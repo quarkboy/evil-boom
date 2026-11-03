@@ -254,7 +254,19 @@ watched on stream) and recover when things go wrong.
   the live planned path (minimap + zoomed overlay on the game view, Tab toggles); "Play level"
   plans and drives the rest of the level from wherever you are.
 
+**Status (execution sweep, god mode, no monsters):** 29 of 64 planned stock maps exit, up from
+13 with the old follower. Known remaining failure kinds:
+- Boss/Keen maps (E2M8, E3M8, MAP07, MAP32 …) can't finish without monsters, as expected.
+- Pillar fields and chains of solid things with gaps under 33 units (E4M9, MAP19): the mesh
+  doesn't model them, and local detours/A* retries can't get round long chains. A real fix
+  is to cut solid things (and narrow strips) into the nav mesh.
+- Timed/sequenced movers (MAP16, E4M8 sector 75): waiting/replanning isn't timing-aware.
+- Assorted single-map snags (see `exec_sweep.py` + `triage.py` in the session scratchpad
+  approach: run each failing map, look at the first trouble).
+
 ## Open questions / research TODO
+- [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
+- [ ] Timing-aware handling of lifts/doors that close on a timer (be on them in time).
 - [ ] Jumps that need lift/timed-door heights can't be set up by the verifier ("unverified").
 - [ ] Straferunning (SR50, ~141% speed) as a second jump speed.
 - [ ] Jump verification is slow on first run (1–4 min/map); optimize.
