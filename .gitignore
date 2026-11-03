@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+build/
+dist/
+
+# Game data — never commit commercial WADs
+*.wad
+*.WAD
+*.pk3
+*.pk7
+
+# ViZDoom writes its config into the working directory
+_vizdoom.ini
+_vizdoom/
+
+# Spike / tool output
+out/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
