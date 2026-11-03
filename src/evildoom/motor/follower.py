@@ -62,6 +62,7 @@ STRAY = 40.0             # off the path and outside its polys by this much: off 
 OFF_COURSE = 96.0        # this far from the path anywhere: off course
 OFF_COURSE_TICS = 10     # ... for this long
 MAX_REPLANS = 6          # per step
+MAX_TOTAL_REPLANS = 30   # per route (replans that add steps restart the per-step count)
 GIVE_UP_TICS = 60 * TICRATE  # one step taking this long: give up
 
 
@@ -616,17 +617,20 @@ class RouteFollower:
             states.setdefault(s, set()).add(h)
         return states
 
-    def _replan(self, obs: Observation, why: str) -> bool:
+    def _replan(self, obs: Observation, why: str, live_only: bool = False) -> bool:
         """Re-path the current step from here. If its goal can't be walked to, plan a way
-        there with triggers (lifts, switches out of a pit); failing that, replan the level."""
+        there with triggers (lifts, switches out of a pit); failing that, replan the level.
+        `live_only`: plan with only the heights as they are now, not everything the plan has
+        unlocked (a lift that went back up has to be called again)."""
         self.replans += 1
         self._step_replans += 1
-        if self._step_replans > MAX_REPLANS:
+        if self._step_replans > MAX_REPLANS or self.replans > MAX_TOTAL_REPLANS:
             self.log.add(obs.tic, f"{why}: replanned too often")
             return False
         nav, pos, step = self.nav, (obs.x, obs.y), self.steps[self.step_i]
         goal = next(p for p in reversed(step.path.waypoints) if p is not None)
-        states = self.world_states(obs)
+        states = {s: {h} for s, h in obs.heights.items()} if live_only else \
+            self.world_states(obs)
         path = nav.find_path(pos, goal, states, nav.local_doors(self.keys))
         if path is not None:
             self.steps[self.step_i] = replace(step, path=path)
@@ -716,7 +720,9 @@ class RouteFollower:
                 # door tracks). For lifts and other movers, waiting before boarding is wrong:
                 # step on and ride, and the crossing off it opens up on the way.
                 door = nxt.sector in self.doors
-                if (j > self.poly_i and not door) or (not door and dist > BLOCK_CHECK_DIST):
+                # (Past the immediate crossing anyway if the box already reaches it.)
+                if (j > self.poly_i and not door and dist >= 2 * PLAYER_RADIUS) \
+                        or (not door and dist > BLOCK_CHECK_DIST):
                     return None
                 return cur, nxt.sector, portal, None
             # The square box reaches into sectors past a narrow strip before it can drop into
@@ -810,7 +816,8 @@ class RouteFollower:
             # of the door, then press.
             facing = abs(_norm(look - obs.angle)) < 10
             use = facing and still and obs.tic - self._last_use >= USE_EVERY
-        elif waited > 3 * TICRATE and still:
+        switch_nearby = False
+        if not opener:
             # Lift/door not coming by itself: use a trigger for it we're standing next to.
             here = self.nav.mesh.poly_at(*pos)
             near = {cur.index} | ({here.index} if here else set())
@@ -818,14 +825,21 @@ class RouteFollower:
             for t in self.nav.triggers:
                 if t.info.trigger in (Trigger.SR, Trigger.S1, Trigger.DR, Trigger.D1) \
                         and involved & set(t.sectors) and near & t.activators:
-                    look = _heading(pos, _line_mid(self.nav.map, t.line))
-                    use = abs(_norm(look - obs.angle)) < 10 and \
-                        obs.tic - self._last_use >= USE_EVERY
+                    switch_nearby = True
+                    if waited > 3 * TICRATE and still:
+                        look = _heading(pos, _line_mid(self.nav.map, t.line))
+                        use = abs(_norm(look - obs.angle)) < 10 and \
+                            obs.tic - self._last_use >= USE_EVERY
                     break
         controls = self.motion.drive(obs, want, look)
         controls.use = use
         if use:
             self._last_use = obs.tic
+        # Nothing to press here: it may need a walk-over line crossing again (a blazing lift
+        # that went back up), so replan from the live heights after a few seconds.
+        if waited == 5 * TICRATE and not opener and not switch_nearby:
+            if self._replan(obs, f"sector {sector} not coming", live_only=True):
+                return self.motion.drive(obs, (0.0, 0.0), look)
         if waited > 15 * TICRATE:
             if not self._replan(obs, f"sector {sector} not opening"):
                 return self._fail(obs, f"waited too long for sector {sector}: live "

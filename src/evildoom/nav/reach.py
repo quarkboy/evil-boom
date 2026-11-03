@@ -35,6 +35,7 @@ ITEM_RADIUS = 20
 PATH_CLEARANCE = 24
 WAYPOINT_CLEARANCE = 18  # minimum distance from a waypoint to any wall line
 THING_CLEARANCE = 6  # extra room left round solid things when detouring past them
+BOX_SLACK = 0.25  # the box must clear walls by this much: no one threads a gap exactly 32 wide
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
 TELEPORT_DEST = 14
 RUN_THRUST = 1.5625   # forwardmove 50 << 11, per tic (vanilla)
@@ -461,9 +462,10 @@ class Navigator:
         for edge, line in set(self._static_walls()):
             for cell in _cells(*edge[0], *edge[1]):
                 grid[cell].append((edge, line))
-        r = PLAYER_RADIUS - 0.1  # touching a wall is allowed
+        r = PLAYER_RADIUS + BOX_SLACK  # a gap exactly 32 wide can't be threaded
         m = self.map
         moving = {s for t in self.triggers for s in t.effects}
+        ledges = self._drop_lines()  # walls only from below: judged per approach, like movers
         fits = []
         # Lines of moving sectors that would make a portal too narrow when they block (a
         # raised block beside a 24-wide strip): checked against heights in passable().
@@ -486,7 +488,7 @@ class Navigator:
                     line = m.linedefs[li]
                     f, b = m.front_sector(line), m.back_sector(line)
                     if li != portal.linedef and f is not None and b is not None and \
-                            (f in moving or b in moving):
+                            (f in moving or b in moving or li in ledges):
                         v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
                         # Only lines across the portal narrow it; one alongside it (a thin
                         # BSP strip next to a door) matters for the next crossing instead.
@@ -538,7 +540,7 @@ class Navigator:
         if key not in self._gate_fits:
             portal = self.mesh.portals[portal_index]
             (x1, y1), (x2, y2) = portal.p1, portal.p2
-            r = PLAYER_RADIUS - 0.1
+            r = PLAYER_RADIUS + BOX_SLACK
             grid = self._static_grid_for_width
             walls = {e for cell in _cells(min(x1, x2) - r, min(y1, y2) - r,
                                           max(x1, x2) + r, max(y1, y2) + r)
@@ -1368,7 +1370,7 @@ class Navigator:
     def _box_hits(self, p: Point, q: Point, ignore=frozenset(),
                   exempt: frozenset | None = None) -> set:
         """Edges (see _static_edges) the player's box touches moving straight from p to q."""
-        r = PLAYER_RADIUS - 0.5   # just touching is fine
+        r = PLAYER_RADIUS + BOX_SLACK
         return {e for e in self._static_edges(p, q, PLAYER_RADIUS + 1, exempt)
                 if e not in ignore and _swept_box_hits(p, q, r, e)}
 
@@ -1422,7 +1424,7 @@ class Navigator:
                     continue
                 seen.add(v)
                 # with some room to spare, or only just clear (passages exactly 32 wide)
-                for d in (PLAYER_RADIUS + THING_CLEARANCE, PLAYER_RADIUS + 0.6):
+                for d in (PLAYER_RADIUS + THING_CLEARANCE, PLAYER_RADIUS + 2 * BOX_SLACK):
                     for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
                         c = (v[0] + sx * d, v[1] + sy * d)
                         if self.mesh.poly_at(*c) is not None and \
