@@ -1,4 +1,5 @@
 """Plan a whole level as a sequence of steps a bot can execute."""
+import time
 from dataclasses import dataclass, field
 
 from evildoom.wad.specials import Category, Key, Trigger
@@ -34,52 +35,37 @@ def _action_for(t: TriggerLine) -> str:
     return "cross"
 
 
-def plan_level(nav: Navigator, start: Point) -> LevelPlan:
-    """From the map's initial heights, finish the level: go for the exit if a route exists,
-    otherwise fetch the cheapest key we can plan a route to, and repeat."""
-    m = nav.map
-    all_polys = set(range(len(nav.mesh.polys)))
-    exits = [t for t in nav.triggers if t.info.category is Category.EXIT and t.activators]
-    keys_left: dict[Key, tuple[int, int]] = {}
-    for thing in m.things:
-        if thing.type in Key._value2member_map_:
-            keys_left.setdefault(Key(thing.type), (thing.x, thing.y))
-
-    plan = LevelPlan()
-    pos, keys, states = start, set(), None
-    while True:
-        plans = []
-        for t in exits:
-            goal = nav._activation_point(t, pos, all_polys)
-            route = nav.plan_route(pos, goal, keys, states)
-            if route:
-                plans.append((route, goal, None, t))
-        if not plans:
-            heights = states or nav.initial_states()
-            for key, (x, y) in keys_left.items():
-                for _, spot in nav.pickup_spots(x, y, heights):
-                    route = nav.plan_route(pos, spot, keys, states)
-                    if route:
-                        plans.append((route, spot, key, None))
-        if not plans:
-            plan.problem = "no route to the exit" + (
-                f" (keys still missing: {sorted(k.name for k in keys_left)})" if keys_left else "")
-            return plan
-        route, goal, key, exit_t = min(plans, key=lambda p: sum(l.path.cost for l in p[0].legs))
-        for leg in route.legs:
-            if leg.trigger:
-                plan.steps.append(Step(leg.path, _action_for(leg.trigger), leg.trigger,
-                                       label=f"line {leg.trigger.line}: "
-                                             f"{leg.trigger.info.description}"))
-            elif key:
-                plan.steps.append(Step(leg.path, "pickup", key=key, label=f"pick up {key.name}"))
-            else:
-                action = _action_for(exit_t)
-                plan.steps.append(Step(leg.path, "exit" if action == "use" else action, exit_t,
-                                       label=f"exit via line {exit_t.line}"))
-        pos, states = goal, route.states
-        if key is None:
-            plan.complete = True
-            return plan
-        keys.add(key)
-        del keys_left[key]
+def plan_level(nav: Navigator, start: Point, max_seconds: float = 60.0,
+               max_expansions: int = 5000) -> LevelPlan:
+    """From the map's initial heights, finish the level: one search (Navigator.plan) whose
+    goal is any exit, using switches and picking up keys in whatever order works."""
+    start_poly = nav.mesh.poly_at(*start)
+    stages = nav.progression(start_poly.index)
+    if not any(t.info.category is Category.EXIT for s in stages for t in s.exits):
+        return LevelPlan(problem="no route to the exit (not reachable even in principle)")
+    # Stand where progression says the player can actually get to.
+    reach = stages[-1].reached
+    exits = {}
+    for t in nav.triggers:
+        if t.info.category is Category.EXIT and t.activators & reach:
+            exits[nav._activation_point(t, start, reach)] = t
+    t0 = time.perf_counter()
+    route = nav.plan(start, list(exits), frozenset(), None, nav.key_items(),
+                     max_expansions=max_expansions, max_seconds=max_seconds)
+    if route is None:
+        timed_out = time.perf_counter() - t0 >= max_seconds
+        return LevelPlan(problem="no route to the exit"
+                         + (f" (search gave up after {max_seconds:.0f}s)" if timed_out else ""))
+    steps = []
+    for leg in route.legs:
+        if leg.trigger:
+            steps.append(Step(leg.path, _action_for(leg.trigger), leg.trigger,
+                              label=f"line {leg.trigger.line}: {leg.trigger.info.description}"))
+        elif leg.key:
+            steps.append(Step(leg.path, "pickup", key=leg.key, label=f"pick up {leg.key.name}"))
+        else:
+            exit_t = exits[route.goal]
+            action = _action_for(exit_t)
+            steps.append(Step(leg.path, "exit" if action == "use" else action, exit_t,
+                              label=f"exit via line {exit_t.line}"))
+    return LevelPlan(steps=steps, complete=True)

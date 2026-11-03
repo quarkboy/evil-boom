@@ -55,6 +55,7 @@ BOSS_RULES = {
 
 HeightStates = dict[int, set[Heights]]
 Doors = dict[int, tuple[set[Heights], set[int]]]
+KeyItems = dict[Key, list[tuple[int, Point]]]  # key -> (poly, point) pickup spots
 
 
 def can_cross(a: Heights, b: Heights) -> bool:
@@ -98,15 +99,19 @@ class Path:
 
 @dataclass
 class Leg:
-    """One leg of a planned route: walk `path`, then activate `trigger` (None = final leg)."""
+    """One leg of a planned route: walk `path`, then activate `trigger` or pick up `key`
+    (neither = the final leg, ending at the goal)."""
     trigger: TriggerLine | None
     path: Path
+    key: Key | None = None
 
 
 @dataclass
 class Route:
     legs: list[Leg]
-    states: HeightStates  # predicted heights once the route is done
+    states: HeightStates            # predicted heights once the route is done
+    keys: frozenset = frozenset()   # keys held at the end
+    goal: Point | None = None       # which goal it reached
 
 
 class Navigator:
@@ -381,7 +386,8 @@ class Navigator:
         states = self.initial_states()
         keys: set[Key] = set()
         fired: set[int] = set()
-        key_things = [t for t in self.map.things if t.type in Key._value2member_map_]
+        key_things = [t for t in self.map.things
+                      if t.type in Key._value2member_map_ and t.in_skill(3)]
         stages = []
         while True:
             fired_now = []
@@ -466,90 +472,165 @@ class Navigator:
 
     def plan_route(self, start: Point, goal: Point, keys: set[Key] = frozenset(),
                    states: HeightStates | None = None, max_expansions: int = 300,
-                   max_seconds: float = 5.0
-                   ) -> Route | None:
-        """Plan a route that may need remote triggers (switches, walk-over lines) first.
+                   max_seconds: float = 5.0) -> Route | None:
+        """Plan a route to one goal, using remote triggers (switches, walk-over lines) as
+        needed but not collecting keys. See `plan` for how the search works."""
+        return self.plan(start, [goal], keys, states, None, max_expansions, max_seconds)
 
-        Best-first search over (triggers used, where we're standing). A trigger is worth
-        trying if using it opens up new area *as seen from where we'd stand afterwards* (some
-        triggers sit past one-way drops and strand the player). Nodes that can reach the goal
-        come first, then the ones with the most reachable area, so it behaves greedily until it
-        hits a dead end, then backtracks. Doors opened by use are handled inside find_path.
-        `states` defaults to the map's initial heights; at runtime pass the live heights.
+    def key_items(self, states: HeightStates | None = None) -> KeyItems:
+        """Every key on the map with the (poly, point) spots it can be picked up from.
+        By default spots are judged against every height a sector can ever take, since keys
+        on pedestals may only become reachable once something moves."""
+        if states is None:
+            states = self.initial_states()
+            for t in self.triggers:
+                for s, hs in t.effects.items():
+                    states[s].update(hs)
+        out: KeyItems = {}
+        for t in self.map.things:
+            if t.type in Key._value2member_map_ and t.in_skill(3):
+                out.setdefault(Key(t.type), []).extend(self.pickup_spots(t.x, t.y, states))
+        return out
+
+    def plan(self, start: Point, goals: list[Point], keys: set[Key] = frozenset(),
+             states: HeightStates | None = None, key_items: KeyItems | None = None,
+             max_expansions: int = 300, max_seconds: float = 5.0) -> Route | None:
+        """Plan a route to any of `goals`, using remote triggers and (if `key_items` is given)
+        picking up keys along the way, in whatever order works.
+
+        Best-first search over (what the world looks like, keys held, where we're standing).
+        Actions are: use a reachable trigger that would change some sector's possible heights,
+        or pick up a reachable key. Each is judged from where we'd stand afterwards (some sit
+        past one-way drops and strand the player). Order: nodes that can reach a goal, then
+        ones that made progress (new area or a new key), then the most reachable area.
+        Triggers that change the world without opening anything yet are still tried, just
+        later: some only help in combination, or are needed later to get back out.
+
+        Use-doors are handled inside find_path; stay-open (D1) doors are also actions, so that
+        once opened they count as open from both sides. Search states are deduplicated by the
+        heights added and keys held, not by which line produced them, and lines with identical
+        effects are only tried once per node (closest first). `states` defaults to the map's
+        initial heights; at runtime pass the live heights.
         """
         mesh = self.mesh
-        doors = self.local_doors(set(keys))
-        remote = [t for t in self.triggers
-                  if t.info.trigger not in (Trigger.D1, Trigger.DR) and t.effects
-                  and t.info.lock.satisfied(set(keys))]
-        goal_poly, start_poly = mesh.poly_at(*goal), mesh.poly_at(*start)
-        if goal_poly is None or start_poly is None:
+        key_items = key_items or {}
+        door_cache: dict[frozenset, Doors] = {}
+
+        def doors_for(ks: frozenset) -> Doors:
+            if ks not in door_cache:
+                door_cache[ks] = self.local_doors(set(ks))
+            return door_cache[ks]
+
+        goal_polys: dict[int, Point] = {}
+        for g in goals:
+            if (gp := mesh.poly_at(*g)) is not None:
+                goal_polys.setdefault(gp.index, g)
+        start_poly = mesh.poly_at(*start)
+        if not goal_polys or start_poly is None:
             return None
+        actions = [t for t in self.triggers if t.info.trigger is not Trigger.DR and t.effects]
 
         @dataclass
         class Node:
             pos: Point
             states: HeightStates
-            fired: tuple[int, ...]
+            added: frozenset            # (sector, heights) pairs added beyond the start
+            keys: frozenset
             legs: list[Leg]
             reach: set[int]
-            pending: tuple[Point, HeightStates, TriggerLine] | None = None  # leg to path
+            steps: int = 0
+            pending: tuple | None = None  # (prev pos, prev states, prev keys, trigger, key)
 
+        keys0 = frozenset(keys)
         states0 = {s: set(h) for s, h in (states or self.initial_states()).items()}
-        if goal_poly.index not in self._upper_bound(start_poly.index, states0, doors, remote):
-            return None  # unreachable even if every reachable trigger fired: don't search
+        bound = self._upper_bound(start_poly.index, states0, keys0, key_items, actions)
+        if not goal_polys.keys() & bound:
+            return None  # unreachable even if everything reachable were used: don't search
         counter = itertools.count()
-        root = Node(start, states0, (), [], self.reachable(start_poly.index, states0, doors))
-        heap = [((False, 0, 0), next(counter), root)]
-        seen: set[tuple[frozenset, frozenset]] = set()
+        root = Node(start, states0, frozenset(), keys0, [],
+                    self.reachable(start_poly.index, states0, doors_for(keys0)))
+        heap = [((False, False, 0, 0), next(counter), root)]
+        seen: set[tuple] = set()
         expansions = 0
         deadline = time.perf_counter() + max_seconds
         while heap and expansions < max_expansions and time.perf_counter() < deadline:
             _, _, node = heapq.heappop(heap)
-            sig = (frozenset(node.fired), frozenset(node.reach))
+            sig = (node.added, node.keys, frozenset(node.reach))
             if sig in seen:
                 continue
             seen.add(sig)
             if node.pending:  # path the leg that got us here, now that we've picked this node
-                prev_pos, prev_states, t = node.pending
-                path = self.find_path(prev_pos, node.pos, prev_states, doors)
+                prev_pos, prev_states, prev_keys, t, key = node.pending
+                path = self.find_path(prev_pos, node.pos, prev_states, doors_for(prev_keys))
                 if path is None:
                     continue
-                node.legs = node.legs + [Leg(t, path)]
+                node.legs = node.legs + [Leg(t, path, key)]
             expansions += 1
-            if goal_poly.index in node.reach:
-                path = self.find_path(node.pos, goal, node.states, doors)
+            doors = doors_for(node.keys)
+            for gp in sorted(goal_polys.keys() & node.reach,
+                             key=lambda p: math.dist(node.pos, goal_polys[p])):
+                path = self.find_path(node.pos, goal_polys[gp], node.states, doors)
                 if path:
-                    return Route(node.legs + [Leg(None, path)], node.states)
-            for t in remote:
-                if t.line in node.fired or not t.activators & node.reach:
-                    continue
-                trial = {s: set(h) for s, h in node.states.items()}
-                for sector, hs in t.effects.items():
-                    trial[sector].update(hs)
-                target = self._activation_point(t, node.pos, node.reach)
+                    return Route(node.legs + [Leg(None, path)], node.states, node.keys,
+                                 goal_polys[gp])
+
+            def push(target: Point, trial: HeightStates, added: frozenset, ks: frozenset,
+                     t: TriggerLine | None, key: Key | None) -> None:
                 target_poly = mesh.poly_at(*target)
                 if target_poly is None:
-                    continue
-                after = self.reachable(target_poly.index, trial, doors)
-                if not after - node.reach:
-                    continue
-                child = Node(target, trial, node.fired + (t.line,), node.legs, after,
-                             (node.pos, node.states, t))
-                priority = (goal_poly.index not in after, -len(after), len(child.fired))
+                    return
+                after = self.reachable(target_poly.index, trial, doors_for(ks))
+                child = Node(target, trial, added, ks, node.legs, after, node.steps + 1,
+                             (node.pos, node.states, node.keys, t, key))
+                progress = bool(after - node.reach) or key is not None
+                priority = (not goal_polys.keys() & after, not progress, -len(after),
+                            child.steps)
                 heapq.heappush(heap, (priority, next(counter), child))
+
+            # Triggers: one candidate per distinct world change, the closest line producing it.
+            options: dict[frozenset, tuple[float, TriggerLine, Point]] = {}
+            for t in actions:
+                if not t.activators & node.reach or not t.info.lock.satisfied(set(node.keys)):
+                    continue
+                new = frozenset((s, h) for s, hs in t.effects.items() for h in hs
+                                if h not in node.states[s])
+                if not new:
+                    continue  # already fired, or a duplicate of something that was
+                target = self._activation_point(t, node.pos, node.reach)
+                d = math.dist(node.pos, target)
+                if new not in options or d < options[new][0]:
+                    options[new] = (d, t, target)
+            for new, (_, t, target) in options.items():
+                trial = {s: set(h) for s, h in node.states.items()}
+                for s, h in new:
+                    trial[s].add(h)
+                push(target, trial, node.added | new, node.keys, t, None)
+            # Keys: the closest reachable pickup spot for each key not yet held.
+            for key, spots in key_items.items():
+                if key in node.keys:
+                    continue
+                here = [pt for p, pt in spots if p in node.reach]
+                if here:
+                    spot = min(here, key=lambda pt: math.dist(node.pos, pt))
+                    push(spot, node.states, node.added, node.keys | {key}, None, key)
         return None
 
-    def _upper_bound(self, start: int, states: HeightStates, doors: Doors,
-                     triggers: list[TriggerLine]) -> set[int]:
-        """Everything reachable if every trigger we can get to were fired (in any order)."""
+    def _upper_bound(self, start: int, states: HeightStates, keys: frozenset,
+                     key_items: KeyItems, triggers: list[TriggerLine]) -> set[int]:
+        """Everything reachable if every trigger we can get to were used and every key we can
+        get to picked up (in any order)."""
         states = {s: set(h) for s, h in states.items()}
+        keys = set(keys)
         fired: set[int] = set()
         while True:
-            reach = self.reachable(start, states, doors)
-            new = [t for t in triggers if t.line not in fired and t.activators & reach]
-            if not new:
+            reach = self.reachable(start, states, self.local_doors(keys))
+            new = [t for t in triggers if t.line not in fired and t.activators & reach
+                   and t.info.lock.satisfied(keys)]
+            new_keys = {k for k, spots in key_items.items()
+                        if k not in keys and any(p in reach for p, _ in spots)}
+            if not new and not new_keys:
                 return reach
+            keys |= new_keys
             for t in new:
                 fired.add(t.line)
                 for sector, hs in t.effects.items():
