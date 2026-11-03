@@ -1076,7 +1076,12 @@ class Navigator:
         chain.reverse()
         polys = [p for p, _ in chain]
         cost = best[gp.index] + math.dist(entry[gp.index], goal)
-        return Path(polys, self._smooth(start, goal, chain), cost,
+        self._smooth_states = states  # box fitting judges moving sectors at these heights
+        try:
+            points = self._smooth(start, goal, chain)
+        finally:
+            self._smooth_states = None
+        return Path(polys, points, cost,
                     self._annotate(chain, states, doors),
                     [via for _, via in chain if isinstance(via, Jump)])
 
@@ -1370,7 +1375,30 @@ class Navigator:
         return need_t, need_k
 
     def _activation_point(self, t: TriggerLine, pos: Point, reach: set[int]) -> Point:
-        """Where to stand to use a switch, or where to walk to so a walk-over line is crossed."""
+        """Where to stand to use a switch, or where to walk to so a walk-over line is crossed.
+        A switch spot the player's box can't occupy (barrels in front of E1M9's switch) is
+        moved straight back from the line, as far as use range allows."""
+        spot = self._activation_spot(t, pos, reach)
+        if t.line < 0 or t.info.trigger not in (Trigger.S1, Trigger.SR, Trigger.D1, Trigger.DR):
+            return spot
+        if not self._box_hits(spot, spot):
+            return spot
+        line = self.map.linedefs[t.line]
+        a, b = self.map.vertexes[line.v1], self.map.vertexes[line.v2]
+        q = _closest_point(spot, (a.x, a.y), (b.x, b.y))
+        d = math.dist(spot, q)
+        if d < 1:
+            return spot
+        ux, uy = (spot[0] - q[0]) / d, (spot[1] - q[1]) / d
+        for back in range(int(d) + 4, USE_REACH + 13, 4):  # use traces reach 64
+            p = (q[0] + ux * back, q[1] + uy * back)
+            poly = self.mesh.poly_at(*p)
+            if poly is not None and poly.index in reach and not self._box_hits(p, p):
+                return p
+        return spot
+
+    def _activation_spot(self, t: TriggerLine, pos: Point, reach: set[int]) -> Point:
+        """The spot before box checks (see _activation_point)."""
         m, mesh = self.map, self.mesh
         if t.line < 0:  # boss death: go to where the monsters are
             return mesh.polys[min(t.activators & reach or t.activators)].center
@@ -1436,6 +1464,9 @@ class Navigator:
         # jump run-up/takeoff points are kept exactly where they are.
         crossed = {mesh.portals[via].linedef for _, via in chain
                    if isinstance(via, int) and mesh.portals[via].linedef is not None}
+        # ...but not walk-over lines that shut a sector right beside them (MAP23's "close door
+        # 30s" line): keep clear of those, or the closing door pins the player's box.
+        crossed -= self._shutting_lines()
         pinned = {p for _, via in chain if isinstance(via, Jump) for p in (via.runup, via.takeoff)}
         out: list[Point | None] = []
         run: list[Point] = []
@@ -1485,8 +1516,13 @@ class Navigator:
                     continue
                 seen.add(li)
                 line = m.linedefs[li]
+                f, bk = m.front_sector(line), m.back_sector(line)
+                states = getattr(self, "_smooth_states", None)
+                if li in walls and states is not None and f is not None and bk is not None \
+                        and any(can_cross(hf, hb) or can_cross(hb, hf)
+                                for hf in states[f] for hb in states[bk]):
+                    continue  # closed at the start, but open by the time we walk this path
                 if li not in walls:  # a ledge: only a wall if we're below it
-                    f, bk = m.front_sector(line), m.back_sector(line)
                     if floor is None or floor + MAX_STEP >= max(init[f][0], init[bk][0]):
                         continue
                 v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
@@ -1612,6 +1648,21 @@ class Navigator:
             i = prev[i]
         chain.reverse()
         return ([a2] if a2 != a else []) + chain + ([b2] if b2 != b else [])
+
+    def _shutting_lines(self) -> set[int]:
+        """Walk-over lines that close (no headroom) a sector on either side of themselves."""
+        if not hasattr(self, "_shutting"):
+            m = self.map
+            self._shutting = set()
+            for t in self.triggers:
+                if t.line < 0 or t.info.trigger not in (Trigger.W1, Trigger.WR):
+                    continue
+                line = m.linedefs[t.line]
+                sides = {m.front_sector(line), m.back_sector(line)}
+                if any(s in sides and any(h[1] - h[0] < PLAYER_HEIGHT for h in hs)
+                       for s, hs in t.effects.items()):
+                    self._shutting.add(t.line)
+        return self._shutting
 
     def _drop_lines(self) -> set[int]:
         """Two-sided lines that can only be crossed one way (drops > MAX_STEP) at initial

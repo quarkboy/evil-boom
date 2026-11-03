@@ -556,6 +556,10 @@ class RouteFollower:
         otherwise the next waypoint exactly."""
         for ahead in CARROT_STEPS:
             q = track.point_at(self.s + ahead)
+            # (A path that doubles back can put a point far along it right next to us.)
+            along = min(ahead, track.length - self.s)
+            if math.dist(pos, q) < 0.6 * along:
+                continue
             if math.dist(pos, q) < 1 or self._chord_clear(pos, q):
                 return q
         return track.carrot(self.k, self.s, TRACK_AHEAD)
