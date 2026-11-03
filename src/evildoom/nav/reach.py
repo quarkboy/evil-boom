@@ -30,6 +30,7 @@ PLAYER_HEIGHT = 56
 MAX_STEP = 24
 PLAYER_RADIUS = 16
 ITEM_RADIUS = 20
+PICKUP_MARGIN = 2  # how far inside touching range a pickup spot must be
 # Paths keep this far from portal ends (wall corners). DOOM collides with a square box of
 # half-width 16, whose corner is ~22.6 from its centre, so 16 snags on diagonal approaches.
 PATH_CLEARANCE = 24
@@ -928,7 +929,8 @@ class Navigator:
         item_floors = {f for f, _ in states[home.sector]}
         edge = [(pi, poly.index) for poly in mesh.polys if poly and poly.sector == home.sector
                 for pi in poly.portals]
-        reach = PLAYER_RADIUS + ITEM_RADIUS
+        # Touching needs the boxes to overlap strictly; keep a margin for where the bot stops.
+        reach = PLAYER_RADIUS + ITEM_RADIUS - PICKUP_MARGIN
         for pi, own in edge:
             portal = mesh.portals[pi]
             other = mesh.polys[portal.other(own)]
@@ -939,9 +941,13 @@ class Navigator:
                        for fi in item_floors for fo, _ in states[other.sector]):
                 continue
             # Stand far enough back that the box fits on the other side of the line (17 units
-            # if the line blocks, else a little past it), then check the boxes overlap.
-            back = PLAYER_RADIUS + 1 if portal.linedef is not None and \
-                self.map.linedefs[portal.linedef].flags & (ML_BLOCKING | ML_BLOCKPLAYERS) else 8
+            # if the line blocks or the item's side is too high to step onto, else a little
+            # past it), then check the boxes overlap.
+            blocks = portal.linedef is not None and \
+                self.map.linedefs[portal.linedef].flags & (ML_BLOCKING | ML_BLOCKPLAYERS)
+            steppable = any(can_cross(ho, hh) for ho in states[other.sector]
+                            for hh in states[home.sector])
+            back = PLAYER_RADIUS + 1 if blocks or not steppable else 8
             cx, cy = other.center
             d = max(math.dist(near, (cx, cy)), 1)
             spot = (near[0] + (cx - near[0]) * back / d, near[1] + (cy - near[1]) * back / d)

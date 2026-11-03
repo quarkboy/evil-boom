@@ -5,6 +5,7 @@ from pathlib import Path
 import vizdoom as vzd
 
 from evildoom.motor.follower import TICRATE, Controls, Observation
+from evildoom.wad.specials import Key
 
 BUTTONS = [vzd.Button.MOVE_FORWARD_BACKWARD_DELTA, vzd.Button.MOVE_LEFT_RIGHT_DELTA,
            vzd.Button.TURN_LEFT_RIGHT_DELTA, vzd.Button.USE, vzd.Button.ATTACK,
@@ -12,6 +13,9 @@ BUTTONS = [vzd.Button.MOVE_FORWARD_BACKWARD_DELTA, vzd.Button.MOVE_LEFT_RIGHT_DE
 VARIABLES = [vzd.GameVariable.POSITION_X, vzd.GameVariable.POSITION_Y,
              vzd.GameVariable.ANGLE, vzd.GameVariable.HEALTH]
 WARMUP_TICS = 8  # ViZDoom ignores turn input for the first few tics of an episode
+KEY_OBJECTS = {"BlueCard": Key.BLUE_CARD, "YellowCard": Key.YELLOW_CARD, "RedCard": Key.RED_CARD,
+               "BlueSkull": Key.BLUE_SKULL, "YellowSkull": Key.YELLOW_SKULL,
+               "RedSkull": Key.RED_SKULL}
 
 
 class VizDoomEngine:
@@ -20,8 +24,9 @@ class VizDoomEngine:
                  size: str = "320x240", rgb: bool = False, objects: bool = False):
         """`size` is a ViZDoom resolution like "1024x768". Avoid 1280x960: it segfaults
         ViZDoom 1.3.2 on init (other sizes, including 1920x1080, are fine).
-        `rgb` makes the screen buffer H x W x 3 RGB (for drawing it ourselves); `objects`
-        enables the live object list (items disappear from it when picked up)."""
+        `rgb` makes the screen buffer H x W x 3 RGB (for drawing it ourselves). The live
+        object list is always on: keys held are worked out from key items that disappear
+        (`objects` is kept for callers that want the list for other things)."""
         game = vzd.DoomGame()
         game.set_doom_game_path(str(iwad))
         if pwad:
@@ -35,7 +40,7 @@ class VizDoomEngine:
         game.set_render_hud(True)
         game.set_render_crosshair(False)
         game.set_sectors_info_enabled(True)
-        game.set_objects_info_enabled(objects)
+        game.set_objects_info_enabled(True)
         if rgb:
             game.set_screen_format(vzd.ScreenFormat.RGB24)
         game.set_available_buttons(BUTTONS)
@@ -44,6 +49,7 @@ class VizDoomEngine:
             game.add_game_args("-nomonsters")
         self.game = game
         self.tic = 0
+        self._keys_at_start: dict[str, int] | None = None
 
     def start(self, record: str | Path | None = None) -> None:
         self.game.init()
@@ -54,6 +60,7 @@ class VizDoomEngine:
             self.game.new_episode()
         self.game.make_action([0] * len(BUTTONS), WARMUP_TICS)
         self.tic = WARMUP_TICS
+        self._keys_at_start = None
 
     @property
     def finished(self) -> bool:
@@ -72,7 +79,19 @@ class VizDoomEngine:
         state = self.game.get_state()
         x, y, angle, _health = state.game_variables
         heights = {s.id: (s.floor_height, s.ceiling_height) for s in state.sectors}
-        return Observation(float(x), float(y), float(angle), heights, self.tic)
+        return Observation(float(x), float(y), float(angle), heights, self.tic,
+                           self._keys_held(state))
+
+    def _keys_held(self, state) -> frozenset:
+        """Keys picked up so far: key items present at the start that have gone."""
+        now: dict[str, int] = {}
+        for o in state.objects:
+            if o.name in KEY_OBJECTS:
+                now[o.name] = now.get(o.name, 0) + 1
+        if self._keys_at_start is None:
+            self._keys_at_start = now
+        return frozenset(KEY_OBJECTS[n] for n, c in self._keys_at_start.items()
+                         if now.get(n, 0) < c)
 
     def state(self):
         """The raw ViZDoom GameState (screen buffer, objects, ...), or None after the end."""
@@ -82,6 +101,7 @@ class VizDoomEngine:
         self.game.new_episode()
         self.game.make_action([0] * len(BUTTONS), WARMUP_TICS)
         self.tic = WARMUP_TICS
+        self._keys_at_start = None
 
     def step(self, c: Controls) -> None:
         self.game.make_action([c.forward, c.strafe, c.turn, float(c.use), float(c.attack),

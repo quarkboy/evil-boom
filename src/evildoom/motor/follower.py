@@ -23,16 +23,17 @@ from bisect import bisect_right
 from dataclasses import dataclass, field, replace
 
 from evildoom.nav.reach import (FRICTION, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS, RUN_THRUST,
-                                apply_trigger,
+                                ITEM_RADIUS, apply_trigger,
                                 HeightStates, Jump, Navigator,
                                 _closest_on_segment, _closest_point, _line_mid, _segment_distance,
                                 _segments_cross, can_cross)
 from evildoom.nav.walkthrough import Step, plan_from, steps_from_legs
-from evildoom.wad.specials import Key, Trigger
+from evildoom.wad.specials import Category, Key, Trigger
 
 TICRATE = 35
 REACHED = 12.0           # arrival radius for points we pass through
 FINAL_REACHED = 10.0     # ... and for points we stop at
+PICKUP_REACHED = 6.0     # ... and for pickup spots (they can be near the edge of touching range)
 USE_EVERY = 15           # tics between use presses while waiting at a door
 RUNUP_TOLERANCE = 6.0    # how exactly to hit a jump run-up point
 STOP_ACTIONS = ("use", "shoot", "exit", "face", "kill")
@@ -63,6 +64,7 @@ STRAY = 40.0             # off the path and outside its polys by this much: off 
 OFF_COURSE = 96.0        # this far from the path anywhere: off course
 OFF_COURSE_TICS = 10     # ... for this long
 MAX_REPLANS = 6          # per step
+PRESS_TRIES = 3          # presses (creeping closer) before giving up on a switch
 MAX_TOTAL_REPLANS = 30   # per route (replans that add steps restart the per-step count)
 GIVE_UP_TICS = 60 * TICRATE  # one step taking this long: give up
 
@@ -74,6 +76,7 @@ class Observation:
     angle: float                                  # degrees, 0 = east, counter-clockwise
     heights: dict[int, tuple[float, float]]       # live sector (floor, ceiling)
     tic: int = 0
+    keys: frozenset | None = None                 # keys held, if the engine can tell
 
 
 @dataclass
@@ -333,6 +336,9 @@ class RouteFollower:
                           f"{step.action} ({step.label})")
         self._step_tic = tic
         self._crossed = False
+        self._item = self._item_of(step)
+        self._press_tries = 0
+        self._before: dict | None = None
         self._start_step(tic)
 
     def _start_step(self, tic: int) -> None:
@@ -442,8 +448,12 @@ class RouteFollower:
         self._last_pos = pos
         if obs.tic - self._step_tic > GIVE_UP_TICS:
             return self._fail(obs, f"step {self.step_i + 1} taking too long")
+        if obs.keys is not None:  # the engine knows what we hold
+            self.keys |= set(obs.keys)
         if self.phase == "walk":
             return self._walk(obs)
+        if self.phase == "fetch":
+            return self._fetch(obs)
         return self._act_at_goal(obs)
 
     def _fail(self, obs: Observation, why: str) -> Controls:
@@ -481,9 +491,16 @@ class RouteFollower:
         to_end = math.dist(pos, end) if track.length - self.s < 48 else math.inf
         if seg.end == "jump" and to_end <= RUNUP_TOLERANCE:
             return self._line_up(obs, seg.jump)
-        if seg.end == "goal" and to_end < (FINAL_REACHED if stop else REACHED):
-            self.phase = "act"
+        if step.action == "pickup" and obs.keys is not None and step.key in obs.keys:
+            self.phase = "act"  # got it (maybe on the way): done
+            return self._act_at_goal(obs)
+        arrive = FINAL_REACHED if stop else (PICKUP_REACHED if step.action == "pickup" else REACHED)
+        if seg.end == "goal" and (to_end < arrive or self._touching_item(pos)):
             self._reset_progress(obs.tic)
+            if step.action == "pickup" and obs.keys is not None and self._item is not None:
+                self.phase = "fetch"  # at the spot but not holding it: go and get it
+                return self._fetch(obs)
+            self.phase = "act"
             return self._act_at_goal(obs)
 
         # Progress and getting unstuck.
@@ -517,6 +534,21 @@ class RouteFollower:
         if math.dist(pos, carrot) < 1:
             return self.motion.drive(obs, (0.0, 0.0), self._look_angle(obs, seg))
         return self.motion.move(obs, _heading(pos, carrot), speed, self._look_angle(obs, seg))
+
+    def _item_of(self, step: Step):
+        """Where the item a pickup step is for lies (the nearest such thing to its goal)."""
+        if step.action != "pickup" or step.key is None:
+            return None
+        goal = next((p for p in reversed(step.path.waypoints) if p is not None), None)
+        things = [(t.x, t.y) for t in self.nav.map.things if t.type == step.key.value]
+        return min(things, key=lambda p: math.dist(p, goal)) if things and goal else None
+
+    def _touching_item(self, pos) -> bool:
+        """Close enough that the boxes overlap: the item is picked up, wherever the spot was
+        (spots by ledges can be ones the box can't quite reach)."""
+        return self._item is not None and \
+            max(abs(pos[0] - self._item[0]), abs(pos[1] - self._item[1])) < \
+            PLAYER_RADIUS + ITEM_RADIUS - 1
 
     def _carrot(self, pos, track: Track) -> tuple[float, float]:
         """Point to steer for: as far ahead on the track (up to CARROT_MAX) as the straight
@@ -812,7 +844,8 @@ class RouteFollower:
             nx, ny = (y2 - y1) / length, -(x2 - x1) / length
             if (pos[0] - door_point[0]) * nx + (pos[1] - door_point[1]) * ny < 0:
                 nx, ny = -nx, -ny   # normal pointing back to our side
-            spot = (door_point[0] + nx * (PLAYER_RADIUS + 2), door_point[1] + ny * (PLAYER_RADIUS + 2))
+            back = PLAYER_RADIUS + 2
+            spot = (door_point[0] + nx * back, door_point[1] + ny * back)
             gap = math.dist(pos, spot)
             if gap > 1:
                 speed = min(4.0, 0.3 * gap)
@@ -856,6 +889,37 @@ class RouteFollower:
 
     # --- acting at the end of a step ------------------------------------------------------
 
+    def _effect_started(self, obs: Observation, t) -> bool:
+        """Has the trigger done something? A sector it moves has moved since we fired it, or
+        is already at a height it moves to (a door that was open anyway)."""
+        if not t.effects:
+            return True  # nothing we can check
+        for s, hs in t.effects.items():
+            live = obs.heights.get(s)
+            if live is None:
+                continue
+            was = (self._before or {}).get(s)
+            if was is not None and (abs(live[0] - was[0]) > 0.5 or abs(live[1] - was[1]) > 0.5):
+                return True
+            if any(abs(live[0] - h[0]) < 1 and abs(live[1] - h[1]) < 1 for h in hs):
+                return True
+        return False
+
+    def _fetch(self, obs: Observation) -> Controls:
+        """At the pickup spot without the item: walk straight at it for a moment."""
+        step = self.steps[self.step_i]
+        if obs.keys is not None and step.key in obs.keys:
+            self.phase = "act"
+            return self._act_at_goal(obs)
+        if obs.tic - self._progress_tic > 3 * TICRATE:
+            self.log.add(obs.tic, f"couldn't pick up {step.key.name} at ({obs.x:.0f}, "
+                                  f"{obs.y:.0f}); carrying on")
+            self.phase = "act"
+            return self._act_at_goal(obs)
+        heading = _heading((obs.x, obs.y), self._item)
+        speed = min(6.0, 0.3 * math.dist((obs.x, obs.y), self._item) + 1)
+        return self.motion.move(obs, heading, speed, heading)
+
     def _trigger_line(self):
         m = self.nav.map
         line = m.linedefs[self.steps[self.step_i].trigger.line]
@@ -886,6 +950,15 @@ class RouteFollower:
         step = self.steps[self.step_i]
         if step.action == "cross" and not self._crossed and step.trigger is not None:
             return self._walk_across(obs)
+        if step.action == "cross" and step.trigger is not None \
+                and step.trigger.info.category is not Category.EXIT:
+            if self._before is None:
+                self._before = {s: obs.heights.get(s) for s in step.trigger.effects}
+                self._action_tic = obs.tic
+            if not self._effect_started(obs, step.trigger):
+                if obs.tic - self._action_tic < TICRATE:
+                    return self.motion.drive(obs, (0.0, 0.0), self._look)
+                self.log.add(obs.tic, f"crossing line {step.trigger.line} didn't do anything")
         if step.action in ("pickup", "cross"):
             self._next_step(obs.tic)
             return self._walk(obs) if not self.done else Controls()
@@ -906,6 +979,10 @@ class RouteFollower:
         err = abs(_norm(look - obs.angle))
         # Hold still (brake) while turning to face the line.
         end = self.segments[-1].track.pts[-1]
+        if self._press_tries:  # missed: stand a bit closer each time
+            d = math.dist(end, aim)
+            k = min(8 * self._press_tries, max(d - PLAYER_RADIUS - 4, 0)) / max(d, 1e-6)
+            end = (end[0] + (aim[0] - end[0]) * k, end[1] + (aim[1] - end[1]) * k)
         hold = ((end[0] - obs.x) * 0.2, (end[1] - obs.y) * 0.2)
         controls = self.motion.drive(obs, hold, look)
         facing = err < 4
@@ -923,9 +1000,22 @@ class RouteFollower:
             elif step.action == "shoot":
                 controls.attack = since < 10
             if since == 0:
-                self.log.add(obs.tic, f"{step.action} line {step.trigger.line}")
-            if since > 8:
+                self._before = {s: obs.heights.get(s) for s in step.trigger.effects}
+                tries = f" (try {self._press_tries + 1})" if self._press_tries else ""
+                self.log.add(obs.tic, f"{step.action} line {step.trigger.line}{tries}")
+            # Did it do anything? (An exit ends the level; otherwise something should move.)
+            if since > 8 and step.action != "exit" and self._effect_started(obs, step.trigger):
                 self._next_step(obs.tic)
+            elif since > (2 * TICRATE if step.action == "exit" else 25):
+                self._press_tries += 1
+                if self._press_tries < PRESS_TRIES:
+                    self.log.add(obs.tic, f"line {step.trigger.line} didn't do anything, "
+                                          f"trying again closer")
+                    self._action_tic = None
+                else:
+                    self.log.add(obs.tic, f"line {step.trigger.line} didn't work after "
+                                          f"{PRESS_TRIES} tries; carrying on")
+                    self._next_step(obs.tic)
         elif obs.tic - self._progress_tic > 3 * TICRATE:
             return self._fail(obs, f"could not face line {step.trigger.line}")
         return controls
