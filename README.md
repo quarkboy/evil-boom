@@ -37,5 +37,6 @@ WADs are not included. By default the tools look in the Steam install
 
 ```sh
 .venv/Scripts/python spikes/wad_spike.py doom E1M1      # summary + out/E1M1.png
+.venv/Scripts/python spikes/nav_spike.py doom E1M3      # key stages + walkthrough + out/*_nav.png
 .venv/Scripts/python spikes/vizdoom_probe.py <iwad> <map> [pwad]
 ```

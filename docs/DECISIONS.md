@@ -103,9 +103,46 @@ detected but not parsed yet. Spike: `spikes/wad_spike.py` (summary + annotated P
 - "Affected sector" resolution: D1/DR specials act on the line's back sector; everything else
   on sectors with a matching tag. This gives us switch → door/lift/floor links for the nav graph.
 
+## Navigation design (2026-11-03)
+Code: `src/evildoom/nav/` (`navmesh.py`, `movers.py`, `reach.py`), spike `spikes/nav_spike.py`.
+
+**Topology is static, heights are not.** Three separate concerns:
+1. **Nav mesh (static):** one convex polygon per subsector, rebuilt by clipping the map bounds
+   down the BSP tree, then by the subsector's segs. Portals = shared polygon edges, split per
+   linedef. Linedefs are matched to polys geometrically (not via seg ownership), because
+   nodebuilders round split vertices to integers (~1 unit off the line) and sometimes put segs
+   into zero-area subsectors on partition lines.
+2. **Passability (dynamic):** a portal A→B is crossable iff, for some pair of height states,
+   step up ≤ 24, opening ≥ 56, and the line isn't impassable/block-players. Any drop is allowed,
+   so drops > 24 are one-way edges.
+3. **Heights:** `HeightStates` = sector → set of (floor, ceiling).
+   - Runtime: one state per sector = live ViZDoom sector heights; re-plan when they change.
+   - Planning: initial heights plus every state a mover can produce (`MoverModel`, mirrors
+     vanilla target rules: lowest-neighbor-ceiling − 4 for doors, stair chains, lifts, etc.).
+     The "ever possible" union over-approximates on purpose.
+
+**Doors vs. remote triggers.** Use-doors (DR/D1) are handled inside A*: a door sector counts as
+open only when entered from a poly the door can be used from (and the lock is satisfied).
+Remote triggers (switches, walk-over lines, gun lines, boss deaths) are planned as route legs by
+a best-first search over (triggers used, current position), scored by area reachable *from
+where you'd stand afterwards* (some triggers sit past one-way drops). An upper-bound check
+(fire everything reachable) skips hopeless searches.
+
+**Pathing.** A* over polys (cost = distance between portal entry points, ×4 on damaging
+floors; heuristic disabled on maps with teleporters), then funnel-algorithm string pulling with
+portals shrunk by the player radius.
+
+**Key progression.** Alternate "fire every reachable trigger to a fixed point" with "pick up
+every reachable key"; each key set is a stage. Boss-death specials (E1M8, E4M6, E4M8, MAP07,
+Keens anywhere) are pseudo-triggers activated from the monsters' positions.
+
+Known approximations: "raise by shortest lower texture" uses +64 (needs TEXTURE1/2); player
+width ignored for narrow portals; gun triggers treated as "adjacent"; Boom generalized movers
+have no height prediction; teleport destination uses the first type-14 thing in the tagged
+sector.
+
 ## Open questions / research TODO
-- [ ] Next spike: build the nav graph from subsectors + key/switch gating; plot reachable
-      regions per key state for E1M3.
+- [ ] Validate the nav mesh and planner against ViZDoom (drive the bot along planned routes).
 - [x] ~~What is ViZDoom's actual compatibility?~~ See findings above.
 - [ ] Verify Boom/MBF feature support in ViZDoom with a real community Boom PWAD.
 - [ ] Check input/control: continuous turn/move delta buttons in ASYNC_PLAYER mode at 35 Hz,

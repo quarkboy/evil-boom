@@ -107,6 +107,21 @@ class Subsector:
     first_seg: int
 
 
+NF_SUBSECTOR = 0x8000
+
+
+@dataclass
+class Node:
+    """BSP node. Children with NF_SUBSECTOR set are subsector indices; child 0 is the front
+    (right) side of the partition line."""
+    x: int
+    y: int
+    dx: int
+    dy: int
+    front_child: int
+    back_child: int
+
+
 @dataclass
 class MapData:
     name: str
@@ -117,6 +132,7 @@ class MapData:
     sectors: list[Sector]
     segs: list[Seg] = field(default_factory=list)
     subsectors: list[Subsector] = field(default_factory=list)
+    nodes: list[Node] = field(default_factory=list)
 
     def front_sector(self, line: Linedef) -> int | None:
         return self.sidedefs[line.front].sector if line.front != NO_SIDEDEF else None
@@ -163,11 +179,17 @@ def load_map(wad: Wad, map_name: str) -> MapData:
     ]
 
     # Standard nodes only; extended/GL nodes (ZNOD, XNOD, ...) are left empty for now.
-    segs, subsectors = [], []
+    segs, subsectors, nodes = [], [], []
     ssectors_raw = lumps.get("SSECTORS", b"")
-    if ssectors_raw and not ssectors_raw.startswith((b"XNOD", b"ZNOD", b"XGLN", b"ZGLN")):
+    nodes_raw = lumps.get("NODES", b"")
+    extended = (b"XNOD", b"ZNOD", b"XGLN", b"ZGLN")
+    if ssectors_raw and not ssectors_raw.startswith(extended) \
+            and not nodes_raw.startswith(extended):
         segs = [Seg(*r) for _, r in _records(lumps.get("SEGS", b""), "<HHhHhh")]
         subsectors = [Subsector(*r) for _, r in _records(ssectors_raw, "<HH")]
+        # x, y, dx, dy, front bbox (4), back bbox (4), front child, back child
+        nodes = [Node(r[0], r[1], r[2], r[3], r[12], r[13])
+                 for _, r in _records(nodes_raw, "<hhhh4h4hHH")]
 
     return MapData(map_name.upper(), things, vertexes, linedefs, sidedefs, sectors,
-                   segs, subsectors)
+                   segs, subsectors, nodes)
