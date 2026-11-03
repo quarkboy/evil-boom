@@ -779,6 +779,13 @@ class RouteFollower:
             track = self.segments[self.seg_i].track
             along = track.project(door_point, self.s, DOOR_CHECK_DIST + 64)[1] - self.s
             dist = max(math.dist(pos, door_point), along)
+            here = self.nav.mesh.poly_at(*pos)
+            if use_point is None and (here is None or here.index not in self.doors[sector][1]) \
+                    and dist > PLAYER_RADIUS + 4:
+                # Not somewhere the door can be pressed from (something else in the way of the
+                # use trace, e.g. another switch line): keep walking up to it.
+                self._speed_cap = max(1.0, 0.3 * dist)
+                return None
             if dist > DOOR_STANDOFF + 4:
                 # Closed door ahead: keep following the path, slowing to stop in front of it.
                 self._speed_cap = max(1.0, min(math.sqrt(2 * BRAKE * (dist - DOOR_STANDOFF)),

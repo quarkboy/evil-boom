@@ -318,7 +318,9 @@ class Navigator:
         m, mesh, init = self.map, self.mesh, self.movers.initial
         # Sectors that can move are required at the heights used even when those are the
         # initial ones: a takeoff floor that's been lowered for good can't be jumped from.
-        moving = {s for t in self.triggers for s in t.effects}
+        if not hasattr(self, "_moving"):
+            self._moving = {s for t in self.triggers for s in t.effects}
+        moving = self._moving
         chosen = dict(chosen)
         floor = chosen[mesh.polys[src].sector][0]
         below = next(h for s, h in chosen.items() if s != mesh.polys[src].sector)[0] \
@@ -696,12 +698,18 @@ class Navigator:
                 f, b = m.front_sector(line), m.back_sector(line)
                 closed = f is None or b is None or \
                     min(init[f][1], init[b][1]) - max(init[f][0], init[b][0]) <= 0
-                if not closed:
+                # The trace also stops at (and uses) the first other line with a use action.
+                # One-shot ones lose their action once used (and the plan uses them first).
+                usable = (i := classify_line(line.special)) is not None and \
+                    i.trigger in (Trigger.SR, Trigger.DR)
+                if not closed and not usable:
                     continue
                 v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
                 # touching counts: slipping exactly through a corner isn't a clear view
                 if _segment_distance(p, q, (v1.x, v1.y), (v2.x, v2.y)) >= 0.5:
                     continue
+                if usable:
+                    return None
                 movable = [s for s in (f, b) if s is not None and s in self._may_move
                            and init[s][1] - init[s][0] <= 0]
                 if f is None or b is None or not movable:
