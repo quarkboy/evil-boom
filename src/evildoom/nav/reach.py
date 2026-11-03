@@ -897,6 +897,34 @@ class Navigator:
 
     def find_path(self, start: Point, goal: Point, states: HeightStates,
                   doors: Doors | None = None) -> Path | None:
+        """A* over polys (see _find_path_once). If the smoothed path has a stretch the
+        player's box can't get through (a 32-wide strip inside one poly, a row of pillars),
+        search again avoiding the polys there, keeping the least squeezed path found."""
+        best, banned = None, set()   # (squeeze points, path) of the least bad attempt
+        for _ in range(3):
+            self._squeezes: list[Point] = []
+            path = self._find_path_once(start, goal, states, doors, banned)
+            if path is None:
+                break
+            if not self._squeezes:
+                return path
+            if best is None or len(self._squeezes) < best[0]:
+                best = (len(self._squeezes), path)
+            # ban the path's own polys where it squeezes (not where it starts or ends)
+            new = set()
+            for pi in path.polys[1:-1]:
+                vs = self.mesh.polys[pi].vertices
+                if any(_segment_distance(vs[i], vs[(i + 1) % len(vs)], q, q) <= PLAYER_RADIUS
+                       for q in self._squeezes for i in range(len(vs))):
+                    new.add(pi)
+            new -= banned
+            if not new:
+                break
+            banned |= new
+        return best[1] if best else None
+
+    def _find_path_once(self, start: Point, goal: Point, states: HeightStates,
+                        doors: Doors | None, banned: set[int]) -> Path | None:
         """A* over polys. Edge cost is the distance between the points where the path enters
         successive polys (closest point on each portal), weighted up on damaging floors."""
         mesh = self.mesh
@@ -930,6 +958,8 @@ class Navigator:
                 if self.edge_ok(tp, states):
                     moves.append((tp.dest_poly, tp.dest, tp))
             for nxt, point, via in moves:
+                if nxt in banned:
+                    continue
                 cost = g + math.dist(here, point) * mult
                 if nxt not in best or cost < best[nxt]:
                     best[nxt] = cost
@@ -1394,8 +1424,23 @@ class Navigator:
                 detour = self._detour(a, b, exempt, ignore)
                 if detour:
                     out += detour
+                elif hasattr(self, "_squeezes"):  # tell find_path to look for another way
+                    self._squeezes += self._squeeze_points(a, b, ignore, exempt)
             out.append(b)
         return out
+
+    def _squeeze_points(self, a: Point, b: Point, ignore, exempt: frozenset) -> list[Point]:
+        """Points along a-b where the player's box doesn't fit."""
+        length = math.dist(a, b)
+        if length < 1:
+            return []
+        ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+        out = []
+        for t in range(0, int(length) + 1, 8):
+            p = (a[0] + ux * t, a[1] + uy * t)
+            if self._box_hits(p, p, ignore, exempt):
+                out.append(p)
+        return out[::max(1, len(out) // 6)]
 
     def _detour(self, a: Point, b: Point, exempt: frozenset, ignore) -> list[Point] | None:
         """Points to go via from a to b so the box fits: the shortest route through spots just
