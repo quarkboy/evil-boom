@@ -6,6 +6,7 @@ maps raise NotImplementedError.
 import struct
 from dataclasses import dataclass, field
 
+from .textures import texture_heights
 from .wad import Wad
 
 NO_SIDEDEF = 0xFFFF
@@ -133,6 +134,7 @@ class MapData:
     segs: list[Seg] = field(default_factory=list)
     subsectors: list[Subsector] = field(default_factory=list)
     nodes: list[Node] = field(default_factory=list)
+    texture_heights: dict[str, int] = field(default_factory=dict)  # wall texture -> height
 
     def front_sector(self, line: Linedef) -> int | None:
         return self.sidedefs[line.front].sector if line.front != NO_SIDEDEF else None
@@ -158,7 +160,9 @@ def _records(data: bytes, fmt: str):
         yield i, struct.unpack_from(fmt, data, i * size)
 
 
-def load_map(wad: Wad, map_name: str) -> MapData:
+def load_map(wad: Wad, map_name: str, *texture_wads: Wad) -> MapData:
+    """Load a map. Texture sizes come from `texture_wads` (e.g. the IWAD when the map is in a
+    PWAD) and then the map's own WAD, later ones overriding earlier ones."""
     lumps = wad.map_lumps(map_name)
     if "TEXTMAP" in lumps:
         raise NotImplementedError(f"{map_name}: UDMF maps are not supported yet")
@@ -191,5 +195,9 @@ def load_map(wad: Wad, map_name: str) -> MapData:
         nodes = [Node(r[0], r[1], r[2], r[3], r[12], r[13])
                  for _, r in _records(nodes_raw, "<hhhh4h4hHH")]
 
+    textures: dict[str, int] = {}
+    for w in (*texture_wads, wad):
+        textures.update(texture_heights(w))
+
     return MapData(map_name.upper(), things, vertexes, linedefs, sidedefs, sectors,
-                   segs, subsectors, nodes)
+                   segs, subsectors, nodes, textures)

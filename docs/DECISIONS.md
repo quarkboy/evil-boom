@@ -160,6 +160,25 @@ Lessons from driving real routes:
 - Turning: `TURN_LEFT_RIGHT_DELTA` is degrees/tic, positive = clockwise. Sector ids match the
   WAD's sector indices.
 
+## Survey of maps that don't plan to the exit (2026-11-03)
+39/66 stock DOOM + DOOM II maps with an exit line plan start-to-exit. Of the other 27,
+diagnosed by relaxing one constraint at a time in the progression analysis:
+
+- **Planner search (11 maps):** progression reaches the exit but `plan_level` can't sequence
+  it — E2M2, E2M7, E3M2, E3M6, E3M7, E4M8, MAP12, MAP18, MAP23, MAP28, MAP32. Biggest bucket;
+  likely the "ever possible" union hiding one-shot/ordering constraints, plus search budget.
+- **Run-off jumps (11 of the remaining 16 are fixed by adding them):** sole fix for MAP15 and
+  MAP29; also fixes E4M1, E4M2, E4M6, E4M9, MAP06, MAP14, MAP17, MAP20, MAP22.
+- **Texture-height floor raises:** now implemented (TEXTURE1/TEXTURE2 heights; "-" skipped
+  as in ZDoom). E4M7's raise-to-texture lines go +128, not the old +64 guess — but E4M7 still
+  doesn't plan: its real blocker is upstream (switch 915's activators are never reached) and
+  was misattributed to texture heights at first. Needs a hands-on look.
+- **Possible width false positive:** MAP06's lift (sector 122) to pit portal is rejected as too
+  narrow — to verify.
+- **Unexplained so far:** MAP11 (only fix: allow 32-unit steps), MAP13 (96-unit steps, no
+  mover), MAP04, MAP09. Worth a hands-on look in `tools/pathfind_lab.py`.
+- Width and headroom relaxations fix nothing: the width check isn't over-blocking.
+
 ## Open questions / research TODO
 - [x] ~~What is ViZDoom's actual compatibility?~~ See findings above.
 - [ ] Verify Boom/MBF feature support in ViZDoom with a real community Boom PWAD.

@@ -13,6 +13,7 @@ vanilla player movement rules: step up <= 24, any drop, opening >= 56 (player he
 import heapq
 import itertools
 import math
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 
@@ -464,7 +465,8 @@ class Navigator:
                     self._annotate(chain, states, doors))
 
     def plan_route(self, start: Point, goal: Point, keys: set[Key] = frozenset(),
-                   states: HeightStates | None = None, max_expansions: int = 300
+                   states: HeightStates | None = None, max_expansions: int = 300,
+                   max_seconds: float = 5.0
                    ) -> Route | None:
         """Plan a route that may need remote triggers (switches, walk-over lines) first.
 
@@ -501,7 +503,8 @@ class Navigator:
         heap = [((False, 0, 0), next(counter), root)]
         seen: set[tuple[frozenset, frozenset]] = set()
         expansions = 0
-        while heap and expansions < max_expansions:
+        deadline = time.perf_counter() + max_seconds
+        while heap and expansions < max_expansions and time.perf_counter() < deadline:
             _, _, node = heapq.heappop(heap)
             sig = (frozenset(node.fired), frozenset(node.reach))
             if sig in seen:

@@ -33,6 +33,21 @@ def test_e1m1(wad):
     assert m.subsectors and m.segs
 
 
+def test_texture_heights(wad):
+    m = load_map(wad, "E1M1")
+    assert len(m.texture_heights) > 100
+    assert m.texture_heights["STARTAN3"] == 128
+
+
+def test_raise_to_texture_uses_real_heights(wad):
+    from evildoom.nav.reach import Navigator
+    m = load_map(wad, "E4M7")
+    nav = Navigator(m)
+    raise_line = next(t for t in nav.triggers if t.line == 264)  # W1 raise to shortest texture
+    (sector, [(floor, _)]), = raise_line.effects.items()
+    assert floor - m.sectors[sector].floor == nav.movers.shortest_lower_texture(sector) == 128
+
+
 def test_every_map_parses(wad):
     for name in wad.map_names():
         m = load_map(wad, name)

@@ -24,7 +24,7 @@ FLOOR_LOWEST_CEIL = {5, 24, 64, 91, 101}
 FLOOR_LOWEST_CEIL_CRUSH = {55, 56, 65, 94}
 FLOOR_NEXT_HIGHER = {18, 20, 22, 47, 68, 69, 95, 119, 128, 129, 130, 131, 132}
 FLOOR_RAISE = {14: 32, 15: 24, 58: 24, 59: 24, 66: 24, 67: 32, 92: 24, 93: 24, 140: 512}
-FLOOR_SHORTEST_TEX = {30, 96}   # needs texture heights; approximated
+FLOOR_SHORTEST_TEX = {30, 96}   # raise by the shortest lower texture around the sector
 STAIRS = {7: 8, 8: 8, 100: 16, 127: 16}
 CEIL_TO_FLOOR = {41, 43}
 CEIL_TO_FLOOR_8 = {44, 72}
@@ -87,7 +87,7 @@ class MoverModel:
         if special in FLOOR_RAISE:
             return [(floor + FLOOR_RAISE[special], ceil)]
         if special in FLOOR_SHORTEST_TEX:
-            return [(floor + 64, ceil)]  # TODO: read texture heights from TEXTURE1/2
+            return [(floor + self.shortest_lower_texture(s), ceil)]
         if special in CEIL_TO_FLOOR:
             return [(floor, floor)]
         if special in CEIL_TO_FLOOR_8:
@@ -97,6 +97,23 @@ class MoverModel:
         if special in CRUSHER:
             return [(floor, floor + 8)]
         return []
+
+    def shortest_lower_texture(self, s: int) -> int:
+        """Height of the shortest lower texture on the sector's two-sided lines (both sides).
+
+        Missing textures ("-") are skipped, as in ZDoom/ViZDoom; vanilla counted texture #0
+        there instead. Falls back to 64 if there's no texture data or nothing to measure.
+        """
+        m = self.map
+        heights = []
+        for line in m.sector_lines(s):
+            if not line.two_sided:
+                continue
+            for side in (line.front, line.back):
+                tex = m.sidedefs[side].lower
+                if tex and tex != "-" and tex in m.texture_heights:
+                    heights.append(m.texture_heights[tex])
+        return min(heights) if heights else 64
 
     def _stairs(self, sectors: list[int], step: int) -> dict[int, list[Heights]]:
         """EV_BuildStairs: raise the tagged sector by one step, then follow two-sided lines
