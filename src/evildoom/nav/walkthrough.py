@@ -86,7 +86,8 @@ def plan_from(nav: Navigator, pos: Point, keys: set[Key], states: HeightStates |
         return LevelPlan(problem="no exit lines")
     t0 = time.perf_counter()
     route = nav.plan(pos, list(exits), frozenset(keys), states, nav.key_items(),
-                     max_expansions=max_expansions, max_seconds=max_seconds)
+                     max_expansions=max_expansions, max_seconds=max_seconds,
+                     goal_triggers=exits)
     if route is None:
         timed_out = time.perf_counter() - t0 >= max_seconds
         return LevelPlan(problem="no route to the exit"

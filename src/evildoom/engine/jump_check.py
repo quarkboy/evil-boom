@@ -92,6 +92,8 @@ def _test_jump(nav: Navigator, engine: VizDoomEngine, j: Jump) -> str:
     engine.game.send_game_command("god")
     engine.game.send_game_command("give all")
     for sector, heights in j.requires:
+        if heights == nav.movers.initial[sector]:
+            continue  # already like that at the start
         if not _establish(nav, engine, sector, heights):
             return UNVERIFIED
     engine.game.send_game_command(f"warp {j.runup[0]:.0f} {j.runup[1]:.0f}")
@@ -131,7 +133,7 @@ def _establish(nav: Navigator, engine: VizDoomEngine, sector: int, heights) -> b
     """Fire a trigger that leaves `sector` at `heights` and wait for it. Only permanent
     changes (floors, stairs, ceilings, stay-open doors) can be set up reliably."""
     t = next((t for t in nav.triggers if t.line >= 0 and heights in t.effects.get(sector, [])
-              and _permanent(t)), None)
+              and t.permanent), None)
     if t is None:
         return False
     m = nav.map
@@ -164,8 +166,3 @@ def _establish(nav: Navigator, engine: VizDoomEngine, sector: int, heights) -> b
             _step(engine, Controls())
     return False
 
-
-def _permanent(t: TriggerLine) -> bool:
-    if t.info.category in (Category.LIFT, Category.CRUSHER):
-        return False
-    return "wait" not in t.info.description

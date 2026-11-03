@@ -70,6 +70,20 @@ Doors = dict[int, tuple[set[Heights], set[int]]]
 KeyItems = dict[Key, list[tuple[int, Point]]]  # key -> (poly, point) pickup spots
 
 
+def apply_trigger(states: "HeightStates", t: "TriggerLine") -> "HeightStates":
+    """The heights the world can take after `t` fires. Normally its targets are added to
+    what's possible (lifts and timed doors come back; you can step onto a rising floor on its
+    way up). A floor that drops for good is replaced, though: the old height is gone (MAP07
+    can't be jumped from the lowered ledge)."""
+    out = {s: set(h) for s, h in states.items()}
+    for s, hs in t.effects.items():
+        if t.permanent and max(h[0] for h in hs) < min(h[0] for h in out[s]):
+            out[s] = set(hs)
+        else:
+            out[s].update(hs)
+    return out
+
+
 def can_cross(a: Heights, b: Heights) -> bool:
     (fa, ca), (fb, cb) = a, b
     return fb - fa <= MAX_STEP and min(ca, cb) - max(fa, fb) >= PLAYER_HEIGHT
@@ -82,6 +96,13 @@ class TriggerLine:
     sectors: list[int]
     effects: dict[int, list[Heights]]
     activators: set[int]        # polys from which it can be activated (use/shoot/cross)
+
+    @property
+    def permanent(self) -> bool:
+        """Its moves stay put (floors, stairs, doors that stay open), unlike lifts, crushers
+        and doors that close again: once fired, the old heights are gone."""
+        return self.info.category not in (Category.LIFT, Category.CRUSHER) \
+            and "wait" not in self.info.description
 
 
 @dataclass
@@ -99,7 +120,7 @@ class Jump(Teleport):
     runup: Point = (0.0, 0.0)
     takeoff: Point = (0.0, 0.0)
     speed: float = 0.0
-    requires: frozenset = frozenset()  # (sector, heights) moved states the jump depends on
+    requires: frozenset = frozenset()  # (sector, heights) of movable sectors it depends on
 
     def usable(self, states: "HeightStates") -> bool:
         return all(h in states[s] for s, h in self.requires)
@@ -152,6 +173,8 @@ class Navigator:
         self.mesh = mesh or NavMesh(m)
         self.movers = MoverModel(m, self.mesh.neighbors_of_sector)
         self.damage = {s.index: classify_sector(s.special).damage for s in m.sectors}
+        # (switch line, poly) -> sectors that must be open for the use trace (activators_now)
+        self.use_gates: dict[tuple[int, int], frozenset[int]] = {}
         self.triggers = self._find_triggers()
         self.teleports = self._find_teleports()
         self.tele_from: dict[int, list[Teleport]] = {}
@@ -293,6 +316,9 @@ class Navigator:
     def _try_jump(self, src: int, takeoff: Point, n: Point, chosen: dict[int, Heights],
                   options: dict[int, list[Heights]], edge: int | None) -> Jump | None:
         m, mesh, init = self.map, self.mesh, self.movers.initial
+        # Sectors that can move are required at the heights used even when those are the
+        # initial ones: a takeoff floor that's been lowered for good can't be jumped from.
+        moving = {s for t in self.triggers for s in t.effects}
         chosen = dict(chosen)
         floor = chosen[mesh.polys[src].sector][0]
         below = next(h for s, h in chosen.items() if s != mesh.polys[src].sector)[0] \
@@ -409,7 +435,8 @@ class Navigator:
                     if land is None or land.sector != ahead.sector:
                         land, on = ahead, (x + n[0] * (PLAYER_RADIUS - 1),
                                            y + n[1] * (PLAYER_RADIUS - 1))
-                    requires = frozenset((s, hh) for s, hh in chosen.items() if hh != init[s])
+                    requires = frozenset((s, hh) for s, hh in chosen.items()
+                                         if hh != init[s] or s in moving)
                     return Jump(-1, {src}, land.index, on, back, takeoff, v, requires)
                 if airborne:
                     # Came down supported by something under the box that isn't ahead (e.g. a
@@ -424,7 +451,8 @@ class Navigator:
                     land = mesh.poly_at(*on)
                     if land is None or under.get(land.sector, (None,))[0] != fmax:
                         return None
-                    requires = frozenset((s, hh) for s, hh in chosen.items() if hh != init[s])
+                    requires = frozenset((s, hh) for s, hh in chosen.items()
+                                         if hh != init[s] or s in moving)
                     return Jump(-1, {src}, land.index, on, back, takeoff, v, requires)
             else:
                 airborne = True
@@ -629,10 +657,67 @@ class Navigator:
             vs = poly.vertices
             # nearest part of the poly (its edges, not just its corners: big polys run past
             # short lines)
-            if any(_segment_distance(vs[i], vs[(i + 1) % len(vs)], a, b) <= USE_REACH
-                   for i in range(len(vs))):
+            if not any(_segment_distance(vs[i], vs[(i + 1) % len(vs)], a, b) <= USE_REACH
+                       for i in range(len(vs))):
+                continue
+            # The use trace stops at the first line with no opening: a switch behind closed
+            # bars (MAP32's exit, opened by killing the Keens) can only be pressed through them
+            # once they're open. Record which sectors must be open (use_gates).
+            near = _spot_in_poly(poly, ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), inset=1.0)
+            length = max(math.dist(a, b), 1e-6)
+            inner = (a[0] + (b[0] - a[0]) * min(0.45, 2 / length),   # aim a little inside
+                     a[1] + (b[1] - a[1]) * min(0.45, 2 / length))   # the line's ends, which
+            inner2 = (b[0] + (a[0] - b[0]) * min(0.45, 2 / length),  # other walls share
+                      b[1] + (a[1] - b[1]) * min(0.45, 2 / length))
+            gates = [g for p in (near, poly.center)
+                     if (g := self._use_gates(p, _closest_point(p, inner, inner2),
+                                              line.index)) is not None]
+            if gates:
                 out.add(poly.index)
+                best = min(gates, key=len)
+                if best:
+                    self.use_gates[(line.index, poly.index)] = best
         return out
+
+    def _use_gates(self, p: Point, q: Point, target: int) -> frozenset | None:
+        """Sectors closed at the map's initial heights that the use trace from p to q (on the
+        target line) passes, or None if a line that never opens is in the way."""
+        m, init = self.map, self.movers.initial
+        if not hasattr(self, "_may_move"):  # tagged sectors and door sectors
+            self._may_move = {s.index for s in m.sectors if s.tag} | {
+                m.back_sector(ln) for ln in m.linedefs
+                if (i := classify_line(ln.special)) and i.trigger in (Trigger.D1, Trigger.DR)}
+        gates = set()
+        for cell in _cells(min(p[0], q[0]), min(p[1], q[1]), max(p[0], q[0]), max(p[1], q[1])):
+            for li in self.mesh._line_grid.get(cell, ()):
+                if li == target:
+                    continue
+                line = m.linedefs[li]
+                f, b = m.front_sector(line), m.back_sector(line)
+                closed = f is None or b is None or \
+                    min(init[f][1], init[b][1]) - max(init[f][0], init[b][0]) <= 0
+                if not closed:
+                    continue
+                v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                # touching counts: slipping exactly through a corner isn't a clear view
+                if _segment_distance(p, q, (v1.x, v1.y), (v2.x, v2.y)) >= 0.5:
+                    continue
+                movable = [s for s in (f, b) if s is not None and s in self._may_move
+                           and init[s][1] - init[s][0] <= 0]
+                if f is None or b is None or not movable:
+                    return None
+                gates.update(movable)
+        return frozenset(gates)
+
+    def activators_now(self, t: TriggerLine, states: HeightStates,
+                       doors: Doors | None = None) -> set[int]:
+        """The trigger's activator polys whose use trace isn't blocked by a closed sector
+        with these heights (with `doors`, ones we can open count as open)."""
+        if t.line < 0:
+            return t.activators
+        return {p for p in t.activators
+                if all(any(h[1] - h[0] > 0 for h in states[s]) or (doors and s in doors)
+                       for s in self.use_gates.get((t.line, p), ()))}
 
     def _boss_triggers(self) -> list[TriggerLine]:
         """Vanilla A_BossDeath / A_KeenDie: killing every monster of a type fires a tagged
@@ -1006,7 +1091,8 @@ class Navigator:
     def plan(self, start: Point, goals: list[Point], keys: set[Key] = frozenset(),
              states: HeightStates | None = None, key_items: KeyItems | None = None,
              max_expansions: int = 300, max_seconds: float = 5.0,
-             trace: list | None = None) -> Route | None:
+             trace: list | None = None,
+             goal_triggers: dict | None = None) -> Route | None:
         """Plan a route to any of `goals`, using remote triggers and (if `key_items` is given)
         picking up keys along the way, in whatever order works.
 
@@ -1022,7 +1108,9 @@ class Navigator:
         once opened they count as open from both sides. Search states are deduplicated by the
         heights added and keys held, not by which line produced them, and lines with identical
         effects are only tried once per node (closest first). `states` defaults to the map's
-        initial heights; at runtime pass the live heights.
+        initial heights; at runtime pass the live heights. `goal_triggers` maps goal points to
+        the switch used there: the goal only counts once that switch can be pressed from it
+        (nothing closed in the way, see activators_now).
         """
         mesh = self.mesh
         key_items = key_items or {}
@@ -1089,6 +1177,9 @@ class Navigator:
             doors = doors_for(node.keys)
             for gp in sorted(goal_polys.keys() & node.reach,
                              key=lambda p: math.dist(node.pos, goal_polys[p])):
+                gt = (goal_triggers or {}).get(goal_polys[gp])
+                if gt is not None and gp not in self.activators_now(gt, node.states):
+                    continue  # e.g. the exit switch is still behind closed bars
                 path = self.find_path(node.pos, goal_polys[gp], node.states, doors)
                 if path:
                     return Route(node.legs + [Leg(None, path)], node.states, node.keys,
@@ -1111,25 +1202,27 @@ class Navigator:
             # Triggers: one candidate per distinct world change, the closest line producing it.
             options: dict[frozenset, tuple[float, TriggerLine, Point]] = {}
             for t in actions:
-                if not t.activators & node.reach or not t.info.lock.satisfied(set(node.keys)):
+                # Usable if a door we can open is all that's in the way, but stand where no
+                # door needs opening when there's such a spot (the path then opens it).
+                usable = self.activators_now(t, node.states) & node.reach or \
+                    self.activators_now(t, node.states, doors) & node.reach
+                if not usable or not t.info.lock.satisfied(set(node.keys)):
                     continue
                 new = frozenset((s, h) for s, hs in t.effects.items() for h in hs
                                 if h not in node.states[s])
                 if not new:
                     continue  # already fired, or a duplicate of something that was
-                target = self._activation_point(t, node.pos, node.reach)
+                target = self._activation_point(t, node.pos, usable)
                 d = math.dist(node.pos, target)
                 if new not in options or d < options[new][0]:
-                    options[new] = (d, t, target)
-            for new, (_, t, target) in options.items():
-                trial = {s: set(h) for s, h in node.states.items()}
-                for s, h in new:
-                    trial[s].add(h)
+                    options[new] = (d, t, target, usable)
+            for new, (_, t, target, usable) in options.items():
+                trial = apply_trigger(node.states, t)
                 # Where we stand to use it matters (a door pressed from the pit below it is
                 # useless): try the default spot and a few others it can be used from, keep
                 # the one leaving the most reachable.
                 by_sector: dict[int, int] = {}  # one candidate per sector it's usable from
-                for p in sorted(t.activators & node.reach,
+                for p in sorted(usable,
                                 key=lambda p: math.dist(mesh.polys[p].center, target)):
                     by_sector.setdefault(mesh.polys[p].sector, p)
                 near = _line_mid(self.map, t.line) if t.line >= 0 else target

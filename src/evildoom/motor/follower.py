@@ -23,6 +23,7 @@ from bisect import bisect_right
 from dataclasses import dataclass, field, replace
 
 from evildoom.nav.reach import (FRICTION, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS, RUN_THRUST,
+                                apply_trigger,
                                 HeightStates, Jump, Navigator,
                                 _closest_on_segment, _closest_point, _line_mid, _segment_distance,
                                 _segments_cross, can_cross)
@@ -318,8 +319,7 @@ class RouteFollower:
         if 0 <= self.step_i < len(self.steps):  # remember what the finished step changed
             done = self.steps[self.step_i]
             if done.trigger is not None:
-                for s, hs in done.trigger.effects.items():
-                    self.states.setdefault(s, set()).update(hs)
+                self.states = apply_trigger(self.states, done.trigger)
             if done.key is not None:
                 self.keys.add(done.key)
         self.step_i += 1
