@@ -13,19 +13,26 @@ vanilla player movement rules: step up <= 24, any drop, opening >= 56 (player he
 import heapq
 import itertools
 import math
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 from evildoom.wad.mapdata import ML_BLOCKING, ML_BLOCKPLAYERS, MapData
 from evildoom.wad.specials import (Category, Key, LineSpecial, Lock, Trigger, classify_line,
                                    classify_sector)
+from evildoom.wad.things import SOLID_DECORATIONS
 
 from .movers import Heights, MoverModel
-from .navmesh import NavMesh, Point
+from .navmesh import NavMesh, Point, _cells
 
 PLAYER_HEIGHT = 56
 MAX_STEP = 24
 PLAYER_RADIUS = 16
 ITEM_RADIUS = 20
+# Paths keep this far from portal ends (wall corners). DOOM collides with a square box of
+# half-width 16, whose corner is ~22.6 from its centre, so 16 snags on diagonal approaches.
+PATH_CLEARANCE = 24
+WAYPOINT_CLEARANCE = 18  # minimum distance from a waypoint to any wall line
+USE_REACH = 48  # use traces 64 from the player centre; keep a margin
 TELEPORT_DEST = 14
 DAMAGE_COST = 4.0  # path cost multiplier on damaging floors
 TELEPORTERS_FOR_PLAYERS = {39, 97, 174, 195, 207, 208, 209, 210}
@@ -113,6 +120,54 @@ class Navigator:
         for tp in self.teleports:
             for p in tp.src_polys:
                 self.tele_from.setdefault(p, []).append(tp)
+        self.portal_fits = self._portal_widths()
+
+    # --- player width -------------------------------------------------------------------
+
+    def _static_walls(self) -> list[tuple[tuple[Point, Point], int | None]]:
+        """(segment, linedef or None) for everything that blocks the player and never changes:
+        one-sided, impassable-flagged, or a height difference that can't be crossed either way
+        between sectors no mover touches. Plus the box edges of solid decorations."""
+        m, init = self.map, self.movers.initial
+        moving = {s for t in self.triggers for s in t.effects}
+        out = []
+        for line in m.linedefs:
+            f, b = m.front_sector(line), m.back_sector(line)
+            wall = b is None or f is None or line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) \
+                or (f not in moving and b not in moving
+                    and not (can_cross(init[f], init[b]) or can_cross(init[b], init[f])))
+            if wall:
+                v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                out.append((((v1.x, v1.y), (v2.x, v2.y)), line.index))
+        out += [(e, None) for edges in self._obstacle_grid().values() for e in set(edges)]
+        return out
+
+    def _portal_widths(self) -> list[bool]:
+        """Whether the player's 32x32 box fits through each portal somewhere along it.
+
+        Mirrors PIT_CheckLine: a box is blocked by a wall if it overlaps the wall's bounding box
+        and has corners on both sides of the wall's line. Narrow sound channels and
+        shoot-through slits fail this even though their heights are fine.
+        """
+        grid: dict[tuple[int, int], list] = defaultdict(list)
+        for edge, line in set(self._static_walls()):
+            for cell in _cells(*edge[0], *edge[1]):
+                grid[cell].append((edge, line))
+        r = PLAYER_RADIUS - 0.1  # touching a wall is allowed
+        fits = []
+        for portal in self.mesh.portals:
+            (x1, y1), (x2, y2) = portal.p1, portal.p2
+            # The portal's own line is judged by flags/heights in passable(), not here.
+            walls = {e for cell in _cells(min(x1, x2) - r, min(y1, y2) - r,
+                                          max(x1, x2) + r, max(y1, y2) + r)
+                     for e, line in grid.get(cell, ())
+                     if line is None or line != portal.linedef}
+            n = max(1, int(portal.width // 4))
+            fits.append(any(
+                not any(_box_hits_segment(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n, r, w)
+                        for w in walls)
+                for i in range(n + 1)))
+        return fits
 
     # --- static analysis ----------------------------------------------------------------
 
@@ -152,7 +207,8 @@ class Navigator:
                 continue
             match info.trigger:
                 case Trigger.S1 | Trigger.SR | Trigger.D1 | Trigger.DR:
-                    activators = touching_front.get(line.index, set())
+                    activators = touching_front.get(line.index, set()) \
+                        | self._polys_in_use_range(line)
                 case Trigger.W1 | Trigger.WR:
                     activators = crossing.get(line.index, set()) \
                         | touching_any.get(line.index, set())
@@ -162,6 +218,31 @@ class Navigator:
             out.append(TriggerLine(line.index, info, sectors,
                                    self.movers.effects(line.special, sectors), activators))
         return out + self._boss_triggers()
+
+    def _polys_in_use_range(self, line) -> set[int]:
+        """Polys that come within USE_REACH of the line on its front side. Use traces 64 units
+        from the player's centre, so a switch at the back of a shallow alcove (too shallow to
+        stand in) is pressed from the room in front of it."""
+        m, mesh = self.map, self.mesh
+        a, b = m.vertexes[line.v1], m.vertexes[line.v2]
+        a, b = (a.x, a.y), (b.x, b.y)
+        out = set()
+        for poly in mesh.polys:
+            if poly is None:
+                continue
+            xs = [v[0] for v in poly.vertices]
+            ys = [v[1] for v in poly.vertices]
+            if min(xs) > max(a[0], b[0]) + USE_REACH or max(xs) < min(a[0], b[0]) - USE_REACH \
+                    or min(ys) > max(a[1], b[1]) + USE_REACH \
+                    or max(ys) < min(a[1], b[1]) - USE_REACH:
+                continue
+            # front side = right of v1->v2; the poly's centre must be in front of the line
+            if (b[0] - a[0]) * (poly.center[1] - a[1]) - (b[1] - a[1]) * (poly.center[0] - a[0]) >= 0:
+                continue
+            if any(math.dist(v, _closest_point(v, a, b)) <= USE_REACH for v in poly.vertices) \
+                    or math.dist(poly.center, _closest_point(poly.center, a, b)) <= USE_REACH:
+                out.add(poly.index)
+        return out
 
     def _boss_triggers(self) -> list[TriggerLine]:
         """Vanilla A_BossDeath / A_KeenDie: killing every monster of a type fires a tagged
@@ -228,6 +309,8 @@ class Navigator:
         if portal.linedef is not None:
             if self.map.linedefs[portal.linedef].flags & (ML_BLOCKING | ML_BLOCKPLAYERS):
                 return False
+        if not self.portal_fits[portal_index]:
+            return False
         sa, sb = mesh.polys[frm].sector, mesh.polys[to].sector
         if sa == sb:
             return True
@@ -507,7 +590,134 @@ class Navigator:
             portals.append(_oriented(portal, mesh.polys[prev_poly].center,
                                      mesh.polys[poly].center))
         points += funnel(seg_start, goal, portals)
-        return points
+        out: list[Point | None] = []
+        run: list[Point] = []
+        for p in points + [None]:
+            if p is None:
+                if run:
+                    out += self._push_from_corners(run)
+                    run = []
+                out.append(None)
+            else:
+                run.append(p)
+        return out[:-1]
+
+    def _wall_lines(self) -> set[int]:
+        """Lines the player can't cross in either direction at initial heights."""
+        if not hasattr(self, "_walls"):
+            m, init = self.map, self.movers.initial
+            self._walls = set()
+            for line in m.linedefs:
+                f, b = m.front_sector(line), m.back_sector(line)
+                if b is None or f is None or line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) \
+                        or not (can_cross(init[f], init[b]) or can_cross(init[b], init[f])):
+                    self._walls.add(line.index)
+        return self._walls
+
+    def _push_from_corners(self, pts: list[Point]) -> list[Point]:
+        """The funnel only keeps clear of the ends of portals it crosses; other wall corners can
+        still be grazed. Insert detour waypoints PATH_CLEARANCE away from any wall vertex that
+        a segment passes too close to."""
+        m, mesh = self.map, self.mesh
+        out = [pts[0]]
+
+        def corners_near(a: Point, b: Point) -> set[Point]:
+            found = set()
+            for (x1, y1), (x2, y2) in self._walls_near(a, b, PATH_CLEARANCE):
+                found.add((x1, y1))
+                found.add((x2, y2))
+            return found
+
+        def segment(a: Point, b: Point, depth: int) -> None:
+            worst = None
+            if depth < 4:
+                for v in corners_near(a, b):
+                    q = _closest_point(v, a, b)
+                    d = math.dist(v, q)
+                    if d < PATH_CLEARANCE - 1 and math.dist(v, a) > 1 and math.dist(v, b) > 1 \
+                            and (worst is None or d < worst[0]):
+                        worst = (d, v, q)
+            if worst:
+                d, v, q = worst
+                if d < 1e-6:  # passing straight through the vertex: step off sideways
+                    length = max(math.dist(a, b), 1e-6)
+                    ux, uy = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
+                else:
+                    ux, uy = (q[0] - v[0]) / d, (q[1] - v[1]) / d
+                w = (v[0] + ux * PATH_CLEARANCE, v[1] + uy * PATH_CLEARANCE)
+                wp, qp = mesh.poly_at(*w), mesh.poly_at(*q)
+                # Only convex corners snag; pushing off a concave one lands on the other wall.
+                if wp and qp and wp.sector == qp.sector \
+                        and math.dist(w, a) > 4 and math.dist(w, b) > 4 \
+                        and self._wall_clearance(w) >= WAYPOINT_CLEARANCE:
+                    segment(a, w, depth + 1)
+                    segment(w, b, depth + 1)
+                    return
+            out.append(b)
+
+        for b in pts[1:]:
+            segment(out[-1], b, 0)
+        # Nudge waypoints (not the start/goal) that still hug a wall away from it.
+        for i in range(1, len(out) - 1):
+            out[i] = self._nudge_off_walls(out[i])
+        return out
+
+    def _obstacle_grid(self) -> dict[tuple[int, int], list[tuple[Point, Point]]]:
+        """Edges of solid decorations' collision boxes (barrels, lamps, pillars...), which
+        block movement like walls but aren't in the map's lines."""
+        if not hasattr(self, "_obstacles"):
+            self._obstacles = defaultdict(list)
+            for t in self.map.things:
+                r = SOLID_DECORATIONS.get(t.type)
+                if r is None or not t.in_skill(3):
+                    continue
+                c = [(t.x - r, t.y - r), (t.x + r, t.y - r), (t.x + r, t.y + r), (t.x - r, t.y + r)]
+                for a, b in zip(c, c[1:] + c[:1]):
+                    for cell in _cells(*a, *b):
+                        self._obstacles[cell].append((a, b))
+        return self._obstacles
+
+    def _walls_near(self, a: Point, b: Point, pad: float):
+        """Wall lines and solid-thing box edges near the segment a-b."""
+        m, mesh, walls, obstacles = self.map, self.mesh, self._wall_lines(), self._obstacle_grid()
+        seen: set = set()
+        for cell in _cells(min(a[0], b[0]) - pad, min(a[1], b[1]) - pad,
+                           max(a[0], b[0]) + pad, max(a[1], b[1]) + pad):
+            for li in mesh._line_grid.get(cell, ()):
+                if li in walls and li not in seen:
+                    seen.add(li)
+                    line = m.linedefs[li]
+                    v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                    yield (v1.x, v1.y), (v2.x, v2.y)
+            for edge in obstacles.get(cell, ()):
+                if edge not in seen:
+                    seen.add(edge)
+                    yield edge
+
+    def _wall_clearance(self, p: Point) -> float:
+        return min((math.dist(p, _closest_point(p, a, b))
+                    for a, b in self._walls_near(p, p, PATH_CLEARANCE)), default=math.inf)
+
+    def _nudge_off_walls(self, p: Point) -> Point:
+        for _ in range(4):
+            worst = None
+            for a, b in self._walls_near(p, p, WAYPOINT_CLEARANCE):
+                q = _closest_point(p, a, b)
+                d = math.dist(p, q)
+                if d < WAYPOINT_CLEARANCE and (worst is None or d < worst[0]):
+                    worst = (d, q, a, b)
+            if worst is None:
+                return p
+            d, q, a, b = worst
+            if d > 1e-6:
+                ux, uy = (p[0] - q[0]) / d, (p[1] - q[1]) / d
+            else:  # on the line: step to the side the poly is on
+                length = max(math.dist(a, b), 1e-6)
+                ux, uy = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
+                if self.mesh.poly_at(p[0] + ux, p[1] + uy) is None:
+                    ux, uy = -ux, -uy
+            p = (q[0] + ux * WAYPOINT_CLEARANCE, q[1] + uy * WAYPOINT_CLEARANCE)
+        return p
 
     def _annotate(self, chain, states: HeightStates, doors: Doors | None) -> list[str]:
         mesh = self.mesh
@@ -536,14 +746,35 @@ def _line_mid(m: MapData, line: int) -> Point:
     return (a.x + b.x) / 2, (a.y + b.y) / 2
 
 
+def _box_hits_segment(cx: float, cy: float, r: float, seg: tuple[Point, Point]) -> bool:
+    """Does the axis-aligned box of half-width r at (cx, cy) straddle the segment?"""
+    (ax, ay), (bx, by) = seg
+    if max(ax, bx) <= cx - r or min(ax, bx) >= cx + r \
+            or max(ay, by) <= cy - r or min(ay, by) >= cy + r:
+        return False
+    dx, dy = bx - ax, by - ay
+    sides = [dx * (py - ay) - dy * (px - ax)
+             for px, py in ((cx - r, cy - r), (cx + r, cy - r), (cx + r, cy + r), (cx - r, cy + r))]
+    return min(sides) < 0 < max(sides)
+
+
+def _closest_point(p: Point, a: Point, b: Point) -> Point:
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length2 = dx * dx + dy * dy
+    if length2 < 1e-9:
+        return a
+    t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length2))
+    return a[0] + t * dx, a[1] + t * dy
+
+
 def _closest_on_segment(p: Point, portal) -> Point:
-    """Closest point to p on the portal, kept PLAYER_RADIUS away from its ends if wide enough."""
+    """Closest point to p on the portal, kept PATH_CLEARANCE away from its ends if wide enough."""
     (x1, y1), (x2, y2) = portal.p1, portal.p2
     length = math.dist(portal.p1, portal.p2)
-    if length <= 2 * PLAYER_RADIUS:
+    if length <= 2 * PATH_CLEARANCE:
         return portal.mid
     t = ((p[0] - x1) * (x2 - x1) + (p[1] - y1) * (y2 - y1)) / (length * length)
-    margin = PLAYER_RADIUS / length
+    margin = PATH_CLEARANCE / length
     t = min(max(t, margin), 1 - margin)
     return x1 + t * (x2 - x1), y1 + t * (y2 - y1)
 
@@ -558,9 +789,9 @@ def _oriented(portal, from_center: Point, to_center: Point) -> tuple[Point, Poin
     else:
         left, right = p2, p1
     length = math.dist(left, right)
-    if length <= 2 * PLAYER_RADIUS:
+    if length <= 2 * PATH_CLEARANCE:
         return portal.mid, portal.mid
-    t = PLAYER_RADIUS / length
+    t = PATH_CLEARANCE / length
     shrink = lambda a, b: (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)  # noqa: E731
     return shrink(left, right), shrink(right, left)
 

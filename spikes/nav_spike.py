@@ -6,9 +6,10 @@ import sys
 from pathlib import Path
 
 from evildoom.config import resolve_wad
-from evildoom.nav.reach import MAX_STEP, Navigator, can_cross
+from evildoom.nav.reach import MAX_STEP, Navigator
+from evildoom.nav.walkthrough import plan_level
 from evildoom.wad.mapdata import load_map
-from evildoom.wad.specials import Category, Key
+from evildoom.wad.specials import Category
 from evildoom.wad.wad import Wad
 
 OUT = Path(__file__).resolve().parent.parent / "out"
@@ -135,51 +136,18 @@ def main() -> None:
 
 
 def walkthrough(nav: Navigator, start, stages):
-    """From the map's initial heights, finish the level: at each step go for the exit if a
-    route exists, otherwise fetch the cheapest key we can plan a route to. Each goal is
-    planned with plan_route, so the switches/walk triggers it needs are included."""
-    m = nav.map
-    all_polys = set(range(len(nav.mesh.polys)))
-    exits = [t for t in nav.triggers if t.info.category is Category.EXIT and t.activators]
-    keys_left = {}
-    for t in m.things:
-        if t.type in Key._value2member_map_:
-            keys_left.setdefault(Key(t.type), (t.x, t.y))
-
+    """Print the full-level plan (see evildoom.nav.walkthrough) and return its steps."""
+    plan = plan_level(nav, start)
     print("\n== walkthrough from initial heights")
-    pos, keys, states, legs = start, set(), None, []
-    while True:
-        options = [(f"use exit (line {t.line})", nav._activation_point(t, pos, all_polys), None)
-                   for t in exits]
-        plans = [(label, goal, key, nav.plan_route(pos, goal, keys, states))
-                 for label, goal, key in options]
-        plans = [p for p in plans if p[3]]
-        if not plans:
-            heights = states or nav.initial_states()
-            plans = [(f"pick up {key.name}", spot, key, nav.plan_route(pos, spot, keys, states))
-                     for key, (x, y) in keys_left.items()
-                     for _, spot in nav.pickup_spots(x, y, heights)]
-            plans = [p for p in plans if p[3]]
-        if not plans:
-            print("  FAILED to plan: exit"
-                  + (f" (keys still missing: {sorted(k.name for k in keys_left)})"
-                     if keys_left else ""))
-            return legs
-        label, goal, key, route = min(plans, key=lambda p: sum(l.path.cost for l in p[3].legs))
-        for leg in route.legs:
-            p = leg.path
-            what = (f"then {leg.trigger.info.trigger.value} line {leg.trigger.line} "
-                    f"({leg.trigger.info.description}) -> sectors {leg.trigger.sectors}"
-                    if leg.trigger else f"then {label}")
-            print(f"  walk {p.cost:6.0f} units, {len(p.polys):3} polys; {what}")
-            for note in p.steps:
-                print(f"      {note}")
-            legs.append(leg)
-        pos, states = goal, route.states
-        if key is None:
-            return legs
-        keys.add(key)
-        del keys_left[key]
+    for step in plan.steps:
+        p = step.path
+        print(f"  walk {p.cost:6.0f} units, {len(p.polys):3} polys; then {step.action}: "
+              f"{step.label}")
+        for note in p.steps:
+            print(f"      {note}")
+    if not plan.complete:
+        print(f"  FAILED to plan: {plan.problem}")
+    return plan.steps
 
 
 if __name__ == "__main__":

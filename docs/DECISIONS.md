@@ -141,8 +141,26 @@ width ignored for narrow portals; gun triggers treated as "adjacent"; Boom gener
 have no height prediction; teleport destination uses the first type-14 thing in the tagged
 sector.
 
+## Route execution + demos (2026-11-03)
+`nav/walkthrough.py` turns a level plan into steps (walk path, then use / shoot / cross /
+pickup / exit). `motor/follower.py` executes them tic by tic, engine-independently
+(Observation in, Controls out); `engine/vizdoom_engine.py` adapts ViZDoom and records/replays
+demos (`new_episode(path)` / `replay_episode(path)`). Spike: `spikes/play_route.py`.
+
+Lessons from driving real routes:
+- **Pressing use on a moving door reverses it.** Only press when the blocking sector's heights
+  have been still for a moment.
+- **Doors hide behind thin door-track sectors**, so live passability is checked for every
+  crossing within reach along the path, not just the next one.
+- **DOOM collides with a square box**, so paths keep 24 units from portal ends, convex wall
+  corners get detour waypoints, and waypoints are nudged ≥ 18 units off walls. Pushing off a
+  *concave* corner slides the point onto the other wall, so pushes must pass a clearance check.
+- Use traces 64 units straight ahead: walk up and square up to the door before pressing.
+- ViZDoom ignores turn input for the first few tics of an episode (warm-up).
+- Turning: `TURN_LEFT_RIGHT_DELTA` is degrees/tic, positive = clockwise. Sector ids match the
+  WAD's sector indices.
+
 ## Open questions / research TODO
-- [ ] Validate the nav mesh and planner against ViZDoom (drive the bot along planned routes).
 - [x] ~~What is ViZDoom's actual compatibility?~~ See findings above.
 - [ ] Verify Boom/MBF feature support in ViZDoom with a real community Boom PWAD.
 - [ ] Check input/control: continuous turn/move delta buttons in ASYNC_PLAYER mode at 35 Hz,
