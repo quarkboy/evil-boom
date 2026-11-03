@@ -132,19 +132,31 @@ class Track:
                 j += 1
             self.corner[i] = max(abs(total), abs(turns[i]))
 
-    def project(self, p, hint: int) -> tuple[int, float, float]:
-        """(segment index, arc length, distance) of the closest point on the track, searching
-        a window of segments around `hint` so the track can't be skipped ahead through walls."""
+    def project(self, p, s_now: float, ahead: float = 64.0) -> tuple[int, float, float]:
+        """(segment index, arc length, distance) of the closest point on the track between a
+        little behind `s_now` and `ahead` past it, so progress can't skip ahead to a later
+        part of the track that passes nearby (paths that double back, through walls)."""
         if len(self.pts) == 1:
             return 0, 0.0, math.dist(p, self.pts[0])
+        lo, hi = s_now - 32, s_now + ahead
         best = None
-        for k in range(max(0, hint - 1), min(len(self.pts) - 1, hint + 6)):
+        for k in range(len(self.pts) - 1):
+            if self.cum[k + 1] < lo:
+                continue
+            if self.cum[k] > hi:
+                break
             a, b = self.pts[k], self.pts[k + 1]
+            seg = self.cum[k + 1] - self.cum[k]
             q = _closest_point(p, a, b)
+            s = self.cum[k] + math.dist(a, q)
+            if s > hi or s < lo:  # clamp to the window
+                s = min(max(s, lo, self.cum[k]), hi, self.cum[k + 1])
+                t = (s - self.cum[k]) / seg if seg > 1e-9 else 0.0
+                q = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
             d = math.dist(p, q)
             if best is None or d < best[2] - 1e-6:
-                best = (k, self.cum[k] + math.dist(a, q), d)
-        return best
+                best = (k, s, d)
+        return best or (len(self.pts) - 2, self.length, math.dist(p, self.pts[-1]))
 
     def carrot(self, k: int, s: float, ahead: float) -> tuple[float, float]:
         """Point to steer for: `ahead` along the track, but never past the next waypoint
@@ -447,7 +459,7 @@ class RouteFollower:
         seg = self.segments[self.seg_i]
         track = seg.track
         pos = (obs.x, obs.y)
-        self.k, self.s, self.cross = track.project(pos, self.k)
+        self.k, self.s, self.cross = track.project(pos, self.s)
 
         if self._lost(obs):
             if not self._replan(obs, "off course"):
@@ -463,7 +475,9 @@ class RouteFollower:
         step = self.steps[self.step_i]
         last = self.seg_i == len(self.segments) - 1
         stop = seg.end == "jump" or (last and step.action in STOP_ACTIONS)
-        to_end = math.dist(pos, end)
+        # Near the end only counts once we've come along the track (paths double back, e.g. to
+        # walk onto a teleport pad from its front side).
+        to_end = math.dist(pos, end) if track.length - self.s < 48 else math.inf
         if seg.end == "jump" and to_end <= RUNUP_TOLERANCE:
             return self._line_up(obs, seg.jump)
         if seg.end == "goal" and to_end < (FINAL_REACHED if stop else REACHED):
@@ -529,7 +543,7 @@ class RouteFollower:
         """View angle: towards a point well ahead on the path (or what we're heading for),
         holding the previous one when that point is too close to give a stable direction."""
         look = seg.look
-        s = look.project((obs.x, obs.y), self.k)[1] if look.length > seg.track.length else self.s
+        s = look.project((obs.x, obs.y), self.s)[1] if look.length > seg.track.length else self.s
         point = look.point_at(s + LOOK_AHEAD)
         if math.dist((obs.x, obs.y), point) >= 40 or self._look is None:
             if math.dist((obs.x, obs.y), point) > 1:
@@ -704,14 +718,41 @@ class RouteFollower:
                 door = nxt.sector in self.doors
                 if (j > self.poly_i and not door) or (not door and dist > BLOCK_CHECK_DIST):
                     return None
-                return cur, nxt, portal
+                return cur, nxt.sector, portal, None
             # The square box reaches into sectors past a narrow strip before it can drop into
             # the strip: a low ceiling there must clear the floor we're standing on now.
             floor_now = obs.heights[here.sector][0]
             f, c = obs.heights[nxt.sector]
             if j > self.poly_i and dist < 2 * PLAYER_RADIUS and nxt.sector != here.sector \
                     and c - max(f, floor_now) < PLAYER_HEIGHT:
-                return cur, nxt, portal
+                return cur, nxt.sector, portal, None
+            # Something beside the way that makes it too narrow right now (key bars, a raised
+            # block): open it if it's a door we can use, else wait like for a mover.
+            if portal.index in self.nav._portal_gates:
+                live = {s: {h} for s, h in obs.heights.items()}
+                blockers = self.nav.gate_blockers(portal.index, cur.index, live)
+                if blockers and not self.nav.portal_fits_without(portal.index, blockers):
+                    door = self._gate_door(blockers, {cur.index, here.index}, (obs.x, obs.y))
+                    if door is not None:
+                        return cur, door[0], portal, door[1]
+                    if j == self.poly_i and dist < BLOCK_CHECK_DIST:
+                        line = self.nav.map.linedefs[blockers[0]]
+                        sides = {self.nav.map.front_sector(line), self.nav.map.back_sector(line)}
+                        return cur, next(iter(sides - {cur.sector}), cur.sector), portal, None
+        return None
+
+    def _gate_door(self, lines, near: set[int], pos):
+        """(door sector, point to press) for a usable door among the sectors of these lines."""
+        m = self.nav.map
+        sectors = {s for li in lines for s in (m.front_sector(m.linedefs[li]),
+                                                m.back_sector(m.linedefs[li]))}
+        for t in self.nav.triggers:
+            if t.info.trigger in (Trigger.DR, Trigger.D1) and sectors & set(t.effects) \
+                    and near & t.activators and t.info.lock.satisfied(set(Key)):
+                line = m.linedefs[t.line]
+                a, b = m.vertexes[line.v1], m.vertexes[line.v2]
+                return (next(iter(sectors & set(t.effects))),
+                        _closest_point(pos, (a.x, a.y), (b.x, b.y)))
         return None
 
     def _check_blocked(self, obs: Observation) -> Controls | None:
@@ -720,16 +761,17 @@ class RouteFollower:
         if blocked is None:
             self._wait_tic = None
             return None
-        cur, nxt, portal = blocked
+        cur, sector, portal, use_point = blocked
         live = obs.heights
         pos = (obs.x, obs.y)
-        opener = nxt.sector in self.doors and cur.index in self.doors[nxt.sector][1]
-        # the part of the doorway in front of us (doors can be wide)
-        door_point = _closest_on_segment(pos, portal)
+        opener = sector in self.doors and (use_point is not None
+                                           or cur.index in self.doors[sector][1])
+        # the part of the doorway in front of us (doors can be wide), or the gate door's line
+        door_point = use_point or _closest_on_segment(pos, portal)
         if opener:
             # how far to the door, along the path where it goes round corners
             track = self.segments[self.seg_i].track
-            along = track.project(door_point, self.k)[1] - self.s
+            along = track.project(door_point, self.s, DOOR_CHECK_DIST + 64)[1] - self.s
             dist = max(math.dist(pos, door_point), along)
             if dist > DOOR_STANDOFF + 4:
                 # Closed door ahead: keep following the path, slowing to stop in front of it.
@@ -739,13 +781,13 @@ class RouteFollower:
 
         if self._wait_tic is None:
             self._wait_tic = obs.tic
-            kind = "door" if nxt.sector in self.doors else "mover"
-            self.log.add(obs.tic, f"waiting at {kind} (sector {nxt.sector})")
+            kind = "door" if sector in self.doors else "mover"
+            self.log.add(obs.tic, f"waiting at {kind} (sector {sector})")
         waited = obs.tic - self._wait_tic
         self._progress_tic = obs.tic  # waiting is not being stuck
         # Pressing use on a moving door reverses it, so only press once things are still.
-        if live[nxt.sector] != self._mover_heights:
-            self._mover_heights, self._mover_still_since = live[nxt.sector], obs.tic
+        if live[sector] != self._mover_heights:
+            self._mover_heights, self._mover_still_since = live[sector], obs.tic
         still = obs.tic - self._mover_still_since >= USE_EVERY
         look = _heading(pos, door_point)
         want, use = (0.0, 0.0), False
@@ -772,7 +814,7 @@ class RouteFollower:
             # Lift/door not coming by itself: use a trigger for it we're standing next to.
             here = self.nav.mesh.poly_at(*pos)
             near = {cur.index} | ({here.index} if here else set())
-            involved = {cur.sector, nxt.sector} | ({here.sector} if here else set())
+            involved = {cur.sector, sector} | ({here.sector} if here else set())
             for t in self.nav.triggers:
                 if t.info.trigger in (Trigger.SR, Trigger.S1, Trigger.DR, Trigger.D1) \
                         and involved & set(t.sectors) and near & t.activators:
@@ -785,9 +827,9 @@ class RouteFollower:
         if use:
             self._last_use = obs.tic
         if waited > 15 * TICRATE:
-            if not self._replan(obs, f"sector {nxt.sector} not opening"):
-                return self._fail(obs, f"waited too long for sector {nxt.sector}: live "
-                                       f"{live[cur.sector]} -> {live[nxt.sector]}")
+            if not self._replan(obs, f"sector {sector} not opening"):
+                return self._fail(obs, f"waited too long for sector {sector}: live "
+                                       f"{live[cur.sector]} -> {live[sector]}")
             return self.motion.drive(obs, (0.0, 0.0), look)
         return controls
 
@@ -831,14 +873,21 @@ class RouteFollower:
             self._next_step(obs.tic)
             return Controls()
 
-        mid = _line_mid(self.nav.map, step.trigger.line)
-        look = _heading((obs.x, obs.y), mid)
+        # Aim at the nearest part of the line (a little in from its ends): the use trace is a
+        # 64-unit ray, and from off to one side the line's middle can be out of its reach.
+        a, b = self._trigger_line()
+        length = max(math.dist(a, b), 1e-6)
+        pos = (obs.x, obs.y)
+        t = ((pos[0] - a[0]) * (b[0] - a[0]) + (pos[1] - a[1]) * (b[1] - a[1])) / length ** 2
+        t = min(max(t, min(0.5, 8 / length)), max(0.5, 1 - 8 / length))
+        aim = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+        look = _heading(pos, aim)
         err = abs(_norm(look - obs.angle))
         # Hold still (brake) while turning to face the line.
         end = self.segments[-1].track.pts[-1]
         hold = ((end[0] - obs.x) * 0.2, (end[1] - obs.y) * 0.2)
         controls = self.motion.drive(obs, hold, look)
-        facing = err < (4 if step.action == "shoot" else 10)
+        facing = err < 4
         if step.action == "face":  # walk up to it and look at it; leave pressing to a human
             if facing:
                 self.log.add(obs.tic, f"facing line {step.trigger.line}")

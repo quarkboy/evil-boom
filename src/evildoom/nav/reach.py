@@ -462,20 +462,91 @@ class Navigator:
             for cell in _cells(*edge[0], *edge[1]):
                 grid[cell].append((edge, line))
         r = PLAYER_RADIUS - 0.1  # touching a wall is allowed
+        m = self.map
+        moving = {s for t in self.triggers for s in t.effects}
         fits = []
+        # Lines of moving sectors that would make a portal too narrow when they block (a
+        # raised block beside a 24-wide strip): checked against heights in passable().
+        self._portal_gates: dict[int, list[tuple[int, tuple[Point, Point], tuple[int, int]]]] = {}
+        self._gate_fits: dict[tuple[int, frozenset], bool] = {}
+        self._static_grid_for_width = grid
         for portal in self.mesh.portals:
             (x1, y1), (x2, y2) = portal.p1, portal.p2
+            box = (min(x1, x2) - r, min(y1, y2) - r, max(x1, x2) + r, max(y1, y2) + r)
             # The portal's own line is judged by flags/heights in passable(), not here.
+            walls = {e for cell in _cells(*box) for e, line in grid.get(cell, ())
+                     if line is None or line != portal.linedef}
+            ok = _box_fits_somewhere(portal, r, walls)
+            fits.append(ok)
+            if not ok:
+                continue
+            gates = {}
+            for cell in _cells(*box):
+                for li in self.mesh._line_grid.get(cell, ()):
+                    line = m.linedefs[li]
+                    f, b = m.front_sector(line), m.back_sector(line)
+                    if li != portal.linedef and f is not None and b is not None and \
+                            (f in moving or b in moving):
+                        v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                        # Only lines across the portal narrow it; one alongside it (a thin
+                        # BSP strip next to a door) matters for the next crossing instead.
+                        lx, ly = v2.x - v1.x, v2.y - v1.y
+                        cos = abs(lx * (x2 - x1) + ly * (y2 - y1)) / max(
+                            math.hypot(lx, ly) * math.hypot(x2 - x1, y2 - y1), 1e-9)
+                        if cos < 0.87:
+                            gates[li] = ((v1.x, v1.y), (v2.x, v2.y)), (f, b)
+            if gates and not _box_fits_somewhere(portal, r, walls | {e for e, _ in gates.values()}):
+                self._portal_gates[portal.index] = [(li, e, s) for li, (e, s) in gates.items()]
+        return fits
+
+    def gate_blockers(self, portal_index: int, frm: int, states: HeightStates,
+                      doors: Doors | None = None) -> list[int]:
+        """Nearby moving-sector lines that block the box at this portal, coming from poly
+        `frm`: the box can't overlap the sector on their far side (too high a step, or no
+        headroom). Doors we can open from here (key bars beside a corridor) count as open."""
+        gates = self._portal_gates.get(portal_index)
+        if not gates:
+            return []
+        sector = self.mesh.polys[frm].sector
+        blocking = []
+        here = states[sector] | (doors[sector][0] if doors and sector in doors else set())
+        for li, _edge, sectors in gates:
+            for s in sectors:
+                if s == sector:
+                    continue
+                hs = states[s]
+                if doors and s in doors and frm in doors[s][1]:
+                    hs = hs | doors[s][0]
+                if not any(can_cross(ha, hb) for ha in here for hb in hs):
+                    blocking.append(li)
+                    break
+        return blocking
+
+    def _fits_now(self, portal_index: int, frm: int, states: HeightStates,
+                  doors: Doors | None) -> bool:
+        """Does the box fit through the portal from poly `frm`, given which nearby
+        moving-sector lines block (gate_blockers)?"""
+        return self.portal_fits_without(portal_index,
+                                        self.gate_blockers(portal_index, frm, states, doors))
+
+    def portal_fits_without(self, portal_index: int, blocking) -> bool:
+        """Does the box fit through the portal with these gate lines (indices) as walls?"""
+        if not blocking:
+            return True
+        gates = self._portal_gates[portal_index]
+        key = (portal_index, frozenset(blocking))
+        if key not in self._gate_fits:
+            portal = self.mesh.portals[portal_index]
+            (x1, y1), (x2, y2) = portal.p1, portal.p2
+            r = PLAYER_RADIUS - 0.1
+            grid = self._static_grid_for_width
             walls = {e for cell in _cells(min(x1, x2) - r, min(y1, y2) - r,
                                           max(x1, x2) + r, max(y1, y2) + r)
                      for e, line in grid.get(cell, ())
                      if line is None or line != portal.linedef}
-            n = max(1, int(portal.width // 4))
-            fits.append(any(
-                not any(_box_hits_segment(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n, r, w)
-                        for w in walls)
-                for i in range(n + 1)))
-        return fits
+            walls |= {e for li, e, _ in gates if li in key[1]}
+            self._gate_fits[key] = _box_fits_somewhere(portal, r, walls)
+        return self._gate_fits[key]
 
     # --- static analysis ----------------------------------------------------------------
 
@@ -553,8 +624,11 @@ class Navigator:
             # front side = right of v1->v2; the poly's centre must be in front of the line
             if (b[0] - a[0]) * (poly.center[1] - a[1]) - (b[1] - a[1]) * (poly.center[0] - a[0]) >= 0:
                 continue
-            if any(math.dist(v, _closest_point(v, a, b)) <= USE_REACH for v in poly.vertices) \
-                    or math.dist(poly.center, _closest_point(poly.center, a, b)) <= USE_REACH:
+            vs = poly.vertices
+            # nearest part of the poly (its edges, not just its corners: big polys run past
+            # short lines)
+            if any(_segment_distance(vs[i], vs[(i + 1) % len(vs)], a, b) <= USE_REACH
+                   for i in range(len(vs))):
                 out.add(poly.index)
         return out
 
@@ -715,6 +789,8 @@ class Navigator:
         if not self.portal_fits[portal_index]:
             return False
         sa, sb = mesh.polys[frm].sector, mesh.polys[to].sector
+        if not self._fits_now(portal_index, frm, states, doors):
+            return False
         if sa == sb:
             return True
         hs_a, hs_b = states[sa], states[sb]
@@ -1024,7 +1100,10 @@ class Navigator:
                 for p in sorted(t.activators & node.reach,
                                 key=lambda p: math.dist(mesh.polys[p].center, target)):
                     by_sector.setdefault(mesh.polys[p].sector, p)
-                spots = [target] + [mesh.polys[p].center for p in list(by_sector.values())[:8]]
+                near = _line_mid(self.map, t.line) if t.line >= 0 else target
+                spots = [target] + [_spot_in_poly(mesh.polys[p], near) if t.line >= 0
+                                    else mesh.polys[p].center
+                                    for p in list(by_sector.values())[:8]]
                 doors_k = doors_for(node.keys)
                 best = max(spots, key=lambda sp: len(self.reachable(
                     mesh.poly_at(*sp).index, trial, doors_k)) if mesh.poly_at(*sp) else -1)
@@ -1174,7 +1253,16 @@ class Navigator:
                 return min(spots, key=lambda c: math.dist(c, pos))
         if front in ok:
             return front
-        return mesh.polys[min(t.activators & reach)].center
+        # Otherwise the spot nearest the line in any poly it can be used from (big polys only
+        # qualify by their nearest part, so their centres can be out of reach).
+        best = None
+        for pi in t.activators & reach:
+            spot = _spot_in_poly(mesh.polys[pi], (mx, my))
+            if mesh.poly_at(*spot) is not None and mesh.poly_at(*spot).index == pi:
+                d = math.dist(spot, _closest_point(spot, (a.x, a.y), (b.x, b.y)))
+                if best is None or d < best[0]:
+                    best = (d, spot)
+        return best[1] if best else mesh.polys[min(t.activators & reach)].center
 
     def _smooth(self, start: Point, goal: Point, chain) -> list[Point | None]:
         """String-pull through portals with the funnel algorithm, restarting at teleports.
@@ -1233,16 +1321,37 @@ class Navigator:
 
     # --- making paths fit the player's square box ---------------------------------------------
 
-    def _static_edges(self, a: Point, b: Point, pad: float):
-        """Static walls and solid-thing box edges near the segment a-b."""
+    def _static_edges(self, a: Point, b: Point, pad: float, exempt: frozenset | None = None):
+        """Static walls and solid-thing box edges near the segment a-b. With `exempt` (lines
+        the path means to cross), also lines that block at the map's initial heights: closed
+        sectors that some trigger moves, and ledges seen from below (from a's floor)."""
         grid = self._static_wall_grid()
         seen: set = set()
-        for cell in _cells(min(a[0], b[0]) - pad, min(a[1], b[1]) - pad,
-                           max(a[0], b[0]) + pad, max(a[1], b[1]) + pad):
+        cells = list(_cells(min(a[0], b[0]) - pad, min(a[1], b[1]) - pad,
+                            max(a[0], b[0]) + pad, max(a[1], b[1]) + pad))
+        for cell in cells:
             for e in grid.get(cell, ()):
                 if e not in seen:
                     seen.add(e)
                     yield e
+        if exempt is None:
+            return
+        m, init = self.map, self.movers.initial
+        walls, drops = self._wall_lines(), self._drop_lines()
+        here = self.mesh.poly_at(*a)
+        floor = init[here.sector][0] if here else None
+        for cell in cells:
+            for li in self.mesh._line_grid.get(cell, ()):
+                if li in seen or li in exempt or (li not in walls and li not in drops):
+                    continue
+                seen.add(li)
+                line = m.linedefs[li]
+                if li not in walls:  # a ledge: only a wall if we're below it
+                    f, bk = m.front_sector(line), m.back_sector(line)
+                    if floor is None or floor + MAX_STEP >= max(init[f][0], init[bk][0]):
+                        continue
+                v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                yield (v1.x, v1.y), (v2.x, v2.y)
 
     def _ledges_crossed(self, a: Point, b: Point, exempt: frozenset) -> bool:
         """Does a-b walk off a ledge (a one-way drop line) other than the exempt ones?"""
@@ -1256,10 +1365,11 @@ class Navigator:
                         return True
         return False
 
-    def _box_hits(self, p: Point, q: Point, ignore=frozenset()) -> set:
-        """Static edges the player's box touches moving straight from p to q."""
+    def _box_hits(self, p: Point, q: Point, ignore=frozenset(),
+                  exempt: frozenset | None = None) -> set:
+        """Edges (see _static_edges) the player's box touches moving straight from p to q."""
         r = PLAYER_RADIUS - 0.5   # just touching is fine
-        return {e for e in self._static_edges(p, q, PLAYER_RADIUS + 1)
+        return {e for e in self._static_edges(p, q, PLAYER_RADIUS + 1, exempt)
                 if e not in ignore and _swept_box_hits(p, q, r, e)}
 
     def _box_fits_path(self, pts: list[Point], exempt: frozenset,
@@ -1272,12 +1382,13 @@ class Navigator:
             return pts
         # Interior waypoints the box can't occupy are dropped; detours reconnect neighbours.
         pts = [p for i, p in enumerate(pts)
-               if i == 0 or i == len(pts) - 1 or p in pinned or not self._box_hits(p, p)]
+               if i == 0 or i == len(pts) - 1 or p in pinned or not self._box_hits(p, p, exempt=exempt)]
         out = [pts[0]]
         for b in pts[1:]:
             a = out[-1]
-            ignore = self._box_hits(a, a) | self._box_hits(b, b)  # ends already touching
-            if self._box_hits(a, b, ignore):
+            # edges the ends already touch don't count
+            ignore = self._box_hits(a, a, exempt=exempt) | self._box_hits(b, b, exempt=exempt)
+            if self._box_hits(a, b, ignore, exempt):
                 detour = self._detour(a, b, exempt, ignore)
                 if detour:
                     out += detour
@@ -1295,29 +1406,32 @@ class Navigator:
         bad = [t for t in range(0, int(length) + 1, 8)
                if self._box_hits((a[0] + ux * t, a[1] + uy * t),
                                  (a[0] + ux * min(t + 8, length), a[1] + uy * min(t + 8, length)),
-                                 ignore)]
+                                 ignore, exempt)]
         if not bad:
             return None
         t0, t1 = bad[0] - 40, bad[-1] + 48
         a2 = (a[0] + ux * t0, a[1] + uy * t0) if t0 > 0 else a
         b2 = (a[0] + ux * t1, a[1] + uy * t1) if t1 < length else b
-        if (a2 != a and self._box_hits(a2, a2)) or (b2 != b and self._box_hits(b2, b2)):
+        if (a2 != a and self._box_hits(a2, a2, exempt=exempt)) or \
+                (b2 != b and self._box_hits(b2, b2, exempt=exempt)):
             a2, b2 = a, b
-        d = PLAYER_RADIUS + THING_CLEARANCE
         nodes, seen = [a2, b2], set()
-        for e in self._static_edges(a2, b2, 96):
+        for e in self._static_edges(a2, b2, 96, exempt):
             for v in e:
                 if v in seen or _segment_distance(a2, b2, v, v) > 96:
                     continue
                 seen.add(v)
-                for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
-                    c = (v[0] + sx * d, v[1] + sy * d)
-                    if self.mesh.poly_at(*c) is not None and not self._box_hits(c, c):
-                        nodes.append(c)
+                # with some room to spare, or only just clear (passages exactly 32 wide)
+                for d in (PLAYER_RADIUS + THING_CLEARANCE, PLAYER_RADIUS + 0.6):
+                    for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                        c = (v[0] + sx * d, v[1] + sy * d)
+                        if self.mesh.poly_at(*c) is not None and \
+                                not self._box_hits(c, c, exempt=exempt):
+                            nodes.append(c)
 
         def ok(p: Point, q: Point) -> bool:
             skip = ignore if p in (a, a2) or q in (b, b2) else frozenset()
-            return not self._box_hits(p, q, skip) and not self._ledges_crossed(p, q, exempt)
+            return not self._box_hits(p, q, skip, exempt) and not self._ledges_crossed(p, q, exempt)
         # A* over the candidate spots, checking edges lazily.
         limit = 3 * math.dist(a2, b2) + 192
         best, prev = {0: 0.0}, {}
@@ -1438,11 +1552,12 @@ class Navigator:
 
     def _walls_near(self, a: Point, b: Point, pad: float, exempt: frozenset | None = None):
         """Wall lines and solid-thing box edges near the segment a-b. With `exempt` given
-        (path smoothing), ledge edges count as walls too, except the exempt lines."""
+        (path smoothing: the lines the path crosses), ledge edges count as walls too, and
+        the exempt lines (doors it opens, ledges it drops off) don't."""
         m, mesh, obstacles = self.map, self.mesh, self._obstacle_grid()
         walls = self._wall_lines()
-        if exempt is not None:
-            walls = walls | (self._drop_lines() - exempt)
+        if exempt is not None:  # the lines the path crosses (doors it opens) aren't walls
+            walls = (walls | self._drop_lines()) - exempt
         seen: set = set()
         for cell in _cells(min(a[0], b[0]) - pad, min(a[1], b[1]) - pad,
                            max(a[0], b[0]) + pad, max(a[1], b[1]) + pad):
@@ -1553,6 +1668,28 @@ def _segment_hits_box(a: Point, b: Point, cx: float, cy: float, r: float) -> boo
         if t0 >= t1:
             return False
     return True
+
+
+def _spot_in_poly(poly, target: Point, inset: float = PLAYER_RADIUS + 2) -> Point:
+    """The point of the poly nearest `target`, moved `inset` towards the poly's centre (or
+    to the centre if the poly is smaller than that)."""
+    vs = poly.vertices
+    best = min((_closest_point(target, vs[i], vs[(i + 1) % len(vs)]) for i in range(len(vs))),
+               key=lambda q: math.dist(q, target))
+    cx, cy = poly.center
+    d = math.dist(best, (cx, cy))
+    if d <= inset:
+        return poly.center
+    return (best[0] + (cx - best[0]) * inset / d, best[1] + (cy - best[1]) * inset / d)
+
+
+def _box_fits_somewhere(portal, r: float, walls) -> bool:
+    """Is there a spot along the portal where the box of half-width r touches none of `walls`?"""
+    (x1, y1), (x2, y2) = portal.p1, portal.p2
+    n = max(1, int(portal.width // 4))
+    return any(not any(_box_hits_segment(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n, r, w)
+                       for w in walls)
+               for i in range(n + 1))
 
 
 def _box_clearance(a: Point, b: Point) -> float:

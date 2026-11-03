@@ -235,6 +235,21 @@ watched on stream) and recover when things go wrong.
   an octagonal pillar, E3M1's lamp field); waypoints are kept off diagonal walls by the box's
   reach (22.6), not 18; walk-over teleports need their line to be steppable (MAP08's sits in
   front of a closed niche).
+- **Moving-sector gates**: a portal can be too narrow only while some nearby moving sector
+  blocks (E2M7's raised block beside a 24-wide strip, MAP19/MAP21/MAP26's key bars). Portals
+  store the mover lines across them that would narrow them; `passable` treats such a line as a
+  wall when its far sector can't be entered from where we are at those heights (a door we can
+  open from here counts as open). Lines *alongside* a portal are ignored — BSP leaves thin
+  strips next to doors that the player's centre never needs to stop in. The follower opens a
+  gate door like any door (walk up, press its use line).
+- More planner fixes found by driving: lines the path crosses (doors it opens) aren't walls
+  for waypoint nudging (it was zig-zagging waypoints off both faces of a door); use range is
+  measured to a poly's edges, not its corners (big polys run past short switch lines); standing
+  spots for switches are the point of each candidate poly nearest the line, not its centre.
+- More follower fixes: press use aimed at the nearest part of the line within 4° (a 64-unit ray
+  from off to one side misses the middle); progress along the path is searched only a little
+  behind/ahead of where we were (paths double back: walking off a teleport pad to re-enter it
+  from its front side); arriving at a segment's end only counts once we've come along it.
 - Lab (`tools/pathfind_lab.py`): shows the bot's current objective, recent log, replans, and
   the live planned path (minimap + zoomed overlay on the game view, Tab toggles); "Play level"
   plans and drives the rest of the level from wherever you are.
