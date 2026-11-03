@@ -34,6 +34,7 @@ ITEM_RADIUS = 20
 # half-width 16, whose corner is ~22.6 from its centre, so 16 snags on diagonal approaches.
 PATH_CLEARANCE = 24
 WAYPOINT_CLEARANCE = 18  # minimum distance from a waypoint to any wall line
+THING_CLEARANCE = 6  # extra room left round solid things when detouring past them
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
 TELEPORT_DEST = 14
 RUN_THRUST = 1.5625   # forwardmove 50 << 11, per tic (vanilla)
@@ -168,6 +169,18 @@ class Navigator:
         for j in self.jumps:
             for p in j.src_polys:
                 self.tele_from.setdefault(p, []).append(j)
+
+    def edge_ok(self, tp: Teleport, states: HeightStates) -> bool:
+        """Can this teleport/jump edge be taken with these heights? A walk-over teleport only
+        fires if the player can actually step over its line (MAP08 has one in front of a
+        closed niche); a jump needs the moved heights it was found with."""
+        if isinstance(tp, Jump):
+            return tp.usable(states)
+        line = self.map.linedefs[tp.line]
+        f, b = self.map.front_sector(line), self.map.back_sector(line)
+        if f is None or b is None:
+            return False
+        return any(can_cross(fh, bh) for fh in states[f] for bh in states[b])
 
     # --- run-off jumps --------------------------------------------------------------------
 
@@ -721,7 +734,7 @@ class Navigator:
             nxt = [self.mesh.portals[pi].other(poly) for pi in self.mesh.polys[poly].portals
                    if self.passable(pi, poly, states, doors)]
             nxt += [tp.dest_poly for tp in self.tele_from.get(poly, [])
-                    if not isinstance(tp, Jump) or tp.usable(states)]
+                    if self.edge_ok(tp, states)]
             for n in nxt:
                 if n not in seen:
                     seen.add(n)
@@ -836,7 +849,7 @@ class Navigator:
                     portal = mesh.portals[pi]
                     moves.append((portal.other(poly), _closest_on_segment(here, portal), pi))
             for tp in self.tele_from.get(poly, []):
-                if not isinstance(tp, Jump) or tp.usable(states):
+                if self.edge_ok(tp, states):
                     moves.append((tp.dest_poly, tp.dest, tp))
             for nxt, point, via in moves:
                 cost = g + math.dist(here, point) * mult
@@ -1095,7 +1108,7 @@ class Navigator:
                 moves = [(mesh.portals[pi].other(p), pi) for pi in mesh.polys[p].portals
                          if self.passable(pi, p, states_all, doors_all)]
                 moves += [(tp.dest_poly, tp) for tp in self.tele_from.get(p, [])
-                          if not isinstance(tp, Jump) or tp.usable(states_all)]
+                          if self.edge_ok(tp, states_all)]
                 for n, via in moves:
                     if n not in parent:
                         parent[n] = (p, via)
@@ -1202,12 +1215,135 @@ class Navigator:
         for p in points + [None]:
             if p is None:
                 if run:
-                    out += self._push_from_corners(run, frozenset(crossed), pinned)
+                    out += self._box_fits_path(
+                        self._push_from_corners(run, frozenset(crossed), pinned),
+                        frozenset(crossed), pinned)
                     run = []
                 out.append(None)
             else:
                 run.append(p)
         return out[:-1]
+
+    def _solid_things(self) -> list[tuple[float, float, float]]:
+        """(x, y, radius) of solid decorations present at skill 3."""
+        if not hasattr(self, "_solids"):
+            self._solids = [(t.x, t.y, SOLID_DECORATIONS[t.type]) for t in self.map.things
+                            if t.type in SOLID_DECORATIONS and t.in_skill(3)]
+        return self._solids
+
+    # --- making paths fit the player's square box ---------------------------------------------
+
+    def _static_edges(self, a: Point, b: Point, pad: float):
+        """Static walls and solid-thing box edges near the segment a-b."""
+        grid = self._static_wall_grid()
+        seen: set = set()
+        for cell in _cells(min(a[0], b[0]) - pad, min(a[1], b[1]) - pad,
+                           max(a[0], b[0]) + pad, max(a[1], b[1]) + pad):
+            for e in grid.get(cell, ()):
+                if e not in seen:
+                    seen.add(e)
+                    yield e
+
+    def _ledges_crossed(self, a: Point, b: Point, exempt: frozenset) -> bool:
+        """Does a-b walk off a ledge (a one-way drop line) other than the exempt ones?"""
+        m, drops = self.map, self._drop_lines()
+        for cell in _cells(min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1])):
+            for li in self.mesh._line_grid.get(cell, ()):
+                if li in drops and li not in exempt:
+                    line = m.linedefs[li]
+                    v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                    if _segments_cross(a, b, (v1.x, v1.y), (v2.x, v2.y)):
+                        return True
+        return False
+
+    def _box_hits(self, p: Point, q: Point, ignore=frozenset()) -> set:
+        """Static edges the player's box touches moving straight from p to q."""
+        r = PLAYER_RADIUS - 0.5   # just touching is fine
+        return {e for e in self._static_edges(p, q, PLAYER_RADIUS + 1)
+                if e not in ignore and _swept_box_hits(p, q, r, e)}
+
+    def _box_fits_path(self, pts: list[Point], exempt: frozenset,
+                       pinned: set[Point] = frozenset()) -> list[Point]:
+        """The funnel and corner pushes keep round clearances from portal ends and vertices,
+        but DOOM's player is a 32x32 square that also hits diagonal walls, pillars and solid
+        things (a path squeezed between a barrel and a pillar's corner doesn't fit). Check
+        each segment with the swept box and detour locally round what it would hit."""
+        if len(pts) < 2:
+            return pts
+        # Interior waypoints the box can't occupy are dropped; detours reconnect neighbours.
+        pts = [p for i, p in enumerate(pts)
+               if i == 0 or i == len(pts) - 1 or p in pinned or not self._box_hits(p, p)]
+        out = [pts[0]]
+        for b in pts[1:]:
+            a = out[-1]
+            ignore = self._box_hits(a, a) | self._box_hits(b, b)  # ends already touching
+            if self._box_hits(a, b, ignore):
+                detour = self._detour(a, b, exempt, ignore)
+                if detour:
+                    out += detour
+            out.append(b)
+        return out
+
+    def _detour(self, a: Point, b: Point, exempt: frozenset, ignore) -> list[Point] | None:
+        """Points to go via from a to b so the box fits: the shortest route through spots just
+        diagonally off the corners of nearby walls and solid things. Only the stretch of a-b
+        that doesn't fit is rerouted (the rest may run through tight spots of its own)."""
+        length = math.dist(a, b)
+        if length < 1:
+            return None
+        ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+        bad = [t for t in range(0, int(length) + 1, 8)
+               if self._box_hits((a[0] + ux * t, a[1] + uy * t),
+                                 (a[0] + ux * min(t + 8, length), a[1] + uy * min(t + 8, length)),
+                                 ignore)]
+        if not bad:
+            return None
+        t0, t1 = bad[0] - 40, bad[-1] + 48
+        a2 = (a[0] + ux * t0, a[1] + uy * t0) if t0 > 0 else a
+        b2 = (a[0] + ux * t1, a[1] + uy * t1) if t1 < length else b
+        if (a2 != a and self._box_hits(a2, a2)) or (b2 != b and self._box_hits(b2, b2)):
+            a2, b2 = a, b
+        d = PLAYER_RADIUS + THING_CLEARANCE
+        nodes, seen = [a2, b2], set()
+        for e in self._static_edges(a2, b2, 96):
+            for v in e:
+                if v in seen or _segment_distance(a2, b2, v, v) > 96:
+                    continue
+                seen.add(v)
+                for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                    c = (v[0] + sx * d, v[1] + sy * d)
+                    if self.mesh.poly_at(*c) is not None and not self._box_hits(c, c):
+                        nodes.append(c)
+
+        def ok(p: Point, q: Point) -> bool:
+            skip = ignore if p in (a, a2) or q in (b, b2) else frozenset()
+            return not self._box_hits(p, q, skip) and not self._ledges_crossed(p, q, exempt)
+        # A* over the candidate spots, checking edges lazily.
+        limit = 3 * math.dist(a2, b2) + 192
+        best, prev = {0: 0.0}, {}
+        todo = [(math.dist(a2, b2), 0.0, 0)]
+        expansions = 0
+        while todo and expansions < 150:
+            _, cost, i = heapq.heappop(todo)
+            if i == 1:
+                break
+            if cost > best[i]:
+                continue
+            expansions += 1
+            for j in range(1, len(nodes)):
+                c = cost + math.dist(nodes[i], nodes[j])
+                if j != i and c < best.get(j, math.inf) and \
+                        c + math.dist(nodes[j], b2) <= limit and ok(nodes[i], nodes[j]):
+                    best[j], prev[j] = c, i
+                    heapq.heappush(todo, (c + math.dist(nodes[j], b2), c, j))
+        if 1 not in prev:
+            return None
+        chain, i = [], prev[1]
+        while i != 0:
+            chain.append(nodes[i])
+            i = prev[i]
+        chain.reverse()
+        return ([a2] if a2 != a else []) + chain + ([b2] if b2 != b else [])
 
     def _drop_lines(self) -> set[int]:
         """Two-sided lines that can only be crossed one way (drops > MAX_STEP) at initial
@@ -1329,14 +1465,16 @@ class Navigator:
     def _nudge_off_walls(self, p: Point, exempt: frozenset | None = None) -> Point:
         for _ in range(4):
             worst = None
-            for a, b in self._walls_near(p, p, WAYPOINT_CLEARANCE, exempt):
+            for a, b in self._walls_near(p, p, WAYPOINT_CLEARANCE + 6, exempt):
                 q = _closest_point(p, a, b)
                 d = math.dist(p, q)
-                if d < WAYPOINT_CLEARANCE and (worst is None or d < worst[0]):
-                    worst = (d, q, a, b)
+                need = _box_clearance(a, b)
+                if d < need and (worst is None or d - need < worst[0]):
+                    worst = (d - need, q, a, b, need)
             if worst is None:
                 return p
-            d, q, a, b = worst
+            _, q, a, b, need = worst
+            d = math.dist(p, q)
             if d > 1e-6:
                 ux, uy = (p[0] - q[0]) / d, (p[1] - q[1]) / d
             else:  # on the line: step to the side the poly is on
@@ -1344,7 +1482,7 @@ class Navigator:
                 ux, uy = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
                 if self.mesh.poly_at(p[0] + ux, p[1] + uy) is None:
                     ux, uy = -ux, -uy
-            p = (q[0] + ux * WAYPOINT_CLEARANCE, q[1] + uy * WAYPOINT_CLEARANCE)
+            p = (q[0] + ux * need, q[1] + uy * need)
         return p
 
     def _annotate(self, chain, states: HeightStates, doors: Doors | None) -> list[str]:
@@ -1397,6 +1535,59 @@ def _box_hits_segment(cx: float, cy: float, r: float, seg: tuple[Point, Point]) 
     sides = [dx * (py - ay) - dy * (px - ax)
              for px, py in ((cx - r, cy - r), (cx + r, cy - r), (cx + r, cy + r), (cx - r, cy + r))]
     return min(sides) < 0 < max(sides)
+
+
+def _segment_hits_box(a: Point, b: Point, cx: float, cy: float, r: float) -> bool:
+    """Does segment a-b pass through the open axis-aligned box of half-width r at (cx, cy)?
+    (Slab clipping.)"""
+    t0, t1 = 0.0, 1.0
+    for p, d, lo, hi in ((a[0], b[0] - a[0], cx - r, cx + r), (a[1], b[1] - a[1], cy - r, cy + r)):
+        if abs(d) < 1e-9:
+            if p <= lo or p >= hi:
+                return False
+            continue
+        u0, u1 = (lo - p) / d, (hi - p) / d
+        if u0 > u1:
+            u0, u1 = u1, u0
+        t0, t1 = max(t0, u0), min(t1, u1)
+        if t0 >= t1:
+            return False
+    return True
+
+
+def _box_clearance(a: Point, b: Point) -> float:
+    """How far a waypoint should be from the wall a-b: WAYPOINT_CLEARANCE, or more for
+    diagonal walls, which the square player box's corner reaches further towards."""
+    length = max(math.dist(a, b), 1e-6)
+    c, s = abs(b[0] - a[0]) / length, abs(b[1] - a[1]) / length
+    return max(WAYPOINT_CLEARANCE, PLAYER_RADIUS * (c + s) + 1)
+
+
+def _swept_box_hits(p: Point, q: Point, r: float, edge: tuple[Point, Point]) -> bool:
+    """Does an axis-aligned square of half-width r, moved straight from p to q, overlap the
+    segment `edge`? Separating-axis test: the swept square is convex with edge normals x, y
+    and the normal of p-q; add the edge's own normal."""
+    e1, e2 = edge
+    axes = [(1.0, 0.0), (0.0, 1.0)]
+    for (x1, y1), (x2, y2) in ((p, q), (e1, e2)):
+        dx, dy = x2 - x1, y2 - y1
+        length = math.hypot(dx, dy)
+        if length > 1e-9:
+            axes.append((-dy / length, dx / length))
+    for ux, uy in axes:
+        ext = r * (abs(ux) + abs(uy))
+        a, b = p[0] * ux + p[1] * uy, q[0] * ux + q[1] * uy
+        c, d = e1[0] * ux + e1[1] * uy, e2[0] * ux + e2[1] * uy
+        if max(a, b) + ext <= min(c, d) or max(c, d) <= min(a, b) - ext:
+            return False
+    return True
+
+
+def _segment_distance(p1: Point, p2: Point, q1: Point, q2: Point) -> float:
+    if _segments_cross(p1, p2, q1, q2):
+        return 0.0
+    return min(math.dist(p1, _closest_point(p1, q1, q2)), math.dist(p2, _closest_point(p2, q1, q2)),
+               math.dist(q1, _closest_point(q1, p1, p2)), math.dist(q2, _closest_point(q2, p1, p2)))
 
 
 def _closest_point(p: Point, a: Point, b: Point) -> Point:

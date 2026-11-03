@@ -196,6 +196,49 @@ diagnosed by relaxing one constraint at a time in the progression analysis:
   (E4M7's red skull on a balcony).
 - Shootable lines usable from line of sight; boss deaths from where the boss can walk/teleport.
 
+## Motor execution: human-looking movement + replanning (2026-11-03)
+The follower (`motor/follower.py`) was rewritten so routes look like a person playing (it'll be
+watched on stream) and recover when things go wrong.
+- **Turning** is rate-limited like a keyboard player (≤ 8°/tic, vanilla's fast keyboard turn is
+  7) with acceleration limits, and aims at a point 128 units ahead on the path, so the view
+  swings into corners early instead of snapping at waypoints. The old follower turned at 25°/tic
+  and reversed direction 50–100 times a minute; now 95th-percentile turn is 5–7°/tic and a few
+  reversals a minute.
+- **Movement is decoupled from facing.** A velocity controller works out the thrust needed
+  against DOOM's momentum (next move = 0.90625 × last move + thrust, thrust 1.5625/tic at
+  input 50) and splits it into forward + strafe for the current view angle. Input magnitude is
+  capped at 50 (no straferun boost); moving more than 40° off the view costs speed, so it
+  strafes a little round corners but never runs sideways. Strafe input: positive = right.
+- **Speed planning**: slows before sharp corners (combined turn over 48 units), stops at
+  goals, slows to a stop in front of closed doors.
+- **Steering look-ahead is clearance-checked**: steer for the farthest point (up to 72) whose
+  straight line keeps the square box clear of walls, solid things and uncrossed ledges; else
+  the next waypoint exactly. Cutting corners blindly snags the box; turning only at waypoints
+  lets momentum swing wide and catch the next corner on S-bends.
+- **Getting stuck**: a short smooth back-off away from what we're snagged on (no wiggling),
+  twice, then replan.
+- **Replanning**: off the path (> 96 units, > 40 outside its polys, or somewhere lower we can't
+  step back up from, for 10 tics), stuck, or a door/lift that never opens → re-path the step
+  from where we are (`find_path`, ~2 ms); if the goal isn't walkable, `Navigator.plan` a way
+  there with triggers (lifts/switches out of a pit) and splice those steps in; failing that,
+  replan the rest of the level (`walkthrough.plan_from`). The planner-model heights (initial +
+  effects of triggers used so far) plus live heights are the world state; keys are tracked from
+  pickup steps.
+- Lessons: a rising lift goes back down if the player's box overlaps a neighbouring sector
+  whose ceiling is too low, so wait squarely at the edge being crossed; measure door distance
+  to the nearest part of the doorway (doors can be 128 wide); "cross" steps must actually cross
+  their line; a narrow strip below a ledge can't be dropped into if the box reaches a
+  low-ceiling sector beyond it first (E4M1).
+- **Planner fixes found by driving**: path smoothing now checks every segment with the exact
+  swept square box (separating axes) against static walls and solid things, and detours locally
+  via spots diagonally off nearby corners (E1M2's barrel by a wall corner, E1M5's barrel next to
+  an octagonal pillar, E3M1's lamp field); waypoints are kept off diagonal walls by the box's
+  reach (22.6), not 18; walk-over teleports need their line to be steppable (MAP08's sits in
+  front of a closed niche).
+- Lab (`tools/pathfind_lab.py`): shows the bot's current objective, recent log, replans, and
+  the live planned path (minimap + zoomed overlay on the game view, Tab toggles); "Play level"
+  plans and drives the rest of the level from wherever you are.
+
 ## Open questions / research TODO
 - [ ] Jumps that need lift/timed-door heights can't be set up by the verifier ("unverified").
 - [ ] Straferunning (SR50, ~141% speed) as a second jump speed.

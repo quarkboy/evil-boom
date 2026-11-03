@@ -7,11 +7,15 @@ Left: the game. You play with the keyboard (and mouse, once you click the view).
 Right: buttons for every item and switch reachable from where you stand right now, using live
 sector heights and the keys you hold (doors you can open count as passable). Click one and the
 bot walks there from wherever you are; for switches it stops facing the switch so you can
-press it yourself. Your controls are locked while the bot drives; Cancel (or Esc) stops it.
+press it yourself. "Play level" plans the rest of the level from where you stand (switches,
+keys, exit) and lets the bot do all of it. Your controls are locked while the bot drives;
+Cancel (or Esc) stops it. While it drives, the panel shows the current objective and the
+recent log, and the planned path is drawn on the minimap and on a zoomed overlay (Tab toggles
+the overlay) - replans show up live.
 
 Keys: W/S move, A/D strafe, Left/Right turn, E or Space use, Ctrl or left mouse fire,
       Shift walk (run is the default), click the view to capture the mouse, Esc releases it,
-      R restarts the level after it ends.
+      R restarts the level after it ends, Tab toggles the path overlay.
 """
 import argparse
 import math
@@ -25,7 +29,7 @@ from evildoom.engine.jump_check import keep_verified
 from evildoom.engine.vizdoom_engine import VizDoomEngine
 from evildoom.motor.follower import TICRATE, Controls, RouteFollower
 from evildoom.nav.reach import Navigator
-from evildoom.nav.walkthrough import Step
+from evildoom.nav.walkthrough import Step, plan_from
 from evildoom.wad.mapdata import load_map
 from evildoom.wad.specials import Category, Key, Trigger
 from evildoom.wad.wad import Wad
@@ -77,7 +81,8 @@ class Lab:
         self.scroll = 0
         self.show_bonuses = False
         self.mouse_captured = False
-        self.path_points: list[tuple[float, float]] = []
+        self.overlay = True
+        self.goal_label = ""
         self.map_keys = {Key(t.type) for t in self.map.things
                          if t.type in Key._value2member_map_ and t.in_skill(3)}
 
@@ -148,10 +153,31 @@ class Lab:
             return
         action = "face" if target.trigger is not None else "pickup"
         step = Step(path, action, target.trigger, label=target.label)
-        self.follower = RouteFollower(self.nav, [step])
-        self.path_points = [w for w in path.waypoints if w]
+        self.follower = RouteFollower(self.nav, [step], keys=self.keys_held(state),
+                                      replan_level=False)
+        self.goal_label = target.label
         notes = f" ({'; '.join(path.steps)})" if path.steps else ""
         self.status = f"bot -> {target.label}{notes}"
+
+    def play_level(self) -> None:
+        """Plan the rest of the level from here and let the bot do all of it."""
+        state = self.engine.state()
+        if state is None:
+            return
+        obs = self.engine.observe()
+        keys = self.keys_held(state)
+        states = self.nav.initial_states()
+        for s, h in obs.heights.items():
+            states.setdefault(s, set()).add(h)
+        self.status = "planning the rest of the level..."
+        self.draw(state)
+        plan = plan_from(self.nav, (obs.x, obs.y), keys, states, max_seconds=30)
+        if not plan.complete:
+            self.status = f"no plan: {plan.problem}"
+            return
+        self.follower = RouteFollower(self.nav, plan.steps, keys=keys, states=states)
+        self.goal_label = "the exit"
+        self.status = f"bot -> exit, {len(plan.steps)} steps"
 
     def cancel(self, why: str = "cancelled") -> None:
         self.follower = None
@@ -222,6 +248,8 @@ class Lab:
                              (20, GAME_H // 2))
         if self.follower is not None:
             pygame.draw.rect(self.screen, (255, 60, 60), (0, 0, GAME_W, GAME_H), 3)
+            if self.overlay and state is not None:
+                self.draw_overlay()
 
         x0 = GAME_W + 10
         self.screen.blit(self.font.render(f"{self.map.name}  -  pathfinding lab", True, FG),
@@ -232,9 +260,34 @@ class Lab:
         self.button(pygame.Rect(x0, y, 80, 20), "Cancel", lambda: self.cancel(),
                     fill=(110, 40, 40) if self.follower else (50, 50, 60))
         self.button(pygame.Rect(x0 + 88, y, 80, 20), "Refresh", self.refresh_targets)
-        self.button(pygame.Rect(x0 + 176, y, 180, 20),
-                    f"Bonuses: {'shown' if self.show_bonuses else 'hidden'}", self.toggle_bonuses)
+        self.button(pygame.Rect(x0 + 176, y, 90, 20), "Play level", self.play_level,
+                    color=CATEGORY_COLORS["Exit"])
+        self.button(pygame.Rect(x0 + 274, y, 86, 20),
+                    f"Bonus:{'on' if self.show_bonuses else 'off'}", self.toggle_bonuses)
         y += 28
+        if self.follower is not None:  # what the bot is doing instead of the target list
+            self.screen.blit(self.font.render(f"-> {self.goal_label}"[:46], True, FG), (x0, y))
+            y += 18
+            for line in _wrap(self.follower.objective, 50)[:3]:
+                self.screen.blit(self.small.render(line, True, (120, 220, 255)), (x0, y))
+                y += 14
+            if self.follower.replans:
+                self.screen.blit(self.small.render(f"replans: {self.follower.replans}", True,
+                                                   (255, 150, 120)), (x0, y))
+                y += 14
+            y += 6
+            self.screen.blit(self.small.render("log:", True, DIM), (x0, y))
+            y += 14
+            room = (self.mm_rect.y - 8 - y) // 13
+            lines = []
+            for e in self.follower.log.events[-room:]:
+                lines += _wrap(e, 52)
+            for line in lines[-room:]:
+                self.screen.blit(self.small.render(line, True, DIM), (x0, y))
+                y += 13
+            self.draw_minimap(state)
+            pygame.display.flip()
+            return
         self.screen.blit(self.small.render(f"{len(self.targets)} reachable targets (wheel to "
                                            f"scroll)", True, DIM), (x0, y))
         y += 16
@@ -261,9 +314,11 @@ class Lab:
         for t in self.targets:
             pygame.draw.circle(self.screen, CATEGORY_COLORS.get(t.kind, FG),
                                self.to_minimap(*t.goal), 2)
-        if self.follower is not None and len(self.path_points) > 1:
-            pygame.draw.lines(self.screen, (255, 60, 60), False,
-                              [self.to_minimap(*p) for p in self.path_points], 2)
+        if self.follower is not None and state is not None:
+            obs = self.engine.observe()
+            for pts, color, width in self.paths_ahead((obs.x, obs.y)):
+                pygame.draw.lines(self.screen, color, False, [self.to_minimap(*p) for p in pts],
+                                  width)
         if state is not None:
             obs = self.engine.observe()
             px, py = self.to_minimap(obs.x, obs.y)
@@ -271,6 +326,59 @@ class Lab:
             pygame.draw.circle(self.screen, (80, 255, 80), (px, py), 4)
             pygame.draw.line(self.screen, (80, 255, 80), (px, py),
                              (px + 10 * math.cos(a), py - 10 * math.sin(a)), 2)
+
+    def paths_ahead(self, pos) -> list[tuple[list, tuple, int]]:
+        """Polylines to draw: the rest of the current step (bright), later steps (dim)."""
+        f = self.follower
+        out = []
+
+        def runs(points, color, width):
+            run = []
+            for p in points + [None]:
+                if p is None:
+                    if len(run) > 1:
+                        out.append((run, color, width))
+                    run = []
+                else:
+                    run.append(p)
+        for step in f.steps[f.step_i + 1:]:
+            runs(list(step.path.waypoints), (120, 60, 60), 1)
+        runs(f.planned_path(pos), (255, 60, 60), 2)
+        return out
+
+    def draw_overlay(self) -> None:
+        """Zoomed, north-up map of the area round the player with the planned path."""
+        size, scale = 220, 0.22
+        rect = pygame.Rect(GAME_W - size - 8, 8, size, size)
+        surf = pygame.Surface(rect.size, pygame.SRCALPHA)
+        surf.fill((0, 0, 0, 150))
+        obs = self.engine.observe()
+        cx, cy = obs.x, obs.y
+
+        def to(p):
+            return (size / 2 + (p[0] - cx) * scale, size / 2 - (p[1] - cy) * scale)
+        reach = size / 2 / scale
+        m = self.map
+        for line in m.linedefs:
+            a, b = m.vertexes[line.v1], m.vertexes[line.v2]
+            if min(a.x, b.x) > cx + reach or max(a.x, b.x) < cx - reach or \
+                    min(a.y, b.y) > cy + reach or max(a.y, b.y) < cy - reach:
+                continue
+            color = (110, 110, 120, 255) if line.two_sided else (220, 220, 230, 255)
+            pygame.draw.line(surf, color, to((a.x, a.y)), to((b.x, b.y)))
+        for pts, color, width in self.paths_ahead((cx, cy)):
+            pygame.draw.lines(surf, color + (255,), False, [to(p) for p in pts], width)
+        step_path = self.follower.planned_path()
+        goal = next((p for p in reversed(step_path) if p is not None), None)
+        if goal:
+            pygame.draw.circle(surf, (255, 220, 60, 255), to(goal), 5, 2)
+        a = math.radians(obs.angle)
+        pygame.draw.circle(surf, (80, 255, 80, 255), (size / 2, size / 2), 4)
+        pygame.draw.line(surf, (80, 255, 80, 255), (size / 2, size / 2),
+                         (size / 2 + 12 * math.cos(a), size / 2 - 12 * math.sin(a)), 2)
+        self.screen.blit(surf, rect)
+        text = self.small.render(self.follower.objective[:34], True, (255, 255, 255))
+        self.screen.blit(text, (rect.x + 4, rect.bottom - 16))
 
     def toggle_bonuses(self) -> None:
         self.show_bonuses = not self.show_bonuses
@@ -290,6 +398,8 @@ class Lab:
                         self.cancel()
                     else:
                         self.set_capture(False)
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
+                    self.overlay = not self.overlay
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_r \
                         and self.engine.finished:
                     self.engine.restart()
@@ -305,7 +415,7 @@ class Lab:
                 if self.follower is not None:
                     controls = self.follower.act(self.engine.observe())
                     if self.follower.done:
-                        self.cancel(f"arrived: {self.status.removeprefix('bot -> ')}")
+                        self.cancel(f"arrived: {self.goal_label}")
                     elif self.follower.failed:
                         self.cancel("bot gave up: " + self.follower.log.events[-1])
                     if self.mouse_captured:
