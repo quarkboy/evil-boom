@@ -21,6 +21,7 @@ from dataclasses import dataclass
 import pygame
 
 from evildoom.config import resolve_wad
+from evildoom.engine.jump_check import keep_verified
 from evildoom.engine.vizdoom_engine import VizDoomEngine
 from evildoom.motor.follower import TICRATE, Controls, RouteFollower
 from evildoom.nav.reach import Navigator
@@ -55,13 +56,21 @@ class Target:
 
 
 class Lab:
-    def __init__(self, wad: str, map_name: str, monsters: bool):
+    def __init__(self, wad: str, map_name: str, monsters: bool,
+                 at: tuple[float, float] | None = None, god: bool = False,
+                 give_all: bool = False):
         iwad = resolve_wad(wad)
         self.map = load_map(Wad(iwad), map_name)
         self.nav = Navigator(self.map)
+        keep_verified(self.nav, iwad, map_name)  # drop jumps the engine disproves
         self.engine = VizDoomEngine(iwad, map_name, nomonsters=not monsters,
                                     size=f"{GAME_W}x{GAME_H}", rgb=True, objects=True)
+        if at or god or give_all:
+            self.engine.game.add_game_args("+sv_cheats 1")
         self.engine.start()
+        self.cheats = ["god"] * god + ["give all"] * give_all \
+            + ([f"warp {at[0]:.0f} {at[1]:.0f}"] if at else [])
+        self.apply_cheats()
         self.follower: RouteFollower | None = None
         self.status = "idle - click a target, or play"
         self.targets: list[Target] = []
@@ -79,6 +88,12 @@ class Lab:
         self.small = pygame.font.SysFont("consolas", 12)
         self.clock = pygame.time.Clock()
         self._minimap_setup()
+
+    def apply_cheats(self) -> None:
+        for cmd in self.cheats:
+            self.engine.game.send_game_command(cmd)
+        for _ in range(3):
+            self.engine.step(Controls())
 
     # --- world queries --------------------------------------------------------------------
 
@@ -278,6 +293,7 @@ class Lab:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_r \
                         and self.engine.finished:
                     self.engine.restart()
+                    self.apply_cheats()
                     self.cancel("level restarted")
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if not (self.mouse_captured and event.pos[0] < GAME_W):
@@ -319,8 +335,14 @@ def main() -> None:
     ap.add_argument("wad", help="IWAD short name (doom, doom2, tnt, plutonia) or path")
     ap.add_argument("map", help="map name, e.g. E1M1 or MAP01")
     ap.add_argument("--monsters", action="store_true", help="keep monsters (default: none)")
+    ap.add_argument("--at", nargs=2, type=float, metavar=("X", "Y"),
+                    help="start at this map position (uses the warp cheat)")
+    ap.add_argument("--god", action="store_true", help="god mode")
+    ap.add_argument("--give-all", action="store_true",
+                    help="all weapons, ammo and keys (cheat)")
     args = ap.parse_args()
-    lab = Lab(args.wad, args.map.upper(), args.monsters)
+    lab = Lab(args.wad, args.map.upper(), args.monsters,
+              tuple(args.at) if args.at else None, args.god, args.give_all)
     try:
         lab.run()
     finally:

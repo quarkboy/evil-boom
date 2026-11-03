@@ -179,7 +179,27 @@ diagnosed by relaxing one constraint at a time in the progression analysis:
   mover), MAP04, MAP09. Worth a hands-on look in `tools/pathfind_lab.py`.
 - Width and headroom relaxations fix nothing: the width check isn't over-blocking.
 
+## Jumps, verification and planner guidance (2026-11-03)
+- **Run-off jumps** (`Navigator._find_jumps`): vanilla thrust/friction for run-up speed, flight
+  per tic like P_XYMovement/P_ZMovement, with the whole 32x32 box: you keep ledge height until
+  the box leaves the ledge and land as soon as its front reaches something within a step. Angles
+  0/±30/±45/±60 off each edge, takeoffs every 16 units. Moved heights a jump needs (a lowered
+  fence) become `Jump.requires`; the planner only uses the jump once the world has them.
+- **Engine verification** (`engine/jump_check.py`): every jump is tried in ViZDoom (warp, line
+  up, sprint, must touch down on the predicted sector); disproved jumps are dropped, results
+  cached in `out/jumpcache`. Typically 10–20% of simulated jumps fail.
+- **Relaxed-plan guidance**: the search tries the triggers/keys a relaxed plan (ordering
+  ignored) depends on first. Fixed every "search gave up" map (E2M2, E4M8, MAP12, MAP15, MAP18).
+- **Where to stand matters**: trigger and key actions try several spots (one per sector) and
+  keep the one leaving the most reachable (E4M1's red door pressed from the nukage pit).
+- **Pickups across railings**: box overlap per axis, standing 17 back from impassable lines
+  (E4M7's red skull on a balcony).
+- Shootable lines usable from line of sight; boss deaths from where the boss can walk/teleport.
+
 ## Open questions / research TODO
+- [ ] Jumps that need lift/timed-door heights can't be set up by the verifier ("unverified").
+- [ ] Straferunning (SR50, ~141% speed) as a second jump speed.
+- [ ] Jump verification is slow on first run (1–4 min/map); optimize.
 - [x] ~~What is ViZDoom's actual compatibility?~~ See findings above.
 - [ ] Verify Boom/MBF feature support in ViZDoom with a real community Boom PWAD.
 - [ ] Check input/control: continuous turn/move delta buttons in ASYNC_PLAYER mode at 35 Hz,

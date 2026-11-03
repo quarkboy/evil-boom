@@ -57,7 +57,16 @@ class VizDoomEngine:
 
     @property
     def finished(self) -> bool:
+        """The episode is over: the level was exited *or the player died*."""
         return self.game.is_episode_finished()
+
+    @property
+    def dead(self) -> bool:
+        return self.game.is_player_dead()
+
+    @property
+    def exited(self) -> bool:
+        return self.finished and not self.dead
 
     def observe(self) -> Observation:
         state = self.game.get_state()

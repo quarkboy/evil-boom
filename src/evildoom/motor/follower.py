@@ -20,6 +20,7 @@ MAX_TURN = 25.0          # degrees per tic
 USE_EVERY = 15           # tics between use presses while waiting at a door
 STUCK_TICS = 2 * TICRATE
 GIVE_UP_TICS = 15 * TICRATE
+RUNUP_TOLERANCE = 6.0   # how exactly to hit a jump run-up point
 
 
 @dataclass
@@ -63,6 +64,7 @@ class RouteFollower:
         self.done = False
         self.failed = False
         self._last_pos: tuple[float, float] | None = None
+        self._sprint = None  # (jump, heading, start tic) while executing a run-jump
         self._next_step(0)
 
     # --- step / segment bookkeeping ----------------------------------------------------
@@ -131,9 +133,17 @@ class RouteFollower:
         seg = self.segments[self.seg_i]
         pos = (obs.x, obs.y)
 
+        if self._sprint is not None:
+            return self._sprint_jump(obs)
+
         blocked = self._check_blocked(obs)
         if blocked is not None:
             return blocked
+
+        if self.wp_i < len(seg):
+            jump = self._jump_at(seg[self.wp_i])
+            if jump is not None:
+                return self._approach_runup(obs, jump)
 
         if self.wp_i >= len(seg):
             if self.seg_i + 1 < len(self.segments):  # waiting for a teleport to happen
@@ -169,6 +179,58 @@ class RouteFollower:
             # wiggle sideways to get unsnagged from a corner
             controls.strafe = 30 if (obs.tic // 20) % 2 else -30
         return controls
+
+    # --- run-off jumps ---------------------------------------------------------------------
+
+    def _jump_at(self, waypoint):
+        """The planned jump whose run-up starts at this waypoint, if any."""
+        for jump in self.steps[self.step_i].path.jumps:
+            if math.dist(waypoint, jump.runup) < 1:
+                return jump
+        return None
+
+    def _approach_runup(self, obs: Observation, jump) -> Controls:
+        """Get to the run-up point precisely and face the takeoff, then start sprinting."""
+        pos = (obs.x, obs.y)
+        dist = math.dist(pos, jump.runup)
+        dx, dy = jump.takeoff[0] - jump.runup[0], jump.takeoff[1] - jump.runup[1]
+        heading = math.degrees(math.atan2(dy, dx))
+        if dist > RUNUP_TOLERANCE:
+            controls = self._steer(obs, jump.runup, final=True)
+            controls.forward = min(controls.forward, max(4.0, dist / 2))
+            if dist < self._best_dist - 1:
+                self._best_dist, self._progress_tic = dist, obs.tic
+            if obs.tic - self._progress_tic > GIVE_UP_TICS:
+                self.failed = True
+                self.log.add(obs.tic, f"could not reach jump run-up {jump.runup}")
+            return controls
+        diff = _norm(heading - obs.angle)
+        if abs(diff) > 1.5:
+            return Controls(turn=max(-MAX_TURN, min(MAX_TURN, -diff)))
+        self._sprint = (jump, heading, obs.tic)
+        self.log.add(obs.tic, f"run-jump from ({jump.takeoff[0]:.0f}, {jump.takeoff[1]:.0f})")
+        return self._sprint_jump(obs)
+
+    def _sprint_jump(self, obs: Observation) -> Controls:
+        """Full speed in a straight line until we've covered the planned flight distance."""
+        jump, heading, since = self._sprint
+        ux, uy = math.cos(math.radians(heading)), math.sin(math.radians(heading))
+        flown = (obs.x - jump.takeoff[0]) * ux + (obs.y - jump.takeoff[1]) * uy
+        if flown >= math.dist(jump.takeoff, jump.dest) - 8 or obs.tic - since > 4 * TICRATE:
+            self._sprint = None
+            seg = self.segments[self.seg_i]
+            # continue from the first waypoint after the takeoff
+            while self.wp_i < len(seg) and math.dist(seg[self.wp_i], jump.dest) > 1 \
+                    and not (math.dist(seg[self.wp_i], jump.takeoff) < 1):
+                self.wp_i += 1
+            self.wp_i += 1
+            self._reset_progress(obs.tic)
+            land = self.nav.mesh.poly_at(obs.x, obs.y)
+            self.log.add(obs.tic, f"landed at ({obs.x:.0f}, {obs.y:.0f}) sector "
+                                  f"{land.sector if land else None}")
+            return Controls()
+        diff = _norm(heading - obs.angle)
+        return Controls(forward=50.0, turn=max(-3.0, min(3.0, -diff)))
 
     def _steer(self, obs: Observation, target, final: bool) -> Controls:
         dx, dy = target[0] - obs.x, target[1] - obs.y
@@ -210,6 +272,11 @@ class RouteFollower:
                 return None
             if nxt.sector != cur.sector and \
                     not can_cross(obs.heights[cur.sector], obs.heights[nxt.sector]):
+                # Look past the immediate crossing only for doors (they hide behind thin
+                # door tracks). For lifts and other movers, waiting before boarding is wrong:
+                # step on and ride, and the crossing off it opens up on the way.
+                if j > self.poly_i and nxt.sector not in self.doors:
+                    return None
                 return cur, nxt, portal
         return None
 

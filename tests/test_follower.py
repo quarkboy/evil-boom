@@ -27,6 +27,6 @@ def test_bot_exits_e1m1():
     follower = RouteFollower(nav, plan.steps)
     while not engine.finished and not follower.failed and engine.tic < 120 * TICRATE:
         engine.step(follower.act(engine.observe()))
-    exited = engine.finished
+    exited = engine.exited  # finished *and* alive
     engine.close()
     assert exited, "\n".join(follower.log.events)

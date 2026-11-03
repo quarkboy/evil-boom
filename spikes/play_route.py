@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from evildoom.config import resolve_wad
+from evildoom.engine.jump_check import keep_verified
 from evildoom.engine.vizdoom_engine import VizDoomEngine
 from evildoom.motor.follower import TICRATE, RouteFollower
 from evildoom.nav.reach import Navigator
@@ -31,6 +32,8 @@ def main() -> None:
     ap.add_argument("--replay-only", action="store_true", help="just replay the saved demo")
     ap.add_argument("--no-replay", action="store_true", help="record without watching")
     ap.add_argument("--max-minutes", type=float, default=15, help="game-time limit for the run")
+    ap.add_argument("--god", action="store_true",
+                    help="god mode for the run (tests pathfinding, not survival)")
     ap.add_argument("--size", default="1024x768",
                     help="replay window size, e.g. 800x600, 1280x720, 1920x1080")
     args = ap.parse_args()
@@ -43,6 +46,8 @@ def main() -> None:
     if not args.replay_only:
         m = load_map(Wad(iwad), map_name)
         nav = Navigator(m)
+        counts = keep_verified(nav, iwad, map_name, log=print)
+        print(f"jumps checked in the engine: {counts}")
         start = next(t for t in m.things if t.type == 1)
         t0 = time.perf_counter()
         plan = plan_level(nav, (start.x, start.y))
@@ -54,13 +59,17 @@ def main() -> None:
             return
 
         engine = VizDoomEngine(iwad, map_name)
+        if args.god:
+            engine.game.add_game_args("+sv_cheats 1")
         engine.start(record=demo)
+        if args.god:
+            engine.game.send_game_command("god")
         follower = RouteFollower(nav, plan.steps)
         max_tics = int(args.max_minutes * 60 * TICRATE)
         while not engine.finished and not follower.done and not follower.failed \
                 and engine.tic < max_tics:
             engine.step(follower.act(engine.observe()))
-        exited = engine.finished
+        exited, died = engine.exited, engine.dead
         # let the demo run a moment past the end of the route
         for _ in range(TICRATE):
             if engine.finished:
@@ -72,6 +81,7 @@ def main() -> None:
         for e in follower.log.events:
             print("  " + e)
         result = ("EXITED the level" if exited else
+                  "DIED" if died else
                   "FAILED" if follower.failed else
                   "route done but level not exited" if follower.done else "timed out")
         print(f"\n{result} after {engine.tic / TICRATE:.1f}s of game time; demo: {demo}")
