@@ -337,6 +337,12 @@ watched on stream) and recover when things go wrong.
   adapter, follower and Neuro integration stay in Python. The Python version is the
   reference until each stage plans every map the same. Keep it portable (final deployment
   is likely Linux).
+- Stage 3: the plan search itself (`native/src/plan.rs`) is native; Python does the one-off
+  analysis (upper bound, relaxed plan) and rebuilds the Route. Identical plans on 35 maps
+  checked. Most of the time was box fitting (cheap geometric test now goes before the height
+  rules) and repeated flood fills (now cached on start poly, keys and a hash of the heights).
+  MAP17 does 5000 expansions in 8 s instead of 62 s, and plans within the budget, now raised
+  to 20000 expansions (the 60 s limit still applies).
 
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).

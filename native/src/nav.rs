@@ -44,11 +44,32 @@ pub struct States<'py> {
     pub cache: HashMap<usize, Vec<Heights>>,
 }
 
+/// Where flood fills and path-finding read sector heights from: a Python dict (read lazily)
+/// or the plan search's own states.
+pub trait Src {
+    fn get(&mut self, s: usize) -> PyResult<&Vec<Heights>>;
+}
+
+/// A plan-search world: per sector, the heights it can take (shared between nodes).
+pub struct Owned<'a>(pub &'a [std::rc::Rc<Vec<Heights>>]);
+
+impl Src for Owned<'_> {
+    fn get(&mut self, s: usize) -> PyResult<&Vec<Heights>> {
+        Ok(&self.0[s])
+    }
+}
+
 impl<'py> States<'py> {
     pub fn new(dict: Bound<'py, PyDict>) -> Self {
         States { dict, cache: HashMap::new() }
     }
-    pub fn get(&mut self, s: usize) -> PyResult<&Vec<Heights>> {
+    pub fn get_owned(&mut self, s: usize) -> PyResult<Vec<Heights>> {
+        Ok(Src::get(self, s)?.clone())
+    }
+}
+
+impl Src for States<'_> {
+    fn get(&mut self, s: usize) -> PyResult<&Vec<Heights>> {
         if !self.cache.contains_key(&s) {
             let mut v = Vec::new();
             if let Some(hs) = self.dict.get_item(s)? {
@@ -128,22 +149,23 @@ pub struct NavCore {
     pub static_grid: HashMap<(i64, i64), Vec<Seg>>,
     pub obstacle_grid: HashMap<(i64, i64), Vec<Seg>>,
     pub obstacle_order: Vec<(i64, i64)>,
+    pub plan_data: Option<crate::plan::PlanData>,
 }
 
 impl NavCore {
-    fn line_seg(&self, li: usize) -> Seg {
+    pub(crate) fn line_seg(&self, li: usize) -> Seg {
         let l = &self.map.linedefs[li];
         let (a, b) = (self.map.vertexes[l.v1], self.map.vertexes[l.v2]);
         ((a.x, a.y), (b.x, b.y))
     }
 
-    fn sector_at(&self, p: Point) -> Option<usize> {
+    pub(crate) fn sector_at(&self, p: Point) -> Option<usize> {
         self.mesh.poly_at(p.0, p.1).map(|i| self.poly_sector[i])
     }
 
     // --- passability ------------------------------------------------------------------------
 
-    fn heights(states: &mut States<'_>, doors: &Option<Doors>, s: usize, frm: Option<usize>) -> PyResult<Vec<Heights>> {
+    fn heights(states: &mut dyn Src, doors: Option<&Doors>, s: usize, frm: Option<usize>) -> PyResult<Vec<Heights>> {
         let mut out = states.get(s)?.clone();
         if let Some(d) = doors {
             if let Some((open, users)) = d.get(&s) {
@@ -179,7 +201,7 @@ impl NavCore {
         Ok(v)
     }
 
-    fn fits_now(&mut self, py: Python<'_>, portal: usize, frm: usize, st: &mut States<'_>, doors: &Option<Doors>) -> PyResult<bool> {
+    fn fits_now(&mut self, py: Python<'_>, portal: usize, frm: usize, st: &mut dyn Src, doors: Option<&Doors>) -> PyResult<bool> {
         let Some(gates) = self.gates.get(&portal) else { return Ok(true) };
         let gates = gates.clone();
         let sector = self.poly_sector[frm];
@@ -200,7 +222,7 @@ impl NavCore {
         self.fits(py, portal, blocking)
     }
 
-    fn heights_passable(&mut self, py: Python<'_>, sa: usize, sb: usize, linedef: i64, frm: usize, st: &mut States<'_>, doors: &Option<Doors>) -> PyResult<bool> {
+    fn heights_passable(&mut self, py: Python<'_>, sa: usize, sb: usize, linedef: i64, frm: usize, st: &mut dyn Src, doors: Option<&Doors>) -> PyResult<bool> {
         let hs_a = Self::heights(st, doors, sa, None)?;
         let hs_b = Self::heights(st, doors, sb, Some(frm))?;
         for &ha in &hs_a {
@@ -214,7 +236,7 @@ impl NavCore {
     }
 
     /// Edge `i` of `poly`'s adjacency crossable now?
-    fn edge_passable(&mut self, py: Python<'_>, poly: usize, i: usize, st: &mut States<'_>, doors: &Option<Doors>) -> PyResult<bool> {
+    fn edge_passable(&mut self, py: Python<'_>, poly: usize, i: usize, st: &mut dyn Src, doors: Option<&Doors>) -> PyResult<bool> {
         let (portal, sa, sb, linedef) = {
             let e = &self.adj[poly][i];
             (e.portal, e.sa, e.sb, e.linedef)
@@ -225,7 +247,7 @@ impl NavCore {
         Ok(sa == sb || self.heights_passable(py, sa, sb, linedef, poly, st, doors)?)
     }
 
-    fn tele_ok(&self, poly: usize, ti: usize, st: &mut States<'_>) -> PyResult<bool> {
+    fn tele_ok(&self, poly: usize, ti: usize, st: &mut dyn Src) -> PyResult<bool> {
         match &self.tele[poly][ti].kind {
             TeleKind::Jump { requires, .. } => {
                 for (s, h) in requires.clone() {
@@ -247,7 +269,7 @@ impl NavCore {
         }
     }
 
-    pub fn reachable(&mut self, py: Python<'_>, start: usize, st: &mut States<'_>, doors: &Option<Doors>) -> PyResult<HashSet<usize>> {
+    pub fn reachable(&mut self, py: Python<'_>, start: usize, st: &mut dyn Src, doors: Option<&Doors>) -> PyResult<HashSet<usize>> {
         let mut seen: HashSet<usize> = HashSet::new();
         seen.insert(start);
         let mut todo = vec![start];
@@ -273,7 +295,7 @@ impl NavCore {
 
     // --- path-finding -------------------------------------------------------------------------
 
-    pub fn find_path(&mut self, py: Python<'_>, start: Point, goal: Point, st: &mut States<'_>, doors: &Option<Doors>, strict_fit: bool) -> PyResult<Option<Found>> {
+    pub fn find_path(&mut self, py: Python<'_>, start: Point, goal: Point, st: &mut dyn Src, doors: Option<&Doors>, strict_fit: bool) -> PyResult<Option<Found>> {
         let mut best: Option<Found> = None;
         let mut banned: HashSet<usize> = HashSet::new();
         for _ in 0..3 {
@@ -309,7 +331,7 @@ impl NavCore {
         Ok(best)
     }
 
-    fn find_path_once(&mut self, py: Python<'_>, start: Point, goal: Point, st: &mut States<'_>, doors: &Option<Doors>, banned: &HashSet<usize>, squeezes: &mut Vec<Point>) -> PyResult<Option<Found>> {
+    fn find_path_once(&mut self, py: Python<'_>, start: Point, goal: Point, st: &mut dyn Src, doors: Option<&Doors>, banned: &HashSet<usize>, squeezes: &mut Vec<Point>) -> PyResult<Option<Found>> {
         let (Some(sp), Some(gp)) = (self.mesh.poly_at(start.0, start.1), self.mesh.poly_at(goal.0, goal.1)) else { return Ok(None) };
         let use_h = !self.has_teleports;
         let h = |me: &Self, poly: usize| if use_h { dist(me.mesh.polys[poly].as_ref().unwrap().center, goal) } else { 0.0 };
@@ -318,6 +340,7 @@ impl NavCore {
         let mut came: HashMap<usize, (usize, (bool, usize))> = HashMap::new();
         best.insert(sp, 0.0);
         entry.insert(sp, start);
+        let t_astar = std::time::Instant::now();
         let mut heap = BinaryHeap::new();
         heap.push(HeapItem(h(self, sp), 0.0, sp));
         while let Some(HeapItem(_, g, poly)) = heap.pop() {
@@ -369,6 +392,7 @@ impl NavCore {
         }
         chain.reverse();
         let cost = best[&gp] + dist(entry[&gp], goal);
+        crate::plan::phase(0, t_astar);
         let points = self.smooth(py, start, goal, &chain, st, squeezes)?;
         Ok(Some(Found {
             polys: chain.iter().map(|c| c.0).collect(),
@@ -386,7 +410,7 @@ impl NavCore {
         }
     }
 
-    fn smooth(&mut self, _py: Python<'_>, start: Point, goal: Point, chain: &[(usize, Option<(bool, usize)>)], st: &mut States<'_>, squeezes: &mut Vec<Point>) -> PyResult<Vec<Option<Point>>> {
+    fn smooth(&mut self, _py: Python<'_>, start: Point, goal: Point, chain: &[(usize, Option<(bool, usize)>)], st: &mut dyn Src, squeezes: &mut Vec<Point>) -> PyResult<Vec<Option<Point>>> {
         let mut points: Vec<Option<Point>> = Vec::new();
         let mut seg_start = start;
         let mut portals: Vec<(Point, Point)> = Vec::new();
@@ -457,9 +481,15 @@ impl NavCore {
             match p {
                 None => {
                     if !run.is_empty() {
+                        let t = std::time::Instant::now();
                         let a = self.push_from_corners(&run, &crossed, &pinned, st)?;
+                        crate::plan::phase(1, t);
+                        let t = std::time::Instant::now();
                         let b = self.box_fits_path(&a, &crossed, &pinned, st, squeezes)?;
+                        crate::plan::phase(2, t);
+                        let t = std::time::Instant::now();
                         let c = self.straighten(&b, &crossed, &pinned, Some(&sectors), st)?;
+                        crate::plan::phase(3, t);
                         out.extend(c.into_iter().map(Some));
                         run.clear();
                     }
@@ -475,7 +505,7 @@ impl NavCore {
     // --- box fitting -------------------------------------------------------------------------
 
     /// Navigator._static_edges(a, b, pad, exempt) at the planned heights.
-    fn static_edges(&self, a: Point, b: Point, pad: f64, exempt: Option<&HashSet<usize>>, st: &mut States<'_>) -> PyResult<Vec<Seg>> {
+    fn static_edges(&self, a: Point, b: Point, pad: f64, exempt: Option<&HashSet<usize>>, st: &mut dyn Src) -> PyResult<Vec<Seg>> {
         let cs: Vec<(i64, i64)> = cells(a.0.min(b.0) - pad, a.1.min(b.1) - pad, a.0.max(b.0) + pad, a.1.max(b.1) + pad).collect();
         let mut seen_e: HashSet<(u64, u64, u64, u64)> = HashSet::new();
         let mut out = Vec::new();
@@ -577,13 +607,111 @@ impl NavCore {
         Ok(out)
     }
 
-    fn box_hits(&self, p: Point, q: Point, ignore: &HashSet<(u64, u64, u64, u64)>, exempt: Option<&HashSet<usize>>, st: &mut States<'_>) -> PyResult<HashSet<(u64, u64, u64, u64)>> {
+    /// The floor height the box at `a` stands on, for which ledges block it (static_edges's
+    /// `ours`).
+    fn standing_floor(&self, a: Point, st: &mut dyn Src) -> PyResult<Option<f64>> {
+        let Some(hp) = self.mesh.poly_at(a.0, a.1) else { return Ok(None) };
+        let hs = self.poly_sector[hp];
+        let reach_up = st.get(hs)?.iter().map(|h| h.0).fold(f64::NEG_INFINITY, f64::max) + MAX_STEP;
+        let mut grid = [[f64::NEG_INFINITY; 3]; 3];
+        for (i, row) in grid.iter_mut().enumerate() {
+            for (j, f) in row.iter_mut().enumerate() {
+                if let Some(s) = self.sector_at((a.0 + (i as f64 - 1.0) * PLAYER_RADIUS, a.1 + (j as f64 - 1.0) * PLAYER_RADIUS)) {
+                    *f = st.get(s)?.iter().map(|h| h.0).fold(f64::NEG_INFINITY, f64::max);
+                }
+            }
+        }
+        let high = |i: usize, j: usize| grid[i][j] > reach_up;
+        let wedged = (0..3).any(|k| (high(0, k) && high(2, k) && !high(1, k)) || (high(k, 0) && high(k, 2) && !high(k, 1)));
+        Ok(grid.iter().flatten().copied().filter(|&f| f > f64::NEG_INFINITY && (!wedged || f <= reach_up)).fold(None, |acc: Option<f64>, f| Some(acc.map_or(f, |a| a.max(f)))))
+    }
+
+    /// Whether line `li` (not exempt) stops the box standing on `ours` (static_edges's rules).
+    fn line_blocks(&self, li: usize, ours: &mut Option<Option<f64>>, a: Point, st: &mut dyn Src) -> PyResult<bool> {
+        let l = &self.map.linedefs[li];
+        let (f, bk) = (self.map.front_sector(l), self.map.back_sector(l));
+        if self.teleport_lines.contains(&li) {
+            return Ok(true);
+        }
+        let is_wall = self.walls.contains(&li);
+        if !is_wall && !self.drops.contains(&li) {
+            let (Some(f), Some(bk)) = (f, bk) else { return Ok(false) };
+            if ours.is_none() {
+                *ours = Some(self.standing_floor(a, st)?);
+            }
+            let Some(o) = ours.unwrap() else { return Ok(false) };
+            let fs = st.get(f)?.clone();
+            let bs = st.get(bk)?;
+            let mut top = f64::NEG_INFINITY;
+            for hf in &fs {
+                for hb in bs {
+                    top = top.max(hf.1.min(hb.1));
+                }
+            }
+            return Ok(top - o < PLAYER_HEIGHT);
+        }
+        if is_wall {
+            if let (Some(f), Some(bk)) = (f, bk) {
+                let fs = st.get(f)?.clone();
+                let bs = st.get(bk)?;
+                if fs.iter().any(|&hf| bs.iter().any(|&hb| can_cross(hf, hb) || can_cross(hb, hf))) {
+                    return Ok(false);
+                }
+            }
+            return Ok(true);
+        }
+        let (f, bk) = (f.unwrap(), bk.unwrap());
+        let fs = st.get(f)?.clone();
+        let bs = st.get(bk)?;
+        let mut top = f64::INFINITY;
+        for hf in &fs {
+            for hb in bs {
+                top = top.min(hf.0.max(hb.0));
+            }
+        }
+        if ours.is_none() {
+            *ours = Some(self.standing_floor(a, st)?);
+        }
+        Ok(matches!(ours.unwrap(), Some(o) if o + MAX_STEP < top))
+    }
+
+    /// The edges (static_edges(p, q, radius + 1, exempt)) the box swept from p to q hits,
+    /// less `ignore`: the cheap geometric test first, the height rules only for what it hits.
+    pub(crate) fn box_hits(&self, p: Point, q: Point, ignore: &HashSet<(u64, u64, u64, u64)>, exempt: Option<&HashSet<usize>>, st: &mut dyn Src) -> PyResult<HashSet<(u64, u64, u64, u64)>> {
         let r = PLAYER_RADIUS + BOX_SLACK;
-        Ok(self.static_edges(p, q, PLAYER_RADIUS + 1.0, exempt, st)?
-            .into_iter()
-            .filter(|&e| !ignore.contains(&skey(e)) && swept_box_hits(p, q, r, e))
-            .map(skey)
-            .collect())
+        let pad = PLAYER_RADIUS + 1.0;
+        let cs: Vec<(i64, i64)> = cells(p.0.min(q.0) - pad, p.1.min(q.1) - pad, p.0.max(q.0) + pad, p.1.max(q.1) + pad).collect();
+        let mut out = HashSet::new();
+        for c in &cs {
+            if let Some(es) = self.static_grid.get(c) {
+                for &e in es {
+                    let k = skey(e);
+                    if !ignore.contains(&k) && !out.contains(&k) && swept_box_hits(p, q, r, e) {
+                        out.insert(k);
+                    }
+                }
+            }
+        }
+        let Some(exempt) = exempt else { return Ok(out) };
+        let mut ours: Option<Option<f64>> = None;
+        let mut seen: HashSet<usize> = HashSet::new();
+        for c in &cs {
+            let Some(lis) = self.mesh.line_grid.get(c) else { continue };
+            for &li in lis {
+                if exempt.contains(&li) || !seen.insert(li) {
+                    continue;
+                }
+                let e = self.line_seg(li);
+                let k = skey(e);
+                if ignore.contains(&k) || out.contains(&k) || !swept_box_hits(p, q, r, e) {
+                    continue;
+                }
+                if self.line_blocks(li, &mut ours, p, st)? {
+                    out.insert(k);
+                }
+            }
+        }
+        Ok(out)
     }
 
     fn ledges_crossed(&self, a: Point, b: Point, exempt: &HashSet<usize>) -> bool {
@@ -602,7 +730,7 @@ impl NavCore {
         false
     }
 
-    fn box_fits_path(&self, pts: &[Point], exempt: &HashSet<usize>, pinned: &HashSet<(u64, u64)>, st: &mut States<'_>, squeezes: &mut Vec<Point>) -> PyResult<Vec<Point>> {
+    fn box_fits_path(&self, pts: &[Point], exempt: &HashSet<usize>, pinned: &HashSet<(u64, u64)>, st: &mut dyn Src, squeezes: &mut Vec<Point>) -> PyResult<Vec<Point>> {
         if pts.len() < 2 {
             return Ok(pts.to_vec());
         }
@@ -654,7 +782,7 @@ impl NavCore {
         true
     }
 
-    fn straighten(&self, pts: &[Point], exempt: &HashSet<usize>, pinned: &HashSet<(u64, u64)>, sectors: Option<&HashSet<usize>>, st: &mut States<'_>) -> PyResult<Vec<Point>> {
+    fn straighten(&self, pts: &[Point], exempt: &HashSet<usize>, pinned: &HashSet<(u64, u64)>, sectors: Option<&HashSet<usize>>, st: &mut dyn Src) -> PyResult<Vec<Point>> {
         if pts.len() < 3 {
             return Ok(pts.to_vec());
         }
@@ -695,7 +823,7 @@ impl NavCore {
         Ok(out)
     }
 
-    fn squeeze_points(&self, a: Point, b: Point, ignore: &HashSet<(u64, u64, u64, u64)>, exempt: &HashSet<usize>, st: &mut States<'_>) -> PyResult<Vec<Point>> {
+    fn squeeze_points(&self, a: Point, b: Point, ignore: &HashSet<(u64, u64, u64, u64)>, exempt: &HashSet<usize>, st: &mut dyn Src) -> PyResult<Vec<Point>> {
         let length = dist(a, b);
         if length < 1.0 {
             return Ok(Vec::new());
@@ -714,7 +842,7 @@ impl NavCore {
         Ok(out.into_iter().step_by(step).collect())
     }
 
-    fn detour(&self, a: Point, b: Point, exempt: &HashSet<usize>, ignore: &HashSet<(u64, u64, u64, u64)>, st: &mut States<'_>) -> PyResult<Option<Vec<Point>>> {
+    fn detour(&self, a: Point, b: Point, exempt: &HashSet<usize>, ignore: &HashSet<(u64, u64, u64, u64)>, st: &mut dyn Src) -> PyResult<Option<Vec<Point>>> {
         let length = dist(a, b);
         if length < 1.0 {
             return Ok(None);
@@ -816,7 +944,7 @@ impl NavCore {
     }
 
     /// Navigator._walls_near(a, b, pad, exempt) at the planned heights (live=None).
-    fn walls_near(&self, a: Point, b: Point, pad: f64, exempt: Option<&HashSet<usize>>, st: &mut States<'_>) -> PyResult<Vec<Seg>> {
+    fn walls_near(&self, a: Point, b: Point, pad: f64, exempt: Option<&HashSet<usize>>, st: &mut dyn Src) -> PyResult<Vec<Seg>> {
         let mut out = Vec::new();
         let mut seen_l: HashSet<usize> = HashSet::new();
         let mut seen_e: HashSet<(u64, u64, u64, u64)> = HashSet::new();
@@ -855,11 +983,11 @@ impl NavCore {
         Ok(out)
     }
 
-    fn wall_clearance(&self, p: Point, exempt: &HashSet<usize>, st: &mut States<'_>) -> PyResult<f64> {
+    fn wall_clearance(&self, p: Point, exempt: &HashSet<usize>, st: &mut dyn Src) -> PyResult<f64> {
         Ok(self.walls_near(p, p, PATH_CLEARANCE, Some(exempt), st)?.into_iter().map(|(a, b)| dist(p, closest_point(p, a, b))).fold(f64::INFINITY, f64::min))
     }
 
-    fn nudge_off_walls(&self, mut p: Point, exempt: &HashSet<usize>, st: &mut States<'_>) -> PyResult<Point> {
+    fn nudge_off_walls(&self, mut p: Point, exempt: &HashSet<usize>, st: &mut dyn Src) -> PyResult<Point> {
         for _ in 0..4 {
             let mut worst: Option<(f64, Point, Point, Point, f64)> = None;
             for (a, b) in self.walls_near(p, p, WAYPOINT_CLEARANCE + 6.0, Some(exempt), st)? {
@@ -897,7 +1025,7 @@ impl NavCore {
         Ok(p)
     }
 
-    fn push_from_corners(&self, pts: &[Point], exempt: &HashSet<usize>, pinned: &HashSet<(u64, u64)>, st: &mut States<'_>) -> PyResult<Vec<Point>> {
+    fn push_from_corners(&self, pts: &[Point], exempt: &HashSet<usize>, pinned: &HashSet<(u64, u64)>, st: &mut dyn Src) -> PyResult<Vec<Point>> {
         let mut out = vec![pts[0]];
         for &b in &pts[1..] {
             let a = *out.last().unwrap();
@@ -912,7 +1040,7 @@ impl NavCore {
         Ok(out)
     }
 
-    fn segment(&self, a: Point, b: Point, depth: u32, exempt: &HashSet<usize>, st: &mut States<'_>, out: &mut Vec<Point>) -> PyResult<()> {
+    fn segment(&self, a: Point, b: Point, depth: u32, exempt: &HashSet<usize>, st: &mut dyn Src, out: &mut Vec<Point>) -> PyResult<()> {
         let mut worst: Option<(f64, Point, Point)> = None;
         if depth < 4 {
             let mut corners: Vec<Point> = Vec::new();

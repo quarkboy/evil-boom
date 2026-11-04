@@ -28,6 +28,8 @@ from evildoom.wad.specials import (Category, Key, LineSpecial, Lock, Trigger, cl
                                    classify_sector)
 from evildoom.wad.things import SHOOTABLE_OBSTACLES, SOLID_DECORATIONS
 
+KEY_ORDER = list(Key)  # bit i of a key mask in the native planner
+
 try:  # compiled hot paths (native/), optional: Python versions below are the fallback
     import evildoom_native as _native
 except ImportError:
@@ -108,7 +110,7 @@ def _without(states: "HeightStates", pairs) -> "HeightStates":
     the sectors that change get new sets (the plan search does this tens of thousands of
     times; nothing changes height sets in place without copying them first)."""
     out = dict(states)
-    for s, h in pairs:
+    for s, h in sorted(pairs):
         if len(out[s]) > 1 and h in out[s]:
             out[s] = out[s] - {h}
     return out
@@ -1426,7 +1428,7 @@ class Navigator:
         if not late:
             return path
         slower = {s: set(hs) for s, hs in states.items()}
-        for s, h in late:
+        for s, h in sorted(late):
             if len(slower[s]) > 1:
                 slower[s].discard(h)
         return self.find_path(start, goal, slower, doors)
@@ -1515,6 +1517,9 @@ class Navigator:
         the switch used there: the goal only counts once that switch can be pressed from it
         (nothing closed in the way, see activators_now).
         """
+        if _native is not None and trace is None:
+            return self._native_plan(start, goals, keys, states, key_items, max_expansions,
+                                     max_seconds, goal_triggers)
         mesh = self.mesh
         key_items = key_items or {}
         door_cache: dict[frozenset, Doors] = {}
@@ -1585,7 +1590,7 @@ class Navigator:
                     # sector 3 at its old floor long after it had risen).
                     travel = self.movers.timing(t.info.special, t.info.description, s,
                                                 hs[0]).travel if t.line >= 0 else 0
-                    old = {(s, h): travel for h in trial[s] if h not in hs}
+                    old = {(s, h): travel for h in sorted(trial[s]) if h not in hs}
                     moving_off.update(old)
                     out.update(old)
                     continue
@@ -1691,7 +1696,7 @@ class Navigator:
                                f"key {last.key.name}" if last and last.key else "start")))
             doors = doors_for(node.keys)
             for gp in sorted(goal_polys.keys() & node.reach,
-                             key=lambda p: math.dist(node.pos, goal_polys[p])):
+                             key=lambda p: (math.dist(node.pos, goal_polys[p]), p)):
                 gt = (goal_triggers or {}).get(goal_polys[gp])
                 if gt is not None and gp not in self.activators_now(gt, node.states):
                     continue  # e.g. the exit switch is still behind closed bars
@@ -1767,7 +1772,7 @@ class Navigator:
                 # the one leaving the most reachable.
                 by_sector: dict[int, int] = {}  # one candidate per sector it's usable from
                 for p in sorted(usable,
-                                key=lambda p: math.dist(mesh.polys[p].center, target)):
+                                key=lambda p: (math.dist(mesh.polys[p].center, target), p)):
                     by_sector.setdefault(mesh.polys[p].sector, p)
                 near = _line_mid(self.map, t.line) if t.line >= 0 else target
                 spots = [target] + [_spot_in_poly(mesh.polys[p], near) if t.line >= 0
@@ -1807,6 +1812,95 @@ class Navigator:
                     push(spot, after_states, node.added - gone, ks, None, key, left,
                          carried=frozenset(left))
         return fallback[1] if fallback else None
+
+    def _native_plan(self, start: Point, goals: list[Point], keys, states, key_items,
+                     max_expansions: int, max_seconds: float,
+                     goal_triggers: dict | None) -> "Route | None":
+        """plan() in the compiled core. The one-off analysis (the upper bound, the relaxed
+        plan's needs) is done here first; the Route is put together from what comes back."""
+        mesh = self.mesh
+        key_items = key_items or {}
+        goal_polys = {gp.index for g in goals if (gp := mesh.poly_at(*g)) is not None}
+        start_poly = mesh.poly_at(*start)
+        if not goal_polys or start_poly is None:
+            return None
+        actions = [t for t in self.triggers if t.info.trigger is not Trigger.DR and t.effects]
+        keys0 = frozenset(keys)
+        states0 = {s: set(h) for s, h in (states or self.initial_states()).items()}
+        bound = self._upper_bound(start_poly.index, states0, keys0, key_items, actions)
+        if not goal_polys & bound:
+            return None
+        rel_t, rel_k = self._relaxed_needs(start_poly.index, goal_polys, states0, keys0,
+                                           key_items, actions)
+        nav = self._native_nav()
+        if not self.__dict__.get("_nplan_ready"):
+            nav.set_plan_data(*self._native_plan_data())
+            self._nplan_ready = True
+        bit = {k: i for i, k in enumerate(KEY_ORDER)}
+        index = {id(t): i for i, t in enumerate(self.triggers)}
+        found = nav.plan(start, list(goals), sum(1 << bit[k] for k in keys0), states0,
+                         [(bit[k], list(spots)) for k, spots in key_items.items()],
+                         max_expansions, max_seconds,
+                         [(g, index[id(t)]) for g, t in (goal_triggers or {}).items()],
+                         set(rel_t), sum(1 << bit[k] for k in rel_k),
+                         self.strict_fit)
+        if found is None:
+            return None
+        legs_out, final_states, final_keys, goal = found
+
+        def heights(d):
+            return {s: {tuple(int(v) if float(v).is_integer() else v for v in h) for h in hs}
+                    for s, hs in d.items()}
+
+        def keyset(mask):
+            return frozenset(k for k, i in bit.items() if mask & (1 << i))
+        legs = []
+        for ti, kbit, (polys, waypoints, cost, vias, squeezes), leg_states, leg_keys in legs_out:
+            chain = []
+            for i, (poly, via) in enumerate(zip(polys, vias)):
+                if via is None:
+                    chain.append((poly, None))
+                elif via[0]:
+                    chain.append((poly, self.tele_from[polys[i - 1]][via[1]]))
+                else:
+                    chain.append((poly, via[1]))
+            notes = self._annotate(chain, heights(leg_states), self.local_doors(set(keyset(leg_keys))))
+            path = Path(polys, waypoints, cost, notes,
+                        [v for _, v in chain if isinstance(v, Jump)], squeezes)
+            legs.append(Leg(self.triggers[ti] if ti is not None else None, path,
+                            KEY_ORDER[kbit] if kbit is not None else None))
+        return Route(legs, heights(final_states), keyset(final_keys), goal)
+
+    def _native_plan_data(self) -> tuple:
+        """The plan search's per-map facts for evildoom_native.Nav.set_plan_data."""
+        kinds = {Trigger.W1: "W", Trigger.WR: "W", Trigger.S1: "S", Trigger.SR: "S",
+                 Trigger.D1: "D1", Trigger.DR: "DR", Trigger.G1: "G", Trigger.GR: "G"}
+        masks = [frozenset(k for i, k in enumerate(KEY_ORDER) if m & (1 << i)) for m in range(64)]
+        triggers = []
+        for t in self.triggers:
+            timing, perm = [], []
+            if t.line >= 0:
+                for sec, hs in t.effects.items():
+                    for h in hs:
+                        tm = self.movers.timing(t.info.special, t.info.description, sec, h)
+                        timing.append(((sec, tuple(map(float, h))),
+                                       (float(tm.travel),
+                                        float(tm.hold) if tm.hold is not None else -1.0)))
+                    if hs:
+                        perm.append((sec, float(self.movers.timing(
+                            t.info.special, t.info.description, sec, hs[0]).travel)))
+            triggers.append((t.line, kinds.get(t.info.trigger, "O") if t.line >= 0 else "O",
+                             [(sec, [tuple(map(float, h)) for h in hs])
+                              for sec, hs in t.effects.items()],
+                             set(t.activators), t.permanent,
+                             [t.info.lock.satisfied(set(m)) for m in masks], timing, perm))
+        bit = {k: i for i, k in enumerate(KEY_ORDER)}
+        return (triggers,
+                {k: sorted(v) for k, v in self.use_gates.items()},
+                {k: tuple(map(float, v)) for k, v in self.shot_floors.items()},
+                [(sec, tuple(map(float, h))) for sec, h in self._temporary_heights()],
+                [(bit[k], list(map(lambda p: tuple(map(float, p)), ps)))
+                 for k, ps in self._key_positions.items()])
 
     def _upper_bound(self, start: int, states: HeightStates, keys: frozenset,
                      key_items: KeyItems, triggers: list[TriggerLine]) -> set[int]:
@@ -1957,7 +2051,7 @@ class Navigator:
             return max(ok, key=lambda p: math.dist(p, pos))  # far side: cross the line
         if t.info.trigger in (Trigger.G1, Trigger.GR):
             # anywhere with a view: the reachable shooting spot closest to where we are
-            spots = [mesh.polys[p].center for p in t.activators & reach]
+            spots = [mesh.polys[p].center for p in sorted(t.activators & reach)]
             if spots:
                 return min(spots, key=lambda c: math.dist(c, pos))
         if front in ok:
@@ -1965,7 +2059,7 @@ class Navigator:
         # Otherwise the spot nearest the line in any poly it can be used from (big polys only
         # qualify by their nearest part, so their centres can be out of reach).
         best = None
-        for pi in t.activators & reach:
+        for pi in sorted(t.activators & reach):
             spot = _spot_in_poly(mesh.polys[pi], (mx, my))
             if mesh.poly_at(*spot) is not None and mesh.poly_at(*spot).index == pi:
                 d = math.dist(spot, _closest_point(spot, (a.x, a.y), (b.x, b.y)))

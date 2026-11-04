@@ -123,7 +123,7 @@ def _exit_step(t: TriggerLine) -> Step:
 
 
 def plan_level(nav: Navigator, start: Point, max_seconds: float = 60.0,
-               max_expansions: int = 5000) -> LevelPlan:
+               max_expansions: int = 20000) -> LevelPlan:
     """From the map's initial heights, finish the level: one search (Navigator.plan) whose
     goal is any exit, using switches and picking up keys in whatever order works."""
     start_poly = nav.mesh.poly_at(*start)
@@ -138,7 +138,7 @@ def plan_level(nav: Navigator, start: Point, max_seconds: float = 60.0,
 
 def plan_from(nav: Navigator, pos: Point, keys: set[Key], states: HeightStates | None,
               reach: set[int] | None = None, max_seconds: float = 30.0,
-              max_expansions: int = 5000) -> LevelPlan:
+              max_expansions: int = 20000) -> LevelPlan:
     """Plan the rest of the level from `pos` holding `keys`, with `states` the heights the
     world can take now (default: the map's initial heights). `reach` limits which exit
     activation spots are considered (default: anywhere)."""

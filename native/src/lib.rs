@@ -8,6 +8,7 @@
 mod geom;
 mod mesh;
 mod nav;
+mod plan;
 mod wad;
 
 use geom::{Point, Seg};
@@ -136,6 +137,7 @@ impl Nav {
                 static_grid,
                 obstacle_grid,
                 obstacle_order: Vec::new(),
+                plan_data: None,
             },
         })
     }
@@ -148,7 +150,7 @@ impl Nav {
             Some(d) if !d.is_empty() => Some(read_doors(&d)?),
             _ => None,
         };
-        self.core.reachable(py, start, &mut st, &doors)
+        self.core.reachable(py, start, &mut st, doors.as_ref())
     }
 
     /// Navigator.find_path: None, or (polys, waypoints (None = teleport), cost, vias (None |
@@ -162,11 +164,104 @@ impl Nav {
             Some(d) if !d.is_empty() => Some(read_doors(&d)?),
             _ => None,
         };
-        Ok(self.core.find_path(py, start, goal, &mut st, &doors, strict_fit)?.map(|f| (f.polys, f.waypoints, f.cost, f.vias, f.squeezes)))
+        Ok(self.core.find_path(py, start, goal, &mut st, doors.as_ref(), strict_fit)?.map(|f| (f.polys, f.waypoints, f.cost, f.vias, f.squeezes)))
     }
 
     fn poly_at(&self, x: f64, y: f64) -> Option<usize> {
         self.core.mesh.poly_at(x, y)
+    }
+
+    /// The plan search's per-map facts. `triggers`: (line, kind, effects [(sector,
+    /// [heights])], activators, permanent, lock_ok per key bitmask, timing [((sector, heights),
+    /// (travel, hold or -1))], perm_travel [(sector, travel)]); `key_positions`: [(key bit,
+    /// [(x, y)])].
+    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
+    fn set_plan_data(
+        &mut self,
+        triggers: Vec<(i64, String, Vec<(usize, Vec<(f64, f64)>)>, HashSet<usize>, bool, Vec<bool>, Vec<((usize, (f64, f64)), (f64, f64))>, Vec<(usize, f64)>)>,
+        use_gates: HashMap<(i64, usize), Vec<usize>>,
+        shot_floors: HashMap<(i64, usize), (f64, f64)>,
+        temporary: Vec<(usize, (f64, f64))>,
+        key_positions: Vec<(u8, Vec<Point>)>,
+    ) {
+        use plan::{hk, Kind, PlanData, Trig};
+        let triggers = triggers.into_iter().map(|(line, kind, effects, activators, permanent, lock_ok, timing, perm)| Trig {
+            line,
+            kind: match kind.as_str() { "W" => Kind::Walk, "S" => Kind::Switch, "D1" => Kind::D1, "DR" => Kind::DR, "G" => Kind::Gun, _ => Kind::Other },
+            effects,
+            activators,
+            permanent,
+            lock_ok,
+            timing: timing.into_iter().map(|((s, h), v)| ((s, hk(h)), v)).collect(),
+            perm_travel: perm.into_iter().collect(),
+        }).collect();
+        self.core.plan_data = Some(PlanData {
+            triggers,
+            use_gates,
+            shot_floors,
+            temporary: temporary.into_iter().map(|(s, h)| (s, hk(h))).collect(),
+            key_positions,
+            door_cache: HashMap::new(),
+            reach_cache: HashMap::new(),
+        });
+    }
+
+    /// Navigator.plan. Returns None or (legs [(trigger index or None, key bit or None, path
+    /// (as find_path), leg states {sector: [heights]}, leg keys bitmask)], final states, final
+    /// keys bitmask, goal point).
+    #[pyo3(signature = (start, goals, keys, states, key_items, max_expansions, max_seconds, goal_triggers, rel_t, rel_k, strict_fit=false))]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn plan(
+        &mut self,
+        py: Python<'_>,
+        start: Point,
+        goals: Vec<Point>,
+        keys: u8,
+        states: Bound<'_, PyDict>,
+        key_items: Vec<(u8, Vec<(usize, Point)>)>,
+        max_expansions: usize,
+        max_seconds: f64,
+        goal_triggers: Vec<(Point, usize)>,
+        rel_t: HashSet<i64>,
+        rel_k: u8,
+        strict_fit: bool,
+    ) -> PyResult<Option<PyObject>> {
+        use std::rc::Rc;
+        let n = self.core.poly_sector.iter().copied().max().unwrap_or(0) + 1;
+        let n = n.max(states.len());
+        let mut st = States::new(states);
+        let mut world: Vec<Rc<Vec<(f64, f64)>>> = Vec::with_capacity(n);
+        for s in 0..n {
+            world.push(Rc::new(st.get_owned(s)?));
+        }
+        let gt: HashMap<(u64, u64), usize> = goal_triggers.into_iter().map(|(p, t)| (geom::pkey(p), t)).collect();
+        plan::STATS.with(|s| *s.borrow_mut() = (0, 0.0, 0, 0.0));
+        plan::PHASES.with(|p| *p.borrow_mut() = [0.0; 4]);
+        let t0 = std::time::Instant::now();
+        let found = self.core.plan(py, start, &goals, keys, Rc::new(world), &key_items, max_expansions, max_seconds, &gt, &rel_t, rel_k, strict_fit)?;
+        if std::env::var_os("EVILDOOM_NATIVE_STATS").is_some() {
+            plan::STATS.with(|s| {
+                let s = s.borrow();
+                let p = plan::PHASES.with(|p| *p.borrow());
+                eprintln!("native plan {:.2}s: {} timed paths {:.2}s (A* {:.2} corners {:.2} fit {:.2} straighten {:.2}), {} flood fills {:.2}s", t0.elapsed().as_secs_f64(), s.0, s.1, p[0], p[1], p[2], p[3], s.2, s.3);
+            });
+        }
+        let Some(route) = found else { return Ok(None) };
+        let to_dict = |w: &Rc<Vec<Rc<Vec<(f64, f64)>>>>| -> PyResult<PyObject> {
+            let d = PyDict::new(py);
+            for (s, hs) in w.iter().enumerate() {
+                d.set_item(s, hs.as_ref().clone())?;
+            }
+            Ok(d.into_any().unbind())
+        };
+        let mut legs = Vec::new();
+        for leg in &route.legs {
+            let f = &leg.path;
+            let path = (f.polys.clone(), f.waypoints.clone(), f.cost, f.vias.clone(), f.squeezes);
+            legs.push((leg.trig, leg.key, path, to_dict(&leg.states)?, leg.keys).into_pyobject(py)?.into_any().unbind());
+        }
+        let out = (legs, to_dict(&route.states)?, route.keys, route.goal).into_pyobject(py)?.into_any().unbind();
+        Ok(Some(out))
     }
 }
 
