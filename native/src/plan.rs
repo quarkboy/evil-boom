@@ -25,6 +25,9 @@ pub fn phase(i: usize, t0: Instant) {
     PHASES.with(|p| p.borrow_mut()[i] += t0.elapsed().as_secs_f64());
 }
 
+/// Navigator LIFT_BACK
+pub const LIFT_BACK: f64 = 60.0;
+
 /// Navigator ALT_TRIGGERS
 pub const ALT_TRIGGERS: usize = 1;
 
@@ -544,6 +547,33 @@ impl NavCore {
                 }
             }
         }
+        // (a jump off a lift that's still down waits for it to come back: Navigator._timed_path)
+        for (i, via) in path.vias.iter().enumerate() {
+            if let Some((true, ti)) = via {
+                let t = &self.tele[path.polys[i - 1]][*ti];
+                if let TeleKind::Jump { takeoff, requires, .. } = &t.kind {
+                    let Some(src) = self.sector_at(*takeoff) else { continue };
+                    let Some(&t_off) = arrive.get(&src) else { continue };
+                    let mut lifts: HashMap<usize, f64> = HashMap::new();
+                    for (&(s2, h2), &left) in deadlines.iter() {
+                        if self.pd().temporary.contains(&(s2, h2)) && requires.iter().any(|(s, h)| *s == s2 && hk(*h) != h2) {
+                            lifts.insert(s2, left);
+                        }
+                    }
+                    if lifts.is_empty() {
+                        continue;
+                    }
+                    let ready = lifts.values().copied().fold(f64::NEG_INFINITY, f64::max) + LIFT_BACK;
+                    if ready > t_off {
+                        for (x, a) in arrive.iter_mut() {
+                            if *a >= t_off && !lifts.contains_key(x) {
+                                *a += ready - t_off;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         let mut late: Vec<Pair> = deadlines.iter().filter(|(&(s, _), &left)| arrive.get(&s).map_or(false, |&a| a > left)).map(|(k, _)| *k).collect();
         if late.is_empty() {
             return Ok(Some((path, states.clone())));
@@ -886,7 +916,10 @@ impl NavCore {
                 continue;
             }
             for h in hs {
-                if pd.temporary.contains(&(*s, hk(*h))) {
+                // (also a height another line makes for good, if not there yet: Navigator.plan)
+                let held = t.line >= 0 && t.timing.get(&(*s, hk(*h))).map_or(false, |&(_, hold)| hold >= 0.0)
+                    && !base[*s].iter().any(|x| hk(*x) == hk(*h));
+                if pd.temporary.contains(&(*s, hk(*h))) || held {
                     let v = if t.line >= 0 {
                         let (travel, hold) = *t.timing.get(&(*s, hk(*h))).unwrap_or(&(0.0, -1.0));
                         travel + if hold >= 0.0 { hold } else { 0.0 }

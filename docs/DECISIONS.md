@@ -403,6 +403,29 @@ identically.
   node again (more doubled MAP17's planning). Only used stair switches split the search's
   worlds.
 
+## MAP09 without the dash: 67 of 68 (2026-11-04)
+- The rising bridge isn't a race: it's jumped onto, raised, from the top of the lift beside
+  it. Jumps are now also tried with the sectors met in flight at their highest possible
+  floor, when the plain try finds nothing (a raised platform to land on).
+- A timed line's heights are temporary when it fires even if another line makes them for
+  good (door 101: the shut-again switch was taken as opening it for good, as the other
+  switch does).
+- Timed legs: a jump off a lift that's still down waits for it to come back up (about 60
+  tics with lining up), so later windows are judged against that.
+- Jumps have to work half a unit to either side of their line (MAP09's first choice through
+  a doorway glanced off the jamb from 0.4 units over; 1 unit removed jumps E4M6 and MAP24
+  need). A jump's flight wants 8 units of headroom over the player.
+- Smoothing never starts a shortcut at a jump's takeoff (what follows is the flight: MAP29
+  cut across the pit after landing). Pinning the landing as well forced paths through the
+  exact spot (E4M2, MAP17, MAP25).
+- Follower: before pressing a height-dependent switch, wait for the lifts round it to be
+  where the plan has them; a lift line set off on the way is crossed only once the lift is
+  back (and the press before it waits too); a sector still on its way to the plan's height
+  is waited for, not replanned round; a jump goes without settling when what it needs is
+  about to run out, and takes a ceiling a little lower than planned; after a permanent
+  move the old height is forgotten.
+- Every Doom and Doom II map exits except MAP30 (the Icon of Sin).
+
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
 - [ ] Timing-aware handling of lifts/doors that close on a timer (be on them in time).

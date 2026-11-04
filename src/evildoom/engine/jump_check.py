@@ -73,7 +73,33 @@ def simulate_jumps(nav: Navigator) -> dict[str, str]:
     """verify_jumps' results from the movement simulator instead of the game: the same
     test, a few ms a jump (it agrees with the engine on ~98% of them)."""
     sim = PlayerSim(nav)
-    return {j.key: _test_jump(nav, sim, j) for j in nav.jumps}
+    out = {}
+    for j in nav.jumps:
+        r = _test_jump(nav, sim, j)
+        if r != FAIL and not _robust(nav, sim, j):
+            r = FAIL
+        out[j.key] = r
+    return out
+
+
+ROBUST_SHIFT = 0.5  # a jump has to work this far to either side of its line too (1 was too strict: E4M6, MAP24)
+
+
+def _robust(nav: Navigator, sim, j) -> bool:
+    """Does the jump still work a unit to either side? Nobody stands to a fraction of a
+    unit: MAP09's jump through a doorway off a lift glanced off the jamb from 0.4 units over
+    from where the check stood. (3 units was too strict: E4M2's and E4M6's needed jumps.)"""
+    (rx, ry), (tx, ty) = j.runup, j.takeoff
+    length = math.hypot(tx - rx, ty - ry)
+    if length < 1e-6:
+        return True
+    px, py = -(ty - ry) / length, (tx - rx) / length
+    for s in (ROBUST_SHIFT, -ROBUST_SHIFT):
+        shifted = replace(j, runup=(rx + px * s, ry + py * s), takeoff=(tx + px * s, ty + py * s),
+                          dest=(j.dest[0] + px * s, j.dest[1] + py * s))
+        if nav.mesh.poly_at(*shifted.runup) is None or _test_jump(nav, sim, shifted) == FAIL:
+            return False
+    return True
 
 
 def keep_verified(nav: Navigator, iwad: str | Path, map_name: str,

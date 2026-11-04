@@ -55,9 +55,11 @@ MIN_PORTAL = 4.0  # narrower portals are nodebuilder slivers, never the real way
 LEG_SPEED = 12.0  # units/tic assumed when timing legs against lifts and doors (full run ~16)
 EXIT_FLOOR = -1000  # pseudo-trigger lines below this: exit floors (Navigator._exit_floors)
 ALT_TRIGGERS = 1   # lines producing the same change tried per node (if they leave different reach)
+FLIGHT_HEADROOM = 8  # ceiling room to spare over the player during a jump
 LEDGE_TICS = 4  # ...tics a jump's box may stay over its ledge with a wall right beside it
 LONG_LEDGE_TICS = 30  # ...or at all (an edge walk, not a jump)
 PIN_MARGIN = 3.0  # how near a wall counts as beside the box
+LIFT_BACK = 60  # tics for a lift that's run out its wait to be back up and a jump off it lined up
 MIN_SHOT_SPAN = 6.0  # degrees a gun line must span from where it's shot (aim isn't exact)
 BOX_SLACK = 0.25  # the box must clear walls by this much: no one threads a gap exactly 32 wide
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
@@ -433,6 +435,13 @@ class Navigator:
                                 takeoff = (x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
                                 jump = self._try_jump(a, takeoff, d, {sa: ha, sb: hb}, options,
                                                       portal.linedef)
+                                high = self._try_jump(a, takeoff, d, {sa: ha, sb: hb}, options,
+                                                      portal.linedef, high=True)                                     if jump is None else None
+                                if high is not None:
+                                    key = (a, mesh.polys[high.dest_poly].sector)
+                                    if seen.get(key, 0) < JUMPS_PER_TARGET:
+                                        seen[key] = seen.get(key, 0) + 1
+                                        out.append(high)
                                 if jump is None:
                                     continue
                                 # keep a few varied candidates per (takeoff poly, landing
@@ -468,7 +477,11 @@ class Navigator:
         return out
 
     def _try_jump(self, src: int, takeoff: Point, n: Point, chosen: dict[int, Heights],
-                  options: dict[int, list[Heights]], edge: int | None) -> Jump | None:
+                  options: dict[int, list[Heights]], edge: int | None,
+                  high: bool = False) -> Jump | None:
+        """`high`: sectors met in flight are taken at their highest possible floor that
+        works rather than the first (a platform raised to land on: MAP09's bridge, jumped to
+        from the lift top across the pit, which at its starting height is just a drop)."""
         m, mesh, init = self.map, self.mesh, self.movers.initial
         # Sectors that can move are required at the heights used even when those are the
         # initial ones: a takeoff floor that's been lowered for good can't be jumped from.
@@ -480,10 +493,12 @@ class Navigator:
         below = next(h for s, h in chosen.items() if s != mesh.polys[src].sector)[0] \
             if len(chosen) > 1 else floor
 
-        def pick(sector: int, ok) -> Heights | None:
+        def pick(sector: int, ok, flight: bool = False) -> Heights | None:
             if sector in chosen:
                 return chosen[sector] if ok(chosen[sector]) else None
-            for h in options[sector]:
+            order = sorted(options[sector], key=lambda h: -h[0]) if flight and high \
+                else options[sector]
+            for h in order:
                 if ok(h):
                     chosen[sector] = h
                     return h
@@ -573,8 +588,11 @@ class Navigator:
                 if q is None:
                     return None
                 if q.sector not in under:
+                    # (a little headroom to spare in the air: MAP09's jump through a door, its
+                    # head an inch under the lintel in the check, met it in the game)
                     h = pick(q.sector, lambda h, z=z: h[0] <= z + MAX_STEP
-                             and h[1] - max(z, h[0]) >= PLAYER_HEIGHT)
+                             and h[1] - max(z, h[0]) >= PLAYER_HEIGHT + FLIGHT_HEADROOM,
+                             flight=True)
                     if h is None:
                         return None  # a wall/ledge face or a low ceiling in the way
                     under[q.sector] = h
@@ -1645,6 +1663,25 @@ class Navigator:
             if src is not None and src.sector in arrive:
                 for s, _h in j.requires:
                     arrive[s] = min(arrive.get(s, math.inf), arrive[src.sector])
+        if deadlines:
+            # A jump off a lift that's still down waits for it to come back up: everything
+            # from the takeoff on is that much later (MAP09: down on the lift, up, then the
+            # jump through a door whose window had run out meanwhile)
+            for j in path.jumps:
+                src = self.mesh.poly_at(*j.takeoff)
+                if src is None or src.sector not in arrive:
+                    continue
+                t_off = arrive[src.sector]
+                lifts = {s2: left for (s2, h2), left in sorted(deadlines.items())
+                         if (s2, h2) in temporary
+                         and any(s == s2 and h != h2 for s, h in j.requires)}
+                if not lifts:
+                    continue
+                ready = max(lifts.values()) + LIFT_BACK
+                if ready > t_off:
+                    for x in arrive:
+                        if arrive[x] >= t_off and x not in lifts:
+                            arrive[x] += ready - t_off
         if deadlines is not None:
             late = [(s, h) for (s, h), left in deadlines.items()
                     if s in arrive and arrive[s] > left]
@@ -1842,7 +1879,14 @@ class Navigator:
                     out.update(old)
                     continue
                 for h in hs:  # (fresh even if still there from before: pressed again)
-                    if (s, h) in temporary:
+                    # Also a height another line makes for good, if not there yet: this one
+                    # takes it away again (MAP09: door 101 opened by a switch that lets it shut
+                    # after a few seconds was taken as open for good, since another switch
+                    # opens it for good)
+                    tm = self.movers.timing(t.info.special, t.info.description, s, h) \
+                        if t.line >= 0 else None
+                    if (s, h) in temporary or (tm is not None and tm.hold is not None
+                                               and h not in base[s]):
                         tm = self.movers.timing(t.info.special, t.info.description, s, h) \
                             if t.line >= 0 else None
                         out[(s, h)] = tm.travel + (tm.hold or 0) if tm else 0
@@ -2461,7 +2505,12 @@ class Navigator:
         # ...but not walk-over lines that shut a sector right beside them (MAP23's "close door
         # 30s" line): keep clear of those, or the closing door pins the player's box.
         crossed -= self._shutting_lines()
-        pinned = {p for _, via in chain if isinstance(via, Jump) for p in (via.runup, via.takeoff)}
+        pinned = {p for _, via in chain if isinstance(via, Jump)
+                  for p in (via.runup, via.takeoff)}
+        # No shortcut from a takeoff: what follows it is the flight, and going straight on past
+        # the landing cuts across the pit the jump clears (MAP29). (Pinning the landing as well
+        # made paths go through the exact landing spot: E4M2, MAP17, MAP25.)
+        takeoffs = frozenset(via.takeoff for _, via in chain if isinstance(via, Jump))
         out: list[Point | None] = []
         run: list[Point] = []
         for p in points + [None]:
@@ -2470,7 +2519,7 @@ class Navigator:
                     out += self._straighten(self._box_fits_path(
                         self._push_from_corners(run, frozenset(crossed), pinned),
                         frozenset(crossed), pinned), frozenset(crossed), pinned,
-                        {mesh.polys[p].sector for p, _ in chain})
+                        {mesh.polys[p].sector for p, _ in chain}, takeoffs)
                     run = []
                 out.append(None)
             else:
@@ -2655,7 +2704,7 @@ class Navigator:
 
     def _straighten(self, pts: list[Point], exempt: frozenset,
                     pinned: set[Point] = frozenset(),
-                    sectors: set[int] | None = None) -> list[Point]:
+                    sectors: set[int] | None = None, takeoffs: frozenset = frozenset()) -> list[Point]:
         """Last pass: from each waypoint go straight to the farthest later one the player's
         box reaches without touching a wall or walking off a ledge, never skipping a pinned
         point (jump run-ups/takeoffs). Removes the back-and-forth jitter that corner pushes,
@@ -2670,7 +2719,7 @@ class Navigator:
         while i < len(pts) - 1:
             a = pts[i]
             best = i + 1
-            for j in range(min(len(pts) - 1, i + 10), i + 1, -1):
+            for j in range(min(len(pts) - 1, i + 10) if a not in takeoffs else i + 1, i + 1, -1):
                 if any(p in pinned for p in pts[i + 1:j]):
                     continue
                 b = pts[j]

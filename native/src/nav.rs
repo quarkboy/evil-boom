@@ -484,6 +484,12 @@ impl NavCore {
             }
         }
         let sectors: HashSet<usize> = chain.iter().map(|c| self.poly_sector[c.0]).collect();
+        let mut takeoffs: HashSet<(u64, u64)> = HashSet::new();
+        for i in 1..chain.len() {
+            if let Some(Tele { kind: TeleKind::Jump { takeoff, .. }, .. }) = self.tele_of(chain, i) {
+                takeoffs.insert(pkey(*takeoff));
+            }
+        }
         let mut out: Vec<Option<Point>> = Vec::new();
         let mut run: Vec<Point> = Vec::new();
         points.push(None);
@@ -498,7 +504,7 @@ impl NavCore {
                         let b = self.box_fits_path(&a, &crossed, &pinned, st, squeezes)?;
                         crate::plan::phase(2, t);
                         let t = std::time::Instant::now();
-                        let c = self.straighten(&b, &crossed, &pinned, Some(&sectors), st)?;
+                        let c = self.straighten(&b, &crossed, &pinned, Some(&sectors), &takeoffs, st)?;
                         crate::plan::phase(3, t);
                         out.extend(c.into_iter().map(Some));
                         run.clear();
@@ -824,7 +830,7 @@ impl NavCore {
         true
     }
 
-    fn straighten(&self, pts: &[Point], exempt: &HashSet<usize>, pinned: &HashSet<(u64, u64)>, sectors: Option<&HashSet<usize>>, st: &mut dyn Src) -> PyResult<Vec<Point>> {
+    fn straighten(&self, pts: &[Point], exempt: &HashSet<usize>, pinned: &HashSet<(u64, u64)>, sectors: Option<&HashSet<usize>>, takeoffs: &HashSet<(u64, u64)>, st: &mut dyn Src) -> PyResult<Vec<Point>> {
         if pts.len() < 3 {
             return Ok(pts.to_vec());
         }
@@ -835,7 +841,8 @@ impl NavCore {
         while i < pts.len() - 1 {
             let a = pts[i];
             let mut best = i + 1;
-            let hi = (pts.len() - 1).min(i + 10);
+            // (no shortcut from a takeoff: Navigator._smooth)
+            let hi = if takeoffs.contains(&pkey(a)) { i + 1 } else { (pts.len() - 1).min(i + 10) };
             let mut j = hi;
             while j > i + 1 {
                 if pts[i + 1..j].iter().any(|p| pinned.contains(&pkey(*p))) {

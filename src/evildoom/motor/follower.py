@@ -41,6 +41,10 @@ RUN_AHEAD_SINK = 4       # how much lower a sinking floor is assumed by the time
 BARREL_IN_WAY = 40       # a barrel this close when stuck is what's in the way
 BARREL_SAFE = 150        # back off this far before shooting one (blast radius 128)
 BARREL_GIVE_UP = 8 * TICRATE
+JUMP_HURRY = 2 * TICRATE  # a jump goes without settling if what it needs runs out sooner
+JUMP_CEILING_SLACK = 16.0  # how much lower than planned a ceiling can be for a jump
+CROSS_REST_WAIT = 8 * TICRATE  # longest wait for a lift to come back before crossing its line
+SETTLE_WAIT = 10 * TICRATE  # longest wait for things round a switch to settle before pressing
 DROP_CHECK_DIST = 48     # how far ahead to look for crossings that became one-way drops
 USE_EVERY = 15           # tics between use presses while waiting at a door
 RUNUP_TOLERANCE = 6.0    # how exactly to hit a jump run-up point
@@ -328,6 +332,10 @@ class RouteFollower:
         self.fired: frozenset = frozenset()  # one-shot stair switches used (for replans)
         self._drops_ok: set = set()  # unexpected drops already replanned for (this step)
         self._edge_wait = False  # holding at an edge for a sector to rise to it (logged once)
+        self._settle_logged = -1  # step whose settle wait has been logged
+        self._cross_ready = False  # this cross step's lift is at rest (or we've stopped waiting)
+        self._cross_wait_logged = False
+        self._goal_tic = 0  # when we got to the step's goal
         self._last_pos: tuple[float, float] | None = None
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
         self._run = None     # running over sinking floors (_run_step)
@@ -387,7 +395,13 @@ class RouteFollower:
         if 0 <= self.step_i < len(self.steps):  # remember what the finished step changed
             done = self.steps[self.step_i]
             if done.trigger is not None:
+                effects = done.trigger.effects_now(self.states)
                 self.states = apply_trigger(self.states, done.trigger)
+                if done.trigger.permanent:
+                    # Gone for good, risen or lowered: replans mustn't count on the old height
+                    # (MAP29: one routed over a floor at where it had risen from a minute before)
+                    for sec, hs in effects.items():
+                        self.states[sec] = set(hs)
                 if done.trigger.once and done.trigger.cumulative:
                     self.fired = self.fired | {done.trigger.line}
                 for e in done.expects:  # watch what it should do, against the timings
@@ -406,6 +420,7 @@ class RouteFollower:
         self.step_i += 1
         self._step_replans = 0
         self._drops_ok = set()
+        self._cross_ready = self._cross_wait_logged = False
         if self.step_i >= len(self.steps):
             self.done = True
             self.log.add(tic, "route finished")
@@ -570,6 +585,24 @@ class RouteFollower:
             return self._run_step(obs)
         if self._barrel is not None:
             return self._shoot_barrel(obs)
+        step = self.steps[self.step_i]
+        t = step.trigger
+        if step.action == "cross" and t is not None and t.info.trigger is Trigger.WR \
+                and not t.permanent and not self._cross_ready:
+            # A lift line to cross for its window: if the lift's already away (set off on the
+            # way, MAP09: a jump landing on the line), crossing now does nothing and the
+            # window is shorter than planned. Wait for it to come back first.
+            init = self.nav.movers.initial
+            away = [x for x in t.effects if (live := obs.heights.get(x)) is not None
+                    and abs(live[0] - init[x][0]) > 0.5]
+            if away and obs.tic - self._step_tic < CROSS_REST_WAIT:
+                if not self._cross_wait_logged:
+                    self.log.add(obs.tic, f"sector {away[0]} already away: waiting for it to "
+                                          f"come back before crossing line {t.line}")
+                    self._cross_wait_logged = True
+                self._progress_tic = obs.tic
+                return self.motion.drive(obs, (0.0, 0.0), obs.angle)
+            self._cross_ready = True
         if obs.tic < self._brake_until:
             if self.motion.speed > 1.0:  # just landed a jump: stop first
                 self._progress_tic = obs.tic
@@ -877,7 +910,9 @@ class RouteFollower:
         # (If it has stopped somewhere else it's not coming: jump from there anyway.)
         for sector, h in jump.requires:
             live = obs.heights.get(sector)
-            if live is None or abs(live[0] - h[0]) > 0.5 or abs(live[1] - h[1]) > 0.5:
+            # (a ceiling a little lower is fine: MAP09's door just starting to close as the lift
+            # brings us up for the jump through it)
+            if live is None or abs(live[0] - h[0]) > 0.5 or live[1] > h[1] + 0.5                     or live[1] < h[1] - JUMP_CEILING_SLACK:
                 if self._jump_wait is None or self._jump_wait[:2] != (sector, live):
                     if self._jump_wait is None or self._jump_wait[0] != sector:
                         self.log.add(obs.tic, f"waiting for sector {sector} to reach "
@@ -909,6 +944,14 @@ class RouteFollower:
         # (some jumps only just make it). Settling longer than a second: go anyway.
         settled = math.dist((obs.x, obs.y), jump.runup) < 1.5 and abs(diff) <= 0.75 \
             and self.motion.speed < 0.3 and abs(self.motion.rate) < 0.5
+        # Something the jump needs is about to go (MAP09: the door it goes through starts
+        # closing a moment after the lift brings us up to it): no settling, go once facing.
+        needs = {sec for sec, _h in jump.requires}
+        if any(w.expect.sector in needs and w.reached is not None and not w.over
+               and w.expect.hold is not None
+               and w.reached + w.expect.hold - obs.tic < JUMP_HURRY for w in self._watches) \
+                and math.dist((obs.x, obs.y), jump.runup) < 6 and abs(diff) <= 3:
+            settled = True
         if self._lineup_tic is None:
             self._lineup_tic = obs.tic
         if settled or (obs.tic - self._lineup_tic > TICRATE and abs(diff) <= 1.5
@@ -1356,6 +1399,14 @@ class RouteFollower:
                 if not self._replan(obs, f"sector {sector} not reopening"):
                     return self._fail(obs, f"waited too long for sector {sector} to reopen")
             return self.motion.drive(obs, want, (obs.angle + 10) % 360)
+        # Still on its way to where the plan has it (MAP29's floor that takes half a minute to
+        # rise to the walkway): nothing to replan, just wait.
+        coming = any(w.expect.sector == sector and w.reached is None
+                     and obs.tic - w.since < 1.5 * w.expect.travel + 10 * TICRATE
+                     for w in self._watches)
+        if coming and not opener:
+            self._wait_tic = obs.tic - min(waited, 4 * TICRATE)  # (keeps "waited" short)
+            return self.motion.drive(obs, want, look)
         if missed or not opener and waited == 5 * TICRATE and not switch_nearby:
             why = f"missed sector {sector}'s window" if missed else f"sector {sector} not coming"
             if self._replan(obs, why, live_only=True):
@@ -1578,6 +1629,41 @@ class RouteFollower:
             live = obs.heights.get(s0)
             if live is not None and live[0] < top - 0.5:
                 self._progress_tic = self._step_tic = obs.tic
+                return controls
+        if step.action in ("use", "shoot") and self._action_tic is None and t is not None \
+                and t.recompute is not None:
+            # Where it takes things to depends on what's round it when pressed: wait for the
+            # lifts and doors among those to be where the plan has them (MAP09: a floor going
+            # down to the lowest round it, pressed with the lift next to it still down, went
+            # all the way down).
+            init = self.nav.movers.initial
+            off = [x for x in t.relevant
+                   if (live := obs.heights.get(x)) is not None
+                   and (h := self.nav._rep(self.states[x], init[x])) is not None
+                   and (abs(live[0] - h[0]) > 0.5 or abs(live[1] - h[1]) > 0.5)]
+            if off and self._settle_logged != self.step_i:
+                self.log.add(obs.tic, f"waiting for sector {off[0]} to settle before "
+                                      f"line {t.line}")
+                self._settle_logged, self._goal_tic = self.step_i, obs.tic
+            if off and obs.tic - self._goal_tic < SETTLE_WAIT:
+                self._progress_tic = self._step_tic = obs.tic
+                return controls
+        nxt = self.steps[self.step_i + 1] if self.step_i + 1 < len(self.steps) else None
+        if step.action in ("use", "shoot") and self._action_tic is None and nxt is not None \
+                and nxt.action == "cross" and nxt.trigger is not None \
+                and nxt.trigger.info.trigger is Trigger.WR and not nxt.trigger.permanent:
+            # The next step crosses a lift line for its window: if that lift is away (set off
+            # on the way, MAP09), wait for it now, before this press starts a timer of its own
+            # (the door the lift ride leads through) that the wait would use up.
+            init = self.nav.movers.initial
+            away = [x for x in nxt.trigger.effects if (live := obs.heights.get(x)) is not None
+                    and abs(live[0] - init[x][0]) > 0.5]
+            if away and obs.tic - self._step_tic < CROSS_REST_WAIT:
+                if not self._cross_wait_logged:
+                    self.log.add(obs.tic, f"sector {away[0]} already away: waiting for it to "
+                                          f"come back before line {t.line if t else '?'}")
+                    self._cross_wait_logged = True
+                self._progress_tic = obs.tic
                 return controls
         if step.action == "shoot" and self._action_tic is None and obs.weapon == 1:
             # A fist or chainsaw (picked up on the way: the game switches to it) doesn't set
