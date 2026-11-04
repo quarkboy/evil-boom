@@ -47,6 +47,9 @@ class VizDoomEngine:
         game.set_available_game_variables(VARIABLES)
         if nomonsters:
             game.add_game_args("-nomonsters")
+        # ViZDoom never times out ZDoom's "A secret is revealed!" message: it stays on screen
+        # for the rest of the level (worst in demo replay). Turn it off.
+        game.add_game_args("+cl_showsecretmessage 0")
         self.game = game
         self.tic = 0
         self._keys_at_start: dict[str, int] | None = None
