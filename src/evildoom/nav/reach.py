@@ -53,6 +53,7 @@ THING_CLEARANCE = 6  # extra room left round solid things when detouring past th
 SHOT_HEIGHT = 36  # bullets leave the player at z + 28 + 8, and level: no aiming up or down
 MIN_PORTAL = 4.0  # narrower portals are nodebuilder slivers, never the real way through
 LEG_SPEED = 12.0  # units/tic assumed when timing legs against lifts and doors (full run ~16)
+MIN_SHOT_SPAN = 6.0  # degrees a gun line must span from where it's shot (aim isn't exact)
 BOX_SLACK = 0.25  # the box must clear walls by this much: no one threads a gap exactly 32 wide
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
 TELEPORT_DEST = 14
@@ -812,6 +813,14 @@ class Navigator:
                     # ...where a level shot (no aiming up or down) actually hits it
                     activators = set()
                     for pi in candidates:
+                        # (and not too edge-on to hit: MAP19's line seen at 3 degrees from
+                        # 340 units away was 4 units wide)
+                        c = self.mesh.polys[pi].center
+                        span = abs((math.degrees(math.atan2(a.y - c[1], a.x - c[0])
+                                                 - math.atan2(b.y - c[1], b.x - c[0]))
+                                    + 180) % 360 - 180)
+                        if span < MIN_SHOT_SPAN:
+                            continue
                         ranges = [r for point in points
                                   if (r := self._shot_floors(self.mesh.polys[pi].center,
                                                              point, line.index))]

@@ -85,6 +85,7 @@ class Observation:
     tic: int = 0
     keys: frozenset | None = None                 # keys held, if the engine can tell
     z: float | None = None                        # height of the player's feet
+    weapon: int | None = None                     # weapon slot held, if the engine can tell
 
 
 @dataclass
@@ -95,6 +96,7 @@ class Controls:
     use: bool = False
     attack: bool = False
     run: bool = True
+    pistol: bool = False   # switch to the pistol (slot 2)
 
 
 @dataclass
@@ -1416,9 +1418,12 @@ class RouteFollower:
         pos = (obs.x, obs.y)
         t = ((pos[0] - a[0]) * (b[0] - a[0]) + (pos[1] - a[1]) * (b[1] - a[1])) / length ** 2
         t = min(max(t, min(0.5, 8 / length)), max(0.5, 1 - 8 / length))
+        if step.action == "shoot":
+            t = 0.5  # (a shot reaches: the middle, where it's widest to hit)
         aim = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
         look = _heading(pos, aim)
         err = abs(_norm(look - obs.angle))
+        span = abs(_norm(_heading(pos, a) - _heading(pos, b)))
         # Hold still (brake) while turning to face the line.
         end = self.segments[-1].track.pts[-1]
         if self._press_tries:  # missed: stand a bit closer each time
@@ -1427,11 +1432,17 @@ class RouteFollower:
             end = (end[0] + (aim[0] - end[0]) * k, end[1] + (aim[1] - end[1]) * k)
         hold = ((end[0] - obs.x) * 0.2, (end[1] - obs.y) * 0.2)
         controls = self.motion.drive(obs, hold, look)
-        facing = err < 4
+        facing = err < (min(4.0, span / 3) if step.action == "shoot" else 4)
         if step.action == "face":  # walk up to it and look at it; leave pressing to a human
             if facing:
                 self.log.add(obs.tic, f"facing line {step.trigger.line}")
                 self._next_step(obs.tic)
+            return controls
+        if step.action == "shoot" and self._action_tic is None and obs.weapon == 1:
+            # A fist or chainsaw (picked up on the way: the game switches to it) doesn't set
+            # off a gun line (MAP19): out with the pistol first.
+            controls.pistol = True
+            self._progress_tic = obs.tic
             return controls
         if step.action == "shoot" and self._action_tic is None and facing \
                 and not self._at_shot_height(obs, step):

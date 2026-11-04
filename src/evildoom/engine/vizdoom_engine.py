@@ -16,9 +16,10 @@ from evildoom.wad.specials import Key
 
 BUTTONS = [vzd.Button.MOVE_FORWARD_BACKWARD_DELTA, vzd.Button.MOVE_LEFT_RIGHT_DELTA,
            vzd.Button.TURN_LEFT_RIGHT_DELTA, vzd.Button.USE, vzd.Button.ATTACK,
-           vzd.Button.SPEED]
+           vzd.Button.SPEED, vzd.Button.SELECT_WEAPON2]
 VARIABLES = [vzd.GameVariable.POSITION_X, vzd.GameVariable.POSITION_Y,
-             vzd.GameVariable.ANGLE, vzd.GameVariable.HEALTH, vzd.GameVariable.POSITION_Z]
+             vzd.GameVariable.ANGLE, vzd.GameVariable.HEALTH, vzd.GameVariable.POSITION_Z,
+             vzd.GameVariable.SELECTED_WEAPON]
 WARMUP_TICS = 8  # ViZDoom ignores turn input for the first few tics of an episode
 KEY_OBJECTS = {"BlueCard": Key.BLUE_CARD, "YellowCard": Key.YELLOW_CARD, "RedCard": Key.RED_CARD,
                "BlueSkull": Key.BLUE_SKULL, "YellowSkull": Key.YELLOW_SKULL,
@@ -87,10 +88,10 @@ class VizDoomEngine:
 
     def observe(self) -> Observation:
         state = self.game.get_state()
-        x, y, angle, _health, z = state.game_variables
+        x, y, angle, _health, z, weapon = state.game_variables
         heights = {s.id: (s.floor_height, s.ceiling_height) for s in state.sectors}
         return Observation(float(x), float(y), float(angle), heights, self.tic,
-                           self._keys_held(state), float(z))
+                           self._keys_held(state), float(z), int(weapon))
 
     def _keys_held(self, state) -> frozenset:
         """Keys picked up so far: key items present at the start that have gone."""
@@ -115,7 +116,7 @@ class VizDoomEngine:
 
     def step(self, c: Controls) -> None:
         self.game.make_action([c.forward, c.strafe, c.turn, float(c.use), float(c.attack),
-                               float(c.run)])
+                               float(c.run), float(c.pistol)])
         self.tic += 1
 
     def close(self) -> None:

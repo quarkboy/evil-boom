@@ -23,7 +23,7 @@ def run_map(wad: str, map_name: str, max_seconds: float) -> tuple[str, str, str]
     from evildoom.config import resolve_wad
     from evildoom.engine.jump_check import keep_verified
     from evildoom.engine.vizdoom_engine import VizDoomEngine
-    from evildoom.motor.follower import TICRATE, RouteFollower
+    from evildoom.motor.follower import TICRATE, Controls, RouteFollower
     from evildoom.nav.reach import Navigator
     from evildoom.nav.walkthrough import plan_level
     from evildoom.wad.mapdata import load_map
@@ -55,6 +55,10 @@ def run_map(wad: str, map_name: str, max_seconds: float) -> tuple[str, str, str]
         f = RouteFollower(nav, plan.steps)
         while not e.finished and not f.done and not f.failed and e.tic < max_seconds * TICRATE:
             e.step(f.act(e.observe()))
+        # (a walk-over exit goes off as the route finishes; the level ends a tic or so later)
+        grace = e.tic + 2 * TICRATE
+        while f.done and not e.finished and e.tic < grace:
+            e.step(Controls())
         exited, game_s = e.exited, e.tic / TICRATE
         e.close()
         lines += [str(ev) for ev in f.log.events]
