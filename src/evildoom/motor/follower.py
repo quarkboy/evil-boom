@@ -22,11 +22,11 @@ import math
 from bisect import bisect_right
 from dataclasses import dataclass, field, replace
 
-from evildoom.nav.reach import (FRICTION, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS, RUN_THRUST,
-                                ITEM_RADIUS, apply_trigger,
-                                HeightStates, Jump, Navigator,
-                                _closest_on_segment, _closest_point, _line_mid, _segment_distance,
-                                _segments_cross, can_cross)
+from evildoom.nav.navmesh import _cells
+from evildoom.nav.reach import (FRICTION, ITEM_RADIUS, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS,
+                                RUN_THRUST, TELEPORTERS_FOR_PLAYERS, HeightStates, Jump,
+                                Navigator, _closest_on_segment, _closest_point, _line_mid,
+                                _segment_distance, _segments_cross, apply_trigger, can_cross)
 from evildoom.nav.walkthrough import Step, plan_from, steps_from_legs
 from evildoom.wad.specials import Category, Key, Trigger
 
@@ -290,6 +290,8 @@ class RouteFollower:
         self.replans = 0
         self._last_pos: tuple[float, float] | None = None
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
+        self._lineup_tic: int | None = None  # when we arrived at a jump's run-up
+        self._brake_until = -1               # after landing a jump, until we've stopped
         self._look = None    # last view angle we were aiming for
         self._next_step(0)
 
@@ -467,6 +469,11 @@ class RouteFollower:
     def _walk(self, obs: Observation) -> Controls:
         if self._sprint is not None:
             return self._sprint_jump(obs)
+        if obs.tic < self._brake_until:
+            if self.motion.speed > 1.0:  # just landed a jump: stop first
+                self._progress_tic = obs.tic
+                return self.motion.drive(obs, (0.0, 0.0), self._look)
+            self._brake_until = -1
         seg = self.segments[self.seg_i]
         track = seg.track
         pos = (obs.x, obs.y)
@@ -531,6 +538,8 @@ class RouteFollower:
         speed = min(FULL_SPEED, track.speed_limit(self.s, end_speed), self._speed_cap)
         if stop:
             speed = min(speed, 0.3 * to_end + 0.5)
+        if seg.end == "jump":  # run-ups are often right at a ledge: come in gently
+            speed = min(speed, 0.12 * (track.length - self.s) + 1.5)
         if math.dist(pos, carrot) < 1:
             return self.motion.drive(obs, (0.0, 0.0), self._look_angle(obs, seg))
         return self.motion.move(obs, _heading(pos, carrot), speed, self._look_angle(obs, seg))
@@ -574,6 +583,18 @@ class RouteFollower:
             d = _segment_distance(p, q, e1, e2)
             if d < reach and d < _segment_distance(p, p, e1, e2) - 0.5:
                 return False
+        # Nor across a teleport line from its front (cutting a corner over one teleports us).
+        m = self.nav.map
+        for cell in _cells(min(p[0], q[0]), min(p[1], q[1]), max(p[0], q[0]), max(p[1], q[1])):
+            for li in self.nav.mesh._line_grid.get(cell, ()):
+                line = m.linedefs[li]
+                if line.special not in TELEPORTERS_FOR_PLAYERS or li in self._crossing_lines:
+                    continue
+                v1, v2 = (m.vertexes[line.v1].x, m.vertexes[line.v1].y), \
+                    (m.vertexes[line.v2].x, m.vertexes[line.v2].y)
+                in_front = (v2[0] - v1[0]) * (p[1] - v1[1]) - (v2[1] - v1[1]) * (p[0] - v1[0]) < 0
+                if in_front and _segment_distance(p, q, v1, v2) < 1:
+                    return False
         return True
 
     def _look_angle(self, obs: Observation, seg: Segment) -> float:
@@ -702,7 +723,15 @@ class RouteFollower:
         """At the run-up: settle on the exact spot facing the takeoff, then start sprinting."""
         heading = _heading(jump.runup, jump.takeoff)
         diff = _norm(heading - obs.angle)
-        if abs(diff) <= 1.5 and self.motion.speed < 0.5 and abs(self.motion.rate) < 1:
+        # As exactly as the engine check did it: on the spot, square on, standing still
+        # (some jumps only just make it). Settling longer than a second: go anyway.
+        settled = math.dist((obs.x, obs.y), jump.runup) < 1.5 and abs(diff) <= 0.75 \
+            and self.motion.speed < 0.3 and abs(self.motion.rate) < 0.5
+        if self._lineup_tic is None:
+            self._lineup_tic = obs.tic
+        if settled or (obs.tic - self._lineup_tic > TICRATE and abs(diff) <= 1.5
+                       and self.motion.speed < 0.5):
+            self._lineup_tic = None
             self._sprint = (jump, heading, obs.tic)
             self.log.add(obs.tic, f"run-jump from ({jump.takeoff[0]:.0f}, {jump.takeoff[1]:.0f})")
             return self._sprint_jump(obs)
@@ -723,6 +752,8 @@ class RouteFollower:
             self.seg_i = min(self.seg_i + 1, len(self.segments) - 1)
             self._enter_segment(obs.tic)
             self._look = heading
+            # Landing spots can be small: shed the sprint speed before going on.
+            self._brake_until = obs.tic + 2 * TICRATE
             return self._walk(obs)
         diff = _norm(heading - obs.angle)
         self.motion.rate = 0.0

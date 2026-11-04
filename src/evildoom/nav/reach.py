@@ -174,6 +174,7 @@ class Navigator:
         self.mesh = mesh or NavMesh(m)
         self.movers = MoverModel(m, self.mesh.neighbors_of_sector)
         self.damage = {s.index: classify_sector(s.special).damage for s in m.sectors}
+        self.strict_fit = False  # True: find_path refuses paths the box (maybe) can't get through
         # (switch line, poly) -> sectors that must be open for the use trace (activators_now)
         self.use_gates: dict[tuple[int, int], frozenset[int]] = {}
         self.triggers = self._find_triggers()
@@ -998,7 +999,8 @@ class Navigator:
                   doors: Doors | None = None) -> Path | None:
         """A* over polys (see _find_path_once). If the smoothed path has a stretch the
         player's box can't get through (a 32-wide strip inside one poly, a row of pillars),
-        search again avoiding the polys there, keeping the least squeezed path found."""
+        search again avoiding the polys there. If every way squeezes there's no path (the
+        player wouldn't fit), unless `strict_fit` is off: then the least squeezed one."""
         best, banned = None, set()   # (squeeze points, path) of the least bad attempt
         for _ in range(3):
             self._squeezes: list[Point] = []
@@ -1020,7 +1022,7 @@ class Navigator:
             if not new:
                 break
             banned |= new
-        return best[1] if best else None
+        return best[1] if best and not self.strict_fit else None
 
     def _find_path_once(self, start: Point, goal: Point, states: HeightStates,
                         doors: Doors | None, banned: set[int]) -> Path | None:
@@ -1464,6 +1466,8 @@ class Navigator:
         # jump run-up/takeoff points are kept exactly where they are.
         crossed = {mesh.portals[via].linedef for _, via in chain
                    if isinstance(via, int) and mesh.portals[via].linedef is not None}
+        crossed |= {via.line for _, via in chain
+                    if isinstance(via, Teleport) and not isinstance(via, Jump)}
         # ...but not walk-over lines that shut a sector right beside them (MAP23's "close door
         # 30s" line): keep clear of those, or the closing door pins the player's box.
         crossed -= self._shutting_lines()
@@ -1523,7 +1527,17 @@ class Navigator:
                                 for hf in states[f] for hb in states[bk]):
                     continue  # closed at the start, but open by the time we walk this path
                 if li not in walls:  # a ledge: only a wall if we're below it
-                    if floor is None or floor + MAX_STEP >= max(init[f][0], init[bk][0]):
+                    if states is not None and here is not None:  # as high as we can be:
+                        # the player stands on the highest floor anywhere under the box
+                        under = {here.sector} | {
+                            p.sector for dx in (-PLAYER_RADIUS, PLAYER_RADIUS)
+                            for dy in (-PLAYER_RADIUS, PLAYER_RADIUS)
+                            if (p := self.mesh.poly_at(a[0] + dx, a[1] + dy)) is not None}
+                        ours = max(h[0] for s_ in under for h in states[s_])
+                        top = min(max(hf[0], hb[0]) for hf in states[f] for hb in states[bk])
+                    else:
+                        ours, top = floor, max(init[f][0], init[bk][0])
+                    if ours is None or ours + MAX_STEP >= top:
                         continue
                 v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
                 yield (v1.x, v1.y), (v2.x, v2.y)
