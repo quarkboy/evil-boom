@@ -4,8 +4,12 @@
 //! `Graph::reachable` is `Navigator.reachable`: the flood fill over navmesh polys that the
 //! plan search runs thousands of times per level (about 40% of planning time in Python).
 
+mod mesh;
+mod wad;
+
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PySet};
+use pyo3::types::PyDict;
 use std::collections::{HashMap, HashSet};
 
 const MAX_STEP: f64 = 24.0;
@@ -316,8 +320,65 @@ impl Graph {
     }
 }
 
+type PolyOut = Option<(usize, Vec<mesh::Point>, mesh::Point, Vec<usize>, Vec<usize>, Vec<usize>)>;
+
+/// A map loaded and its navmesh built in Rust (stage 1 of the port: owned here, readable from
+/// Python for checking against evildoom.nav.navmesh).
+#[pyclass]
+struct NativeMesh {
+    map: wad::MapData,
+    mesh: mesh::Mesh,
+}
+
+#[pymethods]
+impl NativeMesh {
+    /// `wad_path`'s `map_name`, texture sizes from `texture_wads` then the map's own WAD;
+    /// `obstacles`: (x, y, half-width) boxes cut out (solid things, grown by the player).
+    #[new]
+    #[pyo3(signature = (wad_path, map_name, obstacles, texture_wads=Vec::new()))]
+    fn new(wad_path: &str, map_name: &str, obstacles: Vec<(f64, f64, f64)>,
+           texture_wads: Vec<String>) -> PyResult<Self> {
+        let err = |e: String| PyValueError::new_err(e);
+        let w = wad::Wad::open(wad_path).map_err(err)?;
+        let tw: Vec<wad::Wad> = texture_wads.iter().map(|p| wad::Wad::open(p)).collect::<Result<_, _>>().map_err(err)?;
+        let refs: Vec<&wad::Wad> = tw.iter().collect();
+        let map = wad::load_map(&w, map_name, &refs).map_err(err)?;
+        let mesh = mesh::Mesh::build(&map, &obstacles).map_err(err)?;
+        Ok(NativeMesh { map, mesh })
+    }
+
+    /// per poly: None or (sector, vertices, center, lines_front, lines_back, portals)
+    fn polys(&self) -> Vec<PolyOut> {
+        self.mesh.polys.iter().map(|p| p.as_ref().map(|p| {
+            let mut f: Vec<usize> = p.lines_front.iter().copied().collect();
+            let mut b: Vec<usize> = p.lines_back.iter().copied().collect();
+            f.sort_unstable();
+            b.sort_unstable();
+            (p.sector, p.vertices.clone(), p.center, f, b, p.portals.clone())
+        })).collect()
+    }
+
+    /// per portal: (a, b, p1, p2, linedef or None)
+    fn portals(&self) -> Vec<(usize, usize, mesh::Point, mesh::Point, Option<usize>)> {
+        self.mesh.portals.iter().map(|q| (q.a, q.b, q.p1, q.p2, q.linedef)).collect()
+    }
+
+    fn pieces(&self) -> HashMap<usize, Vec<usize>> {
+        self.mesh.pieces.clone()
+    }
+
+    fn poly_at(&self, x: f64, y: f64) -> Option<usize> {
+        self.mesh.poly_at(x, y)
+    }
+
+    fn counts(&self) -> (usize, usize, usize, usize) {
+        (self.map.vertexes.len(), self.map.linedefs.len(), self.map.sectors.len(), self.map.things.len())
+    }
+}
+
 #[pymodule]
 fn evildoom_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Graph>()?;
+    m.add_class::<NativeMesh>()?;
     Ok(())
 }

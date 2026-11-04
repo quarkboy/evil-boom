@@ -215,7 +215,7 @@ class NavMesh:
         m = self.map
         candidates = {li for cell in _cells(*p, *q) for li in self._line_grid.get(cell, ())}
         out = []
-        for li in candidates:
+        for li in sorted(candidates):  # (sorted: portal order mustn't depend on set order)
             line = m.linedefs[li]
             a, b = m.vertexes[line.v1], m.vertexes[line.v2]
             if _shared_segment((a.x, a.y), (b.x, b.y), p, q) is not None:
