@@ -1547,9 +1547,9 @@ class Navigator:
         for p in points + [None]:
             if p is None:
                 if run:
-                    out += self._box_fits_path(
+                    out += self._straighten(self._box_fits_path(
                         self._push_from_corners(run, frozenset(crossed), pinned),
-                        frozenset(crossed), pinned)
+                        frozenset(crossed), pinned), frozenset(crossed), pinned)
                     run = []
                 out.append(None)
             else:
@@ -1654,6 +1654,31 @@ class Navigator:
                 elif hasattr(self, "_squeezes"):  # tell find_path to look for another way
                     self._squeezes += self._squeeze_points(a, b, ignore, exempt)
             out.append(b)
+        return out
+
+    def _straighten(self, pts: list[Point], exempt: frozenset,
+                    pinned: set[Point] = frozenset()) -> list[Point]:
+        """Last pass: from each waypoint go straight to the farthest later one the player's
+        box reaches without touching a wall or walking off a ledge, never skipping a pinned
+        point (jump run-ups/takeoffs). Removes the back-and-forth jitter that corner pushes,
+        nudges and detours can leave (MAP02's bars), and any needless corners."""
+        if len(pts) < 3:
+            return pts
+        out, i = [pts[0]], 0
+        while i < len(pts) - 1:
+            a = pts[i]
+            best = i + 1
+            for j in range(min(len(pts) - 1, i + 10), i + 1, -1):
+                if any(p in pinned for p in pts[i + 1:j]):
+                    continue
+                b = pts[j]
+                ignore = self._box_hits(a, a, exempt=exempt) | self._box_hits(b, b, exempt=exempt)
+                if not self._box_hits(a, b, ignore, exempt) \
+                        and not self._ledges_crossed(a, b, exempt):
+                    best = j
+                    break
+            out.append(pts[best])
+            i = best
         return out
 
     def _squeeze_points(self, a: Point, b: Point, ignore, exempt: frozenset) -> list[Point]:
