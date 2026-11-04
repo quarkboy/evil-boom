@@ -273,14 +273,18 @@ class NavMesh:
 
     def poly_at(self, x: float, y: float) -> NavPoly | None:
         """Walk the BSP like R_PointInSubsector."""
-        m = self.map
-        if not m.nodes:
+        nodes = self.__dict__.get("_flat_nodes")
+        if nodes is None:
+            # the hottest lookup there is (jump finding, path fitting, the movement sim):
+            # plain tuples, the side test inlined
+            nodes = self._flat_nodes = [(n.x, n.y, n.dx, n.dy, n.front_child, n.back_child)
+                                        for n in self.map.nodes]
+        if not nodes:
             return self.polys[0]
-        child = len(m.nodes) - 1
+        child = len(nodes) - 1
         while not child & NF_SUBSECTOR:
-            node = m.nodes[child]
-            front = _cross(node.x, node.y, node.dx, node.dy, x, y) < 0
-            child = node.front_child if front else node.back_child
+            nx, ny, ndx, ndy, front, back = nodes[child]
+            child = front if ndx * (y - ny) - ndy * (x - nx) < 0 else back
         ss = child & ~NF_SUBSECTOR
         group = self._pieces.get(ss)
         if group is None:
