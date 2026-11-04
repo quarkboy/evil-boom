@@ -65,6 +65,7 @@ OFF_COURSE = 96.0        # this far from the path anywhere: off course
 OFF_COURSE_TICS = 10     # ... for this long
 MAX_REPLANS = 6          # per step
 PRESS_TRIES = 3          # presses (creeping closer) before giving up on a switch
+PRESS_RANGE = 56.0     # how near a door to press it (use reaches 64)
 SETTLE_MAX = 0   # don't stand still for moves to finish: some floors are hopped onto rising
 MAX_TOTAL_REPLANS = 30   # per route (replans that add steps restart the per-step count)
 GIVE_UP_TICS = 60 * TICRATE  # one step taking this long: give up
@@ -881,6 +882,22 @@ class RouteFollower:
                         return cur, next(iter(sides - {cur.sector}), cur.sector), portal, None
         return None
 
+    def _door_line_point(self, sector: int, pos):
+        """Nearest point (a little in from its ends) on a use line that opens this door."""
+        m, best = self.nav.map, None
+        for t in self.nav.triggers:
+            if t.info.trigger in (Trigger.DR, Trigger.D1) and sector in t.effects:
+                line = m.linedefs[t.line]
+                a = (m.vertexes[line.v1].x, m.vertexes[line.v1].y)
+                b = (m.vertexes[line.v2].x, m.vertexes[line.v2].y)
+                length = max(math.dist(a, b), 1e-6)
+                k = min(0.5, 8 / length)
+                q = _closest_point(pos, (a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k),
+                                   (b[0] + (a[0] - b[0]) * k, b[1] + (a[1] - b[1]) * k))
+                if best is None or math.dist(pos, q) < math.dist(pos, best):
+                    best = q
+        return best
+
     def _gate_door(self, lines, near: set[int], pos):
         """(door sector, point to press) for a usable door among the sectors of these lines."""
         m = self.nav.map
@@ -906,16 +923,21 @@ class RouteFollower:
         pos = (obs.x, obs.y)
         opener = sector in self.doors and (use_point is not None
                                            or cur.index in self.doors[sector][1])
-        # the part of the doorway in front of us (doors can be wide), or the gate door's line
-        door_point = use_point or _closest_on_segment(pos, portal)
+        # the part of the doorway in front of us (doors can be wide), or the gate door's line;
+        # for a door, its use line (the face with the door special: MAP12's diagonal blue
+        # door isn't the side the path goes in by)
+        door_point = use_point or (self._door_line_point(sector, pos) if opener else None) \
+            or _closest_on_segment(pos, portal)
         if opener:
             # how far to the door, along the path where it goes round corners
             track = self.segments[self.seg_i].track
             along = track.project(door_point, self.s, DOOR_CHECK_DIST + 64)[1] - self.s
             dist = max(math.dist(pos, door_point), along)
             here = self.nav.mesh.poly_at(*pos)
+            # (Use reaches 64: close enough to press, whatever the planner's list of
+            # door-user polys says, which keeps a margin.)
             if use_point is None and (here is None or here.index not in self.doors[sector][1]) \
-                    and dist > PLAYER_RADIUS + 4:
+                    and math.dist(pos, door_point) > PRESS_RANGE:
                 # Not somewhere the door can be pressed from (something else in the way of the
                 # use trace, e.g. another switch line): keep walking up to it.
                 self._speed_cap = max(1.0, 0.3 * dist)

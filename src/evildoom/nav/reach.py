@@ -216,7 +216,9 @@ class Navigator:
         """(sector, heights) that only movers which come back (lifts, timed doors, crushers)
         produce: the sector won't stay like that."""
         if not hasattr(self, "_temporary"):
-            lasting = {(s, h) for t in self.triggers if t.permanent
+            # (perpetual lifts keep cycling: both their heights come round again and again)
+            lasting = {(s, h) for t in self.triggers
+                       if t.permanent or "perpetual" in t.info.description
                        for s, hs in t.effects.items() for h in hs}
             lasting |= {(s, h) for s, h in enumerate(self.movers.initial)}
             self._temporary = {(s, h) for t in self.triggers if not t.permanent

@@ -80,6 +80,8 @@ def expects_of(nav: Navigator, t: TriggerLine, after: Path | None) -> list[Expec
     depends on it."""
     on_path = {nav.mesh.polys[p].sector for p in after.polys} if after else set()
     out = []
+    if "perpetual" in t.info.description:
+        return out  # they keep cycling: nothing to wait for or beat
     for s, hs in t.effects.items():
         h = hs[0]
         if h == nav.movers.initial[s] and len(hs) == 1:
