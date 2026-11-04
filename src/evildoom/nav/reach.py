@@ -1296,12 +1296,26 @@ class Navigator:
         made (lift down, door open for a while) can only be used if the path gets to that
         sector before it ends, at running speed; otherwise path without it."""
         path = self.find_path(start, goal, states, doors)
-        if path is None or fired is None or fired.permanent or fired.line < 0:
+        if path is None or fired is None or fired.line < 0:
             return path
         temporary = self._temporary_heights()
         late = []
         arrive = self._arrival_tics(path)
+        for j in path.jumps:  # a jump needs its heights when we take off
+            src = self.mesh.poly_at(*j.takeoff)
+            if src is not None and src.sector in arrive:
+                for s, _h in j.requires:
+                    arrive[s] = min(arrive.get(s, math.inf), arrive[src.sector])
         for s, hs in fired.effects.items():
+            if fired.permanent:
+                # A floor moving for good: where it was is only there until it gets where
+                # it's going (E4M2: a jump planned over sector 30 at its old height, which it
+                # rises from in 0.3 s; the bot came down on it, well short).
+                timing = self.movers.timing(fired.info.special, fired.info.description, s,
+                                            hs[0])
+                if s in arrive and arrive[s] > timing.travel:
+                    late += [(s, h) for h in states[s] if h not in hs]
+                continue
             for h in hs:
                 if (s, h) not in temporary or s not in arrive:
                     continue
@@ -1549,6 +1563,12 @@ class Navigator:
                 trial = apply_trigger(base, t)
                 temp = frozenset((s, h) for s, hs in t.effects.items() for h in hs
                                  if (s, h) in temporary and h not in base[s])
+                if t.permanent:
+                    # Once a floor has risen for good its old height is gone too: only the
+                    # next leg can still hop on while it moves (E4M2: the plan walked from a
+                    # pit onto sector 3 at its old floor long after it had risen).
+                    temp |= {(s, h) for s, hs in t.effects.items() for h in trial[s]
+                             if h not in hs}
                 # Where we stand to use it matters (a door pressed from the pit below it is
                 # useless): try the default spot and a few others it can be used from, keep
                 # the one leaving the most reachable.
@@ -1938,9 +1958,12 @@ class Navigator:
         box reaches without touching a wall or walking off a ledge, never skipping a pinned
         point (jump run-ups/takeoffs). Removes the back-and-forth jitter that corner pushes,
         nudges and detours can leave (MAP02's bars), and any needless corners. Shortcuts
-        stay over the route's `sectors` (not across a lift that's only sometimes low)."""
+        stay over the route's `sectors` (not across a lift that's only sometimes low), and
+        over sectors the stretch they replace went over (E4M2: the route started in a lava
+        pit, so a shortcut later on cut straight across it from one rim to the other)."""
         if len(pts) < 3:
             return pts
+        over = [self._sectors_along(pts[k], pts[k + 1]) for k in range(len(pts) - 1)]
         out, i = [pts[0]], 0
         while i < len(pts) - 1:
             a = pts[i]
@@ -1949,14 +1972,29 @@ class Navigator:
                 if any(p in pinned for p in pts[i + 1:j]):
                     continue
                 b = pts[j]
+                allowed = set().union(*over[i:j])
+                if sectors is not None:
+                    allowed &= sectors
+                if not self._within_sectors(a, b, allowed):
+                    continue
                 ignore = self._box_hits(a, a, exempt=exempt) | self._box_hits(b, b, exempt=exempt)
                 if not self._box_hits(a, b, ignore, exempt) \
-                        and not self._ledges_crossed(a, b, exempt) \
-                        and self._within_sectors(a, b, sectors):
+                        and not self._ledges_crossed(a, b, exempt):
                     best = j
                     break
             out.append(pts[best])
             i = best
+        return out
+
+    def _sectors_along(self, a: Point, b: Point) -> set[int]:
+        """Sectors under the segment a-b (sampled every 8 units)."""
+        n = max(1, int(math.dist(a, b) // 8))
+        out = set()
+        for i in range(n + 1):
+            poly = self.mesh.poly_at(a[0] + (b[0] - a[0]) * i / n,
+                                     a[1] + (b[1] - a[1]) * i / n)
+            if poly is not None:
+                out.add(poly.sector)
         return out
 
     def _within_sectors(self, a: Point, b: Point, sectors: set[int] | None) -> bool:
@@ -2154,10 +2192,14 @@ class Navigator:
                         self._obstacles[cell].append((a, b))
         return self._obstacles
 
-    def _walls_near(self, a: Point, b: Point, pad: float, exempt: frozenset | None = None):
+    def _walls_near(self, a: Point, b: Point, pad: float, exempt: frozenset | None = None,
+                    live: dict[int, Heights] | None = None):
         """Wall lines and solid-thing box edges near the segment a-b. With `exempt` given
         (path smoothing: the lines the path crosses), ledge edges count as walls too, and
-        the exempt lines (doors it opens, ledges it drops off) don't."""
+        the exempt lines (doors it opens, ledges it drops off) don't. With `live` heights
+        (the follower), lines that are walls or ledges *now* count as well: a floor that has
+        risen makes new ledges (E4M2: sector 3 rose out of the lava; cutting a corner by it
+        dropped the bot back in)."""
         m, mesh, obstacles = self.map, self.mesh, self._obstacle_grid()
         walls = self._wall_lines()
         if exempt is not None:  # the lines the path crosses (doors it opens) aren't walls
@@ -2166,6 +2208,16 @@ class Navigator:
         for cell in _cells(min(a[0], b[0]) - pad, min(a[1], b[1]) - pad,
                            max(a[0], b[0]) + pad, max(a[1], b[1]) + pad):
             for li in mesh._line_grid.get(cell, ()):
+                if live is not None and li not in walls and li not in seen \
+                        and (exempt is None or li not in exempt):
+                    line = m.linedefs[li]
+                    f, bk = m.front_sector(line), m.back_sector(line)
+                    if f is not None and bk is not None and \
+                            not (can_cross(live[f], live[bk]) and can_cross(live[bk], live[f])):
+                        seen.add(li)
+                        v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                        yield (v1.x, v1.y), (v2.x, v2.y)
+                        continue
                 if li in walls and li not in seen:
                     seen.add(li)
                     line = m.linedefs[li]

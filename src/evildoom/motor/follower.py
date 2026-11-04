@@ -309,7 +309,6 @@ class RouteFollower:
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
         self._lineup_tic: int | None = None  # when we arrived at a jump's run-up
         self._brake_until = -1               # after landing a jump, until we've stopped
-        self._airborne = False               # in the air during a run-jump
         self._jump_wait = None
         self._watches: list[Watch] = []      # what fired triggers should be doing
         self._settle: list[Expect] = []      # moves we're waiting on before the next step
@@ -476,6 +475,7 @@ class RouteFollower:
         if self.done or self.failed:
             return Controls()
         self.motion.observe(obs)
+        self._live = obs.heights   # (corner cutting keeps off ledges as they are now)
         pos = (obs.x, obs.y)
         if self._last_pos and math.dist(pos, self._last_pos) > 64:
             if self.seg_i + 1 < len(self.segments) and self.segments[self.seg_i].end == "teleport":
@@ -620,7 +620,8 @@ class RouteFollower:
     def _chord_clear(self, p, q) -> bool:
         """Can the player's box move straight from p to q without touching a wall, solid thing
         or (uncrossed) ledge edge? Edges we're already close to only need not get closer."""
-        for e1, e2 in self.nav._walls_near(p, q, 2 * PLAYER_RADIUS, self._crossing_lines):
+        for e1, e2 in self.nav._walls_near(p, q, 2 * PLAYER_RADIUS, self._crossing_lines,
+                                           getattr(self, "_live", None)):
             length = max(math.dist(e1, e2), 1e-6)
             c, s = abs(e2[0] - e1[0]) / length, abs(e2[1] - e1[1]) / length
             reach = PLAYER_RADIUS * (c + s) + 2   # the square box's extent across this edge
@@ -812,21 +813,20 @@ class RouteFollower:
     def _sprint_jump(self, obs: Observation) -> Controls:
         """Full speed in a straight line, exactly as the engine check did it: only up to the
         edge for a soft jump (then coast: it lands slower, for narrow strips), otherwise
-        through the flight. On touchdown stop sprinting so the landing is braked at once."""
+        through the flight. On touchdown on the landing sector stop sprinting so the landing
+        is braked at once."""
         jump, heading, since = self._sprint
         ux, uy = math.cos(math.radians(heading)), math.sin(math.radians(heading))
         flown = (obs.x - jump.takeoff[0]) * ux + (obs.y - jump.takeoff[1]) * uy
         here = self.nav.mesh.poly_at(obs.x, obs.y)
         floor = obs.heights[here.sector][0] if here is not None else None
-        landed = here is not None and here.sector == self.nav.mesh.polys[jump.dest_poly].sector             and obs.z is not None and abs(obs.z - floor) < 1 and flown > 0
-        if obs.z is not None and floor is not None and flown > 0 and not jump.through:
-            if obs.z > floor + 8:  # really falling, not just down a step
-                self._airborne = True
-            elif self._airborne and obs.z <= floor + 0.5:
-                landed = True
+        # Landed only on the sector the jump was checked to land on, as the check had it: a
+        # jump can skim another floor on the way (E4M2: the far side of the door it takes off
+        # from), and stopping there drops us short.
+        landed = flown > 0 and here is not None and obs.z is not None and \
+            here.sector == self.nav.mesh.polys[jump.dest_poly].sector and abs(obs.z - floor) < 1
         if landed or flown >= math.dist(jump.takeoff, jump.dest) - 8 \
                 or obs.tic - since > 4 * TICRATE:
-            self._airborne = False
             self._sprint = None
             land = self.nav.mesh.poly_at(obs.x, obs.y)
             self.log.add(obs.tic, f"landed at ({obs.x:.0f}, {obs.y:.0f}) sector "

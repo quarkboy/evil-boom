@@ -8,7 +8,8 @@ It follows ZDoom 2.8.1 (what ViZDoom runs) per tic, in floating point:
       may not straddle a one-sided or blocking line or a solid thing; the opening must be
       tall enough; a step up of at most 24 above the *current* z is allowed, even in the air,
       which is how a falling player lands on a ledge's lip); a blocked move slides along the
-      wall (approximately: velocity projected onto the wall, then x or y alone). Friction
+      wall (SlideMove: the rest of the move along it becomes the velocity), or against a
+      solid thing (y alone, else x alone, the dropped part of the velocity lost). Friction
       only on the ground (including while the box hangs over a ledge).
   P_ZMovement: z += velz; above the floor, gravity (2 on the first tic off a ledge, then 1);
       at or below it, land.
@@ -96,8 +97,20 @@ class PlayerSim:
         steps = 1 + int(speed // MAX_SUBSTEP) if speed > MAX_SUBSTEP else 1
         for _ in range(steps):
             dx, dy = self.vx / steps, self.vy / steps
+            self._thing_hit = False
             if not self._try_move(self.x + dx, self.y + dy):
-                self._slide(dx, dy, steps)
+                if self._thing_hit:
+                    # Sliding against another actor (P_XYMovement): y alone, else x alone,
+                    # and the dropped part of the velocity is gone for good (E4M2: a barrel
+                    # clipping a coasting jump stops it dead sideways).
+                    if self._try_move(self.x, self.y + dy):
+                        self.vx = 0.0
+                    elif self._try_move(self.x + dx, self.y):
+                        self.vy = 0.0
+                    else:
+                        self.vx = self.vy = 0.0
+                else:
+                    self._slide(dx, dy, steps)
                 if self.vx == 0 and self.vy == 0:
                     break
         # friction
@@ -231,6 +244,7 @@ class PlayerSim:
             for (ax, ay), (bx, by) in self._things.get(cell, ()):
                 if max(ax, bx) > x0 and min(ax, bx) < x1 and max(ay, by) > y0 \
                         and min(ay, by) < y1:
+                    self._thing_hit = True
                     return False, floor, ceil, None, None, None
         return True, floor, ceil, None, floor_line, ceil_line
 
