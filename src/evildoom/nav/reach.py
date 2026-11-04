@@ -982,7 +982,45 @@ class Navigator:
                 hs_a = hs_a | doors[sa][0]
             if sb in doors and frm in doors[sb][1]:
                 hs_b = hs_b | doors[sb][0]
-        return any(can_cross(ha, hb) for ha in hs_a for hb in hs_b)
+        return any(can_cross(ha, hb) and (ha[0] - hb[0] <= MAX_STEP or portal.linedef is None
+                                          or self._landable(portal.linedef, sa, ha[0]))
+                   for ha in hs_a for hb in hs_b)
+
+    def _landable(self, li: int, high: int, top: float) -> bool:
+        """Can the player drop off line `li` from sector `high`, whose floor is at `top`? DOOM
+        keeps you on the highest floor anywhere under your box, so you only fall once the
+        whole box is past the ledge, and up there it must fit (not straddle a wall, nor an
+        opening too low for someone at `top`). A gap exactly as wide as the box can't be
+        dropped into (MAP15's 32-wide strip by a low opening: you're stopped a hair short)."""
+        key = (li, high, top)
+        cache = self.__dict__.setdefault("_landable_cache", {})
+        if key not in cache:
+            from .physics import PlayerSim  # (physics imports the motor, which imports us)
+            if not hasattr(self, "_probe"):
+                self._probe = PlayerSim(self)
+            m = self.map
+            line = m.linedefs[li]
+            a, b = m.vertexes[line.v1], m.vertexes[line.v2]
+            dx, dy = b.x - a.x, b.y - a.y
+            length = math.hypot(dx, dy) or 1.0
+            nx, ny = -dy / length, dx / length  # left of v1->v2: the back side
+            if m.back_sector(line) == high:
+                nx, ny = -nx, -ny
+            clear = PLAYER_RADIUS * (abs(nx) + abs(ny)) + 0.5  # box fully past the line
+            ok = False
+            steps = max(2, int(length // 8))
+            for i in range(1, steps):
+                t = i / steps
+                for d in (clear, clear + 4, clear + 8, clear + 16, clear + 32):
+                    x, y = a.x + dx * t + nx * d, a.y + dy * t + ny * d
+                    fits, floor, ceil, *_ = self._probe._check(x, y, top)
+                    if fits and floor < top and ceil - top >= PLAYER_HEIGHT:
+                        ok = True
+                        break
+                if ok:
+                    break
+            cache[key] = ok
+        return cache[key]
 
     def reachable(self, start: int, states: HeightStates,
                   doors: Doors | None = None) -> set[int]:
@@ -1690,30 +1728,48 @@ class Navigator:
         m, init = self.map, self.movers.initial
         walls, drops = self._wall_lines(), self._drop_lines()
         here = self.mesh.poly_at(*a)
-        floor = init[here.sector][0] if here else None
+        states = getattr(self, "_smooth_states", None)
+        if here is None:
+            ours = None
+        elif states is not None:  # as high as we can be:
+            # the player stands on the highest floor anywhere under the box
+            under = {here.sector} | {
+                p.sector for dx in (-PLAYER_RADIUS, PLAYER_RADIUS)
+                for dy in (-PLAYER_RADIUS, PLAYER_RADIUS)
+                if (p := self.mesh.poly_at(a[0] + dx, a[1] + dy)) is not None}
+            ours = max(h[0] for s_ in under for h in states[s_])
+        else:
+            ours = init[here.sector][0]
         for cell in cells:
             for li in self.mesh._line_grid.get(cell, ()):
-                if li in seen or li in exempt or (li not in walls and li not in drops):
+                if li in seen or li in exempt:
                     continue
-                seen.add(li)
                 line = m.linedefs[li]
                 f, bk = m.front_sector(line), m.back_sector(line)
-                states = getattr(self, "_smooth_states", None)
+                if li not in walls and li not in drops:
+                    # Up on a ledge, an opening whose ceiling is below our head is a wall
+                    # too, even if it's fine from the floor below (MAP15: next to the drop
+                    # off the 32-wide strip, sector 186's ceiling is 176 under the strip).
+                    if f is None or bk is None or ours is None:
+                        continue
+                    top = max(min(hf[1], hb[1]) for hf in (states[f] if states else [init[f]])
+                              for hb in (states[bk] if states else [init[bk]]))
+                    if top - ours >= PLAYER_HEIGHT:
+                        continue
+                    seen.add(li)
+                    v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                    yield (v1.x, v1.y), (v2.x, v2.y)
+                    continue
+                seen.add(li)
                 if li in walls and states is not None and f is not None and bk is not None \
                         and any(can_cross(hf, hb) or can_cross(hb, hf)
                                 for hf in states[f] for hb in states[bk]):
                     continue  # closed at the start, but open by the time we walk this path
                 if li not in walls:  # a ledge: only a wall if we're below it
-                    if states is not None and here is not None:  # as high as we can be:
-                        # the player stands on the highest floor anywhere under the box
-                        under = {here.sector} | {
-                            p.sector for dx in (-PLAYER_RADIUS, PLAYER_RADIUS)
-                            for dy in (-PLAYER_RADIUS, PLAYER_RADIUS)
-                            if (p := self.mesh.poly_at(a[0] + dx, a[1] + dy)) is not None}
-                        ours = max(h[0] for s_ in under for h in states[s_])
+                    if states is not None:
                         top = min(max(hf[0], hb[0]) for hf in states[f] for hb in states[bk])
                     else:
-                        ours, top = floor, max(init[f][0], init[bk][0])
+                        top = max(init[f][0], init[bk][0])
                     if ours is None or ours + MAX_STEP >= top:
                         continue
                 v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
