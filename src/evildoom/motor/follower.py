@@ -38,6 +38,9 @@ PICKUP_REACHED = 6.0     # ... and for pickup spots (they can be near the edge o
 RUN_REAIM = 4            # tics between re-aims while running over sinking floors
 RUN_TURN = 10.0          # degrees a tic a player turns while running across them
 RUN_AHEAD_SINK = 4       # how much lower a sinking floor is assumed by the time we leave it
+BARREL_IN_WAY = 40       # a barrel this close when stuck is what's in the way
+BARREL_SAFE = 150        # back off this far before shooting one (blast radius 128)
+BARREL_GIVE_UP = 8 * TICRATE
 DROP_CHECK_DIST = 48     # how far ahead to look for crossings that became one-way drops
 USE_EVERY = 15           # tics between use presses while waiting at a door
 RUNUP_TOLERANCE = 6.0    # how exactly to hit a jump run-up point
@@ -86,6 +89,7 @@ class Observation:
     keys: frozenset | None = None                 # keys held, if the engine can tell
     z: float | None = None                        # height of the player's feet
     weapon: int | None = None                     # weapon slot held, if the engine can tell
+    barrels: tuple | None = None                  # where explosive barrels are now, if known
 
 
 @dataclass
@@ -325,6 +329,7 @@ class RouteFollower:
         self._last_pos: tuple[float, float] | None = None
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
         self._run = None     # running over sinking floors (_run_step)
+        self._barrel = None  # (where, since tic) of a barrel in the way being shot (_shoot_barrel)
         # Floors that sink once stepped on (a walk-over line on their own edge lowers them:
         # MAP08's exit run over the nukage): a jump off one goes at once, without settling.
         self._sinking = set()
@@ -559,6 +564,8 @@ class RouteFollower:
             return self._sprint_jump(obs)
         if self._run is not None:
             return self._run_step(obs)
+        if self._barrel is not None:
+            return self._shoot_barrel(obs)
         if obs.tic < self._brake_until:
             if self.motion.speed > 1.0:  # just landed a jump: stop first
                 self._progress_tic = obs.tic
@@ -615,6 +622,14 @@ class RouteFollower:
                 if not self._replan(obs, "stuck"):
                     return self._fail(obs, "stuck")
                 return self._walk(obs)
+            barrel = next((b for b in obs.barrels or () if math.dist(b, pos) < BARREL_IN_WAY), None)
+            if barrel is not None:
+                # Wedged against a barrel (MAP23 has rows of them across corridors): blow
+                # it up from a safe distance, as a player would.
+                self.log.add(obs.tic, f"barrel in the way at ({barrel[0]:.0f}, {barrel[1]:.0f}): "
+                                      f"shooting it")
+                self._barrel = (barrel, obs.tic)
+                return self._shoot_barrel(obs)
             self.log.add(obs.tic, f"stuck at ({obs.x:.0f}, {obs.y:.0f}), backing off")
             self._unstick_until = obs.tic + UNSTICK_TICS
             self._progress_tic = obs.tic + UNSTICK_TICS
@@ -885,6 +900,31 @@ class RouteFollower:
         hold = ((jump.runup[0] - obs.x) * 0.3, (jump.runup[1] - obs.y) * 0.3)
         self._progress_tic = obs.tic
         return self.motion.drive(obs, hold, heading)
+
+    def _shoot_barrel(self, obs: Observation) -> Controls:
+        """Back off out of its blast (128 units) and shoot the barrel that's in the way, then
+        carry on along the path."""
+        where, since = self._barrel
+        pos = (obs.x, obs.y)
+        if not any(math.dist(b, where) < 8 for b in obs.barrels or ()) \
+                or obs.tic - since > BARREL_GIVE_UP:
+            self._barrel = None
+            self._reset_progress(obs.tic)
+            self.log.add(obs.tic, "barrel gone" if obs.tic - since <= BARREL_GIVE_UP
+                         else "couldn't shoot the barrel")
+            return self._walk(obs)
+        self._progress_tic = obs.tic
+        look = _heading(pos, where)
+        d = math.dist(pos, where)
+        if d < BARREL_SAFE and obs.tic - since < 3 * TICRATE:
+            away = math.atan2(pos[1] - where[1], pos[0] - where[0])
+            return self.motion.drive(obs, (math.cos(away) * 8, math.sin(away) * 8), look)
+        controls = self.motion.drive(obs, (0.0, 0.0), look)
+        if obs.weapon == 1:
+            controls.pistol = True
+        elif abs(_norm(look - obs.angle)) < 2:
+            controls.attack = True
+        return controls
 
     def _run_step(self, obs: Observation) -> Controls:
         """Running over floors that sink once stepped on (MAP08's exit: platforms in nukage

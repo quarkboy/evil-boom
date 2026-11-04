@@ -90,8 +90,10 @@ class VizDoomEngine:
         state = self.game.get_state()
         x, y, angle, _health, z, weapon = state.game_variables
         heights = {s.id: (s.floor_height, s.ceiling_height) for s in state.sectors}
+        barrels = tuple((o.position_x, o.position_y) for o in state.objects
+                        if o.name == "ExplosiveBarrel")
         return Observation(float(x), float(y), float(angle), heights, self.tic,
-                           self._keys_held(state), float(z), int(weapon))
+                           self._keys_held(state), float(z), int(weapon), barrels)
 
     def _keys_held(self, state) -> frozenset:
         """Keys picked up so far: key items present at the start that have gone."""
