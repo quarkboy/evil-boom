@@ -922,8 +922,33 @@ class Navigator:
             if shot is not None and not any(shot[0] <= h[0] <= shot[1]
                                             for h in states[self.mesh.polys[p].sector]):
                 continue
+            far = self.cross_sides().get((t.line, p))
+            if far is not None and not (doors and far in doors) and not any(
+                    can_cross(a, b) for a in states[self.mesh.polys[p].sector]
+                    for b in states[far]):
+                continue
             out.add(p)
         return out
+
+    def cross_sides(self) -> dict[tuple[int, int], int]:
+        """(walk-over line, activator poly) -> the sector across the line from it. A walk-over
+        line only goes off when the centre gets across it, so from below a ledge it can't be
+        set off (MAP09's lift line on a 48-unit step: only from the top, dropping over)."""
+        if not hasattr(self, "_cross_sides"):
+            m, out = self.map, {}
+            for t in self.triggers:
+                if t.line < 0 or t.info.trigger not in (Trigger.W1, Trigger.WR):
+                    continue
+                line = m.linedefs[t.line]
+                f, b = m.front_sector(line), m.back_sector(line)
+                if f is None or b is None or f == b:
+                    continue
+                for p in t.activators:
+                    sec = self.mesh.polys[p].sector
+                    if sec in (f, b):
+                        out[(t.line, p)] = b if sec == f else f
+            self._cross_sides = out
+        return self._cross_sides
 
     def _boss_triggers(self) -> list[TriggerLine]:
         """Vanilla A_BossDeath / A_KeenDie: killing every monster of a type fires a tagged
@@ -1666,7 +1691,13 @@ class Navigator:
                     # sector 3 at its old floor long after it had risen).
                     travel = self.movers.timing(t.info.special, t.info.description, s,
                                                 hs[0]).travel if t.line >= 0 else 0
-                    old = {(s, h): travel for h in sorted(trial[s]) if h not in hs}
+                    # A rising floor is only its old height for crossing on until it's a step
+                    # above it (MAP09: the plan crossed sector 6 most of the way through its
+                    # rise, by when it was a 30-unit climb).
+                    rise = hs[0][0]
+                    old = {(s, h): travel if rise <= h[0] else
+                           min(travel, (travel - 1) * MAX_STEP / (rise - h[0]) + 1)
+                           for h in sorted(trial[s]) if h not in hs}
                     moving_off.update(old)
                     out.update(old)
                     continue
@@ -1815,7 +1846,13 @@ class Navigator:
                              squeezes=node.squeezes, stable=stable, world=world)
                 progress = bool(stable - (node.stable or node.reach)) or key is not None
                 relevant = (t is not None and t.line in rel_t) or (key is not None and key in rel_k)
-                child.rank = (not relevant, not progress, -len(stable), child.steps)
+                # Holding more of the keys the route needs comes first: once one's picked up
+                # the search carries on from there, even with triggers the relaxed plan didn't
+                # see a need for (MAP09: the lifts out of the yellow key's pit, which it
+                # thought one lift did; behind thousands of nodes without the key, they were
+                # never reached).
+                child.rank = (-len(ks & rel_k), not relevant, not progress, -len(stable),
+                              child.steps)
                 priority = (not goal_polys.keys() & stable, child.squeezes) + child.rank
                 heapq.heappush(heap, (priority, next(counter), child))
 
@@ -1974,6 +2011,7 @@ class Navigator:
         return (triggers,
                 {k: sorted(v) for k, v in self.use_gates.items()},
                 {k: tuple(map(float, v)) for k, v in self.shot_floors.items()},
+                dict(self.cross_sides()),
                 [(sec, tuple(map(float, h))) for sec, h in self._temporary_heights()],
                 [(bit[k], list(map(lambda p: tuple(map(float, p)), ps)))
                  for k, ps in self._key_positions.items()])

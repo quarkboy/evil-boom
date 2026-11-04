@@ -181,6 +181,7 @@ impl Nav {
         triggers: Vec<(i64, String, Vec<(usize, Vec<(f64, f64)>)>, HashSet<usize>, bool, Vec<bool>, Vec<((usize, (f64, f64)), (f64, f64))>, Vec<(usize, f64)>)>,
         use_gates: HashMap<(i64, usize), Vec<usize>>,
         shot_floors: HashMap<(i64, usize), (f64, f64)>,
+        cross_sides: HashMap<(i64, usize), usize>,
         temporary: Vec<(usize, (f64, f64))>,
         key_positions: Vec<(u8, Vec<Point>)>,
     ) {
@@ -199,6 +200,7 @@ impl Nav {
             triggers,
             use_gates,
             shot_floors,
+            cross_sides,
             temporary: temporary.into_iter().map(|(s, h)| (s, hk(h))).collect(),
             key_positions,
             door_cache: HashMap::new(),

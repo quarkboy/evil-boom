@@ -70,6 +70,8 @@ pub struct PlanData {
     pub triggers: Vec<Trig>,
     pub use_gates: HashMap<(i64, usize), Vec<usize>>,
     pub shot_floors: HashMap<(i64, usize), (f64, f64)>,
+    /// (walk-over line, activator poly) -> the sector across the line (Navigator.cross_sides)
+    pub cross_sides: HashMap<(i64, usize), usize>,
     pub temporary: HashSet<(usize, HKey)>,
     /// key bit -> where that key is (skill 3), in Navigator._key_positions order
     pub key_positions: Vec<(u8, Vec<Point>)>,
@@ -133,12 +135,12 @@ struct Node {
     squeezes: usize,
     world: Option<Rc<HashSet<usize>>>,
     stable: Option<Rc<HashSet<usize>>>,
-    rank: (bool, bool, i64, usize),
+    rank: (i64, bool, bool, i64, usize),
 }
 
 /// (can't reach a goal, squeezes, not relevant, not progress, -len(stable), steps), counter
 #[derive(PartialEq, Eq)]
-struct Prio((bool, usize, bool, bool, i64, usize), u64);
+struct Prio((bool, usize, i64, bool, bool, i64, usize), u64);
 impl PartialOrd for Prio {
     fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
         Some(self.cmp(o))
@@ -216,6 +218,12 @@ impl NavCore {
             }
             if let Some(&(lo, hi)) = pd.shot_floors.get(&(t.line, p)) {
                 if !states[self.poly_sector[p]].iter().any(|h| lo <= h.0 && h.0 <= hi) {
+                    continue;
+                }
+            }
+            if let Some(&far) = pd.cross_sides.get(&(t.line, p)) {
+                let open = doors.map_or(false, |d| d.contains_key(&far));
+                if !open && !states[self.poly_sector[p]].iter().any(|&a| states[far].iter().any(|&b| can_cross(a, b))) {
                     continue;
                 }
             }
@@ -546,13 +554,13 @@ impl NavCore {
         let root = Node {
             pos: start, states: states0, added: BTreeSet::new(), keys: keys0, legs: Rc::new(Vec::new()),
             reach: root_reach, steps: 0, pending: None, temp: Rc::new(BTreeMap::new()), squeezes: 0,
-            world: None, stable: None, rank: (false, false, 0, 0),
+            world: None, stable: None, rank: (0, false, false, 0, 0),
         };
         let mut counter: u64 = 0;
         let mut heap: BinaryHeap<(Prio, std::cmp::Reverse<u64>)> = BinaryHeap::new();
         let mut nodes: HashMap<u64, Node> = HashMap::new();
         nodes.insert(counter, root);
-        heap.push((Prio((false, 0, false, false, 0, 0), counter), std::cmp::Reverse(counter)));
+        heap.push((Prio((false, 0, 0, false, false, 0, 0), counter), std::cmp::Reverse(counter)));
         counter += 1;
         type SigKey = (Vec<Pair>, u8, Vec<usize>);
         let mut seen: HashMap<SigKey, Vec<Rc<Temp>>> = HashMap::new();
@@ -626,7 +634,7 @@ impl NavCore {
                     let r = node.rank;
                     let id2 = counter;
                     counter += 1;
-                    heap.push((Prio((priority.0, node.squeezes, r.0, r.1, r.2, r.3), id2), std::cmp::Reverse(id2)));
+                    heap.push((Prio((priority.0, node.squeezes, r.0, r.1, r.2, r.3, r.4), id2), std::cmp::Reverse(id2)));
                     nodes.insert(id2, node);
                     continue;
                 }
@@ -768,7 +776,7 @@ impl NavCore {
                 let goal_unreach = !c.stable.as_ref().unwrap().iter().any(|p| goal_set.contains(p));
                 let id2 = counter;
                 counter += 1;
-                heap.push((Prio((goal_unreach, c.squeezes, r.0, r.1, r.2, r.3), id2), std::cmp::Reverse(id2)));
+                heap.push((Prio((goal_unreach, c.squeezes, r.0, r.1, r.2, r.3, r.4), id2), std::cmp::Reverse(id2)));
                 nodes.insert(id2, c);
             }
         }
@@ -798,9 +806,12 @@ impl NavCore {
                 let travel = if t.line >= 0 { *t.perm_travel.get(s).unwrap_or(&0.0) } else { 0.0 };
                 let mut olds: Vec<Heights> = trial[*s].iter().copied().filter(|h| !hs.iter().any(|x| hk(*x) == hk(*h))).collect();
                 olds.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+                let rise = hs[0].0;
                 for h in olds {
                     moving_off.insert((*s, hk(h)));
-                    out.insert((*s, hk(h)), travel);
+                    // (a rising floor: only until it's a step above, see Navigator.plan)
+                    let last = if rise <= h.0 { travel } else { travel.min((travel - 1.0) * MAX_STEP / (rise - h.0) + 1.0) };
+                    out.insert((*s, hk(h)), last);
                 }
                 continue;
             }
@@ -851,7 +862,8 @@ impl NavCore {
         let progress = stable.iter().any(|p| !prev_stable.contains(p)) || key.is_some();
         let relevant = ti.map_or(false, |i| rel_t.contains(&self.pd().triggers[i].line)) || key.map_or(false, |k| rel_k & (1 << k) != 0);
         let steps = node.steps + 1;
-        let rank = (!relevant, !progress, -(stable.len() as i64), steps);
+        // (needed keys held first: see Navigator.plan)
+        let rank = (-((ks & rel_k).count_ones() as i64), !relevant, !progress, -(stable.len() as i64), steps);
         Ok(Some(Node {
             pos: target,
             states: trial,
