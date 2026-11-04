@@ -427,11 +427,16 @@ class RouteFollower:
             jump = next((j for j in step.path.jumps if math.dist(p, j.runup) < 1), None)
             if jump is not None:
                 raw.append((cur, "jump", jump))
-                cur = []
-                # carry on from the landing point (the waypoint after the takeoff)
+                # carry on from the landing point, then the waypoints after the takeoff (one
+                # at the landing point itself is dropped; a nearby one can be where the step
+                # ends: E4M6's switch is 26 units past the landing, and a track of just that
+                # point is "already there")
+                cur = [jump.dest]
                 land = next((k for k in range(i + 2, len(pts))
                              if pts[k] is not None and math.dist(pts[k], jump.dest) < 32), None)
                 i = land if land is not None else i + 2
+                if i < len(pts) and pts[i] is not None and math.dist(pts[i], jump.dest) < 4:
+                    i += 1
                 continue
             i += 1
         raw.append((cur, "goal", None))

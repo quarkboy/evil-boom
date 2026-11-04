@@ -1471,9 +1471,11 @@ class Navigator:
         root = Node(start, states0, frozenset(), keys0, [],
                     self.reachable(start_poly.index, states0, doors_for(keys0)))
         # Paths where the player's box may not fit (Path.squeezes) aren't refused (the check has
-        # false alarms) but rank below clean ones: priority is (can't reach a goal, squeezes
-        # so far, rank...). A squeezed route to a goal is kept as `fallback` and returned once
-        # nothing ahead in the queue could do better.
+        # false alarms) but rank below clean ones: priority is (can't reach a goal *or*
+        # squeezed, squeezes so far, rank...), so any clean node comes before a squeezed one
+        # (E4M9: a squeezed walk to the key beat pressing the switches that open the way). A
+        # squeezed route to a goal is kept as `fallback` and returned once nothing ahead in
+        # the queue could do better.
         heap = [((False, 0, False, False, 0, 0), next(counter), root)]
         seen: set[tuple] = set()
         expansions = 0
@@ -1498,7 +1500,7 @@ class Navigator:
                 if path.squeezes:  # back in the queue, behind cleaner nodes
                     node.squeezes += path.squeezes
                     seen.discard(sig)
-                    heapq.heappush(heap, ((priority[0], node.squeezes) + node.rank,
+                    heapq.heappush(heap, ((True, node.squeezes) + node.rank,
                                           next(counter), node))
                     continue
             expansions += 1
@@ -1521,8 +1523,8 @@ class Navigator:
                     total = node.squeezes + path.squeezes
                     if not total:
                         return route
-                    if fallback is None or (False, total) < fallback[0]:
-                        fallback = ((False, total), route)
+                    if fallback is None or (True, total) < fallback[0]:
+                        fallback = ((True, total), route)
 
             def push(target: Point, trial: HeightStates, added: frozenset, ks: frozenset,
                      t: TriggerLine | None, key: Key | None, temp: frozenset = frozenset(),
@@ -1538,7 +1540,8 @@ class Navigator:
                 progress = bool(after - node.reach) or key is not None
                 relevant = (t is not None and t.line in rel_t) or (key is not None and key in rel_k)
                 child.rank = (not relevant, not progress, -len(after), child.steps)
-                priority = (not goal_polys.keys() & after, child.squeezes) + child.rank
+                priority = (bool(child.squeezes) or not goal_polys.keys() & after,
+                            child.squeezes) + child.rank
                 heapq.heappush(heap, (priority, next(counter), child))
 
             # Triggers: one candidate per distinct world change, the closest line producing it.
@@ -1864,12 +1867,15 @@ class Navigator:
         if here is None:
             ours = None
         elif states is not None:  # as high as we can be:
-            # the player stands on the highest floor anywhere under the box
+            # the player stands on the highest floor anywhere under the box, of those within
+            # a step of the floor under its centre (E4M9: a box in a 32-wide gap between two
+            # 64-high blocks isn't standing on them, so their edges are walls; it can't get up)
+            reach_up = max(h[0] for h in states[here.sector]) + MAX_STEP
             under = {here.sector} | {
                 p.sector for dx in (-PLAYER_RADIUS, PLAYER_RADIUS)
                 for dy in (-PLAYER_RADIUS, PLAYER_RADIUS)
                 if (p := self.mesh.poly_at(a[0] + dx, a[1] + dy)) is not None}
-            ours = max(h[0] for s_ in under for h in states[s_])
+            ours = max(h[0] for s_ in under for h in states[s_] if h[0] <= reach_up)
         else:
             ours = init[here.sector][0]
         for cell in cells:
@@ -1878,6 +1884,13 @@ class Navigator:
                     continue
                 line = m.linedefs[li]
                 f, bk = m.front_sector(line), m.back_sector(line)
+                if line.special in TELEPORTERS_FOR_PLAYERS:
+                    # A teleport line the path doesn't mean to take: keep the box off it (it
+                    # fires when the box touches it and the centre crosses its extension).
+                    seen.add(li)
+                    v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                    yield (v1.x, v1.y), (v2.x, v2.y)
+                    continue
                 if li not in walls and li not in drops:
                     # Up on a ledge, an opening whose ceiling is below our head is a wall
                     # too, even if it's fine from the floor below (MAP15: next to the drop
@@ -2114,6 +2127,13 @@ class Navigator:
                     self._drops.add(line.index)
         return self._drops
 
+    def _teleport_lines(self) -> set[int]:
+        """Lines that teleport the player when walked over (from the front)."""
+        if not hasattr(self, "_teleport_set"):
+            self._teleport_set = {line.index for line in self.map.linedefs
+                                  if line.special in TELEPORTERS_FOR_PLAYERS}
+        return self._teleport_set
+
     def _wall_lines(self) -> set[int]:
         """Lines the player can't cross in either direction at initial heights."""
         if not hasattr(self, "_walls"):
@@ -2203,7 +2223,8 @@ class Navigator:
         m, mesh, obstacles = self.map, self.mesh, self._obstacle_grid()
         walls = self._wall_lines()
         if exempt is not None:  # the lines the path crosses (doors it opens) aren't walls
-            walls = (walls | self._drop_lines()) - exempt
+            # (teleport lines it doesn't mean to take are: touching one can fire it)
+            walls = (walls | self._drop_lines() | self._teleport_lines()) - exempt
         seen: set = set()
         for cell in _cells(min(a[0], b[0]) - pad, min(a[1], b[1]) - pad,
                            max(a[0], b[0]) + pad, max(a[1], b[1]) + pad):

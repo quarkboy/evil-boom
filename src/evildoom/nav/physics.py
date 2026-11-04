@@ -251,21 +251,26 @@ class PlayerSim:
     def _crossings(self, x: float, y: float) -> None:
         if not self._teleports:
             return
+        # As P_TryMove's spechit: a line the box (at the new spot) touches fires when the
+        # centre goes from its front to its back side of the *infinite* line, so walking past
+        # the end of a teleport line can fire it (E4M3: past the corner of a teleporter pad).
         m = self.m
-        for cell in _cells(self.x, self.y, x, y):
+        r = RADIUS
+        x0, y0, x1, y1 = x - r, y - r, x + r, y + r
+        for cell in _cells(x0, y0, x1, y1):
             for li in self.mesh._line_grid.get(cell, ()):
                 if li not in self._teleports:
                     continue
                 line = m.linedefs[li]
                 a, b = m.vertexes[line.v1], m.vertexes[line.v2]
+                if max(a.x, b.x) <= x0 or min(a.x, b.x) >= x1 \
+                        or max(a.y, b.y) <= y0 or min(a.y, b.y) >= y1 \
+                        or not _box_straddles(a.x, a.y, b.x, b.y, x0, y0, x1, y1):
+                    continue
                 s0 = (b.x - a.x) * (self.y - a.y) - (b.y - a.y) * (self.x - a.x)
                 s1 = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x)
-                if s0 < 0 <= s1 or s1 < 0 <= s0:
-                    t = s0 / (s0 - s1)
-                    px, py = self.x + (x - self.x) * t, self.y + (y - self.y) * t
-                    if min(a.x, b.x) - 0.01 <= px <= max(a.x, b.x) + 0.01 \
-                            and min(a.y, b.y) - 0.01 <= py <= max(a.y, b.y) + 0.01:
-                        raise Teleported
+                if s0 < 0 <= s1:  # front (right of v1->v2) to back: teleports only fire so
+                    raise Teleported
 
 
 def _box_straddles(ax, ay, bx, by, x0, y0, x1, y1) -> bool:

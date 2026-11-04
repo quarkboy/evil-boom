@@ -150,7 +150,19 @@ def _prepare(nav: Navigator, engine: VizDoomEngine, j: Jump) -> float | None:
     heading, or None if that can't be done. `engine` may be a PlayerSim: the heights are just
     set then."""
     if isinstance(engine, PlayerSim):
-        engine.heights = dict(enumerate(nav.movers.initial)) | dict(j.requires)
+        # Like _establish in the game: the trigger that makes a required height moves every
+        # sector it tags (E4M6: two posts by a takeoff lower together; with only the required
+        # one lowered, the box caught the other).
+        heights = dict(enumerate(nav.movers.initial))
+        for sector, h in j.requires:
+            if h == nav.movers.initial[sector]:
+                continue
+            t = next((t for t in nav.triggers if t.line >= 0 and t.permanent
+                      and h in t.effects.get(sector, [])), None)
+            if t is not None:
+                for s, hs in t.effects.items():
+                    heights[s] = hs[0]
+        engine.heights = heights | dict(j.requires)
         engine.place(round(j.runup[0]), round(j.runup[1]))
     else:
         engine.restart()
@@ -207,8 +219,12 @@ def _fly_once(nav: Navigator, engine: VizDoomEngine, j: Jump, heading: float, so
             return "missed", last  # teleported somewhere else
         last = (o.x, o.y)
         here = nav.mesh.poly_at(o.x, o.y)
-        crossed = crossed or (here is not None and here.sector == want)
-        if touched is None and here is not None and abs(o.z - o.heights[here.sector][0]) < 1:
+        # Only past the takeoff (as RouteFollower counts it): the landing sector can be the
+        # run-up's own, on the far side of a gap (E4M3: across a teleporter pad).
+        past = (o.x - j.takeoff[0]) * ux + (o.y - j.takeoff[1]) * uy > 0
+        crossed = crossed or (past and here is not None and here.sector == want)
+        if touched is None and past and here is not None \
+                and abs(o.z - o.heights[here.sector][0]) < 1:
             if not through and here.sector == want:
                 touched = i
             elif through and crossed and here.sector not in src | {want} \
