@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, replace
 
 from evildoom.wad.specials import Category, Key, Trigger
 
+from .movers import TICRATE
 from .reach import HeightStates, Navigator, Path, Point, TriggerLine
 
 
@@ -30,6 +31,31 @@ class Step:
     key: Key | None = None
     label: str = ""
     expects: list[Expect] = field(default_factory=list)
+
+    def substeps(self) -> list[str]:
+        """The step spelled out, for display and debugging: walk, act, then what to wait
+        for (permanent moves the next path needs) or beat (temporary ones)."""
+        goal = next((p for p in reversed(self.path.waypoints) if p is not None), None)
+        notes = f" ({'; '.join(self.path.steps)})" if self.path.steps else ""
+        out = [f"walk to ({goal[0]:.0f}, {goal[1]:.0f}){notes}" if goal else "walk"]
+        if self.action == "pickup":
+            out.append(f"pick up {self.key.name}")
+        elif self.trigger is not None and self.trigger.line >= 0:
+            verb = {"use": "press", "exit": "press exit", "shoot": "shoot", "cross": "cross",
+                    "face": "face"}.get(self.action, self.action)
+            out.append(f"{verb} line {self.trigger.line}")
+        elif self.action == "kill":
+            out.append(self.label)
+        for e in self.expects:
+            if not e.needed:
+                continue
+            if e.hold is None:
+                out.append(f"wait for sector {e.sector} to reach {e.heights} "
+                           f"(~{e.travel / TICRATE:.1f}s)")
+            else:
+                out.append(f"get to sector {e.sector} within "
+                           f"{(e.travel + e.hold) / TICRATE:.1f}s, before it moves back")
+        return out
 
 
 @dataclass

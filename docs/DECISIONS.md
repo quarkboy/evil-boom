@@ -254,6 +254,29 @@ watched on stream) and recover when things go wrong.
   the live planned path (minimap + zoomed overlay on the game view, Tab toggles); "Play level"
   plans and drives the rest of the level from wherever you are.
 
+## Granular, timed plans (2026-11-03)
+- **Outcomes are checked, not assumed.** The engine reports keys held (key items gone from the
+  object list); pickups finish when the key is held. Switch presses are checked against the
+  sectors they should move and retried closer (3 tries); walk-over lines are checked too.
+- **Mover timing** (`MoverModel.timing`): vanilla speeds and waits — doors 2/8 u/tic with a
+  150-tic wait, lifts 4/8 with 105, floors 1/4, stairs 1/4 or 4. Predictions match the engine
+  within a few tics.
+- **Steps carry expectations** (`walkthrough.Expect`: sector, heights, travel, hold, needed by
+  the next path) and spell themselves out as sub-steps (`Step.substeps()`: walk to → press /
+  cross / pick up → wait for sector X / get to sector Y within N s). The follower logs arrivals
+  vs prediction, lateness, and windows closing; waits ("settle") for quick permanent moves the
+  next path needs; replans at once when the window it relied on has closed.
+- **Timing-aware planning** (`Navigator._timed_path`): after a trigger with a temporary effect,
+  the next leg may only use that state if, at ~12 units/tic, it gets to the sector before the
+  mover returns; otherwise it's planned without it (or the action is unusable there).
+- **No jumps off things that move**: jumps needing a lift/timed door at a temporary height
+  aren't planned; before any jump the follower waits for the takeoff floor to stop.
+- **Solid decorations are cut into the nav mesh**, grown by the player's half-width, so the
+  mesh is where the player's centre can be (A* routes round rows of pillars, and gaps the box
+  can't fit vanish). They never move; moving sectors stay height-dependent (portal gates).
+  Barrels are not cut — they can be shot away (MAP23 has a row sealing a corridor) — and stay
+  soft obstacles handled by box-fit detours.
+
 **Status (execution sweep, god mode, no monsters):** 29 of 64 planned stock maps exit, up from
 13 with the old follower. Known remaining failure kinds:
 - Boss/Keen maps (E2M8, E3M8, MAP07, MAP32 …) can't finish without monsters, as expected.

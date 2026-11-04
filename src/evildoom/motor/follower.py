@@ -65,6 +65,7 @@ OFF_COURSE = 96.0        # this far from the path anywhere: off course
 OFF_COURSE_TICS = 10     # ... for this long
 MAX_REPLANS = 6          # per step
 PRESS_TRIES = 3          # presses (creeping closer) before giving up on a switch
+SETTLE_MAX = 0   # don't stand still for moves to finish: some floors are hopped onto rising
 MAX_TOTAL_REPLANS = 30   # per route (replans that add steps restart the per-step count)
 GIVE_UP_TICS = 60 * TICRATE  # one step taking this long: give up
 
@@ -98,6 +99,8 @@ class Watch:
     reached: int | None = None  # tic it got there
     late: bool = False          # logged as late
     over: bool = False          # its hold window has run out
+    step: int = -1              # index of the step that fired it
+    used: bool = False          # its closing has already prompted a replan
 
 
 @dataclass
@@ -305,6 +308,7 @@ class RouteFollower:
         self._brake_until = -1               # after landing a jump, until we've stopped
         self._jump_wait = None
         self._watches: list[Watch] = []      # what fired triggers should be doing
+        self._settle: list[Expect] = []      # moves we're waiting on before the next step
         self._look = None    # last view angle we were aiming for
         self._next_step(0)
 
@@ -317,7 +321,14 @@ class RouteFollower:
         if self.failed:
             return "gave up"
         step = self.steps[self.step_i]
-        return f"step {self.step_i + 1}/{len(self.steps)}: {step.action} - {step.label}"
+        subs = step.substeps()
+        if self.phase == "settle":
+            sub = ", ".join(f"wait for sector {e.sector}" for e in self._settle)
+        elif self.phase == "walk":
+            sub = subs[0]
+        else:
+            sub = subs[1] if len(subs) > 1 else step.action
+        return f"step {self.step_i + 1}/{len(self.steps)}: {sub} ({step.label})"
 
     def planned_path(self, pos: tuple[float, float] | None = None) -> list:
         """The rest of the current step's path from `pos` (None marks a teleport/jump)."""
@@ -339,9 +350,18 @@ class RouteFollower:
             if done.trigger is not None:
                 self.states = apply_trigger(self.states, done.trigger)
                 for e in done.expects:  # watch what it should do, against the timings
-                    self._watches.append(Watch(e, tic, done.trigger.line))
+                    self._watches.append(Watch(e, tic, done.trigger.line, step=self.step_i))
             if done.key is not None:
                 self.keys.add(done.key)
+            # Sub-step: let a quick permanent move the next path needs finish first.
+            settle = [e for e in done.expects
+                      if e.needed and e.hold is None and e.travel <= SETTLE_MAX]
+            if settle:
+                self._settle, self._settle_tic, self.phase = settle, tic, "settle"
+                return
+        self._advance(tic)
+
+    def _advance(self, tic: int) -> None:
         self.step_i += 1
         self._step_replans = 0
         if self.step_i >= len(self.steps):
@@ -349,13 +369,14 @@ class RouteFollower:
             self.log.add(tic, "route finished")
             return
         step = self.steps[self.step_i]
-        self.log.add(tic, f"step {self.step_i + 1}/{len(self.steps)}: walk, then "
-                          f"{step.action} ({step.label})")
+        self.log.add(tic, f"step {self.step_i + 1}/{len(self.steps)}: "
+                          + " -> ".join(step.substeps()))
         self._step_tic = tic
         self._crossed = False
         self._item = self._item_of(step)
         self._press_tries = 0
         self._before: dict | None = None
+        self._cross_tic: int | None = None
         self._start_step(tic)
 
     def _start_step(self, tic: int) -> None:
@@ -472,6 +493,8 @@ class RouteFollower:
             return self._walk(obs)
         if self.phase == "fetch":
             return self._fetch(obs)
+        if self.phase == "settle":
+            return self._settle_step(obs)
         return self._act_at_goal(obs)
 
     def _fail(self, obs: Observation, why: str) -> Controls:
@@ -945,10 +968,9 @@ class RouteFollower:
         # Nothing to press here: it may need a walk-over line crossing again (a blazing lift
         # that went back up), so replan from the live heights after a few seconds; at once
         # if we know the window we were counting on has run out.
-        if not opener and (waited == 5 * TICRATE and not switch_nearby
-                           or waited == TICRATE // 2 and self._window_over(sector)):
-            why = f"missed sector {sector}'s window" if self._window_over(sector) else \
-                f"sector {sector} not coming"
+        missed = not opener and waited == TICRATE // 2 and self._window_over(sector)
+        if missed or not opener and waited == 5 * TICRATE and not switch_nearby:
+            why = f"missed sector {sector}'s window" if missed else f"sector {sector} not coming"
             if self._replan(obs, why, live_only=True):
                 return self.motion.drive(obs, (0.0, 0.0), look)
         if waited > 15 * TICRATE:
@@ -959,6 +981,31 @@ class RouteFollower:
         return controls
 
     # --- acting at the end of a step ------------------------------------------------------
+
+    def _settle_step(self, obs: Observation) -> Controls:
+        """Wait (standing still) for the sectors the next path needs to finish moving."""
+        def at(e) -> bool:
+            live = obs.heights.get(e.sector)
+            return live is not None and abs(live[0] - e.heights[0]) < 1 \
+                and abs(live[1] - e.heights[1]) < 1
+        waiting = [e for e in self._settle if not at(e)]
+        took = (obs.tic - self._settle_tic) / TICRATE
+        if not waiting:
+            self.log.add(obs.tic, f"sectors {[e.sector for e in self._settle]} in place after "
+                                  f"{took:.1f}s")
+        elif obs.tic - self._settle_tic > max(1.5 * e.travel for e in waiting) + TICRATE:
+            e = waiting[0]
+            self.log.add(obs.tic, f"sector {e.sector} didn't reach {e.heights} in {took:.1f}s "
+                                  f"(expected {e.travel / TICRATE:.1f}s, it's at "
+                                  f"{obs.heights.get(e.sector)}); going on")
+        else:
+            self._progress_tic = obs.tic
+            return self.motion.drive(obs, (0.0, 0.0), self._look)
+        self._settle = []
+        self._advance(obs.tic)
+        if self.done:
+            return Controls()
+        return self._walk(obs)
 
     def _check_watches(self, obs: Observation) -> None:
         """Compare what fired triggers are doing with what the plan expected, and log it:
@@ -989,8 +1036,14 @@ class RouteFollower:
                     self.log.add(obs.tic, f"sector {e.sector}'s window is over (line {w.line})")
 
     def _window_over(self, sector: int) -> bool:
-        """Did a temporary state we were relying on for this sector run out?"""
-        return any(w.over and w.expect.sector == sector for w in self._watches)
+        """Did the temporary state the previous step set up for this sector (lift down, door
+        open) run out? Each closing only counts once."""
+        for w in self._watches:
+            if w.over and not w.used and w.expect.sector == sector \
+                    and w.step == self.step_i - 1:
+                w.used = True
+                return True
+        return False
 
     def _effect_started(self, obs: Observation, t) -> bool:
         """Has the trigger done something? A sector it moves has moved since we fired it, or
@@ -1049,22 +1102,30 @@ class RouteFollower:
         heading = _heading(pos, target)
         return self.motion.move(obs, heading, min(8.0, 0.3 * math.dist(pos, target) + 2), heading)
 
+    def _carry_on(self, obs: Observation) -> Controls:
+        """Right after finishing a step: whatever comes next (a settle sub-step or walking)."""
+        if self.done or self.failed:
+            return Controls()
+        if self.phase == "settle":
+            return self._settle_step(obs)
+        return self._walk(obs)
+
     def _act_at_goal(self, obs: Observation) -> Controls:
         step = self.steps[self.step_i]
         if step.action == "cross" and not self._crossed and step.trigger is not None:
             return self._walk_across(obs)
         if step.action == "cross" and step.trigger is not None \
                 and step.trigger.info.category is not Category.EXIT:
-            if self._before is None:
+            if self._cross_tic is None:
                 self._before = {s: obs.heights.get(s) for s in step.trigger.effects}
-                self._action_tic = obs.tic
+                self._cross_tic = obs.tic
             if not self._effect_started(obs, step.trigger):
-                if obs.tic - self._action_tic < TICRATE:
+                if obs.tic - self._cross_tic < TICRATE:
                     return self.motion.drive(obs, (0.0, 0.0), self._look)
                 self.log.add(obs.tic, f"crossing line {step.trigger.line} didn't do anything")
         if step.action in ("pickup", "cross"):
             self._next_step(obs.tic)
-            return self._walk(obs) if not self.done else Controls()
+            return self._carry_on(obs)
         if step.action == "kill":
             self.log.add(obs.tic, "skipping boss kill (no monsters in this run)")
             self._next_step(obs.tic)

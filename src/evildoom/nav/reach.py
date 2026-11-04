@@ -21,7 +21,7 @@ from evildoom.wad.mapdata import (ML_BLOCKING, ML_BLOCKMONSTERS, ML_BLOCKPLAYERS
                                   MapData)
 from evildoom.wad.specials import (Category, Key, LineSpecial, Lock, Trigger, classify_line,
                                    classify_sector)
-from evildoom.wad.things import SOLID_DECORATIONS
+from evildoom.wad.things import SHOOTABLE_OBSTACLES, SOLID_DECORATIONS
 
 from .movers import Heights, MoverModel
 from .navmesh import NavMesh, Point, _cells
@@ -36,6 +36,7 @@ PICKUP_MARGIN = 2  # how far inside touching range a pickup spot must be
 PATH_CLEARANCE = 24
 WAYPOINT_CLEARANCE = 18  # minimum distance from a waypoint to any wall line
 THING_CLEARANCE = 6  # extra room left round solid things when detouring past them
+LEG_SPEED = 12.0  # units/tic assumed when timing legs against lifts and doors (full run ~16)
 BOX_SLACK = 0.25  # the box must clear walls by this much: no one threads a gap exactly 32 wide
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
 TELEPORT_DEST = 14
@@ -171,7 +172,15 @@ class Route:
 class Navigator:
     def __init__(self, m: MapData, mesh: NavMesh | None = None):
         self.map = m
-        self.mesh = mesh or NavMesh(m)
+        # Solid decorations (pillars, lamps, trees) are cut out of the mesh, grown by the
+        # player's half-width: the mesh is where the player's centre can be, so A* goes round
+        # rows of them and never through gaps the box can't fit. They never move; moving
+        # *sectors* are handled by heights. Barrels aren't cut: they can be shot away (a row of
+        # them sealing a corridor in MAP23), so they stay soft obstacles that paths detour round.
+        self.mesh = mesh or NavMesh(m, [
+            (t.x, t.y, SOLID_DECORATIONS[t.type] + PLAYER_RADIUS) for t in m.things
+            if t.type in SOLID_DECORATIONS and t.type not in SHOOTABLE_OBSTACLES
+            and t.in_skill(3)])
         self.movers = MoverModel(m, self.mesh.neighbors_of_sector)
         self.damage = {s.index: classify_sector(s.special).damage for s in m.sectors}
         self.strict_fit = False  # True: find_path refuses paths the box (maybe) can't get through
@@ -1101,6 +1110,51 @@ class Navigator:
                     self._annotate(chain, states, doors),
                     [via for _, via in chain if isinstance(via, Jump)])
 
+    def _timed_path(self, start: Point, goal: Point, states: HeightStates, doors: Doors | None,
+                    fired: TriggerLine | None) -> Path | None:
+        """find_path for the leg right after `fired` went off at `start`. A temporary state it
+        made (lift down, door open for a while) can only be used if the path gets to that
+        sector before it ends, at running speed; otherwise path without it."""
+        path = self.find_path(start, goal, states, doors)
+        if path is None or fired is None or fired.permanent or fired.line < 0:
+            return path
+        temporary = self._temporary_heights()
+        late = []
+        arrive = self._arrival_tics(path)
+        for s, hs in fired.effects.items():
+            for h in hs:
+                if (s, h) not in temporary or s not in arrive:
+                    continue
+                timing = self.movers.timing(fired.info.special, fired.info.description, s, h)
+                if arrive[s] > timing.travel + (timing.hold or 0):
+                    late.append((s, h))
+        if not late:
+            return path
+        slower = {s: set(hs) for s, hs in states.items()}
+        for s, h in late:
+            if len(slower[s]) > 1:
+                slower[s].discard(h)
+        return self.find_path(start, goal, slower, doors)
+
+    def _arrival_tics(self, path: Path) -> dict[int, float]:
+        """Roughly when (tics from the start) a path first gets into each sector it crosses:
+        distance along it at a little under full running speed, plus a moment to get going."""
+        out: dict[int, float] = {}
+        dist, prev = 0.0, None
+        for p in path.waypoints:
+            if p is None:
+                prev = None
+                continue
+            if prev is not None:
+                dist += math.dist(prev, p)
+            prev = p
+            poly = self.mesh.poly_at(*p)
+            if poly is not None and poly.sector not in out:
+                out[poly.sector] = 10 + dist / LEG_SPEED
+        for poly in path.polys:  # sectors only passed through between waypoints
+            out.setdefault(self.mesh.polys[poly].sector, 10 + path.cost / LEG_SPEED)
+        return out
+
     def plan_route(self, start: Point, goal: Point, keys: set[Key] = frozenset(),
                    states: HeightStates | None = None, max_expansions: int = 300,
                    max_seconds: float = 5.0) -> Route | None:
@@ -1199,7 +1253,8 @@ class Navigator:
             seen.add(sig)
             if node.pending:  # path the leg that got us here, now that we've picked this node
                 prev_pos, prev_states, prev_keys, t, key = node.pending
-                path = self.find_path(prev_pos, node.pos, prev_states, doors_for(prev_keys))
+                path = self._timed_path(prev_pos, node.pos, prev_states, doors_for(prev_keys),
+                                        node.legs[-1].trigger if node.legs else None)
                 if path is None:
                     continue
                 node.legs = node.legs + [Leg(t, path, key)]
@@ -1215,7 +1270,8 @@ class Navigator:
                 gt = (goal_triggers or {}).get(goal_polys[gp])
                 if gt is not None and gp not in self.activators_now(gt, node.states):
                     continue  # e.g. the exit switch is still behind closed bars
-                path = self.find_path(node.pos, goal_polys[gp], node.states, doors)
+                path = self._timed_path(node.pos, goal_polys[gp], node.states, doors,
+                                        node.legs[-1].trigger if node.legs else None)
                 if path:
                     return Route(node.legs + [Leg(None, path)], node.states, node.keys,
                                  goal_polys[gp])

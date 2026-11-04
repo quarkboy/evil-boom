@@ -90,20 +90,68 @@ class Portal:
 
 
 class NavMesh:
-    def __init__(self, m: MapData):
+    def __init__(self, m: MapData, obstacles: list[tuple[float, float, float]] = ()):
+        """`obstacles`: (x, y, half-width) boxes cut out of the mesh, so it only covers where
+        the player's centre can be (solid things, grown by the player's half-width)."""
         if not m.nodes and len(m.subsectors) > 1:
             raise ValueError(f"{m.name}: no usable BSP nodes (extended node formats unsupported)")
         self.map = m
         self.polys: list[NavPoly | None] = []
         self.portals: list[Portal] = []
+        self._pieces: dict[int, list[int]] = {}   # subsector -> its polys, where cut up
         self._line_grid: dict[tuple[int, int], list[int]] = defaultdict(list)
         for line in m.linedefs:
             a, b = m.vertexes[line.v1], m.vertexes[line.v2]
             for cell in _cells(a.x, a.y, b.x, b.y):
                 self._line_grid[cell].append(line.index)
         self._build_polys()
+        if obstacles:
+            self._cut_obstacles(obstacles)
         self._attach_lines()
         self._build_portals()
+
+    def _cut_obstacles(self, boxes: list[tuple[float, float, float]]) -> None:
+        """Remove axis-aligned boxes from the polys. A cut poly is replaced by the convex
+        pieces outside the box (left, right, then below and above the box between those);
+        poly indices beyond the subsector count are the extra pieces."""
+        def outside(vs: list[Point], box) -> list[list[Point]]:
+            x0, x1, y0, y1 = box
+            # clip_front(..., front=True) keeps x > ox for a line pointing +y, and y < oy for
+            # a line pointing +x
+            left = clip_front(vs, x0, 0, 0, 1, False)
+            rest = clip_front(vs, x0, 0, 0, 1, True)
+            right = clip_front(rest, x1, 0, 0, 1, True)
+            middle = clip_front(rest, x1, 0, 0, 1, False)
+            below = clip_front(middle, 0, y0, 1, 0, True)
+            above = clip_front(middle, 0, y1, 1, 0, False)
+            return [p for p in (left, right, below, above) if len(p) >= 3 and area(p) >= 1.0]
+
+        rects = [(x - r, x + r, y - r, y + r) for x, y, r in boxes]
+        for ss in range(len(self.polys)):
+            poly = self.polys[ss]
+            if poly is None:
+                continue
+            xs = [v[0] for v in poly.vertices]
+            ys = [v[1] for v in poly.vertices]
+            hits = [b for b in rects if b[0] < max(xs) and b[1] > min(xs)
+                    and b[2] < max(ys) and b[3] > min(ys)]
+            if not hits:
+                continue
+            pieces = [poly.vertices]
+            for box in hits:
+                pieces = [q for p in pieces for q in outside(p, box)]
+            group = []
+            for n, p in enumerate(pieces):
+                i = ss if n == 0 else len(self.polys)
+                piece = NavPoly(i, poly.sector, p, centroid(p))
+                if n == 0:
+                    self.polys[ss] = piece
+                else:
+                    self.polys.append(piece)
+                group.append(i)
+            if not pieces:
+                self.polys[ss] = None
+            self._pieces[ss] = group
 
     # --- construction -------------------------------------------------------------------
 
@@ -233,7 +281,21 @@ class NavMesh:
             node = m.nodes[child]
             front = _cross(node.x, node.y, node.dx, node.dy, x, y) < 0
             child = node.front_child if front else node.back_child
-        return self.polys[child & ~NF_SUBSECTOR]
+        ss = child & ~NF_SUBSECTOR
+        group = self._pieces.get(ss)
+        if group is None:
+            return self.polys[ss]
+        # cut up by obstacles: the piece holding the point (else the nearest: on an obstacle's
+        # edge, or inside one, which the player's centre can't really be)
+        best = None
+        for i in group:
+            vs = self.polys[i].vertices
+            if _inside(vs, x, y):
+                return self.polys[i]
+            d = min(math.dist((x, y), q) for q in vs)
+            if best is None or d < best[0]:
+                best = (d, i)
+        return self.polys[best[1]] if best else None
 
     def neighbors_of_sector(self, sector: int) -> set[int]:
         m = self.map
@@ -246,6 +308,16 @@ class NavMesh:
 
 
 GRID = 128
+
+
+def _inside(vs: list[Point], x: float, y: float) -> bool:
+    """Is the point inside (or on) the convex polygon?"""
+    signs = set()
+    for (ax, ay), (bx, by) in zip(vs, vs[1:] + vs[:1]):
+        c = (bx - ax) * (y - ay) - (by - ay) * (x - ax)
+        if abs(c) > EPS:
+            signs.add(c > 0)
+    return len(signs) <= 1
 
 
 def _cells(x0: float, y0: float, x1: float, y1: float):

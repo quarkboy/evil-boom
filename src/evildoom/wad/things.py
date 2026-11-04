@@ -28,3 +28,6 @@ SOLID_DECORATIONS: dict[int, int] = {
     49: 16, 50: 16, 51: 16, 52: 16, 53: 16,  # hanging victims (solid)
     73: 16, 74: 16, 75: 16, 76: 16, 77: 16,  # hanging victims / torsos (Doom II, solid)
 }
+
+# Solid things that can be destroyed (shot), so they don't block a route for good.
+SHOOTABLE_OBSTACLES = {2035}  # explosive barrel
