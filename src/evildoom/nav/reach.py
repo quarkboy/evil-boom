@@ -1854,6 +1854,13 @@ class Navigator:
                 if li in walls and li not in seen:
                     seen.add(li)
                     line = m.linedefs[li]
+                    states = getattr(self, "_smooth_states", None)
+                    f, bk = m.front_sector(line), m.back_sector(line)
+                    if states is not None and f is not None and bk is not None and \
+                            li in self._wall_lines() and \
+                            any(can_cross(hf, hb) or can_cross(hb, hf)
+                                for hf in states[f] for hb in states[bk]):
+                        continue  # closed at the start, open at the heights planned for
                     v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
                     yield (v1.x, v1.y), (v2.x, v2.y)
             for edge in obstacles.get(cell, ()):
@@ -1886,7 +1893,15 @@ class Navigator:
                 ux, uy = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
                 if self.mesh.poly_at(p[0] + ux, p[1] + uy) is None:
                     ux, uy = -ux, -uy
-            p = (q[0] + ux * need, q[1] + uy * need)
+            moved = (q[0] + ux * need, q[1] + uy * need)
+            # Never push a waypoint through a wall or into another sector (MAP02: pushed off
+            # a key bar, through the corridor's corner into the void behind it).
+            here, there = self.mesh.poly_at(*p), self.mesh.poly_at(*moved)
+            if there is None or (here is not None and there.sector != here.sector) \
+                    or any(_segments_cross(p, moved, e1, e2)
+                           for e1, e2 in self._walls_near(p, moved, 0, exempt)):
+                return p
+            p = moved
         return p
 
     def _annotate(self, chain, states: HeightStates, doors: Doors | None) -> list[str]:
