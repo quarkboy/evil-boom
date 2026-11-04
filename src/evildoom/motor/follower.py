@@ -736,10 +736,11 @@ class RouteFollower:
     # --- recovering ---------------------------------------------------------------------
 
     def _away_from_walls(self, obs: Observation) -> float:
-        """Direction to back off in: away from the nearest walls/obstacles, else backwards."""
+        """Direction to back off in: away from the nearest walls/obstacles and ledges (MAP29:
+        backing off a stair wall walked it off the other side into the pit), else backwards."""
         pos = (obs.x, obs.y)
         ax = ay = 0.0
-        for a, b in self.nav._walls_near(pos, pos, 40):
+        for a, b in self.nav._walls_near(pos, pos, 40, self._crossing_lines, live=obs.heights):
             q = _closest_point(pos, a, b)
             d = math.dist(pos, q)
             if 1e-6 < d < 40:
@@ -1274,9 +1275,25 @@ class RouteFollower:
                         and involved & set(t.sectors) and near & t.activators:
                     switch_nearby = True
                     if waited > 3 * TICRATE and still:
-                        look = _heading(pos, _line_mid(self.nav.map, t.line))
-                        use = abs(_norm(look - obs.angle)) < 10 and \
-                            obs.tic - self._last_use >= USE_EVERY
+                        # The nearest bit of it (a long lift edge's middle can be out of use
+                        # range: MAP29), stepping up to it if need be.
+                        m = self.nav.map
+                        line = m.linedefs[t.line]
+                        la = (m.vertexes[line.v1].x, m.vertexes[line.v1].y)
+                        lb = (m.vertexes[line.v2].x, m.vertexes[line.v2].y)
+                        length = max(math.dist(la, lb), 1e-6)
+                        k = ((pos[0] - la[0]) * (lb[0] - la[0]) + (pos[1] - la[1]) * (lb[1] - la[1])) \
+                            / length ** 2
+                        k = min(max(k, min(0.5, 8 / length)), max(0.5, 1 - 8 / length))
+                        point = (la[0] + (lb[0] - la[0]) * k, la[1] + (lb[1] - la[1]) * k)
+                        look = _heading(pos, point)
+                        if math.dist(pos, point) > PRESS_RANGE:
+                            gap = math.dist(pos, point) - PRESS_RANGE + 4
+                            h = math.radians(look)
+                            want = (math.cos(h) * min(4.0, 0.3 * gap), math.sin(h) * min(4.0, 0.3 * gap))
+                        else:
+                            use = abs(_norm(look - obs.angle)) < 10 and \
+                                obs.tic - self._last_use >= USE_EVERY
                     break
         controls = self.motion.drive(obs, want, look)
         controls.use = use
