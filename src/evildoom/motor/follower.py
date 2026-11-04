@@ -22,6 +22,7 @@ import math
 from bisect import bisect_right
 from dataclasses import dataclass, field, replace
 
+from evildoom.nav.movers import DOOR_CLOSE_30
 from evildoom.nav.navmesh import _cells
 from evildoom.nav.reach import (FRICTION, ITEM_RADIUS, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS,
                                 RUN_THRUST, TELEPORTERS_FOR_PLAYERS, HeightStates, Jump,
@@ -310,6 +311,7 @@ class RouteFollower:
         self._lineup_tic: int | None = None  # when we arrived at a jump's run-up
         self._brake_until = -1               # after landing a jump, until we've stopped
         self._jump_wait = None
+        self._reopening = False              # waiting out a "close, wait 30s, open" door
         self._watches: list[Watch] = []      # what fired triggers should be doing
         self._settle: list[Expect] = []      # moves we're waiting on before the next step
         self._look = None    # last view angle we were aiming for
@@ -587,8 +589,14 @@ class RouteFollower:
         speed = min(FULL_SPEED, track.speed_limit(self.s, end_speed), self._speed_cap)
         if stop:
             speed = min(speed, 0.3 * to_end + 0.5)
-        if seg.end == "jump":  # run-ups are often right at a ledge: come in gently
-            speed = min(speed, 0.12 * (track.length - self.s) + 1.5)
+        if seg.end == "jump":  # run-ups are often right at a ledge: come in gently, slowly
+            # over the last stretch (braking does nothing between steps down: MAP17's run-up
+            # at the foot of a stair was overshot into the pit beyond)
+            rest = track.length - self.s
+            if self._steps_down_to_end(obs, track):
+                speed = min(speed, 0.06 * rest + 1.5, 6.0 if rest < 128 else FULL_SPEED)
+            else:
+                speed = min(speed, 0.12 * rest + 1.5)
         if math.dist(pos, carrot) < 1:
             return self.motion.drive(obs, (0.0, 0.0), self._look_angle(obs, seg))
         return self.motion.move(obs, _heading(pos, carrot), speed, self._look_angle(obs, seg))
@@ -918,6 +926,24 @@ class RouteFollower:
                     best = q
         return best
 
+    def _steps_down_to_end(self, obs: Observation, track: Track) -> bool:
+        """Does the last 128 units of the track go down any steps (live floors)? Braking
+        does nothing while dropping between them."""
+        mesh, floors = self.nav.mesh, []
+        start = max(0.0, track.length - 128)
+        for k in range(9):
+            q = mesh.poly_at(*track.point_at(start + (track.length - start) * k / 8))
+            if q is not None:
+                floors.append(obs.heights[q.sector][0])
+        return any(b < a for a, b in zip(floors, floors[1:]))
+
+    def _reopens(self, sector: int, live) -> bool:
+        """Is `sector` shut by a "close, wait 30s, open" door special (it opens again by
+        itself)?"""
+        return any(t.info.special in DOOR_CLOSE_30 and sector in t.effects
+                   and any(abs(live[1] - h[1]) < 1 for h in t.effects[sector])
+                   for t in self.nav.triggers)
+
     def _gate_door(self, lines, near: set[int], pos):
         """(door sector, point to press) for a usable door among the sectors of these lines."""
         m = self.nav.map
@@ -1023,6 +1049,19 @@ class RouteFollower:
         # that went back up), so replan from the live heights after a few seconds; at once
         # if we know the window we were counting on has run out.
         missed = not opener and waited == TICRATE // 2 and self._window_over(sector)
+        if waited == 0:
+            self._reopening = self._reopens(sector, live[sector])
+            if self._reopening:
+                self.log.add(obs.tic, f"sector {sector} shut for 30s: waiting for it to reopen")
+        if self._reopening:
+            # A "close, wait 30s, open" door we walked into the trigger of (E1M6): nothing to
+            # do but wait (till it's open, not just till it starts opening), as a player would;
+            # no point replanning every few seconds. Spin round lazily meanwhile.
+            if waited > 33 * TICRATE:
+                self._reopening = False
+                if not self._replan(obs, f"sector {sector} not reopening"):
+                    return self._fail(obs, f"waited too long for sector {sector} to reopen")
+            return self.motion.drive(obs, want, (obs.angle + 10) % 360)
         if missed or not opener and waited == 5 * TICRATE and not switch_nearby:
             why = f"missed sector {sector}'s window" if missed else f"sector {sector} not coming"
             if self._replan(obs, why, live_only=True):

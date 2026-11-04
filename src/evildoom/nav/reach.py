@@ -2127,6 +2127,17 @@ class Navigator:
                     self._drops.add(line.index)
         return self._drops
 
+    def _trap_lines(self) -> set[int]:
+        """Walk-over trigger lines that close a sector to below the player's height (doors
+        shutting, ceilings coming down): crossing one by accident can shut the way ahead
+        (E1M6: line 206 closes door 187 for 30 s, just past it on the way to the blue key)."""
+        if not hasattr(self, "_traps"):
+            self._traps = {t.line for t in self.triggers
+                           if t.line >= 0 and t.info.trigger in (Trigger.W1, Trigger.WR)
+                           and any(h[1] - h[0] < PLAYER_HEIGHT
+                                   for hs in t.effects.values() for h in hs)}
+        return self._traps
+
     def _teleport_lines(self) -> set[int]:
         """Lines that teleport the player when walked over (from the front)."""
         if not hasattr(self, "_teleport_set"):
