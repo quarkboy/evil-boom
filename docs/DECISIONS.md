@@ -344,6 +344,37 @@ watched on stream) and recover when things go wrong.
   MAP17 does 5000 expansions in 8 s instead of 62 s, and plans within the budget, now raised
   to 20000 expansions (the 60 s limit still applies).
 
+## Map fixing round: 52 → 64 of 68 (2026-11-04)
+Each change below came from one map and was checked with a full Doom + Doom II sweep for
+regressions. Planner changes are made in both Python and Rust, and checked to plan
+identically.
+- Trenches: a sector narrower than the box everywhere and lower than all its neighbours
+  can't be stood in; it's planned at its lowest neighbour's floor, following them as they
+  move (E4M1, MAP08). The mover model keeps the real heights.
+- The follower finds itself by the floor the box actually stands on, not the polygon under
+  its centre (MAP24's 24-unit walkways, E4M9).
+- Unexpected one-way drops (a walk-over line on the way sank something) stop the follower
+  and trigger a replan with the real heights (MAP08's bridge). Floors that sink when stepped
+  on are run across, re-aiming with the movement sim every few tics (MAP08's exit).
+- Search: nodes holding more of the relaxed plan's keys rank first (MAP09). Walk-over lines
+  count only from a side they can be crossed from (MAP09). A rising floor keeps its old
+  height only until it's a step above it.
+- Box fit: a squeeze against shut sectors we can't open is a real block (MAP21). Waypoints
+  aren't dropped where going straight on would walk off a ledge (MAP29).
+- Gun lines: shot only from where they span at least 6° and only with a hitscan weapon;
+  the bot takes out the pistol if it's holding a fist or chainsaw (MAP19).
+- Barrels in the way are shot from beyond their blast radius (MAP23).
+- A lift being ridden is waited on from its middle (MAP06). Lift lines are pressed at their
+  nearest point (MAP29). Doors aren't pressed through another switch line (E3M9). Backing
+  off when stuck keeps away from ledges too (MAP29).
+- Exit floors (sector special 11) are pseudo-triggers: stand there till they end the level
+  (E1M8). The sweep keeps stepping briefly after a walk-over exit (E4M8).
+- Still failing, each needing more planner modelling: MAP09 (press a switch, then reach a
+  rising bridge within about 24 tics), MAP21 (four switches that each build the same stairs
+  higher: cumulative effects), MAP27 (chains of platforms that sink as you cross onto them,
+  in order). MAP30 is out of reach in principle (boss brain). Tried and reverted: keeping a
+  lowered floor's old height briefly (broke MAP08, didn't fix MAP27).
+
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
 - [ ] Timing-aware handling of lifts/doors that close on a timer (be on them in time).
