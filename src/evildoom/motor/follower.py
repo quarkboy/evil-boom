@@ -23,7 +23,7 @@ from bisect import bisect_right
 from dataclasses import dataclass, field, replace
 
 from evildoom.nav.movers import DOOR_CLOSE_30
-from evildoom.nav.navmesh import _cells
+from evildoom.nav.navmesh import _cells, _inside
 from evildoom.nav.reach import (FRICTION, ITEM_RADIUS, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS,
                                 RUN_THRUST, TELEPORTERS_FOR_PLAYERS, HeightStates, Jump,
                                 Navigator, _closest_on_segment, _closest_point, _line_mid,
@@ -741,12 +741,34 @@ class RouteFollower:
         seg = self.segments[self.seg_i]
         return self.motion.move(obs, self._unstick_dir, 5.0, self._look_angle(obs, seg))
 
+    def _standing(self, obs: Observation):
+        """(poly, point in it) of the floor we're actually standing on. DOOM holds the box up
+        on the highest floor under any of it, so the centre can be out over a pit beside a
+        walkway narrower than the box (MAP24's 24-wide ones) with nothing wrong: then it's
+        the walkway's poly, at the bit of it under the box nearest the centre."""
+        mesh = self.nav.mesh
+        here = mesh.poly_at(obs.x, obs.y)
+        if obs.z is None or here is None or abs(obs.heights[here.sector][0] - obs.z) < 0.5:
+            return here, (obs.x, obs.y)
+        r = PLAYER_RADIUS - 1
+        best = None
+        for dx in (-r, -r / 2, 0, r / 2, r):
+            for dy in (-r, -r / 2, 0, r / 2, r):
+                q = (obs.x + dx, obs.y + dy)
+                p = mesh.poly_at(*q)
+                if p is not None and abs(obs.heights[p.sector][0] - obs.z) < 0.5 \
+                        and _inside(p.vertices, *q):
+                    d = math.hypot(dx, dy)
+                    if best is None or d < best[0]:
+                        best = (d, p, q)
+        return (best[1], best[2]) if best else (here, (obs.x, obs.y))
+
     def _lost(self, obs: Observation) -> bool:
         """Off the planned path (fell into a pit, pushed, unexpected teleport) for a while."""
         if obs.tic < self._settle_until:
             return False
         mesh = self.nav.mesh
-        here = mesh.poly_at(obs.x, obs.y)
+        here = self._standing(obs)[0]
         off = self.cross > OFF_COURSE
         if not off and (here is None or here.index not in self._path_polys):
             if self.cross > STRAY:
@@ -781,7 +803,7 @@ class RouteFollower:
         if self._step_replans > MAX_REPLANS or self.replans > MAX_TOTAL_REPLANS:
             self.log.add(obs.tic, f"{why}: replanned too often")
             return False
-        nav, pos, step = self.nav, (obs.x, obs.y), self.steps[self.step_i]
+        nav, pos, step = self.nav, self._standing(obs)[1], self.steps[self.step_i]
         goal = next(p for p in reversed(step.path.waypoints) if p is not None)
         states = {s: {h} for s, h in obs.heights.items()} if live_only else \
             self.world_states(obs)
@@ -903,7 +925,8 @@ class RouteFollower:
         sim = PlayerSim(nav, heights)
         live = {s: {h} for s, h in obs.heights.items()}
         doors = nav.local_doors(self.keys)
-        going = math.degrees(math.atan2(self.motion.disp[1], self.motion.disp[0]))             if math.hypot(*self.motion.disp) > 2 else obs.angle
+        going = math.degrees(math.atan2(self.motion.disp[1], self.motion.disp[0])) \
+            if math.hypot(*self.motion.disp) > 2 else obs.angle
         cost_from: dict[int, float | None] = {}
         best = None
         for off in range(-180, 180, 15):
@@ -916,12 +939,14 @@ class RouteFollower:
                 for _ in range(2 * TICRATE):
                     sim.step(_run_controls(sim.angle, heading))
                     q = nav.mesh.poly_at(sim.x, sim.y)
-                    if q is not None and q.sector != sector and sim.z <= sim.floorz                             and abs(sim.floorz - heights[q.sector][0]) < 0.5:
+                    if q is not None and q.sector != sector and sim.z <= sim.floorz \
+                            and abs(sim.floorz - heights[q.sector][0]) < 0.5:
                         land = q
                         break
             except Exception:
                 continue
-            if land is None or nav.damage.get(land.sector)                     or heights[land.sector][0] < f - MAX_STEP:
+            if land is None or nav.damage.get(land.sector) \
+                    or heights[land.sector][0] < f - MAX_STEP:
                 continue  # into the nukage (or nowhere)
             if land.sector not in cost_from:
                 path = nav.find_path((sim.x, sim.y), goal, live, doors)
@@ -988,7 +1013,8 @@ class RouteFollower:
                 return False
             a, b = obs.heights[cur.sector], obs.heights[nxt.sector]
             key = (cur.sector, nxt.sector, a, b)
-            if str(nxt.sector) in planned or key in self._drops_ok                     or not can_cross(a, b) or can_cross(b, a):
+            if str(nxt.sector) in planned or key in self._drops_ok \
+                    or not can_cross(a, b) or can_cross(b, a):
                 continue
             if not any(can_cross(hb, ha) for ha in self.states.get(cur.sector, ())
                        for hb in self.states.get(nxt.sector, ())):
