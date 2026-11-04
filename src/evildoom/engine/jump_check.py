@@ -1,7 +1,8 @@
-"""Verify the navigator's run-off jumps in ViZDoom and keep only the ones that work.
+"""Check the navigator's run-off jumps and keep only the ones that work.
 
-The jump finder simulates DOOM physics, but small errors decide whether a jump clears a gap, so
-each candidate is tried in the real engine: warp to its run-up, line up, sprint along the planned
+By default each candidate is tried in the movement simulator (nav/physics.py, a port of ZDoom's
+player movement: ~98% agreement with the engine, a few ms a jump). With engine=True it is tried
+in ViZDoom instead (slow, cached). Either way the test is the same: warp to its run-up, line up, sprint along the planned
 line, and check that the player touches down on the predicted sector (standing on its floor)
 without being teleported away first, and can brake to a stop there. A "soft" sprint (full speed
 only up to the edge, then coasting) is tried first: it lands slower, which narrow strips need. Jumps that need moved heights (a lowered fence, a raised
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from evildoom.motor.follower import TICRATE, Controls, Motion, _norm
 from evildoom.nav.reach import MAX_STEP, Jump, Navigator, TriggerLine
+from evildoom.nav.physics import PlayerSim, Teleported
 from evildoom.wad.specials import Category, Trigger
 
 from .vizdoom_engine import VizDoomEngine
@@ -67,10 +69,20 @@ def verify_jumps(nav: Navigator, iwad: str | Path, map_name: str, pwad: str | Pa
     return {j.key: cached[j.key] for j in nav.jumps}
 
 
+def simulate_jumps(nav: Navigator) -> dict[str, str]:
+    """verify_jumps' results from the movement simulator instead of the game: the same
+    test, a few ms a jump (it agrees with the engine on ~98% of them)."""
+    sim = PlayerSim(nav)
+    return {j.key: _test_jump(nav, sim, j) for j in nav.jumps}
+
+
 def keep_verified(nav: Navigator, iwad: str | Path, map_name: str,
-                  pwad: str | Path | None = None, log=None) -> dict[str, int]:
-    """Drop the jumps the engine disproves (unverified ones are kept). Returns counts."""
-    results = verify_jumps(nav, iwad, map_name, pwad, log=log)
+                  pwad: str | Path | None = None, log=None,
+                  engine: bool = False) -> dict[str, int]:
+    """Drop the jumps the check disproves (unverified ones are kept). Returns counts. The
+    check runs in the movement simulator, or with `engine` in ViZDoom (slow; cached)."""
+    results = verify_jumps(nav, iwad, map_name, pwad, log=log) if engine \
+        else simulate_jumps(nav)
     # One that slides off its landing is only kept when there's no better way across: one
     # that stops there, or one that runs straight across it (the strip isn't for stopping on).
     sticks = {(frozenset(j.src_polys), nav.mesh.polys[j.dest_poly].sector)
@@ -135,16 +147,21 @@ def _test_jump(nav: Navigator, engine: VizDoomEngine, j: Jump) -> str:
 
 def _prepare(nav: Navigator, engine: VizDoomEngine, j: Jump) -> float | None:
     """Set up the heights the jump needs and stand at its run-up facing the takeoff; the
-    heading, or None if that can't be done."""
-    engine.restart()
-    engine.game.send_game_command("god")
-    engine.game.send_game_command("give all")
-    for sector, heights in j.requires:
-        if heights == nav.movers.initial[sector]:
-            continue  # already like that at the start
-        if not _establish(nav, engine, sector, heights):
-            return None
-    engine.game.send_game_command(f"warp {j.runup[0]:.0f} {j.runup[1]:.0f}")
+    heading, or None if that can't be done. `engine` may be a PlayerSim: the heights are just
+    set then."""
+    if isinstance(engine, PlayerSim):
+        engine.heights = dict(enumerate(nav.movers.initial)) | dict(j.requires)
+        engine.place(round(j.runup[0]), round(j.runup[1]))
+    else:
+        engine.restart()
+        engine.game.send_game_command("god")
+        engine.game.send_game_command("give all")
+        for sector, heights in j.requires:
+            if heights == nav.movers.initial[sector]:
+                continue  # already like that at the start
+            if not _establish(nav, engine, sector, heights):
+                return None
+        engine.game.send_game_command(f"warp {j.runup[0]:.0f} {j.runup[1]:.0f}")
     for _ in range(4):
         _step(engine, Controls())
     o = engine.observe()
@@ -159,7 +176,15 @@ def _prepare(nav: Navigator, engine: VizDoomEngine, j: Jump) -> float | None:
     return heading
 
 
-def _fly(nav: Navigator, engine: VizDoomEngine, j: Jump, heading: float, soft: bool,
+def _fly(nav, engine, j: Jump, heading: float, soft: bool, through: bool = False):
+    try:
+        return _fly_once(nav, engine, j, heading, soft, through)
+    except Teleported:  # the sim doesn't follow teleports (the engine check spots the jump)
+        o = engine.observe()
+        return "missed", (o.x, o.y)
+
+
+def _fly_once(nav: Navigator, engine: VizDoomEngine, j: Jump, heading: float, soft: bool,
          through: bool = False) -> tuple[str, tuple[float, float]]:
     """Sprint (as RouteFollower does), then brake on touchdown: "stuck" if we stop on the
     landing sector, "slid" if we touched it but slid off, "missed" otherwise; and where we

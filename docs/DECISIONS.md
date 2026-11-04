@@ -287,12 +287,30 @@ watched on stream) and recover when things go wrong.
 - Assorted single-map snags (see `exec_sweep.py` + `triage.py` in the session scratchpad
   approach: run each failing map, look at the first trouble).
 
+## Jumps checked in a movement simulator, not the engine (2026-11-04)
+- **Jumps must stick the landing.** A jump only counts if the player can brake to a stop on
+  the landing sector (MAP14's strip 110 is 24 units deep: every angled jump onto it "touched"
+  it and slid off). The check tries a *soft* sprint first (full speed to the edge, then
+  coast), then pushing all the way; one that slides off is retried running *straight across*
+  onto the next floor (MAP14: over 110 onto 98, as a human does it). The follower sprints
+  exactly as the check did (`Jump.soft`, `Jump.through`).
+- **The check runs in `nav/physics.py`**, a port of ZDoom 2.8.1's player movement (thrust and
+  1/256 air control, sub-stepped P_TryMove with step-ups from the current z, SlideMove's
+  velocity rule, ground-only friction, P_ZMovement gravity) on our geometry. Reference: the
+  ZDoom sources in the ViZDoom repo (p_user.cpp, p_mobj.cpp, p_map.cpp). Tic-by-tic traces
+  match the engine to ~0.1 unit; jump results agree on ~98% (MAP13 121/121, MAP14 126/135,
+  MAP15 358/364). It needs no cache. One map's jumps take about a second, against minutes
+  in ViZDoom (~3 s a jump, engine-bound: Python was ~4%).
+  `keep_verified(engine=True)` still uses ViZDoom.
+- Windows: ViZDoom tics were bound to the 15.6 ms default timer resolution; the adapter sets
+  1 ms (`timeBeginPeriod`), ~3x faster runs.
+
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
 - [ ] Timing-aware handling of lifts/doors that close on a timer (be on them in time).
 - [ ] Jumps that need lift/timed-door heights can't be set up by the verifier ("unverified").
 - [ ] Straferunning (SR50, ~141% speed) as a second jump speed.
-- [ ] Jump verification is slow on first run (1–4 min/map); optimize.
+- [x] ~~Jump verification is slow on first run~~: movement simulator (see above).
 - [x] ~~What is ViZDoom's actual compatibility?~~ See findings above.
 - [ ] Verify Boom/MBF feature support in ViZDoom with a real community Boom PWAD.
 - [ ] Check input/control: continuous turn/move delta buttons in ASYNC_PLAYER mode at 35 Hz,
