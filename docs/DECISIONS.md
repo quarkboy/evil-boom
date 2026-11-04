@@ -369,11 +369,28 @@ identically.
   off when stuck keeps away from ledges too (MAP29).
 - Exit floors (sector special 11) are pseudo-triggers: stand there till they end the level
   (E1M8). The sweep keeps stepping briefly after a walk-over exit (E4M8).
-- Still failing, each needing more planner modelling: MAP09 (press a switch, then reach a
-  rising bridge within about 24 tics), MAP21 (four switches that each build the same stairs
-  higher: cumulative effects), MAP27 (chains of platforms that sink as you cross onto them,
-  in order). MAP30 is out of reach in principle (boss brain). Tried and reverted: keeping a
-  lowered floor's old height briefly (broke MAP08, didn't fix MAP27).
+- Still failing: MAP09 (press a switch, then reach a rising bridge within about 24 tics).
+  MAP30 is out of reach in principle (boss brain). Tried and reverted: keeping a lowered
+  floor's old height briefly (broke MAP08, didn't fix MAP27).
+
+## Effects that depend on the heights when fired (2026-11-04): 66 of 68
+- Stairs build on from where their first step is now (MAP21: four switches, each one step
+  higher). Specials whose target comes from the heights round them ("lower to highest
+  neighbour + 8" and the like) are worked out again from the heights at the time, once
+  something round them has changed (MAP27: the red key's pedestal only comes down to 8
+  once the four platforms round it are down). Natively these call back into Python
+  (Navigator.effects_from_reps), cached.
+- So pressing them again can do something new: the one-shot ones are tracked as used, in
+  the search's nodes and signature and in the follower (replans start from them).
+- Several lines with the same effect: the closest, plus any that leave somewhere else
+  reachable (MAP27: the lines in the platform room trap you there).
+- Relaxed plan: a needed switch that can only be pressed through a door names that door's
+  key; a producer behind its own effect (a switch opening a door from the inside) is passed
+  over for the locked door's key (MAP27: yellow, then blue, then red).
+- Follower: stairs aren't pressed while their first step is away (also a lift); a press is
+  made from where it's stuck if the switch is in reach (through a door the press opens);
+  run-ups strafe to hold the jump's line; a sector still rising to the plan's height is
+  waited for at the edge rather than treated as an unexpected drop (MAP29).
 
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).

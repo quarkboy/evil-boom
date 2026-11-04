@@ -59,6 +59,12 @@ PLAT_WAIT = 3 * TICRATE  # PLATWAIT
 DOOR_CLOSE_30 = {16, 76}  # close, wait 30 s, open
 
 
+# Specials whose target depends on the heights round them (or their own) when they fire
+DEPENDS_ON_HEIGHTS = (FLOOR_LOWEST | FLOOR_HIGHEST | FLOOR_TURBO | FLOOR_LOWEST_CEIL
+                      | FLOOR_LOWEST_CEIL_CRUSH | FLOOR_NEXT_HIGHER | set(FLOOR_RAISE)
+                      | FLOOR_SHORTEST_TEX | CEIL_HIGHEST)
+
+
 class MoverModel:
     def __init__(self, m: MapData, neighbors: Callable[[int], set[int]]):
         self.map = m
@@ -68,13 +74,17 @@ class MoverModel:
         self.real: list[Heights] = [(s.floor, s.ceiling) for s in m.sectors]
         self.initial: list[Heights] = list(self.real)
 
-    def _nfloors(self, s: int) -> list[int]:
-        return [self.real[n][0] for n in self.neighbors(s)]
+    def _at(self, s: int, heights: dict | None) -> Heights:
+        return heights[s] if heights and s in heights else self.real[s]
 
-    def _nceils(self, s: int) -> list[int]:
-        return [self.real[n][1] for n in self.neighbors(s)]
+    def _nfloors(self, s: int, heights: dict | None = None) -> list[int]:
+        return [self._at(n, heights)[0] for n in self.neighbors(s)]
 
-    def effects(self, special: int, sectors: list[int]) -> dict[int, list[Heights]]:
+    def _nceils(self, s: int, heights: dict | None = None) -> list[int]:
+        return [self._at(n, heights)[1] for n in self.neighbors(s)]
+
+    def effects(self, special: int, sectors: list[int],
+                heights: dict | None = None) -> dict[int, list[Heights]]:
         """Heights each affected sector can take after the special fires.
 
         Returns several states for movers that oscillate (lifts, perpetual platforms).
@@ -85,14 +95,16 @@ class MoverModel:
             return self._stairs(sectors, STAIRS[special])
         out = {}
         for s in sectors:
-            states = self._sector_effect(special, s)
+            states = self._sector_effect(special, s, heights)
             if states:
                 out[s] = states
         return out
 
-    def _sector_effect(self, special: int, s: int) -> list[Heights]:
-        floor, ceil = self.real[s]
-        nf, nc = self._nfloors(s), self._nceils(s)
+    def _sector_effect(self, special: int, s: int, heights: dict | None = None) -> list[Heights]:
+        """`heights`: sectors' heights now, where not the map's (the target is worked out
+        when the special fires, from what's round it then)."""
+        floor, ceil = self._at(s, heights)
+        nf, nc = self._nfloors(s, heights), self._nceils(s, heights)
         if special in DOOR_OPEN:
             return [(floor, min(nc, default=ceil) - 4)]
         if special in DOOR_CLOSE:

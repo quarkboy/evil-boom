@@ -327,6 +327,7 @@ class RouteFollower:
         self.replans = 0
         self.fired: frozenset = frozenset()  # one-shot stair switches used (for replans)
         self._drops_ok: set = set()  # unexpected drops already replanned for (this step)
+        self._edge_wait = False  # holding at an edge for a sector to rise to it (logged once)
         self._last_pos: tuple[float, float] | None = None
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
         self._run = None     # running over sinking floors (_run_step)
@@ -387,7 +388,7 @@ class RouteFollower:
             done = self.steps[self.step_i]
             if done.trigger is not None:
                 self.states = apply_trigger(self.states, done.trigger)
-                if done.trigger.once and done.trigger.shift_from is not None:
+                if done.trigger.once and done.trigger.cumulative:
                     self.fired = self.fired | {done.trigger.line}
                 for e in done.expects:  # watch what it should do, against the timings
                     self._watches.append(Watch(e, tic, done.trigger.line, step=self.step_i))
@@ -619,6 +620,14 @@ class RouteFollower:
             self._best_s, self._progress_tic = self.s, obs.tic
         if obs.tic < self._unstick_until:
             return self._unstick(obs)
+        if obs.tic - self._progress_tic > STUCK_TICS and step.action == "use" \
+                and step.trigger is not None and step.trigger.line >= 0 \
+                and seg is self.segments[-1] and self._line_distance(pos, step.trigger.line) <= PRESS_RANGE:
+            # Can't get to the spot, but the switch is in reach from here (MAP27's, past a
+            # closed door the press opens first): press from here.
+            self._reset_progress(obs.tic)
+            self.phase = "act"
+            return self._act_at_goal(obs)
         if obs.tic - self._progress_tic > STUCK_TICS:
             self._unsticks += 1
             if self._unsticks > UNSTICKS_BEFORE_REPLAN:
@@ -1044,7 +1053,14 @@ class RouteFollower:
         diff = _norm(heading - obs.angle)
         self.motion.rate = 0.0
         push = flown < (0 if jump.soft else math.dist(jump.takeoff, jump.dest) - 8)
-        return Controls(forward=50.0 if push else 0.0, turn=max(-3.0, min(3.0, -diff)))
+        # Keep on the jump's line till takeoff (MAP27's clears a ledge corner by nothing: 2
+        # units of drift on the run-up and the box caught it). The check ran it dead straight.
+        strafe = 0.0
+        if flown < 0:
+            side = (obs.x - jump.takeoff[0]) * uy - (obs.y - jump.takeoff[1]) * ux
+            strafe = max(-15.0, min(15.0, -4.0 * side))  # (side: how far right of the line)
+        return Controls(forward=50.0 if push else 0.0, strafe=strafe,
+                        turn=max(-3.0, min(3.0, -diff)))
 
     # --- doors and lifts in the way --------------------------------------------------------
 
@@ -1072,6 +1088,20 @@ class RouteFollower:
             if not any(can_cross(hb, ha) for ha in self.states.get(cur.sector, ())
                        for hb in self.states.get(nxt.sector, ())):
                 continue  # one-way in the plan as well
+            coming = next((w for w in self._watches if w.expect.sector == nxt.sector
+                           and w.reached is None and can_cross(a, w.expect.heights)
+                           and can_cross(w.expect.heights, a)
+                           and obs.tic - w.since < 1.5 * w.expect.travel + 10 * TICRATE), None)
+            if coming is not None:
+                # Still on its way to where the plan has it (MAP29: a floor that takes half a
+                # minute to rise to the walkway): wait at the edge for it.
+                if not self._edge_wait:
+                    self.log.add(obs.tic, f"waiting for sector {nxt.sector} to reach "
+                                          f"{coming.expect.heights}")
+                    self._edge_wait = True
+                self._speed_cap = 0.0
+                self._progress_tic = self._step_tic = obs.tic
+                return False
             self._drops_ok.add(key)
             return self._replan(obs, f"unexpected drop into sector {nxt.sector}",
                                 live_only=True)
@@ -1129,6 +1159,13 @@ class RouteFollower:
                         sides = {self.nav.map.front_sector(line), self.nav.map.back_sector(line)}
                         return cur, next(iter(sides - {cur.sector}), cur.sector), portal, None
         return None
+
+    def _line_distance(self, pos, li: int) -> float:
+        m = self.nav.map
+        line = m.linedefs[li]
+        a = (m.vertexes[line.v1].x, m.vertexes[line.v1].y)
+        b = (m.vertexes[line.v2].x, m.vertexes[line.v2].y)
+        return math.dist(pos, _closest_point(pos, a, b))
 
     def _use_intercepted(self, pos, target) -> bool:
         """Does the use trace from pos to target cross a line with a special on the way (a

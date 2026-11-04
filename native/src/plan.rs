@@ -25,6 +25,9 @@ pub fn phase(i: usize, t0: Instant) {
     PHASES.with(|p| p.borrow_mut()[i] += t0.elapsed().as_secs_f64());
 }
 
+/// Navigator ALT_TRIGGERS
+pub const ALT_TRIGGERS: usize = 6;
+
 pub const ITEM_RADIUS: f64 = 20.0;
 pub const PICKUP_MARGIN: f64 = 2.0;
 pub const LEG_SPEED: f64 = 12.0;
@@ -68,6 +71,9 @@ pub struct Trig {
     pub shift_from: Option<(usize, f64)>,
     /// W1/S1/G1/D1
     pub once: bool,
+    /// effects worked out from the heights when fired: the sectors they depend on
+    /// (TriggerLine.recompute), or None
+    pub relevant: Option<Vec<usize>>,
 }
 
 pub struct PlanData {
@@ -82,6 +88,9 @@ pub struct PlanData {
     pub door_cache: HashMap<u8, Arc<Doors>>,
     /// flood fills already done: (start poly, keys, hash of the heights) -> reach
     pub reach_cache: HashMap<(usize, u8, u64), Arc<HashSet<usize>>>,
+    /// Navigator.effects_from_reps(trigger, [(sector, heights)]), and its answers
+    pub effects_cb: PyObject,
+    pub effects_cache: std::sync::Mutex<HashMap<(usize, Vec<(usize, u64, u64)>), Vec<(usize, Vec<Heights>)>>>,
 }
 
 /// A hash of every sector's heights (the world a flood fill depends on, with the keys).
@@ -398,6 +407,40 @@ impl NavCore {
     /// TriggerLine.effects_now
     fn effects_now(&self, ti: usize, states: &World) -> Vec<(usize, Vec<Heights>)> {
         let t = &self.pd().triggers[ti];
+        if let Some(rel) = &t.relevant {
+            // Navigator._effects_at: one height per sector (the only one, the starting one if
+            // still possible, else the highest); as at the start: the plain effects
+            let mut reps: Vec<(usize, Heights)> = Vec::with_capacity(rel.len());
+            let mut same = true;
+            for &s in rel {
+                let hs = &states[s];
+                let init = self.initial[s];
+                let rep = if hs.len() == 1 {
+                    hs[0]
+                } else if hs.iter().any(|h| h.0 == init.0 && h.1 == init.1) {
+                    init
+                } else {
+                    *hs.iter().max_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1))).unwrap()
+                };
+                if rep.0 != init.0 || rep.1 != init.1 {
+                    same = false;
+                }
+                reps.push((s, rep));
+            }
+            if same {
+                return t.effects.clone();
+            }
+            let key = (ti, reps.iter().map(|(s, h)| (*s, (h.0 + 0.0).to_bits(), (h.1 + 0.0).to_bits())).collect::<Vec<_>>());
+            let pd = self.pd();
+            if let Some(v) = pd.effects_cache.lock().unwrap().get(&key) {
+                return v.clone();
+            }
+            let v: Vec<(usize, Vec<Heights>)> = Python::with_gil(|py| {
+                pd.effects_cb.call1(py, (ti, reps.clone())).and_then(|r| r.extract(py))
+            }).unwrap_or_else(|_| t.effects.clone());
+            pd.effects_cache.lock().unwrap().insert(key, v.clone());
+            return v;
+        }
         let Some((s0, f0)) = t.shift_from else { return t.effects.clone() };
         let shift = states[s0].iter().map(|h| h.0).fold(f64::NEG_INFINITY, f64::max) - f0;
         if shift == 0.0 {
@@ -685,7 +728,7 @@ impl NavCore {
             }
             let mut children: Vec<Node> = Vec::new();
             // triggers: one candidate per distinct change, the closest line producing it
-            let mut options: Vec<(BTreeSet<Pair>, f64, usize, Point, HashSet<usize>)> = Vec::new();
+            let mut options: Vec<(BTreeSet<Pair>, Vec<(f64, i64, usize, Point, HashSet<usize>)>)> = Vec::new();
             for &ti in &actions {
                 let mut usable: HashSet<usize> = self.activators_now(ti, &node.states, None).intersection(&node.reach).copied().collect();
                 if usable.is_empty() {
@@ -703,60 +746,65 @@ impl NavCore {
                 }
                 let target = self.activation_point(ti, node.pos, &usable)?;
                 let d = dist(node.pos, target);
+                let line = self.pd().triggers[ti].line;
                 match options.iter_mut().find(|o| o.0 == new) {
-                    Some(o) => {
-                        if d < o.1 {
-                            o.1 = d;
-                            o.2 = ti;
-                            o.3 = target;
-                            o.4 = usable;
-                        }
-                    }
-                    None => options.push((new, d, ti, target, usable)),
+                    Some(o) => o.1.push((d, line, ti, target, usable)),
+                    None => options.push((new, vec![(d, line, ti, target, usable)])),
                 }
             }
-            for (new, _, ti, target, usable) in options {
-                let (base, left, gone) = self.expire(&node.states, &node.temp, target, node.pos, &moving_off);
-                let trial = self.apply_trigger(&base, ti);
-                let mut temp = left.clone();
-                for (k, v) in self.deadlines_of(ti, &base, &trial, &mut moving_off) {
-                    temp.insert(k, v);
-                }
-                let mut ordered: Vec<usize> = usable.iter().copied().collect();
-                ordered.sort_by(|&a, &b| dist(self.center(a), target).total_cmp(&dist(self.center(b), target)).then(a.cmp(&b)));
-                let mut by_sector: Vec<(usize, usize)> = Vec::new();
-                for p in ordered {
-                    let s = self.poly_sector[p];
-                    if !by_sector.iter().any(|(bs, _)| *bs == s) {
-                        by_sector.push((s, p));
+            for (new, mut cands) in options {
+                // (closest first; others only if they leave somewhere else reachable: see Navigator.plan)
+                cands.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+                let mut reaches: Vec<HashSet<usize>> = Vec::new();
+                for (_, _, ti, target, usable) in cands.into_iter().take(ALT_TRIGGERS) {
+                    let (base, left, gone) = self.expire(&node.states, &node.temp, target, node.pos, &moving_off);
+                    let trial = self.apply_trigger(&base, ti);
+                    let mut temp = left.clone();
+                    for (k, v) in self.deadlines_of(ti, &base, &trial, &mut moving_off) {
+                        temp.insert(k, v);
                     }
-                }
-                let line = self.pd().triggers[ti].line;
-                let near = if line >= 0 { let (a, b) = self.line_seg(line as usize); portal_mid(a, b) } else { target };
-                let mut spots = vec![target];
-                for &(_, p) in by_sector.iter().take(8) {
-                    spots.push(if line >= 0 { self.spot_in_poly(p, near) } else { self.center(p) });
-                }
-                let mut best = spots[0];
-                let mut best_reach: Option<HashSet<usize>> = None;
-                let mut covered: HashSet<usize> = HashSet::new();
-                for sp in spots {
-                    let Some(p) = self.mesh.poly_at(sp.0, sp.1) else { continue };
-                    if covered.contains(&p) {
-                        continue;
+                    let mut ordered: Vec<usize> = usable.iter().copied().collect();
+                    ordered.sort_by(|&a, &b| dist(self.center(a), target).total_cmp(&dist(self.center(b), target)).then(a.cmp(&b)));
+                    let mut by_sector: Vec<(usize, usize)> = Vec::new();
+                    for p in ordered {
+                        let s = self.poly_sector[p];
+                        if !by_sector.iter().any(|(bs, _)| *bs == s) {
+                            by_sector.push((s, p));
+                        }
                     }
-                    let r = self.reach_from(py, p, &trial, node.keys)?;
-                    covered.extend(r.iter().copied());
-                    if best_reach.as_ref().map_or(true, |br| r.len() > br.len()) {
-                        best = sp;
-                        best_reach = Some(r);
+                    let line = self.pd().triggers[ti].line;
+                    let near = if line >= 0 { let (a, b) = self.line_seg(line as usize); portal_mid(a, b) } else { target };
+                    let mut spots = vec![target];
+                    for &(_, p) in by_sector.iter().take(8) {
+                        spots.push(if line >= 0 { self.spot_in_poly(p, near) } else { self.center(p) });
                     }
-                }
-                let mut added: BTreeSet<Pair> = node.added.iter().copied().filter(|k| !gone.contains(k)).collect();
-                added.extend(new.iter().copied());
-                let carried: BTreeSet<Pair> = left.keys().copied().collect();
-                if let Some(c) = self.make_child(py, &node, best, trial, added, node.keys, Some(ti), None, temp, best_reach, carried, &goal_set, rel_t, rel_k)? {
-                    children.push(c);
+                    let mut best = spots[0];
+                    let mut best_reach: Option<HashSet<usize>> = None;
+                    let mut covered: HashSet<usize> = HashSet::new();
+                    for sp in spots {
+                        let Some(p) = self.mesh.poly_at(sp.0, sp.1) else { continue };
+                        if covered.contains(&p) {
+                            continue;
+                        }
+                        let r = self.reach_from(py, p, &trial, node.keys)?;
+                        covered.extend(r.iter().copied());
+                        if best_reach.as_ref().map_or(true, |br| r.len() > br.len()) {
+                            best = sp;
+                            best_reach = Some(r);
+                        }
+                    }
+                    if let Some(br) = &best_reach {
+                        if reaches.contains(br) {
+                            continue;
+                        }
+                        reaches.push(br.clone());
+                    }
+                    let mut added: BTreeSet<Pair> = node.added.iter().copied().filter(|k| !gone.contains(k)).collect();
+                    added.extend(new.iter().copied());
+                    let carried: BTreeSet<Pair> = left.keys().copied().collect();
+                    if let Some(c) = self.make_child(py, &node, best, trial, added, node.keys, Some(ti), None, temp, best_reach, carried, &goal_set, rel_t, rel_k)? {
+                        children.push(c);
+                    }
                 }
             }
             // keys
@@ -884,7 +932,7 @@ impl NavCore {
         // (needed keys held first: see Navigator.plan)
         let rank = (-((ks & rel_k).count_ones() as i64), !relevant, !progress, -(stable.len() as i64), steps);
         let fired = match ti {
-            Some(i) if self.pd().triggers[i].once && self.pd().triggers[i].shift_from.is_some() => {
+            Some(i) if self.pd().triggers[i].once && (self.pd().triggers[i].shift_from.is_some() || self.pd().triggers[i].relevant.is_some()) => {
                 let mut f = (*node.fired).clone();
                 f.insert(self.pd().triggers[i].line);
                 Rc::new(f)

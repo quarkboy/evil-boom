@@ -186,15 +186,16 @@ impl Nav {
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     fn set_plan_data(
         &mut self,
-        triggers: Vec<(i64, String, Vec<(usize, Vec<(f64, f64)>)>, HashSet<usize>, bool, Vec<bool>, Vec<((usize, (f64, f64)), (f64, f64))>, Vec<(usize, f64)>, Option<(usize, f64)>, bool)>,
+        triggers: Vec<(i64, String, Vec<(usize, Vec<(f64, f64)>)>, HashSet<usize>, bool, Vec<bool>, Vec<((usize, (f64, f64)), (f64, f64))>, Vec<(usize, f64)>, Option<(usize, f64)>, bool, Option<Vec<usize>>)>,
         use_gates: HashMap<(i64, usize), Vec<usize>>,
         shot_floors: HashMap<(i64, usize), (f64, f64)>,
         cross_sides: HashMap<(i64, usize), usize>,
         temporary: Vec<(usize, (f64, f64))>,
         key_positions: Vec<(u8, Vec<Point>)>,
+        effects_cb: PyObject,
     ) {
         use plan::{hk, Kind, PlanData, Trig};
-        let triggers = triggers.into_iter().map(|(line, kind, effects, activators, permanent, lock_ok, timing, perm, shift_from, once)| Trig {
+        let triggers = triggers.into_iter().map(|(line, kind, effects, activators, permanent, lock_ok, timing, perm, shift_from, once, relevant)| Trig {
             line,
             kind: match kind.as_str() { "W" => Kind::Walk, "S" => Kind::Switch, "D1" => Kind::D1, "DR" => Kind::DR, "G" => Kind::Gun, _ => Kind::Other },
             effects,
@@ -205,6 +206,7 @@ impl Nav {
             perm_travel: perm.into_iter().collect(),
             shift_from,
             once,
+            relevant,
         }).collect();
         self.core.plan_data = Some(PlanData {
             triggers,
@@ -215,6 +217,8 @@ impl Nav {
             key_positions,
             door_cache: HashMap::new(),
             reach_cache: HashMap::new(),
+            effects_cb,
+            effects_cache: std::sync::Mutex::new(HashMap::new()),
         });
     }
 

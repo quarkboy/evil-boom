@@ -54,6 +54,7 @@ SHOT_HEIGHT = 36  # bullets leave the player at z + 28 + 8, and level: no aiming
 MIN_PORTAL = 4.0  # narrower portals are nodebuilder slivers, never the real way through
 LEG_SPEED = 12.0  # units/tic assumed when timing legs against lifts and doors (full run ~16)
 EXIT_FLOOR = -1000  # pseudo-trigger lines below this: exit floors (Navigator._exit_floors)
+ALT_TRIGGERS = 6   # lines producing the same change tried per node (if they leave different reach)
 MIN_SHOT_SPAN = 6.0  # degrees a gun line must span from where it's shot (aim isn't exact)
 BOX_SLACK = 0.25  # the box must clear walls by this much: no one threads a gap exactly 32 wide
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
@@ -134,13 +135,24 @@ class TriggerLine:
     # stairs each raise them another step (MAP21's four). (start sector, its first floor):
     # the effects are shifted by how far that sector has risen since.
     shift_from: tuple[int, float] | None = None
+    # Its target is worked out from the heights round it when it fires (MAP27's "lower to
+    # highest neighbour + 8" once the platforms round it are down): (Navigator) function of
+    # the states, or None.
+    recompute: "object | None" = None
 
     @property
     def once(self) -> bool:
         return self.info.trigger in (Trigger.W1, Trigger.S1, Trigger.G1, Trigger.D1)
 
+    @property
+    def cumulative(self) -> bool:
+        """Firing it again can do something new (so one-shot ones are tracked as used)."""
+        return self.shift_from is not None or self.recompute is not None
+
     def effects_now(self, states: "HeightStates") -> dict[int, list[Heights]]:
         """What firing it does with the world at these heights."""
+        if self.recompute is not None:
+            return self.recompute(states)
         if self.shift_from is None:
             return self.effects
         s0, f0 = self.shift_from
@@ -246,6 +258,7 @@ class Navigator:
         self.shot_floors: dict[tuple[int, int], tuple[float, float]] = {}
         self.triggers = self._find_triggers()
         self._trench_effects()
+        self._dynamic_effects()
         self.teleports = self._find_teleports()
         self.tele_from: dict[int, list[Teleport]] = {}
         for tp in self.teleports:
@@ -765,20 +778,68 @@ class Navigator:
     def _trench_effects(self) -> None:
         """A trigger that moves a trench's neighbor moves the trench's floor with it."""
         for t in self.triggers:
-            for tr, around in self.trenches.items():
-                moving = [o for o in around if o in t.effects]
-                if not moving:
-                    continue
-                ceil = self.movers.real[tr][1]
-                hs = []
-                for n in moving:
-                    for h in t.effects[n]:
-                        f = self.trench_floor(tr, lambda o: h[0] if o == n
-                                              else self.movers.initial[o][0])
-                        if ceil - f >= PLAYER_HEIGHT and (f, ceil) not in hs:
-                            hs.append((f, ceil))
-                if hs:
-                    t.effects[tr] = hs
+            t.effects = self._with_trenches(t.effects)
+
+    def _with_trenches(self, effects: dict) -> dict:
+        """`effects` and what they do to trenches next to the sectors they move."""
+        out = dict(effects)
+        for tr, around in self.trenches.items():
+            moving = [o for o in around if o in effects]
+            if not moving:
+                continue
+            ceil = self.movers.real[tr][1]
+            hs = []
+            for n in moving:
+                for h in effects[n]:
+                    f = self.trench_floor(tr, lambda o: h[0] if o == n
+                                          else self.movers.initial[o][0])
+                    if ceil - f >= PLAYER_HEIGHT and (f, ceil) not in hs:
+                        hs.append((f, ceil))
+            if hs:
+                out[tr] = hs
+        return out
+
+    def _dynamic_effects(self) -> None:
+        """Triggers whose targets depend on the heights round them get worked out again from
+        the heights when they fire (TriggerLine.recompute)."""
+        from .movers import DEPENDS_ON_HEIGHTS
+        self._dyn_cache: dict = {}
+        for i, t in enumerate(self.triggers):
+            if t.line < 0 or t.info.special not in DEPENDS_ON_HEIGHTS or not t.sectors \
+                    or t.shift_from is not None:
+                continue
+            relevant = set(t.sectors)
+            for s in t.sectors:
+                relevant |= self.mesh.neighbors_of_sector(s)
+            t.relevant = sorted(relevant)
+            t.recompute = lambda states, t=t, i=i: self._effects_at(i, t, states)
+
+    @staticmethod
+    def _rep(hs, initial):
+        """One height to work a target out from: the only one, the starting one if it's
+        still possible, else the highest."""
+        if len(hs) == 1:
+            return next(iter(hs))
+        return initial if initial in hs else max(hs)
+
+    def _effects_at(self, i: int, t: "TriggerLine", states: HeightStates) -> dict:
+        init = self.movers.initial
+        reps = [(s, self._rep(states[s], init[s])) for s in t.relevant]
+        if all(h == init[s] for s, h in reps):
+            return t.effects
+        return self.effects_from_reps(i, reps)
+
+    def effects_from_reps(self, i: int, reps) -> dict:
+        """Trigger i's effects with these (sector, heights) as they are now (the native
+        planner calls this too)."""
+        key = (i, tuple((s, (float(h[0]), float(h[1]))) for s, h in reps))
+        out = self._dyn_cache.get(key)
+        if out is None:
+            t = self.triggers[i]
+            heights = {s: (h[0], h[1]) for s, h in reps if h != self.movers.initial[s]}
+            out = self._with_trenches(self.movers.effects(t.info.special, t.sectors, heights))
+            self._dyn_cache[key] = out
+        return out
 
     def initial_states(self) -> HeightStates:
         return {i: {h} for i, h in enumerate(self.movers.initial)}
@@ -1894,7 +1955,7 @@ class Navigator:
                              (node.pos, node.states, node.keys, t, key, node.temp), temp,
                              squeezes=node.squeezes, stable=stable, world=world,
                              fired=node.fired | {t.line} if t is not None and t.once
-                             and t.shift_from is not None else node.fired)
+                             and t.cumulative else node.fired)
                 progress = bool(stable - (node.stable or node.reach)) or key is not None
                 relevant = (t is not None and t.line in rel_t) or (key is not None and key in rel_k)
                 # Holding more of the keys the route needs comes first: once one's picked up
@@ -1907,8 +1968,11 @@ class Navigator:
                 priority = (not goal_polys.keys() & stable, child.squeezes) + child.rank
                 heapq.heappush(heap, (priority, next(counter), child))
 
-            # Triggers: one candidate per distinct world change, the closest line producing it.
-            options: dict[frozenset, tuple[float, TriggerLine, Point]] = {}
+            # Triggers: per distinct world change, the lines producing it, closest first; the
+            # closest, and others only if they leave somewhere else reachable (MAP27: the lines
+            # in the platform room lower the platforms too, but leave you down there, away
+            # from the switch for the key's pedestal; others elsewhere in the level don't).
+            options: dict[frozenset, list] = {}
             for t in actions:
                 # Usable if a door we can open is all that's in the way, but stand where no
                 # door needs opening when there's such a spot (the path then opens it).
@@ -1926,36 +1990,41 @@ class Navigator:
                     continue  # already fired, or a duplicate of something that was
                 target = self._activation_point(t, node.pos, usable)
                 d = math.dist(node.pos, target)
-                if new not in options or d < options[new][0]:
-                    options[new] = (d, t, target, usable)
-            for new, (_, t, target, usable) in options.items():
-                base, left, gone = expire(node.states, node.temp, target, node.pos)
-                trial = apply_trigger(base, t)
-                temp = left | deadlines_of(t, base, trial)
-                # Where we stand to use it matters (a door pressed from the pit below it is
-                # useless): try the default spot and a few others it can be used from, keep
-                # the one leaving the most reachable.
-                by_sector: dict[int, int] = {}  # one candidate per sector it's usable from
-                for p in sorted(usable,
-                                key=lambda p: (math.dist(mesh.polys[p].center, target), p)):
-                    by_sector.setdefault(mesh.polys[p].sector, p)
-                near = _line_mid(self.map, t.line) if t.line >= 0 else target
-                spots = [target] + [_spot_in_poly(mesh.polys[p], near) if t.line >= 0
-                                    else mesh.polys[p].center
-                                    for p in list(by_sector.values())[:8]]
-                doors_k = doors_for(node.keys)
-                # A spot inside what another reaches can't reach more than it: skip it.
-                best, best_reach, covered = spots[0], None, set()
-                for sp in spots:
-                    p = mesh.poly_at(*sp)
-                    if p is None or p.index in covered:
-                        continue
-                    r = self.reachable(p.index, trial, doors_k)
-                    covered |= r
-                    if best_reach is None or len(r) > len(best_reach):
-                        best, best_reach = sp, r
-                push(best, trial, (node.added - gone) | new, node.keys, t, None, temp,
-                     best_reach, frozenset(left))
+                options.setdefault(new, []).append((d, t.line, t, target, usable))
+            for new, cands in options.items():
+                cands.sort(key=lambda c: (c[0], c[1]))
+                reaches: list = []
+                for _, _, t, target, usable in cands[:ALT_TRIGGERS]:
+                    base, left, gone = expire(node.states, node.temp, target, node.pos)
+                    trial = apply_trigger(base, t)
+                    temp = left | deadlines_of(t, base, trial)
+                    # Where we stand to use it matters (a door pressed from the pit below it is
+                    # useless): try the default spot and a few others it can be used from, keep
+                    # the one leaving the most reachable.
+                    by_sector: dict[int, int] = {}  # one candidate per sector it's usable from
+                    for p in sorted(usable,
+                                    key=lambda p: (math.dist(mesh.polys[p].center, target), p)):
+                        by_sector.setdefault(mesh.polys[p].sector, p)
+                    near = _line_mid(self.map, t.line) if t.line >= 0 else target
+                    spots = [target] + [_spot_in_poly(mesh.polys[p], near) if t.line >= 0
+                                        else mesh.polys[p].center
+                                        for p in list(by_sector.values())[:8]]
+                    doors_k = doors_for(node.keys)
+                    # A spot inside what another reaches can't reach more than it: skip it.
+                    best, best_reach, covered = spots[0], None, set()
+                    for sp in spots:
+                        p = mesh.poly_at(*sp)
+                        if p is None or p.index in covered:
+                            continue
+                        r = self.reachable(p.index, trial, doors_k)
+                        covered |= r
+                        if best_reach is None or len(r) > len(best_reach):
+                            best, best_reach = sp, r
+                    if best_reach in reaches:
+                        continue  # leaves the same as a closer line doing the same
+                    reaches.append(best_reach)
+                    push(best, trial, (node.added - gone) | new, node.keys, t, None, temp,
+                         best_reach, frozenset(left))
             # Keys: for each key not yet held, the reachable pickup spot that leaves the most
             # reachable afterwards (some spots are slivers you can't walk on from).
             for key, spots in key_items.items():
@@ -2060,7 +2129,7 @@ class Navigator:
                              set(t.activators), t.permanent,
                              [t.info.lock.satisfied(set(m)) for m in masks], timing, perm,
                              (t.shift_from[0], float(t.shift_from[1])) if t.shift_from else None,
-                             t.once))
+                             t.once, getattr(t, "relevant", []) if t.recompute else None))
         bit = {k: i for i, k in enumerate(KEY_ORDER)}
         return (triggers,
                 {k: sorted(v) for k, v in self.use_gates.items()},
@@ -2068,7 +2137,9 @@ class Navigator:
                 dict(self.cross_sides()),
                 [(sec, tuple(map(float, h))) for sec, h in self._temporary_heights()],
                 [(bit[k], list(map(lambda p: tuple(map(float, p)), ps)))
-                 for k, ps in self._key_positions.items()])
+                 for k, ps in self._key_positions.items()],
+                lambda i, reps: [(s, [tuple(map(float, h)) for h in hs])
+                                 for s, hs in self.effects_from_reps(i, reps).items()])
 
     def _upper_bound(self, start: int, states: HeightStates, keys: frozenset,
                      key_items: KeyItems, triggers: list[TriggerLine]) -> set[int]:
@@ -2117,6 +2188,7 @@ class Navigator:
         mesh = self.mesh
         need_t: set[int] = set()
         need_k: set[Key] = set()
+        without: dict[int, set[int]] = {}  # sector -> reach with its needed height taken away
         queue = [goals]
         seen_goals: set[frozenset] = set()
         while queue and len(seen_goals) < 200:
@@ -2167,10 +2239,43 @@ class Navigator:
                                     queue.append({sp for sp, _ in key_items[k]})
                 p = prev
             for sh in needed_states:
-                for t in producers.get(sh, [])[:1]:
+                cands = producers.get(sh, [])
+                # A producer that can be got to without what it produces (MAP27: the switch
+                # that opens a door from the inside); if there's none, and the sector is a
+                # locked door as well, that door's key is what's really needed (the yellow
+                # door in front of MAP27's blue key).
+                if sh[0] not in without:
+                    st2 = {k: v for k, v in states_all.items()}
+                    if len(st2[sh[0]]) > 1:
+                        st2[sh[0]] = st2[sh[0]] - {sh[1]}
+                    without[sh[0]] = self.reachable(start, st2, {k: v for k, v in doors_all.items()
+                                                                if k != sh[0]})
+                first = next((t for t in cands if t.activators & without[sh[0]]), None)
+                if first is None:
+                    for dt in self.triggers:
+                        if sh[0] in dt.sectors and dt.info.lock is not Lock.NONE:
+                            k = next((k for k in key_items if dt.info.lock.satisfied({k})), None)
+                            if k is not None and k not in need_k:
+                                need_k.add(k)
+                                queue.append({sp for sp, _ in key_items[k]})
+                for t in ([first] if first is not None else cands[:1]):
                     if t.line not in need_t:
                         need_t.add(t.line)
-                        queue.append(set(t.activators))
+                        # Where it can be used from without something having to be open in
+                        # the way of the press, if anywhere (MAP27's switch for the red key's
+                        # pedestal, behind a blue door: the path there names the blue key)
+                        clear = {p for p in t.activators if not self.use_gates.get((t.line, p))}
+                        queue.append(clear & reach_all or set(t.activators))
+                        if not clear & reach_all:  # pressed through a door: its key
+                            gates = {g for p in t.activators
+                                     for g in self.use_gates.get((t.line, p), ())}
+                            for dt in self.triggers:
+                                if gates & set(dt.sectors) and dt.info.lock is not Lock.NONE:
+                                    k = next((k for k in key_items
+                                              if dt.info.lock.satisfied({k})), None)
+                                    if k is not None and k not in need_k:
+                                        need_k.add(k)
+                                        queue.append({sp for sp, _ in key_items[k]})
                         if t.info.lock is not Lock.NONE:
                             k = next((k for k in key_items if t.info.lock.satisfied({k})), None)
                             if k is not None and k not in need_k:
