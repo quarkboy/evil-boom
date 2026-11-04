@@ -325,6 +325,7 @@ class RouteFollower:
         self.done = False
         self.failed = False
         self.replans = 0
+        self.fired: frozenset = frozenset()  # one-shot stair switches used (for replans)
         self._drops_ok: set = set()  # unexpected drops already replanned for (this step)
         self._last_pos: tuple[float, float] | None = None
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
@@ -386,6 +387,8 @@ class RouteFollower:
             done = self.steps[self.step_i]
             if done.trigger is not None:
                 self.states = apply_trigger(self.states, done.trigger)
+                if done.trigger.once and done.trigger.shift_from is not None:
+                    self.fired = self.fired | {done.trigger.line}
                 for e in done.expects:  # watch what it should do, against the timings
                     self._watches.append(Watch(e, tic, done.trigger.line, step=self.step_i))
             if done.key is not None:
@@ -832,14 +835,14 @@ class RouteFollower:
                                   f"({goal[0]:.0f}, {goal[1]:.0f})")
         else:
             route = nav.plan(pos, [goal], frozenset(self.keys), states, None,
-                             max_expansions=200, max_seconds=3.0)
+                             max_expansions=200, max_seconds=3.0, fired=self.fired)
             if route is not None:
-                new = steps_from_legs(route.legs, step, nav)
+                new = steps_from_legs(route.legs, step, nav, states)
                 self.steps[self.step_i:self.step_i + 1] = new
                 self.log.add(obs.tic, f"{why} at ({obs.x:.0f}, {obs.y:.0f}): back on track "
                                       f"via {len(new) - 1} extra step(s)")
             elif self.replan_level:
-                plan = plan_from(nav, pos, self.keys, states, max_seconds=10.0,
+                plan = plan_from(nav, pos, self.keys, states, max_seconds=10.0, fired=self.fired,
                                  max_expansions=1000)
                 if not plan.complete:
                     self.log.add(obs.tic, f"{why}: no way to the step goal or the exit")
@@ -1528,6 +1531,17 @@ class RouteFollower:
                 self.log.add(obs.tic, f"facing line {step.trigger.line}")
                 self._next_step(obs.tic)
             return controls
+        t = step.trigger
+        if step.action == "use" and self._action_tic is None and t is not None \
+                and t.shift_from is not None:
+            # Stairs don't build while their first step is moving (MAP21: it's also a lift):
+            # wait till it's back up where the stairs left it.
+            s0 = t.shift_from[0]
+            top = max(h[0] for h in self.states[s0])
+            live = obs.heights.get(s0)
+            if live is not None and live[0] < top - 0.5:
+                self._progress_tic = self._step_tic = obs.tic
+                return controls
         if step.action == "shoot" and self._action_tic is None and obs.weapon == 1:
             # A fist or chainsaw (picked up on the way: the game switches to it) doesn't set
             # off a gun line (MAP19): out with the pistol first.

@@ -186,7 +186,7 @@ impl Nav {
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     fn set_plan_data(
         &mut self,
-        triggers: Vec<(i64, String, Vec<(usize, Vec<(f64, f64)>)>, HashSet<usize>, bool, Vec<bool>, Vec<((usize, (f64, f64)), (f64, f64))>, Vec<(usize, f64)>)>,
+        triggers: Vec<(i64, String, Vec<(usize, Vec<(f64, f64)>)>, HashSet<usize>, bool, Vec<bool>, Vec<((usize, (f64, f64)), (f64, f64))>, Vec<(usize, f64)>, Option<(usize, f64)>, bool)>,
         use_gates: HashMap<(i64, usize), Vec<usize>>,
         shot_floors: HashMap<(i64, usize), (f64, f64)>,
         cross_sides: HashMap<(i64, usize), usize>,
@@ -194,7 +194,7 @@ impl Nav {
         key_positions: Vec<(u8, Vec<Point>)>,
     ) {
         use plan::{hk, Kind, PlanData, Trig};
-        let triggers = triggers.into_iter().map(|(line, kind, effects, activators, permanent, lock_ok, timing, perm)| Trig {
+        let triggers = triggers.into_iter().map(|(line, kind, effects, activators, permanent, lock_ok, timing, perm, shift_from, once)| Trig {
             line,
             kind: match kind.as_str() { "W" => Kind::Walk, "S" => Kind::Switch, "D1" => Kind::D1, "DR" => Kind::DR, "G" => Kind::Gun, _ => Kind::Other },
             effects,
@@ -203,6 +203,8 @@ impl Nav {
             lock_ok,
             timing: timing.into_iter().map(|((s, h), v)| ((s, hk(h)), v)).collect(),
             perm_travel: perm.into_iter().collect(),
+            shift_from,
+            once,
         }).collect();
         self.core.plan_data = Some(PlanData {
             triggers,
@@ -219,7 +221,7 @@ impl Nav {
     /// Navigator.plan. Returns None or (legs [(trigger index or None, key bit or None, path
     /// (as find_path), leg states {sector: [heights]}, leg keys bitmask)], final states, final
     /// keys bitmask, goal point).
-    #[pyo3(signature = (start, goals, keys, states, key_items, max_expansions, max_seconds, goal_triggers, rel_t, rel_k, strict_fit=false))]
+    #[pyo3(signature = (start, goals, keys, states, key_items, max_expansions, max_seconds, goal_triggers, rel_t, rel_k, strict_fit=false, fired=Vec::new()))]
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn plan(
         &mut self,
@@ -235,6 +237,7 @@ impl Nav {
         rel_t: HashSet<i64>,
         rel_k: u8,
         strict_fit: bool,
+        fired: Vec<i64>,
     ) -> PyResult<Option<PyObject>> {
         use std::rc::Rc;
         let n = self.core.poly_sector.iter().copied().max().unwrap_or(0) + 1;
@@ -248,7 +251,7 @@ impl Nav {
         plan::STATS.with(|s| *s.borrow_mut() = (0, 0.0, 0, 0.0));
         plan::PHASES.with(|p| *p.borrow_mut() = [0.0; 4]);
         let t0 = std::time::Instant::now();
-        let found = self.core.plan(py, start, &goals, keys, Rc::new(world), &key_items, max_expansions, max_seconds, &gt, &rel_t, rel_k, strict_fit)?;
+        let found = self.core.plan(py, start, &goals, keys, Rc::new(world), &key_items, max_expansions, max_seconds, &gt, &rel_t, rel_k, strict_fit, &fired)?;
         if std::env::var_os("EVILDOOM_NATIVE_STATS").is_some() {
             plan::STATS.with(|s| {
                 let s = s.borrow();

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field, replace
 from evildoom.wad.specials import Category, Key, Trigger
 
 from .movers import TICRATE
-from .reach import EXIT_FLOOR, HeightStates, Navigator, Path, Point, TriggerLine
+from .reach import EXIT_FLOOR, HeightStates, Navigator, Path, Point, TriggerLine, apply_trigger
 
 
 @dataclass
@@ -77,14 +77,16 @@ def _action_for(t: TriggerLine) -> str:
     return "cross"
 
 
-def expects_of(nav: Navigator, t: TriggerLine, after: Path | None) -> list[Expect]:
-    """What firing `t` should do, with timings; marked `needed` where the path `after`
-    depends on it."""
+def expects_of(nav: Navigator, t: TriggerLine, after: Path | None,
+               effects: dict | None = None, also: set[int] = frozenset()) -> list[Expect]:
+    """What firing `t` should do (`effects`: as fired, by default its plain effects), with
+    timings; marked `needed` where the path `after` depends on it, or for sectors in `also`."""
     on_path = {nav.mesh.polys[p].sector for p in after.polys} if after else set()
+    on_path |= set(also)
     out = []
     if "perpetual" in t.info.description:
         return out  # they keep cycling: nothing to wait for or beat
-    for s, hs in t.effects.items():
+    for s, hs in (effects if effects is not None else t.effects).items():
         h = hs[0]
         if h == nav.movers.initial[s] and len(hs) == 1:
             continue  # already like that: nothing to see
@@ -96,13 +98,25 @@ def expects_of(nav: Navigator, t: TriggerLine, after: Path | None) -> list[Expec
 
 
 def steps_from_legs(legs, goal_step: Step | None = None,
-                    nav: Navigator | None = None) -> list[Step]:
+                    nav: Navigator | None = None, states: HeightStates | None = None) -> list[Step]:
     """Steps for a Route's legs. The final (goal) leg becomes `goal_step` with that leg's
-    path, or is dropped if `goal_step` is None. With `nav`, trigger steps get `expects`."""
+    path, or is dropped if `goal_step` is None. With `nav`, trigger steps get `expects`
+    (from `states`, the heights at the start: stairs build on from where they are)."""
     steps = []
+    running = {k: set(v) for k, v in (states or (nav.initial_states() if nav else {})).items()}
     for i, leg in enumerate(legs[:-1]):
         if leg.trigger:
-            expects = expects_of(nav, leg.trigger, legs[i + 1].path) if nav else []
+            expects = []
+            if nav:
+                t = leg.trigger
+                effects = t.effects_now(running)
+                # Another switch for the same stairs next: wait for these to stop first (a
+                # press while they're still moving does nothing: MAP21).
+                nxt = legs[i + 1].trigger
+                also = set(effects) if nxt is not None and t.shift_from is not None \
+                    and nxt.shift_from == t.shift_from else set()
+                expects = expects_of(nav, t, legs[i + 1].path, effects, also)
+                running = apply_trigger(running, t)
             steps.append(Step(leg.path, _action_for(leg.trigger), leg.trigger,
                               label=f"line {leg.trigger.line}: {leg.trigger.info.description}",
                               expects=expects))
@@ -140,7 +154,7 @@ def plan_level(nav: Navigator, start: Point, max_seconds: float = 60.0,
 
 def plan_from(nav: Navigator, pos: Point, keys: set[Key], states: HeightStates | None,
               reach: set[int] | None = None, max_seconds: float = 30.0,
-              max_expansions: int = 20000) -> LevelPlan:
+              max_expansions: int = 20000, fired: frozenset = frozenset()) -> LevelPlan:
     """Plan the rest of the level from `pos` holding `keys`, with `states` the heights the
     world can take now (default: the map's initial heights). `reach` limits which exit
     activation spots are considered (default: anywhere)."""
@@ -152,10 +166,10 @@ def plan_from(nav: Navigator, pos: Point, keys: set[Key], states: HeightStates |
     t0 = time.perf_counter()
     route = nav.plan(pos, list(exits), frozenset(keys), states, nav.key_items(),
                      max_expansions=max_expansions, max_seconds=max_seconds,
-                     goal_triggers=exits)
+                     goal_triggers=exits, fired=fired)
     if route is None:
         timed_out = time.perf_counter() - t0 >= max_seconds
         return LevelPlan(problem="no route to the exit"
                          + (f" (search gave up after {max_seconds:.0f}s)" if timed_out else ""))
-    return LevelPlan(steps=steps_from_legs(route.legs, _exit_step(exits[route.goal]), nav),
+    return LevelPlan(steps=steps_from_legs(route.legs, _exit_step(exits[route.goal]), nav, states),
                      complete=True)

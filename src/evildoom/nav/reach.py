@@ -37,7 +37,7 @@ except ImportError:
 if os.environ.get("EVILDOOM_NO_NATIVE"):
     _native = None
 
-from .movers import TICRATE, Heights, MoverModel
+from .movers import STAIRS, TICRATE, Heights, MoverModel
 from .navmesh import NavMesh, Point, _cells, _inside
 
 PLAYER_HEIGHT = 56
@@ -99,7 +99,7 @@ def apply_trigger(states: "HeightStates", t: "TriggerLine") -> "HeightStates":
     way up). A floor that drops for good is replaced, though: the old height is gone (MAP07
     can't be jumped from the lowered ledge)."""
     out = {s: set(h) for s, h in states.items()}
-    for s, hs in t.effects.items():
+    for s, hs in t.effects_now(states).items():
         if t.permanent and max(h[0] for h in hs) < min(h[0] for h in out[s]):
             out[s] = set(hs)
         else:
@@ -130,6 +130,24 @@ class TriggerLine:
     sectors: list[int]
     effects: dict[int, list[Heights]]
     activators: set[int]        # polys from which it can be activated (use/shoot/cross)
+    # Stairs build up from where the tagged sector is *now*: several switches for the same
+    # stairs each raise them another step (MAP21's four). (start sector, its first floor):
+    # the effects are shifted by how far that sector has risen since.
+    shift_from: tuple[int, float] | None = None
+
+    @property
+    def once(self) -> bool:
+        return self.info.trigger in (Trigger.W1, Trigger.S1, Trigger.G1, Trigger.D1)
+
+    def effects_now(self, states: "HeightStates") -> dict[int, list[Heights]]:
+        """What firing it does with the world at these heights."""
+        if self.shift_from is None:
+            return self.effects
+        s0, f0 = self.shift_from
+        shift = max(h[0] for h in states[s0]) - f0
+        if not shift:
+            return self.effects
+        return {s: [(h[0] + shift, h[1]) for h in hs] for s, hs in self.effects.items()}
 
     @property
     def permanent(self) -> bool:
@@ -830,8 +848,11 @@ class Navigator:
                             self.shot_floors[(line.index, pi)] = max(
                                 ranges, key=lambda r: r[1] - r[0])
             sectors = self._affected(line.index, info)
+            shift_from = (sectors[0], self.movers.initial[sectors[0]][0]) \
+                if line.special in STAIRS and len(sectors) == 1 else None
             out.append(TriggerLine(line.index, info, sectors,
-                                   self.movers.effects(line.special, sectors), activators))
+                                   self.movers.effects(line.special, sectors), activators,
+                                   shift_from))
         self.triggers = out  # boss triggers need the line triggers (monster-usable doors)
         return out + self._boss_triggers() + self._exit_floors()
 
@@ -1378,7 +1399,7 @@ class Navigator:
                 for t in usable:
                     fired.add(t.line)
                     fired_now.append(t)
-                    for sector, hs in t.effects.items():
+                    for sector, hs in t.effects_now(states).items():
                         states[sector].update(hs)
             available = {Key(t.type) for t in key_things
                          if any(p in reached for p, _ in self.pickup_spots(t.x, t.y, states))}
@@ -1623,9 +1644,10 @@ class Navigator:
              states: HeightStates | None = None, key_items: KeyItems | None = None,
              max_expansions: int = 300, max_seconds: float = 5.0,
              trace: list | None = None,
-             goal_triggers: dict | None = None) -> Route | None:
+             goal_triggers: dict | None = None, fired: frozenset = frozenset()) -> Route | None:
         """Plan a route to any of `goals`, using remote triggers and (if `key_items` is given)
-        picking up keys along the way, in whatever order works.
+        picking up keys along the way, in whatever order works. `fired`: one-shot stair
+        switches already used (TriggerLine.shift_from).
 
         Best-first search over (what the world looks like, keys held, where we're standing).
         Actions are: use a reachable trigger that would change some sector's possible heights,
@@ -1645,7 +1667,7 @@ class Navigator:
         """
         if _native is not None and trace is None:
             return self._native_plan(start, goals, keys, states, key_items, max_expansions,
-                                     max_seconds, goal_triggers)
+                                     max_seconds, goal_triggers, fired)
         mesh = self.mesh
         key_items = key_items or {}
         door_cache: dict[frozenset, Doors] = {}
@@ -1686,6 +1708,7 @@ class Navigator:
             #     legs (for ranking: several lifts each down for a few seconds all count at
             #     once in `reach`, which makes a node look far better than it is: MAP14)
             rank: tuple = ()    # the rest of its priority (after goal reach and squeezes)
+            fired: frozenset = frozenset()  # one-shot cumulative lines used (TriggerLine.shift_from)
 
         temporary = self._temporary_heights()
 
@@ -1709,7 +1732,7 @@ class Navigator:
         def deadlines_of(t: TriggerLine, base: HeightStates, trial: HeightStates) -> dict:
             """The temporary heights firing `t` makes, with how long they last."""
             out = {}
-            for s, hs in t.effects.items():
+            for s, hs in t.effects_now(base).items():
                 if t.permanent:
                     # Once a floor has risen for good its old height is gone too: you can
                     # still hop on while it moves (E4M2: the plan walked from a pit onto
@@ -1743,7 +1766,8 @@ class Navigator:
                                            key_items, actions)
         counter = itertools.count()
         root = Node(start, states0, frozenset(), keys0, [],
-                    self.reachable(start_poly.index, states0, doors_for(keys0)))
+                    self.reachable(start_poly.index, states0, doors_for(keys0)),
+                    fired=frozenset(fired))
         # Paths where the player's box may not fit (Path.squeezes) aren't refused (the check has
         # false alarms) but rank below clean ones: priority is (can't reach a goal, squeezes
         # so far, rank...). A squeezed route to a goal is kept as `fallback`; the search goes
@@ -1797,7 +1821,7 @@ class Navigator:
             # (with them in the world, every combination of lifts still down was a world of
             # its own and nothing could be pruned: MAP14's search grew tenfold)
             sig = (node.added - frozenset(node.temp), node.keys,
-                   frozenset(node.world if node.world is not None else node.reach))
+                   frozenset(node.world if node.world is not None else node.reach), node.fired)
             tm = timers(node)
             if dominated(sig, tm):
                 continue
@@ -1868,7 +1892,9 @@ class Navigator:
                     world = self.reachable(target_poly.index, plain, doors_for(ks))
                 child = Node(target, trial, added, ks, node.legs, after, node.steps + 1,
                              (node.pos, node.states, node.keys, t, key, node.temp), temp,
-                             squeezes=node.squeezes, stable=stable, world=world)
+                             squeezes=node.squeezes, stable=stable, world=world,
+                             fired=node.fired | {t.line} if t is not None and t.once
+                             and t.shift_from is not None else node.fired)
                 progress = bool(stable - (node.stable or node.reach)) or key is not None
                 relevant = (t is not None and t.line in rel_t) or (key is not None and key in rel_k)
                 # Holding more of the keys the route needs comes first: once one's picked up
@@ -1888,13 +1914,14 @@ class Navigator:
                 # door needs opening when there's such a spot (the path then opens it).
                 usable = self.activators_now(t, node.states) & node.reach or \
                     self.activators_now(t, node.states, doors) & node.reach
-                if not usable or not t.info.lock.satisfied(set(node.keys)):
+                if not usable or not t.info.lock.satisfied(set(node.keys)) \
+                        or t.line in node.fired:
                     continue
                 # (not pressed again while its lift or door is still running: refreshing a
                 # timer always looks better and the search loops on it, MAP17; once it has run
                 # out, pressing is new again)
-                new = frozenset((s, h) for s, hs in t.effects.items() for h in hs
-                                if h not in node.states[s])
+                new = frozenset((s, h) for s, hs in t.effects_now(node.states).items()
+                                for h in hs if h not in node.states[s])
                 if not new:
                     continue  # already fired, or a duplicate of something that was
                 target = self._activation_point(t, node.pos, usable)
@@ -1953,7 +1980,7 @@ class Navigator:
 
     def _native_plan(self, start: Point, goals: list[Point], keys, states, key_items,
                      max_expansions: int, max_seconds: float,
-                     goal_triggers: dict | None) -> "Route | None":
+                     goal_triggers: dict | None, fired: frozenset = frozenset()) -> "Route | None":
         """plan() in the compiled core. The one-off analysis (the upper bound, the relaxed
         plan's needs) is done here first; the Route is put together from what comes back."""
         mesh = self.mesh
@@ -1981,7 +2008,7 @@ class Navigator:
                          max_expansions, max_seconds,
                          [(g, index[id(t)]) for g, t in (goal_triggers or {}).items()],
                          set(rel_t), sum(1 << bit[k] for k in rel_k),
-                         self.strict_fit)
+                         self.strict_fit, sorted(fired))
         if found is None:
             return None
         legs_out, final_states, final_keys, goal = found
@@ -2031,7 +2058,9 @@ class Navigator:
                              [(sec, [tuple(map(float, h)) for h in hs])
                               for sec, hs in t.effects.items()],
                              set(t.activators), t.permanent,
-                             [t.info.lock.satisfied(set(m)) for m in masks], timing, perm))
+                             [t.info.lock.satisfied(set(m)) for m in masks], timing, perm,
+                             (t.shift_from[0], float(t.shift_from[1])) if t.shift_from else None,
+                             t.once))
         bit = {k: i for i, k in enumerate(KEY_ORDER)}
         return (triggers,
                 {k: sorted(v) for k, v in self.use_gates.items()},
@@ -2065,7 +2094,7 @@ class Navigator:
             keys |= new_keys
             for t in new:
                 fired.add(t.line)
-                for sector, hs in t.effects.items():
+                for sector, hs in t.effects_now(states).items():
                     states[sector].update(hs)
 
     def _relaxed_needs(self, start: int, goals: set[int], states0: HeightStates,

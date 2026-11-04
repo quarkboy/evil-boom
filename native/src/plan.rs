@@ -64,6 +64,10 @@ pub struct Trig {
     pub timing: HashMap<(usize, HKey), (f64, f64)>,
     /// permanent moves: sector -> travel to its first target
     pub perm_travel: HashMap<usize, f64>,
+    /// stairs: (start sector, its first floor); effects shift as it rises (TriggerLine.shift_from)
+    pub shift_from: Option<(usize, f64)>,
+    /// W1/S1/G1/D1
+    pub once: bool,
 }
 
 pub struct PlanData {
@@ -136,6 +140,8 @@ struct Node {
     world: Option<Rc<HashSet<usize>>>,
     stable: Option<Rc<HashSet<usize>>>,
     rank: (i64, bool, bool, i64, usize),
+    /// one-shot cumulative lines used
+    fired: Rc<BTreeSet<i64>>,
 }
 
 /// (can't reach a goal, squeezes, not relevant, not progress, -len(stable), steps), counter
@@ -389,10 +395,22 @@ impl NavCore {
         spots
     }
 
+    /// TriggerLine.effects_now
+    fn effects_now(&self, ti: usize, states: &World) -> Vec<(usize, Vec<Heights>)> {
+        let t = &self.pd().triggers[ti];
+        let Some((s0, f0)) = t.shift_from else { return t.effects.clone() };
+        let shift = states[s0].iter().map(|h| h.0).fold(f64::NEG_INFINITY, f64::max) - f0;
+        if shift == 0.0 {
+            return t.effects.clone();
+        }
+        t.effects.iter().map(|(s, hs)| (*s, hs.iter().map(|h| (h.0 + shift, h.1)).collect())).collect()
+    }
+
     fn apply_trigger(&self, states: &World, ti: usize) -> World {
         let t = &self.pd().triggers[ti];
+        let effects = self.effects_now(ti, states);
         let mut out: Vec<Rc<Vec<Heights>>> = (**states).clone();
-        for (s, hs) in &t.effects {
+        for (s, hs) in &effects {
             let cur_min = out[*s].iter().map(|h| h.0).fold(f64::INFINITY, f64::min);
             let hs_max = hs.iter().map(|h| h.0).fold(f64::NEG_INFINITY, f64::max);
             let mut dedup: Vec<Heights> = Vec::new();
@@ -530,6 +548,7 @@ impl NavCore {
         rel_t: &HashSet<i64>,
         rel_k: u8,
         strict: bool,
+        fired0: &[i64],
     ) -> PyResult<Option<RouteOut>> {
         let t0 = Instant::now();
         let mut goal_polys: Vec<(usize, Point)> = Vec::new();
@@ -554,7 +573,7 @@ impl NavCore {
         let root = Node {
             pos: start, states: states0, added: BTreeSet::new(), keys: keys0, legs: Rc::new(Vec::new()),
             reach: root_reach, steps: 0, pending: None, temp: Rc::new(BTreeMap::new()), squeezes: 0,
-            world: None, stable: None, rank: (0, false, false, 0, 0),
+            world: None, stable: None, rank: (0, false, false, 0, 0), fired: Rc::new(fired0.iter().copied().collect()),
         };
         let mut counter: u64 = 0;
         let mut heap: BinaryHeap<(Prio, std::cmp::Reverse<u64>)> = BinaryHeap::new();
@@ -562,7 +581,7 @@ impl NavCore {
         nodes.insert(counter, root);
         heap.push((Prio((false, 0, 0, false, false, 0, 0), counter), std::cmp::Reverse(counter)));
         counter += 1;
-        type SigKey = (Vec<Pair>, u8, Vec<usize>);
+        type SigKey = (Vec<Pair>, u8, Vec<usize>, Vec<i64>);
         let mut seen: HashMap<SigKey, Vec<Rc<Temp>>> = HashMap::new();
         let mut expansions = 0usize;
         let mut fallback: Option<(usize, RouteOut, usize, Instant)> = None;
@@ -586,7 +605,7 @@ impl NavCore {
             let sig: SigKey = {
                 let added: Vec<Pair> = node.added.iter().copied().filter(|k| !node.temp.contains_key(k)).collect();
                 let w = node.world.as_ref().unwrap_or(&node.reach);
-                (added, node.keys, sorted_reach(w))
+                (added, node.keys, sorted_reach(w), node.fired.iter().copied().collect())
             };
             let tm = node.temp.clone();
             {
@@ -672,10 +691,10 @@ impl NavCore {
                 if usable.is_empty() {
                     usable = self.activators_now(ti, &node.states, Some(&doors)).intersection(&node.reach).copied().collect();
                 }
-                if usable.is_empty() || !self.pd().triggers[ti].lock_ok[node.keys as usize] {
+                if usable.is_empty() || !self.pd().triggers[ti].lock_ok[node.keys as usize] || node.fired.contains(&self.pd().triggers[ti].line) {
                     continue;
                 }
-                let new: BTreeSet<Pair> = self.pd().triggers[ti].effects.iter()
+                let new: BTreeSet<Pair> = self.effects_now(ti, &node.states).iter()
                     .flat_map(|(s, hs)| hs.iter().map(move |h| (*s, hk(*h))))
                     .filter(|(s, h)| !node.states[*s].iter().any(|x| hk(*x) == *h))
                     .collect();
@@ -801,7 +820,8 @@ impl NavCore {
         let pd = self.pd();
         let t = &pd.triggers[ti];
         let mut out: Temp = BTreeMap::new();
-        for (s, hs) in &t.effects {
+        let effects = self.effects_now(ti, base);
+        for (s, hs) in &effects {
             if t.permanent {
                 let travel = if t.line >= 0 { *t.perm_travel.get(s).unwrap_or(&0.0) } else { 0.0 };
                 let mut olds: Vec<Heights> = trial[*s].iter().copied().filter(|h| !hs.iter().any(|x| hk(*x) == hk(*h))).collect();
@@ -827,7 +847,6 @@ impl NavCore {
                 }
             }
         }
-        let _ = base;
         out
     }
 
@@ -864,6 +883,14 @@ impl NavCore {
         let steps = node.steps + 1;
         // (needed keys held first: see Navigator.plan)
         let rank = (-((ks & rel_k).count_ones() as i64), !relevant, !progress, -(stable.len() as i64), steps);
+        let fired = match ti {
+            Some(i) if self.pd().triggers[i].once && self.pd().triggers[i].shift_from.is_some() => {
+                let mut f = (*node.fired).clone();
+                f.insert(self.pd().triggers[i].line);
+                Rc::new(f)
+            }
+            _ => node.fired.clone(),
+        };
         Ok(Some(Node {
             pos: target,
             states: trial,
@@ -878,6 +905,7 @@ impl NavCore {
             world: Some(Rc::new(world)),
             stable: Some(Rc::new(stable)),
             rank,
+            fired,
         }))
     }
 }
