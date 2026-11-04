@@ -293,6 +293,7 @@ class RouteFollower:
         self.nav = nav
         self.steps = list(steps)
         self.doors = nav.local_doors(set(Key))  # the plan only routes through doors we can open
+        self._lift_sectors = {s for t in nav.triggers if not t.permanent for s in t.effects}
         self.keys = set(keys or ())
         self.states = {s: set(h) for s, h in (states or nav.initial_states()).items()}
         self.replan_level = replan_level
@@ -773,11 +774,21 @@ class RouteFollower:
                         self.log.add(obs.tic, f"waiting for sector {sector} to reach "
                                               f"{h} before jumping (now {live})")
                     self._jump_wait = (sector, live, obs.tic)
-                if obs.tic - self._jump_wait[2] < TICRATE:  # still moving recently
+                # still moving recently (a lift pauses ~3s at the bottom before coming back)
+                still_for = 5 * TICRATE if sector in self._lift_sectors else TICRATE
+                if obs.tic - self._jump_wait[2] < still_for:
                     self._lineup_tic = None
                     self._progress_tic = obs.tic
                     hold = ((jump.runup[0] - obs.x) * 0.3, (jump.runup[1] - obs.y) * 0.3)
                     return self.motion.drive(obs, hold, heading)
+                if live is None or live[0] < h[0] - 0.5:
+                    # Stopped lower than the jump needs (taking off higher is fine): it
+                    # won't make it from here, so find another way with things as they are.
+                    self._jump_wait = None
+                    if self._replan(obs, f"sector {sector} at {live}, too low for the jump",
+                                    live_only=True):
+                        return self.motion.drive(obs, (0.0, 0.0), heading)
+                    return self._fail(obs, "jump takeoff too low and no other way")
         # As exactly as the engine check did it: on the spot, square on, standing still
         # (some jumps only just make it). Settling longer than a second: go anyway.
         settled = math.dist((obs.x, obs.y), jump.runup) < 1.5 and abs(diff) <= 0.75 \
