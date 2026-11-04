@@ -1009,7 +1009,9 @@ class Navigator:
         keeps you on the highest floor anywhere under your box, so you only fall once the
         whole box is past the ledge, and up there it must fit (not straddle a wall, nor an
         opening too low for someone at `top`). A gap exactly as wide as the box can't be
-        dropped into (MAP15's 32-wide strip by a low opening: you're stopped a hair short)."""
+        dropped into (MAP15's 32-wide strip by a low opening: you're stopped a hair short).
+        Only walls and ceilings are checked (the map's initial ceilings): floors past the
+        ledge may have moved, and a teleport line just past it means you never land (MAP13)."""
         key = (li, high, top)
         cache = self.__dict__.setdefault("_landable_cache", {})
         if key not in cache:
@@ -1031,8 +1033,8 @@ class Navigator:
                 t = i / steps
                 for d in (clear, clear + 4, clear + 8, clear + 16, clear + 32):
                     x, y = a.x + dx * t + nx * d, a.y + dy * t + ny * d
-                    fits, floor, ceil, *_ = self._probe._check(x, y, top)
-                    if fits and floor < top and ceil - top >= PLAYER_HEIGHT:
+                    fits, _floor, ceil, *_ = self._probe._check(x, y, top)
+                    if fits and ceil - top >= PLAYER_HEIGHT:
                         ok = True
                         break
                 if ok:

@@ -45,10 +45,14 @@ class Timing:
     hold: int | None = None
 
 
-# vanilla speeds in units/tic (p_spec.h): doors 2 (blazing 8), plats 4 (blazing 8),
-# floors and ceilings 1 (turbo/fast 4), stairs 1/4 (turbo 4)
+# vanilla speeds in units/tic (p_spec.h, p_plats.c): doors 2 (blazing 8); lifts 4 (blazing 8),
+# perpetual lifts 1, the "change texture" raises 1/2 (they're plats, not floors); floors and
+# ceilings 1 (turbo/fast 4), stairs 1/4 (turbo 4)
 DOOR_SPEED, DOOR_BLAZE = 2, 8
 PLAT_SPEED, PLAT_BLAZE = 4, 8
+PERPETUAL_SPEED = 1
+PLAT_CHANGE_SPEED = 0.5
+PLAT_CHANGE = {14, 15, 20, 22, 47, 66, 67, 68, 95}  # raiseAndChange, raiseToNearestAndChange
 FLOOR_SPEED, FLOOR_FAST = 1, 4
 DOOR_WAIT = 150          # VDOORWAIT
 PLAT_WAIT = 3 * TICRATE  # PLATWAIT
@@ -133,8 +137,12 @@ class MoverModel:
                 hold = 30 * TICRATE
             else:
                 hold = DOOR_WAIT if "wait" in description else None
-        elif special in LIFT or special in PERPETUAL_LIFT:
+        elif special in LIFT:
             speed, hold = (PLAT_BLAZE if fast else PLAT_SPEED), PLAT_WAIT
+        elif special in PERPETUAL_LIFT:
+            speed, hold = PERPETUAL_SPEED, PLAT_WAIT
+        elif special in PLAT_CHANGE:
+            speed, hold = PLAT_CHANGE_SPEED, None
         elif special in STAIRS:
             speed, hold = (FLOOR_FAST if fast else FLOOR_SPEED / 4), None
         elif special in CRUSHER:
