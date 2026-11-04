@@ -54,7 +54,10 @@ SHOT_HEIGHT = 36  # bullets leave the player at z + 28 + 8, and level: no aiming
 MIN_PORTAL = 4.0  # narrower portals are nodebuilder slivers, never the real way through
 LEG_SPEED = 12.0  # units/tic assumed when timing legs against lifts and doors (full run ~16)
 EXIT_FLOOR = -1000  # pseudo-trigger lines below this: exit floors (Navigator._exit_floors)
-ALT_TRIGGERS = 6   # lines producing the same change tried per node (if they leave different reach)
+ALT_TRIGGERS = 1   # lines producing the same change tried per node (if they leave different reach)
+LEDGE_TICS = 4  # ...tics a jump's box may stay over its ledge with a wall right beside it
+LONG_LEDGE_TICS = 30  # ...or at all (an edge walk, not a jump)
+PIN_MARGIN = 3.0  # how near a wall counts as beside the box
 MIN_SHOT_SPAN = 6.0  # degrees a gun line must span from where it's shot (aim isn't exact)
 BOX_SLACK = 0.25  # the box must clear walls by this much: no one threads a gap exactly 32 wide
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
@@ -318,6 +321,22 @@ class Navigator:
                     self._swgrid[cell].append(edge)
         return self._swgrid
 
+    def _pinned(self, x: float, y: float, z: float, chosen: dict, init) -> bool:
+        """A wall (static, a solid thing, or a floor more than a step above `z` at the
+        heights being assumed) within PIN_MARGIN of the box at (x, y)?"""
+        r = PLAYER_RADIUS + PIN_MARGIN
+        grid = self._static_wall_grid()
+        edges = {e for cell in _cells(x - r, y - r, x + r, y + r) for e in grid.get(cell, ())}
+        if any(_box_hits_segment(x, y, r, e) for e in edges):
+            return True
+        for dx, dy in ((-r, -r), (0, -r), (r, -r), (r, 0), (r, r), (0, r), (-r, r), (-r, 0)):
+            q = self.mesh.poly_at(x + dx, y + dy)
+            if q is not None and _inside(q.vertices, x + dx, y + dy):
+                f = chosen.get(q.sector, init[q.sector])[0]
+                if f > z + MAX_STEP:
+                    return True
+        return False
+
     def _box_hits_static_wall(self, x: float, y: float) -> bool:
         """Does the player's box at (x, y) straddle a static wall or solid thing edge?"""
         r = PLAYER_RADIUS - 0.1
@@ -539,6 +558,8 @@ class Navigator:
         x, y = takeoff
         z, vz = float(floor), 0.0
         airborne = False
+        held = 0  # tics still held up by the ledge after takeoff
+        pinned = False  # ...with a wall right beside the box meanwhile
         for _ in range(120):
             nx_, ny_ = x + n[0] * v, y + n[1] * v
             for line in crossed((x, y), (nx_, ny_)):
@@ -575,6 +596,16 @@ class Navigator:
                     requires = frozenset((s, hh) for s, hh in chosen.items()
                                          if hh != init[s] or s in moving)
                     return Jump(-1, {src}, land.index, on, back, takeoff, v, requires)
+                if not airborne:
+                    # Still on the ledge, the box hanging over the drop. Fine for a few tics
+                    # (an angled takeoff), but a walk along a strip narrower than the box with
+                    # a wall on the other side is down to the last unit (MAP27's 8-unit strip
+                    # by a block: 2 units off and the box caught it), and any long one is no
+                    # jump (MAP27: 660 units with the centre over a pit).
+                    held += 1
+                    pinned = pinned or self._pinned(x, y, z, chosen, init)
+                    if held > LONG_LEDGE_TICS or (held > LEDGE_TICS and pinned):
+                        return None
                 if airborne:
                     # Came down supported by something under the box that isn't ahead (e.g. a
                     # narrow bridge under the back half): that's a landing on it all the same.
@@ -1825,6 +1856,9 @@ class Navigator:
         # Point the search at the critical chain: actions the relaxed plan depends on first.
         rel_t, rel_k = self._relaxed_needs(start_poly.index, set(goal_polys), states0, keys0,
                                            key_items, actions)
+        # (used stair switches make a world of their own; other used one-shot lines are only
+        # not pressed again: in the signature they split worlds that are the same, MAP17)
+        stair_lines = {t.line for t in actions if t.shift_from is not None}
         counter = itertools.count()
         root = Node(start, states0, frozenset(), keys0, [],
                     self.reachable(start_poly.index, states0, doors_for(keys0)),
@@ -1882,7 +1916,8 @@ class Navigator:
             # (with them in the world, every combination of lifts still down was a world of
             # its own and nothing could be pruned: MAP14's search grew tenfold)
             sig = (node.added - frozenset(node.temp), node.keys,
-                   frozenset(node.world if node.world is not None else node.reach), node.fired)
+                   frozenset(node.world if node.world is not None else node.reach),
+                   frozenset(l for l in node.fired if l in stair_lines))
             tm = timers(node)
             if dominated(sig, tm):
                 continue
@@ -2167,6 +2202,32 @@ class Navigator:
                 fired.add(t.line)
                 for sector, hs in t.effects_now(states).items():
                     states[sector].update(hs)
+                if t.recompute is not None:  # and as it'd be with everything round it down
+                    for sector, hs in self._low_variant(t)[0].items():
+                        states[sector].update(hs)
+
+    def _low_variant(self, t: "TriggerLine") -> tuple[dict, frozenset]:
+        """A height-dependent trigger's effects with the sectors round it at the lowest any
+        trigger puts them, and the (sector, heights) that assumes (MAP27: the red key's
+        pedestal comes down to 8 once the platforms round it are down)."""
+        if not hasattr(self, "_lowest"):
+            low = {i: h for i, h in enumerate(self.movers.initial)}
+            for u in self.triggers:
+                for sec, hs in u.effects.items():
+                    for h in hs:
+                        if h[0] < low[sec][0]:
+                            low[sec] = h
+            self._lowest = low
+            self._low_variants = {}
+        if t.line not in self._low_variants:
+            i = self.triggers.index(t)
+            own = set(t.sectors)
+            reps = [(sec, self._lowest[sec] if sec not in own else self.movers.initial[sec])
+                    for sec in t.relevant]
+            assumes = frozenset((sec, h) for sec, h in reps if h != self.movers.initial[sec])
+            self._low_variants[t.line] = (self.effects_from_reps(i, reps) if assumes else {},
+                                          assumes)
+        return self._low_variants[t.line]
 
     def _relaxed_needs(self, start: int, goals: set[int], states0: HeightStates,
                        keys0: frozenset, key_items: KeyItems,
@@ -2180,15 +2241,24 @@ class Navigator:
                                                          triggers)
         doors_all = self.local_doors(keys_all)
         producers: dict[tuple[int, Heights], list[TriggerLine]] = {}
+        assumed: dict[tuple[int, Heights], frozenset] = {}  # what a low variant relies on
         for t in triggers:
             if t.activators & reach_all:
                 for s, hs in t.effects.items():
                     for h in hs:
                         producers.setdefault((s, h), []).append(t)
+                if t.recompute is not None:
+                    effects, assumes = self._low_variant(t)
+                    for s, hs in effects.items():
+                        for h in hs:
+                            if (s, h) not in producers:
+                                producers[(s, h)] = [t]
+                                assumed[(s, h)] = assumes
         mesh = self.mesh
         need_t: set[int] = set()
         need_k: set[Key] = set()
         without: dict[int, set[int]] = {}  # sector -> reach with its needed height taken away
+        relied: set = set()  # heights a low variant (_low_variant) relies on
         queue = [goals]
         seen_goals: set[frozenset] = set()
         while queue and len(seen_goals) < 200:
@@ -2258,6 +2328,12 @@ class Navigator:
                             if k is not None and k not in need_k:
                                 need_k.add(k)
                                 queue.append({sp for sp, _ in key_items[k]})
+                for sh2 in assumed.get(sh, ()):  # the heights round it that relies on
+                    relied.add(sh2)
+                    for t2 in producers.get(sh2, [])[:1]:
+                        if t2.line not in need_t:
+                            need_t.add(t2.line)
+                            queue.append(set(t2.activators))
                 for t in ([first] if first is not None else cands[:1]):
                     if t.line not in need_t:
                         need_t.add(t.line)
@@ -2281,6 +2357,13 @@ class Navigator:
                             if k is not None and k not in need_k:
                                 need_k.add(k)
                                 queue.append({sp for sp, _ in key_items[k]})
+        # For those the change is what's needed, not the line: any other line making it counts
+        # too (MAP27: the platforms can be lowered from several places, and the ones the
+        # relaxed plan happens to pick leave you shut in the platform room)
+        # (only for heights a height-dependent trigger relies on round it: elsewhere the extra
+        # lines just widen the search, MAP15)
+        need_t |= {t.line for t in triggers
+                   if any((s, h) in relied for s, hs in t.effects.items() for h in hs)}
         return need_t, need_k
 
     def _activation_point(self, t: TriggerLine, pos: Point, reach: set[int]) -> Point:

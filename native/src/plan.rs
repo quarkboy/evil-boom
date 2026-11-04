@@ -26,7 +26,7 @@ pub fn phase(i: usize, t0: Instant) {
 }
 
 /// Navigator ALT_TRIGGERS
-pub const ALT_TRIGGERS: usize = 6;
+pub const ALT_TRIGGERS: usize = 1;
 
 pub const ITEM_RADIUS: f64 = 20.0;
 pub const PICKUP_MARGIN: f64 = 2.0;
@@ -612,6 +612,8 @@ impl NavCore {
             t.kind != Kind::DR && !t.effects.is_empty()
         }).collect();
         let mut moving_off: HashSet<Pair> = HashSet::new();
+        // (only used stair switches in the signature: see Navigator.plan)
+        let stair_lines: HashSet<i64> = actions.iter().filter(|&&i| self.pd().triggers[i].shift_from.is_some()).map(|&i| self.pd().triggers[i].line).collect();
         let root_reach = Rc::new(self.reach_from(py, start_poly, &states0, keys0)?);
         let root = Node {
             pos: start, states: states0, added: BTreeSet::new(), keys: keys0, legs: Rc::new(Vec::new()),
@@ -648,7 +650,7 @@ impl NavCore {
             let sig: SigKey = {
                 let added: Vec<Pair> = node.added.iter().copied().filter(|k| !node.temp.contains_key(k)).collect();
                 let w = node.world.as_ref().unwrap_or(&node.reach);
-                (added, node.keys, sorted_reach(w), node.fired.iter().copied().collect())
+                (added, node.keys, sorted_reach(w), node.fired.iter().copied().filter(|l| stair_lines.contains(l)).collect())
             };
             let tm = node.temp.clone();
             {

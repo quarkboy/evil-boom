@@ -391,6 +391,17 @@ identically.
   made from where it's stuck if the switch is in reach (through a door the press opens);
   run-ups strafe to hold the jump's line; a sector still rising to the plan's height is
   waited for at the edge rather than treated as an unexpected drop (MAP29).
+- No walking a ledge narrower than the box as a "jump": a jump's box may stay over its
+  takeoff ledge only 4 tics with a wall within 3 units of it, 30 at most otherwise (MAP27:
+  an 8-unit strip between a pit and a block, a 660-unit walk with the centre over a pit).
+  Tried and dropped: requiring every jump to work 3 units to either side (lost jumps E4M2
+  and E4M6 need).
+- Relaxed plan: a height-dependent trigger's result with everything round it at its lowest
+  is part of the fully-fired world, and what that relies on round it is needed too, by
+  effect: any line making the same change counts (MAP27: the platforms under the red key's
+  pedestal; only for these, wider it slowed MAP15). Lines with the same effect: one per
+  node again (more doubled MAP17's planning). Only used stair switches split the search's
+  worlds.
 
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
