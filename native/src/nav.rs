@@ -747,7 +747,9 @@ impl NavCore {
         let none = HashSet::new();
         let mut kept = Vec::with_capacity(pts.len());
         for (i, &p) in pts.iter().enumerate() {
-            if i == 0 || i == pts.len() - 1 || pinned.contains(&pkey(p)) || self.box_hits(p, p, &none, Some(exempt), st)?.is_empty() {
+            // (not dropped where going straight on would walk off a ledge: Navigator._box_fits_path)
+            if i == 0 || i == pts.len() - 1 || pinned.contains(&pkey(p)) || self.box_hits(p, p, &none, Some(exempt), st)?.is_empty()
+                || self.ledges_crossed(*kept.last().unwrap(), pts[i + 1], exempt) {
                 kept.push(p);
             }
         }

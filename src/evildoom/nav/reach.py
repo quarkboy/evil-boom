@@ -2397,8 +2397,15 @@ class Navigator:
         if len(pts) < 2:
             return pts
         # Interior waypoints the box can't occupy are dropped; detours reconnect neighbours.
-        pts = [p for i, p in enumerate(pts)
-               if i == 0 or i == len(pts) - 1 or p in pinned or not self._box_hits(p, p, exempt=exempt)]
+        # Not where going straight on instead would walk off a ledge (MAP29's narrow stair
+        # round a pit: every point on it touches a wall, and the straight line is over the pit).
+        kept = []
+        for i, p in enumerate(pts):
+            if i == 0 or i == len(pts) - 1 or p in pinned \
+                    or not self._box_hits(p, p, exempt=exempt) \
+                    or self._ledges_crossed(kept[-1], pts[i + 1], exempt):
+                kept.append(p)
+        pts = kept
         out = [pts[0]]
         for b in pts[1:]:
             a = out[-1]
