@@ -378,6 +378,7 @@ class RouteFollower:
         self._press_tries = 0
         self._before: dict | None = None
         self._cross_tic: int | None = None
+        self._height_wait: int | None = None
         self._start_step(tic)
 
     def _start_step(self, tic: int) -> None:
@@ -1113,6 +1114,24 @@ class RouteFollower:
         heading = _heading(pos, target)
         return self.motion.move(obs, heading, min(8.0, 0.3 * math.dist(pos, target) + 2), heading)
 
+    def _at_shot_height(self, obs: Observation, step: Step) -> bool:
+        """Is the floor we're on at a height where a level shot hits the gun line? (Shots
+        go straight out at SHOT_HEIGHT; some switches are hit from a lift at the right
+        height.) Waits at most a few seconds, then lets the shot be tried anyway."""
+        here = self.nav.mesh.poly_at(obs.x, obs.y)
+        shot = self.nav.shot_floors.get((step.trigger.line, here.index)) if here else None
+        if shot is None:
+            return True
+        floor = obs.heights[here.sector][0]
+        if shot[0] <= floor <= shot[1]:
+            return True
+        if self._height_wait is None:
+            self._height_wait = obs.tic
+            self.log.add(obs.tic, f"waiting to be at the right height to shoot line "
+                                  f"{step.trigger.line} (floor {floor:.0f}, needs "
+                                  f"{shot[0]:.0f}..{shot[1]:.0f})")
+        return obs.tic - self._height_wait > 6 * TICRATE
+
     def _carry_on(self, obs: Observation) -> Controls:
         """Right after finishing a step: whatever comes next (a settle sub-step or walking)."""
         if self.done or self.failed:
@@ -1165,6 +1184,10 @@ class RouteFollower:
             if facing:
                 self.log.add(obs.tic, f"facing line {step.trigger.line}")
                 self._next_step(obs.tic)
+            return controls
+        if step.action == "shoot" and self._action_tic is None and facing \
+                and not self._at_shot_height(obs, step):
+            self._progress_tic = obs.tic  # waiting for the floor (a lift) to bring us level
             return controls
         if self._action_tic is None and facing:
             self._action_tic = obs.tic

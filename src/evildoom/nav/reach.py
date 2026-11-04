@@ -36,6 +36,8 @@ PICKUP_MARGIN = 2  # how far inside touching range a pickup spot must be
 PATH_CLEARANCE = 24
 WAYPOINT_CLEARANCE = 18  # minimum distance from a waypoint to any wall line
 THING_CLEARANCE = 6  # extra room left round solid things when detouring past them
+SHOT_HEIGHT = 36  # bullets leave the player at z + 28 + 8, and level: no aiming up or down
+MIN_PORTAL = 4.0  # narrower portals are nodebuilder slivers, never the real way through
 LEG_SPEED = 12.0  # units/tic assumed when timing legs against lifts and doors (full run ~16)
 BOX_SLACK = 0.25  # the box must clear walls by this much: no one threads a gap exactly 32 wide
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
@@ -186,6 +188,8 @@ class Navigator:
         self.strict_fit = False  # True: find_path refuses paths the box (maybe) can't get through
         # (switch line, poly) -> sectors that must be open for the use trace (activators_now)
         self.use_gates: dict[tuple[int, int], frozenset[int]] = {}
+        # (gun line, poly) -> floors to stand on there for a level shot to hit it
+        self.shot_floors: dict[tuple[int, int], tuple[float, float]] = {}
         self.triggers = self._find_triggers()
         self.teleports = self._find_teleports()
         self.tele_from: dict[int, list[Teleport]] = {}
@@ -533,7 +537,9 @@ class Navigator:
             # The portal's own line is judged by flags/heights in passable(), not here.
             walls = {e for cell in _cells(*box) for e, line in grid.get(cell, ())
                      if line is None or line != portal.linedef}
-            ok = _box_fits_somewhere(portal, r, walls)
+            # Slivers (BSP leftovers a unit or so wide, e.g. along MAP16's lift edge) are never
+            # the real way through: where it's open there's a wide portal next to them.
+            ok = portal.width >= MIN_PORTAL and _box_fits_somewhere(portal, r, walls)
             fits.append(ok)
             if not ok:
                 continue
@@ -648,13 +654,24 @@ class Navigator:
                 case Trigger.W1 | Trigger.WR:
                     activators = crossing.get(line.index, set()) \
                         | touching_any.get(line.index, set())
-                case _:  # gun triggers: shoot from anywhere with a view of the line
-                    activators = touching_any.get(line.index, set())
+                case _:  # gun triggers: shoot from anywhere with a view of the line...
+                    candidates = touching_any.get(line.index, set())
                     a, b = self.map.vertexes[line.v1], self.map.vertexes[line.v2]
-                    for t in (0.25, 0.5, 0.75):
-                        point = (a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
-                        activators = activators | self._line_of_sight_polys(
+                    points = [(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+                              for t in (0.25, 0.5, 0.75)]
+                    for point in points:
+                        candidates = candidates | self._line_of_sight_polys(
                             point, ignore=line.index)
+                    # ...where a level shot (no aiming up or down) actually hits it
+                    activators = set()
+                    for pi in candidates:
+                        ranges = [r for point in points
+                                  if (r := self._shot_floors(self.mesh.polys[pi].center,
+                                                             point, line.index))]
+                        if ranges:
+                            activators.add(pi)
+                            self.shot_floors[(line.index, pi)] = max(
+                                ranges, key=lambda r: r[1] - r[0])
             sectors = self._affected(line.index, info)
             out.append(TriggerLine(line.index, info, sectors,
                                    self.movers.effects(line.special, sectors), activators))
@@ -745,12 +762,21 @@ class Navigator:
     def activators_now(self, t: TriggerLine, states: HeightStates,
                        doors: Doors | None = None) -> set[int]:
         """The trigger's activator polys whose use trace isn't blocked by a closed sector
-        with these heights (with `doors`, ones we can open count as open)."""
+        with these heights (with `doors`, ones we can open count as open), and for gun
+        lines, where the floor can be at a height a level shot hits the line from."""
         if t.line < 0:
             return t.activators
-        return {p for p in t.activators
-                if all(any(h[1] - h[0] > 0 for h in states[s]) or (doors and s in doors)
-                       for s in self.use_gates.get((t.line, p), ()))}
+        out = set()
+        for p in t.activators:
+            if not all(any(h[1] - h[0] > 0 for h in states[s]) or (doors and s in doors)
+                       for s in self.use_gates.get((t.line, p), ())):
+                continue
+            shot = self.shot_floors.get((t.line, p))
+            if shot is not None and not any(shot[0] <= h[0] <= shot[1]
+                                            for h in states[self.mesh.polys[p].sector]):
+                continue
+            out.add(p)
+        return out
 
     def _boss_triggers(self) -> list[TriggerLine]:
         """Vanilla A_BossDeath / A_KeenDie: killing every monster of a type fires a tagged
@@ -846,6 +872,39 @@ class Navigator:
         grid = self._sight_blockers()
         segs = {s for cell in _cells(*a, *b) for s in grid.get(cell, ())}
         return not any(li != ignore and _segments_cross(a, b, p, q) for p, q, li in segs)
+
+    def _shot_floors(self, p: Point, q: Point, target: int) -> tuple[float, float] | None:
+        """Floors to stand on at p so a level shot hits line `target` at q: bullets leave at
+        SHOT_HEIGHT above the feet and go straight (no aiming up or down), so every two-sided
+        line on the way must be open at that height, and the target hit where it's solid.
+        (Map's initial heights.) None if no floor works."""
+        m, init = self.map, self.movers.initial
+        lo, hi = -math.inf, math.inf   # shot heights that get through
+        for cell in _cells(min(p[0], q[0]), min(p[1], q[1]), max(p[0], q[0]), max(p[1], q[1])):
+            for li in self.mesh._line_grid.get(cell, ()):
+                if li == target:
+                    continue
+                line = m.linedefs[li]
+                v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                if not _segments_cross(p, q, (v1.x, v1.y), (v2.x, v2.y)):
+                    continue
+                f, b = m.front_sector(line), m.back_sector(line)
+                if f is None or b is None:
+                    return None
+                lo = max(lo, init[f][0], init[b][0])
+                hi = min(hi, init[f][1], init[b][1])
+        line = m.linedefs[target]
+        f, b = m.front_sector(line), m.back_sector(line)
+        if b is None:  # a wall: anywhere between its sector's floor and ceiling
+            lo, hi = max(lo, init[f][0]), min(hi, init[f][1])
+        else:  # two-sided: only its upper or lower part is solid
+            opening = (max(init[f][0], init[b][0]), min(init[f][1], init[b][1]))
+            below = (lo, min(hi, opening[0]))
+            above = (max(lo, opening[1]), hi)
+            lo, hi = below if below[1] - below[0] >= above[1] - above[0] else above
+        if hi - lo < 1:
+            return None
+        return lo - SHOT_HEIGHT, hi - SHOT_HEIGHT
 
     def _line_of_sight_polys(self, target: Point, max_range: float = 2048,
                              ignore: int | None = None) -> set[int]:
@@ -1229,6 +1288,20 @@ class Navigator:
             reach: set[int]
             steps: int = 0
             pending: tuple | None = None  # (prev pos, prev states, prev keys, trigger, key)
+            temp: frozenset = frozenset()  # temporary heights the last trigger made (a lift
+            #                                down for 3s): only the next leg can use them
+
+        temporary = self._temporary_heights()
+
+        def expire(states: HeightStates, temp: frozenset) -> HeightStates:
+            """The heights once a node's temporary states have run out."""
+            if not temp:
+                return states
+            out = {s: set(h) for s, h in states.items()}
+            for s, h in temp:
+                if len(out[s]) > 1:
+                    out[s].discard(h)
+            return out
 
         keys0 = frozenset(keys)
         states0 = {s: set(h) for s, h in (states or self.initial_states()).items()}
@@ -1277,13 +1350,13 @@ class Navigator:
                                  goal_polys[gp])
 
             def push(target: Point, trial: HeightStates, added: frozenset, ks: frozenset,
-                     t: TriggerLine | None, key: Key | None) -> None:
+                     t: TriggerLine | None, key: Key | None, temp: frozenset = frozenset()) -> None:
                 target_poly = mesh.poly_at(*target)
                 if target_poly is None:
                     return
                 after = self.reachable(target_poly.index, trial, doors_for(ks))
                 child = Node(target, trial, added, ks, node.legs, after, node.steps + 1,
-                             (node.pos, node.states, node.keys, t, key))
+                             (node.pos, node.states, node.keys, t, key), temp)
                 progress = bool(after - node.reach) or key is not None
                 relevant = (t is not None and t.line in rel_t) or (key is not None and key in rel_k)
                 priority = (not goal_polys.keys() & after, not relevant, not progress,
@@ -1308,7 +1381,10 @@ class Navigator:
                 if new not in options or d < options[new][0]:
                     options[new] = (d, t, target, usable)
             for new, (_, t, target, usable) in options.items():
-                trial = apply_trigger(node.states, t)
+                base = expire(node.states, node.temp)
+                trial = apply_trigger(base, t)
+                temp = frozenset((s, h) for s, hs in t.effects.items() for h in hs
+                                 if (s, h) in temporary and h not in base[s])
                 # Where we stand to use it matters (a door pressed from the pit below it is
                 # useless): try the default spot and a few others it can be used from, keep
                 # the one leaving the most reachable.
@@ -1323,7 +1399,7 @@ class Navigator:
                 doors_k = doors_for(node.keys)
                 best = max(spots, key=lambda sp: len(self.reachable(
                     mesh.poly_at(*sp).index, trial, doors_k)) if mesh.poly_at(*sp) else -1)
-                push(best, trial, node.added | new, node.keys, t, None)
+                push(best, trial, (node.added - node.temp) | new, node.keys, t, None, temp)
             # Keys: for each key not yet held, the reachable pickup spot that leaves the most
             # reachable afterwards (some spots are slivers you can't walk on from).
             for key, spots in key_items.items():
@@ -1335,7 +1411,8 @@ class Navigator:
                     _, spot = max(here, key=lambda s: (
                         len(self.reachable(s[0], node.states, doors_for(ks))),
                         -math.dist(node.pos, s[1])))
-                    push(spot, node.states, node.added, ks, None, key)
+                    push(spot, expire(node.states, node.temp), node.added - node.temp, ks, None,
+                         key)
         return None
 
     def _upper_bound(self, start: int, states: HeightStates, keys: frozenset,
@@ -1549,7 +1626,8 @@ class Navigator:
                 if run:
                     out += self._straighten(self._box_fits_path(
                         self._push_from_corners(run, frozenset(crossed), pinned),
-                        frozenset(crossed), pinned), frozenset(crossed), pinned)
+                        frozenset(crossed), pinned), frozenset(crossed), pinned,
+                        {mesh.polys[p].sector for p, _ in chain})
                     run = []
                 out.append(None)
             else:
@@ -1657,11 +1735,13 @@ class Navigator:
         return out
 
     def _straighten(self, pts: list[Point], exempt: frozenset,
-                    pinned: set[Point] = frozenset()) -> list[Point]:
+                    pinned: set[Point] = frozenset(),
+                    sectors: set[int] | None = None) -> list[Point]:
         """Last pass: from each waypoint go straight to the farthest later one the player's
         box reaches without touching a wall or walking off a ledge, never skipping a pinned
         point (jump run-ups/takeoffs). Removes the back-and-forth jitter that corner pushes,
-        nudges and detours can leave (MAP02's bars), and any needless corners."""
+        nudges and detours can leave (MAP02's bars), and any needless corners. Shortcuts
+        stay over the route's `sectors` (not across a lift that's only sometimes low)."""
         if len(pts) < 3:
             return pts
         out, i = [pts[0]], 0
@@ -1674,12 +1754,25 @@ class Navigator:
                 b = pts[j]
                 ignore = self._box_hits(a, a, exempt=exempt) | self._box_hits(b, b, exempt=exempt)
                 if not self._box_hits(a, b, ignore, exempt) \
-                        and not self._ledges_crossed(a, b, exempt):
+                        and not self._ledges_crossed(a, b, exempt) \
+                        and self._within_sectors(a, b, sectors):
                     best = j
                     break
             out.append(pts[best])
             i = best
         return out
+
+    def _within_sectors(self, a: Point, b: Point, sectors: set[int] | None) -> bool:
+        """Does the segment a-b stay over the given sectors (sampled every 8 units)?"""
+        if sectors is None:
+            return True
+        n = max(1, int(math.dist(a, b) // 8))
+        for i in range(n + 1):
+            poly = self.mesh.poly_at(a[0] + (b[0] - a[0]) * i / n,
+                                     a[1] + (b[1] - a[1]) * i / n)
+            if poly is None or poly.sector not in sectors:
+                return False
+        return True
 
     def _squeeze_points(self, a: Point, b: Point, ignore, exempt: frozenset) -> list[Point]:
         """Points along a-b where the player's box doesn't fit."""
