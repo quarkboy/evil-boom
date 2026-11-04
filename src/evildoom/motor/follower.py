@@ -875,7 +875,14 @@ class RouteFollower:
                 if obs.tic - self._jump_wait[2] < still_for:
                     self._lineup_tic = None
                     self._progress_tic = obs.tic
-                    hold = ((jump.runup[0] - obs.x) * 0.3, (jump.runup[1] - obs.y) * 0.3)
+                    spot = jump.runup
+                    here = self._standing(obs)[0]
+                    if here is not None and here.sector == sector:
+                        # Riding it (we set it off on the way to the run-up: MAP06): stand
+                        # in the middle, clear of anything over the edges, or it can't come
+                        # back up with us and goes down again.
+                        spot = here.center
+                    hold = ((spot[0] - obs.x) * 0.3, (spot[1] - obs.y) * 0.3)
                     return self.motion.drive(obs, hold, heading)
                 if live is None or live[0] < h[0] - 0.5:
                     # Stopped lower than the jump needs (taking off higher is fine): it
