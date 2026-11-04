@@ -6,7 +6,9 @@ maps; chains of movers that depend on each other's moved heights are approximate
 
 Boom generalized movers are not predicted yet (stock maps don't use them).
 """
+import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from evildoom.wad.mapdata import ML_TWOSIDED, MapData
 
@@ -30,6 +32,27 @@ CEIL_TO_FLOOR = {41, 43}
 CEIL_TO_FLOOR_8 = {44, 72}
 CEIL_HIGHEST = {40}
 CRUSHER = {6, 25, 49, 73, 77, 141}
+
+
+TICRATE = 35
+
+
+@dataclass(frozen=True)
+class Timing:
+    """How a mover gets to its target: `travel` tics to arrive (from the initial heights),
+    then it stays `hold` tics before heading back (None: it stays for good)."""
+    travel: int
+    hold: int | None = None
+
+
+# vanilla speeds in units/tic (p_spec.h): doors 2 (blazing 8), plats 4 (blazing 8),
+# floors and ceilings 1 (turbo/fast 4), stairs 1/4 (turbo 4)
+DOOR_SPEED, DOOR_BLAZE = 2, 8
+PLAT_SPEED, PLAT_BLAZE = 4, 8
+FLOOR_SPEED, FLOOR_FAST = 1, 4
+DOOR_WAIT = 150          # VDOORWAIT
+PLAT_WAIT = 3 * TICRATE  # PLATWAIT
+DOOR_CLOSE_30 = {16, 76}  # close, wait 30 s, open
 
 
 class MoverModel:
@@ -97,6 +120,28 @@ class MoverModel:
         if special in CRUSHER:
             return [(floor, floor + 8)]
         return []
+
+    def timing(self, special: int, description: str, s: int, target: Heights) -> Timing:
+        """How long the special takes to move sector s from its initial heights to `target`,
+        and how long it stays there (approximate: vanilla speeds, starting from rest)."""
+        floor, ceil = self.initial[s]
+        fast = "blazing" in description or "turbo" in description or "fast" in description
+        moved = max(abs(target[0] - floor), abs(target[1] - ceil))
+        if special in DOOR_OPEN or special in DOOR_CLOSE:
+            speed = DOOR_BLAZE if fast else DOOR_SPEED
+            if special in DOOR_CLOSE_30:
+                hold = 30 * TICRATE
+            else:
+                hold = DOOR_WAIT if "wait" in description else None
+        elif special in LIFT or special in PERPETUAL_LIFT:
+            speed, hold = (PLAT_BLAZE if fast else PLAT_SPEED), PLAT_WAIT
+        elif special in STAIRS:
+            speed, hold = (FLOOR_FAST if fast else FLOOR_SPEED / 4), None
+        elif special in CRUSHER:
+            speed, hold = (2 if fast else 1), 0
+        else:
+            speed, hold = (FLOOR_FAST if fast else FLOOR_SPEED), None
+        return Timing(int(math.ceil(moved / speed)) + 1, hold)
 
     def shortest_lower_texture(self, s: int) -> int:
         """Height of the shortest lower texture on the sector's two-sided lines (both sides).

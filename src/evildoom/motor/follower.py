@@ -27,7 +27,7 @@ from evildoom.nav.reach import (FRICTION, ITEM_RADIUS, MAX_STEP, PLAYER_HEIGHT, 
                                 RUN_THRUST, TELEPORTERS_FOR_PLAYERS, HeightStates, Jump,
                                 Navigator, _closest_on_segment, _closest_point, _line_mid,
                                 _segment_distance, _segments_cross, apply_trigger, can_cross)
-from evildoom.nav.walkthrough import Step, plan_from, steps_from_legs
+from evildoom.nav.walkthrough import Expect, Step, plan_from, steps_from_legs
 from evildoom.wad.specials import Category, Key, Trigger
 
 TICRATE = 35
@@ -87,6 +87,17 @@ class Controls:
     use: bool = False
     attack: bool = False
     run: bool = True
+
+
+@dataclass
+class Watch:
+    """A trigger's expected effect being checked as it plays out."""
+    expect: Expect
+    since: int                  # tic the trigger fired
+    line: int
+    reached: int | None = None  # tic it got there
+    late: bool = False          # logged as late
+    over: bool = False          # its hold window has run out
 
 
 @dataclass
@@ -292,6 +303,8 @@ class RouteFollower:
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
         self._lineup_tic: int | None = None  # when we arrived at a jump's run-up
         self._brake_until = -1               # after landing a jump, until we've stopped
+        self._jump_wait = None
+        self._watches: list[Watch] = []      # what fired triggers should be doing
         self._look = None    # last view angle we were aiming for
         self._next_step(0)
 
@@ -325,6 +338,8 @@ class RouteFollower:
             done = self.steps[self.step_i]
             if done.trigger is not None:
                 self.states = apply_trigger(self.states, done.trigger)
+                for e in done.expects:  # watch what it should do, against the timings
+                    self._watches.append(Watch(e, tic, done.trigger.line))
             if done.key is not None:
                 self.keys.add(done.key)
         self.step_i += 1
@@ -450,6 +465,7 @@ class RouteFollower:
         self._last_pos = pos
         if obs.tic - self._step_tic > GIVE_UP_TICS:
             return self._fail(obs, f"step {self.step_i + 1} taking too long")
+        self._check_watches(obs)
         if obs.keys is not None:  # the engine knows what we hold
             self.keys |= set(obs.keys)
         if self.phase == "walk":
@@ -697,7 +713,7 @@ class RouteFollower:
             route = nav.plan(pos, [goal], frozenset(self.keys), states, None,
                              max_expansions=200, max_seconds=3.0)
             if route is not None:
-                new = steps_from_legs(route.legs, step)
+                new = steps_from_legs(route.legs, step, nav)
                 self.steps[self.step_i:self.step_i + 1] = new
                 self.log.add(obs.tic, f"{why} at ({obs.x:.0f}, {obs.y:.0f}): back on track "
                                       f"via {len(new) - 1} extra step(s)")
@@ -723,6 +739,22 @@ class RouteFollower:
         """At the run-up: settle on the exact spot facing the takeoff, then start sprinting."""
         heading = _heading(jump.runup, jump.takeoff)
         diff = _norm(heading - obs.angle)
+        # The heights the jump was found with must be there, and not still moving (a floor
+        # that's still rising under the run-up).
+        # (If it has stopped somewhere else it's not coming: jump from there anyway.)
+        for sector, h in jump.requires:
+            live = obs.heights.get(sector)
+            if live is None or abs(live[0] - h[0]) > 0.5 or abs(live[1] - h[1]) > 0.5:
+                if self._jump_wait is None or self._jump_wait[:2] != (sector, live):
+                    if self._jump_wait is None or self._jump_wait[0] != sector:
+                        self.log.add(obs.tic, f"waiting for sector {sector} to reach "
+                                              f"{h} before jumping (now {live})")
+                    self._jump_wait = (sector, live, obs.tic)
+                if obs.tic - self._jump_wait[2] < TICRATE:  # still moving recently
+                    self._lineup_tic = None
+                    self._progress_tic = obs.tic
+                    hold = ((jump.runup[0] - obs.x) * 0.3, (jump.runup[1] - obs.y) * 0.3)
+                    return self.motion.drive(obs, hold, heading)
         # As exactly as the engine check did it: on the spot, square on, standing still
         # (some jumps only just make it). Settling longer than a second: go anyway.
         settled = math.dist((obs.x, obs.y), jump.runup) < 1.5 and abs(diff) <= 0.75 \
@@ -911,9 +943,13 @@ class RouteFollower:
         if use:
             self._last_use = obs.tic
         # Nothing to press here: it may need a walk-over line crossing again (a blazing lift
-        # that went back up), so replan from the live heights after a few seconds.
-        if waited == 5 * TICRATE and not opener and not switch_nearby:
-            if self._replan(obs, f"sector {sector} not coming", live_only=True):
+        # that went back up), so replan from the live heights after a few seconds; at once
+        # if we know the window we were counting on has run out.
+        if not opener and (waited == 5 * TICRATE and not switch_nearby
+                           or waited == TICRATE // 2 and self._window_over(sector)):
+            why = f"missed sector {sector}'s window" if self._window_over(sector) else \
+                f"sector {sector} not coming"
+            if self._replan(obs, why, live_only=True):
                 return self.motion.drive(obs, (0.0, 0.0), look)
         if waited > 15 * TICRATE:
             if not self._replan(obs, f"sector {sector} not opening"):
@@ -923,6 +959,38 @@ class RouteFollower:
         return controls
 
     # --- acting at the end of a step ------------------------------------------------------
+
+    def _check_watches(self, obs: Observation) -> None:
+        """Compare what fired triggers are doing with what the plan expected, and log it:
+        arrivals, lateness, and when a temporary state (lift down, door open) runs out."""
+        for w in self._watches:
+            e = w.expect
+            live = obs.heights.get(e.sector)
+            if live is None or w.over:
+                continue
+            at = abs(live[0] - e.heights[0]) < 1 and abs(live[1] - e.heights[1]) < 1
+            if w.reached is None:
+                if at:
+                    w.reached = obs.tic
+                    took = (obs.tic - w.since) / TICRATE
+                    if e.needed or took > 1.5 * e.travel / TICRATE + 1:
+                        self.log.add(obs.tic, f"sector {e.sector} reached {e.heights} after "
+                                              f"{took:.1f}s (expected {e.travel / TICRATE:.1f}s)")
+                elif not w.late and obs.tic - w.since > 1.5 * e.travel + 2 * TICRATE:
+                    w.late = True
+                    self.log.add(obs.tic, f"sector {e.sector} hasn't reached {e.heights} "
+                                          f"{(obs.tic - w.since) / TICRATE:.1f}s after line "
+                                          f"{w.line} (expected {e.travel / TICRATE:.1f}s); "
+                                          f"it's at {live}")
+            elif e.hold is not None and (not at and obs.tic - w.reached > e.hold
+                                         or obs.tic - w.reached > e.hold + e.travel):
+                w.over = True
+                if e.needed:
+                    self.log.add(obs.tic, f"sector {e.sector}'s window is over (line {w.line})")
+
+    def _window_over(self, sector: int) -> bool:
+        """Did a temporary state we were relying on for this sector run out?"""
+        return any(w.over and w.expect.sector == sector for w in self._watches)
 
     def _effect_started(self, obs: Observation, t) -> bool:
         """Has the trigger done something? A sector it moves has moved since we fired it, or

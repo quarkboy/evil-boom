@@ -188,13 +188,27 @@ class Navigator:
         self.set_jumps(self._find_jumps())
 
     def set_jumps(self, jumps: list["Jump"]) -> None:
-        """Replace the jump edges (e.g. with only the engine-verified ones)."""
+        """Replace the jump edges (e.g. with only the engine-verified ones). Jumps that need
+        a lift or timed door at a height it only passes through or waits at are left out:
+        no stock level needs a jump off something that's about to move."""
         for p, edges in self.tele_from.items():
             self.tele_from[p] = [e for e in edges if not isinstance(e, Jump)]
-        self.jumps = list(jumps)
+        temporary = self._temporary_heights()
+        self.jumps = [j for j in jumps if not any(r in temporary for r in j.requires)]
         for j in self.jumps:
             for p in j.src_polys:
                 self.tele_from.setdefault(p, []).append(j)
+
+    def _temporary_heights(self) -> set[tuple[int, Heights]]:
+        """(sector, heights) that only movers which come back (lifts, timed doors, crushers)
+        produce: the sector won't stay like that."""
+        if not hasattr(self, "_temporary"):
+            lasting = {(s, h) for t in self.triggers if t.permanent
+                       for s, hs in t.effects.items() for h in hs}
+            lasting |= {(s, h) for s, h in enumerate(self.movers.initial)}
+            self._temporary = {(s, h) for t in self.triggers if not t.permanent
+                               for s, hs in t.effects.items() for h in hs} - lasting
+        return self._temporary
 
     def edge_ok(self, tp: Teleport, states: HeightStates) -> bool:
         """Can this teleport/jump edge be taken with these heights? A walk-over teleport only

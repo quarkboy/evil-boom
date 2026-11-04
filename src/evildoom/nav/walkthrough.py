@@ -8,14 +8,28 @@ from .reach import HeightStates, Navigator, Path, Point, TriggerLine
 
 
 @dataclass
+class Expect:
+    """What a trigger step should make happen, for checking as it runs: `sector` reaches
+    `heights` about `travel` tics after the action and then stays `hold` tics (None: for
+    good). `needed`: the next step's path relies on it (goes over or through the sector)."""
+    sector: int
+    heights: tuple[int, int]
+    travel: int
+    hold: int | None
+    needed: bool
+
+
+@dataclass
 class Step:
     """Walk `path`, then do `action` ("use", "shoot", "cross", "pickup", "exit", "kill", or
-    "face": stop facing the trigger line without pressing it)."""
+    "face": stop facing the trigger line without pressing it). `expects` lists what the
+    action should then do to the world (see Expect)."""
     path: Path
     action: str
     trigger: TriggerLine | None = None
     key: Key | None = None
     label: str = ""
+    expects: list[Expect] = field(default_factory=list)
 
 
 @dataclass
@@ -35,14 +49,33 @@ def _action_for(t: TriggerLine) -> str:
     return "cross"
 
 
-def steps_from_legs(legs, goal_step: Step | None = None) -> list[Step]:
+def expects_of(nav: Navigator, t: TriggerLine, after: Path | None) -> list[Expect]:
+    """What firing `t` should do, with timings; marked `needed` where the path `after`
+    depends on it."""
+    on_path = {nav.mesh.polys[p].sector for p in after.polys} if after else set()
+    out = []
+    for s, hs in t.effects.items():
+        h = hs[0]
+        if h == nav.movers.initial[s] and len(hs) == 1:
+            continue  # already like that: nothing to see
+        timing = nav.movers.timing(t.info.special, t.info.description, s, h) \
+            if t.line >= 0 else None
+        out.append(Expect(s, h, timing.travel if timing else 0,
+                          timing.hold if timing else None, s in on_path))
+    return out
+
+
+def steps_from_legs(legs, goal_step: Step | None = None,
+                    nav: Navigator | None = None) -> list[Step]:
     """Steps for a Route's legs. The final (goal) leg becomes `goal_step` with that leg's
-    path, or is dropped if `goal_step` is None."""
+    path, or is dropped if `goal_step` is None. With `nav`, trigger steps get `expects`."""
     steps = []
-    for leg in legs[:-1]:
+    for i, leg in enumerate(legs[:-1]):
         if leg.trigger:
+            expects = expects_of(nav, leg.trigger, legs[i + 1].path) if nav else []
             steps.append(Step(leg.path, _action_for(leg.trigger), leg.trigger,
-                              label=f"line {leg.trigger.line}: {leg.trigger.info.description}"))
+                              label=f"line {leg.trigger.line}: {leg.trigger.info.description}",
+                              expects=expects))
         elif leg.key:
             steps.append(Step(leg.path, "pickup", key=leg.key, label=f"pick up {leg.key.name}"))
     if goal_step is not None and legs:
@@ -100,5 +133,5 @@ def plan_from(nav: Navigator, pos: Point, keys: set[Key], states: HeightStates |
         timed_out = time.perf_counter() - t0 >= max_seconds
         return LevelPlan(problem="no route to the exit"
                          + (f" (search gave up after {max_seconds:.0f}s)" if timed_out else ""))
-    return LevelPlan(steps=steps_from_legs(route.legs, _exit_step(exits[route.goal])),
+    return LevelPlan(steps=steps_from_legs(route.legs, _exit_step(exits[route.goal]), nav),
                      complete=True)
