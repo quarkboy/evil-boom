@@ -63,13 +63,16 @@ class MoverModel:
     def __init__(self, m: MapData, neighbors: Callable[[int], set[int]]):
         self.map = m
         self.neighbors = neighbors
-        self.initial: list[Heights] = [(s.floor, s.ceiling) for s in m.sectors]
+        # The map's heights, which movers go by; `initial` is the planner's view of where the
+        # player can stand, which can differ (Navigator._fill_trenches).
+        self.real: list[Heights] = [(s.floor, s.ceiling) for s in m.sectors]
+        self.initial: list[Heights] = list(self.real)
 
     def _nfloors(self, s: int) -> list[int]:
-        return [self.initial[n][0] for n in self.neighbors(s)]
+        return [self.real[n][0] for n in self.neighbors(s)]
 
     def _nceils(self, s: int) -> list[int]:
-        return [self.initial[n][1] for n in self.neighbors(s)]
+        return [self.real[n][1] for n in self.neighbors(s)]
 
     def effects(self, special: int, sectors: list[int]) -> dict[int, list[Heights]]:
         """Heights each affected sector can take after the special fires.
@@ -88,7 +91,7 @@ class MoverModel:
         return out
 
     def _sector_effect(self, special: int, s: int) -> list[Heights]:
-        floor, ceil = self.initial[s]
+        floor, ceil = self.real[s]
         nf, nc = self._nfloors(s), self._nceils(s)
         if special in DOOR_OPEN:
             return [(floor, min(nc, default=ceil) - 4)]
@@ -128,7 +131,7 @@ class MoverModel:
     def timing(self, special: int, description: str, s: int, target: Heights) -> Timing:
         """How long the special takes to move sector s from its initial heights to `target`,
         and how long it stays there (approximate: vanilla speeds, starting from rest)."""
-        floor, ceil = self.initial[s]
+        floor, ceil = self.real[s]
         fast = "blazing" in description or "turbo" in description or "fast" in description
         moved = max(abs(target[0] - floor), abs(target[1] - ceil))
         if special in DOOR_OPEN or special in DOOR_CLOSE:
@@ -175,9 +178,9 @@ class MoverModel:
         out: dict[int, list[Heights]] = {}
         for start in sectors:
             sec = start
-            height = self.initial[sec][0] + step
+            height = self.real[sec][0] + step
             texture = m.sectors[sec].floor_tex
-            out[sec] = [(height, self.initial[sec][1])]
+            out[sec] = [(height, self.real[sec][1])]
             while True:
                 nxt = None
                 for line in m.sector_lines(sec):
@@ -194,5 +197,5 @@ class MoverModel:
                 if nxt is None:
                     break
                 sec = nxt
-                out[sec] = [(height, self.initial[sec][1])]
+                out[sec] = [(height, self.real[sec][1])]
         return out

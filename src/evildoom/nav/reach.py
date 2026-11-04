@@ -216,6 +216,7 @@ class Navigator:
             and t.in_skill(3)]
         self.mesh = mesh or NavMesh(m, self._mesh_obstacles)
         self.movers = MoverModel(m, self.mesh.neighbors_of_sector)
+        self._fill_trenches()
         self.damage = {s.index: classify_sector(s.special).damage for s in m.sectors}
         self.strict_fit = False  # True: find_path refuses paths the box (maybe) can't get through
         #                          (the planner instead prefers paths with fewer squeezes)
@@ -683,6 +684,54 @@ class Navigator:
         return self._gate_fits[key]
 
     # --- static analysis ----------------------------------------------------------------
+
+    def _fill_trenches(self) -> None:
+        """A sector lower than everything round it and too narrow anywhere for the player's
+        box can't be stood in: the box always rests on the floor beside it (E4M1's 8-unit slot
+        between the stairs and the blue key room, which the planner took for a pit to drop into
+        and never climb out of). The planner sees it at its lowest neighbor's floor; the mover
+        model keeps the real heights. Only sectors nothing moves."""
+        m, mesh = self.map, self.mesh
+        moved = {s.index for l in m.linedefs if l.special for s in m.tagged_sectors(l.tag)}
+        moved |= {m.back_sector(l) for l in m.linedefs if l.special and l.two_sided}
+        r = PLAYER_RADIUS
+        for sec in m.sectors:
+            si = sec.index
+            if si in moved:
+                continue
+            lines = m.sector_lines(si)
+            bounds, floors = [], []
+            for l in lines:
+                f, b = m.front_sector(l), m.back_sector(l)
+                if f == b:
+                    continue
+                v1, v2 = m.vertexes[l.v1], m.vertexes[l.v2]
+                bounds.append(((v1.x, v1.y), (v2.x, v2.y)))
+                o = b if f == si else f
+                if o is not None:
+                    floors.append(self.movers.real[o][0])
+            if not floors or min(floors) <= sec.floor:
+                continue
+            fits = False
+            for poly in mesh.polys:
+                if poly is None or poly.sector != si:
+                    continue
+                xs = [v[0] for v in poly.vertices]
+                ys = [v[1] for v in poly.vertices]
+                x = min(xs)
+                while x <= max(xs) and not fits:
+                    y = min(ys)
+                    while y <= max(ys):
+                        if mesh.poly_at(x, y) is poly and not any(
+                                _box_hits_segment(x, y, r, e) for e in bounds):
+                            fits = True
+                            break
+                        y += 4
+                    x += 4
+                if fits:
+                    break
+            if not fits and sec.ceiling - min(floors) >= PLAYER_HEIGHT:
+                self.movers.initial[si] = (min(floors), sec.ceiling)
 
     def initial_states(self) -> HeightStates:
         return {i: {h} for i, h in enumerate(self.movers.initial)}

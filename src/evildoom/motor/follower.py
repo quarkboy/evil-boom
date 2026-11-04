@@ -481,6 +481,15 @@ class RouteFollower:
     def act(self, obs: Observation) -> Controls:
         if self.done or self.failed:
             return Controls()
+        mv = self.nav.movers
+        if mv.initial != mv.real:
+            # Slots too narrow to stand in, at the floor beside them, as planned
+            # (Navigator._fill_trenches): otherwise the real floor reads as a step to wait out.
+            heights = dict(obs.heights)
+            for s, (real, planned) in enumerate(zip(mv.real, mv.initial)):
+                if real != planned and s in heights:
+                    heights[s] = planned
+            obs = replace(obs, heights=heights)
         self.motion.observe(obs)
         self._live = obs.heights   # (corner cutting keeps off ledges as they are now)
         pos = (obs.x, obs.y)
