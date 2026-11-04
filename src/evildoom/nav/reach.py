@@ -159,6 +159,7 @@ class Path:
     cost: float
     steps: list[str] = field(default_factory=list)   # human-readable notes (teleports, drops)
     jumps: list["Jump"] = field(default_factory=list)  # run-off jumps, in order
+    squeezes: int = 0   # spots where the player's box may not fit (see find_path)
 
 
 @dataclass
@@ -193,6 +194,7 @@ class Navigator:
         self.movers = MoverModel(m, self.mesh.neighbors_of_sector)
         self.damage = {s.index: classify_sector(s.special).damage for s in m.sectors}
         self.strict_fit = False  # True: find_path refuses paths the box (maybe) can't get through
+        #                          (the planner instead prefers paths with fewer squeezes)
         # (switch line, poly) -> sectors that must be open for the use trace (activators_now)
         self.use_gates: dict[tuple[int, int], frozenset[int]] = {}
         # (gun line, poly) -> floors to stand on there for a level shot to hit it
@@ -1196,8 +1198,9 @@ class Navigator:
                   doors: Doors | None = None) -> Path | None:
         """A* over polys (see _find_path_once). If the smoothed path has a stretch the
         player's box can't get through (a 32-wide strip inside one poly, a row of pillars),
-        search again avoiding the polys there. If every way squeezes there's no path (the
-        player wouldn't fit), unless `strict_fit` is off: then the least squeezed one."""
+        search again avoiding the polys there. If every way squeezes: the least squeezed one,
+        with `Path.squeezes` set (the box check has false alarms, so the planner ranks these
+        below clean paths rather than refusing them), or None with `strict_fit`."""
         best, banned = None, set()   # (squeeze points, path) of the least bad attempt
         for _ in range(3):
             self._squeezes: list[Point] = []
@@ -1219,7 +1222,10 @@ class Navigator:
             if not new:
                 break
             banned |= new
-        return best[1] if best and not self.strict_fit else None
+        if best is None or self.strict_fit:
+            return None
+        best[1].squeezes = best[0]
+        return best[1]
 
     def _find_path_once(self, start: Point, goal: Point, states: HeightStates,
                         doors: Doors | None, banned: set[int]) -> Path | None:
@@ -1424,6 +1430,8 @@ class Navigator:
             pending: tuple | None = None  # (prev pos, prev states, prev keys, trigger, key)
             temp: frozenset = frozenset()  # temporary heights the last trigger made (a lift
             #                                down for 3s): only the next leg can use them
+            squeezes: int = 0   # spots on the route so far where the box may not fit
+            rank: tuple = ()    # the rest of its priority (after goal reach and squeezes)
 
         temporary = self._temporary_heights()
 
@@ -1448,12 +1456,19 @@ class Navigator:
         counter = itertools.count()
         root = Node(start, states0, frozenset(), keys0, [],
                     self.reachable(start_poly.index, states0, doors_for(keys0)))
-        heap = [((False, False, False, 0, 0), next(counter), root)]
+        # Paths where the player's box may not fit (Path.squeezes) aren't refused (the check has
+        # false alarms) but rank below clean ones: priority is (can't reach a goal, squeezes
+        # so far, rank...). A squeezed route to a goal is kept as `fallback` and returned once
+        # nothing ahead in the queue could do better.
+        heap = [((False, 0, False, False, 0, 0), next(counter), root)]
         seen: set[tuple] = set()
         expansions = 0
+        fallback: tuple[tuple, Route] | None = None
         deadline = time.perf_counter() + max_seconds
         while heap and expansions < max_expansions and time.perf_counter() < deadline:
-            _, _, node = heapq.heappop(heap)
+            priority, _, node = heapq.heappop(heap)
+            if fallback is not None and priority[:2] >= fallback[0]:
+                return fallback[1]
             sig = (node.added, node.keys, frozenset(node.reach))
             if sig in seen:
                 continue
@@ -1465,6 +1480,13 @@ class Navigator:
                 if path is None:
                     continue
                 node.legs = node.legs + [Leg(t, path, key)]
+                node.pending = None
+                if path.squeezes:  # back in the queue, behind cleaner nodes
+                    node.squeezes += path.squeezes
+                    seen.discard(sig)
+                    heapq.heappush(heap, ((priority[0], node.squeezes) + node.rank,
+                                          next(counter), node))
+                    continue
             expansions += 1
             if trace is not None:  # debugging: what the search actually explores
                 last = node.legs[-1] if node.legs else None
@@ -1480,8 +1502,13 @@ class Navigator:
                 path = self._timed_path(node.pos, goal_polys[gp], node.states, doors,
                                         node.legs[-1].trigger if node.legs else None)
                 if path:
-                    return Route(node.legs + [Leg(None, path)], node.states, node.keys,
-                                 goal_polys[gp])
+                    route = Route(node.legs + [Leg(None, path)], node.states, node.keys,
+                                  goal_polys[gp])
+                    total = node.squeezes + path.squeezes
+                    if not total:
+                        return route
+                    if fallback is None or (False, total) < fallback[0]:
+                        fallback = ((False, total), route)
 
             def push(target: Point, trial: HeightStates, added: frozenset, ks: frozenset,
                      t: TriggerLine | None, key: Key | None, temp: frozenset = frozenset(),
@@ -1492,11 +1519,12 @@ class Navigator:
                 if after is None:  # (what's reachable from target, if already worked out)
                     after = self.reachable(target_poly.index, trial, doors_for(ks))
                 child = Node(target, trial, added, ks, node.legs, after, node.steps + 1,
-                             (node.pos, node.states, node.keys, t, key), temp)
+                             (node.pos, node.states, node.keys, t, key), temp,
+                             squeezes=node.squeezes)
                 progress = bool(after - node.reach) or key is not None
                 relevant = (t is not None and t.line in rel_t) or (key is not None and key in rel_k)
-                priority = (not goal_polys.keys() & after, not relevant, not progress,
-                            -len(after), child.steps)
+                child.rank = (not relevant, not progress, -len(after), child.steps)
+                priority = (not goal_polys.keys() & after, child.squeezes) + child.rank
                 heapq.heappush(heap, (priority, next(counter), child))
 
             # Triggers: one candidate per distinct world change, the closest line producing it.
@@ -1564,7 +1592,7 @@ class Navigator:
                         -math.dist(node.pos, s[1])))
                     push(spot, expire(node.states, node.temp), node.added - node.temp, ks, None,
                          key)
-        return None
+        return fallback[1] if fallback else None
 
     def _upper_bound(self, start: int, states: HeightStates, keys: frozenset,
                      key_items: KeyItems, triggers: list[TriggerLine]) -> set[int]:

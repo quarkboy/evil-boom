@@ -305,6 +305,14 @@ watched on stream) and recover when things go wrong.
 - Windows: ViZDoom tics were bound to the 15.6 ms default timer resolution; the adapter sets
   1 ms (`timeBeginPeriod`), ~3x faster runs.
 
+- **Box fit is a cost, not a filter (2026-11-04).** Planning used to search the whole level
+  twice: strict (refusing paths where the swept 32x32 box may clip a wall) and, if that
+  failed, lenient. Strict usually "failed" by timing out (MAP13: 120 s wasted). Now one
+  search: `find_path` returns its least-squeezed path with `Path.squeezes`, and the plan
+  search ranks nodes by (can't reach a goal, squeezes so far, ...), so clean routes win and
+  a squeezed route to the exit is taken only when nothing cleaner is ahead in the queue.
+  MAP13 plans in 2 s instead of 124 s.
+
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
 - [ ] Timing-aware handling of lifts/doors that close on a timer (be on them in time).

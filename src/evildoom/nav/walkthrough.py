@@ -130,16 +130,10 @@ def plan_level(nav: Navigator, start: Point, max_seconds: float = 60.0,
     stages = nav.progression(start_poly.index)
     if not any(t.info.category is Category.EXIT for s in stages for t in s.exits):
         return LevelPlan(problem="no route to the exit (not reachable even in principle)")
-    # Stand where progression says the player can actually get to.
-    # Paths the player's box surely fits through first; if the level can't be done that way
-    # (the box check can be too strict), allow tight ones.
-    nav.strict_fit = True
-    plan = plan_from(nav, start, set(), None, stages[-1].reached, max_seconds, max_expansions)
-    if not plan.complete:
-        nav.strict_fit = False
-        plan = plan_from(nav, start, set(), None, stages[-1].reached, max_seconds,
-                         max_expansions)
-    return plan
+    # Stand where progression says the player can actually get to. One search: it prefers
+    # paths the player's box surely fits through and only takes tight ones (the box check
+    # has false alarms) when nothing cleaner gets there (Navigator.plan, Path.squeezes).
+    return plan_from(nav, start, set(), None, stages[-1].reached, max_seconds, max_expansions)
 
 
 def plan_from(nav: Navigator, pos: Point, keys: set[Key], states: HeightStates | None,
