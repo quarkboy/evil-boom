@@ -1236,6 +1236,16 @@ class Navigator:
                 out.setdefault(Key(t.type), []).extend(self.pickup_spots(t.x, t.y, states))
         return out
 
+    @property
+    def _key_positions(self) -> dict[Key, list[Point]]:
+        """Where each key (at skill 3) is."""
+        if not hasattr(self, "_keys_at"):
+            self._keys_at: dict[Key, list[Point]] = {}
+            for t in self.map.things:
+                if t.type in Key._value2member_map_ and t.in_skill(3):
+                    self._keys_at.setdefault(Key(t.type), []).append((t.x, t.y))
+        return self._keys_at
+
     def plan(self, start: Point, goals: list[Point], keys: set[Key] = frozenset(),
              states: HeightStates | None = None, key_items: KeyItems | None = None,
              max_expansions: int = 300, max_seconds: float = 5.0,
@@ -1405,6 +1415,12 @@ class Navigator:
             for key, spots in key_items.items():
                 if key in node.keys:
                     continue
+                # Spots as things stand at this node (key_items is judged against every
+                # height, so a key on a pedestal that hasn't been lowered yet would look
+                # reachable from beside it: MAP04's blue card).
+                if key in self._key_positions:
+                    spots = [s for x, y in self._key_positions[key]
+                             for s in self.pickup_spots(x, y, node.states)]
                 here = [(p, pt) for p, pt in spots if p in node.reach]
                 if here:
                     ks = node.keys | {key}
