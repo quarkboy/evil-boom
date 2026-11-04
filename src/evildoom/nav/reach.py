@@ -52,6 +52,7 @@ GRAVITY = 1.0
 MAX_RUNUP = 256
 JUMP_ANGLES = (0, -30, 30, -45, 45, -60, 60)  # degrees off the edge normal
 NAV_CACHE = Path(__file__).resolve().parents[3] / "out" / "navcache"
+FALLBACK_GRACE = 300  # search nodes to look on for a clean route once a squeezed one is found
 JUMPS_PER_TARGET = 4  # candidates kept per (takeoff poly, landing sector)
 DAMAGE_COST = 4.0  # path cost multiplier on damaging floors
 TELEPORTERS_FOR_PLAYERS = {39, 97, 174, 195, 207, 208, 209, 210}
@@ -1471,20 +1472,24 @@ class Navigator:
         root = Node(start, states0, frozenset(), keys0, [],
                     self.reachable(start_poly.index, states0, doors_for(keys0)))
         # Paths where the player's box may not fit (Path.squeezes) aren't refused (the check has
-        # false alarms) but rank below clean ones: priority is (can't reach a goal *or*
-        # squeezed, squeezes so far, rank...), so any clean node comes before a squeezed one
-        # (E4M9: a squeezed walk to the key beat pressing the switches that open the way). A
-        # squeezed route to a goal is kept as `fallback` and returned once nothing ahead in
-        # the queue could do better.
+        # false alarms) but rank below clean ones: priority is (can't reach a goal, squeezes
+        # so far, rank...). A squeezed route to a goal is kept as `fallback`; the search goes
+        # on a while for a clean one (E4M9: a squeezed walk to the key came before pressing
+        # the switches that open the way) and returns the fallback if none turns up (making
+        # every clean node go first wanders for ages where a squeeze is needed: MAP26/29).
         heap = [((False, 0, False, False, 0, 0), next(counter), root)]
         seen: set[tuple] = set()
         expansions = 0
-        fallback: tuple[tuple, Route] | None = None
+        fallback: tuple[int, Route, int, float] | None = None  # squeezes, route, when found
         deadline = time.perf_counter() + max_seconds
         while heap and expansions < max_expansions and time.perf_counter() < deadline:
             priority, _, node = heapq.heappop(heap)
-            if fallback is not None and priority[:2] >= fallback[0]:
+            if fallback is not None and (expansions - fallback[2] > FALLBACK_GRACE
+                                         or time.perf_counter() - fallback[3] > 10):
                 return fallback[1]
+            if fallback is not None and node.squeezes:
+                continue  # looking for a clean route now: only clean nodes
+
             sig = (node.added, node.keys, frozenset(node.reach))
             if sig in seen:
                 continue
@@ -1500,7 +1505,7 @@ class Navigator:
                 if path.squeezes:  # back in the queue, behind cleaner nodes
                     node.squeezes += path.squeezes
                     seen.discard(sig)
-                    heapq.heappush(heap, ((True, node.squeezes) + node.rank,
+                    heapq.heappush(heap, ((priority[0], node.squeezes) + node.rank,
                                           next(counter), node))
                     continue
             expansions += 1
@@ -1523,8 +1528,8 @@ class Navigator:
                     total = node.squeezes + path.squeezes
                     if not total:
                         return route
-                    if fallback is None or (True, total) < fallback[0]:
-                        fallback = ((True, total), route)
+                    if fallback is None or total < fallback[0]:
+                        fallback = (total, route, expansions, time.perf_counter())
 
             def push(target: Point, trial: HeightStates, added: frozenset, ks: frozenset,
                      t: TriggerLine | None, key: Key | None, temp: frozenset = frozenset(),
@@ -1540,8 +1545,7 @@ class Navigator:
                 progress = bool(after - node.reach) or key is not None
                 relevant = (t is not None and t.line in rel_t) or (key is not None and key in rel_k)
                 child.rank = (not relevant, not progress, -len(after), child.steps)
-                priority = (bool(child.squeezes) or not goal_polys.keys() & after,
-                            child.squeezes) + child.rank
+                priority = (not goal_polys.keys() & after, child.squeezes) + child.rank
                 heapq.heappush(heap, (priority, next(counter), child))
 
             # Triggers: one candidate per distinct world change, the closest line producing it.
@@ -1867,15 +1871,23 @@ class Navigator:
         if here is None:
             ours = None
         elif states is not None:  # as high as we can be:
-            # the player stands on the highest floor anywhere under the box, of those within
-            # a step of the floor under its centre (E4M9: a box in a 32-wide gap between two
-            # 64-high blocks isn't standing on them, so their edges are walls; it can't get up)
+            # the player stands on the highest floor anywhere under the box, unless that's
+            # out of reach (more than a step above the floor under its centre) on two opposite
+            # sides: then it's a box wedged in a gap between higher floors, not one standing
+            # on a ledge and hanging over its edge (E4M9: a 32-wide gap between two 64-high
+            # blocks, whose edges are walls; MAP29 walks along ledges)
             reach_up = max(h[0] for h in states[here.sector]) + MAX_STEP
-            under = {here.sector} | {
-                p.sector for dx in (-PLAYER_RADIUS, PLAYER_RADIUS)
-                for dy in (-PLAYER_RADIUS, PLAYER_RADIUS)
-                if (p := self.mesh.poly_at(a[0] + dx, a[1] + dy)) is not None}
-            ours = max(h[0] for s_ in under for h in states[s_] if h[0] <= reach_up)
+            grid_f = {}
+            for i in (-1, 0, 1):
+                for j in (-1, 0, 1):
+                    p = self.mesh.poly_at(a[0] + i * PLAYER_RADIUS, a[1] + j * PLAYER_RADIUS)
+                    grid_f[(i, j)] = max(h[0] for h in states[p.sector]) if p else -math.inf
+            high = {c for c, f in grid_f.items() if f > reach_up}
+            # high, low, high across the box (both ways): a gap between higher floors
+            wedged = any({(-1, k), (1, k)} <= high and (0, k) not in high or
+                         {(k, -1), (k, 1)} <= high and (k, 0) not in high for k in (-1, 0, 1))
+            ours = max(f for f in grid_f.values() if f > -math.inf and
+                       (not wedged or f <= reach_up))
         else:
             ours = init[here.sector][0]
         for cell in cells:
