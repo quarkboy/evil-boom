@@ -287,3 +287,28 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
     }
     Ok(MapData { things, vertexes, linedefs, sidedefs, sectors, segs, subsectors, nodes, texture_heights })
 }
+
+impl MapData {
+    /// The parts the navmesh needs, handed over from Python's MapData (no WAD file needed).
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_parts(
+        verts: Vec<(f64, f64)>,
+        lines: Vec<(usize, usize, u16, u16, u16, u16, u16)>,
+        side_sectors: Vec<usize>,
+        segs: Vec<(usize, usize, usize, i16)>,
+        subsectors: Vec<(usize, usize)>,
+        nodes: Vec<(f64, f64, f64, f64, u16, u16)>,
+    ) -> MapData {
+        MapData {
+            things: Vec::new(),
+            vertexes: verts.into_iter().map(|(x, y)| Vertex { x, y }).collect(),
+            linedefs: lines.into_iter().map(|(v1, v2, flags, special, tag, front, back)| Linedef { v1, v2, flags, special, tag, front, back }).collect(),
+            sidedefs: side_sectors.into_iter().map(|sector| Sidedef { upper: String::new(), lower: String::new(), middle: String::new(), sector }).collect(),
+            sectors: Vec::new(),
+            segs: segs.into_iter().map(|(v1, v2, linedef, direction)| Seg { v1, v2, linedef, direction }).collect(),
+            subsectors: subsectors.into_iter().map(|(seg_count, first_seg)| Subsector { seg_count, first_seg }).collect(),
+            nodes: nodes.into_iter().map(|(x, y, dx, dy, front, back)| Node { x, y, dx, dy, front, back }).collect(),
+            texture_heights: HashMap::new(),
+        }
+    }
+}

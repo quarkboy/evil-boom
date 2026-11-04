@@ -103,6 +103,17 @@ def apply_trigger(states: "HeightStates", t: "TriggerLine") -> "HeightStates":
     return out
 
 
+def _without(states: "HeightStates", pairs) -> "HeightStates":
+    """`states` without these (sector, heights), keeping at least one height per sector. Only
+    the sectors that change get new sets (the plan search does this tens of thousands of
+    times; nothing changes height sets in place without copying them first)."""
+    out = dict(states)
+    for s, h in pairs:
+        if len(out[s]) > 1 and h in out[s]:
+            out[s] = out[s] - {h}
+    return out
+
+
 def can_cross(a: Heights, b: Heights) -> bool:
     (fa, ca), (fb, cb) = a, b
     return fb - fa <= MAX_STEP and min(ca, cb) - max(fa, fb) >= PLAYER_HEIGHT
@@ -197,10 +208,11 @@ class Navigator:
         # rows of them and never through gaps the box can't fit. They never move; moving
         # *sectors* are handled by heights. Barrels aren't cut: they can be shot away (a row of
         # them sealing a corridor in MAP23), so they stay soft obstacles that paths detour round.
-        self.mesh = mesh or NavMesh(m, [
+        self._mesh_obstacles = [
             (t.x, t.y, SOLID_DECORATIONS[t.type] + PLAYER_RADIUS) for t in m.things
             if t.type in SOLID_DECORATIONS and t.type not in SHOOTABLE_OBSTACLES
-            and t.in_skill(3)])
+            and t.in_skill(3)]
+        self.mesh = mesh or NavMesh(m, self._mesh_obstacles)
         self.movers = MoverModel(m, self.mesh.neighbors_of_sector)
         self.damage = {s.index: classify_sector(s.special).damage for s in m.sectors}
         self.strict_fit = False  # True: find_path refuses paths the box (maybe) can't get through
@@ -223,7 +235,7 @@ class Navigator:
         """Replace the jump edges (e.g. with only the engine-verified ones). Jumps that need
         a lift or timed door at a height it only passes through or waits at are left out:
         no stock level needs a jump off something that's about to move."""
-        self.__dict__.pop("_ngraph", None)  # (the native graph holds the edges)
+        self.__dict__.pop("_nnav", None)  # (the native navigator holds the edges)
         for p, edges in self.tele_from.items():
             self.tele_from[p] = [e for e in edges if not isinstance(e, Jump)]
         temporary = self._temporary_heights()
@@ -262,7 +274,9 @@ class Navigator:
     def _static_wall_grid(self) -> dict[tuple[int, int], list[tuple[Point, Point]]]:
         if not hasattr(self, "_swgrid"):
             self._swgrid = defaultdict(list)
-            for edge, _line in set(self._static_walls()):
+            # (sorted, not set order: what's checked first must not depend on hashing)
+            for edge, _line in sorted(set(self._static_walls()),
+                                      key=lambda w: (w[0], -1 if w[1] is None else w[1])):
                 for cell in _cells(*edge[0], *edge[1]):
                     self._swgrid[cell].append(edge)
         return self._swgrid
@@ -1060,7 +1074,7 @@ class Navigator:
         # The planner's inner loop (millions of portal checks a level): the parts of
         # passable() that don't depend on heights are worked out once (_static_adjacency).
         if _native is not None:
-            return self._native_graph().reachable(start, states, doors or None)
+            return self._native_nav().reachable(start, states, doors or None)
         adj = self._static_adjacency()
         gates = self._portal_gates
         seen = {start}
@@ -1082,11 +1096,12 @@ class Navigator:
                     todo.append(tp.dest_poly)
         return seen
 
-    def _native_graph(self):
-        """The compiled flood fill (evildoom_native.Graph) for this navmesh: the static
-        adjacency, gate lines, teleports and jumps, with the geometry questions it can't
-        answer itself (box past gate lines, room to drop) asked back here."""
-        if "_ngraph" not in self.__dict__:
+    def _native_nav(self):
+        """The compiled navigator core (evildoom_native.Nav) for this map: its own navmesh
+        (identical to self.mesh), the static adjacency, gates, teleports and jumps, and the
+        facts path-finding needs; the geometry questions it can't answer itself (box past
+        gate lines, room to drop) are asked back here."""
+        if "_nnav" not in self.__dict__:
             mesh, m = self.mesh, self.map
             adj = [[(pi, to, sa, sb, -1 if mesh.portals[pi].linedef is None
                      else mesh.portals[pi].linedef) for pi, to, sa, sb in edges]
@@ -1098,18 +1113,34 @@ class Navigator:
                 out = []
                 for tp in self.tele_from.get(poly, ()):
                     if isinstance(tp, Jump):
-                        out.append(("jump", tp.dest_poly, -1, -1, sorted(tp.requires)))
+                        out.append(("jump", tp.dest_poly, tp.dest, -1, -1, -1, tp.runup,
+                                    tp.takeoff, sorted(tp.requires)))
                     else:
                         line = m.linedefs[tp.line]
                         f, b = m.front_sector(line), m.back_sector(line)
-                        out.append(("line", tp.dest_poly, -1 if f is None else f,
-                                    -1 if b is None else b, []))
+                        out.append(("line", tp.dest_poly, tp.dest, tp.line,
+                                    -1 if f is None else f, -1 if b is None else b,
+                                    (0.0, 0.0), (0.0, 0.0), []))
                 tele.append(out)
-            self._ngraph = _native.Graph(
-                [p.sector if p else 0 for p in mesh.polys], adj, gates, tele,
+            self._nnav = _native.Nav(
+                [(v.x, v.y) for v in m.vertexes],
+                [(l.v1, l.v2, l.flags, l.special, l.tag, l.front, l.back) for l in m.linedefs],
+                [sd.sector for sd in m.sidedefs],
+                [(sg.v1, sg.v2, sg.linedef, sg.direction) for sg in m.segs],
+                [(ss.seg_count, ss.first_seg) for ss in m.subsectors],
+                [(n.x, n.y, n.dx, n.dy, n.front_child, n.back_child) for n in m.nodes],
+                [tuple(map(float, b)) for b in self._mesh_obstacles],
+                adj, gates, tele,
+                [tuple(map(float, h)) for h in self.movers.initial],
+                [bool(self.damage[i]) for i in range(len(m.sectors))],
+                bool(self.teleports),
+                self._wall_lines(), self._drop_lines(), self._teleport_lines(),
+                self._shutting_lines(),
+                {c: list(es) for c, es in self._static_wall_grid().items()},
+                {c: list(es) for c, es in self._obstacle_grid().items()},
                 lambda pi, blocking: self.portal_fits_without(pi, blocking),
                 lambda li, high, top: self._landable(li, high, top))
-        return self._ngraph
+        return self._nnav
 
     def _static_adjacency(self) -> list[list[tuple[int, int, int, int]]]:
         """Per poly: (portal, poly beyond, its sector, the far sector) for the portals that
@@ -1243,6 +1274,8 @@ class Navigator:
         search again avoiding the polys there. If every way squeezes: the least squeezed one,
         with `Path.squeezes` set (the box check has false alarms, so the planner ranks these
         below clean paths rather than refusing them), or None with `strict_fit`."""
+        if _native is not None:
+            return self._native_find_path(start, goal, states, doors)
         best, banned = None, set()   # (squeeze points, path) of the least bad attempt
         for _ in range(3):
             self._squeezes: list[Point] = []
@@ -1268,6 +1301,25 @@ class Navigator:
             return None
         best[1].squeezes = best[0]
         return best[1]
+
+    def _native_find_path(self, start: Point, goal: Point, states: HeightStates,
+                          doors: Doors | None) -> Path | None:
+        """find_path in the compiled core; the Path (notes, jumps) put together here."""
+        found = self._native_nav().find_path(start, goal, states, doors or None,
+                                             self.strict_fit)
+        if found is None:
+            return None
+        polys, waypoints, cost, vias, squeezes = found
+        chain = []
+        for i, (poly, via) in enumerate(zip(polys, vias)):
+            if via is None:
+                chain.append((poly, None))
+            elif via[0]:
+                chain.append((poly, self.tele_from[polys[i - 1]][via[1]]))
+            else:
+                chain.append((poly, via[1]))
+        return Path(polys, waypoints, cost, self._annotate(chain, states, doors),
+                    [v for _, v in chain if isinstance(v, Jump)], squeezes)
 
     def _find_path_once(self, start: Point, goal: Point, states: HeightStates,
                         doors: Doors | None, banned: set[int]) -> Path | None:
@@ -1521,11 +1573,7 @@ class Navigator:
             gone = frozenset(temp) - frozenset(left)
             if not gone:
                 return states, left, gone
-            out = {s: set(h) for s, h in states.items()}
-            for s, h in gone:
-                if len(out[s]) > 1:
-                    out[s].discard(h)
-            return out, left, gone
+            return _without(states, gone), left, gone
 
         def deadlines_of(t: TriggerLine, base: HeightStates, trial: HeightStates) -> dict:
             """The temporary heights firing `t` makes, with how long they last."""
@@ -1668,10 +1716,7 @@ class Navigator:
                     after = self.reachable(target_poly.index, trial, doors_for(ks))
                 stable = after
                 if carried:
-                    plain = {x: set(hs) for x, hs in trial.items()}
-                    for x, h in carried:
-                        if len(plain[x]) > 1:
-                            plain[x].discard(h)
+                    plain = _without(trial, carried)
                     stable = self.reachable(target_poly.index, plain, doors_for(ks))
                     if stable == after:
                         # The lifts and doors still running from earlier open nothing more
@@ -1682,10 +1727,7 @@ class Navigator:
                         carried = frozenset()
                 world = stable  # what's reachable with no temporary heights at all
                 if set(temp) - carried:
-                    plain = {x: set(hs) for x, hs in trial.items()}
-                    for x, h in temp:
-                        if len(plain[x]) > 1:
-                            plain[x].discard(h)
+                    plain = _without(trial, temp)
                     world = self.reachable(target_poly.index, plain, doors_for(ks))
                 child = Node(target, trial, added, ks, node.legs, after, node.steps + 1,
                              (node.pos, node.states, node.keys, t, key, node.temp), temp,
@@ -2333,7 +2375,7 @@ class Navigator:
         def segment(a: Point, b: Point, depth: int) -> None:
             worst = None
             if depth < 4:
-                for v in corners_near(a, b):
+                for v in sorted(corners_near(a, b)):
                     q = _closest_point(v, a, b)
                     d = math.dist(v, q)
                     if d < PATH_CLEARANCE - 1 and math.dist(v, a) > 1 and math.dist(v, b) > 1 \
