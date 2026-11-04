@@ -1,8 +1,15 @@
 """ViZDoom adapter: Controls in, Observations out, with demo recording and playback."""
+import sys
 import time
 from pathlib import Path
 
 import vizdoom as vzd
+
+if sys.platform == "win32":
+    # ViZDoom sleeps between tics; at Windows' default 15.6 ms timer resolution every tic
+    # costs a whole timer tick (only ~2x real time). 1 ms makes it ~3x faster.
+    import ctypes
+    ctypes.windll.winmm.timeBeginPeriod(1)
 
 from evildoom.motor.follower import TICRATE, Controls, Observation
 from evildoom.wad.specials import Key
@@ -11,7 +18,7 @@ BUTTONS = [vzd.Button.MOVE_FORWARD_BACKWARD_DELTA, vzd.Button.MOVE_LEFT_RIGHT_DE
            vzd.Button.TURN_LEFT_RIGHT_DELTA, vzd.Button.USE, vzd.Button.ATTACK,
            vzd.Button.SPEED]
 VARIABLES = [vzd.GameVariable.POSITION_X, vzd.GameVariable.POSITION_Y,
-             vzd.GameVariable.ANGLE, vzd.GameVariable.HEALTH]
+             vzd.GameVariable.ANGLE, vzd.GameVariable.HEALTH, vzd.GameVariable.POSITION_Z]
 WARMUP_TICS = 8  # ViZDoom ignores turn input for the first few tics of an episode
 KEY_OBJECTS = {"BlueCard": Key.BLUE_CARD, "YellowCard": Key.YELLOW_CARD, "RedCard": Key.RED_CARD,
                "BlueSkull": Key.BLUE_SKULL, "YellowSkull": Key.YELLOW_SKULL,
@@ -80,10 +87,10 @@ class VizDoomEngine:
 
     def observe(self) -> Observation:
         state = self.game.get_state()
-        x, y, angle, _health = state.game_variables
+        x, y, angle, _health, z = state.game_variables
         heights = {s.id: (s.floor_height, s.ceiling_height) for s in state.sectors}
         return Observation(float(x), float(y), float(angle), heights, self.tic,
-                           self._keys_held(state))
+                           self._keys_held(state), float(z))
 
     def _keys_held(self, state) -> frozenset:
         """Keys picked up so far: key items present at the start that have gone."""

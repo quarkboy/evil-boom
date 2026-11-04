@@ -3,7 +3,8 @@
 The jump finder simulates DOOM physics, but small errors decide whether a jump clears a gap, so
 each candidate is tried in the real engine: warp to its run-up, line up, sprint along the planned
 line, and check that the player touches down on the predicted sector (standing on its floor)
-without being teleported away first. Jumps that need moved heights (a lowered fence, a raised
+without being teleported away first, and can brake to a stop there. A "soft" sprint (full speed
+only up to the edge, then coasting) is tried first: it lands slower, which narrow strips need. Jumps that need moved heights (a lowered fence, a raised
 floor) get those set up first by firing the trigger that produces them; when that isn't possible
 or reliable (lifts and timed doors) the jump is kept but marked unverified.
 
@@ -11,19 +12,20 @@ Results are cached per map in out/jumpcache, keyed by Jump.key, so only new jump
 """
 import json
 import math
+from dataclasses import replace
 from pathlib import Path
 
-import vizdoom as vzd
-
-from evildoom.motor.follower import TICRATE, Controls, _norm
-from evildoom.nav.reach import Jump, Navigator, TriggerLine
+from evildoom.motor.follower import TICRATE, Controls, Motion, _norm
+from evildoom.nav.reach import MAX_STEP, Jump, Navigator, TriggerLine
 from evildoom.wad.specials import Category, Trigger
 
 from .vizdoom_engine import VizDoomEngine
 
 CACHE_DIR = Path(__file__).resolve().parents[3] / "out" / "jumpcache"
-VERSION = 1   # bump to invalidate cached results when the test procedure changes
+VERSION = 5   # bump to invalidate cached results when the test procedure changes
 OK, FAIL, UNVERIFIED = "ok", "fail", "unverified"
+SOFT = "soft"   # works coasting from the edge (Jump.soft)
+SLID = "slid"   # lands, but slides off the landing sector
 
 
 def _cache_path(iwad: Path, map_name: str, pwad: Path | None) -> Path:
@@ -33,7 +35,7 @@ def _cache_path(iwad: Path, map_name: str, pwad: Path | None) -> Path:
 
 def verify_jumps(nav: Navigator, iwad: str | Path, map_name: str, pwad: str | Path | None = None,
                  use_cache: bool = True, log=None) -> dict[str, str]:
-    """Return {jump key: "ok" | "fail" | "unverified"} for every jump the navigator has."""
+    """Return {jump key: "ok" | "soft" | "slid" | "fail" | "unverified"} for every jump."""
     path = _cache_path(Path(iwad), map_name, Path(pwad) if pwad else None)
     cached: dict[str, str] = {}
     if use_cache and path.exists():
@@ -69,10 +71,29 @@ def keep_verified(nav: Navigator, iwad: str | Path, map_name: str,
                   pwad: str | Path | None = None, log=None) -> dict[str, int]:
     """Drop the jumps the engine disproves (unverified ones are kept). Returns counts."""
     results = verify_jumps(nav, iwad, map_name, pwad, log=log)
-    nav.set_jumps([j for j in nav.jumps if results[j.key] != FAIL])
-    counts = {OK: 0, FAIL: 0, UNVERIFIED: 0}
+    # One that slides off its landing is only kept when there's no better way across: one
+    # that stops there, or one that runs straight across it (the strip isn't for stopping on).
+    sticks = {(frozenset(j.src_polys), nav.mesh.polys[j.dest_poly].sector)
+              for j in nav.jumps if results[j.key] in (OK, SOFT) or "@" in results[j.key]}
+    keep = []
+    for j in nav.jumps:
+        r = results[j.key]
+        if "@" in r:
+            # run straight across the strip it lands on, to where the engine stopped
+            x, y = map(float, r.split("@")[1].split(","))
+            end = nav.mesh.poly_at(x, y)
+            if end is not None:
+                keep.append(replace(j, dest_poly=end.index, dest=(x, y), through=True))
+        r = r.split("@")[0]
+        if r == FAIL or r == SLID and (frozenset(j.src_polys),
+                                     nav.mesh.polys[j.dest_poly].sector) in sticks:
+            continue
+        j.soft = r == SOFT
+        keep.append(j)
+    nav.set_jumps(keep)
+    counts = {OK: 0, SOFT: 0, SLID: 0, FAIL: 0, UNVERIFIED: 0}
     for r in results.values():
-        counts[r] += 1
+        counts[r.split("@")[0]] += 1
     return counts
 
 
@@ -88,6 +109,33 @@ def _step(engine: VizDoomEngine, controls: Controls) -> None:
         raise _LevelEnded
 
 def _test_jump(nav: Navigator, engine: VizDoomEngine, j: Jump) -> str:
+    """Try the jump soft (full speed only up to the edge, then coast) and, if that doesn't
+    stick, pushing all the way. Landing spots can be narrow strips: touching one isn't enough,
+    the player has to stop on it."""
+    pushed = FAIL
+    for soft in (True, False):
+        heading = _prepare(nav, engine, j)
+        if heading is None:
+            return UNVERIFIED
+        result, _ = _fly(nav, engine, j, heading, soft)
+        if result == "stuck":
+            return SOFT if soft else OK
+        if result == "slid" and not soft:
+            pushed = SLID
+    if pushed in (SLID, FAIL):
+        # Too narrow to stop on: maybe it's meant to be run straight across, onto the next
+        # floor (MAP14's strips). Recorded as "slid@x,y" (or "fail@x,y"), where we stopped.
+        heading = _prepare(nav, engine, j)
+        if heading is not None:
+            result, at = _fly(nav, engine, j, heading, False, through=True)
+            if result == "stuck":
+                return f"{pushed}@{at[0]:.0f},{at[1]:.0f}"
+    return pushed
+
+
+def _prepare(nav: Navigator, engine: VizDoomEngine, j: Jump) -> float | None:
+    """Set up the heights the jump needs and stand at its run-up facing the takeoff; the
+    heading, or None if that can't be done."""
     engine.restart()
     engine.game.send_game_command("god")
     engine.game.send_game_command("give all")
@@ -95,38 +143,64 @@ def _test_jump(nav: Navigator, engine: VizDoomEngine, j: Jump) -> str:
         if heights == nav.movers.initial[sector]:
             continue  # already like that at the start
         if not _establish(nav, engine, sector, heights):
-            return UNVERIFIED
+            return None
     engine.game.send_game_command(f"warp {j.runup[0]:.0f} {j.runup[1]:.0f}")
     for _ in range(4):
         _step(engine, Controls())
     o = engine.observe()
     if math.dist((o.x, o.y), j.runup) > 4:
-        return UNVERIFIED  # couldn't stand at the run-up (e.g. it's on a moving sector)
+        return None  # couldn't stand at the run-up (e.g. it's on a moving sector)
     heading = math.degrees(math.atan2(j.takeoff[1] - j.runup[1], j.takeoff[0] - j.runup[0]))
     for _ in range(20):
         diff = _norm(heading - engine.observe().angle)
         if abs(diff) < 1:
             break
         _step(engine, Controls(turn=max(-25, min(25, -diff))))
-    flight = math.dist(j.runup, j.takeoff) + math.dist(j.takeoff, j.dest)
+    return heading
+
+
+def _fly(nav: Navigator, engine: VizDoomEngine, j: Jump, heading: float, soft: bool,
+         through: bool = False) -> tuple[str, tuple[float, float]]:
+    """Sprint (as RouteFollower does), then brake on touchdown: "stuck" if we stop on the
+    landing sector, "slid" if we touched it but slid off, "missed" otherwise; and where we
+    ended up. `through`: keep sprinting across the landing sector and land on whatever comes
+    next (no lower than a step below it)."""
+    edge = math.dist(j.runup, j.takeoff)
+    flight = edge + math.dist(j.takeoff, j.dest)
     ux, uy = math.cos(math.radians(heading)), math.sin(math.radians(heading))
     want = nav.mesh.polys[j.dest_poly].sector
+    src = {nav.mesh.polys[p].sector for p in j.src_polys}
+    motion = Motion()
+    o = engine.observe()
     last = (o.x, o.y)
-    for i in range(4 * TICRATE + 20):
+    touched = None
+    crossed = False   # been over the landing sector (for `through`)
+    for i in range(6 * TICRATE):
         o = engine.observe()
+        motion.observe(o)
         if math.dist((o.x, o.y), last) > 64:
-            return FAIL  # teleported somewhere else
+            return "missed", last  # teleported somewhere else
         last = (o.x, o.y)
         here = nav.mesh.poly_at(o.x, o.y)
-        z = engine.game.get_game_variable(vzd.GameVariable.POSITION_Z)
-        if here is not None and here.sector == want and abs(z - o.heights[want][0]) < 1:
-            return OK
+        crossed = crossed or (here is not None and here.sector == want)
+        if touched is None and here is not None and abs(o.z - o.heights[here.sector][0]) < 1:
+            if not through and here.sector == want:
+                touched = i
+            elif through and crossed and here.sector not in src | {want} \
+                    and o.heights[here.sector][0] >= o.heights[want][0] - MAX_STEP:
+                touched, want = i, here.sector
+        if touched is not None:
+            if motion.speed < 0.3 or i - touched > 2 * TICRATE:
+                return ("stuck" if here is not None and here.sector == want else "slid"), last
+            _step(engine, motion.drive(o, (0.0, 0.0), heading))
+            continue
         flown = (o.x - j.runup[0]) * ux + (o.y - j.runup[1]) * uy
         if flown >= flight - 8 and i > 4 * TICRATE:
             break
-        _step(engine, Controls(forward=50 if flown < flight - 8 else 0,
-                             turn=max(-3, min(3, -_norm(heading - o.angle)))))
-    return FAIL
+        push = through or flown < (edge if soft else flight - 8)
+        _step(engine, Controls(forward=50 if push else 0,
+                               turn=max(-3, min(3, -_norm(heading - o.angle)))))
+    return "missed", last
 
 
 def _establish(nav: Navigator, engine: VizDoomEngine, sector: int, heights) -> bool:

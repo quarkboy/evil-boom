@@ -79,6 +79,7 @@ class Observation:
     heights: dict[int, tuple[float, float]]       # live sector (floor, ceiling)
     tic: int = 0
     keys: frozenset | None = None                 # keys held, if the engine can tell
+    z: float | None = None                        # height of the player's feet
 
 
 @dataclass
@@ -308,6 +309,7 @@ class RouteFollower:
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
         self._lineup_tic: int | None = None  # when we arrived at a jump's run-up
         self._brake_until = -1               # after landing a jump, until we've stopped
+        self._airborne = False               # in the air during a run-jump
         self._jump_wait = None
         self._watches: list[Watch] = []      # what fired triggers should be doing
         self._settle: list[Expect] = []      # moves we're waiting on before the next step
@@ -808,11 +810,23 @@ class RouteFollower:
         return self.motion.drive(obs, hold, heading)
 
     def _sprint_jump(self, obs: Observation) -> Controls:
-        """Full speed in a straight line until we've covered the planned flight distance."""
+        """Full speed in a straight line, exactly as the engine check did it: only up to the
+        edge for a soft jump (then coast: it lands slower, for narrow strips), otherwise
+        through the flight. On touchdown stop sprinting so the landing is braked at once."""
         jump, heading, since = self._sprint
         ux, uy = math.cos(math.radians(heading)), math.sin(math.radians(heading))
         flown = (obs.x - jump.takeoff[0]) * ux + (obs.y - jump.takeoff[1]) * uy
-        if flown >= math.dist(jump.takeoff, jump.dest) - 8 or obs.tic - since > 4 * TICRATE:
+        here = self.nav.mesh.poly_at(obs.x, obs.y)
+        floor = obs.heights[here.sector][0] if here is not None else None
+        landed = here is not None and here.sector == self.nav.mesh.polys[jump.dest_poly].sector             and obs.z is not None and abs(obs.z - floor) < 1 and flown > 0
+        if obs.z is not None and floor is not None and flown > 0 and not jump.through:
+            if obs.z > floor + 8:  # really falling, not just down a step
+                self._airborne = True
+            elif self._airborne and obs.z <= floor + 0.5:
+                landed = True
+        if landed or flown >= math.dist(jump.takeoff, jump.dest) - 8 \
+                or obs.tic - since > 4 * TICRATE:
+            self._airborne = False
             self._sprint = None
             land = self.nav.mesh.poly_at(obs.x, obs.y)
             self.log.add(obs.tic, f"landed at ({obs.x:.0f}, {obs.y:.0f}) sector "
@@ -825,7 +839,8 @@ class RouteFollower:
             return self._walk(obs)
         diff = _norm(heading - obs.angle)
         self.motion.rate = 0.0
-        return Controls(forward=50.0, turn=max(-3.0, min(3.0, -diff)))
+        push = flown < (0 if jump.soft else math.dist(jump.takeoff, jump.dest) - 8)
+        return Controls(forward=50.0 if push else 0.0, turn=max(-3.0, min(3.0, -diff)))
 
     # --- doors and lifts in the way --------------------------------------------------------
 

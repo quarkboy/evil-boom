@@ -125,6 +125,8 @@ class Jump(Teleport):
     takeoff: Point = (0.0, 0.0)
     speed: float = 0.0
     requires: frozenset = frozenset()  # (sector, heights) of movable sectors it depends on
+    soft: bool = False  # engine-checked: sprint only to the edge, then coast (narrow landings)
+    through: bool = False  # sprint straight across a strip too narrow to stop on, to `dest`
 
     def usable(self, states: "HeightStates") -> bool:
         return all(h in states[s] for s, h in self.requires)
@@ -1202,17 +1204,26 @@ class Navigator:
         distance along it at a little under full running speed, plus a moment to get going."""
         out: dict[int, float] = {}
         dist, prev = 0.0, None
+
+        def note(q: Point, d: float) -> None:
+            poly = self.mesh.poly_at(*q)
+            if poly is not None and poly.sector not in out:
+                out[poly.sector] = 10 + d / LEG_SPEED
         for p in path.waypoints:
             if p is None:
                 prev = None
                 continue
-            if prev is not None:
-                dist += math.dist(prev, p)
+            if prev is None:
+                note(p, dist)
+            else:  # sample along the segment: doors and the like lie between waypoints
+                seg = math.dist(prev, p)
+                n = max(1, int(seg // 8))
+                for i in range(1, n + 1):
+                    note((prev[0] + (p[0] - prev[0]) * i / n, prev[1] + (p[1] - prev[1]) * i / n),
+                         dist + seg * i / n)
+                dist += seg
             prev = p
-            poly = self.mesh.poly_at(*p)
-            if poly is not None and poly.sector not in out:
-                out[poly.sector] = 10 + dist / LEG_SPEED
-        for poly in path.polys:  # sectors only passed through between waypoints
+        for poly in path.polys:  # anything missed (a sliver between samples)
             out.setdefault(self.mesh.polys[poly].sector, 10 + path.cost / LEG_SPEED)
         return out
 
