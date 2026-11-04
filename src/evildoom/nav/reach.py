@@ -16,6 +16,7 @@ import inspect
 import itertools
 import json
 import math
+import os
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -27,7 +28,14 @@ from evildoom.wad.specials import (Category, Key, LineSpecial, Lock, Trigger, cl
                                    classify_sector)
 from evildoom.wad.things import SHOOTABLE_OBSTACLES, SOLID_DECORATIONS
 
-from .movers import Heights, MoverModel
+try:  # compiled hot paths (native/), optional: Python versions below are the fallback
+    import evildoom_native as _native
+except ImportError:
+    _native = None
+if os.environ.get("EVILDOOM_NO_NATIVE"):
+    _native = None
+
+from .movers import TICRATE, Heights, MoverModel
 from .navmesh import NavMesh, Point, _cells
 
 PLAYER_HEIGHT = 56
@@ -52,6 +60,7 @@ GRAVITY = 1.0
 MAX_RUNUP = 256
 JUMP_ANGLES = (0, -30, 30, -45, 45, -60, 60)  # degrees off the edge normal
 NAV_CACHE = Path(__file__).resolve().parents[3] / "out" / "navcache"
+TIMER_SETS = 2  # timer sets kept per world in the plan search (see Navigator.plan)
 FALLBACK_GRACE = 300  # search nodes to look on for a clean route once a squeezed one is found
 JUMPS_PER_TARGET = 4  # candidates kept per (takeoff poly, landing sector)
 DAMAGE_COST = 4.0  # path cost multiplier on damaging floors
@@ -214,6 +223,7 @@ class Navigator:
         """Replace the jump edges (e.g. with only the engine-verified ones). Jumps that need
         a lift or timed door at a height it only passes through or waits at are left out:
         no stock level needs a jump off something that's about to move."""
+        self.__dict__.pop("_ngraph", None)  # (the native graph holds the edges)
         for p, edges in self.tele_from.items():
             self.tele_from[p] = [e for e in edges if not isinstance(e, Jump)]
         temporary = self._temporary_heights()
@@ -1049,6 +1059,8 @@ class Navigator:
                   doors: Doors | None = None) -> set[int]:
         # The planner's inner loop (millions of portal checks a level): the parts of
         # passable() that don't depend on heights are worked out once (_static_adjacency).
+        if _native is not None:
+            return self._native_graph().reachable(start, states, doors or None)
         adj = self._static_adjacency()
         gates = self._portal_gates
         seen = {start}
@@ -1069,6 +1081,35 @@ class Navigator:
                     seen.add(tp.dest_poly)
                     todo.append(tp.dest_poly)
         return seen
+
+    def _native_graph(self):
+        """The compiled flood fill (evildoom_native.Graph) for this navmesh: the static
+        adjacency, gate lines, teleports and jumps, with the geometry questions it can't
+        answer itself (box past gate lines, room to drop) asked back here."""
+        if "_ngraph" not in self.__dict__:
+            mesh, m = self.mesh, self.map
+            adj = [[(pi, to, sa, sb, -1 if mesh.portals[pi].linedef is None
+                     else mesh.portals[pi].linedef) for pi, to, sa, sb in edges]
+                   for edges in self._static_adjacency()]
+            gates = {pi: [(li, list(sectors)) for li, _edge, sectors in g]
+                     for pi, g in self._portal_gates.items()}
+            tele = []
+            for poly in range(len(mesh.polys)):
+                out = []
+                for tp in self.tele_from.get(poly, ()):
+                    if isinstance(tp, Jump):
+                        out.append(("jump", tp.dest_poly, -1, -1, sorted(tp.requires)))
+                    else:
+                        line = m.linedefs[tp.line]
+                        f, b = m.front_sector(line), m.back_sector(line)
+                        out.append(("line", tp.dest_poly, -1 if f is None else f,
+                                    -1 if b is None else b, []))
+                tele.append(out)
+            self._ngraph = _native.Graph(
+                [p.sector if p else 0 for p in mesh.polys], adj, gates, tele,
+                lambda pi, blocking: self.portal_fits_without(pi, blocking),
+                lambda li, high, top: self._landable(li, high, top))
+        return self._ngraph
 
     def _static_adjacency(self) -> list[list[tuple[int, int, int, int]]]:
         """Per poly: (portal, poly beyond, its sector, the far sector) for the portals that
@@ -1292,12 +1333,16 @@ class Navigator:
                     [via for _, via in chain if isinstance(via, Jump)])
 
     def _timed_path(self, start: Point, goal: Point, states: HeightStates, doors: Doors | None,
-                    fired: TriggerLine | None) -> Path | None:
-        """find_path for the leg right after `fired` went off at `start`. A temporary state it
-        made (lift down, door open for a while) can only be used if the path gets to that
-        sector before it ends, at running speed; otherwise path without it."""
+                    fired: TriggerLine | None,
+                    deadlines: dict | None = None) -> Path | None:
+        """find_path for a leg from `start`. Temporary heights can only be used if the path
+        gets to their sector before they end, at running speed; otherwise path without them.
+        `deadlines`: (sector, heights) -> tics they have left (the planner's, which can come
+        from several triggers back); without it, those `fired` (just went off at `start`)
+        made: a lift down or door open for a while, or a floor's old height while it moves."""
         path = self.find_path(start, goal, states, doors)
-        if path is None or fired is None or fired.line < 0:
+        if path is None or not deadlines and (deadlines is not None or fired is None
+                                              or fired.line < 0):
             return path
         temporary = self._temporary_heights()
         late = []
@@ -1307,7 +1352,10 @@ class Navigator:
             if src is not None and src.sector in arrive:
                 for s, _h in j.requires:
                     arrive[s] = min(arrive.get(s, math.inf), arrive[src.sector])
-        for s, hs in fired.effects.items():
+        if deadlines is not None:
+            late = [(s, h) for (s, h), left in deadlines.items()
+                    if s in arrive and arrive[s] > left]
+        for s, hs in (fired.effects.items() if deadlines is None else ()):
             if fired.permanent:
                 # A floor moving for good: where it was is only there until it gets where
                 # it's going (E4M2: a jump planned over sector 30 at its old height, which it
@@ -1442,22 +1490,62 @@ class Navigator:
             legs: list[Leg]
             reach: set[int]
             steps: int = 0
-            pending: tuple | None = None  # (prev pos, prev states, prev keys, trigger, key)
-            temp: frozenset = frozenset()  # temporary heights the last trigger made (a lift
-            #                                down for 3s): only the next leg can use them
+            pending: tuple | None = None  # (prev pos, prev states, prev keys, trigger, key,
+            #                               prev temp)
+            temp: dict = field(default_factory=dict)  # temporary heights (a lift down for
+            #     3s, a door open for 4s) -> tics left from here: later legs can use them
+            #     until they run out (MAP22: through a door to a switch and back through it
+            #     for the red skull; MAP24: onto a lift for the red card, then on across it).
+            #     A floor's old height while it moves for good only lasts the next leg.
             squeezes: int = 0   # spots on the route so far where the box may not fit
+            world: set | None = None   # reach without any temporary heights (what lasts)
+            stable: set | None = None  # reach without temporary heights carried from earlier
+            #     legs (for ranking: several lifts each down for a few seconds all count at
+            #     once in `reach`, which makes a node look far better than it is: MAP14)
             rank: tuple = ()    # the rest of its priority (after goal reach and squeezes)
 
         temporary = self._temporary_heights()
 
-        def expire(states: HeightStates, temp: frozenset) -> HeightStates:
-            """The heights once a node's temporary states have run out."""
+        moving_off: set = set()  # (sector, heights) a permanent move leaves behind
+
+        def expire(states: HeightStates, temp: dict, target: Point,
+                   frm: Point) -> tuple[HeightStates, dict, frozenset]:
+            """Walking from `frm` to `target` (and acting there): the heights without the
+            temporary ones that run out meanwhile, those that don't (with the time they have
+            left then), and the ones that ran out."""
             if not temp:
-                return states
+                return states, {}, frozenset()
+            took = math.dist(frm, target) / LEG_SPEED + 10
+            left = {k: v - took for k, v in temp.items()
+                    if v - took > 0 and k not in moving_off}
+            gone = frozenset(temp) - frozenset(left)
+            if not gone:
+                return states, left, gone
             out = {s: set(h) for s, h in states.items()}
-            for s, h in temp:
+            for s, h in gone:
                 if len(out[s]) > 1:
                     out[s].discard(h)
+            return out, left, gone
+
+        def deadlines_of(t: TriggerLine, base: HeightStates, trial: HeightStates) -> dict:
+            """The temporary heights firing `t` makes, with how long they last."""
+            out = {}
+            for s, hs in t.effects.items():
+                if t.permanent:
+                    # Once a floor has risen for good its old height is gone too: you can
+                    # still hop on while it moves (E4M2: the plan walked from a pit onto
+                    # sector 3 at its old floor long after it had risen).
+                    travel = self.movers.timing(t.info.special, t.info.description, s,
+                                                hs[0]).travel if t.line >= 0 else 0
+                    old = {(s, h): travel for h in trial[s] if h not in hs}
+                    moving_off.update(old)
+                    out.update(old)
+                    continue
+                for h in hs:  # (fresh even if still there from before: pressed again)
+                    if (s, h) in temporary:
+                        tm = self.movers.timing(t.info.special, t.info.description, s, h) \
+                            if t.line >= 0 else None
+                        out[(s, h)] = tm.travel + (tm.hold or 0) if tm else 0
             return out
 
         keys0 = frozenset(keys)
@@ -1478,7 +1566,34 @@ class Navigator:
         # the switches that open the way) and returns the fallback if none turns up (making
         # every clean node go first wanders for ages where a squeeze is needed: MAP26/29).
         heap = [((False, 0, False, False, 0, 0), next(counter), root)]
-        seen: set[tuple] = set()
+        # Duplicate check with dominance on time left: per world (heights added, keys held,
+        # reachable area) keep the timer sets no other one beats; a node is skipped when an
+        # earlier one for its world has at least as much time left on every running lift
+        # and door.
+        seen: dict[tuple, list[dict]] = {}
+
+        def timers(n: Node) -> dict:
+            return n.temp
+
+        def dominated(sig: tuple, tm: dict) -> bool:
+            others = seen.get(sig, ())
+            if any(all(k in other and other[k] >= v for k, v in tm.items())
+                   for other in others):
+                return True
+            # Several timers running at once rarely beat each other outright ({A: 4s, B: 1s}
+            # vs {A: 1s, B: 4s}), so alternating presses kept making "new" ones (MAP14: two
+            # lifts pressed 70+ times each). Keep a few per world: the most time left in all.
+            return len(others) >= TIMER_SETS and \
+                sum(tm.values()) <= min(sum(o.values()) for o in others)
+
+        def mark(sig: tuple, tm: dict) -> None:
+            keep = [o for o in seen.get(sig, ())
+                    if not all(k in tm and tm[k] >= v for k, v in o.items())]
+            keep = sorted(keep + [tm], key=lambda o: -sum(o.values()))
+            seen[sig] = keep[:TIMER_SETS] if tm in keep[:TIMER_SETS] else keep[:TIMER_SETS - 1] + [tm]
+
+        def unmark(sig: tuple, tm: dict) -> None:
+            seen[sig] = [o for o in seen.get(sig, ()) if o is not tm]
         expansions = 0
         fallback: tuple[int, Route, int, float] | None = None  # squeezes, route, when found
         deadline = time.perf_counter() + max_seconds
@@ -1490,21 +1605,33 @@ class Navigator:
             if fallback is not None and node.squeezes:
                 continue  # looking for a clean route now: only clean nodes
 
-            sig = (node.added, node.keys, frozenset(node.reach))
-            if sig in seen:
+            # (pressing a door's switch again only changes its timer, and that's what the next
+            # leg may need: MAP02; but the same world with less time left is no better)
+            # The world is what lasts: heights added that aren't temporary, keys, and what's
+            # reachable without the temporary ones; those are the timers, compared by dominance
+            # (with them in the world, every combination of lifts still down was a world of
+            # its own and nothing could be pruned: MAP14's search grew tenfold)
+            sig = (node.added - frozenset(node.temp), node.keys,
+                   frozenset(node.world if node.world is not None else node.reach))
+            tm = timers(node)
+            if dominated(sig, tm):
                 continue
-            seen.add(sig)
+            mark(sig, tm)
             if node.pending:  # path the leg that got us here, now that we've picked this node
-                prev_pos, prev_states, prev_keys, t, key = node.pending
+                prev_pos, prev_states, prev_keys, t, key, prev_temp = node.pending
                 path = self._timed_path(prev_pos, node.pos, prev_states, doors_for(prev_keys),
-                                        node.legs[-1].trigger if node.legs else None)
+                                        None, prev_temp)
                 if path is None:
+                    if prev_temp:
+                        # Maybe only too late for something temporary: the same world reached
+                        # another way (the switch pressed later) still gets its turn (MAP02).
+                        unmark(sig, tm)
                     continue
                 node.legs = node.legs + [Leg(t, path, key)]
                 node.pending = None
                 if path.squeezes:  # back in the queue, behind cleaner nodes
                     node.squeezes += path.squeezes
-                    seen.discard(sig)
+                    unmark(sig, tm)
                     heapq.heappush(heap, ((priority[0], node.squeezes) + node.rank,
                                           next(counter), node))
                     continue
@@ -1520,8 +1647,8 @@ class Navigator:
                 gt = (goal_triggers or {}).get(goal_polys[gp])
                 if gt is not None and gp not in self.activators_now(gt, node.states):
                     continue  # e.g. the exit switch is still behind closed bars
-                path = self._timed_path(node.pos, goal_polys[gp], node.states, doors,
-                                        node.legs[-1].trigger if node.legs else None)
+                path = self._timed_path(node.pos, goal_polys[gp], node.states, doors, None,
+                                        node.temp)
                 if path:
                     route = Route(node.legs + [Leg(None, path)], node.states, node.keys,
                                   goal_polys[gp])
@@ -1532,20 +1659,41 @@ class Navigator:
                         fallback = (total, route, expansions, time.perf_counter())
 
             def push(target: Point, trial: HeightStates, added: frozenset, ks: frozenset,
-                     t: TriggerLine | None, key: Key | None, temp: frozenset = frozenset(),
-                     after: set[int] | None = None) -> None:
+                     t: TriggerLine | None, key: Key | None, temp: dict,
+                     after: set[int] | None = None, carried: frozenset = frozenset()) -> None:
                 target_poly = mesh.poly_at(*target)
                 if target_poly is None:
                     return
                 if after is None:  # (what's reachable from target, if already worked out)
                     after = self.reachable(target_poly.index, trial, doors_for(ks))
+                stable = after
+                if carried:
+                    plain = {x: set(hs) for x, hs in trial.items()}
+                    for x, h in carried:
+                        if len(plain[x]) > 1:
+                            plain[x].discard(h)
+                    stable = self.reachable(target_poly.index, plain, doors_for(ks))
+                    if stable == after:
+                        # The lifts and doors still running from earlier open nothing more
+                        # from here: let them go (keeping them only multiplies the search:
+                        # MAP17's many repeatable lifts)
+                        trial, temp = plain, {k: v for k, v in temp.items() if k not in carried}
+                        added = added - carried
+                        carried = frozenset()
+                world = stable  # what's reachable with no temporary heights at all
+                if set(temp) - carried:
+                    plain = {x: set(hs) for x, hs in trial.items()}
+                    for x, h in temp:
+                        if len(plain[x]) > 1:
+                            plain[x].discard(h)
+                    world = self.reachable(target_poly.index, plain, doors_for(ks))
                 child = Node(target, trial, added, ks, node.legs, after, node.steps + 1,
-                             (node.pos, node.states, node.keys, t, key), temp,
-                             squeezes=node.squeezes)
-                progress = bool(after - node.reach) or key is not None
+                             (node.pos, node.states, node.keys, t, key, node.temp), temp,
+                             squeezes=node.squeezes, stable=stable, world=world)
+                progress = bool(stable - (node.stable or node.reach)) or key is not None
                 relevant = (t is not None and t.line in rel_t) or (key is not None and key in rel_k)
-                child.rank = (not relevant, not progress, -len(after), child.steps)
-                priority = (not goal_polys.keys() & after, child.squeezes) + child.rank
+                child.rank = (not relevant, not progress, -len(stable), child.steps)
+                priority = (not goal_polys.keys() & stable, child.squeezes) + child.rank
                 heapq.heappush(heap, (priority, next(counter), child))
 
             # Triggers: one candidate per distinct world change, the closest line producing it.
@@ -1557,6 +1705,9 @@ class Navigator:
                     self.activators_now(t, node.states, doors) & node.reach
                 if not usable or not t.info.lock.satisfied(set(node.keys)):
                     continue
+                # (not pressed again while its lift or door is still running: refreshing a
+                # timer always looks better and the search loops on it, MAP17; once it has run
+                # out, pressing is new again)
                 new = frozenset((s, h) for s, hs in t.effects.items() for h in hs
                                 if h not in node.states[s])
                 if not new:
@@ -1566,16 +1717,9 @@ class Navigator:
                 if new not in options or d < options[new][0]:
                     options[new] = (d, t, target, usable)
             for new, (_, t, target, usable) in options.items():
-                base = expire(node.states, node.temp)
+                base, left, gone = expire(node.states, node.temp, target, node.pos)
                 trial = apply_trigger(base, t)
-                temp = frozenset((s, h) for s, hs in t.effects.items() for h in hs
-                                 if (s, h) in temporary and h not in base[s])
-                if t.permanent:
-                    # Once a floor has risen for good its old height is gone too: only the
-                    # next leg can still hop on while it moves (E4M2: the plan walked from a
-                    # pit onto sector 3 at its old floor long after it had risen).
-                    temp |= {(s, h) for s, hs in t.effects.items() for h in trial[s]
-                             if h not in hs}
+                temp = left | deadlines_of(t, base, trial)
                 # Where we stand to use it matters (a door pressed from the pit below it is
                 # useless): try the default spot and a few others it can be used from, keep
                 # the one leaving the most reachable.
@@ -1598,8 +1742,8 @@ class Navigator:
                     covered |= r
                     if best_reach is None or len(r) > len(best_reach):
                         best, best_reach = sp, r
-                push(best, trial, (node.added - node.temp) | new, node.keys, t, None, temp,
-                     best_reach)
+                push(best, trial, (node.added - gone) | new, node.keys, t, None, temp,
+                     best_reach, frozenset(left))
             # Keys: for each key not yet held, the reachable pickup spot that leaves the most
             # reachable afterwards (some spots are slivers you can't walk on from).
             for key, spots in key_items.items():
@@ -1617,8 +1761,9 @@ class Navigator:
                     _, spot = max(here, key=lambda s: (
                         len(self.reachable(s[0], node.states, doors_for(ks))),
                         -math.dist(node.pos, s[1])))
-                    push(spot, expire(node.states, node.temp), node.added - node.temp, ks, None,
-                         key)
+                    after_states, left, gone = expire(node.states, node.temp, spot, node.pos)
+                    push(spot, after_states, node.added - gone, ks, None, key, left,
+                         carried=frozenset(left))
         return fallback[1] if fallback else None
 
     def _upper_bound(self, start: int, states: HeightStates, keys: frozenset,

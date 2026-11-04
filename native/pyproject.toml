@@ -1,0 +1,12 @@
+[build-system]
+requires = ["maturin>=1.5"]
+build-backend = "maturin"
+
+[project]
+name = "evildoom-native"
+version = "0.1.0"
+description = "Compiled hot paths for the evil-doom planner (optional; Python fallbacks exist)"
+requires-python = ">=3.12"
+
+[tool.maturin]
+module-name = "evildoom_native"

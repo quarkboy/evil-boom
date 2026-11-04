@@ -122,7 +122,7 @@ def _exit_step(t: TriggerLine) -> Step:
     return Step(None, "exit" if action == "use" else action, t, label=f"exit via line {t.line}")
 
 
-def plan_level(nav: Navigator, start: Point, max_seconds: float = 30.0,
+def plan_level(nav: Navigator, start: Point, max_seconds: float = 60.0,
                max_expansions: int = 5000) -> LevelPlan:
     """From the map's initial heights, finish the level: one search (Navigator.plan) whose
     goal is any exit, using switches and picking up keys in whatever order works."""

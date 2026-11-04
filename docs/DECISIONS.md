@@ -313,6 +313,31 @@ watched on stream) and recover when things go wrong.
   a squeezed route to the exit is taken only when nothing cleaner is ahead in the queue.
   MAP13 plans in 2 s instead of 124 s.
 
+## One planning mode: lifts and timed doors last across legs (2026-11-04)
+- Temporary heights (a lift down for 3 s, a door open for 4 s) carry the time they have
+  left, and any later leg may use them until it runs out (MAP22: through a door to a switch
+  and back through it; MAP24: onto a lift for a key and on across it). They used to last only
+  for the leg right after their trigger. A floor's old height while it moves for good still
+  only lasts one leg.
+- To keep the search small: the "world" for duplicate checks is what lasts (heights added
+  that aren't temporary, keys, the area reachable without temporary heights); timers are
+  compared by dominance within a world, keeping at most TIMER_SETS per world by total time
+  left; a carried timer that doesn't change what's reachable is dropped; a switch isn't
+  pressed again while its lift or door is still running; nodes are ranked by the area they
+  reach without carried timers.
+- MAP17 (many repeatable lifts) is the slow case: ~300 s to plan; the planning limit is
+  60 s for now.
+
+## Navigation core moves to Rust (2026-11-04)
+- A first compiled piece (`native/`, PyO3 + maturin, crate `evildoom_native`) does the
+  planner's flood fill. It matches Python on every call checked, but is only 2-3x faster:
+  crossing the Python/Rust boundary thousands of times per plan dominates. So the whole
+  navigation core (map data, navmesh, planner, path-finding, movers, jump finder, movement
+  sim) is to be ported in stages, with Python calling in about once per plan; the ViZDoom
+  adapter, follower and Neuro integration stay in Python. The Python version is the
+  reference until each stage plans every map the same. Keep it portable (final deployment
+  is likely Linux).
+
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
 - [ ] Timing-aware handling of lifts/doors that close on a timer (be on them in time).
