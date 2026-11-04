@@ -1126,6 +1126,22 @@ class RouteFollower:
                         return cur, next(iter(sides - {cur.sector}), cur.sector), portal, None
         return None
 
+    def _use_intercepted(self, pos, target) -> bool:
+        """Does the use trace from pos to target cross a line with a special on the way (a
+        press would set that off instead)? Lines ending at target don't count."""
+        m, grid = self.nav.map, self.nav.mesh._line_grid
+        for li in {li for c in _cells(*pos, *target) for li in grid.get(c, ())}:
+            line = m.linedefs[li]
+            if not line.special:
+                continue
+            a = (m.vertexes[line.v1].x, m.vertexes[line.v1].y)
+            b = (m.vertexes[line.v2].x, m.vertexes[line.v2].y)
+            if math.dist(_closest_point(target, a, b), target) < 1:
+                continue  # the line being pressed
+            if _segments_cross(pos, target, a, b):
+                return True
+        return False
+
     def _door_line_point(self, sector: int, pos):
         """Nearest point (a little in from its ends) on a use line that opens this door."""
         m, best = self.nav.map, None
@@ -1204,10 +1220,15 @@ class RouteFollower:
                 # use trace, e.g. another switch line): keep walking up to it.
                 self._speed_cap = max(1.0, 0.3 * dist)
                 return None
-            if dist > DOOR_STANDOFF + 4:
+            standoff = DOOR_STANDOFF
+            if self._use_intercepted(pos, door_point):
+                # Another switch line between us and the door would take the press (E3M9: a
+                # door-close switch just in front of the red door): go right up to the door.
+                standoff = PLAYER_RADIUS + 2
+            if dist > standoff + 4:
                 # Closed door ahead: keep following the path, slowing to stop in front of it.
-                self._speed_cap = max(1.0, min(math.sqrt(2 * BRAKE * (dist - DOOR_STANDOFF)),
-                                               0.3 * (dist - DOOR_STANDOFF) + 1))
+                self._speed_cap = max(1.0, min(math.sqrt(2 * BRAKE * (dist - standoff)),
+                                               0.3 * (dist - standoff) + 1))
                 return None
 
         if self._wait_tic is None:
