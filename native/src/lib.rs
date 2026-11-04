@@ -115,6 +115,11 @@ impl Nav {
             dest_pt,
             kind: if kind == "jump" { TeleKind::Jump { runup, takeoff, requires } } else { TeleKind::Line { line: line as usize, front, back } },
         }).collect()).collect();
+        let mut seg_lines = HashMap::new();
+        for (li, l) in map.linedefs.iter().enumerate() {
+            let (va, vb) = (map.vertexes[l.v1], map.vertexes[l.v2]);
+            seg_lines.insert(geom::skey(((va.x, va.y), (vb.x, vb.y))), li);
+        }
         Ok(Nav {
             core: NavCore {
                 map,
@@ -138,6 +143,9 @@ impl Nav {
                 obstacle_grid,
                 obstacle_order: Vec::new(),
                 plan_data: None,
+                seg_lines,
+                smooth_doors: None,
+                hard_squeeze: std::sync::atomic::AtomicBool::new(false),
             },
         })
     }

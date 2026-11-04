@@ -1391,12 +1391,13 @@ class Navigator:
         best, banned = None, set()   # (squeeze points, path) of the least bad attempt
         for _ in range(3):
             self._squeezes: list[Point] = []
+            self._hard_squeeze = False
             path = self._find_path_once(start, goal, states, doors, banned)
             if path is None:
                 break
             if not self._squeezes:
                 return path
-            if best is None or len(self._squeezes) < best[0]:
+            if not self._hard_squeeze and (best is None or len(self._squeezes) < best[0]):
                 best = (len(self._squeezes), path)
             # ban the path's own polys where it squeezes (not where it starts or ends)
             new = set()
@@ -1488,10 +1489,11 @@ class Navigator:
         polys = [p for p, _ in chain]
         cost = best[gp.index] + math.dist(entry[gp.index], goal)
         self._smooth_states = states  # box fitting judges moving sectors at these heights
+        self._smooth_doors = doors
         try:
             points = self._smooth(start, goal, chain)
         finally:
-            self._smooth_states = None
+            self._smooth_states = self._smooth_doors = None
         return Path(polys, points, cost,
                     self._annotate(chain, states, doors),
                     [via for _, via in chain if isinstance(via, Jump)])
@@ -2355,6 +2357,37 @@ class Navigator:
         return {e for e in self._static_edges(p, q, PLAYER_RADIUS + 1, exempt)
                 if e not in ignore and _swept_box_hits(p, q, r, e)}
 
+    def _shut_in(self, edges) -> bool:
+        """Are all these edges lines of sectors shut at the heights being judged (no room to
+        stand in) that we can't open? Then the box really doesn't get through: no false
+        alarm (MAP21: a 24x24 diagonal gap between the corners of two yellow-key doors,
+        before the key)."""
+        if not edges:
+            return False
+        if not hasattr(self, "_seg_lines"):
+            m = self.map
+            self._seg_lines = {((m.vertexes[l.v1].x, m.vertexes[l.v1].y),
+                                (m.vertexes[l.v2].x, m.vertexes[l.v2].y)): l.index
+                               for l in m.linedefs}
+        states, doors = self._smooth_states, self._smooth_doors or {}
+        if states is None:
+            return False
+        m = self.map
+        for e in edges:
+            li = self._seg_lines.get(e)
+            if li is None:
+                return False
+            line = m.linedefs[li]
+            f, b = m.front_sector(line), m.back_sector(line)
+            if f is None or b is None or f in doors or b in doors:
+                return False
+            if any(min(hf[1], hb[1]) - max(hf[0], hb[0]) >= PLAYER_HEIGHT
+                   for hf in states[f] for hb in states[b]) and \
+                    any(h[1] - h[0] >= PLAYER_HEIGHT for h in states[f]) and \
+                    any(h[1] - h[0] >= PLAYER_HEIGHT for h in states[b]):
+                return False
+        return True
+
     def _box_fits_path(self, pts: list[Point], exempt: frozenset,
                        pinned: set[Point] = frozenset()) -> list[Point]:
         """The funnel and corner pushes keep round clearances from portal ends and vertices,
@@ -2377,6 +2410,8 @@ class Navigator:
                     out += detour
                 elif hasattr(self, "_squeezes"):  # tell find_path to look for another way
                     self._squeezes += self._squeeze_points(a, b, ignore, exempt)
+                    if self._shut_in(self._box_hits(a, b, ignore, exempt)):
+                        self._hard_squeeze = True
             out.append(b)
         return out
 

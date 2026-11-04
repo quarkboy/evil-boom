@@ -150,6 +150,12 @@ pub struct NavCore {
     pub obstacle_grid: HashMap<(i64, i64), Vec<Seg>>,
     pub obstacle_order: Vec<(i64, i64)>,
     pub plan_data: Option<crate::plan::PlanData>,
+    /// line segment (skey) -> line, for telling which lines the box is blocked by
+    pub seg_lines: HashMap<(u64, u64, u64, u64), usize>,
+    /// doors that can be opened, while smoothing a path (Navigator._smooth_doors)
+    pub smooth_doors: Option<HashSet<usize>>,
+    /// a squeeze while smoothing was against shut sectors only (Navigator._hard_squeeze)
+    pub hard_squeeze: std::sync::atomic::AtomicBool,
 }
 
 impl NavCore {
@@ -300,13 +306,14 @@ impl NavCore {
         let mut banned: HashSet<usize> = HashSet::new();
         for _ in 0..3 {
             let mut squeezes: Vec<Point> = Vec::new();
+            self.hard_squeeze.store(false, std::sync::atomic::Ordering::Relaxed);
             let Some(mut path) = self.find_path_once(py, start, goal, st, doors, &banned, &mut squeezes)? else { break };
             if squeezes.is_empty() {
                 return Ok(Some(path));
             }
             let n = squeezes.len();
             let polys = path.polys.clone();
-            if best.as_ref().map_or(true, |b| n < b.squeezes) {
+            if !self.hard_squeeze.load(std::sync::atomic::Ordering::Relaxed) && best.as_ref().map_or(true, |b| n < b.squeezes) {
                 path.squeezes = n;
                 best = Some(path);
             }
@@ -393,7 +400,10 @@ impl NavCore {
         chain.reverse();
         let cost = best[&gp] + dist(entry[&gp], goal);
         crate::plan::phase(0, t_astar);
-        let points = self.smooth(py, start, goal, &chain, st, squeezes)?;
+        self.smooth_doors = doors.map(|d| d.keys().copied().collect());
+        let points = self.smooth(py, start, goal, &chain, st, squeezes);
+        self.smooth_doors = None;
+        let points = points?;
         Ok(Some(Found {
             polys: chain.iter().map(|c| c.0).collect(),
             waypoints: points,
@@ -751,11 +761,41 @@ impl NavCore {
                     out.extend(d);
                 } else {
                     squeezes.extend(self.squeeze_points(a, b, &ignore, exempt, st)?);
+                    let hits = self.box_hits(a, b, &ignore, Some(exempt), st)?;
+                    if self.shut_in(&hits, st)? {
+                        self.hard_squeeze.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
                 }
             }
             out.push(b);
         }
         Ok(out)
+    }
+
+    /// Navigator._shut_in: all these edges are lines of shut sectors we can't open.
+    fn shut_in(&self, edges: &HashSet<(u64, u64, u64, u64)>, st: &mut dyn Src) -> PyResult<bool> {
+        if edges.is_empty() {
+            return Ok(false);
+        }
+        let room = |h: &Heights| h.1 - h.0 >= PLAYER_HEIGHT;
+        for e in edges {
+            let Some(&li) = self.seg_lines.get(e) else { return Ok(false) };
+            let l = &self.map.linedefs[li];
+            let (Some(f), Some(b)) = (self.map.front_sector(l), self.map.back_sector(l)) else { return Ok(false) };
+            if let Some(d) = &self.smooth_doors {
+                if d.contains(&f) || d.contains(&b) {
+                    return Ok(false);
+                }
+            }
+            let fs = st.get(f)?.clone();
+            let bs = st.get(b)?;
+            let open = fs.iter().any(|hf| bs.iter().any(|hb| hf.1.min(hb.1) - hf.0.max(hb.0) >= PLAYER_HEIGHT))
+                && fs.iter().any(room) && bs.iter().any(room);
+            if open {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     fn sectors_along(&self, a: Point, b: Point) -> HashSet<usize> {
