@@ -5,7 +5,7 @@ from dataclasses import dataclass, field, replace
 from evildoom.wad.specials import Category, Key, Trigger
 
 from .movers import TICRATE
-from .reach import HeightStates, Navigator, Path, Point, TriggerLine
+from .reach import EXIT_FLOOR, HeightStates, Navigator, Path, Point, TriggerLine
 
 
 @dataclass
@@ -66,6 +66,8 @@ class LevelPlan:
 
 
 def _action_for(t: TriggerLine) -> str:
+    if t.line <= EXIT_FLOOR:
+        return "endure"
     if t.line < 0:
         return "kill"
     if t.info.trigger in (Trigger.S1, Trigger.SR, Trigger.D1, Trigger.DR):

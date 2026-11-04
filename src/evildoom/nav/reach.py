@@ -53,6 +53,7 @@ THING_CLEARANCE = 6  # extra room left round solid things when detouring past th
 SHOT_HEIGHT = 36  # bullets leave the player at z + 28 + 8, and level: no aiming up or down
 MIN_PORTAL = 4.0  # narrower portals are nodebuilder slivers, never the real way through
 LEG_SPEED = 12.0  # units/tic assumed when timing legs against lifts and doors (full run ~16)
+EXIT_FLOOR = -1000  # pseudo-trigger lines below this: exit floors (Navigator._exit_floors)
 MIN_SHOT_SPAN = 6.0  # degrees a gun line must span from where it's shot (aim isn't exact)
 BOX_SLACK = 0.25  # the box must clear walls by this much: no one threads a gap exactly 32 wide
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
@@ -832,7 +833,20 @@ class Navigator:
             out.append(TriggerLine(line.index, info, sectors,
                                    self.movers.effects(line.special, sectors), activators))
         self.triggers = out  # boss triggers need the line triggers (monster-usable doors)
-        return out + self._boss_triggers()
+        return out + self._boss_triggers() + self._exit_floors()
+
+    def _exit_floors(self) -> list[TriggerLine]:
+        """Sectors that end the level once the floor has hurt the player down to 10 health
+        (special 11: E1M8's exit, behind the barons). Pseudo-triggers, line EXIT_FLOOR - sector,
+        "activated" by standing on them."""
+        out = []
+        for sec in self.map.sectors:
+            if sec.special == 11:
+                polys = {p.index for p in self.mesh.polys if p is not None and p.sector == sec.index}
+                info = LineSpecial(0, Trigger.NONE, Category.EXIT,
+                                   f"stand on sector {sec.index} till it ends the level")
+                out.append(TriggerLine(EXIT_FLOOR - sec.index, info, [], {}, polys))
+        return out
 
     def _polys_in_use_range(self, line) -> set[int]:
         """Polys that come within USE_REACH of the line on its front side. Use traces 64 units

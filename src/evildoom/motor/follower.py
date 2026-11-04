@@ -44,7 +44,7 @@ BARREL_GIVE_UP = 8 * TICRATE
 DROP_CHECK_DIST = 48     # how far ahead to look for crossings that became one-way drops
 USE_EVERY = 15           # tics between use presses while waiting at a door
 RUNUP_TOLERANCE = 6.0    # how exactly to hit a jump run-up point
-STOP_ACTIONS = ("use", "shoot", "exit", "face", "kill")
+STOP_ACTIONS = ("use", "shoot", "exit", "face", "kill", "endure")
 
 # Turning, roughly a keyboard player's (vanilla's fast keyboard turn is 7 deg/tic).
 MAX_TURN = 8.0           # degrees per tic
@@ -1477,6 +1477,11 @@ class RouteFollower:
 
     def _act_at_goal(self, obs: Observation) -> Controls:
         step = self.steps[self.step_i]
+        if step.action == "endure":
+            # An exit floor: stand on it while it hurts us down to 10 health, which ends the
+            # level (E1M8). Nothing to do but wait.
+            self._step_tic = self._progress_tic = obs.tic
+            return self.motion.drive(obs, (0.0, 0.0), self._look)
         if step.action == "cross" and not self._crossed and step.trigger is not None:
             return self._walk_across(obs)
         if step.action == "cross" and step.trigger is not None \
