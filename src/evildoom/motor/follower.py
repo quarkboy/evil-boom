@@ -35,6 +35,10 @@ TICRATE = 35
 REACHED = 12.0           # arrival radius for points we pass through
 FINAL_REACHED = 10.0     # ... and for points we stop at
 PICKUP_REACHED = 6.0     # ... and for pickup spots (they can be near the edge of touching range)
+RUN_REAIM = 4            # tics between re-aims while running over sinking floors
+RUN_TURN = 10.0          # degrees a tic a player turns while running across them
+RUN_AHEAD_SINK = 4       # how much lower a sinking floor is assumed by the time we leave it
+DROP_CHECK_DIST = 48     # how far ahead to look for crossings that became one-way drops
 USE_EVERY = 15           # tics between use presses while waiting at a door
 RUNUP_TOLERANCE = 6.0    # how exactly to hit a jump run-up point
 STOP_ACTIONS = ("use", "shoot", "exit", "face", "kill")
@@ -284,6 +288,15 @@ class Motion:
         return self.drive(obs, (math.cos(rad) * speed, math.sin(rad) * speed), look, cap)
 
 
+def _run_controls(angle: float, direction: float) -> Controls:
+    """Full thrust towards world `direction` (running and strafing as needed), turning to
+    face it."""
+    d = _norm(direction - angle)
+    rad = math.radians(d)
+    return Controls(forward=50.0 * math.cos(rad), strafe=-50.0 * math.sin(rad),
+                    turn=max(-RUN_TURN, min(RUN_TURN, -d)))
+
+
 # --- following a route ------------------------------------------------------------------------
 
 class RouteFollower:
@@ -306,8 +319,20 @@ class RouteFollower:
         self.done = False
         self.failed = False
         self.replans = 0
+        self._drops_ok: set = set()  # unexpected drops already replanned for (this step)
         self._last_pos: tuple[float, float] | None = None
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
+        self._run = None     # running over sinking floors (_run_step)
+        # Floors that sink once stepped on (a walk-over line on their own edge lowers them:
+        # MAP08's exit run over the nukage): a jump off one goes at once, without settling.
+        self._sinking = set()
+        for t in nav.triggers:
+            if t.line >= 0 and t.info.trigger in (Trigger.W1, Trigger.WR):
+                line = nav.map.linedefs[t.line]
+                for sec in {nav.map.front_sector(line), nav.map.back_sector(line)}:
+                    if sec in t.effects and any(h[0] < nav.movers.real[sec][0]
+                                                for h in t.effects[sec]):
+                        self._sinking.add(sec)
         self._lineup_tic: int | None = None  # when we arrived at a jump's run-up
         self._brake_until = -1               # after landing a jump, until we've stopped
         self._jump_wait = None
@@ -369,6 +394,7 @@ class RouteFollower:
     def _advance(self, tic: int) -> None:
         self.step_i += 1
         self._step_replans = 0
+        self._drops_ok = set()
         if self.step_i >= len(self.steps):
             self.done = True
             self.log.add(tic, "route finished")
@@ -481,14 +507,14 @@ class RouteFollower:
     def act(self, obs: Observation) -> Controls:
         if self.done or self.failed:
             return Controls()
-        mv = self.nav.movers
-        if mv.initial != mv.real:
+        if self.nav.trenches:
             # Slots too narrow to stand in, at the floor beside them, as planned
             # (Navigator._fill_trenches): otherwise the real floor reads as a step to wait out.
             heights = dict(obs.heights)
-            for s, (real, planned) in enumerate(zip(mv.real, mv.initial)):
-                if real != planned and s in heights:
-                    heights[s] = planned
+            for t in self.nav.trenches:
+                if t in heights:
+                    f = self.nav.trench_floor(t, lambda o: obs.heights.get(o, (math.inf,))[0])
+                    heights[t] = (f, heights[t][1])
             obs = replace(obs, heights=heights)
         self.motion.observe(obs)
         self._live = obs.heights   # (corner cutting keeps off ledges as they are now)
@@ -529,6 +555,8 @@ class RouteFollower:
     def _walk(self, obs: Observation) -> Controls:
         if self._sprint is not None:
             return self._sprint_jump(obs)
+        if self._run is not None:
+            return self._run_step(obs)
         if obs.tic < self._brake_until:
             if self.motion.speed > 1.0:  # just landed a jump: stop first
                 self._progress_tic = obs.tic
@@ -545,6 +573,8 @@ class RouteFollower:
             return self._walk(obs)
 
         self._speed_cap = math.inf
+        if self._unexpected_drop(obs):
+            return self._walk(obs)
         blocked = self._check_blocked(obs)
         if blocked is not None:
             return blocked
@@ -832,6 +862,75 @@ class RouteFollower:
         self._progress_tic = obs.tic
         return self.motion.drive(obs, hold, heading)
 
+    def _run_step(self, obs: Observation) -> Controls:
+        """Running over floors that sink once stepped on (MAP08's exit: platforms in nukage
+        that go down as you land, with a turn in the middle). There's no stopping to line up
+        a jump: keep running, and every few tics pick, with the movement sim from where we are
+        and how fast we're going, the heading that lands on the floor nearest the goal along
+        the way. Over once we're on a floor that stays put; then path on from there."""
+        here = self.nav.mesh.poly_at(obs.x, obs.y)
+        on_ground = obs.z is None or here is None or obs.z <= obs.heights[here.sector][0] + 0.5
+        if on_ground and here is not None and here.sector not in self._sinking:
+            self._run = None
+            self.log.add(obs.tic, f"ran across to ({obs.x:.0f}, {obs.y:.0f}) sector "
+                                  f"{here.sector}")
+            if not self._replan(obs, "after the run"):
+                return self._fail(obs, "nowhere to go after the run")
+            return self._walk(obs)
+        if on_ground and (obs.tic >= self._run["next"] or here.sector != self._run["sector"]):
+            heading = self._run_heading(obs, here.sector)
+            if heading is None:
+                self._run = None
+                self.log.add(obs.tic, "no heading off the sinking floor lands anywhere")
+                if not self._replan(obs, "sinking floor", live_only=True):
+                    return self._fail(obs, "stranded on a sinking floor")
+                return self._walk(obs)
+            self._run.update(heading=heading, sector=here.sector, next=obs.tic + RUN_REAIM)
+        self.motion.rate = 0.0
+        return _run_controls(obs.angle, self._run["heading"])
+
+    def _run_heading(self, obs: Observation, sector: int) -> float | None:
+        """The direction to push (from a fan all round: pushing back against our momentum
+        may be what keeps us on) whose simulated run lands, off this floor, on the floor
+        whose path to the step goal is shortest."""
+        from evildoom.nav.physics import PlayerSim   # (physics imports this module)
+        nav = self.nav
+        goal = next(p for p in reversed(self.steps[self.step_i].path.waypoints)
+                    if p is not None)
+        heights = dict(obs.heights)
+        f, c = heights[sector]
+        heights[sector] = (f - RUN_AHEAD_SINK, c)   # it keeps going down meanwhile
+        sim = PlayerSim(nav, heights)
+        live = {s: {h} for s, h in obs.heights.items()}
+        doors = nav.local_doors(self.keys)
+        going = math.degrees(math.atan2(self.motion.disp[1], self.motion.disp[0]))             if math.hypot(*self.motion.disp) > 2 else obs.angle
+        cost_from: dict[int, float | None] = {}
+        best = None
+        for off in range(-180, 180, 15):
+            heading = going + off
+            sim.place(obs.x, obs.y, obs.angle)
+            sim.vx, sim.vy = self.motion.disp
+            sim.z = obs.z if obs.z is not None else sim.floorz
+            land = None
+            try:
+                for _ in range(2 * TICRATE):
+                    sim.step(_run_controls(sim.angle, heading))
+                    q = nav.mesh.poly_at(sim.x, sim.y)
+                    if q is not None and q.sector != sector and sim.z <= sim.floorz                             and abs(sim.floorz - heights[q.sector][0]) < 0.5:
+                        land = q
+                        break
+            except Exception:
+                continue
+            if land is None or nav.damage.get(land.sector)                     or heights[land.sector][0] < f - MAX_STEP:
+                continue  # into the nukage (or nowhere)
+            if land.sector not in cost_from:
+                path = nav.find_path((sim.x, sim.y), goal, live, doors)
+                cost_from[land.sector] = path.cost if path is not None else None
+            cost = cost_from[land.sector]
+            if cost is not None and (best is None or (cost, abs(off)) < best[:2]):
+                best = (cost, abs(off), heading)
+        return best[2] if best else None
+
     def _sprint_jump(self, obs: Observation) -> Controls:
         """Full speed in a straight line, exactly as the engine check did it: only up to the
         edge for a soft jump (then coast: it lands slower, for narrow strips), otherwise
@@ -856,6 +955,11 @@ class RouteFollower:
             self.seg_i = min(self.seg_i + 1, len(self.segments) - 1)
             self._enter_segment(obs.tic)
             self._look = heading
+            if land is not None and land.sector in self._sinking:
+                # Going down under us: no settling, run on across (_run_step).
+                self.log.add(obs.tic, f"sector {land.sector} sinking: running on")
+                self._run = {"heading": heading, "sector": None, "next": obs.tic}
+                return self._run_step(obs)
             # Landing spots can be small: shed the sprint speed before going on.
             self._brake_until = obs.tic + 2 * TICRATE
             return self._walk(obs)
@@ -865,6 +969,34 @@ class RouteFollower:
         return Controls(forward=50.0 if push else 0.0, turn=max(-3.0, min(3.0, -diff)))
 
     # --- doors and lifts in the way --------------------------------------------------------
+
+    def _unexpected_drop(self, obs: Observation) -> bool:
+        """A crossing just ahead that's become a one-way drop the plan didn't mean to take
+        (MAP08: walking to the red key goes over a line that sinks the bridge back into the
+        nukage; walking on would be into the pit). Stop and replan with the heights as they
+        are, which finds the switch that raises it again. True if it replanned."""
+        mesh, path = self.nav.mesh, self.steps[self.step_i].path
+        planned = {n.split("into sector ")[1] for n in path.steps if "one-way drop" in n}
+        for j in range(self.poly_i, min(self.poly_i + 4, len(path.polys) - 1)):
+            cur, nxt = mesh.polys[path.polys[j]], mesh.polys[path.polys[j + 1]]
+            if cur.sector == nxt.sector:
+                continue
+            portal = next((mesh.portals[pi] for pi in cur.portals
+                           if mesh.portals[pi].other(cur.index) == nxt.index), None)
+            if portal is None or math.dist(_closest_on_segment((obs.x, obs.y), portal),
+                                           (obs.x, obs.y)) > DROP_CHECK_DIST:
+                return False
+            a, b = obs.heights[cur.sector], obs.heights[nxt.sector]
+            key = (cur.sector, nxt.sector, a, b)
+            if str(nxt.sector) in planned or key in self._drops_ok                     or not can_cross(a, b) or can_cross(b, a):
+                continue
+            if not any(can_cross(hb, ha) for ha in self.states.get(cur.sector, ())
+                       for hb in self.states.get(nxt.sector, ())):
+                continue  # one-way in the plan as well
+            self._drops_ok.add(key)
+            return self._replan(obs, f"unexpected drop into sector {nxt.sector}",
+                                live_only=True)
+        return False
 
     def _next_blocked(self, obs: Observation):
         """First crossing on the path ahead, within reach, that live heights don't allow.

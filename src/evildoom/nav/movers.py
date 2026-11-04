@@ -131,7 +131,7 @@ class MoverModel:
     def timing(self, special: int, description: str, s: int, target: Heights) -> Timing:
         """How long the special takes to move sector s from its initial heights to `target`,
         and how long it stays there (approximate: vanilla speeds, starting from rest)."""
-        floor, ceil = self.real[s]
+        floor, ceil = self.initial[s]
         fast = "blazing" in description or "turbo" in description or "fast" in description
         moved = max(abs(target[0] - floor), abs(target[1] - ceil))
         if special in DOOR_OPEN or special in DOOR_CLOSE:

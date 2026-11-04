@@ -38,7 +38,7 @@ if os.environ.get("EVILDOOM_NO_NATIVE"):
     _native = None
 
 from .movers import TICRATE, Heights, MoverModel
-from .navmesh import NavMesh, Point, _cells
+from .navmesh import NavMesh, Point, _cells, _inside
 
 PLAYER_HEIGHT = 56
 MAX_STEP = 24
@@ -225,6 +225,7 @@ class Navigator:
         # (gun line, poly) -> floors to stand on there for a level shot to hit it
         self.shot_floors: dict[tuple[int, int], tuple[float, float]] = {}
         self.triggers = self._find_triggers()
+        self._trench_effects()
         self.teleports = self._find_teleports()
         self.tele_from: dict[int, list[Teleport]] = {}
         for tp in self.teleports:
@@ -689,19 +690,21 @@ class Navigator:
         """A sector lower than everything round it and too narrow anywhere for the player's
         box can't be stood in: the box always rests on the floor beside it (E4M1's 8-unit slot
         between the stairs and the blue key room, which the planner took for a pit to drop into
-        and never climb out of). The planner sees it at its lowest neighbor's floor; the mover
-        model keeps the real heights. Only sectors nothing moves."""
+        and never climb out of; MAP08's nukage channel round the red key bridge). The planner
+        sees it at its lowest neighbor's floor, which follows the neighbors as they move
+        (_trench_effects); the mover model keeps the real heights. `self.trenches`: trench ->
+        its neighbors."""
         m, mesh = self.map, self.mesh
         moved = {s.index for l in m.linedefs if l.special for s in m.tagged_sectors(l.tag)}
         moved |= {m.back_sector(l) for l in m.linedefs if l.special and l.two_sided}
         r = PLAYER_RADIUS
+        self.trenches: dict[int, list[int]] = {}
         for sec in m.sectors:
             si = sec.index
             if si in moved:
                 continue
-            lines = m.sector_lines(si)
-            bounds, floors = [], []
-            for l in lines:
+            bounds, around = [], set()
+            for l in m.sector_lines(si):
                 f, b = m.front_sector(l), m.back_sector(l)
                 if f == b:
                     continue
@@ -709,8 +712,9 @@ class Navigator:
                 bounds.append(((v1.x, v1.y), (v2.x, v2.y)))
                 o = b if f == si else f
                 if o is not None:
-                    floors.append(self.movers.real[o][0])
-            if not floors or min(floors) <= sec.floor:
+                    around.add(o)
+            floors = [self.movers.real[o][0] for o in around]
+            if not floors or min(floors) <= sec.floor or sec.ceiling - min(floors) < PLAYER_HEIGHT:
                 continue
             fits = False
             for poly in mesh.polys:
@@ -722,7 +726,7 @@ class Navigator:
                 while x <= max(xs) and not fits:
                     y = min(ys)
                     while y <= max(ys):
-                        if mesh.poly_at(x, y) is poly and not any(
+                        if _inside(poly.vertices, x, y) and not any(
                                 _box_hits_segment(x, y, r, e) for e in bounds):
                             fits = True
                             break
@@ -730,8 +734,31 @@ class Navigator:
                     x += 4
                 if fits:
                     break
-            if not fits and sec.ceiling - min(floors) >= PLAYER_HEIGHT:
+            if not fits:
+                self.trenches[si] = sorted(around)
                 self.movers.initial[si] = (min(floors), sec.ceiling)
+
+    def trench_floor(self, t: int, floor_of) -> float:
+        """Where the player stands over trench t, given each sector's floor now."""
+        return max(self.movers.real[t][0], min(floor_of(o) for o in self.trenches[t]))
+
+    def _trench_effects(self) -> None:
+        """A trigger that moves a trench's neighbor moves the trench's floor with it."""
+        for t in self.triggers:
+            for tr, around in self.trenches.items():
+                moving = [o for o in around if o in t.effects]
+                if not moving:
+                    continue
+                ceil = self.movers.real[tr][1]
+                hs = []
+                for n in moving:
+                    for h in t.effects[n]:
+                        f = self.trench_floor(tr, lambda o: h[0] if o == n
+                                              else self.movers.initial[o][0])
+                        if ceil - f >= PLAYER_HEIGHT and (f, ceil) not in hs:
+                            hs.append((f, ceil))
+                if hs:
+                    t.effects[tr] = hs
 
     def initial_states(self) -> HeightStates:
         return {i: {h} for i, h in enumerate(self.movers.initial)}
