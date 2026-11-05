@@ -420,9 +420,13 @@ class Knowledge:
         return out
 
     def unexplained_since(self) -> int | None:
-        """The last tic a line was fired whose effect hasn't been seen at all, if any."""
+        """The last tic a line was first fired whose effect hasn't been seen at all, if any
+        (setting it off again, a walk-over line crossed time and again, tells nothing new)."""
         explained = {self.nav.triggers[i].line for i, s in self.learned.items() if s}
-        tics = [f.tic for f in self.fired if f.line not in explained]
+        first: dict[int, int] = {}
+        for f in self.fired:
+            first.setdefault(f.line, f.tic)
+        tics = [tic for line, tic in first.items() if line not in explained]
         return max(tics) if tics else None
 
     def unseen_walls(self) -> dict[int, list[int]]:
