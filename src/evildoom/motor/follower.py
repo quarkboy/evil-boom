@@ -48,7 +48,7 @@ SETTLE_WAIT = 10 * TICRATE  # longest wait for things round a switch to settle b
 DROP_CHECK_DIST = 48     # how far ahead to look for crossings that became one-way drops
 USE_EVERY = 15           # tics between use presses while waiting at a door
 RUNUP_TOLERANCE = 6.0    # how exactly to hit a jump run-up point
-STOP_ACTIONS = ("use", "shoot", "exit", "face", "kill", "endure")
+STOP_ACTIONS = ("use", "shoot", "exit", "face", "kill", "endure", "goto")  # (goto: the explorer's next way is anyone's guess; E3M3 slid off a ledge it arrived at running)
 
 # Turning, roughly a keyboard player's (vanilla's fast keyboard turn is 7 deg/tic).
 MAX_TURN = 8.0           # degrees per tic

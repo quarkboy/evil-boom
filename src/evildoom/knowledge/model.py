@@ -31,6 +31,8 @@ TELEPORT_JUMP = 64.0   # further than this in a tic is a teleport
 TELEPORT_NEAR = 48.0   # ...through a teleport line this near where she was
 NEAR_SOUND = 128.0       # a sound this near is something she'll see anyway
 EXPECTED_RADIUS = 128.0  # a sound this near a known mover's is that mover
+EXPECTED_FOR = 8 * 35    # ...which she set off at most this many tics before (a door closing
+#                          behind her, a lift coming back): later it moved by itself
 FELT_TICS = 70          # unhurt on a floor this long: it doesn't hurt
 SUIT_TICS = 60 * 35     # a radiation suit lasts a minute
 TICS_SAME_SOUND = 4   # sounds this close together from the same way are one
@@ -534,13 +536,23 @@ class Knowledge:
         return self.looks_damaging(s) if felt is None else felt
 
     def expected(self, h: Heard) -> bool:
-        """A sound from something she knows moves (a door or lift she's learned: the one she
-        just went through closing behind her), or from right beside her: nothing new."""
+        """A sound from something she knows moves and set off a moment before (the door she
+        just went through closing behind her, a lift coming back), or from right beside her:
+        nothing new. One she set off long before moving again is news: E1M6's door that shut
+        on her opened again 30 s later, and she'd given up."""
         if h.distance <= NEAR_SOUND:
             return True
-        movers = {s for _, sectors in self.known_triggers() for s in sectors}
-        return any(math.dist(self._sound_origin[s], h.origin) <= EXPECTED_RADIUS
-                   for s in movers if s in self._sound_origin)
+        fired_at: dict[int, int] = {}
+        for f in self.fired:
+            fired_at[f.line] = f.tic
+        for t, sectors in self.known_triggers():
+            tic = fired_at.get(t.line)
+            if tic is None or not 0 <= h.tic - tic <= EXPECTED_FOR:
+                continue
+            if any(math.dist(self._sound_origin[s], h.origin) <= EXPECTED_RADIUS
+                   for s in sectors if s in self._sound_origin):
+                return True
+        return False
 
     def known_polys(self) -> set[int]:
         """Where she can plan to go: the parts of the map she's seen into or stood in (not a

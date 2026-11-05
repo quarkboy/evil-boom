@@ -57,7 +57,7 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
         obs = e.observe()
         c = x.act(obs, c)
         e.step(c)
-    exited, game_s = e.exited, e.tic / TICRATE
+    exited, died, game_s = e.exited, e.finished and e.dead, e.tic / TICRATE
     k = x.knowledge
     lines = list(x.log) + ["", "knowledge events:"] + k.events + ["", k.summary()]
     if not exited and obs is not None:
@@ -79,7 +79,7 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                          f"activators known {len(t.activators & known_polys)}/{len(t.activators)}, "
                          f"effect sectors known {sum(s in k.sectors for s in t.effects)}/{len(t.effects)}")
     e.close()
-    outcome = "EXITED" if exited else "DIED" if e.dead else "STUCK"
+    outcome = "EXITED" if exited else "DIED" if died else "STUCK"
     detail = f"{game_s:.0f}s game, {time.perf_counter() - t0:.0f}s real, {deaths} deaths; {k.summary()}"
     lines.append(f"RESULT {outcome} {detail}")
     OUT.mkdir(parents=True, exist_ok=True)

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 
 from evildoom.knowledge.model import Knowledge
 from evildoom.motor.follower import TICRATE, Controls, Observation, RouteFollower
-from evildoom.nav.reach import MAX_STEP, HeightStates, Navigator, TriggerLine, can_cross
+from evildoom.nav.reach import MAX_STEP, PLAYER_HEIGHT, HeightStates, Navigator, TriggerLine, can_cross
 from evildoom.nav.walkthrough import Step, _action_for, steps_from_legs
 from evildoom.wad.specials import Category, Key, Lock
 
@@ -133,6 +133,12 @@ class Explorer:
                 if k.seen_tic.get(s, -1) < done:
                     hs = {tuple(h) for h in effects[s]}
                     out[s] = hs if t.permanent else out[s] | hs
+        # a lift or a timed door she knows comes back to where it rests, wherever she last saw
+        # it (E3M3: seen down, the lift seemed to stay down, and couldn't take her up)
+        for t, sectors in known.values():
+            if not t.permanent:
+                for s in sectors:
+                    out[s] = out[s] | {tuple(self.nav.movers.initial[s])}
         return out
 
     def view(self) -> Navigator:
@@ -339,17 +345,31 @@ class Explorer:
         walk-over lines nobody can see, often right across a room): per sector, the reachable
         poly furthest from anywhere she's stood, if that's far enough to be worth it."""
         k, mesh = self.knowledge, self.nav.mesh
+        lab = self.nav.jump_lab()
         stood = [mesh.polys[p].center for p in k.visited]
+        entered = {mesh.polys[p].sector for p in k.visited}
         best: dict[int, tuple[float, int]] = {}
+        nearest: dict[int, tuple[float, int]] = {}  # per sector never stepped into
         for pi in reach:
             poly = mesh.polys[pi]
             if pi in k.visited or k.damaging(poly.sector):
                 continue  # (not wading through nukage just to look)
+            clear, floor, ceiling = lab.fits_at(*poly.center)
+            if not clear or ceiling - floor < PLAYER_HEIGHT:
+                continue  # (the box can't stand there: an 8-wide strip by a shut door, E1M4)
+            if poly.sector not in entered:
+                d = math.dist(poly.center, pos)
+                if poly.sector not in nearest or d < nearest[poly.sector][0]:
+                    nearest[poly.sector] = (d, pi)
             gap = min((math.dist(poly.center, c) for c in stood), default=math.inf)
             if gap < COVER_GAP:
                 continue
             if poly.sector not in best or gap > best[poly.sector][0]:
                 best[poly.sector] = (gap, pi)
+        # every room stepped into once, however near she's been: walk-over lines are often
+        # across the way in (E1M4's door opener, at the mouth of an alcove she'd stood by)
+        for s, (_, pi) in nearest.items():
+            best.setdefault(s, (0.0, pi))
         return [Objective("visit", mesh.polys[pi].center, f"walk across sector {s}",
                           reveals=frozenset({pi}))
                 for s, (_, pi) in best.items()]
