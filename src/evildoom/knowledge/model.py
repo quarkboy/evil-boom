@@ -243,7 +243,8 @@ class Knowledge:
         out = []
         for li in sorted(self.mapped):
             info = self._special(li)
-            if info is not None and info.trigger in USED + SHOT and li not in used                     and info.category not in (Category.EXIT, Category.SECRET_EXIT):
+            if info is not None and info.trigger in USED + SHOT and li not in used \
+                    and info.category not in (Category.EXIT, Category.SECRET_EXIT):
                 out.append(li)
         return out
 

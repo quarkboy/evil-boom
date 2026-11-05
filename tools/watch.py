@@ -122,7 +122,8 @@ class Watch:
             if self.paused:
                 owed = 0
             self.draw()
-            if self.snapshot is not None and self.obs is not None                     and (self.obs.tic >= self.snapshot * TICRATE or self.engine.finished):
+            if self.snapshot is not None and self.obs is not None \
+                    and (self.obs.tic >= self.snapshot * TICRATE or self.engine.finished):
                 pygame.image.save(self.screen, "out/watch.png")
                 self.close()
                 return
