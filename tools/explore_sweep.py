@@ -9,6 +9,7 @@ finishes; the log goes to out/explore/WAD_MAP.txt, and for a map it didn't finis
 omniscient planner would do from where it ended up (and what of that the explorer knew).
 """
 import argparse
+import math
 import os
 import sys
 import time
@@ -55,12 +56,19 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
     idle_since = None  # since when she's had nothing to do
     while e.tic < max_seconds * TICRATE:
         stranded = idle_since is not None and e.tic - idle_since > STRANDED_TICS
+        if e.finished and e.dead and fight and obs is not None:
+            seen = ", ".join(f"{t.name} {math.dist((t.x, t.y), (obs.x, obs.y)):.0f} away"
+                             for t in x.combat.visible)
+            x.log.append(f"tic {e.tic}: killed: health {obs.health:.0f}, armor {obs.armor:.0f}, "
+                         f"weapon {obs.weapon}, weapons {sorted(obs.weapons or ())}, ammo {obs.ammo}; "
+                         f"in sight: {seen or 'nothing'}; doing: {x.current.label if x.current else '-'}")
         if e.finished or (stranded and deaths + 1 < lives):
             # dead, or stranded with nothing to do (a trap she couldn't know of: MAP12's
             # floor that drops into a pit): the level again, knowing what she learned
             if (e.dead or stranded) and deaths + 1 < lives:
                 deaths += 1
                 x.log.append(f"tic {e.tic}: {'died' if e.dead else 'stranded'}: starting again")
+
                 e.restart(keep_time=True)
                 if not mortal:
                     e.game.send_game_command("god")  # (a new episode drops the cheat)

@@ -120,6 +120,7 @@ class Explorer:
     wanted: object = None
     last_resort: object = None
     gone: object = None
+    dangerous: object = None  # (obs, objective) -> too dangerous to go for unless nothing else
     _held_since: int | None = None  # something else has had the controls since then
     _urgent_n: int = 0  # sounds checked for being worth dropping everything for
     _reach: set = field(default_factory=set)  # polys she could get to, as of the last look
@@ -292,7 +293,8 @@ class Explorer:
                 # down the other one-way drop, the way on, still to look into)
                 return [r for o in objectives if o.kind != "noise"
                         and fresh(r := replace(o, label=o.label + " (risky)", risky=True))]
-            return [o for o in objectives if fresh(o) and returnable(o)]
+            return [o for o in objectives if fresh(o) and returnable(o)
+                    and not (self.dangerous is not None and self.dangerous(obs, o))]
         # with nothing else left, the ways between rooms never walked over (walk-over lines
         # are thresholds: E4M7's was between two rooms she'd come into other ways)
         # (and last of all, those onto floors that hurt: E4M2's door opener is on lava)

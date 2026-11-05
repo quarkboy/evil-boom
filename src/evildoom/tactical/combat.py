@@ -34,6 +34,9 @@ DODGE_TICS = 30          # a missile arriving sooner than this is dodged
 DODGE_MARGIN = 10.0      # ...if it would pass nearer than the two radii and this
 CLOSE = 160.0            # a clawing monster nearer than this: back off from it
 STAND_THREAT = 6.0       # this much threat in sight: stand and fight rather than walk on
+OUTMATCHED = 15.0        # ...unless killing what's in sight would take longer than this (s):
+#                          then get past it (on the way to something better to fight with)
+SHORT_OF_AMMO = 15       # fewer shots than this for the guns held: supplies come first
 LOW_HEALTH = 35.0        # ...or below this health, anything in sight
 STRAFE_TICS = (18, 40)   # a strafe one way lasts between these
 SWITCH_WAIT = 40         # a weapon switch asked for: give it this long before asking again
@@ -137,6 +140,28 @@ class Combat:
     def threats(self, obs: Observation) -> float:
         return sum(MONSTERS[t.name].threat for t in self.visible)
 
+    def firepower(self, obs: Observation) -> float:
+        """Damage a second she can do with the best gun she has ammo for (the fist's, else)."""
+        held = obs.weapons or frozenset({1, 2})
+        ammo = obs.ammo or {}
+        return max(w.dps for slot, w in WEAPONS.items()
+                   if slot in held and (not w.ammo_per_shot or ammo.get(slot, 0) >= w.ammo_per_shot))
+
+    def outmatched(self, obs: Observation) -> bool:
+        """Would killing what's in sight take too long with what she has (a room of barons
+        with the pistol: MAP08 at pistol start)?"""
+        pos = (obs.x, obs.y)
+        hp = sum(MONSTERS[t.name].health for t in self.visible if math.dist((t.x, t.y), pos) < 1200)
+        return hp / self.firepower(obs) > OUTMATCHED
+
+    def short_of_ammo(self, obs: Observation) -> bool:
+        """Next to nothing left to shoot with (the fist doesn't count)."""
+        held = obs.weapons or frozenset({1, 2})
+        ammo = obs.ammo or {}
+        shots = sum(ammo.get(slot, 0) // w.ammo_per_shot for slot, w in WEAPONS.items()
+                    if slot in held and w.ammo_per_shot and slot != 4)  # (4 shares 2's bullets)
+        return shots < SHORT_OF_AMMO
+
     # --- deciding -----------------------------------------------------------------------
 
     def decide(self, obs: Observation, busy: bool = False) -> Decision | None:
@@ -158,6 +183,7 @@ class Combat:
             aim, fire, weapon = self._aim_and_fire(obs, target)
         health = obs.health if obs.health is not None else 100.0
         threat = self.threats(obs)
+        outmatched = self.outmatched(obs)
         close = [t for t in self.visible if MONSTERS[t.name].attack in ("melee", "charge", "fire")
                  or MONSTERS[t.name].melee]
         close = [t for t in close if math.dist((t.x, t.y), pos) < CLOSE + MONSTERS[t.name].radius]
@@ -172,12 +198,14 @@ class Combat:
             nearest = min(close, key=lambda t: math.dist((t.x, t.y), pos))
             move = self._away_from(obs, (nearest.x, nearest.y))
             why = f"backing off from {nearest.name}"
+        elif outmatched:
+            why = "getting past"  # (shooting on the way, the route going on)
         elif threat >= STAND_THREAT or health < LOW_HEALTH or self._blocking(obs, target):
             move = self._strafe_dir(obs, aim)
             why = "standing and fighting"
         else:
             why = "shooting on the way"
-        takeover = not busy and why != "shooting on the way" or missile is not None
+        takeover = not busy and why not in ("shooting on the way", "getting past") or missile is not None
         if why != self._mode:
             self.log.append(f"tic {obs.tic}: {why}"
                             + (f" (target {target.name} {target.id}, {threat:.0f} threat)" if target else ""))
@@ -245,10 +273,25 @@ class Combat:
         info = MONSTERS[t.name]
         tolerance = max(1.5, math.degrees(math.atan2(info.radius * 0.7, max(d, 1.0))))
         on = abs(_norm(aim - obs.angle)) < tolerance
-        ok = d < ENGAGE_RANGE and (held != 5 or d > WEAPONS[5].splash + info.radius)
-        if held == 1 and d > 80:
-            ok = False
+        ok = d < min(ENGAGE_RANGE, w.reach) and (held != 5 or self._rocket_safe(obs, t))
         return aim, on and ok, weapon
+
+    def _rocket_safe(self, obs: Observation, t: Thing) -> bool:
+        """Is a rocket at t sure not to blow up by her: t well clear, nothing else near her or
+        in the way (a monster stepping in, a barrel: E1M9's died at 88 health, nothing in
+        sight)?"""
+        pos = (obs.x, obs.y)
+        clear = WEAPONS[5].splash + 48
+        if math.dist((t.x, t.y), pos) < clear + MONSTERS[t.name].radius:
+            return False
+        others = [(o.x, o.y, MONSTERS[o.name].radius) for o in self.visible if o.id != t.id]
+        others += [(b[0], b[1], 10.0) for b in obs.barrels or ()]
+        for x, y, r in others:
+            if math.dist((x, y), pos) < clear + r:
+                return False
+            if _segment_point_distance(pos, (t.x, t.y), (x, y)) < r + 12                     and math.dist((x, y), pos) < math.dist((t.x, t.y), pos):
+                return False
+        return True
 
     def _weapon_for(self, obs: Observation, t: Thing, d: float) -> int:
         held = obs.weapons or frozenset({1, 2})
@@ -273,8 +316,7 @@ class Combat:
                 v *= 0.2
             if slot == 1:
                 v *= 1.0 if d < 64 and info.attack == "hitscan" else 0.02
-            if slot == 5 and any(math.dist((o.x, o.y), (obs.x, obs.y)) < WEAPONS[5].splash + 32
-                                 for o in self.visible):
+            if slot == 5 and not self._rocket_safe(obs, t):
                 v *= 0.02
             if slot == obs.weapon:
                 v *= 1.3  # (switching takes a moment)
@@ -416,3 +458,10 @@ def _heading(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 def _norm(a: float) -> float:
     return (a + 180.0) % 360.0 - 180.0
+
+
+def _segment_point_distance(a: tuple[float, float], b: tuple[float, float], p: tuple[float, float]) -> float:
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    n = dx * dx + dy * dy
+    u = 0.0 if n == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / n))
+    return math.dist(p, (a[0] + dx * u, a[1] + dy * u))

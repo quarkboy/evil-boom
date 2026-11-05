@@ -16,7 +16,7 @@ class Monster:
 
 
 MONSTERS: dict[str, Monster] = {
-    "ZombieMan": Monster(20, 56, 20, "hitscan", threat=2),
+    "Zombieman": Monster(20, 56, 20, "hitscan", threat=2),
     "ShotgunGuy": Monster(20, 56, 30, "hitscan", threat=4),
     "ChaingunGuy": Monster(20, 56, 70, "hitscan", threat=6),
     "WolfensteinSS": Monster(20, 56, 50, "hitscan", threat=4),
@@ -70,14 +70,15 @@ class Weapon:
     hitscan: bool = True
     speed: float = 0.0               # (its missile's, if not hitscan)
     splash: float = 0.0              # keep at least this far from what it hits
+    reach: float = 2048.0            # no shooting at anything further (the spread wastes it)
 
 
 # by slot (the weapon a slot gives: slot 1's fist/chainsaw and slot 3's two shotguns share)
 WEAPONS: dict[int, Weapon] = {
-    1: Weapon(1, 0, (0, 64), 30),
-    2: Weapon(2, 1, (0, 600), 25),
-    3: Weapon(3, 1, (0, 400), 60),
-    4: Weapon(4, 1, (0, 900), 90),
+    1: Weapon(1, 0, (0, 64), 30, reach=80),
+    2: Weapon(2, 1, (0, 600), 25, reach=800),
+    3: Weapon(3, 1, (0, 400), 60, reach=640),
+    4: Weapon(4, 1, (0, 900), 90, reach=1100),
     5: Weapon(5, 1, (200, 1500), 110, hitscan=False, speed=20, splash=160),
     6: Weapon(6, 1, (0, 1200), 200, hitscan=False, speed=25),
     7: Weapon(7, 40, (128, 1200), 400, hitscan=False, speed=25, splash=0),
