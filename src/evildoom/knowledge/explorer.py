@@ -73,6 +73,7 @@ class Explorer:
     _glanced: int = 0  # fired lines looked round for so far
     _heard_n: int = 0  # sounds dealt with so far
     _last_glance: int = -10**9
+    _sector: int | None = None
     _glance_at: float | None = None
 
     def __post_init__(self) -> None:
@@ -358,12 +359,26 @@ class Explorer:
             action = _action_for(obj.trigger)
             last = Step(None, "exit" if obj.kind == "exit" and action == "use" else action,
                         obj.trigger, label=obj.label)
+        if obj.kind != "exit":
+            # (no dropping into nukage and the like, but to leave: a pit she believes she can
+            # climb out of may well be a death trap)
+            for leg in route.legs:
+                for note in leg.path.steps:
+                    if "one-way drop" in note and self.nav.damage[int(note.rsplit(" ", 1)[1])]:
+                        return None
         return steps_from_legs(route.legs, last, view, states)
 
     # --- playing ------------------------------------------------------------------------
 
     def act(self, obs: Observation, last: Controls | None = None) -> Controls:
         self.knowledge.update(obs, last)
+        here = self.nav.mesh.poly_at(obs.x, obs.y)
+        if here is not None and here.sector != self._sector:
+            if self.nav.damage[here.sector]:
+                self.log.append(f"tic {obs.tic}: onto damaging floor (sector {here.sector}) from "
+                                f"sector {self._sector}, doing: "
+                                f"{self.follower.objective if self.follower else '-'}")
+            self._sector = here.sector
         glance = self._glance(obs)
         if glance is not None:
             return glance
