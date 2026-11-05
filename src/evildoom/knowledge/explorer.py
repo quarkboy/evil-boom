@@ -172,7 +172,11 @@ class Explorer:
                 after = view.reachable(p.index, states_all, doors)
                 back[p.index] = here.index in after or len(after & reach) >= KEEP_REACH * len(reach)
             return back[p.index]
-        return [o for o in out if returnable(o)]
+        safe = [o for o in out if returnable(o)]
+        if safe or not out:
+            return safe
+        # nothing left this side of a one-way drop: over it, then
+        return [replace(o, label=o.label + " (one way)") for o in out]
 
     def _frontier(self, reach: set[int], pos) -> list[Objective]:
         """Known polys she can get to next to polys she hasn't seen: one per unknown sector
