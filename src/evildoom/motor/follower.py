@@ -957,8 +957,11 @@ class RouteFollower:
             settled = True
         if self._lineup_tic is None:
             self._lineup_tic = obs.tic
+        # (settling longer than a second: go anyway, if on the spot near enough: from off it
+        # the jump goes off line, MAP24's platforms; much longer: go from wherever)
+        near = math.dist((obs.x, obs.y), jump.runup) < 6
         if settled or (obs.tic - self._lineup_tic > TICRATE and abs(diff) <= 1.5
-                       and self.motion.speed < 0.5):
+                       and self.motion.speed < 0.5 and (near or obs.tic - self._lineup_tic > 3 * TICRATE)):
             self._lineup_tic = None
             self._sprint = (jump, heading, obs.tic)
             self.log.add(obs.tic, f"run-jump from ({jump.takeoff[0]:.0f}, {jump.takeoff[1]:.0f})")

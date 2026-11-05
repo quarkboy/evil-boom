@@ -58,6 +58,7 @@ MAX_RUNUP = 256
 JUMP_ANGLES = (0, -30, 30, -45, 45, -60, 60)  # degrees off the edge normal
 NAV_CACHE = Path(__file__).resolve().parents[3] / "out" / "navcache"
 JUMPS_PER_TARGET = 4  # candidates kept per (takeoff poly, landing sector)
+AIM_INSIDE = 32.0     # aiming a jump at a sector's nearest part: this far in from its rim
 TELEPORTERS_FOR_PLAYERS = {39, 97, 174, 195, 207, 208, 209, 210}
 TELEPORTERS_FOR_MONSTERS = {39, 97, 125, 126, 207, 208}  # walk-over ones monsters trigger
 
@@ -383,8 +384,7 @@ class Navigator:
         for t in self.triggers:
             for s, hs in t.effects.items():
                 options[s] += [h for h in hs if h not in options[s]]
-        out = []
-        seen: dict[tuple[int, int], int] = {}
+        found: dict[tuple[int, int], list[Jump]] = {}
         for portal in mesh.portals:
             if not self.portal_fits[portal.index]:
                 continue
@@ -421,21 +421,53 @@ class Navigator:
                                                       portal.linedef)
                                 high = self._try_jump(a, takeoff, d, {sa: ha, sb: hb}, options,
                                                       portal.linedef, high=True)                                     if jump is None else None
-                                if high is not None:
-                                    key = (a, mesh.polys[high.dest_poly].sector)
-                                    if seen.get(key, 0) < JUMPS_PER_TARGET:
-                                        seen[key] = seen.get(key, 0) + 1
-                                        out.append(high)
-                                if jump is None:
-                                    continue
-                                # keep a few varied candidates per (takeoff poly, landing
-                                # sector): engine verification drops the near misses
-                                key = (a, mesh.polys[jump.dest_poly].sector)
-                                if seen.get(key, 0) < JUMPS_PER_TARGET:
-                                    seen[key] = seen.get(key, 0) + 1
-                                    out.append(jump)
-                                break
+                                for j in (jump, high):
+                                    if j is not None:
+                                        key = (a, mesh.polys[j.dest_poly].sector)
+                                        found.setdefault(key, []).append(j)
+                                if jump is not None:
+                                    break
+        # a few candidates per (takeoff poly, landing sector), those landing furthest in from
+        # where the landing drops away first (a little short still lands: MAP24's platforms),
+        # varied (verification drops the near misses)
+        # (the first found, as before, and those landing furthest in on top)
+        out = []
+        for cands in found.values():
+            kept: list[Jump] = list(cands[:JUMPS_PER_TARGET])
+            margin = sorted(cands[JUMPS_PER_TARGET:],
+                            key=lambda j: (-self._landing_margin(j), math.dist(j.takeoff, j.dest), j.key))
+            best = max((self._landing_margin(j) for j in kept), default=-math.inf)
+            for j in margin[:JUMPS_PER_TARGET]:
+                if self._landing_margin(j) > best + 8 and all(
+                        math.dist(j.takeoff, k.takeoff) > 8 or math.dist(j.dest, k.dest) > 8 for k in kept):
+                    kept.append(j)
+            out += kept
         return out
+
+    def _landing_margin(self, j: Jump) -> float:
+        """How far a jump's landing is from the nearest edge of its landing sector with a drop
+        of more than a step beyond it (walls don't count: landing by one is fine)."""
+        m = self.map
+        s = self.mesh.polys[j.dest_poly].sector
+        floor = self.movers.initial[s][0]
+        best = math.inf
+        for line in self._sector_lines().get(s, ()):
+            f, b = m.front_sector(line), m.back_sector(line)
+            other = b if f == s else f
+            if other is None or self.movers.initial[other][0] >= floor - MAX_STEP:
+                continue
+            a, c = m.vertexes[line.v1], m.vertexes[line.v2]
+            best = min(best, math.dist(j.dest, _closest_point(j.dest, (a.x, a.y), (c.x, c.y))))
+        return best
+
+    def _sector_lines(self) -> dict[int, list]:
+        if not hasattr(self, "_lines_of_sector"):
+            out: dict[int, list] = {}
+            for line in self.map.linedefs:
+                for sec in {self.map.front_sector(line), self.map.back_sector(line)} - {None}:
+                    out.setdefault(sec, []).append(line)
+            self._lines_of_sector = out
+        return self._lines_of_sector
 
     def _aim_angles(self, origin: Point, n: Point, min_floor: float,
                     options: dict[int, list[Heights]], max_dist: float = 400) -> list[float]:
@@ -448,16 +480,36 @@ class Navigator:
                     acc.setdefault(poly.sector, []).append(poly.center)
             self._sector_centres = {s: (sum(p[0] for p in ps) / len(ps),
                                         sum(p[1] for p in ps) / len(ps)) for s, ps in acc.items()}
+        if not hasattr(self, "_sector_edges"):
+            edges: dict[int, list[tuple[Point, Point]]] = {}
+            for poly in self.mesh.polys:
+                if poly is not None:
+                    vs = poly.vertices
+                    edges.setdefault(poly.sector, []).extend(
+                        (vs[i], vs[(i + 1) % len(vs)]) for i in range(len(vs)))
+            self._sector_edges = edges
         out = []
         base = math.atan2(n[1], n[0])
+
+        def add(px: float, py: float) -> None:
+            ang = math.degrees(math.atan2(py - origin[1], px - origin[0]) - base)
+            ang = (ang + 180) % 360 - 180
+            if abs(ang) <= 75 and all(abs(ang - a) > 5 for a in JUMP_ANGLES + tuple(out)):
+                out.append(round(ang))
+        nearby = []
         for s, (cx, cy) in self._sector_centres.items():
             d = math.dist(origin, (cx, cy))
             if d > max_dist or d < 16 or max(h[0] for h in options[s]) <= min_floor:
                 continue
-            ang = math.degrees(math.atan2(cy - origin[1], cx - origin[0]) - base)
-            ang = (ang + 180) % 360 - 180
-            if abs(ang) <= 75 and all(abs(ang - a) > 5 for a in JUMP_ANGLES + tuple(out)):
-                out.append(round(ang))
+            add(cx, cy)
+            nearby.append((s, cx, cy))
+        for s, cx, cy in nearby:
+            # and where it's nearest (a little in from its rim): the shortest way across
+            near = min((_closest_point(origin, a, b) for a, b in self._sector_edges.get(s, ())),
+                       key=lambda q: math.dist(q, origin), default=None)
+            if near is not None and math.dist(near, origin) > 1:
+                k = AIM_INSIDE / max(math.dist(near, (cx, cy)), 1.0)
+                add(near[0] + (cx - near[0]) * min(k, 1.0), near[1] + (cy - near[1]) * min(k, 1.0))
         return out
 
     def _try_jump(self, src: int, takeoff: Point, n: Point, chosen: dict[int, Heights],

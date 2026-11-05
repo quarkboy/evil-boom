@@ -78,6 +78,8 @@ class Explorer:
     _heard_n: int = 0  # sounds dealt with so far
     _last_glance: int = -10**9
     _sector: int | None = None
+    _follower_of: object = None  # the follower whose log has been passed on...
+    _follower_seen: int = 0      # ...this far
     _glance_at: float | None = None
 
     def __post_init__(self) -> None:
@@ -435,7 +437,15 @@ class Explorer:
             self._next(obs)
         if self.follower is None:
             return Controls(turn=10.0)  # nothing to do: look round
-        return self.follower.act(obs)
+        f = self.follower
+        out = f.act(obs)
+        # (what the follower had to say: jumps, waits, trouble)
+        events = f.log.events
+        start = self._follower_seen if self._follower_of is f else 0
+        for ev in events[start:]:
+            self.log.append(f"    {ev}")
+        self._follower_of, self._follower_seen = f, len(events)
+        return out
 
     def _glance(self, obs: Observation) -> Controls | None:
         """Stop and look: towards a sound she couldn't see the source of, or round about when

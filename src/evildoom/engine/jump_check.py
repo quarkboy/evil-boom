@@ -76,13 +76,53 @@ def simulate_jumps(nav: Navigator) -> dict[str, str]:
     out = {}
     for j in nav.jumps:
         r = _test_jump(nav, sim, j)
-        if r != FAIL and not _robust(nav, sim, j):
+        if r in (SOFT, OK):
+            # made the one way that works with a little slack every way round (coasting from
+            # the edge if that does, else sprinting all the way), or not at all
+            r = next((SOFT if soft else OK for soft in ((True, False) if r == SOFT else (False,))
+                      if _works(nav, sim, j, soft)
+                      and all(_works(nav, sim, v, soft, reach=True) for v in _variants(nav, j))), FAIL)
+        elif r != FAIL and not _robust(nav, sim, j):
             r = FAIL
         out[j.key] = r
     return out
 
 
+def _works(nav: Navigator, sim, j, soft: bool, reach: bool = False) -> bool:
+    """Does the jump stick, made soft (or not)? With `reach`: does it get there at all
+    (sliding on after touching down is all right, not falling short: what a little off
+    changes is mostly whether it stops on the landing or slides a bit, E4M6)."""
+    heading = _prepare(nav, sim, j)
+    if heading is None:
+        return reach  # (a variant that can't be set up doesn't count against the jump)
+    result, at = _fly(nav, sim, j, heading, soft)
+    if reach and result == "missed" and math.dist(at, j.runup) < 4:
+        return True  # (nor one that can't get going: its run-up backed into a wall, say)
+    return result in (("stuck", "slid") if reach else ("stuck",))
+
+
+def _variants(nav: Navigator, j) -> list:
+    """The jump a little off how the check makes it: half a unit to either side of its line,
+    and from a run-up ROBUST_RUNUP further back or nearer (taking off a little faster or
+    slower). Nobody lines up to a fraction of a unit, so a jump has to survive these."""
+    (rx, ry), (tx, ty) = j.runup, j.takeoff
+    length = math.hypot(tx - rx, ty - ry)
+    if length < 1e-6:
+        return []
+    ux, uy = (tx - rx) / length, (ty - ry) / length
+    px, py = -uy, ux
+    out = []
+    for s in (ROBUST_SHIFT, -ROBUST_SHIFT):
+        out.append(replace(j, runup=(rx + px * s, ry + py * s), takeoff=(tx + px * s, ty + py * s),
+                           dest=(j.dest[0] + px * s, j.dest[1] + py * s)))
+    for d in (-ROBUST_RUNUP, ROBUST_RUNUP):
+        if length - d > 1:
+            out.append(replace(j, runup=(rx + ux * d, ry + uy * d)))
+    return [v for v in out if nav.mesh.poly_at(*v.runup) is not None]
+
+
 ROBUST_SHIFT = 0.5  # a jump has to work this far to either side of its line too (1 was too strict: E4M6, MAP24)
+ROBUST_RUNUP = 2.0  # ...and get there from a run-up this much longer or shorter (4 lost E4M2's jumps onto narrow ledges)
 
 
 def _robust(nav: Navigator, sim, j) -> bool:
@@ -107,8 +147,10 @@ def keep_verified(nav: Navigator, iwad: str | Path, map_name: str,
                   engine: bool = False) -> dict[str, int]:
     """Drop the jumps the check disproves (unverified ones are kept). Returns counts. The
     check runs in the movement simulator, or with `engine` in ViZDoom (slow; cached)."""
-    results = verify_jumps(nav, iwad, map_name, pwad, log=log) if engine \
-        else simulate_jumps(nav)
+    if engine:
+        results = verify_jumps(nav, iwad, map_name, pwad, log=log)
+    else:
+        results = simulate_jumps(nav)
     # One that slides off its landing is only kept when there's no better way across: one
     # that stops there, or one that runs straight across it (the strip isn't for stopping on).
     sticks = {(frozenset(j.src_polys), nav.mesh.polys[j.dest_poly].sector)
