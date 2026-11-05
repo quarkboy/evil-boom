@@ -1,8 +1,8 @@
 import pytest
 
 from evildoom.config import resolve_wad
-from evildoom.nav.navmesh import NavMesh, area
-from evildoom.nav.reach import Navigator, can_cross, funnel
+from evildoom.nav.navmesh import NavMesh
+from evildoom.nav.reach import Navigator, can_cross
 from evildoom.wad.mapdata import load_map
 from evildoom.wad.specials import Category, Key
 from evildoom.wad.wad import Wad
@@ -30,25 +30,15 @@ def test_headroom():
     assert not can_cross((0, 0), (0, 128))        # closed door
 
 
-# --- funnel -----------------------------------------------------------------------------
-
-def test_funnel_straight_corridor_is_one_segment():
-    portals = [((x, 10.0), (x, -10.0)) for x in (10.0, 20.0, 30.0)]  # (left, right) going +x
-    assert funnel((0.0, 0.0), (40.0, 0.0), portals) == [(0.0, 0.0), (40.0, 0.0)]
-
-
-def test_funnel_bends_around_corner():
-    # Corridor goes +x then turns +y; the inside corner is at (10, 10).
-    portals = [((10.0, 10.0), (10.0, -10.0)), ((10.0, 10.0), (30.0, 10.0))]
-    path = funnel((0.0, 0.0), (20.0, 40.0), portals)
-    assert path == [(0.0, 0.0), (10.0, 10.0), (20.0, 40.0)]
-
-
 # --- real maps ----------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
 def wad():
     return Wad(DOOM)
+
+
+def _area(vs):
+    return abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(vs, vs[1:] + vs[:1]))) / 2
 
 
 def _start(m):
@@ -63,7 +53,7 @@ def test_mesh_polys_are_found_by_bsp_lookup(wad):
     polys = [p for p in mesh.polys if p]
     assert len(polys) == len(m.subsectors)
     for p in polys:
-        assert area(p.vertices) > 0
+        assert _area(p.vertices) > 0
         assert mesh.poly_at(*p.center) is p
 
 

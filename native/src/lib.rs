@@ -30,15 +30,20 @@ struct NativeMesh {
 
 #[pymethods]
 impl NativeMesh {
+    /// The navmesh of a map given as its parts (what evildoom.wad.mapdata loaded), with
+    /// `obstacles` (x, y, half-width) cut out of it.
     #[new]
-    #[pyo3(signature = (wad_path, map_name, obstacles, texture_wads=Vec::new()))]
-    fn new(wad_path: &str, map_name: &str, obstacles: Vec<(f64, f64, f64)>, texture_wads: Vec<String>) -> PyResult<Self> {
-        let err = |e: String| PyValueError::new_err(e);
-        let w = wad::Wad::open(wad_path).map_err(err)?;
-        let tw: Vec<wad::Wad> = texture_wads.iter().map(|p| wad::Wad::open(p)).collect::<Result<_, _>>().map_err(err)?;
-        let refs: Vec<&wad::Wad> = tw.iter().collect();
-        let map = wad::load_map(&w, map_name, &refs).map_err(err)?;
-        let mesh = mesh::Mesh::build(&map, &obstacles).map_err(err)?;
+    fn new(
+        verts: Vec<(f64, f64)>,
+        lines: Vec<(usize, usize, u16, u16, u16, u16, u16)>,
+        side_sectors: Vec<usize>,
+        segs: Vec<(usize, usize, usize, i16)>,
+        subsectors: Vec<(usize, usize)>,
+        nodes: Vec<(f64, f64, f64, f64, u16, u16)>,
+        obstacles: Vec<(f64, f64, f64)>,
+    ) -> PyResult<Self> {
+        let map = wad::MapData::from_parts(verts, lines, side_sectors, segs, subsectors, nodes);
+        let mesh = mesh::Mesh::build(&map, &obstacles).map_err(PyValueError::new_err)?;
         Ok(NativeMesh { map, mesh })
     }
 

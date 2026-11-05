@@ -426,6 +426,15 @@ identically.
   move the old height is forgotten.
 - Every Doom and Doom II map exits except MAP30 (the Icon of Sin).
 
+## Python copies of the native core removed (2026-11-04)
+- The navmesh build, flood fill, path-finding (A*, funnel, box fitting, smoothing) and the
+  plan search now exist only in Rust (`native/`); the native module is required. Python
+  keeps what hasn't been ported: map loading, triggers and movers, the one-off analysis
+  (progression, the bound, the relaxed plan), the jump finder and movement sim, the
+  follower and the engine adapter. `NavMesh` takes its polys and portals from the native
+  build and keeps only lookups (BSP point lookup, line grid, sector neighbours).
+- From here on the ported parts are changed in Rust only; no parity checks.
+
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
 - [ ] Timing-aware handling of lifts/doors that close on a timer (be on them in time).

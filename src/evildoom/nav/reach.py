@@ -11,13 +11,9 @@ A portal from sector A to sector B is passable if some pair of states allows it,
 vanilla player movement rules: step up <= 24, any drop, opening >= 56 (player height).
 """
 import hashlib
-import heapq
 import inspect
-import itertools
 import json
 import math
-import os
-import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -30,14 +26,9 @@ from evildoom.wad.things import SHOOTABLE_OBSTACLES, SOLID_DECORATIONS
 
 KEY_ORDER = list(Key)  # bit i of a key mask in the native planner
 
-try:  # compiled hot paths (native/), optional: Python versions below are the fallback
-    import evildoom_native as _native
-except ImportError:
-    _native = None
-if os.environ.get("EVILDOOM_NO_NATIVE"):
-    _native = None
+import evildoom_native as _native  # the navigation core (native/)
 
-from .movers import STAIRS, TICRATE, Heights, MoverModel
+from .movers import STAIRS, Heights, MoverModel
 from .navmesh import NavMesh, Point, _cells, _inside
 
 PLAYER_HEIGHT = 56
@@ -48,18 +39,13 @@ PICKUP_MARGIN = 2  # how far inside touching range a pickup spot must be
 # Paths keep this far from portal ends (wall corners). DOOM collides with a square box of
 # half-width 16, whose corner is ~22.6 from its centre, so 16 snags on diagonal approaches.
 PATH_CLEARANCE = 24
-WAYPOINT_CLEARANCE = 18  # minimum distance from a waypoint to any wall line
-THING_CLEARANCE = 6  # extra room left round solid things when detouring past them
 SHOT_HEIGHT = 36  # bullets leave the player at z + 28 + 8, and level: no aiming up or down
 MIN_PORTAL = 4.0  # narrower portals are nodebuilder slivers, never the real way through
-LEG_SPEED = 12.0  # units/tic assumed when timing legs against lifts and doors (full run ~16)
 EXIT_FLOOR = -1000  # pseudo-trigger lines below this: exit floors (Navigator._exit_floors)
-ALT_TRIGGERS = 1   # lines producing the same change tried per node (if they leave different reach)
 FLIGHT_HEADROOM = 8  # ceiling room to spare over the player during a jump
 LEDGE_TICS = 4  # ...tics a jump's box may stay over its ledge with a wall right beside it
 LONG_LEDGE_TICS = 30  # ...or at all (an edge walk, not a jump)
 PIN_MARGIN = 3.0  # how near a wall counts as beside the box
-LIFT_BACK = 60  # tics for a lift that's run out its wait to be back up and a jump off it lined up
 MIN_SHOT_SPAN = 6.0  # degrees a gun line must span from where it's shot (aim isn't exact)
 BOX_SLACK = 0.25  # the box must clear walls by this much: no one threads a gap exactly 32 wide
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
@@ -70,10 +56,7 @@ GRAVITY = 1.0
 MAX_RUNUP = 256
 JUMP_ANGLES = (0, -30, 30, -45, 45, -60, 60)  # degrees off the edge normal
 NAV_CACHE = Path(__file__).resolve().parents[3] / "out" / "navcache"
-TIMER_SETS = 2  # timer sets kept per world in the plan search (see Navigator.plan)
-FALLBACK_GRACE = 300  # search nodes to look on for a clean route once a squeezed one is found
 JUMPS_PER_TARGET = 4  # candidates kept per (takeoff poly, landing sector)
-DAMAGE_COST = 4.0  # path cost multiplier on damaging floors
 TELEPORTERS_FOR_PLAYERS = {39, 97, 174, 195, 207, 208, 209, 210}
 TELEPORTERS_FOR_MONSTERS = {39, 97, 125, 126, 207, 208}  # walk-over ones monsters trigger
 
@@ -1328,30 +1311,8 @@ class Navigator:
 
     def reachable(self, start: int, states: HeightStates,
                   doors: Doors | None = None) -> set[int]:
-        # The planner's inner loop (millions of portal checks a level): the parts of
-        # passable() that don't depend on heights are worked out once (_static_adjacency).
-        if _native is not None:
-            return self._native_nav().reachable(start, states, doors or None)
-        adj = self._static_adjacency()
-        gates = self._portal_gates
-        seen = {start}
-        todo = [start]
-        while todo:
-            poly = todo.pop()
-            for pi, to, sa, sb in adj[poly]:
-                if to in seen:
-                    continue
-                if pi in gates and not self._fits_now(pi, poly, states, doors):
-                    continue
-                if sa != sb and not self._heights_passable(pi, poly, sa, sb, states, doors):
-                    continue
-                seen.add(to)
-                todo.append(to)
-            for tp in self.tele_from.get(poly, ()):
-                if tp.dest_poly not in seen and self.edge_ok(tp, states):
-                    seen.add(tp.dest_poly)
-                    todo.append(tp.dest_poly)
-        return seen
+        """Polys reachable from `start` with these heights (flood fill, natively)."""
+        return self._native_nav().reachable(start, states, doors or None)
 
     def _native_nav(self):
         """The compiled navigator core (evildoom_native.Nav) for this map: its own navmesh
@@ -1526,39 +1487,12 @@ class Navigator:
 
     def find_path(self, start: Point, goal: Point, states: HeightStates,
                   doors: Doors | None = None) -> Path | None:
-        """A* over polys (see _find_path_once). If the smoothed path has a stretch the
+        """A* over polys, natively (native/src/nav.rs). If the smoothed path has a stretch the
         player's box can't get through (a 32-wide strip inside one poly, a row of pillars),
         search again avoiding the polys there. If every way squeezes: the least squeezed one,
         with `Path.squeezes` set (the box check has false alarms, so the planner ranks these
         below clean paths rather than refusing them), or None with `strict_fit`."""
-        if _native is not None:
-            return self._native_find_path(start, goal, states, doors)
-        best, banned = None, set()   # (squeeze points, path) of the least bad attempt
-        for _ in range(3):
-            self._squeezes: list[Point] = []
-            self._hard_squeeze = False
-            path = self._find_path_once(start, goal, states, doors, banned)
-            if path is None:
-                break
-            if not self._squeezes:
-                return path
-            if not self._hard_squeeze and (best is None or len(self._squeezes) < best[0]):
-                best = (len(self._squeezes), path)
-            # ban the path's own polys where it squeezes (not where it starts or ends)
-            new = set()
-            for pi in path.polys[1:-1]:
-                vs = self.mesh.polys[pi].vertices
-                if any(_segment_distance(vs[i], vs[(i + 1) % len(vs)], q, q) <= PLAYER_RADIUS
-                       for q in self._squeezes for i in range(len(vs))):
-                    new.add(pi)
-            new -= banned
-            if not new:
-                break
-            banned |= new
-        if best is None or self.strict_fit:
-            return None
-        best[1].squeezes = best[0]
-        return best[1]
+        return self._native_find_path(start, goal, states, doors)
 
     def _native_find_path(self, start: Point, goal: Point, states: HeightStates,
                           doors: Doors | None) -> Path | None:
@@ -1578,164 +1512,6 @@ class Navigator:
                 chain.append((poly, via[1]))
         return Path(polys, waypoints, cost, self._annotate(chain, states, doors),
                     [v for _, v in chain if isinstance(v, Jump)], squeezes)
-
-    def _find_path_once(self, start: Point, goal: Point, states: HeightStates,
-                        doors: Doors | None, banned: set[int]) -> Path | None:
-        """A* over polys. Edge cost is the distance between the points where the path enters
-        successive polys (closest point on each portal), weighted up on damaging floors."""
-        mesh = self.mesh
-        sp, gp = mesh.poly_at(*start), mesh.poly_at(*goal)
-        if sp is None or gp is None:
-            return None
-        use_heuristic = not self.teleports  # teleports break admissibility
-
-        def h(poly: int) -> float:
-            return math.dist(mesh.polys[poly].center, goal) if use_heuristic else 0.0
-
-        # Nodes are polys; the point we entered a poly at is tracked for edge costs.
-        best = {sp.index: 0.0}
-        entry = {sp.index: start}
-        came: dict[int, tuple[int, int | Teleport]] = {}
-        heap = [(h(sp.index), 0.0, sp.index)]
-        while heap:
-            _, g, poly = heapq.heappop(heap)
-            if poly == gp.index:
-                break
-            if g > best[poly]:
-                continue
-            here = entry[poly]
-            mult = DAMAGE_COST if self.damage[mesh.polys[poly].sector] else 1.0
-            moves: list[tuple[int, Point, int | Teleport]] = []
-            for pi in mesh.polys[poly].portals:
-                if self.passable(pi, poly, states, doors):
-                    portal = mesh.portals[pi]
-                    moves.append((portal.other(poly), _closest_on_segment(here, portal), pi))
-            for tp in self.tele_from.get(poly, []):
-                if self.edge_ok(tp, states):
-                    moves.append((tp.dest_poly, tp.dest, tp))
-            for nxt, point, via in moves:
-                if nxt in banned:
-                    continue
-                cost = g + math.dist(here, point) * mult
-                if nxt not in best or cost < best[nxt]:
-                    best[nxt] = cost
-                    entry[nxt] = point
-                    came[nxt] = (poly, via)
-                    heapq.heappush(heap, (cost + h(nxt), cost, nxt))
-        if gp.index not in best:
-            return None
-
-        chain: list[tuple[int, int | Teleport | None]] = [(gp.index, None)]
-        while chain[-1][0] != sp.index:
-            prev, via = came[chain[-1][0]]
-            chain[-1] = (chain[-1][0], via)
-            chain.append((prev, None))
-        chain.reverse()
-        polys = [p for p, _ in chain]
-        cost = best[gp.index] + math.dist(entry[gp.index], goal)
-        self._smooth_states = states  # box fitting judges moving sectors at these heights
-        self._smooth_doors = doors
-        try:
-            points = self._smooth(start, goal, chain)
-        finally:
-            self._smooth_states = self._smooth_doors = None
-        return Path(polys, points, cost,
-                    self._annotate(chain, states, doors),
-                    [via for _, via in chain if isinstance(via, Jump)])
-
-    def _timed_path(self, start: Point, goal: Point, states: HeightStates, doors: Doors | None,
-                    fired: TriggerLine | None,
-                    deadlines: dict | None = None) -> Path | None:
-        """find_path for a leg from `start`. Temporary heights can only be used if the path
-        gets to their sector before they end, at running speed; otherwise path without them.
-        `deadlines`: (sector, heights) -> tics they have left (the planner's, which can come
-        from several triggers back); without it, those `fired` (just went off at `start`)
-        made: a lift down or door open for a while, or a floor's old height while it moves."""
-        path = self.find_path(start, goal, states, doors)
-        if path is None or not deadlines and (deadlines is not None or fired is None
-                                              or fired.line < 0):
-            return path
-        temporary = self._temporary_heights()
-        late = []
-        arrive = self._arrival_tics(path)
-        for j in path.jumps:  # a jump needs its heights when we take off
-            src = self.mesh.poly_at(*j.takeoff)
-            if src is not None and src.sector in arrive:
-                for s, _h in j.requires:
-                    arrive[s] = min(arrive.get(s, math.inf), arrive[src.sector])
-        if deadlines:
-            # A jump off a lift that's still down waits for it to come back up: everything
-            # from the takeoff on is that much later (MAP09: down on the lift, up, then the
-            # jump through a door whose window had run out meanwhile)
-            for j in path.jumps:
-                src = self.mesh.poly_at(*j.takeoff)
-                if src is None or src.sector not in arrive:
-                    continue
-                t_off = arrive[src.sector]
-                lifts = {s2: left for (s2, h2), left in sorted(deadlines.items())
-                         if (s2, h2) in temporary
-                         and any(s == s2 and h != h2 for s, h in j.requires)}
-                if not lifts:
-                    continue
-                ready = max(lifts.values()) + LIFT_BACK
-                if ready > t_off:
-                    for x in arrive:
-                        if arrive[x] >= t_off and x not in lifts:
-                            arrive[x] += ready - t_off
-        if deadlines is not None:
-            late = [(s, h) for (s, h), left in deadlines.items()
-                    if s in arrive and arrive[s] > left]
-        for s, hs in (fired.effects.items() if deadlines is None else ()):
-            if fired.permanent:
-                # A floor moving for good: where it was is only there until it gets where
-                # it's going (E4M2: a jump planned over sector 30 at its old height, which it
-                # rises from in 0.3 s; the bot came down on it, well short).
-                timing = self.movers.timing(fired.info.special, fired.info.description, s,
-                                            hs[0])
-                if s in arrive and arrive[s] > timing.travel:
-                    late += [(s, h) for h in states[s] if h not in hs]
-                continue
-            for h in hs:
-                if (s, h) not in temporary or s not in arrive:
-                    continue
-                timing = self.movers.timing(fired.info.special, fired.info.description, s, h)
-                if arrive[s] > timing.travel + (timing.hold or 0):
-                    late.append((s, h))
-        if not late:
-            return path
-        slower = {s: set(hs) for s, hs in states.items()}
-        for s, h in sorted(late):
-            if len(slower[s]) > 1:
-                slower[s].discard(h)
-        return self.find_path(start, goal, slower, doors)
-
-    def _arrival_tics(self, path: Path) -> dict[int, float]:
-        """Roughly when (tics from the start) a path first gets into each sector it crosses:
-        distance along it at a little under full running speed, plus a moment to get going."""
-        out: dict[int, float] = {}
-        dist, prev = 0.0, None
-
-        def note(q: Point, d: float) -> None:
-            poly = self.mesh.poly_at(*q)
-            if poly is not None and poly.sector not in out:
-                out[poly.sector] = 10 + d / LEG_SPEED
-        for p in path.waypoints:
-            if p is None:
-                prev = None
-                continue
-            if prev is None:
-                note(p, dist)
-            else:  # sample along the segment: doors and the like lie between waypoints
-                seg = math.dist(prev, p)
-                n = max(1, int(seg // 8))
-                for i in range(1, n + 1):
-                    note((prev[0] + (p[0] - prev[0]) * i / n, prev[1] + (p[1] - prev[1]) * i / n),
-                         dist + seg * i / n)
-                dist += seg
-            prev = p
-        for poly in path.polys:  # anything missed (a sliver between samples)
-            out.setdefault(self.mesh.polys[poly].sector, 10 + path.cost / LEG_SPEED)
-        return out
 
     def plan_route(self, start: Point, goal: Point, keys: set[Key] = frozenset(),
                    states: HeightStates | None = None, max_expansions: int = 300,
@@ -1772,7 +1548,6 @@ class Navigator:
     def plan(self, start: Point, goals: list[Point], keys: set[Key] = frozenset(),
              states: HeightStates | None = None, key_items: KeyItems | None = None,
              max_expansions: int = 300, max_seconds: float = 5.0,
-             trace: list | None = None,
              goal_triggers: dict | None = None, fired: frozenset = frozenset()) -> Route | None:
         """Plan a route to any of `goals`, using remote triggers and (if `key_items` is given)
         picking up keys along the way, in whatever order works. `fired`: one-shot stair
@@ -1794,337 +1569,8 @@ class Navigator:
         the switch used there: the goal only counts once that switch can be pressed from it
         (nothing closed in the way, see activators_now).
         """
-        if _native is not None and trace is None:
-            return self._native_plan(start, goals, keys, states, key_items, max_expansions,
-                                     max_seconds, goal_triggers, fired)
-        mesh = self.mesh
-        key_items = key_items or {}
-        door_cache: dict[frozenset, Doors] = {}
-
-        def doors_for(ks: frozenset) -> Doors:
-            if ks not in door_cache:
-                door_cache[ks] = self.local_doors(set(ks))
-            return door_cache[ks]
-
-        goal_polys: dict[int, Point] = {}
-        for g in goals:
-            if (gp := mesh.poly_at(*g)) is not None:
-                goal_polys.setdefault(gp.index, g)
-        start_poly = mesh.poly_at(*start)
-        if not goal_polys or start_poly is None:
-            return None
-        actions = [t for t in self.triggers if t.info.trigger is not Trigger.DR and t.effects]
-
-        @dataclass
-        class Node:
-            pos: Point
-            states: HeightStates
-            added: frozenset            # (sector, heights) pairs added beyond the start
-            keys: frozenset
-            legs: list[Leg]
-            reach: set[int]
-            steps: int = 0
-            pending: tuple | None = None  # (prev pos, prev states, prev keys, trigger, key,
-            #                               prev temp)
-            temp: dict = field(default_factory=dict)  # temporary heights (a lift down for
-            #     3s, a door open for 4s) -> tics left from here: later legs can use them
-            #     until they run out (MAP22: through a door to a switch and back through it
-            #     for the red skull; MAP24: onto a lift for the red card, then on across it).
-            #     A floor's old height while it moves for good only lasts the next leg.
-            squeezes: int = 0   # spots on the route so far where the box may not fit
-            world: set | None = None   # reach without any temporary heights (what lasts)
-            stable: set | None = None  # reach without temporary heights carried from earlier
-            #     legs (for ranking: several lifts each down for a few seconds all count at
-            #     once in `reach`, which makes a node look far better than it is: MAP14)
-            rank: tuple = ()    # the rest of its priority (after goal reach and squeezes)
-            fired: frozenset = frozenset()  # one-shot cumulative lines used (TriggerLine.shift_from)
-
-        temporary = self._temporary_heights()
-
-        moving_off: set = set()  # (sector, heights) a permanent move leaves behind
-
-        def expire(states: HeightStates, temp: dict, target: Point,
-                   frm: Point) -> tuple[HeightStates, dict, frozenset]:
-            """Walking from `frm` to `target` (and acting there): the heights without the
-            temporary ones that run out meanwhile, those that don't (with the time they have
-            left then), and the ones that ran out."""
-            if not temp:
-                return states, {}, frozenset()
-            took = math.dist(frm, target) / LEG_SPEED + 10
-            left = {k: v - took for k, v in temp.items()
-                    if v - took > 0 and k not in moving_off}
-            gone = frozenset(temp) - frozenset(left)
-            if not gone:
-                return states, left, gone
-            return _without(states, gone), left, gone
-
-        def deadlines_of(t: TriggerLine, base: HeightStates, trial: HeightStates) -> dict:
-            """The temporary heights firing `t` makes, with how long they last."""
-            out = {}
-            for s, hs in t.effects_now(base).items():
-                if t.permanent:
-                    # Once a floor has risen for good its old height is gone too: you can
-                    # still hop on while it moves (E4M2: the plan walked from a pit onto
-                    # sector 3 at its old floor long after it had risen).
-                    travel = self.movers.timing(t.info.special, t.info.description, s,
-                                                hs[0]).travel if t.line >= 0 else 0
-                    # A rising floor is only its old height for crossing on until it's a step
-                    # above it (MAP09: the plan crossed sector 6 most of the way through its
-                    # rise, by when it was a 30-unit climb).
-                    rise = hs[0][0]
-                    old = {(s, h): travel if rise <= h[0] else
-                           min(travel, (travel - 1) * MAX_STEP / (rise - h[0]) + 1)
-                           for h in sorted(trial[s]) if h not in hs}
-                    moving_off.update(old)
-                    out.update(old)
-                    continue
-                for h in hs:  # (fresh even if still there from before: pressed again)
-                    # Also a height another line makes for good, if not there yet: this one
-                    # takes it away again (MAP09: door 101 opened by a switch that lets it shut
-                    # after a few seconds was taken as open for good, since another switch
-                    # opens it for good)
-                    tm = self.movers.timing(t.info.special, t.info.description, s, h) \
-                        if t.line >= 0 else None
-                    if (s, h) in temporary or (tm is not None and tm.hold is not None
-                                               and h not in base[s]):
-                        tm = self.movers.timing(t.info.special, t.info.description, s, h) \
-                            if t.line >= 0 else None
-                        out[(s, h)] = tm.travel + (tm.hold or 0) if tm else 0
-            return out
-
-        keys0 = frozenset(keys)
-        states0 = {s: set(h) for s, h in (states or self.initial_states()).items()}
-        bound = self._upper_bound(start_poly.index, states0, keys0, key_items, actions)
-        if not goal_polys.keys() & bound:
-            return None  # unreachable even if everything reachable were used: don't search
-        # Point the search at the critical chain: actions the relaxed plan depends on first.
-        rel_t, rel_k = self._relaxed_needs(start_poly.index, set(goal_polys), states0, keys0,
-                                           key_items, actions)
-        # (used stair switches make a world of their own; other used one-shot lines are only
-        # not pressed again: in the signature they split worlds that are the same, MAP17)
-        stair_lines = {t.line for t in actions if t.shift_from is not None}
-        counter = itertools.count()
-        root = Node(start, states0, frozenset(), keys0, [],
-                    self.reachable(start_poly.index, states0, doors_for(keys0)),
-                    fired=frozenset(fired))
-        # Paths where the player's box may not fit (Path.squeezes) aren't refused (the check has
-        # false alarms) but rank below clean ones: priority is (can't reach a goal, squeezes
-        # so far, rank...). A squeezed route to a goal is kept as `fallback`; the search goes
-        # on a while for a clean one (E4M9: a squeezed walk to the key came before pressing
-        # the switches that open the way) and returns the fallback if none turns up (making
-        # every clean node go first wanders for ages where a squeeze is needed: MAP26/29).
-        heap = [((False, 0, False, False, 0, 0), next(counter), root)]
-        # Duplicate check with dominance on time left: per world (heights added, keys held,
-        # reachable area) keep the timer sets no other one beats; a node is skipped when an
-        # earlier one for its world has at least as much time left on every running lift
-        # and door.
-        seen: dict[tuple, list[dict]] = {}
-
-        def timers(n: Node) -> dict:
-            return n.temp
-
-        def dominated(sig: tuple, tm: dict) -> bool:
-            others = seen.get(sig, ())
-            if any(all(k in other and other[k] >= v for k, v in tm.items())
-                   for other in others):
-                return True
-            # Several timers running at once rarely beat each other outright ({A: 4s, B: 1s}
-            # vs {A: 1s, B: 4s}), so alternating presses kept making "new" ones (MAP14: two
-            # lifts pressed 70+ times each). Keep a few per world: the most time left in all.
-            return len(others) >= TIMER_SETS and \
-                sum(tm.values()) <= min(sum(o.values()) for o in others)
-
-        def mark(sig: tuple, tm: dict) -> None:
-            keep = [o for o in seen.get(sig, ())
-                    if not all(k in tm and tm[k] >= v for k, v in o.items())]
-            keep = sorted(keep + [tm], key=lambda o: -sum(o.values()))
-            seen[sig] = keep[:TIMER_SETS] if tm in keep[:TIMER_SETS] else keep[:TIMER_SETS - 1] + [tm]
-
-        def unmark(sig: tuple, tm: dict) -> None:
-            seen[sig] = [o for o in seen.get(sig, ()) if o is not tm]
-        expansions = 0
-        fallback: tuple[int, Route, int, float] | None = None  # squeezes, route, when found
-        deadline = time.perf_counter() + max_seconds
-        while heap and expansions < max_expansions and time.perf_counter() < deadline:
-            priority, _, node = heapq.heappop(heap)
-            if fallback is not None and (expansions - fallback[2] > FALLBACK_GRACE
-                                         or time.perf_counter() - fallback[3] > 10):
-                return fallback[1]
-            if fallback is not None and node.squeezes:
-                continue  # looking for a clean route now: only clean nodes
-
-            # (pressing a door's switch again only changes its timer, and that's what the next
-            # leg may need: MAP02; but the same world with less time left is no better)
-            # The world is what lasts: heights added that aren't temporary, keys, and what's
-            # reachable without the temporary ones; those are the timers, compared by dominance
-            # (with them in the world, every combination of lifts still down was a world of
-            # its own and nothing could be pruned: MAP14's search grew tenfold)
-            sig = (node.added - frozenset(node.temp), node.keys,
-                   frozenset(node.world if node.world is not None else node.reach),
-                   frozenset(l for l in node.fired if l in stair_lines))
-            tm = timers(node)
-            if dominated(sig, tm):
-                continue
-            mark(sig, tm)
-            if node.pending:  # path the leg that got us here, now that we've picked this node
-                prev_pos, prev_states, prev_keys, t, key, prev_temp = node.pending
-                path = self._timed_path(prev_pos, node.pos, prev_states, doors_for(prev_keys),
-                                        None, prev_temp)
-                if path is None:
-                    if prev_temp:
-                        # Maybe only too late for something temporary: the same world reached
-                        # another way (the switch pressed later) still gets its turn (MAP02).
-                        unmark(sig, tm)
-                    continue
-                node.legs = node.legs + [Leg(t, path, key)]
-                node.pending = None
-                if path.squeezes:  # back in the queue, behind cleaner nodes
-                    node.squeezes += path.squeezes
-                    unmark(sig, tm)
-                    heapq.heappush(heap, ((priority[0], node.squeezes) + node.rank,
-                                          next(counter), node))
-                    continue
-            expansions += 1
-            if trace is not None:  # debugging: what the search actually explores
-                last = node.legs[-1] if node.legs else None
-                trace.append((len(node.reach), sorted(k.name for k in node.keys),
-                              (f"line {last.trigger.line}" if last and last.trigger else
-                               f"key {last.key.name}" if last and last.key else "start")))
-            doors = doors_for(node.keys)
-            for gp in sorted(goal_polys.keys() & node.reach,
-                             key=lambda p: (math.dist(node.pos, goal_polys[p]), p)):
-                gt = (goal_triggers or {}).get(goal_polys[gp])
-                if gt is not None and gp not in self.activators_now(gt, node.states):
-                    continue  # e.g. the exit switch is still behind closed bars
-                path = self._timed_path(node.pos, goal_polys[gp], node.states, doors, None,
-                                        node.temp)
-                if path:
-                    route = Route(node.legs + [Leg(None, path)], node.states, node.keys,
-                                  goal_polys[gp])
-                    total = node.squeezes + path.squeezes
-                    if not total:
-                        return route
-                    if fallback is None or total < fallback[0]:
-                        fallback = (total, route, expansions, time.perf_counter())
-
-            def push(target: Point, trial: HeightStates, added: frozenset, ks: frozenset,
-                     t: TriggerLine | None, key: Key | None, temp: dict,
-                     after: set[int] | None = None, carried: frozenset = frozenset()) -> None:
-                target_poly = mesh.poly_at(*target)
-                if target_poly is None:
-                    return
-                if after is None:  # (what's reachable from target, if already worked out)
-                    after = self.reachable(target_poly.index, trial, doors_for(ks))
-                stable = after
-                if carried:
-                    plain = _without(trial, carried)
-                    stable = self.reachable(target_poly.index, plain, doors_for(ks))
-                    if stable == after:
-                        # The lifts and doors still running from earlier open nothing more
-                        # from here: let them go (keeping them only multiplies the search:
-                        # MAP17's many repeatable lifts)
-                        trial, temp = plain, {k: v for k, v in temp.items() if k not in carried}
-                        added = added - carried
-                        carried = frozenset()
-                world = stable  # what's reachable with no temporary heights at all
-                if set(temp) - carried:
-                    plain = _without(trial, temp)
-                    world = self.reachable(target_poly.index, plain, doors_for(ks))
-                child = Node(target, trial, added, ks, node.legs, after, node.steps + 1,
-                             (node.pos, node.states, node.keys, t, key, node.temp), temp,
-                             squeezes=node.squeezes, stable=stable, world=world,
-                             fired=node.fired | {t.line} if t is not None and t.once
-                             and t.cumulative else node.fired)
-                progress = bool(stable - (node.stable or node.reach)) or key is not None
-                relevant = (t is not None and t.line in rel_t) or (key is not None and key in rel_k)
-                # Holding more of the keys the route needs comes first: once one's picked up
-                # the search carries on from there, even with triggers the relaxed plan didn't
-                # see a need for (MAP09: the lifts out of the yellow key's pit, which it
-                # thought one lift did; behind thousands of nodes without the key, they were
-                # never reached).
-                child.rank = (-len(ks & rel_k), not relevant, not progress, -len(stable),
-                              child.steps)
-                priority = (not goal_polys.keys() & stable, child.squeezes) + child.rank
-                heapq.heappush(heap, (priority, next(counter), child))
-
-            # Triggers: per distinct world change, the lines producing it, closest first; the
-            # closest, and others only if they leave somewhere else reachable (MAP27: the lines
-            # in the platform room lower the platforms too, but leave you down there, away
-            # from the switch for the key's pedestal; others elsewhere in the level don't).
-            options: dict[frozenset, list] = {}
-            for t in actions:
-                # Usable if a door we can open is all that's in the way, but stand where no
-                # door needs opening when there's such a spot (the path then opens it).
-                usable = self.activators_now(t, node.states) & node.reach or \
-                    self.activators_now(t, node.states, doors) & node.reach
-                if not usable or not t.info.lock.satisfied(set(node.keys)) \
-                        or t.line in node.fired:
-                    continue
-                # (not pressed again while its lift or door is still running: refreshing a
-                # timer always looks better and the search loops on it, MAP17; once it has run
-                # out, pressing is new again)
-                new = frozenset((s, h) for s, hs in t.effects_now(node.states).items()
-                                for h in hs if h not in node.states[s])
-                if not new:
-                    continue  # already fired, or a duplicate of something that was
-                target = self._activation_point(t, node.pos, usable)
-                d = math.dist(node.pos, target)
-                options.setdefault(new, []).append((d, t.line, t, target, usable))
-            for new, cands in options.items():
-                cands.sort(key=lambda c: (c[0], c[1]))
-                reaches: list = []
-                for _, _, t, target, usable in cands[:ALT_TRIGGERS]:
-                    base, left, gone = expire(node.states, node.temp, target, node.pos)
-                    trial = apply_trigger(base, t)
-                    temp = left | deadlines_of(t, base, trial)
-                    # Where we stand to use it matters (a door pressed from the pit below it is
-                    # useless): try the default spot and a few others it can be used from, keep
-                    # the one leaving the most reachable.
-                    by_sector: dict[int, int] = {}  # one candidate per sector it's usable from
-                    for p in sorted(usable,
-                                    key=lambda p: (math.dist(mesh.polys[p].center, target), p)):
-                        by_sector.setdefault(mesh.polys[p].sector, p)
-                    near = _line_mid(self.map, t.line) if t.line >= 0 else target
-                    spots = [target] + [_spot_in_poly(mesh.polys[p], near) if t.line >= 0
-                                        else mesh.polys[p].center
-                                        for p in list(by_sector.values())[:8]]
-                    doors_k = doors_for(node.keys)
-                    # A spot inside what another reaches can't reach more than it: skip it.
-                    best, best_reach, covered = spots[0], None, set()
-                    for sp in spots:
-                        p = mesh.poly_at(*sp)
-                        if p is None or p.index in covered:
-                            continue
-                        r = self.reachable(p.index, trial, doors_k)
-                        covered |= r
-                        if best_reach is None or len(r) > len(best_reach):
-                            best, best_reach = sp, r
-                    if best_reach in reaches:
-                        continue  # leaves the same as a closer line doing the same
-                    reaches.append(best_reach)
-                    push(best, trial, (node.added - gone) | new, node.keys, t, None, temp,
-                         best_reach, frozenset(left))
-            # Keys: for each key not yet held, the reachable pickup spot that leaves the most
-            # reachable afterwards (some spots are slivers you can't walk on from).
-            for key, spots in key_items.items():
-                if key in node.keys:
-                    continue
-                # Spots as things stand at this node (key_items is judged against every
-                # height, so a key on a pedestal that hasn't been lowered yet would look
-                # reachable from beside it: MAP04's blue card).
-                if key in self._key_positions:
-                    spots = [s for x, y in self._key_positions[key]
-                             for s in self.pickup_spots(x, y, node.states)]
-                here = [(p, pt) for p, pt in spots if p in node.reach]
-                if here:
-                    ks = node.keys | {key}
-                    _, spot = max(here, key=lambda s: (
-                        len(self.reachable(s[0], node.states, doors_for(ks))),
-                        -math.dist(node.pos, s[1])))
-                    after_states, left, gone = expire(node.states, node.temp, spot, node.pos)
-                    push(spot, after_states, node.added - gone, ks, None, key, left,
-                         carried=frozenset(left))
-        return fallback[1] if fallback else None
+        return self._native_plan(start, goals, keys, states, key_items, max_expansions,
+                                 max_seconds, goal_triggers, fired)
 
     def _native_plan(self, start: Point, goals: list[Point], keys, states, key_items,
                      max_expansions: int, max_seconds: float,
@@ -2410,6 +1856,15 @@ class Navigator:
                    if any((s, h) in relied for s, hs in t.effects.items() for h in hs)}
         return need_t, need_k
 
+    def _box_blocked(self, p: Point) -> bool:
+        """Does the player's box at p touch a static wall or solid thing?"""
+        r = PLAYER_RADIUS + BOX_SLACK
+        pad = PLAYER_RADIUS + 1
+        grid = self._static_wall_grid()
+        edges = {e for cell in _cells(p[0] - pad, p[1] - pad, p[0] + pad, p[1] + pad)
+                 for e in grid.get(cell, ())}
+        return any(_box_overlaps(p, r, e) for e in edges)
+
     def _activation_point(self, t: TriggerLine, pos: Point, reach: set[int]) -> Point:
         """Where to stand to use a switch, or where to walk to so a walk-over line is crossed.
         A switch spot the player's box can't occupy (barrels in front of E1M9's switch) is
@@ -2417,7 +1872,7 @@ class Navigator:
         spot = self._activation_spot(t, pos, reach)
         if t.line < 0 or t.info.trigger not in (Trigger.S1, Trigger.SR, Trigger.D1, Trigger.DR):
             return spot
-        if not self._box_hits(spot, spot):
+        if not self._box_blocked(spot):
             return spot
         line = self.map.linedefs[t.line]
         a, b = self.map.vertexes[line.v1], self.map.vertexes[line.v2]
@@ -2429,7 +1884,7 @@ class Navigator:
         for back in range(int(d) + 4, USE_REACH + 13, 4):  # use traces reach 64
             p = (q[0] + ux * back, q[1] + uy * back)
             poly = self.mesh.poly_at(*p)
-            if poly is not None and poly.index in reach and not self._box_hits(p, p):
+            if poly is not None and poly.index in reach and not self._box_blocked(p):
                 return p
         return spot
 
@@ -2466,376 +1921,6 @@ class Navigator:
                 if best is None or d < best[0]:
                     best = (d, spot)
         return best[1] if best else mesh.polys[min(t.activators & reach)].center
-
-    def _smooth(self, start: Point, goal: Point, chain) -> list[Point | None]:
-        """String-pull through portals with the funnel algorithm, restarting at teleports.
-        A None in the result marks a teleport jump between two waypoints."""
-        mesh = self.mesh
-        points: list[Point | None] = []
-        seg_start, portals = start, []
-        for i in range(1, len(chain)):
-            prev_poly = chain[i - 1][0]
-            poly, via = chain[i]
-            if isinstance(via, Jump):  # continuous: run-up, edge, landing; no teleport marker
-                points += funnel(seg_start, via.runup, portals) + [via.takeoff]
-                seg_start, portals = via.dest, []
-                continue
-            if isinstance(via, Teleport):
-                # Cross this exact line squarely: adjacent teleport lines often have different
-                # destinations (E4M6's lift edge has four).
-                mid = _line_mid(self.map, via.line)
-                line = self.map.linedefs[via.line]
-                a, b = self.map.vertexes[line.v1], self.map.vertexes[line.v2]
-                length = max(math.dist((a.x, a.y), (b.x, b.y)), 1)
-                approach = (mid[0] + (b.y - a.y) / length * 24, mid[1] - (b.x - a.x) / length * 24)
-                points += funnel(seg_start, approach, portals) + [mid]
-                points.append(None)
-                seg_start, portals = via.dest, []
-                continue
-            portal = mesh.portals[via]
-            portals.append(_oriented(portal, mesh.polys[prev_poly].center,
-                                     mesh.polys[poly].center))
-        points += funnel(seg_start, goal, portals)
-        # Ledge edges get wall-like clearance too, except the ones this path means to cross;
-        # jump run-up/takeoff points are kept exactly where they are.
-        crossed = {mesh.portals[via].linedef for _, via in chain
-                   if isinstance(via, int) and mesh.portals[via].linedef is not None}
-        crossed |= {via.line for _, via in chain
-                    if isinstance(via, Teleport) and not isinstance(via, Jump)}
-        # ...but not walk-over lines that shut a sector right beside them (MAP23's "close door
-        # 30s" line): keep clear of those, or the closing door pins the player's box.
-        crossed -= self._shutting_lines()
-        pinned = {p for _, via in chain if isinstance(via, Jump)
-                  for p in (via.runup, via.takeoff)}
-        # No shortcut from a takeoff: what follows it is the flight, and going straight on past
-        # the landing cuts across the pit the jump clears (MAP29). (Pinning the landing as well
-        # made paths go through the exact landing spot: E4M2, MAP17, MAP25.)
-        takeoffs = frozenset(via.takeoff for _, via in chain if isinstance(via, Jump))
-        out: list[Point | None] = []
-        run: list[Point] = []
-        for p in points + [None]:
-            if p is None:
-                if run:
-                    out += self._straighten(self._box_fits_path(
-                        self._push_from_corners(run, frozenset(crossed), pinned),
-                        frozenset(crossed), pinned), frozenset(crossed), pinned,
-                        {mesh.polys[p].sector for p, _ in chain}, takeoffs)
-                    run = []
-                out.append(None)
-            else:
-                run.append(p)
-        return out[:-1]
-
-    def _solid_things(self) -> list[tuple[float, float, float]]:
-        """(x, y, radius) of solid decorations present at skill 3."""
-        if not hasattr(self, "_solids"):
-            self._solids = [(t.x, t.y, SOLID_DECORATIONS[t.type]) for t in self.map.things
-                            if t.type in SOLID_DECORATIONS and t.in_skill(3)]
-        return self._solids
-
-    # --- making paths fit the player's square box ---------------------------------------------
-
-    def _static_edges(self, a: Point, b: Point, pad: float, exempt: frozenset | None = None):
-        """Static walls and solid-thing box edges near the segment a-b. With `exempt` (lines
-        the path means to cross), also lines that block at the map's initial heights: closed
-        sectors that some trigger moves, and ledges seen from below (from a's floor)."""
-        grid = self._static_wall_grid()
-        seen: set = set()
-        cells = list(_cells(min(a[0], b[0]) - pad, min(a[1], b[1]) - pad,
-                            max(a[0], b[0]) + pad, max(a[1], b[1]) + pad))
-        for cell in cells:
-            for e in grid.get(cell, ()):
-                if e not in seen:
-                    seen.add(e)
-                    yield e
-        if exempt is None:
-            return
-        m, init = self.map, self.movers.initial
-        walls, drops = self._wall_lines(), self._drop_lines()
-        here = self.mesh.poly_at(*a)
-        states = getattr(self, "_smooth_states", None)
-        if here is None:
-            ours = None
-        elif states is not None:  # as high as we can be:
-            # the player stands on the highest floor anywhere under the box, unless that's
-            # out of reach (more than a step above the floor under its centre) on two opposite
-            # sides: then it's a box wedged in a gap between higher floors, not one standing
-            # on a ledge and hanging over its edge (E4M9: a 32-wide gap between two 64-high
-            # blocks, whose edges are walls; MAP29 walks along ledges)
-            reach_up = max(h[0] for h in states[here.sector]) + MAX_STEP
-            grid_f = {}
-            for i in (-1, 0, 1):
-                for j in (-1, 0, 1):
-                    p = self.mesh.poly_at(a[0] + i * PLAYER_RADIUS, a[1] + j * PLAYER_RADIUS)
-                    grid_f[(i, j)] = max(h[0] for h in states[p.sector]) if p else -math.inf
-            high = {c for c, f in grid_f.items() if f > reach_up}
-            # high, low, high across the box (both ways): a gap between higher floors
-            wedged = any({(-1, k), (1, k)} <= high and (0, k) not in high or
-                         {(k, -1), (k, 1)} <= high and (k, 0) not in high for k in (-1, 0, 1))
-            ours = max(f for f in grid_f.values() if f > -math.inf and
-                       (not wedged or f <= reach_up))
-        else:
-            ours = init[here.sector][0]
-        for cell in cells:
-            for li in self.mesh._line_grid.get(cell, ()):
-                if li in seen or li in exempt:
-                    continue
-                line = m.linedefs[li]
-                f, bk = m.front_sector(line), m.back_sector(line)
-                if line.special in TELEPORTERS_FOR_PLAYERS:
-                    # A teleport line the path doesn't mean to take: keep the box off it (it
-                    # fires when the box touches it and the centre crosses its extension).
-                    seen.add(li)
-                    v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
-                    yield (v1.x, v1.y), (v2.x, v2.y)
-                    continue
-                if li not in walls and li not in drops:
-                    # Up on a ledge, an opening whose ceiling is below our head is a wall
-                    # too, even if it's fine from the floor below (MAP15: next to the drop
-                    # off the 32-wide strip, sector 186's ceiling is 176 under the strip).
-                    if f is None or bk is None or ours is None:
-                        continue
-                    top = max(min(hf[1], hb[1]) for hf in (states[f] if states else [init[f]])
-                              for hb in (states[bk] if states else [init[bk]]))
-                    if top - ours >= PLAYER_HEIGHT:
-                        continue
-                    seen.add(li)
-                    v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
-                    yield (v1.x, v1.y), (v2.x, v2.y)
-                    continue
-                seen.add(li)
-                if li in walls and states is not None and f is not None and bk is not None \
-                        and any(can_cross(hf, hb) or can_cross(hb, hf)
-                                for hf in states[f] for hb in states[bk]):
-                    continue  # closed at the start, but open by the time we walk this path
-                if li not in walls:  # a ledge: only a wall if we're below it
-                    if states is not None:
-                        top = min(max(hf[0], hb[0]) for hf in states[f] for hb in states[bk])
-                    else:
-                        top = max(init[f][0], init[bk][0])
-                    if ours is None or ours + MAX_STEP >= top:
-                        continue
-                v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
-                yield (v1.x, v1.y), (v2.x, v2.y)
-
-    def _ledges_crossed(self, a: Point, b: Point, exempt: frozenset) -> bool:
-        """Does a-b walk off a ledge (a one-way drop line) other than the exempt ones?"""
-        m, drops = self.map, self._drop_lines()
-        for cell in _cells(min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1])):
-            for li in self.mesh._line_grid.get(cell, ()):
-                if li in drops and li not in exempt:
-                    line = m.linedefs[li]
-                    v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
-                    if _segments_cross(a, b, (v1.x, v1.y), (v2.x, v2.y)):
-                        return True
-        return False
-
-    def _box_hits(self, p: Point, q: Point, ignore=frozenset(),
-                  exempt: frozenset | None = None) -> set:
-        """Edges (see _static_edges) the player's box touches moving straight from p to q."""
-        r = PLAYER_RADIUS + BOX_SLACK
-        return {e for e in self._static_edges(p, q, PLAYER_RADIUS + 1, exempt)
-                if e not in ignore and _swept_box_hits(p, q, r, e)}
-
-    def _shut_in(self, edges) -> bool:
-        """Are all these edges lines of sectors shut at the heights being judged (no room to
-        stand in) that we can't open? Then the box really doesn't get through: no false
-        alarm (MAP21: a 24x24 diagonal gap between the corners of two yellow-key doors,
-        before the key)."""
-        if not edges:
-            return False
-        if not hasattr(self, "_seg_lines"):
-            m = self.map
-            self._seg_lines = {((m.vertexes[l.v1].x, m.vertexes[l.v1].y),
-                                (m.vertexes[l.v2].x, m.vertexes[l.v2].y)): l.index
-                               for l in m.linedefs}
-        states, doors = self._smooth_states, self._smooth_doors or {}
-        if states is None:
-            return False
-        m = self.map
-        for e in edges:
-            li = self._seg_lines.get(e)
-            if li is None:
-                return False
-            line = m.linedefs[li]
-            f, b = m.front_sector(line), m.back_sector(line)
-            if f is None or b is None or f in doors or b in doors:
-                return False
-            if any(min(hf[1], hb[1]) - max(hf[0], hb[0]) >= PLAYER_HEIGHT
-                   for hf in states[f] for hb in states[b]) and \
-                    any(h[1] - h[0] >= PLAYER_HEIGHT for h in states[f]) and \
-                    any(h[1] - h[0] >= PLAYER_HEIGHT for h in states[b]):
-                return False
-        return True
-
-    def _box_fits_path(self, pts: list[Point], exempt: frozenset,
-                       pinned: set[Point] = frozenset()) -> list[Point]:
-        """The funnel and corner pushes keep round clearances from portal ends and vertices,
-        but DOOM's player is a 32x32 square that also hits diagonal walls, pillars and solid
-        things (a path squeezed between a barrel and a pillar's corner doesn't fit). Check
-        each segment with the swept box and detour locally round what it would hit."""
-        if len(pts) < 2:
-            return pts
-        # Interior waypoints the box can't occupy are dropped; detours reconnect neighbours.
-        # Not where going straight on instead would walk off a ledge (MAP29's narrow stair
-        # round a pit: every point on it touches a wall, and the straight line is over the pit).
-        kept = []
-        for i, p in enumerate(pts):
-            if i == 0 or i == len(pts) - 1 or p in pinned \
-                    or not self._box_hits(p, p, exempt=exempt) \
-                    or self._ledges_crossed(kept[-1], pts[i + 1], exempt):
-                kept.append(p)
-        pts = kept
-        out = [pts[0]]
-        for b in pts[1:]:
-            a = out[-1]
-            # edges the ends already touch don't count
-            ignore = self._box_hits(a, a, exempt=exempt) | self._box_hits(b, b, exempt=exempt)
-            if self._box_hits(a, b, ignore, exempt):
-                detour = self._detour(a, b, exempt, ignore)
-                if detour:
-                    out += detour
-                elif hasattr(self, "_squeezes"):  # tell find_path to look for another way
-                    self._squeezes += self._squeeze_points(a, b, ignore, exempt)
-                    if self._shut_in(self._box_hits(a, b, ignore, exempt)):
-                        self._hard_squeeze = True
-            out.append(b)
-        return out
-
-    def _straighten(self, pts: list[Point], exempt: frozenset,
-                    pinned: set[Point] = frozenset(),
-                    sectors: set[int] | None = None, takeoffs: frozenset = frozenset()) -> list[Point]:
-        """Last pass: from each waypoint go straight to the farthest later one the player's
-        box reaches without touching a wall or walking off a ledge, never skipping a pinned
-        point (jump run-ups/takeoffs). Removes the back-and-forth jitter that corner pushes,
-        nudges and detours can leave (MAP02's bars), and any needless corners. Shortcuts
-        stay over the route's `sectors` (not across a lift that's only sometimes low), and
-        over sectors the stretch they replace went over (E4M2: the route started in a lava
-        pit, so a shortcut later on cut straight across it from one rim to the other)."""
-        if len(pts) < 3:
-            return pts
-        over = [self._sectors_along(pts[k], pts[k + 1]) for k in range(len(pts) - 1)]
-        out, i = [pts[0]], 0
-        while i < len(pts) - 1:
-            a = pts[i]
-            best = i + 1
-            for j in range(min(len(pts) - 1, i + 10) if a not in takeoffs else i + 1, i + 1, -1):
-                if any(p in pinned for p in pts[i + 1:j]):
-                    continue
-                b = pts[j]
-                allowed = set().union(*over[i:j])
-                if sectors is not None:
-                    allowed &= sectors
-                if not self._within_sectors(a, b, allowed):
-                    continue
-                ignore = self._box_hits(a, a, exempt=exempt) | self._box_hits(b, b, exempt=exempt)
-                if not self._box_hits(a, b, ignore, exempt) \
-                        and not self._ledges_crossed(a, b, exempt):
-                    best = j
-                    break
-            out.append(pts[best])
-            i = best
-        return out
-
-    def _sectors_along(self, a: Point, b: Point) -> set[int]:
-        """Sectors under the segment a-b (sampled every 8 units)."""
-        n = max(1, int(math.dist(a, b) // 8))
-        out = set()
-        for i in range(n + 1):
-            poly = self.mesh.poly_at(a[0] + (b[0] - a[0]) * i / n,
-                                     a[1] + (b[1] - a[1]) * i / n)
-            if poly is not None:
-                out.add(poly.sector)
-        return out
-
-    def _within_sectors(self, a: Point, b: Point, sectors: set[int] | None) -> bool:
-        """Does the segment a-b stay over the given sectors (sampled every 8 units)?"""
-        if sectors is None:
-            return True
-        n = max(1, int(math.dist(a, b) // 8))
-        for i in range(n + 1):
-            poly = self.mesh.poly_at(a[0] + (b[0] - a[0]) * i / n,
-                                     a[1] + (b[1] - a[1]) * i / n)
-            if poly is None or poly.sector not in sectors:
-                return False
-        return True
-
-    def _squeeze_points(self, a: Point, b: Point, ignore, exempt: frozenset) -> list[Point]:
-        """Points along a-b where the player's box doesn't fit."""
-        length = math.dist(a, b)
-        if length < 1:
-            return []
-        ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
-        out = []
-        for t in range(0, int(length) + 1, 8):
-            p = (a[0] + ux * t, a[1] + uy * t)
-            if self._box_hits(p, p, ignore, exempt):
-                out.append(p)
-        return out[::max(1, len(out) // 6)]
-
-    def _detour(self, a: Point, b: Point, exempt: frozenset, ignore) -> list[Point] | None:
-        """Points to go via from a to b so the box fits: the shortest route through spots just
-        diagonally off the corners of nearby walls and solid things. Only the stretch of a-b
-        that doesn't fit is rerouted (the rest may run through tight spots of its own)."""
-        length = math.dist(a, b)
-        if length < 1:
-            return None
-        ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
-        bad = [t for t in range(0, int(length) + 1, 8)
-               if self._box_hits((a[0] + ux * t, a[1] + uy * t),
-                                 (a[0] + ux * min(t + 8, length), a[1] + uy * min(t + 8, length)),
-                                 ignore, exempt)]
-        if not bad:
-            return None
-        t0, t1 = bad[0] - 40, bad[-1] + 48
-        a2 = (a[0] + ux * t0, a[1] + uy * t0) if t0 > 0 else a
-        b2 = (a[0] + ux * t1, a[1] + uy * t1) if t1 < length else b
-        if (a2 != a and self._box_hits(a2, a2, exempt=exempt)) or \
-                (b2 != b and self._box_hits(b2, b2, exempt=exempt)):
-            a2, b2 = a, b
-        nodes, seen = [a2, b2], set()
-        for e in self._static_edges(a2, b2, 96, exempt):
-            for v in e:
-                if v in seen or _segment_distance(a2, b2, v, v) > 96:
-                    continue
-                seen.add(v)
-                # with some room to spare, or only just clear (passages exactly 32 wide)
-                for d in (PLAYER_RADIUS + THING_CLEARANCE, PLAYER_RADIUS + 2 * BOX_SLACK):
-                    for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
-                        c = (v[0] + sx * d, v[1] + sy * d)
-                        if self.mesh.poly_at(*c) is not None and \
-                                not self._box_hits(c, c, exempt=exempt):
-                            nodes.append(c)
-
-        def ok(p: Point, q: Point) -> bool:
-            skip = ignore if p in (a, a2) or q in (b, b2) else frozenset()
-            return not self._box_hits(p, q, skip, exempt) and not self._ledges_crossed(p, q, exempt)
-        # A* over the candidate spots, checking edges lazily.
-        limit = 3 * math.dist(a2, b2) + 192
-        best, prev = {0: 0.0}, {}
-        todo = [(math.dist(a2, b2), 0.0, 0)]
-        expansions = 0
-        while todo and expansions < 150:
-            _, cost, i = heapq.heappop(todo)
-            if i == 1:
-                break
-            if cost > best[i]:
-                continue
-            expansions += 1
-            for j in range(1, len(nodes)):
-                c = cost + math.dist(nodes[i], nodes[j])
-                if j != i and c < best.get(j, math.inf) and \
-                        c + math.dist(nodes[j], b2) <= limit and ok(nodes[i], nodes[j]):
-                    best[j], prev[j] = c, i
-                    heapq.heappush(todo, (c + math.dist(nodes[j], b2), c, j))
-        if 1 not in prev:
-            return None
-        chain, i = [], prev[1]
-        while i != 0:
-            chain.append(nodes[i])
-            i = prev[i]
-        chain.reverse()
-        return ([a2] if a2 != a else []) + chain + ([b2] if b2 != b else [])
 
     def _shutting_lines(self) -> set[int]:
         """Walk-over lines that close (no headroom) a sector on either side of themselves."""
@@ -2894,57 +1979,6 @@ class Navigator:
                         or not (can_cross(init[f], init[b]) or can_cross(init[b], init[f])):
                     self._walls.add(line.index)
         return self._walls
-
-    def _push_from_corners(self, pts: list[Point], exempt: frozenset = frozenset(),
-                           pinned: set[Point] = frozenset()) -> list[Point]:
-        """The funnel only keeps clear of the ends of portals it crosses; other wall corners can
-        still be grazed. Insert detour waypoints PATH_CLEARANCE away from any wall (or ledge
-        edge not in `exempt`) vertex that a segment passes too close to, then nudge waypoints
-        (except `pinned` ones) off walls and ledges."""
-        m, mesh = self.map, self.mesh
-        out = [pts[0]]
-
-        def corners_near(a: Point, b: Point) -> set[Point]:
-            found = set()
-            for (x1, y1), (x2, y2) in self._walls_near(a, b, PATH_CLEARANCE, exempt):
-                found.add((x1, y1))
-                found.add((x2, y2))
-            return found
-
-        def segment(a: Point, b: Point, depth: int) -> None:
-            worst = None
-            if depth < 4:
-                for v in sorted(corners_near(a, b)):
-                    q = _closest_point(v, a, b)
-                    d = math.dist(v, q)
-                    if d < PATH_CLEARANCE - 1 and math.dist(v, a) > 1 and math.dist(v, b) > 1 \
-                            and (worst is None or d < worst[0]):
-                        worst = (d, v, q)
-            if worst:
-                d, v, q = worst
-                if d < 1e-6:  # passing straight through the vertex: step off sideways
-                    length = max(math.dist(a, b), 1e-6)
-                    ux, uy = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
-                else:
-                    ux, uy = (q[0] - v[0]) / d, (q[1] - v[1]) / d
-                w = (v[0] + ux * PATH_CLEARANCE, v[1] + uy * PATH_CLEARANCE)
-                wp, qp = mesh.poly_at(*w), mesh.poly_at(*q)
-                # Only convex corners snag; pushing off a concave one lands on the other wall.
-                if wp and qp and wp.sector == qp.sector \
-                        and math.dist(w, a) > 4 and math.dist(w, b) > 4 \
-                        and self._wall_clearance(w, exempt) >= WAYPOINT_CLEARANCE:
-                    segment(a, w, depth + 1)
-                    segment(w, b, depth + 1)
-                    return
-            out.append(b)
-
-        for b in pts[1:]:
-            segment(out[-1], b, 0)
-        # Nudge waypoints (not the start/goal) that still hug a wall or ledge away from it.
-        for i in range(1, len(out) - 1):
-            if out[i] not in pinned:
-                out[i] = self._nudge_off_walls(out[i], exempt)
-        return out
 
     def _obstacle_grid(self) -> dict[tuple[int, int], list[tuple[Point, Point]]]:
         """Edges of solid decorations' collision boxes (barrels, lamps, pillars...), which
@@ -3005,42 +2039,6 @@ class Navigator:
                     seen.add(edge)
                     yield edge
 
-    def _wall_clearance(self, p: Point, exempt: frozenset | None = None) -> float:
-        return min((math.dist(p, _closest_point(p, a, b))
-                    for a, b in self._walls_near(p, p, PATH_CLEARANCE, exempt)),
-                   default=math.inf)
-
-    def _nudge_off_walls(self, p: Point, exempt: frozenset | None = None) -> Point:
-        for _ in range(4):
-            worst = None
-            for a, b in self._walls_near(p, p, WAYPOINT_CLEARANCE + 6, exempt):
-                q = _closest_point(p, a, b)
-                d = math.dist(p, q)
-                need = _box_clearance(a, b)
-                if d < need and (worst is None or d - need < worst[0]):
-                    worst = (d - need, q, a, b, need)
-            if worst is None:
-                return p
-            _, q, a, b, need = worst
-            d = math.dist(p, q)
-            if d > 1e-6:
-                ux, uy = (p[0] - q[0]) / d, (p[1] - q[1]) / d
-            else:  # on the line: step to the side the poly is on
-                length = max(math.dist(a, b), 1e-6)
-                ux, uy = -(b[1] - a[1]) / length, (b[0] - a[0]) / length
-                if self.mesh.poly_at(p[0] + ux, p[1] + uy) is None:
-                    ux, uy = -ux, -uy
-            moved = (q[0] + ux * need, q[1] + uy * need)
-            # Never push a waypoint through a wall or into another sector (MAP02: pushed off
-            # a key bar, through the corridor's corner into the void behind it).
-            here, there = self.mesh.poly_at(*p), self.mesh.poly_at(*moved)
-            if there is None or (here is not None and there.sector != here.sector) \
-                    or any(_segments_cross(p, moved, e1, e2)
-                           for e1, e2 in self._walls_near(p, moved, 0, exempt)):
-                return p
-            p = moved
-        return p
-
     def _annotate(self, chain, states: HeightStates, doors: Doors | None) -> list[str]:
         mesh = self.mesh
         notes = []
@@ -3093,24 +2091,6 @@ def _box_hits_segment(cx: float, cy: float, r: float, seg: tuple[Point, Point]) 
     return min(sides) < 0 < max(sides)
 
 
-def _segment_hits_box(a: Point, b: Point, cx: float, cy: float, r: float) -> bool:
-    """Does segment a-b pass through the open axis-aligned box of half-width r at (cx, cy)?
-    (Slab clipping.)"""
-    t0, t1 = 0.0, 1.0
-    for p, d, lo, hi in ((a[0], b[0] - a[0], cx - r, cx + r), (a[1], b[1] - a[1], cy - r, cy + r)):
-        if abs(d) < 1e-9:
-            if p <= lo or p >= hi:
-                return False
-            continue
-        u0, u1 = (lo - p) / d, (hi - p) / d
-        if u0 > u1:
-            u0, u1 = u1, u0
-        t0, t1 = max(t0, u0), min(t1, u1)
-        if t0 >= t1:
-            return False
-    return True
-
-
 def _spot_in_poly(poly, target: Point, inset: float = PLAYER_RADIUS + 2) -> Point:
     """The point of the poly nearest `target`, moved `inset` towards the poly's centre (or
     to the centre if the poly is smaller than that)."""
@@ -3133,30 +2113,20 @@ def _box_fits_somewhere(portal, r: float, walls) -> bool:
                for i in range(n + 1))
 
 
-def _box_clearance(a: Point, b: Point) -> float:
-    """How far a waypoint should be from the wall a-b: WAYPOINT_CLEARANCE, or more for
-    diagonal walls, which the square player box's corner reaches further towards."""
-    length = max(math.dist(a, b), 1e-6)
-    c, s = abs(b[0] - a[0]) / length, abs(b[1] - a[1]) / length
-    return max(WAYPOINT_CLEARANCE, PLAYER_RADIUS * (c + s) + 1)
-
-
-def _swept_box_hits(p: Point, q: Point, r: float, edge: tuple[Point, Point]) -> bool:
-    """Does an axis-aligned square of half-width r, moved straight from p to q, overlap the
-    segment `edge`? Separating-axis test: the swept square is convex with edge normals x, y
-    and the normal of p-q; add the edge's own normal."""
+def _box_overlaps(p: Point, r: float, edge: tuple[Point, Point]) -> bool:
+    """Does the axis-aligned square of half-width r at p overlap the segment `edge`?
+    Separating axes: x, y and the edge's normal."""
     e1, e2 = edge
     axes = [(1.0, 0.0), (0.0, 1.0)]
-    for (x1, y1), (x2, y2) in ((p, q), (e1, e2)):
-        dx, dy = x2 - x1, y2 - y1
-        length = math.hypot(dx, dy)
-        if length > 1e-9:
-            axes.append((-dy / length, dx / length))
+    dx, dy = e2[0] - e1[0], e2[1] - e1[1]
+    length = math.hypot(dx, dy)
+    if length > 1e-9:
+        axes.append((-dy / length, dx / length))
     for ux, uy in axes:
         ext = r * (abs(ux) + abs(uy))
-        a, b = p[0] * ux + p[1] * uy, q[0] * ux + q[1] * uy
+        a = p[0] * ux + p[1] * uy
         c, d = e1[0] * ux + e1[1] * uy, e2[0] * ux + e2[1] * uy
-        if max(a, b) + ext <= min(c, d) or max(c, d) <= min(a, b) - ext:
+        if a + ext <= min(c, d) or max(c, d) <= a - ext:
             return False
     return True
 
@@ -3189,61 +2159,3 @@ def _closest_on_segment(p: Point, portal) -> Point:
     return x1 + t * (x2 - x1), y1 + t * (y2 - y1)
 
 
-def _oriented(portal, from_center: Point, to_center: Point) -> tuple[Point, Point]:
-    """Return (left, right) endpoints as seen walking from one poly to the next, shrunk by the
-    player radius so the smoothed path doesn't clip corners."""
-    p1, p2 = portal.p1, portal.p2
-    dx, dy = to_center[0] - from_center[0], to_center[1] - from_center[1]
-    if dx * (p1[1] - from_center[1]) - dy * (p1[0] - from_center[0]) > 0:
-        left, right = p1, p2
-    else:
-        left, right = p2, p1
-    length = math.dist(left, right)
-    if length <= 2 * PATH_CLEARANCE:
-        return portal.mid, portal.mid
-    t = PATH_CLEARANCE / length
-    shrink = lambda a, b: (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)  # noqa: E731
-    return shrink(left, right), shrink(right, left)
-
-
-def _tri(a: Point, b: Point, c: Point) -> float:
-    """Twice the signed area of abc; > 0 when c is left of a->b."""
-    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-
-
-def funnel(start: Point, goal: Point, portals: list[tuple[Point, Point]]) -> list[Point]:
-    """Simple stupid funnel algorithm (Mononen). Portals are (left, right) pairs in travel
-    order. Returns the taut path including start and goal."""
-    portals = [(start, start)] + portals + [(goal, goal)]
-    path = [start]
-    apex = left = right = start
-    apex_i = left_i = right_i = 0
-    i = 1
-    while i < len(portals):
-        pl, pr = portals[i]
-        # Tighten the right side
-        if _tri(apex, right, pr) >= 0:
-            if apex == right or _tri(apex, left, pr) < 0:
-                right, right_i = pr, i
-            else:
-                path.append(left)
-                apex, apex_i = left, left_i
-                left = right = apex
-                left_i = right_i = apex_i
-                i = apex_i + 1
-                continue
-        # Tighten the left side
-        if _tri(apex, left, pl) <= 0:
-            if apex == left or _tri(apex, right, pl) > 0:
-                left, left_i = pl, i
-            else:
-                path.append(right)
-                apex, apex_i = right, right_i
-                left = right = apex
-                left_i = right_i = apex_i
-                i = apex_i + 1
-                continue
-        i += 1
-    if path[-1] != goal:
-        path.append(goal)
-    return path
