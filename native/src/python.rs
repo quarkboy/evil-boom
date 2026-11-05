@@ -5,6 +5,7 @@ use crate::map::MapData;
 use crate::mesh::{Mesh, Obstacle};
 use crate::nav::{Callbacks, DoorOpening, Doors, Edge, Found, Gate, HeightSource, Heights, NavCore, NavFacts, Tele, TeleKind, Via};
 use crate::plan::{KeySet, Kind, PlanCaches, PlanFacts, Planner, Query, Timing, Trigger, World};
+use crate::sight;
 use crate::stats;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -360,5 +361,25 @@ impl Nav {
             .collect::<PyResult<Vec<_>>>()?;
         let out = (legs, world_out(py, &route.states)?, route.keys.0, route.goal);
         Ok(Some(out.into_pyobject(py)?.into_any().unbind()))
+    }
+}
+
+/// What the renderer draws of a map from a viewpoint (the lines the automap reveals).
+#[pyclass]
+pub struct Sight {
+    sight: sight::Sight,
+}
+
+#[pymethods]
+impl Sight {
+    #[new]
+    fn new(map: MapData) -> Self {
+        Sight { sight: sight::Sight::new(&map) }
+    }
+
+    /// The linedefs drawn looking from (x, y) at `angle` (degrees, anticlockwise from east)
+    /// on a screen `width` columns wide, with the sectors at `heights` [(floor, ceiling)].
+    fn drawn(&self, x: f64, y: f64, angle: f64, width: i32, heights: Vec<(f64, f64)>) -> Vec<usize> {
+        self.sight.drawn(&sight::View { x, y, angle, width, heights: &heights })
     }
 }

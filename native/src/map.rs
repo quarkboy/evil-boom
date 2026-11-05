@@ -47,6 +47,18 @@ impl Linedef {
 #[derive(Clone, FromPyObject)]
 pub struct Sidedef {
     pub sector: usize,
+    /// texture names, "-" for none
+    pub upper: String,
+    pub lower: String,
+    pub middle: String,
+}
+
+/// What the renderer tells sectors apart by (besides their heights).
+#[derive(Clone, FromPyObject)]
+pub struct Sector {
+    pub floor_tex: String,
+    pub ceiling_tex: String,
+    pub light: i32,
 }
 
 #[derive(Clone, FromPyObject)]
@@ -89,6 +101,7 @@ pub struct MapData {
     pub vertexes: Vec<Vertex>,
     pub linedefs: Vec<Linedef>,
     pub sidedefs: Vec<Sidedef>,
+    pub sectors: Vec<Sector>,
     pub segs: Vec<MapSeg>,
     pub subsectors: Vec<Subsector>,
     pub nodes: Vec<Node>,
