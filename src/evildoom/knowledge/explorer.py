@@ -91,6 +91,9 @@ class Explorer:
     follower: RouteFollower | None = None
     log: list[str] = field(default_factory=list)
     _dropped: dict = field(default_factory=dict)  # objective ident -> tic dropped
+    # ...and how often (each time it waits twice as long to be offered again: MAP14's switch
+    # that never worked kept the one that would out of the running)
+    _drop_count: dict = field(default_factory=dict)
     _since: int = 0
     _exits_seen: int = 0
     _allowed: int = GIVE_UP_TICS  # how long the current objective may take
@@ -236,8 +239,9 @@ class Explorer:
         out += self._unvisited(reach, pos)
         out += self._noises(reach, pos, obs.tic)
         tic = obs.tic
-        def fresh(o: Objective) -> bool:  # (not dropped lately)
-            return tic - self._dropped.get(o.ident, -10**9) > RETRY_TICS
+        def fresh(o: Objective) -> bool:  # (not dropped lately: the longer, the more often it has been)
+            times = self._drop_count.get(o.ident, 0)
+            return tic - self._dropped.get(o.ident, -10**9) > RETRY_TICS * 2 ** max(0, min(times - 1, 5))
         # (not anywhere that would cut her off from most of what she can get to now, as far as
         # she knows: pits, one-way drops; where she stands may itself be a spot she can't get
         # back to, so it's the share of the rest that counts)
@@ -591,6 +595,7 @@ class Explorer:
         self.log.append(f"--- died: life {self.knowledge.lives}")
         self.current = self.follower = None
         self._dropped.clear()
+        self._drop_count.clear()
         self._look_until = self._glance_until = None
         self._heard_n = len(self.knowledge.heard)
         self._glanced = len(self.knowledge.fired)
@@ -744,6 +749,7 @@ class Explorer:
 
     def _drop(self, obj: Objective, obs: Observation, why: str) -> None:
         self._dropped[obj.ident] = obs.tic
+        self._drop_count[obj.ident] = self._drop_count.get(obj.ident, 0) + 1
         self.log.append(f"tic {obs.tic}: dropped '{obj.label}' ({why})")
 
     def _next(self, obs: Observation) -> None:

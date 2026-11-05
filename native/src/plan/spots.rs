@@ -2,7 +2,7 @@
 
 use super::world::World;
 use super::{Kind, Planner};
-use crate::geom::{closest_on_portal, closest_point, dist, midpoint, Point, PLAYER_HEIGHT, PLAYER_RADIUS};
+use crate::geom::{closest_on_portal, closest_point, dist, midpoint, segment_distance, Point, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::nav::can_cross;
 use std::collections::HashSet;
 
@@ -35,6 +35,38 @@ impl Planner<'_, '_> {
             return p.center;
         }
         (best.0 + (cx - best.0) * inset / d, best.1 + (cy - best.1) * inset / d)
+    }
+
+    /// A spot the box can stand at within use range of the line a-b, nearest it, along the
+    /// edges of these polys (moved in by the box): MAP14's door is pressed from a floor 48
+    /// below the one in front of it, and the spot nearest the line's middle was out of range.
+    fn press_spot_in_reach(&self, polys: &[usize], a: Point, b: Point) -> Option<Point> {
+        let mesh = &self.nav.mesh;
+        let reach = USE_REACH as f64 + 12.0;
+        let mut best: Option<(f64, Point)> = None;
+        for &pi in polys {
+            let poly = mesh.poly(pi);
+            for (p1, p2) in poly.edges() {
+                for k in 0..=8 {
+                    let t = f64::from(k) / 8.0;
+                    let e = (p1.0 + (p2.0 - p1.0) * t, p1.1 + (p2.1 - p1.1) * t);
+                    let d = dist(e, poly.center);
+                    if d < 1e-6 {
+                        continue;
+                    }
+                    let f = ((PLAYER_RADIUS + 1.0) / d).min(1.0);
+                    let q = (e.0 + (poly.center.0 - e.0) * f, e.1 + (poly.center.1 - e.1) * f);
+                    let r = segment_distance(a, b, q, q);
+                    if r > reach || best.is_some_and(|(br, _)| r >= br) {
+                        continue;
+                    }
+                    if mesh.poly_at(q) == Some(pi) && !self.nav.box_blocked_static(q) {
+                        best = Some((r, q));
+                    }
+                }
+            }
+        }
+        best.map(|(_, q)| q)
     }
 
     /// Where to stand to fire trigger `ti` from one of the polys in `reach`, coming from `pos`.
@@ -75,6 +107,15 @@ impl Planner<'_, '_> {
                     best = Some((d, spot));
                 }
             }
+        }
+        if let Some((d, spot)) = best {
+            if d <= USE_REACH as f64 + 12.0 {
+                return spot;
+            }
+        }
+        // (out of reach: somewhere else in those polys that isn't)
+        if let Some(spot) = self.press_spot_in_reach(&inter, a, b) {
+            return spot;
         }
         best.map_or_else(|| mesh.center(first), |(_, s)| s)
     }

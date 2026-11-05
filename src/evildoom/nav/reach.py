@@ -18,7 +18,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from evildoom.wad.mapdata import (ML_BLOCKING, ML_BLOCKMONSTERS, ML_BLOCKPLAYERS, MapData)
+from evildoom.wad.mapdata import ML_BLOCKING, ML_BLOCKMONSTERS, ML_BLOCKPLAYERS, NO_SIDEDEF, MapData
 from evildoom.wad.specials import (Category, Key, LineSpecial, Lock, Trigger, classify_line,
                                    classify_sector)
 from evildoom.wad.things import SHOOTABLE_OBSTACLES, SOLID_DECORATIONS
@@ -739,6 +739,11 @@ class Navigator:
             if not any(_segment_distance(vs[i], vs[(i + 1) % len(vs)], a, b) <= USE_REACH
                        for i in range(len(vs))):
                 continue
+            # ...and somewhere in it the box can stand within use range (its centre keeps a
+            # box's width off a ledge: MAP14's door was "pressed" from a floor below the one in
+            # front of it, out of reach)
+            if not self._press_point_in(poly, a, b):
+                continue
             # The use trace stops at the first line with no opening: a switch behind closed
             # bars (MAP32's exit, opened by killing the Keens) can only be pressed through them
             # once they're open. Record which sectors must be open (use_gates).
@@ -757,6 +762,39 @@ class Navigator:
                 if best:
                     self.use_gates[(line.index, poly.index)] = best
         return out
+
+    def _press_point_in(self, poly, a: Point, b: Point) -> bool:
+        """Is there a spot in `poly` the box can stand at within use range of the line a-b
+        (along its edges, moved in by the box)?"""
+        vs = poly.vertices
+        for i in range(len(vs)):
+            p1, p2 = vs[i], vs[(i + 1) % len(vs)]
+            for k in range(9):
+                e = (p1[0] + (p2[0] - p1[0]) * k / 8, p1[1] + (p2[1] - p1[1]) * k / 8)
+                d = math.dist(e, poly.center)
+                f = min(1.0, (PLAYER_RADIUS + 1) / d) if d > 1e-6 else 0.0
+                q = (e[0] + (poly.center[0] - e[0]) * f, e[1] + (poly.center[1] - e[1]) * f)
+                if _segment_distance(a, b, q, q) <= USE_REACH + 16:  # (the trace's whole 64)
+                    at = self.mesh.poly_at(*q)
+                    if at is not None and at.index == poly.index and not self._box_on_wall(q):
+                        return True
+        return False
+
+    def _box_on_wall(self, q: Point) -> bool:
+        """Does the box at q overlap a one-sided or impassable line, or a solid thing (what
+        never moves: usable before the triggers are worked out)?"""
+        m, r = self.map, PLAYER_RADIUS - 0.5
+        for cell in _cells(q[0] - r, q[1] - r, q[0] + r, q[1] + r):
+            for li in self.mesh._line_grid.get(cell, ()):
+                line = m.linedefs[li]
+                if line.back == NO_SIDEDEF or line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS):
+                    v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
+                    if _box_hits_segment(q[0], q[1], r, ((v1.x, v1.y), (v2.x, v2.y))):
+                        return True
+            for e in self._obstacle_grid().get(cell, ()):
+                if _box_hits_segment(q[0], q[1], r, e):
+                    return True
+        return False
 
     def _use_gates(self, p: Point, q: Point, target: int) -> frozenset | None:
         """Sectors closed at the map's initial heights that the use trace from p to q (on the
@@ -1685,8 +1723,8 @@ class Navigator:
                 return min(spots, key=lambda c: math.dist(c, pos))
         if front in ok:
             return front
-        # Otherwise the spot nearest the line in any poly it can be used from (big polys only
-        # qualify by their nearest part, so their centres can be out of reach).
+        # The spot nearest the line in any poly it can be used from (big polys only qualify by
+        # their nearest part, so their centres can be out of reach)...
         best = None
         for pi in sorted(t.activators & reach):
             spot = _spot_in_poly(mesh.polys[pi], (mx, my))
@@ -1694,6 +1732,32 @@ class Navigator:
                 d = math.dist(spot, _closest_point(spot, (a.x, a.y), (b.x, b.y)))
                 if best is None or d < best[0]:
                     best = (d, spot)
+        if best is not None and best[0] <= USE_REACH + 12:
+            return best[1]
+        # ...unless that's out of reach: then a spot in reach the box can stand at, nearest the
+        # line, along those polys' edges (MAP14's door is pressed from a floor 48 below the one
+        # in front of it, and the spot nearest the line's middle was out of reach)
+        near = None
+        for pi in sorted(t.activators & reach):
+            poly = mesh.polys[pi]
+            vs = poly.vertices
+            for i in range(len(vs)):
+                p1, p2 = vs[i], vs[(i + 1) % len(vs)]
+                for k in range(9):
+                    e = (p1[0] + (p2[0] - p1[0]) * k / 8, p1[1] + (p2[1] - p1[1]) * k / 8)
+                    d = math.dist(e, poly.center)
+                    if d < 1e-6:
+                        continue
+                    f = min(1.0, (PLAYER_RADIUS + 1) / d)
+                    q = (e[0] + (poly.center[0] - e[0]) * f, e[1] + (poly.center[1] - e[1]) * f)
+                    r = _segment_distance((a.x, a.y), (b.x, b.y), q, q)
+                    if r > USE_REACH + 12 or (near is not None and r >= near[0]):
+                        continue
+                    at = mesh.poly_at(*q)
+                    if at is not None and at.index == pi and not self._box_blocked(q):
+                        near = (r, q)
+        if near is not None:
+            return near[1]
         return best[1] if best else mesh.polys[min(t.activators & reach)].center
 
     def _shutting_lines(self) -> set[int]:
