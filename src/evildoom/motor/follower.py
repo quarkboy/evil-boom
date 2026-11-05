@@ -668,7 +668,9 @@ class RouteFollower:
         if obs.tic - self._progress_tic > STUCK_TICS:
             self._unsticks += 1
             if self._unsticks > UNSTICKS_BEFORE_REPLAN:
-                if not self._replan(obs, "stuck"):
+                # (with the heights as they are: the way the plan saw may be shut now, MAP23's
+                # squeezed past a timed door that had closed, re-pathed the same way for ever)
+                if not self._replan(obs, "stuck", live_only=True):
                     return self._fail(obs, "stuck")
                 return self._walk(obs)
             barrel = next((b for b in obs.barrels or () if math.dist(b, pos) < BARREL_IN_WAY), None)

@@ -119,6 +119,7 @@ class Explorer:
         the effect of and hasn't looked since, as it'll have left it (a floor lowered out of
         sight is down: the planner can't fire a one-shot switch again to get it)."""
         k = self.knowledge
+        now = k._last.tic if k._last is not None else 0
         out = {s: {tuple(k.seen_heights[s])} if s in k.seen_heights else {h}
                for s, h in enumerate(self.nav.movers.initial)}
         known = {t.line: (t, sectors) for t, sectors in k.known_triggers()}
@@ -133,8 +134,13 @@ class Explorer:
                 # (not seen since the move should have finished: as it'll have left it; seen
                 # after, as seen. Stairs rise slowly: seen part way up is not the top)
                 h = effects[s][0]
-                done = f.tic + (self.nav.movers.timing(t.info.special, t.info.description, s, h).travel
-                                if t.line >= 0 else 0)
+                timing = self.nav.movers.timing(t.info.special, t.info.description, s, h) if t.line >= 0 else None
+                done = f.tic + (timing.travel if timing else 0)
+                # (what comes back is only as moved till it's due back: MAP23's timed door,
+                # opened a minute before, seemed open still and a path squeezed through it)
+                back = done + (timing.hold + timing.travel if timing and timing.hold is not None else 0)
+                if not t.permanent and timing is not None and timing.hold is not None and now > back:
+                    continue
                 if k.seen_tic.get(s, -1) < done:
                     hs = {tuple(h) for h in effects[s]}
                     out[s] = hs if t.permanent else out[s] | hs

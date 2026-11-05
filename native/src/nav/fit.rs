@@ -221,6 +221,15 @@ impl Fitter<'_> {
         Ok(grid.iter().flatten().copied().filter(|&f| f > f64::NEG_INFINITY && (!wedged || f <= reach_up)).reduce(f64::max))
     }
 
+    /// Does the box at p hang over a floor more than a step above the one under its centre (not
+    /// wedged between two: a rim walk)? It can only be there having come along the top, never
+    /// from beside it (MAP23: a detour round barrels went along a 128-high ledge).
+    fn up_against_ledge(&mut self, p: Point) -> PyResult<bool> {
+        let Some(here) = self.nav.sector_at(p) else { return Ok(false) };
+        let centre = top_floor(&self.heights(here)?);
+        Ok(self.standing_floor(p)?.is_some_and(|f| f > centre + MAX_STEP))
+    }
+
     /// Does (non-exempt) line `li` stop the box standing at `at`? `standing` caches
     /// `standing_floor(at)`.
     fn line_blocks(&mut self, li: usize, at: Point, standing: &mut Option<Option<f64>>) -> PyResult<bool> {
@@ -449,7 +458,7 @@ impl Fitter<'_> {
                 for d in [PLAYER_RADIUS + THING_CLEARANCE, PLAYER_RADIUS + 2.0 * BOX_SLACK] {
                     for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
                         let c = (v.0 + sx * d, v.1 + sy * d);
-                        if self.nav.mesh.poly_at(c).is_some() && self.box_clear(c, c, &none)? {
+                        if self.nav.mesh.poly_at(c).is_some() && self.box_clear(c, c, &none)? && !self.up_against_ledge(c)? {
                             nodes.push(c);
                         }
                     }
