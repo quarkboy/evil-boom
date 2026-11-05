@@ -389,9 +389,10 @@ impl Sight {
 
     /// Looking from (x, y) at `angle` (degrees, anticlockwise from east) on a screen `width`
     /// columns wide, with the sectors at `heights` [(floor, ceiling)]: (the linedefs drawn,
-    /// those in view but invisible).
-    fn drawn(&self, x: f64, y: f64, angle: f64, width: i32, heights: Vec<(f64, f64)>) -> (Vec<usize>, Vec<usize>) {
-        self.sight.drawn(&sight::View { x, y, angle, width, heights: &heights })
+    /// those in view but invisible, the subsectors seen into).
+    fn drawn(&self, x: f64, y: f64, angle: f64, width: i32, heights: Vec<(f64, f64)>) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
+        let seen = self.sight.view(&sight::View { x, y, angle, width, heights: &heights });
+        (seen.drawn, seen.through, seen.subsectors)
     }
 }
 

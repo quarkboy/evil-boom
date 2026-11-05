@@ -77,6 +77,7 @@ class Knowledge:
     learned: dict[int, set[int]] = field(default_factory=dict)  # trigger index -> sectors whose effect is known
     teleports: dict[int, tuple[float, float]] = field(default_factory=dict)  # used line -> where it took us
     visited: set[int] = field(default_factory=set)      # polys stood in
+    seen_polys: set[int] = field(default_factory=set)   # polys seen into (or in front of a mapped line)
     heard: list[Heard] = field(default_factory=list)
     felt: dict[int, bool] = field(default_factory=dict)  # sector stood on -> did it hurt
     suit_until: int | None = None  # radiation suit on until this tic
@@ -118,15 +119,25 @@ class Knowledge:
         self._drawable = [i for i, line in enumerate(m.linedefs) if drawable(line)]
         self._live: dict[int, tuple[float, float]] = {}  # every sector's heights last tic
         self._moving: set[int] = set()
+        # per linedef: the subsectors its segs bound (the floor in front of it)
+        self._line_subsectors: dict[int, set[int]] = {}
+        for ss, sub in enumerate(m.subsectors):
+            for seg in m.segs[sub.first_seg:sub.first_seg + sub.seg_count]:
+                self._line_subsectors.setdefault(seg.linedef, set()).add(ss)
         for i, line in enumerate(m.linedefs):
             if line.flags & ML_MAPPED:
                 self._map_line(i)
 
     # --- seeing -------------------------------------------------------------------------
 
+    def _see_subsector(self, ss: int) -> None:
+        self.seen_polys.update(self.nav.mesh.subsector_polys(ss))
+
     def _map_line(self, li: int) -> None:
         m = self.nav.map
         self.mapped.add(li)
+        for ss in self._line_subsectors.get(li, ()):
+            self._see_subsector(ss)
         line = m.linedefs[li]
         for s in (m.front_sector(line), m.back_sector(line)):
             if s is not None and s not in self.sectors:
@@ -146,7 +157,9 @@ class Knowledge:
         on the tic that led here)."""
         m = self.nav.map
         heights = self._heights_list(obs)
-        drawn, through = self._sight.drawn(obs.x, obs.y, obs.angle, self.width, heights)
+        drawn, through, subsectors = self._sight.drawn(obs.x, obs.y, obs.angle, self.width, heights)
+        for ss in subsectors:
+            self._see_subsector(ss)
         in_view: set[int] = set()
         for li in through:
             # (not on the automap, but the floor across it is in view)
@@ -530,7 +543,9 @@ class Knowledge:
                    for s in movers if s in self._sound_origin)
 
     def known_polys(self) -> set[int]:
-        return {p.index for p in self.nav.mesh.polys if p is not None and p.sector in self.sectors}
+        """Where she can plan to go: the parts of the map she's seen into or stood in (not a
+        whole room for seeing its door: MAP24's paths beelined across rooms not looked into)."""
+        return self.seen_polys | self.visited
 
     def known_triggers(self) -> list[tuple[TriggerLine, set[int]]]:
         """Triggers whose effect on some sectors she has learned, with those sectors; also the

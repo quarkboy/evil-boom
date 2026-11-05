@@ -5,6 +5,9 @@
 //!
 //! Only horizontal occlusion counts (walls cover whole columns, windows none), as in the
 //! renderer: a step seen through a window is mapped even if it's hidden behind the sill.
+//!
+//! Also which subsectors are seen into: one is when any of its segs (from either side) is in
+//! columns no solid wall covers yet, as the walk reaches it.
 
 use crate::map::{MapData, NF_SUBSECTOR, NO_SIDEDEF};
 
@@ -95,6 +98,15 @@ pub struct Sight {
     textured: Vec<(bool, bool, bool)>,
 }
 
+/// What a view shows: the linedefs drawn (each once, in the order first drawn), those in
+/// view but not drawn at all (two-sided lines alike on both sides: the floor across them is
+/// still seen), and the subsectors seen into.
+pub struct Seen {
+    pub drawn: Vec<usize>,
+    pub through: Vec<usize>,
+    pub subsectors: Vec<usize>,
+}
+
 /// A view: where from, which way, how many screen columns, and the sectors' heights now.
 pub struct View<'a> {
     pub x: f64,
@@ -135,18 +147,16 @@ impl Sight {
         }
     }
 
-    /// The linedefs drawn in this view (each once, in the order first drawn), and those in
-    /// view but not drawn at all (two-sided lines alike on both sides: the floor across them
-    /// is still seen).
-    pub fn drawn(&self, view: &View<'_>) -> (Vec<usize>, Vec<usize>) {
+    /// What this view shows.
+    pub fn view(&self, view: &View<'_>) -> Seen {
         let (sin, cos) = view.angle.to_radians().sin_cos();
         let lines = self.segs.iter().map(|s| s.line + 1).max().unwrap_or(0);
-        let mut walk = Walk { sight: self, view, covered: Covered::new(view.width), drawn: Vec::new(), through: Vec::new(), seen: vec![false; lines], sin, cos };
+        let mut walk = Walk { sight: self, view, covered: Covered::new(view.width), seen: vec![false; lines], out: Seen { drawn: Vec::new(), through: Vec::new(), subsectors: Vec::new() }, sin, cos };
         match self.nodes.len().checked_sub(1) {
             None => walk.subsector(0),
             Some(root) => walk.node(u16::try_from(root).unwrap_or(0)),
         }
-        (walk.drawn, walk.through)
+        walk.out
     }
 }
 
@@ -155,9 +165,9 @@ struct Walk<'a> {
     sight: &'a Sight,
     view: &'a View<'a>,
     covered: Covered,
-    drawn: Vec<usize>,
-    through: Vec<usize>,
+    /// per linedef: drawn already
     seen: Vec<bool>,
+    out: Seen,
     sin: f64,
     cos: f64,
 }
@@ -180,9 +190,19 @@ impl Walk<'_> {
 
     fn subsector(&mut self, ss: usize) {
         let Some(range) = self.sight.subsectors.get(ss).cloned() else { return };
+        if range.clone().any(|i| self.open_either_side(i)) {
+            self.out.subsectors.push(ss);
+        }
         for i in range {
             self.add_line(i);
         }
+    }
+
+    /// Is any of seg i in columns not covered yet, whichever side of it we're on?
+    fn open_either_side(&self, i: usize) -> bool {
+        let s = &self.sight.segs[i];
+        let (a, b) = (self.to_view(s.v1), self.to_view(s.v2));
+        [(a, b), (b, a)].into_iter().any(|(l, r)| self.columns(l, r).is_some_and(|(x1, x2)| self.covered.any_open(x1, x2 - 1)))
     }
 
     /// A point in view space: (to the right, depth).
@@ -269,8 +289,8 @@ impl Walk<'_> {
         }
         let Some((x1, x2)) = self.columns(self.to_view(s.v1), self.to_view(s.v2)) else { return };
         let Some(solid) = self.classify(s) else {
-            if !self.through.contains(&s.line) && self.covered.any_open(x1, x2 - 1) {
-                self.through.push(s.line);
+            if !self.out.through.contains(&s.line) && self.covered.any_open(x1, x2 - 1) {
+                self.out.through.push(s.line);
             }
             return;
         };
@@ -278,7 +298,7 @@ impl Walk<'_> {
             if let Some(seen) = self.seen.get_mut(s.line) {
                 if !*seen {
                     *seen = true;
-                    self.drawn.push(s.line);
+                    self.out.drawn.push(s.line);
                 }
             }
         }

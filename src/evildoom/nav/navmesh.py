@@ -106,6 +106,13 @@ class NavMesh:
                 best = (d, i)
         return self.polys[best[1]] if best else None
 
+    def subsector_polys(self, ss: int) -> list[int]:
+        """The polys subsector `ss` became (one, or the pieces obstacles cut it into)."""
+        group = self._pieces.get(ss)
+        if group is not None:
+            return list(group)
+        return [ss] if ss < len(self.polys) and self.polys[ss] is not None else []
+
     def neighbors_of_sector(self, sector: int) -> set[int]:
         m = self.map
         out = set()

@@ -57,7 +57,7 @@ class Objective:
     label: str
     trigger: TriggerLine | None = None
     key: Key | None = None
-    reveals: frozenset = frozenset()  # frontier: the unknown sectors it looks into
+    reveals: frozenset = frozenset()  # frontier: the unseen polys it looks into
     heard: object = None              # noise: the sound
     look_at: tuple | None = None      # room: the wall to face once there
     risky: bool = False               # nothing safer left: one-way drops, nukage are all right
@@ -138,7 +138,8 @@ class Explorer:
     def view(self) -> Navigator:
         """The navigator as far as Evil knows (rebuilt when what she knows changes)."""
         k = self.knowledge
-        key = (len(k.sectors), sum(map(len, k.learned.values())), len(k.teleports))
+        key = (len(k.sectors), len(k.seen_polys), len(k.visited), sum(map(len, k.learned.values())),
+               len(k.teleports))
         if self._view is None or key != self._view_key:
             triggers = []
             for t, sectors in k.known_triggers():
@@ -224,20 +225,23 @@ class Explorer:
         return [o for o in out if fresh(o) and returnable(o)]
 
     def _frontier(self, reach: set[int], pos) -> list[Objective]:
-        """Known polys she can get to next to polys she hasn't seen: one per unknown sector
-        bordered, at the reachable poly nearest her."""
+        """Known polys she can get to next to polys she hasn't seen into: per sector those are
+        in, at the reachable poly nearest her (done once she's seen into any of them)."""
         mesh, k = self.nav.mesh, self.knowledge
+        known = k.known_polys()
         best: dict[int, tuple[float, tuple]] = {}
+        unseen: dict[int, set[int]] = {}
         for pi in reach:
             poly = mesh.polys[pi]
             for portal in poly.portals:
                 other = mesh.polys[mesh.portals[portal].other(pi)]
-                if other.sector in k.sectors:
+                if other.index in known:
                     continue
+                unseen.setdefault(other.sector, set()).add(other.index)
                 d = math.dist(poly.center, pos)
                 if other.sector not in best or d < best[other.sector][0]:
                     best[other.sector] = (d, poly.center)
-        return [Objective("frontier", c, f"look into sector {s}", reveals=frozenset({s}))
+        return [Objective("frontier", c, f"look into sector {s}", reveals=frozenset(unseen[s]))
                 for s, (_, c) in best.items()]
 
     def _teleporters(self, reach: set[int], pos) -> list[Objective]:
@@ -318,7 +322,7 @@ class Explorer:
                               key=lambda c: math.dist(c[0], mid))[:ROOM_SPOTS]
                 for c, _ in near:
                     angle = math.degrees(math.atan2(mid[1] - c[1], mid[0] - c[0]))
-                    drawn, _ = k._sight.drawn(c[0], c[1], angle, k.width, heights)
+                    drawn, _, _ = k._sight.drawn(c[0], c[1], angle, k.width, heights)
                     if li in drawn:
                         key = math.dist(c, pos) + math.dist(c, mid)
                         if best is None or key < best[0]:
@@ -560,7 +564,7 @@ class Explorer:
         """Has what the objective was to look at been seen?"""
         k = self.knowledge
         if obj.kind == "frontier":
-            return obj.reveals <= k.sectors
+            return bool(obj.reveals & k.known_polys())
         if obj.kind == "recheck":
             return all(k.seen_tic.get(s, -1) >= self._since for s in obj.reveals)
         if obj.kind == "noise":
@@ -605,7 +609,7 @@ class Explorer:
                 why = next((str(ev) for ev in reversed(f.log.events) if "FAILED" in str(ev)), "")
                 self._drop(obj, obs, "failed: " + why.split("] ", 1)[-1])
             return True
-        if obj.kind == "frontier" and obj.reveals <= self.knowledge.sectors:
+        if obj.kind == "frontier" and obj.reveals & self.knowledge.known_polys():
             return True  # seen it on the way
         if obj.kind == "teleporter" and obj.trigger.line in self.knowledge.teleports:
             return True  # been through
