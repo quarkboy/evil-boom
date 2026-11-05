@@ -3,7 +3,8 @@
   python tools/explore_sweep.py doom2               every map in DOOM2.WAD
   python tools/explore_sweep.py doom E1M1 E1M4      just these
 
-Each map: no monsters, god mode, up to --max-seconds of game time. One line per map as it
+Each map: no monsters, god mode, up to --max-seconds of game time (--fight 4 --mortal: monsters
+on Ultra-Violence, and no god mode). One line per map as it
 finishes; the log goes to out/explore/WAD_MAP.txt, and for a map it didn't finish, what the
 omniscient planner would do from where it ended up (and what of that the explorer knew).
 """
@@ -21,7 +22,7 @@ STRANDED_TICS = 60 * 35  # nothing to do this long (with lives left): start the 
 
 
 def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
-            lives: int = 1) -> tuple[str, str, str]:
+            lives: int = 1, fight: int = 0) -> tuple[str, str, str]:
     from evildoom.config import resolve_wad
     from evildoom.engine.jump_check import keep_verified
     from evildoom.engine.vizdoom_engine import VizDoomEngine
@@ -34,15 +35,20 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
 
     iwad = resolve_wad(wad)
     m = load_map(Wad(iwad), map_name)
-    nav = Navigator(m)
+    skill = fight or 3
+    nav = Navigator(m, skill=skill)
     keep_verified(nav, iwad, map_name)
-    e = VizDoomEngine(iwad, map_name)
+    e = VizDoomEngine(iwad, map_name, skill=skill, nomonsters=not fight, objects=bool(fight))
     e.game.add_game_args("+sv_cheats 1")
     e.start()
     if not mortal:
         e.game.send_game_command("god")
     from evildoom.knowledge.model import Knowledge
-    x = Explorer(nav, Knowledge(nav, mortal=mortal))
+    if fight:
+        from evildoom.tactical.player import Player
+        x = Player(nav, Knowledge(nav, mortal=mortal))
+    else:
+        x = Explorer(nav, Knowledge(nav, mortal=mortal))
     c = obs = None
     t0 = time.perf_counter()
     deaths = 0
@@ -108,6 +114,8 @@ def main() -> None:
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     ap.add_argument("--max-seconds", type=float, default=1500)
     ap.add_argument("--mortal", action="store_true", help="no god mode: floors hurt")
+    ap.add_argument("--fight", type=int, default=0, metavar="SKILL",
+                    help="monsters in, at this skill (4: Ultra-Violence), and Evil fights them")
     ap.add_argument("--lives", type=int, default=1,
                     help="tries at a map (dying starts it again, knowing what was learned)")
     a = ap.parse_args()
@@ -122,7 +130,7 @@ def main() -> None:
     jobs = [(w, mp) for w, maps in groups for mp in (maps or Wad(resolve_wad(w)).map_names())]
     results = []
     with ProcessPoolExecutor(a.jobs) as pool:
-        futs = {pool.submit(run_map, w, n, a.max_seconds, a.mortal, a.lives): (w, n) for w, n in jobs}
+        futs = {pool.submit(run_map, w, n, a.max_seconds, a.mortal, a.lives, a.fight): (w, n) for w, n in jobs}
         for i, f in enumerate(as_completed(futs), 1):
             w, n = futs[f]
             try:

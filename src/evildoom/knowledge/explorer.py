@@ -15,14 +15,15 @@ from dataclasses import dataclass, field, replace
 
 from evildoom.knowledge.model import Knowledge
 from evildoom.motor.follower import TICRATE, Controls, Observation, RouteFollower
-from evildoom.nav.reach import MAX_STEP, PLAYER_HEIGHT, HeightStates, Navigator, TriggerLine, can_cross
+from evildoom.nav.reach import (MAX_STEP, PLAYER_HEIGHT, HeightStates, Navigator, TriggerLine,
+                                _segments_cross, apply_trigger, can_cross)
 from evildoom.nav.walkthrough import Step, _action_for, steps_from_legs
 from evildoom.wad.specials import Category, Key, Lock, Trigger
 
 PLAN_SECONDS = 1.5
 # how much nearer an objective of each kind counts as (keys, switches first; looking again last)
 WEIGHT = {"exit": 0.5, "key": 0.6, "switch": 0.8, "door": 0.8, "frontier": 1.0, "room": 1.1,
-          "visit": 2.0, "noise": 0.7, "teleporter": 1.2, "recheck": 3.0}
+          "visit": 2.0, "noise": 0.7, "teleporter": 1.2, "recheck": 3.0, "item": 0.6, "hunt": 1.5}
 COMPARED = 4                  # objectives routed and compared by the way there, each pick
 GIVE_UP_TICS = 20 * TICRATE   # an objective not done by then is dropped for a while...
 ROUTE_SPEED = 8.0             # ...or by the time it takes to walk its route at this (units a tic)
@@ -36,6 +37,8 @@ TURN_RATE = 20.0              # degrees a tic, turning to look at something
 AMBIENT_RADIUS = 96.0         # sounds from about the same place...
 AMBIENT_REPEATS = 4           # ...heard more often than this are background
 NOISE_TICS = 60 * TICRATE     # a sound is worth going to look into for this long
+CAUSE_TICS = TICRATE          # a sound this soon after she set off a line she doesn't know...
+URGENT_TICS = 6 * TICRATE     # ...is gone to look at first, for this long (a timed door shuts)
 GLANCE_GAP = 5 * TICRATE      # at most one look round this often (stairs build in many steps)
 GLANCE_AFTER = 8              # tics after a walk-over line goes off unseen, before looking
 HEAR_NEARER = 128.0           # a noise is worth walking towards if it gets her this much nearer
@@ -56,7 +59,7 @@ def _compass(bearing: float) -> str:
 
 @dataclass
 class Objective:
-    kind: str  # exit, key, switch, door, teleporter, frontier, room, visit, recheck, noise
+    kind: str  # exit, key, switch, door, teleporter, frontier, room, visit, recheck, noise, item, hunt
     goal: tuple[float, float]
     label: str
     trigger: TriggerLine | None = None
@@ -66,11 +69,13 @@ class Objective:
     look_at: tuple | None = None      # room: the wall to face once there
     risky: bool = False               # nothing safer left: one-way drops, nukage are all right
     pad: frozenset = frozenset()      # teleporter: all the lines of its pad (one objective)
+    thing: int | None = None          # item, hunt: the thing's id (the engine's)
+    urgent: bool = False              # noise: just after she set something off; go now
 
     @property
     def ident(self) -> tuple:
         line = self.pad or (self.trigger.line if self.trigger else None)
-        return (self.kind, line, self.key, self.reveals or None, self.risky)
+        return (self.kind, line, self.key, self.reveals or None, self.risky, self.thing)
 
     @property
     def priority(self) -> int:
@@ -79,6 +84,8 @@ class Objective:
         if self.kind == "exit":
             return 0
         if self.kind in ("door", "switch") and self.trigger.info.lock is not Lock.NONE:
+            return 1
+        if self.urgent:
             return 1
         return 2
 
@@ -107,6 +114,15 @@ class Explorer:
     _follower_seen: int = 0      # ...this far
     _glance_at: float | None = None
     _idle_since: int = -10**9  # when it last found nothing to do
+    # Other things to do, from elsewhere (the fight: what to pick up, monsters to hunt down):
+    # (obs, reach, pos) -> objectives; `wanted` are offered with the rest, `last_resort` only
+    # once there's nothing else; `gone(obs, objective)`: it's no longer there to be done.
+    wanted: object = None
+    last_resort: object = None
+    gone: object = None
+    _held_since: int | None = None  # something else has had the controls since then
+    _urgent_n: int = 0  # sounds checked for being worth dropping everything for
+    _reach: set = field(default_factory=set)  # polys she could get to, as of the last look
 
     def __post_init__(self) -> None:
         if self.knowledge is None:
@@ -127,7 +143,7 @@ class Explorer:
                for s, h in enumerate(self.nav.movers.initial)}
         known = {t.line: (t, sectors) for t, sectors in k.known_triggers()}
         for f in k.fired:
-            if f.line not in known:
+            if f.line not in known or f.life != k.lives:  # (this life's: the level's started again)
                 continue
             t, sectors = known[f.line]
             effects = t.effects_now(out)
@@ -155,9 +171,12 @@ class Explorer:
                     out[s] = out[s] | {tuple(self.nav.movers.initial[s])}
         # a slot narrower than the box is walked over at its sides' floor, however deep she
         # saw it (E4M1's 8-unit slot by the blue key room, seen at its real floor, was a pit)
+        # (at each floor the sides can be at: MAP08's moat beside a floor a trap drops and a
+        # switch raises back, taken at the bottom only, kept her in once it was back up)
         for tr in self.nav.trenches:
-            floor = self.nav.trench_floor(tr, lambda o: min(h[0] for h in out[o]))
-            out[tr] = {(floor, h[1]) for h in out[tr]}
+            floors = {self.nav.trench_floor(tr, lambda o: min(h[0] for h in out[o])),
+                      self.nav.trench_floor(tr, lambda o: max(h[0] for h in out[o]))}
+            out[tr] = {(floor, h[1]) for h in out[tr] for floor in floors}
         return out
 
     def view(self) -> Navigator:
@@ -167,12 +186,17 @@ class Explorer:
                len(k.teleports))
         if self._view is None or key != self._view_key:
             triggers = []
+            trenches = self.nav.trenches
             for t, sectors in k.known_triggers():
-                effects = {s: hs for s, hs in t.effects.items() if s in sectors}
+                # (and the slots beside them: walked at their sides' floor, they never move to
+                # be seen to; MAP08's moat beside the floor the trap drops and a switch raises)
+                keep = set(sectors) | {s for s in t.effects
+                                       if s in trenches and set(trenches[s]) & set(sectors)}
+                effects = {s: hs for s, hs in t.effects.items() if s in keep}
                 recompute = t.recompute
                 if recompute is not None:
                     recompute = (lambda f, keep: lambda st: {s: h for s, h in f(st).items()
-                                                             if s in keep})(recompute, sectors)
+                                                             if s in keep})(recompute, keep)
                 known = replace(t, effects=effects, recompute=recompute)
                 for extra, value in vars(t).items():  # (set after construction: `relevant`)
                     known.__dict__.setdefault(extra, value)
@@ -199,6 +223,7 @@ class Explorer:
         # (what she could get to using what she's learned: the planner works out how)
         actions = [t for t in view.triggers if t.effects]
         reach, states_all, _ = view._saturate(here.index, states, frozenset(keys), {}, actions)
+        self._reach = reach
         out: list[Objective] = []
         by_line = {t.line: t for t in nav.triggers if t.line >= 0}
         for li in k.exits():
@@ -238,6 +263,8 @@ class Explorer:
         out += self._unfinished(reach, pos)
         out += self._unvisited(reach, pos)
         out += self._noises(reach, pos, obs.tic)
+        if self.wanted is not None:
+            out += self.wanted(obs, reach, pos)
         tic = obs.tic
         def fresh(o: Objective) -> bool:  # (not dropped lately: the longer, the more often it has been)
             times = self._drop_count.get(o.ident, 0)
@@ -260,14 +287,18 @@ class Explorer:
             return back[p.index]
         def usable(objectives: list[Objective]) -> list[Objective]:
             if risky:
-                # nothing safe left: anything, one-way drops and nukage and all
-                return [r for o in objectives
-                        if fresh(r := replace(o, label=o.label + " (risky)", risky=True))]
+                # nothing safe left: anything, one-way drops and nukage and all; but not for a
+                # sound (MAP09: a noise far off took her down into a pit, with the room
+                # down the other one-way drop, the way on, still to look into)
+                return [r for o in objectives if o.kind != "noise"
+                        and fresh(r := replace(o, label=o.label + " (risky)", risky=True))]
             return [o for o in objectives if fresh(o) and returnable(o)]
         # with nothing else left, the ways between rooms never walked over (walk-over lines
         # are thresholds: E4M7's was between two rooms she'd come into other ways)
         # (and last of all, those onto floors that hurt: E4M2's door opener is on lava)
-        return usable(out) or usable(self._thresholds(reach)) or usable(self._thresholds(reach, hurting=True))             or usable(again)
+        return (usable(out) or usable(self._thresholds(reach)) or usable(self._thresholds(reach, hurting=True))
+                or usable(again)
+                or (usable(self.last_resort(obs, reach, pos)) if self.last_resort is not None else []))
 
     def _frontier(self, reach: set[int], pos) -> list[Objective]:
         """Known polys she can get to next to polys she hasn't seen into: per sector those are
@@ -391,20 +422,32 @@ class Explorer:
     def _noises(self, reach: set[int], pos, tic: int) -> list[Objective]:
         """Sounds she heard but couldn't see the source of, lately: go to the reachable spot
         nearest where it seemed to come from (if that's nearer than here) and look."""
-        mesh = self.nav.mesh
+        mesh, k = self.nav.mesh, self.knowledge
         out = []
-        for h in self.knowledge.heard:
+        for h in k.heard:
             if tic - h.tic > NOISE_TICS or not self._worth_a_look(h) or self._noise_seen(h):
                 continue
+            urgent = self._urgent(h, tic)
             best = min(reach, key=lambda p: math.dist(mesh.polys[p].center, h.origin), default=None)
             if best is None:
                 continue
             spot = mesh.polys[best].center
             if math.dist(spot, h.origin) > math.dist(pos, h.origin) - HEAR_NEARER:
                 continue
-            out.append(Objective("noise", spot, f"check a noise {_compass(h.bearing)} (~{h.distance:.0f})",
-                                 reveals=frozenset({h.tic}), heard=h))
+            out.append(Objective("noise", spot, f"check a noise {_compass(h.bearing)} (~{h.distance:.0f})"
+                                 + (" right away" if urgent else ""),
+                                 reveals=frozenset({h.tic}), heard=h, urgent=urgent))
         return out
+
+    def _urgent(self, h, tic: int) -> bool:
+        """A sound heard just after she set off a line she doesn't know the effect of: go and
+        look now, while it's still moving (MAP19's line 443 opens a timed door out of sight,
+        the way on; looked at later, it was shut again and nothing was learned)."""
+        k = self.knowledge
+        if tic - h.tic >= URGENT_TICS or h.seen:
+            return False
+        lines = {f.line for f in k.fired[-8:] if 0 <= h.tic - f.tic <= CAUSE_TICS}
+        return any(not k.learned.get(i) for i, t in enumerate(self.nav.triggers) if t.line in lines)
 
     def _noise_seen(self, h) -> bool:
         """Has where a sound seemed to come from been in view since?"""
@@ -551,13 +594,24 @@ class Explorer:
         # (the one-shot switches she's used whose effect builds on itself: stairs a press
         # raises another step, so the planner knows those are spent)
         by_line = {t.line: t for t in self.nav.triggers if t.line >= 0}
-        fired = frozenset(f.line for f in k.fired
+        fired = frozenset(f.line for f in k.fired if f.life == k.lives
                           if (t := by_line.get(f.line)) is not None and t.once and t.cumulative)
         route = view.plan((obs.x, obs.y), [obj.goal], keys, states, key_items,
                           max_expansions=2000, max_seconds=PLAN_SECONDS, fired=fired)
+        # no way to the nearest spot to press it from: the next nearest (MAP08's exit door,
+        # nearest from a nukage pit through a gap too tight, is pressed from the ledge above)
+        goal, tried = obj.goal, set()
+        while route is None and obj.trigger is not None and obj.kind in ("switch", "door", "exit")                 and len(tried) < 3 and (at := self.nav.mesh.poly_at(*goal)) is not None:
+            tried.add(at.index)
+            rest = (obj.trigger.activators & self._reach) - tried
+            if not rest:
+                break
+            goal = self.nav._activation_point(obj.trigger, (obs.x, obs.y), rest)
+            route = view.plan((obs.x, obs.y), [goal], keys, states, key_items,
+                              max_expansions=2000, max_seconds=PLAN_SECONDS, fired=fired)
         if route is None:
             return None
-        if obj.kind in ("frontier", "recheck", "visit", "noise", "room"):
+        if obj.kind in ("frontier", "recheck", "visit", "noise", "room", "item", "hunt"):
             last = Step(None, "goto", label=obj.label)
         elif obj.kind == "key":
             last = Step(None, "pickup", key=obj.key, label=obj.label)
@@ -584,7 +638,64 @@ class Explorer:
                 wade += self._wading(leg.path.waypoints)
             if wade > WADE_LIMIT or (wade > 0 and obs.health is not None and obs.health < WADE_HEALTH):
                 return None
+        if obj.kind != "exit" and not obj.risky and self._shuts_in(route, obj, obs, view):
+            return None
         return steps_from_legs(route.legs, last, view, states)
+
+    def _shuts_in(self, route, obj: Objective, obs: Observation, view: Navigator) -> bool:
+        """Would the walk-over lines the route goes over cut her off at the end of it, where
+        she wouldn't be without them? (MAP08: the line by the red skull drops the floor she'd
+        come back over into a pit; a key is worth a one-way drop, not a trap.) The planner
+        counts what it sets off on purpose; what a path happens to go over, it doesn't."""
+        mesh = self.nav.mesh
+        end = mesh.poly_at(*obj.goal)
+        here = mesh.poly_at(obs.x, obs.y)
+        if end is None or here is None or not route.legs:
+            return False
+        doors = view.local_doors(set(route.keys))
+        # (the planner fires what it means to; walk-over lines the path just goes over fire too)
+        k, m = self.knowledge, self.nav.map
+        spent = {f.line for f in k.fired if f.life == k.lives}
+        legs = [(p, q) for leg in route.legs for p, q in zip(leg.path.waypoints, leg.path.waypoints[1:])
+                if p is not None and q is not None]
+        final = route.states
+        for t in view.triggers:
+            if t.line < 0 or not t.effects or t.info.trigger not in (Trigger.W1, Trigger.WR)                     or (t.once and t.line in spent):
+                continue
+            a, b = _line_ends(m, t.line)
+            if any(_segments_cross(p, q, a, b) for p, q in legs):
+                final = apply_trigger(final, t)
+        if final is route.states:
+            return False
+
+        def opened(st: HeightStates) -> HeightStates:
+            # (doors gone through on the way: open on the way back too, as far as this goes;
+            # MAP08's from the key room's side only opens from the other)
+            out = dict(st)
+            for d, (open_heights, _) in doors.items():
+                out[d] = set(out.get(d, ())) | set(open_heights)
+            return out
+        # (with what she knows how to work from there: MAP08's switch by the red skull raises
+        # the floor the trap dropped, once she's learned it does)
+        actions = [t for t in view.triggers if t.effects]
+        keys = frozenset(route.keys)
+        before, _, _ = view._saturate(end.index, opened(route.states), keys, {}, actions)
+        after, _, _ = view._saturate(end.index, opened(final), keys, {}, actions)
+        if here.index in after or len(after) >= KEEP_REACH * len(before):
+            return False
+        # (shut in with something left to try is the way on, maybe: unseen parts, switches not
+        # pressed; MAP08's sinking floors to the exit door, the trap room's switch that undoes it)
+        known = k.known_polys()
+        mesh_portals = mesh.portals
+        if any(mesh_portals[q].other(pi) not in known for pi in after for q in mesh.polys[pi].portals):
+            return False
+        by_line = {t.line: t for t in self.nav.triggers if t.line >= 0}
+        if any((t := by_line.get(li)) is not None and t.activators & after for li in k.interactables()):
+            return False
+        if self.current is None or self.current.ident != obj.ident:
+            self.log.append(f"tic {obs.tic}: '{obj.label}': what the way there sets off would "
+                            f"shut her in ({len(after)} polys to get to after, {len(before)} before)")
+        return True
 
     # --- playing ------------------------------------------------------------------------
 
@@ -601,8 +712,22 @@ class Explorer:
         self._glanced = len(self.knowledge.fired)
         self._sector = None
         self._view = None
+        self._held_since = None
+        self._urgent_n = len(self.knowledge.heard)
+
+    def hold(self, obs: Observation, last: Controls | None = None) -> None:
+        """Something else has the controls this tic (a fight): take in what's seen, and
+        carry on from here afterwards (the time it took isn't time spent on the objective)."""
+        self.knowledge.update(obs, last)
+        if self._held_since is None:
+            self._held_since = obs.tic
 
     def act(self, obs: Observation, last: Controls | None = None) -> Controls:
+        if self._held_since is not None:
+            self._since += obs.tic - self._held_since
+            self._held_since = None
+            if self.follower is not None:
+                self.follower.resume(obs.tic)
         self.knowledge.update(obs, last)
         here = self.nav.mesh.poly_at(obs.x, obs.y)
         if here is not None and here.sector != self._sector:
@@ -611,7 +736,11 @@ class Explorer:
                                 f"sector {self._sector}, doing: "
                                 f"{self.follower.objective if self.follower else '-'}")
             self._sector = here.sector
-        glance = self._glance(obs)
+        f = self.follower
+        # (no looking round in the middle of a jump: MAP08's, glanced away from at the run-up,
+        # overshot onto a floor already sinking into the nukage)
+        busy = f is not None and (f._sprint is not None or f._run is not None or f._lineup_tic is not None)
+        glance = None if busy else self._glance(obs)
         if glance is not None:
             return glance
         if self.current is not None and self.follower is not None and self.follower.done:
@@ -725,6 +854,8 @@ class Explorer:
             self._drop(obj, obs, "got there but not in it")
         elif obj.kind == "teleporter" and obj.trigger.line not in self.knowledge.teleports:
             self._drop(obj, obs, "didn't take me anywhere")
+        elif obj.kind in ("item", "hunt") and not (self.gone is not None and self.gone(obs, obj)):
+            self._drop(obj, obs, "not there" if obj.kind == "hunt" else "couldn't pick it up")
         self._look_until = None
         self.follower = None
         return None
@@ -742,6 +873,16 @@ class Explorer:
             return True  # been through
         if obj.kind != "exit" and len(self.knowledge.exits()) > self._exits_seen:
             return True  # an exit came into view
+        if self.gone is not None and self.gone(obs, obj):
+            return True  # (picked up, killed)
+        heard = self.knowledge.heard
+        fresh, self._urgent_n = heard[self._urgent_n:], len(heard)
+        # (something just went off out of sight: go and look first; not half way through a
+        # run of jumps, though: MAP08's, broken off on a landing, walked off it into a pit)
+        jumping = any("run-jump" in n for st in f.steps[f.step_i:] if st.path for n in st.path.steps)
+        if not (obj.kind == "noise" and obj.urgent) and not jumping and any(
+                self._urgent(h, obs.tic) and self._worth_a_look(h) for h in fresh):
+            return True
         if obs.tic - self._since > self._allowed:
             self._drop(obj, obs, "took too long")
             return True
@@ -795,3 +936,9 @@ class Explorer:
     def _route_length(steps: list[Step]) -> float:
         return sum(math.dist(a, b) for st in steps if st.path
                    for a, b in zip(st.path.waypoints, st.path.waypoints[1:]) if a and b)
+
+
+def _line_ends(m, li: int):
+    line = m.linedefs[li]
+    a, b = m.vertexes[line.v1], m.vertexes[line.v2]
+    return (a.x, a.y), (b.x, b.y)

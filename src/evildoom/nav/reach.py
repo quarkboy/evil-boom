@@ -215,8 +215,9 @@ class Route:
 
 
 class Navigator:
-    def __init__(self, m: MapData, mesh: NavMesh | None = None):
+    def __init__(self, m: MapData, mesh: NavMesh | None = None, skill: int = 3):
         self.map = m
+        self.skill = skill  # 1-5 as ViZDoom's: which of the map's things are there
         # Solid decorations (pillars, lamps, trees) are cut out of the mesh, grown by the
         # player's half-width: the mesh is where the player's centre can be, so A* goes round
         # rows of them and never through gaps the box can't fit. They never move; moving
@@ -225,7 +226,7 @@ class Navigator:
         self._mesh_obstacles = [
             (t.x, t.y, SOLID_DECORATIONS[t.type] + PLAYER_RADIUS) for t in m.things
             if t.type in SOLID_DECORATIONS and t.type not in SHOOTABLE_OBSTACLES
-            and t.in_skill(3)]
+            and t.in_skill(self.skill)]
         self.mesh = mesh or NavMesh(m, self._mesh_obstacles)
         self.movers = MoverModel(m, self.mesh.neighbors_of_sector)
         self._fill_trenches()
@@ -553,6 +554,23 @@ class Navigator:
             if not fits:
                 self.trenches[si] = sorted(around)
                 self.movers.initial[si] = (min(floors), sec.ceiling)
+
+    def floor_after(self, t: "TriggerLine", s: int) -> bool | None:
+        """Does sector s's floor hurt once trigger t has moved it, if t changes its type
+        (None: it doesn't)? Lowering to the lowest neighbour and changing texture takes that
+        neighbour's flat and type (MAP08's trap drops a walkway into the nukage and makes it
+        nukage); raising to the next higher one and changing texture clears the type."""
+        special = t.info.special if t.line >= 0 else None
+        if special == 37:
+            around = self.mesh.neighbors_of_sector(s)
+            if not around:
+                return None
+            # (by the map's floors: a trench's initial height is its sides')
+            model = min(around, key=lambda o: self.map.sectors[o].floor)
+            return bool(self.damage[model])
+        if special in (20, 22, 47, 68):
+            return False
+        return None
 
     def trench_floor(self, t: int, floor_of) -> float:
         """Where the player stands over trench t, given each sector's floor now."""
@@ -886,7 +904,7 @@ class Navigator:
         rules.append((KEEN, 666, 2, Category.DOOR))  # Keens open tag 666 on any map
         out = []
         for i, (monster, tag, special, category) in enumerate(rules):
-            homes = [(t.x, t.y) for t in m.things if t.type == monster and t.in_skill(3)]
+            homes = [(t.x, t.y) for t in m.things if t.type == monster and t.in_skill(self.skill)]
             if not homes:
                 continue
             # Killable from anywhere the boss can walk or teleport to (monster closets with
@@ -1259,7 +1277,7 @@ class Navigator:
         keys: set[Key] = set()
         fired: set[int] = set()
         key_things = [t for t in self.map.things
-                      if t.type in Key._value2member_map_ and t.in_skill(3)]
+                      if t.type in Key._value2member_map_ and t.in_skill(self.skill)]
         stages = []
         while True:
             fired_now = []
@@ -1334,17 +1352,17 @@ class Navigator:
                     states[s].update(hs)
         out: KeyItems = {}
         for t in self.map.things:
-            if t.type in Key._value2member_map_ and t.in_skill(3):
+            if t.type in Key._value2member_map_ and t.in_skill(self.skill):
                 out.setdefault(Key(t.type), []).extend(self.pickup_spots(t.x, t.y, states))
         return out
 
     @property
     def _key_positions(self) -> dict[Key, list[Point]]:
-        """Where each key (at skill 3) is."""
+        """Where each key (at the skill played) is."""
         if not hasattr(self, "_keys_at"):
             self._keys_at: dict[Key, list[Point]] = {}
             for t in self.map.things:
-                if t.type in Key._value2member_map_ and t.in_skill(3):
+                if t.type in Key._value2member_map_ and t.in_skill(self.skill):
                     self._keys_at.setdefault(Key(t.type), []).append((t.x, t.y))
         return self._keys_at
 
@@ -1825,7 +1843,7 @@ class Navigator:
             self._obstacles = defaultdict(list)
             for t in self.map.things:
                 r = SOLID_DECORATIONS.get(t.type)
-                if r is None or not t.in_skill(3):
+                if r is None or not t.in_skill(self.skill):
                     continue
                 c = [(t.x - r, t.y - r), (t.x + r, t.y - r), (t.x + r, t.y + r), (t.x - r, t.y + r)]
                 for a, b in zip(c, c[1:] + c[:1]):

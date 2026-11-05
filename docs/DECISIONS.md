@@ -482,6 +482,48 @@ identically.
   plan's path past a jump was smoothed across it and can wander (MAP22: back off the ledge
   it lands on, onto a floor with no way up).
 
+## Explorer finishes every map that doesn't need a kill (2026-11-05)
+With knowledge limited to what she's seen (no monsters, god mode, 3 lives), the explorer
+exits every DOOM and DOOM2 map except those that open only when monsters die (E1M8, E2M8,
+E3M8, E4M6, E4M8, MAP07, MAP32; MAP30 excluded). What it took, beyond earlier fixes:
+- **Sounds right after setting something off are looked into at once** ("check a noise
+  right away", priority over everything but the exit): MAP19's walk-over line opens a timed
+  door out of sight, the way on; looked at later, it was shut and nothing was learned. Not
+  in the middle of a run of jumps (one broken off on a landing walked off it).
+- **No sounds in the risky tier**: a far noise took MAP09's explorer down a one-way drop.
+- **Once-only lines are once per life** (`Fired.life`): after a restart, MAP08's trap went
+  off unrecorded and the planner took it for spent. Beliefs from fired effects are this
+  life's only.
+- **Routes that walk over a trap are refused** (`Explorer._shuts_in`): the planner counts
+  what it fires on purpose, not walk-over lines a path merely crosses. Their effects are
+  applied to the route's end state; refused if she'd be cut off from most of what she can get
+  to (with what she knows how to work, doors gone through counted open), unless what's left
+  has unseen parts or untried switches (the trap room's switch that undoes it).
+- **Floors change type** (`Navigator.floor_after`, `Knowledge.changed_floor`): a floor seen
+  lowered by "lower to lowest, change texture" takes its neighbour's type (MAP08's walkway
+  becomes nukage: a pit to avoid dropping into); "raise to next higher, change texture"
+  clears it. (The user's diagnosis.)
+- **Trenches move with their sides in the known view** too (they never visibly move, so the
+  learned effects left them out), and take both their sides' lowest and highest floors.
+- **Another press spot when the nearest has no route** (MAP08's exit door: nearest from a
+  nukage pit through a gap too tight; pressed from the ledge above).
+- **No glancing round mid-jump** (a glance at the run-up overshot onto a sinking floor).
+- Tried and dropped: counting a box pinched against a tall ledge as a squeeze (and as a hard
+  one). Right in itself, but it changed plan searches elsewhere (MAP17, MAP29 omniscient;
+  many explorer maps with hard squeezes) and nothing needs it now.
+
+## Fighting: first pieces (2026-11-05)
+- Native `LineOfSight` (ZDoom's P_CheckSight without REJECT): who can see whom.
+- `Navigator(skill=)`: which things are on the map at the skill played.
+- Observations carry the things about (monsters, missiles, items, by ZDoom class name),
+  weapons held, ammo per slot and armour; controls select any weapon slot.
+- `tactical.bestiary` (monster sizes, toughness, attack kind, threat; missiles; weapons),
+  `tactical.combat.Combat` (noticing, targets, weapon choice, aim with lead, dodging missiles,
+  backing off from clawing monsters, strafing when it's hot, shooting on the move otherwise),
+  `tactical.player.Player` (explorer + fight; items she needs and has seen as objectives;
+  monsters seen still about hunted once there's nothing else).
+- Testing starts at lower skills (HNTR/HMP) and works up to Ultra-Violence (the user's call).
+
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
 - [ ] Timing-aware handling of lifts/doors that close on a timer (be on them in time).

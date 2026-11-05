@@ -6,6 +6,7 @@ use crate::mesh::{Mesh, Obstacle};
 use crate::nav::{Callbacks, DoorOpening, Doors, Edge, Found, Gate, HeightSource, Heights, NavCore, NavFacts, Tele, TeleKind, Via};
 use crate::plan::{KeySet, Kind, PlanCaches, PlanFacts, Planner, Query, Timing, Trigger, World};
 use crate::jumps;
+use crate::los;
 use crate::sight;
 use crate::stats;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -393,6 +394,34 @@ impl Sight {
     fn drawn(&self, x: f64, y: f64, angle: f64, width: i32, heights: Vec<(f64, f64)>) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
         let seen = self.sight.view(&sight::View { x, y, angle, width, heights: &heights });
         (seen.drawn, seen.through, seen.subsectors)
+    }
+}
+
+/// Who can see whom: line-of-sight checks between things (ZDoom's P_CheckSight).
+#[pyclass(name = "LineOfSight")]
+pub struct LineOfSightPy {
+    los: los::LineOfSight,
+}
+
+/// A thing for a sight check: (x, y, feet z, height).
+type BodyIn = (f64, f64, f64, f64);
+
+fn body((x, y, z, height): BodyIn) -> los::Body {
+    los::Body { x, y, z, height }
+}
+
+#[pymethods]
+impl LineOfSightPy {
+    #[new]
+    fn new(map: MapData) -> Self {
+        LineOfSightPy { los: los::LineOfSight::new(&map) }
+    }
+
+    /// Which of `targets` the thing `from` can see, with the sectors at `heights`
+    /// [(floor, ceiling)].
+    fn visible(&self, from: BodyIn, targets: Vec<BodyIn>, heights: Vec<(f64, f64)>) -> Vec<bool> {
+        let from = body(from);
+        targets.into_iter().map(|t| self.los.clear(from, body(t), &heights)).collect()
     }
 }
 

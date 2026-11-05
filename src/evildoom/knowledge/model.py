@@ -51,6 +51,7 @@ class Fired:
     line: int
     tic: int
     how: str  # "use", "walk", "shoot"
+    life: int = 1  # which try at the level (a one-shot line works again in the next)
 
 
 @dataclass
@@ -82,6 +83,9 @@ class Knowledge:
     seen_polys: set[int] = field(default_factory=set)   # polys seen into (or in front of a mapped line)
     heard: list[Heard] = field(default_factory=list)
     felt: dict[int, bool] = field(default_factory=dict)  # sector stood on -> did it hurt
+    # sector -> does it hurt now, for floors seen moved by a line that changes their type
+    # (this life: the level starting again puts them back)
+    changed_floor: dict[int, bool] = field(default_factory=dict)
     suit_until: int | None = None  # radiation suit on until this tic
     lives: int = 1                 # tries at the level so far
     events: list[str] = field(default_factory=list)
@@ -249,6 +253,11 @@ class Knowledge:
             for ti in self._by_line.get(f.line, ()):
                 t = self.nav.triggers[ti]
                 if s in t.effects:
+                    hurts = self.nav.floor_after(t, s)
+                    if hurts is not None and self.changed_floor.get(s) != hurts:
+                        self.changed_floor[s] = hurts
+                        self.events.append(f"tic {tic}: sector {s}'s floor "
+                                           + ("turns to something that hurts" if hurts else "is safe now"))
                     known = self.learned.setdefault(ti, set())
                     if s not in known:
                         known.add(s)
@@ -378,9 +387,10 @@ class Knowledge:
     def _fire(self, li: int, tic: int, how: str) -> None:
         info = self._special(li)
         if info.trigger in (Trigger.W1, Trigger.S1, Trigger.G1, Trigger.D1) and \
-                any(f.line == li for f in self.fired):
-            return  # (once only: nothing happens again)
-        self.fired.append(Fired(li, tic, how))
+                any(f.line == li and f.life == self.lives for f in self.fired):
+            return  # (once only: nothing happens again, this life; MAP08's trap went off again
+            #        in the next and wasn't noticed: the planner took the line for spent)
+        self.fired.append(Fired(li, tic, how, self.lives))
         self.events.append(f"tic {tic}: {how} line {li} ({info.description})")
 
     # --- what Evil can tell -------------------------------------------------------------
@@ -444,11 +454,11 @@ class Knowledge:
         return out
 
     def known_things(self) -> list:
-        """The map's things in sectors she has seen (at skill 3)."""
+        """The map's things in sectors she has seen (at the skill played)."""
         out = []
         for t in self.nav.map.things:
             poly = self.nav.mesh.poly_at(t.x, t.y)
-            if poly is not None and poly.sector in self.sectors and t.in_skill(3):
+            if poly is not None and poly.sector in self.sectors and t.in_skill(self.nav.skill):
                 out.append(t)
         return out
 
@@ -485,6 +495,7 @@ class Knowledge:
         for s in self.sectors:
             self.seen_heights[s] = (float(m.sectors[s].floor), float(m.sectors[s].ceiling))
         self.suit_until = None
+        self.changed_floor.clear()
         self._last = None
         self._standing = None
         self._live = {}
@@ -532,6 +543,8 @@ class Knowledge:
     def damaging(self, s: int) -> bool:
         """Does she take sector s's floor to hurt: as found out by standing on it, else by
         its look."""
+        if s in self.changed_floor:  # (seen changed since: MAP08's walkway gone to nukage)
+            return self.changed_floor[s]
         felt = self.felt.get(s)
         return self.looks_damaging(s) if felt is None else felt
 

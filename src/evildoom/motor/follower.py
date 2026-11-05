@@ -100,6 +100,25 @@ class Observation:
     barrels: tuple | None = None                  # where explosive barrels are now, if known
     health: float | None = None                   # the player's health, if the engine can tell
     suits: int | None = None                      # radiation suits picked up so far, if known
+    things: tuple | None = None                   # what's about now (Things), if the engine tells
+    weapons: frozenset | None = None              # weapon slots held (1-7), if known
+    ammo: dict | None = None                      # weapon slot -> ammo for it, if known
+    armor: float | None = None
+
+
+@dataclass(frozen=True)
+class Thing:
+    """Something in the level as it is now: a monster, a missile in flight, an item."""
+    id: int
+    name: str        # its class name (ZDoom's: "DoomImp", "BaronBall", "Shotgun", ...)
+    category: str    # Monster, Projectile, Weapon, Ammo, Health, Armor, Key, Powerup, ...
+    x: float
+    y: float
+    z: float
+    vx: float = 0.0
+    vy: float = 0.0
+    vz: float = 0.0
+    angle: float = 0.0
 
 
 @dataclass
@@ -110,7 +129,7 @@ class Controls:
     use: bool = False
     attack: bool = False
     run: bool = True
-    pistol: bool = False   # switch to the pistol (slot 2)
+    weapon: int = 0        # switch to the weapon in this slot (1-7; 0: don't)
 
 
 @dataclass
@@ -1053,7 +1072,7 @@ class RouteFollower:
             return self.motion.drive(obs, (math.cos(away) * 8, math.sin(away) * 8), look)
         controls = self.motion.drive(obs, (0.0, 0.0), look)
         if obs.weapon == 1:
-            controls.pistol = True
+            controls.weapon = 2
         elif abs(_norm(look - obs.angle)) < 2:
             controls.attack = True
         return controls
@@ -1729,7 +1748,7 @@ class RouteFollower:
         if step.action == "shoot" and self._action_tic is None and obs.weapon == 1:
             # A fist or chainsaw (picked up on the way: the game switches to it) doesn't set
             # off a gun line (MAP19): out with the pistol first.
-            controls.pistol = True
+            controls.weapon = 2
             self._progress_tic = obs.tic
             return controls
         if step.action == "shoot" and self._action_tic is None and facing \

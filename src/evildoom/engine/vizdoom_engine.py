@@ -11,15 +11,16 @@ if sys.platform == "win32":
     import ctypes
     ctypes.windll.winmm.timeBeginPeriod(1)
 
-from evildoom.motor.follower import TICRATE, Controls, Observation
+from evildoom.motor.follower import TICRATE, Controls, Observation, Thing
+from evildoom.tactical.bestiary import category
 from evildoom.wad.specials import Key
 
 BUTTONS = [vzd.Button.MOVE_FORWARD_BACKWARD_DELTA, vzd.Button.MOVE_LEFT_RIGHT_DELTA,
            vzd.Button.TURN_LEFT_RIGHT_DELTA, vzd.Button.USE, vzd.Button.ATTACK,
-           vzd.Button.SPEED, vzd.Button.SELECT_WEAPON2]
+           vzd.Button.SPEED] + [getattr(vzd.Button, f"SELECT_WEAPON{i}") for i in range(1, 8)]
 VARIABLES = [vzd.GameVariable.POSITION_X, vzd.GameVariable.POSITION_Y,
              vzd.GameVariable.ANGLE, vzd.GameVariable.HEALTH, vzd.GameVariable.POSITION_Z,
-             vzd.GameVariable.SELECTED_WEAPON]
+             vzd.GameVariable.SELECTED_WEAPON, vzd.GameVariable.ARMOR]     + [getattr(vzd.GameVariable, f"WEAPON{i}") for i in range(1, 8)]     + [getattr(vzd.GameVariable, f"AMMO{i}") for i in range(1, 8)]
 WARMUP_TICS = 8  # ViZDoom ignores turn input for the first few tics of an episode
 KEY_OBJECTS = {"BlueCard": Key.BLUE_CARD, "YellowCard": Key.YELLOW_CARD, "RedCard": Key.RED_CARD,
                "BlueSkull": Key.BLUE_SKULL, "YellowSkull": Key.YELLOW_SKULL,
@@ -33,8 +34,8 @@ class VizDoomEngine:
         """`size` is a ViZDoom resolution like "1024x768". Avoid 1280x960: it segfaults
         ViZDoom 1.3.2 on init (other sizes, including 1920x1080, are fine).
         `rgb` makes the screen buffer H x W x 3 RGB (for drawing it ourselves). The live
-        object list is always on: keys held are worked out from key items that disappear
-        (`objects` is kept for callers that want the list for other things)."""
+        object list is always on: keys held are worked out from key items that disappear;
+        `objects` puts it in each Observation too (`things`: monsters, missiles, items)."""
         game = vzd.DoomGame()
         game.set_doom_game_path(str(iwad))
         if pwad:
@@ -59,6 +60,7 @@ class VizDoomEngine:
         # for the rest of the level (worst in demo replay). Turn it off.
         game.add_game_args("+cl_showsecretmessage 0")
         self.game = game
+        self.objects = objects
         self.tic = 0
         self._keys_at_start: dict[str, int] | None = None
 
@@ -89,13 +91,23 @@ class VizDoomEngine:
 
     def observe(self) -> Observation:
         state = self.game.get_state()
-        x, y, angle, health, z, weapon = state.game_variables
+        v = state.game_variables
+        x, y, angle, health, z, weapon, armor = v[:7]
+        held, ammo = v[7:14], v[14:21]
         heights = {s.id: (s.floor_height, s.ceiling_height) for s in state.sectors}
         barrels = tuple((o.position_x, o.position_y) for o in state.objects
                         if o.name == "ExplosiveBarrel")
+        things = None
+        if self.objects:
+            things = tuple(Thing(int(o.id), o.name, category(o.name), float(o.position_x),
+                                 float(o.position_y), float(o.position_z), float(o.velocity_x),
+                                 float(o.velocity_y), float(o.velocity_z), float(o.angle))
+                           for o in state.objects if o.name != "DoomPlayer")
         return Observation(float(x), float(y), float(angle), heights, self.tic,
                            self._keys_held(state), float(z), int(weapon), barrels, float(health),
-                           self._suits_taken(state))
+                           self._suits_taken(state), things,
+                           frozenset(i + 1 for i, h in enumerate(held) if h > 0),
+                           {i + 1: int(a) for i, a in enumerate(ammo)}, float(armor))
 
     def _keys_held(self, state) -> frozenset:
         """Keys picked up so far: key items present at the start that have gone."""
@@ -130,7 +142,7 @@ class VizDoomEngine:
 
     def step(self, c: Controls) -> None:
         self.game.make_action([c.forward, c.strafe, c.turn, float(c.use), float(c.attack),
-                               float(c.run), float(c.pistol)])
+                               float(c.run)] + [float(c.weapon == i) for i in range(1, 8)])
         self.tic += 1
 
     def close(self) -> None:
