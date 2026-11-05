@@ -60,14 +60,7 @@ class NavMesh:
             raise ValueError(f"{m.name}: no usable BSP nodes (extended node formats unsupported)")
         import evildoom_native
         self.map = m
-        built = evildoom_native.NativeMesh(
-            [(v.x, v.y) for v in m.vertexes],
-            [(l.v1, l.v2, l.flags, l.special, l.tag, l.front, l.back) for l in m.linedefs],
-            [sd.sector for sd in m.sidedefs],
-            [(sg.v1, sg.v2, sg.linedef, sg.direction) for sg in m.segs],
-            [(ss.seg_count, ss.first_seg) for ss in m.subsectors],
-            [(n.x, n.y, n.dx, n.dy, n.front_child, n.back_child) for n in m.nodes],
-            [tuple(map(float, b)) for b in obstacles])
+        built = evildoom_native.NativeMesh(m, [tuple(map(float, b)) for b in obstacles])
         self.polys: list[NavPoly | None] = [
             None if p is None else NavPoly(i, p[0], list(p[1]), p[2], set(p[3]), set(p[4]),
                                            list(p[5]))

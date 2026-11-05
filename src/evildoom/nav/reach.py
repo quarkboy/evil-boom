@@ -1321,8 +1321,7 @@ class Navigator:
         gate lines, room to drop) are asked back here."""
         if "_nnav" not in self.__dict__:
             mesh, m = self.mesh, self.map
-            adj = [[(pi, to, sa, sb, -1 if mesh.portals[pi].linedef is None
-                     else mesh.portals[pi].linedef) for pi, to, sa, sb in edges]
+            adj = [[(pi, to, sa, sb, mesh.portals[pi].linedef) for pi, to, sa, sb in edges]
                    for edges in self._static_adjacency()]
             gates = {pi: [(li, list(sectors)) for li, _edge, sectors in g]
                      for pi, g in self._portal_gates.items()}
@@ -1331,31 +1330,25 @@ class Navigator:
                 out = []
                 for tp in self.tele_from.get(poly, ()):
                     if isinstance(tp, Jump):
-                        out.append(("jump", tp.dest_poly, tp.dest, -1, -1, -1, tp.runup,
-                                    tp.takeoff, sorted(tp.requires)))
+                        out.append(("jump", tp.dest_poly, tp.dest, tp.runup, tp.takeoff,
+                                    sorted(tp.requires)))
                     else:
                         line = m.linedefs[tp.line]
-                        f, b = m.front_sector(line), m.back_sector(line)
                         out.append(("line", tp.dest_poly, tp.dest, tp.line,
-                                    -1 if f is None else f, -1 if b is None else b,
-                                    (0.0, 0.0), (0.0, 0.0), []))
+                                    m.front_sector(line), m.back_sector(line)))
                 tele.append(out)
+            facts = {
+                "adj": adj, "gates": gates, "tele": tele,
+                "initial": [tuple(map(float, h)) for h in self.movers.initial],
+                "damage": [bool(self.damage[i]) for i in range(len(m.sectors))],
+                "has_teleports": bool(self.teleports),
+                "walls": self._wall_lines(), "drops": self._drop_lines(),
+                "teleport_lines": self._teleport_lines(), "shutting": self._shutting_lines(),
+                "static_grid": {c: list(es) for c, es in self._static_wall_grid().items()},
+                "obstacle_grid": {c: list(es) for c, es in self._obstacle_grid().items()},
+            }
             self._nnav = _native.Nav(
-                [(v.x, v.y) for v in m.vertexes],
-                [(l.v1, l.v2, l.flags, l.special, l.tag, l.front, l.back) for l in m.linedefs],
-                [sd.sector for sd in m.sidedefs],
-                [(sg.v1, sg.v2, sg.linedef, sg.direction) for sg in m.segs],
-                [(ss.seg_count, ss.first_seg) for ss in m.subsectors],
-                [(n.x, n.y, n.dx, n.dy, n.front_child, n.back_child) for n in m.nodes],
-                [tuple(map(float, b)) for b in self._mesh_obstacles],
-                adj, gates, tele,
-                [tuple(map(float, h)) for h in self.movers.initial],
-                [bool(self.damage[i]) for i in range(len(m.sectors))],
-                bool(self.teleports),
-                self._wall_lines(), self._drop_lines(), self._teleport_lines(),
-                self._shutting_lines(),
-                {c: list(es) for c, es in self._static_wall_grid().items()},
-                {c: list(es) for c, es in self._obstacle_grid().items()},
+                m, [tuple(map(float, b)) for b in self._mesh_obstacles], facts,
                 lambda pi, blocking: self.portal_fits_without(pi, blocking),
                 lambda li, high, top: self._landable(li, high, top))
         return self._nnav
@@ -1593,16 +1586,18 @@ class Navigator:
                                            key_items, actions)
         nav = self._native_nav()
         if not self.__dict__.get("_nplan_ready"):
-            nav.set_plan_data(*self._native_plan_data())
+            nav.set_plan_data(self._native_plan_data())
             self._nplan_ready = True
         bit = {k: i for i, k in enumerate(KEY_ORDER)}
         index = {id(t): i for i, t in enumerate(self.triggers)}
-        found = nav.plan(start, list(goals), sum(1 << bit[k] for k in keys0), states0,
-                         [(bit[k], list(spots)) for k, spots in key_items.items()],
-                         max_expansions, max_seconds,
-                         [(g, index[id(t)]) for g, t in (goal_triggers or {}).items()],
-                         set(rel_t), sum(1 << bit[k] for k in rel_k),
-                         self.strict_fit, sorted(fired))
+        found = nav.plan(start, list(goals), states0, {
+            "keys": sum(1 << bit[k] for k in keys0),
+            "key_items": [(bit[k], list(spots)) for k, spots in key_items.items()],
+            "max_expansions": max_expansions, "max_seconds": max_seconds,
+            "goal_triggers": [(g, index[id(t)]) for g, t in (goal_triggers or {}).items()],
+            "relevant_lines": {line if line >= 0 else None for line in rel_t},
+            "relevant_keys": sum(1 << bit[k] for k in rel_k),
+            "strict_fit": self.strict_fit, "fired": sorted(fired)})
         if found is None:
             return None
         legs_out, final_states, final_keys, goal = found
@@ -1630,7 +1625,7 @@ class Navigator:
                             KEY_ORDER[kbit] if kbit is not None else None))
         return Route(legs, heights(final_states), keyset(final_keys), goal)
 
-    def _native_plan_data(self) -> tuple:
+    def _native_plan_data(self) -> dict:
         """The plan search's per-map facts for evildoom_native.Nav.set_plan_data."""
         kinds = {Trigger.W1: "W", Trigger.WR: "W", Trigger.S1: "S", Trigger.SR: "S",
                  Trigger.D1: "D1", Trigger.DR: "DR", Trigger.G1: "G", Trigger.GR: "G"}
@@ -1644,27 +1639,34 @@ class Navigator:
                         tm = self.movers.timing(t.info.special, t.info.description, sec, h)
                         timing.append(((sec, tuple(map(float, h))),
                                        (float(tm.travel),
-                                        float(tm.hold) if tm.hold is not None else -1.0)))
+                                        float(tm.hold) if tm.hold is not None else None)))
                     if hs:
                         perm.append((sec, float(self.movers.timing(
                             t.info.special, t.info.description, sec, hs[0]).travel)))
-            triggers.append((t.line, kinds.get(t.info.trigger, "O") if t.line >= 0 else "O",
-                             [(sec, [tuple(map(float, h)) for h in hs])
-                              for sec, hs in t.effects.items()],
-                             set(t.activators), t.permanent,
-                             [t.info.lock.satisfied(set(m)) for m in masks], timing, perm,
-                             (t.shift_from[0], float(t.shift_from[1])) if t.shift_from else None,
-                             t.once, getattr(t, "relevant", []) if t.recompute else None))
+            triggers.append({
+                "line": t.line if t.line >= 0 else None,
+                "kind": kinds.get(t.info.trigger, "O") if t.line >= 0 else "O",
+                "effects": [(sec, [tuple(map(float, h)) for h in hs])
+                            for sec, hs in t.effects.items()],
+                "activators": set(t.activators), "permanent": t.permanent,
+                "lock_ok": [t.info.lock.satisfied(set(m)) for m in masks],
+                "timing": timing, "perm_travel": perm,
+                "shift_from": (t.shift_from[0], float(t.shift_from[1])) if t.shift_from else None,
+                "once": t.once,
+                "relevant": getattr(t, "relevant", []) if t.recompute else None})
         bit = {k: i for i, k in enumerate(KEY_ORDER)}
-        return (triggers,
-                {k: sorted(v) for k, v in self.use_gates.items()},
-                {k: tuple(map(float, v)) for k, v in self.shot_floors.items()},
-                dict(self.cross_sides()),
-                [(sec, tuple(map(float, h))) for sec, h in self._temporary_heights()],
-                [(bit[k], list(map(lambda p: tuple(map(float, p)), ps)))
-                 for k, ps in self._key_positions.items()],
-                lambda i, reps: [(s, [tuple(map(float, h)) for h in hs])
-                                 for s, hs in self.effects_from_reps(i, reps).items()])
+        return {
+            "triggers": triggers,
+            "use_gates": {k: sorted(v) for k, v in self.use_gates.items()},
+            "shot_floors": {k: tuple(map(float, v)) for k, v in self.shot_floors.items()},
+            "cross_sides": dict(self.cross_sides()),
+            "temporary": [(sec, tuple(map(float, h))) for sec, h in self._temporary_heights()],
+            "key_positions": [(bit[k], [tuple(map(float, p)) for p in ps])
+                              for k, ps in self._key_positions.items()],
+            "effects_from_reps": lambda i, reps: [
+                (s, [tuple(map(float, h)) for h in hs])
+                for s, hs in self.effects_from_reps(i, reps).items()],
+        }
 
     def _upper_bound(self, start: int, states: HeightStates, keys: frozenset,
                      key_items: KeyItems, triggers: list[TriggerLine]) -> set[int]:

@@ -435,6 +435,22 @@ identically.
   build and keeps only lookups (BSP point lookup, line grid, sector neighbours).
 - From here on the ported parts are changed in Rust only; no parity checks.
 
+## Native core reorganised (2026-11-04)
+- `native/src` split by job: `geom` (points, segments, the funnel, the line grid), `map`
+  (the map parts, read straight from Python's `MapData`), `mesh`, `nav` (passability and
+  flood fill) with `nav/path` (A*) and `nav/fit` (smoothing, box fitting), `plan` (the
+  search) with `plan/triggers`, `plan/spots`, `plan/timing`, `plan/world`, `python` (the
+  classes and conversions) and `stats`. The WAD reader the Rust side no longer used is gone.
+- What crosses from Python is named: `Nav(map, obstacles, facts, fits, landable)` and
+  `set_plan_data(facts)` and `plan(start, goals, states, query)` take dicts whose keys are
+  the Rust structs' fields (`NavFacts`, `PlanFacts`, `Query`); absent lines and sectors are
+  None rather than -1. Errors from Python callbacks propagate instead of being swallowed.
+- Per-call state is passed, not kept on the core: path smoothing has its own `Fitter`, the
+  plan search a `Planner` borrowing the core, the plan facts and their caches separately (no
+  locks or atomics). Builds clean under clippy with no lint allowances; `cargo test` covers
+  the geometry (funnel included) and the plan's world operations. Plans for all 68 maps came
+  out identical to before.
+
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
 - [ ] Timing-aware handling of lifts/doors that close on a timer (be on them in time).
