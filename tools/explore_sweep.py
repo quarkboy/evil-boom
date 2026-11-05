@@ -17,6 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 OUT = ROOT / "out" / "explore"
+STRANDED_TICS = 60 * 35  # nothing to do this long (with lives left): start the level again
 
 
 def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
@@ -45,17 +46,27 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
     c = obs = None
     t0 = time.perf_counter()
     deaths = 0
+    idle_since = None  # since when she's had nothing to do
     while e.tic < max_seconds * TICRATE:
-        if e.finished:
-            if e.dead and deaths + 1 < lives:
+        stranded = idle_since is not None and e.tic - idle_since > STRANDED_TICS
+        if e.finished or (stranded and deaths + 1 < lives):
+            # dead, or stranded with nothing to do (a trap she couldn't know of: MAP12's
+            # floor that drops into a pit): the level again, knowing what she learned
+            if (e.dead or stranded) and deaths + 1 < lives:
                 deaths += 1
+                x.log.append(f"tic {e.tic}: {'died' if e.dead else 'stranded'}: starting again")
                 e.restart(keep_time=True)
                 x.restart()
                 c = None
+                idle_since = None
                 continue
             break
         obs = e.observe()
         c = x.act(obs, c)
+        if x.current is None:
+            idle_since = e.tic if idle_since is None else idle_since
+        else:
+            idle_since = None
         e.step(c)
     exited, died, game_s = e.exited, e.finished and e.dead, e.tic / TICRATE
     k = x.knowledge
