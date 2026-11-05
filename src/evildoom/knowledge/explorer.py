@@ -17,7 +17,7 @@ from evildoom.knowledge.model import Knowledge
 from evildoom.motor.follower import TICRATE, Controls, Observation, RouteFollower
 from evildoom.nav.reach import MAX_STEP, PLAYER_HEIGHT, HeightStates, Navigator, TriggerLine, can_cross
 from evildoom.nav.walkthrough import Step, _action_for, steps_from_legs
-from evildoom.wad.specials import Category, Key, Lock
+from evildoom.wad.specials import Category, Key, Lock, Trigger
 
 PLAN_SECONDS = 1.5
 # how much nearer an objective of each kind counts as (keys, switches first; looking again last)
@@ -28,6 +28,7 @@ GIVE_UP_TICS = 20 * TICRATE   # an objective not done by then is dropped for a w
 ROUTE_SPEED = 8.0             # ...or by the time it takes to walk its route at this (units a tic)
 ROUTE_SLACK = 15 * TICRATE    # ...and this
 THRESHOLD_IN = 8.0            # a threshold's spot: this far over the line
+REPRESS_AFTER = 60 * TICRATE  # a repeatable switch whose effect wasn't seen: another go after this
 IDLE_RETRY = TICRATE          # with nothing to do, look for something again this often
 RETRY_TICS = 30 * TICRATE     # ...and offered again after this
 LOOK_TICS = TICRATE           # a turn on the spot, at the edge of the known map
@@ -209,6 +210,19 @@ class Explorer:
             kind = "door" if t.info.category in (Category.DOOR, Category.LOCKED_DOOR) else "switch"
             out.append(Objective(kind, nav._activation_point(t, pos, reach),
                                  f"try {kind} (line {li})", trigger=t))
+        # repeatable switches pressed a while ago whose effect she never saw: worth another go
+        # once there's nothing else (E3M4: a door one opened was shut again by another)
+        learned_lines = {nav.triggers[i].line for i, sec in k.learned.items() if sec}
+        last_press: dict[int, int] = {f.line: f.tic for f in k.fired}
+        again = []
+        for li, tic in last_press.items():
+            t = by_line.get(li)
+            if t is None or li not in k.mapped or li in learned_lines or t.info.trigger not in (Trigger.SR, Trigger.GR):
+                continue
+            if obs.tic - tic < REPRESS_AFTER or not t.activators & reach or not t.info.lock.satisfied(keys):
+                continue
+            again.append(Objective("switch", nav._activation_point(t, pos, reach),
+                                   f"try switch again (line {li})", trigger=t))
         out += self._teleporters(reach, pos)
         out += self._frontier(reach, pos)
         out += self._recheck(reach, pos)
@@ -242,7 +256,8 @@ class Explorer:
             return [o for o in objectives if fresh(o) and returnable(o)]
         # with nothing else left, the ways between rooms never walked over (walk-over lines
         # are thresholds: E4M7's was between two rooms she'd come into other ways)
-        return usable(out) or usable(self._thresholds(reach))
+        # (and last of all, those onto floors that hurt: E4M2's door opener is on lava)
+        return usable(out) or usable(self._thresholds(reach)) or usable(self._thresholds(reach, hurting=True))             or usable(again)
 
     def _frontier(self, reach: set[int], pos) -> list[Objective]:
         """Known polys she can get to next to polys she hasn't seen into: per sector those are
@@ -273,7 +288,7 @@ class Explorer:
         return [Objective("frontier", self._stand_spot(c, reach), f"look into sector {s}", reveals=frozenset(unseen[s]))
                 for s, (_, c) in best.items()]
 
-    def _thresholds(self, reach: set[int]) -> list[Objective]:
+    def _thresholds(self, reach: set[int], hurting: bool = False) -> list[Objective]:
         """Reachable polys she hasn't stood in across a line from ones she has: just over the
         line (all a walk-over line needs, and a strip's middle may have no room for the box:
         E4M7's, against a platform)."""
@@ -281,7 +296,7 @@ class Explorer:
         out = []
         for pi in sorted(reach - k.visited):
             poly = mesh.polys[pi]
-            if k.damaging(poly.sector):
+            if k.damaging(poly.sector) != hurting:
                 continue
             for q in poly.portals:
                 portal = mesh.portals[q]

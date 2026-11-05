@@ -93,7 +93,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("targets", nargs="+", help="WAD short names (doom, doom2) and/or map names")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
-    ap.add_argument("--max-seconds", type=float, default=900)
+    ap.add_argument("--max-seconds", type=float, default=1500)
     ap.add_argument("--mortal", action="store_true", help="no god mode: floors hurt")
     ap.add_argument("--lives", type=int, default=1,
                     help="tries at a map (dying starts it again, knowing what was learned)")
