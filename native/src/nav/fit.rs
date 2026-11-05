@@ -15,6 +15,10 @@ use std::time::Instant;
 
 /// How far waypoints are kept from walls.
 const WAYPOINT_CLEARANCE: f64 = 18.0;
+/// How far the path is kept from wall corners: the box's corner, coming at one diagonally,
+/// and room to spare, as nobody follows a line to the unit (MAP24: the box a unit off a wall's
+/// end, and the player wedged against it two units off the line).
+const CORNER_CLEARANCE: f64 = PLAYER_RADIUS * std::f64::consts::SQRT_2 + 4.0;
 /// Extra room kept from solid things' corners when detouring round them.
 const THING_CLEARANCE: f64 = 6.0;
 /// The box checks' tolerance.
@@ -33,6 +37,7 @@ pub struct Squeezes {
 }
 
 /// How close to a wall a waypoint can be: enough for the box, whatever the wall's angle.
+/// (More than that squeezed MAP06's paths between waypoints.)
 fn box_clearance(a: Point, b: Point) -> f64 {
     let length = dist(a, b).max(1e-6);
     let (c, s) = ((b.0 - a.0).abs() / length, (b.1 - a.1).abs() / length);
@@ -623,13 +628,13 @@ impl Fitter<'_> {
     }
 
     /// The way from a to b (a already in `out`): if it passes too close to a corner, by a
-    /// waypoint PATH_CLEARANCE off it (recursively, a few deep).
+    /// waypoint CORNER_CLEARANCE off it (recursively, a few deep).
     fn round_corners(&mut self, a: Point, b: Point, depth: u32, out: &mut Vec<Point>) -> PyResult<()> {
         let mut worst: Option<(f64, Point, Point)> = None;
         if depth < 4 {
             let mut corners: Vec<Point> = Vec::new();
             let mut seen: HashSet<PointKey> = HashSet::new();
-            for (p1, p2) in self.walls_near(a, b, PATH_CLEARANCE)? {
+            for (p1, p2) in self.walls_near(a, b, CORNER_CLEARANCE)? {
                 for v in [p1, p2] {
                     if seen.insert(point_key(v)) {
                         corners.push(v);
@@ -640,7 +645,7 @@ impl Fitter<'_> {
             for v in corners {
                 let q = closest_point(v, a, b);
                 let d = dist(v, q);
-                if d < PATH_CLEARANCE - 1.0 && dist(v, a) > 1.0 && dist(v, b) > 1.0 && worst.is_none_or(|w| d < w.0) {
+                if d < CORNER_CLEARANCE - 1.0 && dist(v, a) > 1.0 && dist(v, b) > 1.0 && worst.is_none_or(|w| d < w.0) {
                     worst = Some((d, v, q));
                 }
             }
@@ -652,7 +657,7 @@ impl Fitter<'_> {
             } else {
                 ((q.0 - v.0) / d, (q.1 - v.1) / d)
             };
-            let w = (v.0 + ux * PATH_CLEARANCE, v.1 + uy * PATH_CLEARANCE);
+            let w = (v.0 + ux * CORNER_CLEARANCE, v.1 + uy * CORNER_CLEARANCE);
             let (wp, qp) = (self.nav.sector_at(w), self.nav.sector_at(q));
             if wp.is_some() && wp == qp && dist(w, a) > 4.0 && dist(w, b) > 4.0 && self.wall_clearance(w)? >= WAYPOINT_CLEARANCE {
                 self.round_corners(a, w, depth + 1, out)?;
