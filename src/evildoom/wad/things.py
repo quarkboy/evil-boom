@@ -31,3 +31,21 @@ SOLID_DECORATIONS: dict[int, int] = {
 
 # Solid things that can be destroyed (shot), so they don't block a route for good.
 SHOOTABLE_OBSTACLES = {2035}  # explosive barrel
+
+# Things that can be picked up (vanilla Doom / Doom II): thing type -> (name, category).
+PICKUPS: dict[int, tuple[str, str]] = {
+    5: ("blue keycard", "key"), 6: ("yellow keycard", "key"), 13: ("red keycard", "key"),
+    38: ("red skull key", "key"), 39: ("yellow skull key", "key"), 40: ("blue skull key", "key"),
+    2001: ("shotgun", "weapon"), 82: ("super shotgun", "weapon"), 2002: ("chaingun", "weapon"),
+    2003: ("rocket launcher", "weapon"), 2004: ("plasma rifle", "weapon"),
+    2005: ("chainsaw", "weapon"), 2006: ("BFG9000", "weapon"),
+    2007: ("clip", "ammo"), 2048: ("box of bullets", "ammo"), 2008: ("shells", "ammo"),
+    2049: ("box of shells", "ammo"), 2010: ("rocket", "ammo"), 2046: ("box of rockets", "ammo"),
+    2047: ("cell", "ammo"), 17: ("cell pack", "ammo"), 8: ("backpack", "ammo"),
+    2011: ("stimpack", "health"), 2012: ("medikit", "health"), 2014: ("health bonus", "health"),
+    2013: ("soulsphere", "health"), 83: ("megasphere", "health"),
+    2018: ("green armor", "armor"), 2019: ("blue armor", "armor"), 2015: ("armor bonus", "armor"),
+    2022: ("invulnerability", "powerup"), 2023: ("berserk", "powerup"),
+    2024: ("partial invisibility", "powerup"), 2025: ("radiation suit", "powerup"),
+    2026: ("computer area map", "powerup"), 2045: ("light amplification visor", "powerup"),
+}

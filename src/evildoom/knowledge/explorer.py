@@ -23,6 +23,7 @@ PLAN_SECONDS = 5.0
 GIVE_UP_TICS = 20 * TICRATE   # an objective not done by then is dropped for a while
 RETRY_TICS = 30 * TICRATE     # ...and offered again after this
 LOOK_TICS = TICRATE           # a turn on the spot, at the edge of the known map
+KEEP_REACH = 0.75             # an objective mustn't leave less than this share reachable
 
 
 @dataclass
@@ -130,7 +131,9 @@ class Explorer:
         out += self._unvisited(reach, pos)
         tic = obs.tic
         out = [o for o in out if tic - self._dropped.get(o.ident, -10**9) > RETRY_TICS]
-        # (not anywhere she couldn't get back from, as far as she knows: pits, one-way drops)
+        # (not anywhere that would cut her off from most of what she can get to now, as far as
+        # she knows: pits, one-way drops; where she stands may itself be a spot she can't get
+        # back to, so it's the share of the rest that counts)
         doors = view.local_doors(keys)
         back: dict[int, bool] = {}
 
@@ -141,7 +144,8 @@ class Explorer:
             if p is None:
                 return False
             if p.index not in back:
-                back[p.index] = here.index in view.reachable(p.index, states_all, doors)
+                after = view.reachable(p.index, states_all, doors)
+                back[p.index] = here.index in after or len(after & reach) >= KEEP_REACH * len(reach)
             return back[p.index]
         return [o for o in out if returnable(o)]
 

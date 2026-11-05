@@ -238,12 +238,12 @@ class Knowledge:
 
     def interactables(self) -> list[int]:
         """Mapped lines she can tell are switches or use-doors (or gun targets), not used
-        yet."""
+        yet (exits are told apart: see exits)."""
         used = {f.line for f in self.fired}
         out = []
         for li in sorted(self.mapped):
             info = self._special(li)
-            if info is not None and info.trigger in USED + SHOT and li not in used:
+            if info is not None and info.trigger in USED + SHOT and li not in used                     and info.category not in (Category.EXIT, Category.SECRET_EXIT):
                 out.append(li)
         return out
 
