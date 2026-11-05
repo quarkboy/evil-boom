@@ -38,6 +38,10 @@ OUTMATCHED = 15.0        # ...unless killing what's in sight would take longer t
 #                          then get past it (on the way to something better to fight with)
 SHORT_OF_AMMO = 15       # fewer shots than this for the guns held: supplies come first
 LOW_HEALTH = 35.0        # ...or below this health, anything in sight
+BARREL_CLEAR = 160.0     # with something shooting in sight, keep this far from barrels
+BARREL_NEAR = 96.0       # a barrel this near a monster (and well clear of her) is shot instead
+BARREL_TICS = 2 * TICRATE    # getting clear of barrels: at most this long at a time...
+BARREL_REST = 3 * TICRATE    # ...then not again for this long (E1M7: pressed against a wall for ever)
 STRAFE_TICS = (18, 40)   # a strafe one way lasts between these
 SWITCH_WAIT = 40         # a weapon switch asked for: give it this long before asking again
 
@@ -86,6 +90,9 @@ class Combat:
         self._rate = 0.0
         self._mode = ""
         self._dodging: int | None = None  # missile being dodged
+        self._barrel_way: tuple[float, float] | None = None  # getting clear of barrels this way
+        self._barrel_since = 0
+        self._barrel_rest_until = -10**9
 
     def restart(self) -> None:
         """A new life: the level from the start (what's been seen is remembered: it'll be
@@ -181,6 +188,12 @@ class Combat:
         weapon = 0
         if target is not None:
             aim, fire, weapon = self._aim_and_fire(obs, target)
+            shot = self._barrel_shot(obs)
+            if shot is not None and obs.weapon in (2, 3, 4):
+                # (MAP23: the barrels round the mancubus do what the pistol can't)
+                aim = _heading(pos, shot)
+                d = math.dist(shot, pos)
+                fire = abs(_norm(aim - obs.angle)) < max(0.75, math.degrees(math.atan2(8, d)))                     and d < WEAPONS[obs.weapon].reach
         health = obs.health if obs.health is not None else 100.0
         threat = self.threats(obs)
         outmatched = self.outmatched(obs)
@@ -189,9 +202,16 @@ class Combat:
         close = [t for t in close if math.dist((t.x, t.y), pos) < CLOSE + MONSTERS[t.name].radius]
         move = None
         why = ""
+        shooting = any(MONSTERS[t.name].attack in ("hitscan", "missile") for t in self.visible)
+        barrel = min(obs.barrels or (), key=lambda b: math.dist(b, pos), default=None)
         if missile is not None:
             move = self._dodge(obs, missile)
             why = f"dodging {missile.name}"
+        elif not busy and shooting and barrel is not None and math.dist(barrel, pos) < BARREL_CLEAR + 64                 and (away := self._from_barrels(obs, barrel)) is not None:
+            # (MAP23: a mancubus's fireball set off the barrels she stood by, at full health;
+            # once clear, she can set them off on it)
+            move = away
+            why = "away from a barrel"
         elif busy:
             why = "shooting on the way"
         elif close:
@@ -275,6 +295,55 @@ class Combat:
         on = abs(_norm(aim - obs.angle)) < tolerance
         ok = d < min(ENGAGE_RANGE, w.reach) and (held != 5 or self._rocket_safe(obs, t))
         return aim, on and ok, weapon
+
+    def _barrel_shot(self, obs: Observation) -> tuple[float, float] | None:
+        """A barrel she can see right by a monster, well clear of her: shoot that."""
+        pos = (obs.x, obs.y)
+        barrels = [b for b in obs.barrels or () if math.dist(b, pos) > BARREL_CLEAR + 64
+                   and any(math.dist(b, (t.x, t.y)) < BARREL_NEAR + MONSTERS[t.name].radius
+                           for t in self.visible)]
+        if not barrels:
+            return None
+        heights = self._heights(obs)
+        me = (obs.x, obs.y, self._z(obs), PLAYER_HEIGHT)
+        floor = self._floor_at
+        seen = self.los.visible(me, [(b[0], b[1], floor(obs, b), 32.0) for b in barrels], heights)
+        open_ = [b for b, v in zip(barrels, seen) if v]
+        return min(open_, key=lambda b: math.dist(b, pos)) if open_ else None
+
+    def _floor_at(self, obs: Observation, p: tuple[float, float]) -> float:
+        poly = self.nav.mesh.poly_at(*p)
+        return obs.heights.get(poly.sector, (0.0, 0.0))[0] if poly is not None else 0.0
+
+    def _from_barrels(self, obs: Observation, nearest: tuple[float, float]) -> tuple[float, float] | None:
+        """The way to go to get clear of the barrels by her: the way she's going already if
+        it's still safe and clearing them (no dithering), else a new one; None once she's
+        clear (or can't get so)."""
+        pos = (obs.x, obs.y)
+        if obs.tic < self._barrel_rest_until:
+            return None
+        if self._barrel_way is None:
+            self._barrel_since = obs.tic
+        elif obs.tic - self._barrel_since > BARREL_TICS:
+            self._barrel_way = None
+            self._barrel_rest_until = obs.tic + BARREL_REST
+            return None
+        if math.dist(nearest, pos) >= BARREL_CLEAR + (64 if self._barrel_way is not None else 0):
+            self._barrel_way = None
+            return None
+        way = self._barrel_way
+        if way is not None and self._safe(obs, way, 48.0) and self._clear_of_barrels(obs, way):
+            return way
+        way = self._away_from(obs, nearest)
+        self._barrel_way = way if way is not None and self._clear_of_barrels(obs, way) else None
+        return self._barrel_way
+
+    def _clear_of_barrels(self, obs: Observation, d: tuple[float, float]) -> bool:
+        """Does going that way (a second's run) leave her further from every barrel near her?"""
+        pos = (obs.x, obs.y)
+        ahead = (pos[0] + d[0] * 96, pos[1] + d[1] * 96)
+        near = [b for b in obs.barrels or () if math.dist(b, pos) < BARREL_CLEAR]
+        return all(math.dist(b, ahead) > math.dist(b, pos) for b in near)
 
     def _rocket_safe(self, obs: Observation, t: Thing) -> bool:
         """Is a rocket at t sure not to blow up by her: t well clear, nothing else near her or
