@@ -252,10 +252,15 @@ impl Fitter<'_> {
         };
         let (fs, bs) = (self.heights(f)?, self.heights(b)?);
         let Some(ours) = self.standing_floor_cached(at, standing)? else { return Ok(false) };
+        // a ledge (at the heights now, not only those at the start: MAP17's pillar rose out of
+        // the floor and a path cut its corner): in the way if its high side is more than a step
+        // above where we stand
+        let high = fs.iter().flat_map(|hf| bs.iter().map(|hb| hf.floor.max(hb.floor))).fold(f64::INFINITY, f64::min);
+        if ours + MAX_STEP < high {
+            return Ok(true);
+        }
         if nav.drops.contains(&li) {
-            // a ledge: in the way if the lower side is more than a step below where we stand
-            let low = fs.iter().flat_map(|hf| bs.iter().map(|hb| hf.floor.max(hb.floor))).fold(f64::INFINITY, f64::min);
-            return Ok(ours + MAX_STEP < low);
+            return Ok(false);
         }
         // an opening: in the way if it's too low over where we stand
         let top = fs.iter().flat_map(|hf| bs.iter().map(|hb| hf.ceiling.min(hb.ceiling))).fold(f64::NEG_INFINITY, f64::max);

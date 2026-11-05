@@ -298,7 +298,7 @@ class Explorer:
         """Reachable polys she hasn't stood in across a line from ones she has: just over the
         line (all a walk-over line needs, and a strip's middle may have no room for the box:
         E4M7's, against a platform)."""
-        k, mesh, lab = self.knowledge, self.nav.mesh, self.nav.jump_lab()
+        k, mesh = self.knowledge, self.nav.mesh
         out = []
         for pi in sorted(reach - k.visited):
             poly = mesh.polys[pi]
@@ -315,23 +315,28 @@ class Explorer:
                 spot = (mid[0] + (poly.center[0] - mid[0]) / d * THRESHOLD_IN,
                         mid[1] + (poly.center[1] - mid[1]) / d * THRESHOLD_IN)
                 at = mesh.poly_at(*spot)
-                clear, floor, ceiling = lab.fits_at(*spot)
-                if at is None or at.index != pi or not clear or ceiling - floor < PLAYER_HEIGHT:
+                if at is None or at.index != pi or not self._standable(spot):
                     continue  # (a sliver by a wall or shut door the box can't stand in)
                 out.append(Objective("visit", spot, f"step over line {portal.linedef}",
                                      reveals=frozenset({pi})))
                 break
         return out
 
+    def _standable(self, q) -> bool:
+        """Can the box stand at q, come to from the floor there: clear of walls and things,
+        room overhead, and not hanging over a floor more than a step higher (MAP16's goal had
+        the box's edge up on a ledge 96 high)?"""
+        clear, floor, ceiling = self.nav.jump_lab().fits_at(*q)
+        here = self.nav.mesh.poly_at(*q)
+        centre = self.nav.movers.initial[here.sector][0] if here is not None else floor
+        return clear and ceiling - floor >= PLAYER_HEIGHT and floor <= centre + MAX_STEP
+
     def _stand_spot(self, spot, reach: set[int]):
         """`spot`, if the box can stand there; else the middle of its poly, or of one next to
         it she can get to, where it can (E3M4: a look-out in a thin strip by a shut door,
         tried for ever)."""
-        mesh, lab = self.nav.mesh, self.nav.jump_lab()
-
-        def standable(q) -> bool:
-            clear, floor, ceiling = lab.fits_at(*q)
-            return clear and ceiling - floor >= PLAYER_HEIGHT
+        mesh = self.nav.mesh
+        standable = self._standable
         if standable(spot):
             return spot
         poly = mesh.poly_at(*spot)
@@ -409,13 +414,8 @@ class Explorer:
         mesh, m, k = self.nav.mesh, self.nav.map, self.knowledge
         heights = [tuple(k.seen_heights.get(i, (sec.floor, sec.ceiling)))
                    for i, sec in enumerate(m.sectors)]
-        lab = self.nav.jump_lab()
-
-        def standable(q) -> bool:
-            clear, floor, ceiling = lab.fits_at(*q)
-            return clear and ceiling - floor >= PLAYER_HEIGHT
         # (only spots the box can stand at: E4M7's was in a shut door)
-        centres = [(mesh.polys[p].center, p) for p in reach if standable(mesh.polys[p].center)]
+        centres = [(mesh.polys[p].center, p) for p in reach if self._standable(mesh.polys[p].center)]
         out = []
         for s, lines in k.unseen_walls().items():
             best = None
@@ -444,7 +444,6 @@ class Explorer:
         walk-over lines nobody can see, often right across a room): per sector, the reachable
         poly furthest from anywhere she's stood, if that's far enough to be worth it."""
         k, mesh = self.knowledge, self.nav.mesh
-        lab = self.nav.jump_lab()
         stood = [mesh.polys[p].center for p in k.visited]
         entered = {mesh.polys[p].sector for p in k.visited}
         best: dict[int, tuple[float, int]] = {}
@@ -453,8 +452,7 @@ class Explorer:
             poly = mesh.polys[pi]
             if pi in k.visited or k.damaging(poly.sector):
                 continue  # (not wading through nukage just to look)
-            clear, floor, ceiling = lab.fits_at(*poly.center)
-            if not clear or ceiling - floor < PLAYER_HEIGHT:
+            if not self._standable(poly.center):
                 continue  # (the box can't stand there: an 8-wide strip by a shut door, E1M4)
             if poly.sector not in entered:
                 d = math.dist(poly.center, pos)

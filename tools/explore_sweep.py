@@ -56,6 +56,8 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                 deaths += 1
                 x.log.append(f"tic {e.tic}: {'died' if e.dead else 'stranded'}: starting again")
                 e.restart(keep_time=True)
+                if not mortal:
+                    e.game.send_game_command("god")  # (a new episode drops the cheat)
                 x.restart()
                 c = None
                 idle_since = None
