@@ -19,7 +19,7 @@ from evildoom.nav.reach import HeightStates, Navigator, TriggerLine, can_cross
 from evildoom.nav.walkthrough import Step, _action_for, steps_from_legs
 from evildoom.wad.specials import Category, Key
 
-PLAN_SECONDS = 5.0
+PLAN_SECONDS = 1.5
 GIVE_UP_TICS = 20 * TICRATE   # an objective not done by then is dropped for a while
 RETRY_TICS = 30 * TICRATE     # ...and offered again after this
 LOOK_TICS = TICRATE           # a turn on the spot, at the edge of the known map
@@ -33,6 +33,8 @@ HEAR_NEARER = 128.0           # a noise is worth walking towards if it gets her 
 ROOM_SPOTS = 6                # reachable spots tried for seeing an unseen wall from
 ROOM_LOOK_RANGE = 768.0       # an unseen wall is looked at from a reachable spot this near it
 COVER_GAP = 96.0              # a room's walked once nowhere in it is further than this from her steps
+WADE_LIMIT = 256.0            # how far over a hurting floor a route may go, normally
+WADE_HEALTH = 50.0            # ...and not at all below this health
 KEEP_REACH = 0.75             # an objective mustn't leave less than this share reachable
 
 
@@ -57,7 +59,7 @@ class Objective:
     @property
     def ident(self) -> tuple:
         return (self.kind, self.trigger.line if self.trigger else None, self.key,
-                self.reveals or None)
+                self.reveals or None, self.risky)
 
 
 @dataclass
@@ -119,7 +121,7 @@ class Explorer:
 
     # --- objectives ---------------------------------------------------------------------
 
-    def objectives(self, obs: Observation) -> list[Objective]:
+    def objectives(self, obs: Observation, risky: bool = False) -> list[Objective]:
         """What Evil could go and do now."""
         nav, k, view = self.nav, self.knowledge, self.view()
         pos = (obs.x, obs.y)
@@ -158,7 +160,8 @@ class Explorer:
         out += self._unvisited(reach, pos)
         out += self._noises(reach, pos, obs.tic)
         tic = obs.tic
-        out = [o for o in out if tic - self._dropped.get(o.ident, -10**9) > RETRY_TICS]
+        def fresh(o: Objective) -> bool:  # (not dropped lately)
+            return tic - self._dropped.get(o.ident, -10**9) > RETRY_TICS
         # (not anywhere that would cut her off from most of what she can get to now, as far as
         # she knows: pits, one-way drops; where she stands may itself be a spot she can't get
         # back to, so it's the share of the rest that counts)
@@ -175,11 +178,10 @@ class Explorer:
                 after = view.reachable(p.index, states_all, doors)
                 back[p.index] = here.index in after or len(after & reach) >= KEEP_REACH * len(reach)
             return back[p.index]
-        safe = [o for o in out if returnable(o)]
-        if safe or not out:
-            return safe
-        # nothing left this side of a one-way drop: over it, then
-        return [replace(o, label=o.label + " (one way)", risky=True) for o in out]
+        if risky:
+            # nothing safe left: anything, one-way drops and nukage and all
+            return [r for o in out if fresh(r := replace(o, label=o.label + " (risky)", risky=True))]
+        return [o for o in out if fresh(o) and returnable(o)]
 
     def _frontier(self, reach: set[int], pos) -> list[Objective]:
         """Known polys she can get to next to polys she hasn't seen: one per unknown sector
@@ -293,7 +295,7 @@ class Explorer:
         best: dict[int, tuple[float, int]] = {}
         for pi in reach:
             poly = mesh.polys[pi]
-            if pi in k.visited or self.nav.damage[poly.sector]:
+            if pi in k.visited or k.damaging(poly.sector):
                 continue  # (not wading through nukage just to look)
             gap = min((math.dist(poly.center, c) for c in stood), default=math.inf)
             if gap < COVER_GAP:
@@ -326,10 +328,10 @@ class Explorer:
         return [Objective("recheck", c, f"look at sector {s} again", reveals=frozenset({s}))
                 for s, (_, c) in best.items()]
 
-    def choose(self, obs: Observation) -> Objective | None:
+    def choose(self, obs: Observation, risky: bool = False) -> Objective | None:
         """The explorer's pick: the exit if it can get there, else the nearest objective
         (keys and untried switches a little ahead of the edge of the map)."""
-        options = self.objectives(obs)
+        options = self.objectives(obs, risky)
         exits = [o for o in options if o.kind == "exit"]
         if exits:
             return exits[0]
@@ -339,6 +341,25 @@ class Explorer:
         pos = (obs.x, obs.y)
         options.sort(key=lambda o: math.dist(o.goal, pos) * weight[o.kind])
         return options[0] if options else None
+
+    def _wading(self, waypoints) -> float:
+        """How far a path goes over floors she takes to hurt."""
+        mesh, k = self.nav.mesh, self.knowledge
+        out = 0.0
+        prev = None
+        for p in waypoints:
+            if p is None or prev is None:
+                prev = p
+                continue
+            n = max(1, int(math.dist(prev, p) // 16))
+            step = math.dist(prev, p) / n
+            for i in range(n):
+                q = (prev[0] + (p[0] - prev[0]) * (i + 0.5) / n, prev[1] + (p[1] - prev[1]) * (i + 0.5) / n)
+                poly = mesh.poly_at(*q)
+                if poly is not None and k.damaging(poly.sector):
+                    out += step
+            prev = p
+        return out
 
     def route_to(self, obj: Objective, obs: Observation) -> list[Step] | None:
         """Steps to get to an objective and do it, through what's known (using switches
@@ -365,16 +386,34 @@ class Explorer:
             action = _action_for(obj.trigger)
             last = Step(None, "exit" if obj.kind == "exit" and action == "use" else action,
                         obj.trigger, label=obj.label)
-        if obj.kind != "exit" and not obj.risky:
-            # (no dropping into nukage and the like, but to leave: a pit she believes she can
-            # climb out of may well be a death trap)
+        if obj.kind != "exit" and not obj.risky and not self.knowledge.protected(obs.tic):
+            # (nukage and the like only for a few steps, and never dropping into it: a pit she
+            # believes she can get out of may well be a death trap; but to leave, or when
+            # there's nothing else)
+            wade = 0.0
             for leg in route.legs:
-                for note in leg.path.steps:
-                    if "one-way drop" in note and self.nav.damage[int(note.rsplit(" ", 1)[1])]:
-                        return None
+                if any("one-way drop" in n and self.knowledge.damaging(int(n.rsplit(" ", 1)[1]))
+                       for n in leg.path.steps):
+                    return None
+                wade += self._wading(leg.path.waypoints)
+            if wade > WADE_LIMIT or (wade > 0 and obs.health is not None and obs.health < WADE_HEALTH):
+                return None
         return steps_from_legs(route.legs, last, view, states)
 
     # --- playing ------------------------------------------------------------------------
+
+    def restart(self) -> None:
+        """Died: the level from the start again, keeping what's known of it (Knowledge.restart).
+        Whatever she was doing is dropped; the next pick is the exit if she knows the way."""
+        self.knowledge.restart()
+        self.log.append(f"--- died: life {self.knowledge.lives}")
+        self.current = self.follower = None
+        self._dropped.clear()
+        self._look_until = self._glance_until = None
+        self._heard_n = len(self.knowledge.heard)
+        self._glanced = len(self.knowledge.fired)
+        self._sector = None
+        self._view = None
 
     def act(self, obs: Observation, last: Controls | None = None) -> Controls:
         self.knowledge.update(obs, last)
@@ -514,13 +553,17 @@ class Explorer:
 
     def _next(self, obs: Observation) -> None:
         self.follower = None
+        if not self._try_objectives(obs, risky=False) and not self._try_objectives(obs, risky=True):
+            if self.current is not None:
+                self.log.append(f"tic {obs.tic}: nothing left to do")
+            self.current = None
+
+    def _try_objectives(self, obs: Observation, risky: bool) -> bool:
+        """Take up the best objective there's a route to (a few tried); False if none."""
         for _ in range(6):
-            obj = self.choose(obs)
+            obj = self.choose(obs, risky)
             if obj is None:
-                if self.current is not None:
-                    self.log.append(f"tic {obs.tic}: nothing left to do")
-                self.current = None
-                return
+                return False
             steps = self.route_to(obj, obs)
             if steps:
                 self.current, self._since = obj, obs.tic
@@ -530,6 +573,6 @@ class Explorer:
                                               tic=obs.tic)
                 self.log.append(f"tic {obs.tic}: {obj.label} ({len(steps)} steps) | "
                                 f"{self.knowledge.summary()}")
-                return
+                return True
             self._drop(obj, obs, "no route")
-        self.current = None
+        return False

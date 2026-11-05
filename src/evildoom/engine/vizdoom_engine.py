@@ -72,6 +72,7 @@ class VizDoomEngine:
         self.game.make_action([0] * len(BUTTONS), WARMUP_TICS)
         self.tic = WARMUP_TICS
         self._keys_at_start = None
+        self._suits_at_start = None
 
     @property
     def finished(self) -> bool:
@@ -88,12 +89,13 @@ class VizDoomEngine:
 
     def observe(self) -> Observation:
         state = self.game.get_state()
-        x, y, angle, _health, z, weapon = state.game_variables
+        x, y, angle, health, z, weapon = state.game_variables
         heights = {s.id: (s.floor_height, s.ceiling_height) for s in state.sectors}
         barrels = tuple((o.position_x, o.position_y) for o in state.objects
                         if o.name == "ExplosiveBarrel")
         return Observation(float(x), float(y), float(angle), heights, self.tic,
-                           self._keys_held(state), float(z), int(weapon), barrels)
+                           self._keys_held(state), float(z), int(weapon), barrels, float(health),
+                           self._suits_taken(state))
 
     def _keys_held(self, state) -> frozenset:
         """Keys picked up so far: key items present at the start that have gone."""
@@ -106,15 +108,25 @@ class VizDoomEngine:
         return frozenset(KEY_OBJECTS[n] for n, c in self._keys_at_start.items()
                          if now.get(n, 0) < c)
 
+    def _suits_taken(self, state) -> int:
+        """Radiation suits picked up so far (ones present at the start that have gone)."""
+        now = sum(o.name == "RadSuit" for o in state.objects)
+        if self._suits_at_start is None:
+            self._suits_at_start = now
+        return self._suits_at_start - now
+
     def state(self):
         """The raw ViZDoom GameState (screen buffer, objects, ...), or None after the end."""
         return self.game.get_state()
 
-    def restart(self) -> None:
+    def restart(self, keep_time: bool = False) -> None:
+        """The level from the start again (`keep_time`: the tic count carries on, for
+        another life in the same run)."""
         self.game.new_episode()
         self.game.make_action([0] * len(BUTTONS), WARMUP_TICS)
-        self.tic = WARMUP_TICS
+        self.tic = self.tic + WARMUP_TICS if keep_time else WARMUP_TICS
         self._keys_at_start = None
+        self._suits_at_start = None
 
     def step(self, c: Controls) -> None:
         self.game.make_action([c.forward, c.strafe, c.turn, float(c.use), float(c.attack),

@@ -57,7 +57,9 @@ def key_colour(name: str):
 
 
 class Watch:
-    def __init__(self, iwad: Path, map_name: str, speed: float, snapshot: float | None = None):
+    def __init__(self, iwad: Path, map_name: str, speed: float, snapshot: float | None = None,
+                 mortal: bool = False, lives: int = 1):
+        self.lives_left = lives - 1
         self.map_name = map_name
         self.snapshot = snapshot
         self.m = load_map(Wad(iwad), map_name)
@@ -66,9 +68,10 @@ class Watch:
         self.engine = VizDoomEngine(iwad, map_name, size=VIEW_SIZE, rgb=True)
         self.engine.game.add_game_args("+sv_cheats 1")
         self.engine.start()
-        self.engine.game.send_game_command("god")
+        if not mortal:
+            self.engine.game.send_game_command("god")
         width = int(VIEW_SIZE.split("x")[0])
-        self.x = Explorer(self.nav, Knowledge(self.nav, width=width))
+        self.x = Explorer(self.nav, Knowledge(self.nav, width=width, mortal=mortal))
         self.speed = speed
         self.paused = False
         self.show_all = False
@@ -117,6 +120,12 @@ class Watch:
             owed += (now - last_frame) * TICRATE * self.speed
             last_frame = now
             owed = min(owed, 8)  # (don't race to catch up after a slow plan)
+            if self.engine.dead and self.lives_left > 0 and not self.paused:
+                self.lives_left -= 1
+                self.engine.restart(keep_time=True)
+                self.x.restart()
+                self.controls = None
+                self.finished_at = None
             while owed >= 1 and not self.paused and not self.engine.finished:
                 self.tic()
                 owed -= 1
@@ -291,7 +300,12 @@ class Watch:
         k, x, obs = self.x.knowledge, self.x, self.obs
         left, right = PANEL.x + 8, PANEL.x + 410
         tic = obs.tic if obs else 0
-        state = "EXITED" if self.engine.exited else "paused" if self.paused else "exploring"
+        state = "EXITED" if self.engine.exited else "DIED" if self.engine.dead else \
+            "paused" if self.paused else "exploring"
+        if obs is not None and obs.health is not None:
+            state += f"  {obs.health:.0f}hp"
+        if k.protected(tic):
+            state += f"  suit {(k.suit_until - tic) / TICRATE:.0f}s"
         y = self.text(f"{self.map_name}  {tic / TICRATE:6.1f}s  x{self.speed:g}  {state}",
                       (left, PANEL.y + 4), HEAD, self.big)
         cur = x.current
@@ -356,10 +370,12 @@ def main() -> None:
     ap.add_argument("map", help="e.g. E1M1, MAP02")
     ap.add_argument("--speed", type=float, default=1.0, help="game speed (1 = real time)")
     ap.add_argument("--all", action="store_true", help="start with the whole map shown (A)")
+    ap.add_argument("--mortal", action="store_true", help="no god mode: floors hurt")
+    ap.add_argument("--lives", type=int, default=1, help="tries at the map (with --mortal)")
     ap.add_argument("--snapshot", type=float, metavar="SECONDS",
                     help="save the window to out/watch.png after this much game time, and quit")
     a = ap.parse_args()
-    w = Watch(resolve_wad(a.wad), a.map.upper(), a.speed, a.snapshot)
+    w = Watch(resolve_wad(a.wad), a.map.upper(), a.speed, a.snapshot, a.mortal, a.lives)
     w.show_all = a.all
     w.run()
 

@@ -19,7 +19,8 @@ sys.path.insert(0, str(ROOT / "src"))
 OUT = ROOT / "out" / "explore"
 
 
-def run_map(wad: str, map_name: str, max_seconds: float) -> tuple[str, str, str]:
+def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
+            lives: int = 1) -> tuple[str, str, str]:
     from evildoom.config import resolve_wad
     from evildoom.engine.jump_check import keep_verified
     from evildoom.engine.vizdoom_engine import VizDoomEngine
@@ -37,11 +38,22 @@ def run_map(wad: str, map_name: str, max_seconds: float) -> tuple[str, str, str]
     e = VizDoomEngine(iwad, map_name)
     e.game.add_game_args("+sv_cheats 1")
     e.start()
-    e.game.send_game_command("god")
-    x = Explorer(nav)
+    if not mortal:
+        e.game.send_game_command("god")
+    from evildoom.knowledge.model import Knowledge
+    x = Explorer(nav, Knowledge(nav, mortal=mortal))
     c = obs = None
     t0 = time.perf_counter()
-    while not e.finished and e.tic < max_seconds * TICRATE:
+    deaths = 0
+    while e.tic < max_seconds * TICRATE:
+        if e.finished:
+            if e.dead and deaths + 1 < lives:
+                deaths += 1
+                e.restart(keep_time=True)
+                x.restart()
+                c = None
+                continue
+            break
         obs = e.observe()
         c = x.act(obs, c)
         e.step(c)
@@ -67,8 +79,8 @@ def run_map(wad: str, map_name: str, max_seconds: float) -> tuple[str, str, str]
                          f"activators known {len(t.activators & known_polys)}/{len(t.activators)}, "
                          f"effect sectors known {sum(s in k.sectors for s in t.effects)}/{len(t.effects)}")
     e.close()
-    outcome = "EXITED" if exited else "STUCK"
-    detail = f"{game_s:.0f}s game, {time.perf_counter() - t0:.0f}s real; {k.summary()}"
+    outcome = "EXITED" if exited else "DIED" if e.dead else "STUCK"
+    detail = f"{game_s:.0f}s game, {time.perf_counter() - t0:.0f}s real, {deaths} deaths; {k.summary()}"
     lines.append(f"RESULT {outcome} {detail}")
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f"{iwad.stem.upper()}_{map_name}.txt").write_text("\n".join(lines) + "\n")
@@ -82,6 +94,9 @@ def main() -> None:
     ap.add_argument("targets", nargs="+", help="WAD short names (doom, doom2) and/or map names")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     ap.add_argument("--max-seconds", type=float, default=900)
+    ap.add_argument("--mortal", action="store_true", help="no god mode: floors hurt")
+    ap.add_argument("--lives", type=int, default=1,
+                    help="tries at a map (dying starts it again, knowing what was learned)")
     a = ap.parse_args()
     groups: list[tuple[str, list[str]]] = []  # (wad, maps named after it)
     for t in a.targets:
@@ -94,7 +109,7 @@ def main() -> None:
     jobs = [(w, mp) for w, maps in groups for mp in (maps or Wad(resolve_wad(w)).map_names())]
     results = []
     with ProcessPoolExecutor(a.jobs) as pool:
-        futs = {pool.submit(run_map, w, n, a.max_seconds): (w, n) for w, n in jobs}
+        futs = {pool.submit(run_map, w, n, a.max_seconds, a.mortal, a.lives): (w, n) for w, n in jobs}
         for i, f in enumerate(as_completed(futs), 1):
             w, n = futs[f]
             try:

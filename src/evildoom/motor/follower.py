@@ -94,6 +94,8 @@ class Observation:
     z: float | None = None                        # height of the player's feet
     weapon: int | None = None                     # weapon slot held, if the engine can tell
     barrels: tuple | None = None                  # where explosive barrels are now, if known
+    health: float | None = None                   # the player's health, if the engine can tell
+    suits: int | None = None                      # radiation suits picked up so far, if known
 
 
 @dataclass

@@ -31,7 +31,12 @@ TELEPORT_JUMP = 64.0   # further than this in a tic is a teleport
 TELEPORT_NEAR = 48.0   # ...through a teleport line this near where she was
 NEAR_SOUND = 128.0       # a sound this near is something she'll see anyway
 EXPECTED_RADIUS = 128.0  # a sound this near a known mover's is that mover
+FELT_TICS = 70          # unhurt on a floor this long: it doesn't hurt
+SUIT_TICS = 60 * 35     # a radiation suit lasts a minute
 TICS_SAME_SOUND = 4   # sounds this close together from the same way are one
+
+# Floors that look like they'd hurt (liquids): nukage, lava, blood, the slimes.
+HAZARD_FLATS = ("NUKAGE", "LAVA", "BLOOD", "SLIME0")
 
 USED = (Trigger.S1, Trigger.SR, Trigger.D1, Trigger.DR)
 WALKED = (Trigger.W1, Trigger.WR)
@@ -61,6 +66,9 @@ class Heard:
 class Knowledge:
     nav: Navigator
     width: int = VIEW_WIDTH
+    # does she get hurt (no god mode): then a floor's harm is learned from her health, else
+    # from standing on it
+    mortal: bool = False
     mapped: set[int] = field(default_factory=set)       # linedefs seen
     sectors: set[int] = field(default_factory=set)      # sectors seen (either side of a mapped line)
     seen_heights: dict[int, tuple[float, float]] = field(default_factory=dict)  # when last seen
@@ -70,6 +78,9 @@ class Knowledge:
     teleports: dict[int, tuple[float, float]] = field(default_factory=dict)  # used line -> where it took us
     visited: set[int] = field(default_factory=set)      # polys stood in
     heard: list[Heard] = field(default_factory=list)
+    felt: dict[int, bool] = field(default_factory=dict)  # sector stood on -> did it hurt
+    suit_until: int | None = None  # radiation suit on until this tic
+    lives: int = 1                 # tries at the level so far
     events: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -83,6 +94,7 @@ class Knowledge:
         self._info = {i: info for i, line in enumerate(m.linedefs)
                       if (info := classify_line(line.special)) is not None}
         self._last: Observation | None = None
+        self._standing: tuple[int, int] | None = None  # (sector, since tic) on its floor
         # where each sector's sounds come from: the middle of its bounding box (P_GroupLines)
         box: dict[int, list[float]] = {}
         for line in m.linedefs:
@@ -154,10 +166,15 @@ class Knowledge:
         poly = self.nav.mesh.poly_at(obs.x, obs.y)
         if poly is not None:
             self.visited.add(poly.index)
+            on_floor = obs.z is None or obs.z <= heights[poly.sector][0] + 1
+            self._feel(poly.sector if on_floor else None, obs)
             in_view.add(poly.sector)
             if poly.sector not in self.sectors:
                 self.sectors.add(poly.sector)
         last = self._last
+        if last is not None and obs.suits is not None and last.suits is not None and obs.suits > last.suits:
+            self.suit_until = obs.tic + SUIT_TICS
+            self.events.append(f"tic {obs.tic}: radiation suit on")
         if last is not None:
             if math.dist((last.x, last.y), (obs.x, obs.y)) > TELEPORT_JUMP:
                 self._teleported(last, obs)
@@ -421,6 +438,65 @@ class Knowledge:
                 if s is not None and s in self.sectors:
                     out.setdefault(s, []).append(li)
         return out
+
+    def restart(self) -> None:
+        """The level started again (after dying): what she knows of the map stays (what she
+        has seen, what lines do, which floors hurt, where teleporters go, where she's walked,
+        what she's tried); what was so this time goes. The level is as at the start again,
+        so the heights she knows go back to those (where she saw them so: else as seen)."""
+        m = self.nav.map
+        for s in self.sectors:
+            self.seen_heights[s] = (float(m.sectors[s].floor), float(m.sectors[s].ceiling))
+        self.suit_until = None
+        self._last = None
+        self._standing = None
+        self._live = {}
+        self._moving = set()
+        self.lives += 1
+        self.events.append(f"--- life {self.lives}: the level from the start, knowing what she knew")
+
+    def _feel(self, s: int | None, obs: Observation) -> None:
+        """What standing on sector s's floor (None: not on a floor) tells her about it: it
+        hurts if her health drops there, it doesn't if she's stood there a while unhurt
+        (floors hurt every 32 tics). Without being hurt at all (god mode): it's as the map
+        has it, found out by standing on it."""
+        if s is None:
+            self._standing = None
+            return
+        if not self.mortal:
+            if s not in self.felt:
+                self._learn_floor(s, bool(self.nav.damage[s]), obs.tic)
+            return
+        last = self._last
+        if self._standing is None or self._standing[0] != s:
+            self._standing = (s, obs.tic)
+        if last is not None and obs.health is not None and last.health is not None \
+                and obs.health < last.health:
+            self._learn_floor(s, True, obs.tic)
+        elif obs.tic - self._standing[1] > FELT_TICS and self.felt.get(s) is not False \
+                and not self.protected(obs.tic):
+            self._learn_floor(s, False, obs.tic)
+
+    def _learn_floor(self, s: int, hurts: bool, tic: int) -> None:
+        if self.felt.get(s) == hurts:
+            return
+        self.felt[s] = hurts
+        if hurts != self.looks_damaging(s):
+            self.events.append(f"tic {tic}: sector {s} " + ("hurts after all" if hurts else "doesn't hurt after all"))
+
+    def protected(self, tic: int) -> bool:
+        """Is she wearing a radiation suit (one picked up in the last minute)?"""
+        return self.suit_until is not None and tic < self.suit_until
+
+    def looks_damaging(self, s: int) -> bool:
+        """A floor that looks like it would hurt (its flat is a liquid)."""
+        return self.nav.map.sectors[s].floor_tex.upper().startswith(HAZARD_FLATS)
+
+    def damaging(self, s: int) -> bool:
+        """Does she take sector s's floor to hurt: as found out by standing on it, else by
+        its look."""
+        felt = self.felt.get(s)
+        return self.looks_damaging(s) if felt is None else felt
 
     def expected(self, h: Heard) -> bool:
         """A sound from something she knows moves (a door or lift she's learned: the one she
