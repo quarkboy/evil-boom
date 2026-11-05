@@ -38,6 +38,7 @@ GLANCE_AFTER = 8              # tics after a walk-over line goes off unseen, bef
 HEAR_NEARER = 128.0           # a noise is worth walking towards if it gets her this much nearer
 ROOM_SPOTS = 6                # reachable spots tried for seeing an unseen wall from
 ROOM_LOOK_RANGE = 768.0       # an unseen wall is looked at from a reachable spot this near it
+FRONTIER_BACK = 24.0          # a frontier's look-out: this far back from the way into the unseen
 COVER_GAP = 96.0              # a room's walked once nowhere in it is further than this from her steps
 WADE_LIMIT = 256.0            # how far over a hurting floor a route may go, normally
 WADE_HEALTH = 50.0            # ...and not at all below this health
@@ -139,6 +140,11 @@ class Explorer:
             if not t.permanent:
                 for s in sectors:
                     out[s] = out[s] | {tuple(self.nav.movers.initial[s])}
+        # a slot narrower than the box is walked over at its sides' floor, however deep she
+        # saw it (E4M1's 8-unit slot by the blue key room, seen at its real floor, was a pit)
+        for tr in self.nav.trenches:
+            floor = self.nav.trench_floor(tr, lambda o: min(h[0] for h in out[o]))
+            out[tr] = {(floor, h[1]) for h in out[tr]}
         return out
 
     def view(self) -> Navigator:
@@ -240,15 +246,44 @@ class Explorer:
         for pi in reach:
             poly = mesh.polys[pi]
             for portal in poly.portals:
-                other = mesh.polys[mesh.portals[portal].other(pi)]
+                q = mesh.portals[portal]
+                other = mesh.polys[q.other(pi)]
                 if other.index in known:
                     continue
                 unseen.setdefault(other.sector, set()).add(other.index)
-                d = math.dist(poly.center, pos)
+                # look from the way in, just this side of it (from the poly's middle it can be
+                # round a corner: E2M4)
+                mid = ((q.p1[0] + q.p2[0]) / 2, (q.p1[1] + q.p2[1]) / 2)
+                back = math.dist(mid, poly.center)
+                k = min(1.0, FRONTIER_BACK / back) if back > 0 else 0.0
+                spot = (mid[0] + (poly.center[0] - mid[0]) * k, mid[1] + (poly.center[1] - mid[1]) * k)
+                if mesh.poly_at(*spot) is None or mesh.poly_at(*spot).index != pi:
+                    spot = poly.center
+                d = math.dist(spot, pos)
                 if other.sector not in best or d < best[other.sector][0]:
-                    best[other.sector] = (d, poly.center)
-        return [Objective("frontier", c, f"look into sector {s}", reveals=frozenset(unseen[s]))
+                    best[other.sector] = (d, spot)
+        return [Objective("frontier", self._stand_spot(c, reach), f"look into sector {s}", reveals=frozenset(unseen[s]))
                 for s, (_, c) in best.items()]
+
+    def _stand_spot(self, spot, reach: set[int]):
+        """`spot`, if the box can stand there; else the middle of its poly, or of one next to
+        it she can get to, where it can (E3M4: a look-out in a thin strip by a shut door,
+        tried for ever)."""
+        mesh, lab = self.nav.mesh, self.nav.jump_lab()
+
+        def standable(q) -> bool:
+            clear, floor, ceiling = lab.fits_at(*q)
+            return clear and ceiling - floor >= PLAYER_HEIGHT
+        if standable(spot):
+            return spot
+        poly = mesh.poly_at(*spot)
+        if poly is None:
+            return spot
+        around = [poly.index] + [mesh.portals[q].other(poly.index) for q in poly.portals]
+        for pi in around:
+            if pi in reach and standable(mesh.polys[pi].center):
+                return mesh.polys[pi].center
+        return spot
 
     def _teleporters(self, reach: set[int], pos) -> list[Objective]:
         """Teleporters she has seen and not been through: walk over one (from the side that
@@ -393,7 +428,7 @@ class Explorer:
                 d = math.dist(poly.center, pos)
                 if s not in best or d < best[s][0]:
                     best[s] = (d, poly.center)
-        return [Objective("recheck", c, f"look at sector {s} again", reveals=frozenset({s}))
+        return [Objective("recheck", self._stand_spot(c, reach), f"look at sector {s} again", reveals=frozenset({s}))
                 for s, (_, c) in best.items()]
 
     def ranked(self, obs: Observation, risky: bool = False) -> list[Objective]:
