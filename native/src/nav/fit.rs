@@ -5,7 +5,7 @@
 use super::path::Chain;
 use super::{crossable_either_way, top_floor, Doors, HeightSource, Heights, NavCore, Open, TeleKind, Via};
 use crate::geom::{
-    cells, cells_around, closest_point, Cell, dist, funnel, midpoint, oriented, point_key, seg_key, segment_distance, segments_cross, swept_box_hits, Point,
+    cells, cells_around, closest_point, Cell, dist, funnel, oriented, point_key, seg_key, segment_distance, segments_cross, swept_box_hits, Point,
     PointKey, Seg, SegKey, MAX_STEP, PATH_CLEARANCE, PLAYER_HEIGHT, PLAYER_RADIUS,
 };
 use crate::stats::{self, Phase};
@@ -75,11 +75,8 @@ impl NavCore {
                             points.push(Some(*takeoff));
                         }
                         TeleKind::Line { line, .. } => {
-                            // walk onto the line's middle from 24 in front of it
-                            let (a, b) = self.map.line_seg(*line);
-                            let mid = midpoint(a, b);
-                            let length = dist(a, b).max(1.0);
-                            let approach = (mid.0 + (b.1 - a.1) / length * 24.0, mid.1 - (b.0 - a.0) / length * 24.0);
+                            // walk onto the line from 24 in front of it, where the box gets over
+                            let (mid, approach) = self.teleport_crossing(*line);
                             points.extend(funnel(seg_start, approach, &portals).into_iter().map(Some));
                             points.push(Some(mid));
                             points.push(None);
@@ -156,6 +153,25 @@ impl NavCore {
                 }
             }
         }
+    }
+
+    /// Where to cross teleport line `li`, and the spot 24 in front of it to come from: the
+    /// point of the line nearest its middle where the box fits both just over it and at that
+    /// spot (MAP17's is a face of a closet too narrow at its middle for the box).
+    fn teleport_crossing(&self, li: usize) -> (Point, Point) {
+        let (a, b) = self.map.line_seg(li);
+        let length = dist(a, b).max(1.0);
+        let (nx, ny) = ((b.1 - a.1) / length, -(b.0 - a.0) / length); // towards the front
+        let at = |t: f64| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+        let fits = |c: Point| !self.box_blocked_static((c.0 - nx * 2.0, c.1 - ny * 2.0)) && !self.box_blocked_static((c.0 + nx * 24.0, c.1 + ny * 24.0));
+        let steps = (length / 4.0).floor().max(1.0) as i64;
+        let best = (0..=steps)
+            .map(|i| i as f64 / steps as f64)
+            .filter(|&t| fits(at(t)))
+            .min_by(|x, y| (x - 0.5).abs().total_cmp(&(y - 0.5).abs()))
+            .unwrap_or(0.5);
+        let c = at(best);
+        (c, (c.0 + nx * 24.0, c.1 + ny * 24.0))
     }
 
     /// Does the box at p overlap a static wall?
