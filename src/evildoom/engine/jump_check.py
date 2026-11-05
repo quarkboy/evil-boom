@@ -1,13 +1,15 @@
 """Check the navigator's run-off jumps and keep only the ones that work.
 
-By default each candidate is tried in the movement simulator (nav/physics.py, a port of ZDoom's
-player movement: ~98% agreement with the engine, a few ms a jump). With engine=True it is tried
-in ViZDoom instead (slow, cached). Either way the test is the same: warp to its run-up, line up, sprint along the planned
-line, and check that the player touches down on the predicted sector (standing on its floor)
-without being teleported away first, and can brake to a stop there. A "soft" sprint (full speed
-only up to the edge, then coasting) is tried first: it lands slower, which narrow strips need. Jumps that need moved heights (a lowered fence, a raised
-floor) get those set up first by firing the trigger that produces them; when that isn't possible
-or reliable (lifts and timed doors) the jump is kept but marked unverified.
+By default each candidate is tried in the native movement simulator (evildoom_native.JumpLab:
+ZDoom's player movement, tic for tic; a few ms a jump), which also makes sure it still works
+made a little off its line. With engine=True it is tried in ViZDoom instead (slow, cached).
+Either way the test is the same: warp to its run-up, line up, sprint along the planned line, and
+check that the player touches down on the predicted sector (standing on its floor) without
+being teleported away first, and can brake to a stop there. A "soft" sprint (full speed only up
+to the edge, then coasting) is tried first: it lands slower, which narrow strips need. Jumps
+that need moved heights (a lowered fence, a raised floor) get those set up first by firing the
+trigger that produces them; when that isn't possible or reliable (lifts and timed doors) the
+jump is kept but marked unverified.
 
 Results are cached per map in out/jumpcache, keyed by Jump.key, so only new jumps are tested.
 """
@@ -17,16 +19,15 @@ from dataclasses import replace
 from pathlib import Path
 
 from evildoom.motor.follower import TICRATE, Controls, Motion, _norm
-from evildoom.nav.reach import MAX_STEP, Jump, Navigator, TriggerLine
-from evildoom.nav.physics import PlayerSim, Teleported
-from evildoom.wad.specials import Category, Trigger
+from evildoom.nav.reach import MAX_STEP, Jump, Navigator
+from evildoom.wad.specials import Trigger
 
 from .vizdoom_engine import VizDoomEngine
 
 CACHE_DIR = Path(__file__).resolve().parents[3] / "out" / "jumpcache"
 VERSION = 5   # bump to invalidate cached results when the test procedure changes
 OK, FAIL, UNVERIFIED = "ok", "fail", "unverified"
-SOFT = "soft"   # works coasting from the edge (Jump.soft)
+SOFT = "soft"   # works coasting from the edge (Jump.soft); "soft+N": letting go N past it
 SLID = "slid"   # lands, but slides off the landing sector
 
 
@@ -70,76 +71,14 @@ def verify_jumps(nav: Navigator, iwad: str | Path, map_name: str, pwad: str | Pa
 
 
 def simulate_jumps(nav: Navigator) -> dict[str, str]:
-    """verify_jumps' results from the movement simulator instead of the game: the same
-    test, a few ms a jump (it agrees with the engine on ~98% of them)."""
-    sim = PlayerSim(nav)
-    out = {}
-    for j in nav.jumps:
-        r = _test_jump(nav, sim, j)
-        if r in (SOFT, OK):
-            # made the one way that works with a little slack every way round (coasting from
-            # the edge if that does, else sprinting all the way), or not at all
-            r = next((SOFT if soft else OK for soft in ((True, False) if r == SOFT else (False,))
-                      if _works(nav, sim, j, soft)
-                      and all(_works(nav, sim, v, soft, reach=True) for v in _variants(nav, j))), FAIL)
-        elif r != FAIL and not _robust(nav, sim, j):
-            r = FAIL
-        out[j.key] = r
-    return out
-
-
-def _works(nav: Navigator, sim, j, soft: bool, reach: bool = False) -> bool:
-    """Does the jump stick, made soft (or not)? With `reach`: does it get there at all
-    (sliding on after touching down is all right, not falling short: what a little off
-    changes is mostly whether it stops on the landing or slides a bit, E4M6)."""
-    heading = _prepare(nav, sim, j)
-    if heading is None:
-        return reach  # (a variant that can't be set up doesn't count against the jump)
-    result, at = _fly(nav, sim, j, heading, soft)
-    if reach and result == "missed" and math.dist(at, j.runup) < 4:
-        return True  # (nor one that can't get going: its run-up backed into a wall, say)
-    return result in (("stuck", "slid") if reach else ("stuck",))
-
-
-def _variants(nav: Navigator, j) -> list:
-    """The jump a little off how the check makes it: half a unit to either side of its line,
-    and from a run-up ROBUST_RUNUP further back or nearer (taking off a little faster or
-    slower). Nobody lines up to a fraction of a unit, so a jump has to survive these."""
-    (rx, ry), (tx, ty) = j.runup, j.takeoff
-    length = math.hypot(tx - rx, ty - ry)
-    if length < 1e-6:
-        return []
-    ux, uy = (tx - rx) / length, (ty - ry) / length
-    px, py = -uy, ux
-    out = []
-    for s in (ROBUST_SHIFT, -ROBUST_SHIFT):
-        out.append(replace(j, runup=(rx + px * s, ry + py * s), takeoff=(tx + px * s, ty + py * s),
-                           dest=(j.dest[0] + px * s, j.dest[1] + py * s)))
-    for d in (-ROBUST_RUNUP, ROBUST_RUNUP):
-        if length - d > 1:
-            out.append(replace(j, runup=(rx + ux * d, ry + uy * d)))
-    return [v for v in out if nav.mesh.poly_at(*v.runup) is not None]
-
-
-ROBUST_SHIFT = 0.5  # a jump has to work this far to either side of its line too (1 was too strict: E4M6, MAP24)
-ROBUST_RUNUP = 2.0  # ...and get there from a run-up this much longer or shorter (4 lost E4M2's jumps onto narrow ledges)
-
-
-def _robust(nav: Navigator, sim, j) -> bool:
-    """Does the jump still work a unit to either side? Nobody stands to a fraction of a
-    unit: MAP09's jump through a doorway off a lift glanced off the jamb from 0.4 units over
-    from where the check stood. (3 units was too strict: E4M2's and E4M6's needed jumps.)"""
-    (rx, ry), (tx, ty) = j.runup, j.takeoff
-    length = math.hypot(tx - rx, ty - ry)
-    if length < 1e-6:
-        return True
-    px, py = -(ty - ry) / length, (tx - rx) / length
-    for s in (ROBUST_SHIFT, -ROBUST_SHIFT):
-        shifted = replace(j, runup=(rx + px * s, ry + py * s), takeoff=(tx + px * s, ty + py * s),
-                          dest=(j.dest[0] + px * s, j.dest[1] + py * s))
-        if nav.mesh.poly_at(*shifted.runup) is None or _test_jump(nav, sim, shifted) == FAIL:
-            return False
-    return True
+    """verify_jumps' results from the native movement simulator: the same test, and a jump
+    that works has to keep working made a little off its line (nobody lines up to a fraction
+    of a unit). One that comes in too fast to stop on its landing is tried from shorter
+    run-ups: "ok~x,y" / "soft~x,y" is one that sticks from (x, y)."""
+    verdicts = nav.jump_lab().check([
+        (sorted(j.src_polys), j.dest_poly, j.dest, j.runup, j.takeoff,
+         sorted((s, tuple(map(float, h))) for s, h in j.requires)) for j in nav.jumps])
+    return dict(zip((j.key for j in nav.jumps), verdicts))
 
 
 def keep_verified(nav: Navigator, iwad: str | Path, map_name: str,
@@ -151,12 +90,25 @@ def keep_verified(nav: Navigator, iwad: str | Path, map_name: str,
         results = verify_jumps(nav, iwad, map_name, pwad, log=log)
     else:
         results = simulate_jumps(nav)
+    # "ok~x,y": it sticks from a shorter run-up, at (x, y); "soft+N": coasting from N past
+    # the takeoff
+    jumps = []
+    for j in nav.jumps:
+        r = results[j.key]
+        if "~" in r:
+            r, at = r.split("~")
+            j = replace(j, runup=tuple(map(float, at.split(","))))
+        if r.startswith(SOFT + "+"):
+            r, release = r.split("+")
+            j = replace(j, release=float(release))
+        results[j.key] = r
+        jumps.append(j)
     # One that slides off its landing is only kept when there's no better way across: one
     # that stops there, or one that runs straight across it (the strip isn't for stopping on).
     sticks = {(frozenset(j.src_polys), nav.mesh.polys[j.dest_poly].sector)
-              for j in nav.jumps if results[j.key] in (OK, SOFT) or "@" in results[j.key]}
+              for j in jumps if results[j.key] in (OK, SOFT) or "@" in results[j.key]}
     keep = []
-    for j in nav.jumps:
+    for j in jumps:
         r = results[j.key]
         if "@" in r:
             # run straight across the strip it lands on, to where the engine stopped
@@ -172,8 +124,8 @@ def keep_verified(nav: Navigator, iwad: str | Path, map_name: str,
         keep.append(j)
     nav.set_jumps(keep)
     counts = {OK: 0, SOFT: 0, SLID: 0, FAIL: 0, UNVERIFIED: 0}
-    for r in results.values():
-        counts[r.split("@")[0]] += 1
+    for j in jumps:
+        counts[results[j.key].split("@")[0]] += 1
     return counts
 
 
@@ -215,33 +167,16 @@ def _test_jump(nav: Navigator, engine: VizDoomEngine, j: Jump) -> str:
 
 def _prepare(nav: Navigator, engine: VizDoomEngine, j: Jump) -> float | None:
     """Set up the heights the jump needs and stand at its run-up facing the takeoff; the
-    heading, or None if that can't be done. `engine` may be a PlayerSim: the heights are just
-    set then."""
-    if isinstance(engine, PlayerSim):
-        # Like _establish in the game: the trigger that makes a required height moves every
-        # sector it tags (E4M6: two posts by a takeoff lower together; with only the required
-        # one lowered, the box caught the other).
-        heights = dict(enumerate(nav.movers.initial))
-        for sector, h in j.requires:
-            if h == nav.movers.initial[sector]:
-                continue
-            t = next((t for t in nav.triggers if t.line >= 0 and t.permanent
-                      and h in t.effects.get(sector, [])), None)
-            if t is not None:
-                for s, hs in t.effects.items():
-                    heights[s] = hs[0]
-        engine.heights = heights | dict(j.requires)
-        engine.place(round(j.runup[0]), round(j.runup[1]))
-    else:
-        engine.restart()
-        engine.game.send_game_command("god")
-        engine.game.send_game_command("give all")
-        for sector, heights in j.requires:
-            if heights == nav.movers.initial[sector]:
-                continue  # already like that at the start
-            if not _establish(nav, engine, sector, heights):
-                return None
-        engine.game.send_game_command(f"warp {j.runup[0]:.0f} {j.runup[1]:.0f}")
+    heading, or None if that can't be done."""
+    engine.restart()
+    engine.game.send_game_command("god")
+    engine.game.send_game_command("give all")
+    for sector, heights in j.requires:
+        if heights == nav.movers.initial[sector]:
+            continue  # already like that at the start
+        if not _establish(nav, engine, sector, heights):
+            return None
+    engine.game.send_game_command(f"warp {j.runup[0]:.0f} {j.runup[1]:.0f}")
     for _ in range(4):
         _step(engine, Controls())
     o = engine.observe()
@@ -256,15 +191,7 @@ def _prepare(nav: Navigator, engine: VizDoomEngine, j: Jump) -> float | None:
     return heading
 
 
-def _fly(nav, engine, j: Jump, heading: float, soft: bool, through: bool = False):
-    try:
-        return _fly_once(nav, engine, j, heading, soft, through)
-    except Teleported:  # the sim doesn't follow teleports (the engine check spots the jump)
-        o = engine.observe()
-        return "missed", (o.x, o.y)
-
-
-def _fly_once(nav: Navigator, engine: VizDoomEngine, j: Jump, heading: float, soft: bool,
+def _fly(nav: Navigator, engine: VizDoomEngine, j: Jump, heading: float, soft: bool,
          through: bool = False) -> tuple[str, tuple[float, float]]:
     """Sprint (as RouteFollower does), then brake on touchdown: "stuck" if we stop on the
     landing sector, "slid" if we touched it but slid off, "missed" otherwise; and where we

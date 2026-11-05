@@ -12,15 +12,13 @@ vanilla player movement rules: step up <= 24, any drop, opening >= 56 (player he
 """
 import copy
 import hashlib
-import inspect
 import json
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from evildoom.wad.mapdata import (ML_BLOCKING, ML_BLOCKMONSTERS, ML_BLOCKPLAYERS, NO_SIDEDEF,
-                                  MapData)
+from evildoom.wad.mapdata import (ML_BLOCKING, ML_BLOCKMONSTERS, ML_BLOCKPLAYERS, MapData)
 from evildoom.wad.specials import (Category, Key, LineSpecial, Lock, Trigger, classify_line,
                                    classify_sector)
 from evildoom.wad.things import SHOOTABLE_OBSTACLES, SOLID_DECORATIONS
@@ -43,22 +41,13 @@ PATH_CLEARANCE = 24
 SHOT_HEIGHT = 36  # bullets leave the player at z + 28 + 8, and level: no aiming up or down
 MIN_PORTAL = 4.0  # narrower portals are nodebuilder slivers, never the real way through
 EXIT_FLOOR = -1000  # pseudo-trigger lines below this: exit floors (Navigator._exit_floors)
-FLIGHT_HEADROOM = 8  # ceiling room to spare over the player during a jump
-LEDGE_TICS = 4  # ...tics a jump's box may stay over its ledge with a wall right beside it
-LONG_LEDGE_TICS = 30  # ...or at all (an edge walk, not a jump)
-PIN_MARGIN = 3.0  # how near a wall counts as beside the box
 MIN_SHOT_SPAN = 6.0  # degrees a gun line must span from where it's shot (aim isn't exact)
 BOX_SLACK = 0.25  # the box must clear walls by this much: no one threads a gap exactly 32 wide
 USE_REACH = 48  # use traces 64 from the player centre; keep a margin
 TELEPORT_DEST = 14
 RUN_THRUST = 1.5625   # forwardmove 50 << 11, per tic (vanilla)
 FRICTION = 0.90625    # ORIG_FRICTION, applied on the ground only
-GRAVITY = 1.0
-MAX_RUNUP = 256
-JUMP_ANGLES = (0, -30, 30, -45, 45, -60, 60)  # degrees off the edge normal
 NAV_CACHE = Path(__file__).resolve().parents[3] / "out" / "navcache"
-JUMPS_PER_TARGET = 4  # candidates kept per (takeoff poly, landing sector)
-AIM_INSIDE = 32.0     # aiming a jump at a sector's nearest part: this far in from its rim
 TELEPORTERS_FOR_PLAYERS = {39, 97, 174, 195, 207, 208, 209, 210}
 TELEPORTERS_FOR_MONSTERS = {39, 97, 125, 126, 207, 208}  # walk-over ones monsters trigger
 
@@ -176,6 +165,7 @@ class Jump(Teleport):
     speed: float = 0.0
     requires: frozenset = frozenset()  # (sector, heights) of movable sectors it depends on
     soft: bool = False  # engine-checked: sprint only to the edge, then coast (narrow landings)
+    release: float = 0.0  # ...soft: let go of forward this far past the takeoff
     through: bool = False  # sprint straight across a strip too narrow to stop on, to `dest`
 
     def usable(self, states: "HeightStates") -> bool:
@@ -308,38 +298,10 @@ class Navigator:
                     self._swgrid[cell].append(edge)
         return self._swgrid
 
-    def _pinned(self, x: float, y: float, z: float, chosen: dict, init) -> bool:
-        """A wall (static, a solid thing, or a floor more than a step above `z` at the
-        heights being assumed) within PIN_MARGIN of the box at (x, y)?"""
-        r = PLAYER_RADIUS + PIN_MARGIN
-        grid = self._static_wall_grid()
-        edges = {e for cell in _cells(x - r, y - r, x + r, y + r) for e in grid.get(cell, ())}
-        if any(_box_hits_segment(x, y, r, e) for e in edges):
-            return True
-        for dx, dy in ((-r, -r), (0, -r), (r, -r), (r, 0), (r, r), (0, r), (-r, r), (-r, 0)):
-            q = self.mesh.poly_at(x + dx, y + dy)
-            if q is not None and _inside(q.vertices, x + dx, y + dy):
-                f = chosen.get(q.sector, init[q.sector])[0]
-                if f > z + MAX_STEP:
-                    return True
-        return False
-
-    def _box_hits_static_wall(self, x: float, y: float) -> bool:
-        """Does the player's box at (x, y) straddle a static wall or solid thing edge?"""
-        r = PLAYER_RADIUS - 0.1
-        grid = self._static_wall_grid()
-        edges = {e for cell in _cells(x - r, y - r, x + r, y + r) for e in grid.get(cell, ())}
-        return any(_box_hits_segment(x, y, r, e) for e in edges)
-
-    def _crosses_static_wall(self, a: Point, b: Point) -> bool:
-        grid = self._static_wall_grid()
-        edges = {e for cell in _cells(*a, *b) for e in grid.get(cell, ())}
-        return any(_segments_cross(a, b, p, q) for p, q in edges)
-
     def _find_jumps_cached(self) -> list[Jump]:
         """_find_jumps, from out/navcache when nothing it depends on has changed: the map, the
-        mesh, the heights sectors can take, which portals the box fits, and the jump finder's
-        own code and constants (most of building a Navigator otherwise)."""
+        mesh, the heights sectors can take, which portals the box fits, the static walls, and
+        the native finder's version."""
         h = hashlib.sha256()
         m = self.map
         for part in (m.vertexes, m.linedefs, m.sidedefs, m.sectors, m.things,
@@ -347,14 +309,9 @@ class Navigator:
                      [(q.a, q.b, q.p1, q.p2, q.linedef) for q in self.mesh.portals],
                      self.portal_fits, sorted({s: sorted(hs) for t in self.triggers
                                               for s, hs in t.effects.items()}.items()),
-                     self.movers.initial,
-                     (MAX_STEP, PLAYER_RADIUS, PLAYER_HEIGHT, RUN_THRUST, FRICTION, GRAVITY,
-                      MAX_RUNUP, JUMPS_PER_TARGET, JUMP_ANGLES)):
+                     self.movers.initial, sorted(set(self._static_walls()), key=repr),
+                     _native.JumpLab.finder_version()):
             h.update(repr(part).encode())
-        for fn in (Navigator._find_jumps, Navigator._try_jump, Navigator._aim_angles,
-                   Navigator._static_walls, Navigator._static_wall_grid,
-                   Navigator._box_hits_static_wall, _box_hits_segment, _segments_cross):
-            h.update(inspect.getsource(fn).encode())
         path = NAV_CACHE / f"jumps_{h.hexdigest()[:24]}.json"
         if path.exists():
             return [Jump(d["line"], set(d["src"]), d["dest_poly"], tuple(d["dest"]),
@@ -370,316 +327,57 @@ class Navigator:
         return jumps
 
     def _find_jumps(self) -> list[Jump]:
-        """Run-off jumps across gaps. For every ledge edge (a drop of more than MAX_STEP), take
-        the straight run-up available behind it, the speed that run-up produces (vanilla thrust
-        and friction), and simulate the flight: no air friction, gravity 1/tic^2, blocked by
-        walls, by ledge faces more than MAX_STEP above the player, and by low ceilings. Kept if
-        it lands higher than the floor right below the edge (plain drops are already edges).
-
-        Sectors a trigger can move are allowed: each is given one of its possible heights
-        (starting heights first) that makes the jump work, and any moved heights it needed are
-        recorded in `Jump.requires`; the edge is only usable once the world has them."""
-        mesh = self.mesh
+        """Run-off jumps across gaps (the native finder, evildoom_native.JumpLab.find). Sectors
+        a trigger can move may take any of their heights; the moved ones a jump needs are its
+        `requires`."""
         options: dict[int, list[Heights]] = {s: [h] for s, h in enumerate(self.movers.initial)}
         for t in self.triggers:
             for s, hs in t.effects.items():
                 options[s] += [h for h in hs if h not in options[s]]
-        found: dict[tuple[int, int], list[Jump]] = {}
-        for portal in mesh.portals:
-            if not self.portal_fits[portal.index]:
-                continue
-            if portal.linedef is not None and \
-                    self.map.linedefs[portal.linedef].flags & (ML_BLOCKING | ML_BLOCKPLAYERS):
-                continue
-            for a, b in ((portal.a, portal.b), (portal.b, portal.a)):
-                sa, sb = mesh.polys[a].sector, mesh.polys[b].sector
-                (x1, y1), (x2, y2) = portal.p1, portal.p2
-                length = max(portal.width, 1)
-                nx, ny = -(y2 - y1) / length, (x2 - x1) / length
-                ca = mesh.polys[a].center
-                if nx * (portal.mid[0] - ca[0]) + ny * (portal.mid[1] - ca[1]) < 0:
-                    nx, ny = -nx, -ny
-                # Players aim: try angles off the edge, not just straight out. Keep one jump
-                # per (takeoff poly, landing sector).
-                for ha in options[sa]:
-                    for hb in options[sb]:
-                        if ha[0] - hb[0] <= MAX_STEP:
-                            continue
-                        # fixed angles, plus aiming straight at nearby sectors high enough
-                        # to land on (an island in a pit isn't at any fixed angle)
-                        for ang in JUMP_ANGLES + tuple(self._aim_angles(
-                                portal.mid, (nx, ny), hb[0] + MAX_STEP, options)):
-                            c, s_ = math.cos(math.radians(ang)), math.sin(math.radians(ang))
-                            d = (nx * c - ny * s_, nx * s_ + ny * c)
-                            # every 16 units along the edge: gaps between bars are narrow
-                            steps = max(1, int(portal.width // 16))
-                            ts = sorted({0.5} | {(i + 0.5) / steps for i in range(steps)},
-                                        key=lambda t: abs(t - 0.5))
-                            for t in ts:
-                                takeoff = (x1 + (x2 - x1) * t, y1 + (y2 - y1) * t)
-                                jump = self._try_jump(a, takeoff, d, {sa: ha, sb: hb}, options,
-                                                      portal.linedef)
-                                high = self._try_jump(a, takeoff, d, {sa: ha, sb: hb}, options,
-                                                      portal.linedef, high=True)                                     if jump is None else None
-                                for j in (jump, high):
-                                    if j is not None:
-                                        key = (a, mesh.polys[j.dest_poly].sector)
-                                        found.setdefault(key, []).append(j)
-                                if jump is not None:
-                                    break
-        # a few candidates per (takeoff poly, landing sector), those landing furthest in from
-        # where the landing drops away first (a little short still lands: MAP24's platforms),
-        # varied (verification drops the near misses)
-        # (the first found, as before, and those landing furthest in on top)
-        out = []
-        for cands in found.values():
-            kept: list[Jump] = list(cands[:JUMPS_PER_TARGET])
-            margin = sorted(cands[JUMPS_PER_TARGET:],
-                            key=lambda j: (-self._landing_margin(j), math.dist(j.takeoff, j.dest), j.key))
-            best = max((self._landing_margin(j) for j in kept), default=-math.inf)
-            for j in margin[:JUMPS_PER_TARGET]:
-                if self._landing_margin(j) > best + 8 and all(
-                        math.dist(j.takeoff, k.takeoff) > 8 or math.dist(j.dest, k.dest) > 8 for k in kept):
-                    kept.append(j)
-            out += kept
-        return out
+        moving = {s for t in self.triggers for s in t.effects}
+        found = self.jump_lab().find(
+            [[tuple(map(float, h)) for h in options[s]] for s in range(len(self.map.sectors))],
+            moving, [bool(f) for f in self.portal_fits])
+        return [Jump(-1, {src}, dest_poly, dest, runup, takeoff, speed, frozenset(requires))
+                for src, dest_poly, dest, runup, takeoff, speed, requires in found]
 
-    def _landing_margin(self, j: Jump) -> float:
-        """How far a jump's landing is from the nearest edge of its landing sector with a drop
-        of more than a step beyond it (walls don't count: landing by one is fine)."""
-        m = self.map
-        s = self.mesh.polys[j.dest_poly].sector
-        floor = self.movers.initial[s][0]
-        best = math.inf
-        for line in self._sector_lines().get(s, ()):
-            f, b = m.front_sector(line), m.back_sector(line)
-            other = b if f == s else f
-            if other is None or self.movers.initial[other][0] >= floor - MAX_STEP:
-                continue
-            a, c = m.vertexes[line.v1], m.vertexes[line.v2]
-            best = min(best, math.dist(j.dest, _closest_point(j.dest, (a.x, a.y), (c.x, c.y))))
-        return best
+    def sinking_sectors(self) -> set[int]:
+        """Floors that sink once stepped on (a walk-over line on their own edge lowers them:
+        MAP08's exit run over the nukage)."""
+        if not hasattr(self, "_sinking"):
+            self._sinking = set()
+            for t in self.triggers:
+                if t.line >= 0 and t.info.trigger in (Trigger.W1, Trigger.WR):
+                    line = self.map.linedefs[t.line]
+                    for sec in {self.map.front_sector(line), self.map.back_sector(line)}:
+                        if sec in t.effects and any(h[0] < self.movers.real[sec][0]
+                                                    for h in t.effects[sec]):
+                            self._sinking.add(sec)
+        return self._sinking
 
-    def _sector_lines(self) -> dict[int, list]:
-        if not hasattr(self, "_lines_of_sector"):
-            out: dict[int, list] = {}
-            for line in self.map.linedefs:
-                for sec in {self.map.front_sector(line), self.map.back_sector(line)} - {None}:
-                    out.setdefault(sec, []).append(line)
-            self._lines_of_sector = out
-        return self._lines_of_sector
-
-    def _aim_angles(self, origin: Point, n: Point, min_floor: float,
-                    options: dict[int, list[Heights]], max_dist: float = 400) -> list[float]:
-        """Angles (degrees off normal n, within +-75) toward the centres of sectors within
-        max_dist whose floor could be landed on (above min_floor)."""
-        if not hasattr(self, "_sector_centres"):
-            acc: dict[int, list[Point]] = {}
-            for poly in self.mesh.polys:
-                if poly is not None:
-                    acc.setdefault(poly.sector, []).append(poly.center)
-            self._sector_centres = {s: (sum(p[0] for p in ps) / len(ps),
-                                        sum(p[1] for p in ps) / len(ps)) for s, ps in acc.items()}
-        if not hasattr(self, "_sector_edges"):
-            edges: dict[int, list[tuple[Point, Point]]] = {}
-            for poly in self.mesh.polys:
-                if poly is not None:
-                    vs = poly.vertices
-                    edges.setdefault(poly.sector, []).extend(
-                        (vs[i], vs[(i + 1) % len(vs)]) for i in range(len(vs)))
-            self._sector_edges = edges
-        out = []
-        base = math.atan2(n[1], n[0])
-
-        def add(px: float, py: float) -> None:
-            ang = math.degrees(math.atan2(py - origin[1], px - origin[0]) - base)
-            ang = (ang + 180) % 360 - 180
-            if abs(ang) <= 75 and all(abs(ang - a) > 5 for a in JUMP_ANGLES + tuple(out)):
-                out.append(round(ang))
-        nearby = []
-        for s, (cx, cy) in self._sector_centres.items():
-            d = math.dist(origin, (cx, cy))
-            if d > max_dist or d < 16 or max(h[0] for h in options[s]) <= min_floor:
-                continue
-            add(cx, cy)
-            nearby.append((s, cx, cy))
-        for s, cx, cy in nearby:
-            # and where it's nearest (a little in from its rim): the shortest way across
-            near = min((_closest_point(origin, a, b) for a, b in self._sector_edges.get(s, ())),
-                       key=lambda q: math.dist(q, origin), default=None)
-            if near is not None and math.dist(near, origin) > 1:
-                k = AIM_INSIDE / max(math.dist(near, (cx, cy)), 1.0)
-                add(near[0] + (cx - near[0]) * min(k, 1.0), near[1] + (cy - near[1]) * min(k, 1.0))
-        return out
-
-    def _try_jump(self, src: int, takeoff: Point, n: Point, chosen: dict[int, Heights],
-                  options: dict[int, list[Heights]], edge: int | None,
-                  high: bool = False) -> Jump | None:
-        """`high`: sectors met in flight are taken at their highest possible floor that
-        works rather than the first (a platform raised to land on: MAP09's bridge, jumped to
-        from the lift top across the pit, which at its starting height is just a drop)."""
-        m, mesh, init = self.map, self.mesh, self.movers.initial
-        # Sectors that can move are required at the heights used even when those are the
-        # initial ones: a takeoff floor that's been lowered for good can't be jumped from.
-        if not hasattr(self, "_moving"):
-            self._moving = {s for t in self.triggers for s in t.effects}
-        moving = self._moving
-        chosen = dict(chosen)
-        floor = chosen[mesh.polys[src].sector][0]
-        below = next(h for s, h in chosen.items() if s != mesh.polys[src].sector)[0] \
-            if len(chosen) > 1 else floor
-
-        def pick(sector: int, ok, flight: bool = False) -> Heights | None:
-            if sector in chosen:
-                return chosen[sector] if ok(chosen[sector]) else None
-            order = sorted(options[sector], key=lambda h: -h[0]) if flight and high \
-                else options[sector]
-            for h in order:
-                if ok(h):
-                    chosen[sector] = h
-                    return h
-            return None
-
-        def crossed(a: Point, b: Point):
-            cand = {li for cell in _cells(*a, *b) for li in mesh._line_grid.get(cell, ())}
-            for li in cand:
-                line = m.linedefs[li]
-                v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
-                if _segments_cross(a, b, (v1.x, v1.y), (v2.x, v2.y)):
-                    yield line
-
-        # Run-up: back off along -n while every line we'd cross running forward is crossable
-        # (in the running direction) and the box stays clear of walls.
-        runup, back = 0.0, takeoff
-        r = PLAYER_RADIUS - 1
-        box = [(-r, -r), (0, -r), (r, -r), (r, 0), (r, r), (0, r), (-r, r), (-r, 0)]
-        while runup < MAX_RUNUP:
-            nxt = (takeoff[0] - n[0] * (runup + 8), takeoff[1] - n[1] * (runup + 8))
-            here = mesh.poly_at(*nxt)
-            # static walls only: doors and other movers are handled through their heights below
-            if here is None or self._box_hits_static_wall(*nxt):
-                break
-            # The whole 32x32 box has to fit: DOOM stands you on the highest floor under it, so
-            # a ledge more than a step up anywhere under the box blocks the run (moved heights
-            # may be chosen, e.g. a lowered fence, and become requirements).
-            hc = pick(here.sector, lambda h: h[1] - h[0] >= PLAYER_HEIGHT)  # room to stand
-            if hc is None:
-                break
-            ok = True
-            for dx, dy in box:
-                q = mesh.poly_at(nxt[0] + dx, nxt[1] + dy)
-                if q is None or pick(q.sector, lambda h, hc=hc: h[0] <= hc[0] + MAX_STEP and
-                                     h[1] - max(h[0], hc[0]) >= PLAYER_HEIGHT) is None:
-                    ok = False
-                    break
-            if not ok:
-                break
-            for line in crossed(nxt, back):
-                f, b = m.front_sector(line), m.back_sector(line)
-                if b is None or line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS):
-                    ok = False
-                    break
-                # which side is behind (farther from the takeoff)?
-                v1 = m.vertexes[line.v1]
-                v2 = m.vertexes[line.v2]
-                behind_front = ((v2.x - v1.x) * (nxt[1] - v1.y)
-                                - (v2.y - v1.y) * (nxt[0] - v1.x)) < 0
-                far, near = (f, b) if behind_front else (b, f)
-                hf = pick(far, lambda h: True)
-                hn = pick(near, lambda h, hf=hf: can_cross(hf, h))
-                if hn is None:
-                    ok = False
-                    break
-            if not ok:
-                break
-            runup, back = runup + 8, nxt
-        if runup < 16:
-            return None
-        v = d = 0.0
-        while d < runup:
-            v = v * FRICTION + RUN_THRUST
-            d += v
-
-        # Flight. DOOM stands the player on the highest floor anywhere under their 32x32 box,
-        # so they keep ledge height until the box has fully left the ledge, and they land (or
-        # step up) as soon as the front of the box reaches something no more than a step above
-        # them. Per tic, like P_XYMovement then P_ZMovement: move, check the floors/ceilings
-        # under the box, then fall (first falling tic -2, then -1 per tic).
-        src_sector = mesh.polys[src].sector
-        x, y = takeoff
-        z, vz = float(floor), 0.0
-        airborne = False
-        held = 0  # tics still held up by the ledge after takeoff
-        pinned = False  # ...with a wall right beside the box meanwhile
-        for _ in range(120):
-            nx_, ny_ = x + n[0] * v, y + n[1] * v
-            for line in crossed((x, y), (nx_, ny_)):
-                if line.back == NO_SIDEDEF or line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS):
-                    return None
-            if self._box_hits_static_wall(nx_, ny_):
-                return None  # the box clips a wall/pillar even if the centre line misses it
-            under: dict[int, Heights] = {}
-            for dx, dy in box + [(0, 0)]:
-                q = mesh.poly_at(nx_ + dx, ny_ + dy)
-                if q is None:
-                    return None
-                if q.sector not in under:
-                    # (a little headroom to spare in the air: MAP09's jump through a door, its
-                    # head an inch under the lintel in the check, met it in the game)
-                    h = pick(q.sector, lambda h, z=z: h[0] <= z + MAX_STEP
-                             and h[1] - max(z, h[0]) >= PLAYER_HEIGHT + FLIGHT_HEADROOM,
-                             flight=True)
-                    if h is None:
-                        return None  # a wall/ledge face or a low ceiling in the way
-                    under[q.sector] = h
-            fmax = max(h[0] for h in under.values())
-            x, y = nx_, ny_
-            z += vz
-            if z <= fmax:
-                z, vz = fmax, 0.0
-                ahead = mesh.poly_at(x + n[0] * (PLAYER_RADIUS - 1), y + n[1] * (PLAYER_RADIUS - 1))
-                if ahead is not None and ahead.sector != src_sector \
-                        and under.get(ahead.sector, (None,))[0] == fmax:
-                    if fmax <= below + MAX_STEP:
-                        return None  # just dropped to the floor below: an ordinary edge
-                    on = (x + n[0] * (PLAYER_RADIUS + 8), y + n[1] * (PLAYER_RADIUS + 8))
-                    land = mesh.poly_at(*on)
-                    if land is None or land.sector != ahead.sector:
-                        land, on = ahead, (x + n[0] * (PLAYER_RADIUS - 1),
-                                           y + n[1] * (PLAYER_RADIUS - 1))
-                    requires = frozenset((s, hh) for s, hh in chosen.items()
-                                         if hh != init[s] or s in moving)
-                    return Jump(-1, {src}, land.index, on, back, takeoff, v, requires)
-                if not airborne:
-                    # Still on the ledge, the box hanging over the drop. Fine for a few tics
-                    # (an angled takeoff), but a walk along a strip narrower than the box with
-                    # a wall on the other side is down to the last unit (MAP27's 8-unit strip
-                    # by a block: 2 units off and the box caught it), and any long one is no
-                    # jump (MAP27: 660 units with the centre over a pit).
-                    held += 1
-                    pinned = pinned or self._pinned(x, y, z, chosen, init)
-                    if held > LONG_LEDGE_TICS or (held > LEDGE_TICS and pinned):
-                        return None
-                if airborne:
-                    # Came down supported by something under the box that isn't ahead (e.g. a
-                    # narrow bridge under the back half): that's a landing on it all the same.
-                    support = [(dx, dy) for dx, dy in box + [(0, 0)]
-                               if (q := mesh.poly_at(x + dx, y + dy)) is not None
-                               and q.sector != src_sector and under[q.sector][0] == fmax]
-                    if not support or fmax <= below + MAX_STEP:
-                        return None
-                    dx, dy = min(support, key=lambda d: abs(d[0]) + abs(d[1]))
-                    on = (x + dx * 0.8, y + dy * 0.8)
-                    land = mesh.poly_at(*on)
-                    if land is None or under.get(land.sector, (None,))[0] != fmax:
-                        return None
-                    requires = frozenset((s, hh) for s, hh in chosen.items()
-                                         if hh != init[s] or s in moving)
-                    return Jump(-1, {src}, land.index, on, back, takeoff, v, requires)
-            else:
-                airborne = True
-                vz = -2 * GRAVITY if vz == 0 else vz - GRAVITY
-        return None
+    def jump_lab(self):
+        """The compiled jump finder and player-movement simulator (evildoom_native.JumpLab)
+        for this map."""
+        if "_jlab" not in self.__dict__:
+            m = self.map
+            start = next((t for t in m.things if t.type == 1), None)
+            teleports = {line.index for line in m.linedefs if line.special
+                         and (info := classify_line(line.special)) is not None
+                         and info.category is Category.TELEPORT}
+            facts = {
+                "static_grid": {c: list(es) for c, es in self._static_wall_grid().items()},
+                "obstacle_grid": {c: list(es) for c, es in self._obstacle_grid().items()},
+                "initial": [tuple(map(float, h)) for h in self.movers.initial],
+                "teleports": teleports,
+                "start_angle": float(start.angle) if start else 90.0,
+                # per trigger whose moves stay put: everything it moves (the simulator sets a
+                # jump's required heights up as the trigger would)
+                "permanent": [[(s, [tuple(map(float, h)) for h in hs]) for s, hs in t.effects.items()]
+                              for t in self.triggers if t.line >= 0 and t.permanent],
+                "sinking": self.sinking_sectors(),
+            }
+            self._jlab = _native.JumpLab(m, [tuple(map(float, b)) for b in self._mesh_obstacles], facts)
+        return self._jlab
 
     # --- player width -------------------------------------------------------------------
 
@@ -1335,9 +1033,7 @@ class Navigator:
         key = (li, high, top)
         cache = self.__dict__.setdefault("_landable_cache", {})
         if key not in cache:
-            from .physics import PlayerSim  # (physics imports the motor, which imports us)
-            if not hasattr(self, "_probe"):
-                self._probe = PlayerSim(self)
+            lab = self.jump_lab()
             m = self.map
             line = m.linedefs[li]
             a, b = m.vertexes[line.v1], m.vertexes[line.v2]
@@ -1353,7 +1049,7 @@ class Navigator:
                 t = i / steps
                 for d in (clear, clear + 4, clear + 8, clear + 16, clear + 32):
                     x, y = a.x + dx * t + nx * d, a.y + dy * t + ny * d
-                    fits, _floor, ceil, *_ = self._probe._check(x, y, top)
+                    fits, _floor, ceil = lab.fits_at(x, y)
                     if fits and ceil - top >= PLAYER_HEIGHT:
                         ok = True
                         break

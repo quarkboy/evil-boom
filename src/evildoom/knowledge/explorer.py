@@ -17,7 +17,7 @@ from evildoom.knowledge.model import Knowledge
 from evildoom.motor.follower import TICRATE, Controls, Observation, RouteFollower
 from evildoom.nav.reach import MAX_STEP, HeightStates, Navigator, TriggerLine, can_cross
 from evildoom.nav.walkthrough import Step, _action_for, steps_from_legs
-from evildoom.wad.specials import Category, Key
+from evildoom.wad.specials import Category, Key, Lock
 
 PLAN_SECONDS = 1.5
 # how much nearer an objective of each kind counts as (keys, switches first; looking again last)
@@ -61,11 +61,22 @@ class Objective:
     heard: object = None              # noise: the sound
     look_at: tuple | None = None      # room: the wall to face once there
     risky: bool = False               # nothing safer left: one-way drops, nukage are all right
+    pad: frozenset = frozenset()      # teleporter: all the lines of its pad (one objective)
 
     @property
     def ident(self) -> tuple:
-        return (self.kind, self.trigger.line if self.trigger else None, self.key,
-                self.reveals or None, self.risky)
+        line = self.pad or (self.trigger.line if self.trigger else None)
+        return (self.kind, line, self.key, self.reveals or None, self.risky)
+
+    @property
+    def priority(self) -> int:
+        """Taken up before anything nearer of a lower one: the exit, then the doors and
+        switches a key she has opens (what the key was got for)."""
+        if self.kind == "exit":
+            return 0
+        if self.kind in ("door", "switch") and self.trigger.info.lock is not Lock.NONE:
+            return 1
+        return 2
 
 
 @dataclass
@@ -231,12 +242,13 @@ class Explorer:
 
     def _teleporters(self, reach: set[int], pos) -> list[Objective]:
         """Teleporters she has seen and not been through: walk over one (from the side that
-        sends you) to find out where it goes."""
+        sends you) to find out where it goes. One objective per pad (the sides of one go to
+        the same place), over its side nearest her."""
         from evildoom.nav.reach import Teleport
         from evildoom.wad.specials import classify_line
         k, nav = self.knowledge, self.nav
         tried = set(k.teleports)
-        out = []
+        best: dict[frozenset, Objective] = {}
         for li in k.teleporters():
             if li in tried:
                 continue
@@ -258,8 +270,11 @@ class Explorer:
             if nav.mesh.poly_at(*spot) is None or nav.mesh.poly_at(*spot).index not in reach:
                 spot = min((nav.mesh.polys[p].center for p in src), key=lambda c: math.dist(c, mid))
             t = TriggerLine(li, classify_line(line.special), [], {}, src)
-            out.append(Objective("teleporter", spot, f"try teleporter (line {li})", trigger=t))
-        return out
+            pad = k.teleport_pad(li)
+            o = Objective("teleporter", spot, f"try teleporter (line {li})", trigger=t, pad=pad)
+            if pad not in best or math.dist(spot, pos) < math.dist(best[pad].goal, pos):
+                best[pad] = o
+        return list(best.values())
 
     def _noises(self, reach: set[int], pos, tic: int) -> list[Objective]:
         """Sounds she heard but couldn't see the source of, lately: go to the reachable spot
@@ -359,11 +374,11 @@ class Explorer:
 
     def ranked(self, obs: Observation, risky: bool = False) -> list[Objective]:
         """The objectives open, the explorer's way round: the exit first if it can get there,
-        then by distance as the crow flies (keys and untried switches a little ahead of the
-        edge of the map)."""
+        then the locks her keys open, then by distance as the crow flies (keys and untried
+        switches a little ahead of the edge of the map)."""
         options = self.objectives(obs, risky)
         pos = (obs.x, obs.y)
-        options.sort(key=lambda o: (o.kind != "exit", math.dist(o.goal, pos) * WEIGHT[o.kind]))
+        options.sort(key=lambda o: (o.priority, math.dist(o.goal, pos) * WEIGHT[o.kind]))
         return options
 
     def choose(self, obs: Observation, risky: bool = False) -> Objective | None:
@@ -625,12 +640,12 @@ class Explorer:
                 steps = self.route_to(obj, obs)
                 if steps:
                     routed.append((self._route_length(steps) * WEIGHT[obj.kind], obj, steps))
-                    if obj.kind == "exit":
-                        break
+                    if obj.priority < 2:
+                        break  # (nothing further down the list comes first anyway)
                 else:
                     self._drop(obj, obs, "no route")
             if routed:
-                routed.sort(key=lambda r: (r[1].kind != "exit", r[0]))
+                routed.sort(key=lambda r: (r[1].priority, r[0]))
                 _, obj, steps = routed[0]
                 self.current, self._since = obj, obs.tic
                 # (time to do it: walking the route, and some)

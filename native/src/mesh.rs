@@ -111,7 +111,7 @@ fn shared_segment(a1: Point, a2: Point, b1: Point, b2: Point) -> Option<(Point, 
 }
 
 /// Is the point inside (or on) the convex polygon?
-fn inside(vs: &[Point], x: f64, y: f64) -> bool {
+pub fn inside(vs: &[Point], x: f64, y: f64) -> bool {
     let (mut pos, mut neg) = (false, false);
     for (a, b) in edges(vs) {
         let c = (b.0 - a.0) * (y - a.1) - (b.1 - a.1) * (x - a.0);

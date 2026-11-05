@@ -5,6 +5,7 @@ use crate::map::MapData;
 use crate::mesh::{Mesh, Obstacle};
 use crate::nav::{Callbacks, DoorOpening, Doors, Edge, Found, Gate, HeightSource, Heights, NavCore, NavFacts, Tele, TeleKind, Via};
 use crate::plan::{KeySet, Kind, PlanCaches, PlanFacts, Planner, Query, Timing, Trigger, World};
+use crate::jumps;
 use crate::sight;
 use crate::stats;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
@@ -391,5 +392,88 @@ impl Sight {
     /// those in view but invisible).
     fn drawn(&self, x: f64, y: f64, angle: f64, width: i32, heights: Vec<(f64, f64)>) -> (Vec<usize>, Vec<usize>) {
         self.sight.drawn(&sight::View { x, y, angle, width, heights: &heights })
+    }
+}
+
+/// A jump, as Python has it: (takeoff polys, landing poly, landing, run-up, takeoff,
+/// [(sector, heights)] it requires).
+type JumpIn = (Vec<usize>, usize, Point, Point, Point, Vec<(usize, Heights)>);
+/// A jump found: (takeoff poly, landing poly, landing, run-up, takeoff, speed, requires).
+type JumpOut = (usize, usize, Point, Point, Point, f64, Vec<(usize, (f64, f64))>);
+
+/// What JumpLab is built from, as a dict.
+#[derive(FromPyObject)]
+#[pyo3(from_item_all)]
+struct JumpFactsIn {
+    static_grid: HashMap<crate::geom::Cell, Vec<crate::geom::Seg>>,
+    obstacle_grid: HashMap<crate::geom::Cell, Vec<crate::geom::Seg>>,
+    initial: Vec<(f64, f64)>,
+    teleports: HashSet<usize>,
+    start_angle: f64,
+    permanent: Vec<Vec<(usize, Vec<Heights>)>>,
+    sinking: HashSet<usize>,
+}
+
+/// Run-off jumps for a map: finding them and checking them in the movement simulator.
+#[pyclass]
+pub struct JumpLab {
+    lab: jumps::JumpLab,
+}
+
+#[pymethods]
+impl JumpLab {
+    #[new]
+    fn new(map: MapData, obstacles: Vec<Obstacle>, facts: JumpFactsIn) -> PyResult<Self> {
+        let mesh = Mesh::build(&map, &obstacles).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let JumpFactsIn { static_grid, obstacle_grid, initial, teleports, start_angle, permanent, sinking } = facts;
+        let facts = jumps::JumpFacts { static_grid, obstacle_grid, initial, teleports, start_angle, permanent, sinking };
+        Ok(JumpLab { lab: jumps::JumpLab::new(map, mesh, facts) })
+    }
+
+    /// The jumps across the map's gaps, given per sector the heights it can take (starting
+    /// ones first), the sectors triggers move, and which portals the box fits through.
+    fn find(&self, options: Vec<Vec<Heights>>, moving: HashSet<usize>, portal_fits: Vec<bool>) -> Vec<JumpOut> {
+        let input = jumps::FinderInput { options, moving, portal_fits };
+        self.lab
+            .find_jumps(&input)
+            .into_iter()
+            .map(|j| (j.src_polys[0], j.dest_poly, j.dest, j.runup, j.takeoff, j.speed, j.requires.iter().map(|(s, h)| (*s, h.tuple())).collect()))
+            .collect()
+    }
+
+    /// The simulator's verdict on each jump ("ok", "soft", "slid", "fail", "unverified", or
+    /// "slid@x,y" / "fail@x,y").
+    fn check(&self, jumps: Vec<JumpIn>) -> Vec<String> {
+        let jumps: Vec<jumps::Jump> = jumps
+            .into_iter()
+            .map(|(src_polys, dest_poly, dest, runup, takeoff, requires)| jumps::Jump { src_polys, dest_poly, dest, runup, takeoff, speed: 0.0, requires })
+            .collect();
+        self.lab.check_jumps(&jumps)
+    }
+
+    /// Can the player's box be at (x, y), at the map's starting heights: (fits, floor, ceiling).
+    fn fits_at(&self, x: f64, y: f64) -> (bool, f64, f64) {
+        self.lab.fits_at((x, y))
+    }
+
+    /// For running off sector `sector`, sinking under the player (`start`: (x, y, vx, vy, z,
+    /// angle): where, how fast, feet height, facing): where pushing towards each of `headings`
+    /// first comes down on another floor within `tics`, as ((x, y), sector) or None.
+    fn run_landings(&self, start: (f64, f64, f64, f64, f64, f64), heights: Vec<(f64, f64)>, sector: usize, headings: Vec<f64>, tics: usize) -> Vec<Option<(Point, usize)>> {
+        let (x, y, vx, vy, z, angle) = start;
+        let start = jumps::RunStart { pos: (x, y), vel: (vx, vy), z, angle };
+        self.lab.run_landings(&start, &heights, sector, &headings, tics)
+    }
+
+    /// The finder's version (for caching what it finds).
+    #[staticmethod]
+    fn finder_version() -> u32 {
+        jumps::FINDER_VERSION
+    }
+
+    /// One jump's flight in the simulator, tic by tic: [(x, y, z, angle)] (for comparing).
+    fn trace(&self, jump: JumpIn, soft: bool) -> Vec<(f64, f64, f64, f64)> {
+        let (src_polys, dest_poly, dest, runup, takeoff, requires) = jump;
+        self.lab.trace(&jumps::Jump { src_polys, dest_poly, dest, runup, takeoff, speed: 0.0, requires }, soft)
     }
 }

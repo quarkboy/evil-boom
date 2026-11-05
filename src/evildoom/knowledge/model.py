@@ -277,7 +277,6 @@ class Knowledge:
 
     def _detect_fired(self, last: Observation, obs: Observation, controls: Controls | None,
                       heights) -> None:
-        m = self.nav.map
         # walking over
         for _, li in self._lines_along((last.x, last.y), (obs.x, obs.y)):
             info = self._special(li)
@@ -333,7 +332,26 @@ class Knowledge:
         self._fire(li, obs.tic, "walk")
         if li not in self.teleports:
             self.events.append(f"tic {obs.tic}: teleport line {li} goes to ({obs.x:.0f}, {obs.y:.0f})")
-        self.teleports[li] = (obs.x, obs.y)
+        # the rest of its pad goes there too (no need to try every side of it)
+        for other in self.teleport_pad(li):
+            self.teleports[other] = (obs.x, obs.y)
+
+    def teleport_pad(self, li: int) -> frozenset[int]:
+        """Teleport line `li` and those joined to it end to end (sharing vertices, one after
+        another) with the same tag, so the same destination: the sides of one pad."""
+        m = self.nav.map
+        tag = m.linedefs[li].tag
+        same = [o for o, info in self._info.items()
+                if info.category is Category.TELEPORT and info.players and m.linedefs[o].tag == tag]
+        pad, todo = {li}, [li]
+        while todo:
+            line = m.linedefs[todo.pop()]
+            ends = {line.v1, line.v2}
+            for o in same:
+                if o not in pad and ends & {m.linedefs[o].v1, m.linedefs[o].v2}:
+                    pad.add(o)
+                    todo.append(o)
+        return frozenset(pad)
 
     def _sector_at(self, obs: Observation) -> int:
         poly = self.nav.mesh.poly_at(obs.x, obs.y)

@@ -343,16 +343,8 @@ class RouteFollower:
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
         self._run = None     # running over sinking floors (_run_step)
         self._barrel = None  # (where, since tic) of a barrel in the way being shot (_shoot_barrel)
-        # Floors that sink once stepped on (a walk-over line on their own edge lowers them:
-        # MAP08's exit run over the nukage): a jump off one goes at once, without settling.
-        self._sinking = set()
-        for t in nav.triggers:
-            if t.line >= 0 and t.info.trigger in (Trigger.W1, Trigger.WR):
-                line = nav.map.linedefs[t.line]
-                for sec in {nav.map.front_sector(line), nav.map.back_sector(line)}:
-                    if sec in t.effects and any(h[0] < nav.movers.real[sec][0]
-                                                for h in t.effects[sec]):
-                        self._sinking.add(sec)
+        # Floors that sink once stepped on: a jump off one goes at once, without settling.
+        self._sinking = nav.sinking_sectors()
         self._lineup_tic: int | None = None  # when we arrived at a jump's run-up
         self._brake_until = -1               # after landing a jump, until we've stopped
         self._jump_wait = None
@@ -859,6 +851,18 @@ class RouteFollower:
             states.setdefault(s, set()).add(h)
         return states
 
+    def _path_on(self, obs: Observation) -> None:
+        """Just landed a jump: the way on to the step goal from where we are. (The plan's path
+        on from a landing was smoothed across the jump, and can wander: MAP22's swung back off
+        the ledge it lands on, to a floor below with no way up.) Not a replan: the plan holds."""
+        nav, step = self.nav, self.steps[self.step_i]
+        goal = next(p for p in reversed(step.path.waypoints) if p is not None)
+        path = nav.find_path(self._standing(obs)[1], goal, self.world_states(obs),
+                             nav.local_doors(self.keys))
+        if path is not None:
+            self.steps[self.step_i] = replace(step, path=path)
+            self._start_step(obs.tic)
+
     def _replan(self, obs: Observation, why: str, live_only: bool = False) -> bool:
         """Re-path the current step from here. If its goal can't be walked to, plan a way
         there with triggers (lifts, switches out of a pit); failing that, replan the level.
@@ -1025,46 +1029,37 @@ class RouteFollower:
     def _run_heading(self, obs: Observation, sector: int) -> float | None:
         """The direction to push (from a fan all round: pushing back against our momentum
         may be what keeps us on) whose simulated run lands, off this floor, on the floor
-        whose path to the step goal is shortest."""
-        from evildoom.nav.physics import PlayerSim   # (physics imports this module)
+        whose path to the step goal is shortest. (Each run is in the native movement
+        simulator, pushing as _run_controls does.)"""
         nav = self.nav
         goal = next(p for p in reversed(self.steps[self.step_i].path.waypoints)
                     if p is not None)
-        heights = dict(obs.heights)
+        heights = [obs.heights.get(s, h) for s, h in enumerate(nav.movers.initial)]
         f, c = heights[sector]
         heights[sector] = (f - RUN_AHEAD_SINK, c)   # it keeps going down meanwhile
-        sim = PlayerSim(nav, heights)
         live = {s: {h} for s, h in obs.heights.items()}
         doors = nav.local_doors(self.keys)
         going = math.degrees(math.atan2(self.motion.disp[1], self.motion.disp[0])) \
             if math.hypot(*self.motion.disp) > 2 else obs.angle
+        offs = range(-180, 180, 15)
+        start = (obs.x, obs.y, *self.motion.disp, obs.z if obs.z is not None else f, obs.angle)
+        landings = nav.jump_lab().run_landings(
+            start, [tuple(map(float, h)) for h in heights], sector,
+            [going + off for off in offs], 2 * TICRATE)
         cost_from: dict[int, float | None] = {}
         best = None
-        for off in range(-180, 180, 15):
-            heading = going + off
-            sim.place(obs.x, obs.y, obs.angle)
-            sim.vx, sim.vy = self.motion.disp
-            sim.z = obs.z if obs.z is not None else sim.floorz
-            land = None
-            try:
-                for _ in range(2 * TICRATE):
-                    sim.step(_run_controls(sim.angle, heading))
-                    q = nav.mesh.poly_at(sim.x, sim.y)
-                    if q is not None and q.sector != sector and sim.z <= sim.floorz \
-                            and abs(sim.floorz - heights[q.sector][0]) < 0.5:
-                        land = q
-                        break
-            except Exception:
+        for off, landing in zip(offs, landings):
+            if landing is None:
                 continue
-            if land is None or nav.damage.get(land.sector) \
-                    or heights[land.sector][0] < f - MAX_STEP:
-                continue  # into the nukage (or nowhere)
-            if land.sector not in cost_from:
-                path = nav.find_path((sim.x, sim.y), goal, live, doors)
-                cost_from[land.sector] = path.cost if path is not None else None
-            cost = cost_from[land.sector]
+            at, land = landing
+            if nav.damage.get(land) or heights[land][0] < f - MAX_STEP:
+                continue  # into the nukage
+            if land not in cost_from:
+                path = nav.find_path(at, goal, live, doors)
+                cost_from[land] = path.cost if path is not None else None
+            cost = cost_from[land]
             if cost is not None and (best is None or (cost, abs(off)) < best[:2]):
-                best = (cost, abs(off), heading)
+                best = (cost, abs(off), going + off)
         return best[2] if best else None
 
     def _sprint_jump(self, obs: Observation) -> Controls:
@@ -1096,12 +1091,13 @@ class RouteFollower:
                 self.log.add(obs.tic, f"sector {land.sector} sinking: running on")
                 self._run = {"heading": heading, "sector": None, "next": obs.tic}
                 return self._run_step(obs)
+            self._path_on(obs)
             # Landing spots can be small: shed the sprint speed before going on.
             self._brake_until = obs.tic + 2 * TICRATE
             return self._walk(obs)
         diff = _norm(heading - obs.angle)
         self.motion.rate = 0.0
-        push = flown < (0 if jump.soft else math.dist(jump.takeoff, jump.dest) - 8)
+        push = flown < (jump.release if jump.soft else math.dist(jump.takeoff, jump.dest) - 8)
         # Keep on the jump's line till takeoff (MAP27's clears a ledge corner by nothing: 2
         # units of drift on the run-up and the box caught it). The check ran it dead straight.
         strafe = 0.0

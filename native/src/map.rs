@@ -96,6 +96,17 @@ impl Node {
     }
 }
 
+/// The BLOCKMAP: 128-unit blocks from (x, y), `columns` across; per block (row by row), its
+/// lines.
+#[derive(Clone, FromPyObject)]
+pub struct Blockmap {
+    pub x: i32,
+    pub y: i32,
+    pub columns: usize,
+    pub rows: usize,
+    pub blocks: Vec<Vec<usize>>,
+}
+
 #[derive(FromPyObject)]
 pub struct MapData {
     pub vertexes: Vec<Vertex>,
@@ -105,6 +116,7 @@ pub struct MapData {
     pub segs: Vec<MapSeg>,
     pub subsectors: Vec<Subsector>,
     pub nodes: Vec<Node>,
+    pub blockmap: Option<Blockmap>,
 }
 
 impl MapData {

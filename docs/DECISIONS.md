@@ -451,6 +451,37 @@ identically.
   the geometry (funnel included) and the plan's world operations. Plans for all 68 maps came
   out identical to before.
 
+## Jump finder and simulator move to Rust, traced from ZDoom (2026-11-05)
+- **The jump finder and the movement simulator are native** (`native/src/jumps`:
+  `finder`, `physics`, `check`; Python's `nav/physics.py` and the finder in `reach.py` are
+  gone). Python asks `Navigator.jump_lab()` (`evildoom_native.JumpLab`): `find` for the
+  jumps (cached in out/navcache, keyed by the finder's version), `check` for their verdicts,
+  `fits_at` (P_CheckPosition, for `_landable`), `run_landings` (the follower's runs over
+  sinking floors). Checking a map's jumps takes ~0.1-0.3 s (Python: ~5 s).
+- **The simulator follows the ZDoom 2.8.1 source function by function** (the ViZDoom tree):
+  ViZDoom's floored delta buttons and G_AddViewAngle; R_InitTables' finesine (truncated, its
+  second quarter mirrored off by one); P_MovePlayer; P_XYMovement's sub-steps and re-basing;
+  P_CheckPosition over every line in the blockmap's blocks (the map's BLOCKMAP lump, now
+  read by `load_map`), with R_PointInSubsector's sector; P_TryMove (no z raise on a step:
+  P_ZMovement lands you); FSlide::SlideMove (three corner traces through FPathTraverse,
+  short ones meeting lines' infinite extensions as ZDoom's do, HitSlideLine's divline
+  projection); P_ZMovement. Traces now match the engine exactly, tic for tic, on every jump
+  compared (MAP24, E4M6: 80 tics, 0.000 apart; the Python port drifted up to 100 units).
+  Left out: monsters, items, specials, slopes, 3D floors, water; solid things are
+  infinitely tall boxes (ZDoom lets a player pass over a low one).
+- **Exact physics showed jumps that only work pushed just so.** MAP24's run along a
+  channel narrower than the box (the rims hold you up): coasting from the edge stops short,
+  pushing all the way overshoots the 20-unit landing. The check now also tries letting go of
+  forward 16, 32, ... units past the takeoff (`soft+N`, `Jump.release`, the follower does
+  the same), and a jump that won't stick is tried from shorter run-ups, 16 at a time
+  (`ok~x,y`: that run-up). Both are what a player would do; robustness to being a little
+  off still applies. Neither is tried onto a floor that sinks once stepped on
+  (`Navigator.sinking_sectors`): that's not for stopping on, only running on (MAP08's exit
+  run went wrong landing softly).
+- **After landing a jump the follower paths on from where it landed** (`_path_on`): the
+  plan's path past a jump was smoothed across it and can wander (MAP22: back off the ledge
+  it lands on, onto a floor with no way up).
+
 ## Open questions / research TODO
 - [ ] Solid things and sub-33 gaps in the nav mesh itself (see status above).
 - [ ] Timing-aware handling of lifts/doors that close on a timer (be on them in time).

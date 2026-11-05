@@ -124,6 +124,17 @@ class Node:
 
 
 @dataclass
+class Blockmap:
+    """The BLOCKMAP lump: 128-unit blocks from (x, y), `columns` across; per block (row by
+    row) its lines, read as ZDoom does (skipping each list's first entry, to the 0xFFFF)."""
+    x: int
+    y: int
+    columns: int
+    rows: int
+    blocks: list[list[int]]
+
+
+@dataclass
 class MapData:
     name: str
     things: list[Thing]
@@ -135,6 +146,7 @@ class MapData:
     subsectors: list[Subsector] = field(default_factory=list)
     nodes: list[Node] = field(default_factory=list)
     texture_heights: dict[str, int] = field(default_factory=dict)  # wall texture -> height
+    blockmap: Blockmap | None = None
 
     def front_sector(self, line: Linedef) -> int | None:
         return self.sidedefs[line.front].sector if line.front != NO_SIDEDEF else None
@@ -152,6 +164,28 @@ class MapData:
 
 def _name(raw: bytes) -> str:
     return raw.split(b"\0", 1)[0].decode("ascii", errors="replace").upper()
+
+
+def _blockmap(data: bytes) -> Blockmap | None:
+    words = len(data) // 2
+    if words < 4:
+        return None
+    x, y, columns, rows = struct.unpack_from("<hhhh", data)
+    count = columns * rows
+    if columns <= 0 or rows <= 0 or words < 4 + count:
+        return None
+    raw = struct.unpack_from(f"<{words}H", data)
+    blocks = []
+    for offset in raw[4:4 + count]:
+        lines = []
+        i = offset + 1
+        while i < words and raw[i] != 0xFFFF:
+            lines.append(raw[i])
+            i += 1
+        if i >= words:
+            return None  # ZDoom would build its own (P_VerifyBlockMap fails)
+        blocks.append(lines)
+    return Blockmap(x, y, columns, rows, blocks)
 
 
 def _records(data: bytes, fmt: str):
@@ -200,4 +234,4 @@ def load_map(wad: Wad, map_name: str, *texture_wads: Wad) -> MapData:
         textures.update(texture_heights(w))
 
     return MapData(map_name.upper(), things, vertexes, linedefs, sidedefs, sectors,
-                   segs, subsectors, nodes, textures)
+                   segs, subsectors, nodes, textures, _blockmap(lumps.get("BLOCKMAP", b"")))
