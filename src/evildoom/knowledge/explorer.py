@@ -32,6 +32,7 @@ GLANCE_AFTER = 8              # tics after a walk-over line goes off unseen, bef
 HEAR_NEARER = 128.0           # a noise is worth walking towards if it gets her this much nearer
 ROOM_SPOTS = 6                # reachable spots tried for seeing an unseen wall from
 ROOM_LOOK_RANGE = 768.0       # an unseen wall is looked at from a reachable spot this near it
+COVER_GAP = 96.0              # a room's walked once nowhere in it is further than this from her steps
 KEEP_REACH = 0.75             # an objective mustn't leave less than this share reachable
 
 
@@ -51,6 +52,7 @@ class Objective:
     reveals: frozenset = frozenset()  # frontier: the unknown sectors it looks into
     heard: object = None              # noise: the sound
     look_at: tuple | None = None      # room: the wall to face once there
+    risky: bool = False               # nothing safer left: one-way drops, nukage are all right
 
     @property
     def ident(self) -> tuple:
@@ -177,7 +179,7 @@ class Explorer:
         if safe or not out:
             return safe
         # nothing left this side of a one-way drop: over it, then
-        return [replace(o, label=o.label + " (one way)") for o in out]
+        return [replace(o, label=o.label + " (one way)", risky=True) for o in out]
 
     def _frontier(self, reach: set[int], pos) -> list[Objective]:
         """Known polys she can get to next to polys she hasn't seen: one per unknown sector
@@ -283,20 +285,24 @@ class Explorer:
         return out
 
     def _unvisited(self, reach: set[int], pos) -> list[Objective]:
-        """Known sectors she can get to but hasn't stood in (walking round finds the walk-over
-        lines nobody can see), one per sector, at its reachable poly nearest her."""
+        """Parts of known rooms she can get to but hasn't walked (walking round finds the
+        walk-over lines nobody can see, often right across a room): per sector, the reachable
+        poly furthest from anywhere she's stood, if that's far enough to be worth it."""
         k, mesh = self.knowledge, self.nav.mesh
-        stood = {mesh.polys[p].sector for p in k.visited}
-        best: dict[int, tuple[float, tuple]] = {}
+        stood = [mesh.polys[p].center for p in k.visited]
+        best: dict[int, tuple[float, int]] = {}
         for pi in reach:
             poly = mesh.polys[pi]
-            if poly.sector in stood or self.nav.damage[poly.sector]:
+            if pi in k.visited or self.nav.damage[poly.sector]:
                 continue  # (not wading through nukage just to look)
-            d = math.dist(poly.center, pos)
-            if poly.sector not in best or d < best[poly.sector][0]:
-                best[poly.sector] = (d, poly.center)
-        return [Objective("visit", c, f"walk into sector {s}", reveals=frozenset({s}))
-                for s, (_, c) in best.items()]
+            gap = min((math.dist(poly.center, c) for c in stood), default=math.inf)
+            if gap < COVER_GAP:
+                continue
+            if poly.sector not in best or gap > best[poly.sector][0]:
+                best[poly.sector] = (gap, pi)
+        return [Objective("visit", mesh.polys[pi].center, f"walk across sector {s}",
+                          reveals=frozenset({pi}))
+                for s, (_, pi) in best.items()]
 
     def _recheck(self, reach: set[int], pos) -> list[Objective]:
         """Since a press whose effect wasn't seen: the known sectors round the reachable area
@@ -359,7 +365,7 @@ class Explorer:
             action = _action_for(obj.trigger)
             last = Step(None, "exit" if obj.kind == "exit" and action == "use" else action,
                         obj.trigger, label=obj.label)
-        if obj.kind != "exit":
+        if obj.kind != "exit" and not obj.risky:
             # (no dropping into nukage and the like, but to leave: a pit she believes she can
             # climb out of may well be a death trap)
             for leg in route.legs:
@@ -454,7 +460,7 @@ class Explorer:
         if obj.kind == "room":
             return obj.reveals <= k.mapped
         if obj.kind == "visit":
-            return obj.reveals <= {self.nav.mesh.polys[p].sector for p in k.visited}
+            return obj.reveals <= k.visited
         return False
 
     def _arrived(self, obs: Observation) -> Controls | None:
