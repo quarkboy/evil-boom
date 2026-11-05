@@ -27,6 +27,8 @@ COMPARED = 4                  # objectives routed and compared by the way there,
 GIVE_UP_TICS = 20 * TICRATE   # an objective not done by then is dropped for a while...
 ROUTE_SPEED = 8.0             # ...or by the time it takes to walk its route at this (units a tic)
 ROUTE_SLACK = 15 * TICRATE    # ...and this
+THRESHOLD_IN = 8.0            # a threshold's spot: this far over the line
+IDLE_RETRY = TICRATE          # with nothing to do, look for something again this often
 RETRY_TICS = 30 * TICRATE     # ...and offered again after this
 LOOK_TICS = TICRATE           # a turn on the spot, at the edge of the known map
 TURN_RATE = 20.0              # degrees a tic, turning to look at something
@@ -100,6 +102,7 @@ class Explorer:
     _follower_of: object = None  # the follower whose log has been passed on...
     _follower_seen: int = 0      # ...this far
     _glance_at: float | None = None
+    _idle_since: int = -10**9  # when it last found nothing to do
 
     def __post_init__(self) -> None:
         if self.knowledge is None:
@@ -231,10 +234,15 @@ class Explorer:
                 after = view.reachable(p.index, states_all, doors)
                 back[p.index] = here.index in after or len(after & reach) >= KEEP_REACH * len(reach)
             return back[p.index]
-        if risky:
-            # nothing safe left: anything, one-way drops and nukage and all
-            return [r for o in out if fresh(r := replace(o, label=o.label + " (risky)", risky=True))]
-        return [o for o in out if fresh(o) and returnable(o)]
+        def usable(objectives: list[Objective]) -> list[Objective]:
+            if risky:
+                # nothing safe left: anything, one-way drops and nukage and all
+                return [r for o in objectives
+                        if fresh(r := replace(o, label=o.label + " (risky)", risky=True))]
+            return [o for o in objectives if fresh(o) and returnable(o)]
+        # with nothing else left, the ways between rooms never walked over (walk-over lines
+        # are thresholds: E4M7's was between two rooms she'd come into other ways)
+        return usable(out) or usable(self._thresholds(reach))
 
     def _frontier(self, reach: set[int], pos) -> list[Objective]:
         """Known polys she can get to next to polys she hasn't seen into: per sector those are
@@ -264,6 +272,35 @@ class Explorer:
                     best[other.sector] = (d, spot)
         return [Objective("frontier", self._stand_spot(c, reach), f"look into sector {s}", reveals=frozenset(unseen[s]))
                 for s, (_, c) in best.items()]
+
+    def _thresholds(self, reach: set[int]) -> list[Objective]:
+        """Reachable polys she hasn't stood in across a line from ones she has: just over the
+        line (all a walk-over line needs, and a strip's middle may have no room for the box:
+        E4M7's, against a platform)."""
+        k, mesh, lab = self.knowledge, self.nav.mesh, self.nav.jump_lab()
+        out = []
+        for pi in sorted(reach - k.visited):
+            poly = mesh.polys[pi]
+            if k.damaging(poly.sector):
+                continue
+            for q in poly.portals:
+                portal = mesh.portals[q]
+                if portal.linedef is None or portal.other(pi) not in k.visited:
+                    continue
+                mid = ((portal.p1[0] + portal.p2[0]) / 2, (portal.p1[1] + portal.p2[1]) / 2)
+                d = math.dist(mid, poly.center)
+                if d < 1e-6:
+                    continue
+                spot = (mid[0] + (poly.center[0] - mid[0]) / d * THRESHOLD_IN,
+                        mid[1] + (poly.center[1] - mid[1]) / d * THRESHOLD_IN)
+                at = mesh.poly_at(*spot)
+                clear, floor, ceiling = lab.fits_at(*spot)
+                if at is None or at.index != pi or not clear or ceiling - floor < PLAYER_HEIGHT:
+                    continue  # (a sliver by a wall or shut door the box can't stand in)
+                out.append(Objective("visit", spot, f"step over line {portal.linedef}",
+                                     reveals=frozenset({pi})))
+                break
+        return out
 
     def _stand_spot(self, spot, reach: set[int]):
         """`spot`, if the box can stand there; else the middle of its poly, or of one next to
@@ -351,7 +388,13 @@ class Explorer:
         mesh, m, k = self.nav.mesh, self.nav.map, self.knowledge
         heights = [tuple(k.seen_heights.get(i, (sec.floor, sec.ceiling)))
                    for i, sec in enumerate(m.sectors)]
-        centres = [(mesh.polys[p].center, p) for p in reach]
+        lab = self.nav.jump_lab()
+
+        def standable(q) -> bool:
+            clear, floor, ceiling = lab.fits_at(*q)
+            return clear and ceiling - floor >= PLAYER_HEIGHT
+        # (only spots the box can stand at: E4M7's was in a shut door)
+        centres = [(mesh.polys[p].center, p) for p in reach if standable(mesh.polys[p].center)]
         out = []
         for s, lines in k.unseen_walls().items():
             best = None
@@ -551,8 +594,11 @@ class Explorer:
             look = self._arrived(obs)
             if look is not None:
                 return look
-        if self._need_new(obs):
+        if self._need_new(obs) and (self.current is not None or self.follower is not None
+                                    or obs.tic - self._idle_since >= IDLE_RETRY):
             self._next(obs)
+            if self.current is None:
+                self._idle_since = obs.tic
         if self.follower is None:
             return Controls(turn=10.0)  # nothing to do: look round
         f = self.follower
