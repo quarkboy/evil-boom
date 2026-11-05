@@ -519,6 +519,8 @@ class Explorer:
             if obs.tic < self._glance_until:
                 return self._turn_to(obs, self._glance_at)
             self._glance_until = None
+            if self.follower is not None:
+                self.follower.resume(obs.tic)  # (MAP24: "stuck" after looking round off a teleporter)
         while self._heard_n < len(k.heard):
             h = k.heard[self._heard_n]
             self._heard_n += 1

@@ -514,6 +514,11 @@ class RouteFollower:
             return [p for p in nxt.path.waypoints[1:6] if p is not None][:3]
         return []
 
+    def resume(self, tic: int) -> None:
+        """Something else had the controls until now (the explorer looking round): the time
+        that took isn't time stuck."""
+        self._reset_progress(tic)
+
     def _reset_progress(self, tic: int) -> None:
         self._best_s = -math.inf
         self._progress_tic = tic
@@ -682,13 +687,16 @@ class RouteFollower:
             carrot = seg.look.pts[-1]
         end_speed = 0.0 if stop else (FULL_SPEED if seg.end == "teleport" else
                                       self._roll_speed(seg))
-        speed = min(FULL_SPEED, track.speed_limit(self.s, end_speed), self._speed_cap)
+        # what's left of the track: off its end, as far as the end really is (MAP24: braked to
+        # a stop 25 past a run-up the track ended at, and stood there "arrived")
+        rest = max(track.length - self.s, math.dist(pos, end))
+        speed = min(FULL_SPEED, track.speed_limit(track.length - rest, end_speed),
+                    self._speed_cap)
         if stop:
             speed = min(speed, 0.3 * to_end + 0.5)
         if seg.end == "jump":  # run-ups are often right at a ledge: come in gently, slowly
             # over the last stretch (braking does nothing between steps down: MAP17's run-up
             # at the foot of a stair was overshot into the pit beyond)
-            rest = track.length - self.s
             if self._steps_down_to_end(obs, track):
                 speed = min(speed, 0.06 * rest + 1.5, 6.0 if rest < 128 else FULL_SPEED)
             else:

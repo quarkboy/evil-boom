@@ -65,7 +65,7 @@ impl NavCore {
         let mut seg_start = start;
         let mut portals: Vec<(Point, Point)> = Vec::new();
         for i in 1..chain.len() {
-            let (prev_poly, poly) = (chain[i - 1].0, chain[i].0);
+            let prev_poly = chain[i - 1].0;
             match chain[i].1 {
                 Some(Via::Tele(ti)) => {
                     let t = &self.tele[prev_poly][ti];
@@ -90,7 +90,7 @@ impl NavCore {
                 }
                 Some(Via::Portal(pi)) => {
                     let q = &self.mesh.portals[pi];
-                    portals.push(oriented(q.p1, q.p2, self.mesh.center(prev_poly), self.mesh.center(poly)));
+                    portals.push(oriented(q.p1, q.p2, self.mesh.center(prev_poly)));
                 }
                 None => {}
             }

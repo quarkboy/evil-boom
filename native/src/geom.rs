@@ -155,10 +155,12 @@ pub fn closest_on_portal(p: Point, p1: Point, p2: Point) -> Point {
     (x1 + t * (x2 - x1), y1 + t * (y2 - y1))
 }
 
-/// A portal's (left, right) ends walking from `from` to `to`, shrunk by PATH_CLEARANCE.
-pub fn oriented(p1: Point, p2: Point, from: Point, to: Point) -> (Point, Point) {
-    let (dx, dy) = (to.0 - from.0, to.1 - from.1);
-    let (left, right) = if dx * (p1.1 - from.1) - dy * (p1.0 - from.0) > 0.0 { (p1, p2) } else { (p2, p1) };
+/// A portal's (left, right) ends crossing it from the side `from` is on (a point in the poly
+/// it's crossed from), shrunk by PATH_CLEARANCE. (The side, not the way to the next poly's
+/// centre: a long strip's centre can be off to one side, MAP24's, which flipped the ends and
+/// let the funnel go straight through walls.)
+pub fn oriented(p1: Point, p2: Point, from: Point) -> (Point, Point) {
+    let (left, right) = if tri(p1, p2, from) > 0.0 { (p2, p1) } else { (p1, p2) };
     let length = dist(left, right);
     if length <= 2.0 * PATH_CLEARANCE {
         let m = midpoint(p1, p2);
@@ -238,8 +240,11 @@ mod tests {
         let end = closest_on_portal((0.0, 5.0), (0.0, 0.0), (200.0, 0.0));
         assert!((end.0 - PATH_CLEARANCE).abs() < 1e-9 && end.1 == 0.0);
         // walking +x through a portal along x = 0: the left end is the one at +y
-        let (l, r) = oriented((0.0, 0.0), (0.0, 100.0), (-10.0, 50.0), (10.0, 50.0));
+        let (l, r) = oriented((0.0, 0.0), (0.0, 100.0), (-10.0, 50.0));
         assert!(dist(l, (0.0, 100.0 - PATH_CLEARANCE)) < 1e-9 && dist(r, (0.0, PATH_CLEARANCE)) < 1e-9);
+        // ...and walking -x, whichever way the end points are given
+        let (l, r) = oriented((0.0, 100.0), (0.0, 0.0), (10.0, -500.0));
+        assert!(dist(l, (0.0, PATH_CLEARANCE)) < 1e-9 && dist(r, (0.0, 100.0 - PATH_CLEARANCE)) < 1e-9);
     }
 
     #[test]
