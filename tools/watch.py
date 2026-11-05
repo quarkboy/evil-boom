@@ -45,7 +45,8 @@ TEXT = (220, 220, 220)
 HEAD = (255, 210, 120)
 KIND_COLOUR = {"exit": (255, 80, 255), "key": (255, 255, 0), "switch": (0, 220, 255),
                "door": (0, 160, 255), "frontier": (120, 255, 120), "visit": (80, 180, 80),
-               "recheck": (200, 160, 60), "noise": (255, 120, 40)}
+               "recheck": (200, 160, 60), "noise": (255, 120, 40),
+               "teleporter": (255, 255, 255), "room": (160, 255, 200)}
 ITEM_COLOUR = {"key": (255, 255, 0), "weapon": (255, 140, 0), "ammo": (180, 140, 90),
                "health": (80, 220, 80), "armor": (80, 160, 255), "powerup": (220, 120, 255)}
 KEY_COLOUR = {"blue": (60, 120, 255), "yellow": (255, 230, 40), "red": (255, 50, 50)}
@@ -354,10 +355,13 @@ def main() -> None:
     ap.add_argument("wad", help="doom, doom2, or a WAD path")
     ap.add_argument("map", help="e.g. E1M1, MAP02")
     ap.add_argument("--speed", type=float, default=1.0, help="game speed (1 = real time)")
+    ap.add_argument("--all", action="store_true", help="start with the whole map shown (A)")
     ap.add_argument("--snapshot", type=float, metavar="SECONDS",
                     help="save the window to out/watch.png after this much game time, and quit")
     a = ap.parse_args()
-    Watch(resolve_wad(a.wad), a.map.upper(), a.speed, a.snapshot).run()
+    w = Watch(resolve_wad(a.wad), a.map.upper(), a.speed, a.snapshot)
+    w.show_all = a.all
+    w.run()
 
 
 if __name__ == "__main__":

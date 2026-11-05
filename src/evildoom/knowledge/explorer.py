@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 
 from evildoom.knowledge.model import Knowledge
 from evildoom.motor.follower import TICRATE, Controls, Observation, RouteFollower
-from evildoom.nav.reach import HeightStates, Navigator, TriggerLine
+from evildoom.nav.reach import HeightStates, Navigator, TriggerLine, can_cross
 from evildoom.nav.walkthrough import Step, _action_for, steps_from_legs
 from evildoom.wad.specials import Category, Key
 
@@ -27,8 +27,11 @@ TURN_RATE = 20.0              # degrees a tic, turning to look at something
 AMBIENT_RADIUS = 96.0         # sounds from about the same place...
 AMBIENT_REPEATS = 4           # ...heard more often than this are background
 NOISE_TICS = 60 * TICRATE     # a sound is worth going to look into for this long
+GLANCE_GAP = 5 * TICRATE      # at most one look round this often (stairs build in many steps)
 GLANCE_AFTER = 8              # tics after a walk-over line goes off unseen, before looking
 HEAR_NEARER = 128.0           # a noise is worth walking towards if it gets her this much nearer
+ROOM_SPOTS = 6                # reachable spots tried for seeing an unseen wall from
+ROOM_LOOK_RANGE = 768.0       # an unseen wall is looked at from a reachable spot this near it
 KEEP_REACH = 0.75             # an objective mustn't leave less than this share reachable
 
 
@@ -40,13 +43,14 @@ def _compass(bearing: float) -> str:
 
 @dataclass
 class Objective:
-    kind: str  # "exit", "key", "switch", "door", "frontier", "visit", "recheck", "noise"
+    kind: str  # exit, key, switch, door, teleporter, frontier, room, visit, recheck, noise
     goal: tuple[float, float]
     label: str
     trigger: TriggerLine | None = None
     key: Key | None = None
     reveals: frozenset = frozenset()  # frontier: the unknown sectors it looks into
     heard: object = None              # noise: the sound
+    look_at: tuple | None = None      # room: the wall to face once there
 
     @property
     def ident(self) -> tuple:
@@ -68,6 +72,7 @@ class Explorer:
     _glance_until: int | None = None
     _glanced: int = 0  # fired lines looked round for so far
     _heard_n: int = 0  # sounds dealt with so far
+    _last_glance: int = -10**9
     _glance_at: float | None = None
 
     def __post_init__(self) -> None:
@@ -143,8 +148,10 @@ class Explorer:
             kind = "door" if t.info.category in (Category.DOOR, Category.LOCKED_DOOR) else "switch"
             out.append(Objective(kind, nav._activation_point(t, pos, reach),
                                  f"try {kind} (line {li})", trigger=t))
+        out += self._teleporters(reach, pos)
         out += self._frontier(reach, pos)
         out += self._recheck(reach, pos)
+        out += self._unfinished(reach, pos)
         out += self._unvisited(reach, pos)
         out += self._noises(reach, pos, obs.tic)
         tic = obs.tic
@@ -156,8 +163,8 @@ class Explorer:
         back: dict[int, bool] = {}
 
         def returnable(o: Objective) -> bool:
-            if o.kind == "exit":
-                return True
+            if o.kind in ("exit", "teleporter", "key"):
+                return True  # (worth the risk: where it leads is the unknown, keys open the way)
             p = nav.mesh.poly_at(*o.goal)
             if p is None:
                 return False
@@ -184,13 +191,45 @@ class Explorer:
         return [Objective("frontier", c, f"look into sector {s}", reveals=frozenset({s}))
                 for s, (_, c) in best.items()]
 
+    def _teleporters(self, reach: set[int], pos) -> list[Objective]:
+        """Teleporters she has seen and not been through: walk over one (from the side that
+        sends you) to find out where it goes."""
+        from evildoom.nav.reach import Teleport
+        from evildoom.wad.specials import classify_line
+        k, nav = self.knowledge, self.nav
+        tried = set(k.teleports)
+        out = []
+        for li in k.teleporters():
+            if li in tried:
+                continue
+            src = {p for p, tps in nav.tele_from.items() for tp in tps
+                   if isinstance(tp, Teleport) and tp.line == li} & reach
+            if not src:
+                continue
+            line = nav.map.linedefs[li]
+            front, back = nav.map.front_sector(line), nav.map.back_sector(line)
+            now = self.states()
+            if front is not None and back is not None and not any(
+                    can_cross(a, b) for a in now[front] for b in now[back]):
+                continue  # (the pad isn't down yet, as far as she's seen)
+            a, b = nav.map.vertexes[line.v1], nav.map.vertexes[line.v2]
+            length = max(math.dist((a.x, a.y), (b.x, b.y)), 1.0)
+            mid = ((a.x + b.x) / 2, (a.y + b.y) / 2)
+            # the front side (the one that teleports), a little back from the line
+            spot = (mid[0] + (b.y - a.y) / length * 24, mid[1] - (b.x - a.x) / length * 24)
+            if nav.mesh.poly_at(*spot) is None or nav.mesh.poly_at(*spot).index not in reach:
+                spot = min((nav.mesh.polys[p].center for p in src), key=lambda c: math.dist(c, mid))
+            t = TriggerLine(li, classify_line(line.special), [], {}, src)
+            out.append(Objective("teleporter", spot, f"try teleporter (line {li})", trigger=t))
+        return out
+
     def _noises(self, reach: set[int], pos, tic: int) -> list[Objective]:
         """Sounds she heard but couldn't see the source of, lately: go to the reachable spot
         nearest where it seemed to come from (if that's nearer than here) and look."""
         mesh = self.nav.mesh
         out = []
         for h in self.knowledge.heard:
-            if h.seen or tic - h.tic > NOISE_TICS or self._ambient(h) or self._noise_seen(h):
+            if tic - h.tic > NOISE_TICS or not self._worth_a_look(h) or self._noise_seen(h):
                 continue
             best = min(reach, key=lambda p: math.dist(mesh.polys[p].center, h.origin), default=None)
             if best is None:
@@ -206,6 +245,37 @@ class Explorer:
         """Has where a sound seemed to come from been in view since?"""
         poly = self.nav.mesh.poly_at(*h.origin)
         return poly is not None and self.knowledge.seen_tic.get(poly.sector, -1) > h.tic
+
+    def _unfinished(self, reach: set[int], pos) -> list[Objective]:
+        """Rooms not closed on the map yet: for each known sector with walls not seen, a
+        reachable spot it can be seen from (checked by looking from there, at the heights as
+        last seen), nearest her first."""
+        mesh, m, k = self.nav.mesh, self.nav.map, self.knowledge
+        heights = [tuple(k.seen_heights.get(i, (sec.floor, sec.ceiling)))
+                   for i, sec in enumerate(m.sectors)]
+        centres = [(mesh.polys[p].center, p) for p in reach]
+        out = []
+        for s, lines in k.unseen_walls().items():
+            best = None
+            for li in lines:
+                line = m.linedefs[li]
+                a, b = m.vertexes[line.v1], m.vertexes[line.v2]
+                mid = ((a.x + b.x) / 2, (a.y + b.y) / 2)
+                near = sorted((c for c in centres if math.dist(c[0], mid) <= ROOM_LOOK_RANGE),
+                              key=lambda c: math.dist(c[0], mid))[:ROOM_SPOTS]
+                for c, _ in near:
+                    angle = math.degrees(math.atan2(mid[1] - c[1], mid[0] - c[0]))
+                    drawn, _ = k._sight.drawn(c[0], c[1], angle, k.width, heights)
+                    if li in drawn:
+                        key = math.dist(c, pos) + math.dist(c, mid)
+                        if best is None or key < best[0]:
+                            best = (key, li, c, mid)
+                        break
+            if best is not None:
+                _, li, c, mid = best
+                out.append(Objective("room", c, f"look at a wall of sector {s} not seen yet",
+                                     reveals=frozenset({li}), look_at=mid))
+        return out
 
     def _unvisited(self, reach: set[int], pos) -> list[Objective]:
         """Known sectors she can get to but hasn't stood in (walking round finds the walk-over
@@ -252,8 +322,8 @@ class Explorer:
         exits = [o for o in options if o.kind == "exit"]
         if exits:
             return exits[0]
-        weight = {"key": 0.6, "switch": 0.8, "door": 0.8, "frontier": 1.0, "visit": 1.5,
-                  "noise": 0.7,
+        weight = {"key": 0.6, "switch": 0.8, "door": 0.8, "frontier": 1.0, "room": 1.1, "visit": 2.0,
+                  "noise": 0.7, "teleporter": 1.2,
                   "recheck": 3.0}
         pos = (obs.x, obs.y)
         options.sort(key=lambda o: math.dist(o.goal, pos) * weight[o.kind])
@@ -274,10 +344,12 @@ class Explorer:
                           max_expansions=2000, max_seconds=PLAN_SECONDS)
         if route is None:
             return None
-        if obj.kind in ("frontier", "recheck", "visit", "noise"):
+        if obj.kind in ("frontier", "recheck", "visit", "noise", "room"):
             last = Step(None, "goto", label=obj.label)
         elif obj.kind == "key":
             last = Step(None, "pickup", key=obj.key, label=obj.label)
+        elif obj.kind == "teleporter":
+            last = Step(None, "cross", obj.trigger, label=obj.label)
         else:
             action = _action_for(obj.trigger)
             last = Step(None, "exit" if obj.kind == "exit" and action == "use" else action,
@@ -313,7 +385,7 @@ class Explorer:
         while self._heard_n < len(k.heard):
             h = k.heard[self._heard_n]
             self._heard_n += 1
-            if not h.seen and not self._ambient(h):
+            if self._worth_a_look(h) and obs.tic - self._last_glance >= GLANCE_GAP:
                 return self._start_glance(obs, h.bearing, f"heard something, bearing {h.bearing:.0f}")
         learned = {self.nav.triggers[i].line for i, s in k.learned.items() if s}
         while self._glanced < len(k.fired):
@@ -325,7 +397,12 @@ class Explorer:
                 return self._start_glance(obs, None, f"set off line {f.line} walking")
         return None
 
+    def _worth_a_look(self, h) -> bool:
+        """A sound she couldn't see the source of, not one she'd expect, not background."""
+        return not h.seen and not self.knowledge.expected(h) and not self._ambient(h)
+
     def _start_glance(self, obs: Observation, bearing: float | None, why: str) -> Controls:
+        self._last_glance = obs.tic
         self.log.append(f"tic {obs.tic}: {why}: looking " + ("round" if bearing is None else "that way"))
         self._glance_until = obs.tic + LOOK_TICS
         self._glance_at = bearing
@@ -355,6 +432,8 @@ class Explorer:
             return all(k.seen_tic.get(s, -1) >= self._since for s in obj.reveals)
         if obj.kind == "noise":
             return self._noise_seen(obj.heard)
+        if obj.kind == "room":
+            return obj.reveals <= k.mapped
         if obj.kind == "visit":
             return obj.reveals <= {self.nav.mesh.polys[p].sector for p in k.visited}
         return False
@@ -364,22 +443,24 @@ class Explorer:
         there's something to look for (what can be seen from there, what a switch did).
         Controls while still looking, else None (and a new objective's wanted)."""
         obj = self.current
+        k = self.knowledge
         if obj.kind in ("switch", "door") and not any(
-                f.line == obj.trigger.line and f.tic >= self._since for f in self.knowledge.fired):
+                k.mechanism(f.line) == k.mechanism(obj.trigger.line) for f in k.fired):
             self._drop(obj, obs, "pressed, but nothing went off")
-        elif obj.kind in ("frontier", "switch", "recheck", "noise") and not self._seen_to(obj):
+        elif obj.kind in ("frontier", "switch", "recheck", "noise", "room") and not self._seen_to(obj):
             if self._look_until is None:
                 self._look_until = obs.tic + LOOK_TICS
             if obs.tic < self._look_until:
-                if obj.kind == "noise":
-                    h = obj.heard
-                    to = math.degrees(math.atan2(h.origin[1] - obs.y, h.origin[0] - obs.x))
-                    return self._turn_to(obs, to)
+                at = obj.heard.origin if obj.kind == "noise" else obj.look_at
+                if at is not None:
+                    return self._turn_to(obs, math.degrees(math.atan2(at[1] - obs.y, at[0] - obs.x)))
                 return Controls(turn=360.0 / LOOK_TICS)
             if obj.kind != "switch" and not self._seen_to(obj):
                 self._drop(obj, obs, "nothing to see from there")
         elif obj.kind == "visit" and not self._seen_to(obj):
             self._drop(obj, obs, "got there but not in it")
+        elif obj.kind == "teleporter" and obj.trigger.line not in self.knowledge.teleports:
+            self._drop(obj, obs, "didn't take me anywhere")
         self._look_until = None
         self.follower = None
         return None
@@ -393,6 +474,8 @@ class Explorer:
             return True
         if obj.kind == "frontier" and obj.reveals <= self.knowledge.sectors:
             return True  # seen it on the way
+        if obj.kind == "teleporter" and obj.trigger.line in self.knowledge.teleports:
+            return True  # been through
         if obj.kind != "exit" and len(self.knowledge.exits()) > self._exits_seen:
             return True  # an exit came into view
         if obs.tic - self._since > GIVE_UP_TICS:

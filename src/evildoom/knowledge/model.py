@@ -27,6 +27,10 @@ VIEW_WIDTH = 320     # screen columns the view is worked out for (the engine's w
 HEAR_RANGE = 1200.0  # S_CLIPPING_DIST: sounds further off aren't heard at all
 HEAR_BEARING = 15.0  # how well she can tell where a sound came from: degrees...
 HEAR_DISTANCE = 64.0  # ...and units
+TELEPORT_JUMP = 64.0   # further than this in a tic is a teleport
+TELEPORT_NEAR = 48.0   # ...through a teleport line this near where she was
+NEAR_SOUND = 128.0       # a sound this near is something she'll see anyway
+EXPECTED_RADIUS = 128.0  # a sound this near a known mover's is that mover
 TICS_SAME_SOUND = 4   # sounds this close together from the same way are one
 
 USED = (Trigger.S1, Trigger.SR, Trigger.D1, Trigger.DR)
@@ -79,7 +83,6 @@ class Knowledge:
         self._info = {i: info for i, line in enumerate(m.linedefs)
                       if (info := classify_line(line.special)) is not None}
         self._last: Observation | None = None
-        self._teleport_from: int | None = None
         # where each sector's sounds come from: the middle of its bounding box (P_GroupLines)
         box: dict[int, list[float]] = {}
         for line in m.linedefs:
@@ -91,6 +94,16 @@ class Knowledge:
                     b[0], b[1] = min(b[0], v.x), min(b[1], v.y)
                     b[2], b[3] = max(b[2], v.x), max(b[3], v.y)
         self._sound_origin = {sec: ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for sec, b in box.items()}
+        # lines that get drawn when looked at (not two-sided ones alike on both sides)
+        def drawable(line) -> bool:
+            f, b = m.front_sector(line), m.back_sector(line)
+            if f is None or b is None:
+                return True
+            sf, sb = m.sectors[f], m.sectors[b]
+            return (sf.floor, sf.ceiling, sf.floor_tex, sf.ceiling_tex, sf.light) != \
+                (sb.floor, sb.ceiling, sb.floor_tex, sb.ceiling_tex, sb.light) \
+                or m.sidedefs[line.front].middle not in ("-", "")
+        self._drawable = [i for i, line in enumerate(m.linedefs) if drawable(line)]
         self._live: dict[int, tuple[float, float]] = {}  # every sector's heights last tic
         self._moving: set[int] = set()
         for i, line in enumerate(m.linedefs):
@@ -146,12 +159,10 @@ class Knowledge:
                 self.sectors.add(poly.sector)
         last = self._last
         if last is not None:
-            self._detect_fired(last, obs, controls, heights)
-            if self._teleport_from is not None and math.dist((last.x, last.y), (obs.x, obs.y)) > 64:
-                self.teleports[self._teleport_from] = (obs.x, obs.y)
-                self.events.append(f"tic {obs.tic}: teleport line {self._teleport_from} goes to "
-                                   f"({obs.x:.0f}, {obs.y:.0f})")
-                self._teleport_from = None
+            if math.dist((last.x, last.y), (obs.x, obs.y)) > TELEPORT_JUMP:
+                self._teleported(last, obs)
+            else:
+                self._detect_fired(last, obs, controls, heights)
         for s in in_view:
             self.seen_tic[s] = obs.tic
             now = heights[s]
@@ -256,9 +267,7 @@ class Knowledge:
             if info is None or info.trigger not in WALKED:
                 continue
             if info.category is Category.TELEPORT:
-                if not self._front(li, last.x, last.y):
-                    continue
-                self._teleport_from = li
+                continue  # (going through is seen by where she ends up: _teleported)
             self._fire(li, obs.tic, "walk")
         if controls is None:
             return
@@ -287,6 +296,28 @@ class Knowledge:
                 if opening is None or not opening[0] < z < opening[1]:
                     break
 
+    def _teleported(self, last: Observation, obs: Observation) -> None:
+        """She moved further in a tic than anyone can walk: a teleporter, the one nearest
+        where she was."""
+        m = self.nav.map
+        best = None
+        for li, info in self._info.items():
+            if info.category is not Category.TELEPORT or not info.players:
+                continue
+            line = m.linedefs[li]
+            a, b = m.vertexes[line.v1], m.vertexes[line.v2]
+            d = _segment_point_distance((a.x, a.y), (b.x, b.y), (last.x, last.y))
+            if best is None or d < best[0]:
+                best = (d, li)
+        if best is None or best[0] > TELEPORT_NEAR:
+            self.events.append(f"tic {obs.tic}: moved to ({obs.x:.0f}, {obs.y:.0f}) all at once")
+            return
+        li = best[1]
+        self._fire(li, obs.tic, "walk")
+        if li not in self.teleports:
+            self.events.append(f"tic {obs.tic}: teleport line {li} goes to ({obs.x:.0f}, {obs.y:.0f})")
+        self.teleports[li] = (obs.x, obs.y)
+
     def _sector_at(self, obs: Observation) -> int:
         poly = self.nav.mesh.poly_at(obs.x, obs.y)
         return poly.sector if poly is not None else 0
@@ -307,14 +338,28 @@ class Knowledge:
     def interactables(self) -> list[int]:
         """Mapped lines she can tell are switches or use-doors (or gun targets), not used
         yet (exits are told apart: see exits)."""
-        used = {f.line for f in self.fired}
+        used = {self.mechanism(f.line) for f in self.fired}
         out = []
         for li in sorted(self.mapped):
             info = self._special(li)
-            if info is not None and info.trigger in USED + SHOT and li not in used \
+            if info is not None and info.trigger in USED + SHOT and self.mechanism(li) not in used \
                     and info.category not in (Category.EXIT, Category.SECRET_EXIT):
                 out.append(li)
         return out
+
+    def mechanism(self, li: int) -> tuple:
+        """What a line works, as far as she can tell: lines with the same special and tag
+        work the same thing (the faces of one set of bars), as do door lines on the same
+        door; using one is trying them all."""
+        m = self.nav.map
+        line = m.linedefs[li]
+        info = self._special(li)
+        if info is not None and info.trigger in (Trigger.D1, Trigger.DR):
+            side = m.back_sector(line)
+            return ("door", side if side is not None else li)
+        if line.tag:
+            return ("tag", line.special, line.tag)
+        return ("line", li)
 
     def exits(self) -> list[int]:
         """Exit lines she can tell are there: mapped ones, or walk-over ones in a sector she
@@ -341,8 +386,8 @@ class Knowledge:
         out = []
         for i, info in self._info.items():
             line = m.linedefs[i]
-            if info.category is not Category.TELEPORT:
-                continue
+            if info.category is not Category.TELEPORT or not info.players:
+                continue  # (not monster-only ones)
             sides = {m.front_sector(line), m.back_sector(line)} - {None}
             if i in self.mapped or sides & self.sectors:
                 out.append(i)
@@ -363,12 +408,51 @@ class Knowledge:
         tics = [f.tic for f in self.fired if f.line not in explained]
         return max(tics) if tics else None
 
+    def unseen_walls(self) -> dict[int, list[int]]:
+        """Known sectors not closed on the automap yet: sector -> its lines that would be
+        drawn if looked at (walls, steps, windows) but haven't been."""
+        m = self.nav.map
+        out: dict[int, list[int]] = {}
+        for li in self._drawable:
+            if li in self.mapped:
+                continue
+            line = m.linedefs[li]
+            for s in (m.front_sector(line), m.back_sector(line)):
+                if s is not None and s in self.sectors:
+                    out.setdefault(s, []).append(li)
+        return out
+
+    def expected(self, h: Heard) -> bool:
+        """A sound from something she knows moves (a door or lift she's learned: the one she
+        just went through closing behind her), or from right beside her: nothing new."""
+        if h.distance <= NEAR_SOUND:
+            return True
+        movers = {s for _, sectors in self.known_triggers() for s in sectors}
+        return any(math.dist(self._sound_origin[s], h.origin) <= EXPECTED_RADIUS
+                   for s in movers if s in self._sound_origin)
+
     def known_polys(self) -> set[int]:
         return {p.index for p in self.nav.mesh.polys if p is not None and p.sector in self.sectors}
 
     def known_triggers(self) -> list[tuple[TriggerLine, set[int]]]:
-        """Triggers whose effect on some sectors she has learned, with those sectors."""
-        return [(self.nav.triggers[i], s) for i, s in self.learned.items() if s]
+        """Triggers whose effect on some sectors she has learned, with those sectors; also the
+        other lines of the same mechanism (the switch on the other side of the same door) as
+        far as they're mapped, which she takes to do the same."""
+        by_mechanism: dict[tuple, set[int]] = {}
+        for i, sectors in self.learned.items():
+            t = self.nav.triggers[i]
+            if sectors and t.line >= 0:
+                by_mechanism.setdefault(self.mechanism(t.line), set()).update(sectors)
+        out = []
+        for i, t in enumerate(self.nav.triggers):
+            if t.line < 0:
+                continue
+            if i in self.learned and self.learned[i]:
+                out.append((t, self.learned[i]))
+            elif t.line in self.mapped and (same := by_mechanism.get(self.mechanism(t.line))):
+                if same & set(t.effects):
+                    out.append((t, same & set(t.effects)))
+        return out
 
     def summary(self) -> str:
         m = self.nav.map
@@ -376,6 +460,13 @@ class Knowledge:
                 f"sectors, {len(self.fired)} fired, {sum(map(len, self.learned.values()))} effects "
                 f"learned, {len(self.interactables())} untried switches/doors, "
                 f"{len(self.exits())} exits seen")
+
+
+def _segment_point_distance(a, b, p) -> float:
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    l2 = dx * dx + dy * dy
+    t = 0.0 if l2 == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2))
+    return math.dist(p, (a[0] + t * dx, a[1] + t * dy))
 
 
 def _intersect(a, b, p, q) -> float | None:
