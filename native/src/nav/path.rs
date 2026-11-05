@@ -97,14 +97,14 @@ impl NavCore {
             let mult = if self.damage[self.poly_sector[poly]] { DAMAGE_COST } else { 1.0 };
             let mut moves: Vec<(usize, Point, Via)> = Vec::new();
             for i in 0..self.adj[poly].len() {
-                if self.edge_passable(py, poly, i, st, doors)? {
+                if self.enterable(self.adj[poly][i].to) && self.edge_passable(py, poly, i, st, doors)? {
                     let e = self.adj[poly][i];
                     let q = &self.mesh.portals[e.portal];
                     moves.push((e.to, closest_on_portal(here, q.p1, q.p2), Via::Portal(e.portal)));
                 }
             }
             for ti in 0..self.tele[poly].len() {
-                if self.tele_ok(poly, ti, st)? {
+                if self.tele_known(poly, ti) && self.tele_ok(poly, ti, st)? {
                     let t = &self.tele[poly][ti];
                     moves.push((t.dest, t.dest_pt, Via::Tele(ti)));
                 }

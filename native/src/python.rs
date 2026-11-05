@@ -336,6 +336,15 @@ impl Nav {
     /// The plan search's per-map facts (a dict of PlanFacts' fields), needed before `plan`.
     fn set_plan_data(&mut self, facts: PlanFactsIn) {
         self.plan_facts = Some(facts.into());
+        self.plan_caches = PlanCaches::default();
+    }
+
+    /// Limit everything to what the player knows: the polys she can go into and the teleport
+    /// lines she knows the way through (None: no limit).
+    #[pyo3(signature = (polys=None, teleports=None))]
+    fn restrict(&mut self, polys: Option<HashSet<usize>>, teleports: Option<HashSet<usize>>) {
+        self.core.restrict(polys, teleports);
+        self.plan_caches = PlanCaches::default();
     }
 
     /// A route from `start` to one of `goals` with the world at `states`, or None:
@@ -377,9 +386,10 @@ impl Sight {
         Sight { sight: sight::Sight::new(&map) }
     }
 
-    /// The linedefs drawn looking from (x, y) at `angle` (degrees, anticlockwise from east)
-    /// on a screen `width` columns wide, with the sectors at `heights` [(floor, ceiling)].
-    fn drawn(&self, x: f64, y: f64, angle: f64, width: i32, heights: Vec<(f64, f64)>) -> Vec<usize> {
+    /// Looking from (x, y) at `angle` (degrees, anticlockwise from east) on a screen `width`
+    /// columns wide, with the sectors at `heights` [(floor, ceiling)]: (the linedefs drawn,
+    /// those in view but invisible).
+    fn drawn(&self, x: f64, y: f64, angle: f64, width: i32, heights: Vec<(f64, f64)>) -> (Vec<usize>, Vec<usize>) {
         self.sight.drawn(&sight::View { x, y, angle, width, heights: &heights })
     }
 }

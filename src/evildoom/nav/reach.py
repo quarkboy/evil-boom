@@ -10,6 +10,7 @@ Heights are kept separate from topology. A `HeightStates` maps each sector to th
 A portal from sector A to sector B is passable if some pair of states allows it, using
 vanilla player movement rules: step up <= 24, any drop, opening >= 56 (player height).
 """
+import copy
 import hashlib
 import inspect
 import json
@@ -1351,7 +1352,30 @@ class Navigator:
                 m, [tuple(map(float, b)) for b in self._mesh_obstacles], facts,
                 lambda pi, blocking: self.portal_fits_without(pi, blocking),
                 lambda li, high, top: self._landable(li, high, top))
-        return self._nnav
+            # shared with knowledge views (see restricted_to): which one it's set up for
+            self._native_for = {"restriction": None, "plan": None}
+        native = self._nnav
+        mine = self.__dict__.get("restriction")
+        if self._native_for["restriction"] is not mine:
+            native.restrict(*(mine or (None, None)))
+            self._native_for["restriction"] = mine
+            self._native_for["plan"] = None
+        return native
+
+    def restricted_to(self, polys: set[int], teleports: set[int],
+                      triggers: list["TriggerLine"], key_positions: dict) -> "Navigator":
+        """A view of this navigator for what the player knows: only `polys` can be walked
+        into, only `teleports` taken, only `triggers` (as far as their effects are known)
+        used, and keys only where `key_positions` says. Shares the map's analysis and the
+        native core (set up for whichever view uses it)."""
+        self._native_nav()
+        view = copy.copy(self)
+        for cached in ("_temporary", "_cross_sides", "_lowest", "_keys_at"):
+            view.__dict__.pop(cached, None)
+        view.triggers = triggers
+        view.restriction = (frozenset(polys), frozenset(teleports))
+        view._keys_at = key_positions
+        return view
 
     def _static_adjacency(self) -> list[list[tuple[int, int, int, int]]]:
         """Per poly: (portal, poly beyond, its sector, the far sector) for the portals that
@@ -1585,9 +1609,9 @@ class Navigator:
         rel_t, rel_k = self._relaxed_needs(start_poly.index, goal_polys, states0, keys0,
                                            key_items, actions)
         nav = self._native_nav()
-        if not self.__dict__.get("_nplan_ready"):
+        if self._native_for["plan"] is not self:
             nav.set_plan_data(self._native_plan_data())
-            self._nplan_ready = True
+            self._native_for["plan"] = self
         bit = {k: i for i, k in enumerate(KEY_ORDER)}
         index = {id(t): i for i, t in enumerate(self.triggers)}
         found = nav.plan(start, list(goals), states0, {

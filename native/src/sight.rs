@@ -135,16 +135,18 @@ impl Sight {
         }
     }
 
-    /// The linedefs drawn in this view (each once, in the order first drawn).
-    pub fn drawn(&self, view: &View<'_>) -> Vec<usize> {
+    /// The linedefs drawn in this view (each once, in the order first drawn), and those in
+    /// view but not drawn at all (two-sided lines alike on both sides: the floor across them
+    /// is still seen).
+    pub fn drawn(&self, view: &View<'_>) -> (Vec<usize>, Vec<usize>) {
         let (sin, cos) = view.angle.to_radians().sin_cos();
         let lines = self.segs.iter().map(|s| s.line + 1).max().unwrap_or(0);
-        let mut walk = Walk { sight: self, view, covered: Covered::new(view.width), drawn: Vec::new(), seen: vec![false; lines], sin, cos };
+        let mut walk = Walk { sight: self, view, covered: Covered::new(view.width), drawn: Vec::new(), through: Vec::new(), seen: vec![false; lines], sin, cos };
         match self.nodes.len().checked_sub(1) {
             None => walk.subsector(0),
             Some(root) => walk.node(u16::try_from(root).unwrap_or(0)),
         }
-        walk.drawn
+        (walk.drawn, walk.through)
     }
 }
 
@@ -154,6 +156,7 @@ struct Walk<'a> {
     view: &'a View<'a>,
     covered: Covered,
     drawn: Vec<usize>,
+    through: Vec<usize>,
     seen: Vec<bool>,
     sin: f64,
     cos: f64,
@@ -265,7 +268,12 @@ impl Walk<'_> {
             return;
         }
         let Some((x1, x2)) = self.columns(self.to_view(s.v1), self.to_view(s.v2)) else { return };
-        let Some(solid) = self.classify(s) else { return };
+        let Some(solid) = self.classify(s) else {
+            if !self.through.contains(&s.line) && self.covered.any_open(x1, x2 - 1) {
+                self.through.push(s.line);
+            }
+            return;
+        };
         if self.covered.any_open(x1, x2 - 1) {
             if let Some(seen) = self.seen.get_mut(s.line) {
                 if !*seen {

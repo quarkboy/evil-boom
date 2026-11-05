@@ -311,11 +311,12 @@ def _run_controls(angle: float, direction: float) -> Controls:
 
 class RouteFollower:
     def __init__(self, nav: Navigator, steps: list[Step], keys: set[Key] | None = None,
-                 states: HeightStates | None = None, replan_level: bool = True):
+                 states: HeightStates | None = None, replan_level: bool = True,
+                 tic: int = 0):
         """`keys` held and `states` (the heights the world can take, as the planner models it)
         at the start; they're kept up to date as steps complete, for replanning.
         `replan_level`: if a step's goal can't be reached any more, plan the rest of the level
-        again (otherwise give up)."""
+        again (otherwise give up). `tic`: the game tic it starts at."""
         self.nav = nav
         self.steps = list(steps)
         self.doors = nav.local_doors(set(Key))  # the plan only routes through doors we can open
@@ -357,7 +358,7 @@ class RouteFollower:
         self._watches: list[Watch] = []      # what fired triggers should be doing
         self._settle: list[Expect] = []      # moves we're waiting on before the next step
         self._look = None    # last view angle we were aiming for
-        self._next_step(0)
+        self._next_step(tic)
 
     # --- what we're doing (for display) -------------------------------------------------
 
@@ -1584,7 +1585,7 @@ class RouteFollower:
                 if obs.tic - self._cross_tic < TICRATE:
                     return self.motion.drive(obs, (0.0, 0.0), self._look)
                 self.log.add(obs.tic, f"crossing line {step.trigger.line} didn't do anything")
-        if step.action in ("pickup", "cross"):
+        if step.action in ("pickup", "cross", "goto"):
             self._next_step(obs.tic)
             return self._carry_on(obs)
         if step.action == "kill":

@@ -217,6 +217,15 @@ pub struct NavCore {
     /// a linedef's segment -> the linedef
     pub seg_lines: HashMap<SegKey, usize>,
     pub callbacks: Callbacks,
+    /// what the player knows of the map, if not everything (`restrict`)
+    pub known: Option<Known>,
+}
+
+/// The part of the map the player knows: the polys that can be walked into, and the
+/// teleport lines whose destination is known.
+pub struct Known {
+    pub polys: Vec<bool>,
+    pub teleports: HashSet<usize>,
 }
 
 impl NavCore {
@@ -242,7 +251,37 @@ impl NavCore {
             obstacle_grid,
             seg_lines,
             callbacks,
+            known: None,
         }
+    }
+
+    /// Limit flood fills and path-finding to these polys and teleport lines (None: all).
+    pub fn restrict(&mut self, polys: Option<HashSet<usize>>, teleports: Option<HashSet<usize>>) {
+        self.known = polys.map(|ps| {
+            let mut known = vec![false; self.mesh.polys.len()];
+            for p in ps {
+                if let Some(k) = known.get_mut(p) {
+                    *k = true;
+                }
+            }
+            Known { polys: known, teleports: teleports.unwrap_or_default() }
+        });
+    }
+
+    /// May the player go into `poly` (does she know it's there)?
+    fn enterable(&self, poly: usize) -> bool {
+        self.known.as_ref().is_none_or(|k| k.polys.get(poly).copied().unwrap_or(false))
+    }
+
+    /// Does the player know teleport/jump `ti` from `poly` is there and where it goes?
+    fn tele_known(&self, poly: usize, ti: usize) -> bool {
+        let Some(known) = &self.known else { return true };
+        let t = &self.tele[poly][ti];
+        self.enterable(t.dest)
+            && match t.kind {
+                TeleKind::Line { line, .. } => known.teleports.contains(&line),
+                TeleKind::Jump { .. } => true,
+            }
     }
 
     pub fn sector_at(&self, p: Point) -> Option<usize> {
@@ -343,14 +382,14 @@ impl NavCore {
         while let Some(poly) = todo.pop() {
             for i in 0..self.adj[poly].len() {
                 let to = self.adj[poly][i].to;
-                if !seen.contains(&to) && self.edge_passable(py, poly, i, st, doors)? {
+                if !seen.contains(&to) && self.enterable(to) && self.edge_passable(py, poly, i, st, doors)? {
                     seen.insert(to);
                     todo.push(to);
                 }
             }
             for ti in 0..self.tele[poly].len() {
                 let dest = self.tele[poly][ti].dest;
-                if !seen.contains(&dest) && self.tele_ok(poly, ti, st)? {
+                if !seen.contains(&dest) && self.tele_known(poly, ti) && self.tele_ok(poly, ti, st)? {
                     seen.insert(dest);
                     todo.push(dest);
                 }
