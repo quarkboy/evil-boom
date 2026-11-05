@@ -24,6 +24,10 @@ USE_RANGE = 64.0     # P_UseLines
 SHOT_RANGE = 2048.0  # far enough for any gun line worth shooting
 SHOT_HEIGHT = 32.0   # above the feet (P_LineAttack's shootz, near enough)
 VIEW_WIDTH = 320     # screen columns the view is worked out for (the engine's width)
+HEAR_RANGE = 1200.0  # S_CLIPPING_DIST: sounds further off aren't heard at all
+HEAR_BEARING = 15.0  # how well she can tell where a sound came from: degrees...
+HEAR_DISTANCE = 64.0  # ...and units
+TICS_SAME_SOUND = 4   # sounds this close together from the same way are one
 
 USED = (Trigger.S1, Trigger.SR, Trigger.D1, Trigger.DR)
 WALKED = (Trigger.W1, Trigger.WR)
@@ -39,6 +43,17 @@ class Fired:
 
 
 @dataclass
+class Heard:
+    """A sound Evil heard: roughly which way and how far, not what made it."""
+    tic: int
+    what: str             # "mover" (a floor or ceiling starting or stopping); later: monsters
+    bearing: float        # degrees, anticlockwise from east, from where she was
+    distance: float
+    origin: tuple[float, float]  # where that puts it (an estimate)
+    seen: bool = False    # what made it was in view anyway
+
+
+@dataclass
 class Knowledge:
     nav: Navigator
     width: int = VIEW_WIDTH
@@ -50,6 +65,7 @@ class Knowledge:
     learned: dict[int, set[int]] = field(default_factory=dict)  # trigger index -> sectors whose effect is known
     teleports: dict[int, tuple[float, float]] = field(default_factory=dict)  # used line -> where it took us
     visited: set[int] = field(default_factory=set)      # polys stood in
+    heard: list[Heard] = field(default_factory=list)
     events: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -64,6 +80,19 @@ class Knowledge:
                       if (info := classify_line(line.special)) is not None}
         self._last: Observation | None = None
         self._teleport_from: int | None = None
+        # where each sector's sounds come from: the middle of its bounding box (P_GroupLines)
+        box: dict[int, list[float]] = {}
+        for line in m.linedefs:
+            for sec in (m.front_sector(line), m.back_sector(line)):
+                if sec is None:
+                    continue
+                b = box.setdefault(sec, [math.inf, math.inf, -math.inf, -math.inf])
+                for v in (m.vertexes[line.v1], m.vertexes[line.v2]):
+                    b[0], b[1] = min(b[0], v.x), min(b[1], v.y)
+                    b[2], b[3] = max(b[2], v.x), max(b[3], v.y)
+        self._sound_origin = {sec: ((b[0] + b[2]) / 2, (b[1] + b[3]) / 2) for sec, b in box.items()}
+        self._live: dict[int, tuple[float, float]] = {}  # every sector's heights last tic
+        self._moving: set[int] = set()
         for i, line in enumerate(m.linedefs):
             if line.flags & ML_MAPPED:
                 self._map_line(i)
@@ -129,7 +158,46 @@ class Knowledge:
             if self.seen_heights.get(s, now) != now:
                 self._saw_move(s, obs.tic)
             self.seen_heights[s] = now
+        self._hear(obs, in_view)
         self._last = obs
+
+    # --- hearing ------------------------------------------------------------------------
+
+    def _hear(self, obs: Observation, in_view: set[int]) -> None:
+        """The sounds of this tic, as the engine plays them: a floor or ceiling makes a sound
+        from its sector's sound origin as it starts moving and as it stops, heard anywhere
+        within HEAR_RANGE (Doom's sounds go through walls), with which way it came from (the
+        stereo) and roughly how far (how loud)."""
+        for s, h in obs.heights.items():
+            prev = self._live.get(s)
+            self._live[s] = h
+            if prev is None:
+                continue
+            moving = prev != h
+            if moving == (s in self._moving):
+                continue
+            if moving:
+                self._moving.add(s)
+            else:
+                self._moving.discard(s)
+            origin = self._sound_origin.get(s)
+            if origin is None:
+                continue
+            d = math.dist((obs.x, obs.y), origin)
+            if d > HEAR_RANGE:
+                continue
+            bearing = math.degrees(math.atan2(origin[1] - obs.y, origin[0] - obs.x))
+            bearing = round(bearing / HEAR_BEARING) * HEAR_BEARING
+            dist = max(HEAR_DISTANCE, round(d / HEAR_DISTANCE) * HEAR_DISTANCE)
+            if any(hd.tic >= obs.tic - TICS_SAME_SOUND and hd.bearing == bearing and hd.distance == dist
+                   for hd in self.heard[-8:]):
+                continue  # (one sound, several sectors: a door's two halves, stairs)
+            est = (obs.x + dist * math.cos(math.radians(bearing)),
+                   obs.y + dist * math.sin(math.radians(bearing)))
+            self.heard.append(Heard(obs.tic, "mover", bearing, dist, est, s in in_view))
+            if s not in in_view:
+                self.events.append(f"tic {obs.tic}: heard something move, bearing {bearing:.0f}, "
+                                   f"about {dist:.0f} away")
 
     def _saw_move(self, s: int, tic: int) -> None:
         """Sector s is seen at new heights: put it down to the latest line fired that moves

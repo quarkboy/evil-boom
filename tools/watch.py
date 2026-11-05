@@ -45,7 +45,7 @@ TEXT = (220, 220, 220)
 HEAD = (255, 210, 120)
 KIND_COLOUR = {"exit": (255, 80, 255), "key": (255, 255, 0), "switch": (0, 220, 255),
                "door": (0, 160, 255), "frontier": (120, 255, 120), "visit": (80, 180, 80),
-               "recheck": (200, 160, 60)}
+               "recheck": (200, 160, 60), "noise": (255, 120, 40)}
 ITEM_COLOUR = {"key": (255, 255, 0), "weapon": (255, 140, 0), "ammo": (180, 140, 90),
                "health": (80, 220, 80), "armor": (80, 160, 255), "powerup": (220, 120, 255)}
 KEY_COLOUR = {"blue": (60, 120, 255), "yellow": (255, 230, 40), "red": (255, 50, 50)}
@@ -243,6 +243,15 @@ class Watch:
                 pygame.draw.circle(self.screen, (255, 255, 255), p, 6, 1)
             else:
                 pygame.draw.circle(self.screen, ITEM_COLOUR[cat], p, 2)
+        # sounds she heard lately: a ring where each seemed to come from, fading
+        now = self.obs.tic if self.obs else 0
+        for h in k.heard[-20:]:
+            age = now - h.tic
+            if h.seen or age > 3 * TICRATE:
+                continue
+            fade = 1 - age / (3 * TICRATE)
+            c = tuple(int(v * fade) for v in KIND_COLOUR["noise"])
+            pygame.draw.circle(self.screen, c, self.to_screen(h.origin), 6 + age // 4, 2)
         # objectives open to her, the current one, the route
         for o in self.options:
             p = self.to_screen(o.goal)
@@ -323,6 +332,10 @@ class Watch:
         y = self.text(f"Untried switches/doors: {len(untried)}" +
                       (f" ({len(locked)} locked: " + ", ".join(sorted({k.lock(li).value for li in locked})) + ")"
                        if locked else ""), (right, y), KIND_COLOUR["switch"], self.small)
+        heard = [h for h in k.heard if not h.seen][-3:]
+        for h in heard:
+            y = self.text(f"Heard ({(tic - h.tic) / TICRATE:.0f}s ago): something moving, bearing "
+                          f"{h.bearing:.0f}, ~{h.distance:.0f} away", (right, y), KIND_COLOUR["noise"], self.small)
         learned = k.known_triggers()
         y = self.text(f"Learned: {len(learned)} lines", (right, y), (140, 220, 255), self.small)
         for t, secs in learned[-6:]:
