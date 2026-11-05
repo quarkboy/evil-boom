@@ -57,6 +57,10 @@ TURN_ACCEL = 1.0         # change in turn rate per tic
 MAX_MOVE = 50.0          # forward/strafe input magnitude: plain running, no straferun boost
 FULL_SPEED = RUN_THRUST * 0.97 / (1 - FRICTION)   # ~16 units/tic, with a little in reserve
 BRAKE = 1.5              # deceleration assumed when planning speed (units/tic per tic)
+STAIRS_DOWN_SPEED = 8.0  # going down steps: in the air between them braking does nothing
+LEDGE_SPEED = 6.0        # along a thin ledge (drops either side of the box): walk, don't run
+LEDGE_NEAR = PLAYER_RADIUS + 8.0  # ...this near the track
+CAUTION_AHEAD = 160.0    # how far ahead along the track to look for either
 TRACK_AHEAD = 32.0       # steer towards the path this far ahead of us
 LOOK_AHEAD = 128.0       # ... and look this far ahead
 STRAFE_FREE = 40.0       # moving up to this far off the facing direction costs no speed
@@ -701,9 +705,54 @@ class RouteFollower:
                 speed = min(speed, 0.06 * rest + 1.5, 6.0 if rest < 128 else FULL_SPEED)
             else:
                 speed = min(speed, 0.12 * rest + 1.5)
+        speed = min(speed, self._caution_speed(obs, track))
         if math.dist(pos, carrot) < 1:
             return self.motion.drive(obs, (0.0, 0.0), self._look_angle(obs, seg))
         return self.motion.move(obs, _heading(pos, carrot), speed, self._look_angle(obs, seg))
+
+    def _caution_speed(self, obs: Observation, track: Track) -> float:
+        """How fast to go for what's just ahead on the track: down steps (braking does nothing
+        while dropping between them: the player ran off the bottom of a stair into a pit),
+        and along a thin ledge, drops close by on both sides (walk it: one-sided, the path
+        keeps off the edge; slowing for those missed MAP09's lift)."""
+        mesh, live = self.nav.mesh, obs.heights
+        drops = self.nav._drop_lines()
+        m = self.nav.map
+        steps_down: list[float] = []  # how far ahead each step down is
+        prev = None
+        ahead = min(CAUTION_AHEAD, track.length - self.s)
+        n = max(1, int(ahead // 16))
+        for i in range(n + 1):
+            q = track.point_at(self.s + ahead * i / n)
+            t = track.point_at(self.s + ahead * i / n + 1.0)
+            dx, dy = t[0] - q[0], t[1] - q[1]
+            sides = set()
+            poly = mesh.poly_at(*q)
+            if poly is None:
+                continue
+            floor = live.get(poly.sector, (0.0, 0.0))[0]
+            if prev is not None and floor < prev:
+                steps_down.append(ahead * i / n)
+            prev = floor
+            for cell in _cells(q[0] - LEDGE_NEAR, q[1] - LEDGE_NEAR, q[0] + LEDGE_NEAR, q[1] + LEDGE_NEAR):
+                for li in mesh._line_grid.get(cell, ()):
+                    if li not in drops:
+                        continue
+                    line = m.linedefs[li]
+                    f, b = m.front_sector(line), m.back_sector(line)
+                    hf, hb = live.get(f), live.get(b)
+                    if hf is None or hb is None or abs(hf[0] - hb[0]) <= MAX_STEP:
+                        continue  # (not a drop at the heights now)
+                    a, c = m.vertexes[line.v1], m.vertexes[line.v2]
+                    if _segment_distance((a.x, a.y), (c.x, c.y), q, q) < LEDGE_NEAR:
+                        near = _closest_point(q, (a.x, a.y), (c.x, c.y))
+                        sides.add(dx * (near[1] - q[1]) - dy * (near[0] - q[0]) > 0)
+            if len(sides) == 2:
+                return LEDGE_SPEED
+        if len(steps_down) < 2:
+            return math.inf  # (one drop isn't a stair: MAP09's slowed for a 48 down missed a lift)
+        # slow enough at the first step, braking towards it till then
+        return math.sqrt(STAIRS_DOWN_SPEED ** 2 + 2 * BRAKE * steps_down[0])
 
     def _item_of(self, step: Step):
         """Where the item a pickup step is for lies (the nearest such thing to its goal)."""
