@@ -93,7 +93,14 @@ EVIL_API int evil_init(int argc, char **argv)
   dsda_UpdateIntConfig(dsda_config_render_wipescreen, 0, false);
   dsda_UpdateIntConfig(dsda_config_uncapped_framerate, 0, false);
   if (!nodrawers && sdl_window)
-    SDL_HideWindow(sdl_window);  /* (its frames are shown by whoever's watching: evil_draw) */
+  {
+    /* (its frames are shown by whoever's watching: evil_draw; and the mouse is theirs: the
+     * game took it for mouse look, and the watcher's window had no cursor) */
+    SDL_HideWindow(sdl_window);
+    SDL_SetWindowGrab(sdl_window, SDL_FALSE);
+    SDL_SetRelativeMouseMode(SDL_FALSE);
+    SDL_ShowCursor(SDL_ENABLE);
+  }
   return 0;
 }
 

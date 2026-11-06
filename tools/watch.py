@@ -107,6 +107,8 @@ class Watch:
         desk_w, desk_h = (pygame.display.get_desktop_sizes() or [(W, H)])[0]
         fit = min(1.0, 0.85 * desk_w / W, 0.85 * desk_h / H)
         self.window = pygame.display.set_mode((int(W * fit), int(H * fit)), pygame.RESIZABLE)
+        pygame.mouse.set_visible(True)  # (the game, sharing SDL, had hidden and grabbed it)
+        pygame.event.set_grab(False)
         self.font = pygame.font.SysFont("consolas", 14)
         self.small = pygame.font.SysFont("consolas", 12)
         self.big = pygame.font.SysFont("consolas", 18, bold=True)
