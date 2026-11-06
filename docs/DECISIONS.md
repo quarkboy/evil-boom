@@ -539,3 +539,15 @@ E3M8, E4M6, E4M8, MAP07, MAP32; MAP30 excluded). What it took, beyond earlier fi
       multiplayer bot projects, etc.).
 - [ ] Can two characters (Neuro + Evil) connect to one game simultaneously?
 - [ ] Benchmark classifier options (hosted Jev vs. local CPU models) for latency/quality.
+
+## Fighting: dodging, guns, shots that land (2026-11-05)
+
+From watching her play (`tools/watch.py --fight SKILL --mortal`):
+- **Dodging** predicts each missile against where she's going (her velocity from the engine), not where she stands; tries 16 ways, simulating a running player's push and Doom's friction, and takes the one that keeps her furthest from every missile coming; a missile is dodged till it's gone by (before, she stopped half way out of its path and walked back in).
+- **Weapon choice** is the time to kill the target: Doom's damage, refire and spread (the share of pellets that land on something that wide that far off), plus the switch (0.8 s) and what the ammo's worth (rockets dear, more so when few). The super shotgun is told apart (WEAPON3 counts both shotguns; slot 3 from another slot brings up the SSG). Before, rough dps with range cut-offs had her flip between shotgun and pistol in mid-range fights.
+- **Shots that land**: she fires only if a shot from her gun (36 above her feet) reaches some part of the target within autoaim's slope (100/160) with nothing in the way (the native sight test, the target's span clipped to that slope); else it'd go out level, into the lip of the ledge the imp stands on. With one monster about that she can see but not hit, she steps back from it (above her) or towards it (below).
+- **Out of reach**: against hitscanners (they hurt from anywhere) she fires past a gun's reach while a fifth of a shot lands; when standing to fight something still out of reach she closes in, zig-zagging (she used to strafe at a chaingunner far off, never firing). Holding fire is logged with why.
+- **Better guns**: one better than her best, seen, breaks off what she's doing, but only if the route there is no longer than the fighting time it'd save against what she knows is still about (and 10 s for what's to come), at 400 units/s; further, it's an ordinary pickup in its turn and the fight comes first.
+- **Rockets** aren't fired with a biter seen near her in the last 3 s (E1M9: dead at full health, a demon round a corner stepped into the blast).
+
+HMP batch (18 maps, 3 lives): 10 → 12+ exited (MAP10 pending at commit time). Deaths left: pistol starts against crowds (MAP08's cacodemons, MAP11), out of ammo, lost souls.

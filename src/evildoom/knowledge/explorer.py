@@ -71,6 +71,8 @@ class Objective:
     pad: frozenset = frozenset()      # teleporter: all the lines of its pad (one objective)
     thing: int | None = None          # item, hunt: the thing's id (the engine's)
     urgent: bool = False              # noise: just after she set something off; go now
+    worth: float | None = None        # urgent only by a route no longer than this (a better gun
+    #                                   is worth so much walking: further, the fight first)
 
     @property
     def ident(self) -> tuple:
@@ -121,6 +123,7 @@ class Explorer:
     last_resort: object = None
     gone: object = None
     dangerous: object = None  # (obs, objective) -> too dangerous to go for unless nothing else
+    interrupt: object = None  # (obs, objective) -> something better to do turned up: choose again
     _held_since: int | None = None  # something else has had the controls since then
     _urgent_n: int = 0  # sounds checked for being worth dropping everything for
     _reach: set = field(default_factory=set)  # polys she could get to, as of the last look
@@ -885,6 +888,8 @@ class Explorer:
         if not (obj.kind == "noise" and obj.urgent) and not jumping and any(
                 self._urgent(h, obs.tic) and self._worth_a_look(h) for h in fresh):
             return True
+        if not jumping and self.interrupt is not None and self.interrupt(obs, obj):
+            return True
         if obs.tic - self._since > self._allowed:
             self._drop(obj, obs, "took too long")
             return True
@@ -914,7 +919,12 @@ class Explorer:
             for obj in options:
                 steps = self.route_to(obj, obs)
                 if steps:
-                    routed.append((self._route_length(steps) * WEIGHT[obj.kind], obj, steps))
+                    length = self._route_length(steps)
+                    if obj.worth is not None and length > obj.worth:
+                        self.log.append(f"tic {obs.tic}: '{obj.label}' not worth {length:.0f} "
+                                        f"to get to (at most {obj.worth:.0f}): in its turn")
+                        obj = replace(obj, urgent=False, worth=None, label=obj.label.split(" (")[0])
+                    routed.append((length * WEIGHT[obj.kind], obj, steps))
                     if obj.priority < 2:
                         break  # (nothing further down the list comes first anyway)
                 else:

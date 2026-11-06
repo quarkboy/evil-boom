@@ -104,6 +104,8 @@ class Observation:
     weapons: frozenset | None = None              # weapon slots held (1-7), if known
     ammo: dict | None = None                      # weapon slot -> ammo for it, if known
     armor: float | None = None
+    super_shotgun: bool | None = None             # has it (slot 3 then brings it up), if known
+    velocity: tuple | None = None                 # the player's (x, y) a tic, if known
 
 
 @dataclass(frozen=True)

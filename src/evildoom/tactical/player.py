@@ -11,7 +11,8 @@ from evildoom.knowledge.model import Knowledge
 from evildoom.motor.follower import TICRATE, Controls, Observation, RouteFollower
 from evildoom.nav.reach import PLAYER_HEIGHT, Navigator
 from evildoom.nav.walkthrough import Step
-from evildoom.tactical.bestiary import AMMO_ITEMS, ARMOR_ITEMS, HEALTH_ITEMS, MONSTERS, WEAPON_ITEMS
+from evildoom.tactical.bestiary import (AMMO_ITEMS, ARMOR_ITEMS, HEALTH_ITEMS, MONSTERS, SUPER_SHOTGUN,
+                                        WEAPON_ITEMS, weapon_in)
 from evildoom.tactical.combat import OUTMATCHED, Combat
 
 # most of each ammo she can carry (without a backpack), by weapon slot
@@ -25,6 +26,9 @@ COVER_RANGE = 768.0    # cover looked for among the places she's been this near
 COVER_SPOTS = 48       # ...the nearest this many of them
 CLEAR_TICS = TICRATE   # a retreat is over once nothing that shoots has been in sight this long
 RETREAT_AGAIN = 3 * TICRATE  # after a retreat that found no cover, not again for this long
+RUN_SPEED = 400.0      # units a second she gets along a route, about (turns, doors, lifts)
+GUN_WORTH = 10.0       # seconds a better gun is worth going for anyway (the fights to come)...
+#                        ...and the fighting time it'd save with what she knows is still about
 
 
 class Player:
@@ -36,6 +40,8 @@ class Player:
         self.explorer.last_resort = self._hunts
         self.explorer.gone = self._gone
         self.explorer.dangerous = self._dangerous
+        self.explorer.interrupt = self._interrupt
+        self._offered: set[int] = set()  # better guns she's turned aside for already
         self._present: set[int] = set()
         self._fighting = False
         self._retreat: RouteFollower | None = None
@@ -164,7 +170,7 @@ class Player:
             d = math.dist((t.x, t.y), pos)
             need = 0.0  # how much it's needed (0: not at all, 1: badly)
             if t.name in WEAPON_ITEMS:
-                need = 1.0 if WEAPON_ITEMS[t.name] not in held or t.name == "SuperShotgun" else 0.0
+                need = 1.0 if self._new_gun(obs, t.name) else 0.0
             elif t.name in AMMO_ITEMS:
                 slots, _ = AMMO_ITEMS[t.name]
                 fill = [ammo.get(s, 0) / AMMO_MAX[s] for s in slots if s in held]
@@ -184,12 +190,57 @@ class Player:
                 continue
             goal = self.explorer._stand_spot((t.x, t.y), reach)
             why = ""
-            if short and (t.name in WEAPON_ITEMS or t.name in AMMO_ITEMS):
+            if t.name in WEAPON_ITEMS and need and self._better_gun(obs, t.name):
+                why = " (a better gun)"
+            elif short and (t.name in WEAPON_ITEMS or t.name in AMMO_ITEMS):
                 why = " (out of ammo)"
             elif health < HURT and t.name in HEALTH_ITEMS and HEALTH_ITEMS[t.name][0] >= 10:
                 why = " (hurt)"
-            out.append(Objective("item", goal, f"pick up {t.name}{why}", thing=t.id, urgent=bool(why)))
+            worth = self._gun_worth(obs, t.name) * RUN_SPEED if why == " (a better gun)" else None
+            if worth is not None and d > worth:
+                why = ""  # (too far to drop everything for, as the crow flies even)
+            out.append(Objective("item", goal, f"pick up {t.name}{why}", thing=t.id, urgent=bool(why),
+                                 worth=worth if why else None))
         return out
+
+    @staticmethod
+    def _new_gun(obs: Observation, name: str) -> bool:
+        if name == "SuperShotgun":
+            return not obs.super_shotgun
+        return WEAPON_ITEMS[name] not in (obs.weapons or frozenset({1, 2}))
+
+    def _better_gun(self, obs: Observation, name: str) -> bool:
+        """Would that gun do more than the best she has (worth dropping what she's doing
+        for: the shotgun over the pistol, the rocket launcher, ...)?"""
+        if name == "Chainsaw" or not self._new_gun(obs, name):
+            return False
+        w = SUPER_SHOTGUN if name == "SuperShotgun" else weapon_in(WEAPON_ITEMS[name], obs.super_shotgun)
+        return w.dps > self.combat.firepower(obs)
+
+    def _gun_worth(self, obs: Observation, name: str) -> float:
+        """Seconds of walking a gun is worth: what it'd save killing what she knows is still
+        about (and some, for what's to come)."""
+        w = SUPER_SHOTGUN if name == "SuperShotgun" else weapon_in(WEAPON_ITEMS[name], obs.super_shotgun)
+        now = self.combat.firepower(obs)
+        hp = sum(MONSTERS[s.name].health for s in self.combat.remaining())
+        return GUN_WORTH + max(0.0, hp / now - hp / max(w.dps, now))
+
+    def _interrupt(self, obs: Observation, obj: Objective) -> bool:
+        """A better gun come into what she knows of the map: go for it now (once for each)."""
+        if obj.urgent or obj.kind == "exit":
+            return False
+        known = self.explorer.knowledge.known_polys()
+        mesh = self.nav.mesh
+        for t in obs.things or ():
+            if t.name not in WEAPON_ITEMS or t.id in self._offered or not self._better_gun(obs, t.name):
+                continue
+            poly = mesh.poly_at(t.x, t.y)
+            if poly is not None and poly.index in known \
+                    and math.dist((t.x, t.y), (obs.x, obs.y)) < self._gun_worth(obs, t.name) * RUN_SPEED:
+                self._offered.add(t.id)
+                self.explorer.log.append(f"  [fight] tic {obs.tic}: spotted a {t.name}")
+                return True
+        return False
 
     def _hunts(self, obs: Observation, reach: set[int], pos) -> list[Objective]:
         """Monsters seen that are still about: go where each was last seen."""

@@ -1,6 +1,7 @@
 """What's what among the things in a level, by ZDoom class name: monsters (how big, how
 tough, how they hurt you), missiles in flight (how fast, how wide), the player's weapons and
 the items lying about."""
+import math
 from dataclasses import dataclass
 
 
@@ -65,24 +66,49 @@ MISSILES: dict[str, Missile] = {
 class Weapon:
     slot: int
     ammo_per_shot: int
-    best_range: tuple[float, float]  # (from, to) where it does well
-    dps: float                       # damage per second, roughly, all hitting
+    damage: float                    # a shot's, on average, every pellet hitting (a rocket's
+    #                                  with its blast)
+    cycle: int                       # tics from one shot to the next, holding the trigger
+    spread: float = 0.0              # hitscan: pellets/bullets land up to this far off (degrees,
+    #                                  most near the middle: P_Random() - P_Random())
     hitscan: bool = True
     speed: float = 0.0               # (its missile's, if not hitscan)
     splash: float = 0.0              # keep at least this far from what it hits
     reach: float = 2048.0            # no shooting at anything further (the spread wastes it)
 
+    @property
+    def dps(self) -> float:
+        """Damage a second, most of it hitting (what she can do with it, roughly)."""
+        return 0.8 * self.damage * TICS_PER_SECOND / self.cycle
 
-# by slot (the weapon a slot gives: slot 1's fist/chainsaw and slot 3's two shotguns share)
+    def hits(self, radius: float, d: float) -> float:
+        """The share of a shot's damage that lands on something this wide this far off."""
+        if not self.hitscan:
+            return 0.85 if d < 768 else 0.85 * 768 / d  # (it may step out of the way)
+        if self.spread == 0:
+            return 1.0
+        a = math.degrees(math.atan2(radius, max(d, 1.0)))
+        return 1.0 if a >= self.spread else 1.0 - (1.0 - a / self.spread) ** 2
+
+
+TICS_PER_SECOND = 35
+# by slot (slot 1's fist and chainsaw share, as do slot 3's shotguns: SUPER_SHOTGUN)
 WEAPONS: dict[int, Weapon] = {
-    1: Weapon(1, 0, (0, 64), 30, reach=80),
-    2: Weapon(2, 1, (0, 600), 25, reach=800),
-    3: Weapon(3, 1, (0, 400), 60, reach=640),
-    4: Weapon(4, 1, (0, 900), 90, reach=1100),
-    5: Weapon(5, 1, (200, 1500), 110, hitscan=False, speed=20, splash=160),
-    6: Weapon(6, 1, (0, 1200), 200, hitscan=False, speed=25),
-    7: Weapon(7, 40, (128, 1200), 400, hitscan=False, speed=25, splash=0),
+    1: Weapon(1, 0, 11, 22, reach=80),
+    2: Weapon(2, 1, 10, 14, spread=5.6, reach=800),
+    3: Weapon(3, 1, 70, 37, spread=5.6, reach=640),
+    4: Weapon(4, 1, 10, 4, spread=5.6, reach=1100),
+    5: Weapon(5, 1, 180, 20, hitscan=False, speed=20, splash=160),
+    6: Weapon(6, 1, 22, 3, hitscan=False, speed=25),
+    7: Weapon(7, 40, 700, 60, hitscan=False, speed=25),
 }
+SUPER_SHOTGUN = Weapon(3, 2, 200, 57, spread=11.2, reach=480)
+
+
+def weapon_in(slot: int, super_shotgun: bool | None) -> Weapon:
+    """What a slot brings up (slot 3: the super shotgun, once she has it)."""
+    return SUPER_SHOTGUN if slot == 3 and super_shotgun else WEAPONS[slot]
+
 
 ITEMS: dict[str, str] = {
     "Shotgun": "Weapon", "SuperShotgun": "Weapon", "Chaingun": "Weapon",

@@ -97,8 +97,11 @@ class VizDoomEngine:
         heights = {s.id: (s.floor_height, s.ceiling_height) for s in state.sectors}
         barrels = tuple((o.position_x, o.position_y) for o in state.objects
                         if o.name == "ExplosiveBarrel")
-        things = None
+        things = velocity = None
         if self.objects:
+            me = next((o for o in state.objects if o.name == "DoomPlayer"), None)
+            if me is not None:
+                velocity = (float(me.velocity_x), float(me.velocity_y))
             things = tuple(Thing(int(o.id), o.name, category(o.name), float(o.position_x),
                                  float(o.position_y), float(o.position_z), float(o.velocity_x),
                                  float(o.velocity_y), float(o.velocity_z), float(o.angle))
@@ -107,7 +110,8 @@ class VizDoomEngine:
                            self._keys_held(state), float(z), int(weapon), barrels, float(health),
                            self._suits_taken(state), things,
                            frozenset(i + 1 for i, h in enumerate(held) if h > 0),
-                           {i + 1: int(a) for i, a in enumerate(ammo)}, float(armor))
+                           {i + 1: int(a) for i, a in enumerate(ammo)}, float(armor),
+                           held[2] > 1, velocity)  # (WEAPON3 counts both shotguns)
 
     def _keys_held(self, state) -> frozenset:
         """Keys picked up so far: key items present at the start that have gone."""
