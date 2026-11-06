@@ -36,6 +36,7 @@ REPRESS_AFTER = 60 * TICRATE  # a repeatable switch whose effect wasn't seen: an
 IDLE_RETRY = TICRATE          # with nothing to do, look for something again this often
 RETRY_TICS = 30 * TICRATE     # ...and offered again after this
 LOOK_TICS = TICRATE           # a turn on the spot, at the edge of the known map
+SHUFFLE_TICS = TICRATE        # an item still there on arrival: shuffled over this long
 TURN_RATE = 20.0              # degrees a tic, turning to look at something
 AMBIENT_RADIUS = 96.0         # sounds from about the same place...
 AMBIENT_REPEATS = 4           # ...heard more often than this are background
@@ -890,6 +891,16 @@ class Explorer:
         elif obj.kind == "teleporter" and obj.trigger.line not in self.knowledge.teleports:
             self._drop(obj, obs, "didn't take me anywhere")
         elif obj.kind in ("item", "hunt") and not (self.gone is not None and self.gone(obs, obj)):
+            if obj.kind == "item":
+                # Doom picks things up only moving onto them: come down on one from a ledge (in
+                # the air, it's out of reach) and stand still, and it stays (MAP10's bonuses in
+                # the nukage pits). A shuffle over it first.
+                if self._look_until is None:
+                    self._look_until = obs.tic + SHUFFLE_TICS
+                if obs.tic < self._look_until:
+                    a = math.atan2(obj.goal[1] - obs.y, obj.goal[0] - obs.x) - math.radians(obs.angle)
+                    push = 20.0 if (obs.tic // 4) % 2 == 0 else -20.0
+                    return Controls(forward=push * math.cos(a), strafe=-push * math.sin(a))
             self._drop(obj, obs, "not there" if obj.kind == "hunt" else "couldn't pick it up")
         self._look_until = None
         self.follower = None
