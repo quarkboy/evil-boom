@@ -28,7 +28,7 @@ from evildoom.knowledge.model import Knowledge
 from evildoom.motor.follower import TICRATE
 from evildoom.nav.reach import Navigator
 from evildoom.wad.mapdata import ML_DONTDRAW, load_map
-from evildoom.wad.specials import Category, Key, Lock
+from evildoom.wad.specials import Key, Lock
 from evildoom.wad.things import PICKUPS
 from evildoom.wad.wad import Wad
 
@@ -58,20 +58,28 @@ def key_colour(name: str):
 
 class Watch:
     def __init__(self, iwad: Path, map_name: str, speed: float, snapshot: float | None = None,
-                 mortal: bool = False, lives: int = 1):
+                 mortal: bool = False, lives: int = 1, fight: int = 0):
         self.lives_left = lives - 1
         self.map_name = map_name
         self.snapshot = snapshot
         self.m = load_map(Wad(iwad), map_name)
-        self.nav = Navigator(self.m)
+        skill = fight or 3
+        self.nav = Navigator(self.m, skill=skill)
         keep_verified(self.nav, iwad, map_name)
-        self.engine = VizDoomEngine(iwad, map_name, size=VIEW_SIZE, rgb=True)
+        self.engine = VizDoomEngine(iwad, map_name, size=VIEW_SIZE, rgb=True, skill=skill,
+                                    nomonsters=not fight, objects=bool(fight))
         self.engine.game.add_game_args("+sv_cheats 1")
         self.engine.start()
         if not mortal:
             self.engine.game.send_game_command("god")
         width = int(VIEW_SIZE.split("x")[0])
-        self.x = Explorer(self.nav, Knowledge(self.nav, width=width, mortal=mortal))
+        knowledge = Knowledge(self.nav, width=width, mortal=mortal)
+        if fight:
+            from evildoom.tactical.player import Player
+            self.agent = Player(self.nav, knowledge)
+            self.x = self.agent.explorer
+        else:
+            self.agent = self.x = Explorer(self.nav, knowledge)
         self.speed = speed
         self.paused = False
         self.show_all = False
@@ -123,7 +131,7 @@ class Watch:
             if self.engine.dead and self.lives_left > 0 and not self.paused:
                 self.lives_left -= 1
                 self.engine.restart(keep_time=True)
-                self.x.restart()
+                self.agent.restart()
                 self.controls = None
                 self.finished_at = None
             while owed >= 1 and not self.paused and not self.engine.finished:
@@ -143,7 +151,7 @@ class Watch:
         e = self.engine
         self.obs = e.observe()
         self.state = e.state()
-        self.controls = self.x.act(self.obs, self.controls)
+        self.controls = self.agent.act(self.obs, self.controls)
         e.step(self.controls)
         if e.finished and self.finished_at is None:
             self.finished_at = e.tic
@@ -372,10 +380,12 @@ def main() -> None:
     ap.add_argument("--all", action="store_true", help="start with the whole map shown (A)")
     ap.add_argument("--mortal", action="store_true", help="no god mode: floors hurt")
     ap.add_argument("--lives", type=int, default=1, help="tries at the map (with --mortal)")
+    ap.add_argument("--fight", type=int, default=0, metavar="SKILL",
+                    help="monsters in, at this skill (1-5; 4: Ultra-Violence), and Evil fights them")
     ap.add_argument("--snapshot", type=float, metavar="SECONDS",
                     help="save the window to out/watch.png after this much game time, and quit")
     a = ap.parse_args()
-    w = Watch(resolve_wad(a.wad), a.map.upper(), a.speed, a.snapshot, a.mortal, a.lives)
+    w = Watch(resolve_wad(a.wad), a.map.upper(), a.speed, a.snapshot, a.mortal, a.lives, a.fight)
     w.show_all = a.all
     w.run()
 
