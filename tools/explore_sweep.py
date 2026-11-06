@@ -22,6 +22,11 @@ OUT = ROOT / "out" / "explore"
 STRANDED_TICS = 60 * 35  # nothing to do this long (with lives left): start the level again
 
 
+# Levels with secrets nobody can get (the user): how many short of the tally counts as all.
+# (One each is an assumption, not checked against the maps.)
+BROKEN_SECRETS = {"E4M3": 1, "E4M7": 1, "MAP15": 1, "MAP27": 1}
+
+
 def _plan_report(lp, k, x=None, real=None) -> list[str]:
     """The omniscient plan's steps, each with what the explorer knew of it: the trigger, and
     (with the explorer `x` and the `real` heights) the way there, where it goes through what
@@ -65,7 +70,7 @@ def _plan_report(lp, k, x=None, real=None) -> list[str]:
 
 def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
             lives: int = 1, fight: int = 0, engine: str = "vizdoom",
-            expert: bool = False, peek: bool = False) -> tuple[str, str, str]:
+            expert: bool = False, peek: bool = False, secrets: bool = False) -> tuple[str, str, str]:
     from evildoom.config import resolve_wad
     from evildoom.engine.jump_check import keep_verified
     from evildoom.engine.vizdoom_engine import VizDoomEngine
@@ -99,6 +104,11 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
         if expert:
             from evildoom.knowledge.completion import Completionist
             Completionist(x, restarts=lives - 1)
+    # the secrets run: out only with every secret there is (the tally's count, as the automap
+    # shows a player: how many, not where); till then, everything else first, the exit last
+    secrets_short = BROKEN_SECRETS.get(map_name, 0)
+    if secrets:
+        x.exit_last = True
     c = obs = None
     t0 = time.perf_counter()
     deaths = 0
@@ -141,6 +151,9 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                 idle_since = None
                 continue
             break
+        if secrets and e.tic % TICRATE == 0:
+            got, of = e.tally()["secrets"]
+            x.exit_last = got < of - secrets_short
         t1 = time.perf_counter()
         obs = e.observe()
         t2 = time.perf_counter()
@@ -179,6 +192,8 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                              f"{poly.sector if poly else None}, {'seen' if seen else 'never seen'}")
     e.close()
     outcome = "EXITED" if exited else "DIED" if died else "STUCK"
+    if secrets and exited and tally is not None and tally["secrets"][0] >= tally["secrets"][1] - secrets_short:
+        outcome = "SECRETS"  # (every secret there is to find, then out)
     if expert and exited and tally is not None:
         from evildoom.knowledge.completion import most_items
         short = most_items(m, skill)
@@ -190,6 +205,8 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
     detail = f"{game_s:.0f}s game, {time.perf_counter() - t0:.0f}s real, {deaths} deaths; {k.summary()}"
     if tally is not None:
         detail = f"items {tally['items'][0]}/{tally['items'][1]}, " + detail
+        if secrets:
+            detail = f"secrets {tally['secrets'][0]}/{tally['secrets'][1]}, " + detail
     lines.append(f"RESULT {outcome} {detail}")
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / f"{iwad.stem.upper()}_{map_name}.txt").write_text("\n".join(lines) + "\n")
@@ -212,6 +229,8 @@ def main() -> None:
                     help="every switch and door known on sight from the map data (no secrets to find)")
     ap.add_argument("--expert", action="store_true",
                     help="every item that counts picked up, then the exit (DSDA-Doom, no monsters)")
+    ap.add_argument("--secrets", action="store_true",
+                    help="every secret there is found (going by the tally's count), then the exit (DSDA-Doom)")
     ap.add_argument("--lives", type=int, default=1,
                     help="tries at a map (dying starts it again, knowing what was learned)")
     a = ap.parse_args()
@@ -230,7 +249,7 @@ def main() -> None:
     results = []
     with ProcessPoolExecutor(a.jobs, max_tasks_per_child=1 if a.engine == "dsda" else None) as pool:
         futs = {pool.submit(run_map, w, n, a.max_seconds, a.mortal, a.lives, a.fight, a.engine, a.expert,
-                           a.peek): (w, n)
+                           a.peek, a.secrets): (w, n)
                 for w, n in jobs}
         for i, f in enumerate(as_completed(futs), 1):
             w, n = futs[f]
@@ -240,10 +259,12 @@ def main() -> None:
                 outcome, detail = "ERROR", repr(ex)[:200]
             results.append((w, n, outcome))
             print(f"[{i:3}/{len(jobs)}] {w} {n}: {outcome} {detail}", flush=True)
-    done = sum(o in ("EXITED", "EXPERT") for *_, o in results)
+    done = sum(o in ("EXITED", "EXPERT", "SECRETS") for *_, o in results)
     print(f"\n{done}/{len(results)} exited")
     if a.expert:
         print(f"{sum(o == 'EXPERT' for *_, o in results)}/{len(results)} with every item")
+    if a.secrets:
+        print(f"{sum(o == 'SECRETS' for *_, o in results)}/{len(results)} with every secret")
 
 
 if __name__ == "__main__":

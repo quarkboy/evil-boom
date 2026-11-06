@@ -652,3 +652,9 @@ Perception **59/68**: only MAP28 out (besides the 8 boss maps). Peek 57/68 (out:
 - **The places she got stuck get another go** once nothing else is left (the poly-avoidance after two failures had cost the only way on in E3M4, MAP05, MAP27). **A panel unlike the same panel either side** is a stronger suspect (+1.5: a mapper's mark for a switch, MAP28's symbol). Skipping walls given up on lately before taking the best few (so MAP28's symbol, 25th, came up) let the wall tier run on for ever and cost MAP14, MAP23, E3M4: not kept.
 
 Still perception 59/68 (MAP28 out), peek 57/68.
+
+## The 100% secrets sweep (2026-11-07)
+
+`tools/explore_sweep.py --secrets` (the user's third step): every secret there is, then the exit. She knows only the tally's count (as the automap shows a player: how many, not where); while it's short, the exit is last (`exit_last`): everything else first, the suspect walls and the panic tier included. Levels with secrets nobody can get (the user: E4M3, E4M7, MAP15, MAP27) pass one short (an assumption: E4M3 ended 20/22, so it may be two).
+
+First sweep (perception, 3 lives): **21/68 with every secret**, 56/68 exited. Most of the rest leave with some missing once there's nothing left to try (E2M4 4/10, MAP10 1/18, MAP19 3/9): the work list for finding secrets.
