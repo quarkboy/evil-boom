@@ -431,9 +431,32 @@ class Knowledge:
             if tic - f.tic < TAKE_TICS:
                 still.append((f, targets))
                 continue
+            if self._already_so(f, targets):
+                continue  # (it took: what it moves was already where it puts it, so nothing moved)
             self.fired.remove(f)
             self.events.append(f"tic {tic}: line {f.line} didn't take (what it moves was busy): not used up")
         self._taking = still
+
+    def _already_so(self, f: Fired, targets: set[int]) -> bool:
+        """Was everything line f moves left where it is for good, by the last line she set off
+        that moves it (a door opened to stay: then nothing's running on it, and f went off but
+        had nothing to do: E3M7's walk-over line opening a door another had just opened for
+        good)? Not if that was a door that closes again (still running on its timer: Doom turned
+        f down, E3M4's) or she doesn't know what moved it. Only for a line with a tag: a door's
+        own once-only line on a door already open stays unused (MAP28's, used later)."""
+        if not self.nav.map.linedefs[f.line].tag:
+            return False
+        for t in targets:
+            last = None
+            for g in self.fired:
+                if g is f or g.life != self.lives or g.tic > f.tic:
+                    continue
+                for ti in self._by_line.get(g.line, ()):
+                    if t in self.nav.triggers[ti].effects and (last is None or g.tic >= last[0]):
+                        last = (g.tic, self.nav.triggers[ti])
+            if last is None or not last[1].permanent:
+                return False
+        return True
 
     # --- what Evil can tell -------------------------------------------------------------
 

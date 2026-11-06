@@ -1760,7 +1760,8 @@ class RouteFollower:
             if off and obs.tic - self._goal_tic < SETTLE_WAIT:
                 self._progress_tic = self._step_tic = obs.tic
                 return controls
-        if step.action in ("use", "shoot") and self._action_tic is None and t is not None and t.once:
+        if step.action in ("use", "shoot") and self._action_tic is None and t is not None and t.once \
+                and not t.cumulative:  # (stairs: each press builds on the last, MAP21's)
             # Doom ignores a switch on a sector that's busy (a door open on its timer, waiting
             # to close), and a once-only one is then still there to press: wait till what it
             # works is back at rest (E3M4: the switch behind a door opened by its own door

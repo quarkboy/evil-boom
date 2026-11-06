@@ -417,6 +417,23 @@ impl Mesh {
 
     /// The poly at (x, y): walk the BSP like R_PointInSubsector; among obstacle pieces the
     /// one holding the point, else the nearest.
+    /// The poly the point is really in (on its floor, not beyond its edges): None for a point
+    /// in a wall or off the map (poly_at goes by the BSP, which gives a poly for any point).
+    pub fn poly_inside(&self, p: Point) -> Option<usize> {
+        let i = self.poly_at(p)?;
+        let v = &self.poly(i).vertices;
+        let n = v.len();
+        // (convex: on the same side of every edge, give or take a unit)
+        let side = |k: usize| {
+            let (a, b) = (v[k], v[(k + 1) % n]);
+            let len = (b.0 - a.0).hypot(b.1 - a.1).max(1e-9);
+            ((b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0)) / len
+        };
+        let sides: Vec<f64> = (0..n).map(side).collect();
+        let inside = sides.iter().all(|&d| d >= -1.0) || sides.iter().all(|&d| d <= 1.0);
+        inside.then_some(i)
+    }
+
     pub fn poly_at(&self, (x, y): Point) -> Option<usize> {
         let Some(last) = self.nodes.len().checked_sub(1) else {
             return self.polys.first().and_then(|p| p.as_ref()).map(|_| 0);

@@ -150,6 +150,9 @@ def main() -> None:
         else:
             groups[-1][1].append(t.upper())
     jobs = [(w, mp) for w, maps in groups for mp in (maps or Wad(resolve_wad(w)).map_names())]
+    # (the same run every time: set and dict orders that depend on hashing don't vary between
+    # processes; the workers inherit it)
+    os.environ.setdefault("PYTHONHASHSEED", "0")
     results = []
     with ProcessPoolExecutor(a.jobs, max_tasks_per_child=1 if a.engine == "dsda" else None) as pool:
         futs = {pool.submit(run_map, w, n, a.max_seconds, a.mortal, a.lives, a.fight, a.engine): (w, n)

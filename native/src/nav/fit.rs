@@ -557,7 +557,11 @@ impl Fitter<'_> {
                     continue;
                 }
                 let ignore = self.overlapped_at(a, b)?;
-                if self.box_clear(a, b, &ignore)? && !self.ledges_crossed(a, b) {
+                // (a wall the box already touches doesn't count against its edges, but going
+                // straight through it does: E3M7, in a doorway with the box flush to its side
+                // wall, a shortcut went through that wall, and she pushed into it for good)
+                let through = ignore.iter().any(|&(p, q)| segments_cross(a, b, key_point(p), key_point(q)));
+                if !through && self.box_clear(a, b, &ignore)? && !self.ledges_crossed(a, b) {
                     best = j;
                     break;
                 }
@@ -687,7 +691,12 @@ impl Fitter<'_> {
             } else {
                 ((q.0 - v.0) / d, (q.1 - v.1) / d)
             };
-            let w = (v.0 + ux * CORNER_CLEARANCE, v.1 + uy * CORNER_CLEARANCE);
+            let off = |s: f64| (v.0 + s * ux * CORNER_CLEARANCE, v.1 + s * uy * CORNER_CLEARANCE);
+            // (off the side of the corner the way is on; a corner right on the way has no side to
+            // it, and the one picked can be the wall: E3M7's corner where a wall ends on the line
+            // between two portals, pushed 30 into the wall, and she pushed into it for good)
+            let walkable = |p: Point| self.nav.mesh.poly_inside(p).is_some_and(|i| self.sectors.contains(&self.nav.poly_sector[i]));
+            let w = if walkable(off(1.0)) || !walkable(off(-1.0)) { off(1.0) } else { off(-1.0) };
             let (wp, qp) = (self.nav.sector_at(w), self.nav.sector_at(q));
             if wp.is_some() && wp == qp && dist(w, a) > 4.0 && dist(w, b) > 4.0 && self.wall_clearance(w)? >= WAYPOINT_CLEARANCE {
                 self.round_corners(a, w, depth + 1, out)?;
@@ -698,4 +707,9 @@ impl Fitter<'_> {
         out.push(b);
         Ok(())
     }
+}
+
+/// The point a PointKey was made from.
+fn key_point(k: crate::geom::PointKey) -> Point {
+    (f64::from_bits(k.0), f64::from_bits(k.1))
 }
