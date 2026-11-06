@@ -677,16 +677,22 @@ class Knowledge:
             behind = back
             face = self._face(line)
             neighbours = [n for n in self._wall_neighbours(li) if self._face(m.linedefs[n])]
-            odd = bool(neighbours) and all(self._face(m.linedefs[n]) != face for n in neighbours)
+            odd = bool(neighbours) and all(self._face(m.linedefs[n]) != face
+                                           or self._shifted(line, m.linedefs[n]) for n in neighbours)
             if back is not None:
                 # (as she last saw them: a stair since built makes a wall of what was floor)
                 (ff, fc), (bf, bc) = (self.seen_heights.get(x, init[x]) for x in (front, back))
                 closed = min(fc, bc) - max(ff, bf) < PLAYER_HEIGHT or bf - ff > MAX_STEP
-                if not closed or back in reach_sectors:
+                if not closed and odd:
+                    # (a way through, but with a face above or below it unlike the walls round
+                    # it, where a switch can be: MAP28's red-eyed skull over an opening onto a
+                    # pool of blood): only that counts, on its own
+                    behind = None
+                elif not closed or back in reach_sectors:
                     continue  # (a way through, or somewhere she gets to anyway: not a wall to her)
-                if not line.flags & ML_SECRET:
+                elif not line.flags & ML_SECRET:
                     score += 3.0  # (the automap draws it as not a wall)
-                if bf - ff > MAX_STEP:
+                if closed and bf - ff > MAX_STEP:
                     score += 1.0  # (a raised platform's side: a lift?)
             else:
                 behind = None
@@ -706,6 +712,17 @@ class Knowledge:
             if key not in best or best[key][0] < score:
                 best[key] = (score, li, stand, mid)
         return sorted(best.values(), key=lambda c: -c[0])
+
+    def _shifted(self, line, other) -> bool:
+        """Does `line` show its texture shifted up or down from `other` beside it, both between
+        the same sectors (so not to line it up: to show another part of it: MAP28's one
+        red-eyed skull of three, the same texture moved down a panel)?"""
+        m = self.nav.map
+        if line.front == NO_SIDE or other.front == NO_SIDE:
+            return False
+        if (m.front_sector(line), m.back_sector(line)) != (m.front_sector(other), m.back_sector(other)):
+            return False
+        return m.sidedefs[line.front].y_offset != m.sidedefs[other.front].y_offset
 
     def _face(self, line) -> str:
         """The texture a wall shows from its front."""
