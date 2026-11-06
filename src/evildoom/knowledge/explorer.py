@@ -145,6 +145,7 @@ class Explorer:
         self._difficult = False  # (the jumps missed once are in, for want of anything else)
         self._exits_open = True  # (exit_last: closed till nothing else is left)
         self._pads: set[int] | None = None  # (polys beyond walk-over exit lines)
+        self._trapped: frozenset | None = None  # (where she could get to, with nothing at all to do)
 
     # --- the known world ----------------------------------------------------------------
 
@@ -598,6 +599,12 @@ class Explorer:
         then the locks her keys open, then by distance as the crow flies (keys and untried
         switches a little ahead of the edge of the map)."""
         options = self.objectives(obs, risky)
+        if risky and self.knowledge.traps:
+            # (not back into a trap she's been stuck in before: MAP18's nukage moat, dropped into
+            # to look at its walls, and stranded; the next go, again, as it seemed worth a look)
+            mesh = self.nav.mesh
+            options = [o for o in options if not any(
+                (p := mesh.poly_at(*o.goal)) is not None and p.index in trap for trap in self.knowledge.traps)]
         if not self._exits_open:
             # (nor anywhere she'd slide over one getting there: MAP24's pad, 38 off a goal)
             self._exit_pads()
@@ -760,7 +767,12 @@ class Explorer:
 
     def restart(self) -> None:
         """Died: the level from the start again, keeping what's known of it (Knowledge.restart).
-        Whatever she was doing is dropped; the next pick is the exit if she knows the way."""
+        Whatever she was doing is dropped; the next pick is the exit if she knows the way.
+        Stuck with nothing at all to do before it: that place is a trap, kept in mind."""
+        if self._trapped:
+            self.knowledge.traps.append(self._trapped)
+            self.log.append(f"--- that was a trap ({len(self._trapped)} polys): not going back in")
+        self._trapped = None
         self.knowledge.restart()
         self.log.append(f"--- died: life {self.knowledge.lives}")
         self.current = self.follower = None
@@ -1042,6 +1054,9 @@ class Explorer:
             if self.current is not None:
                 self.log.append(f"tic {obs.tic}: nothing left to do")
             self.current = None
+            # (the exit out of reach too: where she can get from here is a trap, if it's where
+            # she's started again from; known for the next go)
+            self._trapped = frozenset(self._reach)
 
     def _back_to_exit(self, obj: Objective, obs: Observation) -> bool:
         """With the exit held back (the expert's run): could she get from `obj`'s spot to an exit
@@ -1070,9 +1085,6 @@ class Explorer:
             routed = []
             for obj in options:
                 steps = self.route_to(obj, obs)
-                if steps and obj.risky and not self._exits_open and not self._back_to_exit(obj, obs):
-                    self._drop(obj, obs, "no way back to the exit from there")
-                    continue
                 if steps:
                     length = self._route_length(steps)
                     if obj.worth is not None and length > obj.worth:
