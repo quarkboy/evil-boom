@@ -100,6 +100,7 @@ type NewGameFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int);
 type GodFn = unsafe extern "C" fn(c_int);
 type TicFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int);
 type WarpFn = unsafe extern "C" fn(f64, f64, f64) -> c_int;
+type DrawFn = unsafe extern "C" fn(*mut u8, c_int) -> c_int;
 type StatusFn = unsafe extern "C" fn(*mut Status);
 type SectorsFn = unsafe extern "C" fn(*mut f64, c_int) -> c_int;
 type MobjsFn = unsafe extern "C" fn(*mut Mobj, c_int) -> c_int;
@@ -112,6 +113,7 @@ pub struct Dsda {
     god_fn: GodFn,
     tic_fn: TicFn,
     warp_fn: WarpFn,
+    draw_fn: DrawFn,
     status_fn: StatusFn,
     sectors_fn: SectorsFn,
     mobjs_fn: MobjsFn,
@@ -140,13 +142,14 @@ impl Dsda {
                 .map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
         };
         // SAFETY: each symbol is the function of that name in evil_api.c, with this signature.
-        let (init_fn, new_game_fn, god_fn, tic_fn, warp_fn, status_fn, sectors_fn, mobjs_fn, player_fn) = unsafe {
+        let (init_fn, new_game_fn, god_fn, tic_fn, warp_fn, draw_fn, status_fn, sectors_fn, mobjs_fn, player_fn) = unsafe {
             (
                 std::mem::transmute::<*const (), InitFn>(sym(b"evil_init")?),
                 std::mem::transmute::<*const (), NewGameFn>(sym(b"evil_new_game")?),
                 std::mem::transmute::<*const (), GodFn>(sym(b"evil_god")?),
                 std::mem::transmute::<*const (), TicFn>(sym(b"evil_tic")?),
                 std::mem::transmute::<*const (), WarpFn>(sym(b"evil_warp")?),
+                std::mem::transmute::<*const (), DrawFn>(sym(b"evil_draw")?),
                 std::mem::transmute::<*const (), StatusFn>(sym(b"evil_get_status")?),
                 std::mem::transmute::<*const (), SectorsFn>(sym(b"evil_sectors")?),
                 std::mem::transmute::<*const (), MobjsFn>(sym(b"evil_mobjs")?),
@@ -166,6 +169,7 @@ impl Dsda {
             god_fn,
             tic_fn,
             warp_fn,
+            draw_fn,
             status_fn,
             sectors_fn,
             mobjs_fn,
@@ -210,6 +214,20 @@ impl Dsda {
     pub fn warp(&self, x: f64, y: f64, angle: f64) -> bool {
         // SAFETY: plain values into the game; see `load`.
         unsafe { (self.warp_fn)(x, y, angle) != 0 }
+    }
+
+    /// Draw the frame as the game would and get it as palette indices, a row at a time:
+    /// (width, height, pixels); None when drawing is off (-nodraw).
+    pub fn draw(&self) -> Option<(usize, usize, Vec<u8>)> {
+        let mut buf = vec![0u8; 3840 * 2160];
+        // SAFETY: the game writes at most `max` bytes into the buffer it's given.
+        let wh = unsafe { (self.draw_fn)(buf.as_mut_ptr(), buf.len() as c_int) };
+        if wh <= 0 {
+            return None;
+        }
+        let (w, h) = ((wh >> 16) as usize, (wh & 0xFFFF) as usize);
+        buf.truncate(w * h);
+        Some((w, h, buf))
     }
 
     pub fn status(&self) -> Status {

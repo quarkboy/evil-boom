@@ -572,6 +572,12 @@ impl DsdaGame {
         });
     }
 
+    /// The frame as the game draws it: (width, height, palette indices as bytes), or None
+    /// when drawing is off.
+    fn draw<'py>(&self, py: Python<'py>) -> Option<(usize, usize, Bound<'py, pyo3::types::PyBytes>)> {
+        self.game.draw().map(|(w, h, px)| (w, h, pyo3::types::PyBytes::new(py, &px)))
+    }
+
     /// The level's tally: ((items, total), (kills, total), (secrets, total)).
     fn tally(&self) -> ((i32, i32), (i32, i32), (i32, i32)) {
         let s = self.game.status();

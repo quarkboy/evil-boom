@@ -19,8 +19,14 @@
 #include "r_state.h"
 #include "i_system.h"
 #include "i_video.h"
+#include "v_video.h"
+#include "r_main.h"
+#include "r_fps.h"
+#include "st_stuff.h"
 #include "lprintf.h"
 #include "dsda/args.h"
+#include "dsda/pause.h"
+#include "dsda/configuration.h"
 
 #ifdef _WIN32
 #define EVIL_API __declspec(dllexport)
@@ -78,6 +84,11 @@ EVIL_API int evil_init(int argc, char **argv)
   I_PreInitGraphics();
   D_DoomMainSetupForEvil();
   singletics = true;
+  /* (no screen melt between levels: it runs on the clock, and while it ran some of her
+   * commands went nowhere, a different number each time; and nothing interpolated between
+   * tics, which runs on the clock too) */
+  dsda_UpdateIntConfig(dsda_config_render_wipescreen, 0, false);
+  dsda_UpdateIntConfig(dsda_config_uncapped_framerate, 0, false);
   return 0;
 }
 
@@ -124,9 +135,18 @@ EVIL_API int evil_warp(double x, double y, double angle)
 EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
 {
   ticcmd_t *cmd;
-  I_StartTic();
-  cmd = &local_cmds[consoleplayer][maketic % BACKUPTICS];
-  G_BuildTiccmd(cmd);
+  /* (no I_StartTic: her commands are set here, not read from a keyboard; and the window's
+   * events, drawing for a watcher, paused the game when it wasn't in focus) */
+  dsda_ResetPauseMode();
+  menuactive = false;
+  /* (the slot the game reads this tic, and no other: drawing a frame calls NetUpdate partway
+   * through, which builds commands for the clock's tics and moves maketic on, and a command
+   * written to maketic's slot then went nowhere: a tic of hers lost now and then) */
+  maketic = gametic;
+  cmd = &local_cmds[consoleplayer][gametic % BACKUPTICS];
+  /* (not G_BuildTiccmd: it folds in the mouse and the smoothed view's turning, which with
+   * frames being drawn turned her a little each tic of its own accord) */
+  memset(cmd, 0, sizeof *cmd);
   cmd->forwardmove = (signed char)forward;
   cmd->sidemove = (signed char)side;
   cmd->angleturn = (signed short)turn;
@@ -140,7 +160,36 @@ EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
     exited = 1;
   }
   gametic++;
-  maketic++;
+  maketic = gametic;
+}
+
+/* Draw the frame as the game would (the player's view, the status bar) and copy it out as
+ * palette indices, a row at a time (out: width * height bytes). Returns width << 16 | height,
+ * or 0 if there's no room or nothing's drawn (-nodraw). For watching a run. */
+extern dboolean setsizeneeded;
+void R_ExecuteSetViewSize(void);
+
+EVIL_API int evil_draw(unsigned char *out, int max)
+{
+  int y, w, h;
+  if (nodrawers)
+    return 0;
+  if (gamestate != GS_LEVEL)
+    return 0;
+  /* (the view and the status bar, the tic as it is: no menus, wipes or presenting) */
+  if (setsizeneeded)
+    R_ExecuteSetViewSize();  /* (the view's size and buffers: D_Display does this first) */
+  R_InterpolateView(&players[displayplayer], FRACUNIT);
+  R_RenderPlayerView(&players[displayplayer]);
+  R_RestoreInterpolations();
+  ST_Drawer(true);
+  w = screens[0].width;
+  h = screens[0].height;
+  if (!screens[0].data || w * h > max)
+    return 0;
+  for (y = 0; y < h; y++)
+    memcpy(out + y * w, screens[0].data + y * screens[0].pitch, w);
+  return (w << 16) | h;
 }
 
 EVIL_API void evil_get_status(evil_status *out)

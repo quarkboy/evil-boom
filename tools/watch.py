@@ -58,7 +58,8 @@ def key_colour(name: str):
 
 class Watch:
     def __init__(self, iwad: Path, map_name: str, speed: float, snapshot: float | None = None,
-                 mortal: bool = False, lives: int = 1, fight: int = 0):
+                 mortal: bool = False, lives: int = 1, fight: int = 0, engine: str = "dsda",
+                 expert: bool = False):
         self.lives_left = lives - 1
         self.map_name = map_name
         self.snapshot = snapshot
@@ -66,11 +67,16 @@ class Watch:
         skill = fight or 3
         self.nav = Navigator(self.m, skill=skill)
         keep_verified(self.nav, iwad, map_name)
-        self.engine = VizDoomEngine(iwad, map_name, size=VIEW_SIZE, rgb=True, skill=skill,
-                                    nomonsters=not fight, objects=bool(fight))
+        if engine == "dsda":
+            from evildoom.engine.dsda_engine import DsdaEngine
+            self.engine = DsdaEngine(iwad, map_name, skill=skill, nomonsters=not fight,
+                                     objects=bool(fight) or expert, drawn=True)
+        else:
+            self.engine = VizDoomEngine(iwad, map_name, size=VIEW_SIZE, rgb=True, skill=skill,
+                                        nomonsters=not fight, objects=bool(fight))
         self.engine.start()
         if not mortal:
-            self.engine.game.send_game_command("god")
+            self.engine.god()
         width = int(VIEW_SIZE.split("x")[0])
         knowledge = Knowledge(self.nav, width=width, mortal=mortal)
         if fight:
@@ -79,6 +85,9 @@ class Watch:
             self.x = self.agent.explorer
         else:
             self.agent = self.x = Explorer(self.nav, knowledge)
+            if expert:
+                from evildoom.knowledge.completion import Completionist
+                Completionist(self.x, restarts=lives - 1)
         self.speed = speed
         self.paused = False
         self.show_all = False
@@ -127,7 +136,11 @@ class Watch:
             owed += (now - last_frame) * TICRATE * self.speed
             last_frame = now
             owed = min(owed, 8)  # (don't race to catch up after a slow plan)
-            if self.engine.dead and self.lives_left > 0 and not self.paused:
+            wanted = getattr(self.x, "restart_wanted", False)
+            if wanted and self.lives_left <= 0:
+                self.x.restart_wanted, self.x.before_exit = False, None  # (out with what she has)
+            if (self.engine.dead or wanted) and self.lives_left > 0 and not self.paused:
+                self.x.restart_wanted = False
                 self.lives_left -= 1
                 self.engine.restart(keep_time=True)
                 self.agent.restart()
@@ -149,7 +162,7 @@ class Watch:
     def tic(self) -> None:
         e = self.engine
         self.obs = e.observe()
-        self.state = e.state()
+        self.frame = e.frame() if hasattr(e, "frame") else getattr(e.state(), "screen_buffer", None)
         self.controls = self.agent.act(self.obs, self.controls)
         e.step(self.controls)
         if e.finished and self.finished_at is None:
@@ -178,11 +191,10 @@ class Watch:
         pygame.display.flip()
 
     def draw_game(self) -> None:
-        st = getattr(self, "state", None)
-        if st is None or st.screen_buffer is None:
+        buf = getattr(self, "frame", None)  # H x W x 3
+        if buf is None:
             self.text("starting...", (20, 20))
             return
-        buf = st.screen_buffer  # H x W x 3
         surf = pygame.surfarray.make_surface(buf.swapaxes(0, 1))
         self.screen.blit(pygame.transform.scale(surf, GAME.size), GAME.topleft)
         if self.engine.finished:
@@ -381,10 +393,15 @@ def main() -> None:
     ap.add_argument("--lives", type=int, default=1, help="tries at the map (with --mortal)")
     ap.add_argument("--fight", type=int, default=0, metavar="SKILL",
                     help="monsters in, at this skill (1-5; 4: Ultra-Violence), and Evil fights them")
+    ap.add_argument("--engine", choices=("dsda", "vizdoom"), default="dsda",
+                    help="dsda: DSDA-Doom in-process (the frames it draws), vizdoom: ViZDoom")
+    ap.add_argument("--expert", action="store_true",
+                    help="every item that counts picked up, then the exit (no monsters)")
     ap.add_argument("--snapshot", type=float, metavar="SECONDS",
                     help="save the window to out/watch.png after this much game time, and quit")
     a = ap.parse_args()
-    w = Watch(resolve_wad(a.wad), a.map.upper(), a.speed, a.snapshot, a.mortal, a.lives, a.fight)
+    w = Watch(resolve_wad(a.wad), a.map.upper(), a.speed, a.snapshot, a.mortal, a.lives, a.fight,
+              a.engine, a.expert)
     w.show_all = a.all
     w.run()
 

@@ -36,7 +36,8 @@ def _episode_map(map_name: str) -> tuple[int, int]:
 
 class DsdaEngine:
     def __init__(self, iwad: str | Path, map_name: str, *, skill: int = 3, nomonsters: bool = True,
-                 objects: bool = False, library: str | Path = LIBRARY):
+                 objects: bool = False, library: str | Path = LIBRARY, drawn: bool = False):
+        """`drawn`: the frames are drawn (frame()), for watching; else nothing is."""
         import evildoom_native
         if sys.platform == "win32" and MINGW_BIN.is_dir():
             os.add_dll_directory(str(MINGW_BIN))  # (Python doesn't look in PATH for a DLL's DLLs)
@@ -47,9 +48,16 @@ class DsdaEngine:
         data.mkdir(parents=True, exist_ok=True)
         os.environ.setdefault("DOOMDATADIR", str(data))
         self.game = evildoom_native.DsdaGame(str(library), [
-            "-iwad", str(iwad), "-nodraw", "-nosound", "-nomusic", "-skill", str(skill)]
+            "-iwad", str(iwad), "-nosound", "-nomusic", "-skill", str(skill)]
+            + ([] if drawn else ["-nodraw"])
+            # (straight into the level: no title screen, whose attract-mode demo, played on the
+            # clock while frames are drawn, took over her first commands for a while)
+            + ["-warp"] + ([str(self_ep) for self_ep in _episode_map(map_name)]
+                           if not map_name.upper().startswith("MAP") else [str(_episode_map(map_name)[1])])
             + ["-nomonsters"] * nomonsters)  # (as the game sets it: a new game resets it from this)
         self.map_name = map_name
+        self.iwad = Path(iwad)
+        self._palette = None
         self.episode, self.map = _episode_map(map_name)
         self.skill = skill
         self.nomonsters = nomonsters
@@ -124,6 +132,21 @@ class DsdaEngine:
         scale = 1.0 if c.run else 0.5
         self.game.tic(c.forward * scale, c.strafe * scale, c.turn, c.attack, c.use, c.weapon)
         self.tic += 1
+
+    def frame(self):
+        """The game's frame as it draws it (player's view and status bar): an H x W x 3 RGB
+        array, or None when frames aren't drawn."""
+        import numpy as np
+        got = self.game.draw()
+        if got is None:
+            return None
+        w, h, px = got
+        if self._palette is None:
+            from evildoom.wad.wad import Wad
+            wad = Wad(self.iwad)
+            playpal = next(lump for lump in wad.lumps if lump.name == "PLAYPAL")
+            self._palette = np.frombuffer(wad.read(playpal)[:768], dtype=np.uint8).reshape(256, 3)
+        return self._palette[np.frombuffer(px, dtype=np.uint8).reshape(h, w)]
 
     def close(self) -> None:
         pass  # (the process ends with the game)
