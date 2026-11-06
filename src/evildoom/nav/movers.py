@@ -62,7 +62,10 @@ DOOR_CLOSE_30 = {16, 76}  # close, wait 30 s, open
 # Specials whose target depends on the heights round them (or their own) when they fire
 DEPENDS_ON_HEIGHTS = (FLOOR_LOWEST | FLOOR_HIGHEST | FLOOR_TURBO | FLOOR_LOWEST_CEIL
                       | FLOOR_LOWEST_CEIL_CRUSH | FLOOR_NEXT_HIGHER | set(FLOOR_RAISE)
-                      | FLOOR_SHORTEST_TEX | CEIL_HIGHEST)
+                      | FLOOR_SHORTEST_TEX | CEIL_HIGHEST
+                      # (a door opens to the lowest ceiling round it then, less 4: MAP14's, by a
+                      # crusher stopped low, opened 42 high and she couldn't get under it)
+                      | DOOR_OPEN)
 
 
 class MoverModel:
