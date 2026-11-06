@@ -39,7 +39,8 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
     skill = fight or 3
     nav = Navigator(m, skill=skill)
     keep_verified(nav, iwad, map_name)
-    e = VizDoomEngine(iwad, map_name, skill=skill, nomonsters=not fight, objects=bool(fight))
+    e = VizDoomEngine(iwad, map_name, skill=skill, nomonsters=not fight, objects=bool(fight),
+                      headless=True)
     e.game.add_game_args("+sv_cheats 1")
     e.start()
     if not mortal:
@@ -54,6 +55,7 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
     t0 = time.perf_counter()
     deaths = 0
     idle_since = None  # since when she's had nothing to do
+    spent = {"engine": 0.0, "observe": 0.0, "think": 0.0}  # seconds, where the time goes
     while e.tic < max_seconds * TICRATE:
         stranded = idle_since is not None and e.tic - idle_since > STRANDED_TICS
         if e.finished and e.dead and fight and obs is not None:
@@ -77,13 +79,19 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                 idle_since = None
                 continue
             break
+        t1 = time.perf_counter()
         obs = e.observe()
+        t2 = time.perf_counter()
         c = x.act(obs, c)
+        t3 = time.perf_counter()
         if x.current is None:
             idle_since = e.tic if idle_since is None else idle_since
         else:
             idle_since = None
         e.step(c)
+        spent["observe"] += t2 - t1
+        spent["think"] += t3 - t2
+        spent["engine"] += time.perf_counter() - t3
     exited, died, game_s = e.exited, e.finished and e.dead, e.tic / TICRATE
     k = x.knowledge
     lines = list(x.log) + ["", "knowledge events:"] + k.events + ["", k.summary()]
@@ -107,6 +115,9 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                          f"effect sectors known {sum(s in k.sectors for s in t.effects)}/{len(t.effects)}")
     e.close()
     outcome = "EXITED" if exited else "DIED" if died else "STUCK"
+    real = time.perf_counter() - t0
+    lines.append("time: " + ", ".join(f"{k} {v:.1f}s" for k, v in spent.items())
+                 + f", other {real - sum(spent.values()):.1f}s; {e.tic / max(real, 1e-9):.0f} tics/s")
     detail = f"{game_s:.0f}s game, {time.perf_counter() - t0:.0f}s real, {deaths} deaths; {k.summary()}"
     lines.append(f"RESULT {outcome} {detail}")
     OUT.mkdir(parents=True, exist_ok=True)

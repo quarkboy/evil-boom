@@ -30,12 +30,15 @@ KEY_OBJECTS = {"BlueCard": Key.BLUE_CARD, "YellowCard": Key.YELLOW_CARD, "RedCar
 class VizDoomEngine:
     def __init__(self, iwad: str | Path, map_name: str, *, pwad: str | Path | None = None,
                  skill: int = 3, nomonsters: bool = True, visible: bool = False,
-                 size: str = "320x240", rgb: bool = False, objects: bool = False):
+                 size: str = "320x240", rgb: bool = False, objects: bool = False,
+                 headless: bool = False):
         """`size` is a ViZDoom resolution like "1024x768". Avoid 1280x960: it segfaults
         ViZDoom 1.3.2 on init (other sizes, including 1920x1080, are fine).
         `rgb` makes the screen buffer H x W x 3 RGB (for drawing it ourselves). The live
         object list is always on: keys held are worked out from key items that disappear;
-        `objects` puts it in each Observation too (`things`: monsters, missiles, items)."""
+        `objects` puts it in each Observation too (`things`: monsters, missiles, items).
+        `headless`: nobody looks at the screen (sweeps): the smallest one, nothing extra drawn
+        (what Evil sees is worked out from the map, not the screen)."""
         game = vzd.DoomGame()
         game.set_doom_game_path(str(iwad))
         if pwad:
@@ -46,12 +49,19 @@ class VizDoomEngine:
         game.set_episode_timeout(0)
         game.set_window_visible(visible)
         game.set_screen_resolution(getattr(vzd.ScreenResolution, f"RES_{size.upper()}"))
-        game.set_render_hud(True)
+        if headless:
+            size = "160x120"
+        game.set_render_hud(not headless)
         game.set_render_crosshair(False)
         game.set_sectors_info_enabled(True)
         game.set_objects_info_enabled(True)
         if rgb:
             game.set_screen_format(vzd.ScreenFormat.RGB24)
+        if headless:
+            for off in (game.set_render_weapon, game.set_render_decals, game.set_render_particles,
+                        game.set_render_effects_sprites, game.set_render_messages,
+                        game.set_render_screen_flashes):
+                off(False)
         game.set_available_buttons(BUTTONS)
         game.set_available_game_variables(VARIABLES)
         if nomonsters:
@@ -95,38 +105,50 @@ class VizDoomEngine:
         x, y, angle, health, z, weapon, armor = v[:7]
         held, ammo = v[7:14], v[14:21]
         heights = {s.id: (s.floor_height, s.ceiling_height) for s in state.sectors}
-        barrels = tuple((o.position_x, o.position_y) for o in state.objects
-                        if o.name == "ExplosiveBarrel")
-        things = velocity = None
-        if self.objects:
-            me = next((o for o in state.objects if o.name == "DoomPlayer"), None)
-            if me is not None:
-                velocity = (float(me.velocity_x), float(me.velocity_y))
-            things = tuple(Thing(int(o.id), o.name, category(o.name), float(o.position_x),
-                                 float(o.position_y), float(o.position_z), float(o.velocity_x),
-                                 float(o.velocity_y), float(o.velocity_z), float(o.angle))
-                           for o in state.objects if o.name != "DoomPlayer")
+        # (one pass, each name read once: every read is a call into the engine, and there are
+        # hundreds of objects, most of them decorations, corpses, blood, puffs)
+        barrels = []
+        things = [] if self.objects else None
+        velocity = None
+        keys: dict[str, int] = {}
+        suits = 0
+        for o in state.objects:
+            name = o.name
+            if name == "ExplosiveBarrel":
+                barrels.append((o.position_x, o.position_y))
+            elif name == "DoomPlayer":
+                if self.objects:
+                    velocity = (float(o.velocity_x), float(o.velocity_y))
+            else:
+                if name in KEY_OBJECTS:
+                    keys[name] = keys.get(name, 0) + 1
+                elif name == "RadSuit":
+                    suits += 1
+                if things is not None:
+                    kind = category(name)
+                    if kind != "Other":
+                        things.append(Thing(int(o.id), name, kind, float(o.position_x),
+                                            float(o.position_y), float(o.position_z),
+                                            float(o.velocity_x), float(o.velocity_y),
+                                            float(o.velocity_z), float(o.angle)))
         return Observation(float(x), float(y), float(angle), heights, self.tic,
-                           self._keys_held(state), float(z), int(weapon), barrels, float(health),
-                           self._suits_taken(state), things,
+                           self._keys_held(keys), float(z), int(weapon), tuple(barrels),
+                           float(health), self._suits_taken(suits),
+                           tuple(things) if things is not None else None,
                            frozenset(i + 1 for i, h in enumerate(held) if h > 0),
                            {i + 1: int(a) for i, a in enumerate(ammo)}, float(armor),
                            held[2] > 1, velocity)  # (WEAPON3 counts both shotguns)
 
-    def _keys_held(self, state) -> frozenset:
-        """Keys picked up so far: key items present at the start that have gone."""
-        now: dict[str, int] = {}
-        for o in state.objects:
-            if o.name in KEY_OBJECTS:
-                now[o.name] = now.get(o.name, 0) + 1
+    def _keys_held(self, now: dict[str, int]) -> frozenset:
+        """Keys picked up so far: key items present at the start that have gone (`now`: key
+        objects about, by name)."""
         if self._keys_at_start is None:
             self._keys_at_start = now
         return frozenset(KEY_OBJECTS[n] for n, c in self._keys_at_start.items()
                          if now.get(n, 0) < c)
 
-    def _suits_taken(self, state) -> int:
+    def _suits_taken(self, now: int) -> int:
         """Radiation suits picked up so far (ones present at the start that have gone)."""
-        now = sum(o.name == "RadSuit" for o in state.objects)
         if self._suits_at_start is None:
             self._suits_at_start = now
         return self._suits_at_start - now
