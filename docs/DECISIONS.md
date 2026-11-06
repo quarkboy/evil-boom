@@ -649,3 +649,6 @@ Perception **58/68** (out: MAP27, MAP28); peek 57/68 (out: MAP14, MAP15, MAP27; 
 - **A doubted line's recheck is its one go a life, whether or not it could tell anything**: MAP27's lift switch, its lift always moving when pressed, was "tried again, unsure" 1800 times. With this and the key rule above, MAP27's red door (a marble face, looking like the wall) is pressed with the key: MAP27 exits.
 
 Perception **59/68**: only MAP28 out (besides the 8 boss maps). Peek 57/68 (out: MAP14, MAP15, MAP27).
+- **The places she got stuck get another go** once nothing else is left (the poly-avoidance after two failures had cost the only way on in E3M4, MAP05, MAP27). **A panel unlike the same panel either side** is a stronger suspect (+1.5: a mapper's mark for a switch, MAP28's symbol). Skipping walls given up on lately before taking the best few (so MAP28's symbol, 25th, came up) let the wall tier run on for ever and cost MAP14, MAP23, E3M4: not kept.
+
+Still perception 59/68 (MAP28 out), peek 57/68.

@@ -714,6 +714,11 @@ class Knowledge:
                 score += 1.5
                 if length <= 96:
                     score += 0.5
+                # (one panel unlike the same panel either side of it: a mark, the way a mapper
+                # shows a switch: MAP28's symbol between two plain panels, shot to open the way)
+                faces = {self._face(m.linedefs[n]) for n in neighbours}
+                if len(neighbours) >= 2 and len(faces) == 1:
+                    score += 1.5
             if score < SUSPICION_MIN and not panic:
                 continue
             key = behind if behind is not None else ("line", li)

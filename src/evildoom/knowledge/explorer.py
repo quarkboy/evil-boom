@@ -1200,6 +1200,15 @@ class Explorer:
             self.log.append(f"tic {obs.tic}: nothing else to do: the jumps missed once get another go")
             self._set_jumps(difficult=True)
             found = self._try_objectives(obs, risky=False) or self._try_objectives(obs, risky=True)
+        stuck = [p for p, n in self.knowledge.stuck_at.items() if n >= STUCK_TIMES]
+        if not found and stuck:
+            # (the places she got stuck, given another go: two goes can be bad luck, or a goal
+            # that was the trouble, not the way, and the way on through one was lost for good:
+            # E3M4's, MAP05's, MAP27's)
+            self.log.append(f"tic {obs.tic}: nothing else to do: the {len(stuck)} places she got stuck get another go")
+            for p in stuck:
+                self.knowledge.stuck_at[p] = STUCK_TIMES - 1
+            found = self._try_objectives(obs, risky=False) or self._try_objectives(obs, risky=True)
         if not found:
             if self.current is not None:
                 self.log.append(f"tic {obs.tic}: nothing left to do")
