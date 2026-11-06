@@ -8,35 +8,57 @@ See [docs/DECISIONS.md](docs/DECISIONS.md) for the architecture and decision log
 
 ## Layout
 
+Evil is one Rust crate, `native/` (package `evildoom`: a library and the `evil` binary), running
+DSDA-Doom in-process.
+
 ```
-src/evildoom/
-  wad/        WAD + map lump parsing, line/sector special classification (engine-independent)
-  nav/        navigation graph and key-gated reachability built from parsed maps
-  knowledge/  Evil's knowledge base: what she has seen, pruned into relevant context
-  engine/     engine adapters (ViZDoom first; a modern MBF21 port later)
-  bridge/     Neuro SDK websocket client, action registration and handling
-  tactical/   fast classifier layer (Jev-style decisions conditioned on Evil's intent)
-  motor/      35 Hz deterministic control: aiming, movement, path following
-spikes/       throwaway experiments
-tests/
+native/src/
+  wad, map, specials, things   WAD and map lumps, line/sector specials, things (engine-independent)
+  mesh, nav, plan, movers      the navmesh, movement rules, the planner over moving sectors
+  jumps                        drops and running jumps, simulated with the game's physics
+  navigator, walkthrough       a level's analysis, views restricted to what she knows, routes
+  knowledge                    what Evil has seen (the explorer, the 100%-items run)
+  motor                        35 Hz control: following a route
+  tactical                     monsters, sound, combat, the player with monsters about
+  engine, dsda                 DSDA-Doom in-process (third_party/dsda-doom + dsda/dsda-doom.patch)
+  sweep, play, viewer, main    the `evil` command: sweeps, single maps, watching her play
+native/tests/                  against the real IWADs and the game (skipped when missing)
+dsda/                          the engine patch and its build notes
 docs/
 ```
 
 ## Setup
 
+The engine: DSDA-Doom with `dsda/dsda-doom.patch` applied, built as the `dsda-evil` shared
+library (on Windows with MSYS2 MinGW64):
+
 ```sh
-python -m venv .venv
-.venv/Scripts/python -m pip install -e ".[dev,vizdoom]"
+export PATH=/c/msys64/mingw64/bin:$PATH
+cmake --build third_party/dsda-doom/prboom2/build --target dsda-evil
 ```
 
-WADs are not included. By default the tools look in the Steam install
+Then Evil:
+
+```sh
+cd native
+cargo build --release
+cargo test --release
+```
+
+WADs are not included. By default Evil looks in the Steam install
 (`C:\Program Files (x86)\Steam\steamapps\common\Ultimate Doom`); override with the
 `EVILDOOM_DOOM_DIR` environment variable.
 
-## Spikes
+## Running
 
 ```sh
-.venv/Scripts/python spikes/wad_spike.py doom E1M1      # summary + out/E1M1.png
-.venv/Scripts/python spikes/nav_spike.py doom E1M3      # key stages + walkthrough + out/*_nav.png
-.venv/Scripts/python spikes/vizdoom_probe.py <iwad> <map> [pwad]
+evil sweep doom doom2 --jobs 8              # every map, a line each, then a summary
+evil sweep doom E1M1 E1M2 doom2 MAP01       # some maps
+evil run-map doom2 MAP14                    # one map; its log goes to out/explore
+evil watch doom E1M3                        # watch her play, with what she knows beside the game
+evil dump-nav doom E1M1                     # the level's analysis
 ```
+
+Run options: `--lives N`, `--max-seconds S`, `--seed N|random` (0 unless given), `--peek`
+(she knows the whole map), `--secrets` (out only with every secret), `--expert` (every item,
+then out), `--fight SKILL` (monsters in), `--mortal` (no god mode).

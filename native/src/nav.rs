@@ -10,10 +10,10 @@ pub use path::{Found, Via};
 use crate::geom::{seg_key, Cell, Point, Seg, SegKey, MAX_STEP, PLAYER_HEIGHT};
 use crate::map::MapData;
 use crate::mesh::Mesh;
-use pyo3::prelude::*;
 use std::cmp::Ordering;
 use crate::det::{HashMap, HashSet};
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// A sector's floor and ceiling.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,19 +53,20 @@ pub fn top_floor(hs: &[Heights]) -> f64 {
 
 /// Where flood fills and path-finding read the heights each sector can be at from.
 pub trait HeightSource {
-    fn heights(&mut self, sector: usize) -> PyResult<Rc<Vec<Heights>>>;
+    fn heights(&mut self, sector: usize) -> Rc<Vec<Heights>>;
 }
 
 /// The plan search's heights: per sector, shared between the search's nodes.
 pub struct Planned<'a>(pub &'a [Rc<Vec<Heights>>]);
 
 impl HeightSource for Planned<'_> {
-    fn heights(&mut self, sector: usize) -> PyResult<Rc<Vec<Heights>>> {
-        Ok(Rc::clone(&self.0[sector]))
+    fn heights(&mut self, sector: usize) -> Rc<Vec<Heights>> {
+        Rc::clone(&self.0[sector])
     }
 }
 
 /// What a use-door can be opened to, and from which polys (its activators).
+#[derive(Clone, Debug)]
 pub struct DoorOpening {
     pub heights: Vec<Heights>,
     pub users: HashSet<usize>,
@@ -107,9 +108,7 @@ pub struct Tele {
     pub penalty: f64,
 }
 
-/// The per-map facts the navigator works from, worked out by Python (evildoom.nav.reach).
-#[derive(FromPyObject)]
-#[pyo3(from_item_all)]
+/// The per-map facts the flood fill and path-finding work from (the navigator's analysis).
 pub struct NavFacts {
     /// per poly: its statically passable portals
     pub adj: Vec<Vec<Edge>>,
@@ -135,44 +134,49 @@ pub struct NavFacts {
     pub obstacle_grid: HashMap<Cell, Vec<Seg>>,
 }
 
-/// The geometry questions the navigator asks back of Python, and their answers so far.
+/// Is there room for the box past these gate lines at this portal: `fits(portal, blocking
+/// lines)` (the lines sorted, never none).
+pub type FitsFn = Box<dyn Fn(usize, &[usize]) -> bool>;
+/// Is there room to drop off line `line` from sector `high`, whose floor is at `top`:
+/// `landable(line, high, top)`.
+pub type LandableFn = Box<dyn Fn(usize, usize, f64) -> bool>;
+
+/// The geometry questions the flood fill asks of the level's analysis (navigator), and their
+/// answers so far.
 pub struct Callbacks {
-    /// `portal_fits_without(portal, blocking lines)`: does the box get through the portal
-    /// with those lines' sectors shut?
-    pub fits: PyObject,
-    /// `_landable(line, high sector, top)`: is there room to drop off the line from there?
-    pub landable: PyObject,
+    fits: FitsFn,
+    landable: LandableFn,
     fits_cache: HashMap<(usize, Vec<usize>), bool>,
     landable_cache: HashMap<(usize, usize, i64), bool>,
 }
 
 impl Callbacks {
-    pub fn new(fits: PyObject, landable: PyObject) -> Self {
+    pub fn new(fits: FitsFn, landable: LandableFn) -> Self {
         Callbacks { fits, landable, fits_cache: HashMap::default(), landable_cache: HashMap::default() }
     }
 
-    fn landable(&mut self, py: Python<'_>, line: usize, high: usize, top: f64) -> PyResult<bool> {
+    fn landable(&mut self, line: usize, high: usize, top: f64) -> bool {
         let key = (line, high, (top * 16.0).round() as i64);
         if let Some(&v) = self.landable_cache.get(&key) {
-            return Ok(v);
+            return v;
         }
-        let v: bool = self.landable.call1(py, (line, high, top))?.extract(py)?;
+        let v = (self.landable)(line, high, top);
         self.landable_cache.insert(key, v);
-        Ok(v)
+        v
     }
 
-    fn fits(&mut self, py: Python<'_>, portal: usize, mut blocking: Vec<usize>) -> PyResult<bool> {
+    fn fits(&mut self, portal: usize, mut blocking: Vec<usize>) -> bool {
         if blocking.is_empty() {
-            return Ok(true);
+            return true;
         }
         blocking.sort_unstable();
         let key = (portal, blocking);
         if let Some(&v) = self.fits_cache.get(&key) {
-            return Ok(v);
+            return v;
         }
-        let v: bool = self.fits.call1(py, (portal, key.1.clone()))?.extract(py)?;
+        let v = (self.fits)(portal, &key.1);
         self.fits_cache.insert(key, v);
-        Ok(v)
+        v
     }
 }
 
@@ -200,8 +204,8 @@ impl Ord for Open {
 }
 
 pub struct NavCore {
-    pub map: MapData,
-    pub mesh: Mesh,
+    pub map: Arc<MapData>,
+    pub mesh: Arc<Mesh>,
     /// per poly: its sector
     pub poly_sector: Vec<usize>,
     pub adj: Vec<Vec<Edge>>,
@@ -228,10 +232,12 @@ pub struct NavCore {
 pub struct Known {
     pub polys: Vec<bool>,
     pub teleports: HashSet<usize>,
+    /// (poly, teleport index) edges not to take
+    pub banned: HashSet<(usize, usize)>,
 }
 
 impl NavCore {
-    pub fn new(map: MapData, mesh: Mesh, facts: NavFacts, callbacks: Callbacks) -> Self {
+    pub fn new(map: Arc<MapData>, mesh: Arc<Mesh>, facts: NavFacts, callbacks: Callbacks) -> Self {
         let poly_sector = mesh.polys.iter().map(|p| p.as_ref().map_or(0, |p| p.sector)).collect();
         let seg_lines = (0..map.linedefs.len()).map(|li| (seg_key(map.line_seg(li)), li)).collect();
         let NavFacts { adj, gates, tele, initial, damage, has_teleports, walls, drops, teleport_lines, shutting, static_grid, obstacle_grid } = facts;
@@ -258,7 +264,8 @@ impl NavCore {
     }
 
     /// Limit flood fills and path-finding to these polys and teleport lines (None: all).
-    pub fn restrict(&mut self, polys: Option<HashSet<usize>>, teleports: Option<HashSet<usize>>) {
+    /// `banned`: (poly, teleport index) edges she won't take (jumps she keeps missing).
+    pub fn restrict(&mut self, polys: Option<HashSet<usize>>, teleports: Option<HashSet<usize>>, banned: HashSet<(usize, usize)>) {
         self.known = polys.map(|ps| {
             let mut known = vec![false; self.mesh.polys.len()];
             for p in ps {
@@ -266,7 +273,7 @@ impl NavCore {
                     *k = true;
                 }
             }
-            Known { polys: known, teleports: teleports.unwrap_or_default() }
+            Known { polys: known, teleports: teleports.unwrap_or_default(), banned }
         });
     }
 
@@ -279,7 +286,8 @@ impl NavCore {
     fn tele_known(&self, poly: usize, ti: usize) -> bool {
         let Some(known) = &self.known else { return true };
         let t = &self.tele[poly][ti];
-        self.enterable(t.dest)
+        !known.banned.contains(&(poly, ti))
+            && self.enterable(t.dest)
             && match t.kind {
                 TeleKind::Line { line, .. } => known.teleports.contains(&line),
                 TeleKind::Jump { .. } => true,
@@ -294,42 +302,42 @@ impl NavCore {
 
     /// Sector `s`'s heights, and those its door opens to if it's one we can open (from `frm`,
     /// if given).
-    fn heights_with_doors(st: &mut dyn HeightSource, doors: Option<&Doors>, s: usize, frm: Option<usize>) -> PyResult<Vec<Heights>> {
-        let mut out = st.heights(s)?.to_vec();
+    fn heights_with_doors(st: &mut dyn HeightSource, doors: Option<&Doors>, s: usize, frm: Option<usize>) -> Vec<Heights> {
+        let mut out = st.heights(s).to_vec();
         if let Some(door) = doors.and_then(|d| d.get(&s)) {
             if frm.is_none_or(|p| door.users.contains(&p)) {
                 out.extend_from_slice(&door.heights);
             }
         }
-        Ok(out)
+        out
     }
 
     /// Does the box get through `portal` from poly `frm` with the gate lines round it as the
     /// heights have them?
-    fn fits_now(&mut self, py: Python<'_>, portal: usize, frm: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> PyResult<bool> {
-        let Some(gates) = self.gates.get(&portal) else { return Ok(true) };
+    fn fits_now(&mut self, portal: usize, frm: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> bool {
+        let Some(gates) = self.gates.get(&portal) else { return true };
         let sector = self.poly_sector[frm];
-        let here = Self::heights_with_doors(st, doors, sector, None)?;
+        let here = Self::heights_with_doors(st, doors, sector, None);
         let mut blocking = Vec::new();
         for gate in gates {
             for &s in &gate.sectors {
                 if s == sector {
                     continue;
                 }
-                let there = Self::heights_with_doors(st, doors, s, Some(frm))?;
+                let there = Self::heights_with_doors(st, doors, s, Some(frm));
                 if !here.iter().any(|&ha| there.iter().any(|&hb| can_cross(ha, hb))) {
                     blocking.push(gate.line);
                     break;
                 }
             }
         }
-        self.callbacks.fits(py, portal, blocking)
+        self.callbacks.fits(portal, blocking)
     }
 
     /// The height part of passability: a step or a drop we can make, with headroom.
-    fn heights_passable(&mut self, py: Python<'_>, e: Edge, frm: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> PyResult<bool> {
-        let hs_a = Self::heights_with_doors(st, doors, e.from_sector, None)?;
-        let hs_b = Self::heights_with_doors(st, doors, e.to_sector, Some(frm))?;
+    fn heights_passable(&mut self, e: Edge, frm: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> bool {
+        let hs_a = Self::heights_with_doors(st, doors, e.from_sector, None);
+        let hs_b = Self::heights_with_doors(st, doors, e.to_sector, Some(frm));
         for &ha in &hs_a {
             for &hb in &hs_b {
                 if !can_cross(ha, hb) {
@@ -338,65 +346,65 @@ impl NavCore {
                 let landable = match e.linedef {
                     _ if ha.floor - hb.floor <= MAX_STEP => true,
                     None => true,
-                    Some(li) => self.callbacks.landable(py, li, e.from_sector, ha.floor)?,
+                    Some(li) => self.callbacks.landable(li, e.from_sector, ha.floor),
                 };
                 if landable {
-                    return Ok(true);
+                    return true;
                 }
             }
         }
-        Ok(false)
+        false
     }
 
     /// Can edge `i` of `poly`'s adjacency be crossed now?
-    fn edge_passable(&mut self, py: Python<'_>, poly: usize, i: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> PyResult<bool> {
+    fn edge_passable(&mut self, poly: usize, i: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> bool {
         let e = self.adj[poly][i];
-        if self.gates.contains_key(&e.portal) && !self.fits_now(py, e.portal, poly, st, doors)? {
-            return Ok(false);
+        if self.gates.contains_key(&e.portal) && !self.fits_now(e.portal, poly, st, doors) {
+            return false;
         }
-        Ok(e.from_sector == e.to_sector || self.heights_passable(py, e, poly, st, doors)?)
+        e.from_sector == e.to_sector || self.heights_passable(e, poly, st, doors)
     }
 
     /// Can teleport/jump `ti` from `poly` be taken now?
-    fn tele_ok(&self, poly: usize, ti: usize, st: &mut dyn HeightSource) -> PyResult<bool> {
+    fn tele_ok(&self, poly: usize, ti: usize, st: &mut dyn HeightSource) -> bool {
         match &self.tele[poly][ti].kind {
             TeleKind::Jump { requires, .. } => {
                 for (s, h) in requires {
-                    if !st.heights(*s)?.contains(h) {
-                        return Ok(false);
+                    if !st.heights(*s).contains(h) {
+                        return false;
                     }
                 }
-                Ok(true)
+                true
             }
             TeleKind::Line { front, back, .. } => {
-                let (Some(front), Some(back)) = (*front, *back) else { return Ok(false) };
-                let fs = st.heights(front)?;
-                let bs = st.heights(back)?;
-                Ok(fs.iter().any(|&fh| bs.iter().any(|&bh| can_cross(fh, bh))))
+                let (Some(front), Some(back)) = (*front, *back) else { return false };
+                let fs = st.heights(front);
+                let bs = st.heights(back);
+                fs.iter().any(|&fh| bs.iter().any(|&bh| can_cross(fh, bh)))
             }
         }
     }
 
     /// The polys reachable from `start` (flood fill).
-    pub fn reachable(&mut self, py: Python<'_>, start: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> PyResult<HashSet<usize>> {
+    pub fn reachable(&mut self, start: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> HashSet<usize> {
         let mut seen: HashSet<usize> = HashSet::from_iter([start]);
         let mut todo = vec![start];
         while let Some(poly) = todo.pop() {
             for i in 0..self.adj[poly].len() {
                 let to = self.adj[poly][i].to;
-                if !seen.contains(&to) && self.enterable(to) && self.edge_passable(py, poly, i, st, doors)? {
+                if !seen.contains(&to) && self.enterable(to) && self.edge_passable(poly, i, st, doors) {
                     seen.insert(to);
                     todo.push(to);
                 }
             }
             for ti in 0..self.tele[poly].len() {
                 let dest = self.tele[poly][ti].dest;
-                if !seen.contains(&dest) && self.tele_known(poly, ti) && self.tele_ok(poly, ti, st)? {
+                if !seen.contains(&dest) && self.tele_known(poly, ti) && self.tele_ok(poly, ti, st) {
                     seen.insert(dest);
                     todo.push(dest);
                 }
             }
         }
-        Ok(seen)
+        seen
     }
 }

@@ -132,15 +132,14 @@ pub struct Dsda {
 }
 
 impl Dsda {
-    /// Load the library and set the game up (`args` as for dsda-doom.exe: -iwad and so on).
+    /// Load the library and set the game up (`args` as for dsda-doom.exe: -iwad and so on);
+    /// `dll_dirs`: where else its own libraries are (Windows: MSYS2's SDL2 and the rest).
     /// Once a process.
-    pub fn load(lib: &Path, args: &[String]) -> Result<Self, String> {
+    pub fn load(lib: &Path, dll_dirs: &[&Path], args: &[String]) -> Result<Self, String> {
         if LOADED.swap(true, Ordering::SeqCst) {
             return Err("DSDA-Doom is already loaded in this process (one game a process)".into());
         }
-        // SAFETY: the library is dsda/evil_api.c built with DSDA-Doom; the functions below
-        // have exactly these C signatures there.
-        let lib = unsafe { Library::new(lib) }.map_err(|e| format!("loading {}: {e}", lib.display()))?;
+        let lib = open_library(lib, dll_dirs).map_err(|e| format!("loading {}: {e}", lib.display()))?;
         let sym = |name: &[u8]| -> Result<*const (), String> {
             // SAFETY: as above; the pointer is only turned into the matching fn type.
             unsafe { lib.get::<*const ()>(name) }
@@ -383,4 +382,34 @@ pub fn weapon_slot(weapon: i32) -> i32 {
         6 => 7,
         _ => 0,
     }
+}
+
+/// The library, its own libraries looked for in `dll_dirs` too.
+#[cfg(windows)]
+fn open_library(lib: &Path, dll_dirs: &[&Path]) -> Result<Library, libloading::Error> {
+    use std::os::windows::ffi::OsStrExt;
+    /// LoadLibraryExW: the application's folder, System32 and the folders added.
+    const LOAD_LIBRARY_SEARCH_DEFAULT_DIRS: u32 = 0x0000_1000;
+    /// ...and the library's own folder.
+    const LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: u32 = 0x0000_0100;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn AddDllDirectory(new_directory: *const u16) -> *mut std::ffi::c_void;
+    }
+    for dir in dll_dirs {
+        let wide: Vec<u16> = dir.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        // SAFETY: a nul-terminated wide string that outlives the call.
+        unsafe { AddDllDirectory(wide.as_ptr()) };
+    }
+    // SAFETY: the library is dsda/evil_api.c built with DSDA-Doom; the functions taken from it
+    // have exactly the C signatures they're given here.
+    let lib = unsafe { libloading::os::windows::Library::load_with_flags(lib, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR) }?;
+    Ok(lib.into())
+}
+
+/// The library (its own libraries where the system's loader looks).
+#[cfg(not(windows))]
+fn open_library(lib: &Path, _dll_dirs: &[&Path]) -> Result<Library, libloading::Error> {
+    // SAFETY: as above.
+    unsafe { Library::new(lib) }
 }

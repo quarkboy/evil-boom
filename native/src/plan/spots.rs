@@ -21,7 +21,7 @@ fn first_extreme(points: impl IntoIterator<Item = Point>, p: Point, nearest: boo
     })
 }
 
-impl Planner<'_, '_> {
+impl Planner<'_> {
     /// A point in `poly` as near `target` as can be, PLAYER_RADIUS + 2 in from its edge (or
     /// its centre if it's that small).
     pub(super) fn spot_in_poly(&self, poly: usize, target: Point) -> Point {

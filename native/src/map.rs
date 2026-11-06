@@ -1,18 +1,52 @@
-//! The parts of a Doom-format map the navigation core needs, read straight from Python's
-//! `evildoom.wad.mapdata.MapData` (its records' attributes have the same names).
+//! A Doom-format map, as `wad::load_map` reads it.
+
+use std::collections::BTreeMap;
 
 use crate::geom::{Point, Seg};
-use pyo3::prelude::*;
 
 /// A linedef side that isn't there.
 pub const NO_SIDEDEF: u16 = 0xFFFF;
 /// A BSP child that is a subsector, not a node.
 pub const NF_SUBSECTOR: u16 = 0x8000;
-/// Linedef flags that stop the player.
+/// Linedef flags (vanilla, Boom, MBF21).
 pub const ML_BLOCKING: u16 = 0x0001;
+pub const ML_BLOCKMONSTERS: u16 = 0x0002;
+pub const ML_TWOSIDED: u16 = 0x0004;
+/// (shows as one-sided on the automap)
+pub const ML_SECRET: u16 = 0x0020;
+pub const ML_SOUNDBLOCK: u16 = 0x0040;
+pub const ML_DONTDRAW: u16 = 0x0080;
+pub const ML_MAPPED: u16 = 0x0100;
+/// (Boom: use passes through to lines behind)
+pub const ML_PASSUSE: u16 = 0x0200;
 pub const ML_BLOCKPLAYERS: u16 = 0x2000;
 
-#[derive(Clone, Copy, FromPyObject)]
+/// Thing flags.
+pub const MTF_EASY: u16 = 0x0001;
+pub const MTF_NORMAL: u16 = 0x0002;
+pub const MTF_HARD: u16 = 0x0004;
+pub const MTF_AMBUSH: u16 = 0x0008;
+/// (multiplayer only)
+pub const MTF_NOTSINGLE: u16 = 0x0010;
+
+#[derive(Clone, Copy, Debug)]
+pub struct Thing {
+    pub x: f64,
+    pub y: f64,
+    pub angle: i32,
+    pub kind: u16,
+    pub flags: u16,
+}
+
+impl Thing {
+    /// Is it there at this skill (1-5: 1-2 the easy bit, 3 normal, 4-5 hard), in single player?
+    pub fn in_skill(&self, skill: i32) -> bool {
+        let bit = if skill <= 2 { MTF_EASY } else if skill == 3 { MTF_NORMAL } else { MTF_HARD };
+        self.flags & bit != 0 && self.flags & MTF_NOTSINGLE == 0
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct Vertex {
     pub x: f64,
     pub y: f64,
@@ -24,11 +58,14 @@ impl Vertex {
     }
 }
 
-#[derive(Clone, FromPyObject)]
+#[derive(Clone, Debug)]
 pub struct Linedef {
+    pub index: usize,
     pub v1: usize,
     pub v2: usize,
     pub flags: u16,
+    pub special: u16,
+    pub tag: u16,
     /// sidedef indices, NO_SIDEDEF if absent
     pub front: u16,
     pub back: u16,
@@ -44,8 +81,10 @@ impl Linedef {
     }
 }
 
-#[derive(Clone, FromPyObject)]
+#[derive(Clone, Debug)]
 pub struct Sidedef {
+    pub x_offset: i32,
+    pub y_offset: i32,
     pub sector: usize,
     /// texture names, "-" for none
     pub upper: String,
@@ -53,15 +92,20 @@ pub struct Sidedef {
     pub middle: String,
 }
 
-/// What the renderer tells sectors apart by (besides their heights).
-#[derive(Clone, FromPyObject)]
+#[derive(Clone, Debug)]
 pub struct Sector {
+    pub index: usize,
+    /// heights at the start
+    pub floor: f64,
+    pub ceiling: f64,
     pub floor_tex: String,
     pub ceiling_tex: String,
     pub light: i32,
+    pub special: u16,
+    pub tag: u16,
 }
 
-#[derive(Clone, FromPyObject)]
+#[derive(Clone, Debug)]
 pub struct MapSeg {
     pub v1: usize,
     pub v2: usize,
@@ -70,22 +114,20 @@ pub struct MapSeg {
     pub direction: i16,
 }
 
-#[derive(Clone, Copy, FromPyObject)]
+#[derive(Clone, Copy, Debug)]
 pub struct Subsector {
     pub seg_count: usize,
     pub first_seg: usize,
 }
 
 /// A BSP node: a partition line and the children in front of (right of) and behind it.
-#[derive(Clone, Copy, FromPyObject)]
+#[derive(Clone, Copy, Debug)]
 pub struct Node {
     pub x: f64,
     pub y: f64,
     pub dx: f64,
     pub dy: f64,
-    #[pyo3(attribute("front_child"))]
     pub front: u16,
-    #[pyo3(attribute("back_child"))]
     pub back: u16,
 }
 
@@ -98,7 +140,7 @@ impl Node {
 
 /// The BLOCKMAP: 128-unit blocks from (x, y), `columns` across; per block (row by row), its
 /// lines.
-#[derive(Clone, FromPyObject)]
+#[derive(Clone, Debug)]
 pub struct Blockmap {
     pub x: i32,
     pub y: i32,
@@ -107,8 +149,10 @@ pub struct Blockmap {
     pub blocks: Vec<Vec<usize>>,
 }
 
-#[derive(FromPyObject)]
+#[derive(Clone, Debug)]
 pub struct MapData {
+    pub name: String,
+    pub things: Vec<Thing>,
     pub vertexes: Vec<Vertex>,
     pub linedefs: Vec<Linedef>,
     pub sidedefs: Vec<Sidedef>,
@@ -116,6 +160,8 @@ pub struct MapData {
     pub segs: Vec<MapSeg>,
     pub subsectors: Vec<Subsector>,
     pub nodes: Vec<Node>,
+    /// wall texture -> height
+    pub texture_heights: BTreeMap<String, i32>,
     pub blockmap: Option<Blockmap>,
 }
 
@@ -136,6 +182,14 @@ impl MapData {
     pub fn sides(&self, li: usize) -> (Option<usize>, Option<usize>) {
         let l = &self.linedefs[li];
         (self.front_sector(l), self.back_sector(l))
+    }
+
+    /// The sectors tagged `tag` (none for tag 0).
+    pub fn tagged_sectors(&self, tag: u16) -> Vec<usize> {
+        if tag == 0 {
+            return Vec::new();
+        }
+        self.sectors.iter().filter(|s| s.tag == tag).map(|s| s.index).collect()
     }
 
     /// Line `li` as a segment from its first vertex to its second.

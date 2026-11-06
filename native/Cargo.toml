@@ -1,17 +1,33 @@
 [package]
-name = "evildoom_native"
+name = "evildoom"
 version = "0.1.0"
 edition = "2021"
+description = "Evil: a Doom bot that explores and finishes levels, playing DSDA-Doom in-process"
 
 [lib]
-name = "evildoom_native"
-crate-type = ["cdylib"]
+name = "evildoom"
+path = "src/lib.rs"
+
+[[bin]]
+name = "evil"
+path = "src/main.rs"
+
+[features]
+default = ["viewer"]
+# the `evil watch` window (minifb: Windows, X11/Wayland); off for a headless build
+viewer = ["dep:minifb", "dep:font8x8", "dep:png"]
 
 [dependencies]
-pyo3 = { version = "0.23", features = ["extension-module", "abi3-py312"] }
 libloading = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+minifb = { version = "0.27", optional = true }
+font8x8 = { version = "0.3", optional = true }
+png = { version = "0.17", optional = true }
 
 [profile.release]
 opt-level = 3
 lto = true
 codegen-units = 1
+debug = 1

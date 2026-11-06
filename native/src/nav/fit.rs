@@ -9,7 +9,6 @@ use crate::geom::{
     PointKey, Seg, SegKey, MAX_STEP, PATH_CLEARANCE, PLAYER_HEIGHT, PLAYER_RADIUS,
 };
 use crate::stats::{self, Phase};
-use pyo3::prelude::*;
 use std::collections::BinaryHeap;
 use crate::det::HashSet;
 use std::time::Instant;
@@ -61,7 +60,7 @@ fn tele_into<'a>(nav: &'a NavCore, chain: &Chain, i: usize) -> Option<&'a TeleKi
 
 impl NavCore {
     /// The waypoints along `chain` (None where it teleports), and where the box got squeezed.
-    pub(super) fn smooth(&self, start: Point, goal: Point, chain: &Chain, st: &mut dyn HeightSource, doors: Option<&Doors>) -> PyResult<(Vec<Option<Point>>, Squeezes)> {
+    pub(super) fn smooth(&self, start: Point, goal: Point, chain: &Chain, st: &mut dyn HeightSource, doors: Option<&Doors>) -> (Vec<Option<Point>>, Squeezes) {
         let mut points: Vec<Option<Point>> = Vec::new();
         let mut seg_start = start;
         let mut portals: Vec<(Point, Point)> = Vec::new();
@@ -130,17 +129,17 @@ impl NavCore {
                 continue;
             }
             let t = Instant::now();
-            let a = fitter.push_from_corners(&run)?;
+            let a = fitter.push_from_corners(&run);
             stats::record(Phase::Corners, t);
             let t = Instant::now();
-            let b = fitter.box_fits_path(&a)?;
+            let b = fitter.box_fits_path(&a);
             stats::record(Phase::Fit, t);
             let t = Instant::now();
-            let c = fitter.straighten(&b)?;
+            let c = fitter.straighten(&b);
             stats::record(Phase::Straighten, t);
             out.extend(c.into_iter().map(Some));
         }
-        Ok((out, fitter.squeezes))
+        (out, fitter.squeezes)
     }
 
     /// Static walls (`static_grid`) the box swept from p to q hits, less `ignore`.
@@ -209,7 +208,7 @@ struct Fitter<'a> {
 }
 
 impl Fitter<'_> {
-    fn heights(&mut self, s: usize) -> PyResult<std::rc::Rc<Vec<Heights>>> {
+    fn heights(&mut self, s: usize) -> std::rc::Rc<Vec<Heights>> {
         self.st.heights(s)
     }
 
@@ -221,91 +220,91 @@ impl Fitter<'_> {
 
     /// The floor the box at `a` stands on, for which ledges block it: the highest under it,
     /// but not one it's wedged between (higher than a step on both sides, not in the middle).
-    fn standing_floor(&mut self, a: Point) -> PyResult<Option<f64>> {
+    fn standing_floor(&mut self, a: Point) -> Option<f64> {
         let nav = self.nav;
-        let Some(here) = nav.sector_at(a) else { return Ok(None) };
-        let reach_up = top_floor(&self.heights(here)?) + MAX_STEP;
+        let here = nav.sector_at(a)?;
+        let reach_up = top_floor(&self.heights(here)) + MAX_STEP;
         let mut grid = [[f64::NEG_INFINITY; 3]; 3];
         for (i, row) in grid.iter_mut().enumerate() {
             for (j, f) in row.iter_mut().enumerate() {
                 if let Some(s) = nav.sector_at((a.0 + (i as f64 - 1.0) * PLAYER_RADIUS, a.1 + (j as f64 - 1.0) * PLAYER_RADIUS)) {
-                    *f = top_floor(&self.st.heights(s)?);
+                    *f = top_floor(&self.st.heights(s));
                 }
             }
         }
         let high = |i: usize, j: usize| grid[i][j] > reach_up;
         let wedged = (0..3).any(|k| (high(0, k) && high(2, k) && !high(1, k)) || (high(k, 0) && high(k, 2) && !high(k, 1)));
-        Ok(grid.iter().flatten().copied().filter(|&f| f > f64::NEG_INFINITY && (!wedged || f <= reach_up)).reduce(f64::max))
+        grid.iter().flatten().copied().filter(|&f| f > f64::NEG_INFINITY && (!wedged || f <= reach_up)).reduce(f64::max)
     }
 
     /// Does the box at p hang over a floor more than a step above the one under its centre (not
     /// wedged between two: a rim walk)? It can only be there having come along the top, never
     /// from beside it (MAP23: a detour round barrels went along a 128-high ledge).
-    fn up_against_ledge(&mut self, p: Point) -> PyResult<bool> {
-        let Some(here) = self.nav.sector_at(p) else { return Ok(false) };
-        let centre = top_floor(&self.heights(here)?);
-        Ok(self.standing_floor(p)?.is_some_and(|f| f > centre + MAX_STEP))
+    fn up_against_ledge(&mut self, p: Point) -> bool {
+        let Some(here) = self.nav.sector_at(p) else { return false };
+        let centre = top_floor(&self.heights(here));
+        self.standing_floor(p).is_some_and(|f| f > centre + MAX_STEP)
     }
 
     /// Does (non-exempt) line `li` stop the box standing at `at`? `standing` caches
     /// `standing_floor(at)`.
-    fn line_blocks(&mut self, li: usize, at: Point, standing: &mut Option<Option<f64>>) -> PyResult<bool> {
+    fn line_blocks(&mut self, li: usize, at: Point, standing: &mut Option<Option<f64>>) -> bool {
         let nav = self.nav;
         if nav.teleport_lines.contains(&li) {
-            return Ok(true);
+            return true;
         }
         let (f, b) = nav.map.sides(li);
         let is_wall = nav.walls.contains(&li);
         if is_wall {
             // (a wall in the way unless it's open now)
-            return Ok(match (f, b) {
-                (Some(f), Some(b)) => !crossable_either_way(&self.heights(f)?, &self.heights(b)?),
+            return match (f, b) {
+                (Some(f), Some(b)) => !crossable_either_way(&self.heights(f), &self.heights(b)),
                 _ => true,
-            });
+            };
         }
         let (Some(f), Some(b)) = (f, b) else {
             // (a one-sided line that isn't a wall or a drop: never in the way)
-            return Ok(false);
+            return false;
         };
-        let (fs, bs) = (self.heights(f)?, self.heights(b)?);
-        let Some(ours) = self.standing_floor_cached(at, standing)? else { return Ok(false) };
+        let (fs, bs) = (self.heights(f), self.heights(b));
+        let Some(ours) = self.standing_floor_cached(at, standing) else { return false };
         // a ledge (at the heights now, not only those at the start: MAP17's pillar rose out of
         // the floor and a path cut its corner): in the way if its high side is more than a step
         // above where we stand
         let high = fs.iter().flat_map(|hf| bs.iter().map(|hb| hf.floor.max(hb.floor))).fold(f64::INFINITY, f64::min);
         if ours + MAX_STEP < high {
-            return Ok(true);
+            return true;
         }
         if nav.drops.contains(&li) {
-            return Ok(false);
+            return false;
         }
         // an opening: in the way if it's too low over where we stand
         let top = fs.iter().flat_map(|hf| bs.iter().map(|hb| hf.ceiling.min(hb.ceiling))).fold(f64::NEG_INFINITY, f64::max);
-        Ok(top - ours < PLAYER_HEIGHT)
+        top - ours < PLAYER_HEIGHT
     }
 
     /// Is line `li` a ledge more than a step above the floor under the box's centre at `at`?
-    fn ledge_over_centre(&mut self, li: usize, at: Point) -> PyResult<bool> {
+    fn ledge_over_centre(&mut self, li: usize, at: Point) -> bool {
         let nav = self.nav;
-        let (Some(f), Some(b)) = nav.map.sides(li) else { return Ok(false) };
-        let Some(here) = nav.sector_at(at) else { return Ok(false) };
-        let centre = top_floor(&self.heights(here)?);
+        let (Some(f), Some(b)) = nav.map.sides(li) else { return false };
+        let Some(here) = nav.sector_at(at) else { return false };
+        let centre = top_floor(&self.heights(here));
         let low = |hs: &[Heights]| hs.iter().map(|h| h.floor).fold(f64::INFINITY, f64::min);
-        Ok(low(&self.heights(f)?).max(low(&self.heights(b)?)) > centre + MAX_STEP)
+        low(&self.heights(f)).max(low(&self.heights(b))) > centre + MAX_STEP
     }
 
-    fn standing_floor_cached(&mut self, at: Point, cache: &mut Option<Option<f64>>) -> PyResult<Option<f64>> {
+    fn standing_floor_cached(&mut self, at: Point, cache: &mut Option<Option<f64>>) -> Option<f64> {
         if let Some(f) = *cache {
-            return Ok(f);
+            return f;
         }
-        let f = self.standing_floor(at)?;
+        let f = self.standing_floor(at);
         *cache = Some(f);
-        Ok(f)
+        f
     }
 
     /// The edges the box swept from p to q hits (static walls, then lines in its way at
     /// these heights), less `ignore`.
-    fn box_hits(&mut self, p: Point, q: Point, ignore: &HashSet<SegKey>) -> PyResult<HashSet<SegKey>> {
+    fn box_hits(&mut self, p: Point, q: Point, ignore: &HashSet<SegKey>) -> HashSet<SegKey> {
         let nav = self.nav;
         let mut out = HashSet::default();
         nav.static_hits(p, q, ignore, &mut out);
@@ -323,7 +322,7 @@ impl Fitter<'_> {
             // point where they meet, the box already over the second step up, and along it)
             if swept_box_hits(p, p, r, e)
                 && segment_distance(p, q, e.0, e.1) < dist(p, closest_point(p, e.0, e.1)) - 0.5
-                && self.ledge_over_centre(li, p)?
+                && self.ledge_over_centre(li, p)
             {
                 out.insert(k);
                 continue;
@@ -331,28 +330,28 @@ impl Fitter<'_> {
             if self.exempt.contains(&li) || ignore.contains(&k) {
                 continue;
             }
-            if self.line_blocks(li, p, &mut standing)? {
+            if self.line_blocks(li, p, &mut standing) {
                 out.insert(k);
             }
         }
-        Ok(out)
+        out
     }
 
-    fn box_clear(&mut self, p: Point, q: Point, ignore: &HashSet<SegKey>) -> PyResult<bool> {
-        Ok(self.box_hits(p, q, ignore)?.is_empty())
+    fn box_clear(&mut self, p: Point, q: Point, ignore: &HashSet<SegKey>) -> bool {
+        self.box_hits(p, q, ignore).is_empty()
     }
 
     /// What the box at `a` and at `b` already overlaps (not to count against going between).
-    fn overlapped_at(&mut self, a: Point, b: Point) -> PyResult<HashSet<SegKey>> {
+    fn overlapped_at(&mut self, a: Point, b: Point) -> HashSet<SegKey> {
         let none = HashSet::default();
-        let mut ignore = self.box_hits(a, a, &none)?;
-        ignore.extend(self.box_hits(b, b, &none)?);
-        Ok(ignore)
+        let mut ignore = self.box_hits(a, a, &none);
+        ignore.extend(self.box_hits(b, b, &none));
+        ignore
     }
 
     /// The edges near a-b (within `pad`) in the box's way standing at `a`: static walls, then
     /// lines.
-    fn edges_near(&mut self, a: Point, b: Point, pad: f64) -> PyResult<Vec<Seg>> {
+    fn edges_near(&mut self, a: Point, b: Point, pad: f64) -> Vec<Seg> {
         let nav = self.nav;
         let mut seen: HashSet<SegKey> = HashSet::default();
         let mut out: Vec<Seg> = cells_around(a, b, pad)
@@ -361,11 +360,11 @@ impl Fitter<'_> {
             .collect();
         let mut standing = None;
         for li in nav.lines_in(cells_around(a, b, pad)) {
-            if !self.exempt.contains(&li) && self.line_blocks(li, a, &mut standing)? {
+            if !self.exempt.contains(&li) && self.line_blocks(li, a, &mut standing) {
                 out.push(nav.map.line_seg(li));
             }
         }
-        Ok(out)
+        out
     }
 
     /// Does a-b cross a ledge (not exempt) the player can't climb back up?
@@ -382,26 +381,26 @@ impl Fitter<'_> {
 
     /// Are all these edges lines of shut sectors we can't open (so squeezing past them is no
     /// squeeze but a dead end)?
-    fn shut_in(&mut self, edges: &HashSet<SegKey>) -> PyResult<bool> {
+    fn shut_in(&mut self, edges: &HashSet<SegKey>) -> bool {
         if edges.is_empty() {
-            return Ok(false);
+            return false;
         }
         let room = |h: &Heights| h.ceiling - h.floor >= PLAYER_HEIGHT;
         for e in edges {
-            let Some(&li) = self.nav.seg_lines.get(e) else { return Ok(false) };
-            let (Some(f), Some(b)) = self.nav.map.sides(li) else { return Ok(false) };
+            let Some(&li) = self.nav.seg_lines.get(e) else { return false };
+            let (Some(f), Some(b)) = self.nav.map.sides(li) else { return false };
             if self.doors.is_some_and(|d| d.contains_key(&f) || d.contains_key(&b)) {
-                return Ok(false);
+                return false;
             }
-            let (fs, bs) = (self.heights(f)?, self.heights(b)?);
+            let (fs, bs) = (self.heights(f), self.heights(b));
             let open = fs.iter().any(|hf| bs.iter().any(|hb| hf.ceiling.min(hb.ceiling) - hf.floor.max(hb.floor) >= PLAYER_HEIGHT))
                 && fs.iter().any(room)
                 && bs.iter().any(room);
             if open {
-                return Ok(false);
+                return false;
             }
         }
-        Ok(true)
+        true
     }
 
     // --- fitting the box --------------------------------------------------------------------
@@ -409,9 +408,9 @@ impl Fitter<'_> {
     /// The waypoints the box fits between: those it overlaps something at dropped (unless
     /// going straight on would walk off a ledge), detours round what's in the way between
     /// them, and where there's none, the squeezes noted.
-    fn box_fits_path(&mut self, pts: &[Point]) -> PyResult<Vec<Point>> {
+    fn box_fits_path(&mut self, pts: &[Point]) -> Vec<Point> {
         if pts.len() < 2 {
-            return Ok(pts.to_vec());
+            return pts.to_vec();
         }
         let none = HashSet::default();
         let last = pts.len() - 1;
@@ -419,7 +418,7 @@ impl Fitter<'_> {
         for i in 1..last {
             let p = pts[i];
             let prev = kept[kept.len() - 1];
-            if self.is_pinned(p) || self.box_clear(p, p, &none)? || self.ledges_crossed(prev, pts[i + 1]) {
+            if self.is_pinned(p) || self.box_clear(p, p, &none) || self.ledges_crossed(prev, pts[i + 1]) {
                 kept.push(p);
             }
         }
@@ -427,48 +426,48 @@ impl Fitter<'_> {
         let mut out = vec![kept[0]];
         for &b in &kept[1..] {
             let a = out[out.len() - 1];
-            let ignore = self.overlapped_at(a, b)?;
-            let hits = self.box_hits(a, b, &ignore)?;
+            let ignore = self.overlapped_at(a, b);
+            let hits = self.box_hits(a, b, &ignore);
             if !hits.is_empty() {
-                if let Some(d) = self.detour(a, b, &ignore)? {
+                if let Some(d) = self.detour(a, b, &ignore) {
                     out.extend(d);
                 } else {
-                    let points = self.squeeze_points(a, b, &ignore)?;
+                    let points = self.squeeze_points(a, b, &ignore);
                     self.squeezes.points.extend(points);
-                    if self.shut_in(&hits)? {
+                    if self.shut_in(&hits) {
                         self.squeezes.hard = true;
                     }
                 }
             }
             out.push(b);
         }
-        Ok(out)
+        out
     }
 
     /// Up to about 6 spots between a and b where the box overlaps something.
-    fn squeeze_points(&mut self, a: Point, b: Point, ignore: &HashSet<SegKey>) -> PyResult<Vec<Point>> {
+    fn squeeze_points(&mut self, a: Point, b: Point, ignore: &HashSet<SegKey>) -> Vec<Point> {
         let length = dist(a, b);
         if length < 1.0 {
-            return Ok(Vec::new());
+            return Vec::new();
         }
         let (ux, uy) = ((b.0 - a.0) / length, (b.1 - a.1) / length);
         let mut out = Vec::new();
         for t in (0..=length.floor() as i64).step_by(8) {
             let p = (a.0 + ux * t as f64, a.1 + uy * t as f64);
-            if !self.box_clear(p, p, ignore)? {
+            if !self.box_clear(p, p, ignore) {
                 out.push(p);
             }
         }
         let step = (out.len() / 6).max(1);
-        Ok(out.into_iter().step_by(step).collect())
+        out.into_iter().step_by(step).collect()
     }
 
     /// A way round what's in the box's way from a to b: a short best-first search over spots
     /// off the corners of the edges near the blocked stretch.
-    fn detour(&mut self, a: Point, b: Point, ignore: &HashSet<SegKey>) -> PyResult<Option<Vec<Point>>> {
+    fn detour(&mut self, a: Point, b: Point, ignore: &HashSet<SegKey>) -> Option<Vec<Point>> {
         let length = dist(a, b);
         if length < 1.0 {
-            return Ok(None);
+            return None;
         }
         let (ux, uy) = ((b.0 - a.0) / length, (b.1 - a.1) / length);
         let none = HashSet::default();
@@ -477,22 +476,22 @@ impl Fitter<'_> {
             let tf = t as f64;
             let p = (a.0 + ux * tf, a.1 + uy * tf);
             let q = (a.0 + ux * (tf + 8.0).min(length), a.1 + uy * (tf + 8.0).min(length));
-            if !self.box_clear(p, q, ignore)? {
+            if !self.box_clear(p, q, ignore) {
                 bad.push(tf);
             }
         }
-        let (Some(&first_bad), Some(&last_bad)) = (bad.first(), bad.last()) else { return Ok(None) };
+        let (Some(&first_bad), Some(&last_bad)) = (bad.first(), bad.last()) else { return None };
         // the stretch to get round: from a bit before the first blocked step to after the last
         let (t0, t1) = (first_bad - 40.0, last_bad + 48.0);
         let mut a2 = if t0 > 0.0 { (a.0 + ux * t0, a.1 + uy * t0) } else { a };
         let mut b2 = if t1 < length { (a.0 + ux * t1, a.1 + uy * t1) } else { b };
-        if (a2 != a && !self.box_clear(a2, a2, &none)?) || (b2 != b && !self.box_clear(b2, b2, &none)?) {
+        if (a2 != a && !self.box_clear(a2, a2, &none)) || (b2 != b && !self.box_clear(b2, b2, &none)) {
             a2 = a;
             b2 = b;
         }
         let mut nodes = vec![a2, b2];
         let mut seen: HashSet<PointKey> = HashSet::default();
-        for e in self.edges_near(a2, b2, 96.0)? {
+        for e in self.edges_near(a2, b2, 96.0) {
             for v in [e.0, e.1] {
                 if seen.contains(&point_key(v)) || segment_distance(a2, b2, v, v) > 96.0 {
                     continue;
@@ -501,7 +500,7 @@ impl Fitter<'_> {
                 for d in [PLAYER_RADIUS + THING_CLEARANCE, PLAYER_RADIUS + 2.0 * BOX_SLACK] {
                     for (sx, sy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
                         let c = (v.0 + sx * d, v.1 + sy * d);
-                        if self.nav.mesh.poly_at(c).is_some() && self.box_clear(c, c, &none)? && !self.up_against_ledge(c)? {
+                        if self.nav.mesh.poly_at(c).is_some() && self.box_clear(c, c, &none) && !self.up_against_ledge(c) {
                             nodes.push(c);
                         }
                     }
@@ -529,14 +528,14 @@ impl Fitter<'_> {
                 }
                 let (p, q) = (nodes[i], nodes[j]);
                 let skip = if p == a || p == a2 || q == b || q == b2 { ignore } else { &none };
-                if self.box_clear(p, q, skip)? && !self.ledges_crossed(p, q) {
+                if self.box_clear(p, q, skip) && !self.ledges_crossed(p, q) {
                     best[j] = c;
                     prev[j] = Some(i);
                     todo.push(Open { f: c + dist(nodes[j], b2), g: c, id: j });
                 }
             }
         }
-        let Some(mut i) = prev[1] else { return Ok(None) };
+        let mut i = prev[1]?;
         let mut chain = Vec::new();
         while i != 0 {
             chain.push(nodes[i]);
@@ -552,14 +551,14 @@ impl Fitter<'_> {
         if b2 != b {
             out.push(b2);
         }
-        Ok(Some(out))
+        Some(out)
     }
 
     /// Shortcuts: from each waypoint straight to the farthest of the next few the box gets to
     /// directly, staying in the sectors the path went through (and not over ledges).
-    fn straighten(&mut self, pts: &[Point]) -> PyResult<Vec<Point>> {
+    fn straighten(&mut self, pts: &[Point]) -> Vec<Point> {
         if pts.len() < 3 {
-            return Ok(pts.to_vec());
+            return pts.to_vec();
         }
         let nav = self.nav;
         let over: Vec<HashSet<usize>> = pts.windows(2).map(|w| steps_along(w[0], w[1]).filter_map(|p| nav.sector_at(p)).collect()).collect();
@@ -578,12 +577,12 @@ impl Fitter<'_> {
                 if !steps_along(a, b).all(|p| nav.sector_at(p).is_some_and(|s| allowed.contains(&s))) {
                     continue;
                 }
-                let ignore = self.overlapped_at(a, b)?;
+                let ignore = self.overlapped_at(a, b);
                 // (a wall the box already touches doesn't count against its edges, but going
                 // straight through it does: E3M7, in a doorway with the box flush to its side
                 // wall, a shortcut went through that wall, and she pushed into it for good)
                 let through = ignore.iter().any(|&(p, q)| segments_cross(a, b, key_point(p), key_point(q)));
-                if !through && self.box_clear(a, b, &ignore)? && !self.ledges_crossed(a, b) {
+                if !through && self.box_clear(a, b, &ignore) && !self.ledges_crossed(a, b) {
                     best = j;
                     break;
                 }
@@ -591,14 +590,14 @@ impl Fitter<'_> {
             out.push(pts[best]);
             i = best;
         }
-        Ok(out)
+        out
     }
 
     // --- keeping off walls ------------------------------------------------------------------
 
     /// The walls near a-b (within `pad`) a waypoint should keep clear of: shut walls, ledges
     /// and teleport lines not exempt, and solid things' edges.
-    fn walls_near(&mut self, a: Point, b: Point, pad: f64) -> PyResult<Vec<Seg>> {
+    fn walls_near(&mut self, a: Point, b: Point, pad: f64) -> Vec<Seg> {
         let nav = self.nav;
         let mut out = Vec::new();
         let mut seen_lines: HashSet<usize> = HashSet::default();
@@ -610,7 +609,7 @@ impl Fitter<'_> {
                     continue;
                 }
                 if let (Some(f), Some(bk)) = nav.map.sides(li) {
-                    if nav.walls.contains(&li) && crossable_either_way(&self.heights(f)?, &self.heights(bk)?) {
+                    if nav.walls.contains(&li) && crossable_either_way(&self.heights(f), &self.heights(bk)) {
                         continue;
                     }
                 }
@@ -622,21 +621,21 @@ impl Fitter<'_> {
                 }
             }
         }
-        Ok(out)
+        out
     }
 
-    fn wall_clearance(&mut self, p: Point) -> PyResult<f64> {
-        Ok(self.walls_near(p, p, PATH_CLEARANCE)?.into_iter().map(|(a, b)| dist(p, closest_point(p, a, b))).fold(f64::INFINITY, f64::min))
+    fn wall_clearance(&mut self, p: Point) -> f64 {
+        self.walls_near(p, p, PATH_CLEARANCE).into_iter().map(|(a, b)| dist(p, closest_point(p, a, b))).fold(f64::INFINITY, f64::min)
     }
 
     /// The waypoint moved off the walls it's too close to (a few times: moving off one can
     /// bring it near another), as long as that doesn't take it out of its sector or through
     /// a wall.
-    fn nudge_off_walls(&mut self, mut p: Point) -> PyResult<Point> {
+    fn nudge_off_walls(&mut self, mut p: Point) -> Point {
         let nav = self.nav;
         for _ in 0..4 {
             let mut worst: Option<(f64, Point, Point, Point, f64)> = None;
-            for (a, b) in self.walls_near(p, p, WAYPOINT_CLEARANCE + 6.0)? {
+            for (a, b) in self.walls_near(p, p, WAYPOINT_CLEARANCE + 6.0) {
                 let q = closest_point(p, a, b);
                 let d = dist(p, q);
                 let need = box_clearance(a, b);
@@ -644,7 +643,7 @@ impl Fitter<'_> {
                     worst = Some((d - need, q, a, b, need));
                 }
             }
-            let Some((_, q, a, b, need)) = worst else { return Ok(p) };
+            let Some((_, q, a, b, need)) = worst else { return p };
             let d = dist(p, q);
             let (ux, uy) = if d > 1e-6 {
                 ((p.0 - q.0) / d, (p.1 - q.1) / d)
@@ -657,40 +656,40 @@ impl Fitter<'_> {
             let moved = (q.0 + ux * need, q.1 + uy * need);
             let here = nav.sector_at(p);
             let there = nav.sector_at(moved);
-            let crosses = self.walls_near(p, moved, 0.0)?.into_iter().any(|(e1, e2)| segments_cross(p, moved, e1, e2));
+            let crosses = self.walls_near(p, moved, 0.0).into_iter().any(|(e1, e2)| segments_cross(p, moved, e1, e2));
             if there.is_none() || (here.is_some() && there != here) || crosses {
-                return Ok(p);
+                return p;
             }
             p = moved;
         }
-        Ok(p)
+        p
     }
 
     /// The waypoints with extra ones round corners the path cuts too close, then each (but
     /// the ends and pinned ones) nudged off walls.
-    fn push_from_corners(&mut self, pts: &[Point]) -> PyResult<Vec<Point>> {
-        let Some((&first, rest)) = pts.split_first() else { return Ok(Vec::new()) };
+    fn push_from_corners(&mut self, pts: &[Point]) -> Vec<Point> {
+        let Some((&first, rest)) = pts.split_first() else { return Vec::new() };
         let mut out = vec![first];
         for &b in rest {
             let a = out[out.len() - 1];
-            self.round_corners(a, b, 0, &mut out)?;
+            self.round_corners(a, b, 0, &mut out);
         }
         for i in 1..out.len().saturating_sub(1) {
             if !self.is_pinned(out[i]) {
-                out[i] = self.nudge_off_walls(out[i])?;
+                out[i] = self.nudge_off_walls(out[i]);
             }
         }
-        Ok(out)
+        out
     }
 
     /// The way from a to b (a already in `out`): if it passes too close to a corner, by a
     /// waypoint CORNER_CLEARANCE off it (recursively, a few deep).
-    fn round_corners(&mut self, a: Point, b: Point, depth: u32, out: &mut Vec<Point>) -> PyResult<()> {
+    fn round_corners(&mut self, a: Point, b: Point, depth: u32, out: &mut Vec<Point>) {
         let mut worst: Option<(f64, Point, Point)> = None;
         if depth < 4 {
             let mut corners: Vec<Point> = Vec::new();
             let mut seen: HashSet<PointKey> = HashSet::default();
-            for (p1, p2) in self.walls_near(a, b, CORNER_CLEARANCE)? {
+            for (p1, p2) in self.walls_near(a, b, CORNER_CLEARANCE) {
                 for v in [p1, p2] {
                     if seen.insert(point_key(v)) {
                         corners.push(v);
@@ -720,14 +719,14 @@ impl Fitter<'_> {
             let walkable = |p: Point| self.nav.mesh.poly_inside(p).is_some_and(|i| self.sectors.contains(&self.nav.poly_sector[i]));
             let w = if walkable(off(1.0)) || !walkable(off(-1.0)) { off(1.0) } else { off(-1.0) };
             let (wp, qp) = (self.nav.sector_at(w), self.nav.sector_at(q));
-            if wp.is_some() && wp == qp && dist(w, a) > 4.0 && dist(w, b) > 4.0 && self.wall_clearance(w)? >= WAYPOINT_CLEARANCE {
-                self.round_corners(a, w, depth + 1, out)?;
-                self.round_corners(w, b, depth + 1, out)?;
-                return Ok(());
+            if wp.is_some() && wp == qp && dist(w, a) > 4.0 && dist(w, b) > 4.0 && self.wall_clearance(w) >= WAYPOINT_CLEARANCE {
+                self.round_corners(a, w, depth + 1, out);
+                self.round_corners(w, b, depth + 1, out);
+                return ;
             }
         }
         out.push(b);
-        Ok(())
+        
     }
 }
 

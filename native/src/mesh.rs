@@ -213,6 +213,18 @@ impl Mesh {
     }
 
     /// The polys that exist, with their indices.
+    /// The polys subsector `ss` became (one, or the pieces obstacles cut it into).
+    pub fn subsector_polys(&self, ss: usize) -> Vec<usize> {
+        if let Some(group) = self.pieces.get(&ss) {
+            return group.clone();
+        }
+        if self.polys.get(ss).is_some_and(Option::is_some) {
+            vec![ss]
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn live_polys(&self) -> impl Iterator<Item = (usize, &Poly)> {
         self.polys.iter().enumerate().filter_map(|(i, p)| p.as_ref().map(|p| (i, p)))
     }

@@ -5,7 +5,6 @@ use super::fit::Squeezes;
 use super::{Doors, HeightSource, NavCore, Open};
 use crate::geom::{closest_on_portal, dist, segment_distance, Point, PLAYER_RADIUS};
 use crate::stats::{self, Phase};
-use pyo3::prelude::*;
 use std::collections::BinaryHeap;
 use crate::det::{HashMap, HashSet};
 use std::time::Instant;
@@ -41,13 +40,13 @@ impl NavCore {
     /// A path from `start` to `goal` with these heights (and these doors openable). If the
     /// box gets squeezed along it, searched again avoiding the polys there; failing that the
     /// least squeezed path (with `squeezes` set), or None with `strict_fit`.
-    pub fn find_path(&mut self, py: Python<'_>, start: Point, goal: Point, st: &mut dyn HeightSource, doors: Option<&Doors>, strict_fit: bool) -> PyResult<Option<Found>> {
+    pub fn find_path(&mut self, start: Point, goal: Point, st: &mut dyn HeightSource, doors: Option<&Doors>, strict_fit: bool) -> Option<Found> {
         let mut best: Option<Found> = None;
         let mut banned: HashSet<usize> = HashSet::default();
         for _ in 0..FIT_ROUNDS {
-            let Some((mut path, squeezed)) = self.find_path_once(py, start, goal, st, doors, &banned)? else { break };
+            let Some((mut path, squeezed)) = self.find_path_once(start, goal, st, doors, &banned) else { break };
             if squeezed.points.is_empty() {
-                return Ok(Some(path));
+                return Some(path);
             }
             let new = self.squeezed_polys(&path.polys, &squeezed.points, &banned);
             let n = squeezed.points.len();
@@ -60,7 +59,7 @@ impl NavCore {
             }
             banned.extend(new);
         }
-        Ok(if strict_fit { None } else { best })
+        if strict_fit { None } else { best }
     }
 
     /// The polys along a path (not its ends, not banned already) the box got squeezed at.
@@ -78,8 +77,8 @@ impl NavCore {
     }
 
     /// A* from `start` to `goal`'s poly (not through `banned`), smoothed and fitted.
-    fn find_path_once(&mut self, py: Python<'_>, start: Point, goal: Point, st: &mut dyn HeightSource, doors: Option<&Doors>, banned: &HashSet<usize>) -> PyResult<Option<(Found, Squeezes)>> {
-        let (Some(sp), Some(gp)) = (self.mesh.poly_at(start), self.mesh.poly_at(goal)) else { return Ok(None) };
+    fn find_path_once(&mut self, start: Point, goal: Point, st: &mut dyn HeightSource, doors: Option<&Doors>, banned: &HashSet<usize>) -> Option<(Found, Squeezes)> {
+        let (Some(sp), Some(gp)) = (self.mesh.poly_at(start), self.mesh.poly_at(goal)) else { return None };
         // (no distance estimate with teleports about: they make it inadmissible)
         let estimate = |me: &Self, poly: usize| if me.has_teleports { 0.0 } else { dist(me.mesh.center(poly), goal) };
         let mut best: HashMap<usize, f64> = HashMap::from_iter([(sp, 0.0)]);
@@ -98,14 +97,14 @@ impl NavCore {
             let mult = if self.damage[self.poly_sector[poly]] { DAMAGE_COST } else { 1.0 };
             let mut moves: Vec<(usize, Point, Via, f64)> = Vec::new();
             for i in 0..self.adj[poly].len() {
-                if self.enterable(self.adj[poly][i].to) && self.edge_passable(py, poly, i, st, doors)? {
+                if self.enterable(self.adj[poly][i].to) && self.edge_passable(poly, i, st, doors) {
                     let e = self.adj[poly][i];
                     let q = &self.mesh.portals[e.portal];
                     moves.push((e.to, closest_on_portal(here, q.p1, q.p2), Via::Portal(e.portal), 0.0));
                 }
             }
             for ti in 0..self.tele[poly].len() {
-                if self.tele_known(poly, ti) && self.tele_ok(poly, ti, st)? {
+                if self.tele_known(poly, ti) && self.tele_ok(poly, ti, st) {
                     let t = &self.tele[poly][ti];
                     moves.push((t.dest, t.dest_pt, Via::Tele(ti), t.penalty));
                 }
@@ -123,7 +122,7 @@ impl NavCore {
                 }
             }
         }
-        let Some(&reached) = best.get(&gp) else { return Ok(None) };
+        let &reached = best.get(&gp)?;
         let mut chain: Vec<(usize, Option<Via>)> = Vec::new();
         let mut poly = gp;
         while poly != sp {
@@ -135,7 +134,7 @@ impl NavCore {
         chain.reverse();
         let cost = reached + dist(entry[&gp], goal);
         stats::record(Phase::AStar, t_astar);
-        let (waypoints, squeezes) = self.smooth(start, goal, &chain, st, doors)?;
+        let (waypoints, squeezes) = self.smooth(start, goal, &chain, st, doors);
         let path = Found {
             polys: chain.iter().map(|c| c.0).collect(),
             waypoints,
@@ -143,6 +142,6 @@ impl NavCore {
             vias: chain.iter().map(|c| c.1).collect(),
             squeezes: 0,
         };
-        Ok(Some((path, squeezes)))
+        Some((path, squeezes))
     }
 }

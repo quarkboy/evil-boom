@@ -1,6 +1,11 @@
-//! The navigation core of the evil-doom planner (evildoom.nav uses it):
+//! Evil: a Doom bot that explores levels knowing only what a player could know, and finishes
+//! them, playing DSDA-Doom in-process.
 //!
+//! - `wad`, `map`, `specials`, `things`: the level as the WAD has it.
 //! - `mesh`: the navmesh, one convex poly per subsector, joined by portals.
+//! - `movers`: where doors, lifts and floors go when set off, and how long they take.
+//! - `navigator`: the level's analysis (triggers, teleports, jumps, what the box fits
+//!   through) and the questions asked of it (where she can get to, routes to goals).
 //! - `nav`: which heights let the player across where, flood fill, path-finding with
 //!   smoothing and fitting the player's box along the path.
 //! - `plan`: the search for a route through triggers and keys to a goal.
@@ -8,30 +13,30 @@
 //! - `sight`: which lines the player sees from where (what the automap reveals).
 //! - `los`: line of sight between things (who can see, and shoot, whom).
 //! - `dsda`: DSDA-Doom in-process (the game as a library, a tic at a time).
-//! - `python`: the classes Python uses (`NativeMesh`, `Nav`) and how values cross over.
 
+pub mod config;
 mod det;
-mod dsda;
-mod geom;
-mod jumps;
-mod los;
-mod map;
-mod mesh;
-mod nav;
-mod plan;
-mod python;
-mod sight;
+pub mod dsda;
+pub mod engine;
+pub mod geom;
+pub mod jumps;
+pub mod knowledge;
+pub mod los;
+pub mod map;
+pub mod mesh;
+pub mod motor;
+pub mod movers;
+pub mod nav;
+pub mod navigator;
+pub mod plan;
+pub mod play;
+pub mod sight;
+pub mod specials;
 mod stats;
-
-use pyo3::prelude::*;
-
-#[pymodule]
-fn evildoom_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<python::NativeMesh>()?;
-    m.add_class::<python::Nav>()?;
-    m.add_class::<python::Sight>()?;
-    m.add_class::<python::LineOfSightPy>()?;
-    m.add_class::<python::JumpLab>()?;
-    m.add_class::<python::DsdaGame>()?;
-    Ok(())
-}
+pub mod tactical;
+pub mod sweep;
+pub mod things;
+#[cfg(feature = "viewer")]
+pub mod viewer;
+pub mod wad;
+pub mod walkthrough;

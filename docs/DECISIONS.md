@@ -669,3 +669,12 @@ Also found: `ADDS_ON` (the per-line key for "raise N" floors) had a backspace ch
 - **Which wall next counts each wall's own failures** (`_wall_drops`): the walls still share one wait once given up on (that keeps the wall tier paced; giving each its own cost other maps before), but among those with a route, one given up on before counts as twice as far for each time. MAP14 (with the lock message, she opened the red door sooner and went another way): the nearest wall, line 864, behind a chain of timed switches, timed out every time and still came first every time; the blue door like the wall (811), at the top of the suspects with the key held, never got a go. Now it does: MAP14 exits in 1958 game seconds (3107 before), the same on seeds 0, 1, 2.
 
 Sweeps on seed 0 with all of the above: perception **59/68** (only MAP28 out), peek 57/68 (MAP14, MAP15, MAP27 out): as before, now repeatable.
+
+## Evil in Rust (2026-11-07)
+
+With the game in-process, nearly all the time went into Evil's own thinking, in Python; the user: port all of it. Evil is now one Rust crate (`native/`, package `evildoom`): a library and the `evil` command (`sweep`, `run-map`, `watch`, `dump-nav`, `follow`), with DSDA-Doom in-process as before. The Python (`src/evildoom`, `tools/`, `spikes/`, the ViZDoom adapter, the PyO3 bindings) is gone; it's in git history.
+
+- **How it was checked**: module by module, the Rust's logs keep the Python's line formats, compared on six short levels (E1M1, E1M2, E2M4, MAP01, MAP02, MAP23; seed 0) line for line, the analysis by `evil dump-nav` beside the Python's dump, and the route following by `evil follow`. They match but for timings; the one difference seen (MAP17 peeking) is a tie among equally good spots, broken by set order.
+- **Shape**: the `Navigator` (a level's analysis, its caches in `RefCell`s; one per process, so `Rc`), `View`s of it restricted to what she knows, the `Explorer` with a `Hooks` trait for what the 100%-items run and the fight add (wanted, last resort, gone, dangerous, interrupt, before exit), and `play::Agent` choosing between them.
+- **Speed**: Evil's thinking ~5-7x faster on the parity levels (E1M2: 711 tics/s to 3577; MAP01 1658 to 10934). A full perception sweep, 68 maps at 8 jobs, takes under 3 minutes, most of it the boss maps running out their hour.
+- **Results** (seed 0, 3 lives): perception **59/68** (only MAP28 out besides the 8 boss maps), as in Python. Expert (every item, then out): 53/68 exited, 24/68 with every item: the first expert sweep written down, the work list for pathfinding.

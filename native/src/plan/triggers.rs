@@ -5,7 +5,6 @@ use super::world::{Pair, Timers, World};
 use super::{KeySet, Planner};
 use crate::geom::{Point, MAX_STEP};
 use crate::nav::{can_cross, DoorOpening, Doors, Heights};
-use pyo3::prelude::*;
 use crate::det::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -36,15 +35,13 @@ impl Kind {
     }
 }
 
-/// Per sector moved: the heights it can be moved to.
-pub type Effects = Vec<(usize, Vec<Heights>)>;
+pub use crate::movers::Effects;
 
-/// How long a move to some heights takes and how long it stays there (None: for good).
-#[derive(Clone, Copy)]
-pub struct Timing {
-    pub travel: f64,
-    pub hold: Option<f64>,
-}
+/// A height-dependent trigger's effects with the sectors it depends on at these heights:
+/// `effects_from_reps(trigger, [(sector, heights)])`.
+pub type EffectsFromReps = Box<dyn Fn(usize, &[(usize, Heights)]) -> Effects>;
+
+pub use crate::movers::Timing;
 
 pub struct Trigger {
     /// its linedef (None: boss deaths and the like)
@@ -97,7 +94,7 @@ pub struct PlanFacts {
     pub key_positions: Vec<(u8, Vec<Point>)>,
     /// `effects_from_reps(trigger, [(sector, heights)])`: a height-dependent trigger's effects
     /// with the sectors it depends on at those heights
-    pub effects_from_reps: PyObject,
+    pub effects_from_reps: EffectsFromReps,
 }
 
 /// What the plan search has worked out so far, kept between searches on the same map.
@@ -113,7 +110,7 @@ impl PlanCaches {
     pub(super) const MAX_REACH: usize = 200_000;
 }
 
-impl Planner<'_, '_> {
+impl Planner<'_> {
     /// The use-doors that can be opened with these keys.
     pub(super) fn doors_for(&mut self, keys: KeySet) -> Arc<Doors> {
         if let Some(d) = self.caches.doors.get(&keys) {
@@ -177,7 +174,7 @@ impl Planner<'_, '_> {
     }
 
     /// What firing trigger `ti` does with the world at these heights.
-    pub(super) fn effects_now(&mut self, ti: usize, states: &World) -> PyResult<Effects> {
+    pub(super) fn effects_now(&mut self, ti: usize, states: &World) -> Effects {
         let facts = self.facts;
         let t = &facts.triggers[ti];
         if let Some(relevant) = &t.relevant {
@@ -195,25 +192,23 @@ impl Planner<'_, '_> {
                 reps.push((s, rep));
             }
             if reps.iter().all(|&(s, rep)| rep == self.nav.initial[s]) {
-                return Ok(t.effects.clone());
+                return t.effects.clone();
             }
             let key = (ti, reps.iter().map(|&(s, h)| (s, h.key())).collect::<Vec<_>>());
             if let Some(v) = self.caches.effects.get(&key) {
-                return Ok(v.clone());
+                return v.clone();
             }
-            let args: Vec<(usize, (f64, f64))> = reps.iter().map(|&(s, h)| (s, h.tuple())).collect();
-            let found: Vec<(usize, Vec<(f64, f64)>)> = facts.effects_from_reps.call1(self.py, (ti, args))?.extract(self.py)?;
-            let effects: Effects = found.into_iter().map(|(s, hs)| (s, hs.into_iter().map(|(floor, ceiling)| Heights { floor, ceiling }).collect())).collect();
+            let effects = (facts.effects_from_reps)(ti, &reps);
             self.caches.effects.insert(key, effects.clone());
-            return Ok(effects);
+            return effects;
         }
-        let Some((s0, f0)) = t.shift_from else { return Ok(t.effects.clone()) };
+        let Some((s0, f0)) = t.shift_from else { return t.effects.clone() };
         // stairs: as far up as the start has risen
         let shift = states[s0].iter().map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max) - f0;
         if shift == 0.0 {
-            return Ok(t.effects.clone());
+            return t.effects.clone();
         }
-        Ok(t.effects.iter().map(|(s, hs)| (*s, hs.iter().map(|h| Heights { floor: h.floor + shift, ceiling: h.ceiling }).collect())).collect())
+        t.effects.iter().map(|(s, hs)| (*s, hs.iter().map(|h| Heights { floor: h.floor + shift, ceiling: h.ceiling }).collect())).collect()
     }
 
     /// How long the heights trigger `ti` makes (`effects`, fired with the world at `base`,

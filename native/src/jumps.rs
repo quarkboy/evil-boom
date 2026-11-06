@@ -14,7 +14,7 @@ use crate::map::MapData;
 use crate::mesh::Mesh;
 use crate::nav::Heights;
 use crate::det::{HashMap, HashSet};
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 /// degrees a tic the player turns running across a sinking floor (the follower's RUN_TURN)
 const RUN_TURN: f64 = 10.0;
@@ -58,8 +58,8 @@ pub const FINDER_VERSION: u32 = 3;
 
 /// The map as the jump tools need it.
 pub struct JumpLab {
-    pub map: MapData,
-    pub mesh: Mesh,
+    pub map: Arc<MapData>,
+    pub mesh: Arc<Mesh>,
     /// cell -> walls that never change, and solid things' box edges
     pub static_grid: HashMap<Cell, Vec<Seg>>,
     /// cell -> solid things' box edges
@@ -152,7 +152,7 @@ impl JumpLab {
             .collect()
     }
 
-    pub fn new(map: MapData, mesh: Mesh, facts: JumpFacts) -> JumpLab {
+    pub fn new(map: Arc<MapData>, mesh: Arc<Mesh>, facts: JumpFacts) -> JumpLab {
         let mut centres: Vec<(usize, Vec<Point>)> = Vec::new();
         let mut sector_edges: HashMap<usize, Vec<Seg>> = HashMap::default();
         for (_, poly) in mesh.live_polys() {
