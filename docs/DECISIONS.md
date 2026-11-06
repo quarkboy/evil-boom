@@ -566,3 +566,15 @@ HMP batch (18 maps, 3 lives): 10 → 12 exited (MAP04 now gets through). Deaths 
 - **Arch-viles**: in sight and not killable in 2 s, into cover whatever her health (its fire does nothing once it can't see her; MAP11: three deaths at 50-70 health).
 
 HMP, 9 maps (E1M1, E1M3, E1M9, MAP01, MAP04, MAP05, MAP08, MAP09, MAP11), 3 lives: 4 exit (E1M1, E1M3, MAP01, MAP04, the last two with no deaths); MAP05 stuck once in an explorer loop on lift 645 (exited the two runs before: to trace). Deaths left: pistol starts against cacodemons (MAP08), pain elementals, arch-viles, demons and imps close up (E1M9).
+
+## Final engine: DSDA-Doom; Evil to Rust (2026-11-05)
+
+The user's plan: move to **DSDA-Doom** (full MBF21 support, good Linux support). That settles the "Expected" switch above.
+
+Consequences, as discussed:
+- **One engine for play and for sweeps.** Evil runs in-process with DSDA-Doom's game simulation (rendered for the stream; built headless for sweeps). Same physics in both; no ViZDoom.
+- **Evil moves to Rust entirely** (today ~8.6k lines of Python beside 6.3k of Rust: nav core, sight, line of sight, jump fitting). The Doom engine itself isn't ported: Rust calls DSDA-Doom's C code (FFI). A rewrite of the engine would cost weeks and gain little speed; the win is in-process, no rendering, no conversion.
+- **Why the speed:** profiled 2026-11-05, E1M3 with monsters under ViZDoom: engine 53%, observe (ViZDoom's get_state: Python objects for every object and every sector's lines, each tic) 31%, Evil's thinking 16%; ~150 tics/s a process, ~800 at 8 processes. Both the engine and Evil in Rust should reach thousands a process.
+- **What has to be redone on the new engine:** jump/run-up checks and anything tuned to ZDoom 2.8's physics; the explorer sweep (60/68) and the fight batches re-run. Boom-family physics differ (actor blocking heights, some timings, autoaim details).
+- **To check:** whether two players (Neuro and Evil) can share a DSDA-Doom game.
+- **Order:** a spike first (DSDA-Doom built headless as a library, stepped from Rust, monsters and sectors read directly, tics/s on E1M3, multiplayer); then port Evil bottom-up behind the engine interface (engine adapter, motor, knowledge, then tactics last, since they're changing fastest), each module checked against recorded traces and the Python deleted after. Fighting keeps improving in Python on ViZDoom meanwhile; the behaviour carries over.
