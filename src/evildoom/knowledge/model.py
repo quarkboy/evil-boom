@@ -105,7 +105,10 @@ class Knowledge:
     missed_jumps: dict = field(default_factory=dict)  # run-jump key -> times it came down off its landing
     traps: list = field(default_factory=list)  # polys she got stuck in, nothing to do and no way out (each a set)
     stuck_at: dict = field(default_factory=dict)  # poly -> times a route failed stuck there
-    tried_walls: set = field(default_factory=set)  # walls she's pressed use on, suspecting them
+    # walls she's pressed use on, suspecting them -> the keys she held then (with a key she
+    # didn't have, worth another press: MAP05's blue door, looking like the wall round it,
+    # tried before she had the key and never again)
+    tried_walls: dict = field(default_factory=dict)
     in_the_way: set = field(default_factory=set)  # lines between her and a switch that did nothing
     # what she's learned a line does, put down to it on timing alone (the sector started moving
     # a while after she pressed it: maybe something else did it): (tried_key, sector) -> tic.
@@ -421,7 +424,9 @@ class Knowledge:
                 # (any line with a special stops it, a walk-over one too: E2M4's door behind
                 # one; only one that's used goes off)
                 if info is not None and not self._spent(li):
-                    if info.trigger in USED and self._front(li, last.x, last.y):
+                    # (a locked one without its key says so and does nothing: MAP05's blue door,
+                    # pressed as a wall before she had the key, was taken as used up)
+                    if info.trigger in USED and self._front(li, last.x, last.y)                             and info.lock.satisfied(set(last.keys or ())):
                         self._fire(li, obs.tic, "use")
                     break
                 opening = self._opening(li, heights)
@@ -648,7 +653,8 @@ class Knowledge:
         reach_sectors = {mesh.polys[p].sector for p in reach}
         best: dict = {}
         for li in self.mapped:
-            if li in self.tried_walls or self.looks_interactive(li):
+            keys = frozenset(self._last.keys or ()) if self._last is not None else frozenset()
+            if (li in self.tried_walls and keys <= self.tried_walls[li]) or self.looks_interactive(li):
                 continue
             line = m.linedefs[li]
             if line.front == NO_SIDE:

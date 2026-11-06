@@ -545,7 +545,9 @@ class Explorer:
             best = min(reach, key=lambda p: math.dist(mesh.polys[p].center, h.origin), default=None)
             if best is None:
                 continue
-            spot = mesh.polys[best].center
+            # (where the box can stand: MAP05's was a poly's middle it couldn't get to by 12, pushed
+            # at till that poly was taken for a place she gets stuck, and the way on through it lost)
+            spot = self._stand_spot(mesh.polys[best].center, reach)
             if math.dist(spot, h.origin) > math.dist(pos, h.origin) - HEAR_NEARER:
                 continue
             out.append(Objective("noise", spot, f"check a noise {_compass(h.bearing)} (~{h.distance:.0f})"
@@ -997,7 +999,7 @@ class Explorer:
             # face it, press use, watch a moment (what it does, if anything, Knowledge sees)
             if self._look_until is None:
                 self._look_until = obs.tic + WALL_TICS + 20
-                self.knowledge.tried_walls.add(obj.wall)
+                self.knowledge.tried_walls[obj.wall] = frozenset(obs.keys or ())
             bearing = math.degrees(math.atan2(obj.look_at[1] - obs.y, obj.look_at[0] - obs.x))
             off = abs((bearing - obs.angle + 180) % 360 - 180)
             if obs.tic < self._look_until:

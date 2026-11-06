@@ -641,3 +641,8 @@ Perception sweep after these: **56/68** (out: MAP05, MAP14, MAP27, MAP28). The p
 - **Slow isn't stuck**: the sweep gives a map an hour of game time (`--max-seconds 3600`; was 1500): MAP15 under peek exits at 2051s (the user: fix failures, not inefficiency).
 
 Perception 56/68 (out: MAP05, MAP14, MAP27, MAP28); peek 58/68 (out: MAP14, MAP27). MAP14's doors open by walk-over lines nobody can see, one along the far end of a pit where the box is stopped with its centre on the line: to trace further.
+- **Suspicion of faces over openings**: a face above or below a way through counts when unlike the walls round it, as does the same texture shifted up or down from its neighbours between the same sectors (MAP28's red-eyed skull, one of three WOOD4 panels: pressed now). Giving each suspected wall its own identity (so one given up on doesn't hold the rest back) cost E2M9, E3M4, MAP25: reverted.
+- **A noise checked from where the box can stand** (`_stand_spot`): MAP05's noise goal was a poly's middle 12 short of reach, pushed at till the poly was taken for one she gets stuck in, and the way on through it lost.
+- **Locked lines without the key** don't count as used (the game says so and does nothing): MAP05's blue door, looking like the wall round it, pressed as a suspect wall before she had the key, was taken as a once-only line used up. **A tried wall is tried again** with a key she didn't hold when she tried it.
+
+Perception **58/68** (out: MAP27, MAP28); peek 57/68 (out: MAP14, MAP15, MAP27; MAP15 ends where no route to the exit is left, late on).
