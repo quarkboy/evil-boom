@@ -90,6 +90,7 @@ class Knowledge:
     felt: dict[int, bool] = field(default_factory=dict)  # sector stood on -> did it hurt
     missed_jumps: dict = field(default_factory=dict)  # run-jump key -> times it came down off its landing
     traps: list = field(default_factory=list)  # polys she got stuck in, nothing to do and no way out (each a set)
+    stuck_at: dict = field(default_factory=dict)  # poly -> times a route failed stuck there
     # sector -> does it hurt now, for floors seen moved by a line that changes their type
     # (this life: the level starting again puts them back)
     changed_floor: dict[int, bool] = field(default_factory=dict)

@@ -30,6 +30,7 @@ ROUTE_SPEED = 8.0             # ...or by the time it takes to walk its route at 
 ROUTE_SLACK = 15 * TICRATE    # ...and this
 THRESHOLD_IN = 8.0            # a threshold's spot: this far over the line
 EXIT_MARGIN = 64.0  # the expert's run: no goal this near a walk-over exit line (she'd slide over)
+STUCK_TIMES = 2  # a route failing stuck in the same poly this often: not through there again
 JUMP_MISSES = 2  # a run-jump missed this often isn't tried again; missed once, only when
 #                  there's nothing else to do (it's difficult: another way first)
 REPRESS_AFTER = 60 * TICRATE  # a repeatable switch whose effect wasn't seen: another go after this
@@ -206,8 +207,9 @@ class Explorer:
             f.line for f in k.fired if f.life == k.lives
             and k._special(f.line) is not None and k._special(f.line).trigger is Trigger.D1)
         exits_open = fresh or self._exits_open
+        blocked = frozenset(p for p, n in k.stuck_at.items() if n >= STUCK_TIMES)
         key = (len(k.sectors), len(k.seen_polys), len(k.visited), sum(map(len, k.learned.values())),
-               len(k.teleports), spent_doors, exits_open)
+               len(k.teleports), spent_doors, exits_open, blocked)
         if fresh or self._view is None or key != self._view_key:
             triggers = []
             trenches = self.nav.trenches
@@ -231,7 +233,7 @@ class Explorer:
             for th in k.known_things():
                 if th.type in Key._value2member_map_:
                     keys_at.setdefault(Key(th.type), []).append((th.x, th.y))
-            polys = k.known_polys()
+            polys = k.known_polys() - blocked
             if not exits_open:
                 polys = polys - self._exit_pads()  # (the expert's run: not out by walking over the exit)
             view = self.nav.restricted_to(polys, set(k.teleports), triggers, keys_at)
@@ -956,6 +958,19 @@ class Explorer:
         self._set_jumps(difficult=False)
         return True
 
+    def _note_stuck(self, obs: Observation) -> None:
+        """A route failed stuck: where (the poly she's in) is counted, for the level across lives;
+        stuck there STUCK_TIMES times, it's a place she can't get through and is left out of
+        the way (MAP18: a strip between a ledge and a door narrower than the box, where she
+        hung on the ledge's lip under the door's top, the navigator taking it for a way)."""
+        poly = self.nav.mesh.poly_at(obs.x, obs.y)
+        if poly is None:
+            return
+        n = self.knowledge.stuck_at[poly.index] = self.knowledge.stuck_at.get(poly.index, 0) + 1
+        if n == STUCK_TIMES:
+            self.log.append(f"tic {obs.tic}: stuck at ({obs.x:.0f}, {obs.y:.0f}) {n} times: "
+                            f"not going that way again")
+
     def _set_jumps(self, difficult: bool) -> None:
         """The navigator's run-jumps: all but those missed too often (and, unless `difficult`,
         those missed at all)."""
@@ -975,6 +990,8 @@ class Explorer:
             if f is not None and f.failed and obj is not None:
                 why = next((str(ev) for ev in reversed(f.log.events) if "FAILED" in str(ev)), "")
                 self._drop(obj, obs, "failed: " + why.split("] ", 1)[-1])
+                if "stuck" in why:
+                    self._note_stuck(obs)
             return True
         if obj.kind == "frontier" and obj.reveals & self.knowledge.known_polys():
             return True  # seen it on the way
@@ -996,6 +1013,8 @@ class Explorer:
             return True
         if obs.tic - self._since > self._allowed:
             self._drop(obj, obs, "took too long")
+            if any("stuck at" in str(ev) for ev in f.log.events[-6:]):
+                self._note_stuck(obs)  # (timed out stuck: the same as failing stuck)
             return True
         return False
 
