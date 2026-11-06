@@ -37,6 +37,7 @@ IDLE_RETRY = TICRATE          # with nothing to do, look for something again thi
 RETRY_TICS = 30 * TICRATE     # ...and offered again after this
 LOOK_TICS = TICRATE           # a turn on the spot, at the edge of the known map
 SHUFFLE_TICS = TICRATE        # an item still there on arrival: shuffled over this long
+TOUCH = 36.0                  # a pickup's box and hers overlap this near (20 + 16), either way
 TURN_RATE = 20.0              # degrees a tic, turning to look at something
 AMBIENT_RADIUS = 96.0         # sounds from about the same place...
 AMBIENT_REPEATS = 4           # ...heard more often than this are background
@@ -395,6 +396,28 @@ class Explorer:
         here = self.nav.mesh.poly_at(*q)
         centre = self.nav.movers.initial[here.sector][0] if here is not None else floor
         return clear and ceiling - floor >= PLAYER_HEIGHT and floor <= centre + MAX_STEP
+
+    def touch_spot(self, item, reach: set[int]):
+        """Where to stand to pick up a thing at `item`: there if the box can stand there, else
+        the nearest spot it can stand at, in a poly she can get to, close enough for the boxes
+        to touch (a pickup's box and hers overlap: 36 either way), on a floor near the item's;
+        None if there isn't one (MAP10's soulsphere in an alcove: the middle of the room next
+        to it was 100 off, and stood at, picked up nothing)."""
+        mesh = self.nav.mesh
+        at = mesh.poly_at(*item)
+        floor = self.nav.movers.initial[at.sector][0] if at is not None else None
+        for r in (0.0, 8.0, 16.0, 24.0, 32.0):
+            for k in range(1 if r == 0 else 16):
+                q = (item[0] + r * math.cos(k * math.pi / 8), item[1] + r * math.sin(k * math.pi / 8))
+                if max(abs(q[0] - item[0]), abs(q[1] - item[1])) >= TOUCH:
+                    continue
+                poly = mesh.poly_at(*q)
+                if poly is None or poly.index not in reach or not self._standable(q):
+                    continue
+                if floor is not None and abs(self.nav.movers.initial[poly.sector][0] - floor) > MAX_STEP:
+                    continue
+                return q
+        return None
 
     def _stand_spot(self, spot, reach: set[int]):
         """`spot`, if the box can stand there; else the middle of its poly, or of one next to

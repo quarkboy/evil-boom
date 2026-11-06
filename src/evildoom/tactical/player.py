@@ -324,7 +324,9 @@ class Player:
                     need = 0.6
             if need <= 0.1 or (d > ITEM_RANGE and need < 0.8):
                 continue
-            goal = self.explorer._stand_spot((t.x, t.y), reach)
+            goal = self.explorer.touch_spot((t.x, t.y), reach)
+            if goal is None:
+                continue
             why = ""
             if t.name in WEAPON_ITEMS and need and self._better_gun(obs, t.name):
                 why = " (a better gun)"

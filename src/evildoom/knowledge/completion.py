@@ -46,8 +46,9 @@ class Completionist:
             poly = mesh.poly_at(t.x, t.y)
             if poly is None or poly.index not in known or poly.index not in reach:
                 continue
-            out.append(Objective("item", self.explorer._stand_spot((t.x, t.y), reach),
-                                 f"pick up {t.name}", thing=t.id))
+            spot = self.explorer.touch_spot((t.x, t.y), reach)
+            if spot is not None:
+                out.append(Objective("item", spot, f"pick up {t.name}", thing=t.id))
         return out
 
     def _again(self, obs: Observation) -> bool:
