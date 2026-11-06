@@ -520,10 +520,12 @@ class Knowledge:
         # what it acts on still a while, so that nothing moving tells something; pressed while
         # it's busy, the game turns it down: E3M7's lift line, walked over as the lift came back
         # from another's press, unlearned, and the lift lost to the planner)
-        if doubted and (self.tried_key(li), self.lives) not in self.rechecked and all(
-                tic - self._moved_at.get(t, -10**9) >= BUSY_TICS for t in self._targets(li)):
+        # (the go it gets either way: MAP27's lift switch, its lift always on the move when
+        # pressed, was offered again and again, 1800 times)
+        if doubted and (self.tried_key(li), self.lives) not in self.rechecked:
             self.rechecked.add((self.tried_key(li), self.lives))
-            self._checking.append((f, doubted))
+            if all(tic - self._moved_at.get(t, -10**9) >= BUSY_TICS for t in self._targets(li)):
+                self._checking.append((f, doubted))
         if info.trigger in (Trigger.W1, Trigger.S1, Trigger.G1, Trigger.D1):
             targets = self._targets(li)
             if any(tic - self._moved_at.get(t, -10**9) < BUSY_TICS for t in targets):

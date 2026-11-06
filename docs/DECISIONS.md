@@ -646,3 +646,6 @@ Perception 56/68 (out: MAP05, MAP14, MAP27, MAP28); peek 58/68 (out: MAP14, MAP2
 - **Locked lines without the key** don't count as used (the game says so and does nothing): MAP05's blue door, looking like the wall round it, pressed as a suspect wall before she had the key, was taken as a once-only line used up. **A tried wall is tried again** with a key she didn't hold when she tried it.
 
 Perception **58/68** (out: MAP27, MAP28); peek 57/68 (out: MAP14, MAP15, MAP27; MAP15 ends where no route to the exit is left, late on).
+- **A doubted line's recheck is its one go a life, whether or not it could tell anything**: MAP27's lift switch, its lift always moving when pressed, was "tried again, unsure" 1800 times. With this and the key rule above, MAP27's red door (a marble face, looking like the wall) is pressed with the key: MAP27 exits.
+
+Perception **59/68**: only MAP28 out (besides the 8 boss maps). Peek 57/68 (out: MAP14, MAP15, MAP27).
