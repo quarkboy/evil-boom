@@ -34,6 +34,8 @@ EXPECTED_RADIUS = 128.0  # a sound this near a known mover's is that mover
 EXPECTED_FOR = 8 * 35    # ...which she set off at most this many tics before (a door closing
 #                          behind her, a lift coming back): later it moved by itself
 FELT_TICS = 70          # unhurt on a floor this long: it doesn't hurt
+FLOOR_PERIOD = 32       # a hurting floor hurts on every 32nd tic of the level's clock...
+FLOOR_CONFIRM = 3 * FLOOR_PERIOD  # ...so hurt twice on it a multiple of that apart, this soon: it's the floor
 SUIT_TICS = 60 * 35     # a radiation suit lasts a minute
 TICS_SAME_SOUND = 4   # sounds this close together from the same way are one
 
@@ -102,6 +104,7 @@ class Knowledge:
                       if (info := classify_line(line.special)) is not None}
         self._last: Observation | None = None
         self._standing: tuple[int, int] | None = None  # (sector, since tic) on its floor
+        self._hurt_on: tuple[int, int] | None = None   # (sector, tic) last hurt standing on it
         # where each sector's sounds come from: the middle of its bounding box (P_GroupLines)
         box: dict[int, list[float]] = {}
         for line in m.linedefs:
@@ -498,6 +501,7 @@ class Knowledge:
         self.changed_floor.clear()
         self._last = None
         self._standing = None
+        self._hurt_on = None
         self._live = {}
         self._moving = set()
         self.lives += 1
@@ -520,8 +524,16 @@ class Knowledge:
             self._standing = (s, obs.tic)
         if last is not None and obs.health is not None and last.health is not None \
                 and obs.health < last.health:
-            self._learn_floor(s, True, obs.tic)
-        elif obs.tic - self._standing[1] > FELT_TICS and self.felt.get(s) is not False \
+            # (a floor hurts on the level's clock, every 32 tics: hurt again on the same floor
+            # a multiple of that later, it's the floor; once alone may be a monster's shot,
+            # which isn't the floor's doing: fights had her think floors hurt)
+            prev = self._hurt_on
+            if prev is not None and prev[0] == s and 0 < obs.tic - prev[1] <= FLOOR_CONFIRM \
+                    and (obs.tic - prev[1]) % FLOOR_PERIOD == 0:
+                self._learn_floor(s, True, obs.tic)
+            self._hurt_on = (s, obs.tic)
+        elif obs.tic - max(self._standing[1], self._hurt_on[1] if self._hurt_on and self._hurt_on[0] == s else 0) \
+                > FELT_TICS and self.felt.get(s) is not False \
                 and not self.protected(obs.tic):
             self._learn_floor(s, False, obs.tic)
 
