@@ -33,7 +33,6 @@ ROUTE_SLACK = 15 * TICRATE    # ...and this
 THRESHOLD_IN = 8.0            # a threshold's spot: this far over the line
 EXIT_MARGIN = 64.0  # the expert's run: no goal this near a walk-over exit line (she'd slide over)
 STUCK_TIMES = 2  # a route failing stuck in the same poly this often: not through there again
-DOOR_MARGIN = 3 * TICRATE  # a door on its timer with less than this before it closes: shut, to a route
 SUSPECTS = 6  # suspected walls offered at a time (the most suspicious)
 PANIC_WALLS = 12  # ...and in a panic, the nearest walls of all
 JUMP_MISSES = 2  # a run-jump missed this often isn't tried again; missed once, only when
@@ -167,7 +166,6 @@ class Explorer:
         out = {s: {tuple(k.seen_heights[s])} if s in k.seen_heights else {h}
                for s, h in enumerate(self.nav.movers.initial)}
         known = {t.line: (t, sectors) for t, sectors in k.known_triggers()}
-        closing: dict[int, int] = {}  # door sector -> when the door she last opened starts to close
         for f in k.fired:
             if f.line not in known or f.life != k.lives:  # (this life's: the level's started again)
                 continue
@@ -176,8 +174,6 @@ class Explorer:
             for s in sectors:
                 if not effects.get(s) or (t.permanent and k.doubtful(f.line, s)):
                     continue  # (in doubt that it's gone for good: as seen, not built on)
-                if t.permanent:
-                    closing.pop(s, None)  # (opened for good since: no timer)
                 # (not seen since the move should have finished: as it'll have left it; seen
                 # after, as seen. Stairs rise slowly: seen part way up is not the top)
                 h = effects[s][0]
@@ -186,11 +182,8 @@ class Explorer:
                 # (what comes back is only as moved till it's due back: MAP23's timed door,
                 # opened a minute before, seemed open still and a path squeezed through it)
                 back = done + (timing.hold + timing.travel if timing and timing.hold is not None else 0)
-                if not t.permanent and timing is not None and timing.hold is not None:
-                    if t.info.category in (Category.DOOR, Category.LOCKED_DOOR):
-                        closing[s] = done + timing.hold
-                    if now > back:
-                        continue
+                if not t.permanent and timing is not None and timing.hold is not None and now > back:
+                    continue
                 if k.seen_tic.get(s, -1) < done:
                     hs = {tuple(h) for h in effects[s]}
                     out[s] = hs if t.permanent else out[s] | hs
@@ -200,16 +193,6 @@ class Explorer:
             if not t.permanent:
                 for s in sectors:
                     out[s] = out[s] | {tuple(self.nav.movers.initial[s])}
-        # a door that closes again, open on its timer with little of it left (or none), is
-        # shut as far as a route goes, whatever she last saw (she's not seen it since it was
-        # due to start closing); a route that wants it opens it on the way, from the side
-        # with the switch (MAP12's door 31: open when she set off, a route back through it
-        # from the side with none, a drop behind her, and shut when she got there)
-        here = self.nav.mesh.poly_at(k._last.x, k._last.y) if k._last is not None else None
-        for s, closes in closing.items():
-            if now > closes - DOOR_MARGIN and k.seen_tic.get(s, -1) < closes \
-                    and not (here is not None and here.sector == s):
-                out[s] = {tuple(self.nav.movers.initial[s])}
         # a slot narrower than the box is walked over at its sides' floor, however deep she
         # saw it (E4M1's 8-unit slot by the blue key room, seen at its real floor, was a pit)
         # (at each floor the sides can be at: MAP08's moat beside a floor a trap drops and a
@@ -229,10 +212,16 @@ class Explorer:
         spent_doors = frozenset() if fresh else frozenset(
             f.line for f in k.fired if f.life == k.lives
             and k._special(f.line) is not None and k._special(f.line).trigger is Trigger.D1)
+        # (and once-only teleporters used this life send no one anywhere: MAP27's, walked over
+        # again from a room only it led out of, and every way out of there was stuck on it)
+        spent_teleports = frozenset() if fresh else frozenset(
+            f.line for f in k.fired if f.life == k.lives
+            and k._special(f.line) is not None and k._special(f.line).trigger is Trigger.W1
+            and k._special(f.line).category is Category.TELEPORT)
         exits_open = fresh or self._exits_open
         blocked = frozenset(p for p, n in k.stuck_at.items() if n >= STUCK_TIMES)
         key = (len(k.sectors), len(k.seen_polys), len(k.visited), sum(map(len, k.learned.values())),
-               len(k.teleports), spent_doors, exits_open, blocked)
+               len(k.teleports), spent_doors, spent_teleports, exits_open, blocked)
         if fresh or self._view is None or key != self._view_key:
             triggers = []
             trenches = self.nav.trenches
@@ -259,7 +248,7 @@ class Explorer:
             polys = k.known_polys() - blocked
             if not exits_open:
                 polys = polys - self._exit_pads()  # (the expert's run: not out by walking over the exit)
-            view = self.nav.restricted_to(polys, set(k.teleports), triggers, keys_at)
+            view = self.nav.restricted_to(polys, set(k.teleports) - spent_teleports, triggers, keys_at)
             if fresh:
                 return view
             self._view, self._view_key = view, key
@@ -344,10 +333,28 @@ class Explorer:
         known_triggers = k.known_triggers()
         for_good = {s for t, secs in known_triggers if t.permanent for s in secs}
         states_back = dict(states_all)
+        openers: list[tuple[TriggerLine, set[int]]] = []  # (what opens a door shut here, those doors)
         for t, secs in known_triggers:
             if not t.permanent and t.info.category in (Category.DOOR, Category.LOCKED_DOOR):
                 for s in secs - for_good:
                     states_back[s] = {tuple(nav.movers.initial[s])}
+                openers.append((t, secs - for_good))
+
+        def way_back(start: int) -> set[int]:
+            # (where she can get from `start`, opening on the way the doors she can from there:
+            # a switch or a walk-over line on the far side too, not only a use-door's own line:
+            # MAP19's door, opened again by the walk-over line beyond it)
+            st = dict(states_back)
+            while True:
+                after = view.reachable(start, st, doors)
+                more = [(t, secs) for t, secs in openers
+                        if t.activators & after and t.info.lock.satisfied(keys)
+                        and any(st[x] == {tuple(nav.movers.initial[x])} for x in secs)]
+                if not more:
+                    return after
+                for t, secs in more:
+                    for x in secs:
+                        st[x] = st[x] | set(states_all[x])
 
         def returnable(o: Objective) -> bool:
             if o.kind in ("exit", "teleporter", "key"):
@@ -356,7 +363,7 @@ class Explorer:
             if p is None:
                 return False
             if p.index not in back:
-                after = view.reachable(p.index, states_back, doors)
+                after = way_back(p.index)
                 back[p.index] = here.index in after or len(after & reach) >= KEEP_REACH * len(reach)
             return back[p.index]
         def usable(objectives: list[Objective]) -> list[Objective]:

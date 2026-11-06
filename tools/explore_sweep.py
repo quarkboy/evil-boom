@@ -22,13 +22,36 @@ OUT = ROOT / "out" / "explore"
 STRANDED_TICS = 60 * 35  # nothing to do this long (with lives left): start the level again
 
 
-def _plan_report(lp, k) -> list[str]:
-    """The omniscient plan's steps, each with what the explorer knew of it."""
+def _plan_report(lp, k, x=None, real=None) -> list[str]:
+    """The omniscient plan's steps, each with what the explorer knew of it: the trigger, and
+    (with the explorer `x` and the `real` heights) the way there, where it goes through what
+    she doesn't know or by heights she doesn't take any sector to be at."""
     learned = {t.line for t, _ in k.known_triggers()}
     fired = {f.line for f in k.fired}
     known_polys = k.known_polys()
+    believed = x.states() if x is not None else None
     out = []
     for st in lp.steps or ():
+        if believed is not None and st.path is not None:
+            mesh = x.nav.mesh
+            unknown = [p for p in st.path.polys if p not in known_polys]
+            off = sorted({mesh.polys[p].sector for p in st.path.polys
+                          if (h := real.get(mesh.polys[p].sector)) is not None
+                          and tuple(h) not in believed[mesh.polys[p].sector]})
+            if unknown or off:
+                out.append(f"    (the way: {len(unknown)} of {len(st.path.polys)} polys unknown"
+                           + (f", from poly {unknown[0]} at {tuple(round(c) for c in mesh.polys[unknown[0]].center)}" if unknown else "")
+                           + "".join(f"; sector {s} is {tuple(real[s])}, she takes it as {sorted(believed[s])}" for s in off)
+                           + (f"; via {st.path.steps}" if st.path.steps else "") + ")")
+            reach = getattr(x, "_reach", None) or set()
+            cut = next((i for i, p in enumerate(st.path.polys) if p not in reach), None)
+            if cut is not None and reach:
+                p, prev = st.path.polys[cut], st.path.polys[cut - 1] if cut else None
+                out.append(f"    (her reach ends at poly {p}, sector {mesh.polys[p].sector}, "
+                           f"{tuple(round(c) for c in mesh.polys[p].center)}"
+                           + (f", from sector {mesh.polys[prev].sector}" if prev is not None else "")
+                           + (f"; stuck there {k.stuck_at[p]}x" if k.stuck_at.get(p) else "")
+                           + ("; in a trap" if any(p in t for t in k.traps) else "") + ")")
         t = st.trigger
         if t is None:
             out.append(f"  {st.action} {st.label}")
@@ -108,7 +131,7 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                     x.log.append(f"  stranded at ({obs.x:.0f}, {obs.y:.0f}), objective "
                                  f"{x.current.label if x.current else '-'}; omniscient plan from there: "
                                  f"{'ok' if lp.complete else lp.problem}")
-                    x.log.extend("  " + line for line in _plan_report(lp, x.knowledge))
+                    x.log.extend("  " + line for line in _plan_report(lp, x.knowledge, x, obs.heights))
                 if hasattr(x, "restart_wanted"):
                     x.restart_wanted = False
 
@@ -143,7 +166,7 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
         lp = plan_from(nav, (obs.x, obs.y), set(obs.keys or ()),
                        {s: {h} for s, h in obs.heights.items()}, max_seconds=30)
         lines.append(f"omniscient plan from there: {'ok' if lp.complete else lp.problem}")
-        lines += _plan_report(lp, k)
+        lines += _plan_report(lp, k, x, obs.heights)
     tally = e.tally() if hasattr(e, "tally") else None
     if expert and obs is not None and obs.things is not None:
         from evildoom.knowledge.completion import COUNTED
