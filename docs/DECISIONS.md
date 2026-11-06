@@ -631,4 +631,7 @@ Tracing the maps perception lost, each back to the route that failed:
 
 Sweep: 55/68 (MAP12, MAP08, MAP21, MAP23, MAP29 back; MAP19, MAP27 lost). MAP27 is sensitive to the order things are done in: lowering sectors 28/29 early leaves the lift ride from switch 739 too long for the planner's walking speed (`LEG_SPEED` 12; flat-out running is ~15.1, but the follower doesn't make the lift either); MAP28 needs a red-eyed skull (one of three WOOD4 panels, shifted by its y offset) pressed above an opening, and a symbol panel shot (SKINSYMB), both suspected only in work-in-progress changes that cost E3M4.
 
-Perception sweep after these: **56/68** (out: MAP05, MAP14, MAP27, MAP28). The peek sweep is 54/68 at this point (E3M7, MAP08, MAP15, MAP21, MAP27, MAP28 out; 60 before this day's perception work): to trace.
+Perception sweep after these: **56/68** (out: MAP05, MAP14, MAP27, MAP28). The peek sweep was 54/68 at this point (58 before the perception work), traced:
+- **A doubt is rechecked only on a press with what it acts on still** (and once a life): E3M7's lift line walked over while the lift came back from another's press was turned down by the game, "unlearned", and the lift lost to the planner.
+- **"Pressed, but nothing went off" counts this try only**: MAP08's shoot-switch, shot "again" from where the shot hits the switch on the block's other face first, went on for ever (an old shot of it counted). Pressing "again" also goes by the last press of anything with the same action.
+- Peek: 57/68 (out: MAP15, a one-way move into a dead end late on; MAP21, a corridor exactly the box's width between a wall and key bars alongside it, which the planner takes as open, as a door she could open, though nothing opens it on the way; MAP27).

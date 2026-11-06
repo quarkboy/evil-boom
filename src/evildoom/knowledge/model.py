@@ -511,7 +511,12 @@ class Knowledge:
         self.fired.append(f)
         self.events.append(f"tic {tic}: {how} line {li} ({info.description})")
         doubted = {s for (k, s) in self.doubts if k == self.tried_key(li)}
-        if doubted:
+        # (watched to see if it does what it's in doubt of: once a life, and only pressed with
+        # what it acts on still a while, so that nothing moving tells something; pressed while
+        # it's busy, the game turns it down: E3M7's lift line, walked over as the lift came back
+        # from another's press, unlearned, and the lift lost to the planner)
+        if doubted and (self.tried_key(li), self.lives) not in self.rechecked and all(
+                tic - self._moved_at.get(t, -10**9) >= BUSY_TICS for t in self._targets(li)):
             self.rechecked.add((self.tried_key(li), self.lives))
             self._checking.append((f, doubted))
         if info.trigger in (Trigger.W1, Trigger.S1, Trigger.G1, Trigger.D1):

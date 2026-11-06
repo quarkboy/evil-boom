@@ -292,7 +292,12 @@ class Explorer:
         # repeatable switches pressed a while ago whose effect she never saw: worth another go
         # once there's nothing else (E3M4: a door one opened was shut again by another)
         learned_lines = {nav.triggers[i].line for i, sec in k.learned.items() if sec}
-        last_press: dict[int, int] = {f.line: f.tic for f in k.fired}
+        # (by what it works: pressing one can set off another of the same in front of it, and
+        # MAP08's switch, pressed "again" every few seconds, set off the one in front each time)
+        last_by_key: dict[tuple, int] = {}
+        for f in k.fired:
+            last_by_key[k.tried_key(f.line)] = f.tic
+        last_press: dict[int, int] = {f.line: last_by_key[k.tried_key(f.line)] for f in k.fired}
         again = []
         # (and those whose effect she's put down to them on timing alone, unsure: pressed again
         # and watched, once a life)
@@ -964,8 +969,10 @@ class Explorer:
         Controls while still looking, else None (and a new objective's wanted)."""
         obj = self.current
         k = self.knowledge
+        # (this time: one pressed long ago doesn't count; MAP08's switch, shot "again" from
+        # where the shot hit another first, never went off and was tried for ever)
         if obj.kind in ("switch", "door") and not any(
-                k.tried_key(f.line) == k.tried_key(obj.trigger.line) for f in k.fired):
+                k.tried_key(f.line) == k.tried_key(obj.trigger.line) and f.tic >= self._since for f in k.fired):
             self._drop(obj, obs, "pressed, but nothing went off")
         elif obj.kind in ("frontier", "switch", "recheck", "noise", "room") and not self._seen_to(obj):
             if self._look_until is None:
