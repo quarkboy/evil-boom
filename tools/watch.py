@@ -102,7 +102,11 @@ class Watch:
         self.bounds = (min(xs), min(ys), max(xs), max(ys))
         pygame.init()
         pygame.display.set_caption(f"evil-doom explorer: {map_name}")
-        self.screen = pygame.display.set_mode((W, H))
+        # (drawn at W x H, shown scaled to a window that fits the screen, resizable)
+        self.screen = pygame.Surface((W, H))
+        desk_w, desk_h = (pygame.display.get_desktop_sizes() or [(W, H)])[0]
+        fit = min(1.0, 0.85 * desk_w / W, 0.85 * desk_h / H)
+        self.window = pygame.display.set_mode((int(W * fit), int(H * fit)), pygame.RESIZABLE)
         self.font = pygame.font.SysFont("consolas", 14)
         self.small = pygame.font.SysFont("consolas", 12)
         self.big = pygame.font.SysFont("consolas", 18, bold=True)
@@ -188,6 +192,12 @@ class Watch:
         self.draw_log()
         self.draw_map()
         self.draw_panel()
+        win = pygame.display.get_surface()
+        ww, wh = win.get_size()
+        scale = min(ww / W, wh / H)
+        size = (max(1, int(W * scale)), max(1, int(H * scale)))
+        win.fill(BG)
+        win.blit(pygame.transform.smoothscale(self.screen, size), ((ww - size[0]) // 2, (wh - size[1]) // 2))
         pygame.display.flip()
 
     def draw_game(self) -> None:
