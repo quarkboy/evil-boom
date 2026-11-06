@@ -33,6 +33,7 @@ from .navmesh import NavMesh, Point, _cells, _inside
 PLAYER_HEIGHT = 56
 MAX_STEP = 24
 PLAYER_RADIUS = 16
+JUMP_DOUBT = 1024.0  # a jump that never comes off made a little differently costs this much more (units)
 ITEM_RADIUS = 20
 PICKUP_MARGIN = 2  # how far inside touching range a pickup spot must be
 # Paths keep this far from portal ends (wall corners). DOOM collides with a square box of
@@ -167,6 +168,7 @@ class Jump(Teleport):
     soft: bool = False  # engine-checked: sprint only to the edge, then coast (narrow landings)
     release: float = 0.0  # ...soft: let go of forward this far past the takeoff
     through: bool = False  # sprint straight across a strip too narrow to stop on, to `dest`
+    sure: float = 1.0  # how sure it is (0-1): made a little differently, the share that comes off
 
     def usable(self, states: "HeightStates") -> bool:
         return all(h in states[s] for s, h in self.requires)
@@ -1136,7 +1138,7 @@ class Navigator:
                 for tp in self.tele_from.get(poly, ()):
                     if isinstance(tp, Jump):
                         out.append(("jump", tp.dest_poly, tp.dest, tp.runup, tp.takeoff,
-                                    sorted(tp.requires)))
+                                    sorted(tp.requires), JUMP_DOUBT * (1.0 - tp.sure)))
                     else:
                         line = m.linedefs[tp.line]
                         out.append(("line", tp.dest_poly, tp.dest, tp.line,

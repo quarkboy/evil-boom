@@ -103,6 +103,8 @@ pub struct Tele {
     pub dest: usize,
     pub dest_pt: Point,
     pub kind: TeleKind,
+    /// cost on top of the distance (a jump that doesn't always come off: less sure, dearer)
+    pub penalty: f64,
 }
 
 /// The per-map facts the navigator works from, worked out by Python (evildoom.nav.reach).

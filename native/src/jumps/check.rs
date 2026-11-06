@@ -29,6 +29,12 @@ const FRICTION: f64 = 0.90625;
 const ROBUST_SHIFT: f64 = 0.5;
 /// ...and get there from a run-up this much longer or shorter (4 lost E4M2's jumps onto ledges)
 const ROBUST_RUNUP: f64 = 2.0;
+/// How sure a jump is gets found making it: shifted this far to either side...
+const SURE_SHIFTS: [f64; 2] = [2.0, 4.0];
+/// ...turned this much either way about its takeoff (degrees)...
+const SURE_TURNS: [f64; 2] = [1.5, 3.0];
+/// ...and from a run-up this much longer or shorter (the follower's misses on E4M2: 6-12 off)
+const SURE_RUNUP: f64 = 8.0;
 /// run-ups tried shorter by this much at a time, down to MIN_RUNUP, for a jump that won't stick
 const RUNUP_STEP: f64 = 16.0;
 const MIN_RUNUP: f64 = 16.0;
@@ -252,6 +258,64 @@ impl JumpLab {
             }
         }
         out.retain(|v| self.mesh.poly_at(v.runup).is_some());
+        out
+    }
+
+    /// How sure each jump is (0-1): of it made shifted to either side, turned about its
+    /// takeoff and from a longer or shorter run-up (SURE_*), the share that still gets onto
+    /// its landing (stops there, or slides or runs across it as it does). 1 for one that
+    /// can't be varied (no room to).
+    pub fn robustness(&self, jumps: &[Jump]) -> Vec<f64> {
+        let mut sim = PlayerSim::new(self, self.world());
+        jumps
+            .iter()
+            .map(|j| {
+                let variants: Vec<Jump> = self.sure_variants(j).into_iter().filter(|v| self.mesh.poly_at(v.runup).is_some()).collect();
+                let mut tried = 0usize;
+                let mut landed = 0usize;
+                for v in &variants {
+                    match self.test_jump(&mut sim, v) {
+                        Test::Unverified => {}
+                        Test::Off { slid: false, through: None } => tried += 1,
+                        _ => {
+                            tried += 1;
+                            landed += 1;
+                        }
+                    }
+                }
+                if tried == 0 { 1.0 } else { landed as f64 / tried as f64 }
+            })
+            .collect()
+    }
+
+    /// The ways of making a jump a little differently that `robustness` tries.
+    fn sure_variants(&self, j: &Jump) -> Vec<Jump> {
+        let ((rx, ry), (tx, ty)) = (j.runup, j.takeoff);
+        let length = (tx - rx).hypot(ty - ry);
+        if length < 1e-6 {
+            return Vec::new();
+        }
+        let (ux, uy) = ((tx - rx) / length, (ty - ry) / length);
+        let (px, py) = (-uy, ux);
+        let mut out = Vec::new();
+        for s in SURE_SHIFTS.iter().flat_map(|&s| [s, -s]) {
+            out.push(Jump {
+                runup: (rx + px * s, ry + py * s),
+                takeoff: (tx + px * s, ty + py * s),
+                dest: (j.dest.0 + px * s, j.dest.1 + py * s),
+                ..j.clone()
+            });
+        }
+        for a in SURE_TURNS.iter().flat_map(|&a| [a, -a]) {
+            let (sin, cos) = a.to_radians().sin_cos();
+            let (dx, dy) = (rx - tx, ry - ty);
+            out.push(Jump { runup: (tx + dx * cos - dy * sin, ty + dx * sin + dy * cos), ..j.clone() });
+        }
+        for d in [SURE_RUNUP, -SURE_RUNUP] {
+            if length + d > 1.0 {
+                out.push(Jump { runup: (tx - ux * (length + d), ty - uy * (length + d)), ..j.clone() });
+            }
+        }
         out
     }
 

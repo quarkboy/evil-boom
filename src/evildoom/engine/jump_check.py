@@ -29,6 +29,7 @@ VERSION = 6   # bump to invalidate cached results when the test procedure change
 OK, FAIL, UNVERIFIED = "ok", "fail", "unverified"
 SOFT = "soft"   # works coasting from the edge (Jump.soft); "soft+N": letting go N past it
 SLID = "slid"   # lands, but slides off the landing sector
+MIN_SURE = 0.25  # a jump that comes off less often than this, made a little differently: dropped
 
 
 def _cache_path(iwad: Path, map_name: str, pwad: Path | None) -> Path:
@@ -74,10 +75,29 @@ def simulate_jumps(nav: Navigator) -> dict[str, str]:
     that works has to keep working made a little off its line (nobody lines up to a fraction
     of a unit). One that comes in too fast to stop on its landing is tried from shorter
     run-ups: "ok~x,y" / "soft~x,y" is one that sticks from (x, y)."""
-    verdicts = nav.jump_lab().check([
-        (sorted(j.src_polys), j.dest_poly, j.dest, j.runup, j.takeoff,
-         sorted((s, tuple(map(float, h))) for s, h in j.requires)) for j in nav.jumps])
+    verdicts = nav.jump_lab().check([_jump_in(j) for j in nav.jumps])
     return dict(zip((j.key for j in nav.jumps), verdicts))
+
+
+def _jump_in(j: Jump) -> tuple:
+    return (sorted(j.src_polys), j.dest_poly, j.dest, j.runup, j.takeoff,
+            sorted((s, tuple(map(float, h))) for s, h in j.requires))
+
+
+def _sure_only(nav: Navigator, jumps: list[Jump], results: dict[str, str]) -> list[Jump]:
+    """The jumps sure enough to take, with how sure each is (the planner makes the less sure
+    dearer): of each made a little differently (shifted, turned, from a longer or shorter
+    run-up), the share that still comes off. The follower's run-ups aren't the check's to a
+    unit (E4M2: three jumps onto ledges came down 6-12 off, into the nukage). Unverified ones
+    (needing moved floors) aren't tried: kept, at half."""
+    tried = [j for j in jumps if results.get(j.key) != UNVERIFIED]
+    scores = dict(zip((id(j) for j in tried), nav.jump_lab().robustness([_jump_in(j) for j in tried])))
+    out = []
+    for j in jumps:
+        j.sure = scores.get(id(j), 0.5)
+        if j.sure >= MIN_SURE:
+            out.append(j)
+    return out
 
 
 def keep_verified(nav: Navigator, iwad: str | Path, map_name: str,
@@ -121,6 +141,7 @@ def keep_verified(nav: Navigator, iwad: str | Path, map_name: str,
             continue
         j.soft = r == SOFT
         keep.append(j)
+    keep = _sure_only(nav, keep, results)
     nav.set_jumps(keep)
     counts = {OK: 0, SOFT: 0, SLID: 0, FAIL: 0, UNVERIFIED: 0}
     for j in jumps:

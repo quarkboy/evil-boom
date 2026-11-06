@@ -29,6 +29,8 @@ GIVE_UP_TICS = 20 * TICRATE   # an objective not done by then is dropped for a w
 ROUTE_SPEED = 8.0             # ...or by the time it takes to walk its route at this (units a tic)
 ROUTE_SLACK = 15 * TICRATE    # ...and this
 THRESHOLD_IN = 8.0            # a threshold's spot: this far over the line
+JUMP_MISSES = 2  # a run-jump missed this often isn't tried again; missed once, only when
+#                  there's nothing else to do (it's difficult: another way first)
 REPRESS_AFTER = 60 * TICRATE  # a repeatable switch whose effect wasn't seen: another go after this
 IDLE_RETRY = TICRATE          # with nothing to do, look for something again this often
 RETRY_TICS = 30 * TICRATE     # ...and offered again after this
@@ -133,6 +135,8 @@ class Explorer:
             self.knowledge = Knowledge(self.nav)
         self._view = None
         self._view_key = None
+        self._all_jumps: list | None = None  # (every run-jump the navigator had: some left out once missed)
+        self._difficult = False  # (the jumps missed once are in, for want of anything else)
 
     # --- the known world ----------------------------------------------------------------
 
@@ -872,7 +876,35 @@ class Explorer:
         self.follower = None
         return None
 
+    def _note_misses(self, obs: Observation) -> bool:
+        """Run-jumps the follower missed: counted (for the level, across lives), and left out
+        of the navigator from now on (E4M2: a jump onto a ledge a few units wide, made from a
+        run-up against a wall, came down in the nukage each time). True if one was."""
+        f = self.follower
+        if f is None or not f.missed:
+            return False
+        for j in f.missed:
+            n = self.knowledge.missed_jumps[j.key] = self.knowledge.missed_jumps.get(j.key, 0) + 1
+            self.log.append(f"tic {obs.tic}: missed the jump off ({j.takeoff[0]:.0f}, {j.takeoff[1]:.0f}) "
+                            + ("for good: not trying it again" if n >= JUMP_MISSES else "once: another way first"))
+        f.missed.clear()
+        self._set_jumps(difficult=False)
+        return True
+
+    def _set_jumps(self, difficult: bool) -> None:
+        """The navigator's run-jumps: all but those missed too often (and, unless `difficult`,
+        those missed at all)."""
+        if self._all_jumps is None:
+            self._all_jumps = list(self.nav.jumps)
+        missed = self.knowledge.missed_jumps
+        limit = JUMP_MISSES if difficult else 1
+        self.nav.set_jumps([j for j in self._all_jumps if missed.get(j.key, 0) < limit])
+        self._difficult = difficult
+        self._view = None  # (it holds the old edges)
+
     def _need_new(self, obs: Observation) -> bool:
+        if self._note_misses(obs):
+            return True  # (the way it was going may take that jump again: plan anew)
         f, obj = self.follower, self.current
         if f is None or obj is None or f.done or f.failed:
             if f is not None and f.failed and obj is not None:
@@ -909,7 +941,14 @@ class Explorer:
 
     def _next(self, obs: Observation) -> None:
         self.follower = None
-        if not self._try_objectives(obs, risky=False) and not self._try_objectives(obs, risky=True):
+        if self._difficult:
+            self._set_jumps(difficult=False)  # (the jumps missed once: out again, other ways first)
+        found = self._try_objectives(obs, risky=False) or self._try_objectives(obs, risky=True)
+        if not found and any(n < JUMP_MISSES for n in self.knowledge.missed_jumps.values()):
+            self.log.append(f"tic {obs.tic}: nothing else to do: the jumps missed once get another go")
+            self._set_jumps(difficult=True)
+            found = self._try_objectives(obs, risky=False) or self._try_objectives(obs, risky=True)
+        if not found:
             if self.current is not None:
                 self.log.append(f"tic {obs.tic}: nothing left to do")
             self.current = None

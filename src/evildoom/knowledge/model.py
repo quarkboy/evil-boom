@@ -88,6 +88,7 @@ class Knowledge:
     seen_polys: set[int] = field(default_factory=set)   # polys seen into (or in front of a mapped line)
     heard: list[Heard] = field(default_factory=list)
     felt: dict[int, bool] = field(default_factory=dict)  # sector stood on -> did it hurt
+    missed_jumps: dict = field(default_factory=dict)  # run-jump key -> times it came down off its landing
     # sector -> does it hurt now, for floors seen moved by a line that changes their type
     # (this life: the level starting again puts them back)
     changed_floor: dict[int, bool] = field(default_factory=dict)

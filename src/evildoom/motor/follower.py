@@ -366,6 +366,8 @@ class RouteFollower:
         self._goal_tic = 0  # when we got to the step's goal
         self._last_pos: tuple[float, float] | None = None
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
+        self._touchdown: tuple | None = None  # (jump, tic) a run-jump done: where does it come down?
+        self.missed: list = []  # run-jumps that came down off their landing (for the explorer)
         self._run = None     # running over sinking floors (_run_step)
         self._barrel = None  # (where, since tic) of a barrel in the way being shot (_shoot_barrel)
         # Floors that sink once stepped on: a jump off one goes at once, without settling.
@@ -568,6 +570,7 @@ class RouteFollower:
                     heights[t] = (f, heights[t][1])
             obs = replace(obs, heights=heights)
         self.motion.observe(obs)
+        self._judge_landing(obs)
         self._live = obs.heights   # (corner cutting keeps off ledges as they are now)
         pos = (obs.x, obs.y)
         if self._last_pos and math.dist(pos, self._last_pos) > 64:
@@ -1142,6 +1145,23 @@ class RouteFollower:
                 best = (cost, abs(off), going + off)
         return best[2] if best else None
 
+    def _judge_landing(self, obs: Observation) -> None:
+        """A run-jump done: once she's on a floor again, did it come down on its landing?"""
+        if self._touchdown is None:
+            return
+        jump, tic = self._touchdown
+        here = self.nav.mesh.poly_at(obs.x, obs.y)
+        if here is None or obs.z is None or abs(obs.z - obs.heights[here.sector][0]) >= 1:
+            if obs.tic - tic > 2 * TICRATE:
+                self._touchdown = None  # (still falling, or off the map: no telling)
+            return
+        self._touchdown = None
+        want = self.nav.mesh.polys[jump.dest_poly].sector
+        if here.sector != want:
+            self.missed.append(jump)
+            self.log.add(obs.tic, f"missed the jump off ({jump.takeoff[0]:.0f}, {jump.takeoff[1]:.0f}): "
+                                  f"came down in sector {here.sector}, not {want}")
+
     def _sprint_jump(self, obs: Observation) -> Controls:
         """Full speed in a straight line, exactly as the engine check did it: only up to the
         edge for a soft jump (then coast: it lands slower, for narrow strips), otherwise
@@ -1160,6 +1180,7 @@ class RouteFollower:
         if landed or flown >= math.dist(jump.takeoff, jump.dest) - 8 \
                 or obs.tic - since > 4 * TICRATE:
             self._sprint = None
+            self._touchdown = (jump, obs.tic)
             land = self.nav.mesh.poly_at(obs.x, obs.y)
             self.log.add(obs.tic, f"landed at ({obs.x:.0f}, {obs.y:.0f}) sector "
                                   f"{land.sector if land else None}")

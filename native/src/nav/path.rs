@@ -95,25 +95,25 @@ impl NavCore {
             }
             let here = entry[&poly];
             let mult = if self.damage[self.poly_sector[poly]] { DAMAGE_COST } else { 1.0 };
-            let mut moves: Vec<(usize, Point, Via)> = Vec::new();
+            let mut moves: Vec<(usize, Point, Via, f64)> = Vec::new();
             for i in 0..self.adj[poly].len() {
                 if self.enterable(self.adj[poly][i].to) && self.edge_passable(py, poly, i, st, doors)? {
                     let e = self.adj[poly][i];
                     let q = &self.mesh.portals[e.portal];
-                    moves.push((e.to, closest_on_portal(here, q.p1, q.p2), Via::Portal(e.portal)));
+                    moves.push((e.to, closest_on_portal(here, q.p1, q.p2), Via::Portal(e.portal), 0.0));
                 }
             }
             for ti in 0..self.tele[poly].len() {
                 if self.tele_known(poly, ti) && self.tele_ok(poly, ti, st)? {
                     let t = &self.tele[poly][ti];
-                    moves.push((t.dest, t.dest_pt, Via::Tele(ti)));
+                    moves.push((t.dest, t.dest_pt, Via::Tele(ti), t.penalty));
                 }
             }
-            for (next, point, via) in moves {
+            for (next, point, via, extra) in moves {
                 if banned.contains(&next) {
                     continue;
                 }
-                let cost = g + dist(here, point) * mult;
+                let cost = g + dist(here, point) * mult + extra;
                 if best.get(&next).is_none_or(|&b| cost < b) {
                     best.insert(next, cost);
                     entry.insert(next, point);

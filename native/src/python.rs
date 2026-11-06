@@ -35,6 +35,9 @@ impl<'py> FromPyObject<'py> for Edge {
     }
 }
 
+/// A jump edge as Python gives it: ("jump", dest poly, dest point, runup, takeoff, requires, penalty).
+type JumpTeleIn = (String, usize, Point, Point, Point, Vec<(usize, Heights)>, f64);
+
 /// `(line, [sectors])`
 impl<'py> FromPyObject<'py> for Gate {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
@@ -44,18 +47,18 @@ impl<'py> FromPyObject<'py> for Gate {
 }
 
 /// `("line", dest poly, dest point, line, front sector or None, back sector or None)` or
-/// `("jump", dest poly, dest point, runup, takeoff, [(sector, heights)])`
+/// `("jump", dest poly, dest point, runup, takeoff, [(sector, heights)], penalty)`
 impl<'py> FromPyObject<'py> for Tele {
     fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
         let kind: String = ob.get_item(0)?.extract()?;
         match kind.as_str() {
             "line" => {
                 let (_, dest, dest_pt, line, front, back): (String, usize, Point, usize, Option<usize>, Option<usize>) = ob.extract()?;
-                Ok(Tele { dest, dest_pt, kind: TeleKind::Line { line, front, back } })
+                Ok(Tele { dest, dest_pt, kind: TeleKind::Line { line, front, back }, penalty: 0.0 })
             }
             "jump" => {
-                let (_, dest, dest_pt, runup, takeoff, requires): (String, usize, Point, Point, Point, Vec<(usize, Heights)>) = ob.extract()?;
-                Ok(Tele { dest, dest_pt, kind: TeleKind::Jump { runup, takeoff, requires } })
+                let (_, dest, dest_pt, runup, takeoff, requires, penalty): JumpTeleIn = ob.extract()?;
+                Ok(Tele { dest, dest_pt, kind: TeleKind::Jump { runup, takeoff, requires }, penalty })
             }
             other => Err(PyValueError::new_err(format!("unknown teleport kind {other:?}"))),
         }
@@ -474,6 +477,16 @@ impl JumpLab {
 
     /// The simulator's verdict on each jump ("ok", "soft", "slid", "fail", "unverified", or
     /// "slid@x,y" / "fail@x,y").
+    /// How sure each jump is (0-1): the share of it made a little differently that still
+    /// gets onto its landing (`JumpLab::robustness`).
+    fn robustness(&self, jumps: Vec<JumpIn>) -> Vec<f64> {
+        let jumps: Vec<jumps::Jump> = jumps
+            .into_iter()
+            .map(|(src_polys, dest_poly, dest, runup, takeoff, requires)| jumps::Jump { src_polys, dest_poly, dest, runup, takeoff, speed: 0.0, requires })
+            .collect();
+        self.lab.robustness(&jumps)
+    }
+
     fn check(&self, jumps: Vec<JumpIn>) -> Vec<String> {
         let jumps: Vec<jumps::Jump> = jumps
             .into_iter()
