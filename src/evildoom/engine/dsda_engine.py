@@ -41,20 +41,33 @@ class DsdaEngine:
         import evildoom_native
         if sys.platform == "win32" and MINGW_BIN.is_dir():
             os.add_dll_directory(str(MINGW_BIN))  # (Python doesn't look in PATH for a DLL's DLLs)
-        os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
-        os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
         os.environ.setdefault("DOOMWADDIR", str(BUILD))  # (dsda-doom.wad, beside the library)
         data = ROOT / "out" / "dsda"  # (DSDA-Doom's own files: config, per-WAD data)
         data.mkdir(parents=True, exist_ok=True)
         os.environ.setdefault("DOOMDATADIR", str(data))
-        self.game = evildoom_native.DsdaGame(str(library), [
-            "-iwad", str(iwad), "-nosound", "-nomusic", "-skill", str(skill)]
-            + ([] if drawn else ["-nodraw"])
-            # (straight into the level: no title screen, whose attract-mode demo, played on the
-            # clock while frames are drawn, took over her first commands for a while)
-            + ["-warp"] + ([str(self_ep) for self_ep in _episode_map(map_name)]
-                           if not map_name.upper().startswith("MAP") else [str(_episode_map(map_name)[1])])
-            + ["-nomonsters"] * nomonsters)  # (as the game sets it: a new game resets it from this)
+        episode, level = _episode_map(map_name)
+        # (straight into the level: no title screen, whose attract-mode demo, played on the
+        # clock while frames are drawn, took over her first commands for a while)
+        warp = [str(level)] if map_name.upper().startswith("MAP") else [str(episode), str(level)]
+        # SDL's dummy drivers while the game sets itself up (no sound device; nothing drawn: no
+        # window), and only then: they're the process's. Drawn (for a watcher), the real video
+        # driver: SDL is one library in the process, its video shared with the watcher's pygame
+        # window (on the dummy driver that came up invisible); the game hides its own window
+        saved = {v: os.environ.get(v) for v in ("SDL_VIDEODRIVER", "SDL_AUDIODRIVER")}
+        os.environ["SDL_AUDIODRIVER"] = "dummy"
+        if not drawn:
+            os.environ["SDL_VIDEODRIVER"] = "dummy"
+        try:
+            self.game = evildoom_native.DsdaGame(str(library), [
+                "-iwad", str(iwad), "-nosound", "-nomusic", "-skill", str(skill)]
+                + ([] if drawn else ["-nodraw"]) + ["-warp"] + warp
+                + ["-nomonsters"] * nomonsters)  # (as the game sets it: a new game resets it from this)
+        finally:
+            for v, old in saved.items():
+                if old is None:
+                    os.environ.pop(v, None)
+                else:
+                    os.environ[v] = old
         self.map_name = map_name
         self.iwad = Path(iwad)
         self._palette = None

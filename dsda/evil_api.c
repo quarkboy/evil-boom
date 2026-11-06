@@ -7,6 +7,8 @@
  * engine is all globals. */
 #include <string.h>
 
+#include "SDL.h"
+
 #include "doomstat.h"
 #include "d_event.h"
 #include "d_main.h"
@@ -36,6 +38,7 @@
 
 /* d_main.c: the game's own setup, without its main loop (added to DSDA-Doom by the patch). */
 void D_DoomMainSetupForEvil(void);
+extern SDL_Window *sdl_window;
 void M_LoadDefaults(void);
 
 typedef struct {
@@ -89,6 +92,8 @@ EVIL_API int evil_init(int argc, char **argv)
    * tics, which runs on the clock too) */
   dsda_UpdateIntConfig(dsda_config_render_wipescreen, 0, false);
   dsda_UpdateIntConfig(dsda_config_uncapped_framerate, 0, false);
+  if (!nodrawers && sdl_window)
+    SDL_HideWindow(sdl_window);  /* (its frames are shown by whoever's watching: evil_draw) */
   return 0;
 }
 
