@@ -33,6 +33,9 @@ NEAR_SOUND = 128.0       # a sound this near is something she'll see anyway
 EXPECTED_RADIUS = 128.0  # a sound this near a known mover's is that mover
 EXPECTED_FOR = 8 * 35    # ...which she set off at most this many tics before (a door closing
 #                          behind her, a lift coming back): later it moved by itself
+TAKE_TICS = 35          # a once-only line set off moves nothing in this long...
+BUSY_TICS = 200         # ...where it acts on what moved this lately (a door open, waiting to
+#                          close): it didn't take (Doom leaves a switch on a busy sector unused)
 FELT_TICS = 70          # unhurt on a floor this long: it doesn't hurt
 FLOOR_PERIOD = 32       # a hurting floor hurts on every 32nd tic of the level's clock...
 FLOOR_CONFIRM = 3 * FLOOR_PERIOD  # ...so hurt twice on it a multiple of that apart, this soon: it's the floor
@@ -128,6 +131,8 @@ class Knowledge:
         self._drawable = [i for i, line in enumerate(m.linedefs) if drawable(line)]
         self._live: dict[int, tuple[float, float]] = {}  # every sector's heights last tic
         self._moving: set[int] = set()
+        self._moved_at: dict[int, int] = {}    # sector -> tic it was last heard moving
+        self._taking: list[tuple[Fired, set[int]]] = []  # once-only lines set off: did they take?
         # per linedef: the subsectors its segs bound (the floor in front of it)
         self._line_subsectors: dict[int, set[int]] = {}
         for ss, sub in enumerate(m.subsectors):
@@ -209,6 +214,7 @@ class Knowledge:
                 self._saw_move(s, obs.tic)
             self.seen_heights[s] = now
         self._hear(obs, in_view)
+        self._took(obs.tic)
         self._last = obs
 
     # --- hearing ------------------------------------------------------------------------
@@ -228,6 +234,7 @@ class Knowledge:
                 continue
             if moving:
                 self._moving.add(s)
+                self._moved_at[s] = obs.tic
             else:
                 self._moving.discard(s)
             origin = self._sound_origin.get(s)
@@ -393,8 +400,39 @@ class Knowledge:
                 any(f.line == li and f.life == self.lives for f in self.fired):
             return  # (once only: nothing happens again, this life; MAP08's trap went off again
             #        in the next and wasn't noticed: the planner took the line for spent)
-        self.fired.append(Fired(li, tic, how, self.lives))
+        f = Fired(li, tic, how, self.lives)
+        self.fired.append(f)
         self.events.append(f"tic {tic}: {how} line {li} ({info.description})")
+        if info.trigger in (Trigger.W1, Trigger.S1, Trigger.G1, Trigger.D1):
+            targets = self._targets(li)
+            if any(tic - self._moved_at.get(t, -10**9) < BUSY_TICS for t in targets):
+                self._taking.append((f, targets))
+
+    def _targets(self, li: int) -> set[int]:
+        """The sectors a line acts on, by the game's rule: those with its tag; a door line
+        with none, the door behind it."""
+        m = self.nav.map
+        line = m.linedefs[li]
+        if line.tag:
+            return {i for i, sec in enumerate(m.sectors) if sec.tag == line.tag}
+        back = m.back_sector(line)
+        return {back} if back is not None else set()
+
+    def _took(self, tic: int) -> None:
+        """Once-only lines set off on sectors that were busy: if nothing's moved since, the
+        game turned them down (a switch on a door still open from another stays unused:
+        E3M4's door 152, opened by its door switch, then the switch to open it for good
+        pressed while it waited; it closed, and the switch still worked)."""
+        still = []
+        for f, targets in self._taking:
+            if any(self._moved_at.get(t, -1) > f.tic for t in targets):
+                continue  # (it took)
+            if tic - f.tic < TAKE_TICS:
+                still.append((f, targets))
+                continue
+            self.fired.remove(f)
+            self.events.append(f"tic {tic}: line {f.line} didn't take (what it moves was busy): not used up")
+        self._taking = still
 
     # --- what Evil can tell -------------------------------------------------------------
 
@@ -504,6 +542,8 @@ class Knowledge:
         self._hurt_on = None
         self._live = {}
         self._moving = set()
+        self._moved_at = {}
+        self._taking = []
         self.lives += 1
         self.events.append(f"--- life {self.lives}: the level from the start, knowing what she knew")
 

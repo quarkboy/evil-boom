@@ -1,11 +1,12 @@
 //! A player-movement simulator on the level geometry, for checking jumps without the game.
 //!
-//! It follows ZDoom 2.8.1 (what ViZDoom runs) per tic, in its 16.16 fixed point, function by
-//! function (the names are ZDoom's):
-//!   input: ViZDoom floors the delta buttons; the turn goes through G_AddViewAngle (1/32768ths
-//!     of a half turn), moves are clamped to 50 and shifted up 8.
+//! It follows ZDoom 2.8.1 per tic, in its 16.16 fixed point, function by function (the names
+//! are ZDoom's), but for the push off the ground, which is vanilla's (DSDA-Doom, Evil's engine):
+//!   input: moves and the turn rounded to the nearest step, as the DSDA-Doom adapter's ticcmd;
+//!     the turn in 1/32768ths of a half turn, moves clamped to 50 and shifted up 8.
 //!   P_MovePlayer: turn, then thrust along the new facing (P_ForwardThrust/P_SideThrust,
-//!     finesine as R_InitTables makes it); off the ground only 1/256 of it (aircontrol).
+//!     finesine as R_InitTables makes it); off the ground none (vanilla; ZDoom gives 1/256 of
+//!     it, aircontrol, and jumps checked with it landed 7-12 short in DSDA-Doom: E4M2's nukage).
 //!   P_XYMovement: sub-steps of at most radius - 1, each P_TryMove; blocked by a wall,
 //!     FSlide::SlideMove; by a solid thing, y alone, else x alone. Friction on the ground.
 //!   P_CheckPosition / PIT_CheckLine: the floor and ceiling over every line the box straddles
@@ -30,9 +31,8 @@ const MAX_STEP: Fixed = 24 * FRAC;
 const FRICTION: Fixed = 0xE800;
 const STOP_SPEED: Fixed = 0x1000;
 const GRAVITY: Fixed = FRAC;
-/// ORIG_FRICTION_FACTOR, and that times level.aircontrol (1/256) off the ground
+/// ORIG_FRICTION_FACTOR (on the ground: none off it)
 const MOVE_FACTOR: Fixed = 2048;
-const AIR_MOVE_FACTOR: Fixed = 8;
 /// MAXPLMOVE: the most a delta move button gives
 const MAX_PLAYER_MOVE: f64 = 50.0;
 const FINE_ANGLES: usize = 8192;
@@ -127,10 +127,12 @@ pub struct Controls {
 }
 
 impl Controls {
-    /// As the game gets them: (ucmd.yaw, ucmd.forwardmove, ucmd.sidemove).
+    /// As the game gets them: (ucmd.yaw, ucmd.forwardmove, ucmd.sidemove), each rounded to
+    /// the nearest step as the DSDA-Doom adapter makes its ticcmd (crate::dsda; ViZDoom floored
+    /// them, and jumps checked so ran a little slow and landed short in DSDA-Doom: E4M2).
     fn ticcmd(self) -> (i32, Fixed, Fixed) {
-        let view = (self.turn / 180.0 * 32768.0).floor() as i32;
-        let mv = |v: f64| (v.floor().clamp(-MAX_PLAYER_MOVE, MAX_PLAYER_MOVE) as Fixed) << 8;
+        let view = (self.turn / 180.0 * 32768.0).round() as i32;
+        let mv = |v: f64| (v.round().clamp(-MAX_PLAYER_MOVE, MAX_PLAYER_MOVE) as Fixed) << 8;
         (view.wrapping_neg(), mv(self.forward), mv(self.strafe))
     }
 }
@@ -401,6 +403,10 @@ impl<'a> PlayerSim<'a> {
         to_units(self.z)
     }
 
+    pub fn velocity(&self) -> Point {
+        (to_units(self.vx), to_units(self.vy))
+    }
+
     /// Moving at (vx, vy) units a tic, at height z (for picking up from where the player is).
     pub fn set_motion(&mut self, v: Point, z: f64) {
         self.vx = to_fixed(v.0);
@@ -431,10 +437,9 @@ impl<'a> PlayerSim<'a> {
     pub fn step(&mut self, c: Controls) {
         let (yaw, fm, sm) = c.ticcmd();
         self.angle = self.angle.wrapping_add((yaw as u32) << 16);
-        if fm != 0 || sm != 0 {
-            let factor = if self.z <= self.floorz { MOVE_FACTOR } else { AIR_MOVE_FACTOR };
-            let forward = scale(fm, factor * 35, 35 << 8);
-            let side = scale(sm, factor * 35, 35 << 8);
+        if (fm != 0 || sm != 0) && self.z <= self.floorz {
+            let forward = scale(fm, MOVE_FACTOR * 35, 35 << 8);
+            let side = scale(sm, MOVE_FACTOR * 35, 35 << 8);
             if forward != 0 {
                 self.thrust(self.angle, forward);
             }

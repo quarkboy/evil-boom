@@ -14,6 +14,7 @@
 #include "g_game.h"
 #include "m_menu.h"
 #include "p_mobj.h"
+#include "p_map.h"
 #include "p_tick.h"
 #include "r_state.h"
 #include "i_system.h"
@@ -93,6 +94,26 @@ EVIL_API void evil_god(int on)
     players[consoleplayer].cheats |= CF_GODMODE;
   else
     players[consoleplayer].cheats &= ~CF_GODMODE;
+}
+
+/* Put the player at (x, y) facing `angle` (degrees), standing still on the floor there (as a
+ * "warp": for checking jumps in the game itself). Returns 0 if something's in the way. */
+EVIL_API int evil_warp(double x, double y, double angle)
+{
+  mobj_t *mo = players[consoleplayer].mo;
+  dboolean moved;
+  if (!mo)
+    return 0;
+  P_MapStart();  /* (the game brackets its moves so, and checks it does) */
+  moved = P_TeleportMove(mo, (fixed_t)(x * 65536.0), (fixed_t)(y * 65536.0), false);
+  P_MapEnd();
+  if (!moved)
+    return 0;
+  mo->z = mo->floorz;
+  mo->momx = mo->momy = mo->momz = 0;
+  mo->angle = (angle_t)(long long)(angle / 360.0 * 4294967296.0);
+  players[consoleplayer].viewz = mo->z + players[consoleplayer].viewheight;
+  return 1;
 }
 
 /* One tic, with this command for the player (forwardmove/sidemove as in a ticcmd: a run is

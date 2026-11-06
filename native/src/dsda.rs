@@ -92,6 +92,7 @@ type InitFn = unsafe extern "C" fn(c_int, *mut *mut c_char) -> c_int;
 type NewGameFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int);
 type GodFn = unsafe extern "C" fn(c_int);
 type TicFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int);
+type WarpFn = unsafe extern "C" fn(f64, f64, f64) -> c_int;
 type StatusFn = unsafe extern "C" fn(*mut Status);
 type SectorsFn = unsafe extern "C" fn(*mut f64, c_int) -> c_int;
 type MobjsFn = unsafe extern "C" fn(*mut Mobj, c_int) -> c_int;
@@ -103,6 +104,7 @@ pub struct Dsda {
     new_game_fn: NewGameFn,
     god_fn: GodFn,
     tic_fn: TicFn,
+    warp_fn: WarpFn,
     status_fn: StatusFn,
     sectors_fn: SectorsFn,
     mobjs_fn: MobjsFn,
@@ -131,12 +133,13 @@ impl Dsda {
                 .map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
         };
         // SAFETY: each symbol is the function of that name in evil_api.c, with this signature.
-        let (init_fn, new_game_fn, god_fn, tic_fn, status_fn, sectors_fn, mobjs_fn, player_fn) = unsafe {
+        let (init_fn, new_game_fn, god_fn, tic_fn, warp_fn, status_fn, sectors_fn, mobjs_fn, player_fn) = unsafe {
             (
                 std::mem::transmute::<*const (), InitFn>(sym(b"evil_init")?),
                 std::mem::transmute::<*const (), NewGameFn>(sym(b"evil_new_game")?),
                 std::mem::transmute::<*const (), GodFn>(sym(b"evil_god")?),
                 std::mem::transmute::<*const (), TicFn>(sym(b"evil_tic")?),
+                std::mem::transmute::<*const (), WarpFn>(sym(b"evil_warp")?),
                 std::mem::transmute::<*const (), StatusFn>(sym(b"evil_get_status")?),
                 std::mem::transmute::<*const (), SectorsFn>(sym(b"evil_sectors")?),
                 std::mem::transmute::<*const (), MobjsFn>(sym(b"evil_mobjs")?),
@@ -155,6 +158,7 @@ impl Dsda {
             new_game_fn,
             god_fn,
             tic_fn,
+            warp_fn,
             status_fn,
             sectors_fn,
             mobjs_fn,
@@ -192,6 +196,13 @@ impl Dsda {
         unsafe {
             (self.tic_fn)(cmd.forward.clamp(-50, 50), cmd.side.clamp(-50, 50), cmd.turn.clamp(-32768, 32767), buttons)
         }
+    }
+
+    /// Put the player at (x, y) facing `angle` (degrees), still, on the floor (for checking
+    /// jumps in the game itself). False if something's in the way.
+    pub fn warp(&self, x: f64, y: f64, angle: f64) -> bool {
+        // SAFETY: plain values into the game; see `load`.
+        unsafe { (self.warp_fn)(x, y, angle) != 0 }
     }
 
     pub fn status(&self) -> Status {

@@ -54,7 +54,7 @@ pub struct RunStart {
 }
 
 /// Bumped whenever the finder's results could change (it keys Python's jump cache).
-pub const FINDER_VERSION: u32 = 1;
+pub const FINDER_VERSION: u32 = 3;
 
 /// The map as the jump tools need it.
 pub struct JumpLab {
@@ -131,6 +131,23 @@ impl JumpLab {
                     }
                 }
                 None
+            })
+            .collect()
+    }
+
+    /// The player from standing at `start` (x, y, angle) on the floor, given these controls a
+    /// tic (forward, strafe, turn): where after each, (x, y, z, vx, vy). For comparing the
+    /// simulator with the game.
+    pub fn simulate(&self, start: (f64, f64, f64), heights: &[(f64, f64)], controls: &[Controls]) -> Vec<(f64, f64, f64, f64, f64)> {
+        let mut sim = PlayerSim::new(self, self.world());
+        sim.heights = heights.iter().map(|&(f, c)| (physics::to_fixed(f), physics::to_fixed(c))).collect();
+        sim.place((start.0, start.1), start.2);
+        controls
+            .iter()
+            .map(|&c| {
+                sim.step(c);
+                let ((x, y), (vx, vy)) = (sim.pos(), sim.velocity());
+                (x, y, sim.z_units(), vx, vy)
             })
             .collect()
     }

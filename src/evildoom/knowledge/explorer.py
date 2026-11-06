@@ -186,12 +186,18 @@ class Explorer:
     def view(self) -> Navigator:
         """The navigator as far as Evil knows (rebuilt when what she knows changes)."""
         k = self.knowledge
+        # (once-only door lines used this life open nothing again: MAP19's door, opened for good
+        # by its own, was shut by a walk-over line that opens it a while; it seemed openable)
+        spent_doors = frozenset(f.line for f in k.fired if f.life == k.lives
+                                and k._special(f.line) is not None and k._special(f.line).trigger is Trigger.D1)
         key = (len(k.sectors), len(k.seen_polys), len(k.visited), sum(map(len, k.learned.values())),
-               len(k.teleports))
+               len(k.teleports), spent_doors)
         if self._view is None or key != self._view_key:
             triggers = []
             trenches = self.nav.trenches
             for t, sectors in k.known_triggers():
+                if t.line in spent_doors:
+                    continue
                 # (and the slots beside them: walked at their sides' floor, they never move to
                 # be seen to; MAP08's moat beside the floor the trap drops and a switch raises)
                 keep = set(sectors) | {s for s in t.effects
@@ -596,11 +602,12 @@ class Explorer:
         for th in k.known_things():
             if th.type in Key._value2member_map_:
                 key_items.setdefault(Key(th.type), []).extend(view.pickup_spots(th.x, th.y, states))
-        # (the one-shot switches she's used whose effect builds on itself: stairs a press
-        # raises another step, so the planner knows those are spent)
+        # (the one-shot lines she's used this life are spent: stairs a press raises another
+        # step; and a door one opened that something else shut again won't open for it twice:
+        # E3M4's door, opened for good by one switch, shut by a press of its own door switch)
         by_line = {t.line: t for t in self.nav.triggers if t.line >= 0}
         fired = frozenset(f.line for f in k.fired if f.life == k.lives
-                          if (t := by_line.get(f.line)) is not None and t.once and t.cumulative)
+                          if (t := by_line.get(f.line)) is not None and t.once)
         route = view.plan((obs.x, obs.y), [obj.goal], keys, states, key_items,
                           max_expansions=2000, max_seconds=PLAN_SECONDS, fired=fired)
         # no way to the nearest spot to press it from: the next nearest (MAP08's exit door,

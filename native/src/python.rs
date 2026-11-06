@@ -496,6 +496,13 @@ impl JumpLab {
         self.lab.run_landings(&start, &heights, sector, &headings, tics)
     }
 
+    /// The simulator from standing at (x, y, angle), these controls a tic ((forward, strafe,
+    /// turn)): (x, y, z, vx, vy) after each (for comparing with the game).
+    fn simulate(&self, start: (f64, f64, f64), heights: Vec<(f64, f64)>, controls: Vec<(f64, f64, f64)>) -> Vec<(f64, f64, f64, f64, f64)> {
+        let controls: Vec<jumps::Controls> = controls.into_iter().map(|(forward, strafe, turn)| jumps::Controls { forward, strafe, turn }).collect();
+        self.lab.simulate(start, &heights, &controls)
+    }
+
     /// The finder's version (for caching what it finds).
     #[staticmethod]
     fn finder_version() -> u32 {
@@ -550,6 +557,11 @@ impl DsdaGame {
             use_,
             weapon,
         });
+    }
+
+    /// Put the player at (x, y) facing `angle`, still, on the floor. False if blocked.
+    fn warp(&self, x: f64, y: f64, angle: f64) -> bool {
+        self.game.warp(x, y, angle)
     }
 
     /// (gametic, gamestate, exited, secret exit)

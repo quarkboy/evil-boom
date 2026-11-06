@@ -25,7 +25,7 @@ from evildoom.wad.specials import Trigger
 from .vizdoom_engine import VizDoomEngine
 
 CACHE_DIR = Path(__file__).resolve().parents[3] / "out" / "jumpcache"
-VERSION = 5   # bump to invalidate cached results when the test procedure changes
+VERSION = 6   # bump to invalidate cached results when the test procedure changes
 OK, FAIL, UNVERIFIED = "ok", "fail", "unverified"
 SOFT = "soft"   # works coasting from the edge (Jump.soft); "soft+N": letting go N past it
 SLID = "slid"   # lands, but slides off the landing sector
