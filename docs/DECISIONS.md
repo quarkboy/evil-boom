@@ -599,4 +599,6 @@ Python Evil on DSDA-Doom in-process (`--engine dsda`): the whole explorer sweep 
 - **Floors hurt on the level's clock** (every 32 tics): only hurt twice on a floor that far apart is it the floor (a monster's shot made floors "hurt after all").
 - **Sweeps are deterministic** now (PYTHONHASHSEED fixed for the workers): a change's effect can be told from luck.
 
-58/68 (all but E2M4, E2M7, the 7 kill maps, MAP30).
+- **Use traces, vanilla**: any line with a special stops one (a walk-over line too: E2M4's door was pressed from beyond one, by the planner and in her model); a once-only line used has no special any more, so the trace goes past it (E2M7: a switch behind a used door switch went off, and she never knew).
+
+60/68: parity with ViZDoom (all but the 7 kill maps and MAP30).

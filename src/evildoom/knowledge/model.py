@@ -325,12 +325,16 @@ class Knowledge:
         a = math.radians(last.angle)
         if controls.use:
             # P_UseLines: the first line along the use trace with a special, unless something
-            # shut is in the way first (only from its front side)
+            # shut is in the way first (only from its front side). A once-only line used this
+            # life has no special any more: the trace goes past it (E2M7's switch behind a door
+            # switch used before: pressed, it went off, and she never knew)
             end = (last.x + USE_RANGE * math.cos(a), last.y + USE_RANGE * math.sin(a))
             for _, li in self._lines_along((last.x, last.y), end):
                 info = self._special(li)
-                if info is not None and info.trigger in USED:
-                    if self._front(li, last.x, last.y):
+                # (any line with a special stops it, a walk-over one too: E2M4's door behind
+                # one; only one that's used goes off)
+                if info is not None and not self._spent(li):
+                    if info.trigger in USED and self._front(li, last.x, last.y):
                         self._fire(li, obs.tic, "use")
                     break
                 opening = self._opening(li, heights)
@@ -394,6 +398,11 @@ class Knowledge:
 
     def _special(self, li: int):
         return self._info.get(li)
+
+    def _spent(self, li: int) -> bool:
+        """A once-only line used this life (its special's gone: the game clears it)."""
+        info = self._special(li)
+        return info is not None and info.trigger in (Trigger.W1, Trigger.S1, Trigger.G1, Trigger.D1)             and any(f.line == li and f.life == self.lives for f in self.fired)
 
     def _fire(self, li: int, tic: int, how: str) -> None:
         info = self._special(li)

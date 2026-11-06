@@ -833,10 +833,12 @@ class Navigator:
                 f, b = m.front_sector(line), m.back_sector(line)
                 closed = f is None or b is None or \
                     min(init[f][1], init[b][1]) - max(init[f][0], init[b][0]) <= 0
-                # The trace also stops at (and uses) the first other line with a use action.
-                # One-shot ones lose their action once used (and the plan uses them first).
+                # The trace also stops at the first other line with any special (vanilla: a
+                # walk-over line too; E2M4's door, pressed from beyond a walk-over line, did
+                # nothing). One-shot switches lose their special once used (and the plan uses
+                # them first); walk-over and gun lines, repeatable or not, are taken to stay.
                 usable = (i := classify_line(line.special)) is not None and \
-                    i.trigger in (Trigger.SR, Trigger.DR)
+                    i.trigger not in (Trigger.S1, Trigger.D1)
                 if not closed and not usable:
                     continue
                 v1, v2 = m.vertexes[line.v1], m.vertexes[line.v2]
