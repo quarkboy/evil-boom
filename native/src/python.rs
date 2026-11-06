@@ -13,7 +13,8 @@ use crate::stats;
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::BTreeSet;
+use crate::det::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -100,7 +101,7 @@ struct PyHeights<'py> {
 
 impl<'py> PyHeights<'py> {
     fn new(dict: Bound<'py, PyDict>) -> Self {
-        PyHeights { dict, cache: HashMap::new() }
+        PyHeights { dict, cache: HashMap::default() }
     }
 }
 
@@ -121,7 +122,7 @@ impl HeightSource for PyHeights<'_> {
 /// A `{sector: ({heights}, {activator polys})}` dict of the use-doors that can be opened.
 fn read_doors(d: Option<Bound<'_, PyDict>>) -> PyResult<Option<Doors>> {
     let Some(d) = d.filter(|d| !d.is_empty()) else { return Ok(None) };
-    let mut out = Doors::new();
+    let mut out = Doors::default();
     for (k, v) in d.iter() {
         let (heights, users): (Bound<'_, PyAny>, Bound<'_, PyAny>) = v.extract()?;
         out.insert(k.extract()?, DoorOpening { heights: extract_all(&heights)?, users: extract_all(&users)?.into_iter().collect() });

@@ -11,7 +11,7 @@
 use super::{Jump, JumpLab};
 use crate::geom::{cells, closest_point, dist, segments_cross, Point, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::nav::Heights;
-use std::collections::HashSet;
+use crate::det::HashSet;
 
 /// degrees off the edge normal
 const JUMP_ANGLES: [f64; 7] = [0.0, -30.0, 30.0, -45.0, 45.0, -60.0, 60.0];

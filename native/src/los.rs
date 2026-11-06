@@ -6,7 +6,7 @@
 
 use crate::geom::{cells, Cell, Point, GRID};
 use crate::map::MapData;
-use std::collections::HashMap;
+use crate::det::HashMap;
 
 /// A line as the trace needs it.
 struct SightLine {
@@ -40,7 +40,7 @@ impl LineOfSight {
                 SightLine { a, b, front, back }
             })
             .collect();
-        let mut grid: HashMap<Cell, Vec<usize>> = HashMap::new();
+        let mut grid: HashMap<Cell, Vec<usize>> = HashMap::default();
         for (li, l) in lines.iter().enumerate() {
             for c in segment_cells(l.a, l.b) {
                 let at = grid.entry(c).or_default();

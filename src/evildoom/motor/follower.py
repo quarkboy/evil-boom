@@ -981,14 +981,14 @@ class RouteFollower:
                                   f"({goal[0]:.0f}, {goal[1]:.0f})")
         else:
             route = nav.plan(pos, [goal], frozenset(self.keys), states, None,
-                             max_expansions=200, max_seconds=30.0, fired=self.fired)
+                             max_expansions=200, max_seconds=600.0, fired=self.fired)
             if route is not None:
                 new = steps_from_legs(route.legs, step, nav, states)
                 self.steps[self.step_i:self.step_i + 1] = new
                 self.log.add(obs.tic, f"{why} at ({obs.x:.0f}, {obs.y:.0f}): back on track "
                                       f"via {len(new) - 1} extra step(s)")
             elif self.replan_level:
-                plan = plan_from(nav, pos, self.keys, states, max_seconds=120.0, fired=self.fired,
+                plan = plan_from(nav, pos, self.keys, states, max_seconds=600.0, fired=self.fired,
                                  max_expansions=1000)
                 if not plan.complete:
                     self.log.add(obs.tic, f"{why}: no way to the step goal or the exit")

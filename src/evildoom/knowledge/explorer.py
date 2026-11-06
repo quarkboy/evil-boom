@@ -20,7 +20,7 @@ from evildoom.nav.reach import (MAX_STEP, PLAYER_HEIGHT, HeightStates, Navigator
 from evildoom.nav.walkthrough import Step, _action_for, steps_from_legs
 from evildoom.wad.specials import Category, Key, Lock, Trigger, classify_line
 
-PLAN_SECONDS = 30.0  # a backstop only: the expansions decide, so that a run is the same however loaded the machine (at 1.5s, eight at once took other ways than one alone)
+PLAN_SECONDS = 600.0  # a backstop only: the expansions decide, so that a run is the same however loaded the machine (any clock limit that binds under load, 1.5s, then 30s with eight at once, made sweeps differ from runs alone)
 # how much nearer an objective of each kind counts as (keys, switches first; looking again last)
 WEIGHT = {"exit": 0.5, "key": 0.6, "switch": 0.8, "door": 0.8, "frontier": 1.0, "room": 1.1,
           "visit": 2.0, "noise": 0.7, "teleporter": 1.2, "recheck": 3.0, "item": 0.6, "hunt": 1.5,

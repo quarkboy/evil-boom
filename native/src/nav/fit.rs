@@ -10,7 +10,8 @@ use crate::geom::{
 };
 use crate::stats::{self, Phase};
 use pyo3::prelude::*;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::BinaryHeap;
+use crate::det::HashSet;
 use std::time::Instant;
 
 /// How far waypoints are kept from walls.
@@ -95,7 +96,7 @@ impl NavCore {
         points.extend(funnel(seg_start, goal, &portals).into_iter().map(Some));
 
         // the lines the path crosses aren't walls to it (unless they shut by themselves)
-        let mut exempt: HashSet<usize> = HashSet::new();
+        let mut exempt: HashSet<usize> = HashSet::default();
         for (i, c) in chain.iter().enumerate() {
             match c.1 {
                 Some(Via::Portal(pi)) => exempt.extend(self.mesh.portals[pi].linedef),
@@ -108,8 +109,8 @@ impl NavCore {
             }
         }
         exempt.retain(|li| !self.shutting.contains(li));
-        let mut pinned: HashSet<PointKey> = HashSet::new();
-        let mut takeoffs: HashSet<PointKey> = HashSet::new();
+        let mut pinned: HashSet<PointKey> = HashSet::default();
+        let mut takeoffs: HashSet<PointKey> = HashSet::default();
         for i in 1..chain.len() {
             if let Some(TeleKind::Jump { runup, takeoff, .. }) = tele_into(self, chain, i) {
                 pinned.extend([point_key(*runup), point_key(*takeoff)]);
@@ -176,14 +177,14 @@ impl NavCore {
 
     /// Does the box at p overlap a static wall?
     pub fn box_blocked_static(&self, p: Point) -> bool {
-        let mut hits = HashSet::new();
-        self.static_hits(p, p, &HashSet::new(), &mut hits);
+        let mut hits = HashSet::default();
+        self.static_hits(p, p, &HashSet::default(), &mut hits);
         !hits.is_empty()
     }
 
     /// The linedefs in these cells, each once, in the order first met.
     fn lines_in<'a>(&'a self, cs: impl Iterator<Item = Cell> + 'a) -> impl Iterator<Item = usize> + 'a {
-        let mut seen: HashSet<usize> = HashSet::new();
+        let mut seen: HashSet<usize> = HashSet::default();
         cs.flat_map(|c| self.mesh.line_grid.get(&c).into_iter().flatten().copied()).filter(move |&li| seen.insert(li))
     }
 }
@@ -306,7 +307,7 @@ impl Fitter<'_> {
     /// these heights), less `ignore`.
     fn box_hits(&mut self, p: Point, q: Point, ignore: &HashSet<SegKey>) -> PyResult<HashSet<SegKey>> {
         let nav = self.nav;
-        let mut out = HashSet::new();
+        let mut out = HashSet::default();
         nav.static_hits(p, q, ignore, &mut out);
         let r = PLAYER_RADIUS + BOX_SLACK;
         let mut standing = None;
@@ -343,7 +344,7 @@ impl Fitter<'_> {
 
     /// What the box at `a` and at `b` already overlaps (not to count against going between).
     fn overlapped_at(&mut self, a: Point, b: Point) -> PyResult<HashSet<SegKey>> {
-        let none = HashSet::new();
+        let none = HashSet::default();
         let mut ignore = self.box_hits(a, a, &none)?;
         ignore.extend(self.box_hits(b, b, &none)?);
         Ok(ignore)
@@ -353,7 +354,7 @@ impl Fitter<'_> {
     /// lines.
     fn edges_near(&mut self, a: Point, b: Point, pad: f64) -> PyResult<Vec<Seg>> {
         let nav = self.nav;
-        let mut seen: HashSet<SegKey> = HashSet::new();
+        let mut seen: HashSet<SegKey> = HashSet::default();
         let mut out: Vec<Seg> = cells_around(a, b, pad)
             .flat_map(|c| nav.static_grid.get(&c).into_iter().flatten().copied())
             .filter(|&e| seen.insert(seg_key(e)))
@@ -412,7 +413,7 @@ impl Fitter<'_> {
         if pts.len() < 2 {
             return Ok(pts.to_vec());
         }
-        let none = HashSet::new();
+        let none = HashSet::default();
         let last = pts.len() - 1;
         let mut kept: Vec<Point> = vec![pts[0]];
         for i in 1..last {
@@ -470,7 +471,7 @@ impl Fitter<'_> {
             return Ok(None);
         }
         let (ux, uy) = ((b.0 - a.0) / length, (b.1 - a.1) / length);
-        let none = HashSet::new();
+        let none = HashSet::default();
         let mut bad = Vec::new();
         for t in (0..=length.floor() as i64).step_by(8) {
             let tf = t as f64;
@@ -490,7 +491,7 @@ impl Fitter<'_> {
             b2 = b;
         }
         let mut nodes = vec![a2, b2];
-        let mut seen: HashSet<PointKey> = HashSet::new();
+        let mut seen: HashSet<PointKey> = HashSet::default();
         for e in self.edges_near(a2, b2, 96.0)? {
             for v in [e.0, e.1] {
                 if seen.contains(&point_key(v)) || segment_distance(a2, b2, v, v) > 96.0 {
@@ -600,8 +601,8 @@ impl Fitter<'_> {
     fn walls_near(&mut self, a: Point, b: Point, pad: f64) -> PyResult<Vec<Seg>> {
         let nav = self.nav;
         let mut out = Vec::new();
-        let mut seen_lines: HashSet<usize> = HashSet::new();
-        let mut seen_edges: HashSet<SegKey> = HashSet::new();
+        let mut seen_lines: HashSet<usize> = HashSet::default();
+        let mut seen_edges: HashSet<SegKey> = HashSet::default();
         for c in cells_around(a, b, pad) {
             for &li in nav.mesh.line_grid.get(&c).into_iter().flatten() {
                 let wall = nav.walls.contains(&li) || nav.drops.contains(&li) || nav.teleport_lines.contains(&li);
@@ -688,7 +689,7 @@ impl Fitter<'_> {
         let mut worst: Option<(f64, Point, Point)> = None;
         if depth < 4 {
             let mut corners: Vec<Point> = Vec::new();
-            let mut seen: HashSet<PointKey> = HashSet::new();
+            let mut seen: HashSet<PointKey> = HashSet::default();
             for (p1, p2) in self.walls_near(a, b, CORNER_CLEARANCE)? {
                 for v in [p1, p2] {
                     if seen.insert(point_key(v)) {

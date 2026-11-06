@@ -15,7 +15,7 @@ use super::physics::{Controls, PlayerSim};
 use super::{Jump, JumpLab};
 use crate::geom::{dist, Point};
 use crate::nav::Heights;
-use std::collections::HashSet;
+use crate::det::HashSet;
 
 const TICRATE: usize = 35;
 const MAX_STEP: f64 = 24.0;

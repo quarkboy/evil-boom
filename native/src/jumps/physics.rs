@@ -270,7 +270,7 @@ pub struct World {
     subsector_sectors: Vec<usize>,
     blocks: Option<Blocks>,
     /// cell -> solid things' box edges
-    things: std::collections::HashMap<crate::geom::Cell, Vec<FixedSeg>>,
+    things: crate::det::HashMap<crate::geom::Cell, Vec<FixedSeg>>,
 }
 
 impl World {

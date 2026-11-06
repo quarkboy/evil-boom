@@ -7,7 +7,7 @@ use crate::geom::{dist, Point};
 use crate::nav::{Doors, Found, Heights, Planned, TeleKind, Via};
 use crate::stats::{self, Phase};
 use pyo3::prelude::*;
-use std::collections::{HashMap, HashSet};
+use crate::det::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -17,7 +17,7 @@ const LIFT_BACK: f64 = 60.0;
 impl Planner<'_, '_> {
     /// When the player gets to each sector along a path (tics, from 10 for setting off).
     fn arrival_tics(&self, path: &Found) -> HashMap<usize, f64> {
-        let mut out: HashMap<usize, f64> = HashMap::new();
+        let mut out: HashMap<usize, f64> = HashMap::default();
         let mut note = |q: Point, d: f64| {
             if let Some(s) = self.nav.sector_at(q) {
                 out.entry(s).or_insert(10.0 + d / LEG_SPEED);
@@ -89,7 +89,7 @@ impl Planner<'_, '_> {
         // the takeoff is that much later)
         for (takeoff, requires) in self.jumps(&path) {
             let Some(&t_off) = self.nav.sector_at(takeoff).and_then(|src| arrive.get(&src)) else { continue };
-            let mut lifts: HashMap<usize, f64> = HashMap::new();
+            let mut lifts: HashMap<usize, f64> = HashMap::default();
             for (&(s2, h2), &left) in deadlines {
                 if self.facts.temporary.contains(&(s2, h2)) && requires.iter().any(|(s, h)| *s == s2 && h.key() != h2) {
                     lifts.insert(s2, left);

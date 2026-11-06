@@ -15,7 +15,8 @@ use crate::geom::{dist, midpoint, point_key, Point, PointKey};
 use crate::nav::{Doors, Found, NavCore};
 use pyo3::prelude::*;
 use std::cmp::Reverse;
-use std::collections::{BTreeSet, BinaryHeap, HashMap, HashSet};
+use std::collections::{BTreeSet, BinaryHeap};
+use crate::det::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -28,7 +29,7 @@ const TIMER_SETS: usize = 2;
 /// Expansions to look for a route without squeezes once one with them is found.
 const FALLBACK_GRACE: usize = 300;
 /// Seconds to look for a route without squeezes once one with them is found.
-const FALLBACK_SECONDS: f64 = 120.0;
+const FALLBACK_SECONDS: f64 = 600.0;
 /// Polys round an activator tried as where to fire it from.
 const FIRING_SPOTS: usize = 8;
 
@@ -242,7 +243,7 @@ pub struct Planner<'a, 'py> {
 
 impl<'a, 'py> Planner<'a, 'py> {
     pub fn new(py: Python<'py>, nav: &'a mut NavCore, facts: &'a PlanFacts, caches: &'a mut PlanCaches) -> Self {
-        Planner { py, nav, facts, caches, strict_fit: false, moving_off: HashSet::new() }
+        Planner { py, nav, facts, caches, strict_fit: false, moving_off: HashSet::default() }
     }
 
     /// A route from `q.start` to one of `q.goals`, starting with the world at `states`.
@@ -445,7 +446,7 @@ impl<'a, 'py> Planner<'a, 'py> {
                 }
                 let mut best = target;
                 let mut best_reach: Option<Arc<HashSet<usize>>> = None;
-                let mut covered: HashSet<usize> = HashSet::new();
+                let mut covered: HashSet<usize> = HashSet::default();
                 for sp in spots {
                     let Some(p) = self.nav.mesh.poly_at(sp) else { continue };
                     if covered.contains(&p) {

@@ -4,7 +4,7 @@ use super::world::World;
 use super::{Kind, Planner};
 use crate::geom::{closest_on_portal, closest_point, dist, midpoint, segment_distance, Point, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::nav::can_cross;
-use std::collections::HashSet;
+use crate::det::HashSet;
 
 /// Items' half-width.
 const ITEM_RADIUS: f64 = 20.0;

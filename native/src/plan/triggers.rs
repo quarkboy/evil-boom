@@ -6,7 +6,7 @@ use super::{KeySet, Planner};
 use crate::geom::{Point, MAX_STEP};
 use crate::nav::{can_cross, DoorOpening, Doors, Heights};
 use pyo3::prelude::*;
-use std::collections::{HashMap, HashSet};
+use crate::det::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -119,10 +119,10 @@ impl Planner<'_, '_> {
         if let Some(d) = self.caches.doors.get(&keys) {
             return Arc::clone(d);
         }
-        let mut out: Doors = HashMap::new();
+        let mut out: Doors = HashMap::default();
         for t in self.facts.triggers.iter().filter(|t| t.kind.is_door() && t.usable_with(keys)) {
             for (s, hs) in &t.effects {
-                let door = out.entry(*s).or_insert_with(|| DoorOpening { heights: Vec::new(), users: HashSet::new() });
+                let door = out.entry(*s).or_insert_with(|| DoorOpening { heights: Vec::new(), users: HashSet::default() });
                 for h in hs {
                     if !door.heights.iter().any(|x| x.key() == h.key()) {
                         door.heights.push(*h);

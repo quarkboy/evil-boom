@@ -4,7 +4,8 @@
 use super::triggers::Effects;
 use crate::geom::{dist, Point};
 use crate::nav::{Heights, HeightsKey};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
+use crate::det::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 
@@ -118,9 +119,9 @@ mod tests {
         let pair = (0, h(0.0, 128.0).key());
         let timers = Timers::from([(pair, 20.0)]);
         // 120 units: 10 tics of walking, plus 10
-        let (_, left, gone) = expire(&w, &timers, (0.0, 0.0), (119.0, 0.0), &HashSet::new());
+        let (_, left, gone) = expire(&w, &timers, (0.0, 0.0), (119.0, 0.0), &HashSet::default());
         assert!(gone.is_empty() && left[&pair] > 0.0);
-        let (after, left, gone) = expire(&w, &timers, (0.0, 0.0), (121.0, 0.0), &HashSet::new());
+        let (after, left, gone) = expire(&w, &timers, (0.0, 0.0), (121.0, 0.0), &HashSet::default());
         assert!(left.is_empty() && gone.contains(&pair));
         assert_eq!(*after[0], vec![h(64.0, 128.0)]);
     }

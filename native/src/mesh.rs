@@ -3,7 +3,7 @@
 
 use crate::geom::{cells, Cell, Point};
 use crate::map::{MapData, Node, NF_SUBSECTOR};
-use std::collections::{HashMap, HashSet};
+use crate::det::{HashMap, HashSet};
 use std::fmt;
 
 const EPS: f64 = 0.01;
@@ -140,7 +140,7 @@ pub struct Poly {
 impl Poly {
     fn new(sector: usize, vertices: Vec<Point>) -> Poly {
         let center = centroid(&vertices);
-        Poly { sector, vertices, center, lines_front: HashSet::new(), lines_back: HashSet::new(), portals: Vec::new() }
+        Poly { sector, vertices, center, lines_front: HashSet::default(), lines_back: HashSet::default(), portals: Vec::new() }
     }
 
     pub fn edges(&self) -> impl Iterator<Item = (Point, Point)> + '_ {
@@ -181,14 +181,14 @@ impl Mesh {
         if m.nodes.is_empty() && m.subsectors.len() > 1 {
             return Err(MeshError::NoNodes);
         }
-        let mut line_grid: HashMap<Cell, Vec<usize>> = HashMap::new();
+        let mut line_grid: HashMap<Cell, Vec<usize>> = HashMap::default();
         for li in 0..m.linedefs.len() {
             let (a, b) = m.line_seg(li);
             for c in cells(a.0, a.1, b.0, b.1) {
                 line_grid.entry(c).or_default().push(li);
             }
         }
-        let mut mesh = Mesh { polys: Vec::new(), portals: Vec::new(), pieces: HashMap::new(), line_grid, nodes: m.nodes.clone() };
+        let mut mesh = Mesh { polys: Vec::new(), portals: Vec::new(), pieces: HashMap::default(), line_grid, nodes: m.nodes.clone() };
         mesh.build_polys(m)?;
         if !obstacles.is_empty() {
             mesh.cut_obstacles(obstacles);
@@ -233,7 +233,7 @@ impl Mesh {
             descend(m, n.front, front, out);
             descend(m, n.back, back, out);
         }
-        let mut by_subsector: HashMap<usize, Vec<Point>> = HashMap::new();
+        let mut by_subsector: HashMap<usize, Vec<Point>> = HashMap::default();
         match u16::try_from(m.nodes.len()) {
             Ok(0) => {
                 by_subsector.insert(0, world);
@@ -353,7 +353,7 @@ impl Mesh {
     fn build_portals(&mut self, m: &MapData) {
         // the grid's cells in the order first filled, so portals are numbered by that
         let mut order: Vec<Cell> = Vec::new();
-        let mut grid: HashMap<Cell, Vec<(usize, Point, Point)>> = HashMap::new();
+        let mut grid: HashMap<Cell, Vec<(usize, Point, Point)>> = HashMap::default();
         for (i, poly) in self.live_polys() {
             for (p, q) in poly.edges() {
                 if (p.0 - q.0).hypot(p.1 - q.1) < 1.0 {
@@ -369,7 +369,7 @@ impl Mesh {
                 }
             }
         }
-        let mut seen: HashSet<(usize, usize)> = HashSet::new();
+        let mut seen: HashSet<(usize, usize)> = HashSet::default();
         for c in &order {
             let bucket = &grid[c];
             for (i, &(pa, a1, a2)) in bucket.iter().enumerate() {

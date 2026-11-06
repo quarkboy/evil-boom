@@ -202,7 +202,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("targets", nargs="+", help="WAD short names (doom, doom2) and/or map names")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
-    ap.add_argument("--max-seconds", type=float, default=1500)
+    ap.add_argument("--max-seconds", type=float, default=3600, help="game seconds before a map counts as stuck (an hour: slow is fine, only stuck is a failure)")
     ap.add_argument("--mortal", action="store_true", help="no god mode: floors hurt")
     ap.add_argument("--fight", type=int, default=0, metavar="SKILL",
                     help="monsters in, at this skill (4: Ultra-Violence), and Evil fights them")

@@ -10,6 +10,7 @@
 //! - `dsda`: DSDA-Doom in-process (the game as a library, a tic at a time).
 //! - `python`: the classes Python uses (`NativeMesh`, `Nav`) and how values cross over.
 
+mod det;
 mod dsda;
 mod geom;
 mod jumps;

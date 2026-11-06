@@ -6,7 +6,8 @@ use super::{Doors, HeightSource, NavCore, Open};
 use crate::geom::{closest_on_portal, dist, segment_distance, Point, PLAYER_RADIUS};
 use crate::stats::{self, Phase};
 use pyo3::prelude::*;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::BinaryHeap;
+use crate::det::{HashMap, HashSet};
 use std::time::Instant;
 
 /// Damaging floors cost this much more to walk over.
@@ -42,7 +43,7 @@ impl NavCore {
     /// least squeezed path (with `squeezes` set), or None with `strict_fit`.
     pub fn find_path(&mut self, py: Python<'_>, start: Point, goal: Point, st: &mut dyn HeightSource, doors: Option<&Doors>, strict_fit: bool) -> PyResult<Option<Found>> {
         let mut best: Option<Found> = None;
-        let mut banned: HashSet<usize> = HashSet::new();
+        let mut banned: HashSet<usize> = HashSet::default();
         for _ in 0..FIT_ROUNDS {
             let Some((mut path, squeezed)) = self.find_path_once(py, start, goal, st, doors, &banned)? else { break };
             if squeezed.points.is_empty() {
@@ -64,7 +65,7 @@ impl NavCore {
 
     /// The polys along a path (not its ends, not banned already) the box got squeezed at.
     fn squeezed_polys(&self, polys: &[usize], squeezes: &[Point], banned: &HashSet<usize>) -> HashSet<usize> {
-        let Some(inner) = polys.get(1..polys.len().saturating_sub(1)) else { return HashSet::new() };
+        let Some(inner) = polys.get(1..polys.len().saturating_sub(1)) else { return HashSet::default() };
         inner
             .iter()
             .copied()
@@ -81,9 +82,9 @@ impl NavCore {
         let (Some(sp), Some(gp)) = (self.mesh.poly_at(start), self.mesh.poly_at(goal)) else { return Ok(None) };
         // (no distance estimate with teleports about: they make it inadmissible)
         let estimate = |me: &Self, poly: usize| if me.has_teleports { 0.0 } else { dist(me.mesh.center(poly), goal) };
-        let mut best: HashMap<usize, f64> = HashMap::from([(sp, 0.0)]);
-        let mut entry: HashMap<usize, Point> = HashMap::from([(sp, start)]);
-        let mut came: HashMap<usize, (usize, Via)> = HashMap::new();
+        let mut best: HashMap<usize, f64> = HashMap::from_iter([(sp, 0.0)]);
+        let mut entry: HashMap<usize, Point> = HashMap::from_iter([(sp, start)]);
+        let mut came: HashMap<usize, (usize, Via)> = HashMap::default();
         let t_astar = Instant::now();
         let mut heap = BinaryHeap::from([Open { f: estimate(self, sp), g: 0.0, id: sp }]);
         while let Some(Open { g, id: poly, .. }) = heap.pop() {

@@ -13,7 +13,7 @@ use crate::geom::{Cell, Point, Seg};
 use crate::map::MapData;
 use crate::mesh::Mesh;
 use crate::nav::Heights;
-use std::collections::{HashMap, HashSet};
+use crate::det::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 /// degrees a tic the player turns running across a sinking floor (the follower's RUN_TURN)
@@ -154,7 +154,7 @@ impl JumpLab {
 
     pub fn new(map: MapData, mesh: Mesh, facts: JumpFacts) -> JumpLab {
         let mut centres: Vec<(usize, Vec<Point>)> = Vec::new();
-        let mut sector_edges: HashMap<usize, Vec<Seg>> = HashMap::new();
+        let mut sector_edges: HashMap<usize, Vec<Seg>> = HashMap::default();
         for (_, poly) in mesh.live_polys() {
             match centres.iter_mut().find(|(s, _)| *s == poly.sector) {
                 Some((_, v)) => v.push(poly.center),
@@ -169,7 +169,7 @@ impl JumpLab {
                 (s, (ps.iter().map(|p| p.0).sum::<f64>() / n, ps.iter().map(|p| p.1).sum::<f64>() / n))
             })
             .collect();
-        let mut sector_lines: HashMap<usize, Vec<usize>> = HashMap::new();
+        let mut sector_lines: HashMap<usize, Vec<usize>> = HashMap::default();
         for li in 0..map.linedefs.len() {
             let (f, b) = map.sides(li);
             for s in [f, b].into_iter().flatten().collect::<HashSet<_>>() {

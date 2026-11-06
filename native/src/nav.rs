@@ -12,7 +12,7 @@ use crate::map::MapData;
 use crate::mesh::Mesh;
 use pyo3::prelude::*;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use crate::det::{HashMap, HashSet};
 use std::rc::Rc;
 
 /// A sector's floor and ceiling.
@@ -148,7 +148,7 @@ pub struct Callbacks {
 
 impl Callbacks {
     pub fn new(fits: PyObject, landable: PyObject) -> Self {
-        Callbacks { fits, landable, fits_cache: HashMap::new(), landable_cache: HashMap::new() }
+        Callbacks { fits, landable, fits_cache: HashMap::default(), landable_cache: HashMap::default() }
     }
 
     fn landable(&mut self, py: Python<'_>, line: usize, high: usize, top: f64) -> PyResult<bool> {
@@ -379,7 +379,7 @@ impl NavCore {
 
     /// The polys reachable from `start` (flood fill).
     pub fn reachable(&mut self, py: Python<'_>, start: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> PyResult<HashSet<usize>> {
-        let mut seen: HashSet<usize> = HashSet::from([start]);
+        let mut seen: HashSet<usize> = HashSet::from_iter([start]);
         let mut todo = vec![start];
         while let Some(poly) = todo.pop() {
             for i in 0..self.adj[poly].len() {
