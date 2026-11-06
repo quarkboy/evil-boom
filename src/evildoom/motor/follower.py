@@ -46,6 +46,7 @@ JUMP_CEILING_SLACK = 16.0  # how much lower than planned a ceiling can be for a 
 CROSS_REST_WAIT = 8 * TICRATE  # longest wait for a lift to come back before crossing its line
 BUSY_TICS = 200            # a sector that moved this lately may still be busy (a door open,
 #                            waiting to close): Doom ignores a switch on it...
+BUSY_NEAR = 384.0          # ...what moves this near a switch counts (she can see it moving)
 REST_TICS = 12             # ...unless it's back where it rests and has been still this long
 SETTLE_WAIT = 10 * TICRATE  # longest wait for things round a switch to settle before pressing
 DROP_CHECK_DIST = 48     # how far ahead to look for crossings that became one-way drops
@@ -372,6 +373,9 @@ class RouteFollower:
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
         self._touchdown: tuple | None = None  # (jump, tic) a run-jump done: where does it come down?
         self.missed: list = []  # run-jumps that came down off their landing (for the explorer)
+        self.failed_presses: list = []  # ((x, y), line) pressed from there to no effect (for the explorer)
+        self._rest_logged = -1   # (step waiting for what a once-only switch works to come to rest)
+        self._rest_tic = 0
         self._seen_heights: dict = {}  # sector -> heights last tic
         self._moved_at: dict = {}      # sector -> tic it last moved
         self._run = None     # running over sinking floors (_run_step)
@@ -1155,6 +1159,17 @@ class RouteFollower:
                 best = (cost, abs(off), going + off)
         return best[2] if best else None
 
+    def _sectors_near(self, t) -> set[int]:
+        """The sectors within BUSY_NEAR of a line (cached)."""
+        cache = self.__dict__.setdefault("_near_cache", {})
+        if t.line not in cache:
+            m, mesh = self.nav.map, self.nav.mesh
+            ln = m.linedefs[t.line]
+            a, b = m.vertexes[ln.v1], m.vertexes[ln.v2]
+            mid = ((a.x + b.x) / 2, (a.y + b.y) / 2)
+            cache[t.line] = {p.sector for p in mesh.polys if p is not None and math.dist(p.center, mid) < BUSY_NEAR}
+        return cache[t.line]
+
     def _judge_landing(self, obs: Observation) -> None:
         """A run-jump done: once she's on a floor again, did it come down on its landing?"""
         if self._touchdown is None:
@@ -1762,20 +1777,25 @@ class RouteFollower:
                 self._progress_tic = self._step_tic = obs.tic
                 return controls
         if step.action in ("use", "shoot") and self._action_tic is None and t is not None and t.once \
-                and not t.cumulative:  # (stairs: each press builds on the last, MAP21's)
+                and t.shift_from is None:  # (not stairs: each press builds on the last, MAP21's)
             # Doom ignores a switch on a sector that's busy (a door open on its timer, waiting
             # to close), and a once-only one is then still there to press: wait till what it
             # works is back at rest (E3M4: the switch behind a door opened by its own door
             # switch, pressed as she got there, did nothing, over and over).
             init = self.nav.movers.initial
-            busy = [x for x in t.effects if obs.tic - self._moved_at.get(x, -10**9) < BUSY_TICS
+            # (what it works, if she knows; and what's moving right by it, which she can see)
+            near = self._sectors_near(t)
+            busy = [x for x in set(t.effects) | near if obs.tic - self._moved_at.get(x, -10**9) < BUSY_TICS
                     and not (obs.tic - self._moved_at[x] > REST_TICS
                              and (live := obs.heights.get(x)) is not None
                              and abs(live[0] - init[x][0]) < 0.5 and abs(live[1] - init[x][1]) < 0.5)]
-            if busy and self._settle_logged != self.step_i:
+            # (its own timer: the wait for things round a switch to settle shared one, and used
+            # it up, and this one then never waited: MAP19's door switch, pressed with the lift
+            # her way there set off still running, did nothing, forty-odd times)
+            if busy and self._rest_logged != self.step_i:
                 self.log.add(obs.tic, f"waiting for sector {busy[0]} to come to rest before line {t.line}")
-                self._settle_logged, self._goal_tic = self.step_i, obs.tic
-            if busy and obs.tic - self._goal_tic < SETTLE_WAIT:
+                self._rest_logged, self._rest_tic = self.step_i, obs.tic
+            if busy and obs.tic - self._rest_tic < SETTLE_WAIT:
                 self._progress_tic = self._step_tic = obs.tic
                 return controls
         nxt = self.steps[self.step_i + 1] if self.step_i + 1 < len(self.steps) else None
@@ -1829,6 +1849,7 @@ class RouteFollower:
                 else:
                     self.log.add(obs.tic, f"line {step.trigger.line} didn't work after "
                                           f"{PRESS_TRIES} tries; carrying on")
+                    self.failed_presses.append(((obs.x, obs.y), step.trigger.line))
                     self._next_step(obs.tic)
         elif obs.tic - self._progress_tic > 3 * TICRATE:
             return self._fail(obs, f"could not face line {step.trigger.line}")

@@ -102,6 +102,7 @@ class Knowledge:
     traps: list = field(default_factory=list)  # polys she got stuck in, nothing to do and no way out (each a set)
     stuck_at: dict = field(default_factory=dict)  # poly -> times a route failed stuck there
     tried_walls: set = field(default_factory=set)  # walls she's pressed use on, suspecting them
+    in_the_way: set = field(default_factory=set)  # lines between her and a switch that did nothing
     # sector -> does it hurt now, for floors seen moved by a line that changes their type
     # (this life: the level starting again puts them back)
     changed_floor: dict[int, bool] = field(default_factory=dict)
@@ -492,8 +493,24 @@ class Knowledge:
             info = self._special(li)
             if info is not None and info.trigger in USED + SHOT and self.mechanism(li) not in used \
                     and info.category not in (Category.EXIT, Category.SECRET_EXIT) \
-                    and (not self.perceive or self.looks_interactive(li)):
+                    and (not self.perceive or self.looks_interactive(li) or li in self.in_the_way):
                 out.append(li)
+        return out
+
+    def failed_press(self, at, li: int) -> list[int]:
+        """A switch or door pressed from `at` did nothing: what's in the way of the press
+        (lines along the way to it, near her) is worth a go itself, as a player would think
+        (MAP19: a wall in front of a switch that was something to shoot, and stopped the press).
+        The lines noted."""
+        m = self.nav.map
+        line = m.linedefs[li]
+        a, b = m.vertexes[line.v1], m.vertexes[line.v2]
+        mid = ((a.x + b.x) / 2, (a.y + b.y) / 2)
+        out = []
+        for _, other in self._lines_along(at, mid):
+            if other != li and math.dist(at, mid) <= 2 * USE_RANGE and other not in self.in_the_way:
+                self.in_the_way.add(other)
+                out.append(other)
         return out
 
     def looks_interactive(self, li: int) -> bool:
@@ -506,7 +523,8 @@ class Knowledge:
         sd = m.sidedefs[line.front]
         return any(t.upper().startswith(LOOKS_INTERACTIVE) for t in (sd.upper, sd.middle, sd.lower) if t)
 
-    def suspicious(self, reach: set[int], unreached_items, panic: bool = False) -> list[tuple[float, int, tuple, tuple]]:
+    def suspicious(self, reach: set[int], unreached_items, panic: bool = False,
+                   unreached_places=None) -> list[tuple[float, int, tuple, tuple]]:
         """Walls worth pressing use on, as a player would suspect them, best first:
         (score, line, where to stand, the wall's middle). Only what she can see counts: the
         automap drawing a wall as a two-sided line (a closed door, a lift's side; a mapper hides
@@ -532,12 +550,20 @@ class Knowledge:
             mid = ((a.x + b.x) / 2, (a.y + b.y) / 2)
             # (the front is to the right going v1 to v2; use only works from there)
             nx, ny = (b.y - a.y) / length, -(b.x - a.x) / length
-            stand = (mid[0] + nx * 40, mid[1] + ny * 40)
-            here = mesh.poly_at(*stand)
-            if here is None or here.index not in reach:
-                continue
             front, back = m.front_sector(line), m.back_sector(line)
-            score = 0.0
+            # (something set into a two-sided wall, a grate or a panel: a thing to shoot, from
+            # further off: MAP19's that raises the way on, shot from the room in front)
+            target = back is not None and m.sidedefs[line.front].middle not in ("", "-")
+            stand = None
+            for d in ((40.0, 96.0, 160.0, 256.0) if target else (40.0,)):
+                q = (mid[0] + nx * d, mid[1] + ny * d)
+                here = mesh.poly_at(*q)
+                if here is not None and here.index in reach:
+                    stand = q
+                    break
+            if stand is None:
+                continue
+            score = 1.0 if target else 0.0
             behind = back
             if back is not None:
                 (ff, fc), (bf, bc) = init[front], init[back]
@@ -552,6 +578,9 @@ class Knowledge:
                 behind = None
             far = (mid[0] - nx * 64, mid[1] - ny * 64)
             if any(math.dist(far, it) < 160 for it in unreached_items):
+                score += 2.0
+            # (somewhere she's seen and can't get to, just behind: the way there may be here)
+            if unreached_places is not None and unreached_places.near(far, 128):
                 score += 2.0
             face = self._face(line)
             neighbours = [n for n in self._wall_neighbours(li) if self._face(m.linedefs[n])]

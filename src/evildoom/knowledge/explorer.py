@@ -947,6 +947,8 @@ class Explorer:
                 if off < 4 and obs.tic < self._look_until - WALL_TICS:
                     c.use = True
                     self._look_until = obs.tic + WALL_TICS  # (pressed: now watch)
+                elif off < 4 and obs.tic > self._look_until - WALL_TICS + 4 and obs.tic < self._look_until - 8:
+                    c.attack = True  # (and a few shots: some walls answer to a gun, not a hand)
                 return c
         elif obj.kind in ("item", "hunt") and not (self.gone is not None and self.gone(obs, obj)):
             if obj.kind == "item":
@@ -963,6 +965,16 @@ class Explorer:
         self._look_until = None
         self.follower = None
         return None
+
+    def _note_presses(self, obs: Observation) -> None:
+        """Presses that did nothing: what's in their way is worth trying (Knowledge.failed_press)."""
+        f = self.follower
+        if f is None or not f.failed_presses:
+            return
+        for at, li in f.failed_presses:
+            for other in self.knowledge.failed_press(at, li):
+                self.log.append(f"tic {obs.tic}: line {li} did nothing: line {other} is in the way of it")
+        f.failed_presses.clear()
 
     def _note_misses(self, obs: Observation) -> bool:
         """Run-jumps the follower missed: counted (for the level, across lives), and left out
@@ -1004,6 +1016,7 @@ class Explorer:
         self._view = None  # (it holds the old edges)
 
     def _need_new(self, obs: Observation) -> bool:
+        self._note_presses(obs)
         if self._note_misses(obs):
             return True  # (the way it was going may take that jump again: plan anew)
         f, obj = self.follower, self.current
@@ -1079,9 +1092,10 @@ class Explorer:
         unreached = [(t.x, t.y) for t in obs.things or () if t.category in ("Health", "Armor", "Ammo", "Weapon", "Powerup", "Key")
                      and (p := mesh.poly_at(t.x, t.y)) is not None and p.index in known and p.index not in reach]
         out = []
-        found = k.suspicious(reach, unreached, panic)
-        if panic:  # (nearest first, all of them)
-            found.sort(key=lambda c: math.dist(c[2], (obs.x, obs.y)))
+        places = _Spots(mesh.polys[p].center for p in known - reach if mesh.polys[p] is not None)
+        found = k.suspicious(reach, unreached, panic, places)
+        if panic:  # (all of them: those with somewhere she can't get to behind first, nearest first)
+            found.sort(key=lambda c: (-c[0], math.dist(c[2], (obs.x, obs.y))))
         for score, li, stand, mid in found[:PANIC_WALLS if panic else SUSPECTS]:
             if not self._standable(stand):
                 continue
@@ -1192,3 +1206,20 @@ def _line_ends(m, li: int):
     line = m.linedefs[li]
     a, b = m.vertexes[line.v1], m.vertexes[line.v2]
     return (a.x, a.y), (b.x, b.y)
+
+
+class _Spots:
+    """Points bucketed by a grid, for "is there one near here" (the places she's seen and can't
+    get to, for suspecting the walls in front of them)."""
+    CELL = 128.0
+
+    def __init__(self, points):
+        self.cells: dict = {}
+        for p in points:
+            self.cells.setdefault((int(p[0] // self.CELL), int(p[1] // self.CELL)), []).append(p)
+
+    def near(self, q, r: float) -> bool:
+        cx, cy = int(q[0] // self.CELL), int(q[1] // self.CELL)
+        reach = int(r // self.CELL) + 1
+        return any(math.dist(p, q) < r for dx in range(-reach, reach + 1) for dy in range(-reach, reach + 1)
+                   for p in self.cells.get((cx + dx, cy + dy), ()))
