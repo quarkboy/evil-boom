@@ -53,6 +53,7 @@ typedef struct {
   int ironfeet;        /* radiation suit: tics left */
   int playerstate;     /* 0 alive, 1 dead, 2 reborn */
   int damagecount;     /* (the red flash: how much she was just hurt) */
+  int allmap;          /* has the computer area map (vanilla: a second can't be picked up) */
 } evil_player;
 
 typedef struct {
@@ -61,6 +62,7 @@ typedef struct {
   int gameaction;
   int exited;      /* the level's been left (the exit used): stays set till a new game */
   int secret;      /* ...by the secret exit */
+  int items, total_items, kills, total_kills, secrets, total_secrets;  /* the tally */
 } evil_status;
 
 static int exited, secret_exit;
@@ -148,6 +150,12 @@ EVIL_API void evil_get_status(evil_status *out)
   out->gameaction = gameaction;
   out->exited = exited;
   out->secret = secret_exit;
+  out->items = players[consoleplayer].itemcount;
+  out->total_items = totalitems;
+  out->kills = players[consoleplayer].killcount;
+  out->total_kills = totalkills;
+  out->secrets = players[consoleplayer].secretcount;
+  out->total_secrets = totalsecret;
 }
 
 /* Every sector's floor and ceiling now: out[2i], out[2i+1]. Returns how many sectors. */
@@ -211,6 +219,7 @@ EVIL_API void evil_player_state(evil_player *out)
     out->cards[i] = p->cards[i];
   out->ironfeet = p->powers[pw_ironfeet];
   out->damagecount = p->damagecount;
+  out->allmap = p->powers[pw_allmap] != 0;
   if (p->mo)
   {
     out->x = fx(p->mo->x); out->y = fx(p->mo->y); out->z = fx(p->mo->z);

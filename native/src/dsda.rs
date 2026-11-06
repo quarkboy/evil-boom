@@ -55,6 +55,7 @@ pub struct PlayerState {
     pub ironfeet: c_int,
     pub playerstate: c_int,
     pub damagecount: c_int,
+    pub allmap: c_int,
 }
 
 /// Where the game is (`evil_status`).
@@ -66,6 +67,12 @@ pub struct Status {
     pub gameaction: c_int,
     pub exited: c_int,
     pub secret: c_int,
+    pub items: c_int,
+    pub total_items: c_int,
+    pub kills: c_int,
+    pub total_kills: c_int,
+    pub secrets: c_int,
+    pub total_secrets: c_int,
 }
 
 /// A tic's command for the player, as a ticcmd has it.

@@ -126,6 +126,7 @@ class Explorer:
     gone: object = None
     dangerous: object = None  # (obs, objective) -> too dangerous to go for unless nothing else
     interrupt: object = None  # (obs, objective) -> something better to do turned up: choose again
+    exit_last: bool = False   # the exit only once there's nothing else to do (the expert's 100% run)
     _held_since: int | None = None  # something else has had the controls since then
     _urgent_n: int = 0  # sounds checked for being worth dropping everything for
     _reach: set = field(default_factory=set)  # polys she could get to, as of the last look
@@ -137,6 +138,7 @@ class Explorer:
         self._view_key = None
         self._all_jumps: list | None = None  # (every run-jump the navigator had: some left out once missed)
         self._difficult = False  # (the jumps missed once are in, for want of anything else)
+        self._exits_open = True  # (exit_last: closed till nothing else is left)
 
     # --- the known world ----------------------------------------------------------------
 
@@ -240,7 +242,7 @@ class Explorer:
         self._reach = reach
         out: list[Objective] = []
         by_line = {t.line: t for t in nav.triggers if t.line >= 0}
-        for li in k.exits():
+        for li in k.exits() if self._exits_open else ():
             t = by_line.get(li)
             if t is not None and t.activators & reach and t.info.lock.satisfied(keys):
                 out.append(Objective("exit", nav._activation_point(t, pos, reach),
@@ -915,7 +917,7 @@ class Explorer:
             return True  # seen it on the way
         if obj.kind == "teleporter" and obj.trigger.line in self.knowledge.teleports:
             return True  # been through
-        if obj.kind != "exit" and len(self.knowledge.exits()) > self._exits_seen:
+        if obj.kind != "exit" and not self.exit_last and len(self.knowledge.exits()) > self._exits_seen:
             return True  # an exit came into view
         if self.gone is not None and self.gone(obs, obj):
             return True  # (picked up, killed)
@@ -943,7 +945,12 @@ class Explorer:
         self.follower = None
         if self._difficult:
             self._set_jumps(difficult=False)  # (the jumps missed once: out again, other ways first)
+        self._exits_open = not self.exit_last
         found = self._try_objectives(obs, risky=False) or self._try_objectives(obs, risky=True)
+        if not found and self.exit_last:
+            self.log.append(f"tic {obs.tic}: nothing else to do: for the exit")
+            self._exits_open = True
+            found = self._try_objectives(obs, risky=False) or self._try_objectives(obs, risky=True)
         if not found and any(n < JUMP_MISSES for n in self.knowledge.missed_jumps.values()):
             self.log.append(f"tic {obs.tic}: nothing else to do: the jumps missed once get another go")
             self._set_jumps(difficult=True)

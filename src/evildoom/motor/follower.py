@@ -109,6 +109,7 @@ class Observation:
     armor: float | None = None
     super_shotgun: bool | None = None             # has it (slot 3 then brings it up), if known
     velocity: tuple | None = None                 # the player's (x, y) a tic, if known
+    allmap: bool | None = None                    # has the computer area map, if known
 
 
 @dataclass(frozen=True)

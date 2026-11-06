@@ -82,6 +82,11 @@ class DsdaEngine:
         self._god = True
         self.game.god(True)
 
+    def tally(self) -> dict[str, tuple[int, int]]:
+        """The level's tally so far: items, kills, secrets, each (got, of)."""
+        items, kills, secrets = self.game.tally()
+        return {"items": items, "kills": kills, "secrets": secrets}
+
     @property
     def exited(self) -> bool:
         return self.game.status()[2]
@@ -113,7 +118,7 @@ class DsdaEngine:
                            frozenset(k for k, held in zip(KEYS, p["keys"]) if held), p["z"],
                            p["weapon"], barrels, float(p["health"]), self._suits, things,
                            frozenset(p["weapons"]), ammo, float(p["armor"]), p["ssg"],
-                           (p["momx"], p["momy"]))
+                           (p["momx"], p["momy"]), p["allmap"])
 
     def step(self, c: Controls) -> None:
         scale = 1.0 if c.run else 0.5

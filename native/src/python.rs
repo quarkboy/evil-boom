@@ -572,6 +572,12 @@ impl DsdaGame {
         });
     }
 
+    /// The level's tally: ((items, total), (kills, total), (secrets, total)).
+    fn tally(&self) -> ((i32, i32), (i32, i32), (i32, i32)) {
+        let s = self.game.status();
+        ((s.items, s.total_items), (s.kills, s.total_kills), (s.secrets, s.total_secrets))
+    }
+
     /// Put the player at (x, y) facing `angle`, still, on the floor. False if blocked.
     fn warp(&self, x: f64, y: f64, angle: f64) -> bool {
         self.game.warp(x, y, angle)
@@ -627,6 +633,7 @@ impl DsdaGame {
         d.set_item("keys", p.cards.iter().map(|&c| c != 0).collect::<Vec<_>>())?;
         d.set_item("ironfeet", p.ironfeet)?;
         d.set_item("dead", p.playerstate != 0)?;
+        d.set_item("allmap", p.allmap != 0)?;
         Ok(d)
     }
 }
