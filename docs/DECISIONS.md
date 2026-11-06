@@ -550,4 +550,4 @@ From watching her play (`tools/watch.py --fight SKILL --mortal`):
 - **Better guns**: one better than her best, seen, breaks off what she's doing, but only if the route there is no longer than the fighting time it'd save against what she knows is still about (and 10 s for what's to come), at 400 units/s; further, it's an ordinary pickup in its turn and the fight comes first.
 - **Rockets** aren't fired with a biter seen near her in the last 3 s (E1M9: dead at full health, a demon round a corner stepped into the blast).
 
-HMP batch (18 maps, 3 lives): 10 → 12+ exited (MAP10 pending at commit time). Deaths left: pistol starts against crowds (MAP08's cacodemons, MAP11), out of ammo, lost souls.
+HMP batch (18 maps, 3 lives): 10 → 12 exited (MAP04 now gets through). Deaths left: pistol starts against crowds (MAP08's cacodemons, MAP11), out of ammo, lost souls.
