@@ -20,7 +20,7 @@ from evildoom.nav.reach import (MAX_STEP, PLAYER_HEIGHT, HeightStates, Navigator
 from evildoom.nav.walkthrough import Step, _action_for, steps_from_legs
 from evildoom.wad.specials import Category, Key, Lock, Trigger, classify_line
 
-PLAN_SECONDS = 1.5
+PLAN_SECONDS = 30.0  # a backstop only: the expansions decide, so that a run is the same however loaded the machine (at 1.5s, eight at once took other ways than one alone)
 # how much nearer an objective of each kind counts as (keys, switches first; looking again last)
 WEIGHT = {"exit": 0.5, "key": 0.6, "switch": 0.8, "door": 0.8, "frontier": 1.0, "room": 1.1,
           "visit": 2.0, "noise": 0.7, "teleporter": 1.2, "recheck": 3.0, "item": 0.6, "hunt": 1.5,
@@ -444,14 +444,19 @@ class Explorer:
                 break
         return out
 
-    def _standable(self, q) -> bool:
+    def _standable(self, q, play: bool = False) -> bool:
         """Can the box stand at q, come to from the floor there: clear of walls and things,
         room overhead, and not hanging over a floor more than a step higher (MAP16's goal had
         the box's edge up on a ledge 96 high)?"""
-        clear, floor, ceiling = self.nav.jump_lab().fits_at(*q)
+        lab = self.nav.jump_lab()
+        clear, floor, ceiling = lab.fits_at(*q)
         here = self.nav.mesh.poly_at(*q)
         centre = self.nav.movers.initial[here.sector][0] if here is not None else floor
-        return clear and ceiling - floor >= PLAYER_HEIGHT and floor <= centre + MAX_STEP
+        # (`play`: with a little play round it, for a spot to stop at: one the box fits at only
+        # to the unit is one she never gets to: MAP21's look-out between a wall and key bars, 32
+        # apart, pushed at for good)
+        return clear and ceiling - floor >= PLAYER_HEIGHT and floor <= centre + MAX_STEP             and (not play or all(lab.fits_at(q[0] + dx, q[1] + dy)[0]
+                                 for dx, dy in ((0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5))))
 
     def touch_spot(self, item, reach: set[int]):
         """Where to stand to pick up a thing at `item`: there if the box can stand there, else
@@ -571,7 +576,7 @@ class Explorer:
         heights = [tuple(k.seen_heights.get(i, (sec.floor, sec.ceiling)))
                    for i, sec in enumerate(m.sectors)]
         # (only spots the box can stand at: E4M7's was in a shut door)
-        centres = [(mesh.polys[p].center, p) for p in reach if self._standable(mesh.polys[p].center)]
+        centres = [(mesh.polys[p].center, p) for p in reach if self._standable(mesh.polys[p].center, play=True)]
         out = []
         for s, lines in k.unseen_walls().items():
             best = None

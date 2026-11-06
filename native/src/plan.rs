@@ -28,7 +28,7 @@ const TIMER_SETS: usize = 2;
 /// Expansions to look for a route without squeezes once one with them is found.
 const FALLBACK_GRACE: usize = 300;
 /// Seconds to look for a route without squeezes once one with them is found.
-const FALLBACK_SECONDS: f64 = 10.0;
+const FALLBACK_SECONDS: f64 = 120.0;
 /// Polys round an activator tried as where to fire it from.
 const FIRING_SPOTS: usize = 8;
 
