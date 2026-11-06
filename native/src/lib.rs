@@ -7,8 +7,10 @@
 //! - `jumps`: finding run-off jumps and checking them in a fixed-point movement simulator.
 //! - `sight`: which lines the player sees from where (what the automap reveals).
 //! - `los`: line of sight between things (who can see, and shoot, whom).
+//! - `dsda`: DSDA-Doom in-process (the game as a library, a tic at a time).
 //! - `python`: the classes Python uses (`NativeMesh`, `Nav`) and how values cross over.
 
+mod dsda;
 mod geom;
 mod jumps;
 mod los;
@@ -29,5 +31,6 @@ fn evildoom_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<python::Sight>()?;
     m.add_class::<python::LineOfSightPy>()?;
     m.add_class::<python::JumpLab>()?;
+    m.add_class::<python::DsdaGame>()?;
     Ok(())
 }

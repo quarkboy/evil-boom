@@ -69,8 +69,10 @@ class VizDoomEngine:
         # ViZDoom never times out ZDoom's "A secret is revealed!" message: it stays on screen
         # for the rest of the level (worst in demo replay). Turn it off.
         game.add_game_args("+cl_showsecretmessage 0")
+        game.add_game_args("+sv_cheats 1")
         self.game = game
         self.objects = objects
+        self._god = False
         self.tic = 0
         self._keys_at_start: dict[str, int] | None = None
 
@@ -165,11 +167,18 @@ class VizDoomEngine:
         self.tic = self.tic + WARMUP_TICS if keep_time else WARMUP_TICS
         self._keys_at_start = None
         self._suits_at_start = None
+        if self._god:
+            self.game.send_game_command("god")
 
     def step(self, c: Controls) -> None:
         self.game.make_action([c.forward, c.strafe, c.turn, float(c.use), float(c.attack),
                                float(c.run)] + [float(c.weapon == i) for i in range(1, 8)])
         self.tic += 1
+
+    def god(self) -> None:
+        """Damage does nothing to her (kept across restarts: a new episode drops the cheat)."""
+        self._god = True
+        self.game.send_game_command("god")
 
     def close(self) -> None:
         self.game.close()

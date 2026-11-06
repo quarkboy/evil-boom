@@ -38,3 +38,37 @@ index 4e6abe4..88ce834 100644
  void D_DoomMain(void)
  {
    D_DoomMainSetup(); // CPhipps - setup out of main execution stack
+diff --git a/prboom2/src/p_mobj.c b/prboom2/src/p_mobj.c
+index 9c2a92c..bca1d02 100644
+--- a/prboom2/src/p_mobj.c
++++ b/prboom2/src/p_mobj.c
+@@ -1721,6 +1721,8 @@ int P_MobjSpawnHealth(const mobj_t* mobj)
+ //
+ // P_SpawnMobj
+ //
++int evil_spawned;  // Evil (evil-doom): things spawned so far (each one's evil_id)
++
+ mobj_t* P_SpawnMobj(fixed_t x,fixed_t y,fixed_t z,mobjtype_t type)
+ {
+   mobj_t*     mobj;
+@@ -1729,6 +1731,7 @@ mobj_t* P_SpawnMobj(fixed_t x,fixed_t y,fixed_t z,mobjtype_t type)
+ 
+   mobj = Z_MallocLevel (sizeof(*mobj));
+   memset (mobj, 0, sizeof (*mobj));
++  mobj->evil_id = ++evil_spawned;  // Evil (evil-doom)
+   info = &mobjinfo[type];
+   mobj->type = type;
+   mobj->info = info;
+diff --git a/prboom2/src/p_mobj.h b/prboom2/src/p_mobj.h
+index 65eb56a..8e8be54 100644
+--- a/prboom2/src/p_mobj.h
++++ b/prboom2/src/p_mobj.h
+@@ -391,6 +391,8 @@ typedef struct mobj_s
+ 
+     int iden_nums;		// hi word stores thing num, low word identifier num
+ 
++    int evil_id;  // Evil (evil-doom): a number of its own, from its spawning on
++
+     // heretic
+     int damage;                 // For missiles
+     uint64_t flags2;           // Heretic & MBF21 flags

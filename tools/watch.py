@@ -68,7 +68,6 @@ class Watch:
         keep_verified(self.nav, iwad, map_name)
         self.engine = VizDoomEngine(iwad, map_name, size=VIEW_SIZE, rgb=True, skill=skill,
                                     nomonsters=not fight, objects=bool(fight))
-        self.engine.game.add_game_args("+sv_cheats 1")
         self.engine.start()
         if not mortal:
             self.engine.game.send_game_command("god")

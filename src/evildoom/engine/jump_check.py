@@ -48,7 +48,6 @@ def verify_jumps(nav: Navigator, iwad: str | Path, map_name: str, pwad: str | Pa
     todo = [j for j in nav.jumps if j.key not in cached]
     if todo:
         engine = VizDoomEngine(iwad, map_name, pwad=pwad)
-        engine.game.add_game_args("+sv_cheats 1")
         engine.start()
         path.parent.mkdir(parents=True, exist_ok=True)
 

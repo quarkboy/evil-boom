@@ -23,7 +23,7 @@ STRANDED_TICS = 60 * 35  # nothing to do this long (with lives left): start the 
 
 
 def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
-            lives: int = 1, fight: int = 0) -> tuple[str, str, str]:
+            lives: int = 1, fight: int = 0, engine: str = "vizdoom") -> tuple[str, str, str]:
     from evildoom.config import resolve_wad
     from evildoom.engine.jump_check import keep_verified
     from evildoom.engine.vizdoom_engine import VizDoomEngine
@@ -39,12 +39,15 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
     skill = fight or 3
     nav = Navigator(m, skill=skill)
     keep_verified(nav, iwad, map_name)
-    e = VizDoomEngine(iwad, map_name, skill=skill, nomonsters=not fight, objects=bool(fight),
-                      headless=True)
-    e.game.add_game_args("+sv_cheats 1")
+    if engine == "dsda":
+        from evildoom.engine.dsda_engine import DsdaEngine
+        e = DsdaEngine(iwad, map_name, skill=skill, nomonsters=not fight, objects=bool(fight))
+    else:
+        e = VizDoomEngine(iwad, map_name, skill=skill, nomonsters=not fight, objects=bool(fight),
+                          headless=True)
     e.start()
     if not mortal:
-        e.game.send_game_command("god")
+        e.god()
     from evildoom.knowledge.model import Knowledge
     if fight:
         from evildoom.tactical.player import Player
@@ -72,8 +75,6 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                 x.log.append(f"tic {e.tic}: {'died' if e.dead else 'stranded'}: starting again")
 
                 e.restart(keep_time=True)
-                if not mortal:
-                    e.game.send_game_command("god")  # (a new episode drops the cheat)
                 x.restart()
                 c = None
                 idle_since = None
@@ -135,6 +136,8 @@ def main() -> None:
     ap.add_argument("--mortal", action="store_true", help="no god mode: floors hurt")
     ap.add_argument("--fight", type=int, default=0, metavar="SKILL",
                     help="monsters in, at this skill (4: Ultra-Violence), and Evil fights them")
+    ap.add_argument("--engine", choices=("vizdoom", "dsda"), default="vizdoom",
+                    help="dsda: DSDA-Doom in-process (a process a map: it's one game a process)")
     ap.add_argument("--lives", type=int, default=1,
                     help="tries at a map (dying starts it again, knowing what was learned)")
     a = ap.parse_args()
@@ -148,8 +151,9 @@ def main() -> None:
             groups[-1][1].append(t.upper())
     jobs = [(w, mp) for w, maps in groups for mp in (maps or Wad(resolve_wad(w)).map_names())]
     results = []
-    with ProcessPoolExecutor(a.jobs) as pool:
-        futs = {pool.submit(run_map, w, n, a.max_seconds, a.mortal, a.lives, a.fight): (w, n) for w, n in jobs}
+    with ProcessPoolExecutor(a.jobs, max_tasks_per_child=1 if a.engine == "dsda" else None) as pool:
+        futs = {pool.submit(run_map, w, n, a.max_seconds, a.mortal, a.lives, a.fight, a.engine): (w, n)
+                for w, n in jobs}
         for i, f in enumerate(as_completed(futs), 1):
             w, n = futs[f]
             try:

@@ -69,8 +69,6 @@ class Lab:
         keep_verified(self.nav, iwad, map_name)  # drop jumps the engine disproves
         self.engine = VizDoomEngine(iwad, map_name, nomonsters=not monsters,
                                     size=f"{GAME_W}x{GAME_H}", rgb=True, objects=True)
-        if at or god or give_all:
-            self.engine.game.add_game_args("+sv_cheats 1")
         self.engine.start()
         self.cheats = ["god"] * god + ["give all"] * give_all \
             + ([f"warp {at[0]:.0f} {at[1]:.0f}"] if at else [])

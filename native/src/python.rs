@@ -6,6 +6,7 @@ use crate::mesh::{Mesh, Obstacle};
 use crate::nav::{Callbacks, DoorOpening, Doors, Edge, Found, Gate, HeightSource, Heights, NavCore, NavFacts, Tele, TeleKind, Via};
 use crate::plan::{KeySet, Kind, PlanCaches, PlanFacts, Planner, Query, Timing, Trigger, World};
 use crate::jumps;
+use crate::dsda;
 use crate::los;
 use crate::sight;
 use crate::stats;
@@ -505,5 +506,102 @@ impl JumpLab {
     fn trace(&self, jump: JumpIn, soft: bool) -> Vec<(f64, f64, f64, f64)> {
         let (src_polys, dest_poly, dest, runup, takeoff, requires) = jump;
         self.lab.trace(&jumps::Jump { src_polys, dest_poly, dest, runup, takeoff, speed: 0.0, requires }, soft)
+    }
+}
+
+/// One thing as Python gets it: (id, name, x, y, z, vx, vy, vz, angle).
+type ThingOut = (i32, &'static str, f64, f64, f64, f64, f64, f64, f64);
+
+/// DSDA-Doom in-process (`crate::dsda`), for the Python engine adapter
+/// (`evildoom.engine.dsda_engine`).
+#[pyclass(unsendable)]
+pub struct DsdaGame {
+    game: dsda::Dsda,
+    sectors: Vec<(f64, f64)>,
+    mobjs: Vec<dsda::Mobj>,
+}
+
+#[pymethods]
+impl DsdaGame {
+    /// Load the library and set the game up (`args` as for dsda-doom.exe). Once a process.
+    #[new]
+    fn new(library: std::path::PathBuf, args: Vec<String>) -> PyResult<Self> {
+        let game = dsda::Dsda::load(&library, &args).map_err(PyRuntimeError::new_err)?;
+        Ok(Self { game, sectors: Vec::new(), mobjs: Vec::new() })
+    }
+
+    /// A new game (skill 1-5; Doom: episode 1-4, map 1-9; Doom II: episode 1, map 1-32).
+    fn new_game(&self, skill: i32, episode: i32, map: i32, no_monsters: bool) {
+        self.game.new_game(skill, episode, map, no_monsters);
+    }
+
+    fn god(&self, on: bool) {
+        self.game.god(on);
+    }
+
+    /// One tic: forward and side -50..50 (side positive to the right), turn in degrees
+    /// (positive clockwise), weapon slot 1-7 to switch to (0: none).
+    fn tic(&self, forward: f64, side: f64, turn: f64, attack: bool, use_: bool, weapon: i32) {
+        self.game.tic(dsda::TicCmd {
+            forward: forward.round() as i32,
+            side: side.round() as i32,
+            turn: (-turn * 65536.0 / 360.0).round() as i32,
+            attack,
+            use_,
+            weapon,
+        });
+    }
+
+    /// (gametic, gamestate, exited, secret exit)
+    fn status(&self) -> (i32, i32, bool, bool) {
+        let s = self.game.status();
+        (s.gametic, s.gamestate, s.exited != 0, s.secret != 0)
+    }
+
+    /// Every sector's (floor, ceiling) now.
+    fn sectors(&mut self) -> Vec<(f64, f64)> {
+        self.game.sectors(&mut self.sectors);
+        self.sectors.clone()
+    }
+
+    /// The things about that Evil has a name for, living (no corpses, nothing dying): monsters,
+    /// missiles in flight, items, barrels.
+    fn things(&mut self) -> Vec<ThingOut> {
+        self.game.things(&mut self.mobjs);
+        self.mobjs
+            .iter()
+            .filter(|m| m.kind != 0 && m.flags & dsda::MF_CORPSE == 0)
+            .filter(|m| m.flags & dsda::MF_SHOOTABLE == 0 || m.health > 0)
+            .filter_map(|m| {
+                dsda::type_name(m.kind).map(|name| (m.id, name, m.x, m.y, m.z, m.momx, m.momy, m.momz, m.angle))
+            })
+            .collect()
+    }
+
+    /// The player: a dict of x, y, z, angle, momx, momy, health, armor, weapon (slot held),
+    /// weapons (slots owned), ssg, ammo (by slot), keys (blue card, yellow card, red card,
+    /// blue skull, yellow skull, red skull: held or not), ironfeet (tics), dead.
+    fn player<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let p = self.game.player();
+        let d = PyDict::new(py);
+        d.set_item("x", p.x)?;
+        d.set_item("y", p.y)?;
+        d.set_item("z", p.z)?;
+        d.set_item("angle", p.angle)?;
+        d.set_item("momx", p.momx)?;
+        d.set_item("momy", p.momy)?;
+        d.set_item("health", p.health)?;
+        d.set_item("armor", p.armor)?;
+        d.set_item("weapon", dsda::weapon_slot(p.readyweapon))?;
+        let owned: BTreeSet<i32> = (0..9).filter(|&w| p.weaponowned[w as usize] != 0).map(dsda::weapon_slot).collect();
+        d.set_item("weapons", owned.into_iter().collect::<Vec<_>>())?;
+        d.set_item("ssg", p.weaponowned[8] != 0)?;
+        // (clip: slots 2 and 4; shell: 3; cell: 6 and 7; missile: 5)
+        let [clip, shell, cell, missile] = p.ammo;
+        d.set_item("ammo", vec![(1, 0), (2, clip), (3, shell), (4, clip), (5, missile), (6, cell), (7, cell)])?;
+        d.set_item("keys", p.cards.iter().map(|&c| c != 0).collect::<Vec<_>>())?;
+        d.set_item("ironfeet", p.ironfeet)?;
+        d.set_item("dead", p.playerstate != 0)?;
+        Ok(d)
     }
 }

@@ -47,7 +47,6 @@ def run_map(wad: str, map_name: str, max_seconds: float) -> tuple[str, str, str]
     else:
         bosses = any(st.action == "kill" for st in plan.steps)
         e = VizDoomEngine(iwad, map_name, nomonsters=not bosses)
-        e.game.add_game_args("+sv_cheats 1")
         e.start()
         if not any(st.action == "endure" for st in plan.steps):  # (an exit floor has to hurt)
             e.game.send_game_command("god")

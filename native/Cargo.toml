@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.23", features = ["extension-module", "abi3-py312"] }
+libloading = "0.8"
 
 [profile.release]
 opt-level = 3
