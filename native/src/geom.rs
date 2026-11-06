@@ -21,6 +21,23 @@ pub const PATH_CLEARANCE: f64 = 24.0;
 /// Size of the line grid's cells.
 pub const GRID: f64 = 128.0;
 
+/// Does the axis-aligned box of half-width r at (cx, cy) straddle the segment?
+pub fn box_hits_segment(cx: f64, cy: f64, r: f64, seg: Seg) -> bool {
+    let ((ax, ay), (bx, by)) = seg;
+    if ax.max(bx) <= cx - r || ax.min(bx) >= cx + r || ay.max(by) <= cy - r || ay.min(by) >= cy + r {
+        return false;
+    }
+    let (dx, dy) = (bx - ax, by - ay);
+    let mut lo = f64::INFINITY;
+    let mut hi = f64::NEG_INFINITY;
+    for (px, py) in [(cx - r, cy - r), (cx + r, cy - r), (cx + r, cy + r), (cx - r, cy + r)] {
+        let s = dx * (py - ay) - dy * (px - ax);
+        lo = lo.min(s);
+        hi = hi.max(s);
+    }
+    lo < 0.0 && 0.0 < hi
+}
+
 #[inline]
 pub fn dist(a: Point, b: Point) -> f64 {
     (a.0 - b.0).hypot(a.1 - b.1)

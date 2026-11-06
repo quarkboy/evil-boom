@@ -6,6 +6,8 @@
 //! known map (places she can get to next to ones she hasn't seen); and, with nothing else,
 //! walls that might hide something.
 
+mod viewpoints;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -73,10 +75,6 @@ const GLANCE_GAP: i64 = 5 * 35;
 const GLANCE_AFTER: i64 = 8;
 /// a noise is worth walking towards if it gets her this much nearer
 const HEAR_NEARER: f64 = 128.0;
-/// reachable spots tried for seeing an unseen wall from
-const ROOM_SPOTS: usize = 6;
-/// an unseen wall is looked at from a reachable spot this near it
-const ROOM_LOOK_RANGE: f64 = 768.0;
 /// a frontier's look-out: this far back from the way into the unseen
 const FRONTIER_BACK: f64 = 24.0;
 /// a room's walked once nowhere in it is further than this from her steps
@@ -949,45 +947,6 @@ impl Explorer {
     /// Has where a sound seemed to come from been in view since?
     fn noise_seen(&self, h: &Heard) -> bool {
         self.nav.poly_at(h.origin).is_some_and(|p| self.knowledge.seen_tic.get(&self.nav.sector_of_poly(p)).copied().unwrap_or(-1) > h.tic)
-    }
-
-    /// Rooms not closed on the map yet: for each known sector with walls not seen, a reachable
-    /// spot it can be seen from (checked by looking from there), nearest her first.
-    fn unfinished(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
-        let (mesh, m, k) = (&self.nav.mesh, &self.nav.map, &self.knowledge);
-        let heights: Vec<(f64, f64)> = m.sectors.iter().enumerate().map(|(i, s)| k.seen_heights.get(&i).map_or((s.floor, s.ceiling), |h| (h.floor, h.ceiling))).collect();
-        // (only spots the box can stand at: E4M7's was in a shut door)
-        let centres: Vec<Point> = reach.iter().map(|&p| mesh.poly(p).center).filter(|&c| self.standable(c, true)).collect();
-        let sight = crate::sight::Sight::new(m);
-        let mut out = Vec::new();
-        for (s, lines) in k.unseen_walls() {
-            let mut best: Option<(f64, usize, Point, Point)> = None;
-            for li in lines {
-                let (a, b) = m.line_seg(li);
-                let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
-                let mut near: Vec<Point> = centres.iter().copied().filter(|&c| dist(c, mid) <= ROOM_LOOK_RANGE).collect();
-                near.sort_by(|x, y| dist(*x, mid).total_cmp(&dist(*y, mid)));
-                near.truncate(ROOM_SPOTS);
-                for c in near {
-                    let angle = (mid.1 - c.1).atan2(mid.0 - c.0).to_degrees();
-                    let seen = sight.view(&crate::sight::View { x: c.0, y: c.1, angle, width: k.width, heights: &heights });
-                    if seen.drawn.contains(&li) {
-                        let key = dist(c, pos) + dist(c, mid);
-                        if best.is_none_or(|b| key < b.0) {
-                            best = Some((key, li, c, mid));
-                        }
-                        break;
-                    }
-                }
-            }
-            if let Some((_, li, c, mid)) = best {
-                let mut o = Objective::new(Kind::Room, c, format!("look at a wall of sector {s} not seen yet"));
-                o.reveals = BTreeSet::from([li as i64]);
-                o.look_at = Some(mid);
-                out.push(o);
-            }
-        }
-        out
     }
 
     /// Parts of known rooms she can get to but hasn't walked (walking round finds the walk-over

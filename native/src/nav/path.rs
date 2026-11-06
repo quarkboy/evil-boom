@@ -36,6 +36,13 @@ pub struct Found {
 /// The polys of a path and how each is entered.
 pub(super) type Chain = [(usize, Option<Via>)];
 
+/// Cheapest known arrival at a polygon and the edge used to reach it.
+struct Arrival {
+    cost: f64,
+    point: Point,
+    previous: Option<(usize, Via)>,
+}
+
 impl NavCore {
     /// A path from `start` to `goal` with these heights (and these doors openable). If the
     /// box gets squeezed along it, searched again avoiding the polys there; failing that the
@@ -81,21 +88,21 @@ impl NavCore {
         let (Some(sp), Some(gp)) = (self.mesh.poly_at(start), self.mesh.poly_at(goal)) else { return None };
         // (no distance estimate with teleports about: they make it inadmissible)
         let estimate = |me: &Self, poly: usize| if me.has_teleports { 0.0 } else { dist(me.mesh.center(poly), goal) };
-        let mut best: HashMap<usize, f64> = HashMap::from_iter([(sp, 0.0)]);
-        let mut entry: HashMap<usize, Point> = HashMap::from_iter([(sp, start)]);
-        let mut came: HashMap<usize, (usize, Via)> = HashMap::default();
+        let start_arrival = Arrival { cost: 0.0, point: start, previous: None };
+        let mut arrivals = HashMap::from_iter([(sp, start_arrival)]);
         let t_astar = Instant::now();
         let mut heap = BinaryHeap::from([Open { f: estimate(self, sp), g: 0.0, id: sp }]);
+        let mut moves = Vec::new();
         while let Some(Open { g, id: poly, .. }) = heap.pop() {
             if poly == gp {
                 break;
             }
-            if best.get(&poly).is_some_and(|&b| g > b) {
+            let arrival = &arrivals[&poly];
+            if g > arrival.cost {
                 continue;
             }
-            let here = entry[&poly];
+            let here = arrival.point;
             let mult = if self.damage[self.poly_sector[poly]] { DAMAGE_COST } else { 1.0 };
-            let mut moves: Vec<(usize, Point, Via, f64)> = Vec::new();
             for i in 0..self.adj[poly].len() {
                 if self.enterable(self.adj[poly][i].to) && self.edge_passable(poly, i, st, doors) {
                     let e = self.adj[poly][i];
@@ -109,30 +116,28 @@ impl NavCore {
                     moves.push((t.dest, t.dest_pt, Via::Tele(ti), t.penalty));
                 }
             }
-            for (next, point, via, extra) in moves {
+            for (next, point, via, extra) in moves.drain(..) {
                 if banned.contains(&next) {
                     continue;
                 }
                 let cost = g + dist(here, point) * mult + extra;
-                if best.get(&next).is_none_or(|&b| cost < b) {
-                    best.insert(next, cost);
-                    entry.insert(next, point);
-                    came.insert(next, (poly, via));
+                if arrivals.get(&next).is_none_or(|known| cost < known.cost) {
+                    arrivals.insert(next, Arrival { cost, point, previous: Some((poly, via)) });
                     heap.push(Open { f: cost + estimate(self, next), g: cost, id: next });
                 }
             }
         }
-        let &reached = best.get(&gp)?;
+        let reached = arrivals.get(&gp)?;
         let mut chain: Vec<(usize, Option<Via>)> = Vec::new();
         let mut poly = gp;
         while poly != sp {
-            let (prev, via) = came[&poly];
+            let (prev, via) = arrivals[&poly].previous?;
             chain.push((poly, Some(via)));
             poly = prev;
         }
         chain.push((sp, None));
         chain.reverse();
-        let cost = reached + dist(entry[&gp], goal);
+        let cost = reached.cost + dist(reached.point, goal);
         stats::record(Phase::AStar, t_astar);
         let (waypoints, squeezes) = self.smooth(start, goal, &chain, st, doors);
         let path = Found {

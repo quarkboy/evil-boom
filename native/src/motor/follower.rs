@@ -9,7 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-use super::{fmt_live, heading, norm, Controls, Motion, Observation, Track, BRAKE, FULL_SPEED, TICRATE};
+use super::{fmt_live, heading, norm, Controls, Motion, Observation, Track, BRAKE, FULL_SPEED, RUN_TURN, TICRATE};
 use crate::geom::{cells, closest_point, dist, segment_distance, segments_cross, Point};
 use crate::jumps::RunStart;
 use crate::mesh::{inside, Portal};
@@ -93,8 +93,6 @@ const SETTLE_MAX: f64 = 0.0;
 const MAX_TOTAL_REPLANS: i32 = 30;
 /// one step taking this long: give up
 const GIVE_UP_TICS: i64 = 60 * 35;
-/// degrees a tic she turns running across sinking floors
-const RUN_TURN: f64 = 10.0;
 
 /// The actions she stops at the end of (the explorer's goto included: where it goes next is
 /// anyone's guess; E3M3 slid off a ledge it arrived at running).

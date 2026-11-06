@@ -203,7 +203,7 @@ pub struct Knowledge {
     /// tries at the level so far
     pub lives: i32,
     pub events: Vec<String>,
-    sight: Sight,
+    pub(super) sight: Sight,
     /// line -> trigger ids
     by_line: BTreeMap<usize, Vec<usize>>,
     /// line -> its special

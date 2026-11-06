@@ -1,6 +1,6 @@
 //! Line of sight between two things, as ZDoom's P_CheckSight works it out: a trace from the
-//! looker's eyes to the target, crossing lines in order; a one-sided line blocks, and each
-//! two-sided one narrows the window of heights the target can be seen through (its opening
+//! looker's eyes to the target. A one-sided line blocks, and each two-sided one narrows
+//! the window of heights the target can be seen through (its opening
 //! seen from the eyes, as slopes over the distance along the trace). The REJECT table is
 //! left out (it only ever says no early, and maps rarely lie with it).
 
@@ -44,14 +44,11 @@ impl LineOfSight {
         for (li, l) in lines.iter().enumerate() {
             for c in segment_cells(l.a, l.b) {
                 let at = grid.entry(c).or_default();
+                // Lines arrive in index order, even when a segment revisits this cell.
                 if at.last() != Some(&li) {
                     at.push(li);
                 }
             }
-        }
-        for at in grid.values_mut() {
-            at.sort_unstable();
-            at.dedup();
         }
         LineOfSight { lines, grid }
     }
@@ -64,8 +61,12 @@ impl LineOfSight {
         let mut top = to.z + to.height - eye;
         let mut bottom = to.z - eye;
         let (a, b) = ((from.x, from.y), (to.x, to.y));
-        for (frac, li) in self.crossings(a, b) {
+        // Each opening only narrows the same slope interval. Intersecting the windows in
+        // grid order (even visiting a line twice) gives the same answer and lets a wall
+        // stop the trace before we visit the remaining cells.
+        for &li in segment_cells(a, b).filter_map(|c| self.grid.get(&c)).flatten() {
             let l = &self.lines[li];
+            let Some(frac) = crossing(a, b, l.a, l.b) else { continue };
             let (Some(f), Some(k)) = (l.front, l.back) else {
                 return false;
             };
@@ -93,26 +94,6 @@ impl LineOfSight {
             }
         }
         true
-    }
-
-    /// The lines the segment a-b crosses, as (how far along, 0..1, line), nearest first.
-    fn crossings(&self, a: Point, b: Point) -> Vec<(f64, usize)> {
-        let mut candidates: Vec<usize> = segment_cells(a, b)
-            .filter_map(|c| self.grid.get(&c))
-            .flatten()
-            .copied()
-            .collect();
-        candidates.sort_unstable();
-        candidates.dedup();
-        let mut out: Vec<(f64, usize)> = candidates
-            .into_iter()
-            .filter_map(|li| {
-                let l = &self.lines[li];
-                crossing(a, b, l.a, l.b).map(|t| (t, li))
-            })
-            .collect();
-        out.sort_by(|x, y| x.0.total_cmp(&y.0));
-        out
     }
 }
 
@@ -153,5 +134,22 @@ mod tests {
         let t = crossing((0.0, 0.0), (10.0, 0.0), (5.0, -1.0), (5.0, 1.0));
         assert_eq!(t, Some(0.5));
         assert_eq!(crossing((0.0, 0.0), (4.0, 0.0), (5.0, -1.0), (5.0, 1.0)), None);
+    }
+
+    #[test]
+    fn openings_share_a_slope_window_in_any_visit_order() {
+        let opening = |x, back| SightLine { a: (x, 0.0), b: (x, 10.0), front: Some(0), back: Some(back) };
+        let from = Body { x: 0.0, y: 5.0, z: -3.0, height: 4.0 }; // eye at zero
+        let to = Body { x: 100.0, y: 5.0, z: 0.0, height: 100.0 };
+        for visits in [vec![0, 1], vec![1, 0, 1]] {
+            let sight = LineOfSight {
+                lines: vec![opening(25.0, 1), opening(75.0, 2)],
+                grid: HashMap::from_iter([((0, 0), visits)]),
+            };
+            // A floor of 10 at 1/4 blocks the bottom 40 of the target. A ceiling
+            // of 30 at 3/4 closes the window exactly; raising it leaves a sliver.
+            assert!(!sight.clear(from, to, &[(0.0, 100.0), (10.0, 100.0), (0.0, 30.0)]));
+            assert!(sight.clear(from, to, &[(0.0, 100.0), (10.0, 100.0), (0.0, 31.0)]));
+        }
     }
 }

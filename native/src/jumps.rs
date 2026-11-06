@@ -12,12 +12,10 @@ pub use physics::{Controls, PlayerSim, World};
 use crate::geom::{Cell, Point, Seg};
 use crate::map::MapData;
 use crate::mesh::Mesh;
+use crate::motor::{MAX_MOVE, RUN_TURN};
 use crate::nav::Heights;
 use crate::det::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
-
-/// degrees a tic the player turns running across a sinking floor (the follower's RUN_TURN)
-const RUN_TURN: f64 = 10.0;
 
 /// A run-off jump: sprint from `runup` through `takeoff` (a ledge edge), land at `dest`.
 #[derive(Clone)]
@@ -119,7 +117,7 @@ impl JumpLab {
                     // as the follower's _run_controls: full thrust towards the heading, turning
                     let d = (heading - sim.angle_degrees() + 180.0).rem_euclid(360.0) - 180.0;
                     let (s, c) = d.to_radians().sin_cos();
-                    sim.step(Controls { forward: 50.0 * c, strafe: -50.0 * s, turn: (-d).clamp(-RUN_TURN, RUN_TURN) });
+                    sim.step(Controls { forward: MAX_MOVE * c, strafe: -MAX_MOVE * s, turn: (-d).clamp(-RUN_TURN, RUN_TURN) });
                     if sim.teleported {
                         return None;
                     }

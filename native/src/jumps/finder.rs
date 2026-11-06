@@ -9,9 +9,10 @@
 //! `requires`: the jump is only usable once the world has them.
 
 use super::{Jump, JumpLab};
-use crate::geom::{cells, closest_point, dist, segments_cross, Point, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
-use crate::nav::Heights;
-use crate::det::HashSet;
+use crate::geom::{box_hits_segment, cells, closest_point, dist, segments_cross, Point, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
+use crate::motor::{FRICTION, RUN_THRUST};
+use crate::nav::{can_cross, Heights};
+use crate::det::{HashMap, HashSet};
 
 /// degrees off the edge normal
 const JUMP_ANGLES: [f64; 7] = [0.0, -30.0, 30.0, -45.0, 45.0, -60.0, 60.0];
@@ -20,8 +21,16 @@ const JUMPS_PER_TARGET: usize = 4;
 /// aiming a jump at a sector's nearest part: this far in from its rim
 const AIM_INSIDE: f64 = 32.0;
 const MAX_RUNUP: f64 = 256.0;
-const RUN_THRUST: f64 = 1.5625;
-const FRICTION: f64 = 0.90625;
+/// Map units between clearance checks behind the ledge.
+const RUNUP_STEP: f64 = 8.0;
+const MIN_RUNUP: f64 = 16.0;
+const MAX_FLIGHT_TICS: usize = 120;
+/// Map units between takeoff samples along an edge.
+const TAKEOFF_SPACING: f64 = 16.0;
+const MAX_AIM_ANGLE: f64 = 75.0;
+const MIN_AIM_SEPARATION: f64 = 5.0;
+const MIN_MARGIN_GAIN: f64 = 8.0;
+const MIN_JUMP_SEPARATION: f64 = 8.0;
 const GRAVITY: f64 = 1.0;
 /// ceiling room to spare over the player during a jump
 const FLIGHT_HEADROOM: f64 = 8.0;
@@ -34,19 +43,18 @@ const PIN_MARGIN: f64 = 3.0;
 /// sectors within this of an edge are aimed at
 const AIM_RANGE: f64 = 400.0;
 
-fn can_cross(a: Heights, b: Heights) -> bool {
-    b.floor - a.floor <= MAX_STEP && a.ceiling.min(b.ceiling) - a.floor.max(b.floor) >= PLAYER_HEIGHT
-}
-
-/// Does the axis-aligned box of half-width r at c straddle the segment?
-fn box_hits_segment(c: Point, r: f64, (a, b): (Point, Point)) -> bool {
-    if a.0.max(b.0) <= c.0 - r || a.0.min(b.0) >= c.0 + r || a.1.max(b.1) <= c.1 - r || a.1.min(b.1) >= c.1 + r {
-        return false;
+/// Fractions along the ledge in trial order, nearest the midpoint first.
+fn takeoff_samples(width: f64) -> Vec<f64> {
+    let steps = ((width / TAKEOFF_SPACING).floor() as usize).max(1);
+    let mut samples = vec![0.5];
+    for i in 0..steps {
+        let t = (i as f64 + 0.5) / steps as f64;
+        if t != 0.5 {
+            samples.push(t);
+        }
     }
-    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-    let sides = [(c.0 - r, c.1 - r), (c.0 + r, c.1 - r), (c.0 + r, c.1 + r), (c.0 - r, c.1 + r)].map(|(px, py)| dx * (py - a.1) - dy * (px - a.0));
-    let (lo, hi) = sides.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| (lo.min(v), hi.max(v)));
-    lo < 0.0 && 0.0 < hi
+    samples.sort_by(|p, q| (p - 0.5).abs().total_cmp(&(q - 0.5).abs()).then(p.total_cmp(q)));
+    samples
 }
 
 /// The box's corners and edge middles, for what's under it.
@@ -75,11 +83,9 @@ pub struct FinderInput {
 impl JumpLab {
     pub fn find_jumps(&self, input: &FinderInput) -> Vec<Jump> {
         let mesh = &self.mesh;
-        let mut found: Vec<((usize, usize), Vec<Jump>)> = Vec::new();
-        let add = |found: &mut Vec<((usize, usize), Vec<Jump>)>, key: (usize, usize), j: Jump| match found.iter_mut().find(|(k, _)| *k == key) {
-            Some((_, v)) => v.push(j),
-            None => found.push((key, vec![j])),
-        };
+        // Keep groups in first-discovery order; use the map only to locate them.
+        let mut groups: Vec<Vec<Jump>> = Vec::new();
+        let mut group_index = HashMap::default();
         for (pi, portal) in mesh.portals.iter().enumerate() {
             if !input.portal_fits.get(pi).copied().unwrap_or(false) {
                 continue;
@@ -87,10 +93,11 @@ impl JumpLab {
             if portal.linedef.is_some_and(|li| self.map.linedefs[li].blocks_player()) {
                 continue;
             }
+            let width = dist(portal.p1, portal.p2);
+            let mut samples = None;
             for (a, b) in [(portal.a, portal.b), (portal.b, portal.a)] {
                 let (sa, sb) = (mesh.poly(a).sector, mesh.poly(b).sector);
                 let ((x1, y1), (x2, y2)) = (portal.p1, portal.p2);
-                let width = dist(portal.p1, portal.p2);
                 let length = width.max(1.0);
                 let (mut nx, mut ny) = (-(y2 - y1) / length, (x2 - x1) / length);
                 let mid = ((x1 + x2) / 2.0, (y1 + y2) / 2.0);
@@ -105,32 +112,27 @@ impl JumpLab {
                         }
                         // fixed angles, plus aiming at nearby sectors high enough to land on (an
                         // island in a pit isn't at any fixed angle)
-                        let mut angles: Vec<f64> = JUMP_ANGLES.to_vec();
-                        angles.extend(self.aim_angles(mid, (nx, ny), hb.floor + MAX_STEP, &input.options));
-                        for ang in angles {
+                        let aimed = self.aim_angles(mid, (nx, ny), hb.floor + MAX_STEP, &input.options);
+                        let samples = samples.get_or_insert_with(|| takeoff_samples(width));
+                        for ang in JUMP_ANGLES.into_iter().chain(aimed) {
                             let (s, c) = ang.to_radians().sin_cos();
                             let d = (nx * c - ny * s, nx * s + ny * c);
-                            // every 16 units along the edge, from the middle out
-                            let steps = ((width / 16.0).floor() as usize).max(1);
-                            let mut ts: Vec<f64> = vec![0.5];
-                            for i in 0..steps {
-                                let t = (i as f64 + 0.5) / steps as f64;
-                                if !ts.contains(&t) {
-                                    ts.push(t);
-                                }
-                            }
-                            ts.sort_by(|p, q| (p - 0.5).abs().total_cmp(&(q - 0.5).abs()).then(p.total_cmp(q)));
-                            for t in ts {
+                            for &t in samples.iter() {
                                 let takeoff = (x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
                                 let chosen = Chosen(if sa == sb { vec![(sa, ha)] } else { vec![(sa, ha), (sb, hb)] });
                                 let jump = self.try_jump(a, takeoff, d, chosen.clone(), input, false);
-                                let high = if jump.is_none() { self.try_jump(a, takeoff, d, chosen, input, true) } else { None };
-                                let hit = jump.is_some();
-                                for j in [jump, high].into_iter().flatten() {
+                                // A raised-floor landing is an alternative. Only a normal
+                                // landing ends the takeoff search for this direction.
+                                let normal_landing = jump.is_some();
+                                if let Some(j) = jump.or_else(|| self.try_jump(a, takeoff, d, chosen, input, true)) {
                                     let key = (a, mesh.poly(j.dest_poly).sector);
-                                    add(&mut found, key, j);
+                                    let index = group_index.entry(key).or_insert_with(|| {
+                                        groups.push(Vec::new());
+                                        groups.len() - 1
+                                    });
+                                    groups[*index].push(j);
                                 }
-                                if hit {
+                                if normal_landing {
                                     break;
                                 }
                             }
@@ -139,23 +141,27 @@ impl JumpLab {
                 }
             }
         }
-        // a few per (takeoff poly, landing sector): the first found, and those landing
-        // furthest in from where the landing drops away on top (a little short still lands:
-        // MAP24's platforms)
-        let mut out = Vec::new();
-        for (_, cands) in found {
-            let mut kept: Vec<Jump> = cands.iter().take(JUMPS_PER_TARGET).cloned().collect();
-            let mut rest: Vec<(f64, Jump)> = cands.into_iter().skip(JUMPS_PER_TARGET).map(|j| (self.landing_margin(&j), j)).collect();
-            rest.sort_by(|(ma, a), (mb, b)| mb.total_cmp(ma).then(dist(a.takeoff, a.dest).total_cmp(&dist(b.takeoff, b.dest))).then(a.key().cmp(&b.key())));
-            let best = kept.iter().map(|j| self.landing_margin(j)).fold(f64::NEG_INFINITY, f64::max);
-            for (m, j) in rest.into_iter().take(JUMPS_PER_TARGET) {
-                if m > best + 8.0 && kept.iter().all(|k| dist(j.takeoff, k.takeoff) > 8.0 || dist(j.dest, k.dest) > 8.0) {
-                    kept.push(j);
-                }
+        groups.into_iter().flat_map(|group| self.select_landings(group)).collect()
+    }
+
+    /// Keep the first jumps for a takeoff poly and target sector, plus alternatives
+    /// landing farther from a drop (a slightly short jump still lands on MAP24).
+    fn select_landings(&self, candidates: Vec<Jump>) -> Vec<Jump> {
+        let mut cands = candidates.into_iter();
+        let mut kept: Vec<Jump> = cands.by_ref().take(JUMPS_PER_TARGET).collect();
+        let mut rest: Vec<(f64, Jump)> = cands.map(|j| (self.landing_margin(&j), j)).collect();
+        rest.sort_by(|(ma, a), (mb, b)| {
+            mb.total_cmp(ma)
+                .then_with(|| dist(a.takeoff, a.dest).total_cmp(&dist(b.takeoff, b.dest)))
+                .then_with(|| a.key().cmp(&b.key()))
+        });
+        let best = kept.iter().map(|j| self.landing_margin(j)).fold(f64::NEG_INFINITY, f64::max);
+        for (m, j) in rest.into_iter().take(JUMPS_PER_TARGET) {
+            if m > best + MIN_MARGIN_GAIN && kept.iter().all(|k| dist(j.takeoff, k.takeoff) > MIN_JUMP_SEPARATION || dist(j.dest, k.dest) > MIN_JUMP_SEPARATION) {
+                kept.push(j);
             }
-            out.extend(kept);
         }
-        out
+        kept
     }
 
     /// Angles (degrees off normal n, within +-75) towards nearby sectors whose floor could be
@@ -166,7 +172,7 @@ impl JumpLab {
         let add = |out: &mut Vec<f64>, p: Point| {
             let ang = ((p.1 - origin.1).atan2(p.0 - origin.0) - base).to_degrees();
             let ang = (ang + 180.0).rem_euclid(360.0) - 180.0;
-            if ang.abs() <= 75.0 && JUMP_ANGLES.iter().chain(out.iter()).all(|a| (ang - a).abs() > 5.0) {
+            if ang.abs() <= MAX_AIM_ANGLE && JUMP_ANGLES.iter().chain(out.iter()).all(|a| (ang - a).abs() > MIN_AIM_SEPARATION) {
                 out.push(ang.round_ties_even());
             }
         };
@@ -214,14 +220,14 @@ impl JumpLab {
     /// Does the box at p straddle a static wall or a solid thing's edge?
     fn box_hits_static_wall(&self, p: Point) -> bool {
         let r = PLAYER_RADIUS - 0.1;
-        cells(p.0 - r, p.1 - r, p.0 + r, p.1 + r).any(|c| self.static_grid.get(&c).into_iter().flatten().any(|&e| box_hits_segment(p, r, e)))
+        cells(p.0 - r, p.1 - r, p.0 + r, p.1 + r).any(|c| self.static_grid.get(&c).into_iter().flatten().any(|&e| box_hits_segment(p.0, p.1, r, e)))
     }
 
     /// A wall (static, a solid thing, or a floor more than a step above z at the heights being
     /// assumed) within PIN_MARGIN of the box at p?
     fn pinned(&self, p: Point, z: f64, chosen: &Chosen) -> bool {
         let r = PLAYER_RADIUS + PIN_MARGIN;
-        if cells(p.0 - r, p.1 - r, p.0 + r, p.1 + r).any(|c| self.static_grid.get(&c).into_iter().flatten().any(|&e| box_hits_segment(p, r, e))) {
+        if cells(p.0 - r, p.1 - r, p.0 + r, p.1 + r).any(|c| self.static_grid.get(&c).into_iter().flatten().any(|&e| box_hits_segment(p.0, p.1, r, e))) {
             return true;
         }
         box_points(r).iter().any(|&(dx, dy)| {
@@ -276,7 +282,7 @@ impl JumpLab {
         let r = PLAYER_RADIUS - 1.0;
         let bx = box_points(r);
         'run: while runup < MAX_RUNUP {
-            let nxt = (takeoff.0 - n.0 * (runup + 8.0), takeoff.1 - n.1 * (runup + 8.0));
+            let nxt = (takeoff.0 - n.0 * (runup + RUNUP_STEP), takeoff.1 - n.1 * (runup + RUNUP_STEP));
             let Some(here) = mesh.poly_at(nxt) else { break };
             if self.box_hits_static_wall(nxt) {
                 break;
@@ -306,10 +312,10 @@ impl JumpLab {
                     break 'run;
                 }
             }
-            runup += 8.0;
+            runup += RUNUP_STEP;
             back = nxt;
         }
-        if runup < 16.0 {
+        if runup < MIN_RUNUP {
             return None;
         }
         let (mut v, mut d) = (0.0, 0.0);
@@ -330,7 +336,7 @@ impl JumpLab {
         let requires = |chosen: &Chosen| -> Vec<(usize, Heights)> {
             chosen.0.iter().copied().filter(|&(s, h)| (h.floor, h.ceiling) != self.initial[s] || input.moving.contains(&s)).collect()
         };
-        for _ in 0..120 {
+        for _ in 0..MAX_FLIGHT_TICS {
             let nn = (x + n.0 * v, y + n.1 * v);
             for li in self.crossed((x, y), nn) {
                 let l = &self.map.linedefs[li];

@@ -147,7 +147,8 @@ impl PortalFit {
 
 impl Widths {
     pub(super) fn new(m: &MapData, mesh: &Arc<Mesh>, movers: &MoverModel, triggers: &[TriggerLine], obstacles: &HashMap<Cell, Vec<Seg>>) -> Widths {
-        let walls = static_walls(m, movers, triggers, obstacles);
+        let moving = moving_sectors(triggers);
+        let walls = static_walls(m, movers, &moving, obstacles);
         let mut grid: HashMap<Cell, Vec<(Seg, Option<usize>)>> = HashMap::default();
         for &(e, line) in &walls {
             for cell in cells(e.0 .0, e.0 .1, e.1 .0, e.1 .1) {
@@ -167,7 +168,6 @@ impl Widths {
         // Whether the box fits through each portal somewhere along it (PIT_CheckLine: a wall
         // blocks a box overlapping its bounding box with corners on both sides of its line).
         let r = PLAYER_RADIUS + BOX_SLACK; // (a gap exactly 32 wide can't be threaded)
-        let moving = moving_sectors(triggers);
         let ledges = drop_lines(m, movers); // (walls only from below: judged per approach)
         let mut fits = Vec::with_capacity(mesh.portals.len());
         let mut gates_out = HashMap::default();
@@ -208,9 +208,8 @@ impl Widths {
                 }
             }
             if !gates.is_empty() {
-                let mut with: Vec<Seg> = near.clone();
-                with.extend(gates.iter().map(|g| g.1));
-                if !box_fits_somewhere(portal, r, &with) {
+                near.extend(gates.iter().map(|g| g.1));
+                if !box_fits_somewhere(portal, r, &near) {
                     gates_out.insert(pi, gates);
                 }
             }
@@ -222,9 +221,8 @@ impl Widths {
 /// (segment, linedef or None) for everything that blocks her and never changes: one-sided,
 /// impassable-flagged, or a height difference that can't be crossed either way between
 /// sectors no mover touches; plus solid decorations' box edges.
-fn static_walls(m: &MapData, movers: &MoverModel, triggers: &[TriggerLine], obstacles: &HashMap<Cell, Vec<Seg>>) -> Vec<(Seg, Option<usize>)> {
+fn static_walls(m: &MapData, movers: &MoverModel, moving: &BTreeSet<usize>, obstacles: &HashMap<Cell, Vec<Seg>>) -> Vec<(Seg, Option<usize>)> {
     let init = &movers.initial;
-    let moving = moving_sectors(triggers);
     let mut out: Vec<(Seg, Option<usize>)> = Vec::new();
     for (li, line) in m.linedefs.iter().enumerate() {
         let wall = match m.sides(li) {
@@ -363,7 +361,7 @@ impl Navigator {
         let mut out: Vec<Seg> = Vec::new();
         for cell in cells(a.0.min(b.0) - pad, a.1.min(b.1) - pad, a.0.max(b.0) + pad, a.1.max(b.1) + pad) {
             for &li in self.mesh.line_grid.get(&cell).into_iter().flatten() {
-                if seen_lines.contains(&li) {
+                if !seen_lines.insert(li) {
                     continue;
                 }
                 let wall = is_wall(li);
@@ -372,7 +370,6 @@ impl Navigator {
                         if let (Some(f), Some(bk)) = self.map.sides(li) {
                             if let (Some(&hf), Some(&hb)) = (live.get(f), live.get(bk)) {
                                 if !(can_cross(hf, hb) && can_cross(hb, hf)) {
-                                    seen_lines.insert(li);
                                     out.push(self.map.line_seg(li));
                                     continue;
                                 }
@@ -381,7 +378,6 @@ impl Navigator {
                     }
                 }
                 if wall {
-                    seen_lines.insert(li);
                     out.push(self.map.line_seg(li));
                 }
             }

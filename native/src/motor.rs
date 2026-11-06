@@ -14,9 +14,12 @@ pub const RUN_THRUST: f64 = 1.5625;
 /// ORIG_FRICTION, on the ground only
 pub const FRICTION: f64 = 0.90625;
 
+/// degrees a tic she turns running across sinking floors
+pub(crate) const RUN_TURN: f64 = 10.0;
+
 /// Turning, roughly a keyboard player's (vanilla's fast keyboard turn is 7 degrees a tic).
-const MAX_TURN: f64 = 8.0;
-const TURN_ACCEL: f64 = 1.0;
+pub(crate) const MAX_TURN: f64 = 8.0;
+pub(crate) const TURN_ACCEL: f64 = 1.0;
 /// forward/strafe input magnitude: plain running, no straferun boost
 pub const MAX_MOVE: f64 = 50.0;
 /// ~16 units a tic, with a little in reserve

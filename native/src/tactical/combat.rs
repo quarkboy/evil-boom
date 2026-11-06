@@ -17,7 +17,7 @@ use super::bestiary::{missile, monster, weapon_in, Attack, Missile, Weapon};
 use super::sound::Hearing;
 use crate::geom::{dist, Point};
 use crate::los::{Body, LineOfSight};
-use crate::motor::{heading, norm, Controls, Observation, Thing, TICRATE};
+use crate::motor::{heading, norm, Controls, Observation, Thing, FRICTION, RUN_THRUST, TICRATE};
 use crate::navigator::{Navigator, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 
 /// half the view, degrees: monsters in line of sight inside it are seen...
@@ -26,6 +26,12 @@ const FOV: f64 = 55.0;
 const NEAR: f64 = 384.0;
 /// being hurt: everything in line of sight is noticed for this long
 const HURT_TICS: i64 = 2 * 35;
+/// A recently seen monster can still be noticed outside the usual field of view.
+const RECENT_SIGHT_TICS: i64 = 35;
+/// Movement from the first sighting that counts as waking up (units, units/tic, degrees).
+const WAKE_DISTANCE: f64 = 16.0;
+const WAKE_SPEED: f64 = 0.5;
+const WAKE_TURN: f64 = 1.0;
 /// no shooting at anything further
 const ENGAGE_RANGE: f64 = 2048.0;
 /// degrees a tic, turning to aim
@@ -36,10 +42,6 @@ const DODGE_TICS: i64 = 35;
 /// ...if it would pass nearer than the two radii and this
 const DODGE_MARGIN: f64 = 12.0;
 const DODGE_WAYS: usize = 16;
-/// a running player's push a tic
-const THRUST: f64 = 50.0 * 2048.0 / 65536.0;
-/// what's left of her speed after a tic
-const FRICTION: f64 = 59392.0 / 65536.0;
 /// going some way: pushing that way this long, then...
 const PUSH_TICS: usize = 8;
 /// ...letting go: where she'd slide to in this long must be safe too
@@ -252,38 +254,36 @@ impl Combat {
             }
         }
         self.alive = monsters;
-        let heights = self.heights(obs).to_vec();
+        self.refresh_tic_cache(obs);
         let me = Body { x: obs.x, y: obs.y, z: self.z(obs), height: PLAYER_HEIGHT };
         let hurt = obs.tic - self.hurt_tic < HURT_TICS;
-        let near: Vec<Thing> = self.alive.values().filter(|t| dist((t.x, t.y), pos) < ENGAGE_RANGE).cloned().collect();
         self.visible.clear();
-        for t in near {
-            if !self.los.clear(me, Body { x: t.x, y: t.y, z: t.z, height: mon(t.name).height }, &heights) {
+        for t in self.alive.values() {
+            let d = dist((t.x, t.y), pos);
+            if !(0.0..ENGAGE_RANGE).contains(&d) {
                 continue;
             }
-            let d = dist((t.x, t.y), pos);
-            let off = norm(heading(pos, (t.x, t.y)) - obs.angle).abs();
-            let recent = self.known.get(&t.id).is_some_and(|s| obs.tic - s.tic < 35);
-            if off < FOV || d < NEAR || hurt || recent {
-                match self.known.get_mut(&t.id) {
-                    None => {
-                        self.log.push(format!("tic {}: saw {} {} at ({:.0}, {:.0})", obs.tic, t.name, t.id, t.x, t.y));
-                        self.known.insert(t.id, Seen { id: t.id, name: t.name, x: t.x, y: t.y, z: t.z, tic: obs.tic, first: obs.tic, x0: t.x, y0: t.y, angle0: t.angle, awake: false });
-                    }
-                    Some(s) => {
-                        s.x = t.x;
-                        s.y = t.y;
-                        s.z = t.z;
-                        s.tic = obs.tic;
-                    }
-                }
-                if let Some(s) = self.known.get_mut(&t.id) {
-                    if !s.awake && (dist((t.x, t.y), (s.x0, s.y0)) > 16.0 || t.vx.hypot(t.vy) > 0.5 || norm(t.angle - s.angle0).abs() > 1.0) {
-                        s.awake = true;
-                    }
-                }
-                self.visible.push(t);
+            let recent = self.known.get(&t.id).is_some_and(|s| obs.tic - s.tic < RECENT_SIGHT_TICS);
+            if !(hurt || recent || d < NEAR || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < FOV) {
+                continue;
             }
+            let target = Body { x: t.x, y: t.y, z: t.z, height: mon(t.name).height };
+            if !self.los.clear(me, target, &self.heights_now) {
+                continue;
+            }
+            let seen = self.known.entry(t.id).or_insert_with(|| {
+                self.log.push(format!("tic {}: saw {} {} at ({:.0}, {:.0})", obs.tic, t.name, t.id, t.x, t.y));
+                Seen { id: t.id, name: t.name, x: t.x, y: t.y, z: t.z, tic: obs.tic, first: obs.tic, x0: t.x, y0: t.y, angle0: t.angle, awake: false }
+            });
+            seen.x = t.x;
+            seen.y = t.y;
+            seen.z = t.z;
+            seen.tic = obs.tic;
+            seen.awake = seen.awake
+                || dist(seen.pos(), (seen.x0, seen.y0)) > WAKE_DISTANCE
+                || t.vx.hypot(t.vy) > WAKE_SPEED
+                || norm(t.angle - seen.angle0).abs() > WAKE_TURN;
+            self.visible.push(t.clone());
         }
         self.watch_infighting(obs);
     }
@@ -644,7 +644,7 @@ impl Combat {
     /// level, past it unless it's level with her.
     pub fn can_hit(&mut self, obs: &Observation, t: &Thing, height: Option<f64>) -> bool {
         let h = height.unwrap_or_else(|| mon(t.name).height);
-        self.heights(obs); // (a new tic: what was worked out for the last is cleared)
+        self.refresh_tic_cache(obs);
         let key = (t.id, h.to_bits());
         if let Some(&v) = self.hit_cache.get(&key) {
             return v;
@@ -665,8 +665,8 @@ impl Combat {
             (lo, hi) = (gun - 1.0, gun + 1.0); // (out level: it only hits what's level with it)
         }
         let me = Body { x: obs.x, y: obs.y, z: gun - 0.75 * PLAYER_HEIGHT, height: PLAYER_HEIGHT }; // (the eye's at 0.75)
-        let heights = self.heights(obs).to_vec();
-        self.los.clear(me, Body { x: at.0, y: at.1, z: lo, height: hi - lo }, &heights)
+        self.refresh_tic_cache(obs);
+        self.los.clear(me, Body { x: at.0, y: at.1, z: lo, height: hi - lo }, &self.heights_now)
     }
 
     /// Where to step for a shot at t she can see but can't hit: back from it when it's above
@@ -689,11 +689,11 @@ impl Combat {
         if barrels.is_empty() {
             return None;
         }
-        let heights = self.heights(obs).to_vec();
+        self.refresh_tic_cache(obs);
         let me = Body { x: obs.x, y: obs.y, z: self.z(obs), height: PLAYER_HEIGHT };
         barrels
             .into_iter()
-            .filter(|&b| self.los.clear(me, Body { x: b.0, y: b.1, z: self.floor_at(obs, b), height: 32.0 }, &heights))
+            .filter(|&b| self.los.clear(me, Body { x: b.0, y: b.1, z: self.floor_at(obs, b), height: 32.0 }, &self.heights_now))
             .reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a })
     }
 
@@ -995,8 +995,8 @@ impl Combat {
         floor = floor0;
         for k in 0..SLIDE_TICS {
             if k < PUSH_TICS {
-                vx += THRUST * d.0;
-                vy += THRUST * d.1;
+                vx += RUN_THRUST * d.0;
+                vy += RUN_THRUST * d.1;
             } else if vx * vx + vy * vy < 1.0 {
                 break;
             }
@@ -1021,12 +1021,17 @@ impl Combat {
 
     /// Every sector's floor and ceiling now (made once a tic: it's asked for a lot).
     pub fn heights(&mut self, obs: &Observation) -> &[(f64, f64)] {
+        self.refresh_tic_cache(obs);
+        &self.heights_now
+    }
+
+    /// Heights and cached shots both belong to the current observation tic.
+    fn refresh_tic_cache(&mut self, obs: &Observation) {
         if self.heights_tic != Some(obs.tic) {
             self.heights_now = obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
             self.heights_tic = Some(obs.tic);
             self.hit_cache.clear();
         }
-        &self.heights_now
     }
 
     pub fn z(&self, obs: &Observation) -> f64 {
@@ -1045,8 +1050,8 @@ fn miss_by(pos: Point, vel: Point, way: Point, t: &Thing) -> f64 {
     let (mut vx, mut vy) = vel;
     let mut nearest = f64::INFINITY;
     for k in 1..=DODGE_TICS {
-        vx += THRUST * way.0;
-        vy += THRUST * way.1;
+        vx += RUN_THRUST * way.0;
+        vy += RUN_THRUST * way.1;
         x += vx;
         y += vy;
         vx *= FRICTION;

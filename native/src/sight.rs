@@ -44,50 +44,27 @@ impl Covered {
 
     /// Is any column of first..=last not covered?
     fn any_open(&self, first: i32, last: i32) -> bool {
-        let mut x = first;
-        for &(a, b) in &self.ranges {
-            if b < x {
-                continue;
-            }
-            if a > x {
-                return true;
-            }
-            x = b + 1;
-            if x > last {
-                return false;
-            }
-        }
-        x <= last
+        let i = self.ranges.partition_point(|&(_, end)| end < first);
+        self.ranges.get(i).is_none_or(|&(start, end)| start > first || end < last)
     }
 
     /// Cover first..=last (merging with ranges it touches).
     fn cover(&mut self, first: i32, last: i32) {
-        let (mut lo, mut hi) = (first, last);
-        let mut out = Vec::with_capacity(self.ranges.len() + 1);
-        let mut placed = false;
-        for &(a, b) in &self.ranges {
-            if b + 1 < lo {
-                out.push((a, b));
-            } else if a > hi + 1 {
-                if !placed {
-                    out.push((lo, hi));
-                    placed = true;
-                }
-                out.push((a, b));
-            } else {
-                lo = lo.min(a);
-                hi = hi.max(b);
-            }
+        let start = self.ranges.partition_point(|&(_, end)| end < first.saturating_sub(1));
+        let overlaps = self.ranges[start..].partition_point(|&(begin, _)| begin <= last.saturating_add(1));
+        if overlaps == 0 {
+            self.ranges.insert(start, (first, last));
+        } else {
+            let end = start + overlaps;
+            self.ranges[start] = (first.min(self.ranges[start].0), last.max(self.ranges[end - 1].1));
+            self.ranges.drain(start + 1..end);
         }
-        if !placed {
-            out.push((lo, hi));
-        }
-        self.ranges = out;
     }
 }
 
 /// The renderer's view of a map: which lines get drawn from where.
 pub struct Sight {
+    line_count: usize,
     segs: Vec<ViewSeg>,
     /// per subsector: its segs
     subsectors: Vec<std::ops::Range<usize>>,
@@ -139,6 +116,7 @@ impl Sight {
             .collect();
         let has = |t: &str| t != "-" && !t.is_empty();
         Sight {
+            line_count: m.linedefs.len(),
             segs,
             subsectors: m.subsectors.iter().map(|ss| ss.first_seg..ss.first_seg + ss.seg_count).collect(),
             nodes: m.nodes.clone(),
@@ -150,8 +128,7 @@ impl Sight {
     /// What this view shows.
     pub fn view(&self, view: &View<'_>) -> Seen {
         let (sin, cos) = view.angle.to_radians().sin_cos();
-        let lines = self.segs.iter().map(|s| s.line + 1).max().unwrap_or(0);
-        let mut walk = Walk { sight: self, view, covered: Covered::new(view.width), seen: vec![false; lines], out: Seen { drawn: Vec::new(), through: Vec::new(), subsectors: Vec::new() }, sin, cos };
+        let mut walk = Walk { sight: self, view, covered: Covered::new(view.width), seen: vec![LineSeen::default(); self.line_count], out: Seen { drawn: Vec::new(), through: Vec::new(), subsectors: Vec::new() }, sin, cos };
         match self.nodes.len().checked_sub(1) {
             None => walk.subsector(0),
             Some(root) => walk.node(u16::try_from(root).unwrap_or(0)),
@@ -160,13 +137,19 @@ impl Sight {
     }
 }
 
+/// A linedef can be reported from either side. Keep the first occurrence in each list.
+#[derive(Clone, Copy, Default)]
+struct LineSeen {
+    drawn: bool,
+    through: bool,
+}
+
 /// One BSP walk for a view.
 struct Walk<'a> {
     sight: &'a Sight,
     view: &'a View<'a>,
     covered: Covered,
-    /// per linedef: drawn already
-    seen: Vec<bool>,
+    seen: Vec<LineSeen>,
     out: Seen,
     sin: f64,
     cos: f64,
@@ -288,19 +271,20 @@ impl Walk<'_> {
             return;
         }
         let Some((x1, x2)) = self.columns(self.to_view(s.v1), self.to_view(s.v2)) else { return };
-        let Some(solid) = self.classify(s) else {
-            if !self.out.through.contains(&s.line) && self.covered.any_open(x1, x2 - 1) {
+        let solid = self.classify(s);
+        if !self.covered.any_open(x1, x2 - 1) {
+            return;
+        }
+        let Some(solid) = solid else {
+            if !self.seen[s.line].through {
+                self.seen[s.line].through = true;
                 self.out.through.push(s.line);
             }
             return;
         };
-        if self.covered.any_open(x1, x2 - 1) {
-            if let Some(seen) = self.seen.get_mut(s.line) {
-                if !*seen {
-                    *seen = true;
-                    self.out.drawn.push(s.line);
-                }
-            }
+        if !self.seen[s.line].drawn {
+            self.seen[s.line].drawn = true;
+            self.out.drawn.push(s.line);
         }
         if solid {
             self.covered.cover(x1, x2 - 1);

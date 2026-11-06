@@ -13,18 +13,12 @@
 
 use super::physics::{Controls, PlayerSim};
 use super::{Jump, JumpLab};
-use crate::geom::{dist, Point};
+use crate::geom::{dist, Point, MAX_STEP};
+use crate::motor::{FRICTION, MAX_MOVE, MAX_TURN, RUN_THRUST, TURN_ACCEL};
 use crate::nav::Heights;
 use crate::det::HashSet;
 
 const TICRATE: usize = 35;
-const MAX_STEP: f64 = 24.0;
-/// The follower's movement limits (motor/follower.py), for braking as it does.
-const MAX_TURN: f64 = 8.0;
-const TURN_ACCEL: f64 = 1.0;
-const MAX_MOVE: f64 = 50.0;
-const RUN_THRUST: f64 = 1.5625;
-const FRICTION: f64 = 0.90625;
 /// a jump has to work this far to either side of its line too (1 was too strict: E4M6, MAP24)
 const ROBUST_SHIFT: f64 = 0.5;
 /// ...and get there from a run-up this much longer or shorter (4 lost E4M2's jumps onto ledges)
