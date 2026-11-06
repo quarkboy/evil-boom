@@ -57,14 +57,14 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
         x = Explorer(nav, Knowledge(nav, mortal=mortal))
         if expert:
             from evildoom.knowledge.completion import Completionist
-            Completionist(x)
+            Completionist(x, restarts=lives - 1)
     c = obs = None
     t0 = time.perf_counter()
     deaths = 0
     idle_since = None  # since when she's had nothing to do
     spent = {"engine": 0.0, "observe": 0.0, "think": 0.0}  # seconds, where the time goes
     while e.tic < max_seconds * TICRATE:
-        stranded = idle_since is not None and e.tic - idle_since > STRANDED_TICS
+        stranded = idle_since is not None and e.tic - idle_since > STRANDED_TICS             or getattr(x, "restart_wanted", False)
         if e.finished and e.dead and fight and obs is not None:
             seen = ", ".join(f"{t.name} {math.dist((t.x, t.y), (obs.x, obs.y)):.0f} away"
                              for t in x.combat.visible)
@@ -76,7 +76,10 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
             # floor that drops into a pit): the level again, knowing what she learned
             if (e.dead or stranded) and deaths + 1 < lives:
                 deaths += 1
-                x.log.append(f"tic {e.tic}: {'died' if e.dead else 'stranded'}: starting again")
+                why = "died" if e.dead else "for what's left" if getattr(x, "restart_wanted", False) else "stranded"
+                x.log.append(f"tic {e.tic}: {why}: starting again")
+                if hasattr(x, "restart_wanted"):
+                    x.restart_wanted = False
 
                 e.restart(keep_time=True)
                 x.restart()
@@ -119,10 +122,22 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                          f"activators known {len(t.activators & known_polys)}/{len(t.activators)}, "
                          f"effect sectors known {sum(s in k.sectors for s in t.effects)}/{len(t.effects)}")
     tally = e.tally() if hasattr(e, "tally") else None
+    if expert and obs is not None and obs.things is not None:
+        from evildoom.knowledge.completion import COUNTED
+        known = x.knowledge.known_polys()
+        for t in obs.things:
+            if t.name in COUNTED:
+                poly = nav.mesh.poly_at(t.x, t.y)
+                seen = poly is not None and poly.index in known
+                lines.append(f"left: {t.name} at ({t.x:.0f}, {t.y:.0f}), sector "
+                             f"{poly.sector if poly else None}, {'seen' if seen else 'never seen'}")
     e.close()
     outcome = "EXITED" if exited else "DIED" if died else "STUCK"
-    if expert and exited and tally is not None and tally["items"][0] >= tally["items"][1]:
-        outcome = "EXPERT"  # (every item, then out)
+    if expert and exited and tally is not None:
+        from evildoom.knowledge.completion import most_items
+        short = most_items(m, skill)
+        if tally["items"][0] >= tally["items"][1] - short:
+            outcome = "EXPERT"  # (every item there is to get, then out)
     real = time.perf_counter() - t0
     lines.append("time: " + ", ".join(f"{k} {v:.1f}s" for k, v in spent.items())
                  + f", other {real - sum(spent.values()):.1f}s; {e.tic / max(real, 1e-9):.0f} tics/s")

@@ -16,9 +16,9 @@ from dataclasses import dataclass, field, replace
 from evildoom.knowledge.model import Knowledge
 from evildoom.motor.follower import TICRATE, Controls, Observation, RouteFollower
 from evildoom.nav.reach import (MAX_STEP, PLAYER_HEIGHT, HeightStates, Navigator, TriggerLine,
-                                _segments_cross, apply_trigger, can_cross)
+                                _segment_distance, _segments_cross, apply_trigger, can_cross)
 from evildoom.nav.walkthrough import Step, _action_for, steps_from_legs
-from evildoom.wad.specials import Category, Key, Lock, Trigger
+from evildoom.wad.specials import Category, Key, Lock, Trigger, classify_line
 
 PLAN_SECONDS = 1.5
 # how much nearer an objective of each kind counts as (keys, switches first; looking again last)
@@ -29,6 +29,7 @@ GIVE_UP_TICS = 20 * TICRATE   # an objective not done by then is dropped for a w
 ROUTE_SPEED = 8.0             # ...or by the time it takes to walk its route at this (units a tic)
 ROUTE_SLACK = 15 * TICRATE    # ...and this
 THRESHOLD_IN = 8.0            # a threshold's spot: this far over the line
+EXIT_MARGIN = 64.0  # the expert's run: no goal this near a walk-over exit line (she'd slide over)
 JUMP_MISSES = 2  # a run-jump missed this often isn't tried again; missed once, only when
 #                  there's nothing else to do (it's difficult: another way first)
 REPRESS_AFTER = 60 * TICRATE  # a repeatable switch whose effect wasn't seen: another go after this
@@ -127,6 +128,8 @@ class Explorer:
     dangerous: object = None  # (obs, objective) -> too dangerous to go for unless nothing else
     interrupt: object = None  # (obs, objective) -> something better to do turned up: choose again
     exit_last: bool = False   # the exit only once there's nothing else to do (the expert's 100% run)
+    before_exit: object = None  # (obs) -> True: rather the level again than out (asks restart_wanted)
+    restart_wanted: bool = False  # (for whoever runs the game: the level again, knowing what she knows)
     _held_since: int | None = None  # something else has had the controls since then
     _urgent_n: int = 0  # sounds checked for being worth dropping everything for
     _reach: set = field(default_factory=set)  # polys she could get to, as of the last look
@@ -139,6 +142,7 @@ class Explorer:
         self._all_jumps: list | None = None  # (every run-jump the navigator had: some left out once missed)
         self._difficult = False  # (the jumps missed once are in, for want of anything else)
         self._exits_open = True  # (exit_last: closed till nothing else is left)
+        self._pads: set[int] | None = None  # (polys beyond walk-over exit lines)
 
     # --- the known world ----------------------------------------------------------------
 
@@ -189,16 +193,19 @@ class Explorer:
             out[tr] = {(floor, h[1]) for h in out[tr] for floor in floors}
         return out
 
-    def view(self) -> Navigator:
-        """The navigator as far as Evil knows (rebuilt when what she knows changes)."""
+    def view(self, fresh: bool = False) -> Navigator:
+        """The navigator as far as Evil knows (rebuilt when what she knows changes). `fresh`:
+        for the level from its start (what's spent this life works again; exits open)."""
         k = self.knowledge
         # (once-only door lines used this life open nothing again: MAP19's door, opened for good
         # by its own, was shut by a walk-over line that opens it a while; it seemed openable)
-        spent_doors = frozenset(f.line for f in k.fired if f.life == k.lives
-                                and k._special(f.line) is not None and k._special(f.line).trigger is Trigger.D1)
+        spent_doors = frozenset() if fresh else frozenset(
+            f.line for f in k.fired if f.life == k.lives
+            and k._special(f.line) is not None and k._special(f.line).trigger is Trigger.D1)
+        exits_open = fresh or self._exits_open
         key = (len(k.sectors), len(k.seen_polys), len(k.visited), sum(map(len, k.learned.values())),
-               len(k.teleports), spent_doors)
-        if self._view is None or key != self._view_key:
+               len(k.teleports), spent_doors, exits_open)
+        if fresh or self._view is None or key != self._view_key:
             triggers = []
             trenches = self.nav.trenches
             for t, sectors in k.known_triggers():
@@ -221,8 +228,13 @@ class Explorer:
             for th in k.known_things():
                 if th.type in Key._value2member_map_:
                     keys_at.setdefault(Key(th.type), []).append((th.x, th.y))
-            self._view = self.nav.restricted_to(k.known_polys(), set(k.teleports), triggers, keys_at)
-            self._view_key = key
+            polys = k.known_polys()
+            if not exits_open:
+                polys = polys - self._exit_pads()  # (the expert's run: not out by walking over the exit)
+            view = self.nav.restricted_to(polys, set(k.teleports), triggers, keys_at)
+            if fresh:
+                return view
+            self._view, self._view_key = view, key
         return self._view
 
     # --- objectives ---------------------------------------------------------------------
@@ -562,6 +574,11 @@ class Explorer:
         then the locks her keys open, then by distance as the crow flies (keys and untried
         switches a little ahead of the edge of the map)."""
         options = self.objectives(obs, risky)
+        if not self._exits_open:
+            # (nor anywhere she'd slide over one getting there: MAP24's pad, 38 off a goal)
+            self._exit_pads()
+            options = [o for o in options if all(_segment_distance(a, b, o.goal, o.goal) >= EXIT_MARGIN
+                                                  for a, b in self._exit_segs)]
         pos = (obs.x, obs.y)
         options.sort(key=lambda o: (o.priority, math.dist(o.goal, pos) * WEIGHT[o.kind]))
         return options
@@ -941,12 +958,44 @@ class Explorer:
         self._drop_count[obj.ident] = self._drop_count.get(obj.ident, 0) + 1
         self.log.append(f"tic {obs.tic}: dropped '{obj.label}' ({why})")
 
+    def _exit_pads(self) -> set[int]:
+        """The polys beyond walk-over exit lines: of the two sides of each, the sector more of
+        whose edge is exit lines (MAP24's pad, ringed by five: walked onto looking round, the
+        level was over with 0 of 49 items)."""
+        if self._pads is None:
+            m, mesh = self.nav.map, self.nav.mesh
+            exit_lines = [li for li, line in enumerate(m.linedefs)
+                          if (info := classify_line(line.special)) is not None
+                          and info.category in (Category.EXIT, Category.SECRET_EXIT)
+                          and info.trigger in (Trigger.W1, Trigger.WR)]
+            def share(sec: int) -> float:
+                edge = [li for li, line in enumerate(m.linedefs) if sec in (m.front_sector(line), m.back_sector(line))]
+                length = lambda li: math.dist(*((m.vertexes[m.linedefs[li].v1].x, m.vertexes[m.linedefs[li].v1].y),
+                                                (m.vertexes[m.linedefs[li].v2].x, m.vertexes[m.linedefs[li].v2].y)))
+                total = sum(length(li) for li in edge) or 1.0
+                return sum(length(li) for li in edge if li in exit_lines) / total
+            pads = set()
+            for li in exit_lines:
+                sides = [s for s in (m.front_sector(m.linedefs[li]), m.back_sector(m.linedefs[li])) if s is not None]
+                if sides:
+                    pads.add(max(sides, key=share))
+            self._pads = {p.index for p in mesh.polys if p is not None and p.sector in pads}
+            self._exit_segs = [((m.vertexes[m.linedefs[li].v1].x, m.vertexes[m.linedefs[li].v1].y),
+                                (m.vertexes[m.linedefs[li].v2].x, m.vertexes[m.linedefs[li].v2].y))
+                               for li in exit_lines]
+        return self._pads
+
     def _next(self, obs: Observation) -> None:
         self.follower = None
         if self._difficult:
             self._set_jumps(difficult=False)  # (the jumps missed once: out again, other ways first)
         self._exits_open = not self.exit_last
         found = self._try_objectives(obs, risky=False) or self._try_objectives(obs, risky=True)
+        if not found and self.exit_last and self.before_exit is not None and self.before_exit(obs):
+            self.log.append(f"tic {obs.tic}: nothing else to do here: the level again, for what's left")
+            self.restart_wanted = True
+            self.current = None
+            return
         if not found and self.exit_last:
             self.log.append(f"tic {obs.tic}: nothing else to do: for the exit")
             self._exits_open = True
