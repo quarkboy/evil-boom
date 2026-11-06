@@ -44,6 +44,9 @@ BARREL_GIVE_UP = 8 * TICRATE
 JUMP_HURRY = 2 * TICRATE  # a jump goes without settling if what it needs runs out sooner
 JUMP_CEILING_SLACK = 16.0  # how much lower than planned a ceiling can be for a jump
 CROSS_REST_WAIT = 8 * TICRATE  # longest wait for a lift to come back before crossing its line
+BUSY_TICS = 200            # a sector that moved this lately may still be busy (a door open,
+#                            waiting to close): Doom ignores a switch on it...
+REST_TICS = 12             # ...unless it's back where it rests and has been still this long
 SETTLE_WAIT = 10 * TICRATE  # longest wait for things round a switch to settle before pressing
 DROP_CHECK_DIST = 48     # how far ahead to look for crossings that became one-way drops
 USE_EVERY = 15           # tics between use presses while waiting at a door
@@ -368,6 +371,8 @@ class RouteFollower:
         self._sprint = None  # (jump, heading, start tic) while executing a run-jump
         self._touchdown: tuple | None = None  # (jump, tic) a run-jump done: where does it come down?
         self.missed: list = []  # run-jumps that came down off their landing (for the explorer)
+        self._seen_heights: dict = {}  # sector -> heights last tic
+        self._moved_at: dict = {}      # sector -> tic it last moved
         self._run = None     # running over sinking floors (_run_step)
         self._barrel = None  # (where, since tic) of a barrel in the way being shot (_shoot_barrel)
         # Floors that sink once stepped on: a jump off one goes at once, without settling.
@@ -571,6 +576,10 @@ class RouteFollower:
             obs = replace(obs, heights=heights)
         self.motion.observe(obs)
         self._judge_landing(obs)
+        for sec, h in obs.heights.items():
+            if self._seen_heights.get(sec, h) != h:
+                self._moved_at[sec] = obs.tic
+            self._seen_heights[sec] = h
         self._live = obs.heights   # (corner cutting keeps off ledges as they are now)
         pos = (obs.x, obs.y)
         if self._last_pos and math.dist(pos, self._last_pos) > 64:
@@ -1749,6 +1758,22 @@ class RouteFollower:
                                       f"line {t.line}")
                 self._settle_logged, self._goal_tic = self.step_i, obs.tic
             if off and obs.tic - self._goal_tic < SETTLE_WAIT:
+                self._progress_tic = self._step_tic = obs.tic
+                return controls
+        if step.action in ("use", "shoot") and self._action_tic is None and t is not None and t.once:
+            # Doom ignores a switch on a sector that's busy (a door open on its timer, waiting
+            # to close), and a once-only one is then still there to press: wait till what it
+            # works is back at rest (E3M4: the switch behind a door opened by its own door
+            # switch, pressed as she got there, did nothing, over and over).
+            init = self.nav.movers.initial
+            busy = [x for x in t.effects if obs.tic - self._moved_at.get(x, -10**9) < BUSY_TICS
+                    and not (obs.tic - self._moved_at[x] > REST_TICS
+                             and (live := obs.heights.get(x)) is not None
+                             and abs(live[0] - init[x][0]) < 0.5 and abs(live[1] - init[x][1]) < 0.5)]
+            if busy and self._settle_logged != self.step_i:
+                self.log.add(obs.tic, f"waiting for sector {busy[0]} to come to rest before line {t.line}")
+                self._settle_logged, self._goal_tic = self.step_i, obs.tic
+            if busy and obs.tic - self._goal_tic < SETTLE_WAIT:
                 self._progress_tic = self._step_tic = obs.tic
                 return controls
         nxt = self.steps[self.step_i + 1] if self.step_i + 1 < len(self.steps) else None
