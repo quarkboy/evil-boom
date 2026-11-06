@@ -1043,6 +1043,22 @@ class Explorer:
                 self.log.append(f"tic {obs.tic}: nothing left to do")
             self.current = None
 
+    def _back_to_exit(self, obj: Objective, obs: Observation) -> bool:
+        """With the exit held back (the expert's run): could she get from `obj`'s spot to an exit
+        she knows, as far as she knows? A risky way somewhere (a one-way drop) that can't is a
+        trap: MAP18's nukage moat, dropped into to look at its walls with two items left, the
+        exit out of reach for good. True if she knows of no exit yet."""
+        k, nav = self.knowledge, self.nav
+        by_line = {t.line: t for t in nav.triggers if t.line >= 0}
+        exits = [by_line[li] for li in k.exits() if li in by_line]
+        if not exits:
+            return True
+        view = self.view()
+        goals = [nav._activation_point(t, obj.goal, t.activators) for t in exits if t.activators]
+        route = view.plan(obj.goal, goals, frozenset(obs.keys or ()), self.states(),
+                          max_expansions=1000, max_seconds=PLAN_SECONDS)
+        return route is not None
+
     def _try_objectives(self, obs: Observation, risky: bool) -> bool:
         """Take up the best objective there's a route to: of the nearest few as the crow flies,
         the one nearest by the way there (teleporters and lifts make those very different:
@@ -1054,6 +1070,9 @@ class Explorer:
             routed = []
             for obj in options:
                 steps = self.route_to(obj, obs)
+                if steps and obj.risky and not self._exits_open and not self._back_to_exit(obj, obs):
+                    self._drop(obj, obs, "no way back to the exit from there")
+                    continue
                 if steps:
                     length = self._route_length(steps)
                     if obj.worth is not None and length > obj.worth:
