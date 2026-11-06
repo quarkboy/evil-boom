@@ -59,7 +59,7 @@ def key_colour(name: str):
 class Watch:
     def __init__(self, iwad: Path, map_name: str, speed: float, snapshot: float | None = None,
                  mortal: bool = False, lives: int = 1, fight: int = 0, engine: str = "dsda",
-                 expert: bool = False, peek: bool = False):
+                 expert: bool = False, peek: bool = False, seed: int | None = 0):
         self.lives_left = lives - 1
         self.map_name = map_name
         self.snapshot = snapshot
@@ -70,7 +70,7 @@ class Watch:
         if engine == "dsda":
             from evildoom.engine.dsda_engine import DsdaEngine
             self.engine = DsdaEngine(iwad, map_name, skill=skill, nomonsters=not fight,
-                                     objects=bool(fight) or expert, drawn=True)
+                                     objects=bool(fight) or expert, drawn=True, seed=seed)
         else:
             self.engine = VizDoomEngine(iwad, map_name, size=VIEW_SIZE, rgb=True, skill=skill,
                                         nomonsters=not fight, objects=bool(fight))
@@ -413,9 +413,12 @@ def main() -> None:
                     help="every item that counts picked up, then the exit (no monsters)")
     ap.add_argument("--snapshot", type=float, metavar="SECONDS",
                     help="save the window to out/watch.png after this much game time, and quit")
+    ap.add_argument("--seed", default="0",
+                    help="the game's random numbers from this seed, as the sweep has them (a "
+                         "number), or from the clock as in a real game ('random')")
     a = ap.parse_args()
     w = Watch(resolve_wad(a.wad), a.map.upper(), a.speed, a.snapshot, a.mortal, a.lives, a.fight,
-              a.engine, a.expert, a.peek)
+              a.engine, a.expert, a.peek, None if a.seed == "random" else int(a.seed))
     w.show_all = a.all
     w.run()
 

@@ -36,8 +36,11 @@ def _episode_map(map_name: str) -> tuple[int, int]:
 
 class DsdaEngine:
     def __init__(self, iwad: str | Path, map_name: str, *, skill: int = 3, nomonsters: bool = True,
-                 objects: bool = False, library: str | Path = LIBRARY, drawn: bool = False):
-        """`drawn`: the frames are drawn (frame()), for watching; else nothing is."""
+                 objects: bool = False, library: str | Path = LIBRARY, drawn: bool = False,
+                 seed: int | None = None):
+        """`drawn`: the frames are drawn (frame()), for watching; else nothing is. `seed`: the
+        game's random numbers from it, the same run every time given the same commands (for
+        testing); None: from the clock, as the game has them (a real run)."""
         import evildoom_native
         if sys.platform == "win32" and MINGW_BIN.is_dir():
             os.add_dll_directory(str(MINGW_BIN))  # (Python doesn't look in PATH for a DLL's DLLs)
@@ -79,6 +82,8 @@ class DsdaEngine:
         self._god = False
         self._suits = 0
         self._ironfeet = 0
+        self._message_tic = -1
+        self.game.seed(seed)
 
     def start(self) -> None:
         self._new_game()
@@ -93,6 +98,7 @@ class DsdaEngine:
     def _new_game(self) -> None:
         self.game.new_game(self.skill, self.episode, self.map, self.nomonsters)
         self._suits = self._ironfeet = 0
+        self._message_tic = -1
         for _ in range(WARMUP_TICS):
             self.game.tic(0, 0, 0, False, False, 0)
         if self._god:
@@ -134,12 +140,16 @@ class DsdaEngine:
         if p["ironfeet"] > self._ironfeet:
             self._suits += 1  # (a suit picked up: its time went up)
         self._ironfeet = p["ironfeet"]
+        message = None
+        if p["message_tic"] != self._message_tic:
+            message = p["message"]  # (a new one since she last looked)
+            self._message_tic = p["message_tic"]
         ammo = dict(p["ammo"])
         return Observation(p["x"], p["y"], p["angle"], heights, self.tic,
                            frozenset(k for k, held in zip(KEYS, p["keys"]) if held), p["z"],
                            p["weapon"], barrels, float(p["health"]), self._suits, things,
                            frozenset(p["weapons"]), ammo, float(p["armor"]), p["ssg"],
-                           (p["momx"], p["momy"]), p["allmap"])
+                           (p["momx"], p["momy"]), p["allmap"], message)
 
     def step(self, c: Controls) -> None:
         scale = 1.0 if c.run else 0.5

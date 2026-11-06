@@ -31,7 +31,7 @@ def _drive(knock: bool) -> tuple[bool, int, list[str]]:
     start = next(t for t in m.things if t.type == 1)
     plan = plan_level(nav, (start.x, start.y))
     assert plan.complete
-    engine = DsdaEngine(DOOM, "E1M1")
+    engine = DsdaEngine(DOOM, "E1M1", seed=0)
     engine.start()
     follower = RouteFollower(nav, plan.steps)
     knocked = not knock

@@ -5,6 +5,7 @@
  * Built into a shared library with DSDA-Doom's own sources (see dsda/README.md). Plain C
  * types only across the boundary, so any toolchain can load it. One game a process: the
  * engine is all globals. */
+#include <stdio.h>
 #include <string.h>
 
 #include "SDL.h"
@@ -15,6 +16,7 @@
 #include "d_player.h"
 #include "g_game.h"
 #include "m_menu.h"
+#include "m_random.h"
 #include "p_mobj.h"
 #include "p_map.h"
 #include "p_tick.h"
@@ -63,7 +65,14 @@ typedef struct {
   int playerstate;     /* 0 alive, 1 dead, 2 reborn */
   int damagecount;     /* (the red flash: how much she was just hurt) */
   int allmap;          /* has the computer area map (vanilla: a second can't be picked up) */
+  int message_tic;     /* when the game last gave her a message (-1: never) */
+  char message[96];    /* ...and what it said */
 } evil_player;
+
+extern int evil_fixed_seed;      /* (SDL/i_system.c, patched) */
+extern unsigned long evil_seed_value;
+extern const char *evil_message;  /* (dsda/messenger.c, patched) */
+extern int evil_message_tic;
 
 typedef struct {
   int gametic;
@@ -110,7 +119,21 @@ EVIL_API void evil_new_game(int skill, int episode, int map, int no_monsters)
 {
   nomonsters = clnomonsters = no_monsters != 0;  /* (a new game resets the first from the second) */
   exited = secret_exit = 0;
+  if (evil_fixed_seed)
+    rngseed = 0;  /* (the game adds the seed to what it had: from nothing, the same each time) */
+  evil_message = NULL;
+  evil_message_tic = -1;
   G_DeferedInitNew(skill - 1, episode, map);
+}
+
+/* The random numbers: from the clock, as the game has them (fixed 0: a real run), or from
+ * `value` (fixed 1: the same run every time, given the same commands; for testing: a barrel
+ * took a different number of shots each run, and all after went its own way). From the next
+ * new game on. */
+EVIL_API void evil_seed(int fixed, unsigned long value)
+{
+  evil_fixed_seed = fixed != 0;
+  evil_seed_value = value;
 }
 
 EVIL_API void evil_god(int on)
@@ -281,6 +304,9 @@ EVIL_API void evil_player_state(evil_player *out)
   out->ironfeet = p->powers[pw_ironfeet];
   out->damagecount = p->damagecount;
   out->allmap = p->powers[pw_allmap] != 0;
+  out->message_tic = evil_message_tic;
+  if (evil_message)
+    snprintf(out->message, sizeof out->message, "%s", evil_message);
   if (p->mo)
   {
     out->x = fx(p->mo->x); out->y = fx(p->mo->y); out->z = fx(p->mo->z);

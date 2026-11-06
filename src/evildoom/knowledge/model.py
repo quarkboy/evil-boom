@@ -43,7 +43,8 @@ BUSY_TICS = 200         # ...where it acts on what moved this lately (a door ope
 LOOKS_INTERACTIVE = ("SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR",
                      "ZELDOOR", "PLAT", "SUPPORT")
 SUSPICION_MIN = 2.0     # a wall suspected this much is worth a press of use
-ADDS_ON = re.compile(r"raise \d+")  # (floor raises by an amount: each press adds on)
+NEEDS_KEY = re.compile(r"\bneed\b.*\b(key|keys|card|skull)\b", re.IGNORECASE)  # (the game says)
+ADDS_ON = re.compile(r"raise \d+\b")  # (floor raises by an amount: each press adds on)
 ML_SECRET = 0x0020      # (drawn on the automap as a plain wall)
 NO_SIDE = 0xFFFF
 FELT_TICS = 70          # unhurt on a floor this long: it doesn't hurt
@@ -110,6 +111,9 @@ class Knowledge:
     # tried before she had the key and never again)
     tried_walls: dict = field(default_factory=dict)
     in_the_way: set = field(default_factory=set)  # lines between her and a switch that did nothing
+    # lines the game said need a key when she pressed them ("You need a blue key to open this
+    # door"): a door or a switch, however it looks (MAP05's blue door, like the wall round it)
+    locked: set = field(default_factory=set)
     # what she's learned a line does, put down to it on timing alone (the sector started moving
     # a while after she pressed it: maybe something else did it): (tried_key, sector) -> tic.
     # The planner doesn't build on these; once nothing else is left, the line's pressed again
@@ -424,10 +428,15 @@ class Knowledge:
                 # (any line with a special stops it, a walk-over one too: E2M4's door behind
                 # one; only one that's used goes off)
                 if info is not None and not self._spent(li):
-                    # (a locked one without its key says so and does nothing: MAP05's blue door,
-                    # pressed as a wall before she had the key, was taken as used up)
-                    if info.trigger in USED and self._front(li, last.x, last.y)                             and info.lock.satisfied(set(last.keys or ())):
-                        self._fire(li, obs.tic, "use")
+                    # (a locked one without its key does nothing, and the game says so: it's
+                    # something to come back to with the key, not used up)
+                    if info.trigger in USED and self._front(li, last.x, last.y):
+                        if info.lock.satisfied(set(last.keys or ())):
+                            self._fire(li, obs.tic, "use")
+                        elif obs.message is not None and NEEDS_KEY.search(obs.message) \
+                                and li not in self.locked:
+                            self.locked.add(li)
+                            self.events.append(f'tic {obs.tic}: line {li} is locked ("{obs.message}")')
                     break
                 opening = self._opening(li, heights)
                 if opening is None or opening[1] <= opening[0]:
@@ -494,7 +503,8 @@ class Knowledge:
     def _spent(self, li: int) -> bool:
         """A once-only line used this life (its special's gone: the game clears it)."""
         info = self._special(li)
-        return info is not None and info.trigger in (Trigger.W1, Trigger.S1, Trigger.G1, Trigger.D1)             and any(f.line == li and f.life == self.lives for f in self.fired)
+        return info is not None and info.trigger in (Trigger.W1, Trigger.S1, Trigger.G1, Trigger.D1) \
+                and any(f.line == li and f.life == self.lives for f in self.fired)
 
     def _fire(self, li: int, tic: int, how: str) -> None:
         info = self._special(li)
@@ -610,7 +620,8 @@ class Knowledge:
             info = self._special(li)
             if info is not None and info.trigger in USED + SHOT and self.tried_key(li) not in used \
                     and info.category not in (Category.EXIT, Category.SECRET_EXIT) \
-                    and (not self.perceive or self.looks_interactive(li) or li in self.in_the_way):
+                    and (not self.perceive or self.looks_interactive(li) or li in self.in_the_way
+                         or li in self.locked):
                 out.append(li)
         return out
 

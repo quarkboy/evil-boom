@@ -111,6 +111,7 @@ class Observation:
     super_shotgun: bool | None = None             # has it (slot 3 then brings it up), if known
     velocity: tuple | None = None                 # the player's (x, y) a tic, if known
     allmap: bool | None = None                    # has the computer area map, if known
+    message: str | None = None                    # what the game just told her, if anything
 
 
 @dataclass(frozen=True)
@@ -1016,7 +1017,8 @@ class RouteFollower:
             live = obs.heights.get(sector)
             # (a ceiling a little lower is fine: MAP09's door just starting to close as the lift
             # brings us up for the jump through it)
-            if live is None or abs(live[0] - h[0]) > 0.5 or live[1] > h[1] + 0.5                     or live[1] < h[1] - JUMP_CEILING_SLACK:
+            if live is None or abs(live[0] - h[0]) > 0.5 or live[1] > h[1] + 0.5 \
+                    or live[1] < h[1] - JUMP_CEILING_SLACK:
                 if self._jump_wait is None or self._jump_wait[:2] != (sector, live):
                     if self._jump_wait is None or self._jump_wait[0] != sector:
                         self.log.add(obs.tic, f"waiting for sector {sector} to reach "

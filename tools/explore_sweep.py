@@ -22,9 +22,10 @@ OUT = ROOT / "out" / "explore"
 STRANDED_TICS = 60 * 35  # nothing to do this long (with lives left): start the level again
 
 
-# Levels with secrets nobody can get (the user): how many short of the tally counts as all.
-# (One each is an assumption, not checked against the maps.)
-BROKEN_SECRETS = {"E4M3": 1, "E4M7": 1, "MAP15": 1, "MAP27": 1}
+# Levels with secrets nobody can get: how many short of the tally counts as all (E4M3: two
+# torch sectors no one can stand in; E4M7: one; MAP15's #9 and MAP27's #5: teleporter sectors
+# the teleport line keeps everyone out of)
+BROKEN_SECRETS = {"E4M3": 2, "E4M7": 1, "MAP15": 1, "MAP27": 1}
 
 
 def _plan_report(lp, k, x=None, real=None) -> list[str]:
@@ -70,7 +71,8 @@ def _plan_report(lp, k, x=None, real=None) -> list[str]:
 
 def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
             lives: int = 1, fight: int = 0, engine: str = "vizdoom",
-            expert: bool = False, peek: bool = False, secrets: bool = False) -> tuple[str, str, str]:
+            expert: bool = False, peek: bool = False, secrets: bool = False,
+            seed: int | None = 0) -> tuple[str, str, str]:
     from evildoom.config import resolve_wad
     from evildoom.engine.jump_check import keep_verified
     from evildoom.engine.vizdoom_engine import VizDoomEngine
@@ -88,7 +90,8 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
     keep_verified(nav, iwad, map_name)
     if engine == "dsda":
         from evildoom.engine.dsda_engine import DsdaEngine
-        e = DsdaEngine(iwad, map_name, skill=skill, nomonsters=not fight, objects=bool(fight) or expert)
+        e = DsdaEngine(iwad, map_name, skill=skill, nomonsters=not fight, objects=bool(fight) or expert,
+                       seed=seed)
     else:
         e = VizDoomEngine(iwad, map_name, skill=skill, nomonsters=not fight, objects=bool(fight),
                           headless=True)
@@ -115,7 +118,8 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
     idle_since = None  # since when she's had nothing to do
     spent = {"engine": 0.0, "observe": 0.0, "think": 0.0}  # seconds, where the time goes
     while e.tic < max_seconds * TICRATE:
-        stranded = idle_since is not None and e.tic - idle_since > STRANDED_TICS             or getattr(x, "restart_wanted", False)
+        stranded = idle_since is not None and e.tic - idle_since > STRANDED_TICS \
+                or getattr(x, "restart_wanted", False)
         if e.finished and e.dead and fight and obs is not None:
             seen = ", ".join(f"{t.name} {math.dist((t.x, t.y), (obs.x, obs.y)):.0f} away"
                              for t in x.combat.visible)
@@ -233,7 +237,11 @@ def main() -> None:
                     help="every secret there is found (going by the tally's count), then the exit (DSDA-Doom)")
     ap.add_argument("--lives", type=int, default=1,
                     help="tries at a map (dying starts it again, knowing what was learned)")
+    ap.add_argument("--seed", default="0",
+                    help="the game's random numbers from this seed, the same run every time (a "
+                         "number), or from the clock as in a real game ('random')")
     a = ap.parse_args()
+    seed = None if a.seed == "random" else int(a.seed)
     groups: list[tuple[str, list[str]]] = []  # (wad, maps named after it)
     for t in a.targets:
         if t.lower() in ("doom", "doom2") or t.lower().endswith(".wad"):
@@ -249,7 +257,7 @@ def main() -> None:
     results = []
     with ProcessPoolExecutor(a.jobs, max_tasks_per_child=1 if a.engine == "dsda" else None) as pool:
         futs = {pool.submit(run_map, w, n, a.max_seconds, a.mortal, a.lives, a.fight, a.engine, a.expert,
-                           a.peek, a.secrets): (w, n)
+                           a.peek, a.secrets, seed): (w, n)
                 for w, n in jobs}
         for i, f in enumerate(as_completed(futs), 1):
             w, n = futs[f]

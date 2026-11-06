@@ -21,6 +21,25 @@ index cb9a3d7..b3e5053 100644
 +target_include_directories(dsda-evil PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 +target_link_libraries(dsda-evil PRIVATE dsda::dependencies)
 +set_target_properties(dsda-evil PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${DSDA_OUTPUT_PATH} C_STANDARD 99)
+diff --git a/prboom2/src/SDL/i_system.c b/prboom2/src/SDL/i_system.c
+index 1fec088..bea19e8 100644
+--- a/prboom2/src/SDL/i_system.c
++++ b/prboom2/src/SDL/i_system.c
+@@ -155,8 +155,14 @@ fixed_t I_GetTimeFrac (void)
+  *
+  * CPhipps - extracted from G_ReloadDefaults because it is O/S based
+  */
++// Evil (evil-doom): when set, this seed instead of the clock (the same game every run)
++int evil_fixed_seed;
++unsigned long evil_seed_value;
++
+ unsigned long I_GetRandomTimeSeed(void)
+ {
++  if (evil_fixed_seed)
++    return evil_seed_value;
+   return (unsigned long)time(NULL);
+ }
+ 
 diff --git a/prboom2/src/d_main.c b/prboom2/src/d_main.c
 index 4e6abe4..88ce834 100644
 --- a/prboom2/src/d_main.c
@@ -38,6 +57,27 @@ index 4e6abe4..88ce834 100644
  void D_DoomMain(void)
  {
    D_DoomMainSetup(); // CPhipps - setup out of main execution stack
+diff --git a/prboom2/src/dsda/messenger.c b/prboom2/src/dsda/messenger.c
+index bbdfdb6..9721b2e 100644
+--- a/prboom2/src/dsda/messenger.c
++++ b/prboom2/src/dsda/messenger.c
+@@ -106,7 +106,16 @@ void dsda_AddAlert(const char* str) {
+   dsda_QueueMessage(str, message_alert);
+ }
+ 
++// Evil (evil-doom): the last message the game gave the player and when, shown or not
++// ("You need a blue key to open this door": a player knows what she pressed was locked)
++const char* evil_message;
++int evil_message_tic = -1;
++
+ void dsda_AddPlayerMessage(const char* str, player_t* player) {
++  if (player == &players[consoleplayer]) {
++    evil_message = str;
++    evil_message_tic = gametic;
++  }
+   if (dsda_ShowMessages() && player == &players[displayplayer])
+     dsda_QueueMessage(str, message_normal);
+ }
 diff --git a/prboom2/src/p_mobj.c b/prboom2/src/p_mobj.c
 index 9c2a92c..bca1d02 100644
 --- a/prboom2/src/p_mobj.c

@@ -2,7 +2,7 @@
 //! DSDA-Doom's sources; see `dsda/README.md`), run a tic at a time, its state read straight
 //! out of memory. One game a process (the engine is all globals).
 
-use std::ffi::{c_char, c_int, CString};
+use std::ffi::{c_char, c_int, c_ulong, CString};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -33,7 +33,7 @@ pub struct Mobj {
 
 /// The player (`evil_player`).
 #[repr(C)]
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct PlayerState {
     pub x: f64,
     pub y: f64,
@@ -56,6 +56,10 @@ pub struct PlayerState {
     pub playerstate: c_int,
     pub damagecount: c_int,
     pub allmap: c_int,
+    /// when the game last gave her a message (-1: never)
+    pub message_tic: c_int,
+    /// ...and what it said (nul-terminated)
+    pub message: [c_char; 96],
 }
 
 /// Where the game is (`evil_status`).
@@ -98,6 +102,7 @@ const BT_WEAPONSHIFT: i32 = 3;
 type InitFn = unsafe extern "C" fn(c_int, *mut *mut c_char) -> c_int;
 type NewGameFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int);
 type GodFn = unsafe extern "C" fn(c_int);
+type SeedFn = unsafe extern "C" fn(c_int, c_ulong);
 type TicFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int);
 type WarpFn = unsafe extern "C" fn(f64, f64, f64) -> c_int;
 type DrawFn = unsafe extern "C" fn(*mut u8, c_int) -> c_int;
@@ -111,6 +116,7 @@ static LOADED: AtomicBool = AtomicBool::new(false);
 pub struct Dsda {
     new_game_fn: NewGameFn,
     god_fn: GodFn,
+    seed_fn: SeedFn,
     tic_fn: TicFn,
     warp_fn: WarpFn,
     draw_fn: DrawFn,
@@ -142,11 +148,12 @@ impl Dsda {
                 .map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
         };
         // SAFETY: each symbol is the function of that name in evil_api.c, with this signature.
-        let (init_fn, new_game_fn, god_fn, tic_fn, warp_fn, draw_fn, status_fn, sectors_fn, mobjs_fn, player_fn) = unsafe {
+        let (init_fn, new_game_fn, god_fn, seed_fn, tic_fn, warp_fn, draw_fn, status_fn, sectors_fn, mobjs_fn, player_fn) = unsafe {
             (
                 std::mem::transmute::<*const (), InitFn>(sym(b"evil_init")?),
                 std::mem::transmute::<*const (), NewGameFn>(sym(b"evil_new_game")?),
                 std::mem::transmute::<*const (), GodFn>(sym(b"evil_god")?),
+                std::mem::transmute::<*const (), SeedFn>(sym(b"evil_seed")?),
                 std::mem::transmute::<*const (), TicFn>(sym(b"evil_tic")?),
                 std::mem::transmute::<*const (), WarpFn>(sym(b"evil_warp")?),
                 std::mem::transmute::<*const (), DrawFn>(sym(b"evil_draw")?),
@@ -167,6 +174,7 @@ impl Dsda {
         Ok(Self {
             new_game_fn,
             god_fn,
+            seed_fn,
             tic_fn,
             warp_fn,
             draw_fn,
@@ -190,6 +198,13 @@ impl Dsda {
     pub fn god(&self, on: bool) {
         // SAFETY: as above.
         unsafe { (self.god_fn)(c_int::from(on)) }
+    }
+
+    /// The random numbers from the next new game on: from `seed` (the same run every time,
+    /// given the same commands), or from the clock as the game has them (None: a real run).
+    pub fn seed(&self, seed: Option<u32>) {
+        // SAFETY: as above.
+        unsafe { (self.seed_fn)(c_int::from(seed.is_some()), c_ulong::from(seed.unwrap_or(0))) }
     }
 
     pub fn tic(&self, cmd: TicCmd) {
@@ -268,7 +283,8 @@ impl Dsda {
     }
 
     pub fn player(&self) -> PlayerState {
-        let mut p = PlayerState::default();
+        // SAFETY: the struct is plain numbers: all zeros is a valid one.
+        let mut p: PlayerState = unsafe { std::mem::zeroed() };
         // SAFETY: the game fills the struct it's given.
         unsafe { (self.player_fn)(&mut p) };
         p

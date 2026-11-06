@@ -562,6 +562,13 @@ impl DsdaGame {
         self.game.god(on);
     }
 
+    /// The random numbers from the next new game on: from `seed` (the same run every time,
+    /// given the same commands), or from the clock as the game has them (None: a real run).
+    #[pyo3(signature = (seed=None))]
+    fn seed(&self, seed: Option<u32>) {
+        self.game.seed(seed);
+    }
+
     /// One tic: forward and side -50..50 (side positive to the right), turn in degrees
     /// (positive clockwise), weapon slot 1-7 to switch to (0: none).
     fn tic(&self, forward: f64, side: f64, turn: f64, attack: bool, use_: bool, weapon: i32) {
@@ -620,7 +627,8 @@ impl DsdaGame {
 
     /// The player: a dict of x, y, z, angle, momx, momy, health, armor, weapon (slot held),
     /// weapons (slots owned), ssg, ammo (by slot), keys (blue card, yellow card, red card,
-    /// blue skull, yellow skull, red skull: held or not), ironfeet (tics), dead.
+    /// blue skull, yellow skull, red skull: held or not), ironfeet (tics), dead, allmap, message
+    /// (the last the game gave her) and message_tic (when: -1 never).
     fn player<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let p = self.game.player();
         let d = PyDict::new(py);
@@ -643,6 +651,9 @@ impl DsdaGame {
         d.set_item("ironfeet", p.ironfeet)?;
         d.set_item("dead", p.playerstate != 0)?;
         d.set_item("allmap", p.allmap != 0)?;
+        d.set_item("message_tic", p.message_tic)?;
+        let text: Vec<u8> = p.message.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
+        d.set_item("message", String::from_utf8_lossy(&text).into_owned())?;
         Ok(d)
     }
 }

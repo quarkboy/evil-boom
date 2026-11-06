@@ -336,7 +336,8 @@ class Combat:
         if missile is not None:
             move = self._dodge(obs, missiles)
             why = f"dodging {missile.name}"
-        elif not busy and shooting and barrel is not None and math.dist(barrel, pos) < BARREL_CLEAR + 64                 and (away := self._from_barrels(obs, barrel)) is not None:
+        elif not busy and shooting and barrel is not None and math.dist(barrel, pos) < BARREL_CLEAR + 64 \
+                and (away := self._from_barrels(obs, barrel)) is not None:
             # (MAP23: a mancubus's fireball set off the barrels she stood by, at full health;
             # once clear, she can set them off on it)
             move = away

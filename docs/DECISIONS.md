@@ -655,6 +655,17 @@ Still perception 59/68 (MAP28 out), peek 57/68.
 
 ## The 100% secrets sweep (2026-11-07)
 
-`tools/explore_sweep.py --secrets` (the user's third step): every secret there is, then the exit. She knows only the tally's count (as the automap shows a player: how many, not where); while it's short, the exit is last (`exit_last`): everything else first, the suspect walls and the panic tier included. Levels with secrets nobody can get (the user: E4M3, E4M7, MAP15, MAP27) pass one short (an assumption: E4M3 ended 20/22, so it may be two).
+`tools/explore_sweep.py --secrets` (the user's third step): every secret there is, then the exit. She knows only the tally's count (as the automap shows a player: how many, not where); while it's short, the exit is last (`exit_last`): everything else first, the suspect walls and the panic tier included. Levels with secrets nobody can get pass that many short: E4M3 two (torch sectors no one can stand in), E4M7 one, MAP15 one (#9), MAP27 one (#5: a teleporter's sector, the teleport line in the way); the user, and Paul Falstad's Doom II secrets list (gamers.org).
 
 First sweep (perception, 3 lives): **21/68 with every secret**, 56/68 exited. Most of the rest leave with some missing once there's nothing left to try (E2M4 4/10, MAP10 1/18, MAP19 3/9): the work list for finding secrets.
+
+## What the game tells her (2026-11-07)
+
+The user: pressing a locked door without its key, the game says so ("You need a blue key to open this door"), and a player learns from that. DSDA-Doom's messenger is patched (`dsda/dsda-doom.patch`) to keep the last message given to the player and its tic, shown or not; `evil_player_state` hands both over and `Observation.message` has one when it's new. A press whose line the game answers with a need-a-key message puts the line in `Knowledge.locked`: a door or switch from then on however it looks (offered once she holds the key, first among doors), where before it was only a suspect wall to be tried again with a new key.
+
+Also found: `ADDS_ON` (the per-line key for "raise N" floors) had a backspace character where its `\b` should have been since it was written, so it never matched; fixed.
+
+**The game's random numbers came from the clock**: DSDA-Doom adds `time(NULL)` to its seed at every new game (`I_GetRandomTimeSeed`), so a barrel took a different number of shots to burst each run and everything after went its own way (MAP23, alone, four runs: 376 to 1299 game seconds). Sweep results before this carry that noise. The patch adds `evil_seed(fixed, value)`: a seed of our choosing, the same run every time given the same commands, for testing. A real run keeps the clock (the user: we want random seeds for the real deal), and that's `DsdaEngine`'s default (`seed=None`); the sweep and the watcher take `--seed` (0 unless told; `random` for the clock), so a sweep's run can be watched again as it was, and a map can be tried over several seeds.
+- **Which wall next counts each wall's own failures** (`_wall_drops`): the walls still share one wait once given up on (that keeps the wall tier paced; giving each its own cost other maps before), but among those with a route, one given up on before counts as twice as far for each time. MAP14 (with the lock message, she opened the red door sooner and went another way): the nearest wall, line 864, behind a chain of timed switches, timed out every time and still came first every time; the blue door like the wall (811), at the top of the suspects with the key held, never got a go. Now it does: MAP14 exits in 1958 game seconds (3107 before), the same on seeds 0, 1, 2.
+
+Sweeps on seed 0 with all of the above: perception **59/68** (only MAP28 out), peek 57/68 (MAP14, MAP15, MAP27 out): as before, now repeatable.

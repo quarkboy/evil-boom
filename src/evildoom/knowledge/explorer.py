@@ -114,6 +114,10 @@ class Explorer:
     # ...and how often (each time it waits twice as long to be offered again: MAP14's switch
     # that never worked kept the one that would out of the running)
     _drop_count: dict = field(default_factory=dict)
+    # walls given up on, by line, how often: the walls share one wait (that keeps the wall tier
+    # paced), but which of them goes next counts each one's own failures (MAP14: the nearest,
+    # given up on every time, always came first, and the blue door like the wall never did)
+    _wall_drops: dict = field(default_factory=dict)
     _since: int = 0
     _exits_seen: int = 0
     _allowed: int = GIVE_UP_TICS  # how long the current objective may take
@@ -455,7 +459,8 @@ class Explorer:
         # (`play`: with a little play round it, for a spot to stop at: one the box fits at only
         # to the unit is one she never gets to: MAP21's look-out between a wall and key bars, 32
         # apart, pushed at for good)
-        return clear and ceiling - floor >= PLAYER_HEIGHT and floor <= centre + MAX_STEP             and (not play or all(lab.fits_at(q[0] + dx, q[1] + dy)[0]
+        return clear and ceiling - floor >= PLAYER_HEIGHT and floor <= centre + MAX_STEP \
+                and (not play or all(lab.fits_at(q[0] + dx, q[1] + dy)[0]
                                  for dx, dy in ((0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5))))
 
     def touch_spot(self, item, reach: set[int]):
@@ -1115,6 +1120,8 @@ class Explorer:
     def _drop(self, obj: Objective, obs: Observation, why: str) -> None:
         self._dropped[obj.ident] = obs.tic
         self._drop_count[obj.ident] = self._drop_count.get(obj.ident, 0) + 1
+        if obj.wall is not None:
+            self._wall_drops[obj.wall] = self._wall_drops.get(obj.wall, 0) + 1
         self.log.append(f"tic {obs.tic}: dropped '{obj.label}' ({why})")
 
     def _exit_pads(self) -> set[int]:
@@ -1250,7 +1257,9 @@ class Explorer:
                         self.log.append(f"tic {obs.tic}: '{obj.label}' not worth {length:.0f} "
                                         f"to get to (at most {obj.worth:.0f}): in its turn")
                         obj = replace(obj, urgent=False, worth=None, label=obj.label.split(" (")[0])
-                    routed.append((length * WEIGHT[obj.kind], obj, steps))
+                    # (a wall given up on before: as if twice as far for each time)
+                    tries = 2 ** self._wall_drops.get(obj.wall, 0) if obj.wall is not None else 1
+                    routed.append((length * WEIGHT[obj.kind] * tries, obj, steps))
                     if obj.priority < 2:
                         break  # (nothing further down the list comes first anyway)
                 else:
