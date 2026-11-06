@@ -283,6 +283,16 @@ impl Fitter<'_> {
         Ok(top - ours < PLAYER_HEIGHT)
     }
 
+    /// Is line `li` a ledge more than a step above the floor under the box's centre at `at`?
+    fn ledge_over_centre(&mut self, li: usize, at: Point) -> PyResult<bool> {
+        let nav = self.nav;
+        let (Some(f), Some(b)) = nav.map.sides(li) else { return Ok(false) };
+        let Some(here) = nav.sector_at(at) else { return Ok(false) };
+        let centre = top_floor(&self.heights(here)?);
+        let low = |hs: &[Heights]| hs.iter().map(|h| h.floor).fold(f64::INFINITY, f64::min);
+        Ok(low(&self.heights(f)?).max(low(&self.heights(b)?)) > centre + MAX_STEP)
+    }
+
     fn standing_floor_cached(&mut self, at: Point, cache: &mut Option<Option<f64>>) -> PyResult<Option<f64>> {
         if let Some(f) = *cache {
             return Ok(f);
@@ -301,12 +311,23 @@ impl Fitter<'_> {
         let r = PLAYER_RADIUS + BOX_SLACK;
         let mut standing = None;
         for li in nav.lines_in(cells_around(p, q, PLAYER_RADIUS + 1.0)) {
-            if self.exempt.contains(&li) {
-                continue;
-            }
             let e = nav.map.line_seg(li);
             let k = seg_key(e);
-            if ignore.contains(&k) || out.contains(&k) || !swept_box_hits(p, q, r, e) {
+            if out.contains(&k) || !swept_box_hits(p, q, r, e) {
+                continue;
+            }
+            // (one the box is over already doesn't count against leaving it, nor one the way
+            // crosses, but a ledge more than a step above the floor under its centre does against
+            // going further over it: MAP19's fan of stairs, set off from the floor beside the
+            // point where they meet, the box already over the second step up, and along it)
+            if swept_box_hits(p, p, r, e)
+                && segment_distance(p, q, e.0, e.1) < dist(p, closest_point(p, e.0, e.1)) - 0.5
+                && self.ledge_over_centre(li, p)?
+            {
+                out.insert(k);
+                continue;
+            }
+            if self.exempt.contains(&li) || ignore.contains(&k) {
                 continue;
             }
             if self.line_blocks(li, p, &mut standing)? {
