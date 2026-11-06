@@ -59,7 +59,7 @@ class DsdaEngine:
             os.environ["SDL_VIDEODRIVER"] = "dummy"
         try:
             self.game = evildoom_native.DsdaGame(str(library), [
-                "-iwad", str(iwad), "-nosound", "-nomusic", "-skill", str(skill)]
+                "-iwad", str(iwad), "-nosound", "-nomusic", "-nomouse", "-skill", str(skill)]
                 + ([] if drawn else ["-nodraw"]) + ["-warp"] + warp
                 + ["-nomonsters"] * nomonsters)  # (as the game sets it: a new game resets it from this)
         finally:
