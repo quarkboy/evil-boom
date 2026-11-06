@@ -237,6 +237,10 @@ class Navigator:
         #                          (the planner instead prefers paths with fewer squeezes)
         # (switch line, poly) -> sectors that must be open for the use trace (activators_now)
         self.use_gates: dict[tuple[int, int], frozenset[int]] = {}
+        # (switch line, poly) -> (front, back) sector pairs the use trace crosses between, shut
+        # at the start by their heights (a raised platform's floor at the ceiling beyond), that
+        # must have a gap between them for the press (activators_now)
+        self.use_line_gates: dict[tuple[int, int], frozenset[tuple[int, int]]] = {}
         # (gun line, poly) -> floors to stand on there for a level shot to hit it
         self.shot_floors: dict[tuple[int, int], tuple[float, float]] = {}
         self.triggers = self._find_triggers()
@@ -778,9 +782,11 @@ class Navigator:
                                               line.index)) is not None]
             if gates:
                 out.add(poly.index)
-                best = min(gates, key=len)
-                if best:
-                    self.use_gates[(line.index, poly.index)] = best
+                sectors, pairs = min(gates, key=lambda g: len(g[0]) + len(g[1]))
+                if sectors:
+                    self.use_gates[(line.index, poly.index)] = sectors
+                if pairs:
+                    self.use_line_gates[(line.index, poly.index)] = pairs
         return out
 
     def _press_point_in(self, poly, a: Point, b: Point) -> bool:
@@ -816,15 +822,18 @@ class Navigator:
                     return True
         return False
 
-    def _use_gates(self, p: Point, q: Point, target: int) -> frozenset | None:
-        """Sectors closed at the map's initial heights that the use trace from p to q (on the
-        target line) passes, or None if a line that never opens is in the way."""
+    def _use_gates(self, p: Point, q: Point, target: int) -> tuple[frozenset, frozenset] | None:
+        """What's shut at the map's initial heights that the use trace from p to q (on the
+        target line) passes: sectors shut in themselves (doors), and pairs of sectors with no
+        gap between them where one can move (MAP12's switch in an alcove beside a raised
+        platform, whose floor was at the alcove's ceiling till it was lowered); or None if a
+        line that never opens is in the way."""
         m, init = self.map, self.movers.initial
         if not hasattr(self, "_may_move"):  # tagged sectors and door sectors
             self._may_move = {s.index for s in m.sectors if s.tag} | {
                 m.back_sector(ln) for ln in m.linedefs
                 if (i := classify_line(ln.special)) and i.trigger in (Trigger.D1, Trigger.DR)}
-        gates = set()
+        gates, pairs = set(), set()
         for cell in _cells(min(p[0], q[0]), min(p[1], q[1]), max(p[0], q[0]), max(p[1], q[1])):
             for li in self.mesh._line_grid.get(cell, ()):
                 if li == target:
@@ -847,12 +856,16 @@ class Navigator:
                     continue
                 if usable:
                     return None
-                movable = [s for s in (f, b) if s is not None and s in self._may_move
-                           and init[s][1] - init[s][0] <= 0]
-                if f is None or b is None or not movable:
+                if f is None or b is None:
                     return None
-                gates.update(movable)
-        return frozenset(gates)
+                movable = [s for s in (f, b) if s in self._may_move and init[s][1] - init[s][0] <= 0]
+                if movable:
+                    gates.update(movable)
+                elif f in self._may_move or b in self._may_move:
+                    pairs.add((f, b))
+                else:
+                    return None
+        return frozenset(gates), frozenset(pairs)
 
     def activators_now(self, t: TriggerLine, states: HeightStates,
                        doors: Doors | None = None) -> set[int]:
@@ -865,6 +878,9 @@ class Navigator:
         for p in t.activators:
             if not all(any(h[1] - h[0] > 0 for h in states[s]) or (doors and s in doors)
                        for s in self.use_gates.get((t.line, p), ())):
+                continue
+            if not all(any(min(a[1], b[1]) - max(a[0], b[0]) > 0 for a in states[f] for b in states[bk])
+                       for f, bk in self.use_line_gates.get((t.line, p), ())):
                 continue
             shot = self.shot_floors.get((t.line, p))
             if shot is not None and not any(shot[0] <= h[0] <= shot[1]
@@ -1490,6 +1506,7 @@ class Navigator:
         return {
             "triggers": triggers,
             "use_gates": {k: sorted(v) for k, v in self.use_gates.items()},
+            "use_line_gates": {k: sorted(v) for k, v in self.use_line_gates.items()},
             "shot_floors": {k: tuple(map(float, v)) for k, v in self.shot_floors.items()},
             "cross_sides": dict(self.cross_sides()),
             "temporary": [(sec, tuple(map(float, h))) for sec, h in self._temporary_heights()],
@@ -1644,7 +1661,13 @@ class Navigator:
                         st2[sh[0]] = st2[sh[0]] - {sh[1]}
                     without[sh[0]] = self.reachable(start, st2, {k: v for k, v in doors_all.items()
                                                                 if k != sh[0]})
-                first = next((t for t in cands if t.activators & without[sh[0]]), None)
+                # (not from where the press itself waits on that sector: MAP27's lift switch,
+                # pressed from the floor below across the lift's edge only once the lift's down,
+                # taken for the way to get it down)
+                def free(t):
+                    return {p for p in t.activators if sh[0] not in self.use_gates.get((t.line, p), ())
+                            and not any(sh[0] in pr for pr in self.use_line_gates.get((t.line, p), ()))}
+                first = next((t for t in cands if free(t) & without[sh[0]]), None)
                 if first is None:
                     for dt in self.triggers:
                         if sh[0] in dt.sectors and dt.info.lock is not Lock.NONE:
@@ -1664,7 +1687,8 @@ class Navigator:
                         # Where it can be used from without something having to be open in
                         # the way of the press, if anywhere (MAP27's switch for the red key's
                         # pedestal, behind a blue door: the path there names the blue key)
-                        clear = {p for p in t.activators if not self.use_gates.get((t.line, p))}
+                        clear = {p for p in t.activators if not self.use_gates.get((t.line, p))
+                                 and not self.use_line_gates.get((t.line, p))}
                         queue.append(clear & reach_all or set(t.activators))
                         if not clear & reach_all:  # pressed through a door: its key
                             gates = {g for p in t.activators

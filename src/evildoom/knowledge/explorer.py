@@ -33,6 +33,7 @@ ROUTE_SLACK = 15 * TICRATE    # ...and this
 THRESHOLD_IN = 8.0            # a threshold's spot: this far over the line
 EXIT_MARGIN = 64.0  # the expert's run: no goal this near a walk-over exit line (she'd slide over)
 STUCK_TIMES = 2  # a route failing stuck in the same poly this often: not through there again
+DOOR_MARGIN = 3 * TICRATE  # a door on its timer with less than this before it closes: shut, to a route
 SUSPECTS = 6  # suspected walls offered at a time (the most suspicious)
 PANIC_WALLS = 12  # ...and in a panic, the nearest walls of all
 JUMP_MISSES = 2  # a run-jump missed this often isn't tried again; missed once, only when
@@ -166,14 +167,17 @@ class Explorer:
         out = {s: {tuple(k.seen_heights[s])} if s in k.seen_heights else {h}
                for s, h in enumerate(self.nav.movers.initial)}
         known = {t.line: (t, sectors) for t, sectors in k.known_triggers()}
+        closing: dict[int, int] = {}  # door sector -> when the door she last opened starts to close
         for f in k.fired:
             if f.line not in known or f.life != k.lives:  # (this life's: the level's started again)
                 continue
             t, sectors = known[f.line]
             effects = t.effects_now(out)
             for s in sectors:
-                if not effects.get(s):
-                    continue
+                if not effects.get(s) or (t.permanent and k.doubtful(f.line, s)):
+                    continue  # (in doubt that it's gone for good: as seen, not built on)
+                if t.permanent:
+                    closing.pop(s, None)  # (opened for good since: no timer)
                 # (not seen since the move should have finished: as it'll have left it; seen
                 # after, as seen. Stairs rise slowly: seen part way up is not the top)
                 h = effects[s][0]
@@ -182,8 +186,11 @@ class Explorer:
                 # (what comes back is only as moved till it's due back: MAP23's timed door,
                 # opened a minute before, seemed open still and a path squeezed through it)
                 back = done + (timing.hold + timing.travel if timing and timing.hold is not None else 0)
-                if not t.permanent and timing is not None and timing.hold is not None and now > back:
-                    continue
+                if not t.permanent and timing is not None and timing.hold is not None:
+                    if t.info.category in (Category.DOOR, Category.LOCKED_DOOR):
+                        closing[s] = done + timing.hold
+                    if now > back:
+                        continue
                 if k.seen_tic.get(s, -1) < done:
                     hs = {tuple(h) for h in effects[s]}
                     out[s] = hs if t.permanent else out[s] | hs
@@ -193,6 +200,16 @@ class Explorer:
             if not t.permanent:
                 for s in sectors:
                     out[s] = out[s] | {tuple(self.nav.movers.initial[s])}
+        # a door that closes again, open on its timer with little of it left (or none), is
+        # shut as far as a route goes, whatever she last saw (she's not seen it since it was
+        # due to start closing); a route that wants it opens it on the way, from the side
+        # with the switch (MAP12's door 31: open when she set off, a route back through it
+        # from the side with none, a drop behind her, and shut when she got there)
+        here = self.nav.mesh.poly_at(k._last.x, k._last.y) if k._last is not None else None
+        for s, closes in closing.items():
+            if now > closes - DOOR_MARGIN and k.seen_tic.get(s, -1) < closes \
+                    and not (here is not None and here.sector == s):
+                out[s] = {tuple(self.nav.movers.initial[s])}
         # a slot narrower than the box is walked over at its sides' floor, however deep she
         # saw it (E4M1's 8-unit slot by the blue key room, seen at its real floor, was a pit)
         # (at each floor the sides can be at: MAP08's moat beside a floor a trap drops and a
@@ -288,14 +305,22 @@ class Explorer:
         learned_lines = {nav.triggers[i].line for i, sec in k.learned.items() if sec}
         last_press: dict[int, int] = {f.line: f.tic for f in k.fired}
         again = []
+        # (and those whose effect she's put down to them on timing alone, unsure: pressed again
+        # and watched, once a life)
+        doubted = {key for key, _ in k.doubts}
         for li, tic in last_press.items():
             t = by_line.get(li)
-            if t is None or li not in k.mapped or li in learned_lines or t.info.trigger not in (Trigger.SR, Trigger.GR):
+            if t is None or li not in k.mapped or t.info.trigger not in (Trigger.SR, Trigger.GR):
                 continue
-            if obs.tic - tic < REPRESS_AFTER or not t.activators & reach or not t.info.lock.satisfied(keys):
+            unsure = k.tried_key(li) in doubted and (k.tried_key(li), k.lives) not in k.rechecked
+            if li in learned_lines and not unsure:
+                continue
+            if (obs.tic - tic < REPRESS_AFTER and not unsure) or not t.activators & reach \
+                    or not t.info.lock.satisfied(keys):
                 continue
             again.append(Objective("switch", nav._activation_point(t, pos, reach),
-                                   f"try switch again (line {li})", trigger=t))
+                                   f"try switch again (line {li}{', unsure what it does' if unsure else ''})",
+                                   trigger=t))
         if self._suspecting:
             out += self._walls(obs, reach, panic=self._suspecting == "panic")
         out += self._teleporters(reach, pos)
@@ -306,15 +331,23 @@ class Explorer:
         out += self._noises(reach, pos, obs.tic)
         if self.wanted is not None:
             out += self.wanted(obs, reach, pos)
-        tic = obs.tic
-        def fresh(o: Objective) -> bool:  # (not dropped lately: the longer, the more often it has been)
-            times = self._drop_count.get(o.ident, 0)
-            return tic - self._dropped.get(o.ident, -10**9) > RETRY_TICS * 2 ** max(0, min(times - 1, 5))
+        def fresh(o: Objective) -> bool:
+            return self._fresh(o, obs.tic)
         # (not anywhere that would cut her off from most of what she can get to now, as far as
         # she knows: pits, one-way drops; where she stands may itself be a spot she can't get
         # back to, so it's the share of the rest that counts)
         doors = view.local_doors(keys)
         back: dict[int, bool] = {}
+        # (the way back as it'll be: a door that closes again shut, unless something opens it
+        # for good, but for one she can open from where she'll be (doors); MAP12's door 31,
+        # openable from one side only, counted open coming back from the other, behind a drop)
+        known_triggers = k.known_triggers()
+        for_good = {s for t, secs in known_triggers if t.permanent for s in secs}
+        states_back = dict(states_all)
+        for t, secs in known_triggers:
+            if not t.permanent and t.info.category in (Category.DOOR, Category.LOCKED_DOOR):
+                for s in secs - for_good:
+                    states_back[s] = {tuple(nav.movers.initial[s])}
 
         def returnable(o: Objective) -> bool:
             if o.kind in ("exit", "teleporter", "key"):
@@ -323,7 +356,7 @@ class Explorer:
             if p is None:
                 return False
             if p.index not in back:
-                after = view.reachable(p.index, states_all, doors)
+                after = view.reachable(p.index, states_back, doors)
                 back[p.index] = here.index in after or len(after & reach) >= KEEP_REACH * len(reach)
             return back[p.index]
         def usable(objectives: list[Objective]) -> list[Objective]:
@@ -612,9 +645,13 @@ class Explorer:
         if risky and self.knowledge.traps:
             # (not back into a trap she's been stuck in before: MAP18's nukage moat, dropped into
             # to look at its walls, and stranded; the next go, again, as it seemed worth a look)
+            # (but in one already, it's all there is: MAP21's nukage pit, dropped into for a
+            # skull, its lifts out tried only from inside)
             mesh = self.nav.mesh
+            here = mesh.poly_at(obs.x, obs.y)
+            traps = [t for t in self.knowledge.traps if here is None or here.index not in t]
             options = [o for o in options if not any(
-                (p := mesh.poly_at(*o.goal)) is not None and p.index in trap for trap in self.knowledge.traps)]
+                (p := mesh.poly_at(*o.goal)) is not None and p.index in trap for trap in traps)]
         if not self._exits_open:
             # (nor anywhere she'd slide over one getting there: MAP24's pad, 38 off a goal)
             self._exit_pads()
@@ -677,7 +714,8 @@ class Explorer:
         # no way to the nearest spot to press it from: the next nearest (MAP08's exit door,
         # nearest from a nukage pit through a gap too tight, is pressed from the ledge above)
         goal, tried = obj.goal, set()
-        while route is None and obj.trigger is not None and obj.kind in ("switch", "door", "exit")                 and len(tried) < 3 and (at := self.nav.mesh.poly_at(*goal)) is not None:
+        while route is None and obj.trigger is not None and obj.kind in ("switch", "door", "exit") \
+                    and len(tried) < 3 and (at := self.nav.mesh.poly_at(*goal)) is not None:
             tried.add(at.index)
             rest = (obj.trigger.activators & self._reach) - tried
             if not rest:
@@ -736,7 +774,8 @@ class Explorer:
                 if p is not None and q is not None]
         final = route.states
         for t in view.triggers:
-            if t.line < 0 or not t.effects or t.info.trigger not in (Trigger.W1, Trigger.WR)                     or (t.once and t.line in spent):
+            if t.line < 0 or not t.effects or t.info.trigger not in (Trigger.W1, Trigger.WR) \
+                    or (t.once and t.line in spent):
                 continue
             a, b = _line_ends(m, t.line)
             if any(_segments_cross(p, q, a, b) for p, q in legs):
@@ -919,7 +958,7 @@ class Explorer:
         obj = self.current
         k = self.knowledge
         if obj.kind in ("switch", "door") and not any(
-                k.mechanism(f.line) == k.mechanism(obj.trigger.line) for f in k.fired):
+                k.tried_key(f.line) == k.tried_key(obj.trigger.line) for f in k.fired):
             self._drop(obj, obs, "pressed, but nothing went off")
         elif obj.kind in ("frontier", "switch", "recheck", "noise", "room") and not self._seen_to(obj):
             if self._look_until is None:
@@ -1101,6 +1140,11 @@ class Explorer:
                 continue
             out.append(Objective("wall", stand, f"try the wall (line {li}, {score:.1f})", look_at=mid, wall=li))
         return out
+
+    def _fresh(self, o: Objective, tic: int) -> bool:
+        """Not dropped lately (the longer, the more often it has been)."""
+        times = self._drop_count.get(o.ident, 0)
+        return tic - self._dropped.get(o.ident, -10**9) > RETRY_TICS * 2 ** max(0, min(times - 1, 5))
 
     def _next(self, obs: Observation) -> None:
         self.follower = None

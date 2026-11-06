@@ -84,6 +84,9 @@ pub struct PlanFacts {
     pub triggers: Vec<Trigger>,
     /// (line, activator poly) -> sectors that must be open to press it from there
     pub use_gates: HashMap<(usize, usize), Vec<usize>>,
+    /// (line, activator poly) -> (front, back) sectors the press passes between, which must
+    /// have a gap between them (a raised platform's floor at the ceiling of an alcove beyond)
+    pub use_line_gates: HashMap<(usize, usize), Vec<(usize, usize)>>,
     /// (gun line, activator poly) -> the floors it can be shot from there
     pub shot_floors: HashMap<(usize, usize), (f64, f64)>,
     /// (walk-over line, activator poly) -> the sector across the line
@@ -146,6 +149,14 @@ impl Planner<'_, '_> {
             .filter(|&p| {
                 if let Some(gates) = self.facts.use_gates.get(&(line, p)) {
                     if !gates.iter().all(|&s| states[s].iter().any(|h| h.ceiling - h.floor > 0.0) || openable(s)) {
+                        return false;
+                    }
+                }
+                if let Some(pairs) = self.facts.use_line_gates.get(&(line, p)) {
+                    let gap = |f: usize, b: usize| {
+                        states[f].iter().any(|a| states[b].iter().any(|c| a.ceiling.min(c.ceiling) - a.floor.max(c.floor) > 0.0))
+                    };
+                    if !pairs.iter().all(|&(f, b)| gap(f, b)) {
                         return false;
                     }
                 }

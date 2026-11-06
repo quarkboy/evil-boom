@@ -171,6 +171,7 @@ impl From<TriggerIn> for Trigger {
 struct PlanFactsIn {
     triggers: Vec<TriggerIn>,
     use_gates: HashMap<(usize, usize), Vec<usize>>,
+    use_line_gates: HashMap<(usize, usize), Vec<(usize, usize)>>,
     shot_floors: HashMap<(usize, usize), (f64, f64)>,
     cross_sides: HashMap<(usize, usize), usize>,
     temporary: Vec<(usize, Heights)>,
@@ -183,6 +184,7 @@ impl From<PlanFactsIn> for PlanFacts {
         PlanFacts {
             triggers: f.triggers.into_iter().map(Trigger::from).collect(),
             use_gates: f.use_gates,
+            use_line_gates: f.use_line_gates,
             shot_floors: f.shot_floors,
             cross_sides: f.cross_sides,
             temporary: f.temporary.into_iter().map(|(s, h)| (s, h.key())).collect(),

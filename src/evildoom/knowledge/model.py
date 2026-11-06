@@ -11,6 +11,7 @@ keys a lock needs, teleporters.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 
 import evildoom_native
@@ -34,12 +35,15 @@ EXPECTED_RADIUS = 128.0  # a sound this near a known mover's is that mover
 EXPECTED_FOR = 8 * 35    # ...which she set off at most this many tics before (a door closing
 #                          behind her, a lift coming back): later it moved by itself
 TAKE_TICS = 35          # a once-only line set off moves nothing in this long...
+SURE_TICS = 8           # a sector starting to move this soon after a press: the press did it
+#                         (later, it's put down to the press on timing alone: in doubt)
 BUSY_TICS = 200         # ...where it acts on what moved this lately (a door open, waiting to
 #                          close): it didn't take (Doom leaves a switch on a busy sector unused)
 # textures that make a line look like a switch, a door or a lift (as a player knows them)
 LOOKS_INTERACTIVE = ("SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR",
                      "ZELDOOR", "PLAT", "SUPPORT")
 SUSPICION_MIN = 2.0     # a wall suspected this much is worth a press of use
+ADDS_ON = re.compile(r"raise \d+")  # (floor raises by an amount: each press adds on)
 ML_SECRET = 0x0020      # (drawn on the automap as a plain wall)
 NO_SIDE = 0xFFFF
 FELT_TICS = 70          # unhurt on a floor this long: it doesn't hurt
@@ -103,6 +107,12 @@ class Knowledge:
     stuck_at: dict = field(default_factory=dict)  # poly -> times a route failed stuck there
     tried_walls: set = field(default_factory=set)  # walls she's pressed use on, suspecting them
     in_the_way: set = field(default_factory=set)  # lines between her and a switch that did nothing
+    # what she's learned a line does, put down to it on timing alone (the sector started moving
+    # a while after she pressed it: maybe something else did it): (tried_key, sector) -> tic.
+    # The planner doesn't build on these; once nothing else is left, the line's pressed again
+    # and watched (rechecked: (tried_key, life) done)
+    doubts: dict = field(default_factory=dict)
+    rechecked: set = field(default_factory=set)
     # sector -> does it hurt now, for floors seen moved by a line that changes their type
     # (this life: the level starting again puts them back)
     changed_floor: dict[int, bool] = field(default_factory=dict)
@@ -124,6 +134,7 @@ class Knowledge:
         self._standing: tuple[int, int] | None = None  # (sector, since tic) on its floor
         self._hurt_on: tuple[int, int] | None = None   # (sector, tic) last hurt standing on it
         self._ends: dict | None = None  # vertex -> lines ending there
+        self._checking: list = []  # (fired, sectors in doubt): a doubted line pressed again, watched
         # where each sector's sounds come from: the middle of its bounding box (P_GroupLines)
         box: dict[int, list[float]] = {}
         for line in m.linedefs:
@@ -227,10 +238,11 @@ class Knowledge:
             self.seen_tic[s] = obs.tic
             now = heights[s]
             if self.seen_heights.get(s, now) != now:
-                self._saw_move(s, obs.tic)
+                self._saw_move(s, obs.tic, now)
             self.seen_heights[s] = now
         self._hear(obs, in_view)
         self._took(obs.tic)
+        self._check_doubts(obs.tic)
         self._last = obs
 
     # --- hearing ------------------------------------------------------------------------
@@ -272,13 +284,29 @@ class Knowledge:
                 self.events.append(f"tic {obs.tic}: heard something move, bearing {bearing:.0f}, "
                                    f"about {dist:.0f} away")
 
-    def _saw_move(self, s: int, tic: int) -> None:
-        """Sector s is seen at new heights: put it down to the latest line fired that moves
-        it."""
+    def _saw_move(self, s: int, tic: int, now: tuple[float, float]) -> None:
+        """Sector s is seen at new heights: put it down to the latest line fired, before it
+        started moving, that moves it, and moves it this way (a door seen closing is no
+        open-for-good switch's doing: MAP12's, pressed while the door was open on its own
+        timer, turned down, and taken to have opened it for good). Sure if it started moving
+        right after the press, else in doubt (doubts)."""
+        was = self.seen_heights.get(s)
+        # (when it started moving, by its sound; this tic, if it wasn't moving till now)
+        prev = self._live.get(s)
+        fresh = s not in self._moving and prev is not None and (float(prev[0]), float(prev[1])) != tuple(now)
+        started = tic if fresh else self._moved_at.get(s, tic)
         for f in reversed(self.fired):
+            if f.life != self.lives or f.tic > started:
+                continue
             for ti in self._by_line.get(f.line, ()):
                 t = self.nav.triggers[ti]
-                if s in t.effects:
+                if s in t.effects and self._heads_for(t, s, was, now):
+                    key = (self.tried_key(f.line), s)
+                    if started - f.tic <= SURE_TICS:
+                        if self.doubts.pop(key, None) is not None:
+                            self.events.append(f"tic {tic}: line {f.line} does move sector {s}: sure now")
+                    elif key not in self.doubts and s not in self.learned.get(ti, ()):
+                        self.doubts[key] = tic
                     hurts = self.nav.floor_after(t, s)
                     if hurts is not None and self.changed_floor.get(s) != hurts:
                         self.changed_floor[s] = hurts
@@ -290,6 +318,50 @@ class Knowledge:
                         self.events.append(f"tic {tic}: learned line {f.line} ({t.info.description}) "
                                            f"moves sector {s}")
                     return
+
+    def _heads_for(self, t: TriggerLine, s: int, was, now) -> bool:
+        """Is sector s, seen go from `was` to `now`, on its way to where t puts it (or, for a
+        line whose move comes back, a lift or a door that closes again, back to rest)?"""
+        if was is None or t.shift_from is not None or t.recompute is not None:
+            return True  # (where it goes depends on how things are: no telling)
+        targets = list(t.effects[s])
+        if not t.permanent:
+            targets.append(self.nav.movers.initial[s])
+        def off(h, at):
+            return abs(at[0] - h[0]) + abs(at[1] - h[1])
+        return any(off(h, now) < off(h, was) - 0.5 or off(h, now) < 0.5 for h in targets)
+
+    def doubtful(self, line: int, s: int) -> bool:
+        return (self.tried_key(line), s) in self.doubts
+
+    def _check_doubts(self, tic: int) -> None:
+        """A line in doubt pressed again: what it's put down to moving, moving right after
+        (_saw_move: sure), already where it puts it (no telling, but it fits: kept), or neither
+        (it doesn't do that after all: unlearned)."""
+        still = []
+        for f, sectors in self._checking:
+            left = {s for s in sectors if (self.tried_key(f.line), s) in self.doubts}
+            if not left:
+                continue
+            if tic - f.tic < TAKE_TICS:
+                still.append((f, left))
+                continue
+            for s in left:
+                key = (self.tried_key(f.line), s)
+                fits = False
+                for ti in self._by_line.get(f.line, ()):
+                    t = self.nav.triggers[ti]
+                    if s in t.effects and t.shift_from is None and t.recompute is None:
+                        seen = self.seen_heights.get(s)
+                        fits = fits or (seen is not None and any(
+                            abs(seen[0] - h[0]) + abs(seen[1] - h[1]) < 0.5 for h in t.effects[s]))
+                if fits or self._running(s, tic) or self.seen_tic.get(s, -1) < f.tic:
+                    continue  # (still in doubt: no telling from here)
+                self.doubts.pop(key)
+                for ti in self._by_line.get(f.line, ()):
+                    self.learned.get(ti, set()).discard(s)
+                self.events.append(f"tic {tic}: line {f.line} doesn't move sector {s} after all")
+        self._checking = still
 
     # --- doing --------------------------------------------------------------------------
 
@@ -425,13 +497,46 @@ class Knowledge:
                 any(f.line == li and f.life == self.lives for f in self.fired):
             return  # (once only: nothing happens again, this life; MAP08's trap went off again
             #        in the next and wasn't noticed: the planner took the line for spent)
+        if info.trigger in (Trigger.SR, Trigger.GR) and info.category is not Category.CRUSHER \
+                and any(self.nav.triggers[ti].permanent for ti in self._by_line.get(li, ())) \
+                and (busy := [t for t in self._targets(li) if self._running(t, tic)]):
+            # (Doom turns a switch down on a sector still busy, the switch not even flipping; a
+            # repeatable one that would leave it so for good, taken to have, misleads the planner:
+            # MAP12's switch to open door 31 for good, pressed while the door's own DR line had
+            # it open, waiting to close; it closed, and she'd taken it to be open for good)
+            self.events.append(f"tic {tic}: {how} line {li} ({info.description}): sector {busy[0]} "
+                               f"is busy, so nothing")
+            return
         f = Fired(li, tic, how, self.lives)
         self.fired.append(f)
         self.events.append(f"tic {tic}: {how} line {li} ({info.description})")
+        doubted = {s for (k, s) in self.doubts if k == self.tried_key(li)}
+        if doubted:
+            self.rechecked.add((self.tried_key(li), self.lives))
+            self._checking.append((f, doubted))
         if info.trigger in (Trigger.W1, Trigger.S1, Trigger.G1, Trigger.D1):
             targets = self._targets(li)
             if any(tic - self._moved_at.get(t, -10**9) < BUSY_TICS for t in targets):
                 self._taking.append((f, targets))
+
+    def _running(self, s: int, tic: int) -> bool:
+        """Is sector s, as far as she can tell, still in a move that comes back (a door open on
+        its timer, a lift away): moved lately, by a line of hers that doesn't leave it for good
+        (or by she doesn't know what), and not back where it started?"""
+        if tic - self._moved_at.get(s, -10**9) >= BUSY_TICS:
+            return False
+        init = self.nav.movers.initial[s]
+        seen = self.seen_heights.get(s, init)
+        if abs(seen[0] - init[0]) < 0.5 and abs(seen[1] - init[1]) < 0.5:
+            return False
+        last = None
+        for g in self.fired:
+            if g.life != self.lives:
+                continue
+            for ti in self._by_line.get(g.line, ()):
+                if s in self.nav.triggers[ti].effects and (last is None or g.tic >= last[0]):
+                    last = (g.tic, self.nav.triggers[ti])
+        return last is None or not last[1].permanent
 
     def _targets(self, li: int) -> set[int]:
         """The sectors a line acts on, by the game's rule: those with its tag; a door line
@@ -487,11 +592,11 @@ class Knowledge:
     def interactables(self) -> list[int]:
         """Mapped lines she can tell are switches or use-doors (or gun targets), not used
         yet (exits are told apart: see exits)."""
-        used = {self.mechanism(f.line) for f in self.fired}
+        used = {self.tried_key(f.line) for f in self.fired}
         out = []
         for li in sorted(self.mapped):
             info = self._special(li)
-            if info is not None and info.trigger in USED + SHOT and self.mechanism(li) not in used \
+            if info is not None and info.trigger in USED + SHOT and self.tried_key(li) not in used \
                     and info.category not in (Category.EXIT, Category.SECRET_EXIT) \
                     and (not self.perceive or self.looks_interactive(li) or li in self.in_the_way):
                 out.append(li)
@@ -565,8 +670,12 @@ class Knowledge:
                 continue
             score = 1.0 if target else 0.0
             behind = back
+            face = self._face(line)
+            neighbours = [n for n in self._wall_neighbours(li) if self._face(m.linedefs[n])]
+            odd = bool(neighbours) and all(self._face(m.linedefs[n]) != face for n in neighbours)
             if back is not None:
-                (ff, fc), (bf, bc) = init[front], init[back]
+                # (as she last saw them: a stair since built makes a wall of what was floor)
+                (ff, fc), (bf, bc) = (self.seen_heights.get(x, init[x]) for x in (front, back))
                 closed = min(fc, bc) - max(ff, bf) < PLAYER_HEIGHT or bf - ff > MAX_STEP
                 if not closed or back in reach_sectors:
                     continue  # (a way through, or somewhere she gets to anyway: not a wall to her)
@@ -582,9 +691,7 @@ class Knowledge:
             # (somewhere she's seen and can't get to, just behind: the way there may be here)
             if unreached_places is not None and unreached_places.near(far, 128):
                 score += 2.0
-            face = self._face(line)
-            neighbours = [n for n in self._wall_neighbours(li) if self._face(m.linedefs[n])]
-            if neighbours and all(self._face(m.linedefs[n]) != face for n in neighbours):
+            if odd:
                 score += 1.5
                 if length <= 96:
                     score += 0.5
@@ -631,6 +738,15 @@ class Knowledge:
         if line.tag:
             return ("tag", line.special, line.tag)
         return ("line", li)
+
+    def tried_key(self, li: int) -> tuple:
+        """What trying a line tries: its mechanism, but for a line whose every press adds on
+        (a stair built from where it is, a floor raised by so much) each is worth its own press
+        (MAP21's four switches each build its stair 16 higher, and only all four reach)."""
+        info = self._special(li)
+        if info is not None and (info.category == Category.STAIRS or ADDS_ON.search(info.description)):
+            return ("line", li)
+        return self.mechanism(li)
 
     def exits(self) -> list[int]:
         """Exit lines she can tell are there: mapped ones, or walk-over ones in a sector she
@@ -818,7 +934,7 @@ class Knowledge:
         m = self.nav.map
         return (f"{len(self.mapped)}/{len(m.linedefs)} lines, {len(self.sectors)}/{len(m.sectors)} "
                 f"sectors, {len(self.fired)} fired, {sum(map(len, self.learned.values()))} effects "
-                f"learned, {len(self.interactables())} untried switches/doors, "
+                f"learned ({len(self.doubts)} in doubt), {len(self.interactables())} untried switches/doors, "
                 f"{len(self.exits())} exits seen")
 
 

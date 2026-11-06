@@ -22,6 +22,24 @@ OUT = ROOT / "out" / "explore"
 STRANDED_TICS = 60 * 35  # nothing to do this long (with lives left): start the level again
 
 
+def _plan_report(lp, k) -> list[str]:
+    """The omniscient plan's steps, each with what the explorer knew of it."""
+    learned = {t.line for t, _ in k.known_triggers()}
+    fired = {f.line for f in k.fired}
+    known_polys = k.known_polys()
+    out = []
+    for st in lp.steps or ():
+        t = st.trigger
+        if t is None:
+            out.append(f"  {st.action} {st.label}")
+            continue
+        out.append(f"  {st.action} line {t.line} {t.info.trigger.name} {t.info.description}: "
+                   f"mapped {t.line in k.mapped}, fired {t.line in fired}, learned {t.line in learned}, "
+                   f"activators known {len(t.activators & known_polys)}/{len(t.activators)}, "
+                   f"effect sectors known {sum(s in k.sectors for s in t.effects)}/{len(t.effects)}")
+    return out
+
+
 def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
             lives: int = 1, fight: int = 0, engine: str = "vizdoom",
             expert: bool = False, peek: bool = False) -> tuple[str, str, str]:
@@ -90,6 +108,7 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                     x.log.append(f"  stranded at ({obs.x:.0f}, {obs.y:.0f}), objective "
                                  f"{x.current.label if x.current else '-'}; omniscient plan from there: "
                                  f"{'ok' if lp.complete else lp.problem}")
+                    x.log.extend("  " + line for line in _plan_report(lp, x.knowledge))
                 if hasattr(x, "restart_wanted"):
                     x.restart_wanted = False
 
@@ -115,24 +134,16 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
     exited, died, game_s = e.exited, e.finished and e.dead, e.tic / TICRATE
     k = x.knowledge
     lines = list(x.log) + ["", "knowledge events:"] + k.events + ["", k.summary()]
+    if k.doubts:
+        lines.append("in doubt: " + ", ".join(f"{key} moves sector {s} (since tic {tic})"
+                                              for (key, s), tic in sorted(k.doubts.items(), key=str)))
     if not exited and obs is not None:
         lines.append(f"ended at ({obs.x:.0f}, {obs.y:.0f}), objective: "
                      f"{x.current.label if x.current else '-'}")
         lp = plan_from(nav, (obs.x, obs.y), set(obs.keys or ()),
                        {s: {h} for s, h in obs.heights.items()}, max_seconds=30)
         lines.append(f"omniscient plan from there: {'ok' if lp.complete else lp.problem}")
-        learned = {t.line for t, _ in k.known_triggers()}
-        fired = {f.line for f in k.fired}
-        known_polys = k.known_polys()
-        for st in lp.steps:
-            t = st.trigger
-            if t is None:
-                lines.append(f"  {st.action} {st.label}")
-                continue
-            lines.append(f"  {st.action} line {t.line} {t.info.trigger.name} {t.info.description}: "
-                         f"mapped {t.line in k.mapped}, fired {t.line in fired}, learned {t.line in learned}, "
-                         f"activators known {len(t.activators & known_polys)}/{len(t.activators)}, "
-                         f"effect sectors known {sum(s in k.sectors for s in t.effects)}/{len(t.effects)}")
+        lines += _plan_report(lp, k)
     tally = e.tally() if hasattr(e, "tally") else None
     if expert and obs is not None and obs.things is not None:
         from evildoom.knowledge.completion import COUNTED

@@ -613,3 +613,17 @@ What doesn't look it is found by trying walls, as a player does:
 - **Panic** (the user's idea): nothing at all to do, not even a suspicious wall: every wall round the place she's in, nearest first (a lift out of a pit that looks like the pit's wall).
 
 Explorer sweep with it: 52/68 (peeking: 60). Lost: MAP05, MAP08, MAP14, MAP19, MAP21, MAP27, MAP28, MAP29: the suspicion scoring's work list.
+
+## Perception: what she learns, and how sure (2026-11-06)
+
+Tracing the maps perception lost, each back to the route that failed:
+- **Walls judged as last seen** (not as the map starts): a stair or a raised floor since makes a wall of what was floor, and a lift's side on it a suspect (MAP21, MAP29, MAP23).
+- **Presses that add on** (stair builds, "raise 24/512") each count as their own try (`Knowledge.tried_key`): MAP21's four stair switches each build 16 higher.
+- **A trap she's in** isn't kept out of (MAP21's nukage pit, its lifts out tried only from inside).
+- **A switch on a busy sector** with a lasting effect (SR/GR, not crushers) isn't taken to have worked (MAP12's "open for good" switch pressed while the door was open on its DR timer).
+- **Certainty** (the user's idea): an effect put down to a press is *sure* if the sector started moving (by its sound) within 8 tics of it, and only if it moves the way the line sends it; else it's in doubt (`Knowledge.doubts`). The planner doesn't build on a doubted *permanent* effect (as seen instead); a doubted repeatable switch is pressed again, once a life, once nothing else is left, and the effect made sure, kept (it fits) or unlearned. Doubting non-permanent effects too lost MAP27 (they come back anyway: nothing to guard).
+- **Doors on a timer**, near or past the end of it, are shut to a route (`DOOR_MARGIN`), and the "can she get back?" check takes doors that close again as shut unless she can open them from there (MAP12's door 31, openable from one side, behind a drop).
+- **Use gates between two sectors**: a press across a gap that's shut at the start between a movable sector and another (a raised platform's floor at an alcove's ceiling) is possible once there's a gap (`use_line_gates`, in Rust too): MAP12's switch beside a platform the W1 lines lower. In the relaxed needs, an activator that waits on the very sector being produced doesn't count as a way to produce it (MAP27's lift switch, pressed from below across the lift's edge only once it's down).
+- `tests/test_follower.py` runs on DSDA-Doom (each game in a process of its own).
+
+Sweep: 55/68 (MAP12, MAP08, MAP21, MAP23, MAP29 back; MAP19, MAP27 lost). MAP27 is sensitive to the order things are done in: lowering sectors 28/29 early leaves the lift ride from switch 739 too long for the planner's walking speed (`LEG_SPEED` 12; flat-out running is ~15.1, but the follower doesn't make the lift either); MAP28 needs a red-eyed skull (one of three WOOD4 panels, shifted by its y offset) pressed above an opening, and a symbol panel shot (SKINSYMB), both suspected only in work-in-progress changes that cost E3M4.
