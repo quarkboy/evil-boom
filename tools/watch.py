@@ -59,7 +59,7 @@ def key_colour(name: str):
 class Watch:
     def __init__(self, iwad: Path, map_name: str, speed: float, snapshot: float | None = None,
                  mortal: bool = False, lives: int = 1, fight: int = 0, engine: str = "dsda",
-                 expert: bool = False):
+                 expert: bool = False, peek: bool = False):
         self.lives_left = lives - 1
         self.map_name = map_name
         self.snapshot = snapshot
@@ -78,7 +78,7 @@ class Watch:
         if not mortal:
             self.engine.god()
         width = int(VIEW_SIZE.split("x")[0])
-        knowledge = Knowledge(self.nav, width=width, mortal=mortal)
+        knowledge = Knowledge(self.nav, width=width, mortal=mortal, perceive=not peek)
         if fight:
             from evildoom.tactical.player import Player
             self.agent = Player(self.nav, knowledge)
@@ -407,13 +407,15 @@ def main() -> None:
                     help="monsters in, at this skill (1-5; 4: Ultra-Violence), and Evil fights them")
     ap.add_argument("--engine", choices=("dsda", "vizdoom"), default="dsda",
                     help="dsda: DSDA-Doom in-process (the frames it draws), vizdoom: ViZDoom")
+    ap.add_argument("--peek", action="store_true",
+                    help="every switch and door known on sight from the map data (no secrets to find)")
     ap.add_argument("--expert", action="store_true",
                     help="every item that counts picked up, then the exit (no monsters)")
     ap.add_argument("--snapshot", type=float, metavar="SECONDS",
                     help="save the window to out/watch.png after this much game time, and quit")
     a = ap.parse_args()
     w = Watch(resolve_wad(a.wad), a.map.upper(), a.speed, a.snapshot, a.mortal, a.lives, a.fight,
-              a.engine, a.expert)
+              a.engine, a.expert, a.peek)
     w.show_all = a.all
     w.run()
 

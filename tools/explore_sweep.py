@@ -24,7 +24,7 @@ STRANDED_TICS = 60 * 35  # nothing to do this long (with lives left): start the 
 
 def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
             lives: int = 1, fight: int = 0, engine: str = "vizdoom",
-            expert: bool = False) -> tuple[str, str, str]:
+            expert: bool = False, peek: bool = False) -> tuple[str, str, str]:
     from evildoom.config import resolve_wad
     from evildoom.engine.jump_check import keep_verified
     from evildoom.engine.vizdoom_engine import VizDoomEngine
@@ -52,9 +52,9 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
     from evildoom.knowledge.model import Knowledge
     if fight:
         from evildoom.tactical.player import Player
-        x = Player(nav, Knowledge(nav, mortal=mortal))
+        x = Player(nav, Knowledge(nav, mortal=mortal, perceive=not peek))
     else:
-        x = Explorer(nav, Knowledge(nav, mortal=mortal))
+        x = Explorer(nav, Knowledge(nav, mortal=mortal, perceive=not peek))
         if expert:
             from evildoom.knowledge.completion import Completionist
             Completionist(x, restarts=lives - 1)
@@ -174,6 +174,8 @@ def main() -> None:
                     help="monsters in, at this skill (4: Ultra-Violence), and Evil fights them")
     ap.add_argument("--engine", choices=("vizdoom", "dsda"), default="vizdoom",
                     help="dsda: DSDA-Doom in-process (a process a map: it's one game a process)")
+    ap.add_argument("--peek", action="store_true",
+                    help="every switch and door known on sight from the map data (no secrets to find)")
     ap.add_argument("--expert", action="store_true",
                     help="every item that counts picked up, then the exit (DSDA-Doom, no monsters)")
     ap.add_argument("--lives", type=int, default=1,
@@ -193,7 +195,8 @@ def main() -> None:
     os.environ.setdefault("PYTHONHASHSEED", "0")
     results = []
     with ProcessPoolExecutor(a.jobs, max_tasks_per_child=1 if a.engine == "dsda" else None) as pool:
-        futs = {pool.submit(run_map, w, n, a.max_seconds, a.mortal, a.lives, a.fight, a.engine, a.expert): (w, n)
+        futs = {pool.submit(run_map, w, n, a.max_seconds, a.mortal, a.lives, a.fight, a.engine, a.expert,
+                           a.peek): (w, n)
                 for w, n in jobs}
         for i, f in enumerate(as_completed(futs), 1):
             w, n = futs[f]

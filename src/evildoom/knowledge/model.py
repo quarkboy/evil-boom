@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 import evildoom_native
 
 from evildoom.motor.follower import Controls, Observation
-from evildoom.nav.reach import Navigator, TriggerLine
+from evildoom.nav.reach import MAX_STEP, PLAYER_HEIGHT, Navigator, TriggerLine
 from evildoom.wad.mapdata import ML_MAPPED
 from evildoom.wad.specials import Category, Lock, Trigger
 
@@ -36,6 +36,12 @@ EXPECTED_FOR = 8 * 35    # ...which she set off at most this many tics before (a
 TAKE_TICS = 35          # a once-only line set off moves nothing in this long...
 BUSY_TICS = 200         # ...where it acts on what moved this lately (a door open, waiting to
 #                          close): it didn't take (Doom leaves a switch on a busy sector unused)
+# textures that make a line look like a switch, a door or a lift (as a player knows them)
+LOOKS_INTERACTIVE = ("SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR",
+                     "ZELDOOR", "PLAT", "SUPPORT")
+SUSPICION_MIN = 2.0     # a wall suspected this much is worth a press of use
+ML_SECRET = 0x0020      # (drawn on the automap as a plain wall)
+NO_SIDE = 0xFFFF
 FELT_TICS = 70          # unhurt on a floor this long: it doesn't hurt
 FLOOR_PERIOD = 32       # a hurting floor hurts on every 32nd tic of the level's clock...
 FLOOR_CONFIRM = 3 * FLOOR_PERIOD  # ...so hurt twice on it a multiple of that apart, this soon: it's the floor
@@ -77,6 +83,10 @@ class Knowledge:
     # does she get hurt (no god mode): then a floor's harm is learned from her health, else
     # from standing on it
     mortal: bool = False
+    # what she can tell is a switch or a door: only what looks like one (its textures), as a
+    # player sees it; a hidden one (a secret door like the wall round it) found by trying
+    # walls (suspicion); False: every line with an action is known on sight (peeking at the map)
+    perceive: bool = True
     mapped: set[int] = field(default_factory=set)       # linedefs seen
     sectors: set[int] = field(default_factory=set)      # sectors seen (either side of a mapped line)
     seen_heights: dict[int, tuple[float, float]] = field(default_factory=dict)  # when last seen
@@ -91,6 +101,7 @@ class Knowledge:
     missed_jumps: dict = field(default_factory=dict)  # run-jump key -> times it came down off its landing
     traps: list = field(default_factory=list)  # polys she got stuck in, nothing to do and no way out (each a set)
     stuck_at: dict = field(default_factory=dict)  # poly -> times a route failed stuck there
+    tried_walls: set = field(default_factory=set)  # walls she's pressed use on, suspecting them
     # sector -> does it hurt now, for floors seen moved by a line that changes their type
     # (this life: the level starting again puts them back)
     changed_floor: dict[int, bool] = field(default_factory=dict)
@@ -111,6 +122,7 @@ class Knowledge:
         self._last: Observation | None = None
         self._standing: tuple[int, int] | None = None  # (sector, since tic) on its floor
         self._hurt_on: tuple[int, int] | None = None   # (sector, tic) last hurt standing on it
+        self._ends: dict | None = None  # vertex -> lines ending there
         # where each sector's sounds come from: the middle of its bounding box (P_GroupLines)
         box: dict[int, list[float]] = {}
         for line in m.linedefs:
@@ -479,9 +491,103 @@ class Knowledge:
         for li in sorted(self.mapped):
             info = self._special(li)
             if info is not None and info.trigger in USED + SHOT and self.mechanism(li) not in used \
-                    and info.category not in (Category.EXIT, Category.SECRET_EXIT):
+                    and info.category not in (Category.EXIT, Category.SECRET_EXIT) \
+                    and (not self.perceive or self.looks_interactive(li)):
                 out.append(li)
         return out
+
+    def looks_interactive(self, li: int) -> bool:
+        """Does the line look like a switch, a door or a lift from its front (its textures)?
+        A secret door made to look like the wall round it doesn't."""
+        m = self.nav.map
+        line = m.linedefs[li]
+        if line.front == NO_SIDE:
+            return False
+        sd = m.sidedefs[line.front]
+        return any(t.upper().startswith(LOOKS_INTERACTIVE) for t in (sd.upper, sd.middle, sd.lower) if t)
+
+    def suspicious(self, reach: set[int], unreached_items, panic: bool = False) -> list[tuple[float, int, tuple, tuple]]:
+        """Walls worth pressing use on, as a player would suspect them, best first:
+        (score, line, where to stand, the wall's middle). Only what she can see counts: the
+        automap drawing a wall as a two-sided line (a closed door, a lift's side; a mapper hides
+        a secret one by flagging it), an item she can see but not get to just behind it, a
+        texture unlike the walls either side, a short piece of a longer wall; and only walls
+        whose far side she can't get to, faced from floor she can (one tried for each place
+        behind). `panic`: stuck with nothing at all to do, every wall round the place she's in
+        counts, however unsuspicious (a lift out of a pit that looks like the pit's wall)."""
+        m, mesh = self.nav.map, self.nav.mesh
+        init = self.nav.movers.initial
+        reach_sectors = {mesh.polys[p].sector for p in reach}
+        best: dict = {}
+        for li in self.mapped:
+            if li in self.tried_walls or self.looks_interactive(li):
+                continue
+            line = m.linedefs[li]
+            if line.front == NO_SIDE:
+                continue
+            a, b = m.vertexes[line.v1], m.vertexes[line.v2]
+            length = math.hypot(b.x - a.x, b.y - a.y)
+            if length < 16:
+                continue
+            mid = ((a.x + b.x) / 2, (a.y + b.y) / 2)
+            # (the front is to the right going v1 to v2; use only works from there)
+            nx, ny = (b.y - a.y) / length, -(b.x - a.x) / length
+            stand = (mid[0] + nx * 40, mid[1] + ny * 40)
+            here = mesh.poly_at(*stand)
+            if here is None or here.index not in reach:
+                continue
+            front, back = m.front_sector(line), m.back_sector(line)
+            score = 0.0
+            behind = back
+            if back is not None:
+                (ff, fc), (bf, bc) = init[front], init[back]
+                closed = min(fc, bc) - max(ff, bf) < PLAYER_HEIGHT or bf - ff > MAX_STEP
+                if not closed or back in reach_sectors:
+                    continue  # (a way through, or somewhere she gets to anyway: not a wall to her)
+                if not line.flags & ML_SECRET:
+                    score += 3.0  # (the automap draws it as not a wall)
+                if bf - ff > MAX_STEP:
+                    score += 1.0  # (a raised platform's side: a lift?)
+            else:
+                behind = None
+            far = (mid[0] - nx * 64, mid[1] - ny * 64)
+            if any(math.dist(far, it) < 160 for it in unreached_items):
+                score += 2.0
+            face = self._face(line)
+            neighbours = [n for n in self._wall_neighbours(li) if self._face(m.linedefs[n])]
+            if neighbours and all(self._face(m.linedefs[n]) != face for n in neighbours):
+                score += 1.5
+                if length <= 96:
+                    score += 0.5
+            if score < SUSPICION_MIN and not panic:
+                continue
+            key = behind if behind is not None else ("line", li)
+            if key not in best or best[key][0] < score:
+                best[key] = (score, li, stand, mid)
+        return sorted(best.values(), key=lambda c: -c[0])
+
+    def _face(self, line) -> str:
+        """The texture a wall shows from its front."""
+        if line.front == NO_SIDE:
+            return ""
+        sd = self.nav.map.sidedefs[line.front]
+        for t in (sd.middle, sd.upper, sd.lower):
+            if t and t != "-":
+                return t.upper()
+        return ""
+
+    def _wall_neighbours(self, li: int) -> list[int]:
+        """The lines joined to this one at its ends, on the same sector's side."""
+        if self._ends is None:
+            self._ends = {}
+            for i, ln in enumerate(self.nav.map.linedefs):
+                for v in (ln.v1, ln.v2):
+                    self._ends.setdefault(v, []).append(i)
+        m = self.nav.map
+        line = m.linedefs[li]
+        front = m.front_sector(line)
+        return [n for v in (line.v1, line.v2) for n in self._ends.get(v, ())
+                if n != li and m.front_sector(m.linedefs[n]) == front]
 
     def mechanism(self, li: int) -> tuple:
         """What a line works, as far as she can tell: lines with the same special and tag

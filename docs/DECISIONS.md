@@ -602,3 +602,14 @@ Python Evil on DSDA-Doom in-process (`--engine dsda`): the whole explorer sweep 
 - **Use traces, vanilla**: any line with a special stops one (a walk-over line too: E2M4's door was pressed from beyond one, by the planner and in her model); a once-only line used has no special any more, so the trace goes past it (E2M7: a switch behind a used door switch went off, and she never knew).
 
 60/68: parity with ViZDoom (all but the 7 kill maps and MAP30).
+
+## Secrets hidden: she knows what a player sees (2026-11-06)
+
+`Knowledge.perceive` (default; `--peek` gives the old way): a line is a switch, door or lift to her only if it looks like one (a texture on its front: SW1/SW2, DOOR/BIGDOOR/SPCDOOR/EXITDOOR/ZDOOR/ICKDOOR/ZELDOOR, PLAT/SUPPORT). Surveyed over Doom and Doom II's 2,199 usable lines: that catches 1,394 of the 2,012 not flagged secret and 32 of the 187 flagged (the rest look like the walls round them, as meant); the other 618 are mostly lifts and doors in plain textures.
+
+What doesn't look it is found by trying walls, as a player does:
+- **Suspicion** (`Knowledge.suspicious`), from what she can see only, of seen walls faced from floor she can get to whose far side she can't: the automap drawing it as a two-sided line (+3; a mapper hides a secret door by flagging it), a raised platform's side (+1), an item she can see but not get to just behind (+2), a texture unlike the walls either side (+1.5; short pieces +0.5). 2 or more: worth a press, one wall for each place behind.
+- **Trying** (`wall` objectives): once nothing else is left, the most suspicious few: walk up, face it, press use, watch. What it does (if anything) the knowledge sees as any line set off; tried walls are remembered.
+- **Panic** (the user's idea): nothing at all to do, not even a suspicious wall: every wall round the place she's in, nearest first (a lift out of a pit that looks like the pit's wall).
+
+Explorer sweep with it: 52/68 (peeking: 60). Lost: MAP05, MAP08, MAP14, MAP19, MAP21, MAP27, MAP28, MAP29: the suspicion scoring's work list.

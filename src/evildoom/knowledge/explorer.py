@@ -23,7 +23,9 @@ from evildoom.wad.specials import Category, Key, Lock, Trigger, classify_line
 PLAN_SECONDS = 1.5
 # how much nearer an objective of each kind counts as (keys, switches first; looking again last)
 WEIGHT = {"exit": 0.5, "key": 0.6, "switch": 0.8, "door": 0.8, "frontier": 1.0, "room": 1.1,
-          "visit": 2.0, "noise": 0.7, "teleporter": 1.2, "recheck": 3.0, "item": 0.6, "hunt": 1.5}
+          "visit": 2.0, "noise": 0.7, "teleporter": 1.2, "recheck": 3.0, "item": 0.6, "hunt": 1.5,
+          "wall": 1.0}
+WALL_TICS = 25  # a suspected wall pressed: watched this long for something to happen
 COMPARED = 4                  # objectives routed and compared by the way there, each pick
 GIVE_UP_TICS = 20 * TICRATE   # an objective not done by then is dropped for a while...
 ROUTE_SPEED = 8.0             # ...or by the time it takes to walk its route at this (units a tic)
@@ -31,6 +33,8 @@ ROUTE_SLACK = 15 * TICRATE    # ...and this
 THRESHOLD_IN = 8.0            # a threshold's spot: this far over the line
 EXIT_MARGIN = 64.0  # the expert's run: no goal this near a walk-over exit line (she'd slide over)
 STUCK_TIMES = 2  # a route failing stuck in the same poly this often: not through there again
+SUSPECTS = 6  # suspected walls offered at a time (the most suspicious)
+PANIC_WALLS = 12  # ...and in a panic, the nearest walls of all
 JUMP_MISSES = 2  # a run-jump missed this often isn't tried again; missed once, only when
 #                  there's nothing else to do (it's difficult: another way first)
 REPRESS_AFTER = 60 * TICRATE  # a repeatable switch whose effect wasn't seen: another go after this
@@ -73,6 +77,7 @@ class Objective:
     reveals: frozenset = frozenset()  # frontier: the unseen polys it looks into
     heard: object = None              # noise: the sound
     look_at: tuple | None = None      # room: the wall to face once there
+    wall: int | None = None           # wall: the line to press use on
     risky: bool = False               # nothing safer left: one-way drops, nukage are all right
     pad: frozenset = frozenset()      # teleporter: all the lines of its pad (one objective)
     thing: int | None = None          # item, hunt: the thing's id (the engine's)
@@ -147,6 +152,7 @@ class Explorer:
         self._exits_open = True  # (exit_last: closed till nothing else is left)
         self._pads: set[int] | None = None  # (polys beyond walk-over exit lines)
         self._trapped: frozenset | None = None  # (where she could get to, with nothing at all to do)
+        self._suspecting = False  # (suspected walls offered: nothing else left)
 
     # --- the known world ----------------------------------------------------------------
 
@@ -290,6 +296,8 @@ class Explorer:
                 continue
             again.append(Objective("switch", nav._activation_point(t, pos, reach),
                                    f"try switch again (line {li})", trigger=t))
+        if self._suspecting:
+            out += self._walls(obs, reach, panic=self._suspecting == "panic")
         out += self._teleporters(reach, pos)
         out += self._frontier(reach, pos)
         out += self._recheck(reach, pos)
@@ -679,7 +687,7 @@ class Explorer:
                               max_expansions=2000, max_seconds=PLAN_SECONDS, fired=fired)
         if route is None:
             return None
-        if obj.kind in ("frontier", "recheck", "visit", "noise", "room", "item", "hunt"):
+        if obj.kind in ("frontier", "recheck", "visit", "noise", "room", "item", "hunt", "wall"):
             last = Step(None, "goto", label=obj.label)
         elif obj.kind == "key":
             last = Step(None, "pickup", key=obj.key, label=obj.label)
@@ -927,6 +935,19 @@ class Explorer:
             self._drop(obj, obs, "got there but not in it")
         elif obj.kind == "teleporter" and obj.trigger.line not in self.knowledge.teleports:
             self._drop(obj, obs, "didn't take me anywhere")
+        elif obj.kind == "wall":
+            # face it, press use, watch a moment (what it does, if anything, Knowledge sees)
+            if self._look_until is None:
+                self._look_until = obs.tic + WALL_TICS + 20
+                self.knowledge.tried_walls.add(obj.wall)
+            bearing = math.degrees(math.atan2(obj.look_at[1] - obs.y, obj.look_at[0] - obs.x))
+            off = abs((bearing - obs.angle + 180) % 360 - 180)
+            if obs.tic < self._look_until:
+                c = self._turn_to(obs, bearing)
+                if off < 4 and obs.tic < self._look_until - WALL_TICS:
+                    c.use = True
+                    self._look_until = obs.tic + WALL_TICS  # (pressed: now watch)
+                return c
         elif obj.kind in ("item", "hunt") and not (self.gone is not None and self.gone(obs, obj)):
             if obj.kind == "item":
                 # Doom picks things up only moving onto them: come down on one from a ledge (in
@@ -1050,12 +1071,43 @@ class Explorer:
                                for li in exit_lines]
         return self._pads
 
+    def _walls(self, obs: Observation, reach: set[int], panic: bool = False) -> list[Objective]:
+        """Walls she suspects (Knowledge.suspicious), to press use on: tried once nothing else
+        is left (as a player humps walls for secrets)."""
+        k, mesh = self.knowledge, self.nav.mesh
+        known = k.known_polys()
+        unreached = [(t.x, t.y) for t in obs.things or () if t.category in ("Health", "Armor", "Ammo", "Weapon", "Powerup", "Key")
+                     and (p := mesh.poly_at(t.x, t.y)) is not None and p.index in known and p.index not in reach]
+        out = []
+        found = k.suspicious(reach, unreached, panic)
+        if panic:  # (nearest first, all of them)
+            found.sort(key=lambda c: math.dist(c[2], (obs.x, obs.y)))
+        for score, li, stand, mid in found[:PANIC_WALLS if panic else SUSPECTS]:
+            if not self._standable(stand):
+                continue
+            out.append(Objective("wall", stand, f"try the wall (line {li}, {score:.1f})", look_at=mid, wall=li))
+        return out
+
     def _next(self, obs: Observation) -> None:
         self.follower = None
         if self._difficult:
             self._set_jumps(difficult=False)  # (the jumps missed once: out again, other ways first)
         self._exits_open = not self.exit_last
         found = self._try_objectives(obs, risky=False) or self._try_objectives(obs, risky=True)
+        if not found and self.knowledge.perceive and not self._suspecting:
+            # (nothing else: walls that might hide something, pressed in turn)
+            self._suspecting = True
+            found = self._try_objectives(obs, risky=False) or self._try_objectives(obs, risky=True)
+            if found:
+                self.log.append(f"tic {obs.tic}: nothing else to do: trying walls")
+        if not found and self.knowledge.perceive and (not self.exit_last or not self._exits_open):
+            # (and nothing to try either: is there a way out of here at all? Every wall round,
+            # nearest first, as a player in a pit with no way out would)
+            self._suspecting = "panic"
+            found = self._try_objectives(obs, risky=False) or self._try_objectives(obs, risky=True)
+            if found:
+                self.log.append(f"tic {obs.tic}: nothing at all to do: pressing every wall round here")
+        self._suspecting = False
         if not found and self.exit_last and self.before_exit is not None and self.before_exit(obs):
             self.log.append(f"tic {obs.tic}: nothing else to do here: the level again, for what's left")
             self.restart_wanted = True
