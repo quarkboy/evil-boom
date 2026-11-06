@@ -1,0 +1,40 @@
+diff --git a/prboom2/src/CMakeLists.txt b/prboom2/src/CMakeLists.txt
+index cb9a3d7..b3e5053 100644
+--- a/prboom2/src/CMakeLists.txt
++++ b/prboom2/src/CMakeLists.txt
+@@ -602,3 +602,18 @@ function(AddGameExecutable TARGET SOURCES)
+ endfunction()
+ 
+ AddGameExecutable(dsda-doom "${DSDA_SOURCES}")
++
++# Evil (evil-doom): the game as a library, run a tic at a time from outside.
++add_library(dsda-evil SHARED ${DSDA_SOURCES}
++    gl_clipper.c gl_drawinfo.c gl_fbo.c gl_light.c gl_main.c gl_map.c gl_missingtexture.c
++    gl_opengl.c gl_preprocess.c gl_progress.c gl_shader.c gl_sky.c gl_texture.c gl_vertex.c
++    gl_wipe.c
++    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../dsda/evil_api.c)
++dsda_target_silence_deprecation(dsda-evil)
++dsda_target_enable_fast_math(dsda-evil)
++set(TARGET dsda-evil)  # (the helper reads TARGET from its caller)
++dsda_target_use_config_h(dsda-evil)
++target_compile_features(dsda-evil PRIVATE cxx_std_11)
++target_include_directories(dsda-evil PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
++target_link_libraries(dsda-evil PRIVATE dsda::dependencies)
++set_target_properties(dsda-evil PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${DSDA_OUTPUT_PATH} C_STANDARD 99)
+diff --git a/prboom2/src/d_main.c b/prboom2/src/d_main.c
+index 4e6abe4..88ce834 100644
+--- a/prboom2/src/d_main.c
++++ b/prboom2/src/d_main.c
+@@ -2297,6 +2297,12 @@ static void D_DoomMainSetup(void)
+ // D_DoomMain
+ //
+ 
++// Evil (evil-doom): the setup without the main loop; she runs the tics herself.
++void D_DoomMainSetupForEvil(void)
++{
++  D_DoomMainSetup();
++}
++
+ void D_DoomMain(void)
+ {
+   D_DoomMainSetup(); // CPhipps - setup out of main execution stack

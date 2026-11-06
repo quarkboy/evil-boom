@@ -28,3 +28,5 @@ Thumbs.db
 
 # Rust build output
 native/target/
+third_party/
+dsda/spike/target/
