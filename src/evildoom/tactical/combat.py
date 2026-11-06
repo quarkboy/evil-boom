@@ -22,6 +22,7 @@ import evildoom_native
 from evildoom.motor.follower import TICRATE, Controls, Observation, Thing
 from evildoom.nav.reach import MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS, Navigator
 from evildoom.tactical.bestiary import MISSILES, MONSTERS, WEAPONS, Weapon, weapon_in
+from evildoom.tactical.sound import Hearing
 
 FOV = 55.0               # half the view, degrees: monsters in line of sight inside it are seen...
 NEAR = 384.0             # ...and any this near, in any direction (heard)
@@ -36,6 +37,8 @@ DODGE_MARGIN = 12.0      # ...if it would pass nearer than the two radii and thi
 DODGE_WAYS = 16          # ways tried, getting out of the way
 THRUST = 50 * 2048 / 65536  # a running player's push a tic (units/tic, a tic)
 FRICTION = 0xE800 / 0x10000  # what's left of her speed after a tic
+PUSH_TICS = 8            # going some way: pushing that way this long, then...
+SLIDE_TICS = 40          # ...letting go: where she'd slide to in this long must be safe too
 CLOSE = 160.0            # a clawing monster nearer than this: back off from it
 STAND_THREAT = 6.0       # this much threat in sight: stand and fight rather than walk on
 OUTMATCHED = 15.0        # ...unless killing what's in sight would take longer than this (s):
@@ -52,6 +55,9 @@ AUTOAIM = 100 / 160      # ...and find what they're aimed at only this steep (up
 #                          steeper, or with a ledge's lip in the way, they go out level
 ROCKET_WARY = 3 * TICRATE  # a biter seen this lately near her (round a corner, maybe) rules out
 #                            rockets: it'd be in the blast before the rocket got anywhere
+INFIGHT_FACING = 30.0    # a monster facing another this nearly...
+INFIGHT_NOT_HER = 45.0   # ...and not her (off by more than this)...
+INFIGHT_TICS = 18        # ...this long, moving or faced back: they're fighting each other: leave them
 FAR_HITS = 0.2           # something that shoots back from anywhere (zombies, chaingunners): shot
 #                          at past a gun's reach while this much of a shot lands
 SWITCH_WAIT = 40         # a weapon switch asked for: give it this long before asking again
@@ -72,6 +78,10 @@ class Seen:
     z: float
     tic: int          # last seen
     first: int        # first seen
+    x0: float = 0.0   # where first seen...
+    y0: float = 0.0
+    angle0: float = 0.0  # ...and facing which way
+    awake: bool = False  # seen to move or turn (else it's standing about: a shot may wake it)
 
     @property
     def pos(self) -> tuple[float, float]:
@@ -92,6 +102,7 @@ class Combat:
     def __init__(self, nav: Navigator):
         self.nav = nav
         self.los = evildoom_native.LineOfSight(nav.map)
+        self.hearing = Hearing(nav.map)
         self.known: dict[int, Seen] = {}       # every monster seen, by id
         self.alive: dict[int, Thing] = {}      # every monster about now (as the engine has it)
         self.visible: list[Thing] = []         # monsters she can see now
@@ -106,6 +117,8 @@ class Combat:
         self._rate = 0.0
         self._mode = ""
         self._held_fire = ""
+        self.hold_fire = False  # (baiting: the monsters in the way are the point)
+        self._infight: dict[int, int] = {}  # monster -> tics it's looked to be after another
         self._heights_for: Observation | None = None
         self._heights_now: list[tuple[float, float]] = []
         self._hit_cache: dict[tuple[int, float], bool] = {}
@@ -167,17 +180,54 @@ class Combat:
                 self.visible.append(t)
                 s = self.known.get(t.id)
                 if s is None:
-                    self.known[t.id] = Seen(t.id, t.name, t.x, t.y, t.z, obs.tic, obs.tic)
+                    s = self.known[t.id] = Seen(t.id, t.name, t.x, t.y, t.z, obs.tic, obs.tic,
+                                                t.x, t.y, t.angle)
                     self.log.append(f"tic {obs.tic}: saw {t.name} {t.id} at ({t.x:.0f}, {t.y:.0f})")
                 else:
                     s.x, s.y, s.z, s.tic = t.x, t.y, t.z, obs.tic
+                if not s.awake and (math.dist((t.x, t.y), (s.x0, s.y0)) > 16 or math.hypot(t.vx, t.vy) > 0.5
+                                    or abs(_norm(t.angle - s.angle0)) > 1):
+                    s.awake = True
+        self._watch_infighting(obs)
+
+    def _watch_infighting(self, obs: Observation) -> None:
+        """Which monsters in sight are after each other, not her: facing another (a monster
+        attacking turns to what it's after; chasing, it faces about where it goes), not her,
+        and either moving or faced back (one standing about facing another just happens to)."""
+        pos = (obs.x, obs.y)
+        now: dict[int, int] = {}
+        for t in self.visible:
+            s = self.known.get(t.id)
+            if s is None or not s.awake or abs(_norm(t.angle - _heading((t.x, t.y), pos))) < INFIGHT_NOT_HER:
+                continue  # (standing about where it was put isn't fighting: MAP09's two zombies)
+            moving = math.hypot(t.vx, t.vy) > 0.5
+            for o in self.visible:
+                if o.id == t.id or math.dist((o.x, o.y), (t.x, t.y)) < 1:
+                    continue
+                if o.name == t.name and MONSTERS[t.name].attack != "hitscan":
+                    continue  # (a kind's fireballs and claws don't hurt its own: imps don't fight imps)
+                if abs(_norm(t.angle - _heading((t.x, t.y), (o.x, o.y)))) < INFIGHT_FACING and (
+                        moving or abs(_norm(o.angle - _heading((o.x, o.y), (t.x, t.y)))) < INFIGHT_FACING):
+                    now[t.id] = self._infight.get(t.id, 0) + 1
+                    if now[t.id] == INFIGHT_TICS:
+                        self.log.append(f"tic {obs.tic}: {t.name} {t.id} is fighting {o.name} {o.id}: "
+                                        "leaving them to it")
+                    break
+        self._infight = now
+
+    def infighting(self, t: Thing) -> bool:
+        return self._infight.get(t.id, 0) >= INFIGHT_TICS
+
+    def against_her(self) -> list[Thing]:
+        """The monsters in sight that are after her (not each other)."""
+        return [t for t in self.visible if not self.infighting(t)]
 
     def remaining(self) -> list[Seen]:
         """Monsters seen that are still about (to hunt down)."""
         return [s for i, s in self.known.items() if i in self.alive]
 
     def threats(self, obs: Observation) -> float:
-        return sum(MONSTERS[t.name].threat for t in self.visible)
+        return sum(MONSTERS[t.name].threat for t in self.against_her())
 
     def firepower(self, obs: Observation) -> float:
         """Damage a second she can do with the best gun she has ammo for (the fist's, else)."""
@@ -193,6 +243,49 @@ class Combat:
         hp = sum(MONSTERS[t.name].health for t in self.visible if math.dist((t.x, t.y), pos) < 1200)
         return hp / self.firepower(obs) > OUTMATCHED
 
+    def reachable(self, obs: Observation, t: Thing) -> bool:
+        """Can any gun she has ammo for get to t from here?"""
+        held = obs.weapons or frozenset({1, 2})
+        ammo = obs.ammo or {}
+        d = math.dist((t.x, t.y), (obs.x, obs.y))
+        for slot in WEAPONS:
+            w = weapon_in(slot, obs.super_shotgun)
+            if slot in held and ammo.get(slot, 0) >= w.ammo_per_shot and self.in_reach(w, t, d):
+                return True
+        return False
+
+    def _would_wake(self, obs: Observation, t: Thing) -> str:
+        """If t is standing about (not after her yet), and a shot would be heard by enough
+        monsters she's seen standing about too that she'd be outmatched once they're awake:
+        what it'd wake (else "")."""
+        s = self.known.get(t.id)
+        if s is None or s.awake or self._gun(obs).slot == 1:  # (the fist makes no noise)
+            return ""
+        if any(self.known[o.id].awake for o in self.against_her() if o.id in self.known):
+            return ""  # (already in a fight)
+        here = self.nav.mesh.poly_at(obs.x, obs.y)
+        if here is None:
+            return ""
+        heard = self.hearing.heard(here.sector, self._heights(obs))
+        sleepers = []
+        for m in self.remaining():
+            if m.awake:
+                continue
+            poly = self.nav.mesh.poly_at(m.x, m.y)
+            if poly is not None and poly.sector in heard:
+                sleepers.append(m)
+        hp = sum(MONSTERS[m.name].health for m in sleepers)
+        if len(sleepers) < 2 or hp / self.firepower(obs) <= OUTMATCHED:
+            return ""
+        return f"{len(sleepers)}: " + ", ".join(sorted({m.name for m in sleepers}))
+
+    def armed(self, obs: Observation) -> bool:
+        """Has she a gun with ammo for it (more than the fist)?"""
+        held = obs.weapons or frozenset({1, 2})
+        ammo = obs.ammo or {}
+        return any(ammo.get(slot, 0) >= weapon_in(slot, obs.super_shotgun).ammo_per_shot
+                   for slot in WEAPONS if slot != 1 and slot in held)
+
     def short_of_ammo(self, obs: Observation) -> bool:
         """Next to nothing left to shoot with (the fist doesn't count)."""
         held = obs.weapons or frozenset({1, 2})
@@ -203,10 +296,11 @@ class Combat:
 
     # --- deciding -----------------------------------------------------------------------
 
-    def decide(self, obs: Observation, busy: bool = False) -> Decision | None:
+    def decide(self, obs: Observation, busy: bool = False, errand: str = "") -> Decision | None:
         """What the fight needs this tic (None: nothing). `busy`: the route is in the middle of
         something that wants the controls (a run-up, a jump): only a missile about to hit
-        takes them away."""
+        takes them away. `errand`: the route's going for something to fight with (a gun, ammo):
+        the fight only aims and shoots on the way (and dodges, and backs off from biters)."""
         pos = (obs.x, obs.y)
         missiles = self._incoming(obs)
         missile = missiles[0] if missiles else None
@@ -249,27 +343,48 @@ class Combat:
             why = "away from a barrel"
         elif busy:
             why = "shooting on the way"
+        elif close:
+            nearest = min(close, key=lambda t: math.dist((t.x, t.y), pos))
+            move = self._away_from(obs, (nearest.x, nearest.y))
+            why = f"backing off from {nearest.name}"
+        elif errand:
+            why = f"shooting on the way to {errand}"
+        elif not self.armed(obs):
+            # (MAP05, MAP11: out of ammo, fist out, walked up to imps to punch them)
+            why = "out of ammo: getting past"
+        elif target is not None and (woken := self._would_wake(obs, target)):
+            fire = False
+            why = f"sneaking past (a shot would wake {woken})"
+        elif target is not None and not self.reachable(obs, target):
+            # (in sight, but nothing she has gets to it from here: on with the route)
+            why = "out of reach: going on"
         elif target is not None and not self.can_hit(obs, target) \
                 and len(self.visible) == 1 and math.dist((target.x, target.y), pos) < 512 \
                 and (way := self._shot_way(obs, target)) is not None:
             move = way
             why = f"stepping for a shot at {target.name}"
-        elif close:
-            nearest = min(close, key=lambda t: math.dist((t.x, t.y), pos))
-            move = self._away_from(obs, (nearest.x, nearest.y))
-            why = f"backing off from {nearest.name}"
         elif outmatched:
             why = "getting past"  # (shooting on the way, the route going on)
+        elif target is not None and MONSTERS[target.name].attack != "none" \
+                and math.dist((target.x, target.y), pos) < self._gun(obs).keep[0] \
+                and (way := self._keeping_off(obs, target, aim)) is not None:
+            # (too near for the gun she has, or for them to miss: back to where it does best)
+            move = way
+            why = f"keeping off from {target.name}"
         elif threat >= STAND_THREAT or health < LOW_HEALTH or self._blocking(obs, target):
             move = self._strafe_dir(obs, aim)
             why = "standing and fighting"
-            gun = weapon_in(obs.weapon if obs.weapon in WEAPONS else 2, obs.super_shotgun)
-            if target is not None and not self.in_reach(gun, target, math.dist((target.x, target.y), pos)):
+            gun = self._gun(obs)
+            d = math.dist((target.x, target.y), pos) if target is not None else 0.0
+            if target is not None and (not self.in_reach(gun, target, d) or d > gun.keep[1]):
                 move = self._closing_in(obs, target, move)
                 why = f"closing in on {target.name}"
         else:
             why = "shooting on the way"
-        takeover = not busy and why not in ("shooting on the way", "getting past") or missile is not None
+        if self.hold_fire:
+            fire = False
+        takeover = not busy and not why.startswith(("shooting on the way", "getting past", "out of",
+                                                    "sneaking")) or missile is not None
         if why != self._mode:
             self.log.append(f"tic {obs.tic}: {why}"
                             + (f" (target {target.name} {target.id}, {threat:.0f} threat)" if target else ""))
@@ -307,7 +422,7 @@ class Combat:
     def _pick_target(self, obs: Observation) -> Thing | None:
         pos = (obs.x, obs.y)
         best, score = None, -math.inf
-        for t in self.visible:
+        for t in self.against_her():
             info = MONSTERS[t.name]
             d = max(64.0, math.dist((t.x, t.y), pos))
             s = (info.threat + 1) / d * (1.6 if t.id == self.target else 1.0)
@@ -605,6 +720,23 @@ class Combat:
                 return d
         return None
 
+    @staticmethod
+    def _gun(obs: Observation) -> Weapon:
+        return weapon_in(obs.weapon if obs.weapon in WEAPONS else 2, obs.super_shotgun)
+
+    def _keeping_off(self, obs: Observation, t: Thing, aim: float | None) -> tuple[float, float] | None:
+        """Away from t, aslant (the strafe's way and back), as far as it's safe."""
+        a = math.atan2(obs.y - t.y, obs.x - t.x)
+        back = (math.cos(a), math.sin(a))
+        strafe = self._strafe_dir(obs, aim)
+        ways = [back]
+        if strafe is not None:
+            mixed = (back[0] + strafe[0], back[1] + strafe[1])
+            n = math.hypot(*mixed)
+            if n > 0.1:
+                ways.insert(0, (mixed[0] / n, mixed[1] / n))
+        return next((w for w in ways if self._safe(obs, w, 64.0)), self._away_from(obs, (t.x, t.y)))
+
     def _closing_in(self, obs: Observation, t: Thing, strafe: tuple[float, float] | None
                     ) -> tuple[float, float] | None:
         """Towards t, zig-zagging (the strafe's way and forwards), as far as it's safe."""
@@ -643,13 +775,17 @@ class Combat:
 
     def _safe(self, obs: Observation, d: tuple[float, float], length: float) -> bool:
         """Is it all right to go `length` that way: floor all the way, no drop or step up she
-        couldn't come back from, nothing that hurts, room to stand?"""
+        couldn't come back from, nothing that hurts, room to stand? And where her speed would
+        carry her, pushing that way a moment and then letting go (at a run she slides on for
+        170 or so, and what she had sideways carries on: E1M3, strafing by the start, slid into
+        the nukage and couldn't get out)?"""
         mesh = self.nav.mesh
         here = mesh.poly_at(obs.x, obs.y)
         if here is None:
             return False
         live = obs.heights
-        floor = live.get(here.sector, (0.0, 0.0))[0]
+        floor0 = live.get(here.sector, (0.0, 0.0))[0]
+        floor = floor0
         n = max(2, int(length // 16))
         for i in range(1, n + 1):
             q = (obs.x + d[0] * length * i / n, obs.y + d[1] * length * i / n)
@@ -658,6 +794,27 @@ class Combat:
                 return False
             f, c = live.get(poly.sector, (0.0, 0.0))
             if abs(f - floor) > MAX_STEP or c - f < PLAYER_HEIGHT or self.nav.damage[poly.sector]:
+                return False
+            floor = f
+        # (the slide: a wall or a step up stops her, which is all right; a drop or a hurting
+        # floor isn't)
+        x, y = obs.x, obs.y
+        vx, vy = self._velocity
+        floor = floor0
+        for k in range(SLIDE_TICS):
+            if k < PUSH_TICS:
+                vx, vy = vx + THRUST * d[0], vy + THRUST * d[1]
+            elif vx * vx + vy * vy < 1.0:
+                break
+            x, y = x + vx, y + vy
+            vx, vy = vx * FRICTION, vy * FRICTION
+            poly = mesh.poly_at(x, y)
+            if poly is None:
+                break
+            f, c = live.get(poly.sector, (0.0, 0.0))
+            if f - floor > MAX_STEP or c - f < PLAYER_HEIGHT:
+                break
+            if floor - f > MAX_STEP or self.nav.damage[poly.sector]:
                 return False
             floor = f
         return True

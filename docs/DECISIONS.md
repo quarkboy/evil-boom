@@ -551,3 +551,18 @@ From watching her play (`tools/watch.py --fight SKILL --mortal`):
 - **Rockets** aren't fired with a biter seen near her in the last 3 s (E1M9: dead at full health, a demon round a corner stepped into the blast).
 
 HMP batch (18 maps, 3 lives): 10 → 12 exited (MAP04 now gets through). Deaths left: pistol starts against crowds (MAP08's cacodemons, MAP11), out of ammo, lost souls.
+
+## Fighting: distance, crowds, ammo, sound, infighting (2026-11-05)
+
+- **Distance**: each gun has a band it does best in (`Weapon.keep`: pistol 192-640, shotgun 128-448, SSG 96-320, chaingun/plasma 192-768, rockets/BFG 320-1024). Nearer than the band she backs off aslant (strafing on); further, or out of reach, she closes in; between, she strafes.
+- **Surrounded** (3+ monsters within 640 spread over 160° round her): to a place she's been (96-1024 off) that's seen by the least threat, has them all on one side, is far from the nearest and near her, by a way not within 96 of any of them; shooting on the way, 4 s at most.
+- **The slide**: "is that way safe" also follows where her speed carries her (8 tics pushing, then letting go: ~170 units at a run, sideways speed carrying on). E1M3: strafing by the start, she slid into the nukage and couldn't get out.
+- **Out of ammo** (nothing but the fist): the fight doesn't stand; the route goes on, to the ammo she needs (MAP05, MAP11: she walked up to imps to punch them).
+- **Errands mid-fight**: with only the pistol, or short of ammo, a gun or ammo she knows where it is breaks off the fight once (the explorer takes it up, urgent, if the route's worth it); on the way the fight only aims and shoots (and dodges, and backs off from biters).
+- **Out of reach**: a monster in sight that no gun she has gets to from there doesn't stop the route.
+- **Sound** (`tactical/sound.py`, P_NoiseAlert): a shot floods through two-sided lines with an opening, at most one sound-blocking line. A monster standing about (seen, not seen to move or turn) isn't shot if the shot would wake enough others she's seen standing about that she'd be outmatched; she sneaks past. (The flood is the game's physics, known; the monsters counted are only those seen.) The fist is silent.
+- **Infighting**: a monster awake, facing another (within 30°) and not her, for half a second, moving or faced back, is fighting it: not a target, not counted as threat. A kind doesn't fight its own unless its attack is hitscan (imps' fireballs don't hurt imps).
+- **Baiting**: a heavy (cyberdemon, spider, mancubus, arachnotron, revenant, baron, knight) she'd take over 8 s to kill, with monsters of another kind within 1024 of it: to a place she's been where its line of fire to her passes through one of them, holding fire; over once anything's infighting (or 4 s).
+- **Arch-viles**: in sight and not killable in 2 s, into cover whatever her health (its fire does nothing once it can't see her; MAP11: three deaths at 50-70 health).
+
+HMP, 9 maps (E1M1, E1M3, E1M9, MAP01, MAP04, MAP05, MAP08, MAP09, MAP11), 3 lives: 4 exit (E1M1, E1M3, MAP01, MAP04, the last two with no deaths); MAP05 stuck once in an explorer loop on lift 645 (exited the two runs before: to trace). Deaths left: pistol starts against cacodemons (MAP08), pain elementals, arch-viles, demons and imps close up (E1M9).

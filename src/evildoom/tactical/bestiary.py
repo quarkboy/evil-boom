@@ -75,6 +75,7 @@ class Weapon:
     speed: float = 0.0               # (its missile's, if not hitscan)
     splash: float = 0.0              # keep at least this far from what it hits
     reach: float = 2048.0            # no shooting at anything further (the spread wastes it)
+    keep: tuple[float, float] = (0.0, 2048.0)  # fighting with it: keep this far off (from, to)
 
     @property
     def dps(self) -> float:
@@ -94,15 +95,15 @@ class Weapon:
 TICS_PER_SECOND = 35
 # by slot (slot 1's fist and chainsaw share, as do slot 3's shotguns: SUPER_SHOTGUN)
 WEAPONS: dict[int, Weapon] = {
-    1: Weapon(1, 0, 11, 22, reach=80),
-    2: Weapon(2, 1, 10, 14, spread=5.6, reach=800),
-    3: Weapon(3, 1, 70, 37, spread=5.6, reach=640),
-    4: Weapon(4, 1, 10, 4, spread=5.6, reach=1100),
-    5: Weapon(5, 1, 180, 20, hitscan=False, speed=20, splash=160),
-    6: Weapon(6, 1, 22, 3, hitscan=False, speed=25),
-    7: Weapon(7, 40, 700, 60, hitscan=False, speed=25),
+    1: Weapon(1, 0, 11, 22, reach=80, keep=(0, 64)),
+    2: Weapon(2, 1, 10, 14, spread=5.6, reach=800, keep=(192, 640)),
+    3: Weapon(3, 1, 70, 37, spread=5.6, reach=640, keep=(128, 448)),
+    4: Weapon(4, 1, 10, 4, spread=5.6, reach=1100, keep=(192, 768)),
+    5: Weapon(5, 1, 180, 20, hitscan=False, speed=20, splash=160, keep=(320, 1024)),
+    6: Weapon(6, 1, 22, 3, hitscan=False, speed=25, keep=(192, 768)),
+    7: Weapon(7, 40, 700, 60, hitscan=False, speed=25, keep=(320, 1024)),
 }
-SUPER_SHOTGUN = Weapon(3, 2, 200, 57, spread=11.2, reach=480)
+SUPER_SHOTGUN = Weapon(3, 2, 200, 57, spread=11.2, reach=480, keep=(96, 320))
 
 
 def weapon_in(slot: int, super_shotgun: bool | None) -> Weapon:
