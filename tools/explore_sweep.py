@@ -71,6 +71,11 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
             x.log.append(f"tic {e.tic}: killed: health {obs.health:.0f}, armor {obs.armor:.0f}, "
                          f"weapon {obs.weapon}, weapons {sorted(obs.weapons or ())}, ammo {obs.ammo}; "
                          f"in sight: {seen or 'nothing'}; doing: {x.current.label if x.current else '-'}")
+        if getattr(x, "restart_wanted", False) and deaths + 1 >= lives:
+            # (no level again to be had: out with what she has)
+            x.restart_wanted = False
+            x.before_exit = None
+            stranded = False
         if e.finished or (stranded and deaths + 1 < lives):
             # dead, or stranded with nothing to do (a trap she couldn't know of: MAP12's
             # floor that drops into a pit): the level again, knowing what she learned
@@ -78,6 +83,13 @@ def run_map(wad: str, map_name: str, max_seconds: float, mortal: bool = False,
                 deaths += 1
                 why = "died" if e.dead else "for what's left" if getattr(x, "restart_wanted", False) else "stranded"
                 x.log.append(f"tic {e.tic}: {why}: starting again")
+                if why == "stranded" and obs is not None:
+                    # (a trap she walked into, or a way on she couldn't see?)
+                    lp = plan_from(nav, (obs.x, obs.y), set(obs.keys or ()),
+                                   {s: {h} for s, h in obs.heights.items()}, max_seconds=20)
+                    x.log.append(f"  stranded at ({obs.x:.0f}, {obs.y:.0f}), objective "
+                                 f"{x.current.label if x.current else '-'}; omniscient plan from there: "
+                                 f"{'ok' if lp.complete else lp.problem}")
                 if hasattr(x, "restart_wanted"):
                     x.restart_wanted = False
 
