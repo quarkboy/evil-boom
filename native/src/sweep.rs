@@ -229,6 +229,12 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool) -> Result<S
     if o.secrets {
         agent.x_mut().exit_last = true;
     }
+    // (her own waits inside the stall clock: given up on things back as soon, for its share of
+    // the usual 300 s, and counted stranded in half of it at most; MAP24's way out of the pit, a
+    // wall given another go a minute on, and E3M3's trap, stranded a minute on, both over first
+    // at a stall of 60 s. At 300 s, as ever: MAP14's door by the crusher, back every 150 s, lost
+    // it the blur sphere)
+    agent.x_mut().patience = (o.stall_seconds / 300.0).min(1.0);
     let mut c: Option<Controls> = None;
     let mut obs: Option<Observation> = None;
     let mut deaths = 0;
@@ -362,9 +368,21 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     // the walls she's tried, each one a place she's looked for a way: E1M2's gun panel, a round
     // of walls away when the clock ran out)
     let items_short = most_items(&m, skill);
+    // (and finding her way about: lines mapped, lines set off, places walked into; MAP03's
+    // exploring, none of it counted, over in a minute; the user's. Places by the poly: E4M9's
+    // steps over the lines beyond, each somewhere new in a sector she'd been in)
     let progress = |e: &Engine, x: &Explorer| {
         let k = &x.knowledge;
-        (if o.secrets { e.tally()[2].0 } else { e.tally()[0].0 }, k.sectors.len(), k.learned.values().map(BTreeSet::len).sum::<usize>(), k.tried_walls.len())
+        let fired: BTreeSet<usize> = k.fired.iter().map(|f| f.line).collect();
+        [
+            usize::try_from(if o.secrets { e.tally()[2].0 } else { e.tally()[0].0 }).unwrap_or(0),
+            k.sectors.len(),
+            k.learned.values().map(BTreeSet::len).sum::<usize>(),
+            k.tried_walls.len(),
+            k.mapped.len(),
+            fired.len(),
+            k.visited.len(),
+        ]
     };
     // (the best so far this life: a level again starts the clock afresh, collecting the same
     // things again counted, the user's call; the run's time cap bounds it)
@@ -375,8 +393,8 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     while (e.tic as f64) < until * TICRATE {
         if o.expert || o.secrets {
             let now = progress(&e, agent.x());
-            if now.0 > best.0 || now.1 > best.1 || now.2 > best.2 || now.3 > best.3 {
-                best = (now.0.max(best.0), now.1.max(best.1), now.2.max(best.2), now.3.max(best.3));
+            if now.iter().zip(&best).any(|(n, b)| n > b) {
+                best = std::array::from_fn(|i| now[i].max(best[i]));
                 best_tic = e.tic;
             } else if (e.tic - best_tic) as f64 > o.stall_seconds * TICRATE {
                 agent.x_mut().log.push(format!("tic {}: nothing more collected, learned or tried in {:.0}s: over", e.tic, o.stall_seconds));
@@ -384,7 +402,7 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
                 break;
             }
         }
-        let mut stranded = idle_since.is_some_and(|i| e.tic - i > STRANDED_TICS) || agent.x().restart_wanted;
+        let mut stranded = idle_since.is_some_and(|i| e.tic - i > STRANDED_TICS.min((o.stall_seconds * TICRATE / 2.0) as i64)) || agent.x().restart_wanted;
         if let (true, Some(ob), Some(p)) = (e.finished() && e.dead(), &obs, agent.player_mut()) {
             let pos = ob.pos();
             let seen: Vec<String> = p.combat().visible.iter().map(|t| format!("{} {:.0} away", t.name, crate::geom::dist((t.x, t.y), pos))).collect();

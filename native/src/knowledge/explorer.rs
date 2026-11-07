@@ -346,6 +346,9 @@ pub struct Explorer {
     idle_since: i64,
     /// the exit only once there's nothing else to do (the 100% runs)
     pub exit_last: bool,
+    /// her waits to give something given up on another go, as a share of the usual (her run's
+    /// stall clock over 300 s: her own waits inside it, the user's)
+    pub patience: f64,
     /// (for whoever runs the game: the level again, knowing what she knows)
     pub restart_wanted: bool,
     /// switches set out to press, and what she knew then (pressed again only knowing more)
@@ -444,6 +447,7 @@ impl Explorer {
             glance_at: None,
             idle_since: -1_000_000_000,
             exit_last: false,
+            patience: 1.0,
             restart_wanted: false,
             pressed_knowing: BTreeMap::new(),
             stuck_run: None,
@@ -2187,7 +2191,7 @@ impl Explorer {
     fn fresh(&self, o: &Objective, tic: i64) -> bool {
         let id = o.ident();
         let times = self.drop_count.get(&id).copied().unwrap_or(0);
-        tic - self.dropped.get(&id).copied().unwrap_or(-1_000_000_000) > RETRY_TICS * 2i64.pow((times - 1).clamp(0, 5) as u32)
+        tic - self.dropped.get(&id).copied().unwrap_or(-1_000_000_000) > (self.patience * (RETRY_TICS * 2i64.pow((times - 1).clamp(0, 5) as u32)) as f64) as i64
     }
 
     fn next(&mut self, obs: &Observation, hooks: &mut dyn Hooks) {
