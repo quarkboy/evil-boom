@@ -991,8 +991,10 @@ impl Explorer {
     /// floor near the item's; None if there isn't one (MAP10's soulsphere in an alcove).
     pub fn touch_spot(&self, item: Point, reach: &BTreeSet<usize>) -> Option<Point> {
         let nav = &self.nav;
-        let floor = nav.poly_at(item).map(|p| nav.movers.initial[nav.sector_of_poly(p)].floor);
         let heights = self.roomiest();
+        // (the item on its floor as she believes it now: E3M9's invulnerability on a walkway
+        // lowered 64)
+        let floor = nav.poly_at(item).map(|p| heights[nav.sector_of_poly(p)].0);
         // (square rings, as the boxes touch, every 4 round each: E4M7's blur sphere, on the point
         // of a ledge, can be had only from a corner of the square)
         for r in [0, 8, 16, 24, 32, TOUCH - 1] {

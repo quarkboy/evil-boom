@@ -3,7 +3,7 @@
 //! straightened where it can go direct.
 
 use super::path::Chain;
-use super::{crossable_either_way, top_floor, Doors, HeightSource, Heights, NavCore, Open, TeleKind, Via};
+use super::{can_cross, crossable_either_way, top_floor, Doors, HeightSource, Heights, NavCore, Open, TeleKind, Via};
 use crate::geom::{
     cells, cells_around, closest_point, Cell, dist, funnel, oriented, point_key, seg_key, segment_distance, segments_cross, swept_box_hits, Point,
     PointKey, Seg, SegKey, MAX_STEP, PATH_CLEARANCE, PLAYER_HEIGHT, PLAYER_RADIUS,
@@ -27,6 +27,14 @@ const BOX_SLACK: f64 = 0.25;
 const STRAIGHTEN_REACH: usize = 10;
 /// Most expansions of a detour search.
 const DETOUR_EXPANSIONS: usize = 150;
+
+/// What a line is to cross, at given heights.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Crossing {
+    Open,
+    Ledge,
+    Wall,
+}
 
 /// Where the box got squeezed along a path, and whether any of it was against shut sectors
 /// only (no door to open: the path's no good at all).
@@ -378,16 +386,38 @@ impl Fitter<'_> {
         out
     }
 
-    /// Does a-b cross a ledge (not exempt) the player can't climb back up?
-    fn ledges_crossed(&self, a: Point, b: Point) -> bool {
+    /// Does a-b cross a ledge (not exempt) the player can't climb back up, at these heights?
+    fn ledges_crossed(&mut self, a: Point, b: Point) -> bool {
         let nav = self.nav;
-        cells(a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1))
+        let lines: Vec<usize> = cells(a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1))
             .flat_map(|c| nav.mesh.line_grid.get(&c).into_iter().flatten().copied())
-            .filter(|li| nav.drops.contains(li) && !self.exempt.contains(li))
-            .any(|li| {
+            .filter(|li| !self.exempt.contains(li))
+            .filter(|&li| {
                 let (v1, v2) = nav.map.line_seg(li);
                 segments_cross(a, b, v1, v2)
             })
+            .collect();
+        // (the ledges at the start, and those at these heights that weren't)
+        lines.into_iter().any(|li| nav.drops.contains(&li) || (!nav.walls.contains(&li) && self.crossing(li) == Crossing::Ledge))
+    }
+
+    /// What a two-sided line is to cross at these heights, not only the starting ones (a floor
+    /// that's risen since makes a ledge, a lift come down another): both ways, one way down, or
+    /// neither. A one-sided line: neither.
+    fn crossing(&mut self, li: usize) -> Crossing {
+        let (Some(f), Some(b)) = self.nav.map.sides(li) else { return Crossing::Wall };
+        if self.nav.map.linedefs[li].blocks_player() {
+            return Crossing::Wall;
+        }
+        let (fs, bs) = (self.heights(f), self.heights(b));
+        let pairs = || fs.iter().flat_map(|&hf| bs.iter().map(move |&hb| (hf, hb)));
+        if pairs().any(|(hf, hb)| can_cross(hf, hb) && can_cross(hb, hf)) {
+            Crossing::Open
+        } else if pairs().any(|(hf, hb)| can_cross(hf, hb) || can_cross(hb, hf)) {
+            Crossing::Ledge
+        } else {
+            Crossing::Wall
+        }
     }
 
     /// Are all these edges lines of shut sectors we can't open (so squeezing past them is no
@@ -615,16 +645,19 @@ impl Fitter<'_> {
         let mut seen_edges: HashSet<SegKey> = HashSet::default();
         for c in cells_around(a, b, pad) {
             for &li in nav.mesh.line_grid.get(&c).into_iter().flatten() {
-                let wall = nav.walls.contains(&li) || nav.drops.contains(&li) || nav.teleport_lines.contains(&li);
-                if !wall || self.exempt.contains(&li) || !seen_lines.insert(li) {
+                if self.exempt.contains(&li) || !seen_lines.insert(li) {
                     continue;
                 }
-                if let (Some(f), Some(bk)) = nav.map.sides(li) {
-                    if nav.walls.contains(&li) && crossable_either_way(&self.heights(f), &self.heights(bk)) {
-                        continue;
-                    }
+                // (the walls and ledges at the start, the walls among them open now aside; and
+                // a wall or a ledge at these heights that wasn't: a platform risen since, the path
+                // hugging its foot)
+                let (f, bk) = nav.map.sides(li);
+                let open_wall = nav.walls.contains(&li) && f.zip(bk).is_some_and(|(f, bk)| crossable_either_way(&self.heights(f), &self.heights(bk)));
+                let at_start = (nav.walls.contains(&li) && !open_wall) || nav.drops.contains(&li) || nav.teleport_lines.contains(&li);
+                let now = !nav.walls.contains(&li) && !nav.drops.contains(&li) && self.crossing(li) != Crossing::Open;
+                if at_start || now {
+                    out.push(nav.map.line_seg(li));
                 }
-                out.push(nav.map.line_seg(li));
             }
             for &e in nav.obstacle_grid.get(&c).into_iter().flatten() {
                 if seen_edges.insert(seg_key(e)) {
