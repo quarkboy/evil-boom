@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use crate::map::{MapData, ML_TWOSIDED};
-use crate::nav::Heights;
+use crate::nav::{can_cross, Heights};
 
 pub const TICRATE: f64 = 35.0;
 
@@ -153,7 +153,12 @@ impl MoverModel {
             return h(floor, floor);
         }
         if is(LIFT) || is(FLOOR_LOWEST) {
-            return h(min(&nf, floor).min(floor), ceil);
+            let low = min(&nf, floor).min(floor);
+            let mut out = h(low, ceil);
+            if is(LIFT) {
+                out.extend(self.step_offs(s, low, floor, ceil, now));
+            }
+            return out;
         }
         if is(PERPETUAL_LIFT) {
             return vec![Heights { floor: min(&nf, floor).min(floor), ceiling: ceil }, Heights { floor: max(&nf, floor).max(floor), ceiling: ceil }];
@@ -189,6 +194,27 @@ impl MoverModel {
             return h(floor, max(&nc, ceil).max(ceil));
         }
         Vec::new()
+    }
+
+    /// A lift goes through every height between its ends: where a sector beside it can be
+    /// stepped onto only on the way (its floor between the lift's two, out of reach from either
+    /// end), the lift level with it is a height it has too (MAP17: the strip to the megasphere's
+    /// secret, a step off the blazing lift as it passes, under a ceiling it's above at the top).
+    /// Only those: every other lift stays two heights.
+    fn step_offs(&self, s: usize, low: f64, high: f64, ceiling: f64, now: HeightsNow<'_>) -> Vec<Heights> {
+        let (at_low, at_high) = (Heights { floor: low, ceiling }, Heights { floor: high, ceiling });
+        let mut out: Vec<Heights> = Vec::new();
+        for &n in &self.neighbors[s] {
+            let hn = self.at(n, now);
+            if hn.floor <= low || hn.floor >= high || can_cross(at_low, hn) || can_cross(at_high, hn) {
+                continue;
+            }
+            let level = Heights { floor: hn.floor, ceiling };
+            if can_cross(level, hn) && !out.contains(&level) {
+                out.push(level);
+            }
+        }
+        out
     }
 
     /// How long the special takes to move sector s from its initial heights to `target`, and
