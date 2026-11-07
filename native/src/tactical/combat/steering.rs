@@ -3,7 +3,7 @@
 //! line of fire, not ending up between them, and keeping on the way she's going.
 
 use super::aiming::{standoff, window};
-use super::{mon, spread, Combat};
+use super::{mon, segment_point_distance, spread, Combat};
 use crate::geom::{dist, Point};
 use crate::los::Body;
 use crate::motor::{Observation, Thing};
@@ -14,6 +14,9 @@ const WAYS: usize = 16;
 
 /// where she'd be, about, after half a second running a way
 const LOOK: f64 = 160.0;
+
+/// monsters' bodies looked for this far along a way
+const BODY_LOOK: f64 = 48.0;
 
 /// room to run looked for this far
 const ROOM: f64 = 384.0;
@@ -176,6 +179,10 @@ impl Combat {
             }
             if self.steer_stuck.is_some_and(|(w, until)| obs.tic < until && d.0 * w.0 + d.1 * w.1 > 0.7) {
                 continue; // (pushed that way and got nowhere)
+            }
+            let step = (pos.0 + d.0 * BODY_LOOK, pos.1 + d.1 * BODY_LOOK);
+            if them.iter().any(|m| segment_point_distance(pos, step, (m.x, m.y)) < mon(m.name).radius + PLAYER_RADIUS && dist((m.x, m.y), step) < dist((m.x, m.y), pos)) {
+                continue; // (a monster's body in the way: they're solid)
             }
             let room = self.clear_run(obs, d, ROOM);
             let ahead = (pos.0 + d.0 * LOOK.min(room), pos.1 + d.1 * LOOK.min(room));
