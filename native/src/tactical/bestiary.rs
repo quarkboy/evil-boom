@@ -104,14 +104,23 @@ pub struct Weapon {
     pub reach: f64,
     /// fighting with it: keep this far off (from, to)
     pub keep: (f64, f64),
+    /// hits a shot lands, each a roll of the target's pain chance (the super shotgun's 20
+    /// pellets; a rocket's hit and its blast)
+    pub pellets: f64,
 }
 
 impl Weapon {
     const fn new(slot: i32, ammo_per_shot: i32, damage: f64, cycle: f64) -> Weapon {
-        Weapon { slot, ammo_per_shot, damage, cycle, spread: 0.0, hitscan: true, speed: 0.0, splash: 0.0, reach: 2048.0, keep: (0.0, 2048.0) }
+        Weapon { slot, ammo_per_shot, damage, cycle, spread: 0.0, hitscan: true, speed: 0.0, splash: 0.0, reach: 2048.0, keep: (0.0, 2048.0), pellets: 1.0 }
     }
 
     /// Damage a second, most of it hitting (what she can do with it, roughly).
+    /// Pain rolls a second on something this wide this far off (each hit's a chance to make it
+    /// flinch out of what it's doing).
+    pub fn flinch_rolls(&self, radius: f64, d: f64) -> f64 {
+        self.pellets * self.hits(radius, d) * TICS_PER_SECOND / self.cycle
+    }
+
     pub fn dps(&self) -> f64 {
         0.8 * self.damage * TICS_PER_SECOND / self.cycle
     }
@@ -149,15 +158,15 @@ pub fn weapon(slot: i32) -> Weapon {
     match slot {
         1 => Weapon { reach: 80.0, keep: (0.0, 64.0), ..w(1, 0, 11.0, 22.0) },
         2 => Weapon { spread: 5.6, reach: 800.0, keep: (192.0, 640.0), ..w(2, 1, 10.0, 14.0) },
-        3 => Weapon { spread: 5.6, reach: 640.0, keep: (128.0, 448.0), ..w(3, 1, 70.0, 37.0) },
+        3 => Weapon { spread: 5.6, reach: 640.0, keep: (128.0, 448.0), pellets: 7.0, ..w(3, 1, 70.0, 37.0) },
         4 => Weapon { spread: 5.6, reach: 1100.0, keep: (192.0, 768.0), ..w(4, 1, 10.0, 4.0) },
-        5 => Weapon { hitscan: false, speed: 20.0, splash: 160.0, keep: (320.0, 1024.0), ..w(5, 1, 180.0, 20.0) },
+        5 => Weapon { hitscan: false, speed: 20.0, splash: 160.0, keep: (320.0, 1024.0), pellets: 2.0, ..w(5, 1, 180.0, 20.0) },
         6 => Weapon { hitscan: false, speed: 25.0, keep: (192.0, 768.0), ..w(6, 1, 22.0, 3.0) },
         _ => Weapon { hitscan: false, speed: 25.0, keep: (320.0, 1024.0), ..w(7, 40, 700.0, 60.0) },
     }
 }
 
-pub const SUPER_SHOTGUN: Weapon = Weapon { spread: 11.2, reach: 480.0, keep: (96.0, 320.0), ..Weapon::new(3, 2, 200.0, 57.0) };
+pub const SUPER_SHOTGUN: Weapon = Weapon { spread: 11.2, reach: 480.0, keep: (96.0, 320.0), pellets: 20.0, ..Weapon::new(3, 2, 200.0, 57.0) };
 
 /// What a slot brings up (slot 3: the super shotgun, once she has it).
 pub fn weapon_in(slot: i32, super_shotgun: Option<bool>) -> Weapon {

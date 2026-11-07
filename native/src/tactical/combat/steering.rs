@@ -81,7 +81,7 @@ impl Combat {
             let a = 2.0 * std::f64::consts::PI * i as f64 / WAYS as f64;
             let d = (a.cos(), a.sin());
             // (her middle stops her radius short of what ends the run)
-            let room = self.clear_run(obs, d, (left * RUN).min(512.0) + PLAYER_RADIUS) - PLAYER_RADIUS;
+            let room = self.clear_run(obs, d, left * RUN + PLAYER_RADIUS) - PLAYER_RADIUS;
             let mut far = 0.0;
             while far <= room {
                 let p = (pos.0 + d.0 * far, pos.1 + d.1 * far);

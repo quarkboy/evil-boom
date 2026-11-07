@@ -36,6 +36,9 @@ const FAR_HITS: f64 = 0.2;
 /// a weapon switch asked for: give it this long before asking again
 const SWITCH_WAIT: i64 = 40;
 
+/// pain rolls a second worth twice a gun's kill time, against an arch-vile
+const FLINCH_ROLLS: f64 = 6.0;
+
 /// half a rocket's width, and a little
 const ROCKET_HALF: f64 = 13.0;
 
@@ -350,6 +353,11 @@ impl Combat {
                 let shots = (f64::from(info.health) / (w.damage_on(&info) * w.hits(info.radius, d)).max(1.0)).max(1.0);
                 let (per, low) = ammo_cost(slot);
                 c += shots * f64::from(w.ammo_per_shot) * per * (low / f64::from(have)).max(1.0);
+            }
+            if info.attack == Attack::Fire {
+                // (an arch-vile flinches out of its fire one hit in 25: the super shotgun's 20
+                // pellets, plasma's stream, the chaingun's, stun it best)
+                c /= 1.0 + w.flinch_rolls(info.radius, d) / FLINCH_ROLLS;
             }
             if slot == 7 && (info.boss || crowd >= 4) {
                 c *= 0.3;

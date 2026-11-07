@@ -478,6 +478,15 @@ impl Combat {
         let target = self.pick_target(obs);
         if target.is_none() && first_missile.is_none() {
             if !busy && errand.is_empty() {
+                // (hidden from an arch-vile's fire: staying hidden comes first)
+                if let Some((name, way)) = self.vile_fire(obs) {
+                    let why = format!("out of the {name}'s sight");
+                    if why != self.mode {
+                        self.log.push(format!("tic {}: {why}", obs.tic));
+                        self.mode = why.clone();
+                    }
+                    return Some(Decision { takeover: true, aim: None, fire: false, weapon: 0, moving: way, why });
+                }
                 if let Some(d) = self.lost_sight(obs) {
                     return Some(d);
                 }
