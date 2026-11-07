@@ -481,7 +481,10 @@ impl Fitter<'_> {
                 } else {
                     let points = self.squeeze_points(a, b, &ignore);
                     self.squeezes.points.extend(points);
-                    if self.shut_in(&hits) {
+                    // (no way round a line that sets something off is no way at all: MAP13's path
+                    // over the corner of the exit pad, held back, as a squeeze past a wall)
+                    let trips = hits.iter().any(|e| self.nav.seg_lines.get(e).is_some_and(|li| self.nav.trip_lines.contains(li) && !self.exempt.contains(li)));
+                    if trips || self.shut_in(&hits) {
                         self.squeezes.hard = true;
                     }
                 }

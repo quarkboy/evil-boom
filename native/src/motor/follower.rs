@@ -1529,7 +1529,20 @@ impl RouteFollower {
             if !self.states[cs].iter().any(|&ha| self.states[ns].iter().any(|&hb| can_cross(hb, ha))) {
                 continue; // (one-way in the plan as well)
             }
-            let coming = self.watches.iter().find(|w| w.expect.sector == ns && w.reached.is_none() && can_cross(a, w.expect.heights) && can_cross(w.expect.heights, a) && ((obs.tic - w.since) as f64) < 1.5 * w.expect.travel + 10.0 * TICRATE).map(|w| w.expect.heights);
+            // (or the lift it'd drop off, on its way down to level: MAP05's, pressed to be ridden,
+            // its far side a drop till it's arrived)
+            let coming = self
+                .watches
+                .iter()
+                .find(|w| {
+                    let fits = if w.expect.sector == ns {
+                        can_cross(a, w.expect.heights) && can_cross(w.expect.heights, a)
+                    } else {
+                        w.expect.sector == cs && can_cross(w.expect.heights, b) && can_cross(b, w.expect.heights)
+                    };
+                    fits && w.reached.is_none() && ((obs.tic - w.since) as f64) < 1.5 * w.expect.travel + 10.0 * TICRATE
+                })
+                .map(|w| w.expect.heights);
             if let Some(h) = coming {
                 // still on its way to where the plan has it (MAP29: a floor that takes half a
                 // minute to rise to the walkway): wait at the edge

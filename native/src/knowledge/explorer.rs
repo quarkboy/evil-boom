@@ -40,6 +40,10 @@ const THRESHOLD_IN: f64 = 8.0;
 const EXIT_MARGIN: f64 = 64.0;
 /// a route failing stuck in the same poly this often: not through there again
 pub const STUCK_TIMES: i32 = 2;
+/// a wall suspected this much is tried when she's this near where she'd stand to (not only when
+/// there's nothing else to do)
+const NEAR_SUSPECT: f64 = 6.0;
+const NEAR_WALL: f64 = 128.0;
 /// suspected walls offered at a time (the most suspicious)
 const SUSPECTS: usize = 6;
 /// ...and in a panic, the nearest walls of all
@@ -723,6 +727,23 @@ impl Explorer {
         if self.suspecting != Suspecting::No {
             let panic = self.suspecting == Suspecting::Panic;
             out.extend(self.walls(obs, &reach, panic));
+        } else {
+            // (a wall she strongly suspects, right by her: tried there and then, as a player in
+            // front of it would, not left for when there's nothing else; MAP05's yellow door
+            // under the exit sign, passed by and left for a recheck round that never ended)
+            let near: Vec<Objective> = self
+                .suspected(obs, &reach, false)
+                .into_iter()
+                .filter(|w| w.0 >= NEAR_SUSPECT && dist(w.2, pos) <= NEAR_WALL && self.standable(w.2, false))
+                .map(|(score, li, stand, mid)| {
+                    let mut o = Objective::new(Kind::Wall, stand, format!("try the wall (line {li}, {score:.1})"));
+                    o.look_at = Some(mid);
+                    o.wall = Some(li);
+                    o.suspicion = score;
+                    o
+                })
+                .collect();
+            out.extend(near);
         }
         out.extend(self.teleporters(&reach, pos));
         out.extend(self.frontier(&reach, pos));
@@ -983,10 +1004,17 @@ impl Explorer {
     /// overhead, and not hanging over a floor more than a step higher (MAP16)? `play`: with a
     /// little play round it, for a spot to stop at (MAP21's look-out between a wall and key bars).
     pub fn standable(&self, q: Point, play: bool) -> bool {
+        // (at the heights she last saw, not the map's starting ones: a door opened since, a
+        // floor risen)
+        let heights = self.as_seen();
         let lab = &self.nav.jump_lab;
-        let (clear, floor, ceiling) = lab.fits_at(q);
-        let centre = self.nav.poly_at(q).map_or(floor, |p| self.nav.movers.initial[self.nav.sector_of_poly(p)].floor);
-        clear && ceiling - floor >= PLAYER_HEIGHT && floor <= centre + MAX_STEP && (!play || [(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)].iter().all(|(dx, dy)| lab.fits_at((q.0 + dx, q.1 + dy)).0))
+        self.stands_at(q, &heights) && (!play || [(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)].iter().all(|(dx, dy)| lab.fits_at_heights((q.0 + dx, q.1 + dy), &heights).0))
+    }
+
+    /// Each sector as she last saw it (floor, ceiling); the starting heights where she hasn't.
+    fn as_seen(&self) -> Vec<(f64, f64)> {
+        let k = &self.knowledge;
+        self.nav.movers.initial.iter().enumerate().map(|(s, &h)| k.seen_heights.get(&s).copied().unwrap_or(h)).map(|h| (h.floor, h.ceiling)).collect()
     }
 
     /// Where to stand to pick up a thing at `item`: there if the box can stand there, else the
