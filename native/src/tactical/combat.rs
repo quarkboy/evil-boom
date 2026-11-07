@@ -61,6 +61,8 @@ pub const LEAVE_BE: f64 = 15.0;
 /// of what she shoots that would land (the spread allowed for), this much does (her ammo's
 /// worth, roughly)
 const AMMO_LANDS: f64 = 0.9;
+/// ...outmatched only clearly short of it (fifty rockets for a cyberdemon will about do)
+const SHORT_BY: f64 = 0.8;
 /// fewer shots than this for the guns held: supplies come first
 const SHORT_OF_AMMO: i32 = 15;
 /// ...or below this health, anything in sight
@@ -174,6 +176,10 @@ pub struct Combat {
     steer_still: i64,
     /// a way she got nowhere pushing, and till when it's left be
     steer_stuck: Option<(Point, i64)>,
+    /// running from an arch-vile's fire: when the way was chosen, from which, the way
+    vile_way: Option<(i64, i32, Point)>,
+    /// ...and till when its fire might still go off
+    vile_until: i64,
 }
 
 impl Combat {
@@ -212,6 +218,8 @@ impl Combat {
             steer_tic: -1,
             steer_still: 0,
             steer_stuck: None,
+            vile_way: None,
+            vile_until: 0,
         }
     }
 
@@ -400,7 +408,7 @@ impl Combat {
             worth += best;
         }
         let melee = held.contains(&1) && self.firepower(obs) == weapon_in(1, None).dps();
-        !melee && worth * AMMO_LANDS < hp
+        !melee && worth * AMMO_LANDS < SHORT_BY * hp
     }
 
     /// Can any gun she has ammo for get to t from here?
@@ -520,7 +528,12 @@ impl Combat {
                 barrel_away = self.away_from_barrels(obs, b);
             }
         }
-        if let Some(m) = &first_missile {
+        let vile = if busy { None } else { self.vile_fire(obs) };
+        if let Some((name, way)) = vile {
+            // (its fire goes off only if it can still see her)
+            moving = way;
+            why = format!("out of the {name}'s sight");
+        } else if let Some(m) = &first_missile {
             moving = self.dodge(obs, &missiles);
             why = format!("dodging {}", m.name);
         } else if let Some(away) = barrel_away {
@@ -584,7 +597,7 @@ impl Combat {
         if self.hold_fire {
             fire = false;
         }
-        let takeover = (!busy && !["shooting on the way", "getting past", "out of", "sneaking"].iter().any(|p| why.starts_with(p))) || first_missile.is_some();
+        let takeover = (!busy && !["shooting on the way", "getting past", "out of", "sneaking"].iter().any(|p| why.starts_with(p))) || first_missile.is_some() || vile.is_some();
         if why != self.mode {
             let t = target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {threat:.0} threat; health {health:.0})", t.name, t.id));
             self.log.push(format!("tic {}: {why}{t}", obs.tic));

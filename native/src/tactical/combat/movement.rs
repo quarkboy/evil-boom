@@ -218,7 +218,7 @@ impl Combat {
             let f = length * i as f64 / n as f64;
             let q = (from.0 + d.0 * f, from.1 + d.1 * f);
             let back = length * (i.max(1) - 1) as f64 / n as f64;
-            let Some(p) = nav.poly_at(q) else { return back };
+            let Some(p) = nav.poly_in(q) else { return back };
             let h = floor_of(p);
             if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || nav.damage[nav.sector_of_poly(p)] != 0 {
                 return back;
@@ -262,7 +262,7 @@ impl Combat {
             y += vy;
             vx *= FRICTION;
             vy *= FRICTION;
-            let Some(p) = nav.poly_at((x, y)) else { break };
+            let Some(p) = nav.poly_in((x, y)) else { break };
             let h = floor_of(p);
             if h.floor - floor > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT {
                 break;
