@@ -37,6 +37,8 @@ const WAKE_SPEED: f64 = 0.5;
 const WAKE_TURN: f64 = 1.0;
 /// an awake monster out of sight this long is still fought (where it was)
 const LOST_TICS: i64 = 3 * 35;
+/// outmatched by an awake monster this near: keeping clear of it, not getting past
+const KEEP_CLEAR: f64 = 1024.0;
 /// no shooting at anything further
 const ENGAGE_RANGE: f64 = 2048.0;
 
@@ -558,6 +560,12 @@ impl Combat {
         {
             moving = Some(way);
             why = format!("stepping for a shot at {}", target.as_ref().map_or("", |t| t.name));
+        } else if let Some(t) = target.as_ref().filter(|t| outmatched && self.known.get(&t.id).is_some_and(|s| s.awake) && dist((t.x, t.y), pos) < KEEP_CLEAR) {
+            // (outmatched by something awake and after her: the route walked her up to the
+            // cyberdemon with a rocket or two short; keep her distance, still shooting)
+            let gun = self.preferred_gun(obs, t);
+            moving = self.steer(obs, Some(t), &gun);
+            why = format!("outmatched: keeping clear of {}", t.name);
         } else if outmatched {
             why = "getting past".into(); // (shooting on the way, the route going on)
         } else if let Some(way) = target
