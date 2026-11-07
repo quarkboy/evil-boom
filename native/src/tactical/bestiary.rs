@@ -138,7 +138,9 @@ impl Weapon {
     /// The share of a shot's damage that lands on something this wide this far off.
     pub fn hits(&self, radius: f64, d: f64) -> f64 {
         if !self.hitscan {
-            return if d < 768.0 { 0.85 } else { 0.85 * 768.0 / d }; // (it may step out of the way)
+            // (it may step out of the way, the more so the longer it's in the air: twenty rockets
+            // at cacodemons 1300 off, two hit)
+            return if d < 768.0 { 0.85 } else { 0.85 * (768.0 / d).powi(2) };
         }
         if self.spread == 0.0 {
             return 1.0;

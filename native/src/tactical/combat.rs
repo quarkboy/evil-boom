@@ -553,6 +553,12 @@ impl Combat {
         } else if let Some(woken) = target.as_ref().map(|t| self.would_wake(obs, t)).filter(|w| !w.is_empty()) {
             fire = false;
             why = format!("sneaking past (a shot would wake {woken})");
+        } else if let Some(t) = target.as_ref().filter(|t| !self.reachable(obs, t) && t.after_her && !outmatched && self.known.get(&t.id).is_some_and(|s| s.awake)) {
+            // (after her, only too far for the guns she has: closer, as a player would; a
+            // cacodemon hanging back out of the shotgun's reach)
+            let gun = self.preferred_gun(obs, t);
+            moving = self.steer(obs, Some(t), &gun).or_else(|| self.closing_in(obs, t, None));
+            why = format!("closing in on {} (out of reach)", t.name);
         } else if target.as_ref().is_some_and(|t| !self.reachable(obs, t)) {
             why = "out of reach: going on".into();
         } else if let Some(way) = target

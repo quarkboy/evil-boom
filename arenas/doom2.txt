@@ -265,3 +265,50 @@ spawn DoomImp 750 5800 270
 spawn HellKnight 300 5100 270
 spawn HellKnight 600 5100 270
 seconds 200
+
+# --- indoors (MAP27's big low room: ceiling 128, a cross-shaped pillar at (-480, -50)) ------
+
+arena indoor-mix
+map doom2 MAP27
+at -1000 -100 0
+give shotgun chaingun shell=40 clip=150 armor=50 green
+spawn DoomImp 400 -100 180
+spawn DoomImp 500 -300 180
+spawn ShotgunGuy 700 0 180
+spawn ShotgunGuy 800 -300 180
+spawn Demon 600 150 180
+spawn Demon 100 -250 180
+spawn ChaingunGuy 1000 100 180
+seconds 180
+
+arena indoor-hell
+map doom2 MAP27
+at -1000 -100 0
+give ssg rocket shell=40 rocket=20 armor=100 green
+spawn BaronOfHell 600 150 180
+spawn Revenant 700 0 180
+spawn Revenant 800 -300 180
+spawn DoomImp 400 -100 180
+spawn DoomImp 300 -150 180
+seconds 200
+
+arena indoor-cacos
+map doom2 MAP27
+at -1000 -100 0
+give shotgun rocket shell=40 rocket=20 armor=100 green
+spawn Cacodemon 400 -100 180
+spawn Cacodemon 600 150 180
+spawn Cacodemon 800 -300 180
+spawn Cacodemon 1000 100 180
+seconds 200
+
+arena indoor-close
+map doom2 MAP27
+at -200 100 0
+give ssg shell=30
+spawn Demon 100 -250 90
+spawn Demon 400 -100 180
+spawn Spectre -900 150 0
+spawn DoomImp 600 150 180
+spawn ShotgunGuy 300 -150 180
+seconds 150
