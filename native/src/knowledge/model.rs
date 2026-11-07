@@ -52,6 +52,8 @@ pub const SURE_TICS: i64 = 8;
 pub const BUSY_TICS: i64 = 200;
 /// textures that make a line look like a switch, a door or a lift
 pub const LOOKS_INTERACTIVE: [&str; 11] = ["SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR", "ZELDOOR", "PLAT", "SUPPORT"];
+/// a shut sector no thicker than this behind a line is a door
+const DOOR_THICKNESS: f64 = 32.0;
 /// an exit sign this near the spot in front of a wall marks it
 const EXIT_SIGN_NEAR: f64 = 64.0;
 /// how far behind a wall a blank on her map is looked for...
@@ -243,6 +245,8 @@ pub struct Knowledge {
     hurt_on: Option<(usize, i64)>,
     /// vertex -> lines ending there
     ends: BTreeMap<usize, Vec<usize>>,
+    /// sector -> the smaller side of its bounding box (thin: a door)
+    narrowness: Vec<f64>,
     /// a doubted line pressed again, watched: (fired, sectors in doubt)
     checking: Vec<(Fired, BTreeSet<usize>)>,
     /// where each sector's sounds come from: the middle of its bounding box (P_GroupLines)
@@ -303,11 +307,19 @@ impl Knowledge {
             }
         }
         let mut ends: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        let mut boxes = vec![(f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY); m.sectors.len()];
         for (i, l) in m.linedefs.iter().enumerate() {
             for v in [l.v1, l.v2] {
                 ends.entry(v).or_default().push(i);
             }
+            let (a, b) = m.line_seg(i);
+            let (f, bk) = m.sides(i);
+            for s in [f, bk].into_iter().flatten() {
+                let bx = &mut boxes[s];
+                *bx = (bx.0.min(a.0).min(b.0), bx.1.min(a.1).min(b.1), bx.2.max(a.0).max(b.0), bx.3.max(a.1).max(b.1));
+            }
         }
+        let narrowness = boxes.iter().map(|b| (b.2 - b.0).min(b.3 - b.1)).collect();
         let mut k = Knowledge {
             sight: Sight::new(&m),
             nav,
@@ -343,6 +355,7 @@ impl Knowledge {
             info,
             last: None,
             standing: None,
+            narrowness,
             hurt_on: None,
             ends,
             checking: Vec::new(),
@@ -895,7 +908,7 @@ impl Knowledge {
                     (i.trigger.used() || i.trigger.shot())
                         && !used.contains(&self.tried_key(li))
                         && !i.category.is_exit()
-                        && (!self.perceive || self.looks_interactive(li) || self.in_the_way.contains(&li) || self.locked.contains(&li) || (i.trigger.shot() && self.odd(li).0))
+                        && (!self.perceive || self.looks_interactive(li) || self.door_shaped(li) || self.in_the_way.contains(&li) || self.locked.contains(&li) || (i.trigger.shot() && self.odd(li).0))
                 })
             })
             .collect()
@@ -1115,6 +1128,16 @@ impl Knowledge {
         [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)]
             .iter()
             .all(|(dx, dy)| self.lines_along(p, (p.0 + dx * BLANK_REACH, p.1 + dy * BLANK_REACH)).iter().any(|(_, li)| self.mapped.contains(li)))
+    }
+
+    /// Does the line look like a door by its shape: in front of a sector shut flat, thin as a
+    /// door is, with a face unlike the walls either side (MAP14's exit door, wooden panels at the
+    /// back of a niche in stone, a texture no list of door textures has)?
+    pub fn door_shaped(&self, li: usize) -> bool {
+        let m = &self.nav.map;
+        let (Some(_), Some(b)) = m.sides(li) else { return false };
+        let h = self.seen_heights.get(&b).copied().unwrap_or(self.nav.movers.initial[b]);
+        h.ceiling <= h.floor && self.narrowness[b] <= DOOR_THICKNESS && self.odd(li).0
     }
 
     /// Is the wall's face unlike the walls either side of it (another texture, or the same one

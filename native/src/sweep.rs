@@ -292,11 +292,13 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     let mut journal_n = agent.x().knowledge.journal.len();
     let until = o.snapshot.map_or(o.max_seconds, |s| s.min(o.max_seconds));
     // (the 100% runs: the count she's after and what she knows of the level, and when either
-    // last grew: exploring a teleporter maze before any items is getting somewhere, MAP24)
+    // last grew: exploring a teleporter maze before any items is getting somewhere, MAP24; and
+    // the walls she's tried, each one a place she's looked for a way: E1M2's gun panel, a round
+    // of walls away when the clock ran out)
     let items_short = most_items(&m, skill);
     let progress = |e: &Engine, x: &Explorer| {
         let k = &x.knowledge;
-        (if o.secrets { e.tally()[2].0 } else { e.tally()[0].0 }, k.sectors.len(), k.learned.values().map(BTreeSet::len).sum::<usize>())
+        (if o.secrets { e.tally()[2].0 } else { e.tally()[0].0 }, k.sectors.len(), k.learned.values().map(BTreeSet::len).sum::<usize>(), k.tried_walls.len())
     };
     // (the best so far over the whole run: a level again collecting the same things isn't more)
     let (mut best, mut best_tic) = (progress(&e, agent.x()), e.tic);
@@ -306,11 +308,11 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     while (e.tic as f64) < until * TICRATE {
         if o.expert || o.secrets {
             let now = progress(&e, agent.x());
-            if now.0 > best.0 || now.1 > best.1 || now.2 > best.2 {
-                best = (now.0.max(best.0), now.1.max(best.1), now.2.max(best.2));
+            if now.0 > best.0 || now.1 > best.1 || now.2 > best.2 || now.3 > best.3 {
+                best = (now.0.max(best.0), now.1.max(best.1), now.2.max(best.2), now.3.max(best.3));
                 best_tic = e.tic;
             } else if (e.tic - best_tic) as f64 > o.stall_seconds * TICRATE {
-                agent.x_mut().log.push(format!("tic {}: nothing more collected or learned in {:.0}s: over", e.tic, o.stall_seconds));
+                agent.x_mut().log.push(format!("tic {}: nothing more collected, learned or tried in {:.0}s: over", e.tic, o.stall_seconds));
                 stalled = true;
                 break;
             }

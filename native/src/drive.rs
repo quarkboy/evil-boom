@@ -59,6 +59,9 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 let goal = (num(1)?, num(2)?);
                 let obs = s.obs();
                 let x = s.agent.x_mut();
+                let known = x.knowledge.known_polys();
+                let at = s.nav.poly_at(goal);
+                println!("    goal poly {:?}: known {}, sector {:?}", at, at.is_some_and(|p| known.contains(&p)), at.map(|p| s.nav.sector_of_poly(p)));
                 match x.route_to(&Objective::new(Kind::Visit, goal, "go there"), &obs) {
                     None => println!("  no way there, by what she knows"),
                     Some(steps) => {
