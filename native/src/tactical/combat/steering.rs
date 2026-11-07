@@ -29,6 +29,7 @@ const W_FAR: f64 = 0.6;
 const W_ACROSS: f64 = 1.2;
 const W_SURROUND: f64 = 1.5;
 const W_KEEP: f64 = 0.8;
+const W_EXPOSED: f64 = 1.5;
 
 /// still this long pushing one way: not that way for a while
 const STUCK_TICS: i64 = 6;
@@ -164,6 +165,8 @@ impl Combat {
         }
         let shooting = target.is_some_and(|t| matches!(mon(t.name).attack, Attack::Missile | Attack::Hitscan));
         let spread_now = spread(pos, &them.iter().map(|t| (t.x, t.y)).collect::<Vec<_>>());
+        let hitscanners: Vec<Thing> = them.iter().filter(|m| mon(m.name).attack == Attack::Hitscan).cloned().collect();
+        self.refresh_tic_cache(obs);
         let mut best: Option<(f64, Point)> = None;
         for i in 0..WAYS {
             let a = 2.0 * std::f64::consts::PI * i as f64 / WAYS as f64;
@@ -187,6 +190,15 @@ impl Combat {
                 }
                 if at > far {
                     s -= W_FAR * (at - far) / LOOK;
+                }
+            }
+            // (hitscanners besides her target that'd see her there: one at a time from cover, not
+            // all of them at once)
+            let ahead_body = Body { x: ahead.0, y: ahead.1, z: self.z(obs), height: PLAYER_HEIGHT };
+            for m in hitscanners.iter().filter(|m| Some(m.id) != target.map(|t| t.id)) {
+                let eye = Body { x: m.x, y: m.y, z: m.z, height: mon(m.name).height };
+                if self.los.clear(eye, ahead_body, &self.heights_now) {
+                    s -= W_EXPOSED * mon(m.name).threat / 4.0;
                 }
             }
             if let Some(t) = target.filter(|_| shooting) {
