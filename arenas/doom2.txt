@@ -1,195 +1,196 @@
 # Doom II fights (evil arena arenas/doom2.txt): the map's own pickups taken out, only what's given.
 #
-# MAP07's courtyard (open: floor 8, low blocks 56 high, the middle a column): she starts at its
-# south side (-640, -700) facing north, the monsters across it (y 150..300).
+# MAP32's hall (floor 0, ceiling 256, x -500..1400, y 3450..6000; six pillars down its sides at
+# x -256..0 and 896..1152): she starts at (448, 3900) facing north, the monsters across it
+# (y 5450..5600).
 # MAP16's south field (rocks for cover at about (250, -1550), (550, -1400), (400, -1700); the
 # octagon's wall to the north-west): she starts at (600, -1850), the monsters north (y -1300..-850).
 
 # --- one kind at a time, in the open -------------------------------------------------------
 
 arena zombies-pistol
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give pistol clip=100
-spawn Zombieman -900 250 270
-spawn Zombieman -640 280 270
-spawn Zombieman -380 250 270
-spawn ShotgunGuy -1000 150 270
-spawn ShotgunGuy -280 150 270
+spawn Zombieman 188 5550 270
+spawn Zombieman 448 5580 270
+spawn Zombieman 708 5550 270
+spawn ShotgunGuy 88 5450 270
+spawn ShotgunGuy 808 5450 270
 seconds 90
 
 arena imps-shotgun
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give shotgun shell=40
-spawn DoomImp -1000 250 270
-spawn DoomImp -800 280 270
-spawn DoomImp -640 250 270
-spawn DoomImp -480 280 270
-spawn DoomImp -280 250 270
-spawn DoomImp -640 150 270
+spawn DoomImp 88 5550 270
+spawn DoomImp 288 5580 270
+spawn DoomImp 448 5550 270
+spawn DoomImp 608 5580 270
+spawn DoomImp 808 5550 270
+spawn DoomImp 448 5450 270
 seconds 120
 
 arena demons-ssg
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give ssg shell=40
-spawn Demon -900 250 270
-spawn Demon -640 280 270
-spawn Demon -380 250 270
-spawn Demon -640 150 270
+spawn Demon 188 5550 270
+spawn Demon 448 5580 270
+spawn Demon 708 5550 270
+spawn Demon 448 5450 270
 seconds 120
 
 arena chaingunners
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give shotgun chaingun shell=40 clip=200 armor=100 green
-spawn ChaingunGuy -1000 250 270
-spawn ChaingunGuy -640 280 270
-spawn ChaingunGuy -280 250 270
+spawn ChaingunGuy 88 5550 270
+spawn ChaingunGuy 448 5580 270
+spawn ChaingunGuy 808 5550 270
 seconds 120
 
 arena hellknights-ssg
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give ssg shell=50 armor=100 green
-spawn HellKnight -900 250 270
-spawn HellKnight -640 280 270
-spawn HellKnight -380 250 270
+spawn HellKnight 188 5550 270
+spawn HellKnight 448 5580 270
+spawn HellKnight 708 5550 270
 seconds 150
 
 arena cacos-rockets
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give shotgun rocket shell=40 rocket=30 armor=100 green
-spawn Cacodemon -1000 250 270
-spawn Cacodemon -640 280 270
-spawn Cacodemon -280 250 270
+spawn Cacodemon 88 5550 270
+spawn Cacodemon 448 5580 270
+spawn Cacodemon 808 5550 270
 seconds 150
 
 arena revenants-ssg
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give ssg rocket shell=50 rocket=20 armor=100 green
-spawn Revenant -1000 250 270
-spawn Revenant -640 280 270
-spawn Revenant -280 250 270
+spawn Revenant 88 5550 270
+spawn Revenant 448 5580 270
+spawn Revenant 808 5550 270
 seconds 150
 
 arena mancubi-rockets
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give ssg rocket shell=40 rocket=40 armor=100 green
-spawn Fatso -900 250 270
-spawn Fatso -380 250 270
+spawn Fatso 188 5550 270
+spawn Fatso 708 5550 270
 seconds 150
 
 arena arachnos-plasma
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give shotgun plasma shell=40 cell=300 armor=100 green
-spawn Arachnotron -900 230 270
-spawn Arachnotron -380 230 270
+spawn Arachnotron 188 5530 270
+spawn Arachnotron 708 5530 270
 seconds 150
 
 arena pain-elementals
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give shotgun chaingun rocket shell=40 clip=200 rocket=20 armor=100 green
-spawn PainElemental -900 250 270
-spawn PainElemental -380 250 270
+spawn PainElemental 188 5550 270
+spawn PainElemental 708 5550 270
 seconds 150
 
 arena lost-souls
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give shotgun chaingun shell=40 clip=200
-spawn LostSoul -1000 250 270
-spawn LostSoul -800 280 270
-spawn LostSoul -640 250 270
-spawn LostSoul -480 280 270
-spawn LostSoul -280 250 270
-spawn LostSoul -640 150 270
+spawn LostSoul 88 5550 270
+spawn LostSoul 288 5580 270
+spawn LostSoul 448 5550 270
+spawn LostSoul 608 5580 270
+spawn LostSoul 808 5550 270
+spawn LostSoul 448 5450 270
 seconds 120
 
 # --- the special ones ------------------------------------------------------------------------
 
 arena archvile-solo
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give ssg rocket plasma shell=50 rocket=20 cell=200 armor=100 green
-spawn Archvile -640 250 270
+spawn Archvile 448 5550 270
 seconds 150
 
 arena archvile-pack
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give ssg chaingun rocket shell=50 clip=200 rocket=20 armor=100 green
-spawn Archvile -640 280 270
-spawn DoomImp -1000 250 270
-spawn DoomImp -280 250 270
-spawn ShotgunGuy -800 150 270
-spawn HellKnight -480 150 270
+spawn Archvile 448 5580 270
+spawn DoomImp 88 5550 270
+spawn DoomImp 808 5550 270
+spawn ShotgunGuy 288 5450 270
+spawn HellKnight 608 5450 270
 seconds 180
 
 arena cyberdemon
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give rocket plasma rocket=50 cell=300 armor=200 blue
-spawn Cyberdemon -640 250 270
+spawn Cyberdemon 448 5550 270
 seconds 240
 
 arena cyberdemon-rockets-only
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give rocket rocket=50 armor=100 green
-spawn Cyberdemon -640 250 270
+spawn Cyberdemon 448 5550 270
 seconds 240
 
 arena spider-mastermind
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give rocket plasma chaingun rocket=50 cell=300 clip=200 armor=200 blue
-spawn SpiderMastermind -640 200 270
+spawn SpiderMastermind 448 5500 270
 seconds 240
 
 # --- mixes -----------------------------------------------------------------------------------
 
 arena mixed-hell
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give ssg chaingun rocket plasma shell=50 clip=200 rocket=30 cell=300 armor=200 blue backpack
-spawn DoomImp -1000 250 270
-spawn DoomImp -280 250 270
-spawn ShotgunGuy -800 150 270
-spawn ChaingunGuy -480 280 270
-spawn Cacodemon -640 280 270
-spawn Revenant -380 150 270
-spawn HellKnight -900 280 270
-spawn Demon -640 150 270
+spawn DoomImp 88 5550 270
+spawn DoomImp 808 5550 270
+spawn ShotgunGuy 288 5450 270
+spawn ChaingunGuy 608 5580 270
+spawn Cacodemon 448 5580 270
+spawn Revenant 708 5450 270
+spawn HellKnight 188 5580 270
+spawn Demon 448 5450 270
 seconds 200
 
 arena surrounded
-map doom2 MAP07
-at -1000 -180 0
+map doom2 MAP32
+at 448 4736 90
 give shotgun chaingun shell=40 clip=200
-spawn Demon -1000 250 270
-spawn Demon -640 -450 180
-spawn DoomImp -280 -180 180
-spawn DoomImp -1000 -600 90
-spawn ShotgunGuy -640 250 270
-spawn ShotgunGuy -280 250 270
+spawn Demon 448 5300 270
+spawn Demon 448 4200 90
+spawn DoomImp 1300 4736 180
+spawn DoomImp -400 4736 0
+spawn ShotgunGuy 1000 5400 225
+spawn ShotgunGuy -100 4100 45
 seconds 150
 
 arena low-ammo
-map doom2 MAP07
-at -640 -700 90
+map doom2 MAP32
+at 448 3900 90
 give shotgun shell=12 clip=40
-spawn DoomImp -1000 250 270
-spawn DoomImp -640 250 270
-spawn DoomImp -280 250 270
-spawn ShotgunGuy -800 150 270
-spawn ShotgunGuy -480 150 270
+spawn DoomImp 88 5550 270
+spawn DoomImp 448 5550 270
+spawn DoomImp 808 5550 270
+spawn ShotgunGuy 288 5450 270
+spawn ShotgunGuy 608 5450 270
 seconds 150
 
 # --- with cover (MAP16's south field) --------------------------------------------------------

@@ -3,7 +3,7 @@
 use super::{clearance, miss_by, Combat, DODGE_TICS};
 use crate::geom::{dist, Point};
 use crate::motor::{heading, norm, Observation, Thing, FRICTION, RUN_THRUST};
-use crate::navigator::{MAX_STEP, PLAYER_HEIGHT};
+use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::tactical::bestiary::{missile, weapon_in, Weapon};
 use std::collections::BTreeSet;
 
@@ -179,6 +179,35 @@ impl Combat {
         self.safe(obs, d, 48.0).then_some(d)
     }
 
+    /// How far she could go that way (up to `length`): floor all the way, no step up or drop she
+    /// couldn't come back from, room to stand, nothing that hurts.
+    pub(super) fn clear_run(&self, obs: &Observation, d: Point, length: f64) -> f64 {
+        // (her middle and both sides: MAP07, the middle clear past a block's corner, the side
+        // caught on it, pushing that way for ever)
+        let side = (-d.1 * PLAYER_RADIUS, d.0 * PLAYER_RADIUS);
+        [(0.0, 0.0), side, (-side.0, -side.1)].into_iter().map(|o| self.clear_line(obs, (obs.x + o.0, obs.y + o.1), d, length)).fold(length, f64::min)
+    }
+
+    fn clear_line(&self, obs: &Observation, from: Point, d: Point, length: f64) -> f64 {
+        let nav = &self.nav;
+        let Some(here) = nav.poly_at(obs.pos()) else { return 0.0 };
+        let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
+        let mut floor = floor_of(here).floor;
+        let n = ((length / 16.0).floor() as usize).max(2);
+        for i in 0..=n {
+            let f = length * i as f64 / n as f64;
+            let q = (from.0 + d.0 * f, from.1 + d.1 * f);
+            let back = length * (i.max(1) - 1) as f64 / n as f64;
+            let Some(p) = nav.poly_at(q) else { return back };
+            let h = floor_of(p);
+            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || nav.damage[nav.sector_of_poly(p)] != 0 {
+                return back;
+            }
+            floor = h.floor;
+        }
+        length
+    }
+
     /// A monster near and in front: walking on would walk into it.
     pub(super) fn blocking(&self, obs: &Observation, t: Option<&Thing>) -> bool {
         t.is_some_and(|t| dist((t.x, t.y), obs.pos()) < 320.0 && norm(heading(obs.pos(), (t.x, t.y)) - obs.angle).abs() < 60.0)
@@ -193,17 +222,9 @@ impl Combat {
         let Some(here) = nav.poly_at(obs.pos()) else { return false };
         let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
         let floor0 = floor_of(here).floor;
-        let mut floor = floor0;
-        let n = ((length / 16.0).floor() as usize).max(2);
-        for i in 1..=n {
-            let f = length * i as f64 / n as f64;
-            let q = (obs.x + d.0 * f, obs.y + d.1 * f);
-            let Some(p) = nav.poly_at(q) else { return false };
-            let h = floor_of(p);
-            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || nav.damage[nav.sector_of_poly(p)] != 0 {
-                return false;
-            }
-            floor = h.floor;
+        let mut floor;
+        if self.clear_run(obs, d, length) < length {
+            return false;
         }
         // (the slide: a wall or a step up stops her, which is all right; a drop or a hurting floor
         // isn't)

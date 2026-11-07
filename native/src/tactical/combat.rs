@@ -12,8 +12,9 @@
 
 mod aiming;
 mod movement;
+mod steering;
 
-use super::bestiary::{monster, weapon_in, Attack, Missile};
+use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
 use crate::geom::{dist, Point};
 use crate::los::{Body, LineOfSight};
@@ -161,6 +162,12 @@ pub struct Combat {
     barrel_way: Option<Point>,
     barrel_since: i64,
     barrel_rest_until: i64,
+    /// the way fighting moved her last
+    steer_way: Option<Point>,
+    steer_tic: i64,
+    steer_still: i64,
+    /// a way she got nowhere pushing, and till when it's left be
+    steer_stuck: Option<(Point, i64)>,
 }
 
 impl Combat {
@@ -195,6 +202,10 @@ impl Combat {
             barrel_way: None,
             barrel_since: 0,
             barrel_rest_until: -1_000_000_000,
+            steer_way: None,
+            steer_tic: -1,
+            steer_still: 0,
+            steer_stuck: None,
         }
     }
 
@@ -222,8 +233,17 @@ impl Combat {
         }
         self.last_pos = Some(pos);
         if let Some(h) = obs.health {
-            if self.health.is_some_and(|before| h < before) {
+            if let Some(before) = self.health.filter(|&before| h < before) {
                 self.hurt_tic = obs.tic;
+                // (what by: what's gone off by her, what's up against her)
+                let by: Vec<String> = obs
+                    .things
+                    .iter()
+                    .flatten()
+                    .filter(|t| (missile(t.name).is_some() && dist((t.x, t.y), pos) < 256.0) || (monster(t.name).is_some() && dist((t.x, t.y), pos) < 128.0))
+                    .map(|t| format!("{} {:.0} off", t.name, dist((t.x, t.y), pos)))
+                    .collect();
+                self.log.push(format!("tic {}: hurt {:.0}, health {h:.0} ({})", obs.tic, before - h, if by.is_empty() { "a shot".to_string() } else { by.join(", ") }));
             }
             self.health = Some(h);
         }
@@ -498,7 +518,9 @@ impl Combat {
         } else if busy {
             why = "shooting on the way".into();
         } else if let Some(nearest) = close.iter().min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos))) {
-            moving = self.away_from(obs, (nearest.x, nearest.y));
+            let t = nearest.clone();
+            let gun = self.preferred_gun(obs, &t);
+            moving = self.steer(obs, Some(&t), &gun).or_else(|| self.away_from(obs, (t.x, t.y)));
             why = format!("backing off from {}", nearest.name);
         } else if !errand.is_empty() {
             why = format!("shooting on the way to {errand}");
@@ -522,21 +544,26 @@ impl Combat {
         } else if let Some(way) = target
             .as_ref()
             .filter(|t| mon(t.name).attack != Attack::None && dist((t.x, t.y), pos) < aiming::window(&self.preferred_gun(obs, t), t).0)
-            .and_then(|t| self.keeping_off(obs, t, aim))
+            .and_then(|t| {
+                let gun = self.preferred_gun(obs, t);
+                self.steer(obs, Some(t), &gun).or_else(|| self.keeping_off(obs, t, aim))
+            })
         {
             // (too near for the gun she has, or for them to miss)
             moving = Some(way);
             why = format!("keeping off from {}", target.as_ref().map_or("", |t| t.name));
         } else if threat >= STAND_THREAT || health < LOW_HEALTH || self.blocking(obs, target.as_ref()) {
-            moving = self.strafe_dir(obs, aim);
             let mut w = "standing and fighting".to_string();
             if let Some(t) = &target {
                 let gun = self.preferred_gun(obs, t);
                 let d = dist((t.x, t.y), pos);
+                moving = self.steer(obs, Some(t), &gun);
                 if !Self::in_reach(&gun, t, d) || d > aiming::window(&gun, t).1 {
-                    moving = self.closing_in(obs, t, moving);
+                    moving = moving.or_else(|| self.closing_in(obs, t, None));
                     w = format!("closing in on {}", t.name);
                 }
+            } else {
+                moving = self.strafe_dir(obs, aim);
             }
             why = w;
         } else {
@@ -638,6 +665,20 @@ fn miss_by(pos: Point, vel: Point, way: Point, t: &Thing) -> f64 {
         }
     }
     nearest
+}
+
+/// How far round `at` the points are spread (degrees: 360 less the widest gap).
+pub fn spread(at: Point, points: &[Point]) -> f64 {
+    if points.len() < 2 {
+        return 0.0;
+    }
+    let mut b: Vec<f64> = points.iter().map(|p| (p.1 - at.1).atan2(p.0 - at.0).to_degrees().rem_euclid(360.0)).collect();
+    b.sort_by(f64::total_cmp);
+    let mut widest = b[0] + 360.0 - b[b.len() - 1];
+    for w in b.windows(2) {
+        widest = widest.max(w[1] - w[0]);
+    }
+    360.0 - widest
 }
 
 pub fn segment_point_distance(a: Point, b: Point, p: Point) -> f64 {

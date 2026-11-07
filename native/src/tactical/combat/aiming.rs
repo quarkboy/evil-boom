@@ -5,7 +5,7 @@ use crate::geom::{dist, Point};
 use crate::los::Body;
 use crate::motor::{heading, norm, Observation, Thing, TICRATE};
 use crate::navigator::PLAYER_HEIGHT;
-use crate::tactical::bestiary::{weapon_in, Attack, Weapon};
+use crate::tactical::bestiary::{monster, weapon_in, Attack, Weapon};
 
 /// degrees a tic, turning to aim
 const AIM_TURN: f64 = 18.0;
@@ -36,6 +36,20 @@ const FAR_HITS: f64 = 0.2;
 /// a weapon switch asked for: give it this long before asking again
 const SWITCH_WAIT: i64 = 40;
 
+/// a pain elemental nearer than this isn't shot with rockets (its souls come out in front)
+const PAIN_NEAR: f64 = 512.0;
+
+/// What's to be killed first, beyond its damage: an arch-vile raises the rest, a pain elemental
+/// keeps making more; a lost soul's only worth it once it's near.
+fn priority(name: &str, d: f64) -> f64 {
+    match name {
+        "Archvile" => 3.0,
+        "PainElemental" => 2.5,
+        "LostSoul" if d > 320.0 => 0.4,
+        _ => 1.0,
+    }
+}
+
 /// seconds a weapon switch costs
 const SWITCH_COST: f64 = 0.8;
 
@@ -50,7 +64,7 @@ pub fn window(w: &Weapon, t: &Thing) -> (f64, f64) {
 }
 
 /// The nearest she'd fight a monster from, whatever the gun.
-fn standoff(name: &str) -> f64 {
+pub fn standoff(name: &str) -> f64 {
     match name {
         "Cyberdemon" | "SpiderMastermind" => 640.0,
         "Fatso" => 400.0,
@@ -67,8 +81,8 @@ impl Combat {
         let mut best: Option<(f64, Thing)> = None;
         for t in self.against_her() {
             let info = mon(t.name);
-            let d = dist((t.x, t.y), pos).max(64.0);
-            let mut s = (info.threat + 1.0) / d * if Some(t.id) == self.target { 1.6 } else { 1.0 };
+            let d = dist((t.x, t.y), pos);
+            let mut s = (info.threat + 1.0) * priority(t.name, d) / (d + 192.0) * if Some(t.id) == self.target { 1.6 } else { 1.0 };
             let off = norm(heading(pos, (t.x, t.y)) - obs.angle).abs();
             s *= 1.0 - off.min(150.0) / 300.0; // (rather what's in front than what's behind)
             if !self.can_hit(obs, &t, None) {
@@ -245,7 +259,18 @@ impl Combat {
         if dist((t.x, t.y), pos) < clear + mon(t.name).radius {
             return false;
         }
+        if t.name == "PainElemental" && dist((t.x, t.y), pos) < PAIN_NEAR {
+            return false; // (the souls it spits out come between: E... dead at 90 health, one 28 off)
+        }
         let mut others: Vec<(f64, f64, f64)> = self.visible.iter().filter(|o| o.id != t.id).map(|o| (o.x, o.y, mon(o.name).radius)).collect();
+        // (and anything close in front she'd see, seen yet or not: a soul just spat out)
+        others.extend(
+            obs.things
+                .iter()
+                .flatten()
+                .filter(|o| o.id != t.id && monster(o.name).is_some() && dist((o.x, o.y), pos) < clear * 2.0)
+                .map(|o| (o.x, o.y, mon(o.name).radius)),
+        );
         others.extend(obs.barrels.iter().flatten().map(|b| (b.0, b.1, 10.0)));
         // (E1M9: dead at full health, a demon 83 away: it came round a corner into the way)
         others.extend(

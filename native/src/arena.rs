@@ -197,9 +197,34 @@ pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Out
             break "DRAWN";
         }
         if (e.tic - start) % 35 == 0 {
-            log.push(format!("tic {}: health {} armor {}, ammo {:?}, {alive} left", ob.tic, ob.health.unwrap_or(0.0), ob.armor.unwrap_or(0.0), ob.ammo.clone().unwrap_or_default()));
+            let near: Vec<String> = ob
+                .things
+                .iter()
+                .flatten()
+                .filter(|t| ids.contains(&t.id))
+                .map(|t| format!("{} {:.0}", t.name, crate::geom::dist((t.x, t.y), ob.pos())))
+                .collect();
+            let p = e.game.player();
+            let states: Vec<String> = ob.things.iter().flatten().filter(|t| ids.contains(&t.id)).map(|t| format!("{}@{}", t.state, t.attack)).collect();
+            log.push(format!("  (pending {} mom {:.1},{:.1} states {})", p.pendingweapon, p.momx, p.momy, states.join(" ")));
+            log.push(format!(
+                "tic {}: health {} armor {}, ammo {:?}, at ({:.0}, {:.0}, z {:?}) weapon {:?}; {}; last {:?}",
+                ob.tic,
+                ob.health.unwrap_or(0.0),
+                ob.armor.unwrap_or(0.0),
+                ob.ammo.clone().unwrap_or_default(),
+                ob.x,
+                ob.y,
+                ob.z,
+                ob.weapon,
+                near.join(", "),
+                c
+            ));
         }
-        let ctl = agent.act(&ob, c.as_ref());
+        let mut ctl = agent.act(&ob, c.as_ref());
+        // (the fight's the thing: no switches or doors, which in MAP07's ring set off what
+        // crushed her, between fights)
+        ctl.use_ = false;
         let l = &agent.x().log;
         log.extend(l[log_n.min(l.len())..].iter().cloned());
         log_n = l.len();
