@@ -2,10 +2,10 @@
 //! (only the sectors a step changes are copied).
 
 use super::triggers::Effects;
+use crate::det::HashSet;
 use crate::geom::{dist, Point};
 use crate::nav::{Heights, HeightsKey};
 use std::collections::{BTreeMap, BTreeSet};
-use crate::det::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 
@@ -17,6 +17,8 @@ pub type Timers = BTreeMap<Pair, f64>;
 
 /// Assumed walking speed, units a tic.
 pub const LEG_SPEED: f64 = 12.0;
+/// Time allowed to activate a trigger before walking the next leg.
+pub(super) const ACTIVATION_TICS: f64 = 10.0;
 
 /// A hash of every sector's heights (what a flood fill depends on, with the keys).
 pub fn world_hash(states: &World) -> u64 {
@@ -73,7 +75,7 @@ pub fn expire(states: &World, timers: &Timers, from: Point, to: Point, moving_of
     if timers.is_empty() {
         return (states.clone(), Timers::new(), BTreeSet::new());
     }
-    let took = dist(from, to) / LEG_SPEED + 10.0;
+    let took = dist(from, to) / LEG_SPEED + ACTIVATION_TICS;
     let left: Timers = timers.iter().filter(|(k, v)| **v - took > 0.0 && !moving_off.contains(k)).map(|(k, v)| (*k, *v - took)).collect();
     let gone: BTreeSet<Pair> = timers.keys().copied().filter(|k| !left.contains_key(k)).collect();
     if gone.is_empty() {

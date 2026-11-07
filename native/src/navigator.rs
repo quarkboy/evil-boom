@@ -19,13 +19,7 @@ mod widths;
 pub use jumps::{JumpChecks, JUMP_DOUBT};
 pub use view::{Leg, Path, Plan, Route, View};
 
-use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
-use std::rc::Rc;
-use std::sync::Arc;
-
 use crate::det::HashMap;
-pub use crate::geom::box_hits_segment;
 use crate::geom::{dist, Cell, Point, Seg};
 use crate::jumps::JumpLab;
 use crate::map::{MapData, ML_BLOCKING, ML_BLOCKPLAYERS};
@@ -34,18 +28,19 @@ use crate::movers::{Effects, MoverModel};
 use crate::nav::{can_cross, DoorOpening, Doors, Heights};
 use crate::specials::{classify_sector, Category, Key, Keys, LineSpecial, Trigger};
 use crate::things::{shootable_obstacle, solid_radius};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
+use std::sync::Arc;
 
-pub const PLAYER_HEIGHT: f64 = 56.0;
-pub const MAX_STEP: f64 = 24.0;
-pub const PLAYER_RADIUS: f64 = 16.0;
+pub use crate::geom::box_hits_segment;
+
+pub use crate::geom::{MAX_STEP, PATH_CLEARANCE, PLAYER_HEIGHT, PLAYER_RADIUS};
 pub const ITEM_RADIUS: f64 = 20.0;
 /// an item this far under her feet is still hers to pick up (P_TouchSpecialThing)
 pub const PICKUP_BELOW: f64 = 8.0;
 /// how far inside touching range a pickup spot must be
 pub const PICKUP_MARGIN: f64 = 2.0;
-/// Paths keep this far from portal ends (wall corners): the box's corner is ~22.6 from its
-/// centre, so 16 snags on diagonal approaches.
-pub const PATH_CLEARANCE: f64 = 24.0;
 /// bullets leave the player at z + 28 + 8, and level: no aiming up or down
 pub const SHOT_HEIGHT: f64 = 36.0;
 /// narrower portals are nodebuilder slivers, never the real way through
@@ -706,7 +701,13 @@ pub(crate) fn with_trenches(movers: &MoverModel, trenches: &BTreeMap<usize, Vec<
 }
 
 /// A trigger's effects (special on sectors) with these (sector, heights) as they are now.
-pub(crate) fn effects_from_reps(movers: &MoverModel, trenches: &BTreeMap<usize, Vec<usize>>, special: u16, sectors: &[usize], reps: &[(usize, Heights)]) -> Effects {
+pub(crate) fn effects_from_reps(
+    movers: &MoverModel,
+    trenches: &BTreeMap<usize, Vec<usize>>,
+    special: u16,
+    sectors: &[usize],
+    reps: &[(usize, Heights)],
+) -> Effects {
     let now: Vec<(usize, Heights)> = reps.iter().copied().filter(|(s, h)| *h != movers.initial[*s]).collect();
     let lookup = |s: usize| now.iter().find(|(x, _)| *x == s).map(|(_, h)| *h);
     with_trenches(movers, trenches, &movers.effects(special, sectors, Some(&lookup)))

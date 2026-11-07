@@ -2,14 +2,13 @@
 //! into Observations. One game a process: DSDA-Doom is all globals, so sweeps give each map a
 //! process of its own.
 
-use std::path::{Path, PathBuf};
-
 use crate::config;
 use crate::dsda::{self, Dsda, Mobj, TicCmd};
 use crate::motor::{Controls, Observation, Thing};
 use crate::nav::Heights;
 use crate::specials::{Key, Keys};
 use crate::tactical::bestiary::category;
+use std::path::{Path, PathBuf};
 
 /// (the level loads on the first, then a few idle tics)
 pub const WARMUP_TICS: i64 = 8;
@@ -87,7 +86,8 @@ impl Engine {
         }
         // straight into the level (no title screen: its attract-mode demo took her commands)
         let warp: Vec<String> = if map_name.to_uppercase().starts_with("MAP") { vec![map.to_string()] } else { vec![episode.to_string(), map.to_string()] };
-        let mut args: Vec<String> = ["-iwad", &iwad.to_string_lossy(), "-nosound", "-nomusic", "-nomouse", "-skill", &o.skill.to_string()].iter().map(|s| s.to_string()).collect();
+        let mut args: Vec<String> =
+            ["-iwad", &iwad.to_string_lossy(), "-nosound", "-nomusic", "-nomouse", "-skill", &o.skill.to_string()].iter().map(|s| s.to_string()).collect();
         if !o.drawn {
             args.push("-nodraw".into());
         }
@@ -177,20 +177,23 @@ impl Engine {
         self.game.sectors(&mut self.sectors);
         let heights: Vec<Heights> = self.sectors.iter().map(|&(floor, ceiling)| Heights { floor, ceiling }).collect();
         self.game.things(&mut self.mobjs);
-        let raw: Vec<(&'static str, &Mobj)> = self
-            .mobjs
-            .iter()
-            .filter(|m| m.kind != 0 && m.flags & dsda::MF_CORPSE == 0)
-            .filter(|m| m.flags & dsda::MF_SHOOTABLE == 0 || m.health > 0)
-            .filter_map(|m| dsda::type_name(m.kind).map(|n| (n, m)))
-            .collect();
-        let barrels = raw.iter().filter(|(n, _)| *n == "ExplosiveBarrel").map(|(_, m)| (m.x, m.y)).collect();
-        let things = self.objects.then(|| {
-            raw.iter()
-                .filter(|(n, _)| !matches!(*n, "DoomPlayer" | "BossTarget") && category(n) != "Other")
-                .map(|(n, m)| Thing { id: m.id, name: n, category: category(n), x: m.x, y: m.y, z: m.z, vx: m.momx, vy: m.momy, vz: m.momz, angle: m.angle })
-                .collect()
-        });
+        let mut barrels = Vec::new();
+        let mut things = self.objects.then(Vec::new);
+        for m in &self.mobjs {
+            if m.kind == 0 || m.flags & dsda::MF_CORPSE != 0 || (m.flags & dsda::MF_SHOOTABLE != 0 && m.health <= 0) {
+                continue;
+            }
+            let Some(name) = dsda::type_name(m.kind) else { continue };
+            if name == "ExplosiveBarrel" {
+                barrels.push((m.x, m.y));
+            }
+            if let Some(things) = things.as_mut() {
+                let category = category(name);
+                if !matches!(name, "DoomPlayer" | "BossTarget") && category != "Other" {
+                    things.push(Thing { id: m.id, name, category, x: m.x, y: m.y, z: m.z, vx: m.momx, vy: m.momy, vz: m.momz, angle: m.angle });
+                }
+            }
+        }
         if p.ironfeet > self.ironfeet {
             self.suits += 1; // (a suit picked up: its time went up)
         }
@@ -202,7 +205,8 @@ impl Engine {
         });
         let keys: Keys = Key::ENGINE_ORDER.iter().zip(p.cards).filter(|(_, held)| *held != 0).map(|(k, _)| *k).collect();
         let [clip, shell, cell, rocket] = p.ammo;
-        let weapons: Vec<i32> = (0..9).filter(|&w| p.weaponowned[w as usize] != 0).map(dsda::weapon_slot).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+        let weapons: Vec<i32> =
+            (0..9).filter(|&w| p.weaponowned[w as usize] != 0).map(dsda::weapon_slot).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
         Observation {
             x: p.x,
             y: p.y,
@@ -258,5 +262,9 @@ fn dll_dirs() -> Vec<PathBuf> {
         return Vec::new();
     }
     let bin = std::env::var_os("EVIL_MINGW_BIN").map_or_else(|| PathBuf::from(r"C:\msys64\mingw64\bin"), PathBuf::from);
-    if bin.is_dir() { vec![bin] } else { Vec::new() }
+    if bin.is_dir() {
+        vec![bin]
+    } else {
+        Vec::new()
+    }
 }

@@ -20,17 +20,18 @@
 //! which every run-map writes (_expert etc. by the kind of run), to S game seconds, then the bot as it is now: the run from there
 //! goes to <IWAD>_<MAP>_branch.run).
 
+mod cli;
+use cli::{option_args, run_options};
+use evildoom::config::resolve_wad;
+use evildoom::navigator::Navigator;
+use evildoom::specials::classify_line;
+use evildoom::sweep::run_map;
+use evildoom::wad::{load_map, Wad};
 use std::collections::{BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::rc::Rc;
 use std::sync::Arc;
-
-use evildoom::config::resolve_wad;
-use evildoom::specials::classify_line;
-use evildoom::navigator::Navigator;
-use evildoom::sweep::{run_map, RunOptions};
-use evildoom::wad::{load_map, Wad};
 
 fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
     let wad = Wad::open(&resolve_wad(wad))?;
@@ -84,17 +85,35 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
     for arg in sectors {
         let si: usize = arg.parse().map_err(|_| format!("not a sector: {arg}"))?;
         let s = m.sectors.get(si).ok_or_else(|| format!("no sector {si}"))?;
-        println!("sector {si}: floor {} ceiling {} ({} / {}), light {}, special {}, tag {}", s.floor, s.ceiling, s.floor_tex, s.ceiling_tex, s.light, s.special, s.tag);
+        println!(
+            "sector {si}: floor {} ceiling {} ({} / {}), light {}, special {}, tag {}",
+            s.floor, s.ceiling, s.floor_tex, s.ceiling_tex, s.light, s.special, s.tag
+        );
         for l in &m.linedefs {
             let (front, back) = (m.front_sector(l), m.back_sector(l));
             if front != Some(si) && back != Some(si) {
                 continue;
             }
             let other = if front == Some(si) { back } else { front };
-            let side = |sd: u16| m.sidedefs.get(usize::from(sd)).map_or_else(String::new, |d| format!("[{} {} {} @{},{}]", d.upper, d.middle, d.lower, d.x_offset, d.y_offset));
+            let side = |sd: u16| {
+                m.sidedefs.get(usize::from(sd)).map_or_else(String::new, |d| format!("[{} {} {} @{},{}]", d.upper, d.middle, d.lower, d.x_offset, d.y_offset))
+            };
             let (a, b) = (m.line_seg(l.index).0, m.line_seg(l.index).1);
             let what = classify_line(l.special).map_or_else(String::new, |i| format!(" {}", i.description));
-            println!("  line {} ({:.0},{:.0})-({:.0},{:.0}) flags {:#x} special {}{what} tag {} -> {} front {} back {}", l.index, a.0, a.1, b.0, b.1, l.flags, l.special, l.tag, other.map_or_else(|| "-".to_string(), |o| format!("sector {o} ({}..{})", m.sectors[o].floor, m.sectors[o].ceiling)), side(l.front), side(l.back));
+            println!(
+                "  line {} ({:.0},{:.0})-({:.0},{:.0}) flags {:#x} special {}{what} tag {} -> {} front {} back {}",
+                l.index,
+                a.0,
+                a.1,
+                b.0,
+                b.1,
+                l.flags,
+                l.special,
+                l.tag,
+                other.map_or_else(|| "-".to_string(), |o| format!("sector {o} ({}..{})", m.sectors[o].floor, m.sectors[o].ceiling)),
+                side(l.front),
+                side(l.back)
+            );
         }
         if s.tag != 0 {
             for l in m.linedefs.iter().filter(|l| l.tag == s.tag && l.special != 0) {
@@ -113,10 +132,25 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
         }
         // (the run-jumps found landing here, and what the movement check makes of them)
         let into: Vec<&evildoom::navigator::Jump> = nav.jumps.iter().filter(|j| nav.mesh.polys[j.dest_poly].as_ref().is_some_and(|q| q.sector == si)).collect();
-        let lab: Vec<evildoom::jumps::Jump> = into.iter().map(|j| evildoom::jumps::Jump { src_polys: j.src_polys.iter().copied().collect(), dest_poly: j.dest_poly, dest: j.dest, runup: j.runup, takeoff: j.takeoff, speed: 0.0, requires: j.requires.clone(), strafe: j.strafe }).collect();
+        let lab: Vec<evildoom::jumps::Jump> = into
+            .iter()
+            .map(|j| evildoom::jumps::Jump {
+                src_polys: j.src_polys.iter().copied().collect(),
+                dest_poly: j.dest_poly,
+                dest: j.dest,
+                runup: j.runup,
+                takeoff: j.takeoff,
+                speed: 0.0,
+                requires: j.requires.clone(),
+                strafe: j.strafe,
+            })
+            .collect();
         for (j, verdict) in into.iter().zip(nav.jump_lab.check_jumps(&lab)) {
             let from: BTreeSet<usize> = j.src_polys.iter().filter_map(|&p| nav.mesh.polys[p].as_ref().map(|q| q.sector)).collect();
-            println!("  jump in from sectors {from:?}: run-up ({:.0}, {:.0}), takeoff ({:.0}, {:.0}), lands ({:.0}, {:.0}): {verdict}", j.runup.0, j.runup.1, j.takeoff.0, j.takeoff.1, j.dest.0, j.dest.1);
+            println!(
+                "  jump in from sectors {from:?}: run-up ({:.0}, {:.0}), takeoff ({:.0}, {:.0}), lands ({:.0}, {:.0}): {verdict}",
+                j.runup.0, j.runup.1, j.takeoff.0, j.takeoff.1, j.dest.0, j.dest.1
+            );
         }
     }
     Ok(())
@@ -152,60 +186,6 @@ fn follow(wad: &str, map: &str) -> Result<(), String> {
     }
     println!("exited={} tic={} replans={}", e.exited(), e.tic, f.replans);
     Ok(())
-}
-
-/// The run options among `args`: (options, jobs, the rest as they were).
-fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<String>), String> {
-    let mut o = RunOptions::default();
-    let mut jobs = 8;
-    let mut rest = Vec::new();
-    let mut it = args.iter();
-    while let Some(a) = it.next() {
-        let mut value = |name: &str| it.next().cloned().ok_or_else(|| format!("{name} needs a value"));
-        match a.as_str() {
-            "--lives" => o.lives = value("--lives")?.parse().map_err(|_| "--lives: a number")?,
-            "--snapshot" => o.snapshot = Some(value("--snapshot")?.parse().map_err(|_| "--snapshot: game seconds")?),
-            "--stall" => o.stall_seconds = value("--stall")?.parse().map_err(|_| "--stall: game seconds")?,
-            "--from" => {
-                let v = value("--from")?;
-                let (file, at) = v.rsplit_once('@').ok_or("--from: FILE@SECONDS")?;
-                o.from = Some((std::path::PathBuf::from(file), at.parse().map_err(|_| "--from: FILE@SECONDS")?));
-            }
-            "--focus" => {
-                let v: Vec<f64> = value("--focus")?.split(',').filter_map(|x| x.trim().parse().ok()).collect();
-                let [x, y, z] = v.as_slice() else { return Err("--focus: X,Y,ZOOM".into()) };
-                o.focus = Some((*x, *y, *z));
-            }
-            "--max-seconds" => o.max_seconds = value("--max-seconds")?.parse().map_err(|_| "--max-seconds: a number")?,
-            "--seed" => {
-                let v = value("--seed")?;
-                o.seed = if v == "random" { None } else { Some(v.parse().map_err(|_| "--seed: a number or 'random'")?) };
-            }
-            "--jobs" => jobs = value("--jobs")?.parse().map_err(|_| "--jobs: a number")?,
-            "--fight" => o.fight = value("--fight")?.parse().map_err(|_| "--fight: a skill, 1-5")?,
-            "--expert" => o.expert = true,
-            "--peek" => o.peek = true,
-            "--secrets" => o.secrets = true,
-            "--mortal" => o.mortal = true,
-            _ => rest.push(a.clone()),
-        }
-    }
-    Ok((o, jobs, rest))
-}
-
-/// The options as they'd be given again (for the child processes).
-fn option_args(o: &RunOptions) -> Vec<String> {
-    let mut out = vec!["--lives".to_string(), o.lives.to_string(), "--max-seconds".into(), o.max_seconds.to_string(), "--stall".into(), o.stall_seconds.to_string(), "--seed".into(), o.seed.map_or("random".into(), |s| s.to_string())];
-    if o.fight > 0 {
-        out.push("--fight".into());
-        out.push(o.fight.to_string());
-    }
-    for (on, flag) in [(o.peek, "--peek"), (o.secrets, "--secrets"), (o.mortal, "--mortal"), (o.expert, "--expert")] {
-        if on {
-            out.push(flag.into());
-        }
-    }
-    out
 }
 
 fn run_one(args: &[String]) -> Result<(), String> {
@@ -258,7 +238,15 @@ fn sweep(args: &[String]) -> Result<(), String> {
     while !todo.is_empty() || !running.is_empty() {
         while running.len() < jobs.max(1) {
             let Some((w, m)) = todo.pop_front() else { break };
-            let child = Command::new(&me).arg("run-map").arg(&w).arg(&m).args(option_args(&o)).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
+            let child = Command::new(&me)
+                .arg("run-map")
+                .arg(&w)
+                .arg(&m)
+                .args(option_args(&o))
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|e| e.to_string())?;
             running.push((w, m, child));
         }
         let mut finished = None;
@@ -273,7 +261,12 @@ fn sweep(args: &[String]) -> Result<(), String> {
             continue;
         };
         let (w, m, mut child) = running.swap_remove(i);
-        let line = child.stdout.take().map(BufReader::new).and_then(|r| r.lines().map_while(Result::ok).find(|l| l.starts_with("RESULT "))).unwrap_or_else(|| "RESULT ERROR (no result)".into());
+        let line = child
+            .stdout
+            .take()
+            .map(BufReader::new)
+            .and_then(|r| r.lines().map_while(Result::ok).find(|l| l.starts_with("RESULT ")))
+            .unwrap_or_else(|| "RESULT ERROR (no result)".into());
         let line = line.trim_start_matches("RESULT ").to_string();
         let outcome = line.split(' ').next().unwrap_or("ERROR").to_string();
         results.push(outcome);
@@ -293,7 +286,17 @@ fn sweep(args: &[String]) -> Result<(), String> {
 #[cfg(feature = "viewer")]
 fn watch(args: &[String]) -> Result<(), String> {
     let (o, _, rest) = run_options(args)?;
-    let mut w = evildoom::viewer::WatchOptions { speed: 1.0, show_all: false, mortal: o.mortal, lives: o.lives, fight: o.fight, peek: o.peek, expert: o.expert, seed: o.seed, focus: None };
+    let mut w = evildoom::viewer::WatchOptions {
+        speed: 1.0,
+        show_all: false,
+        mortal: o.mortal,
+        lives: o.lives,
+        fight: o.fight,
+        peek: o.peek,
+        expert: o.expert,
+        seed: o.seed,
+        focus: None,
+    };
     let mut names = Vec::new();
     let mut it = rest.iter();
     while let Some(a) = it.next() {

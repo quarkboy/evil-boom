@@ -21,11 +21,14 @@ native/src/
   motor                        35 Hz control: following a route
   tactical                     monsters, sound, combat, the player with monsters about
   engine, dsda                 DSDA-Doom in-process (third_party/dsda-doom + dsda/dsda-doom.patch)
-  sweep, play, viewer, main    the `evil` command: sweeps, single maps, watching her play
+  sweep, play, viewer, cli, main  the `evil` command: sweeps, single maps, watching her play
 native/tests/                  against the real IWADs and the game (skipped when missing)
 dsda/                          the engine patch and its build notes
 docs/
 ```
+
+For the internal module boundaries, tuning locations, and repeatable gameplay/performance
+comparison procedure, see [the Rust review notes](docs/RUST_REVIEW.md).
 
 ## Setup
 

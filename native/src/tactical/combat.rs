@@ -10,15 +10,17 @@
 //! What she knows of monsters follows what she can see: a monster is noticed when it's in line
 //! of sight in front of her (or near, or she's being hurt), then remembered where last seen.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::rc::Rc;
+mod aiming;
+mod movement;
 
-use super::bestiary::{missile, monster, weapon_in, Attack, Missile, Weapon};
+use super::bestiary::{monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
 use crate::geom::{dist, Point};
 use crate::los::{Body, LineOfSight};
-use crate::motor::{heading, norm, Controls, Observation, Thing, FRICTION, RUN_THRUST, TICRATE};
-use crate::navigator::{Navigator, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
+use crate::motor::{heading, norm, Controls, Observation, Thing, FRICTION, RUN_THRUST};
+use crate::navigator::{Navigator, PLAYER_HEIGHT, PLAYER_RADIUS};
+use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 /// half the view, degrees: monsters in line of sight inside it are seen...
 const FOV: f64 = 55.0;
@@ -34,18 +36,12 @@ const WAKE_SPEED: f64 = 0.5;
 const WAKE_TURN: f64 = 1.0;
 /// no shooting at anything further
 const ENGAGE_RANGE: f64 = 2048.0;
-/// degrees a tic, turning to aim
-const AIM_TURN: f64 = 18.0;
-const TURN_ACCEL: f64 = 5.0;
+
 /// a missile arriving sooner than this is dodged...
 const DODGE_TICS: i64 = 35;
 /// ...if it would pass nearer than the two radii and this
 const DODGE_MARGIN: f64 = 12.0;
-const DODGE_WAYS: usize = 16;
-/// going some way: pushing that way this long, then...
-const PUSH_TICS: usize = 8;
-/// ...letting go: where she'd slide to in this long must be safe too
-const SLIDE_TICS: usize = 40;
+
 /// a clawing monster nearer than this: back off from it
 const CLOSE: f64 = 160.0;
 /// this much threat in sight: stand and fight rather than walk on
@@ -58,32 +54,13 @@ const SHORT_OF_AMMO: i32 = 15;
 const LOW_HEALTH: f64 = 35.0;
 /// with something shooting in sight, keep this far from barrels
 const BARREL_CLEAR: f64 = 160.0;
-/// a barrel this near a monster (and well clear of her) is shot instead
-const BARREL_NEAR: f64 = 96.0;
-/// getting clear of barrels: at most this long at a time...
-const BARREL_TICS: i64 = 2 * 35;
-/// ...then not again for this long (E1M7: pressed against a wall for ever)
-const BARREL_REST: i64 = 3 * 35;
-/// a strafe one way lasts between these
-const STRAFE_TICS: (i64, i64) = (18, 40);
-/// shots leave her this far above her feet...
-const SHOT_HEIGHT: f64 = 36.0;
-/// ...and find what they're aimed at only this steep
-const AUTOAIM: f64 = 100.0 / 160.0;
-/// a biter seen this lately near her rules out rockets
-const ROCKET_WARY: i64 = 3 * 35;
+
 /// a monster facing another this nearly...
 const INFIGHT_FACING: f64 = 30.0;
 /// ...and not her...
 const INFIGHT_NOT_HER: f64 = 45.0;
 /// ...this long: they're fighting each other: leave them
 const INFIGHT_TICS: i32 = 18;
-/// something that shoots back from anywhere: shot at past a gun's reach while this much lands
-const FAR_HITS: f64 = 0.2;
-/// a weapon switch asked for: give it this long before asking again
-const SWITCH_WAIT: i64 = 40;
-/// seconds a weapon switch costs
-const SWITCH_COST: f64 = 0.8;
 
 /// What using up ammo costs, in seconds of fighting a unit, and below how much the cost goes up.
 fn ammo_cost(slot: i32) -> (f64, f64) {
@@ -244,7 +221,8 @@ impl Combat {
             }
             self.health = Some(h);
         }
-        let monsters: BTreeMap<i32, Thing> = obs.things.iter().flatten().filter(|t| monster(t.name).is_some() && t.name != "CommanderKeen").map(|t| (t.id, t.clone())).collect();
+        let monsters: BTreeMap<i32, Thing> =
+            obs.things.iter().flatten().filter(|t| monster(t.name).is_some() && t.name != "CommanderKeen").map(|t| (t.id, t.clone())).collect();
         for i in self.alive.keys() {
             if !monsters.contains_key(i) {
                 if let Some(s) = self.known.get(i) {
@@ -306,7 +284,9 @@ impl Combat {
                 if o.name == t.name && mon(t.name).attack != Attack::Hitscan {
                     continue; // (a kind's fireballs and claws don't hurt its own)
                 }
-                if norm(t.angle - heading((t.x, t.y), (o.x, o.y))).abs() < INFIGHT_FACING && (moving || norm(o.angle - heading((o.x, o.y), (t.x, t.y))).abs() < INFIGHT_FACING) {
+                if norm(t.angle - heading((t.x, t.y), (o.x, o.y))).abs() < INFIGHT_FACING
+                    && (moving || norm(o.angle - heading((o.x, o.y), (t.x, t.y))).abs() < INFIGHT_FACING)
+                {
                     let n = self.infight.get(&t.id).copied().unwrap_or(0) + 1;
                     now.insert(t.id, n);
                     if n == INFIGHT_TICS {
@@ -387,7 +367,11 @@ impl Combat {
         let Some(here) = self.nav.poly_at(obs.pos()) else { return String::new() };
         let hs: Vec<crate::nav::Heights> = self.heights(obs).iter().map(|&(floor, ceiling)| crate::nav::Heights { floor, ceiling }).collect();
         let heard = self.hearing.heard(self.nav.sector_of_poly(here), &hs);
-        let sleepers: Vec<Seen> = self.remaining().into_iter().filter(|m| !m.awake && self.nav.poly_at(m.pos()).is_some_and(|p| heard.contains(&self.nav.sector_of_poly(p)))).collect();
+        let sleepers: Vec<Seen> = self
+            .remaining()
+            .into_iter()
+            .filter(|m| !m.awake && self.nav.poly_at(m.pos()).is_some_and(|p| heard.contains(&self.nav.sector_of_poly(p))))
+            .collect();
         let hp: f64 = sleepers.iter().map(|m| f64::from(mon(m.name).health)).sum();
         if sleepers.len() < 2 || hp / self.firepower(obs) <= OUTMATCHED {
             return String::new();
@@ -444,7 +428,9 @@ impl Combat {
                     let d = dist(shot, pos);
                     aim = Some(a);
                     let floor = self.floor_at(obs, shot);
-                    fire = norm(a - obs.angle).abs() < 0.75f64.max(8.0f64.atan2(d).to_degrees()) && d < weapon_in(obs.weapon.unwrap_or(2), obs.super_shotgun).reach && self.shot_clear(obs, shot, floor, 32.0);
+                    fire = norm(a - obs.angle).abs() < 0.75f64.max(8.0f64.atan2(d).to_degrees())
+                        && d < weapon_in(obs.weapon.unwrap_or(2), obs.super_shotgun).reach
+                        && self.shot_clear(obs, shot, floor, 32.0);
                 }
             }
         }
@@ -492,12 +478,20 @@ impl Combat {
             why = format!("sneaking past (a shot would wake {woken})");
         } else if target.as_ref().is_some_and(|t| !self.reachable(obs, t)) {
             why = "out of reach: going on".into();
-        } else if let Some(way) = target.as_ref().filter(|t| self.visible.len() == 1 && dist((t.x, t.y), pos) < 512.0 && !self.can_hit(obs, t, None)).and_then(|t| self.shot_way(obs, t)) {
+        } else if let Some(way) = target
+            .as_ref()
+            .filter(|t| self.visible.len() == 1 && dist((t.x, t.y), pos) < 512.0 && !self.can_hit(obs, t, None))
+            .and_then(|t| self.shot_way(obs, t))
+        {
             moving = Some(way);
             why = format!("stepping for a shot at {}", target.as_ref().map_or("", |t| t.name));
         } else if outmatched {
             why = "getting past".into(); // (shooting on the way, the route going on)
-        } else if let Some(way) = target.as_ref().filter(|t| mon(t.name).attack != Attack::None && dist((t.x, t.y), pos) < self.gun(obs).keep.0).and_then(|t| self.keeping_off(obs, t, aim)) {
+        } else if let Some(way) = target
+            .as_ref()
+            .filter(|t| mon(t.name).attack != Attack::None && dist((t.x, t.y), pos) < self.gun(obs).keep.0)
+            .and_then(|t| self.keeping_off(obs, t, aim))
+        {
             // (too near for the gun she has, or for them to miss)
             moving = Some(way);
             why = format!("keeping off from {}", target.as_ref().map_or("", |t| t.name));
@@ -563,458 +557,6 @@ impl Combat {
             c.weapon = d.weapon;
         }
         c
-    }
-
-    // --- targets, weapons, aim ----------------------------------------------------------------
-
-    fn pick_target(&mut self, obs: &Observation) -> Option<Thing> {
-        let pos = obs.pos();
-        let mut best: Option<(f64, Thing)> = None;
-        for t in self.against_her() {
-            let info = mon(t.name);
-            let d = dist((t.x, t.y), pos).max(64.0);
-            let mut s = (info.threat + 1.0) / d * if Some(t.id) == self.target { 1.6 } else { 1.0 };
-            let off = norm(heading(pos, (t.x, t.y)) - obs.angle).abs();
-            s *= 1.0 - off.min(150.0) / 300.0; // (rather what's in front than what's behind)
-            if !self.can_hit(obs, &t, None) {
-                s *= 0.3; // (rather what a shot gets to)
-            }
-            if best.as_ref().is_none_or(|(bs, _)| s > *bs) {
-                best = Some((s, t));
-            }
-        }
-        self.target = best.as_ref().map(|(_, t)| t.id);
-        best.map(|(_, t)| t)
-    }
-
-    fn aim_and_fire(&mut self, obs: &Observation, t: &Thing) -> (f64, bool, i32) {
-        let pos = obs.pos();
-        let d = dist((t.x, t.y), pos);
-        let slot = self.weapon_for(obs, t, d);
-        let mut weapon = 0;
-        let held = obs.weapon.unwrap_or(2);
-        if slot != held && obs.tic - self.switch_tic > SWITCH_WAIT {
-            weapon = slot;
-            self.switch_tic = obs.tic;
-        }
-        let w = weapon_in(if (1..=7).contains(&held) { held } else { 2 }, obs.super_shotgun);
-        // lead a moving target with a missile weapon
-        let (mut ax, mut ay) = (t.x, t.y);
-        if !w.hitscan && w.speed > 0.0 {
-            let tof = d / w.speed;
-            ax += t.vx * tof;
-            ay += t.vy * tof;
-        }
-        let aim = heading(pos, (ax, ay));
-        let info = mon(t.name);
-        let tolerance = 1.5f64.max((info.radius * 0.7).atan2(d.max(1.0)).to_degrees());
-        let on = norm(aim - obs.angle).abs() < tolerance;
-        let held_fire = if !Self::in_reach(&w, t, d) {
-            "out of reach"
-        } else if held == 5 && !self.rocket_safe(obs, t) {
-            "rocket not safe"
-        } else if !self.can_hit(obs, t, None) {
-            "no shot (too steep, or something in the way)"
-        } else {
-            ""
-        };
-        if held_fire != self.held_fire {
-            if !held_fire.is_empty() {
-                self.log.push(format!("tic {}: holding fire at {} {}, {d:.0} off: {held_fire}", obs.tic, t.name, t.id));
-            }
-            self.held_fire = held_fire.to_string();
-        }
-        (aim, on && held_fire.is_empty(), weapon)
-    }
-
-    /// Close enough to shoot at with w: inside its reach, or (at something that hurts her from
-    /// anywhere) as far as enough of a shot still lands.
-    pub fn in_reach(w: &Weapon, t: &Thing, d: f64) -> bool {
-        let info = mon(t.name);
-        if d >= ENGAGE_RANGE {
-            return false;
-        }
-        if d < w.reach + if w.slot == 1 { info.radius } else { 0.0 } {
-            return true;
-        }
-        info.attack == Attack::Hitscan && w.slot != 1 && w.hits(info.radius, d) >= FAR_HITS
-    }
-
-    /// Would a shot at t get to it, as Doom aims one (not too steep, nothing in the way); else out
-    /// level, past it unless it's level with her.
-    pub fn can_hit(&mut self, obs: &Observation, t: &Thing, height: Option<f64>) -> bool {
-        let h = height.unwrap_or_else(|| mon(t.name).height);
-        self.refresh_tic_cache(obs);
-        let key = (t.id, h.to_bits());
-        if let Some(&v) = self.hit_cache.get(&key) {
-            return v;
-        }
-        let v = self.shot_clear(obs, (t.x, t.y), t.z, h);
-        self.hit_cache.insert(key, v);
-        v
-    }
-
-    fn shot_clear(&mut self, obs: &Observation, at: Point, z: f64, h: f64) -> bool {
-        let gun = self.z(obs) + SHOT_HEIGHT;
-        let d = dist(at, obs.pos()).max(1.0);
-        let (mut lo, mut hi) = (z.max(gun - AUTOAIM * d), (z + h).min(gun + AUTOAIM * d));
-        if hi <= lo {
-            if !(z < gun && gun < z + h) {
-                return false;
-            }
-            (lo, hi) = (gun - 1.0, gun + 1.0); // (out level: it only hits what's level with it)
-        }
-        let me = Body { x: obs.x, y: obs.y, z: gun - 0.75 * PLAYER_HEIGHT, height: PLAYER_HEIGHT }; // (the eye's at 0.75)
-        self.refresh_tic_cache(obs);
-        self.los.clear(me, Body { x: at.0, y: at.1, z: lo, height: hi - lo }, &self.heights_now)
-    }
-
-    /// Where to step for a shot at t she can see but can't hit: back from it when it's above
-    /// her, towards it when it's below; None if neither way is safe.
-    fn shot_way(&mut self, obs: &Observation, t: &Thing) -> Option<Point> {
-        let away = self.away_from(obs, (t.x, t.y));
-        if t.z <= self.z(obs) {
-            if let Some(a) = away {
-                let toward = (-a.0, -a.1);
-                return self.safe(obs, toward, 64.0).then_some(toward);
-            }
-        }
-        away
-    }
-
-    /// A barrel she can see right by a monster, well clear of her: shoot that.
-    fn barrel_shot(&mut self, obs: &Observation) -> Option<Point> {
-        let pos = obs.pos();
-        let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().filter(|&b| dist(b, pos) > BARREL_CLEAR + 64.0 && self.visible.iter().any(|t| dist(b, (t.x, t.y)) < BARREL_NEAR + mon(t.name).radius)).collect();
-        if barrels.is_empty() {
-            return None;
-        }
-        self.refresh_tic_cache(obs);
-        let me = Body { x: obs.x, y: obs.y, z: self.z(obs), height: PLAYER_HEIGHT };
-        barrels
-            .into_iter()
-            .filter(|&b| self.los.clear(me, Body { x: b.0, y: b.1, z: self.floor_at(obs, b), height: 32.0 }, &self.heights_now))
-            .reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a })
-    }
-
-    fn floor_at(&self, obs: &Observation, p: Point) -> f64 {
-        self.nav.poly_at(p).and_then(|q| obs.height(self.nav.sector_of_poly(q))).map_or(0.0, |h| h.floor)
-    }
-
-    /// The way to go to get clear of the barrels by her: the way she's going already if still
-    /// safe and clearing them, else a new one; None once clear (or she can't get so).
-    fn away_from_barrels(&mut self, obs: &Observation, nearest: Point) -> Option<Point> {
-        let pos = obs.pos();
-        if obs.tic < self.barrel_rest_until {
-            return None;
-        }
-        if self.barrel_way.is_none() {
-            self.barrel_since = obs.tic;
-        } else if obs.tic - self.barrel_since > BARREL_TICS {
-            self.barrel_way = None;
-            self.barrel_rest_until = obs.tic + BARREL_REST;
-            return None;
-        }
-        if dist(nearest, pos) >= BARREL_CLEAR + if self.barrel_way.is_some() { 64.0 } else { 0.0 } {
-            self.barrel_way = None;
-            return None;
-        }
-        if let Some(way) = self.barrel_way {
-            if self.safe(obs, way, 48.0) && self.clear_of_barrels(obs, way) {
-                return Some(way);
-            }
-        }
-        let way = self.away_from(obs, nearest);
-        self.barrel_way = way.filter(|&w| self.clear_of_barrels(obs, w));
-        self.barrel_way
-    }
-
-    /// Does going that way (a second's run) leave her further from every barrel near her?
-    fn clear_of_barrels(&self, obs: &Observation, d: Point) -> bool {
-        let pos = obs.pos();
-        let ahead = (pos.0 + d.0 * 96.0, pos.1 + d.1 * 96.0);
-        obs.barrels.iter().flatten().filter(|&&b| dist(b, pos) < BARREL_CLEAR).all(|&b| dist(b, ahead) > dist(b, pos))
-    }
-
-    /// Is a rocket at t sure not to blow up by her (E1M9's died at 88 health, nothing in sight)?
-    fn rocket_safe(&self, obs: &Observation, t: &Thing) -> bool {
-        let pos = obs.pos();
-        let clear = super::bestiary::weapon(5).splash + 48.0;
-        if dist((t.x, t.y), pos) < clear + mon(t.name).radius {
-            return false;
-        }
-        let mut others: Vec<(f64, f64, f64)> = self.visible.iter().filter(|o| o.id != t.id).map(|o| (o.x, o.y, mon(o.name).radius)).collect();
-        others.extend(obs.barrels.iter().flatten().map(|b| (b.0, b.1, 10.0)));
-        // (E1M9: dead at full health, a demon 83 away: it came round a corner into the way)
-        others.extend(self.remaining().iter().filter(|m| m.id != t.id && obs.tic - m.tic < ROCKET_WARY && matches!(mon(m.name).attack, Attack::Melee | Attack::Charge)).map(|m| (m.x, m.y, mon(m.name).radius + 128.0)));
-        for (x, y, r) in others {
-            if dist((x, y), pos) < clear + r {
-                return false;
-            }
-            if segment_point_distance(pos, (t.x, t.y), (x, y)) < r + 12.0 && dist((x, y), pos) < dist((t.x, t.y), pos) {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// The gun that'd see t off soonest, counting the switch and what its ammo is worth.
-    fn weapon_for(&self, obs: &Observation, t: &Thing, d: f64) -> i32 {
-        let held = Self::held(obs);
-        let info = mon(t.name);
-        let crowd = self.visible.len();
-        let (mut best, mut cost) = (obs.weapon.unwrap_or(2), f64::INFINITY);
-        for &slot in &SLOTS {
-            if !held.contains(&slot) {
-                continue;
-            }
-            let w = weapon_in(slot, obs.super_shotgun);
-            let have = Self::ammo(obs, slot);
-            if (w.ammo_per_shot > 0 && have < w.ammo_per_shot) || (slot == 5 && !self.rocket_safe(obs, t)) {
-                continue;
-            }
-            let mut c = self.time_to_kill(&w, t, d);
-            if w.ammo_per_shot > 0 {
-                let shots = (f64::from(info.health) / (w.damage * w.hits(info.radius, d)).max(1.0)).max(1.0);
-                let (per, low) = ammo_cost(slot);
-                c += shots * f64::from(w.ammo_per_shot) * per * (low / f64::from(have)).max(1.0);
-            }
-            if slot == 7 && (info.boss || crowd >= 4) {
-                c *= 0.3;
-            }
-            if Some(slot) != obs.weapon {
-                c += SWITCH_COST;
-            }
-            if c < cost {
-                best = slot;
-                cost = c;
-            }
-        }
-        best
-    }
-
-    /// Seconds of shooting it'd take (a lot, out of the gun's reach: anything else first).
-    fn time_to_kill(&self, w: &Weapon, t: &Thing, d: f64) -> f64 {
-        let info = mon(t.name);
-        if !Self::in_reach(w, t, d) {
-            return 1e4 + d;
-        }
-        let per_shot = w.damage * w.hits(info.radius, d);
-        (f64::from(info.health) / per_shot.max(0.1)).max(1.0) * w.cycle / TICRATE
-    }
-
-    /// This tic's turn (positive is clockwise) towards `aim`.
-    fn turn(&mut self, obs: &Observation, aim: Option<f64>) -> f64 {
-        let Some(aim) = aim else {
-            self.rate = 0.0;
-            return 0.0;
-        };
-        let err = norm(aim - obs.angle);
-        let want = AIM_TURN.min((2.0 * TURN_ACCEL * err.abs()).sqrt()).min(err.abs()).copysign(err);
-        self.rate = (self.rate - TURN_ACCEL).max((self.rate + TURN_ACCEL).min(want));
-        if err.abs() < 1.0 {
-            self.rate = err;
-        }
-        -self.rate
-    }
-
-    // --- moving -----------------------------------------------------------------------------
-
-    /// The missiles that'd hit her, soonest first: any that would if she went on as she's going,
-    /// and any she's getting out of the way of that haven't gone by yet.
-    fn incoming(&mut self, obs: &Observation) -> Vec<Thing> {
-        let pos = obs.pos();
-        let z = self.z(obs);
-        let vel = self.velocity;
-        let mut out: Vec<(f64, Thing)> = Vec::new();
-        for t in obs.things.iter().flatten() {
-            let Some(m) = missile(t.name) else { continue };
-            if t.name == "LostSoul" && t.vx.hypot(t.vy) < 8.0 {
-                continue;
-            }
-            // (relative to her, as she's going)
-            let (rvx, rvy) = (t.vx - vel.0, t.vy - vel.1);
-            let v2 = rvx * rvx + rvy * rvy;
-            if v2 < 1.0 {
-                continue;
-            }
-            let (rx, ry) = (pos.0 - t.x, pos.1 - t.y);
-            let when = (rx * rvx + ry * rvy) / v2;
-            if !(0.0 < when && when < DODGE_TICS as f64) {
-                continue;
-            }
-            let miss = (t.x + rvx * when - pos.0).hypot(t.y + rvy * when - pos.1);
-            let hz = t.z + t.vz * when;
-            if !(z - 24.0 < hz && hz < z + PLAYER_HEIGHT + 24.0) {
-                continue;
-            }
-            if !self.dodging.contains(&t.id) && miss > clearance(&m) {
-                continue;
-            }
-            if self.dodging.insert(t.id) {
-                self.log.push(format!("tic {}: dodging {} {} (due in {when:.0} tics, {miss:.0} off)", obs.tic, t.name, t.id));
-            }
-            out.push((when, t.clone()));
-        }
-        let here: BTreeSet<i32> = out.iter().map(|(_, t)| t.id).collect();
-        self.dodging.retain(|i| here.contains(i));
-        if here.is_empty() {
-            self.dodge_way = None;
-        }
-        out.sort_by(|a, b| a.0.total_cmp(&b.0));
-        out.into_iter().map(|(_, t)| t).collect()
-    }
-
-    /// The way to run that keeps her furthest from all of them as they go by, where the floor's
-    /// safe; the way she's going already when it's as good (no dithering).
-    fn dodge(&mut self, obs: &Observation, missiles: &[Thing]) -> Option<Point> {
-        let pos = obs.pos();
-        let mut ways: Vec<Point> = (0..DODGE_WAYS).map(|i| {
-            let a = 2.0 * std::f64::consts::PI * i as f64 / DODGE_WAYS as f64;
-            (a.cos(), a.sin())
-        }).collect();
-        if let Some(w) = self.dodge_way {
-            ways.push(w);
-        }
-        let mut best: Option<(f64, Point)> = None;
-        for way in ways {
-            if !self.safe(obs, way, 64.0) {
-                continue;
-            }
-            let mut s = missiles.iter().filter_map(|t| missile(t.name).map(|m| miss_by(pos, self.velocity, way, t) - clearance(&m))).fold(f64::INFINITY, f64::min);
-            s = s.min(48.0); // (clear is clear: then the rest decides)
-            if let Some(dw) = self.dodge_way {
-                s += 6.0 * (way.0 * dw.0 + way.1 * dw.1);
-            }
-            if best.is_none_or(|(bs, _)| s > bs) {
-                best = Some((s, way));
-            }
-        }
-        self.dodge_way = best.map(|b| b.1);
-        self.dodge_way
-    }
-
-    /// Back off from `what`: straight away if the floor's safe that way, else as near that as is.
-    fn away_from(&mut self, obs: &Observation, what: Point) -> Option<Point> {
-        let away = (obs.y - what.1).atan2(obs.x - what.0);
-        for off in [0.0f64, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0] {
-            let a = away + off.to_radians();
-            let d = (a.cos(), a.sin());
-            if self.safe(obs, d, 64.0) {
-                return Some(d);
-            }
-        }
-        None
-    }
-
-    fn gun(&self, obs: &Observation) -> Weapon {
-        weapon_in(obs.weapon.filter(|w| (1..=7).contains(w)).unwrap_or(2), obs.super_shotgun)
-    }
-
-    /// Away from t, aslant (the strafe's way and back), as far as it's safe.
-    fn keeping_off(&mut self, obs: &Observation, t: &Thing, aim: Option<f64>) -> Option<Point> {
-        let a = (obs.y - t.y).atan2(obs.x - t.x);
-        let back = (a.cos(), a.sin());
-        let mut ways = vec![back];
-        if let Some(s) = self.strafe_dir(obs, aim) {
-            let mixed = (back.0 + s.0, back.1 + s.1);
-            let n = mixed.0.hypot(mixed.1);
-            if n > 0.1 {
-                ways.insert(0, (mixed.0 / n, mixed.1 / n));
-            }
-        }
-        if let Some(w) = ways.into_iter().find(|&w| self.safe(obs, w, 64.0)) {
-            return Some(w);
-        }
-        self.away_from(obs, (t.x, t.y))
-    }
-
-    /// Towards t, zig-zagging (the strafe's way and forwards), as far as it's safe.
-    fn closing_in(&mut self, obs: &Observation, t: &Thing, strafe: Option<Point>) -> Option<Point> {
-        let a = (t.y - obs.y).atan2(t.x - obs.x);
-        let ahead = (a.cos(), a.sin());
-        let mut ways = vec![ahead];
-        if let Some(s) = strafe {
-            let mixed = (ahead.0 + s.0, ahead.1 + s.1);
-            let n = mixed.0.hypot(mixed.1);
-            if n > 0.1 {
-                ways.insert(0, (mixed.0 / n, mixed.1 / n));
-            }
-        }
-        ways.into_iter().find(|&w| self.safe(obs, w, 64.0)).or(strafe)
-    }
-
-    /// Side to side across the line of fire, a second or so each way, where it's safe.
-    fn strafe_dir(&mut self, obs: &Observation, aim: Option<f64>) -> Option<Point> {
-        if obs.tic >= self.strafe_until {
-            self.strafe = -self.strafe;
-            let (lo, hi) = STRAFE_TICS;
-            self.strafe_until = obs.tic + lo + (obs.tic * 7919).rem_euclid(hi - lo);
-        }
-        let aim = aim?;
-        let a = (aim + 90.0 * self.strafe).to_radians();
-        let d = (a.cos(), a.sin());
-        if self.safe(obs, d, 48.0) {
-            return Some(d);
-        }
-        self.strafe = -self.strafe;
-        let d = (-d.0, -d.1);
-        self.safe(obs, d, 48.0).then_some(d)
-    }
-
-    /// A monster near and in front: walking on would walk into it.
-    fn blocking(&self, obs: &Observation, t: Option<&Thing>) -> bool {
-        t.is_some_and(|t| dist((t.x, t.y), obs.pos()) < 320.0 && norm(heading(obs.pos(), (t.x, t.y)) - obs.angle).abs() < 60.0)
-    }
-
-    /// Is it all right to go `length` that way: floor all the way, no drop or step up she
-    /// couldn't come back from, nothing that hurts, room to stand? And where her speed would
-    /// carry her, pushing that way a moment and then letting go (E1M3: strafing by the start,
-    /// slid into the nukage)?
-    fn safe(&self, obs: &Observation, d: Point, length: f64) -> bool {
-        let nav = &self.nav;
-        let Some(here) = nav.poly_at(obs.pos()) else { return false };
-        let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
-        let floor0 = floor_of(here).floor;
-        let mut floor = floor0;
-        let n = ((length / 16.0).floor() as usize).max(2);
-        for i in 1..=n {
-            let f = length * i as f64 / n as f64;
-            let q = (obs.x + d.0 * f, obs.y + d.1 * f);
-            let Some(p) = nav.poly_at(q) else { return false };
-            let h = floor_of(p);
-            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || nav.damage[nav.sector_of_poly(p)] != 0 {
-                return false;
-            }
-            floor = h.floor;
-        }
-        // (the slide: a wall or a step up stops her, which is all right; a drop or a hurting floor
-        // isn't)
-        let (mut x, mut y) = obs.pos();
-        let (mut vx, mut vy) = self.velocity;
-        floor = floor0;
-        for k in 0..SLIDE_TICS {
-            if k < PUSH_TICS {
-                vx += RUN_THRUST * d.0;
-                vy += RUN_THRUST * d.1;
-            } else if vx * vx + vy * vy < 1.0 {
-                break;
-            }
-            x += vx;
-            y += vy;
-            vx *= FRICTION;
-            vy *= FRICTION;
-            let Some(p) = nav.poly_at((x, y)) else { break };
-            let h = floor_of(p);
-            if h.floor - floor > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT {
-                break;
-            }
-            if floor - h.floor > MAX_STEP || nav.damage[nav.sector_of_poly(p)] != 0 {
-                return false;
-            }
-            floor = h.floor;
-        }
-        true
     }
 
     // --- helpers ----------------------------------------------------------------------------

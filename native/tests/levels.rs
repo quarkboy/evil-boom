@@ -1,15 +1,14 @@
 //! Against the real IWADs (skipped when they aren't installed): reading them, the movement
 //! rules, the navmesh, planning, and the movement simulator against the engine.
 
-use std::rc::Rc;
-use std::sync::Arc;
-
 use evildoom::config::resolve_wad;
 use evildoom::nav::{can_cross, Heights};
 use evildoom::navigator::{Navigator, Plan};
 use evildoom::specials::{classify_line, classify_sector, Category, Key, Keys};
 use evildoom::wad::{load_map, Wad};
 use evildoom::walkthrough::{action_for, Action};
+use std::rc::Rc;
+use std::sync::Arc;
 
 fn wad(name: &str) -> Option<Wad> {
     let path = resolve_wad(name);
@@ -124,24 +123,37 @@ fn e1m3_exit_is_behind_the_blue_door() {
 
 #[test]
 fn jumps_match_the_engine() {
+    use evildoom::engine::{library, Engine, Options};
+    use evildoom::motor::Controls;
+
     let Some(w) = wad("doom2") else { return };
+    if !library().exists() {
+        return;
+    }
     let m = Arc::new(load_map(&w, "MAP13", &[]).expect("MAP13 loads"));
     let nav = Navigator::new(Arc::clone(&m), 3).expect("the analysis");
-    // coasting off the ledge from (1703, -3032): ViZDoom's trace, tic by tic (on the ledge, in
-    // the air, and the landing against a wall), to the hundredth of a unit
-    let j = nav.jumps.iter().find(|j| j.key() == "1703,-3032>1643,-3136>1534,-3303").expect("the jump");
-    let lab_jump = evildoom::jumps::Jump { src_polys: j.src_polys.iter().copied().collect(), dest_poly: j.dest_poly, dest: j.dest, runup: j.runup, takeoff: j.takeoff, speed: 0.0, requires: j.requires.clone(), strafe: j.strafe };
-    let trace = nav.jump_lab.trace(&lab_jump, true);
-    for (i, (x, y, z)) in [(5, (1692.66, -3049.93, 400.0)), (17, (1629.11, -3160.07, 400.0)), (25, (1586.90, -3233.23, 356.0)), (31, (1555.25, -3288.11, 281.0)), (33, (1545.34, -3303.74, 304.0)), (40, (1541.07, -3303.74, 304.0))] {
-        let (sx, sy, sz, _) = trace[i];
-        assert!((sx - x).hypot(sy - y) < 0.01, "tic {i}");
-        assert!((sz - z).abs() < 0.5, "tic {i}");
-    }
-    // MAP13 is one where the simulator and the engine check agree on every jump
-    let all: Vec<_> = nav.jumps.iter().map(|j| evildoom::jumps::Jump { src_polys: j.src_polys.iter().copied().collect(), dest_poly: j.dest_poly, dest: j.dest, runup: j.runup, takeoff: j.takeoff, speed: 0.0, requires: j.requires.clone(), strafe: j.strafe }).collect();
-    let verdicts = nav.jump_lab.check_jumps(&all);
-    for key in ["1703,-3032>1643,-3136>1534,-3303", "1700,-3048>1660,-3008>1525,-2873"] {
-        let i = nav.jumps.iter().position(|j| j.key() == key).expect("the jump");
-        assert_eq!(verdicts[i], "ok", "{key}");
+    let mut engine = Engine::new(&w.path, "MAP13", &Options { seed: Some(0), ..Options::default() }).expect("the game starts");
+    engine.start();
+    // Fixed ledge probes, independent of which jumps the finder currently accepts. Compare
+    // against the current DSDA engine: the former fixture used a historical ViZDoom trace.
+    for (x, y, angle) in [(1703.0, -3032.0, -120.0), (1700.0, -3048.0, 135.0)] {
+        assert!(engine.game.warp(x, y, angle));
+        let start = engine.observe();
+        let controls: Vec<_> = (0..80).map(|tic| Controls { forward: if tic < 20 { 50.0 } else { 0.0 }, ..Controls::default() }).collect();
+        let heights: Vec<_> = start.heights.iter().map(|h| h.tuple()).collect();
+        let sim_controls: Vec<_> = controls.iter().map(|c| evildoom::jumps::Controls { forward: c.forward, strafe: c.strafe, turn: c.turn }).collect();
+        let trace = nav.jump_lab.simulate((start.x, start.y, start.angle), &heights, &sim_controls);
+        let mut airborne = false;
+        for (tic, (command, &(sx, sy, sz, _, _))) in controls.iter().zip(&trace).enumerate() {
+            engine.step(command);
+            let obs = engine.observe();
+            // The simulator retains ZDoom's trig tables; DSDA differs by less than one
+            // map unit over these flights. Vertical motion should still agree.
+            assert!((sx - obs.x).hypot(sy - obs.y) < 1.0, "probe {x},{y}, tic {tic}: horizontal drift");
+            assert!((sz - obs.z.unwrap()).abs() < 0.5, "probe {x},{y}, tic {tic}: vertical drift");
+            let sector = nav.poly_at(obs.pos()).map(|p| nav.sector_of_poly(p)).expect("on map");
+            airborne |= obs.z.unwrap() > obs.heights[sector].floor + 1.0;
+        }
+        assert!(airborne, "the fixture must exercise flight");
     }
 }

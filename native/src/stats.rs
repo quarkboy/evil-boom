@@ -1,7 +1,7 @@
 //! Where a plan search's time goes: counts and seconds per phase, reported on stderr when
 //! EVILDOOM_NATIVE_STATS is set.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::time::Instant;
 
 #[derive(Clone, Copy)]
@@ -71,27 +71,37 @@ pub struct Search {
 
 thread_local! {
     static SEARCHES: RefCell<Vec<Search>> = const { RefCell::new(Vec::new()) };
-    static LAST_ENDED: RefCell<Option<Ended>> = const { RefCell::new(None) };
-    static MAXED_SINCE: RefCell<bool> = const { RefCell::new(false) };
+    static LAST_ENDED: Cell<Option<Ended>> = const { Cell::new(None) };
+    static MAXED_SINCE: Cell<bool> = const { Cell::new(false) };
+    static COLLECT_SEARCHES: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Note a search done (for the live status's record of them: `EVIL_STATUS`).
 pub fn search_done(s: Search) {
-    LAST_ENDED.with(|l| *l.borrow_mut() = Some(s.ended));
+    LAST_ENDED.with(|l| l.set(Some(s.ended)));
     if s.ended == Ended::Budget {
-        MAXED_SINCE.with(|n| *n.borrow_mut() = true);
+        MAXED_SINCE.with(|n| n.set(true));
     }
-    SEARCHES.with(|v| v.borrow_mut().push(s));
+    if COLLECT_SEARCHES.with(Cell::get) {
+        SEARCHES.with(|v| v.borrow_mut().push(s));
+    }
+}
+
+/// Retain search histories only while a live status writer consumes them. The planner's
+/// outcome and adaptive budget signals are always recorded, independently of diagnostics.
+pub fn collect_searches(enabled: bool) {
+    COLLECT_SEARCHES.with(|c| c.set(enabled));
+    SEARCHES.with(|v| v.borrow_mut().clear());
 }
 
 /// Has a plan search used up its budget since last asked?
 pub fn take_maxed() -> bool {
-    MAXED_SINCE.with(|n| std::mem::take(&mut *n.borrow_mut()))
+    MAXED_SINCE.with(|n| n.replace(false))
 }
 
 /// How the last plan search ended.
 pub fn last_ended() -> Option<Ended> {
-    LAST_ENDED.with(|l| *l.borrow())
+    LAST_ENDED.with(Cell::get)
 }
 
 /// The searches noted since last asked.
@@ -120,4 +130,24 @@ pub fn report(total: f64) -> String {
             s(Phase::FloodFill),
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_outcomes_do_not_depend_on_diagnostic_collection() {
+        for enabled in [false, true, false] {
+            collect_searches(enabled);
+            take_maxed();
+            search_done(Search { budget: 10, expansions: 10, ended: Ended::Budget, secs: 0.0 });
+            search_done(Search { budget: 10, expansions: 3, ended: Ended::Found, secs: 0.0 });
+            assert_eq!(last_ended(), Some(Ended::Found));
+            assert!(take_maxed());
+            assert!(!take_maxed());
+            assert_eq!(take_searches().len(), if enabled { 2 } else { 0 });
+            assert!(take_searches().is_empty());
+        }
+    }
 }

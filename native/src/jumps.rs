@@ -11,12 +11,12 @@ mod physics;
 pub use finder::FinderInput;
 pub use physics::{Controls, PlayerSim, World};
 
+use crate::det::{HashMap, HashSet};
 use crate::geom::{Cell, Point, Seg};
 use crate::map::MapData;
 use crate::mesh::Mesh;
 use crate::motor::{MAX_MOVE, RUN_TURN};
 use crate::nav::Heights;
-use crate::det::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
 
 /// A run-off jump: sprint from `runup` through `takeoff` (a ledge edge), land at `dest`.
@@ -129,9 +129,12 @@ impl JumpLab {
 
     /// fits_at, with the sectors at `heights` (floor, ceiling) instead.
     pub fn fits_at_heights(&self, p: Point, heights: &[(f64, f64)]) -> (bool, f64, f64) {
-        let mut sim = PlayerSim::new(self, self.world());
-        sim.heights = heights.iter().map(|&(f, c)| (physics::to_fixed(f), physics::to_fixed(c))).collect();
-        sim.fits_at(p)
+        self.at_heights(heights).fits_at(p)
+    }
+
+    /// A batch of geometry queries at unchanged heights can share the fixed-point conversion.
+    pub(crate) fn at_heights(&self, heights: &[(f64, f64)]) -> PlayerSim<'_> {
+        PlayerSim::with_heights(self, self.world(), heights)
     }
 
     fn world(&self) -> &World {
@@ -142,8 +145,7 @@ impl JumpLab {
     /// where each first comes down on a floor off `sector` (point and sector), within `tics`,
     /// or None (a teleport, or nowhere).
     pub fn run_landings(&self, start: &RunStart, heights: &[(f64, f64)], sector: usize, headings: &[f64], tics: usize) -> Vec<Option<(Point, usize)>> {
-        let mut sim = PlayerSim::new(self, self.world());
-        sim.heights = heights.iter().map(|&(f, c)| (physics::to_fixed(f), physics::to_fixed(c))).collect();
+        let mut sim = self.at_heights(heights);
         headings
             .iter()
             .map(|&heading| {
@@ -173,8 +175,7 @@ impl JumpLab {
     /// tic (forward, strafe, turn): where after each, (x, y, z, vx, vy). For comparing the
     /// simulator with the game.
     pub fn simulate(&self, start: (f64, f64, f64), heights: &[(f64, f64)], controls: &[Controls]) -> Vec<(f64, f64, f64, f64, f64)> {
-        let mut sim = PlayerSim::new(self, self.world());
-        sim.heights = heights.iter().map(|&(f, c)| (physics::to_fixed(f), physics::to_fixed(c))).collect();
+        let mut sim = self.at_heights(heights);
         sim.place((start.0, start.1), start.2);
         controls
             .iter()
@@ -211,6 +212,20 @@ impl JumpLab {
             }
         }
         let JumpFacts { static_grid, obstacle_grid, initial, teleports, start_angle, permanent, sinking } = facts;
-        JumpLab { map, mesh, static_grid, obstacle_grid, initial, teleports, start_angle, permanent, sinking, sector_centres, sector_edges, sector_lines, world: OnceLock::new() }
+        JumpLab {
+            map,
+            mesh,
+            static_grid,
+            obstacle_grid,
+            initial,
+            teleports,
+            start_angle,
+            permanent,
+            sinking,
+            sector_centres,
+            sector_edges,
+            sector_lines,
+            world: OnceLock::new(),
+        }
     }
 }

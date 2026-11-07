@@ -1,18 +1,20 @@
 //! Legs of a plan timed against the temporary heights they rely on: a lift that will have
 //! gone back up by the time the player gets there can't be used.
 
-use super::world::{without, world_hash, Pair, Timers, World, LEG_SPEED};
 use super::triggers::TimedKey;
+use super::world::{without, world_hash, Pair, Timers, World, ACTIVATION_TICS, LEG_SPEED};
 use super::{KeySet, PlanCaches, Planner};
+use crate::det::{HashMap, HashSet};
 use crate::geom::{dist, Point};
 use crate::nav::{Doors, Found, Heights, Planned, TeleKind, Via};
 use crate::stats::{self, Phase};
-use crate::det::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
 
 /// Tics a lift takes to come back up to be jumped off again.
 const LIFT_BACK: f64 = 60.0;
+/// Map units between samples used to estimate arrival at a sector along a path.
+const ARRIVAL_SAMPLE_STEP: f64 = 8.0;
 
 impl Planner<'_> {
     /// When the player gets to each sector along a path (tics, from 10 for setting off).
@@ -20,7 +22,7 @@ impl Planner<'_> {
         let mut out: HashMap<usize, f64> = HashMap::default();
         let mut note = |q: Point, d: f64| {
             if let Some(s) = self.nav.sector_at(q) {
-                out.entry(s).or_insert(10.0 + d / LEG_SPEED);
+                out.entry(s).or_insert(ACTIVATION_TICS + d / LEG_SPEED);
             }
         };
         let mut so_far = 0.0;
@@ -34,7 +36,7 @@ impl Planner<'_> {
                 None => note(p, so_far),
                 Some(pr) => {
                     let seg = dist(pr, p);
-                    let n = ((seg / 8.0).floor() as i64).max(1);
+                    let n = ((seg / ARRIVAL_SAMPLE_STEP).floor() as i64).max(1);
                     for i in 1..=n {
                         let (fi, nf) = (i as f64, n as f64);
                         note((pr.0 + (p.0 - pr.0) * fi / nf, pr.1 + (p.1 - pr.1) * fi / nf), so_far + seg * fi / nf);
@@ -45,7 +47,7 @@ impl Planner<'_> {
             prev = Some(p);
         }
         for &poly in &path.polys {
-            out.entry(self.nav.poly_sector[poly]).or_insert(10.0 + path.cost / LEG_SPEED);
+            out.entry(self.nav.poly_sector[poly]).or_insert(ACTIVATION_TICS + path.cost / LEG_SPEED);
         }
         out
     }

@@ -1,0 +1,398 @@
+[
+  {
+    "case": "doom2_MAP13",
+    "median_seconds": {
+      "baseline": 11.043870499997865,
+      "candidate": 10.40950830001384
+    },
+    "speedup_percent": 5.744020631029201,
+    "trials": {
+      "baseline": [
+        {
+          "seconds": 11.043870499997865,
+          "sha256": "7b77715b92bc06f2333771ae4e3dd9c00e499507c3e59c08fa2b626ce0cfb2e8",
+          "controls": 20992
+        },
+        {
+          "seconds": 10.23484560000361,
+          "sha256": "7b77715b92bc06f2333771ae4e3dd9c00e499507c3e59c08fa2b626ce0cfb2e8",
+          "controls": 20992
+        },
+        {
+          "seconds": 11.44088500001817,
+          "sha256": "7b77715b92bc06f2333771ae4e3dd9c00e499507c3e59c08fa2b626ce0cfb2e8",
+          "controls": 20992
+        }
+      ],
+      "candidate": [
+        {
+          "seconds": 10.40950830001384,
+          "sha256": "7b77715b92bc06f2333771ae4e3dd9c00e499507c3e59c08fa2b626ce0cfb2e8",
+          "controls": 20992
+        },
+        {
+          "seconds": 9.717679199995473,
+          "sha256": "7b77715b92bc06f2333771ae4e3dd9c00e499507c3e59c08fa2b626ce0cfb2e8",
+          "controls": 20992
+        },
+        {
+          "seconds": 10.772477399994386,
+          "sha256": "7b77715b92bc06f2333771ae4e3dd9c00e499507c3e59c08fa2b626ce0cfb2e8",
+          "controls": 20992
+        }
+      ]
+    }
+  },
+  {
+    "case": "doom2_MAP17",
+    "median_seconds": {
+      "baseline": 14.697809400007827,
+      "candidate": 13.203074299992295
+    },
+    "speedup_percent": 10.169781491483597,
+    "trials": {
+      "baseline": [
+        {
+          "seconds": 14.79552060001879,
+          "sha256": "3c58add425218b5def85698fb32bc4e60e6899f3a6fd9da6f339d33010d6a148",
+          "controls": 20992
+        },
+        {
+          "seconds": 14.697809400007827,
+          "sha256": "3c58add425218b5def85698fb32bc4e60e6899f3a6fd9da6f339d33010d6a148",
+          "controls": 20992
+        },
+        {
+          "seconds": 14.413700499979313,
+          "sha256": "3c58add425218b5def85698fb32bc4e60e6899f3a6fd9da6f339d33010d6a148",
+          "controls": 20992
+        }
+      ],
+      "candidate": [
+        {
+          "seconds": 14.160662799986312,
+          "sha256": "3c58add425218b5def85698fb32bc4e60e6899f3a6fd9da6f339d33010d6a148",
+          "controls": 20992
+        },
+        {
+          "seconds": 13.17729320001672,
+          "sha256": "3c58add425218b5def85698fb32bc4e60e6899f3a6fd9da6f339d33010d6a148",
+          "controls": 20992
+        },
+        {
+          "seconds": 13.203074299992295,
+          "sha256": "3c58add425218b5def85698fb32bc4e60e6899f3a6fd9da6f339d33010d6a148",
+          "controls": 20992
+        }
+      ]
+    }
+  },
+  {
+    "case": "doom2_MAP24",
+    "median_seconds": {
+      "baseline": 3.699080499995034,
+      "candidate": 3.4858660000027157
+    },
+    "speedup_percent": 5.763986482386763,
+    "trials": {
+      "baseline": [
+        {
+          "seconds": 3.5287003999983426,
+          "sha256": "400540a1bab1c2c264d4ed7a0a7f9ab32b846fa1bdfbaaab975750242f514558",
+          "controls": 5833
+        },
+        {
+          "seconds": 3.699080499995034,
+          "sha256": "400540a1bab1c2c264d4ed7a0a7f9ab32b846fa1bdfbaaab975750242f514558",
+          "controls": 5833
+        },
+        {
+          "seconds": 3.709349900018424,
+          "sha256": "400540a1bab1c2c264d4ed7a0a7f9ab32b846fa1bdfbaaab975750242f514558",
+          "controls": 5833
+        }
+      ],
+      "candidate": [
+        {
+          "seconds": 3.4858660000027157,
+          "sha256": "400540a1bab1c2c264d4ed7a0a7f9ab32b846fa1bdfbaaab975750242f514558",
+          "controls": 5833
+        },
+        {
+          "seconds": 3.435331500018947,
+          "sha256": "400540a1bab1c2c264d4ed7a0a7f9ab32b846fa1bdfbaaab975750242f514558",
+          "controls": 5833
+        },
+        {
+          "seconds": 3.5018158000020776,
+          "sha256": "400540a1bab1c2c264d4ed7a0a7f9ab32b846fa1bdfbaaab975750242f514558",
+          "controls": 5833
+        }
+      ]
+    }
+  },
+  {
+    "case": "doom2_MAP29",
+    "median_seconds": {
+      "baseline": 13.468078000005335,
+      "candidate": 12.93267109998851
+    },
+    "speedup_percent": 3.975377184603557,
+    "trials": {
+      "baseline": [
+        {
+          "seconds": 13.59896309999749,
+          "sha256": "176ff79dc533c999cea236d2133e77377a6604a80b7351957808557e327f451f",
+          "controls": 20992
+        },
+        {
+          "seconds": 13.468078000005335,
+          "sha256": "176ff79dc533c999cea236d2133e77377a6604a80b7351957808557e327f451f",
+          "controls": 20992
+        },
+        {
+          "seconds": 8.927857699978631,
+          "sha256": "176ff79dc533c999cea236d2133e77377a6604a80b7351957808557e327f451f",
+          "controls": 20992
+        }
+      ],
+      "candidate": [
+        {
+          "seconds": 12.93267109998851,
+          "sha256": "176ff79dc533c999cea236d2133e77377a6604a80b7351957808557e327f451f",
+          "controls": 20992
+        },
+        {
+          "seconds": 12.941273700009333,
+          "sha256": "176ff79dc533c999cea236d2133e77377a6604a80b7351957808557e327f451f",
+          "controls": 20992
+        },
+        {
+          "seconds": 8.487054199998965,
+          "sha256": "176ff79dc533c999cea236d2133e77377a6604a80b7351957808557e327f451f",
+          "controls": 20992
+        }
+      ]
+    }
+  },
+  {
+    "case": "doom2_MAP26_expert",
+    "median_seconds": {
+      "baseline": 5.515278000006219,
+      "candidate": 5.218699999997625
+    },
+    "speedup_percent": 5.37738986154932,
+    "trials": {
+      "baseline": [
+        {
+          "seconds": 5.630642899981467,
+          "sha256": "a92fb1df459760c257c9c71fc9fe62b015a66121bddbdfbb772a2f54ee1f2a04",
+          "controls": 20992
+        },
+        {
+          "seconds": 5.515278000006219,
+          "sha256": "a92fb1df459760c257c9c71fc9fe62b015a66121bddbdfbb772a2f54ee1f2a04",
+          "controls": 20992
+        },
+        {
+          "seconds": 5.47978019999573,
+          "sha256": "a92fb1df459760c257c9c71fc9fe62b015a66121bddbdfbb772a2f54ee1f2a04",
+          "controls": 20992
+        }
+      ],
+      "candidate": [
+        {
+          "seconds": 5.200502399995457,
+          "sha256": "a92fb1df459760c257c9c71fc9fe62b015a66121bddbdfbb772a2f54ee1f2a04",
+          "controls": 20992
+        },
+        {
+          "seconds": 5.291691799997352,
+          "sha256": "a92fb1df459760c257c9c71fc9fe62b015a66121bddbdfbb772a2f54ee1f2a04",
+          "controls": 20992
+        },
+        {
+          "seconds": 5.218699999997625,
+          "sha256": "a92fb1df459760c257c9c71fc9fe62b015a66121bddbdfbb772a2f54ee1f2a04",
+          "controls": 20992
+        }
+      ]
+    }
+  },
+  {
+    "case": "doom2_MAP23_mortal",
+    "median_seconds": {
+      "baseline": 3.370763100014301,
+      "candidate": 3.424875400000019
+    },
+    "speedup_percent": -1.6053427185520164,
+    "trials": {
+      "baseline": [
+        {
+          "seconds": 3.467679399996996,
+          "sha256": "5d48929453fd0cef18d9a523a818824cdd414874d3f3f8d0125cc2d7de172c81",
+          "controls": 20984
+        },
+        {
+          "seconds": 3.370763100014301,
+          "sha256": "5d48929453fd0cef18d9a523a818824cdd414874d3f3f8d0125cc2d7de172c81",
+          "controls": 20984
+        },
+        {
+          "seconds": 3.368497200019192,
+          "sha256": "5d48929453fd0cef18d9a523a818824cdd414874d3f3f8d0125cc2d7de172c81",
+          "controls": 20984
+        }
+      ],
+      "candidate": [
+        {
+          "seconds": 3.424875400000019,
+          "sha256": "5d48929453fd0cef18d9a523a818824cdd414874d3f3f8d0125cc2d7de172c81",
+          "controls": 20984
+        },
+        {
+          "seconds": 3.448409599979641,
+          "sha256": "5d48929453fd0cef18d9a523a818824cdd414874d3f3f8d0125cc2d7de172c81",
+          "controls": 20984
+        },
+        {
+          "seconds": 3.24300069999299,
+          "sha256": "5d48929453fd0cef18d9a523a818824cdd414874d3f3f8d0125cc2d7de172c81",
+          "controls": 20984
+        }
+      ]
+    }
+  },
+  {
+    "case": "doom_E2M4_expert_mortal",
+    "median_seconds": {
+      "baseline": 4.517800400004489,
+      "candidate": 3.9526185000140686
+    },
+    "speedup_percent": 12.51011222164351,
+    "trials": {
+      "baseline": [
+        {
+          "seconds": 4.517800400004489,
+          "sha256": "57bf9cc3849b732f7ea56884b5b1d0047277ddc012fabfabc66544f0cf0a7959",
+          "controls": 20992
+        },
+        {
+          "seconds": 4.421604999981355,
+          "sha256": "57bf9cc3849b732f7ea56884b5b1d0047277ddc012fabfabc66544f0cf0a7959",
+          "controls": 20992
+        },
+        {
+          "seconds": 4.757919099996798,
+          "sha256": "57bf9cc3849b732f7ea56884b5b1d0047277ddc012fabfabc66544f0cf0a7959",
+          "controls": 20992
+        }
+      ],
+      "candidate": [
+        {
+          "seconds": 3.928763700008858,
+          "sha256": "57bf9cc3849b732f7ea56884b5b1d0047277ddc012fabfabc66544f0cf0a7959",
+          "controls": 20992
+        },
+        {
+          "seconds": 3.9526185000140686,
+          "sha256": "57bf9cc3849b732f7ea56884b5b1d0047277ddc012fabfabc66544f0cf0a7959",
+          "controls": 20992
+        },
+        {
+          "seconds": 5.184127999993507,
+          "sha256": "57bf9cc3849b732f7ea56884b5b1d0047277ddc012fabfabc66544f0cf0a7959",
+          "controls": 20992
+        }
+      ]
+    }
+  },
+  {
+    "case": "doom_E1M3_secrets",
+    "median_seconds": {
+      "baseline": 6.382124700001441,
+      "candidate": 5.457048899988877
+    },
+    "speedup_percent": 14.494793560087526,
+    "trials": {
+      "baseline": [
+        {
+          "seconds": 6.382124700001441,
+          "sha256": "3eb61ac19355c6fc97c78920d715fe3b2d6c9d90b1bea9cb870314d0fab7bd0f",
+          "controls": 20992
+        },
+        {
+          "seconds": 6.551074599992717,
+          "sha256": "3eb61ac19355c6fc97c78920d715fe3b2d6c9d90b1bea9cb870314d0fab7bd0f",
+          "controls": 20992
+        },
+        {
+          "seconds": 6.311398099991493,
+          "sha256": "3eb61ac19355c6fc97c78920d715fe3b2d6c9d90b1bea9cb870314d0fab7bd0f",
+          "controls": 20992
+        }
+      ],
+      "candidate": [
+        {
+          "seconds": 4.944682200002717,
+          "sha256": "3eb61ac19355c6fc97c78920d715fe3b2d6c9d90b1bea9cb870314d0fab7bd0f",
+          "controls": 20992
+        },
+        {
+          "seconds": 5.457048899988877,
+          "sha256": "3eb61ac19355c6fc97c78920d715fe3b2d6c9d90b1bea9cb870314d0fab7bd0f",
+          "controls": 20992
+        },
+        {
+          "seconds": 5.576991200010525,
+          "sha256": "3eb61ac19355c6fc97c78920d715fe3b2d6c9d90b1bea9cb870314d0fab7bd0f",
+          "controls": 20992
+        }
+      ]
+    }
+  },
+  {
+    "case": "doom2_MAP01_fight_4_mortal",
+    "median_seconds": {
+      "baseline": 0.4009864999970887,
+      "candidate": 0.3707523999910336
+    },
+    "speedup_percent": 7.5399296500691655,
+    "trials": {
+      "baseline": [
+        {
+          "seconds": 0.4009864999970887,
+          "sha256": "25b34ea0a5831494022194285ed326123f1946c4bdded72bdb89ed4eead280eb",
+          "controls": 3202
+        },
+        {
+          "seconds": 0.40182550001190975,
+          "sha256": "25b34ea0a5831494022194285ed326123f1946c4bdded72bdb89ed4eead280eb",
+          "controls": 3202
+        },
+        {
+          "seconds": 0.37362459997530095,
+          "sha256": "25b34ea0a5831494022194285ed326123f1946c4bdded72bdb89ed4eead280eb",
+          "controls": 3202
+        }
+      ],
+      "candidate": [
+        {
+          "seconds": 0.3799375999951735,
+          "sha256": "25b34ea0a5831494022194285ed326123f1946c4bdded72bdb89ed4eead280eb",
+          "controls": 3202
+        },
+        {
+          "seconds": 0.3707523999910336,
+          "sha256": "25b34ea0a5831494022194285ed326123f1946c4bdded72bdb89ed4eead280eb",
+          "controls": 3202
+        },
+        {
+          "seconds": 0.3681615999958012,
+          "sha256": "25b34ea0a5831494022194285ed326123f1946c4bdded72bdb89ed4eead280eb",
+          "controls": 3202
+        }
+      ]
+    }
+  }
+]

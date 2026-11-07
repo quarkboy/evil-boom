@@ -1,0 +1,332 @@
+//! Suspecting walls and choosing the next objective when ordinary exploration stalls.
+
+use super::{route_length, Explorer, Hooks, Kind, Objective, Spots, Suspecting, GIVE_UP_TICS, JUMP_MISSES, STUCK_TIMES, WHILE_OPEN};
+use crate::geom::{dist, Point};
+use crate::knowledge::model::{Note, SUSPICION_MIN};
+use crate::motor::follower::RouteFollower;
+use crate::motor::Observation;
+use crate::navigator::TriggerLine;
+use crate::walkthrough::Step;
+use std::collections::BTreeSet;
+use std::sync::Arc;
+
+/// objectives routed and compared by the way there, each pick
+const COMPARED: usize = 4;
+
+/// a "close, wait 30s, open" door's wait, and a little (tics)
+const REOPEN_TICS: i64 = 32 * 35;
+
+/// ...or by the time it takes to walk its route at this (units a tic)
+const ROUTE_SPEED: f64 = 8.0;
+
+/// ...and this
+const ROUTE_SLACK: i64 = 15 * 35;
+
+/// suspected walls offered at a time (the most suspicious)
+const SUSPECTS: usize = 6;
+
+/// ...and in a panic, the nearest walls of all
+const PANIC_WALLS: usize = 12;
+
+/// ...and offered again after this
+const RETRY_TICS: i64 = 30 * 35;
+
+impl Explorer {
+    /// Walls she suspects, to press use on: tried once nothing else is left (as a player humps
+    /// walls for secrets).
+    pub(super) fn walls(&mut self, obs: &Observation, reach: &BTreeSet<usize>, panic: bool) -> Vec<Objective> {
+        let mut found = self.suspected(obs, reach, panic);
+        if panic {
+            // (all of them: those with somewhere she can't get to behind first, nearest first)
+            found.sort_by(|a, b| (-a.0).total_cmp(&-b.0).then(dist(a.2, obs.pos()).total_cmp(&dist(b.2, obs.pos()))));
+        }
+        found
+            .into_iter()
+            // (the ones with more to go on, then the nearest of them: not the nearest, then those
+            // with more to go on, none of a round of weak ones near her while E1M6's door 1119,
+            // further off, waited)
+            .filter(|(score, _, stand, _)| !(self.strong_only && *score <= SUSPICION_MIN) && self.standable(*stand, false))
+            .take(if panic { PANIC_WALLS } else { SUSPECTS })
+            .map(|(score, li, stand, mid)| {
+                let mut o = Objective::new(Kind::Wall, stand, format!("try the wall (line {li}, {score:.1})"));
+                o.look_at = Some(mid);
+                o.wall = Some(li);
+                o.suspicion = score;
+                o.round = true;
+                o
+            })
+            .collect()
+    }
+
+    /// The walls she suspects from where she can get to now, best first: (score, line, where
+    /// to stand, the wall's middle). (`drive`'s walls.)
+    pub fn suspected(&mut self, obs: &Observation, reach: &BTreeSet<usize>, panic: bool) -> Vec<(f64, usize, Point, Point)> {
+        let mesh = Arc::clone(&self.nav.mesh);
+        let known = self.knowledge.known_polys();
+        let unreached: Vec<Point> = obs
+            .things
+            .iter()
+            .flatten()
+            .filter(|t| matches!(t.category, "Health" | "Armor" | "Ammo" | "Weapon" | "Powerup" | "Key"))
+            .filter(|t| mesh.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p) && !reach.contains(&p)))
+            .map(|t| (t.x, t.y))
+            .collect();
+        // (the same again while nothing it goes by has changed: asked for every list of what she
+        // could do, for the strong suspects by her, every wall of the level weighed each time)
+        let key = {
+            use std::hash::{Hash, Hasher};
+            let k = &self.knowledge;
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            k.mapped.hash(&mut h);
+            k.tried_walls.hash(&mut h);
+            for (s, x) in &k.seen_heights {
+                (s, x.key()).hash(&mut h);
+            }
+            k.last.as_ref().and_then(|l| l.keys).unwrap_or_default().hash(&mut h);
+            known.hash(&mut h);
+            reach.hash(&mut h);
+            for p in &unreached {
+                (p.0.to_bits(), p.1.to_bits()).hash(&mut h);
+            }
+            panic.hash(&mut h);
+            h.finish()
+        };
+        if let Some((_, found)) = self.suspects.as_ref().filter(|(k, _)| *k == key) {
+            return found.clone();
+        }
+        let places = Spots::new(known.difference(reach).map(|&p| mesh.poly(p).center));
+        let near = |q: Point, r: f64| places.near(q, r);
+        let found = self.knowledge.suspicious(reach, &unreached, panic, Some(&near));
+        self.suspects = Some((key, found.clone()));
+        found
+    }
+
+    /// Is a door she set off that shuts and opens again by itself (close, wait 30s, open) still
+    /// within its wait?
+    fn reopens_soon(&self, obs: &Observation) -> bool {
+        let m = &self.nav.map;
+        self.knowledge.fired.iter().any(|f| [16, 76].contains(&m.linedefs[f.line].special) && obs.tic - f.tic < REOPEN_TICS)
+    }
+
+    /// Not dropped lately (the longer, the more often it has been).
+    pub(super) fn fresh(&self, o: &Objective, tic: i64) -> bool {
+        let id = o.ident();
+        let times = self.drop_count.get(&id).copied().unwrap_or(0);
+        tic - self.dropped.get(&id).copied().unwrap_or(-1_000_000_000) > (self.patience * (RETRY_TICS * 2i64.pow((times - 1).clamp(0, 5) as u32)) as f64) as i64
+    }
+
+    pub(super) fn next(&mut self, obs: &Observation, hooks: &mut dyn Hooks) {
+        self.follower = None;
+        let suited = self.knowledge.protected(obs.tic);
+        if suited && !self.suited && self.short_of_health.is_some() {
+            // (a suit on: what cost too much a moment ago may not now, and its minute is short)
+            self.log.push(format!("tic {}: suit on: what cost too much gets another go", obs.tic));
+            self.dropped.clear();
+            self.no_route.clear();
+            self.short_of_health = None;
+        }
+        self.suited = suited;
+        if self.difficult {
+            self.set_jumps(false); // (the jumps missed once: out again, other ways first)
+        }
+        self.exits_open = !self.exit_last;
+        let perceive = self.knowledge.perceive;
+        self.strafe_ok = false;
+        let mut found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        if !found && self.nav.jumps.iter().any(|j| j.strafe) {
+            // (nothing else: what a strafing run gets to, MAP03's well)
+            self.strafe_ok = true;
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+            if found {
+                self.log.push(format!("tic {}: nothing else to do: strafing runs too", obs.tic));
+            } else {
+                self.strafe_ok = false;
+            }
+        }
+        if found {
+            self.panic_tries = 0;
+        }
+        if !found && perceive && self.suspecting == Suspecting::No {
+            // (nothing else: walls that might hide something, pressed in turn)
+            self.suspecting = Suspecting::Walls;
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+            if found {
+                self.panic_tries = 0;
+                self.log.push(format!("tic {}: nothing else to do: trying walls", obs.tic));
+            }
+        }
+        if !found && !self.dropped.is_empty() && self.retried.as_deref() != Some(self.knowledge.known_summary().as_str()) {
+            // (nothing else: what was given up on lately gets another go, its wait cut short,
+            // once till there's something else to do: dropped when the way was shut a while,
+            // E1M4's bonus behind the door a walk-over line opens, it waited out her whole life)
+            // (once till she knows something more: not each wall pressed that did nothing, which
+            // threw MAP15's and E4M9's goals out of reach back in, seconds of planning each)
+            self.retried = Some(self.knowledge.known_summary());
+            self.log.push(format!("tic {}: nothing else to do: the {} things given up on lately get another go", obs.tic, self.dropped.len()));
+            self.dropped.clear();
+            self.suspecting = Suspecting::No;
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        }
+        // (with the exit there, held back for what's left: one round of the walls with little to
+        // go on, then out; a press that turns up something to do starts another. E2M5 went round
+        // every wall of the level)
+        self.strong_only = self.exit_last && self.panic_tries >= PANIC_WALLS;
+        if !found && perceive && (!self.exit_last || !self.exits_open) {
+            // (and nothing to try either: is there a way out of here at all? Every wall round,
+            // nearest first, as a player in a pit with no way out would)
+            self.suspecting = Suspecting::Panic;
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+            if found {
+                // (counted: walls with no more to go on than one weak sign; those with more are
+                // all pressed: E4M7's line 1283, E4M9's 1637)
+                if self.current.as_ref().is_some_and(|o| o.suspicion <= SUSPICION_MIN) {
+                    self.panic_tries += 1;
+                }
+                self.log.push(format!("tic {}: nothing at all to do: pressing every wall round here", obs.tic));
+            }
+        }
+        self.suspecting = Suspecting::No;
+        self.strong_only = false;
+        if !found && self.exit_last && hooks.before_exit(self, obs) {
+            self.log.push(format!("tic {}: nothing else to do here: the level again, for what's left", obs.tic));
+            self.restart_wanted = true;
+            self.current = None;
+            return;
+        }
+        // (not out while a door she set off that shuts for a while and opens again by itself is
+        // still shut: what's past it is still to do, as a player waits for it; E1M6's door 37,
+        // shut on the way to a wall, the level left with a blur sphere behind it)
+        if !found && self.exit_last && self.reopens_soon(obs) {
+            if self.current.is_some() || !self.waiting_reopen {
+                self.log.push(format!("tic {}: nothing else to do till a door opens again", obs.tic));
+            }
+            self.waiting_reopen = true;
+            self.current = None;
+            return;
+        }
+        if !found && self.waiting_reopen {
+            // (open again: what was given up on while it was shut gets another go, the way
+            // through it back)
+            self.waiting_reopen = false;
+            self.retried = None;
+            self.current = None;
+            return;
+        }
+        if !found && self.exit_last {
+            self.log.push(format!("tic {}: nothing else to do: for the exit", obs.tic));
+            self.exits_open = true;
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        }
+        if !found && self.knowledge.missed_jumps.values().any(|&n| n < JUMP_MISSES) {
+            self.log.push(format!("tic {}: nothing else to do: the jumps missed once get another go", obs.tic));
+            self.set_jumps(true);
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        }
+        let stuck: Vec<usize> = self.knowledge.stuck_at.iter().filter(|(_, &n)| n >= STUCK_TIMES).map(|(&p, _)| p).collect();
+        if !found && !stuck.is_empty() {
+            // (the places she got stuck, given another go: two goes can be bad luck, or a goal that
+            // was the trouble, not the way: E3M4's, MAP05's, MAP27's)
+            self.log.push(format!("tic {}: nothing else to do: the {} places she got stuck get another go", obs.tic, stuck.len()));
+            for p in stuck {
+                self.knowledge.note(Note::Stuck(p, STUCK_TIMES - 1));
+            }
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        }
+        if !found {
+            if self.current.is_some() {
+                self.log.push(format!("tic {}: nothing left to do", obs.tic));
+            }
+            self.current = None;
+            // (the exit out of reach too: where she can get from here is a trap, if it's where
+            // she's started again from; known for the next go)
+            self.trapped = Some(self.reach.clone());
+        }
+    }
+
+    /// Take up the best objective there's a route to: of the nearest few as the crow flies, the
+    /// one nearest by the way there (teleporters and lifts make those very different: MAP24).
+    fn try_objectives(&mut self, obs: &Observation, risky: bool, hooks: &mut dyn Hooks) -> bool {
+        for _ in 0..3 {
+            let ranked = self.ranked(obs, risky, hooks);
+            if self.debug_tics.is_some_and(|(a, b)| (a..=b).contains(&obs.tic)) {
+                for o in ranked.iter().skip(COMPARED) {
+                    self.log.push(format!("  (not compared) '{}' at ({:.0}, {:.0}), priority {}", o.label, o.goal.0, o.goal.1, o.priority()));
+                }
+            }
+            let options: Vec<Objective> = ranked.into_iter().take(COMPARED).collect();
+            if options.is_empty() {
+                return false;
+            }
+            let mut routed: Vec<(f64, Objective, Vec<Step>)> = Vec::new();
+            let debug = self.debug_tics.is_some_and(|(a, b)| (a..=b).contains(&obs.tic));
+            for obj in options {
+                let route = self.route_to(&obj, obs);
+                if debug {
+                    let how = route.as_ref().map_or_else(|| "no route".to_string(), |st| format!("{:.0} ({} steps)", route_length(st), st.len()));
+                    self.log.push(format!("  option '{}' at ({:.0}, {:.0}), priority {}: {how}", obj.label, obj.goal.0, obj.goal.1, obj.priority()));
+                }
+                match route {
+                    Some(steps) if !steps.is_empty() => {
+                        let length = route_length(&steps);
+                        let mut obj = obj;
+                        if let Some(w) = obj.worth.filter(|&w| length > w) {
+                            self.log.push(format!("tic {}: '{}' not worth {length:.0} to get to (at most {w:.0}): in its turn", obs.tic, obj.label));
+                            obj.urgent = false;
+                            obj.worth = None;
+                            obj.label = obj.label.trim_end_matches(WHILE_OPEN).trim_end_matches(" right away").to_string();
+                        }
+                        // (a wall given up on before: as if twice as far for each time)
+                        let tries = obj.wall.map_or(1.0, |w| 2f64.powi(self.wall_drops.get(&w).copied().unwrap_or(0)));
+                        let prio = obj.priority();
+                        routed.push((length * obj.kind.weight() * tries, obj, steps));
+                        if prio < 2 {
+                            break; // (nothing further down the list comes first anyway)
+                        }
+                    }
+                    _ => self.drop_objective(&obj, obs, "no route"),
+                }
+            }
+            if routed.is_empty() {
+                continue;
+            }
+            routed.sort_by(|a, b| (a.1.priority(), a.0).partial_cmp(&(b.1.priority(), b.0)).unwrap_or(std::cmp::Ordering::Equal));
+            let (_, obj, steps) = routed.swap_remove(0);
+            self.start(obs, obj, steps);
+            return true;
+        }
+        false
+    }
+
+    /// Set about `obj` by `steps` (its route).
+    pub(super) fn start(&mut self, obs: &Observation, obj: Objective, steps: Vec<Step>) {
+        self.since = obs.tic;
+        // (time to do it: walking the route, and some)
+        self.allowed = GIVE_UP_TICS.max((route_length(&steps) / ROUTE_SPEED) as i64 + ROUTE_SLACK);
+        self.exits_seen = self.knowledge.exits().len();
+        let n = steps.len();
+        let states = self.states();
+        let view = self.view();
+        let mut follower = RouteFollower::new(view, steps, obs.keys.unwrap_or_default(), Some(states), false, obs.tic);
+        follower.fired.extend(self.spent_once()); // (its replans: not by them either)
+        follower.mortal = self.knowledge.mortal;
+        self.follower = Some(follower);
+        self.follower_seen = 0;
+        self.log.push(format!("tic {}: {} ({n} steps) | {}", obs.tic, obj.label, self.knowledge.summary()));
+        if let Some(li) = obj.trigger.as_ref().filter(|_| obj.kind == Kind::Switch).and_then(TriggerLine::linedef) {
+            self.pressed_knowing.insert(li, self.knowledge.known_summary());
+        }
+        self.current = Some(obj);
+    }
+
+    /// Set about this objective now, whatever she'd have chosen (evil drive: what if she had?).
+    /// False if she has no route to it.
+    pub fn take(&mut self, obs: &Observation, obj: Objective) -> bool {
+        match self.route_to(&obj, obs) {
+            Some(steps) if !steps.is_empty() => {
+                self.start(obs, obj, steps);
+                true
+            }
+            _ => false,
+        }
+    }
+}

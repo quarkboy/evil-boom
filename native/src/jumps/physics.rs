@@ -65,7 +65,11 @@ fn scale(a: Fixed, b: Fixed, c: Fixed) -> Fixed {
 /// FixedDiv (SafeDivScale16)
 fn fixed_div(a: Fixed, b: Fixed) -> Fixed {
     if (a.abs() >> 14) >= b.abs() {
-        if (a ^ b) < 0 { i64::from(i32::MIN) } else { i64::from(i32::MAX) }
+        if (a ^ b) < 0 {
+            i64::from(i32::MIN)
+        } else {
+            i64::from(i32::MAX)
+        }
     } else {
         (a << 16) / b
     }
@@ -372,7 +376,11 @@ pub struct PlayerSim<'a> {
 
 impl<'a> PlayerSim<'a> {
     pub fn new(lab: &'a JumpLab, world: &'a World) -> Self {
-        let heights = lab.initial.iter().map(|&(f, c)| (to_fixed(f), to_fixed(c))).collect();
+        Self::with_heights(lab, world, &lab.initial)
+    }
+
+    pub(super) fn with_heights(lab: &'a JumpLab, world: &'a World, heights: &[(f64, f64)]) -> Self {
+        let heights = heights.iter().map(|&(f, c)| (to_fixed(f), to_fixed(c))).collect();
         PlayerSim { lab, world, heights, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, angle: 0, floorz: 0, ceilz: 0, blocked_by_thing: false, teleported: false }
     }
 

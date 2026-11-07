@@ -2,11 +2,11 @@
 //! DSDA-Doom's sources; see `dsda/README.md`), run a tic at a time, its state read straight
 //! out of memory. One game a process (the engine is all globals).
 
+use libloading::Library;
+use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_ulong, CString};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-
-use libloading::Library;
 
 /// Thing flags (`mobj_t.flags`) the adapter looks at.
 pub const MF_SHOOTABLE: u64 = 0x4;
@@ -99,6 +99,9 @@ const BT_USE: i32 = 2;
 const BT_CHANGE: i32 = 4;
 const BT_WEAPONSHIFT: i32 = 3;
 
+/// Initial capacity for bulk engine queries; grown when the level needs more.
+const INITIAL_QUERY_CAPACITY: usize = 1024;
+
 type InitFn = unsafe extern "C" fn(c_int, *mut *mut c_char) -> c_int;
 type NewGameFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int);
 type GodFn = unsafe extern "C" fn(c_int);
@@ -115,6 +118,8 @@ type PowerFn = unsafe extern "C" fn(c_int, c_int);
 static LOADED: AtomicBool = AtomicBool::new(false);
 
 pub struct Dsda {
+    /// The C API writes interleaved floor/ceiling values. Keep its staging buffer across tics.
+    sector_buffer: RefCell<Vec<f64>>,
     new_game_fn: NewGameFn,
     god_fn: GodFn,
     seed_fn: SeedFn,
@@ -145,9 +150,7 @@ impl Dsda {
         let lib = open_library(lib, dll_dirs).map_err(|e| format!("loading {}: {e}", lib.display()))?;
         let sym = |name: &[u8]| -> Result<*const (), String> {
             // SAFETY: as above; the pointer is only turned into the matching fn type.
-            unsafe { lib.get::<*const ()>(name) }
-                .map(|s| *s)
-                .map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
+            unsafe { lib.get::<*const ()>(name) }.map(|s| *s).map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
         };
         // SAFETY: each symbol is the function of that name in evil_api.c, with this signature.
         let (init_fn, new_game_fn, god_fn, seed_fn, tic_fn, warp_fn, draw_fn, status_fn, sectors_fn, mobjs_fn, player_fn) = unsafe {
@@ -167,15 +170,13 @@ impl Dsda {
         };
         // SAFETY: as above, evil_power's signature; optional, an older library hasn't it.
         let power_fn = sym(b"evil_power").ok().map(|p| unsafe { std::mem::transmute::<*const (), PowerFn>(p) });
-        let argv: Vec<CString> = std::iter::once("evil".to_string())
-            .chain(args.iter().cloned())
-            .map(CString::new)
-            .collect::<Result<_, _>>()
-            .map_err(|e| e.to_string())?;
+        let argv: Vec<CString> =
+            std::iter::once("evil".to_string()).chain(args.iter().cloned()).map(CString::new).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
         let mut argv_ptrs: Vec<*mut c_char> = argv.iter().map(|a| a.as_ptr().cast_mut()).collect();
         // SAFETY: argv and its pointers live in the returned value, as long as the game.
         unsafe { init_fn(argv_ptrs.len() as c_int, argv_ptrs.as_mut_ptr()) };
         Ok(Self {
+            sector_buffer: RefCell::new(vec![0.0; 2 * INITIAL_QUERY_CAPACITY]),
             new_game_fn,
             god_fn,
             seed_fn,
@@ -233,9 +234,7 @@ impl Dsda {
             buttons |= BT_CHANGE | ((cmd.weapon - 1) << BT_WEAPONSHIFT);
         }
         // SAFETY: as above.
-        unsafe {
-            (self.tic_fn)(cmd.forward.clamp(-50, 50), cmd.side.clamp(-50, 50), cmd.turn.clamp(-32768, 32767), buttons)
-        }
+        unsafe { (self.tic_fn)(cmd.forward.clamp(-50, 50), cmd.side.clamp(-50, 50), cmd.turn.clamp(-32768, 32767), buttons) }
     }
 
     /// Put the player at (x, y) facing `angle` (degrees), still, on the floor (for checking
@@ -268,11 +267,11 @@ impl Dsda {
 
     /// Every sector's (floor, ceiling) now.
     pub fn sectors(&self, out: &mut Vec<(f64, f64)>) {
-        let mut flat = vec![0.0f64; 2 * out.capacity().max(1024)];
+        let mut flat = self.sector_buffer.borrow_mut();
         // SAFETY: the game writes at most `max` pairs into the buffer it's given.
         let mut n = unsafe { (self.sectors_fn)(flat.as_mut_ptr(), (flat.len() / 2) as c_int) } as usize;
         if 2 * n > flat.len() {
-            flat = vec![0.0; 2 * n];
+            flat.resize(2 * n, 0.0);
             // SAFETY: as above, with room for all.
             n = unsafe { (self.sectors_fn)(flat.as_mut_ptr(), n as c_int) } as usize;
         }
@@ -282,8 +281,8 @@ impl Dsda {
 
     /// Every thing about now.
     pub fn things(&self, out: &mut Vec<Mobj>) {
-        if out.len() < 1024 {
-            out.resize(1024, Mobj::default());
+        if out.len() < INITIAL_QUERY_CAPACITY {
+            out.resize(INITIAL_QUERY_CAPACITY, Mobj::default());
         }
         loop {
             // SAFETY: the game writes at most `max` things into the buffer it's given.

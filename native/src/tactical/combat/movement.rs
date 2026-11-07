@@ -1,0 +1,221 @@
+//! Missile avoidance, strafing and checking safe escape directions.
+
+use super::{clearance, miss_by, Combat, DODGE_TICS};
+use crate::geom::{dist, Point};
+use crate::motor::{heading, norm, Observation, Thing, FRICTION, RUN_THRUST};
+use crate::navigator::{MAX_STEP, PLAYER_HEIGHT};
+use crate::tactical::bestiary::{missile, weapon_in, Weapon};
+use std::collections::BTreeSet;
+
+const DODGE_WAYS: usize = 16;
+
+/// going some way: pushing that way this long, then...
+const PUSH_TICS: usize = 8;
+
+/// ...letting go: where she'd slide to in this long must be safe too
+const SLIDE_TICS: usize = 40;
+
+/// a strafe one way lasts between these
+const STRAFE_TICS: (i64, i64) = (18, 40);
+
+impl Combat {
+    /// The missiles that'd hit her, soonest first: any that would if she went on as she's going,
+    /// and any she's getting out of the way of that haven't gone by yet.
+    pub(super) fn incoming(&mut self, obs: &Observation) -> Vec<Thing> {
+        let pos = obs.pos();
+        let z = self.z(obs);
+        let vel = self.velocity;
+        let mut out: Vec<(f64, Thing)> = Vec::new();
+        for t in obs.things.iter().flatten() {
+            let Some(m) = missile(t.name) else { continue };
+            if t.name == "LostSoul" && t.vx.hypot(t.vy) < 8.0 {
+                continue;
+            }
+            // (relative to her, as she's going)
+            let (rvx, rvy) = (t.vx - vel.0, t.vy - vel.1);
+            let v2 = rvx * rvx + rvy * rvy;
+            if v2 < 1.0 {
+                continue;
+            }
+            let (rx, ry) = (pos.0 - t.x, pos.1 - t.y);
+            let when = (rx * rvx + ry * rvy) / v2;
+            if !(0.0 < when && when < DODGE_TICS as f64) {
+                continue;
+            }
+            let miss = (t.x + rvx * when - pos.0).hypot(t.y + rvy * when - pos.1);
+            let hz = t.z + t.vz * when;
+            if !(z - 24.0 < hz && hz < z + PLAYER_HEIGHT + 24.0) {
+                continue;
+            }
+            if !self.dodging.contains(&t.id) && miss > clearance(&m) {
+                continue;
+            }
+            if self.dodging.insert(t.id) {
+                self.log.push(format!("tic {}: dodging {} {} (due in {when:.0} tics, {miss:.0} off)", obs.tic, t.name, t.id));
+            }
+            out.push((when, t.clone()));
+        }
+        let here: BTreeSet<i32> = out.iter().map(|(_, t)| t.id).collect();
+        self.dodging.retain(|i| here.contains(i));
+        if here.is_empty() {
+            self.dodge_way = None;
+        }
+        out.sort_by(|a, b| a.0.total_cmp(&b.0));
+        out.into_iter().map(|(_, t)| t).collect()
+    }
+
+    /// The way to run that keeps her furthest from all of them as they go by, where the floor's
+    /// safe; the way she's going already when it's as good (no dithering).
+    pub(super) fn dodge(&mut self, obs: &Observation, missiles: &[Thing]) -> Option<Point> {
+        let pos = obs.pos();
+        let mut ways: Vec<Point> = (0..DODGE_WAYS)
+            .map(|i| {
+                let a = 2.0 * std::f64::consts::PI * i as f64 / DODGE_WAYS as f64;
+                (a.cos(), a.sin())
+            })
+            .collect();
+        if let Some(w) = self.dodge_way {
+            ways.push(w);
+        }
+        let mut best: Option<(f64, Point)> = None;
+        for way in ways {
+            if !self.safe(obs, way, 64.0) {
+                continue;
+            }
+            let mut s =
+                missiles.iter().filter_map(|t| missile(t.name).map(|m| miss_by(pos, self.velocity, way, t) - clearance(&m))).fold(f64::INFINITY, f64::min);
+            s = s.min(48.0); // (clear is clear: then the rest decides)
+            if let Some(dw) = self.dodge_way {
+                s += 6.0 * (way.0 * dw.0 + way.1 * dw.1);
+            }
+            if best.is_none_or(|(bs, _)| s > bs) {
+                best = Some((s, way));
+            }
+        }
+        self.dodge_way = best.map(|b| b.1);
+        self.dodge_way
+    }
+
+    /// Back off from `what`: straight away if the floor's safe that way, else as near that as is.
+    pub(super) fn away_from(&mut self, obs: &Observation, what: Point) -> Option<Point> {
+        let away = (obs.y - what.1).atan2(obs.x - what.0);
+        for off in [0.0f64, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0] {
+            let a = away + off.to_radians();
+            let d = (a.cos(), a.sin());
+            if self.safe(obs, d, 64.0) {
+                return Some(d);
+            }
+        }
+        None
+    }
+
+    pub(super) fn gun(&self, obs: &Observation) -> Weapon {
+        weapon_in(obs.weapon.filter(|w| (1..=7).contains(w)).unwrap_or(2), obs.super_shotgun)
+    }
+
+    /// Away from t, aslant (the strafe's way and back), as far as it's safe.
+    pub(super) fn keeping_off(&mut self, obs: &Observation, t: &Thing, aim: Option<f64>) -> Option<Point> {
+        let a = (obs.y - t.y).atan2(obs.x - t.x);
+        let back = (a.cos(), a.sin());
+        let mut ways = vec![back];
+        if let Some(s) = self.strafe_dir(obs, aim) {
+            let mixed = (back.0 + s.0, back.1 + s.1);
+            let n = mixed.0.hypot(mixed.1);
+            if n > 0.1 {
+                ways.insert(0, (mixed.0 / n, mixed.1 / n));
+            }
+        }
+        if let Some(w) = ways.into_iter().find(|&w| self.safe(obs, w, 64.0)) {
+            return Some(w);
+        }
+        self.away_from(obs, (t.x, t.y))
+    }
+
+    /// Towards t, zig-zagging (the strafe's way and forwards), as far as it's safe.
+    pub(super) fn closing_in(&mut self, obs: &Observation, t: &Thing, strafe: Option<Point>) -> Option<Point> {
+        let a = (t.y - obs.y).atan2(t.x - obs.x);
+        let ahead = (a.cos(), a.sin());
+        let mut ways = vec![ahead];
+        if let Some(s) = strafe {
+            let mixed = (ahead.0 + s.0, ahead.1 + s.1);
+            let n = mixed.0.hypot(mixed.1);
+            if n > 0.1 {
+                ways.insert(0, (mixed.0 / n, mixed.1 / n));
+            }
+        }
+        ways.into_iter().find(|&w| self.safe(obs, w, 64.0)).or(strafe)
+    }
+
+    /// Side to side across the line of fire, a second or so each way, where it's safe.
+    pub(super) fn strafe_dir(&mut self, obs: &Observation, aim: Option<f64>) -> Option<Point> {
+        if obs.tic >= self.strafe_until {
+            self.strafe = -self.strafe;
+            let (lo, hi) = STRAFE_TICS;
+            self.strafe_until = obs.tic + lo + (obs.tic * 7919).rem_euclid(hi - lo);
+        }
+        let aim = aim?;
+        let a = (aim + 90.0 * self.strafe).to_radians();
+        let d = (a.cos(), a.sin());
+        if self.safe(obs, d, 48.0) {
+            return Some(d);
+        }
+        self.strafe = -self.strafe;
+        let d = (-d.0, -d.1);
+        self.safe(obs, d, 48.0).then_some(d)
+    }
+
+    /// A monster near and in front: walking on would walk into it.
+    pub(super) fn blocking(&self, obs: &Observation, t: Option<&Thing>) -> bool {
+        t.is_some_and(|t| dist((t.x, t.y), obs.pos()) < 320.0 && norm(heading(obs.pos(), (t.x, t.y)) - obs.angle).abs() < 60.0)
+    }
+
+    /// Is it all right to go `length` that way: floor all the way, no drop or step up she
+    /// couldn't come back from, nothing that hurts, room to stand? And where her speed would
+    /// carry her, pushing that way a moment and then letting go (E1M3: strafing by the start,
+    /// slid into the nukage)?
+    pub(super) fn safe(&self, obs: &Observation, d: Point, length: f64) -> bool {
+        let nav = &self.nav;
+        let Some(here) = nav.poly_at(obs.pos()) else { return false };
+        let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
+        let floor0 = floor_of(here).floor;
+        let mut floor = floor0;
+        let n = ((length / 16.0).floor() as usize).max(2);
+        for i in 1..=n {
+            let f = length * i as f64 / n as f64;
+            let q = (obs.x + d.0 * f, obs.y + d.1 * f);
+            let Some(p) = nav.poly_at(q) else { return false };
+            let h = floor_of(p);
+            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || nav.damage[nav.sector_of_poly(p)] != 0 {
+                return false;
+            }
+            floor = h.floor;
+        }
+        // (the slide: a wall or a step up stops her, which is all right; a drop or a hurting floor
+        // isn't)
+        let (mut x, mut y) = obs.pos();
+        let (mut vx, mut vy) = self.velocity;
+        floor = floor0;
+        for k in 0..SLIDE_TICS {
+            if k < PUSH_TICS {
+                vx += RUN_THRUST * d.0;
+                vy += RUN_THRUST * d.1;
+            } else if vx * vx + vy * vy < 1.0 {
+                break;
+            }
+            x += vx;
+            y += vy;
+            vx *= FRICTION;
+            vy *= FRICTION;
+            let Some(p) = nav.poly_at((x, y)) else { break };
+            let h = floor_of(p);
+            if h.floor - floor > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT {
+                break;
+            }
+            if floor - h.floor > MAX_STEP || nav.damage[nav.sector_of_poly(p)] != 0 {
+                return false;
+            }
+            floor = h.floor;
+        }
+        true
+    }
+}

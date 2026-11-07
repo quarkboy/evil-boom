@@ -8,18 +8,21 @@
 //! textures, which custom WADs draw however they like): switches and use-doors, exits, the keys
 //! a lock needs, teleporters.
 
+mod learning;
+mod perception;
+mod walls;
+
+use crate::geom::{cells, dist, Point};
+use crate::map::ML_MAPPED;
+use crate::motor::Observation;
+use crate::movers::Effects;
+use crate::nav::Heights;
+use crate::navigator::{Navigator, TriggerLine};
+use crate::sight::Sight;
+use crate::specials::{classify_line, Category, Keys, LineSpecial, Lock, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
-
-use crate::geom::{cells, dist, Point};
-use crate::map::{Linedef, ML_DONTPEGBOTTOM, ML_DONTPEGTOP, ML_MAPPED, ML_SECRET, NO_SIDEDEF};
-use crate::motor::{Controls, Observation};
-use crate::nav::Heights;
-use crate::movers::Effects;
-use crate::navigator::{Navigator, States, TriggerLine, MAX_STEP, PLAYER_HEIGHT, SHOT_HEIGHT};
-use crate::sight::{Sight, View as SightView};
-use crate::specials::{classify_line, Category, Keys, LineSpecial, Lock, Trigger};
 
 /// P_UseLines
 pub const USE_RANGE: f64 = 64.0;
@@ -52,34 +55,9 @@ pub const SURE_TICS: i64 = 8;
 pub const BUSY_TICS: i64 = 200;
 /// textures that make a line look like a switch, a door or a lift
 pub const LOOKS_INTERACTIVE: [&str; 11] = ["SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR", "ZELDOOR", "PLAT", "SUPPORT"];
-/// a shut sector no thicker than this behind a line is a door
-const DOOR_THICKNESS: f64 = 32.0;
-/// a line pressed this lately (tics) isn't a wall to try: what it does may still be going on
-const PRESSED_LATELY: i64 = 10 * 35;
-/// how far round a wall with nothing joined to it its fellows are looked for (`odd`)
-const AROUND: f64 = 128.0;
-/// a wall this short joined to another is a jamb, the side of a recess (`odd`)
-const JAMB: f64 = 24.0;
-/// an exit sign this near the spot in front of a wall marks it
-const EXIT_SIGN_NEAR: f64 = 64.0;
-/// how far behind a wall a blank on her map is looked for...
-const BLANK_DEPTH: f64 = 96.0;
-/// ...and how far round it the walls she's mapped must close it in
-const BLANK_REACH: f64 = 384.0;
+
 /// a wall suspected this much is worth a press of use
 pub const SUSPICION_MIN: f64 = 2.0;
-/// unhurt on a floor this long: it doesn't hurt
-const FELT_TICS: i64 = 70;
-/// a hurting floor hurts on every 32nd tic of the level's clock...
-const FLOOR_PERIOD: i64 = 32;
-/// ...so hurt twice on it a multiple of that apart, this soon: it's the floor
-const FLOOR_CONFIRM: i64 = 3 * FLOOR_PERIOD;
-/// a radiation suit lasts a minute
-const SUIT_TICS: i64 = 60 * 35;
-/// sounds this close together from the same way are one
-const TICS_SAME_SOUND: i64 = 4;
-/// floors that look like they'd hurt (liquids)
-const HAZARD_FLATS: [&str; 4] = ["NUKAGE", "LAVA", "BLOOD", "SLIME0"];
 
 /// "the game says the line needs a key"
 fn needs_key(message: &str) -> bool {
@@ -300,7 +278,8 @@ impl Knowledge {
                 match m.sides(li) {
                     (Some(f), Some(b)) => {
                         let (sf, sb) = (&m.sectors[f], &m.sectors[b]);
-                        (sf.floor, sf.ceiling, &sf.floor_tex, &sf.ceiling_tex, sf.light) != (sb.floor, sb.ceiling, &sb.floor_tex, &sb.ceiling_tex, sb.light) || !matches!(m.sidedefs[usize::from(l.front)].middle.as_str(), "-" | "")
+                        (sf.floor, sf.ceiling, &sf.floor_tex, &sf.ceiling_tex, sf.light) != (sb.floor, sb.ceiling, &sb.floor_tex, &sb.ceiling_tex, sb.light)
+                            || !matches!(m.sidedefs[usize::from(l.front)].middle.as_str(), "-" | "")
                     }
                     _ => true,
                 }
@@ -385,237 +364,6 @@ impl Knowledge {
         &self.nav.triggers[id]
     }
 
-    // --- seeing -----------------------------------------------------------------------------
-
-    fn see_subsector(&mut self, ss: usize) {
-        let nav = Rc::clone(&self.nav);
-        self.seen_polys.extend(nav.mesh.subsector_polys(ss));
-    }
-
-    fn map_line(&mut self, li: usize) {
-        self.mapped.insert(li);
-        let subs: Vec<usize> = self.line_subsectors.get(&li).into_iter().flatten().copied().collect();
-        for ss in subs {
-            self.see_subsector(ss);
-        }
-        let (f, b) = self.nav.map.sides(li);
-        for s in [f, b].into_iter().flatten() {
-            if self.sectors.insert(s) {
-                let sec = &self.nav.map.sectors[s];
-                self.seen_heights.entry(s).or_insert(Heights { floor: sec.floor, ceiling: sec.ceiling });
-            }
-        }
-    }
-
-    /// Take in a tic: what's in view now, what got set off (`controls`: what she did on the tic
-    /// that led here).
-    pub fn update(&mut self, obs: &Observation, controls: Option<&Controls>) {
-        let nav = Rc::clone(&self.nav);
-        let m = &nav.map;
-        let heights: Vec<(f64, f64)> = obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
-        let seen = self.sight.view(&SightView { x: obs.x, y: obs.y, angle: obs.angle, width: self.width, heights: &heights });
-        for &ss in &seen.subsectors {
-            self.see_subsector(ss);
-        }
-        let mut in_view: BTreeSet<usize> = BTreeSet::new();
-        for &li in &seen.through {
-            // (not on the automap, but the floor across it is in view)
-            let (f, b) = m.sides(li);
-            for s in [f, b].into_iter().flatten() {
-                in_view.insert(s);
-                self.sectors.insert(s);
-            }
-        }
-        for &li in &seen.drawn {
-            let (f, b) = m.sides(li);
-            in_view.extend([f, b].into_iter().flatten());
-            if !self.mapped.contains(&li) {
-                self.map_line(li);
-            }
-        }
-        if let Some(poly) = nav.mesh.poly_at(obs.pos()) {
-            let sector = nav.sector_of_poly(poly);
-            self.visited.insert(poly);
-            let on_floor = obs.z.is_none_or(|z| z <= obs.heights[sector].floor + 1.0);
-            self.feel(if on_floor { Some(sector) } else { None }, obs);
-            in_view.insert(sector);
-            self.sectors.insert(sector);
-        }
-        if let Some(last) = &self.last {
-            if let (Some(now), Some(before)) = (obs.suits, last.suits) {
-                if now > before {
-                    self.suit_until = Some(obs.tic + SUIT_TICS);
-                    self.events.push(format!("tic {}: radiation suit on", obs.tic));
-                }
-            }
-        }
-        if let Some(last) = self.last.take() {
-            if dist(last.pos(), obs.pos()) > TELEPORT_JUMP {
-                self.teleported(&last, obs);
-            } else {
-                self.detect_fired(&last, obs, controls);
-            }
-            self.last = Some(last);
-        }
-        for &s in &in_view {
-            self.seen_tic.insert(s, obs.tic);
-            let now = obs.heights[s];
-            if self.seen_heights.get(&s).is_some_and(|&h| h != now) {
-                self.saw_move(s, obs.tic, now);
-            }
-            self.seen_heights.insert(s, now);
-        }
-        self.hear(obs, &in_view);
-        self.took(obs.tic);
-        self.check_doubts(obs.tic);
-        self.last = Some(obs.clone());
-    }
-
-    // --- hearing ----------------------------------------------------------------------------
-
-    /// This tic's sounds, as the engine plays them: a floor or ceiling makes one from its
-    /// sector's sound origin as it starts moving and as it stops, heard anywhere within
-    /// HEAR_RANGE (through walls), with which way it came from and roughly how far.
-    fn hear(&mut self, obs: &Observation, in_view: &BTreeSet<usize>) {
-        let first = self.live.is_empty();
-        for (s, &h) in obs.heights.iter().enumerate() {
-            let prev = if first { None } else { self.live.get(s).copied() };
-            if self.live.len() <= s {
-                self.live.push(h);
-            } else {
-                self.live[s] = h;
-            }
-            let Some(prev) = prev else { continue };
-            let moving = prev != h;
-            if moving == self.moving.contains(&s) {
-                continue;
-            }
-            if moving {
-                self.moving.insert(s);
-                self.moved_at.insert(s, obs.tic);
-            } else {
-                self.moving.remove(&s);
-            }
-            let Some(&origin) = self.sound_origin.get(&s) else { continue };
-            let d = dist(obs.pos(), origin);
-            if d > HEAR_RANGE {
-                continue;
-            }
-            // (+ 0.0: Python's round() gives an int, never -0)
-            let bearing = ((origin.1 - obs.y).atan2(origin.0 - obs.x).to_degrees() / HEAR_BEARING).round_ties_even() * HEAR_BEARING + 0.0;
-            let distance = HEAR_DISTANCE.max((d / HEAR_DISTANCE).round_ties_even() * HEAR_DISTANCE) + 0.0;
-            let n = self.heard.len();
-            if self.heard[n.saturating_sub(8)..].iter().any(|hd| hd.tic >= obs.tic - TICS_SAME_SOUND && hd.bearing == bearing && hd.distance == distance) {
-                continue; // (one sound, several sectors: a door's two halves, stairs)
-            }
-            let est = (obs.x + distance * bearing.to_radians().cos(), obs.y + distance * bearing.to_radians().sin());
-            let seen = in_view.contains(&s);
-            self.heard.push(Heard { tic: obs.tic, bearing, distance, origin: est, seen });
-            if !seen {
-                self.events.push(format!("tic {}: heard something move, bearing {bearing:.0}, about {distance:.0} away", obs.tic));
-            }
-        }
-    }
-
-    /// Sector s is seen at new heights: put it down to the latest line fired before it started
-    /// moving that moves it, and moves it this way (a door seen closing is no open-for-good
-    /// switch's doing: MAP12's). Sure if it started moving right after the press, else in doubt.
-    fn saw_move(&mut self, s: usize, tic: i64, now: Heights) {
-        let was = self.seen_heights.get(&s).copied();
-        // (when it started moving, by its sound; this tic, if it wasn't moving till now)
-        let prev = self.live.get(s).copied();
-        let fresh = !self.moving.contains(&s) && prev.is_some_and(|p| p != now);
-        let started = if fresh { tic } else { self.moved_at.get(&s).copied().unwrap_or(tic) };
-        let fired: Vec<Fired> = self.fired.iter().rev().copied().collect();
-        for f in fired {
-            if f.life != self.lives || f.tic > started {
-                continue;
-            }
-            let ids = self.by_line.get(&f.line).cloned().unwrap_or_default();
-            for ti in ids {
-                let t = self.trigger(ti).clone();
-                if t.effect(s).is_none() || !self.heads_for(&t, s, was, now) {
-                    continue;
-                }
-                let key = (self.tried_key(f.line), s);
-                if started - f.tic <= SURE_TICS {
-                    if self.doubts.remove(&key).is_some() {
-                        self.events.push(format!("tic {tic}: line {} does move sector {s}: sure now", f.line));
-                    }
-                } else if !self.doubts.contains_key(&key) && !self.learned.get(&ti).is_some_and(|l| l.contains(&s)) {
-                    self.doubts.insert(key, tic);
-                }
-                if let Some(hurts) = self.nav.floor_after(&t, s) {
-                    if self.changed_floor.get(&s) != Some(&hurts) {
-                        self.changed_floor.insert(s, hurts);
-                        self.events.push(format!("tic {tic}: sector {s}'s floor {}", if hurts { "turns to something that hurts" } else { "is safe now" }));
-                    }
-                }
-                if self.learned.entry(ti).or_default().insert(s) {
-                    self.events.push(format!("tic {tic}: learned line {} ({}) moves sector {s}", f.line, t.info.description));
-                }
-                return;
-            }
-        }
-    }
-
-    /// Is sector s, seen go from `was` to `now`, on its way to where t puts it (or, for a line
-    /// whose move comes back, back to rest)?
-    fn heads_for(&self, t: &TriggerLine, s: usize, was: Option<Heights>, now: Heights) -> bool {
-        let Some(was) = was else { return true };
-        if t.shift_from.is_some() || t.relevant.is_some() {
-            return true; // (where it goes depends on how things are: no telling)
-        }
-        let mut targets: Vec<Heights> = t.effect(s).map(<[Heights]>::to_vec).unwrap_or_default();
-        if !t.permanent() {
-            targets.push(self.nav.movers.initial[s]);
-        }
-        let off = |h: Heights, at: Heights| (at.floor - h.floor).abs() + (at.ceiling - h.ceiling).abs();
-        targets.iter().any(|&h| off(h, now) < off(h, was) - 0.5 || off(h, now) < 0.5)
-    }
-
-    pub fn doubtful(&self, line: usize, s: usize) -> bool {
-        self.doubts.contains_key(&(self.tried_key(line), s))
-    }
-
-    /// A line in doubt pressed again: what it's put down to moving, moving right after (sure),
-    /// already where it puts it (no telling, but it fits: kept), or neither (unlearned).
-    fn check_doubts(&mut self, tic: i64) {
-        let checking = std::mem::take(&mut self.checking);
-        let mut still = Vec::new();
-        for (f, sectors) in checking {
-            let left: BTreeSet<usize> = sectors.iter().copied().filter(|&s| self.doubts.contains_key(&(self.tried_key(f.line), s))).collect();
-            if left.is_empty() {
-                continue;
-            }
-            if tic - f.tic < TAKE_TICS {
-                still.push((f, left));
-                continue;
-            }
-            for s in left {
-                let key = (self.tried_key(f.line), s);
-                let mut fits = false;
-                for &ti in self.by_line.get(&f.line).into_iter().flatten() {
-                    let t = self.trigger(ti);
-                    if let Some(hs) = t.effect(s).filter(|_| t.shift_from.is_none() && t.relevant.is_none()) {
-                        fits = fits || self.seen_heights.get(&s).is_some_and(|seen| hs.iter().any(|h| (seen.floor - h.floor).abs() + (seen.ceiling - h.ceiling).abs() < 0.5));
-                    }
-                }
-                if fits || self.running(s, tic) || self.seen_tic.get(&s).copied().unwrap_or(-1) < f.tic {
-                    continue; // (still in doubt: no telling from here)
-                }
-                self.doubts.remove(&key);
-                for &ti in self.by_line.get(&f.line).into_iter().flatten() {
-                    if let Some(l) = self.learned.get_mut(&ti) {
-                        l.remove(&s);
-                    }
-                }
-                self.events.push(format!("tic {tic}: line {} doesn't move sector {s} after all", f.line));
-            }
-        }
-        self.checking = still;
-    }
-
     // --- doing ------------------------------------------------------------------------------
 
     /// Linedefs within `r` of `p`, by number.
@@ -686,83 +434,13 @@ impl Knowledge {
         Some((heights[f].floor.max(heights[b].floor), heights[f].ceiling.min(heights[b].ceiling)))
     }
 
-    fn detect_fired(&mut self, last: &Observation, obs: &Observation, controls: Option<&Controls>) {
-        // walking over
-        for (_, li) in self.lines_along(last.pos(), obs.pos()) {
-            let Some(info) = self.info.get(&li) else { continue };
-            if !info.trigger.walked() || info.category == Category::Teleport {
-                continue; // (going through a teleport is seen by where she ends up)
-            }
-            self.fire(li, obs.tic, How::Walk);
-        }
-        let Some(c) = controls else { return };
-        let a = last.angle.to_radians();
-        let heights = &obs.heights;
-        if c.use_ {
-            if let Some(li) = self.use_hits(last.pos(), last.angle, heights) {
-                // (any line with a special stops it, a walk-over one too: E2M4's door behind
-                // one; only one that's used goes off. A locked one without its key does nothing,
-                // and the game says so: something to come back to with the key)
-                let info = self.info[&li].clone();
-                if info.trigger.used() && self.front(li, last.x, last.y) {
-                    if info.lock.satisfied(last.keys.unwrap_or_default()) {
-                        self.fire(li, obs.tic, How::Use);
-                    } else if obs.message.as_deref().is_some_and(needs_key) && !self.locked.contains(&li) {
-                        self.locked.insert(li);
-                        self.events.push(format!("tic {}: line {li} is locked (\"{}\")", obs.tic, obs.message.as_deref().unwrap_or("")));
-                    }
-                }
-            }
-        }
-        if c.attack {
-            let z = last.z.unwrap_or_else(|| heights[self.sector_at(last)].floor) + SHOT_HEIGHT;
-            let end = (last.x + SHOT_RANGE * a.cos(), last.y + SHOT_RANGE * a.sin());
-            for (_, li) in self.lines_along(last.pos(), end) {
-                if self.info.get(&li).is_some_and(|i| i.trigger.shot()) {
-                    self.fire(li, obs.tic, How::Shoot);
-                }
-                match self.opening(li, heights) {
-                    Some((lo, hi)) if lo < z && z < hi => {}
-                    _ => break,
-                }
-            }
-        }
-    }
-
-    /// She moved further in a tic than anyone can walk: a teleport, the one nearest where she was.
-    fn teleported(&mut self, last: &Observation, obs: &Observation) {
-        let m = Arc::clone(&self.nav.map);
-        let mut best: Option<(f64, usize)> = None;
-        for (&li, info) in &self.info {
-            if info.category != Category::Teleport || !info.players {
-                continue;
-            }
-            let (a, b) = m.line_seg(li);
-            let d = segment_point_distance(a, b, last.pos());
-            if best.is_none_or(|(bd, _)| d < bd) {
-                best = Some((d, li));
-            }
-        }
-        let Some((_, li)) = best.filter(|(d, _)| *d <= TELEPORT_NEAR) else {
-            self.events.push(format!("tic {}: moved to ({:.0}, {:.0}) all at once", obs.tic, obs.x, obs.y));
-            return;
-        };
-        self.fire(li, obs.tic, How::Walk);
-        if !self.teleports.contains_key(&li) {
-            self.events.push(format!("tic {}: teleport line {li} goes to ({:.0}, {:.0})", obs.tic, obs.x, obs.y));
-        }
-        // (the rest of its pad goes there too)
-        for other in self.teleport_pad(li) {
-            self.teleports.insert(other, obs.pos());
-        }
-    }
-
     /// Teleport line `li` and those joined to it end to end with the same tag (the same
     /// destination): the sides of one pad.
     pub fn teleport_pad(&self, li: usize) -> BTreeSet<usize> {
         let m = &self.nav.map;
         let tag = m.linedefs[li].tag;
-        let same: Vec<usize> = self.info.iter().filter(|(&o, i)| i.category == Category::Teleport && i.players && m.linedefs[o].tag == tag).map(|(&o, _)| o).collect();
+        let same: Vec<usize> =
+            self.info.iter().filter(|(&o, i)| i.category == Category::Teleport && i.players && m.linedefs[o].tag == tag).map(|(&o, _)| o).collect();
         let mut pad = BTreeSet::from([li]);
         let mut todo = vec![li];
         while let Some(x) = todo.pop() {
@@ -778,143 +456,8 @@ impl Knowledge {
         pad
     }
 
-    fn sector_at(&self, obs: &Observation) -> usize {
-        self.nav.mesh.poly_at(obs.pos()).map_or(0, |p| self.nav.sector_of_poly(p))
-    }
-
     pub fn special(&self, li: usize) -> Option<&LineSpecial> {
         self.info.get(&li)
-    }
-
-    /// A once-only line used this life (its special's gone: the game clears it).
-    fn spent(&self, li: usize) -> bool {
-        self.info.get(&li).is_some_and(|i| i.trigger.once()) && self.fired.iter().any(|f| f.line == li && f.life == self.lives)
-    }
-
-    fn fire(&mut self, li: usize, tic: i64, how: How) {
-        let Some(info) = self.info.get(&li).cloned() else { return };
-        if info.trigger.once() && self.fired.iter().any(|f| f.line == li && f.life == self.lives) {
-            return; // (once only: nothing happens again this life)
-        }
-        if matches!(info.trigger, Trigger::SR | Trigger::GR) && info.category != Category::Crusher && self.by_line.get(&li).into_iter().flatten().any(|&ti| self.trigger(ti).permanent()) {
-            // (Doom turns a switch down on a sector still busy; a repeatable one that would leave
-            // it so for good, taken to have, misleads the planner: MAP12's)
-            let busy: Vec<usize> = self.targets(li).into_iter().filter(|&t| self.running(t, tic)).collect();
-            if let Some(b) = busy.first() {
-                self.events.push(format!("tic {tic}: {} line {li} ({}): sector {b} is busy, so nothing", how.name(), info.description));
-                return;
-            }
-        }
-        let f = Fired { line: li, tic, how, life: self.lives };
-        self.fired.push(f);
-        // (what it does, by the heights as she knows them now)
-        let now: States = self.nav.movers.initial.iter().enumerate().map(|(s, &h)| vec![self.seen_heights.get(&s).copied().unwrap_or(h)]).collect();
-        let ids: Vec<usize> = self.by_line.get(&li).cloned().unwrap_or_default();
-        for ti in ids {
-            let effects = self.nav.effects_now(self.trigger(ti), &now);
-            self.fired_effects.insert((ti, tic), effects);
-        }
-        self.events.push(format!("tic {tic}: {} line {li} ({})", how.name(), info.description));
-        let tk = self.tried_key(li);
-        let doubted: BTreeSet<usize> = self.doubts.keys().filter(|(k, _)| *k == tk).map(|(_, s)| *s).collect();
-        // (watched to see if it does what it's in doubt of: once a life, and only pressed with
-        // what it acts on still a while; the go it gets either way: MAP27's lift switch)
-        if !doubted.is_empty() && self.rechecked.insert((tk, self.lives)) && self.targets(li).iter().all(|t| tic - self.moved_at.get(t).copied().unwrap_or(-1_000_000_000) >= BUSY_TICS) {
-            self.checking.push((f, doubted));
-        }
-        if info.trigger.once() {
-            let targets = self.targets(li);
-            if targets.iter().any(|t| tic - self.moved_at.get(t).copied().unwrap_or(-1_000_000_000) < BUSY_TICS) {
-                self.taking.push((f, targets));
-            }
-        }
-    }
-
-    /// Is sector s, as far as she can tell, still in a move that comes back (a door open on its
-    /// timer, a lift away): moved lately, by a line of hers that doesn't leave it for good (or
-    /// by she doesn't know what), and not back where it started?
-    fn running(&self, s: usize, tic: i64) -> bool {
-        if tic - self.moved_at.get(&s).copied().unwrap_or(-1_000_000_000) >= BUSY_TICS {
-            return false;
-        }
-        let init = self.nav.movers.initial[s];
-        let seen = self.seen_heights.get(&s).copied().unwrap_or(init);
-        if (seen.floor - init.floor).abs() < 0.5 && (seen.ceiling - init.ceiling).abs() < 0.5 {
-            return false;
-        }
-        let mut last: Option<(i64, usize)> = None;
-        for g in self.fired.iter().filter(|g| g.life == self.lives) {
-            for &ti in self.by_line.get(&g.line).into_iter().flatten() {
-                if self.trigger(ti).effect(s).is_some() && last.is_none_or(|(lt, _)| g.tic >= lt) {
-                    last = Some((g.tic, ti));
-                }
-            }
-        }
-        last.is_none_or(|(_, ti)| !self.trigger(ti).permanent())
-    }
-
-    /// The sectors a line acts on, by the game's rule: those with its tag; a door line with
-    /// none, the door behind it.
-    fn targets(&self, li: usize) -> BTreeSet<usize> {
-        let m = &self.nav.map;
-        let l = &m.linedefs[li];
-        if l.tag != 0 {
-            return m.sectors.iter().filter(|s| s.tag == l.tag).map(|s| s.index).collect();
-        }
-        m.back_sector(l).into_iter().collect()
-    }
-
-    /// Once-only lines set off on sectors that were busy: if nothing's moved since, the game
-    /// turned them down (E3M4's door 152).
-    fn took(&mut self, tic: i64) {
-        let taking = std::mem::take(&mut self.taking);
-        let mut still = Vec::new();
-        for (f, targets) in taking {
-            // (from the tic it's seen pressed: a door moves in the tic of the press, seen in the same
-            // look as the press is; MAP19's door 464, opened for good, taken not to have, and
-            // pressed again for ever once line 443 had shut it on its timer)
-            if targets.iter().any(|t| self.moved_at.get(t).copied().unwrap_or(-1) >= f.tic) {
-                continue; // (it took)
-            }
-            if tic - f.tic < TAKE_TICS {
-                still.push((f, targets));
-                continue;
-            }
-            if self.already_so(&f, &targets) {
-                continue; // (it took: what it moves was already where it puts it)
-            }
-            if let Some(i) = self.fired.iter().position(|g| *g == f) {
-                self.fired.remove(i);
-            }
-            self.events.push(format!("tic {tic}: line {} didn't take (what it moves was busy): not used up", f.line));
-        }
-        self.taking = still;
-    }
-
-    /// Was everything line f moves left where it is for good by the last line she set off that
-    /// moves it (E3M7)? Not if that was a door that closes again (E3M4's) or she doesn't know
-    /// what moved it; only for a line with a tag (MAP28's door line).
-    fn already_so(&self, f: &Fired, targets: &BTreeSet<usize>) -> bool {
-        if self.nav.map.linedefs[f.line].tag == 0 {
-            return false;
-        }
-        for &t in targets {
-            let mut last: Option<(i64, usize)> = None;
-            for g in &self.fired {
-                if g == f || g.life != self.lives || g.tic > f.tic {
-                    continue;
-                }
-                for &ti in self.by_line.get(&g.line).into_iter().flatten() {
-                    if self.trigger(ti).effect(t).is_some() && last.is_none_or(|(lt, _)| g.tic >= lt) {
-                        last = Some((g.tic, ti));
-                    }
-                }
-            }
-            if last.is_none_or(|(_, ti)| !self.trigger(ti).permanent()) {
-                return false;
-            }
-        }
-        true
     }
 
     // --- what she can tell -----------------------------------------------------------------
@@ -932,7 +475,12 @@ impl Knowledge {
                     (i.trigger.used() || i.trigger.shot())
                         && !used.contains(&self.tried_key(li))
                         && !i.category.is_exit()
-                        && (!self.perceive || self.looks_interactive(li) || self.door_shaped(li) || self.in_the_way.contains(&li) || self.locked.contains(&li) || (i.trigger.shot() && self.odd(li).0))
+                        && (!self.perceive
+                            || self.looks_interactive(li)
+                            || self.door_shaped(li)
+                            || self.in_the_way.contains(&li)
+                            || self.locked.contains(&li)
+                            || (i.trigger.shot() && self.odd(li).0))
                 })
             })
             .collect()
@@ -979,334 +527,6 @@ impl Knowledge {
         out
     }
 
-    /// Does the line look like a switch, a door or a lift from its front (its textures)?
-    pub fn looks_interactive(&self, li: usize) -> bool {
-        let m = &self.nav.map;
-        let l = &m.linedefs[li];
-        if l.front == NO_SIDEDEF {
-            return false;
-        }
-        let sd = &m.sidedefs[usize::from(l.front)];
-        [&sd.upper, &sd.middle, &sd.lower].iter().any(|t| !t.is_empty() && LOOKS_INTERACTIVE.iter().any(|p| t.to_uppercase().starts_with(p)))
-    }
-
-    /// Walls worth pressing use on, as a player would suspect them, best first: (score, line,
-    /// where to stand, the wall's middle). Only what she can see counts: the automap drawing a
-    /// wall as a two-sided line (a mapper hides a secret one by flagging it), an item she can
-    /// see but not get to just behind it, a texture unlike the walls either side, a short piece
-    /// of a longer wall; and only walls whose far side she can't get to, faced from floor she
-    /// can (one tried for each place behind). `panic`: stuck with nothing at all to do, every
-    /// wall round where she is counts, however unsuspicious.
-    pub fn suspicious(&mut self, reach: &BTreeSet<usize>, unreached_items: &[Point], panic: bool, unreached_places: Option<&dyn Fn(Point, f64) -> bool>) -> Vec<(f64, usize, Point, Point)> {
-        let nav = Rc::clone(&self.nav);
-        let (m, mesh) = (&nav.map, &nav.mesh);
-        let init = &nav.movers.initial;
-        let reach_sectors: BTreeSet<usize> = reach.iter().map(|&p| mesh.poly(p).sector).collect();
-        let keys = self.last.as_ref().and_then(|l| l.keys).unwrap_or_default();
-        let mut best: BTreeMap<Behind, (f64, usize, Point, Point)> = BTreeMap::new();
-        let mut order: Vec<Behind> = Vec::new();
-        let known = self.known_polys();
-        // (the exit signs she's seen: the middles of lines showing one)
-        let signs: Vec<Point> = self
-            .mapped
-            .iter()
-            .filter(|&&li| {
-                let l = &m.linedefs[li];
-                [l.front, l.back].iter().filter(|&&sd| sd != NO_SIDEDEF).any(|&sd| {
-                    let d = &m.sidedefs[usize::from(sd)];
-                    [&d.upper, &d.middle, &d.lower].iter().any(|t| t.eq_ignore_ascii_case("EXITSIGN"))
-                })
-            })
-            .map(|&li| {
-                let (a, b) = m.line_seg(li);
-                ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)
-            })
-            .collect();
-        // (the heights as she last saw them)
-        let heights: Vec<(f64, f64)> = (0..init.len()).map(|x| self.seen_heights.get(&x).copied().unwrap_or(init[x])).map(|h| (h.floor, h.ceiling)).collect();
-        // (not a line pressed a moment ago, its work still going on: MAP10's door, pressed open as
-        // it shut, then tried "as a wall" and pressed shut again, and she with it in the closet)
-        let now = self.last.as_ref().map_or(0, |l| l.tic);
-        let lately: BTreeSet<usize> = self.fired.iter().filter(|f| now - f.tic < PRESSED_LATELY).map(|f| f.line).collect();
-        for &li in &self.mapped {
-            if self.tried_walls.get(&li).is_some_and(|k| k.covers(keys)) || self.looks_interactive(li) || lately.contains(&li) {
-                continue;
-            }
-            let line = &m.linedefs[li];
-            if line.front == NO_SIDEDEF {
-                continue;
-            }
-            let (a, b) = m.line_seg(li);
-            let length = dist(a, b);
-            if length < 16.0 {
-                continue;
-            }
-            let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
-            // (the front is right of v1->v2; use only works from there)
-            let (nx, ny) = ((b.1 - a.1) / length, -(b.0 - a.0) / length);
-            let (front, back) = m.sides(li);
-            let Some(front) = front else { continue };
-            // (something set into a two-sided wall, a grate or a panel: a thing to shoot, from
-            // further off: MAP19's)
-            let target = back.is_some() && !matches!(m.sidedefs[usize::from(line.front)].middle.as_str(), "" | "-");
-            let dists: &[f64] = if target { &[40.0, 96.0, 160.0, 256.0] } else { &[40.0] };
-            // (in front of its middle; else, the box not fitting there, of another part of it:
-            // MAP11's secret door, a column of pillars in front of its middle; facing that part)
-            // (and on the floor she'd be on there, not up on something beside it the box overlaps:
-            // MAP15's lift crate, pressed from beside the crate next to it, picked a spot with the
-            // box over that one's top, 128 up, and was never offered)
-            let fits = |q: Point| {
-                mesh.poly_at(q).is_some_and(|p| reach.contains(&p) && {
-                    let (clear, floor, ceiling) = nav.jump_lab.fits_at_heights(q, &heights);
-                    clear && ceiling - floor >= PLAYER_HEIGHT && floor - heights[mesh.poly(p).sector].0 <= MAX_STEP
-                })
-            };
-            let Some(mut stand) = dists.iter().map(|d| (mid.0 + nx * d, mid.1 + ny * d)).find(|&q| mesh.poly_at(q).is_some_and(|p| reach.contains(&p))) else { continue };
-            let mut aim = mid;
-            if !fits(stand) {
-                let along = [0.25, 0.75, 0.1, 0.9].iter().map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t));
-                if let Some((q, w)) = along.flat_map(|w| dists.iter().chain(&[24.0]).map(move |d| ((w.0 + nx * d, w.1 + ny * d), w))).find(|&(q, _)| fits(q)) {
-                    (stand, aim) = (q, w);
-                }
-            }
-            let mut score = if target { 1.0 } else { 0.0 };
-            let mut behind = back.map(Behind::Sector);
-            let (odd, neighbours) = self.odd(li);
-            if let Some(bk) = back {
-                // (as she last saw them: a stair since built makes a wall of what was floor)
-                let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
-                let (fh, bh) = (h(front), h(bk));
-                // (a niche she can see into but not step into is a wall all the same: bump into it
-                // and it's plain; E4M4's niche with the torch, pressed, lowers the lift to a secret)
-                let closed = line.blocks_player() || fh.ceiling.min(bh.ceiling) - fh.floor.max(bh.floor) < PLAYER_HEIGHT || bh.floor - fh.floor > MAX_STEP;
-                if !closed && odd {
-                    // (a way through, but with a face above or below it unlike the walls round it,
-                    // where a switch can be: MAP28's red-eyed skull): only that counts
-                    behind = None;
-                } else if !closed || reach_sectors.contains(&bk) {
-                    continue; // (a way through, or somewhere she gets to anyway)
-                } else if line.flags & ML_SECRET == 0 {
-                    score += 3.0; // (the automap draws it as not a wall)
-                }
-                if closed && bh.floor - fh.floor > MAX_STEP {
-                    score += 1.0; // (a raised platform's side: a lift?)
-                }
-            }
-            let far = (mid.0 - nx * 64.0, mid.1 - ny * 64.0);
-            if unreached_items.iter().any(|&it| dist(far, it) < 160.0) {
-                score += 2.0;
-                // (and a gap under it, or over it, the item seen through: a door left ajar, as
-                // good a sign as the automap's: E4M5's berserk, under a wall 8 off the floor)
-                let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
-                if back.is_some_and(|bk| {
-                    let (fh, bh) = (h(front), h(bk));
-                    fh.ceiling.min(bh.ceiling) > fh.floor.max(bh.floor)
-                }) {
-                    score += 3.0;
-                }
-            }
-            // (somewhere she's seen and can't get to, just behind: the way there may be here)
-            if unreached_places.is_some_and(|near| near(far, 128.0)) {
-                score += 2.0;
-            }
-            // (an exit sign hung in front of it: the way out's through here, as a player reads
-            // it; MAP05's yellow door, its face the walls' own TEKBRON2, the sign 50 in front)
-            let ahead = (mid.0 + nx * 48.0, mid.1 + ny * 48.0);
-            if signs.iter().any(|&q| dist(q, ahead) < EXIT_SIGN_NEAR) {
-                score += 3.0;
-            }
-            // (a blank on her map behind it, walled round by what she has mapped: room for
-            // somewhere she's never seen, as a player reads the automap: E1M6's secret room
-            // behind the south wall of the alcove)
-            let deep = (mid.0 - nx * BLANK_DEPTH, mid.1 - ny * BLANK_DEPTH);
-            if !mesh.poly_at(deep).is_some_and(|p| known.contains(&p)) && self.walled_round(deep) {
-                score += 2.0;
-            }
-            if odd {
-                score += 1.5;
-                if length <= 96.0 {
-                    score += 0.5;
-                }
-                // (one panel unlike the same panel either side of it: a mark, the way a mapper
-                // shows a switch: MAP28's symbol between two plain panels)
-                let faces: BTreeSet<String> = neighbours.iter().map(|&n| self.face(&m.linedefs[n])).collect();
-                if neighbours.len() >= 2 && faces.len() == 1 {
-                    score += 1.5;
-                }
-            }
-            if score < SUSPICION_MIN && !panic {
-                continue;
-            }
-            let key = behind.unwrap_or(Behind::Line(li));
-            match best.get(&key) {
-                Some(b) if b.0 >= score => {}
-                Some(_) => {
-                    best.insert(key, (score, li, stand, aim));
-                }
-                None => {
-                    order.push(key);
-                    best.insert(key, (score, li, stand, aim));
-                }
-            }
-        }
-        // (best first; ties in the order first found, as a stable sort of Python's dict has it)
-        let mut out: Vec<(f64, usize, Point, Point)> = order.iter().map(|k| best[k]).collect();
-        out.sort_by(|a, b| b.0.total_cmp(&a.0));
-        out
-    }
-
-    /// Is `p` walled round by lines she has mapped, every way (up, down, left, right) within
-    /// BLANK_REACH? (Not out past the edge of the map as she knows it.)
-    fn walled_round(&self, p: Point) -> bool {
-        [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)]
-            .iter()
-            .all(|(dx, dy)| self.lines_along(p, (p.0 + dx * BLANK_REACH, p.1 + dy * BLANK_REACH)).iter().any(|(_, li)| self.mapped.contains(li)))
-    }
-
-    /// Does the line look like a door by its shape: in front of a sector shut flat, thin as a
-    /// door is, with a face unlike the walls either side (MAP14's exit door, wooden panels at the
-    /// back of a niche in stone, a texture no list of door textures has)?
-    pub fn door_shaped(&self, li: usize) -> bool {
-        let m = &self.nav.map;
-        let (Some(_), Some(b)) = m.sides(li) else { return false };
-        let h = self.seen_heights.get(&b).copied().unwrap_or(self.nav.movers.initial[b]);
-        h.ceiling <= h.floor && self.narrowness[b] <= DOOR_THICKNESS && self.odd(li).0
-    }
-
-    /// Does the wall stand out from those round it (`odd`): a mark, as a player reads it?
-    pub fn marked(&self, li: usize) -> bool {
-        self.odd(li).0
-    }
-
-    /// Is the wall's face unlike the walls either side of it (another texture, or the same one
-    /// shifted)? And those walls, the ones with a face.
-    fn odd(&self, li: usize) -> (bool, Vec<usize>) {
-        let m = &self.nav.map;
-        let line = &m.linedefs[li];
-        let face = self.face(line);
-        // (a short jamb either side, the sides of a recess the wall's set back in: the walls past
-        // them instead, what the panel's set into; MAP19's grey door between two satyr faces in
-        // a brown wall, its jambs grey as the door)
-        let neighbours: Vec<usize> = self
-            .wall_neighbours(li)
-            .into_iter()
-            .flat_map(|n| {
-                let (a, b) = m.line_seg(n);
-                if m.linedefs[n].back == NO_SIDEDEF && dist(a, b) <= JAMB {
-                    self.wall_neighbours(n).into_iter().filter(|&x| x != li).collect()
-                } else {
-                    vec![n]
-                }
-            })
-            .filter(|&n| !self.face(&m.linedefs[n]).is_empty())
-            .collect();
-        if neighbours.is_empty() && !face.is_empty() {
-            // (nothing joined to it on its side, only ways through either end: the walls round
-            // it instead; E2M4's mossy door at the end of a dark corridor of plain stone)
-            let (a, b) = m.line_seg(li);
-            let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
-            let around: Vec<usize> = self
-                .lines_near(mid, AROUND)
-                .into_iter()
-                .filter(|&n| n != li && m.linedefs[n].back == NO_SIDEDEF && self.mapped.contains(&n) && !self.face(&m.linedefs[n]).is_empty())
-                .collect();
-            let odd = around.len() >= 2 && around.iter().all(|&n| self.face(&m.linedefs[n]) != face);
-            return (odd, Vec::new());
-        }
-        let odd = !neighbours.is_empty() && neighbours.iter().all(|&n| self.face(&m.linedefs[n]) != face || self.misaligned(line, &m.linedefs[n]));
-        (odd, neighbours)
-    }
-
-    /// Does `line`'s face sit at another height from `other`'s, the same texture (its rows not
-    /// lining up with those beside it)? A face is placed by where the game anchors it, and
-    /// its offset: a door's upper hangs from the door's own ceiling, the wall's from the room's
-    /// (E2M2's door in the round room of TEKWALL1, its panels out of line; MAP28's one red-eyed
-    /// skull of three, its offset another).
-    fn misaligned(&self, line: &Linedef, other: &Linedef) -> bool {
-        // (only a door's face, shut: a plain wall's face set off from the next is too common a
-        // thing to go by, and a round of walls was spent on them before E1M6's that mattered)
-        let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(self.nav.movers.initial[x]);
-        let door = self.nav.map.back_sector(line).is_some_and(|b| {
-            let hb = h(b);
-            hb.ceiling <= hb.floor
-        });
-        match (door, self.face_phase(line), self.face_phase(other)) {
-            (true, Some(a), Some(b)) => a != b,
-            _ => self.shifted(line, other),
-        }
-    }
-
-    /// Does `line` show its texture shifted up or down from `other` beside it, both between the
-    /// same sectors (another part of it shown: MAP28's one red-eyed skull of three)?
-    fn shifted(&self, line: &Linedef, other: &Linedef) -> bool {
-        let m = &self.nav.map;
-        if line.front == NO_SIDEDEF || other.front == NO_SIDEDEF {
-            return false;
-        }
-        if (m.front_sector(line), m.back_sector(line)) != (m.front_sector(other), m.back_sector(other)) {
-            return false;
-        }
-        m.sidedefs[usize::from(line.front)].y_offset != m.sidedefs[usize::from(other.front)].y_offset
-    }
-
-    /// Where a wall's face starts, up and down, wrapped by its texture's height (at the heights
-    /// she last saw): as R_StoreWallRange anchors it, with the sidedef's offset.
-    fn face_phase(&self, line: &Linedef) -> Option<i64> {
-        if line.front == NO_SIDEDEF {
-            return None;
-        }
-        let m = &self.nav.map;
-        let sd = &m.sidedefs[usize::from(line.front)];
-        let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(self.nav.movers.initial[x]);
-        let front = h(sd.sector);
-        let named = |t: &str| !t.is_empty() && t != "-";
-        let height = |t: &str| m.texture_heights.get(&t.to_uppercase()).copied().filter(|&x| x > 0);
-        let top = match m.back_sector(line).map(h) {
-            None => {
-                let tex = height(&sd.middle)?;
-                if line.flags & ML_DONTPEGBOTTOM != 0 { front.floor + f64::from(tex) } else { front.ceiling }
-            }
-            Some(back) => {
-                let shut = front.ceiling.min(back.ceiling) <= front.floor.max(back.floor);
-                // (the part she sees, as `face` picks it)
-                if (shut || !named(&sd.middle)) && named(&sd.upper) && back.ceiling < front.ceiling {
-                    let tex = height(&sd.upper)?;
-                    if line.flags & ML_DONTPEGTOP != 0 { front.ceiling } else { back.ceiling + f64::from(tex) }
-                } else if (shut || !named(&sd.middle)) && named(&sd.lower) && back.floor > front.floor {
-                    if line.flags & ML_DONTPEGBOTTOM != 0 { front.ceiling } else { back.floor }
-                } else {
-                    return None;
-                }
-            }
-        };
-        let tex = [&sd.upper, &sd.lower, &sd.middle].into_iter().find(|t| named(t)).and_then(|t| height(t))?;
-        Some(((top as i64) + i64::from(sd.y_offset)).rem_euclid(i64::from(tex)))
-    }
-
-    /// The texture a wall shows from its front.
-    fn face(&self, line: &Linedef) -> String {
-        if line.front == NO_SIDEDEF {
-            return String::new();
-        }
-        let m = &self.nav.map;
-        let sd = &m.sidedefs[usize::from(line.front)];
-        // (a two-sided line shut, a door down: no opening for the middle texture to show in,
-        // only what's above and below it: MAP11's secret door, STONE5 over the opening,
-        // between walls of STONE4)
-        let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(self.nav.movers.initial[x]);
-        let shut = matches!(m.sides(line.index), (Some(f), Some(b)) if h(f).ceiling.min(h(b).ceiling) <= h(f).floor.max(h(b).floor));
-        let order = if shut { [&sd.upper, &sd.lower, &sd.middle] } else { [&sd.middle, &sd.upper, &sd.lower] };
-        order.iter().find(|t| !t.is_empty() && t.as_str() != "-").map(|t| t.to_uppercase()).unwrap_or_default()
-    }
-
-    /// The lines joined to this one at its ends, on the same sector's side.
-    fn wall_neighbours(&self, li: usize) -> Vec<usize> {
-        let m = &self.nav.map;
-        let l = &m.linedefs[li];
-        let front = m.front_sector(l);
-        [l.v1, l.v2].iter().flat_map(|v| self.ends.get(v).into_iter().flatten().copied()).filter(|&n| n != li && m.front_sector(&m.linedefs[n]) == front).collect()
-    }
-
     /// What a line works, as far as she can tell: lines with the same special and tag work the
     /// same thing (the faces of one set of bars), as do door lines on the same door.
     pub fn mechanism(&self, li: usize) -> Mechanism {
@@ -1339,7 +559,8 @@ impl Knowledge {
             .iter()
             .filter(|(&i, info)| {
                 let (f, b) = m.sides(i);
-                info.category.is_exit() && (self.mapped.contains(&i) || (info.trigger.walked() && [f, b].into_iter().flatten().any(|s| self.sectors.contains(&s))))
+                info.category.is_exit()
+                    && (self.mapped.contains(&i) || (info.trigger.walked() && [f, b].into_iter().flatten().any(|s| self.sectors.contains(&s))))
             })
             .map(|(&i, _)| i)
             .collect()
@@ -1357,7 +578,9 @@ impl Knowledge {
             .iter()
             .filter(|(&i, info)| {
                 let (f, b) = m.sides(i);
-                info.category == Category::Teleport && info.players && (self.mapped.contains(&i) || [f, b].into_iter().flatten().any(|s| self.sectors.contains(&s)))
+                info.category == Category::Teleport
+                    && info.players
+                    && (self.mapped.contains(&i) || [f, b].into_iter().flatten().any(|s| self.sectors.contains(&s)))
             })
             .map(|(&i, _)| i)
             .collect()
@@ -1366,7 +589,12 @@ impl Knowledge {
     /// The map's things in sectors she has seen (at the skill played).
     pub fn known_things(&self) -> Vec<crate::map::Thing> {
         let nav = &self.nav;
-        nav.map.things.iter().filter(|t| t.in_skill(nav.skill) && nav.mesh.poly_at((t.x, t.y)).is_some_and(|p| self.sectors.contains(&nav.sector_of_poly(p)))).copied().collect()
+        nav.map
+            .things
+            .iter()
+            .filter(|t| t.in_skill(nav.skill) && nav.mesh.poly_at((t.x, t.y)).is_some_and(|p| self.sectors.contains(&nav.sector_of_poly(p))))
+            .copied()
+            .collect()
     }
 
     /// The last tic a line was first fired whose effect hasn't been seen at all, if any (or
@@ -1429,92 +657,6 @@ impl Knowledge {
         self.taking.clear();
         self.lives += 1;
         self.events.push(format!("--- life {}: the level from the start, knowing what she knew", self.lives));
-    }
-
-    /// What standing on sector s's floor (None: not on a floor) tells her about it.
-    fn feel(&mut self, s: Option<usize>, obs: &Observation) {
-        let Some(s) = s else {
-            self.standing = None;
-            return;
-        };
-        if !self.mortal {
-            if !self.felt.contains_key(&s) {
-                self.learn_floor(s, self.nav.damage[s] != 0, obs.tic);
-            }
-            return;
-        }
-        if self.standing.is_none_or(|(x, _)| x != s) {
-            self.standing = Some((s, obs.tic));
-        }
-        let hurt = self.last.as_ref().is_some_and(|last| matches!((obs.health, last.health), (Some(now), Some(before)) if now < before));
-        if hurt {
-            // (a floor hurts on the level's clock, every 32 tics: hurt again on the same floor a
-            // multiple of that later, it's the floor; once alone may be a monster's shot)
-            if let Some((ps, pt)) = self.hurt_on {
-                let gap = obs.tic - pt;
-                if ps == s && 0 < gap && gap <= FLOOR_CONFIRM && gap % FLOOR_PERIOD == 0 {
-                    self.learn_floor(s, true, obs.tic);
-                }
-            }
-            self.hurt_on = Some((s, obs.tic));
-        } else {
-            let since = self.standing.map_or(obs.tic, |x| x.1).max(self.hurt_on.filter(|h| h.0 == s).map_or(0, |h| h.1));
-            if obs.tic - since > FELT_TICS && self.felt.get(&s) != Some(&false) && !self.protected(obs.tic) {
-                self.learn_floor(s, false, obs.tic);
-            }
-        }
-    }
-
-    fn learn_floor(&mut self, s: usize, hurts: bool, tic: i64) {
-        if self.felt.get(&s) == Some(&hurts) {
-            return;
-        }
-        self.felt.insert(s, hurts);
-        if hurts != self.looks_damaging(s) {
-            self.events.push(format!("tic {tic}: sector {s} {}", if hurts { "hurts after all" } else { "doesn't hurt after all" }));
-        }
-    }
-
-    /// Is she wearing a radiation suit (one picked up in the last minute)?
-    pub fn protected(&self, tic: i64) -> bool {
-        self.suit_until.is_some_and(|u| tic < u)
-    }
-
-    /// A floor that looks like it'd hurt (its flat is a liquid).
-    pub fn looks_damaging(&self, s: usize) -> bool {
-        let tex = self.nav.map.sectors[s].floor_tex.to_uppercase();
-        HAZARD_FLATS.iter().any(|h| tex.starts_with(h))
-    }
-
-    /// Does she take sector s's floor to hurt: as found out by standing on it, else by its look.
-    pub fn damaging(&self, s: usize) -> bool {
-        if let Some(&c) = self.changed_floor.get(&s) {
-            return c; // (seen changed since: MAP08's walkway gone to nukage)
-        }
-        self.felt.get(&s).copied().unwrap_or_else(|| self.looks_damaging(s))
-    }
-
-    /// A sound from something she knows moves and set off a moment before (a door closing behind
-    /// her, a lift coming back), or from right beside her: nothing new. One she set off long
-    /// before moving again is news (E1M6's door that shut on her opened again 30 s later).
-    pub fn expected(&self, h: &Heard) -> bool {
-        if h.distance <= NEAR_SOUND {
-            return true;
-        }
-        let mut fired_at: BTreeMap<usize, i64> = BTreeMap::new();
-        for f in &self.fired {
-            fired_at.insert(f.line, f.tic);
-        }
-        for (t, sectors) in self.known_triggers() {
-            let Some(&tic) = t.linedef().and_then(|li| fired_at.get(&li)) else { continue };
-            if !(0..=EXPECTED_FOR).contains(&(h.tic - tic)) {
-                continue;
-            }
-            if sectors.iter().filter_map(|s| self.sound_origin.get(s)).any(|&o| dist(o, h.origin) <= EXPECTED_RADIUS) {
-                return true;
-            }
-        }
-        false
     }
 
     /// Where she can plan to go: the parts of the map she's seen into or stood in.
