@@ -8,7 +8,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use super::widths::{drop_lines, shutting_lines, teleport_lines, wall_lines};
+use super::widths::{drop_lines, exit_walk_lines, shutting_lines, teleport_lines, wall_lines};
 use super::{add_height, Jump, Navigator, States, TeleEdge, TriggerLine, JUMP_DOUBT, MAX_STEP, PLAYER_RADIUS, USE_REACH};
 use crate::det::{HashMap, HashSet};
 use crate::geom::{closest_point, dist, point_key, segment_distance, Point};
@@ -80,7 +80,7 @@ impl Core {
             has_teleports: !n.teleports.is_empty(),
             walls: wall_lines(&n.map, &n.movers).into_iter().collect(),
             drops: drop_lines(&n.map, &n.movers).into_iter().collect(),
-            teleport_lines: teleport_lines(&n.map).into_iter().collect(),
+            trip_lines: teleport_lines(&n.map).into_iter().chain(exit_walk_lines(&n.map)).collect(),
             shutting: shutting_lines(&n.map, &n.triggers).into_iter().collect(),
             static_grid: n.static_wall_grid.clone(),
             obstacle_grid: n.obstacle_grid.clone(),

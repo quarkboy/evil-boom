@@ -71,6 +71,11 @@ pub(crate) fn teleport_lines(m: &MapData) -> BTreeSet<usize> {
     m.linedefs.iter().filter(|l| TELEPORTERS_FOR_PLAYERS.contains(&l.special)).map(|l| l.index).collect()
 }
 
+/// Walk-over lines that end the level.
+pub(crate) fn exit_walk_lines(m: &MapData) -> BTreeSet<usize> {
+    (0..m.linedefs.len()).filter(|&li| crate::specials::classify_line(m.linedefs[li].special).is_some_and(|i| i.category.is_exit() && i.trigger.walked())).collect()
+}
+
 /// Walk-over lines that shut (no headroom) a sector on either side of themselves.
 pub(crate) fn shutting_lines(m: &MapData, triggers: &[TriggerLine]) -> BTreeSet<usize> {
     let mut out = BTreeSet::new();

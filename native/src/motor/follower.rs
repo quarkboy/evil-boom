@@ -36,7 +36,7 @@ const BARREL_GIVE_UP: i64 = 8 * 35;
 /// What to shoot something with: the pistol (the shotgun if there's nothing for it), whatever's
 /// in hand: not the BFG with 20 cells of the 40 it needs (MAP23), nor a missile, which sets off no
 /// gun line.
-fn tap_gun(obs: &Observation) -> i32 {
+pub fn tap_gun(obs: &Observation) -> i32 {
     // (ammo: (weapon slot, rounds for it))
     let rounds = |slot: i32| obs.ammo.as_ref().and_then(|a| a.iter().find(|w| w.0 == slot)).map_or(1, |w| w.1);
     if rounds(2) > 0 {
@@ -46,6 +46,8 @@ fn tap_gun(obs: &Observation) -> i32 {
     }
 }
 
+/// the longest wait under a ceiling too low for her before it counts as being stuck
+const PINNED_WAIT: i64 = 10 * 35;
 /// how far into its range of floors a gun line is shot from
 const SHOT_MARGIN: f64 = 2.0;
 /// a drop this near ahead onto a narrow landing...
@@ -54,8 +56,8 @@ const CREEP_RANGE: f64 = 48.0;
 const LANDING_ROOM: f64 = 192.0;
 /// ...is stepped off no slower than this (units a tic)
 const DROP_CREEP: f64 = 1.0;
-/// tics between shots at a barrel (the pistol ready again, the trigger let go: a first shot each time)
-const BARREL_TAP: i64 = 20;
+/// tics between shots at a barrel or a wall (the pistol ready again, the trigger let go: a first shot each time)
+pub const BARREL_TAP: i64 = 20;
 /// a jump goes without settling if what it needs runs out sooner
 const JUMP_HURRY: f64 = 2.0 * TICRATE;
 /// how much lower than planned a ceiling can be for a jump
@@ -273,6 +275,8 @@ pub struct RouteFollower {
     before: Option<Vec<(usize, Option<Heights>)>>,
     cross_tic: Option<i64>,
     height_wait: Option<i64>,
+    /// since when the box has been under a ceiling too low for her
+    pinned_since: Option<i64>,
     /// the floor under her last tic, waiting to shoot (still moving?)
     shot_floor: Option<f64>,
     segments: Vec<Segment>,
@@ -360,6 +364,7 @@ impl RouteFollower {
             before: None,
             cross_tic: None,
             height_wait: None,
+            pinned_since: None,
             shot_floor: None,
             segments: Vec::new(),
             seg_i: 0,
@@ -814,6 +819,9 @@ impl RouteFollower {
             self.phase = Phase::Act;
             return self.act_at_goal(obs);
         }
+        if let Some(c) = self.pinned_under_ceiling(obs) {
+            return c;
+        }
         if obs.tic - self.progress_tic > STUCK_TICS {
             self.unsticks += 1;
             if self.unsticks > UNSTICKS_BEFORE_REPLAN {
@@ -1000,6 +1008,30 @@ impl RouteFollower {
     }
 
     // --- recovering ---------------------------------------------------------------------------
+
+    /// Under a ceiling too low for her over some of the box (a crusher coming down, a door
+    /// shutting on her): Doom won't move her till it's risen, so that's waiting, not being stuck
+    /// (E3M4's crusher room, the bonuses in it, a dozen lives given up there); up to PINNED_WAIT.
+    fn pinned_under_ceiling(&mut self, obs: &Observation) -> Option<Controls> {
+        let mesh = &self.view.nav.mesh;
+        let r = PLAYER_RADIUS - 1.0;
+        let secs: BTreeSet<usize> = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)].iter().filter_map(|(dx, dy)| mesh.poly_at((obs.x + dx, obs.y + dy))).map(|p| mesh.poly(p).sector).collect();
+        let floor = secs.iter().filter_map(|&s| obs.height(s)).map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max);
+        let ceiling = secs.iter().filter_map(|&s| obs.height(s)).map(|h| h.ceiling).fold(f64::INFINITY, f64::min);
+        if ceiling - floor >= PLAYER_HEIGHT {
+            self.pinned_since = None;
+            return None;
+        }
+        let since = *self.pinned_since.get_or_insert_with(|| {
+            self.log.add(obs.tic, format!("pinned under a ceiling at ({:.0}, {:.0}): waiting for it to rise", obs.x, obs.y));
+            obs.tic
+        });
+        if obs.tic - since > PINNED_WAIT {
+            return None;
+        }
+        self.progress_tic = obs.tic;
+        Some(Controls::default())
+    }
 
     /// Which way to back off: away from the walls and ledges nearest (MAP29: backing off a stair
     /// wall walked it off the other side into the pit), else backwards.

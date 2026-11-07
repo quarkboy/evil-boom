@@ -125,7 +125,9 @@ pub struct NavFacts {
     pub walls: HashSet<usize>,
     /// lines with a drop the player can't climb back up
     pub drops: HashSet<usize>,
-    pub teleport_lines: HashSet<usize>,
+    /// lines that set something off walked over, a path mustn't so much as graze unless it means
+    /// to cross them: teleports, and exits (MAP25's, round the pad atop the pyramid)
+    pub trip_lines: HashSet<usize>,
     /// lines of sectors that shut by themselves (not to be counted as crossed)
     pub shutting: HashSet<usize>,
     /// cell -> one-sided walls (and the like) there
@@ -216,7 +218,7 @@ pub struct NavCore {
     pub has_teleports: bool,
     pub walls: HashSet<usize>,
     pub drops: HashSet<usize>,
-    pub teleport_lines: HashSet<usize>,
+    pub trip_lines: HashSet<usize>,
     pub shutting: HashSet<usize>,
     pub static_grid: HashMap<Cell, Vec<Seg>>,
     pub obstacle_grid: HashMap<Cell, Vec<Seg>>,
@@ -240,7 +242,7 @@ impl NavCore {
     pub fn new(map: Arc<MapData>, mesh: Arc<Mesh>, facts: NavFacts, callbacks: Callbacks) -> Self {
         let poly_sector = mesh.polys.iter().map(|p| p.as_ref().map_or(0, |p| p.sector)).collect();
         let seg_lines = (0..map.linedefs.len()).map(|li| (seg_key(map.line_seg(li)), li)).collect();
-        let NavFacts { adj, gates, tele, initial, damage, has_teleports, walls, drops, teleport_lines, shutting, static_grid, obstacle_grid } = facts;
+        let NavFacts { adj, gates, tele, initial, damage, has_teleports, walls, drops, trip_lines, shutting, static_grid, obstacle_grid } = facts;
         NavCore {
             map,
             mesh,
@@ -253,7 +255,7 @@ impl NavCore {
             has_teleports,
             walls,
             drops,
-            teleport_lines,
+            trip_lines,
             shutting,
             static_grid,
             obstacle_grid,

@@ -52,6 +52,8 @@ pub const SURE_TICS: i64 = 8;
 pub const BUSY_TICS: i64 = 200;
 /// textures that make a line look like a switch, a door or a lift
 pub const LOOKS_INTERACTIVE: [&str; 11] = ["SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR", "ZELDOOR", "PLAT", "SUPPORT"];
+/// an exit sign this near the spot in front of a wall marks it
+const EXIT_SIGN_NEAR: f64 = 64.0;
 /// how far behind a wall a blank on her map is looked for...
 const BLANK_DEPTH: f64 = 96.0;
 /// ...and how far round it the walls she's mapped must close it in
@@ -967,6 +969,22 @@ impl Knowledge {
         let mut best: BTreeMap<Behind, (f64, usize, Point, Point)> = BTreeMap::new();
         let mut order: Vec<Behind> = Vec::new();
         let known = self.known_polys();
+        // (the exit signs she's seen: the middles of lines showing one)
+        let signs: Vec<Point> = self
+            .mapped
+            .iter()
+            .filter(|&&li| {
+                let l = &m.linedefs[li];
+                [l.front, l.back].iter().filter(|&&sd| sd != NO_SIDEDEF).any(|&sd| {
+                    let d = &m.sidedefs[usize::from(sd)];
+                    [&d.upper, &d.middle, &d.lower].iter().any(|t| t.eq_ignore_ascii_case("EXITSIGN"))
+                })
+            })
+            .map(|&li| {
+                let (a, b) = m.line_seg(li);
+                ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)
+            })
+            .collect();
         // (the heights as she last saw them)
         let heights: Vec<(f64, f64)> = (0..init.len()).map(|x| self.seen_heights.get(&x).copied().unwrap_or(init[x])).map(|h| (h.floor, h.ceiling)).collect();
         for &li in &self.mapped {
@@ -1044,6 +1062,12 @@ impl Knowledge {
             // (somewhere she's seen and can't get to, just behind: the way there may be here)
             if unreached_places.is_some_and(|near| near(far, 128.0)) {
                 score += 2.0;
+            }
+            // (an exit sign hung in front of it: the way out's through here, as a player reads
+            // it; MAP05's yellow door, its face the walls' own TEKBRON2, the sign 50 in front)
+            let ahead = (mid.0 + nx * 48.0, mid.1 + ny * 48.0);
+            if signs.iter().any(|&q| dist(q, ahead) < EXIT_SIGN_NEAR) {
+                score += 3.0;
             }
             // (a blank on her map behind it, walled round by what she has mapped: room for
             // somewhere she's never seen, as a player reads the automap: E1M6's secret room

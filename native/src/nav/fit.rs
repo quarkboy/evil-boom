@@ -21,6 +21,8 @@ const WAYPOINT_CLEARANCE: f64 = 18.0;
 const CORNER_CLEARANCE: f64 = PLAYER_RADIUS * std::f64::consts::SQRT_2 + 4.0;
 /// Extra room kept from solid things' corners when detouring round them.
 const THING_CLEARANCE: f64 = 6.0;
+/// How much further than the box a path keeps from an exit line it doesn't mean to cross.
+const TRIP_MARGIN: f64 = 24.0;
 /// The box checks' tolerance.
 const BOX_SLACK: f64 = 0.25;
 /// How many waypoints ahead straightening looks for a direct line.
@@ -269,7 +271,7 @@ impl Fitter<'_> {
     /// `standing_floor(at)`.
     fn line_blocks(&mut self, li: usize, at: Point, standing: &mut Option<Option<f64>>) -> bool {
         let nav = self.nav;
-        if nav.teleport_lines.contains(&li) {
+        if nav.trip_lines.contains(&li) {
             return true;
         }
         let (f, b) = nav.map.sides(li);
@@ -329,10 +331,14 @@ impl Fitter<'_> {
         nav.static_hits(p, q, ignore, &mut out);
         let r = PLAYER_RADIUS + BOX_SLACK;
         let mut standing = None;
-        for li in nav.lines_in(cells_around(p, q, PLAYER_RADIUS + 1.0)) {
+        for li in nav.lines_in(cells_around(p, q, PLAYER_RADIUS + TRIP_MARGIN + 1.0)) {
             let e = nav.map.line_seg(li);
             let k = seg_key(e);
-            if out.contains(&k) || !swept_box_hits(p, q, r, e) {
+            // (an exit not meant to be crossed, given a wide berth: following a path wanders, and
+            // MAP25's went round the pad atop the pyramid, its edges exits, a box from it; not a
+            // teleport, which E2M7's ways go close by)
+            let trip = nav.trip_lines.contains(&li) && !self.exempt.contains(&li) && crate::specials::classify_line(nav.map.linedefs[li].special).is_some_and(|i| i.category.is_exit());
+            if out.contains(&k) || !swept_box_hits(p, q, if trip { r + TRIP_MARGIN } else { r }, e) {
                 continue;
             }
             // (one the box is over already doesn't count against leaving it, nor one the way
@@ -653,7 +659,7 @@ impl Fitter<'_> {
                 // hugging its foot)
                 let (f, bk) = nav.map.sides(li);
                 let open_wall = nav.walls.contains(&li) && f.zip(bk).is_some_and(|(f, bk)| crossable_either_way(&self.heights(f), &self.heights(bk)));
-                let at_start = (nav.walls.contains(&li) && !open_wall) || nav.drops.contains(&li) || nav.teleport_lines.contains(&li);
+                let at_start = (nav.walls.contains(&li) && !open_wall) || nav.drops.contains(&li) || nav.trip_lines.contains(&li);
                 let now = !nav.walls.contains(&li) && !nav.drops.contains(&li) && self.crossing(li) != Crossing::Open;
                 if at_start || now {
                     out.push(nav.map.line_seg(li));
