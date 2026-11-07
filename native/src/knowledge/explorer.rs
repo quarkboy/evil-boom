@@ -36,6 +36,8 @@ const WALL_BUMP_SPEED: f64 = 25.0;
 const WALL_BUMP_LAST: i64 = 4;
 /// objectives routed and compared by the way there, each pick
 const COMPARED: usize = 4;
+/// a "close, wait 30s, open" door's wait, and a little (tics)
+const REOPEN_TICS: i64 = 32 * 35;
 /// bullets and shells below these, she tops up from the ammo she's seen
 const LOW_BULLETS: i32 = 10;
 const LOW_SHELLS: i32 = 4;
@@ -364,6 +366,8 @@ pub struct Explorer {
     panic_tries: usize,
     /// (that round done: only the walls with more to go on)
     strong_only: bool,
+    /// waiting for a door that opens again by itself before anything else (logged once)
+    waiting_reopen: bool,
     /// strafing run-jumps allowed (nothing else to do)
     strafe_ok: bool,
     /// when she last shot at a wall she was trying (single taps)
@@ -445,6 +449,7 @@ impl Explorer {
             suspecting: Suspecting::No,
             panic_tries: 0,
             strong_only: false,
+            waiting_reopen: false,
             strafe_ok: false,
             wall_shot: -1_000_000,
             retried: None,
@@ -2075,8 +2080,11 @@ impl Explorer {
         }
         found
             .into_iter()
+            // (the ones with more to go on, then the nearest of them: not the nearest, then those
+            // with more to go on, none of a round of weak ones near her while E1M6's door 1119,
+            // further off, waited)
+            .filter(|(score, _, stand, _)| !(self.strong_only && *score <= SUSPICION_MIN) && self.standable(*stand, false))
             .take(if panic { PANIC_WALLS } else { SUSPECTS })
-            .filter(|(score, _, stand, _)| self.standable(*stand, false) && !(self.strong_only && *score <= SUSPICION_MIN))
             .map(|(score, li, stand, mid)| {
                 let mut o = Objective::new(Kind::Wall, stand, format!("try the wall (line {li}, {score:.1})"));
                 o.look_at = Some(mid);
@@ -2129,6 +2137,13 @@ impl Explorer {
         let found = self.knowledge.suspicious(reach, &unreached, panic, Some(&near));
         self.suspects = Some((key, found.clone()));
         found
+    }
+
+    /// Is a door she set off that shuts and opens again by itself (close, wait 30s, open) still
+    /// within its wait?
+    fn reopens_soon(&self, obs: &Observation) -> bool {
+        let m = &self.nav.map;
+        self.knowledge.fired.iter().any(|f| [16, 76].contains(&m.linedefs[f.line].special) && obs.tic - f.tic < REOPEN_TICS)
     }
 
     /// Not dropped lately (the longer, the more often it has been).
@@ -2204,6 +2219,25 @@ impl Explorer {
         if !found && self.exit_last && hooks.before_exit(self, obs) {
             self.log.push(format!("tic {}: nothing else to do here: the level again, for what's left", obs.tic));
             self.restart_wanted = true;
+            self.current = None;
+            return;
+        }
+        // (not out while a door she set off that shuts for a while and opens again by itself is
+        // still shut: what's past it is still to do, as a player waits for it; E1M6's door 37,
+        // shut on the way to a wall, the level left with a blur sphere behind it)
+        if !found && self.exit_last && self.reopens_soon(obs) {
+            if self.current.is_some() || !self.waiting_reopen {
+                self.log.push(format!("tic {}: nothing else to do till a door opens again", obs.tic));
+            }
+            self.waiting_reopen = true;
+            self.current = None;
+            return;
+        }
+        if !found && self.waiting_reopen {
+            // (open again: what was given up on while it was shut gets another go, the way
+            // through it back)
+            self.waiting_reopen = false;
+            self.retried = None;
             self.current = None;
             return;
         }

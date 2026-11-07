@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::geom::{cells, dist, Point};
-use crate::map::{Linedef, ML_MAPPED, ML_SECRET, NO_SIDEDEF};
+use crate::map::{Linedef, ML_DONTPEGBOTTOM, ML_DONTPEGTOP, ML_MAPPED, ML_SECRET, NO_SIDEDEF};
 use crate::motor::{Controls, Observation};
 use crate::nav::Heights;
 use crate::movers::Effects;
@@ -1193,8 +1193,27 @@ impl Knowledge {
             let odd = around.len() >= 2 && around.iter().all(|&n| self.face(&m.linedefs[n]) != face);
             return (odd, Vec::new());
         }
-        let odd = !neighbours.is_empty() && neighbours.iter().all(|&n| self.face(&m.linedefs[n]) != face || self.shifted(line, &m.linedefs[n]));
+        let odd = !neighbours.is_empty() && neighbours.iter().all(|&n| self.face(&m.linedefs[n]) != face || self.misaligned(line, &m.linedefs[n]));
         (odd, neighbours)
+    }
+
+    /// Does `line`'s face sit at another height from `other`'s, the same texture (its rows not
+    /// lining up with those beside it)? A face is placed by where the game anchors it, and
+    /// its offset: a door's upper hangs from the door's own ceiling, the wall's from the room's
+    /// (E2M2's door in the round room of TEKWALL1, its panels out of line; MAP28's one red-eyed
+    /// skull of three, its offset another).
+    fn misaligned(&self, line: &Linedef, other: &Linedef) -> bool {
+        // (only a door's face, shut: a plain wall's face set off from the next is too common a
+        // thing to go by, and a round of walls was spent on them before E1M6's that mattered)
+        let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(self.nav.movers.initial[x]);
+        let door = self.nav.map.back_sector(line).is_some_and(|b| {
+            let hb = h(b);
+            hb.ceiling <= hb.floor
+        });
+        match (door, self.face_phase(line), self.face_phase(other)) {
+            (true, Some(a), Some(b)) => a != b,
+            _ => self.shifted(line, other),
+        }
     }
 
     /// Does `line` show its texture shifted up or down from `other` beside it, both between the
@@ -1208,6 +1227,40 @@ impl Knowledge {
             return false;
         }
         m.sidedefs[usize::from(line.front)].y_offset != m.sidedefs[usize::from(other.front)].y_offset
+    }
+
+    /// Where a wall's face starts, up and down, wrapped by its texture's height (at the heights
+    /// she last saw): as R_StoreWallRange anchors it, with the sidedef's offset.
+    fn face_phase(&self, line: &Linedef) -> Option<i64> {
+        if line.front == NO_SIDEDEF {
+            return None;
+        }
+        let m = &self.nav.map;
+        let sd = &m.sidedefs[usize::from(line.front)];
+        let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(self.nav.movers.initial[x]);
+        let front = h(sd.sector);
+        let named = |t: &str| !t.is_empty() && t != "-";
+        let height = |t: &str| m.texture_heights.get(&t.to_uppercase()).copied().filter(|&x| x > 0);
+        let top = match m.back_sector(line).map(h) {
+            None => {
+                let tex = height(&sd.middle)?;
+                if line.flags & ML_DONTPEGBOTTOM != 0 { front.floor + f64::from(tex) } else { front.ceiling }
+            }
+            Some(back) => {
+                let shut = front.ceiling.min(back.ceiling) <= front.floor.max(back.floor);
+                // (the part she sees, as `face` picks it)
+                if (shut || !named(&sd.middle)) && named(&sd.upper) && back.ceiling < front.ceiling {
+                    let tex = height(&sd.upper)?;
+                    if line.flags & ML_DONTPEGTOP != 0 { front.ceiling } else { back.ceiling + f64::from(tex) }
+                } else if (shut || !named(&sd.middle)) && named(&sd.lower) && back.floor > front.floor {
+                    if line.flags & ML_DONTPEGBOTTOM != 0 { front.ceiling } else { back.floor }
+                } else {
+                    return None;
+                }
+            }
+        };
+        let tex = [&sd.upper, &sd.lower, &sd.middle].into_iter().find(|t| named(t)).and_then(|t| height(t))?;
+        Some(((top as i64) + i64::from(sd.y_offset)).rem_euclid(i64::from(tex)))
     }
 
     /// The texture a wall shows from its front.

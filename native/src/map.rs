@@ -14,6 +14,10 @@ pub const ML_BLOCKMONSTERS: u16 = 0x0002;
 pub const ML_TWOSIDED: u16 = 0x0004;
 /// (shows as one-sided on the automap)
 pub const ML_SECRET: u16 = 0x0020;
+/// upper texture drawn down from the ceiling, not up from the far side's
+pub const ML_DONTPEGTOP: u16 = 0x0008;
+/// lower (and a one-sided wall's) texture drawn up from the floor
+pub const ML_DONTPEGBOTTOM: u16 = 0x0010;
 pub const ML_SOUNDBLOCK: u16 = 0x0040;
 pub const ML_DONTDRAW: u16 = 0x0080;
 pub const ML_MAPPED: u16 = 0x0100;
