@@ -57,8 +57,16 @@ evil sweep doom E1M1 E1M2 doom2 MAP01       # some maps
 evil run-map doom2 MAP14                    # one map; its log goes to out/explore
 evil watch doom E1M3                        # watch her play, with what she knows beside the game
 evil dump-nav doom E1M1                     # the level's analysis
+evil sector doom E1M5 99 121                # sectors: heights, lines, things
+evil drive doom E2M4 --from out/runs/DOOM_E2M4_expert.run@1418 --script cmds.txt
+                                            # take her over at a moment of a recorded run
 ```
 
-Run options: `--lives N`, `--max-seconds S`, `--seed N|random` (0 unless given), `--peek`
-(she knows the whole map), `--secrets` (out only with every secret), `--expert` (every item,
-then out), `--fight SKILL` (monsters in), `--mortal` (no god mode).
+For tracing a run: `run-map ... --snapshot S --focus X,Y,ZOOM` (a picture of the run at S, the
+map zoomed on a place), `--from FILE@S` (play a recorded run back to S, then the bot as it is
+now), and `EVIL_DEBUG_OBJECTIVES=from-to` (every option she weighed, those tics).
+
+Run options: `--lives N` (unlimited unless given), `--max-seconds S` (all lives together),
+`--seed N|random` (0 unless given), `--peek` (she knows the whole map), `--secrets` (out only with
+every secret), `--expert` (every item, then out), `--stall S` (the 100% runs: over after S game
+seconds with nothing new), `--fight SKILL` (monsters in), `--mortal` (no god mode).

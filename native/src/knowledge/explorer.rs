@@ -12,7 +12,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use super::model::{How, Knowledge, Heard};
+use super::model::{How, Knowledge, Heard, Note, SUSPICION_MIN};
+use crate::movers::cycles_back;
 use crate::geom::{dist, segment_distance, segments_cross, Point};
 use crate::motor::follower::RouteFollower;
 use crate::motor::{Controls, Observation};
@@ -69,6 +70,12 @@ const NOISE_TICS: i64 = 60 * 35;
 const CAUSE_TICS: i64 = 35;
 /// ...is gone to look at first, for this long (a timed door shuts)
 const URGENT_TICS: i64 = 6 * 35;
+/// how fast she's taken to get places while a door she opened holds (units a tic: below a run)
+const OPEN_SPEED: f64 = 10.0;
+/// (an objective to be had only while something she set off is open)
+const WHILE_OPEN: &str = " (while it's open)";
+/// (an objective that would cut her off from others: after them)
+const LATER: &str = " (after what it cuts off)";
 /// at most one look round this often (stairs build in many steps)
 const GLANCE_GAP: i64 = 5 * 35;
 /// tics after a walk-over line goes off unseen, before looking
@@ -142,8 +149,9 @@ pub struct Objective {
     pub heard: Option<Heard>,
     /// room, wall: the wall to face once there
     pub look_at: Option<Point>,
-    /// wall: the line to press use on
+    /// wall: the line to press use on, and how suspicious it is
     pub wall: Option<usize>,
+    pub suspicion: f64,
     /// nothing safer left: one-way drops, nukage are all right
     pub risky: bool,
     /// teleporter: all the lines of its pad (one objective)
@@ -154,6 +162,8 @@ pub struct Objective {
     pub urgent: bool,
     /// urgent only by a route no longer than this (further: in its turn)
     pub worth: Option<f64>,
+    /// it would cut her off from where other objectives are, as far as she knows: those first
+    pub later: bool,
 }
 
 /// An objective's identity, for dropping it a while.
@@ -176,6 +186,8 @@ impl Objective {
             thing: None,
             urgent: false,
             worth: None,
+            later: false,
+            suspicion: 0.0,
         }
     }
 
@@ -185,10 +197,14 @@ impl Objective {
     }
 
     /// Taken up before anything nearer of a lower one: the exit, then the doors and switches a
-    /// key she has opens (what the key was got for).
+    /// key she has opens (what the key was got for), and what can't wait; last, what would cut
+    /// her off from other things to do.
     pub fn priority(&self) -> i32 {
         if self.kind == Kind::Exit {
             return 0;
+        }
+        if self.later && !self.urgent {
+            return 3; // (first what it would cut her off from; but not what's to be had only now)
         }
         if matches!(self.kind, Kind::Door | Kind::Switch) && self.trigger.as_ref().is_some_and(|t| t.info.lock != Lock::None) {
             return 1;
@@ -307,6 +323,12 @@ pub struct Explorer {
     /// where she could get to, with nothing at all to do
     trapped: Option<BTreeSet<usize>>,
     suspecting: Suspecting,
+    /// walls pressed round about since there was last anything else to do (the 100% runs)
+    panic_tries: usize,
+    /// (that round done: only the walls with more to go on)
+    strong_only: bool,
+    /// (for tracing: the tics, from EVIL_DEBUG_OBJECTIVES=from-to, whose choices are logged in full)
+    debug_tics: Option<(i64, i64)>,
 }
 
 /// What the view's built from: rebuilt when it changes.
@@ -346,6 +368,9 @@ impl Explorer {
             exits_open: true,
             trapped: None,
             suspecting: Suspecting::No,
+            panic_tries: 0,
+            strong_only: false,
+            debug_tics: debug_tics(),
         }
     }
 
@@ -383,6 +408,11 @@ impl Explorer {
                 // (what comes back is only as moved till it's due back: MAP23's timed door)
                 let back = done + timing.and_then(|tm| tm.hold.map(|hold| (hold + tm.travel) as i64)).unwrap_or(0);
                 if !t.permanent() && timing.is_some_and(|tm| tm.hold.is_some()) && now > back {
+                    // (back at rest, as far as she knows, whatever had it before: a door opened
+                    // for good, then pressed open again, shuts after its wait: E2M4's door 48)
+                    if cycles_back(t.info.special, &t.info.description) && k.seen_tic.get(&s).copied().unwrap_or(-1) < back {
+                        out[s] = vec![nav.movers.initial[s]];
+                    }
                     continue;
                 }
                 if k.seen_tic.get(&s).copied().unwrap_or(-1) < done {
@@ -446,6 +476,39 @@ impl Explorer {
     /// again; exits open).
     pub fn fresh_view(&self) -> Rc<View> {
         Rc::new(self.build_view(true))
+    }
+
+    /// The once-only lines she's used this life: spent, to the planner (E3M4's door; E2M1's
+    /// door switch 288, pressed once from the alcove: the room behind is had then or not at all).
+    fn spent_once(&self) -> BTreeSet<usize> {
+        let k = &self.knowledge;
+        k.fired.iter().filter(|f| f.life == k.lives && self.nav.triggers.iter().any(|t| t.line == f.line as i64 && t.once())).map(|f| f.line).collect()
+    }
+
+    /// Sectors a door or lift she pressed open this life holds open for now (as `states` has
+    /// them), and the tic each starts back. (Pressed: what she opened to go through; not a lift
+    /// she walked onto, which takes her away from where she was: E2M4's lift 66.)
+    fn open_for_now(&self, tic: i64) -> BTreeMap<usize, i64> {
+        let (k, nav) = (&self.knowledge, &self.nav);
+        let known: BTreeMap<i64, (TriggerLine, BTreeSet<usize>)> = k.known_triggers().into_iter().map(|(t, s)| (t.line, (t, s))).collect();
+        let mut out: BTreeMap<usize, i64> = BTreeMap::new();
+        for f in k.fired.iter().filter(|f| f.life == k.lives && f.how == How::Use) {
+            let Some((t, sectors)) = known.get(&(f.line as i64)) else { continue };
+            if t.permanent() || t.line < 0 || !cycles_back(t.info.special, &t.info.description) {
+                continue;
+            }
+            for (s, hs) in t.effects.iter().filter(|(s, _)| sectors.contains(s)) {
+                let Some(&h) = hs.first() else { continue };
+                let timing = nav.movers.timing(t.info.special, &t.info.description, *s, h);
+                let Some(hold) = timing.hold else { continue };
+                let until = f.tic + (timing.travel + hold) as i64;
+                if tic < until {
+                    let e = out.entry(*s).or_insert(until);
+                    *e = (*e).max(until);
+                }
+            }
+        }
+        out
     }
 
     fn spent(&self, fresh: bool) -> (BTreeSet<usize>, BTreeSet<usize>) {
@@ -550,12 +613,41 @@ impl Explorer {
         let keys = obs.keys.unwrap_or_default();
         let states = self.states();
         // (what she could get to using what she's learned: the planner works out how)
-        let actions: Vec<&TriggerLine> = view.triggers.iter().filter(|t| !t.effects.is_empty()).collect();
+        let spent = self.spent_once();
+        let actions: Vec<&TriggerLine> = view.triggers.iter().filter(|t| !t.effects.is_empty() && !t.linedef().is_some_and(|li| spent.contains(&li))).collect();
         let (reach, states_all, _) = view.saturate(here, &states, keys, &[], &actions);
         self.reach = reach.clone();
+        // (what she can get to only while a door or lift she's pressed open is open: go now, as a
+        // player goes through a door before it shuts, if near enough to make it: E2M1's door 44,
+        // whose only other switch is on the far side. Only somewhere she's never walked: back
+        // where she's been can wait, there'll be a way or she'll find one)
+        let open = self.open_for_now(obs.tic);
+        let while_open: BTreeSet<usize> = if open.is_empty() {
+            BTreeSet::new()
+        } else {
+            let mut shut = states.clone();
+            for &s in open.keys() {
+                shut[s] = vec![nav.movers.initial[s]];
+            }
+            let (reach_shut, _, _) = view.saturate(here, &shut, keys, &[], &actions);
+            let beyond: BTreeSet<usize> = reach.difference(&reach_shut).copied().collect();
+            if beyond.is_disjoint(&self.knowledge.visited) {
+                beyond
+            } else {
+                BTreeSet::new()
+            }
+        };
+        let closes = open.values().copied().min().unwrap_or(obs.tic);
         let mut out: Vec<Objective> = Vec::new();
         let by_line: BTreeMap<usize, &TriggerLine> = nav.triggers.iter().filter_map(|t| t.linedef().map(|li| (li, t))).collect();
         let k = &self.knowledge;
+        // (where she can set off an exit from, as things are)
+        let exit_polys: BTreeSet<usize> = k
+            .exits()
+            .into_iter()
+            .filter_map(|li| by_line.get(&li).filter(|t| t.info.lock.satisfied(keys)))
+            .flat_map(|t| t.activators.intersection(&reach).copied().collect::<Vec<_>>())
+            .collect();
         if self.exits_open {
             for li in k.exits() {
                 if let Some(t) = by_line.get(&li).filter(|t| !t.activators.is_disjoint(&reach) && t.info.lock.satisfied(keys)) {
@@ -627,16 +719,37 @@ impl Explorer {
         out.extend(self.unvisited(&reach, pos));
         out.extend(self.noises(&reach, pos, obs.tic));
         out.extend(hooks.wanted(self, obs, &reach, pos));
+        if !while_open.is_empty() {
+            for o in out.iter_mut().filter(|o| o.kind != Kind::Exit && nav.poly_at(o.goal).is_some_and(|p| while_open.contains(&p))) {
+                o.urgent = true;
+                o.worth = Some((closes - obs.tic) as f64 * OPEN_SPEED);
+                o.label = format!("{}{WHILE_OPEN}", o.label);
+            }
+        }
         // (not anywhere that would cut her off from most of what she can get to now, as far as
         // she knows; the way back as it'll be: a door that closes again shut, unless something
-        // opens it for good, but for one she can open from where she'll be: MAP12's door 31)
+        // opens it for good, but for one she can open from where she'll be: MAP12's door 31; a
+        // lift the same, at rest unless she can call it from there: MAP27's lift 156, whose only
+        // switch is on it, over the room below)
         let doors = view.local_doors(keys);
         let known_triggers = self.knowledge.known_triggers();
-        let for_good: BTreeSet<usize> = known_triggers.iter().filter(|(t, _)| t.permanent()).flat_map(|(_, s)| s.iter().copied()).collect();
+        // (not where a door or lift that comes back was set off since one that stays: E2M4's
+        // door 48, open for good, pressed again from outside, shuts behind her)
+        let last_fired = |pred: &dyn Fn(&TriggerLine) -> bool, s: usize| -> i64 {
+            let lines: BTreeSet<i64> = known_triggers.iter().filter(|(t, secs)| pred(t) && secs.contains(&s)).map(|(t, _)| t.line).collect();
+            self.knowledge.fired.iter().filter(|f| f.life == self.knowledge.lives && lines.contains(&(f.line as i64))).map(|f| f.tic).max().unwrap_or(-1)
+        };
+        let for_good: BTreeSet<usize> = known_triggers
+            .iter()
+            .filter(|(t, _)| t.permanent())
+            .flat_map(|(_, s)| s.iter().copied())
+            .filter(|&s| last_fired(&|t| !t.permanent() && cycles_back(t.info.special, &t.info.description), s) <= last_fired(&|t| t.permanent(), s))
+            .collect();
         let mut states_back = states_all.clone();
         let mut openers: Vec<(TriggerLine, BTreeSet<usize>)> = Vec::new();
         for (t, secs) in &known_triggers {
-            if !t.permanent() && t.info.category.is_door() {
+            let comes_back = t.info.category.is_door() || (t.info.category == Category::Lift && cycles_back(t.info.special, &t.info.description));
+            if !t.permanent() && comes_back && !t.linedef().is_some_and(|li| spent.contains(&li)) {
                 let shut: BTreeSet<usize> = secs.difference(&for_good).copied().collect();
                 for &s in &shut {
                     states_back[s] = vec![nav.movers.initial[s]];
@@ -655,9 +768,7 @@ impl Explorer {
                     .filter(|(t, secs)| !t.activators.is_disjoint(&after) && t.info.lock.satisfied(keys) && secs.iter().any(|&x| st[x] == vec![nav.movers.initial[x]]))
                     .map(|(_, secs)| secs)
                     .collect();
-                if more.is_empty() {
-                    return after;
-                }
+                let before = st.clone();
                 for secs in more {
                     for &x in secs {
                         for &h in &states_all[x] {
@@ -665,32 +776,68 @@ impl Explorer {
                         }
                     }
                 }
+                if st == before {
+                    return after; // (nothing more opens)
+                }
             }
         };
-        let mut back: BTreeMap<usize, bool> = BTreeMap::new();
-        let mut returnable = |o: &Objective| -> bool {
-            if matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Key) {
-                return true; // (worth the risk: where it leads is the unknown, keys open the way)
+        // (what of where she can get to now she couldn't get back to from a poly)
+        let mut afters: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+        let mut lost_from = |p: usize| -> BTreeSet<usize> {
+            let after = afters.entry(p).or_insert_with(|| way_back(p));
+            if after.contains(&here) {
+                BTreeSet::new()
+            } else {
+                reach.difference(after).copied().collect()
             }
-            let Some(p) = nav.poly_at(o.goal) else { return false };
-            *back.entry(p).or_insert_with(|| {
-                let after = way_back(p);
-                after.contains(&here) || after.intersection(&reach).count() as f64 >= KEEP_REACH * reach.len() as f64
-            })
         };
         let tic = obs.tic;
         let mut usable = |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
             if risky {
                 // nothing safe left: anything, one-way drops and nukage and all; but not for a
-                // sound (MAP09: a noise far off took her down into a pit)
+                // sound (MAP09: a noise far off took her down into a pit), and never away from
+                // every way out there is (MAP24's secret ledge over the nukage pit: the level
+                // given up for a look)
                 return objectives
                     .into_iter()
                     .filter(|o| o.kind != Kind::Noise)
+                    .filter(|o| exit_polys.is_empty() || o.kind == Kind::Exit || nav.poly_at(o.goal).map(&mut lost_from).is_none_or(|g| !exit_polys.is_subset(&g)))
                     .map(|o| Objective { label: format!("{} (risky)", o.label), risky: true, ..o })
                     .filter(|o| this.fresh(o, tic))
                     .collect();
             }
-            objectives.into_iter().filter(|o| this.fresh(o, tic) && returnable(o) && !hooks.dangerous(obs, o)).collect()
+            let mut kept: Vec<Objective> = Vec::new();
+            let mut lost: Vec<BTreeSet<usize>> = Vec::new();
+            for o in objectives {
+                if !this.fresh(&o, tic) || hooks.dangerous(obs, &o) {
+                    continue;
+                }
+                let gone = nav.poly_at(o.goal).map(&mut lost_from);
+                // (worth the risk, however far she can't get back from: the exit, a teleporter,
+                // where it leads is the unknown; a key, it opens the way)
+                let risk_it = matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Key);
+                // (most of what she can get to, and never the way out: MAP24's nukage pit, where a
+                // wall was worth a one-way drop by the rest of it)
+                let keeps = gone.as_ref().is_some_and(|g| (reach.len() - g.len()) as f64 >= KEEP_REACH * reach.len() as f64 && (exit_polys.is_empty() || !exit_polys.is_subset(g)));
+                if risk_it || keeps {
+                    lost.push(gone.unwrap_or_default());
+                    kept.push(o);
+                }
+            }
+            // what would cut her off from where there's more to do, as far as she knows, after
+            // that (as a player finishes a room before dropping out of it: E2M1's, with the
+            // teleporter in it, left by its door, whose switches are spent or inside)
+            let goals: Vec<Option<usize>> = kept.iter().map(|o| nav.poly_at(o.goal)).collect();
+            for (i, o) in kept.iter_mut().enumerate() {
+                if o.kind == Kind::Exit || lost[i].is_empty() {
+                    continue;
+                }
+                if goals.iter().enumerate().any(|(j, g)| j != i && g.is_some_and(|g| lost[i].contains(&g))) {
+                    o.later = true;
+                    o.label = format!("{}{LATER}", o.label);
+                }
+            }
+            kept
         };
         // with nothing else left, the ways between rooms never walked over (walk-over lines are
         // thresholds: E4M7's), and last of all, those onto floors that hurt (E4M2's door opener
@@ -1101,7 +1248,7 @@ impl Explorer {
             }
         }
         // (the once-only lines she's used this life are spent: E3M4's door)
-        let fired: BTreeSet<usize> = k.fired.iter().filter(|f| f.life == k.lives && nav.triggers.iter().any(|t| t.line == f.line as i64 && t.once())).map(|f| f.line).collect();
+        let fired = self.spent_once();
         let plan = |goal: Point| view.plan(obs.pos(), &[goal], &Plan { keys, states: Some(&states), key_items: &key_items, max_expansions: 2000, max_seconds: PLAN_SECONDS, goal_triggers: &[], fired: &fired });
         let mut route = plan(obj.goal);
         // no way to the nearest spot to press it from: the next nearest (MAP08's exit door)
@@ -1230,7 +1377,7 @@ impl Explorer {
     pub fn restart(&mut self) {
         if let Some(t) = self.trapped.take() {
             self.log.push(format!("--- that was a trap ({} polys): not going back in", t.len()));
-            self.knowledge.traps.push(t);
+            self.knowledge.note(Note::Trap(t));
         }
         self.knowledge.restart();
         self.log.push(format!("--- died: life {}", self.knowledge.lives));
@@ -1246,6 +1393,19 @@ impl Explorer {
         self.view = None;
         self.held_since = None;
         self.urgent_n = self.knowledge.heard.len();
+        self.panic_tries = 0;
+    }
+
+    /// Taking over a run played back to here (replay): what she's heard and set off so far is
+    /// old news, nothing's being done.
+    pub fn resume(&mut self, tic: i64) {
+        self.heard_n = self.knowledge.heard.len();
+        self.glanced = self.knowledge.fired.len();
+        self.urgent_n = self.knowledge.heard.len();
+        self.current = None;
+        self.follower = None;
+        self.since = tic;
+        self.log.push(format!("--- played back to tic {tic}: from here, the bot as it is now"));
     }
 
     /// Something else has the controls this tic (a fight): take in what's seen, and carry on
@@ -1403,7 +1563,7 @@ impl Explorer {
             let wall = obj.wall.unwrap_or(0);
             if self.look_until.is_none() {
                 self.look_until = Some(obs.tic + WALL_TICS + 20);
-                self.knowledge.tried_walls.insert(wall, obs.keys.unwrap_or_default());
+                self.knowledge.note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
             }
             let at = obj.look_at.unwrap_or(obj.goal);
             let bearing = (at.1 - obs.y).atan2(at.0 - obs.x).to_degrees();
@@ -1442,7 +1602,7 @@ impl Explorer {
         let Some(f) = &mut self.follower else { return };
         let presses = std::mem::take(&mut f.failed_presses);
         for (at, li) in presses {
-            for other in self.knowledge.failed_press(at, li) {
+            for other in self.knowledge.note(Note::FailedPress(at, li)) {
                 self.log.push(format!("tic {}: line {li} did nothing: line {other} is in the way of it", obs.tic));
             }
         }
@@ -1457,9 +1617,8 @@ impl Explorer {
         }
         let missed = std::mem::take(&mut f.missed);
         for j in missed {
-            let n = self.knowledge.missed_jumps.entry(j.key()).or_insert(0);
-            *n += 1;
-            let n = *n;
+            let n = self.knowledge.missed_jumps.get(&j.key()).copied().unwrap_or(0) + 1;
+            self.knowledge.note(Note::MissedJump(j.key(), n));
             self.log.push(format!(
                 "tic {}: missed the jump off ({:.0}, {:.0}) {}",
                 obs.tic,
@@ -1476,9 +1635,9 @@ impl Explorer {
     /// STUCK_TIMES times, it's left out of the way (MAP18).
     fn note_stuck(&mut self, obs: &Observation) {
         let Some(p) = self.nav.poly_at(obs.pos()) else { return };
-        let n = self.knowledge.stuck_at.entry(p).or_insert(0);
-        *n += 1;
-        if *n == STUCK_TIMES {
+        let n = self.knowledge.stuck_at.get(&p).copied().unwrap_or(0) + 1;
+        self.knowledge.note(Note::Stuck(p, n));
+        if n == STUCK_TIMES {
             self.log.push(format!("tic {}: stuck at ({:.0}, {:.0}) {STUCK_TIMES} times: not going that way again", obs.tic, obs.x, obs.y));
         }
     }
@@ -1510,17 +1669,17 @@ impl Explorer {
         if obj.kind == Kind::Frontier {
             let known = k.known_polys();
             if obj.reveals.iter().any(|&p| known.contains(&(p as usize))) {
-                return true; // (seen it on the way)
+                return self.ends(obs, "seen it on the way");
             }
         }
         if obj.kind == Kind::Teleporter && obj.trigger.as_ref().is_some_and(|t| usize::try_from(t.line).is_ok_and(|li| k.teleports.contains_key(&li))) {
-            return true; // (been through)
+            return self.ends(obs, "been through");
         }
         if obj.kind != Kind::Exit && !self.exit_last && k.exits().len() > self.exits_seen {
-            return true; // (an exit came into view)
+            return self.ends(obs, "an exit came into view");
         }
         if hooks.gone(obs, &obj) {
-            return true; // (picked up, killed)
+            return self.ends(obs, "gone");
         }
         let heard: Vec<Heard> = k.heard[self.urgent_n.min(k.heard.len())..].to_vec();
         self.urgent_n = k.heard.len();
@@ -1528,10 +1687,10 @@ impl Explorer {
         // of jumps: MAP08's)
         let jumping = self.follower.as_ref().is_some_and(RouteFollower::jumps_ahead);
         if !(obj.kind == Kind::Noise && obj.urgent) && !jumping && heard.iter().any(|h| self.urgent(h, obs.tic) && self.worth_a_look(h)) {
-            return true;
+            return self.ends(obs, "something went off out of sight");
         }
         if !jumping && hooks.interrupt(self, obs, &obj) {
-            return true;
+            return self.ends(obs, "interrupted");
         }
         if obs.tic - self.since > self.allowed {
             self.drop_objective(&obj, obs, "took too long");
@@ -1542,6 +1701,14 @@ impl Explorer {
             return true;
         }
         false
+    }
+
+    /// (an objective given up mid-way, for whoever's tracing: why)
+    fn ends(&mut self, obs: &Observation, why: &str) -> bool {
+        if self.debug_tics.is_some_and(|(a, b)| (a..=b).contains(&obs.tic)) {
+            self.log.push(format!("  (objective ends at tic {}: {why})", obs.tic));
+        }
+        true
     }
 
     fn drop_objective(&mut self, obj: &Objective, obs: &Observation, why: &str) {
@@ -1577,11 +1744,12 @@ impl Explorer {
         found
             .into_iter()
             .take(if panic { PANIC_WALLS } else { SUSPECTS })
-            .filter(|(_, _, stand, _)| self.standable(*stand, false))
+            .filter(|(score, _, stand, _)| self.standable(*stand, false) && !(self.strong_only && *score <= SUSPICION_MIN))
             .map(|(score, li, stand, mid)| {
                 let mut o = Objective::new(Kind::Wall, stand, format!("try the wall (line {li}, {score:.1})"));
                 o.look_at = Some(mid);
                 o.wall = Some(li);
+                o.suspicion = score;
                 o
             })
             .collect()
@@ -1602,24 +1770,38 @@ impl Explorer {
         self.exits_open = !self.exit_last;
         let perceive = self.knowledge.perceive;
         let mut found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        if found {
+            self.panic_tries = 0;
+        }
         if !found && perceive && self.suspecting == Suspecting::No {
             // (nothing else: walls that might hide something, pressed in turn)
             self.suspecting = Suspecting::Walls;
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
             if found {
+                self.panic_tries = 0;
                 self.log.push(format!("tic {}: nothing else to do: trying walls", obs.tic));
             }
         }
+        // (with the exit there, held back for what's left: one round of the walls with little to
+        // go on, then out; a press that turns up something to do starts another. E2M5 went round
+        // every wall of the level)
+        self.strong_only = self.exit_last && self.panic_tries >= PANIC_WALLS;
         if !found && perceive && (!self.exit_last || !self.exits_open) {
             // (and nothing to try either: is there a way out of here at all? Every wall round,
             // nearest first, as a player in a pit with no way out would)
             self.suspecting = Suspecting::Panic;
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
             if found {
+                // (counted: walls with no more to go on than one weak sign; those with more are
+                // all pressed: E4M7's line 1283, E4M9's 1637)
+                if self.current.as_ref().is_some_and(|o| o.suspicion <= SUSPICION_MIN) {
+                    self.panic_tries += 1;
+                }
                 self.log.push(format!("tic {}: nothing at all to do: pressing every wall round here", obs.tic));
             }
         }
         self.suspecting = Suspecting::No;
+        self.strong_only = false;
         if !found && self.exit_last && hooks.before_exit(self, obs) {
             self.log.push(format!("tic {}: nothing else to do here: the level again, for what's left", obs.tic));
             self.restart_wanted = true;
@@ -1642,7 +1824,7 @@ impl Explorer {
             // was the trouble, not the way: E3M4's, MAP05's, MAP27's)
             self.log.push(format!("tic {}: nothing else to do: the {} places she got stuck get another go", obs.tic, stuck.len()));
             for p in stuck {
-                self.knowledge.stuck_at.insert(p, STUCK_TIMES - 1);
+                self.knowledge.note(Note::Stuck(p, STUCK_TIMES - 1));
             }
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
         }
@@ -1661,13 +1843,25 @@ impl Explorer {
     /// one nearest by the way there (teleporters and lifts make those very different: MAP24).
     fn try_objectives(&mut self, obs: &Observation, risky: bool, hooks: &mut dyn Hooks) -> bool {
         for _ in 0..3 {
-            let options: Vec<Objective> = self.ranked(obs, risky, hooks).into_iter().take(COMPARED).collect();
+            let ranked = self.ranked(obs, risky, hooks);
+            if self.debug_tics.is_some_and(|(a, b)| (a..=b).contains(&obs.tic)) {
+                for o in ranked.iter().skip(COMPARED) {
+                    self.log.push(format!("  (not compared) '{}' at ({:.0}, {:.0}), priority {}", o.label, o.goal.0, o.goal.1, o.priority()));
+                }
+            }
+            let options: Vec<Objective> = ranked.into_iter().take(COMPARED).collect();
             if options.is_empty() {
                 return false;
             }
             let mut routed: Vec<(f64, Objective, Vec<Step>)> = Vec::new();
+            let debug = self.debug_tics.is_some_and(|(a, b)| (a..=b).contains(&obs.tic));
             for obj in options {
-                match self.route_to(&obj, obs) {
+                let route = self.route_to(&obj, obs);
+                if debug {
+                    let how = route.as_ref().map_or_else(|| "no route".to_string(), |st| format!("{:.0} ({} steps)", route_length(st), st.len()));
+                    self.log.push(format!("  option '{}' at ({:.0}, {:.0}), priority {}: {how}", obj.label, obj.goal.0, obj.goal.1, obj.priority()));
+                }
+                match route {
                     Some(steps) if !steps.is_empty() => {
                         let length = route_length(&steps);
                         let mut obj = obj;
@@ -1675,7 +1869,7 @@ impl Explorer {
                             self.log.push(format!("tic {}: '{}' not worth {length:.0} to get to (at most {w:.0}): in its turn", obs.tic, obj.label));
                             obj.urgent = false;
                             obj.worth = None;
-                            obj.label = obj.label.split(" (").next().unwrap_or("").to_string();
+                            obj.label = obj.label.trim_end_matches(WHILE_OPEN).trim_end_matches(" right away").to_string();
                         }
                         // (a wall given up on before: as if twice as far for each time)
                         let tries = obj.wall.map_or(1.0, |w| 2f64.powi(self.wall_drops.get(&w).copied().unwrap_or(0)));
@@ -1700,7 +1894,9 @@ impl Explorer {
             let n = steps.len();
             let states = self.states();
             let view = self.view();
-            self.follower = Some(RouteFollower::new(view, steps, obs.keys.unwrap_or_default(), Some(states), false, obs.tic));
+            let mut follower = RouteFollower::new(view, steps, obs.keys.unwrap_or_default(), Some(states), false, obs.tic);
+            follower.fired.extend(self.spent_once()); // (its replans: not by them either)
+            self.follower = Some(follower);
             self.follower_seen = 0;
             self.log.push(format!("tic {}: {} ({n} steps) | {}", obs.tic, obj.label, self.knowledge.summary()));
             self.current = Some(obj);
@@ -1708,6 +1904,12 @@ impl Explorer {
         }
         false
     }
+}
+
+fn debug_tics() -> Option<(i64, i64)> {
+    let v = std::env::var("EVIL_DEBUG_OBJECTIVES").ok()?;
+    let (a, b) = v.split_once('-')?;
+    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
 }
 
 /// Turn towards `bearing` (or all the way round, for None).
@@ -1719,7 +1921,9 @@ fn turn_to(obs: &Observation, bearing: Option<f64>) -> Controls {
             (-diff).clamp(-TURN_RATE, TURN_RATE)
         }
     };
-    Controls { turn, ..Controls::default() }
+    // (standing still while she turns: no sliding on with what momentum she had)
+    let (forward, strafe) = crate::motor::brake(obs, obs.angle - turn);
+    Controls { turn, forward, strafe, ..Controls::default() }
 }
 
 fn route_length(steps: &[Step]) -> f64 {

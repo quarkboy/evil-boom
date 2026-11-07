@@ -136,6 +136,21 @@ pub struct Fired {
     pub life: i32,
 }
 
+/// What the explorer puts down in the knowledge itself (the rest she sees).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Note {
+    /// a wall pressed, suspecting it, with these keys held
+    TriedWall(usize, Keys),
+    /// a route failed stuck at this poly: the times it has now
+    Stuck(usize, i32),
+    /// a run-jump came down off its landing: the times it has now
+    MissedJump(String, i32),
+    /// a place she was stuck in with nothing to do
+    Trap(BTreeSet<usize>),
+    /// a switch pressed from here did nothing
+    FailedPress(Point, usize),
+}
+
 /// A sound she heard: roughly which way and how far, not what made it.
 #[derive(Clone, Copy, Debug)]
 pub struct Heard {
@@ -187,6 +202,9 @@ pub struct Knowledge {
     pub tried_walls: BTreeMap<usize, Keys>,
     /// lines between her and a switch that did nothing
     pub in_the_way: BTreeSet<usize>,
+    /// what the explorer put down here itself (not seen: done), with the tic: so a run played
+    /// back from its inputs (replay) knows it too
+    pub journal: Vec<(i64, Note)>,
     /// lines the game said need a key when she pressed them: a door or a switch, however it
     /// looks
     pub locked: BTreeSet<usize>,
@@ -302,6 +320,7 @@ impl Knowledge {
             stuck_at: BTreeMap::new(),
             tried_walls: BTreeMap::new(),
             in_the_way: BTreeSet::new(),
+            journal: Vec::new(),
             locked: BTreeSet::new(),
             doubts: BTreeMap::new(),
             rechecked: BTreeSet::new(),
@@ -849,9 +868,36 @@ impl Knowledge {
             .collect()
     }
 
+    /// Put down something the explorer did (and keep it in the journal). What's new of it, for a
+    /// failed press: the lines in the way.
+    pub fn note(&mut self, n: Note) -> Vec<usize> {
+        let tic = self.last.as_ref().map_or(0, |l| l.tic);
+        let out = match &n {
+            Note::TriedWall(li, keys) => {
+                self.tried_walls.insert(*li, *keys);
+                Vec::new()
+            }
+            Note::Stuck(p, times) => {
+                self.stuck_at.insert(*p, *times);
+                Vec::new()
+            }
+            Note::MissedJump(key, times) => {
+                self.missed_jumps.insert(key.clone(), *times);
+                Vec::new()
+            }
+            Note::Trap(polys) => {
+                self.traps.push(polys.clone());
+                Vec::new()
+            }
+            Note::FailedPress(at, li) => self.failed_press(*at, *li),
+        };
+        self.journal.push((tic, n));
+        out
+    }
+
     /// A switch or door pressed from `at` did nothing: what's in the way of the press (lines
     /// along the way to it, near her) is worth a go itself (MAP19). The lines noted.
-    pub fn failed_press(&mut self, at: Point, li: usize) -> Vec<usize> {
+    fn failed_press(&mut self, at: Point, li: usize) -> Vec<usize> {
         let (a, b) = self.nav.map.line_seg(li);
         let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
         let mut out = Vec::new();

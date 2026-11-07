@@ -329,6 +329,21 @@ impl Motion {
     }
 }
 
+/// (forward, strafe) that take away her momentum this tic, facing `facing` (degrees) after the
+/// tic's turn: turning on the spot is standing still while she turns, not sliding on (MAP24: a
+/// look round just after landing a jump, onto a small ledge, slid her off it).
+pub fn brake(obs: &Observation, facing: f64) -> (f64, f64) {
+    let Some((vx, vy)) = obs.velocity else { return (0.0, 0.0) };
+    let (ax, ay) = (-FRICTION * vx, -FRICTION * vy);
+    let (mut cx, mut cy) = (ax / RUN_THRUST * MAX_MOVE, ay / RUN_THRUST * MAX_MOVE);
+    let mag = cx.hypot(cy);
+    if mag > MAX_MOVE {
+        (cx, cy) = (cx * MAX_MOVE / mag, cy * MAX_MOVE / mag);
+    }
+    let (sin, cos) = facing.to_radians().sin_cos();
+    (cx * cos + cy * sin, cx * sin - cy * cos)
+}
+
 /// Heights as Python printed a tuple of floats ("(48.0, 176.0)").
 pub fn fmt_live(h: Option<Heights>) -> String {
     match h {

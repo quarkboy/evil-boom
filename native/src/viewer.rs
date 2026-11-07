@@ -208,9 +208,9 @@ pub struct WatchOptions {
     pub fight: i32,
     pub peek: bool,
     pub expert: bool,
-    /// save the window to out/watch.png after this much game time, and quit
-    pub snapshot: Option<f64>,
     pub seed: Option<u32>,
+    /// the map view centred on a point, zoomed in this much (for looking at one place)
+    pub focus: Option<(f64, f64, f64)>,
 }
 
 struct Watch {
@@ -229,6 +229,7 @@ struct Watch {
     show_all: bool,
     follow: bool,
     zoom: f64,
+    center: Option<Point>,
     bounds: (f64, f64, f64, f64),
     lives_left: i32,
 }
@@ -250,29 +251,9 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     let mut knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
     knowledge.width = VIEW_WIDTH;
     let agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives);
-    let palette = palette(&w);
-    let xs = m.vertexes.iter().map(|v| v.x);
-    let ys = m.vertexes.iter().map(|v| v.y);
-    let bounds = (xs.clone().fold(f64::INFINITY, f64::min), ys.clone().fold(f64::INFINITY, f64::min), xs.fold(f64::NEG_INFINITY, f64::max), ys.fold(f64::NEG_INFINITY, f64::max));
-    let mut watch = Watch {
-        m,
-        map_name: map_name.clone(),
-        engine,
-        agent,
-        palette,
-        frame: None,
-        obs: None,
-        controls: None,
-        options: Vec::new(),
-        options_tic: -1_000_000_000,
-        speed: o.speed,
-        paused: false,
-        show_all: o.show_all,
-        follow: false,
-        zoom: 1.0,
-        bounds,
-        lives_left: o.lives - 1,
-    };
+    let mut watch = Watch::new(&w, m, &map_name, engine, agent, o.focus, o.lives - 1);
+    watch.speed = o.speed;
+    watch.show_all = o.show_all;
     let mut window = Window::new(&format!("evil-doom explorer: {map_name}"), W, H, WindowOptions { resize: true, scale: Scale::FitScreen, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() }).map_err(|e| e.to_string())?;
     window.set_target_fps(60);
     let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H) };
@@ -318,14 +299,31 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
         }
         watch.draw(&mut canvas);
         window.update_with_buffer(&canvas.px, W, H).map_err(|e| e.to_string())?;
-        if let (Some(at), Some(obs)) = (o.snapshot, &watch.obs) {
-            if obs.tic as f64 >= at * TICRATE || watch.engine.finished() {
-                save_png(&out_dir().join("watch.png"), &canvas.px)?;
-                break;
-            }
-        }
     }
     Ok(())
+}
+
+/// The window as it is now (the game's frame, the map, the panels) into out/watch.png, for a run
+/// played as a sweep plays it (run-map --snapshot): drawn once, at the end.
+pub fn save_snapshot(w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, agent: Agent, focus: Option<(f64, f64, f64)>) -> Result<(), String> {
+    snapshot_to(&out_dir().join("watch.png"), w, m, map_name, engine, agent, focus).2
+}
+
+/// The window drawn once into `path`, the game and Evil handed back after (evil drive).
+pub fn snapshot_to(path: &Path, w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, agent: Agent, focus: Option<(f64, f64, f64)>) -> (Engine, Agent, Result<(), String>) {
+    let mut watch = Watch::new(w, m, map_name, engine, agent, focus, 0);
+    let obs = watch.engine.observe();
+    watch.frame = watch.engine.frame();
+    watch.options = watch.agent.objectives(&obs);
+    watch.options_tic = obs.tic;
+    watch.obs = Some(obs);
+    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H) };
+    watch.draw(&mut canvas);
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let result = save_png(path, &canvas.px);
+    (watch.engine, watch.agent, result)
 }
 
 /// PLAYPAL's first palette, as 0RGB.
@@ -345,6 +343,32 @@ fn save_png(path: &Path, px: &[u32]) -> Result<(), String> {
 }
 
 impl Watch {
+    fn new(w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, agent: Agent, focus: Option<(f64, f64, f64)>, lives_left: i32) -> Watch {
+        let xs = m.vertexes.iter().map(|v| v.x);
+        let ys = m.vertexes.iter().map(|v| v.y);
+        let bounds = (xs.clone().fold(f64::INFINITY, f64::min), ys.clone().fold(f64::INFINITY, f64::min), xs.fold(f64::NEG_INFINITY, f64::max), ys.fold(f64::NEG_INFINITY, f64::max));
+        Watch {
+            m,
+            map_name: map_name.to_string(),
+            engine,
+            agent,
+            palette: palette(w),
+            frame: None,
+            obs: None,
+            controls: None,
+            options: Vec::new(),
+            options_tic: -1_000_000_000,
+            speed: 1.0,
+            paused: false,
+            show_all: false,
+            follow: false,
+            zoom: focus.map_or(1.0, |f| f.2),
+            center: focus.map(|f| (f.0, f.1)),
+            bounds,
+            lives_left,
+        }
+    }
+
     fn tic(&mut self) {
         let obs = self.engine.observe();
         self.frame = self.engine.frame();
@@ -363,8 +387,9 @@ impl Watch {
         let pad = 12.0;
         let (mw, mh) = (MAP.2 as f64, MAP.3 as f64);
         let scale = ((mw - 2.0 * pad) / (x1 - x0).max(1.0)).min((mh - 2.0 * pad) / (y1 - y0).max(1.0)) * self.zoom;
-        let (cx, cy) = match (&self.obs, self.follow) {
-            (Some(o), true) => (o.x, o.y),
+        let (cx, cy) = match (&self.obs, self.follow, self.center) {
+            (Some(o), true, _) => (o.x, o.y),
+            (_, _, Some(c)) => c,
             _ => ((x0 + x1) / 2.0, (y0 + y1) / 2.0),
         };
         (MAP.0 as f64 + mw / 2.0 + (p.0 - cx) * scale, MAP.1 as f64 + mh / 2.0 - (p.1 - cy) * scale)

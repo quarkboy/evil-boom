@@ -5,12 +5,19 @@
 //!   evil run-map <wad> <map> [run options]      one map; its log goes to out/explore
 //!   evil dump-nav <wad> <map>                   the level's analysis (for comparing)
 //!   evil follow <wad> <map>                     plan the level, follow the plan (seed 0)
-//!   evil watch <wad> <map> [--speed X] [--all] [--snapshot S] [run options]
+//!   evil drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
+//!   evil sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things
+//!   evil watch <wad> <map> [--speed X] [--all] [run options]
 //!       watch her play, with what she knows beside the game (space pause, +/- speed, A the
 //!       whole map, F follow, wheel zoom, Esc quit)
 //!
-//! Run options: --lives N (3), --max-seconds S (3600), --seed N|random (0), --peek, --secrets,
-//! --expert, --fight SKILL, --mortal.
+//! Run options: --lives N (unlimited), --max-seconds S (3600, all lives together), --seed N|random (0), --peek, --secrets,
+//! --expert, --fight SKILL, --mortal, --stall S (the 100% runs: over after S game seconds, 300
+//! unless told, with nothing more collected or learned); --snapshot S (stop after S game seconds and draw the
+//! viewer's window to out/watch.png; nothing's drawn till then) and --focus X,Y,ZOOM (its map
+//! centred there); --from FILE@S (play back the run recorded in FILE, out/runs/<IWAD>_<MAP>.run,
+//! which every run-map writes (_expert etc. by the kind of run), to S game seconds, then the bot as it is now: the run from there
+//! goes to <IWAD>_<MAP>_branch.run).
 
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader};
@@ -19,6 +26,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use evildoom::config::resolve_wad;
+use evildoom::specials::classify_line;
 use evildoom::navigator::Navigator;
 use evildoom::sweep::{run_map, RunOptions};
 use evildoom::wad::{load_map, Wad};
@@ -65,6 +73,41 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// What the map says about some sectors: heights, special and tag, each line round them (with
+/// what's on the other side), the lines whose tag moves them, and the things in them.
+fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
+    let w = Wad::open(&resolve_wad(wad))?;
+    let m = load_map(&w, map, &[])?;
+    let nav = Navigator::new(Arc::new(m), 3)?;
+    let m = &nav.map;
+    for arg in sectors {
+        let si: usize = arg.parse().map_err(|_| format!("not a sector: {arg}"))?;
+        let s = m.sectors.get(si).ok_or_else(|| format!("no sector {si}"))?;
+        println!("sector {si}: floor {} ceiling {} ({} / {}), light {}, special {}, tag {}", s.floor, s.ceiling, s.floor_tex, s.ceiling_tex, s.light, s.special, s.tag);
+        for l in &m.linedefs {
+            let (front, back) = (m.front_sector(l), m.back_sector(l));
+            if front != Some(si) && back != Some(si) {
+                continue;
+            }
+            let other = if front == Some(si) { back } else { front };
+            let side = |sd: u16| m.sidedefs.get(usize::from(sd)).map_or_else(String::new, |d| format!("[{} {} {} @{},{}]", d.upper, d.middle, d.lower, d.x_offset, d.y_offset));
+            let (a, b) = (m.line_seg(l.index).0, m.line_seg(l.index).1);
+            let what = classify_line(l.special).map_or_else(String::new, |i| format!(" {}", i.description));
+            println!("  line {} ({:.0},{:.0})-({:.0},{:.0}) flags {:#x} special {}{what} tag {} -> {} front {} back {}", l.index, a.0, a.1, b.0, b.1, l.flags, l.special, l.tag, other.map_or_else(|| "-".to_string(), |o| format!("sector {o} ({}..{})", m.sectors[o].floor, m.sectors[o].ceiling)), side(l.front), side(l.back));
+        }
+        if s.tag != 0 {
+            for l in m.linedefs.iter().filter(|l| l.tag == s.tag && l.special != 0) {
+                let what = classify_line(l.special).map_or_else(String::new, |i| i.description);
+                println!("  moved by line {} ({what}) between sectors {:?}/{:?}", l.index, m.front_sector(l), m.back_sector(l));
+            }
+        }
+        for t in m.things.iter().filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| nav.mesh.polys[p].as_ref().is_some_and(|q| q.sector == si))) {
+            println!("  thing {} at ({}, {}) flags {:#x}", t.kind, t.x, t.y, t.flags);
+        }
+    }
+    Ok(())
+}
+
 /// Plan the level from the start and follow the plan in the game (seed 0): the follower's log.
 fn follow(wad: &str, map: &str) -> Result<(), String> {
     use evildoom::engine::{Engine, Options};
@@ -107,6 +150,18 @@ fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<String>), Stri
         let mut value = |name: &str| it.next().cloned().ok_or_else(|| format!("{name} needs a value"));
         match a.as_str() {
             "--lives" => o.lives = value("--lives")?.parse().map_err(|_| "--lives: a number")?,
+            "--snapshot" => o.snapshot = Some(value("--snapshot")?.parse().map_err(|_| "--snapshot: game seconds")?),
+            "--stall" => o.stall_seconds = value("--stall")?.parse().map_err(|_| "--stall: game seconds")?,
+            "--from" => {
+                let v = value("--from")?;
+                let (file, at) = v.rsplit_once('@').ok_or("--from: FILE@SECONDS")?;
+                o.from = Some((std::path::PathBuf::from(file), at.parse().map_err(|_| "--from: FILE@SECONDS")?));
+            }
+            "--focus" => {
+                let v: Vec<f64> = value("--focus")?.split(',').filter_map(|x| x.trim().parse().ok()).collect();
+                let [x, y, z] = v.as_slice() else { return Err("--focus: X,Y,ZOOM".into()) };
+                o.focus = Some((*x, *y, *z));
+            }
             "--max-seconds" => o.max_seconds = value("--max-seconds")?.parse().map_err(|_| "--max-seconds: a number")?,
             "--seed" => {
                 let v = value("--seed")?;
@@ -126,7 +181,7 @@ fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<String>), Stri
 
 /// The options as they'd be given again (for the child processes).
 fn option_args(o: &RunOptions) -> Vec<String> {
-    let mut out = vec!["--lives".to_string(), o.lives.to_string(), "--max-seconds".into(), o.max_seconds.to_string(), "--seed".into(), o.seed.map_or("random".into(), |s| s.to_string())];
+    let mut out = vec!["--lives".to_string(), o.lives.to_string(), "--max-seconds".into(), o.max_seconds.to_string(), "--stall".into(), o.stall_seconds.to_string(), "--seed".into(), o.seed.map_or("random".into(), |s| s.to_string())];
     if o.fight > 0 {
         out.push("--fight".into());
         out.push(o.fight.to_string());
@@ -145,6 +200,22 @@ fn run_one(args: &[String]) -> Result<(), String> {
     let (outcome, detail) = run_map(wad, map, &o)?;
     println!("RESULT {outcome} {detail}");
     Ok(())
+}
+
+fn drive(args: &[String]) -> Result<(), String> {
+    let (o, _, rest) = run_options(args)?;
+    let mut names = Vec::new();
+    let mut script = None;
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        if a == "--script" {
+            script = it.next().cloned();
+        } else {
+            names.push(a.clone());
+        }
+    }
+    let ([wad, map], Some(script)) = (names.as_slice(), script) else { return Err("usage: evil drive <wad> <map> --script FILE [run options]".into()) };
+    evildoom::drive::drive(wad, map, &o, std::path::Path::new(&script))
 }
 
 fn sweep(args: &[String]) -> Result<(), String> {
@@ -208,18 +279,24 @@ fn sweep(args: &[String]) -> Result<(), String> {
 #[cfg(feature = "viewer")]
 fn watch(args: &[String]) -> Result<(), String> {
     let (o, _, rest) = run_options(args)?;
-    let mut w = evildoom::viewer::WatchOptions { speed: 1.0, show_all: false, mortal: o.mortal, lives: o.lives, fight: o.fight, peek: o.peek, expert: o.expert, snapshot: None, seed: o.seed };
+    let mut w = evildoom::viewer::WatchOptions { speed: 1.0, show_all: false, mortal: o.mortal, lives: o.lives, fight: o.fight, peek: o.peek, expert: o.expert, seed: o.seed, focus: None };
     let mut names = Vec::new();
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--speed" => w.speed = it.next().and_then(|v| v.parse().ok()).ok_or("--speed: a number")?,
-            "--snapshot" => w.snapshot = Some(it.next().and_then(|v| v.parse().ok()).ok_or("--snapshot: seconds")?),
             "--all" => w.show_all = true,
             _ => names.push(a.clone()),
         }
     }
     let [wad, map] = names.as_slice() else { return Err("usage: evil watch <wad> <map> [options]".into()) };
+    if o.snapshot.is_some() {
+        // (a picture: the run as a sweep plays it, nothing drawn till then)
+        let (outcome, detail) = run_map(wad, map, &o)?;
+        println!("RESULT {outcome} {detail}");
+        return Ok(());
+    }
+    w.focus = o.focus;
     evildoom::viewer::watch(wad, map, &w)
 }
 
@@ -233,10 +310,12 @@ fn main() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         Some("dump-nav") if args.len() == 3 => dump_nav(&args[1], &args[2]),
         Some("follow") if args.len() == 3 => follow(&args[1], &args[2]),
+        Some("sector") if args.len() >= 4 => sector(&args[1], &args[2], &args[3..]),
         Some("run-map") => run_one(&args[1..]),
+        Some("drive") => drive(&args[1..]),
         Some("sweep") => sweep(&args[1..]),
         Some("watch") => watch(&args[1..]),
-        _ => Err("usage: evil sweep|run-map|watch|dump-nav|follow ... (see the source's header)".into()),
+        _ => Err("usage: evil sweep|run-map|watch|drive|dump-nav|follow|sector ... (see the source's header)".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

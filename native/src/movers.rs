@@ -43,6 +43,12 @@ fn floor_raise(special: u16) -> Option<f64> {
     }
 }
 
+/// Does it go once and come back to where it was (a door that waits and closes, or closes and
+/// opens again; a lift down and up)? Not a crusher, nor a lift that goes up and down for ever.
+pub fn cycles_back(special: u16, description: &str) -> bool {
+    LIFT.contains(&special) || DOOR_CLOSE_30.contains(&special) || ((DOOR_OPEN.contains(&special) || DOOR_CLOSE.contains(&special)) && description.contains("wait"))
+}
+
 /// Stairs: the step height.
 pub fn stairs_step(special: u16) -> Option<f64> {
     match special {

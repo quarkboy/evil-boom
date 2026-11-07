@@ -16,6 +16,7 @@
 
 pub mod config;
 mod det;
+pub mod drive;
 pub mod dsda;
 pub mod engine;
 pub mod geom;
@@ -30,6 +31,7 @@ pub mod nav;
 pub mod navigator;
 pub mod plan;
 pub mod play;
+pub mod replay;
 pub mod sight;
 pub mod specials;
 mod stats;

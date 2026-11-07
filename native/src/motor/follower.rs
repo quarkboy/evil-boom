@@ -129,6 +129,15 @@ impl FollowerLog {
     }
 }
 
+/// What a drop ahead the plan didn't mean to take came to.
+enum Drop {
+    None,
+    /// another way on, without it
+    Replanned,
+    /// nothing but such drops: the objective's to be judged again
+    GiveBack(String),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SegEnd {
     Teleport,
@@ -723,8 +732,10 @@ impl RouteFollower {
             return self.walk(obs);
         }
         self.speed_cap = f64::INFINITY;
-        if self.unexpected_drop(obs) {
-            return self.walk(obs);
+        match self.unexpected_drop(obs) {
+            Drop::None => {}
+            Drop::Replanned => return self.walk(obs),
+            Drop::GiveBack(why) => return self.fail(obs, &why),
         }
         if let Some(c) = self.check_blocked(obs) {
             return c;
@@ -1383,12 +1394,15 @@ impl RouteFollower {
 
     /// A crossing just ahead that's become a one-way drop the plan didn't mean to take (MAP08:
     /// walking to the red key goes over a line that sinks the bridge back into the nukage).
-    /// Stop and replan with the heights as they are. True if it replanned.
-    fn unexpected_drop(&mut self, obs: &Observation) -> bool {
+    /// Stop and replan with the heights as they are: on if there's a way without such a drop;
+    /// else the objective goes back to be judged again, the ground as it is now (E2M4: a floor
+    /// raised on the way left the goal down in the blood pit, a drop into a trap).
+    fn unexpected_drop(&mut self, obs: &Observation) -> Drop {
         let view = Rc::clone(&self.view);
         let mesh = &view.nav.mesh;
-        let Some(path) = self.step().path.clone() else { return false };
-        let planned: BTreeSet<String> = path.steps.iter().filter(|n| n.contains("one-way drop")).filter_map(|n| n.split("into sector ").nth(1).map(str::to_string)).collect();
+        let Some(path) = self.step().path.clone() else { return Drop::None };
+        // (the drops the plan means to take, this step's and the rest's)
+        let planned: BTreeSet<String> = self.steps[self.step_i as usize..].iter().filter_map(|st| st.path.as_ref()).flat_map(|p| p.steps.iter()).filter(|n| n.contains("one-way drop")).filter_map(|n| n.split("into sector ").nth(1).map(str::to_string)).collect();
         let upto = (self.poly_i + 4).min(path.polys.len().saturating_sub(1));
         for j in self.poly_i..upto {
             let (cur, nxt) = (path.polys[j], path.polys[j + 1]);
@@ -1396,9 +1410,9 @@ impl RouteFollower {
             if cs == ns {
                 continue;
             }
-            let Some(portal) = mesh.poly(cur).portals.iter().map(|&pi| &mesh.portals[pi]).find(|p| p.other(cur) == nxt) else { return false };
+            let Some(portal) = mesh.poly(cur).portals.iter().map(|&pi| &mesh.portals[pi]).find(|p| p.other(cur) == nxt) else { return Drop::None };
             if dist(closest_on_portal(obs.pos(), portal.p1, portal.p2), obs.pos()) > DROP_CHECK_DIST {
-                return false;
+                return Drop::None;
             }
             let (a, b) = (obs.heights[cs], obs.heights[ns]);
             let key = (cs, ns, [a.floor.to_bits(), a.ceiling.to_bits(), b.floor.to_bits(), b.ceiling.to_bits()]);
@@ -1419,12 +1433,29 @@ impl RouteFollower {
                 self.speed_cap = 0.0;
                 self.progress_tic = obs.tic;
                 self.step_tic = obs.tic;
-                return false;
+                return Drop::None;
             }
             self.drops_ok.insert(key);
-            return self.replan(obs, &format!("unexpected drop into sector {ns}"), true);
+            let why = format!("unexpected drop into sector {ns}");
+            // (heights she allowed for, a lift down that she counted on coming up: only the timing
+            // is off, on by the drop as before. Heights she didn't: what's beyond is for the
+            // explorer to judge again)
+            let allowed = |s: usize, h: Heights| self.states[s].iter().any(|x| (x.floor - h.floor).abs() < 1.0 && (x.ceiling - h.ceiling).abs() < 1.0);
+            let foreseen = allowed(cs, a) && allowed(ns, b);
+            if !self.replan(obs, &why, true) {
+                return if foreseen { Drop::None } else { Drop::GiveBack(format!("{why}, and no other way on")) };
+            }
+            if foreseen {
+                return Drop::Replanned;
+            }
+            // (the new way: none of the drops it takes that the plan didn't mean to)
+            let dropped: BTreeSet<String> = self.steps[self.step_i as usize..].iter().filter_map(|st| st.path.as_ref()).flat_map(|p| p.steps.iter()).filter(|n| n.contains("one-way drop")).filter_map(|n| n.split("into sector ").nth(1).map(str::to_string)).collect();
+            if !dropped.is_subset(&planned) {
+                return Drop::GiveBack(format!("{why}: the only way on drops where the plan didn't"));
+            }
+            return Drop::Replanned;
         }
-        false
+        Drop::None
     }
 
     /// The first crossing ahead on the path, within reach, that the live heights don't allow.

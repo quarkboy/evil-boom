@@ -69,6 +69,13 @@ impl Agent {
         }
     }
 
+    /// (a level again, asked for by the expert's run, counted: a run played back)
+    pub fn used_restart(&mut self) {
+        if let Agent::Expert(_, c) = self {
+            c.restarts -= 1;
+        }
+    }
+
     /// (no level again to be had: out with what she has)
     pub fn no_more_restarts(&mut self) {
         if let Agent::Expert(_, c) = self {

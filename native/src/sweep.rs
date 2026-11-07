@@ -3,10 +3,14 @@
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::knowledge::model::Note;
+use crate::map::MapData;
+use crate::replay::{Entry, Recording};
 use crate::config::{out_dir, resolve_wad};
 use crate::engine::{Engine, Options};
 use crate::knowledge::completion::{most_items, COUNTED};
@@ -40,12 +44,22 @@ pub struct RunOptions {
     pub max_seconds: f64,
     /// no god mode: floors hurt
     pub mortal: bool,
-    /// tries at a map (dying starts it again, knowing what was learned)
+    /// tries at a map (dying starts it again, knowing what was learned), the game time cap
+    /// counting them all (unlimited unless told: lives are for testing, not a resource)
     pub lives: i32,
     /// every switch and door known on sight from the map data
     pub peek: bool,
     /// every secret there is found (going by the tally's count), then the exit
     pub secrets: bool,
+    /// the 100% runs: over once this much game time goes by with nothing more collected (items;
+    /// secrets for --secrets) and nothing new learned of the level (sectors seen, what lines do)
+    pub stall_seconds: f64,
+    /// stop after this much game time and draw the window to out/watch.png (the viewer's)
+    pub snapshot: Option<f64>,
+    /// that picture's map centred here, zoomed in this much
+    pub focus: Option<(f64, f64, f64)>,
+    /// played back from this recording (out/runs) to this many game seconds, then the bot
+    pub from: Option<(std::path::PathBuf, f64)>,
     /// every item that counts picked up, then the exit (no monsters)
     pub expert: bool,
     /// monsters in, at this skill (4: Ultra-Violence), and she fights them (0: none)
@@ -56,7 +70,7 @@ pub struct RunOptions {
 
 impl Default for RunOptions {
     fn default() -> Self {
-        RunOptions { max_seconds: 3600.0, mortal: false, lives: 3, peek: false, secrets: false, expert: false, fight: 0, seed: Some(0) }
+        RunOptions { max_seconds: 3600.0, mortal: false, lives: i32::MAX, peek: false, secrets: false, expert: false, fight: 0, seed: Some(0), snapshot: None, focus: None, from: None, stall_seconds: 300.0 }
     }
 }
 
@@ -145,7 +159,29 @@ fn py_bool(b: bool) -> &'static str {
 }
 
 /// The omniscient plan from where she is, with the heights as they are.
-fn plan_here(nav: &Rc<Navigator>, obs: &Observation, max_seconds: f64) -> LevelPlan {
+/// The 100% runs: the exit last while the count she's after (on the automap, as a player sees it)
+/// is short of all there is; then out.
+fn hold_exit(e: &Engine, agent: &mut Agent, o: &RunOptions, secrets_short: i32, items_short: i32) {
+    let tally = e.tally();
+    if o.secrets {
+        agent.x_mut().exit_last = tally[2].0 < tally[2].1 - secrets_short;
+    } else if o.expert {
+        agent.x_mut().exit_last = tally[0].0 < tally[0].1 - items_short;
+    }
+}
+
+/// (recordings of different kinds of run kept apart)
+fn mode_suffix(o: &RunOptions) -> String {
+    let mut out = String::new();
+    for (on, name) in [(o.fight > 0, "_fight"), (o.expert, "_expert"), (o.secrets, "_secrets"), (o.peek, "_peek")] {
+        if on {
+            out.push_str(name);
+        }
+    }
+    out
+}
+
+pub fn plan_here(nav: &Rc<Navigator>, obs: &Observation, max_seconds: f64) -> LevelPlan {
     let view = nav.full_view();
     let states: States = obs.heights.iter().map(|&h| vec![h]).collect();
     plan_from(&view, obs.pos(), &Rest { keys: obs.keys.unwrap_or_default(), states: Some(&states), reach: None, max_seconds, max_expansions: 20000, fired: &BTreeSet::new() })
@@ -153,7 +189,27 @@ fn plan_here(nav: &Rc<Navigator>, obs: &Observation, max_seconds: f64) -> LevelP
 
 
 /// Play one map; (outcome, detail). Writes the log to out/explore/<IWAD>_<MAP>.txt.
-pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, String), String> {
+/// A level set up to play: the game started, Evil in it, and (`--from`) played back to a
+/// moment of a recorded run. `drawn`: the game draws its frames (for pictures).
+pub struct Setup {
+    pub iwad: PathBuf,
+    pub w: Wad,
+    pub m: Arc<MapData>,
+    pub map_name: String,
+    pub skill: i32,
+    pub nav: Rc<Navigator>,
+    pub e: Engine,
+    pub agent: Agent,
+    pub deaths: i32,
+    /// the last tic's controls, the last observation
+    pub c: Option<Controls>,
+    pub obs: Option<Observation>,
+    /// the run so far, as its inputs
+    pub rec: Recording,
+    pub secrets_short: i32,
+}
+
+pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool) -> Result<Setup, String> {
     let iwad = resolve_wad(wad);
     let w = Wad::open(&iwad)?;
     let map_name = map_name.to_uppercase();
@@ -162,7 +218,7 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     let mut nav = Navigator::new(Arc::clone(&m), skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
-    let mut e = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn: false, seed: o.seed })?;
+    let mut e = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn, seed: o.seed })?;
     e.start();
     if !o.mortal {
         e.set_god();
@@ -175,11 +231,88 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     }
     let mut c: Option<Controls> = None;
     let mut obs: Option<Observation> = None;
-    let t0 = Instant::now();
     let mut deaths = 0;
+    let skill_used = skill;
+    let mut rec = Recording::default();
+    if let Some((path, at)) = &o.from {
+        if o.fight > 0 {
+            return Err("--from: not with monsters (the fight's state isn't played back)".into());
+        }
+        let run = Recording::read(path)?;
+        let to = (at * TICRATE).round() as i64;
+        let mut tics = run.entries.iter().filter_map(|en| if let Entry::Tic(t, ctl) = en { Some((*t, *ctl)) } else { None });
+        let restarts: BTreeMap<i64, String> = run.entries.iter().filter_map(|en| if let Entry::Restart(t, why) = en { Some((*t, why.clone())) } else { None }).collect();
+        let mut notes: BTreeMap<i64, Vec<Note>> = BTreeMap::new();
+        for en in &run.entries {
+            if let Entry::Note(t, n) = en {
+                notes.entry(*t).or_default().push(n.clone());
+            }
+        }
+        while e.tic < to && !e.finished() {
+            if let Some(why) = restarts.get(&e.tic) {
+                deaths += 1;
+                if why == "for what's left" {
+                    agent.used_restart();
+                }
+                rec.entries.push(Entry::Restart(e.tic, why.clone()));
+                e.restart(true);
+                agent.restart();
+                c = None;
+                continue;
+            }
+            if e.tic % 35 == 0 {
+                hold_exit(&e, &mut agent, o, secrets_short, most_items(&m, skill));
+            }
+            let ob = e.observe();
+            agent.x_mut().knowledge.update(&ob, c.as_ref());
+            for n in notes.remove(&ob.tic).unwrap_or_default() {
+                agent.x_mut().knowledge.note(n);
+            }
+            let Some((t, ctl)) = tics.next() else { return Err(format!("{}: ends before {at}s", path.display())) };
+            if t != ob.tic {
+                return Err(format!("{}: tic {t} where {} was expected (a different level, options or engine?)", path.display(), ob.tic));
+            }
+            rec.entries.push(Entry::Tic(t, ctl));
+            e.step(&ctl);
+            c = Some(ctl);
+            obs = Some(ob);
+        }
+        let n = agent.x().knowledge.journal.len();
+        rec.entries.extend(agent.x().knowledge.journal[..n].iter().map(|(t, nt)| Entry::Note(*t, nt.clone())));
+        agent.x_mut().resume(e.tic);
+    }
+    Ok(Setup { iwad, w, m, map_name, skill: skill_used, nav, e, agent, deaths, c, obs, rec, secrets_short })
+}
+
+pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, String), String> {
+    let Setup { iwad, w, m, map_name, skill, nav, mut e, mut agent, mut deaths, mut c, mut obs, mut rec, secrets_short } = setup(wad, map_name, o, o.snapshot.is_some())?;
+    let t0 = Instant::now();
     let mut idle_since: Option<i64> = None;
     let (mut t_engine, mut t_observe, mut t_think) = (0.0, 0.0, 0.0);
-    while (e.tic as f64) < o.max_seconds * TICRATE {
+    let mut journal_n = agent.x().knowledge.journal.len();
+    let until = o.snapshot.map_or(o.max_seconds, |s| s.min(o.max_seconds));
+    // (the 100% runs: the count she's after and what she knows of the level, and when either
+    // last grew: exploring a teleporter maze before any items is getting somewhere, MAP24)
+    let items_short = most_items(&m, skill);
+    let progress = |e: &Engine, x: &Explorer| {
+        let k = &x.knowledge;
+        (if o.secrets { e.tally()[2].0 } else { e.tally()[0].0 }, k.sectors.len(), k.learned.values().map(BTreeSet::len).sum::<usize>())
+    };
+    // (the best so far over the whole run: a level again collecting the same things isn't more)
+    let (mut best, mut best_tic) = (progress(&e, agent.x()), e.tic);
+    let mut stalled = false;
+    while (e.tic as f64) < until * TICRATE {
+        if o.expert || o.secrets {
+            let now = progress(&e, agent.x());
+            if now.0 > best.0 || now.1 > best.1 || now.2 > best.2 {
+                best = (now.0.max(best.0), now.1.max(best.1), now.2.max(best.2));
+                best_tic = e.tic;
+            } else if (e.tic - best_tic) as f64 > o.stall_seconds * TICRATE {
+                agent.x_mut().log.push(format!("tic {}: nothing more collected or learned in {:.0}s: over", e.tic, o.stall_seconds));
+                stalled = true;
+                break;
+            }
+        }
         let mut stranded = idle_since.is_some_and(|i| e.tic - i > STRANDED_TICS) || agent.x().restart_wanted;
         if let (true, Some(ob), Some(p)) = (e.finished() && e.dead(), &obs, agent.player_mut()) {
             let pos = ob.pos();
@@ -232,6 +365,7 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
                     }
                 }
                 agent.x_mut().restart_wanted = false;
+                rec.entries.push(Entry::Restart(e.tic, why.to_string()));
                 e.restart(true);
                 agent.restart();
                 c = None;
@@ -240,9 +374,8 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
             }
             break;
         }
-        if o.secrets && e.tic % 35 == 0 {
-            let (got, of) = e.tally()[2];
-            agent.x_mut().exit_last = got < of - secrets_short;
+        if e.tic % 35 == 0 {
+            hold_exit(&e, &mut agent, o, secrets_short, items_short);
         }
         let t1 = Instant::now();
         let ob = e.observe();
@@ -255,6 +388,12 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
             idle_since = None;
         }
         e.step(&ctl);
+        rec.entries.push(Entry::Tic(ob.tic, ctl));
+        {
+            let k = &agent.x().knowledge;
+            rec.entries.extend(k.journal[journal_n.min(k.journal.len())..].iter().map(|(t, nt)| Entry::Note(*t, nt.clone())));
+            journal_n = k.journal.len();
+        }
         t_observe += (t2 - t1).as_secs_f64();
         t_think += (t3 - t2).as_secs_f64();
         t_engine += t3.elapsed().as_secs_f64();
@@ -301,6 +440,8 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
         "EXITED"
     } else if died {
         "DIED"
+    } else if stalled {
+        "STALLED"
     } else {
         "STUCK"
     };
@@ -326,5 +467,24 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     let _ = std::fs::create_dir_all(&dir);
     let stem = iwad.file_stem().map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase());
     let _ = std::fs::write(dir.join(format!("{stem}_{map_name}.txt")), lines.join("\n") + "\n");
+    {
+        let k = &agent.x().knowledge;
+        rec.entries.extend(k.journal[journal_n.min(k.journal.len())..].iter().map(|(t, nt)| Entry::Note(*t, nt.clone())));
+    }
+    let branch = if o.from.is_some() { "_branch" } else { "" };
+    rec.write(&out_dir().join("runs").join(format!("{stem}_{map_name}{}{branch}.run", mode_suffix(o))))?;
+    if o.snapshot.is_some() {
+        snapshot(&w, m, &map_name, e, agent, o.focus)?;
+    }
     Ok((outcome.to_string(), detail))
+}
+
+#[cfg(feature = "viewer")]
+fn snapshot(w: &Wad, m: Arc<MapData>, map_name: &str, e: Engine, agent: Agent, focus: Option<(f64, f64, f64)>) -> Result<(), String> {
+    crate::viewer::save_snapshot(w, m, map_name, e, agent, focus)
+}
+
+#[cfg(not(feature = "viewer"))]
+fn snapshot(_: &Wad, _: Arc<MapData>, _: &str, _: Engine, _: Agent, _: Option<(f64, f64, f64)>) -> Result<(), String> {
+    Err("built without the viewer (the `viewer` feature)".into())
 }
