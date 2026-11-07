@@ -521,7 +521,7 @@ impl Combat {
             why = "getting past".into(); // (shooting on the way, the route going on)
         } else if let Some(way) = target
             .as_ref()
-            .filter(|t| mon(t.name).attack != Attack::None && dist((t.x, t.y), pos) < self.gun(obs).keep.0)
+            .filter(|t| mon(t.name).attack != Attack::None && dist((t.x, t.y), pos) < aiming::window(&self.preferred_gun(obs, t), t).0)
             .and_then(|t| self.keeping_off(obs, t, aim))
         {
             // (too near for the gun she has, or for them to miss)
@@ -530,10 +530,10 @@ impl Combat {
         } else if threat >= STAND_THREAT || health < LOW_HEALTH || self.blocking(obs, target.as_ref()) {
             moving = self.strafe_dir(obs, aim);
             let mut w = "standing and fighting".to_string();
-            let gun = self.gun(obs);
             if let Some(t) = &target {
+                let gun = self.preferred_gun(obs, t);
                 let d = dist((t.x, t.y), pos);
-                if !Self::in_reach(&gun, t, d) || d > gun.keep.1 {
+                if !Self::in_reach(&gun, t, d) || d > aiming::window(&gun, t).1 {
                     moving = self.closing_in(obs, t, moving);
                     w = format!("closing in on {}", t.name);
                 }
@@ -547,7 +547,7 @@ impl Combat {
         }
         let takeover = (!busy && !["shooting on the way", "getting past", "out of", "sneaking"].iter().any(|p| why.starts_with(p))) || first_missile.is_some();
         if why != self.mode {
-            let t = target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {threat:.0} threat)", t.name, t.id));
+            let t = target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {threat:.0} threat; health {health:.0})", t.name, t.id));
             self.log.push(format!("tic {}: {why}{t}", obs.tic));
             self.mode = why.clone();
         }

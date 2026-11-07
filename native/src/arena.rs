@@ -13,6 +13,7 @@
 //! give shotgun rocket shell=40 rocket=30 health=100 armor=100 blue
 //! spawn Cyberdemon 512 0 180     # a monster: its name, x y angle, `ambush` for deaf
 //! seconds 120                    # the most it may take
+//! items                          # the map's pickups left in (else they're taken out)
 //! ```
 //!
 //! `give`: weapons by name (fist pistol shotgun chaingun rocket plasma bfg chainsaw ssg; the
@@ -49,6 +50,8 @@ pub struct Scenario {
     pub give: Loadout,
     pub spawns: Vec<Spawn>,
     pub seconds: f64,
+    /// the map's own pickups left lying about
+    pub items: bool,
 }
 
 /// How a scenario went.
@@ -88,6 +91,7 @@ pub fn parse(text: &str) -> Result<Vec<Scenario>, String> {
                 give: default_loadout(),
                 spawns: Vec::new(),
                 seconds: 120.0,
+                items: false,
             });
             continue;
         }
@@ -100,6 +104,7 @@ pub fn parse(text: &str) -> Result<Vec<Scenario>, String> {
             "skill" => s.skill = num(1)? as i32,
             "at" => s.at = (num(1)?, num(2)?, num(3)?),
             "seconds" => s.seconds = num(1)?,
+            "items" => s.items = true,
             "spawn" => s.spawns.push(Spawn {
                 name: w.get(1).ok_or_else(|| bad("a monster wanted"))?.to_string(),
                 x: num(2)?,
@@ -161,6 +166,9 @@ pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Out
     if !e.game.warp(s.at.0, s.at.1, s.at.2) {
         return Err(format!("{}: can't stand at ({}, {})", s.name, s.at.0, s.at.1));
     }
+    if !s.items && e.game.clear_items().is_none() {
+        return Err("the game library hasn't evil_clear_items (rebuild it)".into());
+    }
     if !e.game.give(&s.give) {
         return Err("the game library hasn't evil_give (rebuild it)".into());
     }
@@ -187,6 +195,9 @@ pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Out
         }
         if e.tic >= until || e.exited() {
             break "DRAWN";
+        }
+        if (e.tic - start) % 35 == 0 {
+            log.push(format!("tic {}: health {} armor {}, ammo {:?}, {alive} left", ob.tic, ob.health.unwrap_or(0.0), ob.armor.unwrap_or(0.0), ob.ammo.clone().unwrap_or_default()));
         }
         let ctl = agent.act(&ob, c.as_ref());
         let l = &agent.x().log;

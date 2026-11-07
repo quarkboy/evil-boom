@@ -39,6 +39,28 @@ const SWITCH_WAIT: i64 = 40;
 /// seconds a weapon switch costs
 const SWITCH_COST: f64 = 0.8;
 
+/// units a second she closes in or backs off by, fighting (strafing as she goes)
+const GET_THERE: f64 = 250.0;
+
+/// How near to t she'd fight it from with w, and how far: the gun's own (its spread, its blast)
+/// and what t does up close (claws, bites; a cyberdemon's rockets too quick to dodge).
+pub fn window(w: &Weapon, t: &Thing) -> (f64, f64) {
+    let s = standoff(t.name);
+    (w.keep.0.max(s), w.keep.1.max(s + 256.0))
+}
+
+/// The nearest she'd fight a monster from, whatever the gun.
+fn standoff(name: &str) -> f64 {
+    match name {
+        "Cyberdemon" | "SpiderMastermind" => 640.0,
+        "Fatso" => 400.0,
+        "Arachnotron" | "Revenant" | "PainElemental" => 256.0,
+        "Demon" | "Spectre" | "HellKnight" | "BaronOfHell" | "Cacodemon" => 160.0,
+        "DoomImp" | "LostSoul" => 128.0,
+        _ => 0.0,
+    }
+}
+
 impl Combat {
     pub(super) fn pick_target(&mut self, obs: &Observation) -> Option<Thing> {
         let pos = obs.pos();
@@ -69,6 +91,7 @@ impl Combat {
         if slot != held && obs.tic - self.switch_tic > SWITCH_WAIT {
             weapon = slot;
             self.switch_tic = obs.tic;
+            self.log.push(format!("tic {}: switching to {slot} (holding {held}) for {} {d:.0} off", obs.tic, t.name));
         }
         let w = weapon_in(if (1..=7).contains(&held) { held } else { 2 }, obs.super_shotgun);
         // lead a moving target with a missile weapon
@@ -242,8 +265,27 @@ impl Combat {
         true
     }
 
-    /// The gun that'd see t off soonest, counting the switch and what its ammo is worth.
+    /// The gun that'd see t off soonest from here, counting the switch and what its ammo is worth.
     fn weapon_for(&self, obs: &Observation, t: &Thing, d: f64) -> i32 {
+        self.best_gun(obs, t, |_| d)
+    }
+
+    /// The gun she'd rather fight t with, wherever she stood: each gun judged from the nearest
+    /// place in its window (and the way there): the super shotgun for hell knights, closing in,
+    /// not the pistol from where she happens to be (all 50 shells kept to the end, dead).
+    pub(super) fn preferred_gun(&self, obs: &Observation, t: &Thing) -> Weapon {
+        let d = dist((t.x, t.y), obs.pos());
+        let slot = self.best_gun(obs, t, |w| {
+            let (near, far) = window(w, t);
+            d.clamp(near, far)
+        });
+        weapon_in(slot, obs.super_shotgun)
+    }
+
+    /// The gun that'd see t off soonest, each judged at the distance `at` gives for it (and the
+    /// time to get there).
+    fn best_gun(&self, obs: &Observation, t: &Thing, at: impl Fn(&Weapon) -> f64) -> i32 {
+        let here = dist((t.x, t.y), obs.pos());
         let held = Self::held(obs);
         let info = mon(t.name);
         let crowd = self.visible.len();
@@ -257,7 +299,8 @@ impl Combat {
             if (w.ammo_per_shot > 0 && have < w.ammo_per_shot) || (slot == 5 && !self.rocket_safe(obs, t)) {
                 continue;
             }
-            let mut c = self.time_to_kill(&w, t, d);
+            let d = at(&w);
+            let mut c = self.time_to_kill(&w, t, d) + (d - here).abs() / GET_THERE;
             if w.ammo_per_shot > 0 {
                 let shots = (f64::from(info.health) / (w.damage_on(&info) * w.hits(info.radius, d)).max(1.0)).max(1.0);
                 let (per, low) = ammo_cost(slot);
