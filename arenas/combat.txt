@@ -1,0 +1,149 @@
+# Fights set up to see how she does (evil arena arenas/combat.txt). E3M8's open centre: floor
+# 0, x -600..1000, y 200..1400; she starts at its south edge facing north, the monsters across it.
+
+arena zombies-pistol
+map doom E3M8
+at 176 200 90
+give pistol clip=100 health=100
+spawn Zombieman -200 1000 270
+spawn Zombieman 200 1200 270
+spawn Zombieman 600 1000 270
+spawn ShotgunGuy 0 1400 270
+spawn ShotgunGuy 400 1400 270
+seconds 90
+
+arena imps-shotgun
+map doom E3M8
+at 176 200 90
+give shotgun shell=50 health=100
+spawn DoomImp -400 1000 270
+spawn DoomImp -100 1200 270
+spawn DoomImp 200 1400 270
+spawn DoomImp 500 1200 270
+spawn DoomImp 800 1000 270
+spawn DoomImp 300 900 270
+seconds 120
+
+arena demons-ssg
+map doom E3M8
+at 176 200 90
+give ssg shell=60 health=100
+spawn Demon -200 1000 270
+spawn Demon 200 1100 270
+spawn Demon 600 1000 270
+spawn Demon 400 1300 270
+seconds 120
+
+arena chaingunners
+map doom E3M8
+at 176 200 90
+give shotgun chaingun shell=50 clip=200 health=100 armor=100 green
+spawn ChaingunGuy -400 1200 270
+spawn ChaingunGuy 200 1400 270
+spawn ChaingunGuy 800 1200 270
+seconds 120
+
+arena cacos-rockets
+map doom E3M8
+at 176 200 90
+give shotgun rocket shell=50 rocket=30 health=100 armor=100 green
+spawn Cacodemon -400 1200 270
+spawn Cacodemon 200 1400 270
+spawn Cacodemon 800 1200 270
+seconds 150
+
+arena barons-plasma
+map doom E3M8
+at 176 200 90
+give shotgun plasma shell=50 cell=300 health=100 armor=100 green
+spawn BaronOfHell -200 1300 270
+spawn BaronOfHell 600 1300 270
+seconds 150
+
+arena revenants-ssg
+map doom E3M8
+at 176 200 90
+give ssg rocket shell=60 rocket=20 health=100 armor=100 green
+spawn Revenant -300 1200 270
+spawn Revenant 200 1400 270
+spawn Revenant 700 1200 270
+seconds 150
+
+arena mancubi-rockets
+map doom E3M8
+at 176 200 90
+give ssg rocket shell=40 rocket=40 health=100 armor=100 green
+spawn Fatso -200 1300 270
+spawn Fatso 600 1300 270
+seconds 150
+
+arena arachnos-plasma
+map doom E3M8
+at 176 200 90
+give shotgun plasma shell=40 cell=300 health=100 armor=100 green
+spawn Arachnotron -200 1300 270
+spawn Arachnotron 600 1300 270
+seconds 150
+
+arena pain-elemental
+map doom E3M8
+at 176 200 90
+give shotgun chaingun rocket shell=40 clip=200 rocket=20 health=100 armor=100 green
+spawn PainElemental 200 1300 270
+seconds 150
+
+arena lost-souls
+map doom E3M8
+at 176 200 90
+give shotgun chaingun shell=40 clip=200 health=100
+spawn LostSoul -200 1100 270
+spawn LostSoul 200 1200 270
+spawn LostSoul 600 1100 270
+spawn LostSoul 400 1300 270
+seconds 120
+
+arena archvile-solo
+map doom E3M8
+at 176 200 90
+give ssg rocket plasma shell=60 rocket=20 cell=200 health=100 armor=100 green
+spawn Archvile 200 1300 270
+seconds 150
+
+arena archvile-zombies
+map doom E3M8
+at 176 200 90
+give ssg chaingun rocket shell=60 clip=200 rocket=20 health=100 armor=100 green
+spawn Archvile 200 1400 270
+spawn Zombieman -300 1000 270
+spawn ShotgunGuy 0 1100 270
+spawn ShotgunGuy 500 1100 270
+spawn DoomImp 800 1000 270
+seconds 150
+
+arena cyberdemon
+map doom E3M8
+at 176 200 90
+give rocket plasma rocket=50 cell=300 health=100 armor=200 blue
+spawn Cyberdemon 200 1300 270
+seconds 240
+
+arena spider-mastermind
+map doom E3M8
+at 176 200 90
+give rocket plasma chaingun rocket=50 cell=300 clip=200 health=100 armor=200 blue
+spawn SpiderMastermind 200 1200 270
+seconds 240
+
+arena mixed-hell
+map doom E3M8
+at 176 200 90
+give ssg chaingun rocket plasma shell=60 clip=200 rocket=30 cell=300 health=100 armor=200 blue backpack
+spawn DoomImp -400 1000 270
+spawn DoomImp 800 1000 270
+spawn ShotgunGuy -200 900 270
+spawn ChaingunGuy 600 1400 270
+spawn Cacodemon 0 1300 270
+spawn Revenant 400 1300 270
+spawn HellKnight 200 1400 270
+spawn Demon -300 1200 270
+seconds 200

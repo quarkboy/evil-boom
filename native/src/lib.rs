@@ -14,6 +14,7 @@
 //! - `los`: line of sight between things (who can see, and shoot, whom).
 //! - `dsda`: DSDA-Doom in-process (the game as a library, a tic at a time).
 
+pub mod arena;
 pub mod config;
 mod det;
 pub mod drive;

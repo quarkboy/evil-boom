@@ -114,6 +114,8 @@ type SectorsFn = unsafe extern "C" fn(*mut f64, c_int) -> c_int;
 type MobjsFn = unsafe extern "C" fn(*mut Mobj, c_int) -> c_int;
 type PlayerFn = unsafe extern "C" fn(*mut PlayerState);
 type PowerFn = unsafe extern "C" fn(c_int, c_int);
+type SpawnFn = unsafe extern "C" fn(c_int, f64, f64, f64, c_int) -> c_int;
+type GiveFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int);
 
 static LOADED: AtomicBool = AtomicBool::new(false);
 
@@ -132,6 +134,9 @@ pub struct Dsda {
     player_fn: PlayerFn,
     /// (none in a library from before it was added)
     power_fn: Option<PowerFn>,
+    /// (arenas; none in an older library)
+    spawn_fn: Option<SpawnFn>,
+    give_fn: Option<GiveFn>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
     _argv: Vec<CString>,
     _argv_ptrs: Vec<*mut c_char>,
@@ -170,6 +175,9 @@ impl Dsda {
         };
         // SAFETY: as above, evil_power's signature; optional, an older library hasn't it.
         let power_fn = sym(b"evil_power").ok().map(|p| unsafe { std::mem::transmute::<*const (), PowerFn>(p) });
+        // SAFETY: as above, evil_spawn's and evil_give's signatures; optional.
+        let spawn_fn = sym(b"evil_spawn").ok().map(|p| unsafe { std::mem::transmute::<*const (), SpawnFn>(p) });
+        let give_fn = sym(b"evil_give").ok().map(|p| unsafe { std::mem::transmute::<*const (), GiveFn>(p) });
         let argv: Vec<CString> =
             std::iter::once("evil".to_string()).chain(args.iter().cloned()).map(CString::new).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
         let mut argv_ptrs: Vec<*mut c_char> = argv.iter().map(|a| a.as_ptr().cast_mut()).collect();
@@ -188,6 +196,8 @@ impl Dsda {
             mobjs_fn,
             player_fn,
             power_fn,
+            spawn_fn,
+            give_fn,
             _argv: argv,
             _argv_ptrs: argv_ptrs,
             _lib: lib,
@@ -207,6 +217,23 @@ impl Dsda {
         let Some(f) = self.power_fn else { return false };
         // SAFETY: plain values into the game; see `load`.
         unsafe { f(power, tics) };
+        true
+    }
+
+    /// Spawn a thing of `kind` (its type number) on the floor at (x, y), facing `angle`;
+    /// `ambush`: deaf. Its id, or None (no room, or no such call in the library).
+    pub fn spawn(&self, kind: i32, x: f64, y: f64, angle: f64, ambush: bool) -> Option<i32> {
+        let f = self.spawn_fn?;
+        // SAFETY: plain values into the game; see `load`.
+        let id = unsafe { f(kind, x, y, angle, c_int::from(ambush)) };
+        (id >= 0).then_some(id)
+    }
+
+    /// Give her a loadout (see `Loadout`); false if the library hasn't the call.
+    pub fn give(&self, l: &Loadout) -> bool {
+        let Some(f) = self.give_fn else { return false };
+        // SAFETY: plain values into the game; see `load`.
+        unsafe { f(l.weapons, l.clip, l.shell, l.cell, l.rocket, c_int::from(l.backpack), l.health, l.armor, l.armor_type) };
         true
     }
 
@@ -302,6 +329,27 @@ impl Dsda {
         unsafe { (self.player_fn)(&mut p) };
         p
     }
+}
+
+/// What to give her in an arena: weapons by weapontype bit (fist 0, pistol 1, shotgun 2,
+/// chaingun 3, rocket launcher 4, plasma 5, BFG 6, chainsaw 7, super shotgun 8), ammo, the
+/// backpack, health, armor (type 1 green, 2 blue).
+#[derive(Clone, Debug)]
+pub struct Loadout {
+    pub weapons: i32,
+    pub clip: i32,
+    pub shell: i32,
+    pub cell: i32,
+    pub rocket: i32,
+    pub backpack: bool,
+    pub health: i32,
+    pub armor: i32,
+    pub armor_type: i32,
+}
+
+/// The type number of a thing Evil knows by `name` (`type_name` backwards).
+pub fn type_of(name: &str) -> Option<i32> {
+    (0..200).find(|&k| type_name(k) == Some(name))
 }
 
 /// The name Evil knows a thing type by (ZDoom's class names, as ViZDoom gave them), for the

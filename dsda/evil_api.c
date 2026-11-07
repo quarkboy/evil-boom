@@ -322,3 +322,48 @@ EVIL_API void evil_player_state(evil_player *out)
     out->momx = fx(p->mo->momx); out->momy = fx(p->mo->momy); out->momz = fx(p->mo->momz);
   }
 }
+
+/* Spawn a thing of type `type` (mobjtype_t) on the floor at (x, y), facing `angle` (degrees);
+ * `ambush`: deaf (waits to see her). Returns its evil_id, or -1. For arenas: the fight set up
+ * where wanted, the level's own monsters left out (-nomonsters). */
+EVIL_API int evil_spawn(int type, double x, double y, double angle, int ambush)
+{
+  mobj_t *mo;
+  if (gamestate != GS_LEVEL || type < 0 || type >= num_mobj_types)
+    return -1;
+  mo = P_SpawnMobj((fixed_t)(x * 65536.0), (fixed_t)(y * 65536.0), ONFLOORZ, type);
+  if (!mo)
+    return -1;
+  mo->angle = (angle_t)(long long)(angle / 360.0 * 4294967296.0);
+  if (ambush)
+    mo->flags |= MF_AMBUSH;
+  if (mo->flags & MF_COUNTKILL)
+    totalkills++;
+  return mo->evil_id;
+}
+
+/* Give her a loadout: weapons by weapontype_t bit (fist 0, pistol 1, shotgun 2, chaingun 3,
+ * missile 4, plasma 5, bfg 6, chainsaw 7, supershotgun 8), ammo (clip, shell, cell, missile),
+ * the backpack, health and armor (armortype 1 green, 2 blue). For arenas. */
+EVIL_API void evil_give(int weapons, int clip, int shell, int cell, int missile, int backpack, int health, int armor, int armortype)
+{
+  player_t *p = &players[consoleplayer];
+  int i;
+  for (i = 0; i < NUMWEAPONS && i < 9; i++)
+    p->weaponowned[i] = (weapons >> i) & 1;
+  if (backpack && !p->backpack)
+  {
+    p->backpack = true;
+    for (i = 0; i < NUMAMMO; i++)
+      p->maxammo[i] *= 2;
+  }
+  p->ammo[am_clip] = clip < p->maxammo[am_clip] ? clip : p->maxammo[am_clip];
+  p->ammo[am_shell] = shell < p->maxammo[am_shell] ? shell : p->maxammo[am_shell];
+  p->ammo[am_cell] = cell < p->maxammo[am_cell] ? cell : p->maxammo[am_cell];
+  p->ammo[am_misl] = missile < p->maxammo[am_misl] ? missile : p->maxammo[am_misl];
+  p->health = health;
+  if (p->mo)
+    p->mo->health = health;
+  p->armorpoints[0] = armor;
+  p->armortype = armortype;
+}
