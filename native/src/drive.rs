@@ -54,6 +54,29 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
         let w: Vec<&str> = line.split_whitespace().collect();
         let num = |k: usize| w.get(k).and_then(|v| v.parse::<f64>().ok()).ok_or_else(|| format!("line {}: {line}: a number wanted", i + 1));
         match w[0] {
+            "path" => {
+                // (the route she'd take there, and each leg's waypoints, as smoothed)
+                let goal = (num(1)?, num(2)?);
+                let obs = s.obs();
+                let x = s.agent.x_mut();
+                match x.route_to(&Objective::new(Kind::Visit, goal, "go there"), &obs) {
+                    None => println!("  no way there, by what she knows"),
+                    Some(steps) => {
+                        for st in &steps {
+                            println!("  step: {}", st.label);
+                            if let Some(p) = &st.path {
+                                let pts: Vec<String> = p.waypoints.iter().map(|w| w.map_or("teleport".to_string(), |w| format!("({:.0}, {:.0})", w.0, w.1))).collect();
+                                println!("    {}", pts.join(" "));
+                                let polys: Vec<String> = p.polys.iter().map(|&q| format!("{q}/{}", s.nav.sector_of_poly(q))).collect();
+                                println!("    polys (poly/sector): {}", polys.join(" "));
+                                if !p.steps.is_empty() {
+                                    println!("    {}", p.steps.join("; "));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             "goto" | "goto-full" => {
                 let goal = (num(1)?, num(2)?);
                 goto(&mut s, goal, w[0] == "goto-full");

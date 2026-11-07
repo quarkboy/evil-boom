@@ -222,13 +222,24 @@ impl Fitter<'_> {
     /// but not one it's wedged between (higher than a step on both sides, not in the middle).
     fn standing_floor(&mut self, a: Point) -> Option<f64> {
         let nav = self.nav;
-        let here = nav.sector_at(a)?;
+        // (on a line between two sectors, the one the path goes through: MAP11's path along the
+        // foot of a 112 ledge, its waypoints on the ledge's edge, taken for on top of it)
+        let here = [(0.0, 0.0), (0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)]
+            .iter()
+            .filter_map(|(dx, dy)| nav.sector_at((a.0 + dx, a.1 + dy)))
+            .find(|s| self.sectors.contains(s))
+            .or_else(|| nav.sector_at(a))?;
         let reach_up = top_floor(&self.heights(here)) + MAX_STEP;
         let mut grid = [[f64::NEG_INFINITY; 3]; 3];
         for (i, row) in grid.iter_mut().enumerate() {
             for (j, f) in row.iter_mut().enumerate() {
                 if let Some(s) = nav.sector_at((a.0 + (i as f64 - 1.0) * PLAYER_RADIUS, a.1 + (j as f64 - 1.0) * PLAYER_RADIUS)) {
-                    *f = top_floor(&self.st.heights(s));
+                    // (not on a floor out of her reach in a sector the path never goes into: the
+                    // box beside a ledge, not on it)
+                    let top = top_floor(&self.st.heights(s));
+                    if top <= reach_up || self.sectors.contains(&s) {
+                        *f = top;
+                    }
                 }
             }
         }
