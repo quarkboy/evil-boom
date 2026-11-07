@@ -22,6 +22,9 @@ const JUMPS_PER_TARGET: usize = 4;
 /// aiming a jump at a sector's nearest part: this far in from its rim
 const AIM_INSIDE: f64 = 32.0;
 const MAX_RUNUP: f64 = 256.0;
+/// how far inside the box's edge the floors under it are found in flight (not on it: a point
+/// on a line is in either sector)
+const FLOOR_EDGE: f64 = 0.1;
 /// run-ups tried: the longest, then shorter ones where it comes down nowhere
 const RUNUP_CAPS: [f64; 3] = [MAX_RUNUP, 96.0, 48.0];
 /// Map units between clearance checks behind the ledge.
@@ -373,7 +376,10 @@ impl JumpLab {
         let mut airborne = false;
         let mut held = 0;
         let mut pinned = false;
-        let all: Vec<Point> = bx.iter().copied().chain([(0.0, 0.0)]).collect();
+        // (the floors under the box at its full size, as the game finds them: the highest any of
+        // it is over. A unit in, she's off the ledge a tic early and a tic lower at the far side:
+        // MAP15's run across the pit into the megasphere's door, 20 under its floor in the game)
+        let all: Vec<Point> = box_points(PLAYER_RADIUS - FLOOR_EDGE).iter().copied().chain([(0.0, 0.0)]).collect();
         let requires = |chosen: &Chosen| -> Vec<(usize, Heights)> {
             chosen.0.iter().copied().filter(|&(s, h)| (h.floor, h.ceiling) != self.initial[s] || input.moving.contains(&s)).collect()
         };

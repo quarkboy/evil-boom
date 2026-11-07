@@ -12,7 +12,7 @@ use super::widths::{drop_lines, exit_walk_lines, shutting_lines, teleport_lines,
 use super::{add_height, Jump, Navigator, States, TeleEdge, TriggerLine, JUMP_DOUBT, MAX_STEP, PLAYER_RADIUS, USE_REACH};
 use crate::det::{HashMap, HashSet};
 use crate::geom::{closest_point, dist, point_key, segment_distance, Point};
-use crate::nav::{can_cross, Callbacks, Doors, Edge, Found, Gate, HeightSource, Heights, HeightsKey, NavCore, NavFacts, Tele, TeleKind, Via};
+use crate::nav::{can_cross, AfterOnly, Callbacks, Doors, Edge, Found, Gate, HeightSource, Heights, HeightsKey, NavCore, NavFacts, Tele, TeleKind, Via};
 use crate::plan::{KeySet, Kind, PlanCaches, PlanFacts, Planner, Query, Trigger as PlanTrigger, World};
 use crate::specials::{Key, Keys, Lock, Trigger};
 
@@ -421,6 +421,40 @@ impl View {
         Navigator::local_doors(&self.triggers, keys)
     }
 
+    /// How the flood fill gets from `start` to `goal` with these heights, if it does: a line a
+    /// poly on the way, with its sector and how it was entered.
+    pub fn reach_chain(&self, start: usize, goal: usize, states: &States, doors: Option<&Doors>) -> Option<Vec<String>> {
+        let doors = doors.filter(|d| !d.is_empty());
+        let chain = self.with_core(|nav, _| nav.reach_chain(start, goal, &mut StatesSource::new(states), doors))?;
+        let n = &self.nav;
+        Some(
+            chain
+                .iter()
+                .map(|&(p, via)| {
+                    let how = match via {
+                        None => "start".to_string(),
+                        Some(Via::Portal(pi)) => format!("portal {pi} (line {:?})", n.mesh.portals[pi].linedef),
+                        Some(Via::Tele(ti)) => {
+                            let from = chain.iter().position(|c| c.0 == p).and_then(|i| i.checked_sub(1)).map_or(p, |i| chain[i].0);
+                            match n.tele_from[from].get(ti) {
+                                Some(TeleEdge::Jump(j)) => format!("run-jump {j} off ({:.0}, {:.0}), requires {:?}", n.jumps[*j].takeoff.0, n.jumps[*j].takeoff.1, n.jumps[*j].requires),
+                                Some(TeleEdge::Teleport(i)) => format!("teleport via line {}", n.teleports[*i].line),
+                                None => format!("tele {ti}"),
+                            }
+                        }
+                    };
+                    format!("poly {p} sector {} ({:.0}, {:.0}): {how}", n.sector_of_poly(p), n.mesh.center(p).0, n.mesh.center(p).1)
+                })
+                .collect(),
+        )
+    }
+
+    /// The same, a sector moved only for good one way on a visit (see `saturate`).
+    fn reachable_phased(&self, start: usize, states: &States, doors: Option<&Doors>, after: &AfterOnly) -> BTreeSet<usize> {
+        let doors = doors.filter(|d| !d.is_empty());
+        self.with_core(|nav, _| nav.reachable_phased(start, &mut StatesSource::new(states), doors, after)).into_iter().collect()
+    }
+
     /// Polys she can get to from `start` with these heights (and use-doors she can open).
     pub fn reachable(&self, start: usize, states: &States, doors: Option<&Doors>) -> BTreeSet<usize> {
         let doors = doors.filter(|d| !d.is_empty());
@@ -552,14 +586,22 @@ impl View {
     }
 
     /// Fire every reachable trigger and take every reachable key until nothing changes:
-    /// (reach, heights, keys) then.
+    /// (reach, heights, keys) then. Every height a trigger gives is kept (it needn't be fired:
+    /// this is the planner's first check, and mustn't come up short), but a sector moved only
+    /// for good is one way on a visit, from before to after (E4M9's lifts 151 and 153, lowered
+    /// for good to the room's floor, were walked onto from it at 0 and stepped off at 64 onto
+    /// the ledges beside: two dozen goals out of reach, planned for in vain every think).
     pub fn saturate(&self, start: usize, states: &States, keys: Keys, key_items: &[(Key, Vec<(usize, Point)>)], triggers: &[&TriggerLine]) -> (BTreeSet<usize>, States, Keys) {
         let mut states = states.clone();
         let mut keys = keys;
         let mut fired: BTreeSet<i64> = BTreeSet::new();
+        // (the heights only a move for good gives, and the sectors something else moves too)
+        let mut after = AfterOnly::default();
+        let mut mixed: BTreeSet<usize> = BTreeSet::new();
         loop {
             let doors = self.local_doors(keys);
-            let reach = self.reachable(start, &states, Some(&doors));
+            after.retain(|s, _| !mixed.contains(s));
+            let reach = self.reachable_phased(start, &states, Some(&doors), &after);
             let new: Vec<&TriggerLine> = triggers.iter().copied().filter(|t| !fired.contains(&t.line) && t.activators.iter().any(|p| reach.contains(p)) && t.info.lock.satisfied(keys)).collect();
             let new_keys: Vec<Key> = key_items.iter().filter(|(k, spots)| !keys.has(*k) && spots.iter().any(|(p, _)| reach.contains(p))).map(|(k, _)| *k).collect();
             if new.is_empty() && new_keys.is_empty() {
@@ -571,13 +613,20 @@ impl View {
             for t in new {
                 fired.insert(t.line);
                 for (s, hs) in self.nav.effects_now(t, &states) {
+                    if !t.permanent() {
+                        mixed.insert(s);
+                    }
                     for h in hs {
+                        if t.permanent() && !states[s].contains(&h) {
+                            add_height(after.entry(s).or_default(), h);
+                        }
                         add_height(&mut states[s], h);
                     }
                 }
                 if t.relevant.is_some() {
                     // (and as it'd be with everything round it down)
                     for (s, hs) in self.low_variant(t).0 {
+                        mixed.insert(s);
                         for h in hs {
                             add_height(&mut states[s], h);
                         }

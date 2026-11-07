@@ -376,6 +376,9 @@ impl<'a> Planner<'a> {
                 push(&mut heap, &mut nodes, Priority { no_goal, squeezes: c.squeezes, rank: c.rank }, c);
             }
         }
+        if crate::stats::enabled() {
+            eprintln!("plan search: {expansions} expanded (of {}), {} still queued, {:.2}s", q.max_expansions, heap.len(), t0.elapsed().as_secs_f64());
+        }
         fallback.map(|f| f.route)
     }
 

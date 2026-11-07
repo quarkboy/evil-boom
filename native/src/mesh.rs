@@ -446,6 +446,13 @@ impl Mesh {
         inside.then_some(i)
     }
 
+    /// Is `p` inside poly `i` (or on its edge)? The BSP puts every point in some subsector, those
+    /// in the solid between rooms too: this tells them apart.
+    pub fn contains(&self, i: usize, p: Point) -> bool {
+        let vs = &self.poly(i).vertices;
+        inside(vs, p.0, p.1) || vs.iter().zip(vs.iter().cycle().skip(1)).any(|(&a, &b)| crate::geom::segment_distance(a, b, p, p) < 0.5)
+    }
+
     pub fn poly_at(&self, (x, y): Point) -> Option<usize> {
         let Some(last) = self.nodes.len().checked_sub(1) else {
             return self.polys.first().and_then(|p| p.as_ref()).map(|_| 0);

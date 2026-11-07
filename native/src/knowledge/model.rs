@@ -1024,9 +1024,14 @@ impl Knowledge {
             let dists: &[f64] = if target { &[40.0, 96.0, 160.0, 256.0] } else { &[40.0] };
             // (in front of its middle; else, the box not fitting there, of another part of it:
             // MAP11's secret door, a column of pillars in front of its middle; facing that part)
-            let fits = |q: Point| mesh.poly_at(q).is_some_and(|p| reach.contains(&p)) && {
-                let (clear, floor, ceiling) = nav.jump_lab.fits_at_heights(q, &heights);
-                clear && ceiling - floor >= PLAYER_HEIGHT
+            // (and on the floor she'd be on there, not up on something beside it the box overlaps:
+            // MAP15's lift crate, pressed from beside the crate next to it, picked a spot with the
+            // box over that one's top, 128 up, and was never offered)
+            let fits = |q: Point| {
+                mesh.poly_at(q).is_some_and(|p| reach.contains(&p) && {
+                    let (clear, floor, ceiling) = nav.jump_lab.fits_at_heights(q, &heights);
+                    clear && ceiling - floor >= PLAYER_HEIGHT && floor - heights[mesh.poly(p).sector].0 <= MAX_STEP
+                })
             };
             let Some(mut stand) = dists.iter().map(|d| (mid.0 + nx * d, mid.1 + ny * d)).find(|&q| mesh.poly_at(q).is_some_and(|p| reach.contains(&p))) else { continue };
             let mut aim = mid;
@@ -1420,6 +1425,23 @@ impl Knowledge {
             }
         }
         out
+    }
+
+    /// What she knows that a route could turn on: the summary but for the lines fired (a wall
+    /// pressed that did nothing is no news to the planner)
+    pub fn known_summary(&self) -> String {
+        let m = &self.nav.map;
+        format!(
+            "{}/{} lines, {}/{} sectors, {} effects learned ({} in doubt), {} untried switches/doors, {} exits seen",
+            self.mapped.len(),
+            m.linedefs.len(),
+            self.sectors.len(),
+            m.sectors.len(),
+            self.learned.values().map(BTreeSet::len).sum::<usize>(),
+            self.doubts.len(),
+            self.interactables().len(),
+            self.exits().len()
+        )
     }
 
     pub fn summary(&self) -> String {

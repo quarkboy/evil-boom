@@ -30,13 +30,15 @@ pub fn most_items(m: &MapData, skill: i32) -> i32 {
 pub struct Completionist {
     /// levels again she may ask for
     pub restarts: i32,
+    /// what she knew and the items left when the level from its start last had no way to them
+    no_way_back: Option<(String, Vec<Point>)>,
 }
 
 impl Completionist {
     /// (the explorer's exit held back)
     pub fn new(explorer: &mut Explorer, restarts: i32) -> Completionist {
         explorer.exit_last = true;
-        Completionist { restarts }
+        Completionist { restarts, no_way_back: None }
     }
 
     fn counted(name: &str, obs: &Observation) -> bool {
@@ -83,11 +85,19 @@ impl Hooks for Completionist {
         if left.is_empty() {
             return false;
         }
+        // (no way to them from the start then, knowing what she does now: none now. Asked every
+        // think while there's nothing else to do, a whole plan each time: MAP10, shut in, two
+        // seconds a second)
+        let asked = (x.knowledge.summary(), left.clone());
+        if self.no_way_back.as_ref() == Some(&asked) {
+            return false;
+        }
         let Some(start) = x.nav.map.things.iter().find(|t| t.kind == 1).map(|t| (t.x, t.y)) else { return false };
         let view = x.fresh_view();
         let states = view.initial_states();
         let route = view.plan(start, &left, &Plan { keys: Keys::default(), states: Some(&states), max_expansions: 2000, max_seconds: 10.0, ..Plan::default() });
         if route.is_none() {
+            self.no_way_back = Some(asked);
             return false;
         }
         self.restarts -= 1;

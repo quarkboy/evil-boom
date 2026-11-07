@@ -284,11 +284,70 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool) -> Result<S
     Ok(Setup { iwad, w, m, map_name, skill: skill_used, nav, e, agent, deaths, c, obs, rec, secrets_short })
 }
 
+/// The live status of a run, for watching it as it goes: with `EVIL_STATUS` set to a directory,
+/// a line each game second to `<dir>/<IWAD>_<MAP>.status` (game and real seconds, the think
+/// time that second and its slowest think, the routes planned and failed so far and their
+/// seconds, what she's doing), and the log of any think longer than `SLOW_THINK`.
+struct Status {
+    file: std::fs::File,
+    secs: f64,
+    slowest: f64,
+}
+
+/// a think longer than this (seconds) has its log written to the status
+const SLOW_THINK: f64 = 1.0;
+
+impl Status {
+    fn open(iwad: &str, map: &str) -> Option<Status> {
+        let dir = std::env::var_os("EVIL_STATUS")?;
+        let path = std::path::Path::new(&dir).join(format!("{iwad}_{map}.status"));
+        let file = std::fs::File::create(path).ok()?;
+        Some(Status { file, secs: 0.0, slowest: 0.0 })
+    }
+
+    fn think(&mut self, ob: &Observation, took: f64, x: &Explorer, log_n: usize, real: f64) {
+        use std::io::Write;
+        self.secs += took;
+        self.slowest = self.slowest.max(took);
+        if took > SLOW_THINK {
+            let _ = writeln!(self.file, "  slow think at tic {}: {:.1}s", ob.tic, took);
+            for l in &x.log[log_n.min(x.log.len())..] {
+                let _ = writeln!(self.file, "    {}", l.chars().take(200).collect::<String>());
+            }
+        }
+        if ob.tic % 35 == 0 {
+            let s = x.stats;
+            let doing = x.current.as_ref().map_or("-", |o| o.label.as_str());
+            let _ = writeln!(
+                self.file,
+                "{:7.1}s game {:6.1}s real | think {:5.2}s (slowest {:5.2}s) | routes {} ({:.1}s), failed {} ({:.1}s), known none {} | lists {} ({:.1}s, saturate {:.1}s) | {}",
+                ob.tic as f64 / TICRATE,
+                real,
+                self.secs,
+                self.slowest,
+                s.routed,
+                s.routed_secs,
+                s.failed,
+                s.failed_secs,
+                s.known_none,
+                s.listed,
+                s.listed_secs,
+                s.saturate_secs,
+                doing
+            );
+            let _ = self.file.flush();
+            self.secs = 0.0;
+            self.slowest = 0.0;
+        }
+    }
+}
+
 pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, String), String> {
     let Setup { iwad, w, m, map_name, skill, nav, mut e, mut agent, mut deaths, mut c, mut obs, mut rec, secrets_short } = setup(wad, map_name, o, o.snapshot.is_some())?;
     let t0 = Instant::now();
     let mut idle_since: Option<i64> = None;
     let (mut t_engine, mut t_observe, mut t_think) = (0.0, 0.0, 0.0);
+    let mut status = Status::open(&iwad.file_stem().map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase()), &map_name);
     let mut journal_n = agent.x().knowledge.journal.len();
     let until = o.snapshot.map_or(o.max_seconds, |s| s.min(o.max_seconds));
     // (the 100% runs: the count she's after and what she knows of the level, and when either
@@ -386,8 +445,12 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
         let t1 = Instant::now();
         let ob = e.observe();
         let t2 = Instant::now();
+        let log_n = agent.x().log.len();
         let ctl = agent.act(&ob, c.as_ref());
         let t3 = Instant::now();
+        if let Some(st) = status.as_mut() {
+            st.think(&ob, (t3 - t2).as_secs_f64(), agent.x(), log_n, t0.elapsed().as_secs_f64());
+        }
         if agent.x().current.is_none() {
             idle_since.get_or_insert(e.tic);
         } else {

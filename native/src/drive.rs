@@ -23,6 +23,11 @@
 //!   force visit X Y | force wall LINE | force item X Y
 //!                       give her an objective she wasn't offering; what came of it
 //!   snapshot NAME [X,Y,ZOOM]   the viewer's window into out/drive/NAME.png
+//!   reach X Y [plan]    how the flood fill her options come from gets there (or, plan, the
+//!                       planner's first check): the polys on the way and how each was entered
+//!   fits X Y            does the box stand there, at the heights she last saw
+//!   budget N            search her routes in up to N plan steps from now on
+//!   stats               the routes planned, found and not, and the lists of options made
 
 use std::path::Path;
 use std::rc::Rc;
@@ -54,6 +59,43 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
         let w: Vec<&str> = line.split_whitespace().collect();
         let num = |k: usize| w.get(k).and_then(|v| v.parse::<f64>().ok()).ok_or_else(|| format!("line {}: {line}: a number wanted", i + 1));
         match w[0] {
+            "fits" => {
+                // (does the box stand at a point, at the heights she last saw: as the wall stand
+                // spots and standable() have it)
+                let q = (num(1)?, num(2)?);
+                let x = s.agent.x();
+                let k = &x.knowledge;
+                let init = &s.nav.movers.initial;
+                let heights: Vec<(f64, f64)> = (0..init.len()).map(|i| k.seen_heights.get(&i).copied().unwrap_or(init[i])).map(|h| (h.floor, h.ceiling)).collect();
+                let (clear, floor, ceiling) = s.nav.jump_lab.fits_at_heights(q, &heights);
+                println!("  ({:.0}, {:.0}): clear {clear}, floor {floor}, ceiling {ceiling}; standable {}", q.0, q.1, x.standable(q, false));
+            }
+            "budget" => {
+                // (the most plan steps her routes are searched for in, from now on)
+                let n = num(1)? as usize;
+                let x = s.agent.x_mut();
+                x.plan_expansions = n;
+                x.forget_no_routes();
+                println!("  routes searched for in up to {n} steps");
+            }
+            "stats" => {
+                // (the routes planned and lists of options made so far, and their time)
+                println!("  {:?}", s.agent.x().stats);
+            }
+            "reach" => {
+                // (how the flood fill her options come from gets there, at every height she
+                // could give things: for an option offered with no route)
+                let goal = (num(1)?, num(2)?);
+                let obs = s.obs();
+                match s.agent.x_mut().reach_chain(&obs, goal, w.get(3) == Some(&"plan")) {
+                    None => println!("  not in reach"),
+                    Some(chain) => {
+                        for l in chain {
+                            println!("    {l}");
+                        }
+                    }
+                }
+            }
             "path" => {
                 // (the route she'd take there, and each leg's waypoints, as smoothed)
                 let goal = (num(1)?, num(2)?);

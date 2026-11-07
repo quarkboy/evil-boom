@@ -75,6 +75,10 @@ pub struct DoorOpening {
 /// Doors that can be opened on the way, by sector.
 pub type Doors = HashMap<usize, DoorOpening>;
 
+/// The heights sectors take only once something has moved them for good, by sector: on one
+/// visit she can go from its heights before to these (riding it as it moves), never back.
+pub type AfterOnly = HashMap<usize, Vec<Heights>>;
+
 /// A portal out of a poly that isn't ruled out whatever the heights.
 #[derive(Clone, Copy)]
 pub struct Edge {
@@ -342,20 +346,49 @@ impl NavCore {
         let hs_b = Self::heights_with_doors(st, doors, e.to_sector, Some(frm));
         for &ha in &hs_a {
             for &hb in &hs_b {
-                if !can_cross(ha, hb) {
-                    continue;
-                }
-                let landable = match e.linedef {
-                    _ if ha.floor - hb.floor <= MAX_STEP => true,
-                    None => true,
-                    Some(li) => self.callbacks.landable(li, e.from_sector, ha.floor),
-                };
-                if landable {
+                if self.lands(e, ha, hb) {
                     return true;
                 }
             }
         }
         false
+    }
+
+    /// From heights `ha` on edge `e`'s near side to `hb` on its far one: through, and onto it.
+    fn lands(&mut self, e: Edge, ha: Heights, hb: Heights) -> bool {
+        if !can_cross(ha, hb) {
+            return false;
+        }
+        match e.linedef {
+            _ if ha.floor - hb.floor <= MAX_STEP => true,
+            None => true,
+            Some(li) => self.callbacks.landable(li, e.from_sector, ha.floor),
+        }
+    }
+
+    /// The ways edge `e` from `frm` can be crossed, coming from its sector at its heights after
+    /// a move for good (`late`) or at any: for each, whether she's at the far sector's after it.
+    fn phased_crossings(&mut self, e: Edge, frm: usize, late: bool, st: &mut dyn HeightSource, doors: Option<&Doors>, after: &AfterOnly) -> [bool; 2] {
+        let mut out = [false; 2];
+        if self.gates.contains_key(&e.portal) && !self.fits_now(e.portal, frm, st, doors) {
+            return out;
+        }
+        if e.from_sector == e.to_sector {
+            out[usize::from(late)] = true;
+            return out;
+        }
+        let late_a = after.get(&e.from_sector);
+        let hs_a: Vec<Heights> = Self::heights_with_doors(st, doors, e.from_sector, None).into_iter().filter(|h| !late || late_a.is_none_or(|v| v.contains(h))).collect();
+        let hs_b = Self::heights_with_doors(st, doors, e.to_sector, Some(frm));
+        let late_b = after.get(&e.to_sector);
+        for &ha in &hs_a {
+            for &hb in &hs_b {
+                if self.lands(e, ha, hb) {
+                    out[usize::from(late_b.is_some_and(|v| v.contains(&hb)))] = true;
+                }
+            }
+        }
+        out
     }
 
     /// Can edge `i` of `poly`'s adjacency be crossed now?
@@ -408,5 +441,90 @@ impl NavCore {
             }
         }
         seen
+    }
+
+    /// How the flood fill gets from `start` to `goal`, if it does: the polys on the way, each with
+    /// how it was entered (a portal, a teleport or jump), for tracing what it takes for reachable.
+    pub fn reach_chain(&mut self, start: usize, goal: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> Option<Vec<(usize, Option<Via>)>> {
+        let mut came: HashMap<usize, (usize, Via)> = HashMap::default();
+        let mut seen: HashSet<usize> = HashSet::from_iter([start]);
+        let mut todo = std::collections::VecDeque::from([start]);
+        while let Some(poly) = todo.pop_front() {
+            if poly == goal {
+                let mut chain = vec![(goal, came.get(&goal).map(|c| c.1))];
+                let mut at = goal;
+                while let Some(&(from, _)) = came.get(&at) {
+                    chain.push((from, came.get(&from).map(|c| c.1)));
+                    at = from;
+                }
+                chain.reverse();
+                return Some(chain);
+            }
+            for i in 0..self.adj[poly].len() {
+                let to = self.adj[poly][i].to;
+                if !seen.contains(&to) && self.enterable(to) && self.edge_passable(poly, i, st, doors) {
+                    seen.insert(to);
+                    came.insert(to, (poly, Via::Portal(self.adj[poly][i].portal)));
+                    todo.push_back(to);
+                }
+            }
+            for ti in 0..self.tele[poly].len() {
+                let dest = self.tele[poly][ti].dest;
+                if !seen.contains(&dest) && self.tele_known(poly, ti) && self.tele_ok(poly, ti, st) {
+                    seen.insert(dest);
+                    came.insert(dest, (poly, Via::Tele(ti)));
+                    todo.push_back(dest);
+                }
+            }
+        }
+        None
+    }
+
+    /// The polys reachable from `start`, no visit to a sector moved for good going from its
+    /// heights after back to those before (E4M9's lift 151, lowered for good to the room's
+    /// floor: got on from the room at 0, not off at 64 onto the ledge beside).
+    pub fn reachable_phased(&mut self, start: usize, st: &mut dyn HeightSource, doors: Option<&Doors>, after: &AfterOnly) -> HashSet<usize> {
+        if after.is_empty() {
+            return self.reachable(start, st, doors);
+        }
+        let mut seen: HashSet<(usize, bool)> = HashSet::from_iter([(start, false)]);
+        let mut out: HashSet<usize> = HashSet::from_iter([start]);
+        let mut todo = vec![(start, false)];
+        while let Some((poly, late)) = todo.pop() {
+            for i in 0..self.adj[poly].len() {
+                let e = self.adj[poly][i];
+                if !self.enterable(e.to) {
+                    continue;
+                }
+                for (phase, ok) in self.phased_crossings(e, poly, late, st, doors, after).into_iter().enumerate() {
+                    if ok && seen.insert((e.to, phase == 1)) {
+                        out.insert(e.to);
+                        todo.push((e.to, phase == 1));
+                    }
+                }
+            }
+            // (on a sector at its heights after a move for good: only a jump found from those, not
+            // one from its heights before, as all the rest were: E4M9's off lift 151 at 64)
+            let late_here = if late { after.get(&self.poly_sector[poly]) } else { None };
+            for ti in 0..self.tele[poly].len() {
+                let dest = self.tele[poly][ti].dest;
+                if let Some(hs) = late_here {
+                    let from_after = match &self.tele[poly][ti].kind {
+                        TeleKind::Jump { requires, .. } => requires.iter().any(|(s, h)| *s == self.poly_sector[poly] && hs.contains(h)),
+                        TeleKind::Line { .. } => true,
+                    };
+                    if !from_after {
+                        continue;
+                    }
+                }
+                // (landed: at whatever heights, as far as this goes)
+                if !seen.contains(&(dest, false)) && self.tele_known(poly, ti) && self.tele_ok(poly, ti, st) {
+                    seen.insert((dest, false));
+                    out.insert(dest);
+                    todo.push((dest, false));
+                }
+            }
+        }
+        out
     }
 }

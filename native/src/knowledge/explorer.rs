@@ -10,6 +10,7 @@ mod viewpoints;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::time::Instant;
 use std::sync::Arc;
 
 use super::model::{How, Knowledge, Heard, Note, SUSPICION_MIN};
@@ -24,6 +25,8 @@ use crate::walkthrough::{action_for, steps_from_legs, Action, Step};
 
 /// a backstop only: the expansions decide (a clock limit made a run depend on the machine)
 const PLAN_SECONDS: f64 = 600.0;
+/// the most plan steps a route is searched for in
+const PLAN_EXPANSIONS: usize = 2000;
 /// a suspected wall pressed: watched this long for something to happen
 const WALL_TICS: i64 = 25;
 /// objectives routed and compared by the way there, each pick
@@ -293,6 +296,12 @@ pub struct Explorer {
     pub current: Option<Objective>,
     pub follower: Option<RouteFollower>,
     pub log: Vec<String>,
+    /// the routes planned so far, and the time they took (the live status: `EVIL_STATUS`)
+    pub stats: RouteStats,
+    /// the goals the planner found no way to, and the plan signature then
+    no_route: BTreeMap<GoalKey, u64>,
+    /// the most plan steps a route is searched for in (`drive budget`)
+    pub plan_expansions: usize,
     dropped: BTreeMap<Ident, i64>,
     /// ...and how often (each time it waits twice as long to be offered again)
     drop_count: BTreeMap<Ident, i32>,
@@ -346,6 +355,25 @@ pub struct Explorer {
     debug_tics: Option<(i64, i64)>,
 }
 
+/// The routes planned (found and not) and the seconds they took, all told.
+#[derive(Clone, Copy, Default, Debug)]
+pub struct RouteStats {
+    pub routed: u64,
+    pub routed_secs: f64,
+    pub failed: u64,
+    pub failed_secs: f64,
+    /// no route, known already (nothing changed since)
+    pub known_none: u64,
+    /// the lists of what she could do made, the seconds they took, and of those in saturate
+    pub listed: u64,
+    pub listed_secs: f64,
+    pub saturate_secs: f64,
+}
+
+/// A goal planned for: where, the line to press there, and whether other spots to press it
+/// from are tried.
+type GoalKey = (u64, u64, Option<i64>, bool);
+
 /// What the view's built from: rebuilt when it changes.
 type ViewKey = (usize, usize, usize, usize, usize, BTreeSet<usize>, BTreeSet<usize>, bool, BTreeSet<usize>, bool);
 
@@ -358,6 +386,9 @@ impl Explorer {
             current: None,
             follower: None,
             log: Vec::new(),
+            stats: RouteStats::default(),
+            no_route: BTreeMap::new(),
+            plan_expansions: PLAN_EXPANSIONS,
             dropped: BTreeMap::new(),
             drop_count: BTreeMap::new(),
             wall_drops: BTreeMap::new(),
@@ -625,8 +656,40 @@ impl Explorer {
 
     // --- objectives ---------------------------------------------------------------------------
 
+    /// How what she'd be offered (the saturated reach) gets her to `goal`: the flood fill's way
+    /// there, at all the heights the triggers she could fire give (`drive reach`); or, `planner`,
+    /// as the planner's first check has it (no use-doors among the triggers, keys she knows of).
+    pub fn reach_chain(&mut self, obs: &Observation, goal: Point, planner: bool) -> Option<Vec<String>> {
+        let nav = Rc::clone(&self.nav);
+        let view = self.view();
+        let here = nav.poly_at(obs.pos())?;
+        let to = nav.poly_at(goal)?;
+        let keys = obs.keys.unwrap_or_default();
+        let states = self.states();
+        let spent = self.spent_once();
+        let mut key_items: Vec<(Key, Vec<(usize, Point)>)> = Vec::new();
+        if planner {
+            for th in self.knowledge.known_things() {
+                if let Some(kk) = Key::from_thing(th.kind) {
+                    key_items.push((kk, view.pickup_spots(th.x, th.y, &states)));
+                }
+            }
+        }
+        let actions: Vec<&TriggerLine> = view.triggers.iter().filter(|t| !t.effects.is_empty() && !t.linedef().is_some_and(|li| spent.contains(&li)) && !(planner && t.info.trigger == Trigger::DR)).collect();
+        let (_, all, keys_all) = view.saturate(here, &states, keys, &key_items, &actions);
+        view.reach_chain(here, to, &all, Some(&view.local_doors(keys_all)))
+    }
+
     /// What she could go and do now.
     pub fn objectives(&mut self, obs: &Observation, risky: bool, hooks: &mut dyn Hooks) -> Vec<Objective> {
+        let t0 = Instant::now();
+        let out = self.list_objectives(obs, risky, hooks);
+        self.stats.listed += 1;
+        self.stats.listed_secs += t0.elapsed().as_secs_f64();
+        out
+    }
+
+    fn list_objectives(&mut self, obs: &Observation, risky: bool, hooks: &mut dyn Hooks) -> Vec<Objective> {
         let nav = Rc::clone(&self.nav);
         let view = self.view();
         let pos = obs.pos();
@@ -636,7 +699,9 @@ impl Explorer {
         // (what she could get to using what she's learned: the planner works out how)
         let spent = self.spent_once();
         let actions: Vec<&TriggerLine> = view.triggers.iter().filter(|t| !t.effects.is_empty() && !t.linedef().is_some_and(|li| spent.contains(&li))).collect();
+        let t_sat = Instant::now();
         let (reach, states_all, _) = view.saturate(here, &states, keys, &[], &actions);
+        self.stats.saturate_secs += t_sat.elapsed().as_secs_f64();
         self.reach = reach.clone();
         // (what she can get to only while a door or lift she's pressed open is open: go now, as a
         // player goes through a door before it shuts, if near enough to make it: E2M1's door 44,
@@ -1083,9 +1148,11 @@ impl Explorer {
     /// opened by a shot, the megasphere in it).
     fn stands_at(&self, q: Point, heights: &[(f64, f64)]) -> bool {
         let mesh = &self.nav.mesh;
+        // (in the map, not in the solid between its rooms, which the BSP puts in the subsector
+        // beside it all the same: MAP15's blur sphere, touched for from inside the wall by it)
+        let Some(p) = mesh.poly_at(q).filter(|&p| mesh.contains(p, q)) else { return false };
         let (fits, floor, ceiling) = self.nav.jump_lab.fits_at_heights(q, heights);
-        let centre = mesh.poly_at(q).map_or(floor, |p| heights[mesh.poly(p).sector].0);
-        fits && ceiling - floor >= PLAYER_HEIGHT && floor <= centre + MAX_STEP
+        fits && ceiling - floor >= PLAYER_HEIGHT && floor <= heights[mesh.poly(p).sector].0 + MAX_STEP
     }
 
     fn stand_spot(&self, spot: Point, reach: &BTreeSet<usize>) -> Point {
@@ -1348,6 +1415,56 @@ impl Explorer {
     /// Steps to get to an objective and do it, through what's known (using switches she has
     /// learned on the way if need be).
     pub fn route_to(&mut self, obj: &Objective, obs: &Observation) -> Option<Vec<Step>> {
+        // (no way there last time, with nothing a plan goes by changed since: none now. What
+        // she's offered comes from a rougher reckoning than the planner's, and a goal it can't
+        // reach costs a whole search: E4M9's ledges and MAP15's secret exit ring, seconds each,
+        // were planned for again every think)
+        let goal: GoalKey = (obj.goal.0.to_bits(), obj.goal.1.to_bits(), obj.trigger.as_ref().map(|t| t.line), matches!(obj.kind, Kind::Switch | Kind::Door | Kind::Exit));
+        let sig = self.plan_signature(obs);
+        if self.no_route.get(&goal) == Some(&sig) {
+            self.stats.known_none += 1;
+            return None;
+        }
+        let t0 = Instant::now();
+        let route = self.plan_route(obj, obs, (goal, sig));
+        let took = t0.elapsed().as_secs_f64();
+        let s = &mut self.stats;
+        if route.is_some() {
+            s.routed += 1;
+            s.routed_secs += took;
+        } else {
+            s.failed += 1;
+            s.failed_secs += took;
+        }
+        route
+    }
+
+    /// Forget the goals there was no route to (`drive budget`: searched for again).
+    pub fn forget_no_routes(&mut self) {
+        self.no_route.clear();
+    }
+
+    /// All a plan goes by, hashed: what she knows (the view), the jumps she won't try, her keys,
+    /// the lines spent this life, the heights as she has them, and where she can get to from
+    /// here (for where she's starting from).
+    fn plan_signature(&mut self, obs: &Observation) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        self.view_key(false).hash(&mut h);
+        self.banned_jumps().hash(&mut h);
+        obs.keys.unwrap_or_default().0.hash(&mut h);
+        self.spent_once().hash(&mut h);
+        for hs in self.states() {
+            hs.len().hash(&mut h);
+            for x in hs {
+                x.key().hash(&mut h);
+            }
+        }
+        self.reach.hash(&mut h);
+        h.finish()
+    }
+
+    fn plan_route(&mut self, obj: &Objective, obs: &Observation, failed: (GoalKey, u64)) -> Option<Vec<Step>> {
         let view = self.view();
         let nav = Rc::clone(&self.nav);
         let keys = obs.keys.unwrap_or_default();
@@ -1365,7 +1482,7 @@ impl Explorer {
         }
         // (the once-only lines she's used this life are spent: E3M4's door)
         let fired = self.spent_once();
-        let plan = |goal: Point| view.plan(obs.pos(), &[goal], &Plan { keys, states: Some(&states), key_items: &key_items, max_expansions: 2000, max_seconds: PLAN_SECONDS, goal_triggers: &[], fired: &fired });
+        let plan = |goal: Point| view.plan(obs.pos(), &[goal], &Plan { keys, states: Some(&states), key_items: &key_items, max_expansions: self.plan_expansions, max_seconds: PLAN_SECONDS, goal_triggers: &[], fired: &fired });
         let mut route = plan(obj.goal);
         // no way to the nearest spot to press it from: the next nearest (MAP08's exit door)
         let mut goal = obj.goal;
@@ -1380,7 +1497,11 @@ impl Explorer {
             goal = nav.activation_point(t, obs.pos(), &rest);
             route = plan(goal);
         }
-        let route = route?;
+        let Some(route) = route else {
+            // (only the planner's none: not a way she won't take, which the risky twin may)
+            self.no_route.insert(failed.0, failed.1);
+            return None;
+        };
         let step = |action: Action, trigger: Option<TriggerLine>, key: Option<Key>| Step { path: None, action, trigger, key, label: obj.label.clone(), expects: Vec::new() };
         let last = match obj.kind {
             Kind::Frontier | Kind::Recheck | Kind::Visit | Kind::Noise | Kind::Room | Kind::Item | Kind::Hunt | Kind::Wall => step(Action::Walk, None, None),
@@ -1931,11 +2052,13 @@ impl Explorer {
                 self.log.push(format!("tic {}: nothing else to do: trying walls", obs.tic));
             }
         }
-        if !found && !self.dropped.is_empty() && self.retried.as_deref() != Some(self.knowledge.summary().as_str()) {
+        if !found && !self.dropped.is_empty() && self.retried.as_deref() != Some(self.knowledge.known_summary().as_str()) {
             // (nothing else: what was given up on lately gets another go, its wait cut short,
             // once till there's something else to do: dropped when the way was shut a while,
             // E1M4's bonus behind the door a walk-over line opens, it waited out her whole life)
-            self.retried = Some(self.knowledge.summary());
+            // (once till she knows something more: not each wall pressed that did nothing, which
+            // threw MAP15's and E4M9's goals out of reach back in, seconds of planning each)
+            self.retried = Some(self.knowledge.known_summary());
             self.log.push(format!("tic {}: nothing else to do: the {} things given up on lately get another go", obs.tic, self.dropped.len()));
             self.dropped.clear();
             self.suspecting = Suspecting::No;
