@@ -983,11 +983,63 @@ impl Explorer {
     /// overhead, and not hanging over a floor more than a step higher (MAP16)? `play`: with a
     /// little play round it, for a spot to stop at (MAP21's look-out between a wall and key bars).
     pub fn standable(&self, q: Point, play: bool) -> bool {
-        let heights: Vec<(f64, f64)> = self.nav.movers.initial.iter().map(|h| (h.floor, h.ceiling)).collect();
         let lab = &self.nav.jump_lab;
-        self.stands_at(q, &heights) && (!play || [(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)].iter().all(|(dx, dy)| lab.fits_at_heights((q.0 + dx, q.1 + dy), &heights).0))
+        let (clear, floor, ceiling) = lab.fits_at(q);
+        let centre = self.nav.poly_at(q).map_or(floor, |p| self.nav.movers.initial[self.nav.sector_of_poly(p)].floor);
+        clear && ceiling - floor >= PLAYER_HEIGHT && floor <= centre + MAX_STEP && (!play || [(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)].iter().all(|(dx, dy)| lab.fits_at((q.0 + dx, q.1 + dy)).0))
     }
 
+    /// Where to stand to pick up a thing at `item`: there if the box can stand there, else the
+    /// nearest spot it can, in a poly she can get to, close enough for the boxes to touch, on a
+    /// floor near the item's; None if there isn't one (MAP10's soulsphere in an alcove).
+    pub fn touch_spot(&self, item: Point, reach: &BTreeSet<usize>) -> Option<Point> {
+        let nav = &self.nav;
+        let heights = self.roomiest();
+        // (the item on its floor as she believes it now: E3M9's invulnerability on a walkway
+        // lowered 64)
+        let floor = nav.poly_at(item).map(|p| heights[nav.sector_of_poly(p)].0);
+        // (square rings, as the boxes touch, every 4 round each: E4M7's blur sphere, on the point
+        // of a ledge, can be had only from a corner of the square)
+        for r in [0, 8, 16, 24, 32, TOUCH - 1] {
+            // (nearest first)
+            let mut ring: Vec<(i32, i32)> = (-r..=r).step_by(4).chain(std::iter::once(r)).flat_map(|i| [(i, -r), (i, r), (-r, i), (r, i)]).collect();
+            ring.sort_by_key(|&(dx, dy)| (dx * dx + dy * dy, dx, dy));
+            ring.dedup();
+            for (dx, dy) in ring {
+                let q = (item.0 + f64::from(dx), item.1 + f64::from(dy));
+                if !nav.poly_at(q).is_some_and(|p| reach.contains(&p)) || !self.stands_at(q, &heights) {
+                    continue;
+                }
+                // (P_TouchSpecialThing: the item no higher than her height over her feet, no
+                // more than 8 under them; E4M7's blur sphere on a ledge 56 up, had from below.
+                // Her feet on the highest floor under the box: E2M7's armor bonus in a sunken
+                // strip, the box half over the floor 24 above it, where she'd come to a stop
+                // a few units short)
+                // (where she can stand, that is: not the box over a ledge she can't step up onto,
+                // MAP11's soulsphere 296 up)
+                let feet = [(0.0, 0.0), (ARRIVE_SLACK, 0.0), (-ARRIVE_SLACK, 0.0), (0.0, ARRIVE_SLACK), (0.0, -ARRIVE_SLACK)]
+                    .iter()
+                    .map(|(dx, dy)| (q.0 + dx, q.1 + dy))
+                    .filter(|&at| at == q || self.stands_at(at, &heights))
+                    .map(|at| nav.jump_lab.fits_at_heights(at, &heights).1)
+                    .fold(f64::NEG_INFINITY, f64::max);
+                if floor.is_some_and(|f| !(-PICKUP_BELOW..=PLAYER_HEIGHT).contains(&(f - feet))) {
+                    continue;
+                }
+                return Some(q);
+            }
+        }
+        None
+    }
+
+    /// `spot`, or somewhere near it the box can stand (`stand_spot`), for objectives from
+    /// elsewhere (a monster's last known spot).
+    pub fn stand_spot_for(&self, spot: Point, reach: &BTreeSet<usize>) -> Point {
+        self.stand_spot(spot, reach)
+    }
+
+    /// `spot`, if the box can stand there; else the middle of its poly, or of one next to it she
+    /// can get to, where it can (E3M4).
     /// Each sector at its roomiest as she believes it now (floor, ceiling).
     fn roomiest(&self) -> Vec<(f64, f64)> {
         self.states().iter().map(|hs| hs.iter().max_by(|a, b| (a.ceiling - a.floor).total_cmp(&(b.ceiling - b.floor))).map_or((0.0, 0.0), |h| (h.floor, h.ceiling))).collect()
