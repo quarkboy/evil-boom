@@ -48,6 +48,12 @@ fn tap_gun(obs: &Observation) -> i32 {
 
 /// how far into its range of floors a gun line is shot from
 const SHOT_MARGIN: f64 = 2.0;
+/// a drop this near ahead onto a narrow landing...
+const CREEP_RANGE: f64 = 48.0;
+/// ...narrower than this the way she's going...
+const LANDING_ROOM: f64 = 192.0;
+/// ...is stepped off no slower than this (units a tic)
+const DROP_CREEP: f64 = 1.0;
 /// tics between shots at a barrel (the pistol ready again, the trigger let go: a first shot each time)
 const BARREL_TAP: i64 = 20;
 /// a jump goes without settling if what it needs runs out sooner
@@ -761,6 +767,7 @@ impl RouteFollower {
             Drop::Replanned => return self.walk(obs),
             Drop::GiveBack(why) => return self.fail(obs, &why),
         }
+        self.creep_to_drop(obs);
         if let Some(c) = self.check_blocked(obs) {
             return c;
         }
@@ -1425,6 +1432,46 @@ impl RouteFollower {
     /// Stop and replan with the heights as they are: on if there's a way without such a drop;
     /// else the objective goes back to be judged again, the ground as it is now (E2M4: a floor
     /// raised on the way left the goal down in the blood pit, a drop into a trap).
+    /// A drop just ahead onto a landing that's narrow the way she's going (a ledge over a pit):
+    /// step off it slowly, as a falling player keeps her speed and slides on landing (MAP11's
+    /// ledge with the blur sphere, 136 down and 48 across: she'd gone straight over it).
+    fn creep_to_drop(&mut self, obs: &Observation) {
+        let view = Rc::clone(&self.view);
+        let mesh = &view.nav.mesh;
+        let Some(path) = self.step().path.clone() else { return };
+        let pos = obs.pos();
+        let upto = (self.poly_i + 4).min(path.polys.len().saturating_sub(1));
+        for j in self.poly_i..upto {
+            let (cur, nxt) = (path.polys[j], path.polys[j + 1]);
+            let (cs, ns) = (mesh.poly(cur).sector, mesh.poly(nxt).sector);
+            let (a, b) = (obs.heights[cs], obs.heights[ns]);
+            if cs == ns || a.floor - b.floor <= MAX_STEP {
+                continue;
+            }
+            let Some(portal) = mesh.poly(cur).portals.iter().map(|&pi| &mesh.portals[pi]).find(|p| p.other(cur) == nxt) else { return };
+            let edge = closest_on_portal(pos, portal.p1, portal.p2);
+            if dist(edge, pos) > CREEP_RANGE {
+                return;
+            }
+            // (the way she'll go over: on from her to the edge, or, at it, the way the landing is)
+            let to = if dist(edge, pos) > 4.0 { pos } else { mesh.poly(cur).center };
+            let len = dist(edge, to).max(1e-6);
+            let dir = ((edge.0 - to.0) / len, (edge.1 - to.1) / len);
+            // (the floor she'd land on, how far on before it drops away again)
+            let room = (1..)
+                .map(|k| f64::from(k) * 8.0)
+                .take_while(|&r| r < LANDING_ROOM)
+                .find(|&r| mesh.poly_at((edge.0 + dir.0 * r, edge.1 + dir.1 * r)).is_none_or(|q| obs.heights[mesh.poly(q).sector].floor < b.floor - MAX_STEP));
+            // (as fast as goes no further than that: the fall, about sqrt(2h) tics, and the
+            // slide on landing, 1 / (1 - friction) tics' worth, at the speed she went over)
+            if let Some(room) = room {
+                let tics = (2.0 * (a.floor - b.floor)).sqrt() + 1.0 / (1.0 - crate::motor::FRICTION);
+                self.speed_cap = self.speed_cap.min((room / tics).max(DROP_CREEP));
+            }
+            return;
+        }
+    }
+
     fn unexpected_drop(&mut self, obs: &Observation) -> Drop {
         let view = Rc::clone(&self.view);
         let mesh = &view.nav.mesh;

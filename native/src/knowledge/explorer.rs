@@ -1010,9 +1010,13 @@ impl Explorer {
                 // Her feet on the highest floor under the box: E2M7's armor bonus in a sunken
                 // strip, the box half over the floor 24 above it, where she'd come to a stop
                 // a few units short)
+                // (where she can stand, that is: not the box over a ledge she can't step up onto,
+                // MAP11's soulsphere 296 up)
                 let feet = [(0.0, 0.0), (ARRIVE_SLACK, 0.0), (-ARRIVE_SLACK, 0.0), (0.0, ARRIVE_SLACK), (0.0, -ARRIVE_SLACK)]
                     .iter()
-                    .map(|(dx, dy)| nav.jump_lab.fits_at_heights((q.0 + dx, q.1 + dy), &heights).1)
+                    .map(|(dx, dy)| (q.0 + dx, q.1 + dy))
+                    .filter(|&at| at == q || self.stands_at(at, &heights))
+                    .map(|at| nav.jump_lab.fits_at_heights(at, &heights).1)
                     .fold(f64::NEG_INFINITY, f64::max);
                 if floor.is_some_and(|f| !(-PICKUP_BELOW..=PLAYER_HEIGHT).contains(&(f - feet))) {
                     continue;
@@ -1078,8 +1082,9 @@ impl Explorer {
     /// you) to find out where it goes. One per pad, over its side nearest her.
     fn teleporters(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let (k, nav) = (&self.knowledge, &self.nav);
-        let mut best: Vec<(BTreeSet<usize>, Objective)> = Vec::new();
+        let mut best: Vec<(BTreeSet<usize>, bool, Objective)> = Vec::new();
         let now = self.states();
+        let heights = self.roomiest();
         for li in k.teleporters() {
             if k.teleports.contains_key(&li) {
                 continue;
@@ -1109,19 +1114,22 @@ impl Explorer {
             if !nav.poly_at(spot).is_some_and(|p| reach.contains(&p)) {
                 spot = src.iter().map(|&p| nav.poly_center(p)).reduce(|x, y| if dist(y, mid) < dist(x, mid) { y } else { x }).unwrap_or(spot);
             }
+            // (somewhere she fits first: not up against a torch in front of the pad, MAP11's,
+            // when another side of it is clear)
+            let fits = self.stands_at(spot, &heights);
             let Some(info) = classify_line(nav.map.linedefs[li].special) else { continue };
             let t = TriggerLine { id: usize::MAX, line: li as i64, info, sectors: Vec::new(), effects: Vec::new(), activators: src, shift_from: None, relevant: None, keep: None };
             let pad = k.teleport_pad(li);
             let mut o = Objective::new(Kind::Teleporter, spot, format!("try teleporter (line {li})"));
             o.trigger = Some(t);
             o.pad = pad.clone();
-            match best.iter_mut().find(|(p, _)| *p == pad) {
-                Some((_, b)) if dist(spot, pos) < dist(b.goal, pos) => *b = o,
+            match best.iter_mut().find(|(p, _, _)| *p == pad) {
+                Some((_, bf, b)) if (fits, -dist(spot, pos)) > (*bf, -dist(b.goal, pos)) => (*bf, *b) = (fits, o),
                 Some(_) => {}
-                None => best.push((pad, o)),
+                None => best.push((pad, fits, o)),
             }
         }
-        best.into_iter().map(|(_, o)| o).collect()
+        best.into_iter().map(|(_, _, o)| o).collect()
     }
 
     /// Sounds she heard but couldn't see the source of, lately: go to the reachable spot nearest
