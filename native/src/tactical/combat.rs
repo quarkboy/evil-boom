@@ -538,7 +538,9 @@ impl Combat {
             why = "away from a barrel".into();
         } else if busy {
             why = "shooting on the way".into();
-        } else if let Some(nearest) = close.iter().min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos))) {
+        // (out of ammo, a demon that follows for ever: backing off got her nowhere, MAP22; the
+        // route takes her past it, faster than it)
+        } else if let Some(nearest) = close.iter().filter(|_| self.armed(obs) || health < LOW_HEALTH).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos))) {
             let t = nearest.clone();
             let gun = self.preferred_gun(obs, &t);
             moving = self.steer(obs, Some(&t), &gun).or_else(|| self.away_from(obs, (t.x, t.y)));
