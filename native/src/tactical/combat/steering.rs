@@ -35,7 +35,10 @@ impl Combat {
     /// The way to move fighting `target` with `gun` (None: nowhere safe).
     pub(super) fn steer(&mut self, obs: &Observation, target: Option<&Thing>, gun: &Weapon) -> Option<Point> {
         let pos = obs.pos();
-        let them = self.against_her();
+        let mut them = self.against_her();
+        if let Some(t) = target.filter(|t| !them.iter().any(|m| m.id == t.id)) {
+            them.push(t.clone()); // (out of sight just now: where it was)
+        }
         let shooting = target.is_some_and(|t| matches!(mon(t.name).attack, Attack::Missile | Attack::Hitscan));
         let spread_now = spread(pos, &them.iter().map(|t| (t.x, t.y)).collect::<Vec<_>>());
         let mut best: Option<(f64, Point)> = None;

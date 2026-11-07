@@ -35,6 +35,8 @@ const RECENT_SIGHT_TICS: i64 = 35;
 const WAKE_DISTANCE: f64 = 16.0;
 const WAKE_SPEED: f64 = 0.5;
 const WAKE_TURN: f64 = 1.0;
+/// an awake monster out of sight this long is still fought (where it was)
+const LOST_TICS: i64 = 3 * 35;
 /// no shooting at anything further
 const ENGAGE_RANGE: f64 = 2048.0;
 
@@ -56,8 +58,9 @@ const OUTMATCHED: f64 = 30.0;
 /// monsters standing about (or by where she's going) she'd take longer than this to kill: left
 /// be
 pub const LEAVE_BE: f64 = 15.0;
-/// of what she shoots, this much lands (her ammo's worth, roughly)
-const AMMO_LANDS: f64 = 0.6;
+/// of what she shoots that would land (the spread allowed for), this much does (her ammo's
+/// worth, roughly)
+const AMMO_LANDS: f64 = 0.9;
 /// fewer shots than this for the guns held: supplies come first
 const SHORT_OF_AMMO: i32 = 15;
 /// ...or below this health, anything in sight
@@ -382,6 +385,7 @@ impl Combat {
         // (what each kind of ammo's worth, with the best gun she has for it; bosses take no blast)
         let held = Self::held(obs);
         let boss = names.iter().any(|n| mon(n).boss);
+        let radius = names.iter().map(|n| mon(n).radius).fold(20.0, f64::max);
         let mut worth = 0.0;
         for pool in [&[2, 4][..], &[3], &[5], &[6, 7]] {
             let best = pool
@@ -390,7 +394,7 @@ impl Combat {
                 .map(|&s| {
                     let w = weapon_in(s, obs.super_shotgun);
                     let per = if boss && s == 5 { w.damage / 2.0 } else { w.damage };
-                    f64::from(Self::ammo(obs, s) / w.ammo_per_shot.max(1)) * per
+                    f64::from(Self::ammo(obs, s) / w.ammo_per_shot.max(1)) * per * w.hits(radius, 384.0)
                 })
                 .fold(0.0, f64::max);
             worth += best;
@@ -465,6 +469,11 @@ impl Combat {
         let first_missile = missiles.first().cloned();
         let target = self.pick_target(obs);
         if target.is_none() && first_missile.is_none() {
+            if !busy && errand.is_empty() {
+                if let Some(d) = self.lost_sight(obs) {
+                    return Some(d);
+                }
+            }
             if !self.mode.is_empty() {
                 self.log.push(format!("tic {}: fight over ({} kills)", obs.tic, self.kills));
             }
@@ -582,6 +591,28 @@ impl Combat {
             self.mode = why.clone();
         }
         Some(Decision { takeover, aim, fire, weapon, moving, why })
+    }
+
+    /// An awake monster that was after her gone out of sight a moment ago (behind a pillar,
+    /// round a corner): she keeps fighting it, aimed where it was, keeping her distance, rather
+    /// than going about her business (MAP32: walked up to a cyberdemon behind a pillar).
+    fn lost_sight(&mut self, obs: &Observation) -> Option<Decision> {
+        let pos = obs.pos();
+        let s = self
+            .remaining()
+            .into_iter()
+            .filter(|s| s.awake && obs.tic - s.tic < LOST_TICS && mon(s.name).attack != Attack::None && dist(s.pos(), pos) < ENGAGE_RANGE)
+            .max_by(|a, b| mon(a.name).threat.total_cmp(&mon(b.name).threat))?;
+        let mut ghost = self.alive.get(&s.id)?.clone();
+        (ghost.x, ghost.y, ghost.z, ghost.vx, ghost.vy) = (s.x, s.y, s.z, 0.0, 0.0);
+        let gun = self.preferred_gun(obs, &ghost);
+        let moving = self.steer(obs, Some(&ghost), &gun);
+        let why = format!("lost sight of {}: keeping at it", s.name);
+        if why != self.mode {
+            self.log.push(format!("tic {}: {why}", obs.tic));
+            self.mode = why.clone();
+        }
+        Some(Decision { takeover: true, aim: Some(heading(pos, s.pos())), fire: false, weapon: 0, moving, why })
     }
 
     /// The controls for a decision: over the route's (`base`: only the aim and the trigger are
