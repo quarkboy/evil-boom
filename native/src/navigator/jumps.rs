@@ -40,6 +40,7 @@ fn lab_jump(j: &Jump) -> LabJump {
         takeoff: j.takeoff,
         speed: j.speed,
         requires: j.requires.clone(),
+        strafe: j.strafe,
     }
 }
 
@@ -52,6 +53,8 @@ struct Cached {
     takeoff: (f64, f64),
     speed: f64,
     requires: Vec<(usize, (f64, f64))>,
+    #[serde(default)]
+    strafe: bool,
 }
 
 /// What the finder depends on, hashed: the map, the mesh, the heights sectors can take, which
@@ -112,6 +115,7 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
         release: 0.0,
         through: false,
         sure: 1.0,
+        strafe: c.strafe,
     };
     if let Some(cached) = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<Vec<Cached>>(&t).ok()) {
         return cached.into_iter().map(from).collect();
@@ -129,6 +133,7 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
             takeoff: j.takeoff,
             speed: j.speed,
             requires: j.requires.iter().map(|(s, h)| (*s, h.tuple())).collect(),
+            strafe: j.strafe,
         })
         .collect();
     if let Some(dir) = path.parent() {

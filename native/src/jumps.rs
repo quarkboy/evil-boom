@@ -30,11 +30,32 @@ pub struct Jump {
     pub speed: f64,
     /// (sector, heights) of movable sectors it depends on
     pub requires: Vec<(usize, Heights)>,
+    /// run strafing (forward and sideways at once, faced STRAFE_FACING off the way), the faster
+    pub strafe: bool,
 }
 
 impl Jump {
     fn new(src: usize, dest_poly: usize, dest: Point, runup: Point, takeoff: Point, speed: f64, requires: Vec<(usize, Heights)>) -> Jump {
-        Jump { src_polys: vec![src], dest_poly, dest, runup, takeoff, speed, requires }
+        Jump { src_polys: vec![src], dest_poly, dest, runup, takeoff, speed, requires, strafe: false }
+    }
+
+    /// Which way to face to go along `heading` (degrees): straight on, or strafing, turned off
+    /// it so forward and sideways add up along it.
+    pub fn facing(&self, heading: f64) -> f64 {
+        if self.strafe {
+            heading + STRAFE_FACING
+        } else {
+            heading
+        }
+    }
+
+    /// How hard to strafe (right) while running: none, or a run key's sidestep.
+    pub fn sidestep(&self) -> f64 {
+        if self.strafe {
+            STRAFE_SIDE
+        } else {
+            0.0
+        }
     }
 
     /// Its identity, as evildoom.nav.reach.Jump.key has it.
@@ -53,8 +74,14 @@ pub struct RunStart {
     pub angle: f64,
 }
 
+/// A run key's sidestep (the game's sidemove with run held), and how far to face off the way to
+/// go straight along it running and strafing at once: atan(40 / 50), 38.7 degrees, for a speed
+/// 1.28 times running straight (MAP03's well: "do a strafe run off the walkway into the well").
+pub const STRAFE_SIDE: f64 = 40.0;
+pub const STRAFE_FACING: f64 = 38.659_808_254_090_09;
+
 /// Bumped whenever the finder's results could change (it keys Python's jump cache).
-pub const FINDER_VERSION: u32 = 17;
+pub const FINDER_VERSION: u32 = 25;
 
 /// The map as the jump tools need it.
 pub struct JumpLab {

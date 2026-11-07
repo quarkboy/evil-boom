@@ -8,7 +8,7 @@
 //! heights first) that makes the jump work, and the moved heights it needed are recorded in
 //! `requires`: the jump is only usable once the world has them.
 
-use super::{Jump, JumpLab};
+use super::{Jump, JumpLab, STRAFE_SIDE};
 use crate::geom::{box_hits_segment, cells, closest_point, dist, segments_cross, Point, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::motor::{FRICTION, RUN_THRUST};
 use crate::nav::{can_cross, Heights};
@@ -67,12 +67,13 @@ fn box_points(r: f64) -> [Point; 8] {
 
 /// How a jump is tried: `high`, sectors met in flight at their highest floor that works; `cap`,
 /// the longest run-up; `ceiling`, set if it came in too high for a ceiling it'd have come down
-/// under (slower, from a shorter run-up, it may not).
+/// under (slower, from a shorter run-up, it may not); `strafe`, running strafing, faster.
 #[derive(Clone, Copy)]
 struct Flight<'a> {
     high: bool,
     cap: f64,
     ceiling: Option<&'a Cell<bool>>,
+    strafe: bool,
 }
 
 /// The heights each sector has been given for the jump being tried, in the order given.
@@ -134,7 +135,7 @@ impl JumpLab {
                                 let takeoff = (x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
                                 let chosen = Chosen(if sa == sb { vec![(sa, ha)] } else { vec![(sa, ha), (sb, hb)] });
                                 let ceiling = Cell::new(false);
-                                let jump = self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: false, cap: MAX_RUNUP, ceiling: Some(&ceiling) });
+                                let jump = self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: false, cap: MAX_RUNUP, ceiling: Some(&ceiling), strafe: false });
                                 // A raised-floor landing is an alternative. Only a normal
                                 // landing ends the takeoff search for this direction.
                                 let normal_landing = jump.is_some();
@@ -142,10 +143,21 @@ impl JumpLab {
                                 // run-up, slower: MAP06's ledge behind the fake wall, its ceiling
                                 // 88 over the floor, too fast from far back)
                                 let found = jump
-                                    .or_else(|| self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: true, cap: MAX_RUNUP, ceiling: None }))
-                                    .or_else(|| ceiling.get().then(|| RUNUP_CAPS[1..].iter().find_map(|&cap| self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: false, cap, ceiling: None }))).flatten());
+                                    .or_else(|| self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: true, cap: MAX_RUNUP, ceiling: None, strafe: false }))
+                                    .or_else(|| ceiling.get().then(|| RUNUP_CAPS[1..].iter().find_map(|&cap| self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: false, cap, ceiling: None, strafe: false }))).flatten())
+                                    // (still nowhere: strafing, faster, as a player runs for a far
+                                    // ledge: MAP03's well, over its rim from the walkway)
+                                    .or_else(|| {
+                                        self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: false, cap: MAX_RUNUP, ceiling: None, strafe: true })
+                                            .map(|mut j| {
+                                            j.strafe = true;
+                                            j
+                                        })
+                                    });
                                 if let Some(j) = found {
-                                    let key = (a, mesh.poly(j.dest_poly).sector);
+                                    // (strafing runs apart: not taking the places of the jumps
+                                    // without, E3M6's off the lift to the soulsphere)
+                                    let key = (a, mesh.poly(j.dest_poly).sector, j.strafe);
                                     let index = group_index.entry(key).or_insert_with(|| {
                                         groups.push(Vec::new());
                                         groups.len() - 1
@@ -281,7 +293,9 @@ impl JumpLab {
     /// highest possible floor that works, rather than the first (a platform raised to land on:
     /// MAP09's bridge).
     fn try_jump(&self, src: usize, takeoff: Point, mut n: Point, mut chosen: Chosen, input: &FinderInput, how: Flight) -> Option<Jump> {
-        let Flight { high, cap, ceiling } = how;
+        let Flight { high, cap, ceiling, strafe } = how;
+        // (running and strafing at once: forward and sideways thrust together)
+        let thrust = if strafe { RUN_THRUST * (1.0 + (STRAFE_SIDE / 50.0).powi(2)).sqrt() } else { RUN_THRUST };
         let mesh = &self.mesh;
         let src_sector = mesh.poly(src).sector;
         let floor = chosen.get(src_sector)?.floor;
@@ -342,7 +356,7 @@ impl JumpLab {
         }
         let (mut v, mut d) = (0.0, 0.0);
         while d < runup {
-            v = v * FRICTION + RUN_THRUST;
+            v = v * FRICTION + thrust;
             d += v;
         }
         // Flight: the player stands on the highest floor under the box, so keeps ledge height

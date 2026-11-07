@@ -1203,7 +1203,9 @@ impl RouteFollower {
     /// At the run-up: settle on the exact spot facing the takeoff, then sprint.
     fn line_up(&mut self, obs: &Observation, jump: &Jump) -> Controls {
         let hd = heading(jump.runup, jump.takeoff);
-        let diff = norm(hd - obs.angle);
+        // (faced off the way for a strafing run: MAP03's well)
+        let face = jump.facing(hd);
+        let diff = norm(face - obs.angle);
         // the heights the jump was found with must be there, and not still moving (if one has
         // stopped somewhere else it's not coming: jump from there anyway)
         for &(sector, h) in &jump.requires {
@@ -1235,13 +1237,13 @@ impl RouteFollower {
                         spot = poly.center;
                     }
                 }
-                return self.motion.hold(obs, ((spot.0 - obs.x) * 0.3, (spot.1 - obs.y) * 0.3), Some(hd));
+                return self.motion.hold(obs, ((spot.0 - obs.x) * 0.3, (spot.1 - obs.y) * 0.3), Some(face));
             }
             if live.is_none_or(|l| l.floor < h.floor - 0.5) {
                 // stopped lower than the jump needs: find another way with things as they are
                 self.jump_wait = None;
                 if self.replan(obs, &format!("sector {sector} at {}, too low for the jump", fmt_live(live)), true) {
-                    return self.motion.hold(obs, (0.0, 0.0), Some(hd));
+                    return self.motion.hold(obs, (0.0, 0.0), Some(face));
                 }
                 return self.fail(obs, "jump takeoff too low and no other way");
             }
@@ -1264,11 +1266,11 @@ impl RouteFollower {
         if settled || (obs.tic - lineup > 35 && diff.abs() <= 1.5 && self.motion.speed() < 0.5 && (near || obs.tic - lineup > 3 * 35)) {
             self.lineup_tic = None;
             self.sprint = Some((jump.clone(), hd, obs.tic));
-            self.log.add(obs.tic, format!("run-jump from ({:.0}, {:.0})", jump.takeoff.0, jump.takeoff.1));
+            self.log.add(obs.tic, format!("run-jump from ({:.0}, {:.0}){}", jump.takeoff.0, jump.takeoff.1, if jump.strafe { ", strafing" } else { "" }));
             return self.sprint_jump(obs);
         }
         self.progress_tic = obs.tic;
-        self.motion.hold(obs, ((jump.runup.0 - obs.x) * 0.3, (jump.runup.1 - obs.y) * 0.3), Some(hd))
+        self.motion.hold(obs, ((jump.runup.0 - obs.x) * 0.3, (jump.runup.1 - obs.y) * 0.3), Some(face))
     }
 
     /// Back out of its blast (128 units) and shoot the barrel in the way, then carry on.
@@ -1445,7 +1447,7 @@ impl RouteFollower {
             self.brake_until = obs.tic + 2 * 35;
             return self.walk(obs);
         }
-        let diff = norm(hd - obs.angle);
+        let diff = norm(jump.facing(hd) - obs.angle);
         self.motion.rate = 0.0;
         let push = flown < if jump.soft { jump.release } else { dist(jump.takeoff, jump.dest) - 8.0 };
         // keep on the jump's line till takeoff (MAP27's clears a ledge corner by nothing)
@@ -1453,6 +1455,9 @@ impl RouteFollower {
         if flown < 0.0 {
             let side = (obs.x - jump.takeoff.0) * uy - (obs.y - jump.takeoff.1) * ux;
             strafe = (-4.0 * side).clamp(-15.0, 15.0); // (side: how far right of the line)
+        }
+        if push {
+            strafe += jump.sidestep();
         }
         Controls { forward: if push { 50.0 } else { 0.0 }, strafe, turn: (-diff).clamp(-3.0, 3.0), ..Controls::default() }
     }

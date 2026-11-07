@@ -335,6 +335,8 @@ pub struct Explorer {
     panic_tries: usize,
     /// (that round done: only the walls with more to go on)
     strong_only: bool,
+    /// strafing run-jumps allowed (nothing else to do)
+    strafe_ok: bool,
     /// when she last shot at a wall she was trying (single taps)
     wall_shot: i64,
     /// what she knew when what was given up on last had its other go: another once she knows
@@ -383,6 +385,7 @@ impl Explorer {
             suspecting: Suspecting::No,
             panic_tries: 0,
             strong_only: false,
+            strafe_ok: false,
             wall_shot: -1_000_000,
             retried: None,
             debug_tics: debug_tics(),
@@ -610,7 +613,9 @@ impl Explorer {
     fn banned_jumps(&self) -> BTreeSet<usize> {
         let limit = if self.difficult { JUMP_MISSES } else { 1 };
         let missed = &self.knowledge.missed_jumps;
-        self.nav.jumps.iter().enumerate().filter(|(_, j)| missed.get(&j.key()).copied().unwrap_or(0) >= limit).map(|(i, _)| i).collect()
+        // (and strafing runs, but when there's nothing else to do: for where a run straight
+        // won't go, not a way round; MAP13's, taken as one, led her off from what was left)
+        self.nav.jumps.iter().enumerate().filter(|(_, j)| missed.get(&j.key()).copied().unwrap_or(0) >= limit || (j.strafe && !self.strafe_ok)).map(|(i, _)| i).collect()
     }
 
     fn set_jumps(&mut self, difficult: bool) {
@@ -1902,7 +1907,18 @@ impl Explorer {
         }
         self.exits_open = !self.exit_last;
         let perceive = self.knowledge.perceive;
+        self.strafe_ok = false;
         let mut found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        if !found && self.nav.jumps.iter().any(|j| j.strafe) {
+            // (nothing else: what a strafing run gets to, MAP03's well)
+            self.strafe_ok = true;
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+            if found {
+                self.log.push(format!("tic {}: nothing else to do: strafing runs too", obs.tic));
+            } else {
+                self.strafe_ok = false;
+            }
+        }
         if found {
             self.panic_tries = 0;
         }

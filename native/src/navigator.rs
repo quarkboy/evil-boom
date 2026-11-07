@@ -158,9 +158,29 @@ pub struct Jump {
     pub through: bool,
     /// how sure (0-1): made a little differently, the share that comes off
     pub sure: f64,
+    /// run strafing, the faster (jumps::Jump::strafe)
+    pub strafe: bool,
 }
 
 impl Jump {
+    /// Which way to face to go along `heading`: straight on, or for a strafing run off it.
+    pub fn facing(&self, heading: f64) -> f64 {
+        if self.strafe {
+            heading + crate::jumps::STRAFE_FACING
+        } else {
+            heading
+        }
+    }
+
+    /// How hard to strafe (right) on the run: none, or a run key's sidestep.
+    pub fn sidestep(&self) -> f64 {
+        if self.strafe {
+            crate::jumps::STRAFE_SIDE
+        } else {
+            0.0
+        }
+    }
+
     pub fn usable(&self, states: &States) -> bool {
         self.requires.iter().all(|(s, h)| states[*s].contains(h))
     }

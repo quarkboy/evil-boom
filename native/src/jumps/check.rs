@@ -209,8 +209,8 @@ impl JumpLab {
             out.push((o.0, o.1, sim.z_units(), sim.angle_degrees()));
             let flown = (o.0 - j.runup.0) * ux + (o.1 - j.runup.1) * uy;
             let pushing = flown < push.until(edge, flight);
-            let turn = (-norm(heading - sim.angle_degrees())).clamp(-3.0, 3.0);
-            sim.step(Controls { forward: if pushing { 50.0 } else { 0.0 }, strafe: 0.0, turn });
+            let turn = (-norm(j.facing(heading) - sim.angle_degrees())).clamp(-3.0, 3.0);
+            sim.step(Controls { forward: if pushing { 50.0 } else { 0.0 }, strafe: if pushing { j.sidestep() } else { 0.0 }, turn });
         }
         out
     }
@@ -386,8 +386,9 @@ impl JumpLab {
             return None;
         }
         let heading = (j.takeoff.1 - j.runup.1).atan2(j.takeoff.0 - j.runup.0).to_degrees();
+        // (faced off the way, strafing: the way's still `heading`)
         for _ in 0..20 {
-            let diff = norm(heading - sim.angle_degrees());
+            let diff = norm(j.facing(heading) - sim.angle_degrees());
             if diff.abs() < 1.0 {
                 break;
             }
@@ -443,8 +444,8 @@ impl JumpLab {
                 break;
             }
             let pushing = through || flown < push.until(edge, flight);
-            let turn = (-norm(heading - sim.angle_degrees())).clamp(-3.0, 3.0);
-            sim.step(Controls { forward: if pushing { 50.0 } else { 0.0 }, strafe: 0.0, turn });
+            let turn = (-norm(j.facing(heading) - sim.angle_degrees())).clamp(-3.0, 3.0);
+            sim.step(Controls { forward: if pushing { 50.0 } else { 0.0 }, strafe: if pushing { j.sidestep() } else { 0.0 }, turn });
         }
         (Flight::Missed, last)
     }

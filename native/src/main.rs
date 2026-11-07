@@ -113,7 +113,7 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
         }
         // (the run-jumps found landing here, and what the movement check makes of them)
         let into: Vec<&evildoom::navigator::Jump> = nav.jumps.iter().filter(|j| nav.mesh.polys[j.dest_poly].as_ref().is_some_and(|q| q.sector == si)).collect();
-        let lab: Vec<evildoom::jumps::Jump> = into.iter().map(|j| evildoom::jumps::Jump { src_polys: j.src_polys.iter().copied().collect(), dest_poly: j.dest_poly, dest: j.dest, runup: j.runup, takeoff: j.takeoff, speed: 0.0, requires: j.requires.clone() }).collect();
+        let lab: Vec<evildoom::jumps::Jump> = into.iter().map(|j| evildoom::jumps::Jump { src_polys: j.src_polys.iter().copied().collect(), dest_poly: j.dest_poly, dest: j.dest, runup: j.runup, takeoff: j.takeoff, speed: 0.0, requires: j.requires.clone(), strafe: j.strafe }).collect();
         for (j, verdict) in into.iter().zip(nav.jump_lab.check_jumps(&lab)) {
             let from: BTreeSet<usize> = j.src_polys.iter().filter_map(|&p| nav.mesh.polys[p].as_ref().map(|q| q.sector)).collect();
             println!("  jump in from sectors {from:?}: run-up ({:.0}, {:.0}), takeoff ({:.0}, {:.0}), lands ({:.0}, {:.0}): {verdict}", j.runup.0, j.runup.1, j.takeoff.0, j.takeoff.1, j.dest.0, j.dest.1);
