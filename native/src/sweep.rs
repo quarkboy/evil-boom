@@ -161,9 +161,11 @@ fn py_bool(b: bool) -> &'static str {
 /// The omniscient plan from where she is, with the heights as they are.
 /// The 100% runs: the exit last while the count she's after (on the automap, as a player sees it)
 /// is short of all there is; then out.
-fn hold_exit(e: &Engine, agent: &mut Agent, o: &RunOptions, secrets_short: i32, items_short: i32) {
+fn hold_exit(e: &Engine, agent: &mut Agent, o: &RunOptions, secrets_short: i32, items_short: i32, given_up: bool) {
     let tally = e.tally();
-    if o.secrets {
+    if given_up {
+        agent.x_mut().exit_last = false;
+    } else if o.secrets {
         agent.x_mut().exit_last = tally[2].0 < tally[2].1 - secrets_short;
     } else if o.expert {
         agent.x_mut().exit_last = tally[0].0 < tally[0].1 - items_short;
@@ -255,7 +257,8 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool) -> Result<S
                 notes.entry(*t).or_default().push(n.clone());
             }
         }
-        while e.tic < to && !e.finished() {
+        // (on past a death: the level again where the run started it again)
+        while e.tic < to && (!e.finished() || restarts.contains_key(&e.tic)) {
             if let Some(why) = restarts.get(&e.tic) {
                 deaths += 1;
                 if why == "for what's left" {
@@ -268,7 +271,7 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool) -> Result<S
                 continue;
             }
             if e.tic % 35 == 0 {
-                hold_exit(&e, &mut agent, o, secrets_short, most_items(&m, skill));
+                hold_exit(&e, &mut agent, o, secrets_short, most_items(&m, skill), false);
             }
             let ob = e.observe();
             agent.x_mut().knowledge.update(&ob, c.as_ref());
@@ -389,6 +392,8 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     // things again counted, the user's call; the run's time cap bounds it)
     let (mut best, mut best_tic) = (progress(&e, agent.x()), e.tic);
     let mut stalled = false;
+    // (the stall clock ran out once: the exit, whatever's left)
+    let mut given_up = false;
     // (the most items and secrets one life got: a level again starts the tally afresh)
     let mut best_life = (0, 0);
     // (the secrets tally so far this life: up by one, she's just found the one where she stands)
@@ -400,9 +405,18 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
                 best = std::array::from_fn(|i| now[i].max(best[i]));
                 best_tic = e.tic;
             } else if (e.tic - best_tic) as f64 > o.stall_seconds * TICRATE {
-                agent.x_mut().log.push(format!("tic {}: nothing more collected, learned or tried in {:.0}s: over", e.tic, o.stall_seconds));
-                stalled = true;
-                break;
+                if !given_up {
+                    // (what's left out of reach as far as she can tell: out, as a player gives up
+                    // on the last secret; a stall's time again to get there. E4M5's second secret)
+                    agent.x_mut().log.push(format!("tic {}: nothing more collected, learned or tried in {:.0}s: for the exit", e.tic, o.stall_seconds));
+                    given_up = true;
+                    best_tic = e.tic;
+                    hold_exit(&e, &mut agent, o, secrets_short, items_short, given_up);
+                } else {
+                    agent.x_mut().log.push(format!("tic {}: nothing more collected, learned or tried in {:.0}s: over", e.tic, o.stall_seconds));
+                    stalled = true;
+                    break;
+                }
             }
         }
         let mut stranded = idle_since.is_some_and(|i| e.tic - i > STRANDED_TICS.min((o.stall_seconds * TICRATE / 2.0) as i64)) || agent.x().restart_wanted;
@@ -466,12 +480,13 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
                 idle_since = None;
                 (best, best_tic) = (progress(&e, agent.x()), e.tic);
                 secrets_seen = 0;
+                given_up = false;
                 continue;
             }
             break;
         }
         if e.tic % 35 == 0 {
-            hold_exit(&e, &mut agent, o, secrets_short, items_short);
+            hold_exit(&e, &mut agent, o, secrets_short, items_short, given_up);
         }
         let t1 = Instant::now();
         let ob = e.observe();

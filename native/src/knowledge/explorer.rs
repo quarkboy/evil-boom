@@ -1398,6 +1398,19 @@ impl Explorer {
         self.nav.poly_at(h.origin).is_some_and(|p| self.knowledge.seen_tic.get(&self.nav.sector_of_poly(p)).copied().unwrap_or(-1) > h.tic)
     }
 
+    /// Is the box (with the checks' slack) at p over a line that teleports her or ends the level?
+    fn by_trip_line(&self, p: Point) -> bool {
+        let (m, mesh) = (&self.nav.map, &self.nav.mesh);
+        let r = crate::geom::PLAYER_RADIUS + 0.25;
+        crate::geom::cells_around(p, p, r + 1.0).any(|c| {
+            mesh.line_grid.get(&c).into_iter().flatten().any(|&li| {
+                let sp = m.linedefs[li].special;
+                let trips = crate::navigator::TELEPORTERS_FOR_PLAYERS.contains(&sp) || crate::specials::classify_line(sp).is_some_and(|i| i.category.is_exit() && i.trigger.walked());
+                trips && crate::geom::swept_box_hits(p, p, r, m.line_seg(li))
+            })
+        })
+    }
+
     /// Parts of known rooms she can get to but hasn't walked (walking round finds the walk-over
     /// lines nobody can see): per sector, the reachable poly furthest from anywhere she's stood,
     /// if far enough to be worth it; and every room stepped into once (E1M4's door opener).
@@ -1412,8 +1425,11 @@ impl Explorer {
             if k.visited.contains(&pi) || k.damaging(poly.sector) {
                 continue; // (not wading through nukage just to look)
             }
-            if !self.standable(poly.center, false) {
-                continue; // (an 8-wide strip by a shut door, E1M4)
+            if !self.standable(poly.center, false) || self.by_trip_line(poly.center) {
+                // (an 8-wide strip by a shut door, E1M4; a strip the box's width beside a teleport
+                // pad, MAP26's, the box over the pad's edge there and no way to it but squeezed
+                // past that edge: a whole search, 20000 steps, for nothing, every life)
+                continue;
             }
             if !entered.contains(&poly.sector) {
                 let d = dist(poly.center, pos);
