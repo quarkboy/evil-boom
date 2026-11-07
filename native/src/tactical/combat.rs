@@ -43,6 +43,9 @@ const DODGE_TICS: i64 = 35;
 /// ...if it would pass nearer than the two radii and this
 const DODGE_MARGIN: f64 = 12.0;
 
+/// a rocket's blast reaches this far (less her radius: 128 in all)
+const SPLASH: f64 = 112.0;
+
 /// a clawing monster nearer than this: back off from it
 const CLOSE: f64 = 160.0;
 /// this much threat in sight: stand and fight rather than walk on
@@ -642,17 +645,22 @@ impl Combat {
 
 /// How far a missile's middle has to pass from hers to miss (and its blast).
 fn clearance(m: &Missile) -> f64 {
-    PLAYER_RADIUS + m.radius + DODGE_MARGIN + if m.splash { 64.0 } else { 0.0 }
+    PLAYER_RADIUS + m.radius + DODGE_MARGIN + if m.splash { SPLASH } else { 0.0 }
 }
 
-/// How near t comes to her as it goes by, if she runs `way` from now.
-fn miss_by(pos: Point, vel: Point, way: Point, t: &Thing) -> f64 {
+/// How near t comes to her as it goes by, if she runs `way` from now (stopped once she's gone
+/// `room`: a wall that way; a rocket by a wall she'd have run into met her there). A rocket's
+/// counted from its middle: its blast (the clearance) does the rest.
+fn miss_by(pos: Point, vel: Point, way: Point, room: f64, t: &Thing) -> f64 {
     let (mut x, mut y) = pos;
     let (mut vx, mut vy) = vel;
     let mut nearest = f64::INFINITY;
     for k in 1..=DODGE_TICS {
         vx += RUN_THRUST * way.0;
         vy += RUN_THRUST * way.1;
+        if dist((x + vx, y + vy), pos) > room {
+            (vx, vy) = (0.0, 0.0);
+        }
         x += vx;
         y += vy;
         vx *= FRICTION;

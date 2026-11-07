@@ -36,6 +36,9 @@ const FAR_HITS: f64 = 0.2;
 /// a weapon switch asked for: give it this long before asking again
 const SWITCH_WAIT: i64 = 40;
 
+/// half a rocket's width, and a little
+const ROCKET_HALF: f64 = 13.0;
+
 /// a pain elemental nearer than this isn't shot with rockets (its souls come out in front)
 const PAIN_NEAR: f64 = 512.0;
 
@@ -121,7 +124,7 @@ impl Combat {
         let on = norm(aim - obs.angle).abs() < tolerance;
         let held_fire = if !Self::in_reach(&w, t, d) {
             "out of reach"
-        } else if held == 5 && !self.rocket_safe(obs, t) {
+        } else if held == 5 && (!self.rocket_safe(obs, t) || !self.rocket_lane_clear(obs, t)) {
             "rocket not safe"
         } else if !self.can_hit(obs, t, None) {
             "no shot (too steep, or something in the way)"
@@ -165,8 +168,25 @@ impl Combat {
     }
 
     pub(super) fn shot_clear(&mut self, obs: &Observation, at: Point, z: f64, h: f64) -> bool {
+        self.shot_clear_from(obs, obs.pos(), at, z, h)
+    }
+
+    /// A rocket's way to t clear its whole width (MAP32: one fired past a pillar's corner beside
+    /// her, the line from her eye clear, the rocket's side not: 86 off her).
+    fn rocket_lane_clear(&mut self, obs: &Observation, t: &Thing) -> bool {
+        let pos = obs.pos();
+        let d = dist((t.x, t.y), pos).max(1.0);
+        let side = (-(t.y - pos.1) / d * ROCKET_HALF, (t.x - pos.0) / d * ROCKET_HALF);
+        let h = mon(t.name).height;
+        [1.0, -1.0].into_iter().all(|k| {
+            let o = (side.0 * k, side.1 * k);
+            self.shot_clear_from(obs, (pos.0 + o.0, pos.1 + o.1), (t.x + o.0, t.y + o.1), t.z, h)
+        })
+    }
+
+    fn shot_clear_from(&mut self, obs: &Observation, from: Point, at: Point, z: f64, h: f64) -> bool {
         let gun = self.z(obs) + SHOT_HEIGHT;
-        let d = dist(at, obs.pos()).max(1.0);
+        let d = dist(at, from).max(1.0);
         let (mut lo, mut hi) = (z.max(gun - AUTOAIM * d), (z + h).min(gun + AUTOAIM * d));
         if hi <= lo {
             if !(z < gun && gun < z + h) {
@@ -174,7 +194,7 @@ impl Combat {
             }
             (lo, hi) = (gun - 1.0, gun + 1.0); // (out level: it only hits what's level with it)
         }
-        let me = Body { x: obs.x, y: obs.y, z: gun - 0.75 * PLAYER_HEIGHT, height: PLAYER_HEIGHT }; // (the eye's at 0.75)
+        let me = Body { x: from.0, y: from.1, z: gun - 0.75 * PLAYER_HEIGHT, height: PLAYER_HEIGHT }; // (the eye's at 0.75)
         self.refresh_tic_cache(obs);
         self.los.clear(me, Body { x: at.0, y: at.1, z: lo, height: hi - lo }, &self.heights_now)
     }

@@ -16,7 +16,11 @@ const LOOK: f64 = 160.0;
 /// room to run looked for this far
 const ROOM: f64 = 384.0;
 
+/// walls looked for round where she'd be this far
+const OPEN: f64 = 192.0;
+
 /// what each counts for
+const W_OPEN: f64 = 2.0;
 const W_ROOM: f64 = 2.0;
 const W_NEAR: f64 = 1.0;
 const W_FAR: f64 = 0.6;
@@ -46,7 +50,7 @@ impl Combat {
             }
             let room = self.clear_run(obs, d, ROOM);
             let ahead = (pos.0 + d.0 * LOOK.min(room), pos.1 + d.1 * LOOK.min(room));
-            let mut s = W_ROOM * room / ROOM;
+            let mut s = W_ROOM * room / ROOM + W_OPEN * self.openness(obs, ahead, OPEN);
             for m in &them {
                 let info = mon(m.name);
                 let w = (info.threat + 1.0).sqrt();

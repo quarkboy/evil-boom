@@ -97,9 +97,15 @@ impl Combat {
             if !self.safe(obs, way, 64.0) {
                 continue;
             }
-            let mut s =
-                missiles.iter().filter_map(|t| missile(t.name).map(|m| miss_by(pos, self.velocity, way, t) - clearance(&m))).fold(f64::INFINITY, f64::min);
+            let room = self.clear_run(obs, way, 16.0 * DODGE_TICS as f64);
+            let mut s = missiles.iter().filter_map(|t| missile(t.name).map(|m| miss_by(pos, self.velocity, way, room, t) - clearance(&m))).fold(f64::INFINITY, f64::min);
             s = s.min(48.0); // (clear is clear: then the rest decides)
+            // (among those, where there's room after: dodged along a wall into a corner, the next
+            // rocket had her)
+            let ahead = (pos.0 + way.0 * room.min(160.0), pos.1 + way.1 * room.min(160.0));
+            if s >= 0.0 {
+                s += 24.0 * self.openness(obs, ahead, 192.0);
+            }
             if let Some(dw) = self.dodge_way {
                 s += 6.0 * (way.0 * dw.0 + way.1 * dw.1);
             }
@@ -188,9 +194,23 @@ impl Combat {
         [(0.0, 0.0), side, (-side.0, -side.1)].into_iter().map(|o| self.clear_line(obs, (obs.x + o.0, obs.y + o.1), d, length)).fold(length, f64::min)
     }
 
+    /// How open it is round p: the mean of how far she could go from there each way, up to
+    /// `length` (a corner's little; the middle of a hall all of it).
+    pub(super) fn openness(&self, obs: &Observation, p: Point, length: f64) -> f64 {
+        let n = 8;
+        (0..n)
+            .map(|i| {
+                let a = 2.0 * std::f64::consts::PI * f64::from(i) / f64::from(n);
+                self.clear_line(obs, p, (a.cos(), a.sin()), length)
+            })
+            .sum::<f64>()
+            / f64::from(n)
+            / length
+    }
+
     fn clear_line(&self, obs: &Observation, from: Point, d: Point, length: f64) -> f64 {
         let nav = &self.nav;
-        let Some(here) = nav.poly_at(obs.pos()) else { return 0.0 };
+        let Some(here) = nav.poly_at(from).or_else(|| nav.poly_at(obs.pos())) else { return 0.0 };
         let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
         let mut floor = floor_of(here).floor;
         let n = ((length / 16.0).floor() as usize).max(2);
