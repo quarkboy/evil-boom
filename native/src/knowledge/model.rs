@@ -54,6 +54,8 @@ pub const BUSY_TICS: i64 = 200;
 pub const LOOKS_INTERACTIVE: [&str; 11] = ["SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR", "ZELDOOR", "PLAT", "SUPPORT"];
 /// a shut sector no thicker than this behind a line is a door
 const DOOR_THICKNESS: f64 = 32.0;
+/// how far round a wall with nothing joined to it its fellows are looked for (`odd`)
+const AROUND: f64 = 128.0;
 /// an exit sign this near the spot in front of a wall marks it
 const EXIT_SIGN_NEAR: f64 = 64.0;
 /// how far behind a wall a blank on her map is looked for...
@@ -612,6 +614,21 @@ impl Knowledge {
 
     // --- doing ------------------------------------------------------------------------------
 
+    /// Linedefs within `r` of `p`, by number.
+    fn lines_near(&self, p: Point, r: f64) -> Vec<usize> {
+        let m = &self.nav.map;
+        let mut out: BTreeSet<usize> = BTreeSet::new();
+        for cell in cells(p.0 - r, p.1 - r, p.0 + r, p.1 + r) {
+            for &li in self.nav.mesh.line_grid.get(&cell).into_iter().flatten() {
+                let (a, b) = m.line_seg(li);
+                if crate::geom::segment_distance(a, b, p, p) <= r {
+                    out.insert(li);
+                }
+            }
+        }
+        out.into_iter().collect()
+    }
+
     /// Linedefs the segment a-b crosses, as (fraction along, line), nearest first.
     fn lines_along(&self, a: Point, b: Point) -> Vec<(f64, usize)> {
         let m = &self.nav.map;
@@ -1152,6 +1169,19 @@ impl Knowledge {
         let line = &m.linedefs[li];
         let face = self.face(line);
         let neighbours: Vec<usize> = self.wall_neighbours(li).into_iter().filter(|&n| !self.face(&m.linedefs[n]).is_empty()).collect();
+        if neighbours.is_empty() && !face.is_empty() {
+            // (nothing joined to it on its side, only ways through either end: the walls round
+            // it instead; E2M4's mossy door at the end of a dark corridor of plain stone)
+            let (a, b) = m.line_seg(li);
+            let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+            let around: Vec<usize> = self
+                .lines_near(mid, AROUND)
+                .into_iter()
+                .filter(|&n| n != li && m.linedefs[n].back == NO_SIDEDEF && self.mapped.contains(&n) && !self.face(&m.linedefs[n]).is_empty())
+                .collect();
+            let odd = around.len() >= 2 && around.iter().all(|&n| self.face(&m.linedefs[n]) != face);
+            return (odd, Vec::new());
+        }
         let odd = !neighbours.is_empty() && neighbours.iter().all(|&n| self.face(&m.linedefs[n]) != face || self.shifted(line, &m.linedefs[n]));
         (odd, neighbours)
     }

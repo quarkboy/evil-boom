@@ -110,6 +110,7 @@ type StatusFn = unsafe extern "C" fn(*mut Status);
 type SectorsFn = unsafe extern "C" fn(*mut f64, c_int) -> c_int;
 type MobjsFn = unsafe extern "C" fn(*mut Mobj, c_int) -> c_int;
 type PlayerFn = unsafe extern "C" fn(*mut PlayerState);
+type PowerFn = unsafe extern "C" fn(c_int, c_int);
 
 static LOADED: AtomicBool = AtomicBool::new(false);
 
@@ -124,6 +125,8 @@ pub struct Dsda {
     sectors_fn: SectorsFn,
     mobjs_fn: MobjsFn,
     player_fn: PlayerFn,
+    /// (none in a library from before it was added)
+    power_fn: Option<PowerFn>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
     _argv: Vec<CString>,
     _argv_ptrs: Vec<*mut c_char>,
@@ -162,6 +165,8 @@ impl Dsda {
                 std::mem::transmute::<*const (), PlayerFn>(sym(b"evil_player_state")?),
             )
         };
+        // SAFETY: as above, evil_power's signature; optional, an older library hasn't it.
+        let power_fn = sym(b"evil_power").ok().map(|p| unsafe { std::mem::transmute::<*const (), PowerFn>(p) });
         let argv: Vec<CString> = std::iter::once("evil".to_string())
             .chain(args.iter().cloned())
             .map(CString::new)
@@ -181,6 +186,7 @@ impl Dsda {
             sectors_fn,
             mobjs_fn,
             player_fn,
+            power_fn,
             _argv: argv,
             _argv_ptrs: argv_ptrs,
             _lib: lib,
@@ -192,6 +198,15 @@ impl Dsda {
     pub fn new_game(&self, skill: i32, episode: i32, map: i32, no_monsters: bool) {
         // SAFETY: plain values into the game; see `load`.
         unsafe { (self.new_game_fn)(skill, episode, map, c_int::from(no_monsters)) }
+    }
+
+    /// Give her power `power` (0 invulnerability .. 5 the light amplification visor) for `tics`;
+    /// false if the library hasn't the call.
+    pub fn power(&self, power: i32, tics: i32) -> bool {
+        let Some(f) = self.power_fn else { return false };
+        // SAFETY: plain values into the game; see `load`.
+        unsafe { f(power, tics) };
+        true
     }
 
     pub fn god(&self, on: bool) {

@@ -144,6 +144,14 @@ EVIL_API void evil_god(int on)
     players[consoleplayer].cheats &= ~CF_GODMODE;
 }
 
+/* Give the player power `power` (pw_invulnerability 0 .. pw_infrared 5) for `tics` tics (for
+ * looking round in drive: the light amplification visor shows a dark room as it is). */
+EVIL_API void evil_power(int power, int tics)
+{
+  if (power >= 0 && power < NUMPOWERS)
+    players[consoleplayer].powers[power] = tics;
+}
+
 /* Put the player at (x, y) facing `angle` (degrees), standing still on the floor there (as a
  * "warp": for checking jumps in the game itself). Returns 0 if something's in the way. */
 EVIL_API int evil_warp(double x, double y, double angle)

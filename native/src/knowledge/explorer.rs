@@ -31,6 +31,11 @@ const PLAN_EXPANSIONS: usize = 20000;
 const WALL_TICS: i64 = 25;
 /// objectives routed and compared by the way there, each pick
 const COMPARED: usize = 4;
+/// bullets and shells below these, she tops up from the ammo she's seen
+const LOW_BULLETS: i32 = 10;
+const LOW_SHELLS: i32 = 4;
+/// what gives bullets or shells for tapping walls and gun lines
+const TAP_AMMO: [&str; 7] = ["Clip", "ClipBox", "Shell", "ShellBox", "Backpack", "Chaingun", "Shotgun"];
 /// an objective not done by then is dropped for a while...
 const GIVE_UP_TICS: i64 = 20 * 35;
 /// ...or by the time it takes to walk its route at this (units a tic)
@@ -762,6 +767,22 @@ impl Explorer {
                 let mut o = Objective::new(Kind::Key, pt, format!("pick up {}", kk.name()));
                 o.key = Some(kk);
                 out.push(o);
+            }
+        }
+        // (out of rounds to tap a wall or a gun line with: the ammo she's seen, as a player tops up;
+        // E2M4's late walls, shot at with an empty pistol, its door that reopens to a shot never)
+        let rounds = |slot: i32| crate::motor::follower::tap_rounds(obs, slot);
+        if obs.ammo.is_some() && rounds(2).max(rounds(4)) < LOW_BULLETS && rounds(3) < LOW_SHELLS {
+            let known = k.known_polys();
+            for t in obs.things.iter().flatten().filter(|t| TAP_AMMO.contains(&t.name)) {
+                if !nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
+                    continue;
+                }
+                if let Some(spot) = self.touch_spot((t.x, t.y), &reach) {
+                    let mut o = Objective::new(Kind::Item, spot, format!("pick up {} (for the gun)", t.name));
+                    o.thing = Some(t.id);
+                    out.push(o);
+                }
             }
         }
         for li in k.interactables() {

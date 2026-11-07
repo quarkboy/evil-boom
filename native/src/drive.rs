@@ -23,6 +23,7 @@
 //!   force visit X Y | force wall LINE | force item X Y
 //!                       give her an objective she wasn't offering; what came of it
 //!   snapshot NAME [X,Y,ZOOM]   the viewer's window into out/drive/NAME.png
+//!   power N [TICS]      give her power N for TICS (5: the light amplification visor)
 //!   reach X Y [plan]    how the flood fill her options come from gets there (or, plan, the
 //!                       planner's first check): the polys on the way and how each was entered
 //!   fits X Y            does the box stand there, at the heights she last saw
@@ -117,6 +118,9 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                                 if !p.steps.is_empty() {
                                     println!("    {}", p.steps.join("; "));
                                 }
+                                for j in &p.jumps {
+                                    println!("    jump off ({:.0}, {:.0}) to ({:.0}, {:.0}), run-up ({:.0}, {:.0}), needs {:?}", j.takeoff.0, j.takeoff.1, j.dest.0, j.dest.1, j.runup.0, j.runup.1, j.requires.iter().map(|(s, h)| (*s, h.floor, h.ceiling)).collect::<Vec<_>>());
+                                }
                             }
                         }
                     }
@@ -125,6 +129,14 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
             "goto" | "goto-full" => {
                 let goal = (num(1)?, num(2)?);
                 goto(&mut s, goal, w[0] == "goto-full");
+            }
+            "power" => {
+                // (a power for looking round: 5 the light amplification visor, a dark room seen)
+                let (power, tics) = (num(1)? as i32, w.get(2).and_then(|v| v.parse().ok()).unwrap_or(35 * 60));
+                if !s.e.game.power(power, tics) {
+                    println!("  the game library hasn't evil_power (rebuild it)");
+                }
+                tick(&mut s, Controls::default());
             }
             "warp" => {
                 let angle = num(3).unwrap_or(s.obs().angle);

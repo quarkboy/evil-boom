@@ -37,13 +37,19 @@ const BARREL_GIVE_UP: i64 = 8 * 35;
 /// in hand: not the BFG with 20 cells of the 40 it needs (MAP23), nor a missile, which sets off no
 /// gun line.
 pub fn tap_gun(obs: &Observation) -> i32 {
-    // (ammo: (weapon slot, rounds for it))
-    let rounds = |slot: i32| obs.ammo.as_ref().and_then(|a| a.iter().find(|w| w.0 == slot)).map_or(1, |w| w.1);
-    if rounds(2) > 0 {
-        2
-    } else {
-        3
+    TAP_GUNS.into_iter().find(|&slot| tap_rounds(obs, slot) > 0).unwrap_or(2)
+}
+
+/// the guns that tap (hitscan), in the order taken up: pistol, chaingun, shotgun
+const TAP_GUNS: [i32; 3] = [2, 4, 3];
+
+/// Rounds for the gun in `slot`, if she has it (none if she hasn't: E2M4's twelve shells, no
+/// shotgun to fire them; ammo is (weapon slot, rounds for it)).
+pub fn tap_rounds(obs: &Observation, slot: i32) -> i32 {
+    if obs.weapons.as_ref().is_some_and(|w| !w.contains(&slot)) {
+        return 0;
     }
+    obs.ammo.as_ref().and_then(|a| a.iter().find(|w| w.0 == slot)).map_or(1, |w| w.1)
 }
 
 /// the longest wait under a ceiling too low for her before it counts as being stuck
@@ -1602,6 +1608,11 @@ impl RouteFollower {
         for j in self.poly_i..upto {
             let (cur, nxt) = (path.polys[j], path.polys[j + 1]);
             let (cs, ns) = (mesh.poly(cur).sector, mesh.poly(nxt).sector);
+            // (a jump or a climb onto the poly beside: the jump's to do, not a walk the heights
+            // don't allow; MAP12's climb up the stair's side, waited at "for the mover" for good)
+            if path.jumps.iter().any(|jp| jp.dest_poly == nxt && jp.src_polys.contains(&cur)) {
+                return None;
+            }
             let portal_i = mesh.poly(cur).portals.iter().copied().find(|&pi| mesh.portals[pi].other(cur) == nxt)?; // (none: a teleport)
             let portal = &mesh.portals[portal_i];
             let near = closest_on_portal(obs.pos(), portal.p1, portal.p2);
