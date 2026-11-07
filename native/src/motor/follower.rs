@@ -54,6 +54,8 @@ pub fn tap_rounds(obs: &Observation, slot: i32) -> i32 {
 
 /// the longest wait under a ceiling too low for her before it counts as being stuck
 const PINNED_WAIT: i64 = 10 * 35;
+/// where along a gun line to aim, the first in sight: the middle, then out towards its ends
+const SHOT_AIMS: [f64; 7] = [0.5, 0.35, 0.65, 0.2, 0.8, 0.08, 0.92];
 /// how far into its range of floors a gun line is shot from
 const SHOT_MARGIN: f64 = 2.0;
 /// a drop this near ahead onto a narrow landing...
@@ -1206,6 +1208,35 @@ impl RouteFollower {
 
     // --- run-off jumps ------------------------------------------------------------------------
 
+    /// Does a shot from `from` at `to` (on line `target`) get there: no wall, nor a sector shut
+    /// now, in the way before it?
+    fn shot_clear(&self, obs: &Observation, from: Point, to: Point, target: usize) -> bool {
+        let nav = &self.view.nav;
+        let m = &nav.map;
+        let mut seen: BTreeSet<usize> = BTreeSet::new();
+        for cell in cells(from.0, from.1, to.0, to.1) {
+            for &li in nav.mesh.line_grid.get(&cell).into_iter().flatten() {
+                if li == target || !seen.insert(li) {
+                    continue;
+                }
+                let (p, q) = m.line_seg(li);
+                if !segments_cross(from, to, p, q) {
+                    continue;
+                }
+                match m.sides(li) {
+                    (Some(f), Some(bk)) => {
+                        let (hf, hb) = (obs.heights[f], obs.heights[bk]);
+                        if hf.ceiling.min(hb.ceiling) <= hf.floor.max(hb.floor) {
+                            return false;
+                        }
+                    }
+                    _ => return false,
+                }
+            }
+        }
+        true
+    }
+
     /// At the run-up: settle on the exact spot facing the takeoff, then sprint.
     fn line_up(&mut self, obs: &Observation, jump: &Jump) -> Controls {
         let hd = heading(jump.runup, jump.takeoff);
@@ -2121,7 +2152,10 @@ impl RouteFollower {
         let mut tt = ((pos.0 - a.0) * (b.0 - a.0) + (pos.1 - a.1) * (b.1 - a.1)) / (length * length);
         tt = tt.max(0.5f64.min(8.0 / length)).min(0.5f64.max(1.0 - 8.0 / length));
         if step.action == Action::Shoot {
-            tt = 0.5; // (a shot reaches: the middle, where it's widest to hit)
+            // (a shot reaches: the middle, where it's widest to hit; else the part of it in
+            // sight: MAP10's door 296 from the step down the room, its middle behind the alcove's
+            // corner, shot at 18 times)
+            tt = SHOT_AIMS.into_iter().find(|&t| self.shot_clear(obs, pos, (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t), li)).unwrap_or(0.5);
         }
         let aim = (a.0 + (b.0 - a.0) * tt, a.1 + (b.1 - a.1) * tt);
         let look = heading(pos, aim);

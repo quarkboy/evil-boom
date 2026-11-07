@@ -54,6 +54,8 @@ pub const BUSY_TICS: i64 = 200;
 pub const LOOKS_INTERACTIVE: [&str; 11] = ["SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR", "ZELDOOR", "PLAT", "SUPPORT"];
 /// a shut sector no thicker than this behind a line is a door
 const DOOR_THICKNESS: f64 = 32.0;
+/// a line pressed this lately (tics) isn't a wall to try: what it does may still be going on
+const PRESSED_LATELY: i64 = 10 * 35;
 /// how far round a wall with nothing joined to it its fellows are looked for (`odd`)
 const AROUND: f64 = 128.0;
 /// an exit sign this near the spot in front of a wall marks it
@@ -1017,8 +1019,12 @@ impl Knowledge {
             .collect();
         // (the heights as she last saw them)
         let heights: Vec<(f64, f64)> = (0..init.len()).map(|x| self.seen_heights.get(&x).copied().unwrap_or(init[x])).map(|h| (h.floor, h.ceiling)).collect();
+        // (not a line pressed a moment ago, its work still going on: MAP10's door, pressed open as
+        // it shut, then tried "as a wall" and pressed shut again, and she with it in the closet)
+        let now = self.last.as_ref().map_or(0, |l| l.tic);
+        let lately: BTreeSet<usize> = self.fired.iter().filter(|f| now - f.tic < PRESSED_LATELY).map(|f| f.line).collect();
         for &li in &self.mapped {
-            if self.tried_walls.get(&li).is_some_and(|k| k.covers(keys)) || self.looks_interactive(li) {
+            if self.tried_walls.get(&li).is_some_and(|k| k.covers(keys)) || self.looks_interactive(li) || lately.contains(&li) {
                 continue;
             }
             let line = &m.linedefs[li];
@@ -1160,6 +1166,11 @@ impl Knowledge {
         let (Some(_), Some(b)) = m.sides(li) else { return false };
         let h = self.seen_heights.get(&b).copied().unwrap_or(self.nav.movers.initial[b]);
         h.ceiling <= h.floor && self.narrowness[b] <= DOOR_THICKNESS && self.odd(li).0
+    }
+
+    /// Does the wall stand out from those round it (`odd`): a mark, as a player reads it?
+    pub fn marked(&self, li: usize) -> bool {
+        self.odd(li).0
     }
 
     /// Is the wall's face unlike the walls either side of it (another texture, or the same one

@@ -29,6 +29,11 @@ const PLAN_SECONDS: f64 = 600.0;
 const PLAN_EXPANSIONS: usize = 20000;
 /// a suspected wall pressed: watched this long for something to happen
 const WALL_TICS: i64 = 25;
+/// a wall tried: walked up to till this near (past the box's edge), at this speed, giving up
+/// on it this many tics before the press is due
+const WALL_BUMP_GAP: f64 = 3.0;
+const WALL_BUMP_SPEED: f64 = 25.0;
+const WALL_BUMP_LAST: i64 = 4;
 /// objectives routed and compared by the way there, each pick
 const COMPARED: usize = 4;
 /// bullets and shells below these, she tops up from the ammo she's seen
@@ -168,6 +173,9 @@ pub struct Objective {
     /// wall: the line to press use on, and how suspicious it is
     pub wall: Option<usize>,
     pub suspicion: f64,
+    /// a wall tried in a round of them (nothing else to do), not one by the way: gone right up
+    /// to if it stands out
+    pub round: bool,
     /// nothing safer left: one-way drops, nukage are all right
     pub risky: bool,
     /// teleporter: all the lines of its pad (one objective)
@@ -204,6 +212,7 @@ impl Objective {
             worth: None,
             later: false,
             suspicion: 0.0,
+            round: false,
         }
     }
 
@@ -340,6 +349,8 @@ pub struct Explorer {
     urgent_n: usize,
     /// polys she could get to, as of the last look
     pub reach: BTreeSet<usize>,
+    /// the heights the triggers she knows could give, with that reach
+    reach_states: States,
     view: Option<(Rc<View>, ViewKey)>,
     /// the jumps missed once are in, for want of anything else
     difficult: bool,
@@ -426,6 +437,7 @@ impl Explorer {
             held_since: None,
             urgent_n: 0,
             reach: BTreeSet::new(),
+            reach_states: Vec::new(),
             view: None,
             difficult: false,
             exits_open: true,
@@ -720,6 +732,7 @@ impl Explorer {
         let (reach, states_all, _) = view.saturate(here, &states, keys, &[], &actions);
         self.stats.saturate_secs += t_sat.elapsed().as_secs_f64();
         self.reach = reach.clone();
+        self.reach_states = states_all.clone();
         // (what she can get to only while a door or lift she's pressed open is open: go now, as a
         // player goes through a door before it shuts, if near enough to make it: E2M1's door 44,
         // whose only other switch is on the far side. Only somewhere she's never walked: back
@@ -1202,7 +1215,14 @@ impl Explorer {
     /// can get to, where it can (E3M4).
     /// Each sector at its roomiest as she believes it now (floor, ceiling).
     fn roomiest(&self) -> Vec<(f64, f64)> {
-        self.states().iter().map(|hs| hs.iter().max_by(|a, b| (a.ceiling - a.floor).total_cmp(&(b.ceiling - b.floor))).map_or((0.0, 0.0), |h| (h.floor, h.ceiling))).collect()
+        // (and what the triggers she knows could give, as of her last list: a lift she can lower;
+        // MAP10's soulsphere on a lift only 48 high, stood on lowered)
+        let could = &self.reach_states;
+        self.states()
+            .iter()
+            .enumerate()
+            .map(|(s, hs)| hs.iter().chain(could.get(s).into_iter().flatten()).max_by(|a, b| (a.ceiling - a.floor).total_cmp(&(b.ceiling - b.floor))).map_or((0.0, 0.0), |h| (h.floor, h.ceiling)))
+            .collect()
     }
 
     /// `standable`, at `heights` rather than the map's starting ones: the box against the lines,
@@ -1874,7 +1894,16 @@ impl Explorer {
                 // (not where the press would reach an exit behind it, with the exit held back:
                 // MAP22's wall in front of the exit switch, the level ended an item short)
                 let exit = self.exit_last && self.knowledge.use_hits(obs.pos(), obs.angle, &obs.heights).is_some_and(|li| self.knowledge.is_exit(li));
-                if off < 4.0 && obs.tic < until - WALL_TICS && !exit {
+                // (a wall that stands out, up against it first, as a player goes right up to a mark:
+                // over anything on the floor in front, MAP10's triangle of walk-over lines before
+                // the marked wall that opens the way to the megasphere, stopped short of at the stand
+                // spot; not every wall, nor one by the way, the last steps over a trap's line: E2M4,
+                // MAP14)
+                let (wa, wb) = self.nav.map.line_seg(wall);
+                let gap = crate::geom::segment_distance(wa, wb, obs.pos(), obs.pos());
+                if off < 4.0 && obs.tic < until - WALL_TICS - WALL_BUMP_LAST && gap > crate::geom::PLAYER_RADIUS + WALL_BUMP_GAP && obj.round && self.knowledge.marked(wall) {
+                    c.forward = WALL_BUMP_SPEED;
+                } else if off < 4.0 && obs.tic < until - WALL_TICS && !exit {
                     c.use_ = true;
                     self.look_until = Some(obs.tic + WALL_TICS); // (pressed: now watch)
                 } else if off < 4.0 && obs.tic > until - WALL_TICS + 4 && obs.tic < until - 8 {
@@ -2053,6 +2082,7 @@ impl Explorer {
                 o.look_at = Some(mid);
                 o.wall = Some(li);
                 o.suspicion = score;
+                o.round = true;
                 o
             })
             .collect()
