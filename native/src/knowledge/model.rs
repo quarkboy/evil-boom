@@ -1107,8 +1107,15 @@ impl Knowledge {
         if line.front == NO_SIDEDEF {
             return String::new();
         }
-        let sd = &self.nav.map.sidedefs[usize::from(line.front)];
-        [&sd.middle, &sd.upper, &sd.lower].iter().find(|t| !t.is_empty() && t.as_str() != "-").map(|t| t.to_uppercase()).unwrap_or_default()
+        let m = &self.nav.map;
+        let sd = &m.sidedefs[usize::from(line.front)];
+        // (a two-sided line shut, a door down: no opening for the middle texture to show in,
+        // only what's above and below it: MAP11's secret door, STONE5 over the opening,
+        // between walls of STONE4)
+        let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(self.nav.movers.initial[x]);
+        let shut = matches!(m.sides(line.index), (Some(f), Some(b)) if h(f).ceiling.min(h(b).ceiling) <= h(f).floor.max(h(b).floor));
+        let order = if shut { [&sd.upper, &sd.lower, &sd.middle] } else { [&sd.middle, &sd.upper, &sd.lower] };
+        order.iter().find(|t| !t.is_empty() && t.as_str() != "-").map(|t| t.to_uppercase()).unwrap_or_default()
     }
 
     /// The lines joined to this one at its ends, on the same sector's side.

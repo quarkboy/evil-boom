@@ -123,6 +123,18 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 println!("  doing: {}", x.current.as_ref().map_or("-", |c| c.label.as_str()));
             }
             "where" => where_(&mut s),
+            "walls" => {
+                // (the walls she suspects from here, best first; "walls all": every wall round)
+                let obs = s.obs();
+                let x = s.agent.x_mut();
+                x.objectives(&obs, false, &mut crate::knowledge::explorer::NoHooks); // (her reach now)
+                let reach = x.reach.clone();
+                let found = x.suspected(&obs, &reach, w.get(1) == Some(&"all"));
+                println!("  {} walls suspected", found.len());
+                for (score, li, stand, _) in found.iter().take(30) {
+                    println!("    line {li}: {score:.1}, from ({:.0}, {:.0})", stand.0, stand.1);
+                }
+            }
             "items" => {
                 // (each counted item still there: seen? hers to get now? from the level's start?)
                 let obs = s.obs();

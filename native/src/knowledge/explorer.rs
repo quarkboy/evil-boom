@@ -1806,19 +1806,7 @@ impl Explorer {
     /// Walls she suspects, to press use on: tried once nothing else is left (as a player humps
     /// walls for secrets).
     fn walls(&mut self, obs: &Observation, reach: &BTreeSet<usize>, panic: bool) -> Vec<Objective> {
-        let mesh = Arc::clone(&self.nav.mesh);
-        let known = self.knowledge.known_polys();
-        let unreached: Vec<Point> = obs
-            .things
-            .iter()
-            .flatten()
-            .filter(|t| matches!(t.category, "Health" | "Armor" | "Ammo" | "Weapon" | "Powerup" | "Key"))
-            .filter(|t| mesh.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p) && !reach.contains(&p)))
-            .map(|t| (t.x, t.y))
-            .collect();
-        let places = Spots::new(known.difference(reach).map(|&p| mesh.poly(p).center));
-        let near = |q: Point, r: f64| places.near(q, r);
-        let mut found = self.knowledge.suspicious(reach, &unreached, panic, Some(&near));
+        let mut found = self.suspected(obs, reach, panic);
         if panic {
             // (all of them: those with somewhere she can't get to behind first, nearest first)
             found.sort_by(|a, b| (-a.0).total_cmp(&-b.0).then(dist(a.2, obs.pos()).total_cmp(&dist(b.2, obs.pos()))));
@@ -1835,6 +1823,24 @@ impl Explorer {
                 o
             })
             .collect()
+    }
+
+    /// The walls she suspects from where she can get to now, best first: (score, line, where
+    /// to stand, the wall's middle). (`drive`'s walls.)
+    pub fn suspected(&mut self, obs: &Observation, reach: &BTreeSet<usize>, panic: bool) -> Vec<(f64, usize, Point, Point)> {
+        let mesh = Arc::clone(&self.nav.mesh);
+        let known = self.knowledge.known_polys();
+        let unreached: Vec<Point> = obs
+            .things
+            .iter()
+            .flatten()
+            .filter(|t| matches!(t.category, "Health" | "Armor" | "Ammo" | "Weapon" | "Powerup" | "Key"))
+            .filter(|t| mesh.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p) && !reach.contains(&p)))
+            .map(|t| (t.x, t.y))
+            .collect();
+        let places = Spots::new(known.difference(reach).map(|&p| mesh.poly(p).center));
+        let near = |q: Point, r: f64| places.near(q, r);
+        self.knowledge.suspicious(reach, &unreached, panic, Some(&near))
     }
 
     /// Not dropped lately (the longer, the more often it has been).

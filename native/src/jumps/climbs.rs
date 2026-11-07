@@ -82,7 +82,7 @@ impl JumpLab {
     /// Is there a way from `src` to `sector` near it on foot, up nothing more than steps, at the
     /// starting heights? (Then a run that gets there up the side of the stairs is no climb:
     /// MAP16's, the box over a step with her centre beside it.)
-    fn walks_to(&self, src: usize, sector: usize, portal_fits: &[bool]) -> bool {
+    pub(super) fn walks_to(&self, src: usize, sector: usize, portal_fits: &[bool]) -> bool {
         let mesh = &self.mesh;
         let origin = mesh.center(src);
         let mut seen: HashSet<usize> = HashSet::default();

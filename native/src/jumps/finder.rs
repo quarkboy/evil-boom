@@ -350,6 +350,11 @@ impl JumpLab {
         // box reaches something no more than a step above. Per tic: move, check the floors and
         // ceilings under the box, then fall (first falling tic -2, then -1 per tic).
         let (mut x, mut y) = takeoff;
+        // (a landing no higher than the floor below the edge is only an edge, a plain drop, if
+        // that floor walks to it: not MAP11's run off the walkway over the nukage, the lip past it
+        // and down into the room beyond)
+        let below_poly = mesh.poly_at((takeoff.0 + n.0 * 2.0, takeoff.1 + n.1 * 2.0));
+        let plain = |s: usize| below_poly.is_none_or(|bp| mesh.poly(bp).sector == s || self.walks_to(bp, s, &input.portal_fits));
         let (mut z, mut vz) = (floor, 0.0);
         let mut airborne = false;
         let mut held = 0;
@@ -411,7 +416,7 @@ impl JumpLab {
                 vz = 0.0;
                 let ahead = mesh.poly_at((x + n.0 * (PLAYER_RADIUS - 1.0), y + n.1 * (PLAYER_RADIUS - 1.0)));
                 if let Some(ahead) = ahead.filter(|&p| mesh.poly(p).sector != src_sector && floor_of(mesh.poly(p).sector) == Some(fmax)) {
-                    if fmax <= below + MAX_STEP {
+                    if fmax <= below + MAX_STEP && plain(mesh.poly(ahead).sector) {
                         return None; // just dropped to the floor below: an ordinary edge
                     }
                     let mut on = (x + n.0 * (PLAYER_RADIUS + 8.0), y + n.1 * (PLAYER_RADIUS + 8.0));
@@ -446,13 +451,10 @@ impl JumpLab {
                         .copied()
                         .filter(|&(dx, dy)| mesh.poly_at((x + dx, y + dy)).is_some_and(|q| mesh.poly(q).sector != src_sector && floor_of(mesh.poly(q).sector) == Some(fmax)))
                         .collect();
-                    if support.is_empty() || fmax <= below + MAX_STEP {
-                        return None;
-                    }
                     let &(dx, dy) = support.iter().min_by(|a, b| (a.0.abs() + a.1.abs()).total_cmp(&(b.0.abs() + b.1.abs())))?;
                     let on = (x + dx * 0.8, y + dy * 0.8);
                     let land = mesh.poly_at(on)?;
-                    if floor_of(mesh.poly(land).sector) != Some(fmax) {
+                    if floor_of(mesh.poly(land).sector) != Some(fmax) || fmax <= below + MAX_STEP && plain(mesh.poly(land).sector) {
                         return None;
                     }
                     return Some(Jump::new(src, land, on, back, takeoff, v, requires(&chosen)));
