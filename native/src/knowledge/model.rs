@@ -981,7 +981,9 @@ impl Knowledge {
                 // (as she last saw them: a stair since built makes a wall of what was floor)
                 let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
                 let (fh, bh) = (h(front), h(bk));
-                let closed = fh.ceiling.min(bh.ceiling) - fh.floor.max(bh.floor) < PLAYER_HEIGHT || bh.floor - fh.floor > MAX_STEP;
+                // (a niche she can see into but not step into is a wall all the same: bump into it
+                // and it's plain; E4M4's niche with the torch, pressed, lowers the lift to a secret)
+                let closed = line.blocks_player() || fh.ceiling.min(bh.ceiling) - fh.floor.max(bh.floor) < PLAYER_HEIGHT || bh.floor - fh.floor > MAX_STEP;
                 if !closed && odd {
                     // (a way through, but with a face above or below it unlike the walls round it,
                     // where a switch can be: MAP28's red-eyed skull): only that counts
