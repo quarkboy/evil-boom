@@ -967,6 +967,8 @@ impl Knowledge {
         let mut best: BTreeMap<Behind, (f64, usize, Point, Point)> = BTreeMap::new();
         let mut order: Vec<Behind> = Vec::new();
         let known = self.known_polys();
+        // (the heights as she last saw them)
+        let heights: Vec<(f64, f64)> = (0..init.len()).map(|x| self.seen_heights.get(&x).copied().unwrap_or(init[x])).map(|h| (h.floor, h.ceiling)).collect();
         for &li in &self.mapped {
             if self.tried_walls.get(&li).is_some_and(|k| k.covers(keys)) || self.looks_interactive(li) {
                 continue;
@@ -989,7 +991,20 @@ impl Knowledge {
             // further off: MAP19's)
             let target = back.is_some() && !matches!(m.sidedefs[usize::from(line.front)].middle.as_str(), "" | "-");
             let dists: &[f64] = if target { &[40.0, 96.0, 160.0, 256.0] } else { &[40.0] };
-            let Some(stand) = dists.iter().map(|d| (mid.0 + nx * d, mid.1 + ny * d)).find(|&q| mesh.poly_at(q).is_some_and(|p| reach.contains(&p))) else { continue };
+            // (in front of its middle; else, the box not fitting there, of another part of it:
+            // MAP11's secret door, a column of pillars in front of its middle; facing that part)
+            let fits = |q: Point| mesh.poly_at(q).is_some_and(|p| reach.contains(&p)) && {
+                let (clear, floor, ceiling) = nav.jump_lab.fits_at_heights(q, &heights);
+                clear && ceiling - floor >= PLAYER_HEIGHT
+            };
+            let Some(mut stand) = dists.iter().map(|d| (mid.0 + nx * d, mid.1 + ny * d)).find(|&q| mesh.poly_at(q).is_some_and(|p| reach.contains(&p))) else { continue };
+            let mut aim = mid;
+            if !fits(stand) {
+                let along = [0.25, 0.75, 0.1, 0.9].iter().map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t));
+                if let Some((q, w)) = along.flat_map(|w| dists.iter().chain(&[24.0]).map(move |d| ((w.0 + nx * d, w.1 + ny * d), w))).find(|&(q, _)| fits(q)) {
+                    (stand, aim) = (q, w);
+                }
+            }
             let mut score = if target { 1.0 } else { 0.0 };
             let mut behind = back.map(Behind::Sector);
             let (odd, neighbours) = self.odd(li);
@@ -1056,11 +1071,11 @@ impl Knowledge {
             match best.get(&key) {
                 Some(b) if b.0 >= score => {}
                 Some(_) => {
-                    best.insert(key, (score, li, stand, mid));
+                    best.insert(key, (score, li, stand, aim));
                 }
                 None => {
                     order.push(key);
-                    best.insert(key, (score, li, stand, mid));
+                    best.insert(key, (score, li, stand, aim));
                 }
             }
         }
