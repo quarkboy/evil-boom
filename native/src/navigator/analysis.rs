@@ -255,6 +255,22 @@ impl<'a> Analysis<'a> {
             let effects = self.movers.effects(line.special, &sectors, None);
             out.push(TriggerLine { id: 0, line: li as i64, info, sectors, effects, activators, shift_from, relevant: None, keep: None });
         }
+        // (a gun line shot only from where the floor can be at a height the shot hits it: MAP16's
+        // flame panel, from the table at its top, never from the floor of the room round it)
+        let mut floors: BTreeMap<usize, Vec<f64>> = BTreeMap::new();
+        for t in &out {
+            for (s, hs) in &t.effects {
+                floors.entry(*s).or_default().extend(hs.iter().map(|h| h.floor));
+            }
+        }
+        for t in out.iter_mut().filter(|t| t.info.trigger.shot()) {
+            let li = t.line as usize;
+            t.activators.retain(|&p| {
+                let s = mesh.poly(p).sector;
+                let Some(&(lo, hi)) = self.shot_floors.get(&(li, p)) else { return false };
+                std::iter::once(self.movers.initial[s].floor).chain(floors.get(&s).into_iter().flatten().copied()).any(|f| (lo..=hi).contains(&f))
+            });
+        }
         let bosses = self.boss_triggers(&out);
         out.extend(bosses);
         out.extend(self.exit_floors());

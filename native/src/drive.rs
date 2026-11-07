@@ -173,6 +173,15 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                         k.locked.contains(&li),
                         k.in_the_way.contains(&li)
                     );
+                    // (and as a trigger: does she take it for one, and where it's set off from)
+                    let x = s.agent.x();
+                    println!("    looks interactive {}, offered {}", k.looks_interactive(li), k.interactables().contains(&li));
+                    for t in s.nav.triggers.iter().filter(|t| t.linedef() == Some(li)) {
+                        let reach = t.activators.intersection(&x.reach).count();
+                        let shots: std::collections::BTreeSet<(i64, i64)> = t.activators.iter().filter_map(|&p| s.nav.shot_floors.get(&(li, p))).map(|&(lo, hi)| (lo as i64, hi as i64)).collect();
+                        let sectors: std::collections::BTreeSet<usize> = t.activators.iter().map(|&p| s.nav.sector_of_poly(p)).collect();
+                        println!("    trigger {}: {} activators ({reach} in reach), sectors {sectors:?}{}", t.id, t.activators.len(), if shots.is_empty() { String::new() } else { format!(", shot from floors {shots:?}") });
+                    }
                 }
             }
             "objectives" => {

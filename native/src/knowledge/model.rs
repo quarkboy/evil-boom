@@ -17,7 +17,7 @@ use crate::map::{Linedef, ML_MAPPED, ML_SECRET, NO_SIDEDEF};
 use crate::motor::{Controls, Observation};
 use crate::nav::Heights;
 use crate::movers::Effects;
-use crate::navigator::{Navigator, States, TriggerLine, MAX_STEP, PLAYER_HEIGHT};
+use crate::navigator::{Navigator, States, TriggerLine, MAX_STEP, PLAYER_HEIGHT, SHOT_HEIGHT};
 use crate::sight::{Sight, View as SightView};
 use crate::specials::{classify_line, Category, Keys, LineSpecial, Lock, Trigger};
 
@@ -25,8 +25,6 @@ use crate::specials::{classify_line, Category, Keys, LineSpecial, Lock, Trigger}
 pub const USE_RANGE: f64 = 64.0;
 /// far enough for any gun line worth shooting
 pub const SHOT_RANGE: f64 = 2048.0;
-/// above the feet (P_LineAttack's shootz, near enough)
-pub const SHOT_HEIGHT: f64 = 32.0;
 /// screen columns the view is worked out for (the engine's width)
 pub const VIEW_WIDTH: i32 = 320;
 /// S_CLIPPING_DIST: sounds further off aren't heard at all
@@ -865,7 +863,9 @@ impl Knowledge {
 
     // --- what she can tell -----------------------------------------------------------------
 
-    /// Mapped lines she can tell are switches or use-doors (or gun targets), not used yet.
+    /// Mapped lines she can tell are switches or use-doors (or gun targets), not used yet. A
+    /// gun target by its look, or by a face unlike the walls either side: MAP16's flame panel in
+    /// a notch in the bookcase.
     pub fn interactables(&self) -> Vec<usize> {
         let used: BTreeSet<Mechanism> = self.fired.iter().map(|f| self.tried_key(f.line)).collect();
         self.mapped
@@ -876,7 +876,7 @@ impl Knowledge {
                     (i.trigger.used() || i.trigger.shot())
                         && !used.contains(&self.tried_key(li))
                         && !i.category.is_exit()
-                        && (!self.perceive || self.looks_interactive(li) || self.in_the_way.contains(&li) || self.locked.contains(&li))
+                        && (!self.perceive || self.looks_interactive(li) || self.in_the_way.contains(&li) || self.locked.contains(&li) || (i.trigger.shot() && self.odd(li).0))
                 })
             })
             .collect()
@@ -974,9 +974,7 @@ impl Knowledge {
             let Some(stand) = dists.iter().map(|d| (mid.0 + nx * d, mid.1 + ny * d)).find(|&q| mesh.poly_at(q).is_some_and(|p| reach.contains(&p))) else { continue };
             let mut score = if target { 1.0 } else { 0.0 };
             let mut behind = back.map(Behind::Sector);
-            let face = self.face(line);
-            let neighbours: Vec<usize> = self.wall_neighbours(li).into_iter().filter(|&n| !self.face(&m.linedefs[n]).is_empty()).collect();
-            let odd = !neighbours.is_empty() && neighbours.iter().all(|&n| self.face(&m.linedefs[n]) != face || self.shifted(line, &m.linedefs[n]));
+            let (odd, neighbours) = self.odd(li);
             if let Some(bk) = back {
                 // (as she last saw them: a stair since built makes a wall of what was floor)
                 let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
@@ -1036,6 +1034,17 @@ impl Knowledge {
         let mut out: Vec<(f64, usize, Point, Point)> = order.iter().map(|k| best[k]).collect();
         out.sort_by(|a, b| b.0.total_cmp(&a.0));
         out
+    }
+
+    /// Is the wall's face unlike the walls either side of it (another texture, or the same one
+    /// shifted)? And those walls, the ones with a face.
+    fn odd(&self, li: usize) -> (bool, Vec<usize>) {
+        let m = &self.nav.map;
+        let line = &m.linedefs[li];
+        let face = self.face(line);
+        let neighbours: Vec<usize> = self.wall_neighbours(li).into_iter().filter(|&n| !self.face(&m.linedefs[n]).is_empty()).collect();
+        let odd = !neighbours.is_empty() && neighbours.iter().all(|&n| self.face(&m.linedefs[n]) != face || self.shifted(line, &m.linedefs[n]));
+        (odd, neighbours)
     }
 
     /// Does `line` show its texture shifted up or down from `other` beside it, both between the

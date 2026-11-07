@@ -990,6 +990,7 @@ impl Explorer {
     pub fn touch_spot(&self, item: Point, reach: &BTreeSet<usize>) -> Option<Point> {
         let nav = &self.nav;
         let floor = nav.poly_at(item).map(|p| nav.movers.initial[nav.sector_of_poly(p)].floor);
+        let heights = self.roomiest();
         // (square rings, as the boxes touch, every 4 round each: E4M7's blur sphere, on the point
         // of a ledge, can be had only from a corner of the square)
         for r in [0, 8, 16, 24, 32, TOUCH - 1] {
@@ -1000,7 +1001,7 @@ impl Explorer {
             for (dx, dy) in ring {
                 let q = (item.0 + f64::from(dx), item.1 + f64::from(dy));
                 let Some(p) = nav.poly_at(q).filter(|p| reach.contains(p)) else { continue };
-                if !self.standable(q, false) {
+                if !self.stands_at(q, &heights) {
                     continue;
                 }
                 // (P_TouchSpecialThing: the item no higher than her height over her feet, no
@@ -1022,20 +1023,27 @@ impl Explorer {
 
     /// `spot`, if the box can stand there; else the middle of its poly, or of one next to it she
     /// can get to, where it can (E3M4).
+    /// Each sector at its roomiest as she believes it now (floor, ceiling).
+    fn roomiest(&self) -> Vec<(f64, f64)> {
+        self.states().iter().map(|hs| hs.iter().max_by(|a, b| (a.ceiling - a.floor).total_cmp(&(b.ceiling - b.floor))).map_or((0.0, 0.0), |h| (h.floor, h.ceiling))).collect()
+    }
+
+    /// `standable`, at `heights` rather than the map's starting ones: the box against the lines,
+    /// as the game has it (E3M4's door 147, shut at the start, open now; MAP16's bookcase,
+    /// opened by a shot, the megasphere in it).
+    fn stands_at(&self, q: Point, heights: &[(f64, f64)]) -> bool {
+        let mesh = &self.nav.mesh;
+        let (fits, floor, ceiling) = self.nav.jump_lab.fits_at_heights(q, heights);
+        let centre = mesh.poly_at(q).map_or(floor, |p| heights[mesh.poly(p).sector].0);
+        fits && ceiling - floor >= PLAYER_HEIGHT && floor <= centre + MAX_STEP
+    }
+
     fn stand_spot(&self, spot: Point, reach: &BTreeSet<usize>) -> Point {
         // (and clear of what's shut now: a door that moves isn't a wall to the map's own heights,
         // but a spot against it shut is no spot: E3M4's door 146, a recheck 4 from its face)
-        let now = self.states();
+        let heights = self.roomiest();
         let mesh = &self.nav.mesh;
-        // (each sector at its roomiest as believed; the box against the lines, as the game has
-        // it, not the map's starting heights)
-        let heights: Vec<(f64, f64)> = now.iter().map(|hs| hs.iter().max_by(|a, b| (a.ceiling - a.floor).total_cmp(&(b.ceiling - b.floor))).map_or((0.0, 0.0), |h| (h.floor, h.ceiling))).collect();
-        // (standable, at those heights: E3M4's door 147, shut at the start, open now)
-        let clear = |q: Point| {
-            let (fits, floor, ceiling) = self.nav.jump_lab.fits_at_heights(q, &heights);
-            let centre = mesh.poly_at(q).map_or(floor, |p| heights[mesh.poly(p).sector].0);
-            fits && ceiling - floor >= PLAYER_HEIGHT && floor <= centre + MAX_STEP
-        };
+        let clear = |q: Point| self.stands_at(q, &heights);
         if clear(spot) {
             return spot;
         }

@@ -33,6 +33,21 @@ const BARREL_IN_WAY: f64 = 40.0;
 /// back off this far before shooting one (blast radius 128)
 const BARREL_SAFE: f64 = 150.0;
 const BARREL_GIVE_UP: i64 = 8 * 35;
+/// What to shoot something with: the pistol (the shotgun if there's nothing for it), whatever's
+/// in hand: not the BFG with 20 cells of the 40 it needs (MAP23), nor a missile, which sets off no
+/// gun line.
+fn tap_gun(obs: &Observation) -> i32 {
+    // (ammo: (weapon slot, rounds for it))
+    let rounds = |slot: i32| obs.ammo.as_ref().and_then(|a| a.iter().find(|w| w.0 == slot)).map_or(1, |w| w.1);
+    if rounds(2) > 0 {
+        2
+    } else {
+        3
+    }
+}
+
+/// how far into its range of floors a gun line is shot from
+const SHOT_MARGIN: f64 = 2.0;
 /// tics between shots at a barrel (the pistol ready again, the trigger let go: a first shot each time)
 const BARREL_TAP: i64 = 20;
 /// a jump goes without settling if what it needs runs out sooner
@@ -252,6 +267,8 @@ pub struct RouteFollower {
     before: Option<Vec<(usize, Option<Heights>)>>,
     cross_tic: Option<i64>,
     height_wait: Option<i64>,
+    /// the floor under her last tic, waiting to shoot (still moving?)
+    shot_floor: Option<f64>,
     segments: Vec<Segment>,
     seg_i: usize,
     poly_i: usize,
@@ -337,6 +354,7 @@ impl RouteFollower {
             before: None,
             cross_tic: None,
             height_wait: None,
+            shot_floor: None,
             segments: Vec::new(),
             seg_i: 0,
             poly_i: 0,
@@ -479,6 +497,7 @@ impl RouteFollower {
         self.before = None;
         self.cross_tic = None;
         self.height_wait = None;
+        self.shot_floor = None;
         self.start_step(tic);
     }
 
@@ -1230,12 +1249,9 @@ impl RouteFollower {
             return self.motion.hold(obs, (away.cos() * 8.0, away.sin() * 8.0), Some(look));
         }
         let mut c = self.motion.hold(obs, (0.0, 0.0), Some(look));
-        // the pistol (the shotgun if there's nothing for it), whatever's in hand: not the BFG
-        // with 20 cells of the 40 it needs (MAP23). Single taps, the trigger let go between: the
-        // first shot of a burst goes straight, only held ones spread
-        // (ammo: (weapon slot, rounds for it))
-        let rounds = |slot: i32| obs.ammo.as_ref().and_then(|a| a.iter().find(|w| w.0 == slot)).map_or(1, |w| w.1);
-        let gun = if rounds(2) > 0 { 2 } else { 3 };
+        // (single taps, the trigger let go between: the first shot of a burst goes straight,
+        // only held ones spread)
+        let gun = tap_gun(obs);
         if obs.weapon != Some(gun) {
             c.weapon = gun;
         } else if norm(look - obs.angle).abs() < 2.0 && obs.tic - self.barrel_shot >= BARREL_TAP {
@@ -1922,7 +1938,10 @@ impl RouteFollower {
         let Some(here) = nav.mesh.poly_at(obs.pos()) else { return true };
         let Some(&(lo, hi)) = nav.shot_floors.get(&(li, here)) else { return true };
         let floor = obs.heights[nav.sector_of_poly(here)].floor;
-        if lo <= floor && floor <= hi {
+        // (well in, and still: the shot goes a few tics after the trigger's pulled, and a lift
+        // rising through the bottom of the range has gone on by then: MAP16's table)
+        let still = self.shot_floor.replace(floor).is_some_and(|f| (f - floor).abs() < 0.5);
+        if still && lo + SHOT_MARGIN <= floor && floor <= hi - SHOT_MARGIN {
             return true;
         }
         let since = *self.height_wait.get_or_insert_with(|| {
@@ -2100,10 +2119,11 @@ impl RouteFollower {
                 }
             }
         }
-        if step.action == Action::Shoot && self.action_tic.is_none() && obs.weapon == Some(1) {
+        if step.action == Action::Shoot && self.action_tic.is_none() && obs.weapon != Some(tap_gun(obs)) {
             // a fist or chainsaw (picked up on the way: the game switches to it) doesn't set
-            // off a gun line (MAP19): out with the pistol first
-            controls.weapon = 2;
+            // off a gun line (MAP19), nor anything that fires a missile; a shotgun's pellets
+            // spread (MAP16's flame panel, 3 degrees across): out with the pistol first
+            controls.weapon = tap_gun(obs);
             self.progress_tic = obs.tic;
             return controls;
         }

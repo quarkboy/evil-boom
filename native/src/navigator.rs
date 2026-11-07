@@ -50,8 +50,10 @@ pub const SHOT_HEIGHT: f64 = 36.0;
 pub const MIN_PORTAL: f64 = 4.0;
 /// pseudo-trigger lines below this: exit floors
 pub const EXIT_FLOOR: i64 = -1000;
-/// degrees a gun line must span from where it's shot (aim isn't exact)
-pub const MIN_SHOT_SPAN: f64 = 6.0;
+/// degrees a gun line must span from where it's shot (aim isn't exact: she faces it to within a
+/// third of that, and taps, the first shot going true; MAP16's flame panel, 3.3 across from the
+/// table, hit from its edge at 3)
+pub const MIN_SHOT_SPAN: f64 = 3.0;
 /// the box must clear walls by this much: no one threads a gap exactly 32 wide
 pub const BOX_SLACK: f64 = 0.25;
 /// use traces 64 from the player's centre; keep a margin
