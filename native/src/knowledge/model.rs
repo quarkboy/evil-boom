@@ -998,6 +998,15 @@ impl Knowledge {
             let far = (mid.0 - nx * 64.0, mid.1 - ny * 64.0);
             if unreached_items.iter().any(|&it| dist(far, it) < 160.0) {
                 score += 2.0;
+                // (and a gap under it, or over it, the item seen through: a door left ajar, as
+                // good a sign as the automap's: E4M5's berserk, under a wall 8 off the floor)
+                let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
+                if back.is_some_and(|bk| {
+                    let (fh, bh) = (h(front), h(bk));
+                    fh.ceiling.min(bh.ceiling) > fh.floor.max(bh.floor)
+                }) {
+                    score += 3.0;
+                }
             }
             // (somewhere she's seen and can't get to, just behind: the way there may be here)
             if unreached_places.is_some_and(|near| near(far, 128.0)) {
