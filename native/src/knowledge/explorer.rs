@@ -132,6 +132,8 @@ pub enum Kind {
     Item,
     Hunt,
     Wall,
+    /// a sector she found a secret in, another life: back into it
+    Secret,
 }
 
 impl Kind {
@@ -140,7 +142,7 @@ impl Kind {
     fn weight(self) -> f64 {
         match self {
             Kind::Exit => 0.5,
-            Kind::Key | Kind::Item => 0.6,
+            Kind::Key | Kind::Item | Kind::Secret => 0.6,
             Kind::Switch | Kind::Door => 0.8,
             Kind::Frontier | Kind::Wall => 1.0,
             Kind::Room => 1.1,
@@ -351,6 +353,12 @@ pub struct Explorer {
     pub patience: f64,
     /// (for whoever runs the game: the level again, knowing what she knows)
     pub restart_wanted: bool,
+    /// the secrets run: every secret, then out
+    pub secrets_mode: bool,
+    /// sectors she's found a secret in (the tally went up as she stepped in: "A secret is
+    /// revealed!"), any life; and those this life (the level again, the tally again from 0)
+    secret_sectors: BTreeSet<usize>,
+    secrets_had: BTreeSet<usize>,
     /// switches set out to press, and what she knew then (pressed again only knowing more)
     pressed_knowing: BTreeMap<usize, String>,
     /// where she last failed stuck, and how many objectives in a row did there
@@ -450,6 +458,9 @@ impl Explorer {
             patience: 1.0,
             restart_wanted: false,
             pressed_knowing: BTreeMap::new(),
+            secrets_mode: false,
+            secret_sectors: BTreeSet::new(),
+            secrets_had: BTreeSet::new(),
             stuck_run: None,
             stuck_known: String::new(),
             held_since: None,
@@ -891,6 +902,7 @@ impl Explorer {
         out.extend(self.recheck(&reach, pos));
         out.extend(self.unfinished(&reach, pos));
         out.extend(self.unvisited(&reach, pos));
+        out.extend(self.secrets_again(&reach, pos));
         out.extend(self.noises(&reach, pos, obs.tic));
         out.extend(hooks.wanted(self, obs, &reach, pos));
         if !while_open.is_empty() {
@@ -1435,6 +1447,34 @@ impl Explorer {
             .collect()
     }
 
+    /// The tally went up with her in sector `s`: a secret there.
+    pub fn found_secret(&mut self, s: usize, tic: i64) {
+        if self.secret_sectors.insert(s) {
+            self.log.push(format!("tic {tic}: a secret in sector {s}"));
+        }
+        self.secrets_had.insert(s);
+    }
+
+    /// The secrets run, the level again: back into the sectors she found secrets in before
+    /// (the tally starts again; knowing the place, nothing else sends her back: MAP19's room
+    /// behind door 558, opened in her first life, never stepped into in the one that got 8/9).
+    fn secrets_again(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
+        if !self.secrets_mode {
+            return Vec::new();
+        }
+        let mesh = &self.nav.mesh;
+        let mut out = Vec::new();
+        for &s in self.secret_sectors.difference(&self.secrets_had) {
+            let nearest = reach.iter().copied().filter(|&p| mesh.poly(p).sector == s && self.standable(mesh.poly(p).center, false)).min_by(|&a, &b| dist(mesh.poly(a).center, pos).total_cmp(&dist(mesh.poly(b).center, pos)));
+            if let Some(p) = nearest {
+                let mut o = Objective::new(Kind::Secret, mesh.poly(p).center, format!("back into secret sector {s}"));
+                o.reveals = BTreeSet::from([s as i64]);
+                out.push(o);
+            }
+        }
+        out
+    }
+
     /// Since a press whose effect wasn't seen: the known sectors round the reachable area not
     /// seen since, one per sector, at the reachable poly next to it nearest her.
     fn recheck(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
@@ -1611,7 +1651,7 @@ impl Explorer {
         };
         let step = |action: Action, trigger: Option<TriggerLine>, key: Option<Key>| Step { path: None, action, trigger, key, label: obj.label.clone(), expects: Vec::new() };
         let last = match obj.kind {
-            Kind::Frontier | Kind::Recheck | Kind::Visit | Kind::Noise | Kind::Room | Kind::Item | Kind::Hunt | Kind::Wall => step(Action::Walk, None, None),
+            Kind::Frontier | Kind::Recheck | Kind::Visit | Kind::Noise | Kind::Room | Kind::Item | Kind::Hunt | Kind::Wall | Kind::Secret => step(Action::Walk, None, None),
             Kind::Key => step(Action::Pickup, None, obj.key),
             Kind::Teleporter => step(Action::Cross, obj.trigger.clone(), None),
             _ => {
@@ -1729,6 +1769,7 @@ impl Explorer {
         self.follower = None;
         self.dropped.clear();
         self.drop_count.clear();
+        self.secrets_had.clear();
         self.look_until = None;
         self.glance_until = None;
         self.heard_n = self.knowledge.heard.len();
@@ -1876,6 +1917,7 @@ impl Explorer {
             Kind::Noise => obj.heard.as_ref().is_some_and(|h| self.noise_seen(h)),
             Kind::Room => obj.reveals.iter().all(|&l| k.mapped.contains(&(l as usize))),
             Kind::Visit => obj.reveals.iter().all(|&p| k.visited.contains(&(p as usize))),
+            Kind::Secret => obj.reveals.iter().all(|&s| self.secrets_had.contains(&(s as usize))),
             _ => false,
         }
     }

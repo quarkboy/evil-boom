@@ -77,6 +77,7 @@ fn kind_name(k: Kind) -> &'static str {
         Kind::Item => "item",
         Kind::Hunt => "hunt",
         Kind::Wall => "wall",
+        Kind::Secret => "secret",
     }
 }
 

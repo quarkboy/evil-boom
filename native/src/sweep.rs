@@ -228,6 +228,7 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool) -> Result<S
     let secrets_short = broken_secrets(&map_name);
     if o.secrets {
         agent.x_mut().exit_last = true;
+        agent.x_mut().secrets_mode = true;
     }
     // (her own waits inside the stall clock: given up on things back as soon, for its share of
     // the usual 300 s, and counted stranded in half of it at most; MAP24's way out of the pit, a
@@ -390,6 +391,8 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     let mut stalled = false;
     // (the most items and secrets one life got: a level again starts the tally afresh)
     let mut best_life = (0, 0);
+    // (the secrets tally so far this life: up by one, she's just found the one where she stands)
+    let mut secrets_seen = 0;
     while (e.tic as f64) < until * TICRATE {
         if o.expert || o.secrets {
             let now = progress(&e, agent.x());
@@ -462,6 +465,7 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
                 c = None;
                 idle_since = None;
                 (best, best_tic) = (progress(&e, agent.x()), e.tic);
+                secrets_seen = 0;
                 continue;
             }
             break;
@@ -471,6 +475,14 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
         }
         let t1 = Instant::now();
         let ob = e.observe();
+        let found = e.tally()[2].0;
+        if found > secrets_seen {
+            if let Some(p) = agent.x().nav.poly_at(ob.pos()) {
+                let s = agent.x().nav.sector_of_poly(p);
+                agent.x_mut().found_secret(s, ob.tic);
+            }
+        }
+        secrets_seen = found;
         let t2 = Instant::now();
         let log_n = agent.x().log.len();
         let ctl = agent.act(&ob, c.as_ref());
