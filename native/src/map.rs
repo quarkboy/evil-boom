@@ -20,6 +20,20 @@ pub const ML_MAPPED: u16 = 0x0100;
 /// (Boom: use passes through to lines behind)
 pub const ML_PASSUSE: u16 = 0x0200;
 pub const ML_BLOCKPLAYERS: u16 = 0x2000;
+/// (set, the rest past the vanilla ones are left over junk, not flags)
+pub const ML_RESERVED: u16 = 0x0800;
+pub const ML_VANILLA: u16 = 0x01ff;
+
+/// A linedef's flags as the game takes them: with the reserved one set, only the vanilla ones,
+/// as DSDA-Doom has it at MBF21 (comp_reservedlineflag): E2M7's crates, flagged 0xfe04, would
+/// otherwise block the player.
+pub fn line_flags(raw: u16) -> u16 {
+    if raw & ML_RESERVED != 0 {
+        raw & ML_VANILLA
+    } else {
+        raw
+    }
+}
 
 /// Thing flags.
 pub const MTF_EASY: u16 = 0x0001;

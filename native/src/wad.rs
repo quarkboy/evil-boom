@@ -185,7 +185,7 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
             index,
             v1: usize::from(u16_at(r, 0)),
             v2: usize::from(u16_at(r, 2)),
-            flags: u16_at(r, 4),
+            flags: crate::map::line_flags(u16_at(r, 4)),
             special: u16_at(r, 6),
             tag: u16_at(r, 8),
             front: u16_at(r, 10),

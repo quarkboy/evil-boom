@@ -117,7 +117,8 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
         return cached.into_iter().map(from).collect();
     }
     let moving: crate::det::HashSet<usize> = nav.triggers.iter().flat_map(|t| t.effects.iter().map(|(s, _)| *s)).collect();
-    let found = nav.jump_lab.find_jumps(&FinderInput { options, moving, portal_fits: nav.portal_fits.clone() });
+    let mut found = nav.jump_lab.find_jumps(&FinderInput { options, moving: moving.clone(), portal_fits: nav.portal_fits.clone() });
+    found.extend(nav.jump_lab.find_climbs(&moving, &nav.portal_fits));
     let out: Vec<Cached> = found
         .into_iter()
         .map(|j| Cached {

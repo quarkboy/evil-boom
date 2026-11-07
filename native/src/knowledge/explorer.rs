@@ -58,6 +58,8 @@ const LOOK_TICS: i64 = 35;
 const SHUFFLE_TICS: i64 = 35;
 /// a pickup's box and hers overlap this near (20 + 16), either way
 const TOUCH: i32 = 36;
+/// how far from a pickup spot she may stop (the follower's PICKUP_REACHED)
+const ARRIVE_SLACK: f64 = 6.0;
 /// an item this far under her feet is still hers to pick up
 const PICKUP_BELOW: f64 = 8.0;
 /// degrees a tic, turning to look at something
@@ -1000,13 +1002,19 @@ impl Explorer {
             ring.dedup();
             for (dx, dy) in ring {
                 let q = (item.0 + f64::from(dx), item.1 + f64::from(dy));
-                let Some(p) = nav.poly_at(q).filter(|p| reach.contains(p)) else { continue };
-                if !self.stands_at(q, &heights) {
+                if !nav.poly_at(q).is_some_and(|p| reach.contains(&p)) || !self.stands_at(q, &heights) {
                     continue;
                 }
                 // (P_TouchSpecialThing: the item no higher than her height over her feet, no
-                // more than 8 under them; E4M7's blur sphere on a ledge 56 up, had from below)
-                if floor.is_some_and(|f| !(-PICKUP_BELOW..=PLAYER_HEIGHT).contains(&(f - nav.movers.initial[nav.sector_of_poly(p)].floor))) {
+                // more than 8 under them; E4M7's blur sphere on a ledge 56 up, had from below.
+                // Her feet on the highest floor under the box: E2M7's armor bonus in a sunken
+                // strip, the box half over the floor 24 above it, where she'd come to a stop
+                // a few units short)
+                let feet = [(0.0, 0.0), (ARRIVE_SLACK, 0.0), (-ARRIVE_SLACK, 0.0), (0.0, ARRIVE_SLACK), (0.0, -ARRIVE_SLACK)]
+                    .iter()
+                    .map(|(dx, dy)| nav.jump_lab.fits_at_heights((q.0 + dx, q.1 + dy), &heights).1)
+                    .fold(f64::NEG_INFINITY, f64::max);
+                if floor.is_some_and(|f| !(-PICKUP_BELOW..=PLAYER_HEIGHT).contains(&(f - feet))) {
                     continue;
                 }
                 return Some(q);

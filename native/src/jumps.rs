@@ -1,8 +1,10 @@
-//! Run-off jumps: finding them across the map's gaps (`finder`), and checking them in a
+//! Run-off jumps: finding them across the map's gaps (`finder`), and the climbs up faces too
+//! high to step by something lower beside them (`climbs`), and checking them in a
 //! player-movement simulator that follows ZDoom's own fixed-point physics (`physics`,
 //! `check`).
 
 mod check;
+mod climbs;
 mod finder;
 mod physics;
 
@@ -52,7 +54,7 @@ pub struct RunStart {
 }
 
 /// Bumped whenever the finder's results could change (it keys Python's jump cache).
-pub const FINDER_VERSION: u32 = 4;
+pub const FINDER_VERSION: u32 = 9;
 
 /// The map as the jump tools need it.
 pub struct JumpLab {
