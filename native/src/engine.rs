@@ -190,7 +190,7 @@ impl Engine {
             if let Some(things) = things.as_mut() {
                 let category = category(name);
                 if !matches!(name, "DoomPlayer" | "BossTarget") && category != "Other" {
-                    things.push(Thing { id: m.id, name, category, x: m.x, y: m.y, z: m.z, vx: m.momx, vy: m.momy, vz: m.momz, angle: m.angle, health: m.health, owner: m.owner_type, state: m.state, after_her: m.after_her != 0 });
+                    things.push(Thing { id: m.id, name, category, x: m.x, y: m.y, z: m.z, vx: m.momx, vy: m.momy, vz: m.momz, angle: m.angle, health: m.health, owner: m.owner_type, state: m.state, after_her: m.after_her != 0, attack: m.attack });
                 }
             }
         }

@@ -259,7 +259,7 @@ impl Combat {
             }
             let mut c = self.time_to_kill(&w, t, d);
             if w.ammo_per_shot > 0 {
-                let shots = (f64::from(info.health) / (w.damage * w.hits(info.radius, d)).max(1.0)).max(1.0);
+                let shots = (f64::from(info.health) / (w.damage_on(&info) * w.hits(info.radius, d)).max(1.0)).max(1.0);
                 let (per, low) = ammo_cost(slot);
                 c += shots * f64::from(w.ammo_per_shot) * per * (low / f64::from(have)).max(1.0);
             }
@@ -283,7 +283,7 @@ impl Combat {
         if !Self::in_reach(w, t, d) {
             return 1e4 + d;
         }
-        let per_shot = w.damage * w.hits(info.radius, d);
+        let per_shot = w.damage_on(&info) * w.hits(info.radius, d);
         (f64::from(info.health) / per_shot.max(0.1)).max(1.0) * w.cycle / TICRATE
     }
 

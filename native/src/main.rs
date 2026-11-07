@@ -384,6 +384,8 @@ fn arena(args: &[String]) -> Result<(), String> {
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut running: Vec<(String, u32, Child)> = Vec::new();
     let mut tally: std::collections::BTreeMap<String, [u32; 4]> = std::collections::BTreeMap::new();
+    // (health left, a lost fight's none; seconds taken, won)
+    let mut left: std::collections::BTreeMap<String, (f64, f64)> = std::collections::BTreeMap::new();
     let mut n = 0;
     while !todo.is_empty() || !running.is_empty() {
         while running.len() < jobs.max(1) {
@@ -411,7 +413,14 @@ fn arena(args: &[String]) -> Result<(), String> {
         }
         let line = out.trim_start_matches("RESULT ").to_string();
         let t = tally.entry(name.clone()).or_default();
-        match line.split(' ').next() {
+        let words: Vec<&str> = line.split(' ').collect();
+        let after = |k: &str| words.iter().position(|w| *w == k).and_then(|i| words.get(i + 1)).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+        let l = left.entry(name.clone()).or_default();
+        if words.first() == Some(&"WON") {
+            l.0 += after("health");
+            l.1 += words.get(1).and_then(|s| s.trim_end_matches('s').parse::<f64>().ok()).unwrap_or(0.0);
+        }
+        match words.first().copied() {
             Some("WON") => t[0] += 1,
             Some("LOST") => t[1] += 1,
             Some("DRAWN") => t[2] += 1,
@@ -421,12 +430,20 @@ fn arena(args: &[String]) -> Result<(), String> {
         println!("[{n:3}/{total}] {name} (seed {k}): {line}");
     }
     println!();
-    let mut won = 0;
+    let (mut won, mut health) = (0, 0.0);
     for (name, [w, l, d, e]) in &tally {
         won += w;
-        println!("{name:32} won {w}  lost {l}  drawn {d}{}", if *e > 0 { format!("  errors {e}") } else { String::new() });
+        let (h, s) = left.get(name).copied().unwrap_or_default();
+        health += h;
+        let runs = f64::from(w + l + d + e).max(1.0);
+        println!(
+            "{name:24} won {w:2}  lost {l:2}  drawn {d:2}  health left {:5.1}  {:4.0}s a win{}",
+            h / runs,
+            s / f64::from(*w).max(1.0),
+            if *e > 0 { format!("  errors {e}") } else { String::new() }
+        );
     }
-    println!("\n{won}/{total} won");
+    println!("\n{won}/{total} won, health left {:.1} a fight", health / (total as f64).max(1.0));
     Ok(())
 }
 

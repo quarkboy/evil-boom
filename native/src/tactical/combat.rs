@@ -46,8 +46,14 @@ const DODGE_MARGIN: f64 = 12.0;
 const CLOSE: f64 = 160.0;
 /// this much threat in sight: stand and fight rather than walk on
 const STAND_THREAT: f64 = 6.0;
-/// ...unless killing what's in sight would take longer than this (s): then get past it
-pub const OUTMATCHED: f64 = 15.0;
+/// ...unless killing what's in sight would take longer than this (s), or more ammo than she
+/// has: then get past it
+const OUTMATCHED: f64 = 30.0;
+/// monsters standing about (or by where she's going) she'd take longer than this to kill: left
+/// be
+pub const LEAVE_BE: f64 = 15.0;
+/// of what she shoots, this much lands (her ammo's worth, roughly)
+const AMMO_LANDS: f64 = 0.6;
 /// fewer shots than this for the guns held: supplies come first
 const SHORT_OF_AMMO: i32 = 15;
 /// ...or below this health, anything in sight
@@ -338,10 +344,36 @@ impl Combat {
     }
 
     /// Would killing what's in sight take too long with what she has (a room of barons with the
-    /// pistol: MAP08 at pistol start)?
+    /// pistol: MAP08 at pistol start), or more ammo than she has (a cyberdemon, ten rockets)?
     pub fn outmatched(&self, obs: &Observation) -> bool {
-        let hp: f64 = self.visible.iter().filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0).map(|t| f64::from(mon(t.name).health)).sum();
-        hp / self.firepower(obs) > OUTMATCHED
+        let near: Vec<&'static str> = self.visible.iter().filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0).map(|t| t.name).collect();
+        self.too_much(obs, &near, OUTMATCHED)
+    }
+
+    /// Would these take her longer than `secs` to kill, or more than her ammo's worth?
+    pub fn too_much(&self, obs: &Observation, names: &[&str], secs: f64) -> bool {
+        let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
+        if hp / self.firepower(obs) > secs {
+            return true;
+        }
+        // (what each kind of ammo's worth, with the best gun she has for it; bosses take no blast)
+        let held = Self::held(obs);
+        let boss = names.iter().any(|n| mon(n).boss);
+        let mut worth = 0.0;
+        for pool in [&[2, 4][..], &[3], &[5], &[6, 7]] {
+            let best = pool
+                .iter()
+                .filter(|s| held.contains(s))
+                .map(|&s| {
+                    let w = weapon_in(s, obs.super_shotgun);
+                    let per = if boss && s == 5 { w.damage / 2.0 } else { w.damage };
+                    f64::from(Self::ammo(obs, s) / w.ammo_per_shot.max(1)) * per
+                })
+                .fold(0.0, f64::max);
+            worth += best;
+        }
+        let melee = held.contains(&1) && self.firepower(obs) == weapon_in(1, None).dps();
+        !melee && worth * AMMO_LANDS < hp
     }
 
     /// Can any gun she has ammo for get to t from here?
@@ -373,7 +405,7 @@ impl Combat {
             .filter(|m| !m.awake && self.nav.poly_at(m.pos()).is_some_and(|p| heard.contains(&self.nav.sector_of_poly(p))))
             .collect();
         let hp: f64 = sleepers.iter().map(|m| f64::from(mon(m.name).health)).sum();
-        if sleepers.len() < 2 || hp / self.firepower(obs) <= OUTMATCHED {
+        if sleepers.len() < 2 || hp / self.firepower(obs) <= LEAVE_BE {
             return String::new();
         }
         let names: BTreeSet<&str> = sleepers.iter().map(|m| m.name).collect();

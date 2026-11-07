@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::bestiary::{ammo_item, armor_item, health_item, monster, weapon_in, weapon_item, Attack, SUPER_SHOTGUN};
-use super::combat::{segment_point_distance, Combat, OUTMATCHED};
+use super::combat::{segment_point_distance, Combat, LEAVE_BE};
 use crate::geom::{dist, Point};
 use crate::knowledge::explorer::{Explorer, Hooks, Kind, Objective};
 use crate::knowledge::model::Knowledge;
@@ -530,8 +530,8 @@ impl Hooks for Fight {
         if obj.urgent || obj.kind == Kind::Exit {
             return false;
         }
-        let hp: f64 = self.combat.remaining().iter().filter(|s| dist(s.pos(), obj.goal) < DANGER_NEAR).map(|s| mhealth(s.name)).sum();
-        hp / self.combat.firepower(obs) > OUTMATCHED
+        let near: Vec<&str> = self.combat.remaining().iter().filter(|s| dist(s.pos(), obj.goal) < DANGER_NEAR).map(|s| s.name).collect();
+        !near.is_empty() && self.combat.too_much(obs, &near, LEAVE_BE)
     }
 
     /// Something to fight with come into what she knows of the map (a better gun; ammo, when

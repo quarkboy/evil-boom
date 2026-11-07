@@ -116,6 +116,16 @@ impl Weapon {
         0.8 * self.damage * TICS_PER_SECOND / self.cycle
     }
 
+    /// A shot's damage on m (the cyberdemon and the spider mastermind take nothing from a
+    /// rocket's blast, only the hit).
+    pub fn damage_on(&self, m: &Monster) -> f64 {
+        if m.boss && self.slot == 5 {
+            self.damage / 2.0
+        } else {
+            self.damage
+        }
+    }
+
     /// The share of a shot's damage that lands on something this wide this far off.
     pub fn hits(&self, radius: f64, d: f64) -> f64 {
         if !self.hitscan {

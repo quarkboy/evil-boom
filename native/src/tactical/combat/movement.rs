@@ -36,22 +36,32 @@ impl Combat {
             if t.name == "LostSoul" && t.vx.hypot(t.vy) < 8.0 {
                 continue;
             }
-            // (relative to her, as she's going)
-            let (rvx, rvy) = (t.vx - vel.0, t.vy - vel.1);
-            let v2 = rvx * rvx + rvy * rvy;
-            if v2 < 1.0 {
+            // (relative to her, as she's going, and were she to stop: aimed at where she was, it
+            // hits if she turns back into it, as a route does, round a corner: Cyberdemon's
+            // rockets met head on, 3 tics off)
+            let Some((when, miss)) = [vel, (0.0, 0.0)]
+                .into_iter()
+                .filter_map(|v| {
+                    let (rvx, rvy) = (t.vx - v.0, t.vy - v.1);
+                    let v2 = rvx * rvx + rvy * rvy;
+                    if v2 < 1.0 {
+                        return None;
+                    }
+                    let (rx, ry) = (pos.0 - t.x, pos.1 - t.y);
+                    let when = (rx * rvx + ry * rvy) / v2;
+                    if !(0.0 < when && when < DODGE_TICS as f64) {
+                        return None;
+                    }
+                    let hz = t.z + t.vz * when;
+                    if !(z - 24.0 < hz && hz < z + PLAYER_HEIGHT + 24.0) {
+                        return None;
+                    }
+                    Some((when, (t.x + rvx * when - pos.0).hypot(t.y + rvy * when - pos.1)))
+                })
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+            else {
                 continue;
-            }
-            let (rx, ry) = (pos.0 - t.x, pos.1 - t.y);
-            let when = (rx * rvx + ry * rvy) / v2;
-            if !(0.0 < when && when < DODGE_TICS as f64) {
-                continue;
-            }
-            let miss = (t.x + rvx * when - pos.0).hypot(t.y + rvy * when - pos.1);
-            let hz = t.z + t.vz * when;
-            if !(z - 24.0 < hz && hz < z + PLAYER_HEIGHT + 24.0) {
-                continue;
-            }
+            };
             if !self.dodging.contains(&t.id) && miss > clearance(&m) {
                 continue;
             }

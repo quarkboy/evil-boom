@@ -35,6 +35,8 @@ pub struct Mobj {
     pub state: c_int,
     /// a monster: it's after the player
     pub after_her: c_int,
+    /// a monster: tics into its missile attack (-1: not attacking)
+    pub attack: c_int,
 }
 
 /// The player (`evil_player`).

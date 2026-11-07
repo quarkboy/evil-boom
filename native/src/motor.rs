@@ -57,6 +57,9 @@ pub struct Thing {
     pub state: i32,
     /// a monster: it's after her
     pub after_her: bool,
+    /// a monster: tics into its attack, from its first frame (as she'd see it winding up: an
+    /// arch-vile raising its hands, a cyberdemon aiming); -1 not attacking
+    pub attack: i32,
 }
 
 /// What she sees of the game a tic.
