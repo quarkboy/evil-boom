@@ -13,6 +13,7 @@ use crate::geom::{box_hits_segment, cells, closest_point, dist, segments_cross, 
 use crate::motor::{FRICTION, RUN_THRUST};
 use crate::nav::{can_cross, Heights};
 use crate::det::{HashMap, HashSet};
+use std::cell::Cell;
 
 /// degrees off the edge normal
 const JUMP_ANGLES: [f64; 7] = [0.0, -30.0, 30.0, -45.0, 45.0, -60.0, 60.0];
@@ -21,6 +22,8 @@ const JUMPS_PER_TARGET: usize = 4;
 /// aiming a jump at a sector's nearest part: this far in from its rim
 const AIM_INSIDE: f64 = 32.0;
 const MAX_RUNUP: f64 = 256.0;
+/// run-ups tried: the longest, then shorter ones where it comes down nowhere
+const RUNUP_CAPS: [f64; 3] = [MAX_RUNUP, 96.0, 48.0];
 /// Map units between clearance checks behind the ledge.
 const RUNUP_STEP: f64 = 8.0;
 const MIN_RUNUP: f64 = 16.0;
@@ -60,6 +63,16 @@ fn takeoff_samples(width: f64) -> Vec<f64> {
 /// The box's corners and edge middles, for what's under it.
 fn box_points(r: f64) -> [Point; 8] {
     [(-r, -r), (0.0, -r), (r, -r), (r, 0.0), (r, r), (0.0, r), (-r, r), (-r, 0.0)]
+}
+
+/// How a jump is tried: `high`, sectors met in flight at their highest floor that works; `cap`,
+/// the longest run-up; `ceiling`, set if it came in too high for a ceiling it'd have come down
+/// under (slower, from a shorter run-up, it may not).
+#[derive(Clone, Copy)]
+struct Flight<'a> {
+    high: bool,
+    cap: f64,
+    ceiling: Option<&'a Cell<bool>>,
 }
 
 /// The heights each sector has been given for the jump being tried, in the order given.
@@ -120,11 +133,18 @@ impl JumpLab {
                             for &t in samples.iter() {
                                 let takeoff = (x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
                                 let chosen = Chosen(if sa == sb { vec![(sa, ha)] } else { vec![(sa, ha), (sb, hb)] });
-                                let jump = self.try_jump(a, takeoff, d, chosen.clone(), input, false);
+                                let ceiling = Cell::new(false);
+                                let jump = self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: false, cap: MAX_RUNUP, ceiling: Some(&ceiling) });
                                 // A raised-floor landing is an alternative. Only a normal
                                 // landing ends the takeoff search for this direction.
                                 let normal_landing = jump.is_some();
-                                if let Some(j) = jump.or_else(|| self.try_jump(a, takeoff, d, chosen, input, true)) {
+                                // (none, and it came in too high for a ceiling: from a shorter
+                                // run-up, slower: MAP06's ledge behind the fake wall, its ceiling
+                                // 88 over the floor, too fast from far back)
+                                let found = jump
+                                    .or_else(|| self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: true, cap: MAX_RUNUP, ceiling: None }))
+                                    .or_else(|| ceiling.get().then(|| RUNUP_CAPS[1..].iter().find_map(|&cap| self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: false, cap, ceiling: None }))).flatten());
+                                if let Some(j) = found {
                                     let key = (a, mesh.poly(j.dest_poly).sector);
                                     let index = group_index.entry(key).or_insert_with(|| {
                                         groups.push(Vec::new());
@@ -256,10 +276,12 @@ impl JumpLab {
         cand
     }
 
-    /// The jump off the edge at `takeoff` from poly `src` heading `n`, if there is one.
-    /// `high`: sectors met in flight are taken at their highest possible floor that works,
-    /// rather than the first (a platform raised to land on: MAP09's bridge).
-    fn try_jump(&self, src: usize, takeoff: Point, n: Point, mut chosen: Chosen, input: &FinderInput, high: bool) -> Option<Jump> {
+    /// The jump off the edge at `takeoff` from poly `src` heading `n`, if there is one, from a
+    /// run-up no longer than `how.cap`. `how.high`: sectors met in flight are taken at their
+    /// highest possible floor that works, rather than the first (a platform raised to land on:
+    /// MAP09's bridge).
+    fn try_jump(&self, src: usize, takeoff: Point, mut n: Point, mut chosen: Chosen, input: &FinderInput, how: Flight) -> Option<Jump> {
+        let Flight { high, cap, ceiling } = how;
         let mesh = &self.mesh;
         let src_sector = mesh.poly(src).sector;
         let floor = chosen.get(src_sector)?.floor;
@@ -281,7 +303,7 @@ impl JumpLab {
         let (mut runup, mut back) = (0.0, takeoff);
         let r = PLAYER_RADIUS - 1.0;
         let bx = box_points(r);
-        'run: while runup < MAX_RUNUP {
+        'run: while runup < cap {
             let nxt = (takeoff.0 - n.0 * (runup + RUNUP_STEP), takeoff.1 - n.1 * (runup + RUNUP_STEP));
             let Some(here) = mesh.poly_at(nxt) else { break };
             if self.box_hits_static_wall(nxt) {
@@ -337,19 +359,29 @@ impl JumpLab {
             chosen.0.iter().copied().filter(|&(s, h)| (h.floor, h.ceiling) != self.initial[s] || input.moving.contains(&s)).collect()
         };
         for _ in 0..MAX_FLIGHT_TICS {
-            let nn = (x + n.0 * v, y + n.1 * v);
+            let mut nn = (x + n.0 * v, y + n.1 * v);
+            if self.box_hits_static_wall(nn) {
+                // (a wall in the way: she slides along it, as the game has her, one way or the
+                // other (P_SlideMove's stairstep): MAP06's jump along the pit's far wall into the
+                // ledge behind the fake wall. Nowhere to slide, something solid in the way, a
+                // barrel on the island: the run's over and she comes down where she is, a landing
+                // if that's on it: MAP25's stepping stones)
+                let (vx, vy) = (n.0 * v, n.1 * v);
+                let slide = [(vx, 0.0), (0.0, vy)].into_iter().find(|&(dx, dy)| dx.hypot(dy) > 0.5 && !self.box_hits_static_wall((x + dx, y + dy)));
+                if let Some((dx, dy)) = slide {
+                    v = dx.hypot(dy);
+                    n = (dx / v, dy / v);
+                    nn = (x + dx, y + dy);
+                } else {
+                    v = 0.0;
+                    nn = (x, y);
+                }
+            }
             for li in self.crossed((x, y), nn) {
                 let l = &self.map.linedefs[li];
                 if !l.two_sided() || l.blocks_player() {
                     return None;
                 }
-            }
-            let mut nn = nn;
-            if self.box_hits_static_wall(nn) {
-                // (something solid in the way, a barrel on the island: the run's over and she
-                // comes down where she is, a landing if that's on it: MAP25's stepping stones)
-                v = 0.0;
-                nn = (x, y);
             }
             let mut under: Vec<(usize, Heights)> = Vec::new();
             for &(dx, dy) in &all {
@@ -361,7 +393,13 @@ impl JumpLab {
                 // (a little headroom to spare in the air: MAP09's jump through a door)
                 let zz = z;
                 let ok = move |h: Heights| h.floor <= zz + MAX_STEP && h.ceiling - zz.max(h.floor) >= PLAYER_HEIGHT + FLIGHT_HEADROOM;
-                let h = pick(&mut chosen, s, &ok, true)?;
+                let Some(h) = pick(&mut chosen, s, &ok, true) else {
+                    // (a floor she'd come down on, but no room under its ceiling this high)
+                    if let Some(c) = ceiling.filter(|_| input.options[s].iter().any(|h| h.floor <= zz + MAX_STEP && h.ceiling - h.floor >= PLAYER_HEIGHT)) {
+                        c.set(true);
+                    }
+                    return None;
+                };
                 under.push((s, h));
             }
             let fmax = under.iter().map(|(_, h)| h.floor).fold(f64::NEG_INFINITY, f64::max);
@@ -378,7 +416,13 @@ impl JumpLab {
                     }
                     let mut on = (x + n.0 * (PLAYER_RADIUS + 8.0), y + n.1 * (PLAYER_RADIUS + 8.0));
                     let mut land = mesh.poly_at(on);
-                    if land.is_none_or(|l| mesh.poly(l).sector != mesh.poly(ahead).sector) {
+                    // (further on: the same sector, or one at the same height past a strip too
+                    // narrow to stop in: MAP06's, 8 wide, behind the fake wall)
+                    let level = |l: usize| {
+                        let s = mesh.poly(l).sector;
+                        s == mesh.poly(ahead).sector || chosen.get(s).or_else(|| input.options[s].first().copied()).is_some_and(|h| h.floor == fmax)
+                    };
+                    if land.is_none_or(|l| !level(l)) {
                         land = Some(ahead);
                         on = (x + n.0 * (PLAYER_RADIUS - 1.0), y + n.1 * (PLAYER_RADIUS - 1.0));
                     }
