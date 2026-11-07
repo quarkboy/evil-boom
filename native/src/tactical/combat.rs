@@ -70,11 +70,7 @@ const LOW_HEALTH: f64 = 35.0;
 /// with something shooting in sight, keep this far from barrels
 const BARREL_CLEAR: f64 = 160.0;
 
-/// a monster facing another this nearly...
-const INFIGHT_FACING: f64 = 30.0;
-/// ...and not her...
-const INFIGHT_NOT_HER: f64 = 45.0;
-/// ...this long: they're fighting each other: leave them
+/// a monster seen after another, not her, this long: they're fighting each other: leave them
 const INFIGHT_TICS: i32 = 18;
 
 /// What using up ammo costs, in seconds of fighting a unit, and below how much the cost goes up.
@@ -312,31 +308,17 @@ impl Combat {
     /// Which monsters in sight are after each other, not her: facing another, not her, and
     /// either moving or faced back.
     fn watch_infighting(&mut self, obs: &Observation) {
-        let pos = obs.pos();
         let mut now: BTreeMap<i32, i32> = BTreeMap::new();
         for t in &self.visible {
             let awake = self.known.get(&t.id).is_some_and(|s| s.awake);
-            if !awake || norm(t.angle - heading((t.x, t.y), pos)).abs() < INFIGHT_NOT_HER {
+            // (awake and after something, not her: which way it runs and shoots shows it)
+            if !awake || t.after_her || !(t.vx.hypot(t.vy) > 0.5 || t.attack >= 0) {
                 continue; // (standing about where it was put isn't fighting: MAP09's zombies)
             }
-            let moving = t.vx.hypot(t.vy) > 0.5;
-            for o in &self.visible {
-                if o.id == t.id || dist((o.x, o.y), (t.x, t.y)) < 1.0 {
-                    continue;
-                }
-                if o.name == t.name && mon(t.name).attack != Attack::Hitscan {
-                    continue; // (a kind's fireballs and claws don't hurt its own)
-                }
-                if norm(t.angle - heading((t.x, t.y), (o.x, o.y))).abs() < INFIGHT_FACING
-                    && (moving || norm(o.angle - heading((o.x, o.y), (t.x, t.y))).abs() < INFIGHT_FACING)
-                {
-                    let n = self.infight.get(&t.id).copied().unwrap_or(0) + 1;
-                    now.insert(t.id, n);
-                    if n == INFIGHT_TICS {
-                        self.log.push(format!("tic {}: {} {} is fighting {} {}: leaving them to it", obs.tic, t.name, t.id, o.name, o.id));
-                    }
-                    break;
-                }
+            let n = self.infight.get(&t.id).copied().unwrap_or(0) + 1;
+            now.insert(t.id, n);
+            if n == INFIGHT_TICS {
+                self.log.push(format!("tic {}: {} {} is fighting another: leaving it to it", obs.tic, t.name, t.id));
             }
         }
         self.infight = now;

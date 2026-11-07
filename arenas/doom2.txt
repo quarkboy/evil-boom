@@ -230,3 +230,38 @@ at 600 -1850 90
 give rocket plasma rocket=40 cell=200 armor=100 green
 spawn Cyberdemon 950 -1150 270
 seconds 240
+
+# --- infighting: a heavy behind others, its shots landing on them ----------------------------
+
+arena infight-cyber-barons
+map doom2 MAP32
+at 448 3900 90
+give rocket plasma rocket=30 cell=300 armor=200 blue
+spawn Cyberdemon 448 5850 270
+spawn BaronOfHell 250 5300 270
+spawn BaronOfHell 650 5300 270
+spawn BaronOfHell 448 5150 270
+seconds 300
+
+arena infight-spider-zombies
+map doom2 MAP32
+at 448 3900 90
+give shotgun chaingun plasma shell=40 clip=200 cell=300 armor=100 green
+spawn SpiderMastermind 448 5800 270
+spawn ShotgunGuy 200 5200 270
+spawn ShotgunGuy 700 5200 270
+spawn ChaingunGuy 448 5100 270
+spawn Zombieman 300 5000 270
+spawn Zombieman 600 5000 270
+seconds 300
+
+arena infight-imps-knights
+map doom2 MAP32
+at 448 3900 90
+give ssg rocket shell=50 rocket=20 armor=100 green
+spawn DoomImp 150 5800 270
+spawn DoomImp 448 5850 270
+spawn DoomImp 750 5800 270
+spawn HellKnight 300 5100 270
+spawn HellKnight 600 5100 270
+seconds 200
