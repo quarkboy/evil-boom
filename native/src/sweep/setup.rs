@@ -19,7 +19,7 @@ use std::sync::Arc;
 /// Levels with secrets nobody can get: how many short of the tally counts as all (E4M3: two
 /// torch sectors no one can stand in; E4M7: one; MAP15's #9 and MAP27's #5: teleporter sectors
 /// the teleport line keeps everyone out of).
-fn broken_secrets(map: &str) -> i32 {
+pub(crate) fn broken_secrets(map: &str) -> i32 {
     match map {
         "E4M3" => 2,
         "E4M7" | "MAP15" | "MAP27" => 1,

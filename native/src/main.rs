@@ -17,7 +17,8 @@
 //!       whole map, F follow, wheel zoom, Esc quit)
 //!
 //! Run options: --lives N (unlimited), --max-seconds S (3600, all lives together), --seed N|random (0), --peek, --secrets,
-//! --expert, --fight SKILL, --mortal, --stall S (the 100% runs: over after S game seconds, 300
+//! --expert, --fight SKILL, --mortal, --complete (every kill, item and secret, then out: --fight 4
+//! --expert --secrets together, the exit held while any tally's short), --stall S (the 100% runs: over after S game seconds, 300
 //! unless told, with nothing more collected or learned); --snapshot S (stop after S game seconds and draw the
 //! viewer's window to out/watch.png; nothing's drawn till then) and --focus X,Y,ZOOM (its map
 //! centred there); --from FILE@S (play back the run recorded in FILE, out/runs/<IWAD>_<MAP>.run,
@@ -276,13 +277,16 @@ fn sweep(args: &[String]) -> Result<(), String> {
         results.push(outcome);
         println!("[{:3}/{total}] {w} {m}: {line}", results.len());
     }
-    let done = results.iter().filter(|o| matches!(o.as_str(), "EXITED" | "EXPERT" | "SECRETS")).count();
+    let done = results.iter().filter(|o| matches!(o.as_str(), "EXITED" | "EXPERT" | "SECRETS" | "COMPLETE")).count();
     println!("\n{done}/{} exited", results.len());
     if o.expert {
         println!("{}/{} with every item", results.iter().filter(|o| *o == "EXPERT").count(), results.len());
     }
     if o.secrets {
         println!("{}/{} with every secret", results.iter().filter(|o| *o == "SECRETS").count(), results.len());
+    }
+    if o.complete {
+        println!("{}/{} with every kill, item and secret", results.iter().filter(|o| *o == "COMPLETE").count(), results.len());
     }
     Ok(())
 }
@@ -298,6 +302,9 @@ fn watch(args: &[String]) -> Result<(), String> {
         fight: o.fight,
         peek: o.peek,
         expert: o.expert,
+        secrets: o.secrets,
+        complete: o.complete,
+        stall_seconds: o.stall_seconds,
         seed: o.seed,
         focus: None,
     };
