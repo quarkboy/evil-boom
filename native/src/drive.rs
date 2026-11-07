@@ -12,10 +12,15 @@
 //!   wait N              N tics, nothing pressed
 //!   bot N               the bot plays N tics
 //!   where               position, sector, keys, the tally
+//!   items               counted items there: seen, hers to get now, or from the level's start
 //!   exit?               is there a way out from here (knowing the whole map)?
 //!   sector S...         sectors' heights now, and as she believes them
 //!   line L...           what she knows of lines
-//!   objectives          what she'd do next: her options, with the length of the way there
+//!   objectives          what she'd do next: her options, numbered, with the way there
+//!   next                let her choose her next objective and do it; what came of it
+//!   pick N              do option N of the last `objectives` instead; what came of it
+//!   force visit X Y | force wall LINE | force item X Y
+//!                       give her an objective she wasn't offering; what came of it
 //!   snapshot NAME [X,Y,ZOOM]   the viewer's window into out/drive/NAME.png
 
 use std::path::Path;
@@ -23,7 +28,7 @@ use std::rc::Rc;
 
 use crate::config::out_dir;
 use crate::geom::{dist, Point};
-use crate::knowledge::explorer::{Kind, Objective};
+use crate::knowledge::explorer::{Ident, Kind, Objective};
 use crate::motor::follower::RouteFollower;
 use crate::motor::{heading, norm, Controls, Observation, TICRATE};
 use crate::navigator::{Plan, States};
@@ -37,6 +42,7 @@ const GOTO_TICS: i64 = 90 * 35;
 pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), String> {
     let text = std::fs::read_to_string(script).map_err(|e| format!("{}: {e}", script.display()))?;
     let mut s = setup(wad, map, o, true)?;
+    let mut listed: Vec<Objective> = Vec::new();
     println!("at tic {} ({:.1}s)", s.e.tic, s.e.tic as f64 / TICRATE);
     for (i, raw) in text.lines().enumerate() {
         let line = raw.split('#').next().unwrap_or("").trim();
@@ -99,6 +105,23 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 println!("  doing: {}", x.current.as_ref().map_or("-", |c| c.label.as_str()));
             }
             "where" => where_(&mut s),
+            "items" => {
+                // (each counted item still there: seen? hers to get now? from the level's start?)
+                let obs = s.obs();
+                let x = s.agent.x_mut();
+                x.objectives(&obs, false, &mut crate::knowledge::explorer::NoHooks); // (her reach now)
+                let known = x.knowledge.known_polys();
+                let fresh = x.fresh_view();
+                let start = s.m.things.iter().find(|t| t.kind == 1).map(|t| (t.x, t.y));
+                let states = fresh.initial_states();
+                for t in obs.things.iter().flatten().filter(|t| crate::knowledge::completion::COUNTED.contains(&t.name)) {
+                    let p = s.nav.poly_at((t.x, t.y));
+                    let seen = p.is_some_and(|p| known.contains(&p));
+                    let now = p.is_some_and(|p| x.reach.contains(&p));
+                    let from_start = seen && start.is_some_and(|st| fresh.plan(st, &[(t.x, t.y)], &Plan { states: Some(&states), max_expansions: 2000, max_seconds: 10.0, ..Plan::default() }).is_some());
+                    println!("  {} at ({:.0}, {:.0}) sector {}: {}", t.name, t.x, t.y, p.map_or("-".into(), |p| s.nav.sector_of_poly(p).to_string()), if !seen { "never seen" } else if now { "seen, hers to get now" } else if from_start { "seen, not now, but from the start" } else { "seen, not to be had" });
+                }
+            }
             "exit?" => {
                 let obs = s.obs();
                 let plan = crate::sweep::plan_here(&s.nav, &obs, 20.0);
@@ -136,15 +159,47 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
             }
             "objectives" => {
                 let obs = s.obs();
+                listed.clear();
                 for risky in [false, true] {
-                    let options = s.agent.x_mut().ranked(&obs, risky, &mut crate::knowledge::explorer::NoHooks);
+                    let options = s.agent.ranked(&obs, risky);
                     println!("  {} options{}", options.len(), if risky { " (risky)" } else { "" });
-                    for obj in options.iter().take(12) {
-                        let route = s.agent.x_mut().route_to(obj, &obs);
-                        let how = route.map_or("no route".to_string(), |st| format!("{} steps", st.len()));
-                        println!("    {} at ({:.0}, {:.0}), priority {}: {how}", obj.label, obj.goal.0, obj.goal.1, obj.priority());
+                    for obj in options.into_iter().take(12) {
+                        let route = s.agent.x_mut().route_to(&obj, &obs);
+                        let how = route.map_or("no route".to_string(), |st| format!("{} steps, {:.0} long", st.len(), crate::knowledge::explorer::route_length(&st)));
+                        println!("    {:2}. {} at ({:.0}, {:.0}), priority {}: {how}", listed.len() + 1, obj.label, obj.goal.0, obj.goal.1, obj.priority());
+                        listed.push(obj);
                     }
                 }
+            }
+            "next" => {
+                // (whatever she's doing given up first: her own choice from here)
+                s.agent.x_mut().current = None;
+                carry_out(&mut s, None);
+            }
+            "pick" => {
+                let n = num(1)? as usize;
+                let Some(obj) = n.checked_sub(1).and_then(|i| listed.get(i)).cloned() else { return Err(format!("line {}: no option {n} (`objectives` first)", i + 1)) };
+                take(&mut s, obj);
+            }
+            "force" => {
+                let obj = match w.get(1).copied() {
+                    Some("visit") => Objective::new(Kind::Visit, (num(2)?, num(3)?), "go there (forced)"),
+                    Some("item") => Objective::new(Kind::Item, (num(2)?, num(3)?), "pick it up (forced)"),
+                    Some("wall") => {
+                        let li = num(2)? as usize;
+                        let (a, b) = s.m.line_seg(li);
+                        let len = dist(a, b).max(1e-6);
+                        let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+                        // (pressed from in front: the front is right of v1->v2)
+                        let (nx, ny) = ((b.1 - a.1) / len, -(b.0 - a.0) / len);
+                        let mut o = Objective::new(Kind::Wall, (mid.0 + nx * 40.0, mid.1 + ny * 40.0), format!("try the wall (line {li}, forced)"));
+                        o.wall = Some(li);
+                        o.look_at = Some(mid);
+                        o
+                    }
+                    _ => return Err(format!("line {}: force visit X Y | force wall LINE | force item X Y", i + 1)),
+                };
+                take(&mut s, obj);
             }
             "snapshot" => {
                 let name = w.get(1).copied().unwrap_or("shot");
@@ -167,6 +222,51 @@ impl Setup {
     fn obs(&mut self) -> Observation {
         self.e.observe()
     }
+}
+
+/// Have her do this objective (her own route and follower), and what came of it.
+fn take(s: &mut Setup, obj: Objective) {
+    let obs = s.obs();
+    let (label, id) = (obj.label.clone(), obj.ident());
+    if !s.agent.x_mut().take(&obs, obj) {
+        println!("  no route to '{label}'");
+        return;
+    }
+    carry_out(s, Some(id));
+}
+
+/// The bot plays till the objective it's on (`doing`; None: the one it chooses next) is over:
+/// what she did, what she learned, what she went on to.
+fn carry_out(s: &mut Setup, doing: Option<Ident>) {
+    let start_log = s.agent.x().log.len();
+    let start_tic = s.e.tic;
+    let knew = s.agent.x().knowledge.summary();
+    let tally = s.e.tally();
+    let mut doing = doing;
+    while s.e.tic - start_tic < GOTO_TICS * 2 && !s.e.finished() {
+        let obs = s.e.observe();
+        let c = s.agent.act(&obs, s.c.as_ref());
+        s.e.step(&c);
+        s.c = Some(c);
+        s.obs = Some(obs);
+        let now = s.agent.x().current.as_ref().map(Objective::ident);
+        match (&doing, &now) {
+            (None, Some(l)) => doing = Some(l.clone()),
+            (Some(d), n) if n.as_ref() != Some(d) => break,
+            _ => {}
+        }
+    }
+    let x = s.agent.x();
+    for l in &x.log[start_log.min(x.log.len())..] {
+        println!("  {l}");
+    }
+    let after = s.e.tally();
+    println!("  took {:.1}s; items {} -> {}, secrets {} -> {}", (s.e.tic - start_tic) as f64 / TICRATE, tally[0].0, after[0].0, tally[2].0, after[2].0);
+    let k = x.knowledge.summary();
+    if k != knew {
+        println!("  knows now: {k}");
+    }
+    println!("  next: {}", x.current.as_ref().map_or("-", |c| c.label.as_str()));
 }
 
 /// A tic with these controls; what she sees goes into her knowledge.

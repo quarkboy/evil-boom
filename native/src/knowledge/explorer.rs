@@ -1887,22 +1887,39 @@ impl Explorer {
             }
             routed.sort_by(|a, b| (a.1.priority(), a.0).partial_cmp(&(b.1.priority(), b.0)).unwrap_or(std::cmp::Ordering::Equal));
             let (_, obj, steps) = routed.swap_remove(0);
-            self.since = obs.tic;
-            // (time to do it: walking the route, and some)
-            self.allowed = GIVE_UP_TICS.max((route_length(&steps) / ROUTE_SPEED) as i64 + ROUTE_SLACK);
-            self.exits_seen = self.knowledge.exits().len();
-            let n = steps.len();
-            let states = self.states();
-            let view = self.view();
-            let mut follower = RouteFollower::new(view, steps, obs.keys.unwrap_or_default(), Some(states), false, obs.tic);
-            follower.fired.extend(self.spent_once()); // (its replans: not by them either)
-            self.follower = Some(follower);
-            self.follower_seen = 0;
-            self.log.push(format!("tic {}: {} ({n} steps) | {}", obs.tic, obj.label, self.knowledge.summary()));
-            self.current = Some(obj);
+            self.start(obs, obj, steps);
             return true;
         }
         false
+    }
+
+    /// Set about `obj` by `steps` (its route).
+    fn start(&mut self, obs: &Observation, obj: Objective, steps: Vec<Step>) {
+        self.since = obs.tic;
+        // (time to do it: walking the route, and some)
+        self.allowed = GIVE_UP_TICS.max((route_length(&steps) / ROUTE_SPEED) as i64 + ROUTE_SLACK);
+        self.exits_seen = self.knowledge.exits().len();
+        let n = steps.len();
+        let states = self.states();
+        let view = self.view();
+        let mut follower = RouteFollower::new(view, steps, obs.keys.unwrap_or_default(), Some(states), false, obs.tic);
+        follower.fired.extend(self.spent_once()); // (its replans: not by them either)
+        self.follower = Some(follower);
+        self.follower_seen = 0;
+        self.log.push(format!("tic {}: {} ({n} steps) | {}", obs.tic, obj.label, self.knowledge.summary()));
+        self.current = Some(obj);
+    }
+
+    /// Set about this objective now, whatever she'd have chosen (evil drive: what if she had?).
+    /// False if she has no route to it.
+    pub fn take(&mut self, obs: &Observation, obj: Objective) -> bool {
+        match self.route_to(&obj, obs) {
+            Some(steps) if !steps.is_empty() => {
+                self.start(obs, obj, steps);
+                true
+            }
+            _ => false,
+        }
     }
 }
 
@@ -1926,7 +1943,7 @@ fn turn_to(obs: &Observation, bearing: Option<f64>) -> Controls {
     Controls { turn, forward, strafe, ..Controls::default() }
 }
 
-fn route_length(steps: &[Step]) -> f64 {
+pub fn route_length(steps: &[Step]) -> f64 {
     steps
         .iter()
         .filter_map(|st| st.path.as_ref())

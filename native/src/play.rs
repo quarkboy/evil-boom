@@ -62,6 +62,15 @@ impl Agent {
         }
     }
 
+    /// Her options now, best first, with whoever's playing's own wants in (evil drive).
+    pub fn ranked(&mut self, obs: &Observation, risky: bool) -> Vec<Objective> {
+        match self {
+            Agent::Plain(x) => x.ranked(obs, risky, &mut NoHooks),
+            Agent::Expert(x, c) => x.ranked(obs, risky, c),
+            Agent::Fight(p) => p.explorer.ranked(obs, risky, &mut NoHooks),
+        }
+    }
+
     pub fn restart(&mut self) {
         match self {
             Agent::Plain(x) | Agent::Expert(x, _) => x.restart(),

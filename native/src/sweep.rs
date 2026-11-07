@@ -301,6 +301,8 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     // (the best so far over the whole run: a level again collecting the same things isn't more)
     let (mut best, mut best_tic) = (progress(&e, agent.x()), e.tic);
     let mut stalled = false;
+    // (the most items and secrets one life got: a level again starts the tally afresh)
+    let mut best_life = (0, 0);
     while (e.tic as f64) < until * TICRATE {
         if o.expert || o.secrets {
             let now = progress(&e, agent.x());
@@ -365,6 +367,8 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
                     }
                 }
                 agent.x_mut().restart_wanted = false;
+                let t = e.tally();
+                best_life = (best_life.0.max(t[0].0), best_life.1.max(t[2].0));
                 rec.entries.push(Entry::Restart(e.tic, why.to_string()));
                 e.restart(true);
                 agent.restart();
@@ -458,9 +462,9 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
         e.tic as f64 / real.max(1e-9)
     ));
     let mut detail = format!("{game_s:.0}s game, {real:.0}s real, {deaths} deaths; {}", k.summary());
-    detail = format!("items {}/{}, {detail}", tally[0].0, tally[0].1);
+    detail = format!("items {}/{}, {detail}", tally[0].0.max(best_life.0), tally[0].1);
     if o.secrets {
-        detail = format!("secrets {}/{}, {detail}", tally[2].0, tally[2].1);
+        detail = format!("secrets {}/{}, {detail}", tally[2].0.max(best_life.1), tally[2].1);
     }
     lines.push(format!("RESULT {outcome} {detail}"));
     let dir = log_dir();
