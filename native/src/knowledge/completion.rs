@@ -52,8 +52,10 @@ impl Hooks for Completionist {
             if !Self::counted(t.name, obs) {
                 continue;
             }
+            // (seen; where it is needn't be somewhere she can get to, only somewhere to touch it
+            // from: E4M7's blur sphere, on a ledge she can reach up onto but not climb)
             let Some(p) = x.nav.poly_at((t.x, t.y)) else { continue };
-            if !known.contains(&p) || !reach.contains(&p) {
+            if !known.contains(&p) {
                 continue;
             }
             if let Some(spot) = x.touch_spot((t.x, t.y), reach) {

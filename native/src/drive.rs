@@ -135,7 +135,7 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 for t in obs.things.iter().flatten().filter(|t| crate::knowledge::completion::COUNTED.contains(&t.name)) {
                     let p = s.nav.poly_at((t.x, t.y));
                     let seen = p.is_some_and(|p| known.contains(&p));
-                    let now = p.is_some_and(|p| x.reach.contains(&p));
+                    let now = seen && x.touch_spot((t.x, t.y), &x.reach).is_some();
                     let from_start = seen && start.is_some_and(|st| fresh.plan(st, &[(t.x, t.y)], &Plan { states: Some(&states), max_expansions: 2000, max_seconds: 10.0, ..Plan::default() }).is_some());
                     println!("  {} at ({:.0}, {:.0}) sector {}: {}", t.name, t.x, t.y, p.map_or("-".into(), |p| s.nav.sector_of_poly(p).to_string()), if !seen { "never seen" } else if now { "seen, hers to get now" } else if from_start { "seen, not now, but from the start" } else { "seen, not to be had" });
                 }

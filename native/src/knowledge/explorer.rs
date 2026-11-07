@@ -57,7 +57,9 @@ const LOOK_TICS: i64 = 35;
 /// an item still there on arrival: shuffled over this long
 const SHUFFLE_TICS: i64 = 35;
 /// a pickup's box and hers overlap this near (20 + 16), either way
-const TOUCH: f64 = 36.0;
+const TOUCH: i32 = 36;
+/// an item this far under her feet is still hers to pick up
+const PICKUP_BELOW: f64 = 8.0;
 /// degrees a tic, turning to look at something
 const TURN_RATE: f64 = 20.0;
 /// sounds from about the same place...
@@ -988,18 +990,22 @@ impl Explorer {
     pub fn touch_spot(&self, item: Point, reach: &BTreeSet<usize>) -> Option<Point> {
         let nav = &self.nav;
         let floor = nav.poly_at(item).map(|p| nav.movers.initial[nav.sector_of_poly(p)].floor);
-        for r in [0.0, 8.0, 16.0, 24.0, 32.0] {
-            for k in 0..if r == 0.0 { 1 } else { 16 } {
-                let a = f64::from(k) * std::f64::consts::PI / 8.0;
-                let q = (item.0 + r * a.cos(), item.1 + r * a.sin());
-                if (q.0 - item.0).abs().max((q.1 - item.1).abs()) >= TOUCH {
-                    continue;
-                }
+        // (square rings, as the boxes touch, every 4 round each: E4M7's blur sphere, on the point
+        // of a ledge, can be had only from a corner of the square)
+        for r in [0, 8, 16, 24, 32, TOUCH - 1] {
+            // (nearest first)
+            let mut ring: Vec<(i32, i32)> = (-r..=r).step_by(4).chain(std::iter::once(r)).flat_map(|i| [(i, -r), (i, r), (-r, i), (r, i)]).collect();
+            ring.sort_by_key(|&(dx, dy)| (dx * dx + dy * dy, dx, dy));
+            ring.dedup();
+            for (dx, dy) in ring {
+                let q = (item.0 + f64::from(dx), item.1 + f64::from(dy));
                 let Some(p) = nav.poly_at(q).filter(|p| reach.contains(p)) else { continue };
                 if !self.standable(q, false) {
                     continue;
                 }
-                if floor.is_some_and(|f| (nav.movers.initial[nav.sector_of_poly(p)].floor - f).abs() > MAX_STEP) {
+                // (P_TouchSpecialThing: the item no higher than her height over her feet, no
+                // more than 8 under them; E4M7's blur sphere on a ledge 56 up, had from below)
+                if floor.is_some_and(|f| !(-PICKUP_BELOW..=PLAYER_HEIGHT).contains(&(f - nav.movers.initial[nav.sector_of_poly(p)].floor))) {
                     continue;
                 }
                 return Some(q);
