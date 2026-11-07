@@ -2,6 +2,7 @@
 //! gone back up by the time the player gets there can't be used.
 
 use super::world::{without, world_hash, Pair, Timers, World, LEG_SPEED};
+use super::triggers::TimedKey;
 use super::{KeySet, PlanCaches, Planner};
 use crate::geom::{dist, Point};
 use crate::nav::{Doors, Found, Heights, Planned, TeleKind, Via};
@@ -62,9 +63,28 @@ impl Planner<'_> {
 
     /// A path from `start` to `goal`, not relying on temporary heights (`deadlines`) it would
     /// be too late for; and the heights it was found with.
-    pub(super) fn timed_path(&mut self, start: Point, goal: Point, states: &World, doors: &Arc<Doors>, deadlines: &Timers) -> Option<(Found, World)> {
+    pub(super) fn timed_path(&mut self, start: Point, goal: Point, states: &World, keys: KeySet, deadlines: &Timers) -> Option<(Found, World)> {
         let t0 = Instant::now();
-        let out = self.timed_path_inner(start, goal, states, doors, deadlines);
+        let timers = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            for (k, v) in deadlines {
+                (k, v.to_bits()).hash(&mut h);
+            }
+            h.finish()
+        };
+        let key: TimedKey = (start.0.to_bits(), start.1.to_bits(), goal.0.to_bits(), goal.1.to_bits(), world_hash(states), keys, timers, self.strict_fit);
+        if let Some(found) = self.caches.timed.get(&key) {
+            let out = found.clone();
+            stats::record(Phase::TimedPath, t0);
+            return out;
+        }
+        let doors = self.doors_for(keys);
+        let out = self.timed_path_inner(start, goal, states, &doors, deadlines);
+        if self.caches.timed.len() > PlanCaches::MAX_TIMED {
+            self.caches.timed.clear();
+        }
+        self.caches.timed.insert(key, out.clone());
         stats::record(Phase::TimedPath, t0);
         out
     }

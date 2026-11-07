@@ -4,7 +4,7 @@
 use super::world::{Pair, Timers, World};
 use super::{KeySet, Planner};
 use crate::geom::{Point, MAX_STEP};
-use crate::nav::{can_cross, DoorOpening, Doors, Heights};
+use crate::nav::{can_cross, DoorOpening, Doors, Found, Heights};
 use crate::det::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -103,11 +103,21 @@ pub struct PlanCaches {
     doors: HashMap<KeySet, Arc<Doors>>,
     pub(super) reach: HashMap<(usize, KeySet, u64), Arc<HashSet<usize>>>,
     effects: HashMap<(usize, Vec<Pair>), Effects>,
+    /// legs found (or not) between two points, by (from, to, heights hash, keys, timers hash,
+    /// strict fit): the same from one search to the next for the same view (MAP24's four
+    /// items compared, each searched for through the same lifts and teleports, 22s each)
+    pub(super) timed: HashMap<TimedKey, Option<(Found, World)>>,
 }
+
+/// A leg asked for: from, to (bits), a hash of the heights, the keys, a hash of the timers,
+/// whether the box must fit all the way.
+pub(super) type TimedKey = (u64, u64, u64, u64, u64, KeySet, u64, bool);
 
 impl PlanCaches {
     /// Flood fills cached before the cache is started afresh.
     pub(super) const MAX_REACH: usize = 200_000;
+    /// Legs remembered before the cache is started afresh.
+    pub(super) const MAX_TIMED: usize = 50_000;
 }
 
 impl Planner<'_> {

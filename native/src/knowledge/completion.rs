@@ -95,7 +95,7 @@ impl Hooks for Completionist {
         let Some(start) = x.nav.map.things.iter().find(|t| t.kind == 1).map(|t| (t.x, t.y)) else { return false };
         let view = x.fresh_view();
         let states = view.initial_states();
-        let route = view.plan(start, &left, &Plan { keys: Keys::default(), states: Some(&states), max_expansions: 2000, max_seconds: 10.0, ..Plan::default() });
+        let route = view.plan(start, &left, &Plan { keys: Keys::default(), states: Some(&states), max_expansions: 20000, max_seconds: 600.0, ..Plan::default() });
         if route.is_none() {
             self.no_way_back = Some(asked);
             return false;

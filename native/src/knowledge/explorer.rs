@@ -26,7 +26,7 @@ use crate::walkthrough::{action_for, steps_from_legs, Action, Step};
 /// a backstop only: the expansions decide (a clock limit made a run depend on the machine)
 const PLAN_SECONDS: f64 = 600.0;
 /// the most plan steps a route is searched for in
-const PLAN_EXPANSIONS: usize = 2000;
+const PLAN_EXPANSIONS: usize = 20000;
 /// a suspected wall pressed: watched this long for something to happen
 const WALL_TICS: i64 = 25;
 /// objectives routed and compared by the way there, each pick

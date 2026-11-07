@@ -319,8 +319,7 @@ impl<'a> Planner<'a> {
                 continue;
             }
             if let Some(pend) = node.pending.take() {
-                let doors = self.doors_for(pend.keys);
-                let Some((path, used)) = self.timed_path(pend.from, node.pos, &pend.states, &doors, &pend.timers) else {
+                let Some((path, used)) = self.timed_path(pend.from, node.pos, &pend.states, pend.keys, &pend.timers) else {
                     if !pend.timers.is_empty() {
                         seen.forget(&sig, &tm);
                     }
@@ -351,12 +350,13 @@ impl<'a> Planner<'a> {
                         continue;
                     }
                 }
-                let Some((path, used)) = self.timed_path(node.pos, gpt, &node.states, &doors, &node.timers) else { continue };
+                let Some((path, used)) = self.timed_path(node.pos, gpt, &node.states, node.keys, &node.timers) else { continue };
                 let total = node.squeezes + path.squeezes;
                 let mut legs = (*node.legs).clone();
                 legs.push(Rc::new(Leg { trigger: None, key: None, path: Rc::new(path), states: used, keys: node.keys }));
                 let route = Route { legs, states: node.states.clone(), keys: node.keys, goal: gpt };
                 if total == 0 {
+                    crate::stats::search_done(crate::stats::Search { budget: q.max_expansions, expansions, ended: crate::stats::Ended::Found, secs: t0.elapsed().as_secs_f64() });
                     return Some(route);
                 }
                 if fallback.as_ref().is_none_or(|f| total < f.squeezes) {
@@ -379,6 +379,14 @@ impl<'a> Planner<'a> {
         if crate::stats::enabled() {
             eprintln!("plan search: {expansions} expanded (of {}), {} still queued, {:.2}s", q.max_expansions, heap.len(), t0.elapsed().as_secs_f64());
         }
+        let ended = if fallback.is_some() {
+            crate::stats::Ended::Squeezed
+        } else if heap.is_empty() {
+            crate::stats::Ended::Exhausted
+        } else {
+            crate::stats::Ended::Budget
+        };
+        crate::stats::search_done(crate::stats::Search { budget: q.max_expansions, expansions, ended, secs: t0.elapsed().as_secs_f64() });
         fallback.map(|f| f.route)
     }
 

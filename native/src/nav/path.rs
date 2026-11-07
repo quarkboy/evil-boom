@@ -25,6 +25,7 @@ pub enum Via {
 /// A path: the polys it goes through and how each is entered (None for the first), the
 /// smoothed waypoints (None where it teleports), its cost, and how many spots along it the
 /// box was found squeezed at.
+#[derive(Clone)]
 pub struct Found {
     pub polys: Vec<usize>,
     pub waypoints: Vec<Option<Point>>,

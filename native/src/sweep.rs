@@ -290,6 +290,8 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool) -> Result<S
 /// seconds, what she's doing), and the log of any think longer than `SLOW_THINK`.
 struct Status {
     file: std::fs::File,
+    /// every plan search, a line each: budget, expansions, how it ended, seconds, game tic
+    searches: std::fs::File,
     secs: f64,
     slowest: f64,
 }
@@ -300,15 +302,20 @@ const SLOW_THINK: f64 = 1.0;
 impl Status {
     fn open(iwad: &str, map: &str) -> Option<Status> {
         let dir = std::env::var_os("EVIL_STATUS")?;
-        let path = std::path::Path::new(&dir).join(format!("{iwad}_{map}.status"));
-        let file = std::fs::File::create(path).ok()?;
-        Some(Status { file, secs: 0.0, slowest: 0.0 })
+        let dir = std::path::Path::new(&dir);
+        let file = std::fs::File::create(dir.join(format!("{iwad}_{map}.status"))).ok()?;
+        let searches = std::fs::File::create(dir.join(format!("{iwad}_{map}.searches"))).ok()?;
+        crate::stats::take_searches();
+        Some(Status { file, searches, secs: 0.0, slowest: 0.0 })
     }
 
     fn think(&mut self, ob: &Observation, took: f64, x: &Explorer, log_n: usize, real: f64) {
         use std::io::Write;
         self.secs += took;
         self.slowest = self.slowest.max(took);
+        for s in crate::stats::take_searches() {
+            let _ = writeln!(self.searches, "{},{},{:?},{:.4},{}", s.budget, s.expansions, s.ended, s.secs, ob.tic);
+        }
         if took > SLOW_THINK {
             let _ = writeln!(self.file, "  slow think at tic {}: {:.1}s", ob.tic, took);
             for l in &x.log[log_n.min(x.log.len())..] {

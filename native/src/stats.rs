@@ -47,6 +47,42 @@ pub fn record(phase: Phase, since: Instant) {
     });
 }
 
+/// How a plan search ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ended {
+    /// a route, no squeezes
+    Found,
+    /// the best squeezed route there was
+    Squeezed,
+    /// nowhere left to look: no route at all
+    Exhausted,
+    /// out of expansions (or time) with more to look at: no route found in the budget
+    Budget,
+}
+
+/// One plan search: its budget, the expansions it made, how it ended, and its seconds.
+#[derive(Clone, Copy, Debug)]
+pub struct Search {
+    pub budget: usize,
+    pub expansions: usize,
+    pub ended: Ended,
+    pub secs: f64,
+}
+
+thread_local! {
+    static SEARCHES: RefCell<Vec<Search>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Note a search done (for the live status's record of them: `EVIL_STATUS`).
+pub fn search_done(s: Search) {
+    SEARCHES.with(|v| v.borrow_mut().push(s));
+}
+
+/// The searches noted since last asked.
+pub fn take_searches() -> Vec<Search> {
+    SEARCHES.with(|v| std::mem::take(&mut *v.borrow_mut()))
+}
+
 pub fn enabled() -> bool {
     std::env::var_os("EVILDOOM_NATIVE_STATS").is_some()
 }
