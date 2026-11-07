@@ -258,7 +258,7 @@ impl Navigator {
         let trenches = analysis::fill_trenches(&map, &mesh, &mut movers);
         let movers = Arc::new(movers);
         let damage = map.sectors.iter().map(|s| classify_sector(s.special).damage).collect();
-        let obstacle_grid = widths::obstacle_grid(&map, skill);
+        let obstacle_grid = widths::obstacle_grid(&map, skill, true);
         let mut a = analysis::Analysis::new(&map, &mesh, &movers, &obstacle_grid, skill);
         let mut triggers = a.find_triggers();
         let (use_gates, use_line_gates, shot_floors) = a.take_gates();
@@ -277,7 +277,7 @@ impl Navigator {
         }
         let teleports = analysis::find_teleports(&map, &mesh);
         let sight_grid = analysis::sight_blockers(&map, &movers);
-        let w = widths::Widths::new(&map, &mesh, &movers, &triggers, &obstacle_grid);
+        let w = widths::Widths::new(&map, &mesh, &movers, &triggers, &widths::obstacle_grid(&map, skill, false));
         let sinking = sinking_sectors(&map, &movers, &triggers);
         let jump_lab = Arc::new(JumpLab::new(
             Arc::clone(&map),

@@ -327,8 +327,9 @@ pub struct Explorer {
     panic_tries: usize,
     /// (that round done: only the walls with more to go on)
     strong_only: bool,
-    /// what was given up on has had its other go, since there was last something to do
-    retried: bool,
+    /// what she knew when what was given up on last had its other go: another once she knows
+    /// more (not merely when one of them is taken up again: E1M3 went round two for ever)
+    retried: Option<String>,
     /// (for tracing: the tics, from EVIL_DEBUG_OBJECTIVES=from-to, whose choices are logged in full)
     debug_tics: Option<(i64, i64)>,
 }
@@ -372,7 +373,7 @@ impl Explorer {
             suspecting: Suspecting::No,
             panic_tries: 0,
             strong_only: false,
-            retried: false,
+            retried: None,
             debug_tics: debug_tics(),
         }
     }
@@ -794,6 +795,10 @@ impl Explorer {
         // lines round the pad in the middle opening its doors for good)
         let known_polys = self.knowledge.known_polys();
         let entered: BTreeSet<usize> = self.knowledge.visited.iter().map(|&q| nav.sector_of_poly(q)).collect();
+        // (lines she's pressed or set off, and sectors she believes shut: a door's face she's not
+        // tried is a way out to try, MAP04's hidden door shutting behind her)
+        let pressed: BTreeSet<usize> = self.knowledge.fired.iter().map(|f| f.line).chain(self.knowledge.tried_walls.keys().copied()).collect();
+        let shut = |sec: usize| states[sec].iter().all(|h| h.ceiling - h.floor < PLAYER_HEIGHT);
         let mut lost_from = |p: usize| -> (BTreeSet<usize>, bool) {
             let after = afters.entry(p).or_insert_with(|| way_back(p));
             if after.contains(&here) {
@@ -802,7 +807,14 @@ impl Explorer {
             let goal_sector = nav.sector_of_poly(p);
             let unseen_edge = after.iter().any(|&q| nav.mesh.poly(q).portals.iter().any(|&pi| !known_polys.contains(&nav.mesh.portals[pi].other(q))));
             let unwalked = after.iter().map(|&q| nav.sector_of_poly(q)).any(|sec| sec != goal_sector && !entered.contains(&sec));
-            (reach.difference(after).copied().collect(), unseen_edge || unwalked)
+            let untried_door = after.iter().any(|&q| {
+                nav.mesh.poly(q).portals.iter().any(|&pi| {
+                    let portal = &nav.mesh.portals[pi];
+                    let other = nav.sector_of_poly(portal.other(q));
+                    shut(other) && portal.linedef.is_some_and(|li| !pressed.contains(&li))
+                })
+            });
+            (reach.difference(after).copied().collect(), unseen_edge || unwalked || untried_door)
         };
         let tic = obs.tic;
         let mut usable = |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
@@ -1005,15 +1017,36 @@ impl Explorer {
     /// `spot`, if the box can stand there; else the middle of its poly, or of one next to it she
     /// can get to, where it can (E3M4).
     fn stand_spot(&self, spot: Point, reach: &BTreeSet<usize>) -> Point {
-        if self.standable(spot, false) {
+        // (and clear of what's shut now: a door that moves isn't a wall to the map's own heights,
+        // but a spot against it shut is no spot: E3M4's door 146, a recheck 4 from its face)
+        let now = self.states();
+        let mesh = &self.nav.mesh;
+        // (each sector at its roomiest as believed; the box against the lines, as the game has
+        // it, not the map's starting heights)
+        let heights: Vec<(f64, f64)> = now.iter().map(|hs| hs.iter().max_by(|a, b| (a.ceiling - a.floor).total_cmp(&(b.ceiling - b.floor))).map_or((0.0, 0.0), |h| (h.floor, h.ceiling))).collect();
+        // (standable, at those heights: E3M4's door 147, shut at the start, open now)
+        let clear = |q: Point| {
+            let (fits, floor, ceiling) = self.nav.jump_lab.fits_at_heights(q, &heights);
+            let centre = mesh.poly_at(q).map_or(floor, |p| heights[mesh.poly(p).sector].0);
+            fits && ceiling - floor >= PLAYER_HEIGHT && floor <= centre + MAX_STEP
+        };
+        if clear(spot) {
             return spot;
         }
-        let mesh = &self.nav.mesh;
         let Some(p) = mesh.poly_at(spot) else { return spot };
-        let around = std::iter::once(p).chain(mesh.poly(p).portals.iter().map(|&q| mesh.portals[q].other(p)));
-        for pi in around {
-            if reach.contains(&pi) && self.standable(mesh.poly(pi).center, false) {
-                return mesh.poly(pi).center;
+        // (two rings out, nearest first: E3M4's double door, a strip 8 deep between a door open
+        // and one shut, and the next strip 8 deep too)
+        let next = |ps: &[usize]| -> Vec<usize> { ps.iter().flat_map(|&a| mesh.poly(a).portals.iter().map(move |&q| mesh.portals[q].other(a))).filter(|q| reach.contains(q)).collect() };
+        let one = next(&[p]);
+        let two = next(&one);
+        for ring in [vec![p].into_iter().filter(|q| reach.contains(q)).collect(), one, two] {
+            let best = ring
+                .into_iter()
+                .map(|pi| mesh.poly(pi).center)
+                .filter(|&c| clear(c))
+                .min_by(|a, b| dist(*a, spot).total_cmp(&dist(*b, spot)));
+            if let Some(c) = best {
+                return c;
             }
         }
         spot
@@ -1409,7 +1442,7 @@ impl Explorer {
         self.held_since = None;
         self.urgent_n = self.knowledge.heard.len();
         self.panic_tries = 0;
-        self.retried = false;
+        self.retried = None;
     }
 
     /// Taking over a run played back to here (replay): what she's heard and set off so far is
@@ -1788,7 +1821,6 @@ impl Explorer {
         let mut found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
         if found {
             self.panic_tries = 0;
-            self.retried = false;
         }
         if !found && perceive && self.suspecting == Suspecting::No {
             // (nothing else: walls that might hide something, pressed in turn)
@@ -1799,11 +1831,11 @@ impl Explorer {
                 self.log.push(format!("tic {}: nothing else to do: trying walls", obs.tic));
             }
         }
-        if !found && !self.dropped.is_empty() && !self.retried {
+        if !found && !self.dropped.is_empty() && self.retried.as_deref() != Some(self.knowledge.summary().as_str()) {
             // (nothing else: what was given up on lately gets another go, its wait cut short,
             // once till there's something else to do: dropped when the way was shut a while,
             // E1M4's bonus behind the door a walk-over line opens, it waited out her whole life)
-            self.retried = true;
+            self.retried = Some(self.knowledge.summary());
             self.log.push(format!("tic {}: nothing else to do: the {} things given up on lately get another go", obs.tic, self.dropped.len()));
             self.dropped.clear();
             self.suspecting = Suspecting::No;

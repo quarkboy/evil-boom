@@ -10,6 +10,7 @@
 //!   use                 press use (facing as she is)
 //!   move F S T N        forward, strafe, turn (degrees a tic, right) for N tics
 //!   wait N              N tics, nothing pressed
+//!   fire N [SLOT]       hold fire for N tics (facing as she is), with that weapon first
 //!   bot N               the bot plays N tics
 //!   where               position, sector, keys, the tally
 //!   items               counted items there: seen, hers to get now, or from the level's start
@@ -89,6 +90,21 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 for _ in 0..num(4)? as i64 {
                     tick(&mut s, ctl);
                 }
+            }
+            "fire" => {
+                if let Ok(slot) = num(2) {
+                    tick(&mut s, Controls { weapon: slot as i32, ..Controls::default() });
+                    for _ in 0..20 {
+                        tick(&mut s, Controls::default());
+                    }
+                    let o = s.obs();
+                    println!("  weapon now {:?} (owns {:?}, ammo {:?})", o.weapon, o.weapons, o.ammo);
+                }
+                for _ in 0..num(1)? as i64 {
+                    tick(&mut s, Controls { attack: true, ..Controls::default() });
+                }
+                let obs = s.obs();
+                println!("  barrels left: {}", obs.barrels.as_ref().map_or(0, Vec::len));
             }
             "wait" => {
                 for _ in 0..num(1)? as i64 {

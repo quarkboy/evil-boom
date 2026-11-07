@@ -12,15 +12,17 @@ use crate::map::{MapData, ML_BLOCKING, ML_BLOCKPLAYERS};
 use crate::mesh::{Mesh, Portal};
 use crate::movers::MoverModel;
 use crate::nav::can_cross;
-use crate::things::solid_radius;
+use crate::things::{shootable_obstacle, solid_radius};
 
 /// The box edges of solid decorations (barrels, lamps, pillars...), which block like walls but
-/// aren't lines, by grid cell.
-pub(super) fn obstacle_grid(m: &MapData, skill: i32) -> HashMap<Cell, Vec<Seg>> {
+/// aren't lines, by grid cell. `shootable`: barrels too (they block till shot away; whether a way
+/// is there at all goes without them, as the mesh does: MAP04's corridor to the armour room,
+/// two barrels across it).
+pub(super) fn obstacle_grid(m: &MapData, skill: i32, shootable: bool) -> HashMap<Cell, Vec<Seg>> {
     let mut out: HashMap<Cell, Vec<Seg>> = HashMap::default();
     for t in &m.things {
         let Some(r) = solid_radius(t.kind) else { continue };
-        if !t.in_skill(skill) {
+        if !t.in_skill(skill) || (!shootable && shootable_obstacle(t.kind)) {
             continue;
         }
         let c = [(t.x - r, t.y - r), (t.x + r, t.y - r), (t.x + r, t.y + r), (t.x - r, t.y + r)];

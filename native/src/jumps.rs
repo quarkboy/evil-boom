@@ -98,6 +98,13 @@ impl JumpLab {
         PlayerSim::new(self, self.world()).fits_at(p)
     }
 
+    /// fits_at, with the sectors at `heights` (floor, ceiling) instead.
+    pub fn fits_at_heights(&self, p: Point, heights: &[(f64, f64)]) -> (bool, f64, f64) {
+        let mut sim = PlayerSim::new(self, self.world());
+        sim.heights = heights.iter().map(|&(f, c)| (physics::to_fixed(f), physics::to_fixed(c))).collect();
+        sim.fits_at(p)
+    }
+
     fn world(&self) -> &World {
         self.world.get_or_init(|| World::new(self))
     }

@@ -33,6 +33,8 @@ const BARREL_IN_WAY: f64 = 40.0;
 /// back off this far before shooting one (blast radius 128)
 const BARREL_SAFE: f64 = 150.0;
 const BARREL_GIVE_UP: i64 = 8 * 35;
+/// tics between shots at a barrel (the pistol ready again, the trigger let go: a first shot each time)
+const BARREL_TAP: i64 = 20;
 /// a jump goes without settling if what it needs runs out sooner
 const JUMP_HURRY: f64 = 2.0 * TICRATE;
 /// how much lower than planned a ceiling can be for a jump
@@ -228,6 +230,8 @@ pub struct RouteFollower {
     run: Option<Run>,
     /// (where, since tic) a barrel in the way being shot
     barrel: Option<(Point, i64)>,
+    /// the tic of the last shot at it
+    barrel_shot: i64,
     sinking: BTreeSet<usize>,
     lineup_tic: Option<i64>,
     brake_until: i64,
@@ -314,6 +318,7 @@ impl RouteFollower {
             moved_at: BTreeMap::new(),
             run: None,
             barrel: None,
+            barrel_shot: -1_000_000_000,
             sinking,
             lineup_tic: None,
             brake_until: -1,
@@ -1225,10 +1230,17 @@ impl RouteFollower {
             return self.motion.hold(obs, (away.cos() * 8.0, away.sin() * 8.0), Some(look));
         }
         let mut c = self.motion.hold(obs, (0.0, 0.0), Some(look));
-        if obs.weapon == Some(1) {
-            c.weapon = 2;
-        } else if norm(look - obs.angle).abs() < 2.0 {
+        // the pistol (the shotgun if there's nothing for it), whatever's in hand: not the BFG
+        // with 20 cells of the 40 it needs (MAP23). Single taps, the trigger let go between: the
+        // first shot of a burst goes straight, only held ones spread
+        // (ammo: (weapon slot, rounds for it))
+        let rounds = |slot: i32| obs.ammo.as_ref().and_then(|a| a.iter().find(|w| w.0 == slot)).map_or(1, |w| w.1);
+        let gun = if rounds(2) > 0 { 2 } else { 3 };
+        if obs.weapon != Some(gun) {
+            c.weapon = gun;
+        } else if norm(look - obs.angle).abs() < 2.0 && obs.tic - self.barrel_shot >= BARREL_TAP {
             c.attack = true;
+            self.barrel_shot = obs.tic;
         }
         c
     }
