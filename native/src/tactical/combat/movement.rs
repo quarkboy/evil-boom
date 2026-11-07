@@ -28,6 +28,11 @@ impl Combat {
         let mut out: Vec<(f64, Thing)> = Vec::new();
         for t in obs.things.iter().flatten() {
             let Some(m) = missile(t.name) else { continue };
+            if t.owner == 0 || t.vx.hypot(t.vy) < 1.0 {
+                // (hers: her own plasma and rockets, dodged before, the fight given up; or gone
+                // off already, standing in its blast frames, met as she runs at it)
+                continue;
+            }
             if t.name == "LostSoul" && t.vx.hypot(t.vy) < 8.0 {
                 continue;
             }

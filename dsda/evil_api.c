@@ -52,6 +52,9 @@ typedef struct {
   double radius, height;
   int health;
   unsigned long long flags;
+  int owner_type;  /* a missile: the type of what fired it (its target), -1: none */
+  int state;       /* its state now (an index into states[]: what it's doing) */
+  int after_her;   /* a monster: its target is the player */
 } evil_mobj;
 
 typedef struct {
@@ -287,6 +290,9 @@ EVIL_API int evil_mobjs(evil_mobj *out, int max)
       o->radius = fx(mo->radius); o->height = fx(mo->height);
       o->health = mo->health;
       o->flags = mo->flags;
+      o->owner_type = (mo->flags & MF_MISSILE) && mo->target ? (int)mo->target->type : -1;
+      o->state = mo->state ? (int)(mo->state - states) : -1;
+      o->after_her = mo->target && mo->target->player ? 1 : 0;
     }
     n++;
   }
