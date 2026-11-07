@@ -327,6 +327,8 @@ pub struct Explorer {
     panic_tries: usize,
     /// (that round done: only the walls with more to go on)
     strong_only: bool,
+    /// what was given up on has had its other go, since there was last something to do
+    retried: bool,
     /// (for tracing: the tics, from EVIL_DEBUG_OBJECTIVES=from-to, whose choices are logged in full)
     debug_tics: Option<(i64, i64)>,
 }
@@ -370,6 +372,7 @@ impl Explorer {
             suspecting: Suspecting::No,
             panic_tries: 0,
             strong_only: false,
+            retried: false,
             debug_tics: debug_tics(),
         }
     }
@@ -394,7 +397,8 @@ impl Explorer {
                 continue; // (this life's: the level's started again)
             }
             let Some((t, sectors)) = known.get(&(f.line as i64)) else { continue };
-            let effects = nav.effects_now(t, &out);
+            // (as worked out when it went off; else from the heights as they're believed now)
+            let effects = k.fired_effects.get(&(t.id, f.tic)).cloned().unwrap_or_else(|| nav.effects_now(t, &out));
             for &s in sectors {
                 let Some(hs) = effects.iter().find(|(x, _)| *x == s).map(|(_, hs)| hs.clone()).filter(|hs| !hs.is_empty()) else { continue };
                 if t.permanent() && k.doubtful(f.line, s) {
@@ -783,25 +787,34 @@ impl Explorer {
         };
         // (what of where she can get to now she couldn't get back to from a poly)
         let mut afters: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
-        let mut lost_from = |p: usize| -> BTreeSet<usize> {
+        // (and whether where she'd be left is still open to finding a way out: an edge onto
+        // somewhere she's never seen, or a sector there she's never set foot in but the goal's,
+        // where a walk-over line can be: no way out known isn't no way out. E1M4's nukage pit,
+        // its switch for the lift out in an alcove she'd not seen into; its room of bonuses, the
+        // lines round the pad in the middle opening its doors for good)
+        let known_polys = self.knowledge.known_polys();
+        let entered: BTreeSet<usize> = self.knowledge.visited.iter().map(|&q| nav.sector_of_poly(q)).collect();
+        let mut lost_from = |p: usize| -> (BTreeSet<usize>, bool) {
             let after = afters.entry(p).or_insert_with(|| way_back(p));
             if after.contains(&here) {
-                BTreeSet::new()
-            } else {
-                reach.difference(after).copied().collect()
+                return (BTreeSet::new(), true);
             }
+            let goal_sector = nav.sector_of_poly(p);
+            let unseen_edge = after.iter().any(|&q| nav.mesh.poly(q).portals.iter().any(|&pi| !known_polys.contains(&nav.mesh.portals[pi].other(q))));
+            let unwalked = after.iter().map(|&q| nav.sector_of_poly(q)).any(|sec| sec != goal_sector && !entered.contains(&sec));
+            (reach.difference(after).copied().collect(), unseen_edge || unwalked)
         };
         let tic = obs.tic;
         let mut usable = |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
             if risky {
                 // nothing safe left: anything, one-way drops and nukage and all; but not for a
                 // sound (MAP09: a noise far off took her down into a pit), and never away from
-                // every way out there is (MAP24's secret ledge over the nukage pit: the level
-                // given up for a look)
+                // every way out there is, as far as she knows (MAP24's secret ledge over the
+                // nukage pit: the level given up for a look)
                 return objectives
                     .into_iter()
                     .filter(|o| o.kind != Kind::Noise)
-                    .filter(|o| exit_polys.is_empty() || o.kind == Kind::Exit || nav.poly_at(o.goal).map(&mut lost_from).is_none_or(|g| !exit_polys.is_subset(&g)))
+                    .filter(|o| exit_polys.is_empty() || o.kind == Kind::Exit || nav.poly_at(o.goal).map(&mut lost_from).is_none_or(|(g, open)| open || !exit_polys.is_subset(&g)))
                     .map(|o| Objective { label: format!("{} (risky)", o.label), risky: true, ..o })
                     .filter(|o| this.fresh(o, tic))
                     .collect();
@@ -812,13 +825,15 @@ impl Explorer {
                 if !this.fresh(&o, tic) || hooks.dangerous(obs, &o) {
                     continue;
                 }
-                let gone = nav.poly_at(o.goal).map(&mut lost_from);
+                let cut = nav.poly_at(o.goal).map(&mut lost_from);
+                let open = cut.as_ref().is_none_or(|c| c.1);
+                let gone = cut.map(|c| c.0);
                 // (worth the risk, however far she can't get back from: the exit, a teleporter,
                 // where it leads is the unknown; a key, it opens the way)
                 let risk_it = matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Key);
-                // (most of what she can get to, and never the way out: MAP24's nukage pit, where a
-                // wall was worth a one-way drop by the rest of it)
-                let keeps = gone.as_ref().is_some_and(|g| (reach.len() - g.len()) as f64 >= KEEP_REACH * reach.len() as f64 && (exit_polys.is_empty() || !exit_polys.is_subset(g)));
+                // (most of what she can get to, and never the way out, as far as she knows: MAP24's
+                // nukage pit, where a wall was worth a one-way drop by the rest of it)
+                let keeps = gone.as_ref().is_some_and(|g| (reach.len() - g.len()) as f64 >= KEEP_REACH * reach.len() as f64 && (exit_polys.is_empty() || open || !exit_polys.is_subset(g)));
                 if risk_it || keeps {
                     lost.push(gone.unwrap_or_default());
                     kept.push(o);
@@ -1394,6 +1409,7 @@ impl Explorer {
         self.held_since = None;
         self.urgent_n = self.knowledge.heard.len();
         self.panic_tries = 0;
+        self.retried = false;
     }
 
     /// Taking over a run played back to here (replay): what she's heard and set off so far is
@@ -1772,6 +1788,7 @@ impl Explorer {
         let mut found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
         if found {
             self.panic_tries = 0;
+            self.retried = false;
         }
         if !found && perceive && self.suspecting == Suspecting::No {
             // (nothing else: walls that might hide something, pressed in turn)
@@ -1781,6 +1798,16 @@ impl Explorer {
                 self.panic_tries = 0;
                 self.log.push(format!("tic {}: nothing else to do: trying walls", obs.tic));
             }
+        }
+        if !found && !self.dropped.is_empty() && !self.retried {
+            // (nothing else: what was given up on lately gets another go, its wait cut short,
+            // once till there's something else to do: dropped when the way was shut a while,
+            // E1M4's bonus behind the door a walk-over line opens, it waited out her whole life)
+            self.retried = true;
+            self.log.push(format!("tic {}: nothing else to do: the {} things given up on lately get another go", obs.tic, self.dropped.len()));
+            self.dropped.clear();
+            self.suspecting = Suspecting::No;
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
         }
         // (with the exit there, held back for what's left: one round of the walls with little to
         // go on, then out; a press that turns up something to do starts another. E2M5 went round

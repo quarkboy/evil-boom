@@ -16,7 +16,8 @@ use crate::geom::{cells, dist, Point};
 use crate::map::{Linedef, ML_MAPPED, ML_SECRET, NO_SIDEDEF};
 use crate::motor::{Controls, Observation};
 use crate::nav::Heights;
-use crate::navigator::{Navigator, TriggerLine, MAX_STEP, PLAYER_HEIGHT};
+use crate::movers::Effects;
+use crate::navigator::{Navigator, States, TriggerLine, MAX_STEP, PLAYER_HEIGHT};
 use crate::sight::{Sight, View as SightView};
 use crate::specials::{classify_line, Category, Keys, LineSpecial, Lock, Trigger};
 
@@ -202,6 +203,11 @@ pub struct Knowledge {
     pub tried_walls: BTreeMap<usize, Keys>,
     /// lines between her and a switch that did nothing
     pub in_the_way: BTreeSet<usize>,
+    /// (trigger, tic it fired) -> what it did, worked out then: a floor raised "to the lowest
+    /// ceiling round it" goes by the ceilings as they were, not as they are later (E1M4: the
+    /// walkway rose to 104, the door beside it shut; opened since, worked out afresh it seemed
+    /// to have risen to 160, sealing the room)
+    pub fired_effects: BTreeMap<(usize, i64), Effects>,
     /// what the explorer put down here itself (not seen: done), with the tic: so a run played
     /// back from its inputs (replay) knows it too
     pub journal: Vec<(i64, Note)>,
@@ -321,6 +327,7 @@ impl Knowledge {
             tried_walls: BTreeMap::new(),
             in_the_way: BTreeSet::new(),
             journal: Vec::new(),
+            fired_effects: BTreeMap::new(),
             locked: BTreeSet::new(),
             doubts: BTreeMap::new(),
             rechecked: BTreeSet::new(),
@@ -749,6 +756,13 @@ impl Knowledge {
         }
         let f = Fired { line: li, tic, how, life: self.lives };
         self.fired.push(f);
+        // (what it does, by the heights as she knows them now)
+        let now: States = self.nav.movers.initial.iter().enumerate().map(|(s, &h)| vec![self.seen_heights.get(&s).copied().unwrap_or(h)]).collect();
+        let ids: Vec<usize> = self.by_line.get(&li).cloned().unwrap_or_default();
+        for ti in ids {
+            let effects = self.nav.effects_now(self.trigger(ti), &now);
+            self.fired_effects.insert((ti, tic), effects);
+        }
         self.events.push(format!("tic {tic}: {} line {li} ({})", how.name(), info.description));
         let tk = self.tried_key(li);
         let doubted: BTreeSet<usize> = self.doubts.keys().filter(|(k, _)| *k == tk).map(|(_, s)| *s).collect();
