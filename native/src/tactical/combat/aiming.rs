@@ -290,6 +290,15 @@ impl Combat {
         if dist((t.x, t.y), pos) < clear + mon(t.name).radius {
             return false;
         }
+        // (where they'll be when it gets there: a revenant closing in met it 71 off her)
+        let me_then = (pos.0 + self.velocity.0 * ROCKET_DELAY, pos.1 + self.velocity.1 * ROCKET_DELAY);
+        for o in self.visible.iter() {
+            let tof = ROCKET_DELAY + dist((o.x, o.y), pos) / 20.0;
+            let then = (o.x + o.vx * tof, o.y + o.vy * tof);
+            if dist(then, me_then) < clear + mon(o.name).radius && dist(then, me_then) < dist((o.x, o.y), pos) {
+                return false;
+            }
+        }
         if t.name == "PainElemental" && dist((t.x, t.y), pos) < PAIN_NEAR {
             return false; // (the souls it spits out come between: E... dead at 90 health, one 28 off)
         }
