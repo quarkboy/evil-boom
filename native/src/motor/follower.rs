@@ -14,7 +14,7 @@ use crate::geom::{cells, closest_point, dist, segment_distance, segments_cross, 
 use crate::jumps::RunStart;
 use crate::mesh::{inside, Portal};
 use crate::nav::{can_cross, Doors, Heights};
-use crate::navigator::{closest_on_portal, rep, Jump, Path, States, View, ITEM_RADIUS, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS, TELEPORTERS_FOR_PLAYERS};
+use crate::navigator::{closest_on_portal, rep, Jump, Path, States, View, ITEM_RADIUS, MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT, PLAYER_RADIUS, TELEPORTERS_FOR_PLAYERS};
 use crate::specials::{Category, Key, Keys, Trigger};
 use crate::walkthrough::{fmt_heights, plan_from, steps_from_legs, Action, Expect, Rest, Step};
 
@@ -799,7 +799,7 @@ impl RouteFollower {
             return self.act_at_goal(obs);
         }
         let arrive = if stop { FINAL_REACHED } else if step.action == Action::Pickup { PICKUP_REACHED } else { REACHED };
-        if seg.end == SegEnd::Goal && (to_end < arrive || self.touching_item(pos)) {
+        if seg.end == SegEnd::Goal && (to_end < arrive || self.touching_item(pos, obs)) {
             self.reset_progress(obs.tic);
             if step.action == Action::Pickup && obs.keys.is_some() && self.item.is_some() {
                 self.phase = Phase::Fetch; // (at the spot but not holding it: go and get it)
@@ -947,9 +947,19 @@ impl RouteFollower {
         self.view.nav.map.things.iter().filter(|t| t.kind == key as u16).map(|t| (t.x, t.y)).min_by(|a, b| dist(*a, goal).total_cmp(&dist(*b, goal)))
     }
 
-    /// Close enough that the boxes overlap: picked up, wherever the spot was.
-    fn touching_item(&self, pos: Point) -> bool {
-        self.item.is_some_and(|it| (pos.0 - it.0).abs().max((pos.1 - it.1).abs()) < PLAYER_RADIUS + ITEM_RADIUS - 1.0)
+    /// Close enough that the boxes overlap, and at a height the game lets her have it from:
+    /// picked up, wherever the spot was. (Not from the floor 24 above E2M7's armor bonus in its
+    /// sunken strip, the boxes overlapping over the edge: the item more than 8 under her feet.)
+    fn touching_item(&self, pos: Point, obs: &Observation) -> bool {
+        let Some(it) = self.item else { return false };
+        if (pos.0 - it.0).abs().max((pos.1 - it.1).abs()) >= PLAYER_RADIUS + ITEM_RADIUS - 1.0 {
+            return false;
+        }
+        let nav = &self.view.nav;
+        match (obs.z, nav.poly_at(it)) {
+            (Some(z), Some(p)) => (-PICKUP_BELOW..=PLAYER_HEIGHT).contains(&(obs.heights[nav.sector_of_poly(p)].floor - z)),
+            _ => true,
+        }
     }
 
     /// The point to steer for: as far ahead on the track as the straight line there keeps the

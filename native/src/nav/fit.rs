@@ -153,8 +153,7 @@ impl NavCore {
     }
 
     /// Static walls (`static_grid`) the box swept from p to q hits, less `ignore`.
-    fn static_hits(&self, p: Point, q: Point, ignore: &HashSet<SegKey>, out: &mut HashSet<SegKey>) {
-        let r = PLAYER_RADIUS + BOX_SLACK;
+    fn static_hits(&self, p: Point, q: Point, r: f64, ignore: &HashSet<SegKey>, out: &mut HashSet<SegKey>) {
         for c in cells_around(p, q, PLAYER_RADIUS + 1.0) {
             for &e in self.static_grid.get(&c).into_iter().flatten() {
                 let k = seg_key(e);
@@ -187,7 +186,7 @@ impl NavCore {
     /// Does the box at p overlap a static wall?
     pub fn box_blocked_static(&self, p: Point) -> bool {
         let mut hits = HashSet::default();
-        self.static_hits(p, p, &HashSet::default(), &mut hits);
+        self.static_hits(p, p, PLAYER_RADIUS + BOX_SLACK, &HashSet::default(), &mut hits);
         !hits.is_empty()
     }
 
@@ -326,10 +325,14 @@ impl Fitter<'_> {
     /// The edges the box swept from p to q hits (static walls, then lines in its way at
     /// these heights), less `ignore`.
     fn box_hits(&mut self, p: Point, q: Point, ignore: &HashSet<SegKey>) -> HashSet<SegKey> {
+        self.box_hits_at(p, q, PLAYER_RADIUS + BOX_SLACK, ignore)
+    }
+
+    /// box_hits, for a box of half-width `r`.
+    fn box_hits_at(&mut self, p: Point, q: Point, r: f64, ignore: &HashSet<SegKey>) -> HashSet<SegKey> {
         let nav = self.nav;
         let mut out = HashSet::default();
-        nav.static_hits(p, q, ignore, &mut out);
-        let r = PLAYER_RADIUS + BOX_SLACK;
+        nav.static_hits(p, q, r, ignore, &mut out);
         let mut standing = None;
         for li in nav.lines_in(cells_around(p, q, PLAYER_RADIUS + TRIP_MARGIN + 1.0)) {
             let e = nav.map.line_seg(li);
@@ -440,8 +443,11 @@ impl Fitter<'_> {
         for e in edges {
             let Some(&li) = self.nav.seg_lines.get(e) else { return false };
             let (Some(f), Some(b)) = self.nav.map.sides(li) else { continue };
+            // (a door's line: no more than its frame, open or shut, either way; a squeeze in a
+            // doorway between its jambs is as before, one past the door to a block risen beside it
+            // is no way at all: MAP18's door 91 again, from the far side)
             if self.doors.is_some_and(|d| d.contains_key(&f) || d.contains_key(&b)) {
-                return false;
+                continue;
             }
             let (fs, bs) = (self.heights(f), self.heights(b));
             let open = fs.iter().any(|hf| bs.iter().any(|hb| hf.ceiling.min(hb.ceiling) - hf.floor.max(hb.floor) >= PLAYER_HEIGHT))
@@ -485,11 +491,14 @@ impl Fitter<'_> {
                     out.extend(d);
                 } else {
                     let points = self.squeeze_points(a, b, &ignore);
-                    self.squeezes.points.extend(points);
+                    self.squeezes.points.extend(points.iter().copied());
                     // (no way round a line that sets something off is no way at all: MAP13's path
                     // over the corner of the exit pad, held back, as a squeeze past a wall)
                     let trips = hits.iter().any(|e| self.nav.seg_lines.get(e).is_some_and(|li| self.nav.trip_lines.contains(li) && !self.exempt.contains(li)));
-                    if trips || self.shut_in(&hits) {
+                    // (but past shut sectors only where the box doesn't fit at all: not where it
+                    // fits with no room to spare, MAP21's cage of door bars, the gaps between them
+                    // 32, the box's width, a way in Doom; MAP18's 24 is short)
+                    if trips || (self.shut_in(&hits) && !self.fits_truly_near(&points, &ignore)) {
                         self.squeezes.hard = true;
                     }
                 }
@@ -497,6 +506,16 @@ impl Fitter<'_> {
             out.push(b);
         }
         out
+    }
+
+    /// Does the box fit, without the checks' slack (P_CheckPosition lets one touching a line
+    /// by), somewhere within 8 of each of these spots?
+    fn fits_truly_near(&mut self, spots: &[Point], ignore: &HashSet<SegKey>) -> bool {
+        let offsets: Vec<Point> = (-4..=4).flat_map(|i| (-4..=4).map(move |j| (f64::from(i) * 2.0, f64::from(j) * 2.0))).collect();
+        spots.iter().all(|&p| offsets.iter().any(|&(dx, dy)| {
+            let c = (p.0 + dx, p.1 + dy);
+            self.nav.mesh.poly_at(c).is_some() && self.box_hits_at(c, c, PLAYER_RADIUS - BOX_SLACK, ignore).is_empty()
+        }))
     }
 
     /// Up to about 6 spots between a and b where the box overlaps something.
@@ -665,8 +684,10 @@ impl Fitter<'_> {
                 // (the walls and ledges at the start, the walls among them open now aside; and
                 // a wall or a ledge at these heights that wasn't: a platform risen since, the path
                 // hugging its foot)
-                let (f, bk) = nav.map.sides(li);
-                let open_wall = nav.walls.contains(&li) && f.zip(bk).is_some_and(|(f, bk)| crossable_either_way(&self.heights(f), &self.heights(bk)));
+                // (open both ways, that is: a wall become a ledge is a ledge, the path off its foot
+                // like any other; MAP11's block of sector 10, lowered from 368 to 136, its corner
+                // cut by the path till she was pinned against it)
+                let open_wall = nav.walls.contains(&li) && self.crossing(li) == Crossing::Open;
                 let at_start = (nav.walls.contains(&li) && !open_wall) || nav.drops.contains(&li) || nav.trip_lines.contains(&li);
                 let now = !nav.walls.contains(&li) && !nav.drops.contains(&li) && self.crossing(li) != Crossing::Open;
                 if at_start || now {

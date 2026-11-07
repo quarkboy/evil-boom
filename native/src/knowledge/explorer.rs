@@ -19,7 +19,7 @@ use crate::geom::{dist, segment_distance, segments_cross, Point};
 use crate::motor::follower::RouteFollower;
 use crate::motor::{Controls, Observation};
 use crate::nav::{can_cross, Heights};
-use crate::navigator::{add_height, Navigator, Plan, Route, States, TeleEdge, TriggerLine, View, MAX_STEP, PLAYER_HEIGHT};
+use crate::navigator::{add_height, Navigator, Plan, Route, States, TeleEdge, TriggerLine, View, MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT};
 use crate::specials::{classify_line, Category, Key, Lock, Trigger};
 use crate::walkthrough::{action_for, steps_from_legs, Action, Step};
 
@@ -36,6 +36,9 @@ const WALL_BUMP_SPEED: f64 = 25.0;
 const WALL_BUMP_LAST: i64 = 4;
 /// objectives routed and compared by the way there, each pick
 const COMPARED: usize = 4;
+/// stuck this near the last time, so many objectives running, with nothing new known: stranded
+const STUCK_SAME: f64 = 32.0;
+const STUCK_RUN: usize = 3;
 /// a "close, wait 30s, open" door's wait, and a little (tics)
 const REOPEN_TICS: i64 = 32 * 35;
 /// bullets and shells below these, she tops up from the ammo she's seen
@@ -79,8 +82,6 @@ const SHUFFLE_TICS: i64 = 35;
 const TOUCH: i32 = 36;
 /// how far from a pickup spot she may stop (the follower's PICKUP_REACHED)
 const ARRIVE_SLACK: f64 = 6.0;
-/// an item this far under her feet is still hers to pick up
-const PICKUP_BELOW: f64 = 8.0;
 /// degrees a tic, turning to look at something
 const TURN_RATE: f64 = 20.0;
 /// sounds from about the same place...
@@ -347,6 +348,12 @@ pub struct Explorer {
     pub exit_last: bool,
     /// (for whoever runs the game: the level again, knowing what she knows)
     pub restart_wanted: bool,
+    /// switches set out to press, and what she knew then (pressed again only knowing more)
+    pressed_knowing: BTreeMap<usize, String>,
+    /// where she last failed stuck, and how many objectives in a row did there
+    stuck_run: Option<(Point, usize)>,
+    /// what she knew when last stuck (no news since: still the same trap)
+    stuck_known: String,
     held_since: Option<i64>,
     urgent_n: usize,
     /// polys she could get to, as of the last look
@@ -438,6 +445,9 @@ impl Explorer {
             idle_since: -1_000_000_000,
             exit_last: false,
             restart_wanted: false,
+            pressed_knowing: BTreeMap::new(),
+            stuck_run: None,
+            stuck_known: String::new(),
             held_since: None,
             urgent_n: 0,
             reach: BTreeSet::new(),
@@ -839,6 +849,12 @@ impl Explorer {
                 continue;
             }
             if (obs.tic - tic < REPRESS_AFTER && !unsure) || t.activators.is_disjoint(&reach) || !t.info.lock.satisfied(keys) {
+                continue;
+            }
+            // (not again knowing no more than when last set out to press it: what was missed then
+            // is missed again; MAP19's lift switch at the bottom of a pit, pressed every minute,
+            // each time just before she'd have counted herself stranded there)
+            if !unsure && self.pressed_knowing.get(&li).is_some_and(|known| *known == k.known_summary()) {
                 continue;
             }
             let mut o = Objective::new(Kind::Switch, nav.activation_point(t, pos, &reach), format!("try switch again (line {li}{})", if unsure { ", unsure what it does" } else { "" }));
@@ -1811,7 +1827,9 @@ impl Explorer {
         let learned: BTreeSet<i64> = self.knowledge.learned.iter().filter(|(_, s)| !s.is_empty()).map(|(&i, _)| self.nav.triggers[i].line).collect();
         while self.glanced < self.knowledge.fired.len() {
             let f = self.knowledge.fired[self.glanced];
-            let unknown = f.how == How::Walk && !learned.contains(&(f.line as i64));
+            // (not a teleporter she knows where goes: nothing to look for, and a stop on the way
+            // through, MAP21's to the megasphere's lift, a second over its window every time)
+            let unknown = f.how == How::Walk && !learned.contains(&(f.line as i64)) && !self.knowledge.teleports.contains_key(&f.line);
             if unknown && obs.tic - f.tic < GLANCE_AFTER {
                 return None; // (give it a moment to be seen first)
             }
@@ -1931,11 +1949,14 @@ impl Explorer {
         } else if matches!(obj.kind, Kind::Item | Kind::Hunt) && !hooks.gone(obs, &obj) {
             if obj.kind == Kind::Item {
                 // Doom picks things up only moving onto them: come down on one from a ledge and
-                // stand still, and it stays (MAP10's bonuses in the nukage pits). A shuffle first.
+                // stand still, and it stays (MAP10's bonuses in the nukage pits). A shuffle first;
+                // back to the spot first if she's off it (E2M7's armor bonus in a sunken strip: the
+                // route over as she dropped into it, her run carrying her past and up the step beyond)
                 let until = *self.look_until.get_or_insert(obs.tic + SHUFFLE_TICS);
                 if obs.tic < until {
                     let a = (obj.goal.1 - obs.y).atan2(obj.goal.0 - obs.x) - obs.angle.to_radians();
-                    let push = if (obs.tic / 4) % 2 == 0 { 20.0 } else { -20.0 };
+                    let off = dist(obs.pos(), obj.goal) > ARRIVE_SLACK;
+                    let push = if off || (obs.tic / 4) % 2 == 0 { 20.0 } else { -20.0 };
                     return Some(Controls { forward: push * a.cos(), strafe: -push * a.sin(), ..Controls::default() });
                 }
             }
@@ -2010,7 +2031,23 @@ impl Explorer {
                 self.drop_objective(&obj, obs, &format!("failed: {why}"));
                 if why.contains("stuck") {
                     self.note_stuck(obs);
+                    // (stuck at one spot whatever she sets out for: wedged, a trap she couldn't
+                    // know of, as stranded as with nothing to do; MAP18's block, risen under the
+                    // edge of her box beside door 91, holding her up where the door's too low)
+                    let here = obs.pos();
+                    let same = self.stuck_run.is_some_and(|(at, _)| dist(at, here) < STUCK_SAME);
+                    let n = if same { self.stuck_run.map_or(0, |(_, n)| n) + 1 } else { 1 };
+                    self.stuck_run = Some((here, n));
+                    if n >= STUCK_RUN && self.knowledge.summary() == self.stuck_known {
+                        self.log.push(format!("tic {}: stuck here {n} times over, whatever for: stranded", obs.tic));
+                        self.restart_wanted = true;
+                    }
+                    self.stuck_known = self.knowledge.summary();
+                } else {
+                    self.stuck_run = None;
                 }
+            } else {
+                self.stuck_run = None;
             }
             return true;
         }
@@ -2340,6 +2377,9 @@ impl Explorer {
         self.follower = Some(follower);
         self.follower_seen = 0;
         self.log.push(format!("tic {}: {} ({n} steps) | {}", obs.tic, obj.label, self.knowledge.summary()));
+        if let Some(li) = obj.trigger.as_ref().filter(|_| obj.kind == Kind::Switch).and_then(TriggerLine::linedef) {
+            self.pressed_knowing.insert(li, self.knowledge.known_summary());
+        }
         self.current = Some(obj);
     }
 

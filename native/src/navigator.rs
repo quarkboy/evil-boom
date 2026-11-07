@@ -39,6 +39,8 @@ pub const PLAYER_HEIGHT: f64 = 56.0;
 pub const MAX_STEP: f64 = 24.0;
 pub const PLAYER_RADIUS: f64 = 16.0;
 pub const ITEM_RADIUS: f64 = 20.0;
+/// an item this far under her feet is still hers to pick up (P_TouchSpecialThing)
+pub const PICKUP_BELOW: f64 = 8.0;
 /// how far inside touching range a pickup spot must be
 pub const PICKUP_MARGIN: f64 = 2.0;
 /// Paths keep this far from portal ends (wall corners): the box's corner is ~22.6 from its

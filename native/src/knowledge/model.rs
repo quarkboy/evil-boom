@@ -58,6 +58,8 @@ const DOOR_THICKNESS: f64 = 32.0;
 const PRESSED_LATELY: i64 = 10 * 35;
 /// how far round a wall with nothing joined to it its fellows are looked for (`odd`)
 const AROUND: f64 = 128.0;
+/// a wall this short joined to another is a jamb, the side of a recess (`odd`)
+const JAMB: f64 = 24.0;
 /// an exit sign this near the spot in front of a wall marks it
 const EXIT_SIGN_NEAR: f64 = 64.0;
 /// how far behind a wall a blank on her map is looked for...
@@ -868,7 +870,10 @@ impl Knowledge {
         let taking = std::mem::take(&mut self.taking);
         let mut still = Vec::new();
         for (f, targets) in taking {
-            if targets.iter().any(|t| self.moved_at.get(t).copied().unwrap_or(-1) > f.tic) {
+            // (from the tic it's seen pressed: a door moves in the tic of the press, seen in the same
+            // look as the press is; MAP19's door 464, opened for good, taken not to have, and
+            // pressed again for ever once line 443 had shut it on its timer)
+            if targets.iter().any(|t| self.moved_at.get(t).copied().unwrap_or(-1) >= f.tic) {
                 continue; // (it took)
             }
             if tic - f.tic < TAKE_TICS {
@@ -1179,7 +1184,22 @@ impl Knowledge {
         let m = &self.nav.map;
         let line = &m.linedefs[li];
         let face = self.face(line);
-        let neighbours: Vec<usize> = self.wall_neighbours(li).into_iter().filter(|&n| !self.face(&m.linedefs[n]).is_empty()).collect();
+        // (a short jamb either side, the sides of a recess the wall's set back in: the walls past
+        // them instead, what the panel's set into; MAP19's grey door between two satyr faces in
+        // a brown wall, its jambs grey as the door)
+        let neighbours: Vec<usize> = self
+            .wall_neighbours(li)
+            .into_iter()
+            .flat_map(|n| {
+                let (a, b) = m.line_seg(n);
+                if m.linedefs[n].back == NO_SIDEDEF && dist(a, b) <= JAMB {
+                    self.wall_neighbours(n).into_iter().filter(|&x| x != li).collect()
+                } else {
+                    vec![n]
+                }
+            })
+            .filter(|&n| !self.face(&m.linedefs[n]).is_empty())
+            .collect();
         if neighbours.is_empty() && !face.is_empty() {
             // (nothing joined to it on its side, only ways through either end: the walls round
             // it instead; E2M4's mossy door at the end of a dark corridor of plain stone)
@@ -1349,12 +1369,21 @@ impl Knowledge {
         nav.map.things.iter().filter(|t| t.in_skill(nav.skill) && nav.mesh.poly_at((t.x, t.y)).is_some_and(|p| self.sectors.contains(&nav.sector_of_poly(p)))).copied().collect()
     }
 
-    /// The last tic a line was first fired whose effect hasn't been seen at all, if any.
+    /// The last tic a line was first fired whose effect hasn't been seen at all, if any (or
+    /// pressed or shot again: a lift's down only a while, and pressed to be watched, MAP21's
+    /// switch 172, its lift seen since the first press, never looked for after the next).
     pub fn unexplained_since(&self) -> Option<i64> {
-        let explained: BTreeSet<i64> = self.learned.iter().filter(|(_, s)| !s.is_empty()).map(|(&i, _)| self.trigger(i).line).collect();
+        // (and a teleport she's been through does what it does: takes her there, nothing to look
+        // round for; MAP29's line 516, her first time through it setting off 25 rechecks)
+        let explained: BTreeSet<i64> =
+            self.learned.iter().filter(|(_, s)| !s.is_empty()).map(|(&i, _)| self.trigger(i).line).chain(self.teleports.keys().map(|&l| l as i64)).collect();
         let mut first: BTreeMap<usize, i64> = BTreeMap::new();
         for f in &self.fired {
-            first.entry(f.line).or_insert(f.tic);
+            if f.how == How::Walk {
+                first.entry(f.line).or_insert(f.tic);
+            } else {
+                first.insert(f.line, f.tic);
+            }
         }
         first.iter().filter(|(&l, _)| !explained.contains(&(l as i64))).map(|(_, &t)| t).max()
     }

@@ -366,7 +366,8 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
         let k = &x.knowledge;
         (if o.secrets { e.tally()[2].0 } else { e.tally()[0].0 }, k.sectors.len(), k.learned.values().map(BTreeSet::len).sum::<usize>(), k.tried_walls.len())
     };
-    // (the best so far over the whole run: a level again collecting the same things isn't more)
+    // (the best so far this life: a level again starts the clock afresh, collecting the same
+    // things again counted, the user's call; the run's time cap bounds it)
     let (mut best, mut best_tic) = (progress(&e, agent.x()), e.tic);
     let mut stalled = false;
     // (the most items and secrets one life got: a level again starts the tally afresh)
@@ -442,6 +443,7 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
                 agent.restart();
                 c = None;
                 idle_since = None;
+                (best, best_tic) = (progress(&e, agent.x()), e.tic);
                 continue;
             }
             break;
