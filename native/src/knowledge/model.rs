@@ -52,6 +52,10 @@ pub const SURE_TICS: i64 = 8;
 pub const BUSY_TICS: i64 = 200;
 /// textures that make a line look like a switch, a door or a lift
 pub const LOOKS_INTERACTIVE: [&str; 11] = ["SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR", "ZELDOOR", "PLAT", "SUPPORT"];
+/// how far behind a wall a blank on her map is looked for...
+const BLANK_DEPTH: f64 = 96.0;
+/// ...and how far round it the walls she's mapped must close it in
+const BLANK_REACH: f64 = 384.0;
 /// a wall suspected this much is worth a press of use
 pub const SUSPICION_MIN: f64 = 2.0;
 /// unhurt on a floor this long: it doesn't hurt
@@ -613,6 +617,29 @@ impl Knowledge {
         out
     }
 
+    /// P_UseLines from `pos` facing `angle` (degrees): the first line along the use trace with
+    /// a special she knows of, unless something shut is in the way first. A once-only line used
+    /// this life has no special any more: the trace goes past it (E2M7).
+    pub fn use_hits(&self, pos: Point, angle: f64, heights: &[Heights]) -> Option<usize> {
+        let a = angle.to_radians();
+        let end = (pos.0 + USE_RANGE * a.cos(), pos.1 + USE_RANGE * a.sin());
+        for (_, li) in self.lines_along(pos, end) {
+            if self.info.contains_key(&li) && !self.spent(li) {
+                return Some(li);
+            }
+            match self.opening(li, heights) {
+                Some((lo, hi)) if hi > lo => {}
+                _ => return None,
+            }
+        }
+        None
+    }
+
+    /// Is `li` an exit she knows of?
+    pub fn is_exit(&self, li: usize) -> bool {
+        self.info.get(&li).is_some_and(|i| i.category.is_exit())
+    }
+
     fn front(&self, li: usize, x: f64, y: f64) -> bool {
         let (a, b) = self.nav.map.line_seg(li);
         (b.0 - a.0) * (y - a.1) - (b.1 - a.1) * (x - a.0) <= 0.0
@@ -636,28 +663,18 @@ impl Knowledge {
         let a = last.angle.to_radians();
         let heights = &obs.heights;
         if c.use_ {
-            // P_UseLines: the first line along the use trace with a special, unless something
-            // shut is in the way first (only from its front). A once-only line used this life has
-            // no special any more: the trace goes past it (E2M7)
-            let end = (last.x + USE_RANGE * a.cos(), last.y + USE_RANGE * a.sin());
-            for (_, li) in self.lines_along(last.pos(), end) {
-                if let Some(info) = self.info.get(&li).filter(|_| !self.spent(li)).cloned() {
-                    // (any line with a special stops it, a walk-over one too: E2M4's door
-                    // behind one; only one that's used goes off. A locked one without its key
-                    // does nothing, and the game says so: something to come back to with the key)
-                    if info.trigger.used() && self.front(li, last.x, last.y) {
-                        if info.lock.satisfied(last.keys.unwrap_or_default()) {
-                            self.fire(li, obs.tic, How::Use);
-                        } else if obs.message.as_deref().is_some_and(needs_key) && !self.locked.contains(&li) {
-                            self.locked.insert(li);
-                            self.events.push(format!("tic {}: line {li} is locked (\"{}\")", obs.tic, obs.message.as_deref().unwrap_or("")));
-                        }
+            if let Some(li) = self.use_hits(last.pos(), last.angle, heights) {
+                // (any line with a special stops it, a walk-over one too: E2M4's door behind
+                // one; only one that's used goes off. A locked one without its key does nothing,
+                // and the game says so: something to come back to with the key)
+                let info = self.info[&li].clone();
+                if info.trigger.used() && self.front(li, last.x, last.y) {
+                    if info.lock.satisfied(last.keys.unwrap_or_default()) {
+                        self.fire(li, obs.tic, How::Use);
+                    } else if obs.message.as_deref().is_some_and(needs_key) && !self.locked.contains(&li) {
+                        self.locked.insert(li);
+                        self.events.push(format!("tic {}: line {li} is locked (\"{}\")", obs.tic, obs.message.as_deref().unwrap_or("")));
                     }
-                    break;
-                }
-                match self.opening(li, heights) {
-                    Some((lo, hi)) if hi > lo => {}
-                    _ => break,
                 }
             }
         }
@@ -949,6 +966,7 @@ impl Knowledge {
         let keys = self.last.as_ref().and_then(|l| l.keys).unwrap_or_default();
         let mut best: BTreeMap<Behind, (f64, usize, Point, Point)> = BTreeMap::new();
         let mut order: Vec<Behind> = Vec::new();
+        let known = self.known_polys();
         for &li in &self.mapped {
             if self.tried_walls.get(&li).is_some_and(|k| k.covers(keys)) || self.looks_interactive(li) {
                 continue;
@@ -1012,6 +1030,13 @@ impl Knowledge {
             if unreached_places.is_some_and(|near| near(far, 128.0)) {
                 score += 2.0;
             }
+            // (a blank on her map behind it, walled round by what she has mapped: room for
+            // somewhere she's never seen, as a player reads the automap: E1M6's secret room
+            // behind the south wall of the alcove)
+            let deep = (mid.0 - nx * BLANK_DEPTH, mid.1 - ny * BLANK_DEPTH);
+            if !mesh.poly_at(deep).is_some_and(|p| known.contains(&p)) && self.walled_round(deep) {
+                score += 2.0;
+            }
             if odd {
                 score += 1.5;
                 if length <= 96.0 {
@@ -1043,6 +1068,14 @@ impl Knowledge {
         let mut out: Vec<(f64, usize, Point, Point)> = order.iter().map(|k| best[k]).collect();
         out.sort_by(|a, b| b.0.total_cmp(&a.0));
         out
+    }
+
+    /// Is `p` walled round by lines she has mapped, every way (up, down, left, right) within
+    /// BLANK_REACH? (Not out past the edge of the map as she knows it.)
+    fn walled_round(&self, p: Point) -> bool {
+        [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)]
+            .iter()
+            .all(|(dx, dy)| self.lines_along(p, (p.0 + dx * BLANK_REACH, p.1 + dy * BLANK_REACH)).iter().any(|(_, li)| self.mapped.contains(li)))
     }
 
     /// Is the wall's face unlike the walls either side of it (another texture, or the same one

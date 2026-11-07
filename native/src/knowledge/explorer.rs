@@ -1642,7 +1642,10 @@ impl Explorer {
             let until = self.look_until.unwrap_or(obs.tic);
             if obs.tic < until {
                 let mut c = turn_to(obs, Some(bearing));
-                if off < 4.0 && obs.tic < until - WALL_TICS {
+                // (not where the press would reach an exit behind it, with the exit held back:
+                // MAP22's wall in front of the exit switch, the level ended an item short)
+                let exit = self.exit_last && self.knowledge.use_hits(obs.pos(), obs.angle, &obs.heights).is_some_and(|li| self.knowledge.is_exit(li));
+                if off < 4.0 && obs.tic < until - WALL_TICS && !exit {
                     c.use_ = true;
                     self.look_until = Some(obs.tic + WALL_TICS); // (pressed: now watch)
                 } else if off < 4.0 && obs.tic > until - WALL_TICS + 4 && obs.tic < until - 8 {

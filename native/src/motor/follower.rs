@@ -1469,7 +1469,10 @@ impl RouteFollower {
             // is off, on by the drop as before. Heights she didn't: what's beyond is for the
             // explorer to judge again)
             let allowed = |s: usize, h: Heights| self.states[s].iter().any(|x| (x.floor - h.floor).abs() < 1.0 && (x.ceiling - h.ceiling).abs() < 1.0);
-            let foreseen = allowed(cs, a) && allowed(ns, b);
+            // (or one the plan is waiting to see move, caught on its way: MAP06's lift, pressed to
+            // be got onto, sinking under her as she stood by its switch)
+            let on_its_way = |s: usize| self.watches.iter().any(|w| w.expect.sector == s && w.reached.is_none());
+            let foreseen = (allowed(cs, a) || on_its_way(cs)) && (allowed(ns, b) || on_its_way(ns));
             if !self.replan(obs, &why, true) {
                 return if foreseen { Drop::None } else { Drop::GiveBack(format!("{why}, and no other way on")) };
             }
