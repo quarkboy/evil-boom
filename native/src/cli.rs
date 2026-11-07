@@ -35,7 +35,16 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--peek" => o.peek = true,
             "--secrets" => o.secrets = true,
             "--mortal" => o.mortal = true,
+            "--complete" => o.complete = true,
             _ => rest.push(a.clone()),
+        }
+    }
+    if o.complete {
+        // (all of it: the items run and the secrets run together, with the monsters in)
+        o.expert = true;
+        o.secrets = true;
+        if o.fight == 0 {
+            o.fight = 4;
         }
     }
     Ok((o, jobs, rest))
@@ -57,7 +66,7 @@ pub(crate) fn option_args(o: &RunOptions) -> Vec<String> {
         out.push("--fight".into());
         out.push(o.fight.to_string());
     }
-    for (on, flag) in [(o.peek, "--peek"), (o.secrets, "--secrets"), (o.mortal, "--mortal"), (o.expert, "--expert")] {
+    for (on, flag) in [(o.peek, "--peek"), (o.secrets, "--secrets"), (o.mortal, "--mortal"), (o.expert, "--expert"), (o.complete, "--complete")] {
         if on {
             out.push(flag.into());
         }

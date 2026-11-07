@@ -4,6 +4,7 @@
 mod setup;
 mod status;
 
+pub(crate) use setup::broken_secrets;
 pub use setup::{setup, Setup};
 
 use crate::config::out_dir;
@@ -55,6 +56,10 @@ pub struct RunOptions {
     pub expert: bool,
     /// monsters in, at this skill (4: Ultra-Violence), and she fights them (0: none)
     pub fight: i32,
+    /// every kill, item and secret there is (going by the tally's counts, as the automap shows
+    /// them), then the exit: monsters in (UV unless --fight says), the items and secrets runs
+    /// together
+    pub complete: bool,
     /// the game's random numbers from this; None: the clock
     pub seed: Option<u32>,
 }
@@ -69,6 +74,7 @@ impl Default for RunOptions {
             secrets: false,
             expert: false,
             fight: 0,
+            complete: false,
             seed: Some(0),
             snapshot: None,
             focus: None,
@@ -166,10 +172,14 @@ fn py_bool(b: bool) -> &'static str {
 /// The omniscient plan from where she is, with the heights as they are.
 /// The 100% runs: the exit last while the count she's after (on the automap, as a player sees it)
 /// is short of all there is; then out.
-fn hold_exit(e: &Engine, agent: &mut Agent, o: &RunOptions, secrets_short: i32, items_short: i32, given_up: bool) {
+pub(crate) fn hold_exit(e: &Engine, agent: &mut Agent, o: &RunOptions, secrets_short: i32, items_short: i32, given_up: bool) {
     let tally = e.tally();
     if given_up {
         agent.x_mut().exit_last = false;
+    } else if o.complete {
+        // (any of the three short: the kills too, whatever's left of them that she knows of
+        // hunted down last)
+        agent.x_mut().exit_last = tally[0].0 < tally[0].1 - items_short || tally[1].0 < tally[1].1 || tally[2].0 < tally[2].1 - secrets_short;
     } else if o.secrets {
         agent.x_mut().exit_last = tally[2].0 < tally[2].1 - secrets_short;
     } else if o.expert {
@@ -177,10 +187,35 @@ fn hold_exit(e: &Engine, agent: &mut Agent, o: &RunOptions, secrets_short: i32, 
     }
 }
 
+/// How far a 100% run's got: what it's after collected (items; secrets; for --complete all three
+/// tallies together) and what's been learned of the level, each counted (any of them up is
+/// progress; the stall clock runs while none is).
+pub(crate) fn progress(e: &Engine, x: &Explorer, o: &RunOptions) -> [usize; 7] {
+    let k = &x.knowledge;
+    let fired: BTreeSet<usize> = k.fired.iter().map(|f| f.line).collect();
+    let t = e.tally();
+    let collected = if o.complete {
+        t[0].0 + t[1].0 + t[2].0
+    } else if o.secrets {
+        t[2].0
+    } else {
+        t[0].0
+    };
+    [
+        usize::try_from(collected).unwrap_or(0),
+        k.sectors.len(),
+        k.learned.values().map(BTreeSet::len).sum::<usize>(),
+        k.tried_walls.len(),
+        k.mapped.len(),
+        fired.len(),
+        k.visited.len(),
+    ]
+}
+
 /// (recordings of different kinds of run kept apart)
 fn mode_suffix(o: &RunOptions) -> String {
     let mut out = String::new();
-    for (on, name) in [(o.fight > 0, "_fight"), (o.expert, "_expert"), (o.secrets, "_secrets"), (o.peek, "_peek")] {
+    for (on, name) in [(o.complete, "_complete"), (o.fight > 0, "_fight"), (o.expert, "_expert"), (o.secrets, "_secrets"), (o.peek, "_peek")] {
         if on {
             out.push_str(name);
         }
@@ -216,19 +251,7 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     // (and finding her way about: lines mapped, lines set off, places walked into; MAP03's
     // exploring, none of it counted, over in a minute; the user's. Places by the poly: E4M9's
     // steps over the lines beyond, each somewhere new in a sector she'd been in)
-    let progress = |e: &Engine, x: &Explorer| {
-        let k = &x.knowledge;
-        let fired: BTreeSet<usize> = k.fired.iter().map(|f| f.line).collect();
-        [
-            usize::try_from(if o.secrets { e.tally()[2].0 } else { e.tally()[0].0 }).unwrap_or(0),
-            k.sectors.len(),
-            k.learned.values().map(BTreeSet::len).sum::<usize>(),
-            k.tried_walls.len(),
-            k.mapped.len(),
-            fired.len(),
-            k.visited.len(),
-        ]
-    };
+    let progress = |e: &Engine, x: &Explorer| progress(e, x, o);
     // (the best so far this life: a level again starts the clock afresh, collecting the same
     // things again counted, the user's call; the run's time cap bounds it)
     let (mut best, mut best_tic) = (progress(&e, agent.x()), e.tic);
@@ -420,6 +443,9 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     if o.expert && exited && tally[0].0 >= tally[0].1 - most_items(&m, skill) {
         outcome = "EXPERT"; // (every item there is to get, then out)
     }
+    if o.complete && outcome == "EXPERT" && (!o.secrets || tally[2].0 >= tally[2].1 - secrets_short) && tally[1].0 >= tally[1].1 {
+        outcome = "COMPLETE"; // (every kill, item and secret, then out)
+    }
     let real = t0.elapsed().as_secs_f64();
     lines.push(format!(
         "time: engine {t_engine:.1}s, observe {t_observe:.1}s, think {t_think:.1}s, other {:.1}s; {:.0} tics/s",
@@ -430,6 +456,9 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     detail = format!("items {}/{}, {detail}", tally[0].0.max(best_life.0), tally[0].1);
     if o.secrets {
         detail = format!("secrets {}/{}, {detail}", tally[2].0.max(best_life.1), tally[2].1);
+    }
+    if o.complete {
+        detail = format!("kills {}/{}, {detail}", tally[1].0, tally[1].1);
     }
     lines.push(format!("RESULT {outcome} {detail}"));
     let dir = log_dir();

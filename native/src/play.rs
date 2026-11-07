@@ -21,7 +21,11 @@ impl Agent {
     /// levels again she may ask for).
     pub fn new(nav: &Rc<Navigator>, knowledge: Knowledge, fight: i32, expert: bool, lives: i32) -> Agent {
         if fight > 0 {
-            Agent::Fight(Box::new(Player::new(Rc::clone(nav), knowledge)))
+            let mut p = Player::new(Rc::clone(nav), knowledge);
+            if expert {
+                p.complete(lives - 1); // (every item as well as fighting: --complete)
+            }
+            Agent::Fight(Box::new(p))
         } else if expert {
             let mut x = Explorer::new(Rc::clone(nav), knowledge);
             let c = Completionist::new(&mut x, lives - 1);

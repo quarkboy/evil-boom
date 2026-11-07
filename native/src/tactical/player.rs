@@ -9,6 +9,7 @@ use std::rc::Rc;
 use super::bestiary::{ammo_item, armor_item, health_item, monster, weapon_in, weapon_item, Attack, SUPER_SHOTGUN};
 use super::combat::{segment_point_distance, Combat, OUTMATCHED};
 use crate::geom::{dist, Point};
+use crate::knowledge::completion::Completionist;
 use crate::knowledge::explorer::{Explorer, Hooks, Kind, Objective};
 use crate::knowledge::model::Knowledge;
 use crate::los::Body;
@@ -90,6 +91,8 @@ struct Fight {
     /// better guns she's turned aside for already
     offered: BTreeSet<i32>,
     present: BTreeSet<i32>,
+    /// --complete: every counted item too, and the level again for ones out of reach
+    completion: Option<Completionist>,
 }
 
 pub struct Player {
@@ -108,13 +111,19 @@ impl Player {
     pub fn new(nav: Rc<Navigator>, knowledge: Knowledge) -> Player {
         Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
-            fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new() },
+            fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None },
             retreat: None,
             retreat_why: "",
             bait_tic: -1_000_000_000,
             retreat_tic: -1_000_000_000,
             shooters_tic: -1_000_000_000,
         }
+    }
+
+    /// Every item that counts as well (the exit held back till nothing's left: --complete);
+    /// `restarts` levels again she may ask for, for ones out of reach.
+    pub fn complete(&mut self, restarts: i32) {
+        self.fight.completion = Some(Completionist::new(&mut self.explorer, restarts));
     }
 
     pub fn combat(&self) -> &Combat {
@@ -436,9 +445,9 @@ impl Fight {
     }
 }
 
-impl Hooks for Fight {
+impl Fight {
     /// Items she has seen that she could use now.
-    fn wanted(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
+    fn supplies(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let known = x.knowledge.known_polys();
         let health = obs.health.unwrap_or(100.0);
         let armor = obs.armor.unwrap_or(0.0);
@@ -495,6 +504,27 @@ impl Hooks for Fight {
             out.push(o);
         }
         out
+    }
+
+}
+
+impl Hooks for Fight {
+    /// Items she could use now; with --complete, every counted item she's seen too.
+    fn wanted(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
+        let mut out = self.supplies(x, obs, reach, pos);
+        if let Some(c) = &mut self.completion {
+            for o in c.wanted(x, obs, reach, pos) {
+                if !out.iter().any(|w| w.thing.is_some() && w.thing == o.thing) {
+                    out.push(o);
+                }
+            }
+        }
+        out
+    }
+
+    /// (--complete: rather the level again than out without items she could get from its start)
+    fn before_exit(&mut self, x: &Explorer, obs: &Observation) -> bool {
+        self.completion.as_mut().is_some_and(|c| c.before_exit(x, obs))
     }
 
     /// Monsters seen that are still about: go where each was last seen.

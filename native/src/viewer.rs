@@ -19,7 +19,9 @@ use minifb::{Key as K, KeyRepeat, Scale, ScaleMode, Window, WindowOptions};
 use crate::config::{out_dir, resolve_wad};
 use crate::engine::{Engine, Options};
 use crate::geom::{dist, Point};
+use crate::knowledge::completion::most_items;
 use crate::knowledge::explorer::{Kind, Objective};
+use crate::sweep::{broken_secrets, hold_exit, progress, RunOptions};
 use crate::knowledge::model::Knowledge;
 use crate::play::Agent;
 use crate::map::{MapData, ML_DONTDRAW};
@@ -209,12 +211,30 @@ pub struct WatchOptions {
     pub fight: i32,
     pub peek: bool,
     pub expert: bool,
+    /// every secret before the exit
+    pub secrets: bool,
+    /// every kill, item and secret before the exit (the exit last while any's short)
+    pub complete: bool,
+    /// a 100% run gives up on what's left (for the exit) after this long with nothing more
+    /// collected or learned
+    pub stall_seconds: f64,
     pub seed: Option<u32>,
     /// the map view centred on a point, zoomed in this much (for looking at one place)
     pub focus: Option<(f64, f64, f64)>,
 }
 
+/// A 100% run's exit held back (see sweep::hold_exit), and its stall clock.
+struct Hold {
+    o: RunOptions,
+    secrets_short: i32,
+    items_short: i32,
+    best: [usize; 7],
+    best_tic: i64,
+    given_up: bool,
+}
+
 struct Watch {
+    hold: Option<Hold>,
     m: Arc<MapData>,
     map_name: String,
     engine: Engine,
@@ -251,8 +271,19 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     }
     let mut knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
     knowledge.width = VIEW_WIDTH;
-    let agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives);
+    let mut agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives);
+    // (a 100% run as a sweep plays it: the exit held back while what it's after is short, given
+    // up on after a stall)
+    let hold = (o.expert || o.secrets || o.complete).then(|| {
+        let ro = RunOptions { expert: o.expert, secrets: o.secrets, complete: o.complete, fight: o.fight, stall_seconds: o.stall_seconds, ..RunOptions::default() };
+        Hold { secrets_short: broken_secrets(&map_name), items_short: most_items(&m, skill), o: ro, best: [0; 7], best_tic: 0, given_up: false }
+    });
+    if o.secrets {
+        agent.x_mut().exit_last = true;
+        agent.x_mut().secrets_mode = true;
+    }
     let mut watch = Watch::new(&w, m, &map_name, engine, agent, o.focus, o.lives - 1);
+    watch.hold = hold;
     watch.speed = o.speed;
     watch.show_all = o.show_all;
     let mut window = Window::new(&format!("evil-doom explorer: {map_name}"), W, H, WindowOptions { resize: true, scale: Scale::FitScreen, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() }).map_err(|e| e.to_string())?;
@@ -349,6 +380,7 @@ impl Watch {
         let ys = m.vertexes.iter().map(|v| v.y);
         let bounds = (xs.clone().fold(f64::INFINITY, f64::min), ys.clone().fold(f64::INFINITY, f64::min), xs.fold(f64::NEG_INFINITY, f64::max), ys.fold(f64::NEG_INFINITY, f64::max));
         Watch {
+            hold: None,
             m,
             map_name: map_name.to_string(),
             engine,
@@ -376,6 +408,17 @@ impl Watch {
         let c = self.agent.act(&obs, self.controls.as_ref());
         self.engine.step(&c);
         self.controls = Some(c);
+        if let Some(h) = self.hold.as_mut().filter(|_| obs.tic % TICRATE as i64 == 0) {
+            let now = progress(&self.engine, self.agent.x(), &h.o);
+            if now.iter().zip(&h.best).any(|(n, b)| n > b) {
+                h.best = std::array::from_fn(|i| now[i].max(h.best[i]));
+                h.best_tic = obs.tic;
+            } else if !h.given_up && (obs.tic - h.best_tic) as f64 > h.o.stall_seconds * TICRATE {
+                h.given_up = true;
+                self.agent.x_mut().log.push(format!("tic {}: nothing more collected, learned or tried in {:.0}s: for the exit", obs.tic, h.o.stall_seconds));
+            }
+            hold_exit(&self.engine, &mut self.agent, &h.o, h.secrets_short, h.items_short, h.given_up);
+        }
         if obs.tic - self.options_tic >= TICRATE as i64 {
             self.options = self.agent.objectives(&obs);
             self.options_tic = obs.tic;
