@@ -909,6 +909,7 @@ impl Explorer {
         // tried is a way out to try, MAP04's hidden door shutting behind her)
         let pressed: BTreeSet<usize> = self.knowledge.fired.iter().map(|f| f.line).chain(self.knowledge.tried_walls.keys().copied()).collect();
         let shut = |sec: usize| states[sec].iter().all(|h| h.ceiling - h.floor < PLAYER_HEIGHT);
+        let untried: Vec<&TriggerLine> = self.knowledge.interactables().iter().filter_map(|li| by_line.get(li).copied()).collect();
         let mut lost_from = |p: usize| -> (BTreeSet<usize>, bool) {
             let after = afters.entry(p).or_insert_with(|| way_back(p));
             if after.contains(&here) {
@@ -924,9 +925,19 @@ impl Explorer {
                     shut(other) && portal.linedef.is_some_and(|li| !pressed.contains(&li))
                 })
             });
-            (reach.difference(after).copied().collect(), unseen_edge || unwalked || untried_door)
+            // (or a switch or door not tried yet that she could press from there: E4M9's pit of
+            // bonuses, its lift out a face of plain support at the south end, as `shuts_in` has it)
+            let untried_switch = untried.iter().any(|t| !t.activators.is_disjoint(after));
+            (reach.difference(after).copied().collect(), unseen_edge || unwalked || untried_door || untried_switch)
         };
         let tic = obs.tic;
+        // (an item the level put somewhere has a way back out from it, if not one she knows yet:
+        // nobody makes a pit with a prize and no way out; not one a monster dropped, which can
+        // fall anywhere. The user's rule, from E4M9's pit of bonuses)
+        let placed = |o: &Objective| {
+            o.kind == Kind::Item
+                && o.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).is_some_and(|t| nav.map.things.iter().any(|m| (m.x - t.x).abs() < 1.0 && (m.y - t.y).abs() < 1.0))
+        };
         let mut usable = |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
             if risky {
                 // nothing safe left: anything, one-way drops and nukage and all; but not for a
@@ -936,7 +947,7 @@ impl Explorer {
                 return objectives
                     .into_iter()
                     .filter(|o| o.kind != Kind::Noise)
-                    .filter(|o| exit_polys.is_empty() || o.kind == Kind::Exit || nav.poly_at(o.goal).map(&mut lost_from).is_none_or(|(g, open)| open || !exit_polys.is_subset(&g)))
+                    .filter(|o| exit_polys.is_empty() || o.kind == Kind::Exit || placed(o) || nav.poly_at(o.goal).map(&mut lost_from).is_none_or(|(g, open)| open || !exit_polys.is_subset(&g)))
                     .map(|o| Objective { label: format!("{} (risky)", o.label), risky: true, ..o })
                     .filter(|o| this.fresh(o, tic))
                     .collect();
@@ -948,7 +959,7 @@ impl Explorer {
                     continue;
                 }
                 let cut = nav.poly_at(o.goal).map(&mut lost_from);
-                let open = cut.as_ref().is_none_or(|c| c.1);
+                let open = cut.as_ref().is_none_or(|c| c.1) || placed(&o);
                 let gone = cut.map(|c| c.0);
                 // (worth the risk, however far she can't get back from: the exit, a teleporter,
                 // where it leads is the unknown; a key, it opens the way)

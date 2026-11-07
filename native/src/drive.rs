@@ -261,6 +261,8 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                         let shots: std::collections::BTreeSet<(i64, i64)> = t.activators.iter().filter_map(|&p| s.nav.shot_floors.get(&(li, p))).map(|&(lo, hi)| (lo as i64, hi as i64)).collect();
                         let sectors: std::collections::BTreeSet<usize> = t.activators.iter().map(|&p| s.nav.sector_of_poly(p)).collect();
                         println!("    trigger {}: {} activators ({reach} in reach), sectors {sectors:?}{}", t.id, t.activators.len(), if shots.is_empty() { String::new() } else { format!(", shot from floors {shots:?}") });
+                        let polys: Vec<String> = t.activators.iter().map(|&p| format!("{p}{}@({:.0},{:.0})", if x.reach.contains(&p) { "*" } else { "" }, s.nav.mesh.center(p).0, s.nav.mesh.center(p).1)).collect();
+                        println!("      from polys (* in reach): {}", polys.join(" "));
                     }
                 }
             }

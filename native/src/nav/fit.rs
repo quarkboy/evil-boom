@@ -433,9 +433,13 @@ impl Fitter<'_> {
             return false;
         }
         let room = |h: &Heights| h.ceiling - h.floor >= PLAYER_HEIGHT;
+        // (a wall along with it opens no more than they do: MAP18's way past door 91, between
+        // its jamb and the block risen beside it, 24 wide, handed out to squeeze through for a
+        // minute; but one between walls alone is as it was, a tight spot that may do)
+        let mut shut = false;
         for e in edges {
             let Some(&li) = self.nav.seg_lines.get(e) else { return false };
-            let (Some(f), Some(b)) = self.nav.map.sides(li) else { return false };
+            let (Some(f), Some(b)) = self.nav.map.sides(li) else { continue };
             if self.doors.is_some_and(|d| d.contains_key(&f) || d.contains_key(&b)) {
                 return false;
             }
@@ -446,8 +450,9 @@ impl Fitter<'_> {
             if open {
                 return false;
             }
+            shut = true;
         }
-        true
+        shut
     }
 
     // --- fitting the box --------------------------------------------------------------------
