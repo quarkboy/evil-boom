@@ -202,7 +202,7 @@ pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Out
                 .iter()
                 .flatten()
                 .filter(|t| ids.contains(&t.id))
-                .map(|t| format!("{} {:.0}", t.name, crate::geom::dist((t.x, t.y), ob.pos())))
+                .map(|t| format!("{} {:.0} ({} hp)", t.name, crate::geom::dist((t.x, t.y), ob.pos()), t.health))
                 .collect();
             let p = e.game.player();
             let states: Vec<String> = ob.things.iter().flatten().filter(|t| ids.contains(&t.id)).map(|t| format!("{}@{}", t.state, t.attack)).collect();

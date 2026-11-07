@@ -39,6 +39,9 @@ const SWITCH_WAIT: i64 = 40;
 /// pain rolls a second worth twice a gun's kill time, against an arch-vile
 const FLINCH_ROLLS: f64 = 6.0;
 
+/// tics from the trigger to the rocket (S_MISSILE1, then A_FireMissile)
+const ROCKET_DELAY: f64 = 8.0;
+
 /// half a rocket's width, and a little
 const ROCKET_HALF: f64 = 13.0;
 
@@ -177,13 +180,18 @@ impl Combat {
     /// A rocket's way to t clear its whole width (MAP32: one fired past a pillar's corner beside
     /// her, the line from her eye clear, the rocket's side not: 86 off her).
     fn rocket_lane_clear(&mut self, obs: &Observation, t: &Thing) -> bool {
-        let pos = obs.pos();
-        let d = dist((t.x, t.y), pos).max(1.0);
-        let side = (-(t.y - pos.1) / d * ROCKET_HALF, (t.x - pos.0) / d * ROCKET_HALF);
+        // (from where she is and from where she'll be when it comes out: the launcher lets
+        // it go 8 tics after the trigger, and she'd run up beside the pillar by then)
+        let now = obs.pos();
+        let then = (now.0 + self.velocity.0 * ROCKET_DELAY, now.1 + self.velocity.1 * ROCKET_DELAY);
         let h = mon(t.name).height;
-        [1.0, -1.0].into_iter().all(|k| {
-            let o = (side.0 * k, side.1 * k);
-            self.shot_clear_from(obs, (pos.0 + o.0, pos.1 + o.1), (t.x + o.0, t.y + o.1), t.z, h)
+        [now, then].into_iter().all(|pos| {
+            let d = dist((t.x, t.y), pos).max(1.0);
+            let side = (-(t.y - pos.1) / d * ROCKET_HALF, (t.x - pos.0) / d * ROCKET_HALF);
+            [1.0, -1.0].into_iter().all(|k| {
+                let o = (side.0 * k, side.1 * k);
+                self.shot_clear_from(obs, (pos.0 + o.0, pos.1 + o.1), (t.x + o.0, t.y + o.1), t.z, h)
+            })
         })
     }
 

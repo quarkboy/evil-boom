@@ -180,6 +180,8 @@ pub struct Combat {
     vile_way: Option<(i64, i32, Point)>,
     /// ...and till when its fire might still go off
     vile_until: i64,
+    /// the trigger was down last tic
+    trigger_held: bool,
 }
 
 impl Combat {
@@ -220,6 +222,7 @@ impl Combat {
             steer_stuck: None,
             vile_way: None,
             vile_until: 0,
+            trigger_held: false,
         }
     }
 
@@ -668,6 +671,12 @@ impl Combat {
             }
         };
         c.attack = d.fire || base.is_some_and(|b| b.attack && !d.takeover);
+        // (the rocket launcher and the BFG don't fire again with the trigger held: let go a tic
+        // after each press, the game's way to fire the next; held, only the first went)
+        if matches!(obs.weapon, Some(5 | 7)) && self.trigger_held {
+            c.attack = false;
+        }
+        self.trigger_held = c.attack;
         if d.weapon != 0 {
             c.weapon = d.weapon;
         }
