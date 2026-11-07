@@ -300,6 +300,10 @@ pub struct Explorer {
     pub stats: RouteStats,
     /// the goals the planner found no way to, and the plan signature then
     no_route: BTreeMap<GoalKey, u64>,
+    /// the walls she suspected last, and a hash of all that went into it (see `suspected`)
+    suspects: Option<(u64, Vec<Suspect>)>,
+    /// what standable() found, at the heights then (see `standable_at`)
+    standable_cache: std::cell::RefCell<StandableCache>,
     /// the most plan steps a route is searched for in (`drive budget`)
     pub plan_expansions: usize,
     dropped: BTreeMap<Ident, i64>,
@@ -370,6 +374,12 @@ pub struct RouteStats {
     pub saturate_secs: f64,
 }
 
+/// A wall she suspects: (score, line, where to stand, the wall's middle).
+type Suspect = (f64, usize, Point, Point);
+
+/// standable()'s answers at a set of heights: the heights, and by (x, y, play) bits.
+type StandableCache = (Vec<(f64, f64)>, crate::det::HashMap<(u64, u64, bool), bool>);
+
 /// A goal planned for: where, the line to press there, and whether other spots to press it
 /// from are tried.
 type GoalKey = (u64, u64, Option<i64>, bool);
@@ -388,6 +398,8 @@ impl Explorer {
             log: Vec::new(),
             stats: RouteStats::default(),
             no_route: BTreeMap::new(),
+            standable_cache: std::cell::RefCell::new((Vec::new(), crate::det::HashMap::default())),
+            suspects: None,
             plan_expansions: PLAN_EXPANSIONS,
             dropped: BTreeMap::new(),
             drop_count: BTreeMap::new(),
@@ -1077,12 +1089,30 @@ impl Explorer {
         // (at the heights she last saw, not the map's starting ones: a door opened since, a
         // floor risen)
         let heights = self.as_seen();
+        self.standable_at(q, play, &heights)
+    }
+
+    /// `standable` at these heights (hers as seen), remembered while they stay as they are:
+    /// asked of every poly she can get to for each list of what she could do (E4M8: two
+    /// thirds of the time making them, the same answers each time).
+    pub(super) fn standable_at(&self, q: Point, play: bool, heights: &[(f64, f64)]) -> bool {
+        let mut cache = self.standable_cache.borrow_mut();
+        if cache.0 != heights {
+            cache.0 = heights.to_vec();
+            cache.1.clear();
+        }
+        let key = (q.0.to_bits(), q.1.to_bits(), play);
+        if let Some(&ok) = cache.1.get(&key) {
+            return ok;
+        }
         let lab = &self.nav.jump_lab;
-        self.stands_at(q, &heights) && (!play || [(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)].iter().all(|(dx, dy)| lab.fits_at_heights((q.0 + dx, q.1 + dy), &heights).0))
+        let ok = self.stands_at(q, heights) && (!play || [(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)].iter().all(|(dx, dy)| lab.fits_at_heights((q.0 + dx, q.1 + dy), heights).0));
+        cache.1.insert(key, ok);
+        ok
     }
 
     /// Each sector as she last saw it (floor, ceiling); the starting heights where she hasn't.
-    fn as_seen(&self) -> Vec<(f64, f64)> {
+    pub(super) fn as_seen(&self) -> Vec<(f64, f64)> {
         let k = &self.knowledge;
         self.nav.movers.initial.iter().enumerate().map(|(s, &h)| k.seen_heights.get(&s).copied().unwrap_or(h)).map(|h| (h.floor, h.ceiling)).collect()
     }
@@ -2009,9 +2039,34 @@ impl Explorer {
             .filter(|t| mesh.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p) && !reach.contains(&p)))
             .map(|t| (t.x, t.y))
             .collect();
+        // (the same again while nothing it goes by has changed: asked for every list of what she
+        // could do, for the strong suspects by her, every wall of the level weighed each time)
+        let key = {
+            use std::hash::{Hash, Hasher};
+            let k = &self.knowledge;
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            k.mapped.hash(&mut h);
+            k.tried_walls.hash(&mut h);
+            for (s, x) in &k.seen_heights {
+                (s, x.key()).hash(&mut h);
+            }
+            k.last.as_ref().and_then(|l| l.keys).unwrap_or_default().hash(&mut h);
+            known.hash(&mut h);
+            reach.hash(&mut h);
+            for p in &unreached {
+                (p.0.to_bits(), p.1.to_bits()).hash(&mut h);
+            }
+            panic.hash(&mut h);
+            h.finish()
+        };
+        if let Some((_, found)) = self.suspects.as_ref().filter(|(k, _)| *k == key) {
+            return found.clone();
+        }
         let places = Spots::new(known.difference(reach).map(|&p| mesh.poly(p).center));
         let near = |q: Point, r: f64| places.near(q, r);
-        self.knowledge.suspicious(reach, &unreached, panic, Some(&near))
+        let found = self.knowledge.suspicious(reach, &unreached, panic, Some(&near));
+        self.suspects = Some((key, found.clone()));
+        found
     }
 
     /// Not dropped lately (the longer, the more often it has been).

@@ -110,10 +110,11 @@ impl Explorer {
             })
             .collect();
         // (only spots the box can stand at: E4M7's was in a shut door)
+        let seen = self.as_seen();
         let centres: Vec<Point> = reach
             .iter()
             .map(|&p| mesh.poly(p).center)
-            .filter(|&c| self.standable(c, true))
+            .filter(|&c| self.standable_at(c, true, &seen))
             .collect();
         let sight = &k.sight;
         let rooms = k.unseen_walls();
