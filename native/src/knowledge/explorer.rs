@@ -27,6 +27,22 @@ use crate::walkthrough::{action_for, steps_from_legs, Action, Step};
 const PLAN_SECONDS: f64 = 600.0;
 /// the most plan steps a route is searched for in
 const PLAN_EXPANSIONS: usize = 20000;
+/// (mortal runs) health a route must leave her with, at the least...
+const HEALTH_MARGIN: f64 = 25.0;
+/// ...below this, healing she's seen is something to go for anyway...
+const HEAL_BELOW: f64 = 50.0;
+/// ...and this long after a route cost too much, healing or a suit is (to afford it)
+const SHORT_TICS: i64 = 60 * 35;
+/// her pace on a route, units a tic (a little under running, for the turns)
+const ROUTE_PACE: f64 = 12.0;
+/// a hurting floor does its damage once in this many tics
+const HURT_PERIOD: f64 = 32.0;
+/// a goal found no way to is taken to have none for this long at most, nothing changed
+const NO_ROUTE_TICS: i64 = 20 * 35;
+/// a plan search's budget, halved each time one uses it up, goes no lower than this...
+const MIN_EXPANSIONS: usize = 200;
+/// ...and is whole again after this long with none that did
+const MAXED_RESET: i64 = 20 * 35;
 /// a suspected wall pressed: watched this long for something to happen
 const WALL_TICS: i64 = 25;
 /// a wall tried: walked up to till this near (past the box's edge), at this speed, giving up
@@ -318,13 +334,16 @@ pub struct Explorer {
     /// the routes planned so far, and the time they took (the live status: `EVIL_STATUS`)
     pub stats: RouteStats,
     /// the goals the planner found no way to, and the plan signature then
-    no_route: BTreeMap<GoalKey, u64>,
+    no_route: BTreeMap<GoalKey, (u64, i64)>,
     /// the walls she suspected last, and a hash of all that went into it (see `suspected`)
     suspects: Option<(u64, Vec<Suspect>)>,
     /// what standable() found, at the heights then (see `standable_at`)
     standable_cache: std::cell::RefCell<StandableCache>,
     /// the most plan steps a route is searched for in (`drive budget`)
     pub plan_expansions: usize,
+    /// times the budget's been halved, and the tic a search last used it up
+    budget_cuts: u32,
+    maxed_tic: i64,
     dropped: BTreeMap<Ident, i64>,
     /// ...and how often (each time it waits twice as long to be offered again)
     drop_count: BTreeMap<Ident, i32>,
@@ -353,6 +372,11 @@ pub struct Explorer {
     pub patience: f64,
     /// (for whoever runs the game: the level again, knowing what she knows)
     pub restart_wanted: bool,
+    /// (mortal runs) when a route last cost more health than she had to spare (floors that hurt:
+    /// healing or a suit would do)
+    short_of_health: Option<i64>,
+    /// a suit on, last she looked (what cost too much then gets another go once it's on)
+    suited: bool,
     /// the secrets run: every secret, then out
     pub secrets_mode: bool,
     /// sectors she's found a secret in (the tally went up as she stepped in: "A secret is
@@ -439,6 +463,8 @@ impl Explorer {
             standable_cache: std::cell::RefCell::new((Vec::new(), crate::det::HashMap::default())),
             suspects: None,
             plan_expansions: PLAN_EXPANSIONS,
+            budget_cuts: 0,
+            maxed_tic: i64::MIN / 2,
             dropped: BTreeMap::new(),
             drop_count: BTreeMap::new(),
             wall_drops: BTreeMap::new(),
@@ -457,6 +483,8 @@ impl Explorer {
             exit_last: false,
             patience: 1.0,
             restart_wanted: false,
+            short_of_health: None,
+            suited: false,
             pressed_knowing: BTreeMap::new(),
             secrets_mode: false,
             secret_sectors: BTreeSet::new(),
@@ -742,7 +770,17 @@ impl Explorer {
     /// What she could go and do now.
     pub fn objectives(&mut self, obs: &Observation, risky: bool, hooks: &mut dyn Hooks) -> Vec<Objective> {
         let t0 = Instant::now();
-        let out = self.list_objectives(obs, risky, hooks);
+        let mut out = self.list_objectives(obs, risky, hooks);
+        if self.knowledge.mortal {
+            // (mortal: nowhere under a crusher to stop at just to look or walk round; what's to be
+            // picked up or pressed there, passed through. E4M7's walls of sectors 226 and 230,
+            // looked at from under them, crushed)
+            let crushers = self.crusher_sectors();
+            out.retain(|o| {
+                matches!(o.kind, Kind::Item | Kind::Key | Kind::Switch | Kind::Door | Kind::Exit | Kind::Teleporter | Kind::Secret)
+                    || !self.nav.poly_at(o.goal).is_some_and(|p| crushers.contains(&self.nav.sector_of_poly(p)))
+            });
+        }
         self.stats.listed += 1;
         self.stats.listed_secs += t0.elapsed().as_secs_f64();
         out
@@ -902,6 +940,8 @@ impl Explorer {
         out.extend(self.recheck(&reach, pos));
         out.extend(self.unfinished(&reach, pos));
         out.extend(self.unvisited(&reach, pos));
+        out.extend(self.healing(obs, &reach));
+        out.extend(self.get_off(obs, &reach));
         out.extend(self.secrets_again(&reach, pos));
         out.extend(self.noises(&reach, pos, obs.tic));
         out.extend(hooks.wanted(self, obs, &reach, pos));
@@ -1463,6 +1503,77 @@ impl Explorer {
             .collect()
     }
 
+    /// The sectors crushers move (as their lines' specials say, the ones she's seen).
+    fn crusher_sectors(&self) -> BTreeSet<usize> {
+        self.nav
+            .triggers
+            .iter()
+            .filter(|t| t.info.category == crate::specials::Category::Crusher && !t.info.description.contains("stop"))
+            .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
+            .collect()
+    }
+
+    /// Is she down on a floor she takes to hurt?
+    fn on_hurting_floor(&self, obs: &Observation) -> bool {
+        let Some(p) = self.nav.poly_at(obs.pos()) else { return false };
+        let s = self.nav.sector_of_poly(p);
+        self.knowledge.damaging(s) && obs.z.is_some_and(|z| (z - obs.heights[s].floor).abs() < 1.0) && !self.knowledge.protected(obs.tic)
+    }
+
+    /// (mortal runs) Down on a floor that hurts: off it, to the nearest floor that doesn't she
+    /// can get to (the user's: "if you fall in, head for the nearest floor that doesn't hurt").
+    fn get_off(&self, obs: &Observation, reach: &BTreeSet<usize>) -> Vec<Objective> {
+        if !self.knowledge.mortal || !self.on_hurting_floor(obs) {
+            return Vec::new();
+        }
+        let mesh = &self.nav.mesh;
+        let pos = obs.pos();
+        let best = reach
+            .iter()
+            .copied()
+            .filter(|&p| !self.knowledge.damaging(mesh.poly(p).sector) && self.standable(mesh.poly(p).center, false))
+            .min_by(|&a, &b| dist(mesh.poly(a).center, pos).total_cmp(&dist(mesh.poly(b).center, pos)));
+        best.map(|p| {
+            let mut o = Objective::new(Kind::Visit, mesh.poly(p).center, "get off the floor that hurts");
+            o.reveals = BTreeSet::from([p as i64]);
+            o.urgent = true;
+            o
+        })
+        .into_iter()
+        .collect()
+    }
+
+    /// (mortal runs) Health she's seen, to go for when she's low or a way cost more than she had
+    /// to spare; and a radiation suit, when one did (floors that hurt are all that costs).
+    fn healing(&self, obs: &Observation, reach: &BTreeSet<usize>) -> Vec<Objective> {
+        if !self.knowledge.mortal {
+            return Vec::new();
+        }
+        let health = obs.health.unwrap_or(100.0);
+        let short = self.short_of_health.is_some_and(|t| obs.tic - t < SHORT_TICS);
+        let known = self.knowledge.known_polys();
+        let mut out = Vec::new();
+        for t in obs.things.iter().flatten() {
+            // (what heals her past 100 counts as an item, had anyway: these only below it)
+            let heals = matches!(t.name, "Stimpack" | "Medikit") && health < 100.0 && (short || health < HEAL_BELOW);
+            let suit = t.name == "RadSuit" && (short || self.on_hurting_floor(obs)) && !self.knowledge.protected(obs.tic);
+            if !heals && !suit {
+                continue;
+            }
+            if !self.nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
+                continue;
+            }
+            if let Some(spot) = self.touch_spot((t.x, t.y), reach) {
+                let why = if suit { "for the floors that hurt" } else { "to heal" };
+                let mut o = Objective::new(Kind::Item, spot, format!("pick up {} ({why})", t.name));
+                o.thing = Some(t.id);
+                o.urgent = health < HEAL_BELOW;
+                out.push(o);
+            }
+        }
+        out
+    }
+
     /// The tally went up with her in sector `s`: a secret there.
     pub fn found_secret(&mut self, s: usize, tic: i64) {
         if self.secret_sectors.insert(s) {
@@ -1547,8 +1658,13 @@ impl Explorer {
     /// How far a path goes on floors she takes to hurt: not over them (a hurting pit well below
     /// a walkway she runs along, or jumps across: MAP24).
     fn wading(&self, waypoints: &[Option<Point>], heights: &States) -> f64 {
+        self.wades(waypoints, heights).iter().map(|(_, d)| d).sum()
+    }
+
+    /// The stretches of a path down on floors she takes to hurt, in order: (sector, length).
+    fn wades(&self, waypoints: &[Option<Point>], heights: &States) -> Vec<(usize, f64)> {
         let (mesh, k) = (&self.nav.mesh, &self.knowledge);
-        let mut out = 0.0;
+        let mut out: Vec<(usize, f64)> = Vec::new();
         let mut prev: Option<Point> = None;
         let mut on: Option<f64> = None;
         for &p in waypoints {
@@ -1567,12 +1683,40 @@ impl Explorer {
                 if !k.damaging(s) {
                     on = Some(floor);
                 } else if on.is_none_or(|o| floor >= o - MAX_STEP) {
-                    out += step; // (down in it, not passing over it)
+                    out.push((s, step)); // (down in it, not passing over it)
                 }
             }
             prev = Some(p);
         }
         out
+    }
+
+    /// (mortal runs) The health a route's legs would cost her: her time down on floors that
+    /// hurt, at what each does (one that only looks it: at the worst); a suit on, nothing for
+    /// the time it has left, but the worst floors' now and then.
+    fn route_damage(&self, legs: &[crate::navigator::Leg], states: &States, obs: &Observation) -> f64 {
+        let suit_left = self.knowledge.suit_until.map_or(0.0, |u| (u - obs.tic) as f64);
+        let mut tics = 0.0;
+        let mut total = 0.0;
+        for leg in legs {
+            for (s, len) in self.wades(&leg.path.waypoints, states) {
+                let t = len / ROUTE_PACE;
+                let felt = self.nav.damage[s];
+                let per = f64::from(if felt > 0 { felt } else { 20 });
+                let rate = if tics + t < suit_left {
+                    if per >= 20.0 {
+                        per * 5.0 / 256.0
+                    } else {
+                        0.0
+                    }
+                } else {
+                    per
+                };
+                total += t / HURT_PERIOD * rate;
+                tics += t;
+            }
+        }
+        total
     }
 
     /// Steps to get to an objective and do it, through what's known (using switches she has
@@ -1584,12 +1728,23 @@ impl Explorer {
         // were planned for again every think)
         let goal: GoalKey = (obj.goal.0.to_bits(), obj.goal.1.to_bits(), obj.trigger.as_ref().map(|t| t.line), matches!(obj.kind, Kind::Switch | Kind::Door | Kind::Exit));
         let sig = self.plan_signature(obs);
-        if self.no_route.get(&goal) == Some(&sig) {
+        if self.no_route.get(&goal).is_some_and(|&(s, tic)| s == sig && obs.tic - tic < NO_ROUTE_TICS) {
             self.stats.known_none += 1;
             return None;
         }
         let t0 = Instant::now();
+        // (a search that uses up its budget: the next ones with half as much, down to a floor,
+        // till a while goes by with none that does; the user's. MAP15's few goals behind the
+        // block, thousands of steps each for none, every time she'd seen a little more)
+        if obs.tic - self.maxed_tic > MAXED_RESET {
+            self.budget_cuts = 0;
+        }
+        crate::stats::take_maxed();
         let route = self.plan_route(obj, obs, (goal, sig));
+        if crate::stats::take_maxed() {
+            self.budget_cuts += 1;
+            self.maxed_tic = obs.tic;
+        }
         let took = t0.elapsed().as_secs_f64();
         let s = &mut self.stats;
         if route.is_some() {
@@ -1613,14 +1768,34 @@ impl Explorer {
     fn plan_signature(&mut self, obs: &Observation) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
-        self.view_key(false).hash(&mut h);
+        // (what she knows of the level as the view has it, but where she's walked only as far as
+        // it's somewhere she knows no other way: the view takes the two together, and walking
+        // over floor she'd seen is no news to a plan)
+        let (sectors, _, _, learned, teleports, spent_doors, spent_teleports, open, blocked, difficult) = self.view_key(false);
+        (sectors, self.knowledge.known_polys().len(), learned, teleports, spent_doors, spent_teleports, open, blocked, difficult).hash(&mut h);
         self.banned_jumps().hash(&mut h);
         obs.keys.unwrap_or_default().0.hash(&mut h);
         self.spent_once().hash(&mut h);
-        for hs in self.states() {
-            hs.len().hash(&mut h);
-            for x in hs {
-                x.key().hash(&mut h);
+        // (the heights as she has them: a sector's only where it's somewhere none of the triggers
+        // she knows of puts it, nor where it starts; a lift or door at an end a switch she knows
+        // gives is no news to a search that can press it. MAP15's goals behind the block,
+        // searched again each time a lift went by, ten and twenty times; the user's rule)
+        let states = self.states();
+        let nav = &self.nav;
+        let mut known: Vec<BTreeSet<crate::nav::HeightsKey>> = nav.movers.initial.iter().map(|h| BTreeSet::from([h.key()])).collect();
+        for (t, sectors) in self.knowledge.known_triggers() {
+            for (sec, hs) in nav.effects_now(&t, &states) {
+                if sectors.contains(&sec) {
+                    known[sec].extend(hs.iter().map(|x| x.key()));
+                }
+            }
+        }
+        for (sec, hs) in states.iter().enumerate() {
+            if hs.iter().any(|x| !known[sec].contains(&x.key())) {
+                sec.hash(&mut h);
+                for x in hs {
+                    x.key().hash(&mut h);
+                }
             }
         }
         self.reach.hash(&mut h);
@@ -1645,7 +1820,8 @@ impl Explorer {
         }
         // (the once-only lines she's used this life are spent: E3M4's door)
         let fired = self.spent_once();
-        let plan = |goal: Point| view.plan(obs.pos(), &[goal], &Plan { keys, states: Some(&states), key_items: &key_items, max_expansions: self.plan_expansions, max_seconds: PLAN_SECONDS, goal_triggers: &[], fired: &fired });
+        let budget = (self.plan_expansions >> self.budget_cuts.min(16)).max(MIN_EXPANSIONS.min(self.plan_expansions));
+        let plan = |goal: Point| view.plan(obs.pos(), &[goal], &Plan { keys, states: Some(&states), key_items: &key_items, max_expansions: budget, max_seconds: PLAN_SECONDS, goal_triggers: &[], fired: &fired });
         let mut route = plan(obj.goal);
         // no way to the nearest spot to press it from: the next nearest (MAP08's exit door)
         let mut goal = obj.goal;
@@ -1662,7 +1838,7 @@ impl Explorer {
         }
         let Some(route) = route else {
             // (only the planner's none: not a way she won't take, which the risky twin may)
-            self.no_route.insert(failed.0, failed.1);
+            self.no_route.insert(failed.0, (failed.1, obs.tic));
             return None;
         };
         let step = |action: Action, trigger: Option<TriggerLine>, key: Option<Key>| Step { path: None, action, trigger, key, label: obj.label.clone(), expects: Vec::new() };
@@ -1679,6 +1855,16 @@ impl Explorer {
                 step(action, Some(t), None)
             }
         };
+        if self.knowledge.mortal && !self.on_hurting_floor(obs) {
+            // (mortal: no way that costs more health than she has to spare, risky or not; noted,
+            // for healing or a suit to go for. Not while down on a floor that hurts: staying
+            // costs more than any way off it, the user's)
+            let cost = self.route_damage(&route.legs, &states, obs);
+            if cost > 0.0 && obs.health.unwrap_or(100.0) - cost < HEALTH_MARGIN {
+                self.short_of_health = Some(obs.tic);
+                return None;
+            }
+        }
         if obj.kind != Kind::Exit && !obj.risky && !self.knowledge.protected(obs.tic) {
             // (nukage and the like only for a few steps, and never dropping into it; but where
             // she's been down before and got out again is all right: MAP24's)
@@ -2254,6 +2440,15 @@ impl Explorer {
 
     fn next(&mut self, obs: &Observation, hooks: &mut dyn Hooks) {
         self.follower = None;
+        let suited = self.knowledge.protected(obs.tic);
+        if suited && !self.suited && self.short_of_health.is_some() {
+            // (a suit on: what cost too much a moment ago may not now, and its minute is short)
+            self.log.push(format!("tic {}: suit on: what cost too much gets another go", obs.tic));
+            self.dropped.clear();
+            self.no_route.clear();
+            self.short_of_health = None;
+        }
+        self.suited = suited;
         if self.difficult {
             self.set_jumps(false); // (the jumps missed once: out again, other ways first)
         }
@@ -2436,6 +2631,7 @@ impl Explorer {
         let view = self.view();
         let mut follower = RouteFollower::new(view, steps, obs.keys.unwrap_or_default(), Some(states), false, obs.tic);
         follower.fired.extend(self.spent_once()); // (its replans: not by them either)
+        follower.mortal = self.knowledge.mortal;
         self.follower = Some(follower);
         self.follower_seen = 0;
         self.log.push(format!("tic {}: {} ({n} steps) | {}", obs.tic, obj.label, self.knowledge.summary()));

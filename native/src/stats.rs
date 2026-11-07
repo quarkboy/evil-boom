@@ -71,11 +71,27 @@ pub struct Search {
 
 thread_local! {
     static SEARCHES: RefCell<Vec<Search>> = const { RefCell::new(Vec::new()) };
+    static LAST_ENDED: RefCell<Option<Ended>> = const { RefCell::new(None) };
+    static MAXED_SINCE: RefCell<bool> = const { RefCell::new(false) };
 }
 
 /// Note a search done (for the live status's record of them: `EVIL_STATUS`).
 pub fn search_done(s: Search) {
+    LAST_ENDED.with(|l| *l.borrow_mut() = Some(s.ended));
+    if s.ended == Ended::Budget {
+        MAXED_SINCE.with(|n| *n.borrow_mut() = true);
+    }
     SEARCHES.with(|v| v.borrow_mut().push(s));
+}
+
+/// Has a plan search used up its budget since last asked?
+pub fn take_maxed() -> bool {
+    MAXED_SINCE.with(|n| std::mem::take(&mut *n.borrow_mut()))
+}
+
+/// How the last plan search ended.
+pub fn last_ended() -> Option<Ended> {
+    LAST_ENDED.with(|l| *l.borrow())
 }
 
 /// The searches noted since last asked.

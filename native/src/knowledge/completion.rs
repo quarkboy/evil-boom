@@ -32,13 +32,15 @@ pub struct Completionist {
     pub restarts: i32,
     /// what she knew and the items left when the level from its start last had no way to them
     no_way_back: Option<(String, Vec<Point>)>,
+    /// the items left when she last asked for the level again for them
+    asked_for: Option<Vec<Point>>,
 }
 
 impl Completionist {
     /// (the explorer's exit held back)
     pub fn new(explorer: &mut Explorer, restarts: i32) -> Completionist {
         explorer.exit_last = true;
-        Completionist { restarts, no_way_back: None }
+        Completionist { restarts, no_way_back: None, asked_for: None }
     }
 
     fn counted(name: &str, obs: &Observation) -> bool {
@@ -100,6 +102,12 @@ impl Hooks for Completionist {
             self.no_way_back = Some(asked);
             return false;
         }
+        // (the level again for the same ones it last didn't get her: it won't now either; E3M4's
+        // mortal run, 209 times for a bonus out of reach every life)
+        if self.asked_for.as_ref() == Some(&left) {
+            return false;
+        }
+        self.asked_for = Some(left);
         self.restarts -= 1;
         true
     }

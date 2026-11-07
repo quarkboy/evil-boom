@@ -16,6 +16,10 @@ use crate::nav::{can_cross, AfterOnly, Callbacks, Doors, Edge, Found, Gate, Heig
 use crate::plan::{KeySet, Kind, PlanCaches, PlanFacts, Planner, Query, Trigger as PlanTrigger, World};
 use crate::specials::{Key, Keys, Lock, Trigger};
 
+/// a plan search with every switch, after one with only those the relaxed plan needs found
+/// none (the most steps routes took before MAP24's needed more)
+const WIDER_EXPANSIONS: usize = 2000;
+
 static NEXT_VIEW: AtomicU64 = AtomicU64::new(1);
 
 /// A height-dependent trigger's effects with everything round it down, and the heights that
@@ -760,13 +764,26 @@ impl View {
             goal_triggers: q.goal_triggers.iter().filter_map(|(p, id)| index.get(id).map(|&i| (point_key(*p), i))).collect(),
             relevant_lines: rel_t.iter().map(|&l| usize::try_from(l).ok()).collect(),
             relevant_keys: KeySet(rel_k.0),
+            useful_lines: Some(rel_t.iter().map(|&l| usize::try_from(l).ok()).collect()),
             strict_fit: n.strict_fit,
             fired: q.fired.clone(),
         };
         let facts = self.plan_facts();
         crate::stats::reset();
         let t0 = std::time::Instant::now();
-        let found = self.with_core(|nav, caches| Planner::new(nav, facts, caches).plan(&query, world(&states0)));
+        // (first with only the lines the relaxed plan needs, to see if there's any way at all:
+        // none, every way with those tried, then with them all as far as the search went before
+        // routes needed more. Not every set of every switch in the level first, to find there's
+        // no way: MAP15's dozen, 12,000 steps and half a minute after a death, the wall's way
+        // there needing a block at the height its only switch takes it down from. A way with
+        // those: the route as ever, from them all; the few lines' route can be another, worse:
+        // E1M5's, MAP14's)
+        let narrow = self.with_core(|nav, caches| Planner::new(nav, facts, caches).plan(&query, world(&states0)));
+        let none = narrow.is_none() && crate::stats::last_ended() == Some(crate::stats::Ended::Exhausted);
+        // (a tenth of the budget, which comes down as searches use theirs up: the explorer's)
+        let max_expansions = if none { (q.max_expansions / 10).min(WIDER_EXPANSIONS) } else { q.max_expansions };
+        let wider = Query { useful_lines: None, max_expansions, ..query };
+        let found = self.with_core(|nav, caches| Planner::new(nav, facts, caches).plan(&wider, world(&states0)));
         if crate::stats::enabled() {
             eprintln!("{}", crate::stats::report(t0.elapsed().as_secs_f64()));
         }

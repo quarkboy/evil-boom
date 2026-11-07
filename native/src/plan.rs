@@ -69,6 +69,9 @@ pub struct Query {
     /// lines (None: line-less triggers) and keys the relaxed plan needs
     pub relevant_lines: HashSet<Option<usize>>,
     pub relevant_keys: KeySet,
+    /// the lines (None: line-less triggers) whose triggers can bear on getting to the goals: the
+    /// rest aren't tried (None: all are)
+    pub useful_lines: Option<HashSet<Option<usize>>>,
     /// no routes where the box gets squeezed
     pub strict_fit: bool,
     /// one-shot cumulative lines already used
@@ -267,7 +270,9 @@ impl<'a> Planner<'a> {
             heap.push(Reverse((priority, nodes.len())));
             nodes.push(Some(node));
         };
-        let actions: Vec<usize> = (0..triggers.len()).filter(|&i| triggers[i].kind != Kind::DoorRepeat && !triggers[i].effects.is_empty()).collect();
+        let actions: Vec<usize> = (0..triggers.len())
+            .filter(|&i| triggers[i].kind != Kind::DoorRepeat && !triggers[i].effects.is_empty() && q.useful_lines.as_ref().is_none_or(|u| u.contains(&triggers[i].line)))
+            .collect();
         // (only used stair switches tell worlds apart)
         let stair_lines: HashSet<usize> = actions.iter().filter(|&&i| triggers[i].shift_from.is_some()).filter_map(|&i| triggers[i].line).collect();
         let reach = self.reach_from(start_poly, &states, q.keys);

@@ -404,9 +404,10 @@ fn where_(s: &mut Setup) {
     let poly = s.nav.poly_at(obs.pos());
     let tally = s.e.tally();
     println!(
-        "  tic {} ({:.1}s) at ({:.0}, {:.0}) z {:.0} facing {:.0}, poly {}, sector {}; keys {:?}; items {}/{}, secrets {}/{}",
+        "  tic {} ({:.1}s) health {:.0} at ({:.0}, {:.0}) z {:.0} facing {:.0}, poly {}, sector {}; keys {:?}; items {}/{}, secrets {}/{}",
         obs.tic,
         obs.tic as f64 / TICRATE,
+        obs.health.unwrap_or(0.0),
         obs.x,
         obs.y,
         obs.z.unwrap_or(0.0),
