@@ -1727,6 +1727,32 @@ impl RouteFollower {
         false
     }
 
+    /// Would a wall stop a press from `pos` at `target` (the use trace ends at a one-sided line or
+    /// a shut opening, P_UseLines)? Not the line being pressed.
+    fn use_walled(&self, pos: Point, target: Point) -> bool {
+        let nav = &self.view.nav;
+        let mut seen: BTreeSet<usize> = BTreeSet::new();
+        for cell in cells(pos.0, pos.1, target.0, target.1) {
+            for &li in nav.mesh.line_grid.get(&cell).into_iter().flatten() {
+                if !seen.insert(li) {
+                    continue;
+                }
+                let (a, b) = nav.map.line_seg(li);
+                if dist(closest_point(target, a, b), target) < 1.0 || !segments_cross(pos, target, a, b) {
+                    continue;
+                }
+                let open = match nav.map.sides(li) {
+                    (Some(f), Some(bk)) => self.live.get(f).zip(self.live.get(bk)).is_none_or(|(hf, hb)| hf.ceiling.min(hb.ceiling) > hf.floor.max(hb.floor)),
+                    _ => false,
+                };
+                if !open {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// The nearest point (a little in from its ends) on a use line that opens this door.
     fn door_line_point(&self, sector: usize, pos: Point) -> Option<Point> {
         let nav = &self.view.nav;
@@ -1804,9 +1830,10 @@ impl RouteFollower {
                 return None;
             }
             let mut standoff = DOOR_STANDOFF;
-            if self.use_intercepted(pos, door_point) {
-                // another switch line between her and the door would take the press (E3M9): go
-                // right up to the door
+            if self.use_intercepted(pos, door_point) || self.use_walled(pos, door_point) {
+                // another switch line between her and the door would take the press (E3M9), or a
+                // wall stop it (E3M4's exit door, set back in its frame, pressed from off to the
+                // side across the frame's corner): go right up to the door
                 standoff = PLAYER_RADIUS + 2.0;
             }
             if d > standoff + 4.0 {
