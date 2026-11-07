@@ -59,7 +59,9 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
             }
             "warp" => {
                 let angle = num(3).unwrap_or(s.obs().angle);
-                s.e.game.warp(num(1)?, num(2)?, angle);
+                if !s.e.game.warp(num(1)?, num(2)?, angle) {
+                    println!("  the game wouldn't put her there (blocked)");
+                }
                 tick(&mut s, Controls::default());
             }
             "face" => {

@@ -6,7 +6,8 @@
 //!   evil dump-nav <wad> <map>                   the level's analysis (for comparing)
 //!   evil follow <wad> <map>                     plan the level, follow the plan (seed 0)
 //!   evil drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
-//!   evil sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things
+//!   evil sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things,
+//!                                               the run-jumps landing there (and their check)
 //!   evil watch <wad> <map> [--speed X] [--all] [run options]
 //!       watch her play, with what she knows beside the game (space pause, +/- speed, A the
 //!       whole map, F follow, wheel zoom, Esc quit)
@@ -19,7 +20,7 @@
 //! which every run-map writes (_expert etc. by the kind of run), to S game seconds, then the bot as it is now: the run from there
 //! goes to <IWAD>_<MAP>_branch.run).
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::rc::Rc;
@@ -103,6 +104,19 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
         }
         for t in m.things.iter().filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| nav.mesh.polys[p].as_ref().is_some_and(|q| q.sector == si))) {
             println!("  thing {} at ({}, {}) flags {:#x}", t.kind, t.x, t.y, t.flags);
+        }
+        // (the navmesh's portals along its lines: where the mesh cuts an edge)
+        for (pi, portal) in nav.mesh.portals.iter().enumerate() {
+            if portal.linedef.is_some_and(|li| m.front_sector(&m.linedefs[li]) == Some(si) || m.back_sector(&m.linedefs[li]) == Some(si)) {
+                println!("  portal {pi} on line {:?}: ({:.0},{:.0})-({:.0},{:.0})", portal.linedef, portal.p1.0, portal.p1.1, portal.p2.0, portal.p2.1);
+            }
+        }
+        // (the run-jumps found landing here, and what the movement check makes of them)
+        let into: Vec<&evildoom::navigator::Jump> = nav.jumps.iter().filter(|j| nav.mesh.polys[j.dest_poly].as_ref().is_some_and(|q| q.sector == si)).collect();
+        let lab: Vec<evildoom::jumps::Jump> = into.iter().map(|j| evildoom::jumps::Jump { src_polys: j.src_polys.iter().copied().collect(), dest_poly: j.dest_poly, dest: j.dest, runup: j.runup, takeoff: j.takeoff, speed: 0.0, requires: j.requires.clone() }).collect();
+        for (j, verdict) in into.iter().zip(nav.jump_lab.check_jumps(&lab)) {
+            let from: BTreeSet<usize> = j.src_polys.iter().filter_map(|&p| nav.mesh.polys[p].as_ref().map(|q| q.sector)).collect();
+            println!("  jump in from sectors {from:?}: run-up ({:.0}, {:.0}), takeoff ({:.0}, {:.0}), lands ({:.0}, {:.0}): {verdict}", j.runup.0, j.runup.1, j.takeoff.0, j.takeoff.1, j.dest.0, j.dest.1);
         }
     }
     Ok(())

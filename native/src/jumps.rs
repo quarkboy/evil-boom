@@ -52,7 +52,7 @@ pub struct RunStart {
 }
 
 /// Bumped whenever the finder's results could change (it keys Python's jump cache).
-pub const FINDER_VERSION: u32 = 3;
+pub const FINDER_VERSION: u32 = 4;
 
 /// The map as the jump tools need it.
 pub struct JumpLab {

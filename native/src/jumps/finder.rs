@@ -344,8 +344,12 @@ impl JumpLab {
                     return None;
                 }
             }
+            let mut nn = nn;
             if self.box_hits_static_wall(nn) {
-                return None;
+                // (something solid in the way, a barrel on the island: the run's over and she
+                // comes down where she is, a landing if that's on it: MAP25's stepping stones)
+                v = 0.0;
+                nn = (x, y);
             }
             let mut under: Vec<(usize, Heights)> = Vec::new();
             for &(dx, dy) in &all {
