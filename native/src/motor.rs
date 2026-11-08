@@ -91,6 +91,10 @@ pub struct Observation {
     pub armor: Option<f64>,
     /// has the super shotgun (slot 3 then brings it up)
     pub super_shotgun: Option<bool>,
+    /// has the chainsaw (slot 1 then brings it up, unless she's berserk)
+    pub chainsaw: Option<bool>,
+    /// berserk (till the level's end: the fist's punch ten times as hard)
+    pub berserk: Option<bool>,
     /// her (x, y) a tic
     pub velocity: Option<Point>,
     /// has the computer area map

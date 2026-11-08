@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use super::bestiary::{ammo_item, armor_item, health_item, monster, weapon_in, weapon_item, Attack, SUPER_SHOTGUN};
+use super::bestiary::{ammo_item, armor_item, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
 use super::combat::{segment_point_distance, spread, Combat, Seen, LEAVE_BE};
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
@@ -715,6 +715,9 @@ impl Fight {
         if name == "SuperShotgun" {
             return obs.super_shotgun != Some(true);
         }
+        if name == "Chainsaw" {
+            return obs.chainsaw != Some(true);
+        }
         let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
         weapon_item(name).is_some_and(|s| !held.contains(&s))
     }
@@ -722,8 +725,10 @@ impl Fight {
     fn gun(obs: &Observation, name: &str) -> super::bestiary::Weapon {
         if name == "SuperShotgun" {
             SUPER_SHOTGUN
+        } else if name == "Chainsaw" {
+            CHAINSAW
         } else {
-            weapon_in(weapon_item(name).unwrap_or(2), obs.super_shotgun)
+            weapon_in(weapon_item(name).unwrap_or(2), obs)
         }
     }
 

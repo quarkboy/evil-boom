@@ -158,7 +158,7 @@ impl Weapon {
 pub fn weapon(slot: i32) -> Weapon {
     let w = Weapon::new;
     match slot {
-        1 => Weapon { reach: 80.0, keep: (0.0, 64.0), ..w(1, 0, 11.0, 22.0) },
+        1 => weapon_const(1),
         2 => Weapon { spread: 5.6, reach: 800.0, keep: (192.0, 640.0), ..w(2, 1, 10.0, 14.0) },
         3 => Weapon { spread: 5.6, reach: 640.0, keep: (128.0, 448.0), pellets: 7.0, ..w(3, 1, 70.0, 37.0) },
         4 => Weapon { spread: 5.6, reach: 1100.0, keep: (192.0, 768.0), ..w(4, 1, 10.0, 4.0) },
@@ -170,12 +170,51 @@ pub fn weapon(slot: i32) -> Weapon {
 
 pub const SUPER_SHOTGUN: Weapon = Weapon { spread: 11.2, reach: 480.0, keep: (96.0, 320.0), pellets: 20.0, ..Weapon::new(3, 2, 200.0, 57.0) };
 
-/// What a slot brings up (slot 3: the super shotgun, once she has it).
-pub fn weapon_in(slot: i32, super_shotgun: Option<bool>) -> Weapon {
-    if slot == 3 && super_shotgun == Some(true) {
-        SUPER_SHOTGUN
-    } else {
-        weapon(slot)
+/// The fist berserk: A_Punch's 2-20 times ten.
+pub const BERSERK_FIST: Weapon = Weapon { damage: 110.0, ..weapon_const(1) };
+
+/// The chainsaw: A_Saw's 2-20 (berserk or not) a 4-tic frame, the trigger held.
+pub const CHAINSAW: Weapon = Weapon { cycle: 4.0, ..weapon_const(1) };
+
+/// (the fist, as a constant to build the others on)
+const fn weapon_const(slot: i32) -> Weapon {
+    Weapon { reach: 80.0, keep: (0.0, 64.0), ..Weapon::new(slot, 0, 11.0, 22.0) }
+}
+
+/// The most health a monster may have for her to go at it with her fists, berserk. A punch is
+/// 110 on average; what she'd take meanwhile is about the punches it needs, by the chance it
+/// isn't left flinching by each, by its swipe: an imp or a demon next to nothing, a revenant or a
+/// cacodemon some 55-60 (3-4 punches, half or more flinching, 6-60 a swipe), a hell knight 160
+/// and a baron 330 (5 and 9 punches, a flinch one in five, 10-80 a swipe); the mancubus,
+/// arachnotron and arch-vile, 500 and more, fire at any distance.
+const PUNCH_HEALTH: i32 = 400;
+
+/// Would she go at it with her fists, berserk?
+pub fn punchable(name: &str) -> bool {
+    monster(name).is_some_and(|m| !m.boss && m.health <= PUNCH_HEALTH)
+}
+
+/// The most health a monster may have for her to go at it with the chainsaw. A hit every 4 tics,
+/// 11 on average, each a roll of its pain chance: a demon (150, 180/256) takes some 14, and to
+/// bite needs two in a row it doesn't flinch at (one pair in eleven); a cacodemon (400, 128/256)
+/// takes 36, and gets its bites in.
+const SAW_HEALTH: i32 = 150;
+
+/// Is w a melee weapon she'd go up to t with (closing in, not keeping her distance): the fist
+/// berserk at what it'd punch, the chainsaw at what it'd keep flinching?
+pub fn melee_at(w: &Weapon, name: &str) -> bool {
+    (*w == BERSERK_FIST && punchable(name)) || (*w == CHAINSAW && monster(name).is_some_and(|m| !m.boss && m.health <= SAW_HEALTH))
+}
+
+/// What a slot brings up, as the game picks it for her (dsda/evil_api.c): slot 3 the super
+/// shotgun once she has it; slot 1 the fist while she's berserk, else the chainsaw once she has
+/// it.
+pub fn weapon_in(slot: i32, obs: &crate::motor::Observation) -> Weapon {
+    match slot {
+        3 if obs.super_shotgun == Some(true) => SUPER_SHOTGUN,
+        1 if obs.berserk == Some(true) => BERSERK_FIST,
+        1 if obs.chainsaw == Some(true) => CHAINSAW,
+        _ => weapon(slot),
     }
 }
 

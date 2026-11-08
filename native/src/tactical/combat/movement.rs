@@ -141,7 +141,7 @@ impl Combat {
     }
 
     pub(super) fn gun(&self, obs: &Observation) -> Weapon {
-        weapon_in(obs.weapon.filter(|w| (1..=7).contains(w)).unwrap_or(2), obs.super_shotgun)
+        weapon_in(obs.weapon.filter(|w| (1..=7).contains(w)).unwrap_or(2), obs)
     }
 
     /// Away from t, aslant (the strafe's way and back), as far as it's safe.

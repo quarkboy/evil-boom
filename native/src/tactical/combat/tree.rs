@@ -8,6 +8,8 @@
 //!    ├─ survive        out of a vile's sight · dodging · out from under a crusher ·
 //!    │                 away from a barrel
 //!    ├─ busy           (a jump: the route keeps the legs) shooting on the way
+//!    ├─ melee          (the weapon she'd fight it with, up close: `Style::Melee`) closing in
+//!    │                 · at it
 //!    └─ fight          backing off from what claws · shooting on the way to an errand ·
 //!                      out of ammo: getting past · sneaking past · closing in (out of reach) ·
 //!                      out of reach: going on · stepping for a shot · outmatched: keeping
@@ -20,7 +22,7 @@
 //! did. The aim and the trigger are sized up before the tree (`Situation`): a node only
 //! overrides them.
 
-use super::style::window;
+use super::style::{window, Style};
 use super::{mon, Combat, Decision, KEEP_CLEAR, LOW_HEALTH, STAND_THREAT};
 use crate::geom::{dist, Point};
 use crate::motor::{heading, Observation, Thing};
@@ -71,6 +73,8 @@ type Node = fn(&mut Combat, &Observation, &Situation) -> Option<Act>;
 const SURVIVE: [Node; 4] = [out_of_vile_sight, dodging, off_crusher, off_barrel];
 /// In a jump, the route has the legs.
 const BUSY: [Node; 1] = [busy];
+/// The weapon she'd fight her target with fought up close.
+const MELEE: [Node; 1] = [melee];
 /// The fight itself.
 const FIGHT: [Node; 12] = [
     backing_off,
@@ -89,7 +93,7 @@ const FIGHT: [Node; 12] = [
 
 /// What she does, a target or a missile about: the first node that applies.
 pub(super) fn engage(c: &mut Combat, obs: &Observation, s: &Situation) -> Act {
-    SURVIVE.iter().chain(&BUSY).chain(&FIGHT).find_map(|node| node(c, obs, s)).unwrap_or_else(|| Act::new(None, "shooting on the way".into()))
+    SURVIVE.iter().chain(&BUSY).chain(&MELEE).chain(&FIGHT).find_map(|node| node(c, obs, s)).unwrap_or_else(|| Act::new(None, "shooting on the way".into()))
 }
 
 // --- survive -----------------------------------------------------------------------------------
@@ -129,6 +133,29 @@ fn off_barrel(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act>
 
 fn busy(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
     s.busy.then(|| Act::new(None, "shooting on the way".into()))
+}
+
+// --- up close ----------------------------------------------------------------------------------
+
+/// punching or sawing: this much inside the weapon's reach (its centre's, by her target's
+/// radius) she stops closing in (it steps about; the punch reaches 64 past her front)
+const MELEE_SLACK: f64 = 24.0;
+
+/// Straight at it, then standing at it hitting. The steering's pull to the gun's window, fine
+/// for a gun's 500 units, left her circling a revenant 100-200 off, never in the fist's reach,
+/// and holding the saw at a demon 99 off as it bit her (E3M4).
+fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    let t = s.target.as_ref()?;
+    let w = c.preferred_gun(obs, t);
+    if Style::of(&w, t) != Style::Melee {
+        return None;
+    }
+    let d = dist((t.x, t.y), s.pos);
+    Some(if d > w.reach + mon(t.name).radius - MELEE_SLACK {
+        Act::new(c.closing_in(obs, t, None), format!("closing in on {} (melee)", t.name))
+    } else {
+        Act::new(None, format!("at {} (melee)", t.name))
+    })
 }
 
 // --- the fight ---------------------------------------------------------------------------------

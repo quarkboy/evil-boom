@@ -52,6 +52,9 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   `evil-boom episode doom2 MAP01 --fight 2 --mortal --seeds 16`; for combat changes also
   `evil-boom arena arenas/combat.txt --seeds 8` and `arenas/doom2.txt`. Compare with the numbers
   in the last commits' messages; within a few tenths of a level is seed noise.
+- **Parity checks** (a refactor meant to change nothing): one run of one episode's levels
+  (e.g. `episode doom E1M1 --seeds 1` with the regression flags) compared line for line with
+  the old build's; runs are deterministic, so that's enough. Not the whole suite (the user's).
 - Sweeps (when asked): 12 parallel jobs (`--jobs 12` on this laptop; episodes and arenas too);
   one sweep type at a time, expert first; the next only
   with no per-level regressions so far.

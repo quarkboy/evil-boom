@@ -71,6 +71,8 @@ pub struct PlayerState {
     /// 0 none, 1 green, 2 blue
     pub armortype: c_int,
     pub backpack: c_int,
+    /// berserk this level
+    pub strength: c_int,
 }
 
 /// Where the game is (`evil_status`).

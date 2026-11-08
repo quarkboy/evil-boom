@@ -70,7 +70,7 @@ const STAND_THREAT: f64 = 6.0;
 /// be
 pub const LEAVE_BE: f64 = 15.0;
 /// ...or below this health, anything in sight
-const LOW_HEALTH: f64 = 35.0;
+pub(super) const LOW_HEALTH: f64 = 35.0;
 /// with something shooting in sight, keep this far from barrels
 const BARREL_CLEAR: f64 = 160.0;
 
@@ -417,8 +417,8 @@ impl Combat {
     /// about too that she'd be outmatched once they're awake: what it'd wake (else "").
     fn would_wake(&mut self, obs: &Observation, t: &Thing) -> String {
         let Some(s) = self.known.get(&t.id) else { return String::new() };
-        if s.awake || self.gun(obs).slot == 1 {
-            return String::new(); // (the fist makes no noise)
+        if s.awake {
+            return String::new(); // (the fist too wakes what hears it: P_FireWeapon's noise alert, no weapon WPF_SILENT)
         }
         if self.against_her().iter().any(|o| self.known.get(&o.id).is_some_and(|k| k.awake)) {
             return String::new(); // (already in a fight)
@@ -481,7 +481,7 @@ impl Combat {
                     aim = Some(a);
                     let floor = self.floor_at(obs, shot);
                     fire = norm(a - obs.angle).abs() < 0.75f64.max(8.0f64.atan2(d).to_degrees())
-                        && d < weapon_in(obs.weapon.unwrap_or(2), obs.super_shotgun).reach
+                        && d < weapon_in(obs.weapon.unwrap_or(2), obs).reach
                         && self.shot_clear(obs, shot, floor, 32.0);
                 }
             }

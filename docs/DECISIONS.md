@@ -743,3 +743,35 @@ tree for the fight rather than one long chain of cases. Restructured with no cha
 - **Retreats** (`player.rs`): an explicit state, `Retreat { kind, route }`, kinds cover / for
   ammo / back / out / bait, started by `start_retreat` (the first rule that holds, in that order)
   and ended by `retreat_over` (each kind its own).
+
+## Up close: berserk and the chainsaw (2026-11-08)
+
+Berserk wasn't observed: the fist was judged at 11 a punch whatever, and with nothing to shoot
+she went off for ammo even berserk. The chainsaw was never used at all: Evil sends weapon numbers
+straight in the tic command, so slot 1 always brought up the fist.
+
+- **What the game does** (DSDA source): A_Punch is (P_Random%10+1)*2, ten times with pw_strength
+  (20-200, 110 on average), a punch every 22 tics held; picking berserk up gives 100 health and
+  the fist. A_Saw is the same 2-20 (berserk or not) every 4 tics held. Every weapon but none
+  flagged WPF_SILENT alerts monsters when fired (P_FireWeapon): the fist too, so `would_wake`'s
+  "the fist makes no noise" was wrong and is gone. Slot 1, as G_BuildTiccmd has it: the chainsaw
+  once owned, but the fist while berserk.
+- **Engine**: `evil_player.strength`; slot 1 brings up the chainsaw once she has it, unless
+  berserk (as slot 3 the super shotgun).
+- **Which weapon** (arsenal, bestiary): slot 1 is the berserk fist (110 a punch) while berserk,
+  else the chainsaw (11 every 4 tics) once she has it, else the fist. Not the saw at what it won't
+  keep flinching, nor the saw or the berserk fist at anything below 35 health, with a gun to hand
+  (E3M4: at 14 health, up to a demon with the saw). Firepower counts slot 1 as the plain fist; the
+  berserk fist counts against what it'd punch (`too_much`), and makes her armed against nothing
+  but such (no retreat for ammo from them).
+- **How to fight with it** (`Style::Melee`): the berserk fist at a monster of 400 health or less
+  (what she'd take meanwhile is about punches x the chance it isn't flinching x its swipe: a
+  revenant or cacodemon ~55-60, a hell knight 160, a baron 330), the chainsaw at 150 or less
+  (a demon needs two unflinched saw hits in a row to bite, a pair in eleven). The tree's melee
+  node: straight at it (the steering's pull to a gun's window left her circling a revenant
+  100-200 off), then standing at it hitting; the weapon brought up at once, not whatever's best
+  from where she stands while closing in (E3M4: rockets up at a demon 299 off, the fist at 46).
+- **Arena** `arenas/berserk.txt` (the user's): the fist, a berserk pack, no ammo, 1-4 revenants
+  in MAP32's hall. Before: 7/8, 3/8, 1/8, 0/8 (11/32); now 8/8 (15 s a win), 3/8, 3/8, 0/8
+  (14/32). Two or more still lose: the run in across the open floor into their tracers, and the
+  second punching her while she punches the first (cover on the way in, one at a time: later).

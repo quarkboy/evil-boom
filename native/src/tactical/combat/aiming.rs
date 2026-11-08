@@ -1,6 +1,7 @@
 //! Target selection, aiming and the trigger, line of fire and blast safety (the weapon choice:
 //! `arsenal`).
 
+use super::style::Style;
 use super::{mon, segment_point_distance, Combat, BARREL_CLEAR};
 use crate::geom::{dist, Point};
 use crate::los::Body;
@@ -80,7 +81,11 @@ impl Combat {
     pub(super) fn aim_and_fire(&mut self, obs: &Observation, t: &Thing) -> (f64, bool, i32) {
         let pos = obs.pos();
         let d = dist((t.x, t.y), pos);
-        let slot = self.weapon_for(obs, t, d);
+        // (fought up close, the weapon for it from the start, not whatever's best from here
+        // while she closes in: E3M4, at a demon 299 off with the rocket launcher up, the fist
+        // brought up 46 off)
+        let preferred = self.preferred_gun(obs, t);
+        let slot = if Style::of(&preferred, t) == Style::Melee { preferred.slot } else { self.weapon_for(obs, t, d) };
         let mut weapon = 0;
         let held = obs.weapon.unwrap_or(2);
         if slot != held && obs.tic - self.switch_tic > SWITCH_WAIT {
@@ -88,7 +93,7 @@ impl Combat {
             self.switch_tic = obs.tic;
             self.log.push(format!("tic {}: switching to {slot} (holding {held}) for {} {d:.0} off", obs.tic, t.name));
         }
-        let w = weapon_in(if (1..=7).contains(&held) { held } else { 2 }, obs.super_shotgun);
+        let w = weapon_in(if (1..=7).contains(&held) { held } else { 2 }, obs);
         // lead a moving target with a missile weapon
         let (mut ax, mut ay) = (t.x, t.y);
         if !w.hitscan && w.speed > 0.0 {

@@ -274,6 +274,8 @@ impl Engine {
             ammo: Some(vec![(1, 0), (2, clip), (3, shell), (4, clip), (5, rocket), (6, cell), (7, cell)]),
             armor: Some(f64::from(p.armor)),
             super_shotgun: Some(p.weaponowned[8] != 0),
+            chainsaw: Some(p.weaponowned[7] != 0),
+            berserk: Some(p.strength != 0),
             velocity: Some((p.momx, p.momy)),
             allmap: Some(p.allmap != 0),
             message,

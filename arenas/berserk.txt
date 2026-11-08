@@ -1,0 +1,44 @@
+# Berserk fights (evil-boom arena arenas/berserk.txt): the fist, a berserk pack where she starts
+# (her first step takes it), no ammo; revenants across the hall.
+#
+# MAP32's hall (floor 0, ceiling 256, x -500..1400, y 3450..6000; six pillars down its sides at
+# x -256..0 and 896..1152): she starts at (448, 3900) facing north, the revenants across it
+# (y 5450..5600).
+
+arena berserk-revenant-1
+map doom2 MAP32
+at 448 3900 90
+give clip=0
+spawn Berserk 448 3900 0
+spawn Revenant 448 5550 270
+seconds 120
+
+arena berserk-revenant-2
+map doom2 MAP32
+at 448 3900 90
+give clip=0
+spawn Berserk 448 3900 0
+spawn Revenant 288 5550 270
+spawn Revenant 608 5550 270
+seconds 120
+
+arena berserk-revenant-3
+map doom2 MAP32
+at 448 3900 90
+give clip=0
+spawn Berserk 448 3900 0
+spawn Revenant 188 5550 270
+spawn Revenant 448 5580 270
+spawn Revenant 708 5550 270
+seconds 150
+
+arena berserk-revenant-4
+map doom2 MAP32
+at 448 3900 90
+give clip=0
+spawn Berserk 448 3900 0
+spawn Revenant 88 5550 270
+spawn Revenant 328 5580 270
+spawn Revenant 568 5580 270
+spawn Revenant 808 5550 270
+seconds 180

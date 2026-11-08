@@ -4,10 +4,10 @@
 
 use super::style::window;
 use super::aiming::SWITCH_WAIT;
-use super::{mon, Combat, SLOTS};
+use super::{mon, Combat, LOW_HEALTH, SLOTS};
 use crate::geom::dist;
 use crate::motor::{Observation, Thing, TICRATE};
-use crate::tactical::bestiary::{weapon_in, Attack, Weapon};
+use crate::tactical::bestiary::{melee_at, punchable, weapon, weapon_in, Attack, Weapon, CHAINSAW};
 
 /// ...unless killing what's in sight would take longer than this (s), or more ammo than she
 /// has: then get past it
@@ -64,13 +64,15 @@ impl Combat {
         obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n)
     }
 
-    /// Damage a second she can do with the best gun she has ammo for (the fist's, else).
+    /// Damage a second she can do with the best gun she has ammo for (the fist's, else: as a
+    /// plain fist, berserk or not, the chainsaw or not; the berserk fist counts against what it'd
+    /// punch, `too_much`).
     pub fn firepower(&self, obs: &Observation) -> f64 {
         let held = Self::held(obs);
         SLOTS
             .iter()
             .filter(|s| held.contains(s))
-            .map(|&s| weapon_in(s, obs.super_shotgun))
+            .map(|&s| if s == 1 { weapon(1) } else { weapon_in(s, obs) })
             .filter(|w| w.ammo_per_shot == 0 || Self::ammo(obs, w.slot) >= w.ammo_per_shot)
             .map(|w| w.dps())
             .fold(f64::NEG_INFINITY, f64::max)
@@ -86,6 +88,10 @@ impl Combat {
     /// Would these take her longer than `secs` to kill, or more than her ammo's worth?
     pub fn too_much(&self, obs: &Observation, names: &[&str], secs: f64) -> bool {
         let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
+        // (berserk, against nothing but what she'd punch: the fist, ammo or none)
+        if Self::fists_for(obs, names) {
+            return hp / self.firepower(obs).max(weapon_in(1, obs).dps()) > secs;
+        }
         if hp / self.firepower(obs) > secs {
             return true;
         }
@@ -99,14 +105,14 @@ impl Combat {
                 .iter()
                 .filter(|s| held.contains(s))
                 .map(|&s| {
-                    let w = weapon_in(s, obs.super_shotgun);
+                    let w = weapon_in(s, obs);
                     let per = if boss && s == 5 { w.damage / 2.0 } else { w.damage };
                     f64::from(Self::ammo(obs, s) / w.ammo_per_shot.max(1)) * per * w.hits(radius, 384.0)
                 })
                 .fold(0.0, f64::max);
             worth += best;
         }
-        let melee = held.contains(&1) && self.firepower(obs) == weapon_in(1, None).dps();
+        let melee = held.contains(&1) && self.firepower(obs) == weapon(1).dps();
         !melee && worth * AMMO_LANDS < SHORT_BY * hp
     }
 
@@ -115,15 +121,26 @@ impl Combat {
         let held = Self::held(obs);
         let d = dist((t.x, t.y), obs.pos());
         SLOTS.iter().any(|&s| {
-            let w = weapon_in(s, obs.super_shotgun);
+            let w = weapon_in(s, obs);
             held.contains(&s) && Self::ammo(obs, s) >= w.ammo_per_shot && Self::in_reach(&w, t, d)
         })
     }
 
-    /// Has she a gun with ammo for it (more than the fist)?
+    /// Has she a gun with ammo for it (more than the fist), or her fists berserk with nothing
+    /// after her she wouldn't punch?
     pub fn armed(&self, obs: &Observation) -> bool {
+        self.guns_armed(obs) || Self::fists_for(obs, &self.against_her().iter().map(|t| t.name).collect::<Vec<_>>())
+    }
+
+    /// Has she a gun with ammo for it (more than slot 1's)?
+    pub(super) fn guns_armed(&self, obs: &Observation) -> bool {
         let held = Self::held(obs);
-        SLOTS.iter().any(|&s| s != 1 && held.contains(&s) && Self::ammo(obs, s) >= weapon_in(s, obs.super_shotgun).ammo_per_shot)
+        SLOTS.iter().any(|&s| s != 1 && held.contains(&s) && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot)
+    }
+
+    /// Berserk, and these all things she'd punch?
+    fn fists_for(obs: &Observation, names: &[&str]) -> bool {
+        obs.berserk == Some(true) && Self::held(obs).contains(&1) && names.iter().all(|n| punchable(n))
     }
 
     /// Next to nothing left to shoot with (the fist doesn't count).
@@ -156,7 +173,7 @@ impl Combat {
     pub fn ready_gun(&self, obs: &Observation) -> Option<i32> {
         let held = Self::held(obs);
         let want = [(3, 4), (4, 20), (6, 40), (2, 1)].into_iter().find(|&(slot, shots)| {
-            let w = weapon_in(slot, obs.super_shotgun);
+            let w = weapon_in(slot, obs);
             held.contains(&slot) && Self::ammo(obs, slot) >= w.ammo_per_shot * shots
         })?;
         (obs.weapon != Some(want.0) && obs.tic - self.switch_tic > SWITCH_WAIT).then_some(want.0)
@@ -171,7 +188,7 @@ impl Combat {
             let (near, far) = window(w, t);
             d.clamp(near, far)
         });
-        weapon_in(slot, obs.super_shotgun)
+        weapon_in(slot, obs)
     }
 
     /// The gun that'd see t off soonest, each judged at the distance `at` gives for it (and the
@@ -186,7 +203,7 @@ impl Combat {
             if !held.contains(&slot) {
                 continue;
             }
-            let w = weapon_in(slot, obs.super_shotgun);
+            let w = weapon_in(slot, obs);
             let have = Self::ammo(obs, slot);
             if (w.ammo_per_shot > 0 && have < w.ammo_per_shot) || (slot == 5 && !self.rocket_safe(obs, t)) {
                 continue;
@@ -194,6 +211,12 @@ impl Combat {
             let d = at(&w);
             if slot == 1 && !Self::in_reach(&w, t, d) {
                 continue; // (not the fist for being free when nothing reaches: as Astra's branch has it)
+            }
+            if slot == 1 && ((w == CHAINSAW && !melee_at(&w, t.name)) || (obs.health.unwrap_or(100.0) < LOW_HEALTH && w != weapon(1))) && self.guns_armed(obs) {
+                // (not the saw at what it won't keep flinching, with a gun to hand: a cacodemon's
+                // bites, a baron's claws come through it; nor the saw or the berserk fist at
+                // anything, hurt: E3M4, at 14 health, up to a demon with the saw, one bite)
+                continue;
             }
             let mut c = self.time_to_kill(&w, t, d) + (d - here).abs() / GET_THERE;
             if w.ammo_per_shot > 0 {

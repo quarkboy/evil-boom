@@ -86,6 +86,7 @@ typedef struct {
   char message[96];    /* ...and what it said */
   int armortype;       /* 0 none, 1 green, 2 blue */
   int backpack;
+  int strength;        /* berserk this level (pw_strength: a punch does ten times the damage) */
 } evil_player;
 
 extern int evil_fixed_seed;      /* (SDL/i_system.c, patched) */
@@ -251,6 +252,11 @@ EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
       ((buttons & BT_WEAPONMASK) >> BT_WEAPONSHIFT) == wp_shotgun &&
       players[consoleplayer].weaponowned[wp_supershotgun])
     buttons = (buttons & ~BT_WEAPONMASK) | (wp_supershotgun << BT_WEAPONSHIFT);
+  /* (slot 1 likewise: the chainsaw once she has it, but the fist while she's berserk, a punch
+   * then outdoing the saw; without, a slot-1 press always brought up the fist) */
+  if ((buttons & BT_CHANGE) && ((buttons & BT_WEAPONMASK) >> BT_WEAPONSHIFT) == wp_fist &&
+      players[consoleplayer].weaponowned[wp_chainsaw] && !players[consoleplayer].powers[pw_strength])
+    buttons = (buttons & ~BT_WEAPONMASK) | (wp_chainsaw << BT_WEAPONSHIFT);
   cmd->buttons = (byte)buttons;
   M_Ticker();
   G_Ticker();
@@ -416,6 +422,7 @@ EVIL_API void evil_player_state(evil_player *out)
   out->message_tic = evil_message_tic;
   out->armortype = p->armortype;
   out->backpack = p->backpack ? 1 : 0;
+  out->strength = p->powers[pw_strength] != 0;
   if (evil_message)
     snprintf(out->message, sizeof out->message, "%s", evil_message);
   if (p->mo)
