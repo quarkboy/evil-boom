@@ -71,7 +71,7 @@ impl Agent {
         match self {
             Agent::Plain(x) => x.ranked(obs, risky, &mut NoHooks),
             Agent::Expert(x, c) => x.ranked(obs, risky, c),
-            Agent::Fight(p) => p.explorer.ranked(obs, risky, &mut NoHooks),
+            Agent::Fight(p) => p.ranked(obs, risky),
         }
     }
 

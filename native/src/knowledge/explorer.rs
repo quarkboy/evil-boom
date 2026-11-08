@@ -254,11 +254,27 @@ impl Spots {
     }
 }
 
+/// How an objective she was given ended (directed play: reported to whoever gave it).
+#[derive(Clone, Debug)]
+pub struct Ended {
+    pub label: String,
+    /// done (got there, did it, or it came to nothing to do: seen on the way)
+    pub ok: bool,
+    pub why: String,
+}
+
 pub struct Explorer {
     pub nav: Rc<Navigator>,
     pub knowledge: Knowledge,
     pub current: Option<Objective>,
     pub follower: Option<RouteFollower>,
+    /// directed play: she doesn't choose objectives herself; she's given them (`take`), and when
+    /// one ends, how is kept in `ended` for whoever gave it, and she waits for the next
+    pub directed: bool,
+    /// (directed) the last objective's end, till it's taken
+    pub ended: Option<Ended>,
+    /// why the objective in hand ended, as `ends` or `drop_objective` had it
+    end_why: Option<(bool, String)>,
     pub log: Vec<String>,
     /// the routes planned so far, and the time they took (the live status: `EVIL_STATUS`)
     pub stats: RouteStats,
@@ -408,6 +424,9 @@ impl Explorer {
             knowledge,
             current: None,
             follower: None,
+            directed: false,
+            ended: None,
+            end_why: None,
             log: Vec::new(),
             stats: RouteStats::default(),
             no_route: BTreeMap::new(),
@@ -555,7 +574,16 @@ impl Explorer {
                 return look;
             }
         }
-        if self.need_new(obs, hooks) && (self.current.is_some() || self.follower.is_some() || obs.tic - self.idle_since >= IDLE_RETRY) {
+        if self.directed {
+            // (given objectives only: when the one in hand ends, how, and then nothing till the
+            // next is given; standing, looking round)
+            if (self.current.is_some() || self.follower.is_some()) && self.need_new(obs, hooks) {
+                self.note_end(obs);
+            }
+            if self.current.is_none() {
+                return turn_to(obs, None);
+            }
+        } else if self.need_new(obs, hooks) && (self.current.is_some() || self.follower.is_some() || obs.tic - self.idle_since >= IDLE_RETRY) {
             self.next(obs, hooks);
             if self.current.is_none() {
                 self.idle_since = obs.tic;
@@ -578,6 +606,24 @@ fn debug_tics() -> Option<(i64, i64)> {
     let v = std::env::var("EVIL_DEBUG_OBJECTIVES").ok()?;
     let (a, b) = v.split_once('-')?;
     Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+}
+
+impl Explorer {
+    /// (directed) The objective in hand is over: how, kept for whoever gave it; nothing in hand.
+    fn note_end(&mut self, obs: &Observation) {
+        let Some(obj) = self.current.take() else {
+            self.follower = None;
+            return;
+        };
+        let (ok, why) = match (&self.follower, self.end_why.take()) {
+            (_, Some(e)) => e,
+            (Some(f), None) if f.done && !f.failed => (true, "done".to_string()),
+            _ => (false, "stopped".to_string()),
+        };
+        self.log.push(format!("tic {}: '{}' over: {}", obs.tic, obj.label, why));
+        self.ended = Some(Ended { label: obj.label, ok, why });
+        self.follower = None;
+    }
 }
 
 /// Turn towards `bearing` (or all the way round, for None).

@@ -309,6 +309,11 @@ impl Player {
         &self.fight.combat
     }
 
+    /// Her options now, best first, the fight's own wants in (supplies, barrels).
+    pub fn ranked(&mut self, obs: &Observation, risky: bool) -> Vec<crate::knowledge::explorer::Objective> {
+        self.explorer.ranked(obs, risky, &mut self.fight)
+    }
+
     pub fn restart(&mut self) {
         // (dead with something on: noted, so as not to walk into it again the same way; MAP29's
         // green armor down in the nukage under fire, five lives running. A level again asked for

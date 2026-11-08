@@ -318,7 +318,9 @@ impl Explorer {
         if obj.kind == Kind::Teleporter && obj.trigger.as_ref().is_some_and(|t| usize::try_from(t.line).is_ok_and(|li| k.teleports.contains_key(&li))) {
             return self.ends(obs, "been through");
         }
-        if obj.kind != Kind::Exit && !committed && !self.exit_last && k.exits().len() > self.exits_seen {
+        // (given objectives aren't ended by her own wants: an exit seen, a noise, a gun spotted;
+        // whoever gave it hears of those)
+        if !self.directed && obj.kind != Kind::Exit && !committed && !self.exit_last && k.exits().len() > self.exits_seen {
             return self.ends(obs, "an exit came into view");
         }
         if hooks.gone(obs, &obj) {
@@ -329,10 +331,10 @@ impl Explorer {
         // (something just went off out of sight: go and look first; not half way through a run
         // of jumps: MAP08's)
         let jumping = committed;
-        if !(obj.kind == Kind::Noise && obj.urgent) && !jumping && heard.iter().any(|h| self.urgent(h, obs.tic) && self.worth_a_look(h)) {
+        if !self.directed && !(obj.kind == Kind::Noise && obj.urgent) && !jumping && heard.iter().any(|h| self.urgent(h, obs.tic) && self.worth_a_look(h)) {
             return self.ends(obs, "something went off out of sight");
         }
-        if !jumping && hooks.interrupt(self, obs, &obj) {
+        if !self.directed && !jumping && hooks.interrupt(self, obs, &obj) {
             return self.ends(obs, "interrupted");
         }
         if obs.tic - self.since > self.allowed {
@@ -348,6 +350,7 @@ impl Explorer {
 
     /// (an objective given up mid-way, for whoever's tracing: why)
     pub(super) fn ends(&mut self, obs: &Observation, why: &str) -> bool {
+        self.end_why = Some((true, why.to_string()));
         if self.debug_tics.is_some_and(|(a, b)| (a..=b).contains(&obs.tic)) {
             self.log.push(format!("  (objective ends at tic {}: {why})", obs.tic));
         }
@@ -355,6 +358,7 @@ impl Explorer {
     }
 
     pub(super) fn drop_objective(&mut self, obj: &Objective, obs: &Observation, why: &str) {
+        self.end_why = Some((false, why.to_string()));
         let id = obj.ident();
         self.dropped.insert(id.clone(), obs.tic);
         *self.drop_count.entry(id).or_insert(0) += 1;

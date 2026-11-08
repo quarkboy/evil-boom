@@ -301,6 +301,7 @@ impl Explorer {
     /// Set about `obj` by `steps` (its route).
     pub(super) fn start(&mut self, obs: &Observation, obj: Objective, steps: Vec<Step>) {
         self.since = obs.tic;
+        self.end_why = None;
         // (time to do it: walking the route, and some)
         self.allowed = GIVE_UP_TICS.max((route_length(&steps) / ROUTE_SPEED) as i64 + ROUTE_SLACK);
         self.exits_seen = self.knowledge.exits().len();

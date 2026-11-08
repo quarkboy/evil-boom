@@ -16,6 +16,7 @@
 
 pub mod arena;
 pub mod config;
+pub mod control;
 mod det;
 pub mod drive;
 pub mod dsda;
