@@ -709,9 +709,13 @@ impl RouteFollower {
                 // where it takes things depends on what's round it when pressed: wait for the
                 // lifts and doors among those to be where the plan has them (MAP09)
                 let init = &nav.movers.initial;
+                // (not what it moves itself: off already if it's been pressed once, as MAP02's red
+                // bars were, a fight in between, and waited for ten seconds to go back)
+                let moves: BTreeSet<usize> = t.effects.iter().map(|(s, _)| *s).collect();
                 let off: Vec<usize> = relevant
                     .iter()
                     .copied()
+                    .filter(|x| !moves.contains(x))
                     .filter(|&x| {
                         obs.height(x).is_some_and(|l| {
                             let h = rep(&self.states[x], init[x]);
@@ -737,7 +741,11 @@ impl RouteFollower {
             // (E3M4). What it works if she knows, and what's moving right by it, which she sees.
             let init = &nav.movers.initial;
             let mut cands: BTreeSet<usize> = t.effects.iter().map(|(s, _)| *s).collect();
-            cands.extend(self.sectors_near(li));
+            if cands.is_empty() {
+                // (what's moving right by it only while what it works isn't known: MAP02's red
+                // bars, pressed with the first door's timer running beside them, waited for)
+                cands.extend(self.sectors_near(li));
+            }
             let busy: Vec<usize> = cands
                 .into_iter()
                 .filter(|&x| {
