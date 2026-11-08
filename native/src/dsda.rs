@@ -125,6 +125,7 @@ type SectorsFn = unsafe extern "C" fn(*mut f64, c_int) -> c_int;
 type MobjsFn = unsafe extern "C" fn(*mut Mobj, c_int) -> c_int;
 type PlayerFn = unsafe extern "C" fn(*mut PlayerState);
 type PowerFn = unsafe extern "C" fn(c_int, c_int);
+type SoundFn = unsafe extern "C" fn(c_int);
 type SpawnFn = unsafe extern "C" fn(c_int, f64, f64, f64, c_int) -> c_int;
 type GiveFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int);
 type ClearFn = unsafe extern "C" fn() -> c_int;
@@ -148,6 +149,7 @@ pub struct Dsda {
     player_fn: PlayerFn,
     /// (none in a library from before it was added)
     power_fn: Option<PowerFn>,
+    sound_fn: Option<SoundFn>,
     /// (arenas; none in an older library)
     spawn_fn: Option<SpawnFn>,
     give_fn: Option<GiveFn>,
@@ -192,6 +194,8 @@ impl Dsda {
         };
         // SAFETY: as above, evil_power's signature; optional, an older library hasn't it.
         let power_fn = sym(b"evil_power").ok().map(|p| unsafe { std::mem::transmute::<*const (), PowerFn>(p) });
+        // SAFETY: as above (evil_sound(int)).
+        let sound_fn = sym(b"evil_sound").ok().map(|p| unsafe { std::mem::transmute::<*const (), SoundFn>(p) });
         // SAFETY: as above, evil_spawn's and evil_give's signatures; optional.
         let spawn_fn = sym(b"evil_spawn").ok().map(|p| unsafe { std::mem::transmute::<*const (), SpawnFn>(p) });
         let give_fn = sym(b"evil_give").ok().map(|p| unsafe { std::mem::transmute::<*const (), GiveFn>(p) });
@@ -219,6 +223,7 @@ impl Dsda {
             mobjs_fn,
             player_fn,
             power_fn,
+            sound_fn,
             spawn_fn,
             give_fn,
             clear_fn,
@@ -244,6 +249,14 @@ impl Dsda {
         // SAFETY: plain values into the game; see `load`.
         unsafe { f(power, tics) };
         true
+    }
+
+    /// Sound on or off (with the game's sound up: a watcher's); no effect without the call.
+    pub fn sound(&self, on: bool) {
+        if let Some(f) = self.sound_fn {
+            // SAFETY: a plain value into the game; see `load`.
+            unsafe { f(c_int::from(on)) };
+        }
     }
 
     /// Spawn a thing of `kind` (its type number) on the floor at (x, y), facing `angle`;

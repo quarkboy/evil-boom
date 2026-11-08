@@ -43,13 +43,15 @@ pub struct Options {
     pub objects: bool,
     /// frames are drawn (for watching)
     pub drawn: bool,
+    /// the game's sound and music, out loud (a watcher's)
+    pub sound: bool,
     /// the game's random numbers from this (testing); None: the clock, as in a real game
     pub seed: Option<u32>,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options { skill: 3, nomonsters: true, objects: false, drawn: false, seed: None }
+        Options { skill: 3, nomonsters: true, objects: false, drawn: false, sound: false, seed: None }
     }
 }
 
@@ -85,14 +87,24 @@ impl Engine {
         set_env_default("DOOMDATADIR", &data);
         // (SDL's dummy drivers while the game sets itself up: no sound device, and drawn or not
         // nothing goes to a window of its own)
-        std::env::set_var("SDL_AUDIODRIVER", "dummy");
+        if o.sound {
+            // (the system's own, unless one's asked for; not the dummy one set before)
+            if std::env::var_os("SDL_AUDIODRIVER").is_some_and(|v| v == "dummy") {
+                std::env::remove_var("SDL_AUDIODRIVER");
+            }
+        } else {
+            std::env::set_var("SDL_AUDIODRIVER", "dummy");
+        }
         if !o.drawn {
             std::env::set_var("SDL_VIDEODRIVER", "dummy");
         }
         // straight into the level (no title screen: its attract-mode demo took her commands)
         let warp: Vec<String> = if map_name.to_uppercase().starts_with("MAP") { vec![map.to_string()] } else { vec![episode.to_string(), map.to_string()] };
         let mut args: Vec<String> =
-            ["-iwad", &iwad.to_string_lossy(), "-nosound", "-nomusic", "-nomouse", "-skill", &o.skill.to_string()].iter().map(|s| s.to_string()).collect();
+            ["-iwad", &iwad.to_string_lossy(), "-nomouse", "-skill", &o.skill.to_string()].iter().map(|s| s.to_string()).collect();
+        if !o.sound {
+            args.extend(["-nosound".to_string(), "-nomusic".to_string()]);
+        }
         if !o.drawn {
             args.push("-nodraw".into());
         }
@@ -104,6 +116,9 @@ impl Engine {
         let dirs = dll_dirs();
         let game = Dsda::load(&library(), &dirs.iter().map(PathBuf::as_path).collect::<Vec<_>>(), &args)?;
         game.seed(o.seed);
+        if o.sound {
+            game.sound(true);
+        }
         Ok(Engine {
             game,
             map_name: map_name.to_uppercase(),
@@ -174,6 +189,11 @@ impl Engine {
     }
 
     /// Damage does nothing to her (kept across restarts).
+    /// The sound on or off for now (paused, or not at the game's own speed); with it up only.
+    pub fn sound(&self, on: bool) {
+        self.game.sound(on);
+    }
+
     pub fn set_god(&mut self) {
         self.god = true;
         self.game.god(true);

@@ -15,14 +15,15 @@
 //!       the fights set up in FILE (see arena.rs), each K times (seeds 0..K), a process a go;
 //!       a line each, then how each scenario went: won, lost, drawn
 //!   evil-boom arena-one FILE NAME [--seed N]         one of them, once; its log to out/arena/NAME.txt
-//!   evil-boom arena-watch FILE NAME [--seed N] [--speed X]   one of them, watched (space pause, N a
-//!                                               tic at a time, +/- speed)
+//!   evil-boom arena-watch FILE NAME [--seed N] [--speed X] [--mute]   one of them, watched (space
+//!                                               pause, N a tic at a time, +/- speed, M mute)
 //!   evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
 //!       [--crf N] [--preset P] [--ffmpeg PATH] [run options]   a watch played as fast as it goes
 //!       into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told)
-//!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [run options]
-//!       watch her play, with what she knows beside the game (space pause, +/- speed, A the
-//!       whole map, F follow, wheel zoom, Esc quit)
+//!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [run options]
+//!       watch her play, with what she knows beside the game, the game's sound on (space pause,
+//!       +/- speed, A the whole map, F follow, M mute, wheel zoom, Esc quit; the sound off while
+//!       paused or not at x1)
 //!
 //! Run options: --lives N (unlimited), --max-seconds S (3600, all lives together), --seed N|random (0), --peek, --secrets,
 //! --expert, --fight SKILL, --mortal, --complete (every kill, item and secret, then out: --fight 4
@@ -487,6 +488,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
         max_seconds: o.max_seconds,
         seed: o.seed,
         focus: None,
+        sound: true,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -496,6 +498,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
             "--all" => w.show_all = true,
             "--episode" => w.episode = true,
             "--headless" => w.headless = true,
+            "--mute" => w.sound = false,
             _ => names.push(a.clone()),
         }
     }
@@ -543,11 +546,15 @@ fn arena_one(args: &[String]) -> Result<(), String> {
 /// One arena scenario, watched in the viewer's window.
 #[cfg(feature = "viewer")]
 fn arena_watch(args: &[String]) -> Result<(), String> {
-    let (mut seed, mut speed) = (Some(0), 1.0);
+    let (mut seed, mut speed, mut sound) = (Some(0), 1.0, true);
     let mut rest: Vec<&String> = Vec::new();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--mute" => {
+                sound = false;
+                i += 1;
+            }
             "--seed" => {
                 let v = args.get(i + 1).ok_or("--seed N")?;
                 seed = if v == "random" { None } else { Some(v.parse().map_err(|_| "--seed N")?) };
@@ -563,12 +570,12 @@ fn arena_watch(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    let [file, name] = rest.as_slice() else { return Err("usage: evil-boom arena-watch FILE NAME [--seed N] [--speed X]".into()) };
+    let [file, name] = rest.as_slice() else { return Err("usage: evil-boom arena-watch FILE NAME [--seed N] [--speed X] [--mute]".into()) };
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let scenarios = evildoom::arena::parse(&text)?;
     let s = scenarios.iter().find(|s| &s.name == *name).ok_or_else(|| format!("{name}: not in {file}"))?;
-    let p = evildoom::arena::prepare(s, seed, true)?;
-    evildoom::viewer::watch_prepared(&p.wad, p.map, &s.map, p.engine, p.agent, speed, &format!("evil-doom arena: {name}"))
+    let p = evildoom::arena::prepare(s, seed, true, sound)?;
+    evildoom::viewer::watch_prepared(p, &s.map, speed, sound, &format!("evil-doom arena: {name}"))
 }
 
 /// The arena's scenarios (those named, else all), each `seeds` times, `jobs` at a time.

@@ -43,6 +43,7 @@
 #include "dsda/args.h"
 #include "dsda/pause.h"
 #include "dsda/configuration.h"
+#include "s_sound.h"
 
 #ifdef _WIN32
 #define EVIL_API __declspec(dllexport)
@@ -259,8 +260,24 @@ EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
       secret_exit = secretexit;
     exited = 1;
   }
+  /* (sounds placed for where she is now, finished ones let go: the game's own loop does it a
+   * frame; nothing without sound, -nosound) */
+  S_UpdateSounds();
   gametic++;
   maketic = gametic;
+}
+
+/* Sound on or off (a watcher's: off while paused or not at the game's own speed, where it'd
+ * lag or pile up). Off stops what's playing too. Never the game's mute when its own window,
+ * which no one sees, isn't focused. No effect without sound (-nosound -nomusic). */
+EVIL_API void evil_sound(int on)
+{
+  dsda_UpdateIntConfig(dsda_config_mute_unfocused_window, 0, false);
+  dsda_UpdateIntConfig(dsda_config_mute_sfx, !on, false);
+  dsda_UpdateIntConfig(dsda_config_mute_music, !on, false);
+  S_ResetVolume();
+  if (!on)
+    S_Stop();
 }
 
 /* Draw the frame as the game would (the player's view, the status bar) and copy it out as

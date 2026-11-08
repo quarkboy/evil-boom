@@ -52,7 +52,8 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   `evil-boom episode doom2 MAP01 --fight 2 --mortal --seeds 16`; for combat changes also
   `evil-boom arena arenas/combat.txt --seeds 8` and `arenas/doom2.txt`. Compare with the numbers
   in the last commits' messages; within a few tenths of a level is seed noise.
-- Sweeps (when asked): 8 parallel jobs; one sweep type at a time, expert first; the next only
+- Sweeps (when asked): 12 parallel jobs (`--jobs 12` on this laptop; episodes and arenas too);
+  one sweep type at a time, expert first; the next only
   with no per-level regressions so far.
 
 ## Where things stand (2026-11-08)
@@ -69,6 +70,9 @@ Same results as on Windows (E1 3.6 levels, Doom II 7.9, the same per-seed ending
 the default WAD folder per platform (`config.rs`), the patch putting the `.so` beside
 `dsda-doom.wad` (and building the WAD with it), `CMAKE_FIND_PACKAGE_PREFER_CONFIG=OFF` for
 Fedora's zlib-ng, minifb 0.27 -> 0.28 (0.27 segfaulted on X11 with AspectRatioStretch and
-corrupted the heap on Wayland). Setup for both platforms: README. Under WSLg the watcher works on
-Wayland (the default) and X11; on X11 SDL catches SIGTERM, so close it from its window.
-Default `--jobs` follows the CPU count (16 here); not re-measured.
+corrupted the heap on Wayland). Setup for both platforms: README. minifb is built X11-only (its
+Wayland window has no decorations under WSLg); SDL catches SIGTERM, so close the watcher from its
+window. The watchers (`watch`, `arena-watch`) play the game's sound by default (`--mute`, M key;
+off while paused or not at x1); everything else is silent. Tests use `--jobs 12` (the user's call
+for this laptop). Linux baselines (HNTR, one life): E1 3.6, E2 2.8 (2/8 through), E3 3.9, Doom II
+7.9; arenas combat 120/128, doom2 227/240.

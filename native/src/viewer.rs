@@ -5,7 +5,7 @@
 //! status panel: what she's doing, the objectives she could pick, what she has found.
 //!
 //! Keys: space pause, +/- speed, A the whole map (faint: what she doesn't know), F follow her
-//! on the map, mouse wheel zoom the map, Esc quit.
+//! on the map, M mute the game's sound, mouse wheel zoom the map, Esc quit.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -228,6 +228,8 @@ pub struct WatchOptions {
     pub seed: Option<u32>,
     /// the map view centred on a point, zoomed in this much (for looking at one place)
     pub focus: Option<(f64, f64, f64)>,
+    /// the game's sound and music out loud (the window only; off while paused or not at x1)
+    pub sound: bool,
 }
 
 /// A 100% run's exit held back (see sweep::hold_exit), and its stall clock.
@@ -258,6 +260,10 @@ struct Watch {
     options_tic: i64,
     speed: f64,
     paused: bool,
+    /// the game's sound up (a window's), muted by M, and whether it's on now
+    sound: bool,
+    muted: bool,
+    sound_on: bool,
     show_all: bool,
     follow: bool,
     zoom: f64,
@@ -267,7 +273,9 @@ struct Watch {
 }
 
 pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> {
-    let (w, watch) = first_watch(wad, map_name, o)?;
+    let sound = o.sound && !o.headless;
+    let (w, mut watch) = first_watch(wad, map_name, o, sound)?;
+    (watch.sound, watch.sound_on) = (sound, sound);
     if o.headless {
         return headless(watch, &w, o);
     }
@@ -276,7 +284,7 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
 }
 
 /// The WAD and the watcher for the first level.
-fn first_watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(Wad, Watch), String> {
+fn first_watch(wad: &str, map_name: &str, o: &WatchOptions, sound: bool) -> Result<(Wad, Watch), String> {
     let iwad = resolve_wad(wad);
     let w = Wad::open(&iwad)?;
     let map_name = map_name.to_uppercase();
@@ -285,7 +293,7 @@ fn first_watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(Wad, Watc
     let mut nav = Navigator::new(Arc::clone(&m), skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
-    let mut engine = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn: true, seed: o.seed })?;
+    let mut engine = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn: true, sound, seed: o.seed })?;
     engine.carry.clone_from(&o.carry);
     engine.start();
     if !o.mortal {
@@ -350,7 +358,7 @@ pub fn find_ffmpeg() -> Option<std::path::PathBuf> {
 /// the level (and with --episode the ones after), as a watch plays it.
 pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) -> Result<(), String> {
     use std::io::Write;
-    let (w, mut watch) = first_watch(wad, map_name, o)?;
+    let (w, mut watch) = first_watch(wad, map_name, o, false)?;
     let (fw, fh) = match r.view {
         RecordView::Full => (W, H),
         RecordView::Hud => (GAME.2, GAME.3),
@@ -508,6 +516,7 @@ fn next_level(watch: Watch, w: &Wad, o: &WatchOptions) -> Result<Option<Watch>, 
     let secret = watch.engine.secret_exit();
     let Some(next) = crate::sweep::next_map(&watch.map_name, secret) else { return Ok(None) };
     let (speed, show_all, follow) = (watch.speed, watch.show_all, watch.follow);
+    let (sound, muted, sound_on) = (watch.sound, watch.muted, watch.sound_on);
     let mut engine = watch.engine;
     engine.carry = Some(engine.loadout());
     let m = Arc::new(load_map(w, &next, &[])?);
@@ -517,14 +526,16 @@ fn next_level(watch: Watch, w: &Wad, o: &WatchOptions) -> Result<Option<Watch>, 
     engine.goto(&next)?;
     let mut watch = level(w, m, Rc::new(nav), engine, o)?;
     (watch.speed, watch.show_all, watch.follow) = (speed, show_all, follow);
+    (watch.sound, watch.muted, watch.sound_on) = (sound, muted, sound_on);
     Ok(Some(watch))
 }
 
 /// A fight set up already (an arena: the engine with its monsters spawned and her loadout given,
 /// drawn; her agent), watched: one life, no switches or doors (as `evil-boom arena` plays it).
-pub fn watch_prepared(w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, agent: Agent, speed: f64, title: &str) -> Result<(), String> {
-    let mut watch = Watch::new(w, m, map_name, engine, agent, None, 0);
+pub fn watch_prepared(p: crate::arena::Prepared, map_name: &str, speed: f64, sound: bool, title: &str) -> Result<(), String> {
+    let mut watch = Watch::new(&p.wad, p.map, map_name, p.engine, p.agent, None, 0);
     watch.speed = speed;
+    (watch.sound, watch.sound_on) = (sound, sound);
     watch.no_use = true;
     show(watch, title, None)
 }
@@ -546,8 +557,15 @@ fn show(mut watch: Watch, title: &str, episode: Option<(&Wad, &WatchOptions)>) -
                 K::Minus | K::NumPadMinus => watch.speed = (watch.speed / 2.0).max(0.25),
                 K::A => watch.show_all = !watch.show_all,
                 K::F => watch.follow = !watch.follow,
+                K::M => watch.muted = !watch.muted,
                 _ => {}
             }
+        }
+        // (the sound only at the game's own speed: faster or slower it'd pile up or lag)
+        let sound = watch.sound && !watch.muted && !watch.paused && (watch.speed - 1.0).abs() < 1e-9;
+        if sound != watch.sound_on {
+            watch.engine.sound(sound);
+            watch.sound_on = sound;
         }
         if let Some((_, dy)) = window.get_scroll_wheel() {
             if dy != 0.0 {
@@ -655,6 +673,9 @@ impl Watch {
             options_tic: -1_000_000_000,
             speed: 1.0,
             paused: false,
+            sound: false,
+            muted: false,
+            sound_on: false,
             show_all: false,
             follow: false,
             zoom: focus.map_or(1.0, |f| f.2),

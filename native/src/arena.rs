@@ -162,15 +162,16 @@ pub struct Prepared {
     pub map: Arc<MapData>,
 }
 
-/// Set scenario `s` up (`drawn`: the game draws its frames, for watching).
-pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool) -> Result<Prepared, String> {
+/// Set scenario `s` up (`drawn`: the game draws its frames, for watching; `sound`: its sound out
+/// loud too).
+pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool, sound: bool) -> Result<Prepared, String> {
     let iwad = resolve_wad(&s.wad);
     let w = Wad::open(&iwad)?;
     let m = Arc::new(load_map(&w, &s.map, &[])?);
     let mut nav = Navigator::new(Arc::clone(&m), s.skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
-    let mut e = Engine::new(&iwad, &s.map, &Options { skill: s.skill, nomonsters: true, objects: true, drawn, seed })?;
+    let mut e = Engine::new(&iwad, &s.map, &Options { skill: s.skill, nomonsters: true, objects: true, drawn, sound, seed })?;
     e.start();
     // (a tic for the level to be there)
     e.step(&Controls::default());
@@ -196,7 +197,7 @@ pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool) -> Result<Prepared,
 
 /// Play scenario `s` (one a process: the engine is all globals). The fight's log goes to `log`.
 pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Outcome, String> {
-    let Prepared { engine: mut e, mut agent, ids, .. } = prepare(s, seed, false)?;
+    let Prepared { engine: mut e, mut agent, ids, .. } = prepare(s, seed, false, false)?;
     let start = e.tic;
     let until = start + (s.seconds * TICRATE) as i64;
     let mut c: Option<Controls> = None;

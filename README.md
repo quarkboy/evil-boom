@@ -90,7 +90,7 @@ WADs are not included. Evil looks for Steam's layout (`base/DOOM.WAD`, `base/doo
 evil-boom sweep doom doom2 --jobs 8              # every map, a line each, then a summary
 evil-boom sweep doom E1M1 E1M2 doom2 MAP01       # some maps
 evil-boom run-map doom2 MAP14                    # one map; its log goes to out/explore
-evil-boom watch doom E1M3                        # watch her play, with what she knows beside the game
+evil-boom watch doom E1M3                        # watch her play, with what she knows beside the game (sound on; --mute, M)
 evil-boom dump-nav doom E1M1                     # the level's analysis
 evil-boom sector doom E1M5 99 121                # sectors: heights, lines, things
 evil-boom drive doom E2M4 --from out/runs/DOOM_E2M4_expert.run@1418 --script cmds.txt
