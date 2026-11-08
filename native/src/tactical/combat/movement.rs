@@ -221,8 +221,15 @@ impl Combat {
     }
 
     /// Is she under a crusher at work?
+    /// Is any of her under a crusher at work? A crusher crushes whatever's even partly under it,
+    /// and her middle out from under it isn't all of her (E3M5: her middle just out of a crusher's
+    /// alcove, 14 units of her still under it, the fight let go, the route walked her back in).
     pub(super) fn under_crusher(&self, obs: &Observation) -> bool {
-        self.nav.poly_at(obs.pos()).is_some_and(|p| self.crushing(obs, self.nav.sector_of_poly(p)))
+        let r = PLAYER_RADIUS + 2.0;
+        [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
+            .iter()
+            .filter_map(|(dx, dy)| self.nav.poly_at((obs.x + dx, obs.y + dy)))
+            .any(|p| self.crushing(obs, self.nav.sector_of_poly(p)))
     }
 
     /// Does going `length` that way get her out from under a crusher?

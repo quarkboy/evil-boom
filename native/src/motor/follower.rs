@@ -750,6 +750,11 @@ impl RouteFollower {
             if let Some(c) = self.pinned_under_ceiling(obs) {
                 return c;
             }
+            if self.phase != Phase::Walk {
+                if let Some(c) = self.crusher_guard(obs) {
+                    return c;
+                }
+            }
         }
         match self.phase {
             Phase::Walk => self.walk(obs),

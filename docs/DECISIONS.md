@@ -775,3 +775,26 @@ straight in the tic command, so slot 1 always brought up the fist.
   in MAP32's hall. Before: 7/8, 3/8, 1/8, 0/8 (11/32); now 8/8 (15 s a win), 3/8, 3/8, 0/8
   (14/32). Two or more still lose: the run in across the open floor into their tracers, and the
   second punching her while she punches the first (cover on the way in, one at a time: later).
+
+## Crushers in every phase (2026-11-08)
+
+The commonest death (9 of 32 regression runs: E3M5 five times, E2M2 three, E3M4 once), traced on
+E3 seed 1, E3M5: a switch in a 64-unit alcove under a slow crusher. She went in, it started
+down, the fight's "out from under a crusher" pulled her out; it judged by her middle only, so it
+let go with 14 units of her still under; the route follower, at its goal (walking up to the
+switch), had no crusher check at all (only the walking phase did) and walked her back in; her
+momentum took her deeper as the fight turned her round, and at 55 units over the floor she was
+pinned.
+
+The mechanics: P_TryMove refuses any move whose box touches a sector with less room than she's
+tall (the lowest ceiling over the box): partly under a crusher below floor + 56, she can't move
+at all till it rises (a slow crusher's round trip: ~100 tics, a hit every 4).
+
+- **The fight**: under a crusher is any of her under it (her box's corners), not her middle.
+- **The follower, every phase** (`crusher_guard`: at a goal, settling, fetching; walking has
+  `crusher_ahead`): partly under a ceiling coming down with less than 64 units to spare, out from
+  under it first (the escape walking already had); a ceiling coming down a step from her box,
+  held where she is till it goes up.
+
+Results (HNTR, one life): E1 3.6 -> 4.1 (1/8 through, the first), E2 3.6 -> 4.2, E3 3.6 -> 5.6
+(three to the E3M8 boss), Doom II 7.9 -> 8.6; arenas unchanged.

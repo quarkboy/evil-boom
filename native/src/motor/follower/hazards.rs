@@ -16,6 +16,9 @@ const CRUSH_ROOM: f64 = 8.0;
 /// coming down on her with less room than this left over her head: out from under it, not on
 const CRUSH_ESCAPE: f64 = 64.0;
 
+/// (mortal, at a goal) a ceiling coming down this near her box (a step on) is waited out
+const CRUSH_STEP: f64 = 24.0;
+
 /// how far a way out from under a ceiling coming down is looked for
 const ESCAPE_LOOK: f64 = 512.0;
 
@@ -158,6 +161,76 @@ impl RouteFollower {
         Some(heading(obs.pos(), aim))
     }
 
+    /// Out from under sector s's ceiling coming down on her, `offset` the part of her under it:
+    /// her middle under it, by the way out; only an edge of her, straight away from that edge
+    /// (E3M4's, waiting at the crusher's edge a corner over it, held there). Full speed whichever
+    /// way she's facing (backing out at a walk, caught).
+    fn escape_crusher(&mut self, obs: &Observation, s: usize, (dx, dy): Point, doors: &BTreeSet<usize>) -> Option<Controls> {
+        let pos = obs.pos();
+        let way = if dx == 0.0 && dy == 0.0 {
+            self.out_from_under(obs, &|q| !doors.contains(&q) && (obs.heights[q].ceiling - self.prev_live[q].ceiling).abs() > 0.01)
+        } else {
+            Some(heading((pos.0 + dx, pos.1 + dy), pos))
+        };
+        let h = way?;
+        if self.crusher_wait != Some(s) {
+            self.log.add(obs.tic, format!("the ceiling of sector {s} coming down on her: out from under it"));
+            self.crusher_wait = Some(s);
+        }
+        self.progress_tic = obs.tic;
+        self.step_tic = obs.tic;
+        self.motion.rate = 0.0;
+        Some(run_controls(obs.angle, h))
+    }
+
+    /// (mortal) The crusher rules for every phase but walking (`crusher_ahead` has those): at a
+    /// goal, settling, fetching. Partly under a ceiling coming down with little room left: out
+    /// from under it first. About to touch one (her box a step on): held where she is till it's
+    /// going up. Under a ceiling lower than she's tall a player can't move at all (P_TryMove
+    /// takes the lowest ceiling over her box), so going in on its way down is being pinned till
+    /// it rises (E3M5: a switch in a crusher's alcove, pulled out by the fight, walked back in to
+    /// press it on the ceiling's way down, pinned for 18 hits).
+    pub(super) fn crusher_guard(&mut self, obs: &Observation) -> Option<Controls> {
+        if !self.mortal || self.prev_live.len() != obs.heights.len() {
+            return None;
+        }
+        let doors = self.doors();
+        let mesh = &self.view.nav.mesh;
+        let pos = obs.pos();
+        let coming_down = |s: usize| {
+            let (now, before) = (obs.heights[s], self.prev_live[s]);
+            !doors.contains(&s) && now.ceiling < before.ceiling - 0.01 && now.ceiling - now.floor - PLAYER_HEIGHT < CRUSH_ESCAPE
+        };
+        let r = PLAYER_RADIUS + 2.0;
+        let box_at = |dx: f64, dy: f64| mesh.poly_at((pos.0 + dx, pos.1 + dy)).map(|p| mesh.poly(p).sector);
+        let under: Vec<(usize, Point)> = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)].iter().filter_map(|&(dx, dy)| box_at(dx, dy).map(|s| (s, (dx, dy)))).collect();
+        let near = PLAYER_RADIUS + CRUSH_STEP;
+        let next: Option<usize> = (0..8)
+            .filter_map(|k| {
+                let a = f64::from(k) * std::f64::consts::FRAC_PI_4;
+                box_at(a.cos() * near, a.sin() * near)
+            })
+            .find(|&s| !under.iter().any(|&(u, _)| u == s) && coming_down(s));
+        if let Some((s, offset)) = under.iter().copied().find(|&(s, _)| coming_down(s)) {
+            if let Some(c) = self.escape_crusher(obs, s, offset, &doors) {
+                return Some(c);
+            }
+        }
+        let Some(s) = next else {
+            if self.crusher_wait.is_some() {
+                self.crusher_wait = None;
+            }
+            return None;
+        };
+        if self.crusher_wait != Some(s) {
+            self.log.add(obs.tic, format!("the ceiling of sector {s} coming down beside her: waiting for it to go up"));
+            self.crusher_wait = Some(s);
+        }
+        self.progress_tic = obs.tic;
+        self.step_tic = obs.tic;
+        Some(self.motion.hold(obs, (0.0, 0.0), self.look))
+    }
+
     /// (mortal) A crusher just ahead on the way, coming down or too low to be under: wait at its
     /// edge till it's on its way up with room, then through without stopping (E4M7's, on the way
     /// to its teleporter: pinned under it, waiting for it to rise, killed 53 times).
@@ -195,24 +268,9 @@ impl RouteFollower {
                 .iter()
                 .filter_map(|&(dx, dy)| mesh.poly_at((pos.0 + dx, pos.1 + dy)).map(|p| (mesh.poly(p).sector, (dx, dy))))
                 .find(|&(s, _)| moving_down(s));
-            if let Some((s, (dx, dy))) = pressing {
-                // (her middle under it: the way out; only an edge of her: straight away from that
-                // edge, E3M4's, waiting at the crusher's edge a corner over it, held there)
-                let way = if dx == 0.0 && dy == 0.0 {
-                    self.out_from_under(obs, &|q| !doors.contains(&q) && (obs.heights[q].ceiling - self.prev_live[q].ceiling).abs() > 0.01)
-                } else {
-                    Some(heading((pos.0 + dx, pos.1 + dy), pos))
-                };
-                if let Some(h) = way {
-                    if self.crusher_wait != Some(s) {
-                        self.log.add(obs.tic, format!("the ceiling of sector {s} coming down on her: out from under it"));
-                        self.crusher_wait = Some(s);
-                    }
-                    self.progress_tic = obs.tic;
-                    self.step_tic = obs.tic;
-                    self.motion.rate = 0.0;
-                    // (full speed whichever way she's facing: backing out at a walk, caught)
-                    return Some(run_controls(obs.angle, h));
+            if let Some((s, offset)) = pressing {
+                if let Some(c) = self.escape_crusher(obs, s, offset, &doors) {
+                    return Some(c);
                 }
             }
             self.crusher_wait = None;

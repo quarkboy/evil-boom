@@ -14,6 +14,10 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   decision that caused it. Work out the game mechanics involved (check vanilla/DSDA source, the
   map's lines with `evil-boom sector`), the narrowest rule that covers it, and everything else that
   rule touches. No first-idea heuristics; no guessed fixes. Say what was considered.
+- **General, never level-specific.** Every behaviour rule comes from the game's mechanics and what
+  she can observe, so it holds on any map or WAD: no map names, sector or line numbers, or
+  coordinates in a rule. The goal is a robust player bot an AI can later control, not one tuned
+  to Doom/Doom II's maps; the failing map is only the test case for the rule.
 - **Look it up** (DoomWiki, secret lists) before calling anything unreachable or broken. DoomWiki
   and Fandom refuse automated fetches: ask the user to paste the page, they're happy to.
 - **No rules that depend on lives left.** Lives are a test setting; the goal is everything on one
@@ -68,13 +72,12 @@ another case in a chain.
 
 ## Where things stand (2026-11-08)
 
-Last bot change c89d5e6 (berserk and the chainsaw, the Melee style). HNTR, one life, 8 seeds:
-E1 3.6 (ends at E1M5), E2 3.6 with 3 of 8 through, E3 3.6 (E3M4/E3M5 crushers), Doom II 7.9
-(16 seeds; MAP12 stuck, MAP08 deaths: the Cyberdemon/Baron room); berserk arena 14/32. Open
-items: crushers (E3's end, and new paths run into them); two or more revenants with berserk
-(the run in under their tracers, the second punching her); Doom II seed 0 stuck on MAP03 (0/9
-items, exploration); deliberate infighting only for heavies; several missile-firing monsters can
-still keep her dodging.
+Last bot change: crushers in every phase. HNTR, one life, 8 seeds: E1 4.1 (1/8 through; the rest
+end at E1M3-E1M5, E1M5 with her own barrel blasts), E2 4.2 (3/8 through; E2M2 stuck/died), E3 5.6
+(three to E3M8), Doom II 8.6 (16 seeds; MAP12 stuck, MAP08 deaths: the Cyberdemon/Baron room);
+berserk arena 14/32. Open items: barrels (the user: shoot any barrel she sees, from clear of the
+chain's blast; E1M5's deaths are her own barrel blasts); two or more revenants with berserk;
+deliberate infighting only for heavies; several missile-firing monsters can still keep her dodging.
 
 ## The Linux port (done 2026-11-08)
 
