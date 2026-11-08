@@ -78,14 +78,15 @@ seconds with nothing new), `--fight SKILL` (monsters in), `--mortal` (no god mod
 
 ## License
 
-Evil DOOM is free software, licensed under the **GNU General Public License, version 2 or (at
-your option) any later version** (GPL-2.0-or-later); see [LICENSE](LICENSE). That's the license of
-the engine it is built on and with:
+Evil DOOM is free software, licensed under the **GNU General Public License, version 3 or (at
+your option) any later version** (GPL-3.0-or-later); see [LICENSE](LICENSE). The engine it is
+built on and with is GPL-2.0-or-later, which allows its use under version 3:
 
 - **DSDA-Doom** (<https://github.com/kraflab/dsda-doom>, GPL-2.0-or-later; from PrBoom+ and id
   Software's Doom source). It isn't included here: `dsda/README.md` says how to fetch it (we use
   commit `eb8eb98`, v0.30.1). Our changes to it are `dsda/dsda-doom.patch`, and `dsda/evil_api.c`
-  is compiled into it. Both are under the same license.
+  is compiled into it; both are ours under GPL-3.0-or-later. DSDA-Doom's own code keeps its
+  license.
 - The movement simulator (`native/src/jumps/physics.rs`) follows ZDoom 2.8.1's player movement
   code function by function, itself derived from id Software's Doom source (GPL).
 
