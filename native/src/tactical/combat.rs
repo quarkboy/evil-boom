@@ -137,6 +137,8 @@ pub struct Combat {
     pub visible: Vec<Thing>,
     /// barrels she's seen that are still there
     pub barrels_seen: Vec<Point>,
+    /// a route under way (the player's): its follower has its own crusher rules
+    pub routed: bool,
     pub target: Option<i32>,
     pub kills: i32,
     pub log: Vec<String>,
@@ -215,6 +217,7 @@ impl Combat {
             alive: BTreeMap::new(),
             visible: Vec::new(),
             barrels_seen: Vec::new(),
+            routed: false,
             target: None,
             kills: 0,
             log: Vec::new(),

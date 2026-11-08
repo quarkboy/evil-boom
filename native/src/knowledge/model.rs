@@ -240,6 +240,8 @@ pub struct Knowledge {
     /// every sector's heights last tic
     live: Vec<Heights>,
     moving: BTreeSet<usize>,
+    /// sector -> the tic it was last heard stopping
+    stopped_at: BTreeMap<usize, i64>,
     /// sector -> the tic it was last heard moving
     moved_at: BTreeMap<usize, i64>,
     /// once-only lines set off: did they take? (with what they act on, and its heights then)
@@ -348,6 +350,7 @@ impl Knowledge {
             drawable,
             live: Vec::new(),
             moving: BTreeSet::new(),
+            stopped_at: BTreeMap::new(),
             moved_at: BTreeMap::new(),
             taking: Vec::new(),
             line_subsectors,
@@ -654,6 +657,7 @@ impl Knowledge {
         self.live.clear();
         self.moving.clear();
         self.moved_at.clear();
+        self.stopped_at.clear();
         self.taking.clear();
         self.lives += 1;
         self.events.push(format!("--- life {}: the level from the start, knowing what she knew", self.lives));
@@ -728,6 +732,12 @@ impl Knowledge {
     /// Sectors last tic, as the knowledge saw them move.
     pub fn moved_at(&self, s: usize) -> Option<i64> {
         self.moved_at.get(&s).copied()
+    }
+
+    /// Has sector s been still, after moving, for at least `tics` (by the sounds of its starts and
+    /// stops)? Not if it's moving, or never seen to move.
+    pub fn stopped_for(&self, s: usize, tic: i64, tics: i64) -> bool {
+        !self.moving.contains(&s) && self.stopped_at.get(&s).is_some_and(|&t| tic - t >= tics)
     }
 }
 

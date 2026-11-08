@@ -138,6 +138,7 @@ impl Knowledge {
                 self.moved_at.insert(s, obs.tic);
             } else {
                 self.moving.remove(&s);
+                self.stopped_at.insert(s, obs.tic);
             }
             let Some(&origin) = self.sound_origin.get(&s) else { continue };
             let d = dist(obs.pos(), origin);

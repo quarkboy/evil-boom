@@ -3,7 +3,8 @@
 //! ```text
 //! decide
 //! ├─ nothing in sight, nothing flying at her
-//! │    out of a vile's sight · lost sight of it: keeping at it · the fight over
+//! │    out from under a crusher · out of a vile's sight · lost sight of it: keeping at it ·
+//! │    the fight over
 //! └─ a target, or a missile on its way
 //!    ├─ survive        out of a vile's sight · dodging · out from under a crusher ·
 //!    │                 away from a barrel
@@ -267,6 +268,20 @@ impl Combat {
     /// comes first), an awake monster just out of sight fought where it was, else the fight's
     /// over.
     pub(super) fn no_target(&mut self, obs: &Observation, busy: bool, errand: &str) -> Option<Decision> {
+        // (out from under a crusher at work with no fight on and no route under way: between
+        // objectives nothing else has her, E3M5's, a switch pressed in a crusher's alcove, the
+        // route over, stood there till it came down, pinned. A route has its own crusher rules:
+        // taken over from one, a timed crossing under E2M2's fast crusher was turned back in it)
+        if !busy && !self.routed && self.under_crusher(obs) {
+            let gun = self.gun(obs);
+            let moving = self.steer(obs, None, &gun);
+            let why = "out from under a crusher".to_string();
+            if why != self.mode {
+                self.log.push(format!("tic {}: {why}", obs.tic));
+                self.mode = why.clone();
+            }
+            return Some(Decision { takeover: true, aim: None, fire: false, weapon: 0, moving, why });
+        }
         if !busy && errand.is_empty() {
             if let Some((name, way)) = self.vile_fire(obs) {
                 let why = format!("out of the {name}'s sight");

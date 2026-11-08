@@ -867,3 +867,27 @@ applied here.
 Results (HNTR, one life): E1 7.4 -> 7.4 (4/8), E2 2.8 -> 5.8 (2/8 -> 3/8 through; none end on
 E2M2), E3 5.5 -> 4.9 (E3M4/E3M5 crushers, by the A/B the timed crossing's: next), Doom II 8.6 ->
 8.4; 263 -> 279 levels over the set. Arenas unchanged.
+
+## Crushers stopped low; out from under one between routes (2026-11-08)
+
+- **Stopped low** (E2 seeds 3, 4, 7, E2M4: an hour waiting at the computer room's cage, a
+  perpetual slow crusher she'd stopped low herself by walking its crusher-stop lines; traced by a
+  helper session in its own worktree, applied here): a perpetual crusher turns at each end at once,
+  so still is stopped, and it stays so till a crusher line starts it again. The planner counted on
+  its rest height (any trigger that isn't permanent "comes back"), the follower waited for it to
+  rise or still with room (never), and the waiting kept the stuck clocks from running out. Now the
+  planner doesn't count on a crusher's rest height while it's been heard stopped and still for a
+  second (`Knowledge::stopped_for`), and the follower fails the step at a crusher still and too
+  low for 3 s ("stopped too low to get under") for the explorer to plan round it.
+- **Between routes** (E3 seed 2, E3M5: a switch pressed in a crusher's alcove, the route over,
+  stood there till it came down): the fight's tree gets her out from under a crusher at work with
+  no fight on, but only with no route under way (the follower's own crusher rules have her
+  otherwise: taken over mid-way, a timed crossing under E2M2's fast crusher was turned back in it,
+  E2 1.2 levels).
+- **Committed crossings** only where the way comes out the far side, and an escape ends one (a
+  switch's alcove under a crusher, pulled out of as it came down, walked back into on the replan).
+
+Results (HNTR, one life): E1 7.4 -> 7.4 (4/8), E2 5.8 -> 7.0 (3/8 -> 4/8 through; no E2M4
+stucks), E3 4.9 -> 4.9, Doom II 8.4 -> 8.3; 279 -> 287 levels. E3's crusher deaths on routes
+(E3M4's ring, E3M5's alcoves) are still to trace: with the fight's escape on mid-route too, E3 was
+5.8 but E2 1.2.

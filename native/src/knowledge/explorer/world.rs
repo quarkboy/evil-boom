@@ -10,6 +10,10 @@ use crate::specials::{Category, Key, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
+/// a crusher heard stopping this long ago, and still since, has been stopped (a crusher turns at
+/// each end at once: still at all is a stop)
+const CRUSHER_STOPPED: i64 = 35;
+
 impl Explorer {
     /// The heights the planner should take: as last seen where seen, else as at the start; and
     /// where she set something off she knows the effect of and hasn't looked since, as it'll
@@ -58,10 +62,14 @@ impl Explorer {
             }
         }
         // a lift or a timed door she knows comes back to where it rests, wherever she last saw
-        // it (E3M3)
+        // it (E3M3); not a crusher stopped where it is (a crusher-stop line leaves it there till
+        // something starts it again: E2M4's, stopped low across the way, waited at for the hour)
         for (t, sectors) in known.values() {
             if !t.permanent() {
                 for &s in sectors {
+                    if t.info.category == Category::Crusher && k.stopped_for(s, now, CRUSHER_STOPPED) {
+                        continue;
+                    }
                     add_height(&mut out[s], nav.movers.initial[s]);
                 }
             }

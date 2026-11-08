@@ -298,6 +298,7 @@ impl Player {
         let busy = self.explorer.follower.as_ref().is_some_and(RouteFollower::in_jump);
         let (errand, toward) = if busy { (String::new(), None) } else { self.fight.errand(&self.explorer, obs).map_or((String::new(), None), |(e, at)| (e, Some(at))) };
         self.fight.combat.toward = toward;
+        self.fight.combat.routed = self.explorer.follower.as_ref().is_some_and(|f| !f.done && !f.failed);
         // (what she knows of floors gone to something that hurts, for where the fight takes her)
         self.fight.combat.changed_floors = self.explorer.knowledge.changed_floor.iter().filter(|(_, &h)| h).map(|(&s, _)| s).collect();
         let d = self.fight.combat.decide(obs, busy, &errand);

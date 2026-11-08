@@ -3,6 +3,7 @@
 use super::{run_controls, RouteFollower};
 use crate::geom::{dist, Point};
 use crate::motor::{heading, Controls, Observation, FRICTION, FULL_SPEED, RUN_THRUST};
+use crate::mesh::Mesh;
 use crate::navigator::{closest_on_portal, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap};
@@ -39,6 +40,9 @@ fn run_tics(v0: f64, d: f64) -> f64 {
     }
     k
 }
+
+/// (mortal) a crusher ahead still this long, too low to get under, has stopped: no waiting for it
+const CRUSH_STOPPED: i64 = 3 * 35;
 
 /// how far a way out from under a ceiling coming down is looked for
 const ESCAPE_LOOK: f64 = 512.0;
@@ -131,55 +135,7 @@ impl RouteFollower {
     /// The heading along the shortest way out from under ceilings on the move (`moving`) to the
     /// nearest floor with room for her under a ceiling that stays put.
     fn out_from_under(&self, obs: &Observation, moving: &dyn Fn(usize) -> bool) -> Option<f64> {
-        let mesh = &self.view.nav.mesh;
-        let start = mesh.poly_at(obs.pos())?;
-        let n = mesh.polys.len();
-        let mut cost = vec![f64::INFINITY; n];
-        let mut entry = vec![obs.pos(); n];
-        let mut came: Vec<Option<(usize, usize)>> = vec![None; n];
-        cost[start] = 0.0;
-        let mut open = BinaryHeap::new();
-        open.push(Reverse((0u64, start)));
-        let mut goal = None;
-        while let Some(Reverse((_, p))) = open.pop() {
-            let s = mesh.poly(p).sector;
-            if p != start && !moving(s) {
-                goal = Some(p);
-                break;
-            }
-            if cost[p] > ESCAPE_LOOK {
-                continue;
-            }
-            let h = obs.heights[s];
-            for &qi in &mesh.poly(p).portals {
-                let q = &mesh.portals[qi];
-                let o = q.other(p);
-                let ho = obs.heights[mesh.poly(o).sector];
-                if ho.floor > h.floor + MAX_STEP || ho.ceiling - ho.floor < PLAYER_HEIGHT || dist(q.p1, q.p2) < 2.0 * PLAYER_RADIUS {
-                    continue;
-                }
-                let at = closest_on_portal(entry[p], q.p1, q.p2);
-                let k = cost[p] + dist(entry[p], at);
-                if k < cost[o] {
-                    (cost[o], entry[o], came[o]) = (k, at, Some((p, qi)));
-                    open.push(Reverse(((k * 16.0) as u64, o)));
-                }
-            }
-        }
-        // (the first portal of the way, crossed well into the next poly)
-        let mut p = goal?;
-        let mut first = None;
-        while let Some((from, qi)) = came[p] {
-            first = Some((qi, p));
-            p = from;
-        }
-        let (qi, beyond) = first?;
-        let q = &mesh.portals[qi];
-        let at = closest_on_portal(obs.pos(), q.p1, q.p2);
-        let c = mesh.poly(beyond).center;
-        let d = dist(at, c).max(1.0);
-        let aim = (at.0 + (c.0 - at.0) / d * d.min(ESCAPE_INTO), at.1 + (c.1 - at.1) / d * d.min(ESCAPE_INTO));
-        Some(heading(obs.pos(), aim))
+        escape_heading(&self.view.nav.mesh, obs, moving)
     }
 
     /// Out from under sector s's ceiling coming down on her, `offset` the part of her under it:
@@ -365,6 +321,7 @@ impl RouteFollower {
             // out of a fast one she's halfway under is caught as surely; E2M2's passage, 64
             // across, its fast crusher open some 16 tics a time)
             if let Some((s, offset)) = pressing.filter(|&(s, _)| self.through_in_time(obs, &polys, s) != Some(true)) {
+                self.crusher_cross = None;
                 if let Some(c) = self.escape_crusher(obs, s, offset, &doors) {
                     return Some(c);
                 }
@@ -406,18 +363,28 @@ impl RouteFollower {
         // there, as before: in once it's rising with room)
         // (and only while it's going up, or still with room: in on its way down, however the sums
         // came out, was a dash to beat it, E3M4's slow one round the pillar, pinned)
-        let go = match self.through_in_time(obs, &polys, s) {
+        let timed = self.through_in_time(obs, &polys, s);
+        let go = match timed {
             Some(t) => t && (rising || (still && room)),
             None => (room && (rising || still)) || (still && !crushers.contains(&s)),
         };
         if go {
-            self.crusher_cross = Some((s, obs.tic));
+            // (committed to only a crossing that comes out the far side: one into an alcove under
+            // it is waited at again, pulled out of it as it came down, E3M5's switch, walked back
+            // into on the replan)
+            self.crusher_cross = timed.is_some().then_some((s, obs.tic));
             self.crusher_wait = None;
             return None;
         }
         if self.crusher_wait != Some(s) {
             self.log.add(obs.tic, format!("waiting for the crusher (sector {s}) to come up"));
             self.crusher_wait = Some(s);
+        }
+        // (one that's stopped, too low to be under, isn't coming up: a crusher turns at each end at
+        // once, so still for a while is stopped (a crusher-stop line). The way's no way while it's
+        // there; E2M4's, stopped low across the way, waited at for the hour)
+        if still && !room && obs.tic - self.moved_at.get(&s).copied().unwrap_or(i64::MIN / 2) > CRUSH_STOPPED {
+            return Some(self.fail(obs, &format!("the crusher (sector {s}) has stopped too low to get under")));
         }
         self.progress_tic = obs.tic;
         self.step_tic = obs.tic;
@@ -432,4 +399,58 @@ impl RouteFollower {
         }
         Some(self.motion.hold(obs, (0.0, 0.0), None))
     }
+}
+
+/// The heading out from under ceilings `moving` (judged by sector), by the mesh: the first portal
+/// on the way to the nearest poly not under one, steps she can take, room to stand, aimed well
+/// into the poly beyond.
+fn escape_heading(mesh: &Mesh, obs: &Observation, moving: &dyn Fn(usize) -> bool) -> Option<f64> {
+    let start = mesh.poly_at(obs.pos())?;
+    let n = mesh.polys.len();
+    let mut cost = vec![f64::INFINITY; n];
+    let mut entry = vec![obs.pos(); n];
+    let mut came: Vec<Option<(usize, usize)>> = vec![None; n];
+    cost[start] = 0.0;
+    let mut open = BinaryHeap::new();
+    open.push(Reverse((0u64, start)));
+    let mut goal = None;
+    while let Some(Reverse((_, p))) = open.pop() {
+        let s = mesh.poly(p).sector;
+        if p != start && !moving(s) {
+            goal = Some(p);
+            break;
+        }
+        if cost[p] > ESCAPE_LOOK {
+            continue;
+        }
+        let h = obs.heights[s];
+        for &qi in &mesh.poly(p).portals {
+            let q = &mesh.portals[qi];
+            let o = q.other(p);
+            let ho = obs.heights[mesh.poly(o).sector];
+            if ho.floor > h.floor + MAX_STEP || ho.ceiling - ho.floor < PLAYER_HEIGHT || dist(q.p1, q.p2) < 2.0 * PLAYER_RADIUS {
+                continue;
+            }
+            let at = closest_on_portal(entry[p], q.p1, q.p2);
+            let k = cost[p] + dist(entry[p], at);
+            if k < cost[o] {
+                (cost[o], entry[o], came[o]) = (k, at, Some((p, qi)));
+                open.push(Reverse(((k * 16.0) as u64, o)));
+            }
+        }
+    }
+    // (the first portal of the way, crossed well into the next poly)
+    let mut p = goal?;
+    let mut first = None;
+    while let Some((from, qi)) = came[p] {
+        first = Some((qi, p));
+        p = from;
+    }
+    let (qi, beyond) = first?;
+    let q = &mesh.portals[qi];
+    let at = closest_on_portal(obs.pos(), q.p1, q.p2);
+    let c = mesh.poly(beyond).center;
+    let d = dist(at, c).max(1.0);
+    let aim = (at.0 + (c.0 - at.0) / d * d.min(ESCAPE_INTO), at.1 + (c.1 - at.1) / d * d.min(ESCAPE_INTO));
+    Some(heading(obs.pos(), aim))
 }
