@@ -75,12 +75,16 @@ another case in a chain.
 
 ## Where things stand (2026-11-08)
 
-Last bot change: barrels in a fight with biters (no shot through a barrel whose chain reaches her;
-clear of barrels in any fight). HNTR, one life, 8 seeds: E1 7.5 (7/8 through), E2 6.6 (5/8
-through; E2M7 own rockets), E3 6.9 (E3M8: the Spider Mastermind), Doom II 8.0 (16 seeds; MAP12
-stuck, MAP08 deaths, MAP05/MAP06); berserk arena 14/32. Open items: her own rockets (launched 8
-tics after the trigger, the lane judged at the trigger); E3M8; Doom II MAP05-MAP08 and MAP12; two
-or more revenants with berserk; deliberate infighting only for heavies.
+Last bot change: plasma where autoaim sends it, a safer gun for a blocked rocket, ducking and posts
+against hitscan heavies, boss ammo kept, crushing floors (DECISIONS.md). HNTR, one life, 8 seeds:
+E1 7.5 (7/8 through), E2 7.0 (6/8), E3 6.9 (1/8 through; E3M8 the Spider Mastermind, E3M9/E3M6
+stucks), Doom II 7.8 (16 seeds; MAP12 stuck, MAP08 deaths (Cyberdemon + barons), MAP05/MAP06);
+arenas combat 120/128, doom2 230/240, autoaim 86/112 (own rockets 19), crates 77/80 (21), plasma
+autoaim 83/112. Arena files run from any build; out/frozen/evil-boom keeps a copy for a regression
+set while the build goes on changing. Open items: E3M8 in the open (posts help, 1/6 from an E3M7
+loadout); weapon churn in boss fights (distance-based picks, the shotgun readied on losing sight);
+Doom II MAP05-MAP08 and MAP12; two or more revenants with berserk; deliberate infighting only for
+heavies.
 
 ## The Linux port (done 2026-11-08)
 

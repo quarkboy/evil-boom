@@ -57,6 +57,17 @@ pub fn monster(name: &str) -> Option<Monster> {
     })
 }
 
+/// A hitscan shooter's wind-up: the tics from the first frame of its attack (turning to face
+/// her, as she'd see it) to its first shot (info.c: the spider mastermind's 20 tics of
+/// `A_FaceTarget`, then a burst every 4 for as long as it sees her; the zombies' 10).
+pub fn first_shot(name: &str) -> Option<i32> {
+    match name {
+        "Zombieman" | "ShotgunGuy" | "ChaingunGuy" => Some(10),
+        "WolfensteinSS" | "SpiderMastermind" => Some(20),
+        _ => None,
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Missile {
     pub radius: f64,

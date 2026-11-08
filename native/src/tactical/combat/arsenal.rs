@@ -9,6 +9,15 @@ use crate::geom::dist;
 use crate::motor::{Observation, Thing, TICRATE};
 use crate::tactical::bestiary::{melee_at, punchable, weapon, weapon_in, Attack, Weapon, CHAINSAW};
 
+/// The launcher, its way blocked, kept (waited with) when the next gun would take this many
+/// times as long.
+const BLOCKED_ROCKET_WORSE: f64 = 3.0;
+/// ...and not the launcher this long (tics) after its way was blocked
+const BLOCKED_KEEP: i64 = 70;
+
+/// the big guns' ammo this much dearer, kept for a boss about
+const BOSS_SAVE: f64 = 10.0;
+
 /// ...unless killing what's in sight would take longer than this (s), or more ammo than she
 /// has: then get past it
 const OUTMATCHED: f64 = 30.0;
@@ -56,11 +65,11 @@ fn ammo_cost(slot: i32) -> (f64, f64) {
 }
 
 impl Combat {
-    fn held(obs: &Observation) -> Vec<i32> {
+    pub(super) fn held(obs: &Observation) -> Vec<i32> {
         obs.weapons.clone().unwrap_or_else(|| vec![1, 2])
     }
 
-    fn ammo(obs: &Observation, slot: i32) -> i32 {
+    pub(super) fn ammo(obs: &Observation, slot: i32) -> i32 {
         obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n)
     }
 
@@ -198,7 +207,11 @@ impl Combat {
         let held = Self::held(obs);
         let info = mon(t.name);
         let crowd = self.visible.len();
+        // (a boss seen and still about, t not it: the big guns' ammo kept for it, as a player
+        // would; E3M8, 138 cells on two cacodemons, the spider mastermind left to 22 rockets)
+        let saving = !info.boss && self.remaining().iter().any(|m| m.id != t.id && mon(m.name).boss);
         let (mut best, mut cost) = (obs.weapon.unwrap_or(2), f64::INFINITY);
+        let mut blocked = None;
         for &slot in &SLOTS {
             if !held.contains(&slot) {
                 continue;
@@ -222,7 +235,8 @@ impl Combat {
             if w.ammo_per_shot > 0 {
                 let shots = (f64::from(info.health) / (w.damage_on(&info) * w.hits(info.radius, d)).max(1.0)).max(1.0);
                 let (per, low) = ammo_cost(slot);
-                c += shots * f64::from(w.ammo_per_shot) * per * (low / f64::from(have)).max(1.0);
+                let kept = if saving && slot >= 5 { BOSS_SAVE } else { 1.0 };
+                c += shots * f64::from(w.ammo_per_shot) * per * kept * (low / f64::from(have)).max(1.0);
             }
             if info.attack == Attack::Fire && t.attack >= 0 {
                 // (winding up its fire: what counts is the chance of a flinch before it goes off,
@@ -241,12 +255,22 @@ impl Combat {
             if Some(slot) != obs.weapon {
                 c += SWITCH_COST;
             }
+            if slot == 5 && self.rocket_blocked.is_some_and(|(id, tic)| id == t.id && obs.tic - tic < BLOCKED_KEEP) {
+                blocked = Some(c);
+                continue;
+            }
             if c < cost {
                 best = slot;
                 cost = c;
             }
         }
-        best
+        // (its way blocked close by: another gun rather than a rocket held, the user's, but one
+        // that'll do; not the pistol at a Cyberdemon, out of cells behind cover: switched to it
+        // each time the cover was in the rocket's way, 3/8 drawn at full health)
+        match blocked {
+            Some(r) if cost > BLOCKED_ROCKET_WORSE * r => 5,
+            _ => best,
+        }
     }
 
     /// The chance a shot at t with w makes it flinch within `window` tics: the shots that land
@@ -278,7 +302,7 @@ impl Combat {
     }
 
     /// Seconds of shooting it'd take (a lot, out of the gun's reach: anything else first).
-    fn time_to_kill(&self, w: &Weapon, t: &Thing, d: f64) -> f64 {
+    pub(super) fn time_to_kill(&self, w: &Weapon, t: &Thing, d: f64) -> f64 {
         let info = mon(t.name);
         if !Self::in_reach(w, t, d) {
             return 1e4 + d;

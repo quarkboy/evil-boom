@@ -1,0 +1,171 @@
+# Plasma down into pits and over low railings (evil-boom arena arenas/autoaim-plasma.txt; the user's):
+# arenas/autoaim.txt with the plasma rifle instead of the launcher: autoaim tips a ball into the
+# ledge's lip below, or (aimed up) into the floor in front of what's up on a ledge.
+
+arena pit-map20-170-1
+# her on sector 170 (floor 232), them in sector 155 (floor 0, +232 below)
+map doom2 MAP20
+at 3840 -1696 40
+give plasma cell=200
+spawn DoomImp 4230 -1086 237
+spawn DoomImp 4311 -1572 195
+spawn DoomImp 4246 -1417 214
+spawn DoomImp 3928 -1237 259
+spawn DoomImp 4259 -1662 185
+seconds 90
+
+arena pit-map20-170-2
+# her on sector 170 (floor 232), them in sector 155 (floor 0, +232 below)
+map doom2 MAP20
+at 3769 -1640 40
+give plasma cell=200
+spawn DoomImp 4197 -1651 178
+spawn DoomImp 3971 -1201 245
+spawn DoomImp 4377 -1487 194
+spawn DoomImp 4084 -1127 238
+spawn DoomImp 4194 -1070 233
+seconds 90
+
+arena pit-map09-73-1
+# her on sector 73 (floor 128), them in sector 32 (floor -64, +192 below)
+map doom2 MAP09
+at -147 1055 99
+give plasma cell=200
+spawn DoomImp -265 1519 284
+spawn DoomImp -371 1541 295
+spawn DoomImp -187 1913 273
+spawn DoomImp -339 1597 290
+spawn DoomImp -6 1478 252
+seconds 90
+
+arena pit-map09-73-2
+# her on sector 73 (floor 128), them in sector 32 (floor -64, +192 below)
+map doom2 MAP09
+at -130 1076 97
+give plasma cell=200
+spawn DoomImp -441 1582 302
+spawn DoomImp -266 1467 289
+spawn DoomImp 93 1654 249
+spawn DoomImp -26 1437 254
+spawn DoomImp -299 1584 288
+seconds 90
+
+arena pit-e1m6-23-1
+# her on sector 23 (floor 144), them in sector 20 (floor -24, +168 below)
+map doom E1M6
+at -1598 1344 178
+give plasma cell=200
+spawn DoomImp -1920 1148 31
+spawn DoomImp -1998 1413 350
+spawn DoomImp -2014 1503 339
+spawn DoomImp -1986 1234 16
+spawn DoomImp -1927 1471 339
+seconds 90
+
+arena pit-e1m6-23-2
+# her on sector 23 (floor 144), them in sector 20 (floor -24, +168 below)
+map doom E1M6
+at -1599 1218 151
+give plasma cell=200
+spawn DoomImp -1979 1112 16
+spawn DoomImp -2045 1359 342
+spawn DoomImp -1981 1512 322
+spawn DoomImp -2031 1568 321
+spawn DoomImp -1771 1552 297
+seconds 90
+
+arena pit-map03-103-1
+# her on sector 103 (floor 112), them in sector 108 (floor 32, +80 below)
+map doom2 MAP03
+at 4654 2933 132
+give plasma cell=200
+spawn DoomImp 4465 3134 313
+spawn DoomImp 4517 3175 299
+spawn DoomImp 4632 3192 275
+spawn DoomImp 4434 3078 327
+spawn DoomImp 4406 2999 345
+seconds 90
+
+arena pit-map03-103-2
+# her on sector 103 (floor 112), them in sector 108 (floor 32, +80 below)
+map doom2 MAP03
+at 4722 2921 136
+give plasma cell=200
+spawn DoomImp 4489 3148 316
+spawn DoomImp 4440 3085 330
+spawn DoomImp 4561 3153 305
+spawn DoomImp 4639 3193 287
+spawn DoomImp 4450 3011 342
+seconds 90
+
+arena pit-map08-23-1
+# her on sector 23 (floor 8), them in sector 22 (floor -56, +64 below)
+map doom2 MAP08
+at 2744 1712 26
+give plasma cell=200
+spawn DoomImp 3089 1742 185
+spawn DoomImp 3261 2126 219
+spawn DoomImp 3152 1995 215
+spawn DoomImp 3165 1707 179
+spawn DoomImp 2930 1914 227
+seconds 90
+
+arena pit-map08-23-2
+# her on sector 23 (floor 8), them in sector 22 (floor -56, +64 below)
+map doom2 MAP08
+at 2782 2108 330
+give plasma cell=200
+spawn DoomImp 3154 1963 159
+spawn DoomImp 3225 1857 150
+spawn DoomImp 3198 2012 167
+spawn DoomImp 3031 1975 152
+spawn DoomImp 3025 1727 123
+seconds 90
+
+arena rail-map14-96-1
+# her on sector 96 (floor 88), them in sector 107 (floor 104, -16 below), over railing sector 110 (floor 136)
+map doom2 MAP14
+at 1873 792 245
+give plasma cell=200
+spawn DoomImp 1732 210 76
+spawn DoomImp 1691 305 69
+spawn DoomImp 1723 427 68
+spawn DoomImp 1666 474 57
+spawn DoomImp 1523 353 51
+seconds 90
+
+arena rail-map14-96-2
+# her on sector 96 (floor 88), them in sector 107 (floor 104, -16 below), over railing sector 110 (floor 136)
+map doom2 MAP14
+at 1917 785 289
+give plasma cell=200
+spawn DoomImp 2174 681 158
+spawn DoomImp 1670 307 63
+spawn DoomImp 2276 14 115
+spawn DoomImp 2003 -34 96
+spawn DoomImp 2300 515 145
+seconds 90
+
+arena rail-map14-176-1
+# her on sector 176 (floor 104), them in sector 182 (floor 112, -8 below), over railing sector 187 (floor 136)
+map doom2 MAP14
+at 406 -1375 253
+give plasma cell=200
+spawn DoomImp 733 -1490 161
+spawn DoomImp 46 -1475 16
+spawn DoomImp 316 -1618 70
+spawn DoomImp 456 -1631 101
+spawn DoomImp 186 -1612 47
+seconds 90
+
+arena rail-map14-176-2
+# her on sector 176 (floor 104), them in sector 182 (floor 112, -8 below), over railing sector 187 (floor 136)
+map doom2 MAP14
+at 284 -1358 306
+give plasma cell=200
+spawn DoomImp 646 -1566 150
+spawn DoomImp 421 -1611 118
+spawn DoomImp 180 -1599 67
+spawn DoomImp 570 -1623 137
+spawn DoomImp 463 -1552 133
+seconds 90

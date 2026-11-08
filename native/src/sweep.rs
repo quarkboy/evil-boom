@@ -365,7 +365,7 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
         let mut stranded = idle_since.is_some_and(|i| e.tic - i > STRANDED_TICS.min((o.stall_seconds * TICRATE / 2.0) as i64)) || agent.x().restart_wanted;
         if let (true, Some(ob), Some(p)) = (e.finished() && e.dead(), &obs, agent.player_mut()) {
             let pos = ob.pos();
-            let seen: Vec<String> = p.combat().visible.iter().map(|t| format!("{} {:.0} away", t.name, crate::geom::dist((t.x, t.y), pos))).collect();
+            let seen: Vec<String> = p.combat().visible.iter().map(|t| format!("{} {:.0} away ({} health)", t.name, crate::geom::dist((t.x, t.y), pos), t.health)).collect();
             let doing = p.explorer.current.as_ref().map_or("-".to_string(), |c| c.label.clone());
             let msg = format!(
                 "tic {}: killed at ({:.0}, {:.0}) by {}: health {:.0}, armor {:.0}, weapon {}, weapons {:?}, ammo {:?}; in sight: {}; doing: {doing}",

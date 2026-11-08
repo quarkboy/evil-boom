@@ -47,6 +47,8 @@ pub(super) const SWITCH_WAIT: i64 = 40;
 
 /// tics from the trigger to the rocket (S_MISSILE1, then A_FireMissile)
 pub(super) const ROCKET_DELAY: f64 = 8.0;
+/// a rocket's speed, a tic
+const ROCKET_SPEED: f64 = 20.0;
 
 /// a rocket's radius: it moves as a box this far each way along x and y, not a circle
 const ROCKET_RADIUS: f64 = 11.0;
@@ -61,6 +63,11 @@ const ROCKET_CLEAR: f64 = 160.0;
 /// there's nothing straight ahead (ANG90/16, 1<<26)
 const AUTOAIM_RANGE: f64 = 1024.0;
 const AUTOAIM_SPREAD: f64 = 5.625;
+/// plasma's radius
+const PLASMA_RADIUS: f64 = 13.0;
+/// autoaim's line goes out from her feet + this (her middle and 8: P_AimLineAttack's shootz), as
+/// does a projectile's middle (it comes out at her feet + 32, 8 high)
+const AIM_HEIGHT: f64 = 36.0;
 
 /// a pain elemental nearer than this isn't shot with rockets (its souls come out in front)
 const PAIN_NEAR: f64 = 512.0;
@@ -100,6 +107,11 @@ impl Combat {
     pub(super) fn aim_and_fire(&mut self, obs: &Observation, t: &Thing) -> (f64, bool, i32) {
         let pos = obs.pos();
         let d = dist((t.x, t.y), pos);
+        let rockets = Self::held(obs).contains(&5) && Self::ammo(obs, 5) > 0;
+        let blocked = rockets && !self.rocket_lane_clear(obs, t);
+        if blocked {
+            self.rocket_blocked = Some((t.id, obs.tic));
+        }
         // (fought up close, the weapon for it from the start, not whatever's best from here
         // while she closes in: E3M4, at a demon 299 off with the rocket launcher up, the fist
         // brought up 46 off)
@@ -126,8 +138,10 @@ impl Combat {
         let on = norm(aim - obs.angle).abs() < tolerance;
         let held_fire = if !Self::in_reach(&w, t, d) {
             "out of reach"
-        } else if held == 5 && (!self.rocket_safe(obs, t) || !self.rocket_lane_clear(obs, t)) {
+        } else if held == 5 && (!self.rocket_safe(obs, t) || blocked) {
             "rocket not safe"
+        } else if held == 6 && !self.projectile_reaches(obs, t, pos, PLASMA_RADIUS) {
+            "plasma wouldn't get there"
         } else if !self.can_hit(obs, t, None) {
             "no shot (too steep, or something in the way)"
         } else if Self::barrel_in_line(obs, &w, t) {
@@ -169,6 +183,7 @@ impl Combat {
         // it go 8 tics after the trigger, and she'd run up beside the pillar by then)
         let now = obs.pos();
         let then = (now.0 + self.velocity.0 * ROCKET_DELAY, now.1 + self.velocity.1 * ROCKET_DELAY);
+        let centre = self.z(obs) + AIM_HEIGHT;
         let mid = t.z + mon(t.name).height / 2.0;
         // (the way to it, and the way she faces: it goes where she faces, and she fires within a
         // couple of degrees of it; the arena's crates, a corner clipped 3 units off the target's
@@ -178,11 +193,21 @@ impl Combat {
         // (and the way the game will send it: autoaim swings it to whatever's first on her way,
         // or 5.6 degrees off it, and down or up at it: into a ledge's lip firing down into a pit,
         // a railing it'd fly over level; the user's)
+        // (and further, running after it: she gains on its blast as it flies, at 20 a tic to her
+        // 16, so something 600 out is a blast 120 from her; MAP06, shooting on the way at an imp
+        // 1500 off, the route running her on after the rocket, twice, dead)
+        let after = {
+            let d = dist((t.x, t.y), now).max(1.0);
+            let gain = (self.velocity.0 * (t.x - now.0) + self.velocity.1 * (t.y - now.1)) / d;
+            1.0 - (gain / ROCKET_SPEED).clamp(0.0, 0.8)
+        };
         [now, then].into_iter().all(|pos| {
             let d = dist((t.x, t.y), pos).max(1.0);
-            let len = d.min(ROCKET_CLEAR + ROCKET_MARGIN);
-            let (h, at) = self.autoaim(obs, pos, obs.angle);
-            [heading(pos, (t.x, t.y)), obs.angle].into_iter().all(|h| self.rocket_flies(obs, pos, h, len, Some(mid))) && self.rocket_flies(obs, pos, h, len, at)
+            let len = d.min(ROCKET_CLEAR / after + ROCKET_MARGIN);
+            let to = ((mid - centre) / d).clamp(-AUTOAIM, AUTOAIM);
+            let (h, seen, middle) = self.autoaim(obs, pos, obs.angle);
+            [heading(pos, (t.x, t.y)), obs.angle].into_iter().all(|h| self.rocket_flies(obs, pos, h, len, to, (ROCKET_RADIUS, ROCKET_MARGIN)))
+                && [seen, middle].into_iter().all(|slope| self.rocket_flies(obs, pos, h, len, slope, (ROCKET_RADIUS, ROCKET_MARGIN)))
         })
     }
 
@@ -191,11 +216,15 @@ impl Combat {
     /// degrees to one side, then the other: the rocket's way swung to it, climbing or dipping to
     /// it (to its middle: the game aims at what's seen of it, above a railing higher, so its
     /// middle is the nearer of the two to what's in between); none, straight on and level.
-    pub(super) fn autoaim(&self, obs: &Observation, pos: Point, facing: f64) -> (f64, Option<f64>) {
+    /// Also the slope to its middle (the game aims at what's seen of it, but a near thing's best
+    /// judged both ways: for a rocket by her, either way clear).
+    pub(super) fn autoaim(&mut self, obs: &Observation, pos: Point, facing: f64) -> (f64, f64, f64) {
+        let shootz = self.z(obs) + AIM_HEIGHT;
+        self.refresh_tic_cache(obs);
         for off in [0.0, AUTOAIM_SPREAD, -AUTOAIM_SPREAD] {
             let h = facing + off;
             let (ux, uy) = (h.to_radians().cos(), h.to_radians().sin());
-            let first = obs
+            let mut on: Vec<(f64, &Thing)> = obs
                 .things
                 .iter()
                 .flatten()
@@ -204,14 +233,29 @@ impl Combat {
                     let (dx, dy) = (m.x - pos.0, m.y - pos.1);
                     let along = dx * ux + dy * uy;
                     let side = (dx * uy - dy * ux).abs();
-                    (along > 0.0 && along < AUTOAIM_RANGE && side < mon(m.name).radius).then_some((along, m.z + mon(m.name).height / 2.0))
+                    (along > 0.0 && along < AUTOAIM_RANGE && side < mon(m.name).radius).then_some((along, m))
                 })
-                .min_by(|a, b| a.0.total_cmp(&b.0));
-            if let Some((_, mid)) = first {
-                return (h, Some(mid));
+                .collect();
+            on.sort_by(|a, b| a.0.total_cmp(&b.0));
+            // (the first it sees any of, aimed at the middle of what it sees: over a railing, the
+            // part above it; the game's way, P_AimLineAttack)
+            for (along, m) in on {
+                let (lo, hi) = (m.z, m.z + mon(m.name).height);
+                let seen: Vec<f64> = (0..)
+                    .map(|k| lo + 4.0 * f64::from(k))
+                    .take_while(|&z| z <= hi)
+                    .filter(|&z| {
+                        let eye = Body { x: pos.0, y: pos.1, z: shootz - 3.0, height: 4.0 };
+                        self.los.clear(eye, Body { x: m.x, y: m.y, z: z - 0.5, height: 1.0 }, &self.heights_now)
+                    })
+                    .collect();
+                if let (Some(&bottom), Some(&top)) = (seen.first(), seen.last()) {
+                    let slope = |z: f64| ((z - shootz) / along.max(1.0)).clamp(-AUTOAIM, AUTOAIM);
+                    return (h, slope((bottom + top) / 2.0), slope((lo + hi) / 2.0));
+                }
             }
         }
-        (facing, None)
+        (facing, 0.0, 0.0)
     }
 
     /// Would a rocket fired from `pos` the way `h` (degrees) get `len` with nothing in its box's
@@ -220,12 +264,13 @@ impl Combat {
     /// arena's 32-high steps, seen over, flown into), and the box reaches a corner its middle
     /// passes (its radius on an axis, 1.4 times it on the diagonal, and some: a miss is better
     /// than one in her face, the user's).
-    pub(super) fn rocket_flies(&mut self, obs: &Observation, pos: Point, h: f64, len: f64, to_mid: Option<f64>) -> bool {
+    /// (`shape`: the projectile's radius, and what's kept clear beyond it each side)
+    pub(super) fn rocket_flies(&mut self, obs: &Observation, pos: Point, h: f64, len: f64, slope: f64, (radius, margin): (f64, f64)) -> bool {
         let (ux, uy) = (h.to_radians().cos(), h.to_radians().sin());
-        let half = ROCKET_RADIUS * (ux.abs() + uy.abs()) + ROCKET_MARGIN;
+        let half = radius * (ux.abs() + uy.abs()) + margin;
         let foot = self.z(obs);
         let (bottom, top) = (foot + ROCKET_BOTTOM - 0.5, foot + ROCKET_BOTTOM + ROCKET_HEIGHT + 0.5);
-        let rise = to_mid.map_or(0.0, |m| m - (foot + ROCKET_BOTTOM + ROCKET_HEIGHT / 2.0));
+        let rise = slope * len;
         self.refresh_tic_cache(obs);
         [0.0, 1.0, -1.0].into_iter().all(|k| {
             let from = (pos.0 - uy * half * k, pos.1 + ux * half * k);
@@ -238,6 +283,45 @@ impl Combat {
         })
     }
 
+    /// Would a shot of a projectile weapon (`radius`: the rocket's 11, plasma's 13) fired at t from
+    /// `q`, facing it, go the way autoaim sends it and get to it, nothing in its box's way at its
+    /// height? (Plasma: not wasted on a ledge's lip below her, or the floor in front of something
+    /// up on a ledge; the user's.) Its middle only, not its box's sides: a side grazing a corner
+    /// costs a cell at most (it steps 25 at a time, the box checked where it lands, and may get
+    /// by), and holding fire for it held her out of a fight (MAP16's cover, a Spider Mastermind 700
+    /// off, the sides 14 off the line clipping the cover's edges: 6/8 lost, none before).
+    pub(super) fn projectile_reaches(&mut self, obs: &Observation, t: &Thing, q: Point, radius: f64) -> bool {
+        let d = dist((t.x, t.y), q);
+        let (h, seen, _) = self.autoaim(obs, q, heading(q, (t.x, t.y)));
+        self.rocket_flies(obs, q, h, (d - mon(t.name).radius - radius).max(1.0), seen, (0.0, 0.0))
+    }
+
+    /// Plasma from here wouldn't get to t (autoaim tips it into a lip below or the floor in front of
+    /// it above): the nearest step, up to 96 on (towards it first, then 30 and 60 degrees off it
+    /// either side), she can take without dropping off anything (the fight's own `safe`: no drop she
+    /// couldn't come back up, nothing that hurts), from where it would; the way to it.
+    /// (Not for rockets: stepping for one put her by the crates' columns more than it helped,
+    /// own-rocket hits in the crate arena 26 -> 44.)
+    pub(super) fn plasma_spot(&mut self, obs: &Observation, t: &Thing) -> Option<Point> {
+        let pos = obs.pos();
+        let to = heading(pos, (t.x, t.y));
+        for off in [0.0, 30.0, -30.0, 60.0, -60.0] {
+            let h = (to + off).to_radians();
+            let d = (h.cos(), h.sin());
+            for k in 1..=6 {
+                let len = 16.0 * f64::from(k);
+                if !self.safe(obs, d, len) {
+                    break;
+                }
+                let q = (pos.0 + d.0 * len, pos.1 + d.1 * len);
+                if self.projectile_reaches(obs, t, q, PLASMA_RADIUS) {
+                    return Some(d);
+                }
+            }
+        }
+        None
+    }
+
     /// (a rocket on its way out, the way she faces now going into something near) The nearest
     /// heading to her facing with a clear lane far enough out that its blast won't reach her:
     /// the last resort once the trigger's pressed (the user's: it can't be called back; turned
@@ -246,8 +330,8 @@ impl Combat {
         let pos = obs.pos();
         // (each way as autoaim will take it from there)
         let goes = |c: &mut Self, facing: f64| {
-            let (h, at) = c.autoaim(obs, pos, facing);
-            c.rocket_flies(obs, pos, h, ROCKET_CLEAR, at)
+            let (h, seen, middle) = c.autoaim(obs, pos, facing);
+            [seen, middle].into_iter().all(|slope| c.rocket_flies(obs, pos, h, ROCKET_CLEAR, slope, (ROCKET_RADIUS, ROCKET_MARGIN)))
         };
         if goes(self, obs.angle) {
             return None;

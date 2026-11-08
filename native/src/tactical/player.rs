@@ -15,7 +15,7 @@ use crate::knowledge::model::Knowledge;
 use crate::los::Body;
 use crate::motor::follower::RouteFollower;
 use crate::motor::{Controls, Observation, Thing};
-use crate::navigator::{Navigator, States, PLAYER_HEIGHT};
+use crate::navigator::{Navigator, States, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::walkthrough::{Action, Step};
 
 /// the most of each ammo she can carry (without a backpack), by weapon slot
@@ -45,6 +45,16 @@ const COVER_RANGE: f64 = 768.0;
 const COVER_SPOTS: usize = 48;
 /// a retreat is over once nothing that shoots has been in sight this long
 const CLEAR_TICS: i64 = 35;
+/// a post (cover to fight from) looked for among the places she knows of this near...
+const POST_RANGE: f64 = 1024.0;
+/// ...the nearest this many of them...
+const POST_LOOKS: usize = 2000;
+/// ...looked at on a grid this fine...
+const POST_GRID: f64 = 32.0;
+/// ...with somewhere they'd see her this near it (to step out to and shoot from)
+const POST_PEEK: f64 = 128.0;
+/// on the way to one this long at most
+const POST_TICS: i64 = 6 * 35;
 /// after a retreat that found no cover, not again for this long
 const RETREAT_AGAIN: i64 = 3 * 35;
 /// monsters this near, this many of them, spread round her this far (degrees): get out
@@ -207,6 +217,9 @@ enum RetreatKind {
     Out,
     /// a heavy she can't kill soon: where its shots land on the others
     Bait,
+    /// in a long fight with a hitscan shooter, out in the open with nowhere near to duck: to
+    /// a corner she knows of, across the open if it must be, to fight it from
+    Post,
 }
 
 impl RetreatKind {
@@ -217,6 +230,7 @@ impl RetreatKind {
             RetreatKind::Back => "back",
             RetreatKind::Out => "out",
             RetreatKind::Bait => "bait",
+            RetreatKind::Post => "post",
         }
     }
 }
@@ -394,6 +408,7 @@ impl Player {
             RetreatKind::ForAmmo => self.fight.combat.armed(obs) || since > AMMO_TICS,
             RetreatKind::Back => calm || since > BACK_TICS,
             RetreatKind::Cover => calm,
+            RetreatKind::Post => since > POST_TICS,
         }
     }
 
@@ -412,6 +427,9 @@ impl Player {
         let (kind, route) = if (health < RETREAT_HEALTH && !self.shooters().is_empty()) || self.vile(obs) {
             self.retreat_tic = obs.tic;
             (RetreatKind::Cover, self.find_cover(obs))
+        } else if self.fight.combat.in_the_open(obs.tic) {
+            self.retreat_tic = obs.tic;
+            (RetreatKind::Post, self.find_post(obs))
         } else if !self.fight.combat.armed(obs) && !self.fight.combat.against_her().is_empty() {
             self.retreat_tic = obs.tic;
             (RetreatKind::ForAmmo, self.for_ammo(obs))
@@ -613,9 +631,14 @@ impl Player {
     /// A way to that poly passing no monster closer than `clear` (`doors`: through doors she
     /// can open, else none).
     fn go_to_clear(&mut self, obs: &Observation, pi: usize, them: &[Thing], label: &str, clear: f64, doors: bool) -> Option<RouteFollower> {
+        let goal = self.explorer.nav.poly_center(pi);
+        self.go_to_point(obs, goal, them, label, clear, doors)
+    }
+
+    /// The same, to a point.
+    fn go_to_point(&mut self, obs: &Observation, goal: Point, them: &[Thing], label: &str, clear: f64, doors: bool) -> Option<RouteFollower> {
         let view = self.explorer.view();
         let live: States = obs.heights.iter().map(|&h| vec![h]).collect();
-        let goal = view.nav.poly_center(pi);
         let openable = doors.then(|| view.local_doors(obs.keys.unwrap_or_default()));
         let path = view.find_path(obs.pos(), goal, &live, openable.as_ref())?;
         let through = path.waypoints.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).flat_map(|(a, b)| them.iter().map(move |t| segment_point_distance(a, b, (t.x, t.y)))).fold(f64::INFINITY, f64::min);
@@ -690,6 +713,77 @@ impl Player {
             }
         }
         self.log(format!("tic {}: surrounded, nowhere better in reach", obs.tic));
+        None
+    }
+
+    /// Out in the open in a long fight with a hitscan shooter: to the nearest place she knows of
+    /// (seen or been) that none of them can see, with somewhere near it they can (a corner to
+    /// step out from and back behind), by a way that doesn't go through them. The user's, for
+    /// E3M8: the building in the middle, across the open to get to it, rather than standing in
+    /// the open with the spider mastermind's bursts.
+    fn find_post(&mut self, obs: &Observation) -> Option<RouteFollower> {
+        let shooters = self.shooters();
+        if shooters.is_empty() {
+            return None;
+        }
+        let nav = Rc::clone(&self.explorer.nav);
+        let known = self.explorer.knowledge.known_polys();
+        let heights = self.fight.combat.heights(obs).to_vec();
+        let pos = obs.pos();
+        // (places on a grid, not the nav's polys: a hall's a few big ones, the shadow behind a
+        // pillar inside one whose middle's in plain sight; E3M8, 27 polys in reach, 2 hidden)
+        let on_known = |p: Point| -> Option<f64> {
+            let pi = nav.poly_in(p)?;
+            let s = nav.sector_of_poly(pi);
+            (known.contains(&pi) && !self.explorer.knowledge.damaging(s)).then(|| heights[s].0)
+        };
+        let fits = |p: Point| {
+            let r = PLAYER_RADIUS;
+            [(-r, -r), (r, -r), (r, r), (-r, r)].into_iter().all(|(dx, dy)| on_known((p.0 + dx, p.1 + dy)).is_some())
+        };
+        let n = (POST_RANGE / POST_GRID) as i32;
+        let mut grid: Vec<(f64, Point, f64)> = (-n..=n)
+            .flat_map(|i| (-n..=n).map(move |j| (pos.0 + f64::from(i) * POST_GRID, pos.1 + f64::from(j) * POST_GRID)))
+            .filter_map(|p| {
+                let d = dist(p, pos);
+                (32.0 < d && d < POST_RANGE && fits(p)).then_some((d, p, on_known(p)?))
+            })
+            .collect();
+        grid.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let los = &self.fight.combat.los;
+        let seen = |p: Point, z: f64| {
+            shooters.iter().any(|t| {
+                let eye = Body { x: t.x, y: t.y, z: t.z, height: monster(t.name).map_or(56.0, |m| m.height) };
+                los.clear(eye, Body { x: p.0, y: p.1, z, height: PLAYER_HEIGHT }, &heights)
+            })
+        };
+        let mut posts = Vec::new();
+        for &(_, p, z) in grid.iter().take(POST_LOOKS) {
+            if seen(p, z) {
+                continue;
+            }
+            let peek = (0..8).any(|k| {
+                let a = f64::from(k) * std::f64::consts::FRAC_PI_4;
+                [POST_PEEK / 2.0, POST_PEEK].into_iter().any(|r| {
+                    let q = (p.0 + a.cos() * r, p.1 + a.sin() * r);
+                    on_known(q).is_some_and(|qz| seen(q, qz))
+                })
+            });
+            if peek {
+                posts.push(p);
+                if posts.len() >= 4 {
+                    break;
+                }
+            }
+        }
+        let found = posts.len();
+        for g in posts {
+            if let Some(f) = self.go_to_point(obs, g, &shooters, "post", PAST_CLEAR, false) {
+                self.log(format!("tic {}: in the open: to a post at ({:.0}, {:.0}), health {:.0}", obs.tic, g.0, g.1, obs.health.unwrap_or(0.0)));
+                return Some(f);
+            }
+        }
+        self.log(format!("tic {}: in the open, no post in reach ({} places, {found} posts)", obs.tic, grid.len()));
         None
     }
 

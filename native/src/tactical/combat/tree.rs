@@ -3,10 +3,12 @@
 //! ```text
 //! decide
 //! ├─ nothing in sight, nothing flying at her
-//! │    out from under a crusher · out of a vile's sight · lost sight of it: keeping at it ·
+//! │    out from under a crusher · out of a vile's sight · ducked: waiting out its fire ·
+//! │    lost sight of it: keeping at it ·
 //! │    the fight over
 //! └─ a target, or a missile on its way
-//!    ├─ survive        out of a vile's sight · dodging · out from under a crusher ·
+//!    ├─ survive        out of a vile's sight · ducking a hitscan heavy · dodging · out from
+//!    │                 under a crusher ·
 //!    │                 away from a barrel
 //!    ├─ busy           (a jump: the route keeps the legs) shooting on the way
 //!    ├─ melee          (the weapon she'd fight it with, up close: `Style::Melee`) closing in
@@ -50,6 +52,8 @@ pub(super) struct Situation<'a> {
     pub barrel_away: Option<Point>,
     /// an arch-vile's fire to get out of the sight of: its name, the way
     pub vile: Option<(&'static str, Option<Point>)>,
+    /// a hitscan shooter's fire to duck out of the sight of: its name, the way
+    pub duck: Option<(&'static str, Option<Point>)>,
 }
 
 /// What a node has her do.
@@ -71,13 +75,13 @@ impl Act {
 type Node = fn(&mut Combat, &Observation, &Situation) -> Option<Act>;
 
 /// Before anything else: out of the way of what would kill her outright.
-const SURVIVE: [Node; 4] = [out_of_vile_sight, dodging, off_crusher, off_barrel];
+const SURVIVE: [Node; 5] = [out_of_vile_sight, ducking, dodging, off_crusher, off_barrel];
 /// In a jump, the route has the legs.
 const BUSY: [Node; 1] = [busy];
 /// The weapon she'd fight her target with fought up close.
 const MELEE: [Node; 1] = [melee];
 /// The fight itself.
-const FIGHT: [Node; 12] = [
+const FIGHT: [Node; 13] = [
     backing_off,
     to_errand,
     unarmed,
@@ -85,6 +89,7 @@ const FIGHT: [Node; 12] = [
     closing_out_of_reach,
     out_of_reach,
     stepping_for_shot,
+    stepping_for_plasma,
     outmatched_keep_clear,
     outmatched_get_past,
     keeping_off,
@@ -106,6 +111,13 @@ fn out_of_vile_sight(c: &mut Combat, _obs: &Observation, s: &Situation) -> Optio
     let mut a = Act::new(way, format!("out of the {name}'s sight"));
     a.aim = c.vile_face().map(|v| heading(s.pos, v));
     Some(a)
+}
+
+/// Out of a hitscan shooter's sight before its first shot (it turns to her first), in a long
+/// fight: shooting on the way, as sized up.
+fn ducking(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
+    let (name, way) = s.duck?;
+    Some(Act::new(way, format!("ducking out of the {name}'s sight")))
 }
 
 fn dodging(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
@@ -210,6 +222,16 @@ fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option
     Some(Act::new(Some(way), format!("stepping for a shot at {}", s.target.as_ref().map_or("", |t| t.name))))
 }
 
+/// Plasma up and autoaim taking it short of the target (into a ledge's lip with them down in a pit,
+/// or the floor in front of them up on one): a step on to where it would get there, never off the
+/// ledge (the user's: on till the weapon can hit, not falling down). Not for rockets (see
+/// `plasma_spot`).
+fn stepping_for_plasma(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    let t = s.target.as_ref().filter(|_| obs.weapon == Some(6) && c.held_fire == "plasma wouldn't get there")?;
+    let way = c.plasma_spot(obs, t)?;
+    Some(Act::new(Some(way), format!("stepping for a shot at {} (its way blocked)", t.name)))
+}
+
 /// Outmatched by something awake and after her: keep her distance, still shooting (the route
 /// walked her up to the cyberdemon with a rocket or two short).
 fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
@@ -291,6 +313,15 @@ impl Combat {
                 }
                 let aim = self.vile_face().map(|v| heading(obs.pos(), v));
                 return Some(Decision { takeover: true, aim, fire: false, weapon: 0, moving: way, why });
+            }
+            if let Some((_, way)) = self.duck(obs) {
+                // (out of its sight now: held there till its fire's broken off)
+                let why = "ducked: waiting out its fire".to_string();
+                if why != self.mode {
+                    self.log.push(format!("tic {}: {why}", obs.tic));
+                    self.mode = why.clone();
+                }
+                return Some(Decision { takeover: true, aim: None, fire: false, weapon: 0, moving: way, why });
             }
             if let Some(d) = self.lost_sight(obs) {
                 return Some(d);

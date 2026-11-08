@@ -8,7 +8,7 @@ use crate::geom::{dist, Point};
 use crate::los::Body;
 use crate::motor::{Observation, Thing};
 use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
-use crate::tactical::bestiary::{Attack, Weapon};
+use crate::tactical::bestiary::{first_shot, weapon_in, Attack, Weapon};
 
 const WAYS: usize = 16;
 
@@ -36,6 +36,7 @@ const W_EXPOSED: f64 = 1.5;
 const W_OFF_FLOOR: f64 = 10.0;
 const W_BARREL: f64 = 4.0;
 const W_TOWARD: f64 = 1.5;
+
 /// with anything shooting in sight, kept this far from a barrel's middle (its blast and a margin)
 const BARREL_KEEP: f64 = 192.0;
 
@@ -64,6 +65,18 @@ const SHELTER_LATE: f64 = 16.0;
 /// she covers about this much a tic, running
 const RUN: f64 = 14.0;
 
+/// ducking from a hitscan shooter only in a fight longer than this (s)...
+const DUCK_FIGHT: f64 = 4.0;
+/// ...with this many tics to get out of its sight, once it's firing (it fires on for as long as
+/// it sees her: any way out of its sight shortens the burst; 8, E3M8, nowhere in 84, a burst of
+/// 120 tics stood in)...
+const DUCK_FIRING: f64 = 24.0;
+/// ...off to the spot with this many tics to spare before its first shot...
+const DUCK_LATE: f64 = 3.0;
+/// ...held there this long past its first shot (its fire breaks off at the next refire, 9 tics
+/// at most, once it can't see her)
+const DUCK_HOLD: i64 = 12;
+
 impl Combat {
     /// An arch-vile in sight winding up its fire: the way to the nearest place it can't see her
     /// that she can get to before it goes off (behind a pillar), as (its name, the way). None if
@@ -86,9 +99,8 @@ impl Combat {
             }
         }
         let eye = Body { x: vile.x, y: vile.y, z: vile.z, height: mon(vile.name).height };
-        self.refresh_tic_cache(obs);
+        let best = self.shadow_spot(obs, eye, left * RUN);
         let z = self.z(obs);
-        let mut best: Option<(f64, Point)> = None;
         // (failing that, somewhere its blast can't reach her: it goes off 24 short of her
         // towards the arch-vile, and hurts only what it can see from there: pressed against
         // something low between them, the blast's on the far side of it; only the 20 of the
@@ -112,22 +124,6 @@ impl Combat {
                     let blast = Body { x: p.0 + (vile.x - p.0) / to * FIRE_SHORT, y: p.1 + (vile.y - p.1) / to * FIRE_SHORT, z, height: FIRE_HEIGHT };
                     if !self.los.clear(blast, me, &self.heights_now) {
                         hug = Some((far, p));
-                    }
-                }
-                if far > 0.0 && !self.los.clear(eye, me, &self.heights_now) {
-                    // (well into its shadow, not on the edge of it: stopped just past a
-                    // pillar's corner, it still saw her)
-                    let deep = far + SHADOW;
-                    let inside = deep <= room && {
-                        let q = (pos.0 + d.0 * deep, pos.1 + d.1 * deep);
-                        !self.los.clear(eye, Body { x: q.0, y: q.1, z, height: PLAYER_HEIGHT }, &self.heights_now)
-                    };
-                    if inside {
-                        let spot = (pos.0 + d.0 * (far + SHADOW / 2.0), pos.1 + d.1 * (far + SHADOW / 2.0));
-                        if best.is_none_or(|(bf, _)| far < bf) {
-                            best = Some((far, spot));
-                        }
-                        break;
                     }
                 }
                 far += 16.0;
@@ -154,6 +150,94 @@ impl Combat {
             if best.is_none() { " (its blast blocked there)" } else { "" }
         ));
         Some((vile.name, self.towards(obs, spot)))
+    }
+
+    /// The nearest place, `reach` or less away along one of the ways round, that something seeing
+    /// from `eye` can't see her (well into its shadow: the spot half `SHADOW` past where it loses
+    /// her, and all of `SHADOW` past still hidden), as (how far till hidden, the spot).
+    fn shadow_spot(&mut self, obs: &Observation, eye: Body, reach: f64) -> Option<(f64, Point)> {
+        let pos = obs.pos();
+        self.refresh_tic_cache(obs);
+        let z = self.z(obs);
+        let mut best: Option<(f64, Point)> = None;
+        for i in 0..WAYS {
+            let a = 2.0 * std::f64::consts::PI * i as f64 / WAYS as f64;
+            let d = (a.cos(), a.sin());
+            // (her middle stops her radius short of what ends the run)
+            let room = self.clear_run(obs, d, reach + PLAYER_RADIUS) - PLAYER_RADIUS;
+            let mut far = 16.0;
+            while far <= room && best.is_none_or(|(bf, _)| far < bf) {
+                let p = (pos.0 + d.0 * far, pos.1 + d.1 * far);
+                let hidden = |c: &Self, q: Point| !c.los.clear(eye, Body { x: q.0, y: q.1, z, height: PLAYER_HEIGHT }, &c.heights_now);
+                if self.fits(obs, p) && hidden(self, p) {
+                    // (well into its shadow, not on the edge of it: stopped just past a
+                    // pillar's corner, it still saw her)
+                    let deep = far + SHADOW;
+                    if deep <= room && hidden(self, (pos.0 + d.0 * deep, pos.1 + d.1 * deep)) {
+                        best = Some((far, (pos.0 + d.0 * (far + SHADOW / 2.0), pos.1 + d.1 * (far + SHADOW / 2.0))));
+                        break;
+                    }
+                }
+                far += 16.0;
+            }
+        }
+        best
+    }
+
+    /// A hitscan shooter in sight winding up at her, or firing, in a fight that'll take a while
+    /// (not over in `DUCK_FIGHT` seconds with the gun up): the way to the nearest place it can't
+    /// see her that she can get to before its first shot (or soon, already firing), as (its name,
+    /// the way); and held there till its fire would have broken off (it fires on only while it
+    /// sees her). A player's peek and duck at a pillar's corner: E3M8, the spider mastermind's
+    /// 20 tics of turning to her, then bursts at any range, stood up to in the open; 4/4 seeds
+    /// dead with it at 600-2000 of its 3000. Then the fight's own "keeping at it" brings her out.
+    pub(super) fn duck(&mut self, obs: &Observation) -> Option<(&'static str, Option<Point>)> {
+        let w = weapon_in(obs.weapon.unwrap_or(2), obs);
+        let pos = obs.pos();
+        let shooter = self
+            .against_her()
+            .into_iter()
+            .filter(|t| first_shot(t.name).is_some() && t.attack >= 0)
+            .filter(|t| self.time_to_kill(&w, t, dist((t.x, t.y), pos)) > DUCK_FIGHT)
+            .min_by_key(|t| t.attack);
+        let Some(t) = shooter else {
+            if obs.tic >= self.duck_until {
+                self.duck_way = None;
+                return None;
+            }
+            return self.duck_way.map(|(_, name, spot)| (name, self.towards(obs, spot)));
+        };
+        let first = first_shot(t.name).unwrap_or(0);
+        let to_shot = (first - t.attack).max(0);
+        let left = f64::from(to_shot).max(DUCK_FIRING) - 2.0;
+        let spot = match self.duck_way {
+            Some((id, _, spot)) if id == t.id => spot,
+            _ => {
+                let eye = Body { x: t.x, y: t.y, z: t.z, height: mon(t.name).height };
+                let Some((_, spot)) = self.shadow_spot(obs, eye, left * RUN) else {
+                    self.duck_way = None;
+                    self.no_duck_tic = obs.tic;
+                    if t.attack == 0 || t.attack == first {
+                        self.log.push(format!("tic {}: nowhere to duck from {} {} ({} tics in, {:.0} to get there)", obs.tic, t.name, t.id, t.attack, left * RUN));
+                    }
+                    return None; // (nowhere to duck: fight on)
+                };
+                self.duck_way = Some((t.id, t.name, spot));
+                spot
+            }
+        };
+        // (not till the last moment: its wind-up's the time to shoot it, out in the open; off
+        // to the spot with just the time to get there before its first shot. Off at once, it
+        // got next to no shooting done: MAP16's cover, 6/8 lost or drawn, all won before)
+        let going = obs.tic < self.duck_until || to_shot == 0 || f64::from(to_shot) <= dist(spot, pos) / RUN + DUCK_LATE;
+        if !going {
+            return None;
+        }
+        if obs.tic >= self.duck_until {
+            self.log.push(format!("tic {}: ducking from {} {}, {} tics in: to ({:.0}, {:.0})", obs.tic, t.name, t.id, t.attack, spot.0, spot.1));
+        }
+        self.duck_until = obs.tic + i64::from(to_shot) + DUCK_HOLD;
+        Some((t.name, self.towards(obs, spot)))
     }
 
     /// Sheltering from an arch-vile's blast rather than out of its sight: where it is, to face

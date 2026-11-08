@@ -965,3 +965,42 @@ Results (HNTR, one life): autoaim arena own-rocket hits 31 -> 21; crate arena 75
 the set runs with own-rocket damage 13 -> 7, damage 589 -> 405; E1 7.5, E2 6.9, E3 6.6 -> 7.0,
 Doom II 7.7 -> 7.6, Doom II arena 228 -> 229; 291 -> 293 levels. MAP09's pit: she holds fire at the
 lip and never steps up to clear it (next: stepping for a rocket shot).
+
+## Plasma where autoaim sends it, a safer gun for a blocked rocket, ducking hitscan heavies (2026-11-08)
+
+- **Plasma** (the user's: not wasted when autoaim would put it in the lip below, or the floor in
+  front of something up on a ledge): held when its middle wouldn't get to the target the way
+  autoaim sends it (aimed at the visible part, as P_AimLineAttack does), and a step on toward it
+  (never off the ledge) to where it would. Its middle only: with its box's sides, cover edges 14 off
+  the line 700 out held her fire at a Spider Mastermind (MAP16's cover, 0/8 -> 6/8 lost).
+  Not for rockets: stepping for a rocket shot put her by the crates' columns (own-rocket hits 26 -> 44).
+- **A blocked rocket** (the user's: a safer weapon rather than one held): the launcher ruled out for
+  2 s after its way at the target was blocked close by; kept (waited with) only when the next gun
+  would take 3x as long (the pistol at a Cyberdemon, cells gone: 3/8 drawn). Rocket safety needs
+  both slopes autoaim may give (the visible part's, the middle's) clear.
+- **Running after her own rocket**: the lane is checked further the faster she's following it
+  (20 a tic to her 16: a wall 600 out is a blast 120 from her). MAP06, shooting on the way, the
+  route running her after it, dead twice.
+- **Crushing floors**: a floor seen coming up lately, with under 72 left beneath the ceiling, is a
+  crusher too (E2M4's secret: over a W1 "raise floor, crush" line, stood on it with nothing left to
+  do). Lifts end level with a floor beside them, room enough over it.
+- **Ducking** a hitscan shooter in a long fight (not over in 4 s with the gun up): it shows its
+  wind-up (the spider mastermind turns to her 20 tics before its first burst, info.c; the zombies
+  10), and fires on only while it sees her (A_SpidRefire, A_CPosRefire). She shoots through the
+  wind-up and leaves for the nearest place out of its sight with just the time to get there, holds
+  till its fire would have broken off, and "keeping at it" brings her back out. Leaving at once,
+  she got next to no shooting done (spider-cover 1/8). Once it's firing: anywhere within 24 tics.
+- **Posts**: in such a fight with nowhere near to duck (E3M8's open star), to the nearest place she
+  knows of (seen or been, on a 32 grid: the nav's polys are too coarse in a hall) that none of them
+  sees, with somewhere they would within 128 to step out to, across the open if need be (the
+  user's: the building in the middle).
+- **Boss ammo**: with a boss seen and about, rockets, cells and the BFG's cost 10x against anything
+  else (E3M8: 138 cells on two cacodemons before the spider).
+- Tried and dropped: steering toward places near a shadow (kept her behind the cover, unable to
+  shoot: spider-cover 8/8 -> 2/8); fighting the spider from 768-1280 rather than 640-896 (the user's
+  idea, its spread; spider-cover 6/8 against 8/8, E3M8 no better).
+
+Results (HNTR, one life): E1 7.5 (7/8), E2 6.9 -> 7.0 (6/8), E3 7.0 -> 6.9 (0/8 -> 1/8 through: E3M8
+won), Doom II 7.6 -> 7.8; arenas combat 120/128, Doom II 229 -> 230; autoaim arena own-rocket hits
+21 -> 19, crates 76 -> 77/80 and 26 -> 21; plasma autoaim arena (arenas/autoaim-plasma.txt) 81 ->
+83/112. E3M8 with an E3M7 loadout: 0/4 -> 1/6, the spider left at 370-1720 rather than 1300-2250.

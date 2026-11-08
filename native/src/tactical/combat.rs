@@ -45,6 +45,8 @@ const GIVEN_UP_TICS: i64 = 30 * 35;
 /// a ceiling seen coming down this lately, this low over its floor, is a crusher at work
 const CRUSH_TICS: i64 = 2 * 35;
 const CRUSH_GAP: f64 = 120.0;
+/// a floor seen coming up this lately with this little room left over it, likewise
+const FLOOR_CRUSH_GAP: f64 = 72.0;
 /// health lost lately: over this long (tics)
 const DAMAGE_WINDOW: i64 = 5 * 35;
 /// an awake monster out of sight this long is still fought (where it was)
@@ -150,6 +152,10 @@ pub struct Combat {
     rate: f64,
     mode: String,
     held_fire: String,
+    /// the monster a rocket's way at was last blocked close by (whatever's up), and when: not the
+    /// launcher for it for a while after (the user's: a safer weapon, rather than a rocket held;
+    /// a while, not each tic it's clear: E2M8, the cyberdemon, 24 switches back and forth)
+    rocket_blocked: Option<(i32, i64)>,
     /// (baiting: the monsters in the way are the point)
     pub hold_fire: bool,
     /// monster -> tics it's looked to be after another
@@ -183,6 +189,12 @@ pub struct Combat {
     vile_way: Option<(i64, i32, Point)>,
     /// ...and till when its fire might still go off
     vile_until: i64,
+    /// ducking from a hitscan shooter's fire: from which, to where
+    duck_way: Option<(i32, &'static str, Point)>,
+    /// ...and till when it might still be firing
+    duck_until: i64,
+    /// when there was last nowhere to duck from one
+    no_duck_tic: i64,
     /// the trigger was down last tic
     trigger_held: bool,
     /// health lost lately: (tic, how much)
@@ -195,6 +207,9 @@ pub struct Combat {
     health_was: BTreeMap<i32, i32>,
     /// each sector's ceiling last tic, and when it was last seen coming down
     ceilings: Vec<f64>,
+    /// each sector's floor last tic, and when it was last seen coming up
+    floors: Vec<f64>,
+    floor_up: Vec<i64>,
     ceiling_down: Vec<i64>,
     /// out of reach, closed in on since when, by id...
     closing_since: BTreeMap<i32, i64>,
@@ -229,6 +244,7 @@ impl Combat {
             rate: 0.0,
             mode: String::new(),
             held_fire: String::new(),
+            rocket_blocked: None,
             hold_fire: false,
             infight: BTreeMap::new(),
             heights_tic: None,
@@ -250,6 +266,9 @@ impl Combat {
             steer_stuck: None,
             vile_way: None,
             vile_until: 0,
+            duck_way: None,
+            duck_until: 0,
+            no_duck_tic: i64::MIN / 2,
             trigger_held: false,
             damage: Vec::new(),
             spent: 0.0,
@@ -257,6 +276,8 @@ impl Combat {
             ammo_was: Vec::new(),
             health_was: BTreeMap::new(),
             ceilings: Vec::new(),
+            floors: Vec::new(),
+            floor_up: Vec::new(),
             ceiling_down: Vec::new(),
             closing_since: BTreeMap::new(),
             given_up: BTreeMap::new(),
@@ -317,11 +338,19 @@ impl Combat {
             self.ceilings = obs.heights.iter().map(|h| h.ceiling).collect();
             self.ceiling_down = vec![i64::MIN / 2; obs.heights.len()];
         }
+        if self.floors.len() != obs.heights.len() {
+            self.floors = obs.heights.iter().map(|h| h.floor).collect();
+            self.floor_up = vec![i64::MIN / 2; obs.heights.len()];
+        }
         for (i, h) in obs.heights.iter().enumerate() {
             if h.ceiling < self.ceilings[i] - 0.01 {
                 self.ceiling_down[i] = obs.tic;
             }
             self.ceilings[i] = h.ceiling;
+            if h.floor > self.floors[i] + 0.01 {
+                self.floor_up[i] = obs.tic;
+            }
+            self.floors[i] = h.floor;
         }
         if let Some(h) = obs.health {
             if let Some(before) = self.health.filter(|&before| h < before) {
@@ -548,7 +577,8 @@ impl Combat {
             }
         }
         let vile = if busy { None } else { self.vile_fire(obs) };
-        let s = tree::Situation { pos, busy, errand, missiles, target, aim, health, threat, outmatched, close, barrel_away, vile };
+        let duck = if busy || vile.is_some() { None } else { self.duck(obs) };
+        let s = tree::Situation { pos, busy, errand, missiles, target, aim, health, threat, outmatched, close, barrel_away, vile, duck };
         (s, fire, weapon)
     }
 
@@ -646,9 +676,14 @@ impl Combat {
     }
 
     /// Is sector s a crusher at work: its ceiling coming down lately, and low (E2M2: backed off
-    /// under one fighting a demon, crushed)?
+    /// under one fighting a demon, crushed)? Or its floor coming up lately, with little more
+    /// than her height left under the ceiling (E2M4's secret: a floor raised to crush, walked
+    /// onto over its W1 line, stood on with nothing left to do till it had her; a lift ends
+    /// level with a floor beside it, room enough over it).
     pub fn crushing(&self, obs: &Observation, s: usize) -> bool {
-        self.ceiling_down.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && obs.heights.get(s).is_some_and(|h| h.ceiling - h.floor < CRUSH_GAP)
+        let gap = obs.heights.get(s).map_or(f64::INFINITY, |h| h.ceiling - h.floor);
+        (self.ceiling_down.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < CRUSH_GAP)
+            || (self.floor_up.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < FLOOR_CRUSH_GAP)
     }
 
     /// Health lost a second lately (over the last few seconds).
@@ -664,6 +699,12 @@ impl Combat {
             return f64::INFINITY;
         }
         obs.health.unwrap_or(100.0) / rate
+    }
+
+    /// Was there nowhere to duck from a hitscan shooter's fire just now (in a long fight with
+    /// it)?
+    pub fn in_the_open(&self, tic: i64) -> bool {
+        tic - self.no_duck_tic <= 1
     }
 
     /// What the fight's doing now ("" with none on).
