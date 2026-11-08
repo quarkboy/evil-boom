@@ -640,7 +640,10 @@ impl Fight {
             .flatten()
             .filter(|t| !self.offered.contains(&t.id))
             .filter(|t| {
-                if weapon_item(t.name).is_some() {
+                if let Some(slot) = weapon_item(t.name).filter(|&s| s != 1 && held.contains(&s) && !Self::new_gun(obs, t.name)) {
+                    // (one she has: its ammo)
+                    short && held.contains(&slot) && dist((t.x, t.y), pos) < ITEM_RANGE
+                } else if weapon_item(t.name).is_some() {
                     (self.better_gun(obs, t.name) || (short && Self::new_gun(obs, t.name) && t.name != "Chainsaw")) && dist((t.x, t.y), pos) <= self.gun_worth(obs, t.name) * RUN_SPEED
                 } else {
                     short && ammo_item(t.name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s))) && dist((t.x, t.y), pos) < ITEM_RANGE
@@ -673,8 +676,12 @@ impl Fight {
             let d = dist((t.x, t.y), pos);
             // how much it's needed (0: not at all, 1: badly)
             let mut need = 0.0;
-            if weapon_item(t.name).is_some() {
-                need = if Self::new_gun(obs, t.name) { 1.0 } else { 0.0 };
+            if weapon_item(t.name).is_some() && Self::new_gun(obs, t.name) {
+                need = 1.0;
+            } else if let Some(slot) = weapon_item(t.name).filter(|&s| s != 1) {
+                // (a gun she has already is its ammo: a shotgun guy's dropped one, 4 shells; left
+                // lying about, MAP04's shells gone by the end and MAP05 begun without any)
+                need = (1.0 - ammo(slot) / ammo_max(slot) * 1.5).max(0.0);
             } else if let Some((slots, _)) = ammo_item(t.name) {
                 let fill: Vec<f64> = slots.iter().filter(|s| held.contains(s)).map(|&s| ammo(s) / ammo_max(s)).collect();
                 if t.name == "Backpack" {
