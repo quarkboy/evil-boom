@@ -700,3 +700,24 @@ Tools (`evil`): `run-map --snapshot S [--focus X,Y,ZOOM]` (the sweep's own run, 
 Found with them: E2M4's computer map sits in a cage of pillars with 32-unit gaps (in DSDA a 32-unit box doesn't pass, aligned or not), lowered by walk-over lines on the edge of a nook the game won't let her into; earlier runs got it somehow, still unexplained.
 
 New baseline, expert (seed 0, unlimited lives, 3600 s, stall 300 s): **17/68 with every item**, 38 exited, 30 stalled (8 of those the boss/kill maps and MAP28). Restart loops to look at: E1M4 (26 levels again, 0 items), MAP30.
+
+## Linux, and the name evil-boom (2026-11-08)
+
+The user moved to a new machine (Fedora 45 under WSL) and wanted both platforms kept. The binary
+is now `evil-boom` (the user: for Boom, and Evil's first original song); the package and library
+stay `evildoom`.
+
+- **WADs**: Linux defaults to `~/.local/share/evildoom` in Steam's layout (`base/...`), copied
+  there rather than read through `/mnt/c` (slow); Windows keeps the Steam folder.
+- **Engine build**: `tools/build-engine.sh` for both (Linux, MSYS2 MINGW64). The patch now sets
+  the library's LIBRARY_OUTPUT_DIRECTORY too (a `.so` is a library output, a `.dll` a runtime
+  one) and depends on `dsda-doom-wad`, so both land in `prboom2/build`. On Fedora,
+  `CMAKE_FIND_PACKAGE_PREFER_CONFIG=OFF`: DSDA prefers package configs, and zlib-ng's names a
+  `libz.a` that isn't installed.
+- **Viewer**: minifb 0.27 -> 0.28. Under WSLg 0.27 segfaulted on X11 with AspectRatioStretch
+  and corrupted the heap on Wayland (found with a minimal program, option by option); 0.28 is
+  fine on both.
+- **Checked**: the same results as on Windows, seed for seed (E1 one life 3.6 levels; Doom II
+  7.9, MAP12 stuck 7/16). Expert sweep, 68 maps, seed 0, 8 jobs: **48/68 with every item**,
+  56 exited, 10 stuck (the 8 boss maps, E1M4 44/45, MAP21 17/18, MAP26 45/58), 2 stalled
+  (E4M6, MAP14), in **207 s** wall-clock.

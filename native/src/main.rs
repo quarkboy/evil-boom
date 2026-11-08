@@ -1,26 +1,26 @@
-//! `evil`: Evil from the command line.
+//! `evil-boom`: Evil from the command line.
 //!
-//!   evil sweep <wad> [maps...] [<wad> [maps...]] [--jobs N] [run options]
+//!   evil-boom sweep <wad> [maps...] [<wad> [maps...]] [--jobs N] [run options]
 //!       many maps at once, a process a map; a line each as they finish, then a summary
-//!   evil run-map <wad> <map> [run options]      one map; its log goes to out/explore
-//!   evil episode <wad> <first map> [--seeds K] [run options]   an episode on one life from that
+//!   evil-boom run-map <wad> <map> [run options]      one map; its log goes to out/explore
+//!   evil-boom episode <wad> <first map> [--seeds K] [run options]   an episode on one life from that
 //!                                               map, what she has carried level to level; K seeds
 //!                                               (8) side by side, --jobs at a time
-//!   evil dump-nav <wad> <map>                   the level's analysis (for comparing)
-//!   evil follow <wad> <map>                     plan the level, follow the plan (seed 0)
-//!   evil drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
-//!   evil sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things,
+//!   evil-boom dump-nav <wad> <map>                   the level's analysis (for comparing)
+//!   evil-boom follow <wad> <map>                     plan the level, follow the plan (seed 0)
+//!   evil-boom drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
+//!   evil-boom sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things,
 //!                                               the run-jumps landing there (and their check)
-//!   evil arena FILE [names...] [--jobs N] [--seeds K]
+//!   evil-boom arena FILE [names...] [--jobs N] [--seeds K]
 //!       the fights set up in FILE (see arena.rs), each K times (seeds 0..K), a process a go;
 //!       a line each, then how each scenario went: won, lost, drawn
-//!   evil arena-one FILE NAME [--seed N]         one of them, once; its log to out/arena/NAME.txt
-//!   evil arena-watch FILE NAME [--seed N] [--speed X]   one of them, watched (space pause, N a
+//!   evil-boom arena-one FILE NAME [--seed N]         one of them, once; its log to out/arena/NAME.txt
+//!   evil-boom arena-watch FILE NAME [--seed N] [--speed X]   one of them, watched (space pause, N a
 //!                                               tic at a time, +/- speed)
-//!   evil record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
+//!   evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
 //!       [--crf N] [--preset P] [--ffmpeg PATH] [run options]   a watch played as fast as it goes
 //!       into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told)
-//!   evil watch <wad> <map> [--speed X] [--all] [--episode] [run options]
+//!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [run options]
 //!       watch her play, with what she knows beside the game (space pause, +/- speed, A the
 //!       whole map, F follow, wheel zoom, Esc quit)
 //!
@@ -204,7 +204,7 @@ fn follow(wad: &str, map: &str) -> Result<(), String> {
 
 fn run_one(args: &[String]) -> Result<(), String> {
     let (o, _, rest) = run_options(args)?;
-    let [wad, map] = rest.as_slice() else { return Err("usage: evil run-map <wad> <map> [options]".into()) };
+    let [wad, map] = rest.as_slice() else { return Err("usage: evil-boom run-map <wad> <map> [options]".into()) };
     let r = evildoom::sweep::run_map_full(wad, map, &o)?;
     // (what she got out with, for the next level of an episode; the secret exit taken)
     if let Some(l) = &r.carry {
@@ -232,7 +232,7 @@ fn episode(args: &[String]) -> Result<(), String> {
             names.push(a.clone());
         }
     }
-    let [wad, first] = names.as_slice() else { return Err("usage: evil episode <wad> <first map> [--seeds K] [run options]".into()) };
+    let [wad, first] = names.as_slice() else { return Err("usage: evil-boom episode <wad> <first map> [--seeds K] [run options]".into()) };
     o.lives = 1;
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     let base = o.seed.unwrap_or(0);
@@ -259,7 +259,7 @@ fn episode(args: &[String]) -> Result<(), String> {
         let mut os = o.clone();
         os.seed = Some(*seed);
         println!("seed {seed}: {levels} levels, {end}");
-        println!("    to watch it all: evil watch {wad} {first} {} --episode", option_args(&os).join(" "));
+        println!("    to watch it all: evil-boom watch {wad} {first} {} --episode", option_args(&os).join(" "));
     }
     let mean = done.iter().map(|d| d.1 as f64).sum::<f64>() / done.len().max(1) as f64;
     let through = done.iter().filter(|d| d.2 == "the episode through").count();
@@ -299,7 +299,7 @@ fn episode_chain(me: &std::path::Path, wad: &str, first: &str, o: &evildoom::swe
 /// WATCH (how to watch the level it ended on), END (levels got through, how it ended).
 fn episode_one(args: &[String]) -> Result<(), String> {
     let (mut o, _, rest) = run_options(args)?;
-    let [wad, first] = rest.as_slice() else { return Err("usage: evil episode-one <wad> <first map> [run options]".into()) };
+    let [wad, first] = rest.as_slice() else { return Err("usage: evil-boom episode-one <wad> <first map> [run options]".into()) };
     o.lives = 1;
     let mut map = Some(first.to_uppercase());
     let mut engine = None;
@@ -312,7 +312,7 @@ fn episode_one(args: &[String]) -> Result<(), String> {
             println!("DAMAGE {}", r.damage);
             let mut os = o.clone();
             os.carry = None;
-            println!("WATCH evil watch {wad} {first} {} --episode", option_args(&os).join(" "));
+            println!("WATCH evil-boom watch {wad} {first} {} --episode", option_args(&os).join(" "));
             println!("END {levels} {m}: {}", r.outcome);
             return Ok(());
         };
@@ -338,7 +338,7 @@ fn drive(args: &[String]) -> Result<(), String> {
             names.push(a.clone());
         }
     }
-    let ([wad, map], Some(script)) = (names.as_slice(), script) else { return Err("usage: evil drive <wad> <map> --script FILE [run options]".into()) };
+    let ([wad, map], Some(script)) = (names.as_slice(), script) else { return Err("usage: evil-boom drive <wad> <map> --script FILE [run options]".into()) };
     evildoom::drive::drive(wad, map, &o, std::path::Path::new(&script))
 }
 
@@ -419,7 +419,7 @@ fn sweep(args: &[String]) -> Result<(), String> {
 #[cfg(feature = "viewer")]
 fn watch(args: &[String]) -> Result<(), String> {
     let (w, names, o) = watch_options(args)?;
-    let [wad, map] = names.as_slice() else { return Err("usage: evil watch <wad> <map> [options]".into()) };
+    let [wad, map] = names.as_slice() else { return Err("usage: evil-boom watch <wad> <map> [options]".into()) };
     if o.snapshot.is_some() {
         // (a picture: the run as a sweep plays it, nothing drawn till then)
         let (outcome, detail) = run_map(wad, map, &o)?;
@@ -429,7 +429,7 @@ fn watch(args: &[String]) -> Result<(), String> {
     evildoom::viewer::watch(wad, map, &w)
 }
 
-/// A run watched into an MP4 (see `viewer::record`): evil record <wad> <map> <out.mp4>
+/// A run watched into an MP4 (see `viewer::record`): evil-boom record <wad> <map> <out.mp4>
 /// [--view game|full|hud] [--size WxH] [--speed N] [--ffmpeg PATH] [--episode] [run options].
 #[cfg(feature = "viewer")]
 fn record(args: &[String]) -> Result<(), String> {
@@ -461,8 +461,8 @@ fn record(args: &[String]) -> Result<(), String> {
         }
     }
     let (w, names, _) = watch_options(&rest)?;
-    let [wad, map, out] = names.as_slice() else { return Err("usage: evil record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode] [options]".into()) };
-    let ffmpeg = ffmpeg.or_else(evildoom::viewer::find_ffmpeg).ok_or("no ffmpeg found (on the path, or winget's): --ffmpeg PATH")?;
+    let [wad, map, out] = names.as_slice() else { return Err("usage: evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode] [options]".into()) };
+    let ffmpeg = ffmpeg.or_else(evildoom::viewer::find_ffmpeg).ok_or("no ffmpeg found (on the path, or winget's on Windows): --ffmpeg PATH")?;
     evildoom::viewer::record(wad, map, &w, &RecordOptions { out: out.into(), view, size, every, crf, preset, ffmpeg })
 }
 
@@ -526,7 +526,7 @@ fn arena_one(args: &[String]) -> Result<(), String> {
         rest.push(&args[i]);
         i += 1;
     }
-    let [file, name] = rest.as_slice() else { return Err("usage: evil arena-one FILE NAME [--seed N]".into()) };
+    let [file, name] = rest.as_slice() else { return Err("usage: evil-boom arena-one FILE NAME [--seed N]".into()) };
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let scenarios = evildoom::arena::parse(&text)?;
     let s = scenarios.iter().find(|s| &s.name == *name).ok_or_else(|| format!("{name}: not in {file}"))?;
@@ -563,7 +563,7 @@ fn arena_watch(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    let [file, name] = rest.as_slice() else { return Err("usage: evil arena-watch FILE NAME [--seed N] [--speed X]".into()) };
+    let [file, name] = rest.as_slice() else { return Err("usage: evil-boom arena-watch FILE NAME [--seed N] [--speed X]".into()) };
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let scenarios = evildoom::arena::parse(&text)?;
     let s = scenarios.iter().find(|s| &s.name == *name).ok_or_else(|| format!("{name}: not in {file}"))?;
@@ -592,7 +592,7 @@ fn arena(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    let file = rest.first().ok_or("usage: evil arena FILE [names...] [--jobs N] [--seeds K]")?.clone();
+    let file = rest.first().ok_or("usage: evil-boom arena FILE [names...] [--jobs N] [--seeds K]")?.clone();
     let text = std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?;
     let names: Vec<String> = evildoom::arena::parse(&text)?.into_iter().map(|s| s.name).filter(|n| rest.len() < 2 || rest[1..].contains(n)).collect();
     let mut todo: VecDeque<(String, u32)> = names.iter().flat_map(|n| (0..seeds).map(move |k| (n.clone(), k))).collect();
@@ -681,7 +681,7 @@ fn main() -> ExitCode {
         Some("arena-one") => arena_one(&args[1..]),
         #[cfg(feature = "viewer")]
         Some("arena-watch") => arena_watch(&args[1..]),
-        _ => Err("usage: evil sweep|run-map|watch|drive|dump-nav|follow|sector ... (see the source's header)".into()),
+        _ => Err("usage: evil-boom sweep|run-map|watch|drive|dump-nav|follow|sector ... (see the source's header)".into()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

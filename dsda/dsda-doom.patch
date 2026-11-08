@@ -1,8 +1,8 @@
 diff --git a/prboom2/src/CMakeLists.txt b/prboom2/src/CMakeLists.txt
-index cb9a3d7..b3e5053 100644
+index cb9a3d7..68c9952 100644
 --- a/prboom2/src/CMakeLists.txt
 +++ b/prboom2/src/CMakeLists.txt
-@@ -602,3 +602,18 @@ function(AddGameExecutable TARGET SOURCES)
+@@ -602,3 +602,20 @@ function(AddGameExecutable TARGET SOURCES)
  endfunction()
  
  AddGameExecutable(dsda-doom "${DSDA_SOURCES}")
@@ -20,7 +20,9 @@ index cb9a3d7..b3e5053 100644
 +target_compile_features(dsda-evil PRIVATE cxx_std_11)
 +target_include_directories(dsda-evil PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 +target_link_libraries(dsda-evil PRIVATE dsda::dependencies)
-+set_target_properties(dsda-evil PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${DSDA_OUTPUT_PATH} C_STANDARD 99)
++# (the .dll is a runtime output, the .so a library one: both beside dsda-doom.wad)
++set_target_properties(dsda-evil PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${DSDA_OUTPUT_PATH} LIBRARY_OUTPUT_DIRECTORY ${DSDA_OUTPUT_PATH} C_STANDARD 99)
++add_dependencies(dsda-evil dsda-doom-wad)
 diff --git a/prboom2/src/SDL/i_system.c b/prboom2/src/SDL/i_system.c
 index 1fec088..bea19e8 100644
 --- a/prboom2/src/SDL/i_system.c

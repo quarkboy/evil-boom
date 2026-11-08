@@ -2,7 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-const DEFAULT_DOOM_DIR: &str = r"C:\Program Files (x86)\Steam\steamapps\common\Ultimate Doom";
+/// Steam's Ultimate Doom folder (base/ holds the IWADs), inside Steam's library.
+const STEAM_DOOM: &str = "steamapps/common/Ultimate Doom";
 
 /// The classic v1.9 IWADs inside the Steam install, by short name.
 const IWADS: [(&str, &str); 4] = [
@@ -13,7 +14,16 @@ const IWADS: [(&str, &str); 4] = [
 ];
 
 pub fn doom_dir() -> PathBuf {
-    std::env::var_os("EVILDOOM_DOOM_DIR").map_or_else(|| PathBuf::from(DEFAULT_DOOM_DIR), PathBuf::from)
+    std::env::var_os("EVILDOOM_DOOM_DIR").map_or_else(default_doom_dir, PathBuf::from)
+}
+
+/// Windows: Steam's own folder. Linux: ~/.local/share/evildoom, the Steam folder's base/ copied
+/// there (under WSL, reading through /mnt/c is slow).
+fn default_doom_dir() -> PathBuf {
+    if cfg!(windows) {
+        return Path::new(r"C:\Program Files (x86)\Steam").join(STEAM_DOOM);
+    }
+    std::env::var_os("HOME").map_or_else(|| PathBuf::from("."), PathBuf::from).join(".local/share/evildoom")
 }
 
 /// A short IWAD name ("doom2") or a path, absolute or from the Doom folder.

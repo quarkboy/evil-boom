@@ -1,4 +1,4 @@
-# Doom II fights (evil arena arenas/doom2.txt): the map's own pickups taken out, only what's given.
+# Doom II fights (evil-boom arena arenas/doom2.txt): the map's own pickups taken out, only what's given.
 #
 # MAP32's hall (floor 0, ceiling 256, x -500..1400, y 3450..6000; six pillars down its sides at
 # x -256..0 and 896..1152): she starts at (448, 3900) facing north, the monsters across it

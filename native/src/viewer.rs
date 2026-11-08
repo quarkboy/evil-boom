@@ -521,7 +521,7 @@ fn next_level(watch: Watch, w: &Wad, o: &WatchOptions) -> Result<Option<Watch>, 
 }
 
 /// A fight set up already (an arena: the engine with its monsters spawned and her loadout given,
-/// drawn; her agent), watched: one life, no switches or doors (as `evil arena` plays it).
+/// drawn; her agent), watched: one life, no switches or doors (as `evil-boom arena` plays it).
 pub fn watch_prepared(w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, agent: Agent, speed: f64, title: &str) -> Result<(), String> {
     let mut watch = Watch::new(w, m, map_name, engine, agent, None, 0);
     watch.speed = speed;
@@ -601,7 +601,7 @@ pub fn save_snapshot(w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, a
     snapshot_to(&out_dir().join("watch.png"), w, m, map_name, engine, agent, focus).2
 }
 
-/// The window drawn once into `path`, the game and Evil handed back after (evil drive).
+/// The window drawn once into `path`, the game and Evil handed back after (evil-boom drive).
 pub fn snapshot_to(path: &Path, w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, agent: Agent, focus: Option<(f64, f64, f64)>) -> (Engine, Agent, Result<(), String>) {
     let mut watch = Watch::new(w, m, map_name, engine, agent, focus, 0);
     let obs = watch.engine.observe();

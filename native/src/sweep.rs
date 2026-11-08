@@ -1,5 +1,5 @@
 //! Running the explorer through a level (knowing only what she has seen) and reporting how it
-//! went; `evil sweep` runs many at once, a process a map (the game is one a process).
+//! went; `evil-boom sweep` runs many at once, a process a map (the game is one a process).
 
 mod setup;
 mod status;

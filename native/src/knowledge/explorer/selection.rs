@@ -318,7 +318,7 @@ impl Explorer {
         self.current = Some(obj);
     }
 
-    /// Set about this objective now, whatever she'd have chosen (evil drive: what if she had?).
+    /// Set about this objective now, whatever she'd have chosen (evil-boom drive: what if she had?).
     /// False if she has no route to it.
     pub fn take(&mut self, obs: &Observation, obj: Objective) -> bool {
         match self.route_to(&obj, obs) {

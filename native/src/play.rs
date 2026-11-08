@@ -66,7 +66,7 @@ impl Agent {
         }
     }
 
-    /// Her options now, best first, with whoever's playing's own wants in (evil drive).
+    /// Her options now, best first, with whoever's playing's own wants in (evil-boom drive).
     pub fn ranked(&mut self, obs: &Observation, risky: bool) -> Vec<Objective> {
         match self {
             Agent::Plain(x) => x.ranked(obs, risky, &mut NoHooks),

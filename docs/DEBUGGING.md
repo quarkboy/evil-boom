@@ -11,7 +11,7 @@ How to find out why a run went wrong, from the evidence the runs leave, before c
   aren't what kills her, and see whether the non-combat failure still happens:
 
   ```
-  evil run-map doom2 MAP08 --fight 2 --mortal --lives 1 --seed 1 --carry 287,200,50,0,20,1,100,100,1
+  evil-boom run-map doom2 MAP08 --fight 2 --mortal --lives 1 --seed 1 --carry 287,200,50,0,20,1,100,100,1
   ```
 
   `--carry` is nine numbers: `weapons,clip,shell,cell,rocket,backpack,health,armor,armortype`.
@@ -29,7 +29,7 @@ clobber each other, so run seeds one after another and copy the file after each:
 
 ```
 for s in 0 1 2 3; do
-  evil run-map doom2 MAP08 ... --seed $s | grep "DAMAGE\|RESULT"
+  evil-boom run-map doom2 MAP08 ... --seed $s | grep "DAMAGE\|RESULT"
   cp out/explore/DOOM2_MAP08.txt /tmp/x08_$s.txt
 done
 ```
@@ -46,7 +46,7 @@ What's in it, by line shape:
 - `tic N: killed at (x, y) by <source>: health, armor, weapons, ammo; in sight: ...; doing: ...`
 - `damage taken: <source> H (+A armor) at tic T (Ns), T2, ...; ...`: the run's damage by
   source, most first, near the end of the log. Run-map prints the same as its `DAMAGE` line, and
-  `evil episode` prints it under the level a seed ended on.
+  `evil-boom episode` prints it under the level a seed ended on.
 
 Damage sources (from the engine's own damage call, dsda `P_DamageMobj`, patched):
 - a monster's name (`ShotgunGuy`, `LostSoul`): its bullet, bite or charge;
@@ -63,22 +63,22 @@ The tics in the summary are where to look in the log: `grep -n "tic 1583" ...`.
 - `--snapshot S` stops after S game seconds and draws the viewer to `out/watch.png` (the game
   view, the map of what she knows, the log). Add `--focus X,Y,ZOOM` to centre the map. Read the
   PNG to look at it.
-- `evil watch <wad> <map> [run options]` to watch it live; `--headless` checks that the watcher
+- `evil-boom watch <wad> <map> [run options]` to watch it live; `--headless` checks that the watcher
   plays as the run did.
-- `evil sector <wad> <map> <sector>...`: a sector's heights, special, tag, lines (with their
+- `evil-boom sector <wad> <map> <sector>...`: a sector's heights, special, tag, lines (with their
   specials and tags), things, and the run-jumps landing there. Use it to answer "what lowers this
   floor", "what's at that corner", and so on. Line specials are Doom's numbers (37 = W1 floor
   lower to lowest neighbour and change type; 16 = sector special: 20% damage).
-- `evil dump-nav <wad> <map>`: the level's analysis.
+- `evil-boom dump-nav <wad> <map>`: the level's analysis.
 
 ## Going back over a run
 
 - Every `run-map` records its run to `out/runs/<IWAD>_<MAP>.run`. `--from FILE@S` plays that
   recording to S game seconds, then hands over to the bot as it is now: a fix can be tested from
   just before the failure.
-## Driving her by hand: `evil drive`
+## Driving her by hand: `evil-boom drive`
 
-`evil drive <wad> <map> --script FILE [run options]` plays a script of commands, one a line
+`evil-boom drive <wad> <map> --script FILE [run options]` plays a script of commands, one a line
 (`#` comments), printing what comes of each. With `--from out/runs/<IWAD>_<MAP>.run@S` it starts
 from the moment S of a recorded run, so you can stand her where things went wrong and try things.
 Her knowledge keeps taking in what she sees the whole time. The full list is at the top of
@@ -103,7 +103,7 @@ src/drive.rs; the most useful:
 Example: from just before the MAP08 platforms, is there a way across from the ledge?
 
 ```
-# evil drive doom2 MAP08 --fight 2 --from out/runs/DOOM2_MAP08.run@376 --script s.txt
+# evil-boom drive doom2 MAP08 --fight 2 --from out/runs/DOOM2_MAP08.run@376 --script s.txt
 where
 sector 39 40 41 54 89 88 85
 objectives
@@ -140,7 +140,7 @@ to paste the page text, they're happy to. Then confirm with `drive` or a snapsho
    (70-140 damage in 7 of 8 runs).
 2. Her own rocket, tic 1583: temporary logs of each shot and the rockets in flight showed a
    rocket that moved 9.5 units in its last tic and stopped with nothing there, 38 units out.
-   `evil sector` and the lines around it put the corner of her alcove's jamb 14.5 units off the
+   `evil-boom sector` and the lines around it put the corner of her alcove's jamb 14.5 units off the
    rocket's path. Doom moves missiles as axis-aligned boxes, so an 11-radius rocket at 115 degrees
    reaches 14.6 units to the side. The lane check used a fixed 13. Fix: the lane's half-width from
    the box's real reach at that heading.

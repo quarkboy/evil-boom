@@ -1,4 +1,4 @@
-# Fights set up to see how she does (evil arena arenas/combat.txt). E3M8's open centre: floor
+# Fights set up to see how she does (evil-boom arena arenas/combat.txt). E3M8's open centre: floor
 # 0, x -600..1000, y 200..1400; she starts at its south edge facing north, the monsters across it.
 
 arena zombies-pistol
