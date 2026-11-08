@@ -49,6 +49,16 @@ const BACKTRACK_SPACING: f64 = 16.0;
 /// Extra candidates considered because walls, barrels and crushers can reject nearby posts.
 const POST_CANDIDATE_FACTOR: usize = 3;
 
+/// Somewhere to shoot a barrel from: how far to go there, where, the barrel to aim at (the one in
+/// the way, or another that sets it off), the way there and the way off after.
+struct Post {
+    length: f64,
+    q: Point,
+    aim: Point,
+    way: Vec<Point>,
+    flee: Vec<Point>,
+}
+
 impl RouteFollower {
     /// Back out of its blast (128 units) and shoot the barrel in the way, then carry on.
     pub(super) fn shoot_barrel(&mut self, obs: &Observation) -> Controls {
@@ -132,11 +142,16 @@ impl RouteFollower {
                     }
                 }
                 let states: States = obs.heights.iter().map(|h| vec![*h]).collect();
-                let mut seen: Vec<Point> = cands.into_iter().filter(|&q| !self.use_walled(q, at)).collect();
-                seen.sort_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)));
-                let mut best: Option<(f64, Point, Vec<Point>, Vec<Point>)> = None;
+                // (the barrel in the way, or any it sets off: shot from where one of those can be
+                // seen, the chain takes the rest; MAP02's corridor of them, the one in the way round
+                // a corner from anywhere clear of the others)
+                let group: Vec<Point> = self.barrel_chain(&barrels, at, at).into_iter().map(|(b, _)| b).collect();
+                let mut seen: Vec<(Point, Point)> =
+                    cands.into_iter().filter_map(|q| group.iter().copied().filter(|&b| !self.use_walled(q, b)).min_by(|a, b| dist(*a, q).total_cmp(&dist(*b, q))).map(|b| (q, b))).collect();
+                seen.sort_by(|a, b| dist(a.0, pos).total_cmp(&dist(b.0, pos)));
+                let mut best: Option<Post> = None;
                 let crushers = self.crushers();
-                for q in seen.into_iter().take(BARREL_POSTS * POST_CANDIDATE_FACTOR) {
+                for (q, aim) in seen.into_iter().take(BARREL_POSTS * POST_CANDIDATE_FACTOR) {
                     let way: Vec<Point> = if dist(q, pos) < 8.0 {
                         vec![pos]
                     } else {
@@ -152,16 +167,21 @@ impl RouteFollower {
                         continue;
                     }
                     let flee: Vec<Point> = way.iter().rev().copied().chain(behind.iter().copied()).collect();
-                    if !self.flee_safe(&barrels, at, q, &flee) {
+                    if !self.flee_safe(&barrels, aim, q, &flee) {
                         continue;
                     }
                     let length: f64 = way.windows(2).map(|w| dist(w[0], w[1])).sum();
-                    if best.as_ref().is_none_or(|b| length < b.0) {
-                        best = Some((length, q, way, flee));
+                    if best.as_ref().is_none_or(|b| length < b.length) {
+                        best = Some(Post { length, q, aim, way, flee });
                     }
                 }
-                if let Some((_, q, way, flee)) = best {
+                if let Some(Post { q, aim, way, flee, .. }) = best {
                     self.log.add(obs.tic, format!("shooting it from ({:.0}, {:.0}), then off back the way she came", q.0, q.1));
+                    if dist(aim, at) > 1.0 {
+                        // (another of them, the chain to take it)
+                        self.log.add(obs.tic, format!("(at the one at ({:.0}, {:.0}), that sets it off)", aim.0, aim.1));
+                        self.barrel = self.barrel.map(|(_, since)| (aim, since));
+                    }
                     self.barrel_post = Some(q);
                     self.barrel_way = way;
                     self.barrel_flee_way = flee;
@@ -239,6 +259,12 @@ impl RouteFollower {
     /// when it comes (a blast reaches only what it can see)?
     fn flee_safe(&self, barrels: &[Point], at: Point, q: Point, flee: &[Point]) -> bool {
         let chain = self.barrel_chain(barrels, at, q);
+        // (shot from somewhere already out of every blast of it: no running needed; MAP02's
+        // barrels before the way to the exit, none of the spots with a run off safe, given up on
+        // for the hour)
+        if chain.iter().all(|&(b, _)| self.use_walled(b, q) || blast_gap(q, b) >= BARREL_SAFE) {
+            return true;
+        }
         chain.iter().all(|&(b, hops)| {
             let p = along(flee, BARREL_FLEE_PACE * BARREL_DELAY * f64::from(hops + 1));
             self.use_walled(b, p) || blast_gap(p, b) >= BARREL_SAFE
