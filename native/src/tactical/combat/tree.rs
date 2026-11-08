@@ -236,15 +236,15 @@ fn stepping_for_plasma(c: &mut Combat, obs: &Observation, s: &Situation) -> Opti
 /// walked her up to the cyberdemon with a rocket or two short).
 fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let pos = s.pos;
-    let t = s.target.as_ref().filter(|t| s.outmatched && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < KEEP_CLEAR)?;
+    let t = s.target.as_ref().filter(|t| s.outmatched && !c.takes_on(obs, t.name) && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < KEEP_CLEAR)?;
     let gun = c.preferred_gun(obs, t);
     let moving = c.steer(obs, Some(t), &gun);
     Some(Act::new(moving, format!("outmatched: keeping clear of {}", t.name)))
 }
 
 /// Outmatched: shooting on the way, the route going on.
-fn outmatched_get_past(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
-    s.outmatched.then(|| Act::new(None, "getting past".into()))
+fn outmatched_get_past(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    (s.outmatched && !s.target.as_ref().is_some_and(|t| c.takes_on(obs, t.name))).then(|| Act::new(None, "getting past".into()))
 }
 
 /// Too near for the gun she'd fight it with, or for them to miss.
@@ -260,7 +260,8 @@ fn keeping_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
 /// Enough in sight, low, or in the way: the route waits; into the gun's window, else across the
 /// line of fire.
 fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    if !(s.threat >= STAND_THREAT || s.health < LOW_HEALTH || c.blocking(obs, s.target.as_ref())) {
+    let duel = s.target.as_ref().is_some_and(|t| c.takes_on(obs, t.name));
+    if !(s.threat >= STAND_THREAT || s.health < LOW_HEALTH || duel || c.blocking(obs, s.target.as_ref())) {
         return None;
     }
     let mut why = "standing and fighting".to_string();

@@ -410,6 +410,14 @@ impl View {
     }
 
     /// The core, set up for this view.
+    /// Ways across polys in something's sight cost this many times their length (by poly; empty:
+    /// none). Paths only, not what's reachable: it's where she'd rather not go, not where she can't.
+    pub fn set_exposure(&self, exposure: Vec<f64>) {
+        if let Some(nav) = self.nav.core.borrow_mut().nav.as_mut() {
+            nav.exposure = exposure;
+        }
+    }
+
     fn with_core<T>(&self, f: impl FnOnce(&mut NavCore, &mut PlanCaches) -> T) -> T {
         let mut core = self.nav.core.borrow_mut();
         let core = &mut *core;

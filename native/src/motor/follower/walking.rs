@@ -250,6 +250,12 @@ impl RouteFollower {
         let mut speed = FULL_SPEED.min(track.speed_limit(track.length - rest, end_speed)).min(self.speed_cap);
         if stop {
             speed = speed.min(0.3 * to_end + 0.5);
+            if self.by_a_drop(obs, end) {
+                // (stopping at the brink of a drop: in gently, slowly over the last stretch, as for
+                // a run-up; E1M3, a spot to look into a nukage pit from, run at off a step down,
+                // in the air where braking does nothing, onto the lip and over, no way back up)
+                speed = speed.min(0.06 * rest + 1.5).min(if rest < 128.0 { 6.0 } else { FULL_SPEED });
+            }
         }
         if seg.end == SegEnd::Jump {
             // run-ups are often right at a ledge: in gently, slowly over the last stretch
@@ -316,6 +322,22 @@ impl RouteFollower {
             return f64::INFINITY; // (one drop isn't a stair: MAP09's slowed for a 48 down missed a lift)
         }
         (STAIRS_DOWN_SPEED * STAIRS_DOWN_SPEED + 2.0 * BRAKE * steps_down[0]).sqrt()
+    }
+
+    /// Is p within reach of a drop (more than a step down, at the heights now)?
+    fn by_a_drop(&self, obs: &Observation, p: Point) -> bool {
+        let nav = &self.view.nav;
+        let (mesh, m) = (&nav.mesh, &nav.map);
+        let drops = nav.drop_lines();
+        let near = 2.0 * LEDGE_NEAR;
+        cells(p.0 - near, p.1 - near, p.0 + near, p.1 + near).any(|cell| {
+            mesh.line_grid.get(&cell).into_iter().flatten().any(|&li| {
+                let (Some(fs), Some(bs)) = (drops.contains(&li).then_some(()).and(m.sides(li).0), m.sides(li).1) else { return false };
+                let (Some(hf), Some(hb)) = (obs.height(fs), obs.height(bs)) else { return false };
+                let (a, c) = m.line_seg(li);
+                (hf.floor - hb.floor).abs() > MAX_STEP && segment_distance(a, c, p, p) < near
+            })
+        })
     }
 
     /// Where the item a pickup step is for lies (the nearest such thing to its goal).

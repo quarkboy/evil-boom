@@ -47,6 +47,8 @@ pub(super) const SWITCH_WAIT: i64 = 40;
 
 /// tics from the trigger to the rocket (S_MISSILE1, then A_FireMissile)
 pub(super) const ROCKET_DELAY: f64 = 8.0;
+/// with a boss in sight, others this far off aren't shot (left to it)
+const LEAVE_TO_BOSS: f64 = 384.0;
 /// a rocket's speed, a tic
 const ROCKET_SPEED: f64 = 20.0;
 
@@ -129,8 +131,9 @@ impl Combat {
         let (mut ax, mut ay) = (t.x, t.y);
         if !w.hitscan && w.speed > 0.0 {
             let tof = d / w.speed;
-            ax += t.vx * tof;
-            ay += t.vy * tof;
+            let (vx, vy) = self.moving(t);
+            ax += vx * tof;
+            ay += vy * tof;
         }
         let aim = heading(pos, (ax, ay));
         let info = mon(t.name);
@@ -142,6 +145,12 @@ impl Combat {
             "rocket not safe"
         } else if held == 6 && !self.projectile_reaches(obs, t, pos, PLASMA_RADIUS) {
             "plasma wouldn't get there"
+        } else if !mon(t.name).boss && d > LEAVE_TO_BOSS && self.visible.iter().any(|b| b.id != t.id && mon(b.name).boss) {
+            // (a boss in sight: the others left to it, not near her; its fire lands on them and
+            // they turn on it, her ammo kept for it. The user's: infighting, E3M8 from a pistol
+            // start, 1400 of 3000-odd damage's worth of ammo spent on two cacodemons and a baron,
+            // out of ammo with the spider mastermind at 1000-2000)
+            "left to the boss"
         } else if !self.can_hit(obs, t, None) {
             "no shot (too steep, or something in the way)"
         } else if Self::barrel_in_line(obs, &w, t) {
@@ -426,7 +435,7 @@ impl Combat {
         })
     }
 
-    pub(super) fn floor_at(&self, obs: &Observation, p: Point) -> f64 {
+    pub(crate) fn floor_at(&self, obs: &Observation, p: Point) -> f64 {
         self.nav.poly_at(p).and_then(|q| obs.height(self.nav.sector_of_poly(q))).map_or(0.0, |h| h.floor)
     }
 

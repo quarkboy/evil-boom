@@ -278,7 +278,8 @@ impl Explorer {
                         // (a wall given up on before: as if twice as far for each time)
                         let tries = obj.wall.map_or(1.0, |w| 2f64.powi(self.wall_drops.get(&w).copied().unwrap_or(0)));
                         let prio = obj.priority();
-                        routed.push((length * obj.kind.weight() * tries, obj, steps));
+                        let weighed = hooks.weigh(obs, &obj);
+                        routed.push((length * obj.kind.weight() * tries * weighed, obj, steps));
                         if prio < 2 {
                             break; // (nothing further down the list comes first anyway)
                         }

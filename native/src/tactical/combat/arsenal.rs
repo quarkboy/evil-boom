@@ -20,7 +20,7 @@ const BOSS_SAVE: f64 = 10.0;
 
 /// ...unless killing what's in sight would take longer than this (s), or more ammo than she
 /// has: then get past it
-const OUTMATCHED: f64 = 30.0;
+pub(super) const OUTMATCHED: f64 = 30.0;
 
 /// of what she shoots that would land (the spread allowed for), this much does (her ammo's
 /// worth, roughly)
@@ -37,6 +37,8 @@ const FIRST_SHOT: f64 = 4.0;
 
 /// seconds a weapon switch costs
 const SWITCH_COST: f64 = 0.8;
+/// the gun in hand counts as taking this share of its time (another must be that much better)
+const HELD_KEEP: f64 = 0.85;
 
 /// units a second she closes in or backs off by, fighting (strafing as she goes)
 const GET_THERE: f64 = 250.0;
@@ -90,8 +92,29 @@ impl Combat {
     /// Would killing what's in sight take too long with what she has (a room of barons with the
     /// pistol: MAP08 at pistol start), or more ammo than she has (a cyberdemon, ten rockets)?
     pub fn outmatched(&self, obs: &Observation) -> bool {
-        let near: Vec<&'static str> = self.visible.iter().filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0).map(|t| t.name).collect();
+        // (a hitscan shooter however far: its bullets get there. E3M8 from a pistol start, the
+        // spider mastermind 1298 off with a pistol and two rockets: closed in on)
+        let near: Vec<&'static str> = self.visible.iter().filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0 || self.sniper(obs, t.name)).map(|t| t.name).collect();
         self.too_much(obs, &near, OUTMATCHED)
+    }
+
+    /// A hitscan shooter she couldn't see off in a few seconds with what she has: one that's
+    /// dangerous however far it is (its bullets get there), the fight with it a long one. Not a
+    /// zombieman or a sergeant across the map: with every hitscanner counted, objectives in
+    /// their sight left undone, E3M9 and MAP06 stuck 4/8 and 4/16.
+    pub fn sniper(&self, obs: &Observation, name: &str) -> bool {
+        let m = mon(name);
+        m.attack == Attack::Hitscan && f64::from(m.health) / self.firepower(obs).max(1.0) > super::steering::DUCK_FIGHT
+    }
+
+    /// A sniper she'd see off before it saw her off, with the gun she has and the health and
+    /// armor she has (not counting her ammo: what she needs she picks up as she goes). Then it's
+    /// fought, from cover, whatever else: kept clear of, its bullets get there anyway; walked on
+    /// past in its sight, the same. E3M8 from a pistol start, the plasma rifle and the blue
+    /// armor in hand, the spider mastermind fighting a cacodemon: walked on in its sight.
+    pub fn takes_on(&self, obs: &Observation, name: &str) -> bool {
+        let m = mon(name);
+        self.sniper(obs, name) && f64::from(m.health) / self.firepower(obs).max(1.0) <= Self::lasts(obs) / m.threat.max(1.0)
     }
 
     /// Would these take her longer than `secs` to kill, or more than her ammo's worth?
@@ -102,6 +125,14 @@ impl Combat {
             return hp / self.firepower(obs).max(weapon_in(1, obs).dps()) > secs;
         }
         if hp / self.firepower(obs) > secs {
+            return true;
+        }
+        // (or longer than she'd last at it, toe to toe, as she is: her health and her armor
+        // against what they'd do to her a second. The user's: what she has weighed, not only
+        // the guns; E3M8, the spider mastermind as much to be kept clear of with the plasma
+        // rifle and the blue armor as with a pistol at 100 health)
+        let rate: f64 = names.iter().map(|n| mon(n).threat).sum();
+        if rate > 0.0 && hp / self.firepower(obs) > Self::lasts(obs) / rate {
             return true;
         }
         // (what each kind of ammo's worth, with the best gun she has for it; bosses take no blast)
@@ -123,6 +154,22 @@ impl Combat {
         }
         let melee = held.contains(&1) && self.firepower(obs) == weapon(1).dps();
         !melee && worth * AMMO_LANDS < SHORT_BY * hp
+    }
+
+    /// Her health as it would go under fire: armor takes its share of each hit (a third green,
+    /// half blue) till it's gone (P_DamageMobj), so so much more health's worth.
+    pub fn lasts(obs: &Observation) -> f64 {
+        let health = obs.health.unwrap_or(100.0).max(0.0);
+        let armor = obs.armor.unwrap_or(0.0).max(0.0);
+        let share = match obs.armor_type.unwrap_or(0) {
+            1 => 1.0 / 3.0,
+            2 => 0.5,
+            _ => return health,
+        };
+        // (all her health lost with the armor holding: health / (1 - share) taken, the armor's
+        // share of it within what she has; else the armor gone first, then health alone)
+        let all = health / (1.0 - share);
+        if armor >= all * share { all } else { health + armor }
     }
 
     /// Can any gun she has ammo for get to t from here?
@@ -180,6 +227,13 @@ impl Combat {
     /// pistol only for want of any. Not the rocket launcher or the BFG (round a corner into
     /// something close), nor the fist. None: what she has up will do.
     pub fn ready_gun(&self, obs: &Observation) -> Option<i32> {
+        // (not with something awake she knows of still about: the next fight's with it, and the
+        // gun up's the one she was fighting it with; E3M8, the shotgun brought up each time the
+        // spider mastermind went out of sight, the plasma rifle back each time it came in, 14
+        // times, a second without a shot each)
+        if self.remaining().iter().any(|s| s.awake && mon(s.name).attack != Attack::None) {
+            return None;
+        }
         let held = Self::held(obs);
         let want = [(3, 4), (4, 20), (6, 40), (2, 1)].into_iter().find(|&(slot, shots)| {
             let w = weapon_in(slot, obs);
@@ -254,6 +308,12 @@ impl Combat {
             }
             if Some(slot) != obs.weapon {
                 c += SWITCH_COST;
+            } else {
+                // (and the one in hand kept unless another's clearly better, by a share of the
+                // whole fight, not a fixed second: against the spider mastermind's 30-odd seconds,
+                // the chaingun and the plasma rifle swapped 17 times as the range went 700-880,
+                // a second without a shot each time; E3M8 lost with it on 20 health)
+                c *= HELD_KEEP;
             }
             if slot == 5 && self.rocket_blocked.is_some_and(|(id, tic)| id == t.id && obs.tic - tic < BLOCKED_KEEP) {
                 blocked = Some(c);

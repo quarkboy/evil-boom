@@ -52,10 +52,11 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   (`--carry 287,200,50,0,20,1,100,100,1`; format in docs/DEBUGGING.md), several seeds, one at a
   time (each run-map overwrites `out/explore/<IWAD>_<MAP>.txt`). Then an episode or pistol-start
   check.
-- Regression set used lately (HNTR = `--fight 2`, `--mortal`, one life):
-  `evil-boom episode doom E1M1 --fight 2 --mortal --seeds 8` (and E2M1, E3M1), and
-  `evil-boom episode doom2 MAP01 --fight 2 --mortal --seeds 16`; for combat changes also
-  `evil-boom arena arenas/combat.txt --seeds 8` and `arenas/doom2.txt`. Compare with the numbers
+- Regression set (the user's, 2026-11-08; HNTR = `--fight 2`, `--mortal`, one life):
+  `evil-boom episode doom E1M1 --fight 2 --mortal --seeds 8` (and E2M1, E3M1), Doom II as single
+  levels from a pistol start, `evil-boom sweep doom2 MAP01 MAP02 MAP03 MAP04 MAP05 MAP08 MAP10
+  MAP12 --fight 2 --mortal --lives 1 --seed N` for seeds 0-3 (no gimmick maps: MAP06's crushers,
+  MAP07), and `evil-boom arena arenas/combat.txt --seeds 8` and `arenas/doom2.txt`. Compare with the numbers
   in the last commits' messages; within a few tenths of a level is seed noise.
 - **Parity checks** (a refactor meant to change nothing): one run of one episode's levels
   (e.g. `episode doom E1M1 --seeds 1` with the regression flags) compared line for line with
@@ -75,16 +76,14 @@ another case in a chain.
 
 ## Where things stand (2026-11-08)
 
-Last bot change: plasma where autoaim sends it, a safer gun for a blocked rocket, ducking and posts
-against hitscan heavies, boss ammo kept, crushing floors (DECISIONS.md). HNTR, one life, 8 seeds:
-E1 7.5 (7/8 through), E2 7.0 (6/8), E3 6.9 (1/8 through; E3M8 the Spider Mastermind, E3M9/E3M6
-stucks), Doom II 7.8 (16 seeds; MAP12 stuck, MAP08 deaths (Cyberdemon + barons), MAP05/MAP06);
-arenas combat 120/128, doom2 230/240, autoaim 86/112 (own rockets 19), crates 77/80 (21), plasma
-autoaim 83/112. Arena files run from any build; out/frozen/evil-boom keeps a copy for a regression
-set while the build goes on changing. Open items: E3M8 in the open (posts help, 1/6 from an E3M7
-loadout); weapon churn in boss fights (distance-based picks, the shotgun readied on losing sight);
-Doom II MAP05-MAP08 and MAP12; two or more revenants with berserk; deliberate infighting only for
-heavies.
+Last bot change: E3M8 boss work (snipers, outmatched weighing health and armor, leading walkers,
+weapon churn, posts, exposure-costed routes, hold at the edge, ledge fixes; DECISIONS.md). HNTR,
+one life, 8 seeds: E1 8.0 (8/8 through), E2 6.1 (2/8; E2M8 and E2M4 deaths), E3 5.0 (E3M4 and
+E3M9 stucks); arenas combat 119/128, doom2 228/240. E3M8 from E3M7's loadout HNTR 13/16, HMP 7/16;
+pistol start HMP 1/16. Sets swing a lot between builds (routes shift onto other old weaknesses):
+judge across sets, not one. Open items: the user's BFG and invulnerability planning (seen in an
+E3 run; ask what went wrong first); E2/E3 regressions above; E3M8 cover-to-cover (a cover graph);
+Doom II MAP08 and MAP12; MAP06 stucks (a gimmick map, not tested).
 
 ## The Linux port (done 2026-11-08)
 

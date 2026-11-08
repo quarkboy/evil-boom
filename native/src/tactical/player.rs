@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use super::bestiary::{ammo_item, armor_item, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
+use super::bestiary::{ammo_item, armor_item, first_shot, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
 use super::combat::{segment_point_distance, spread, Combat, Seen, LEAVE_BE};
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
@@ -37,6 +37,8 @@ const HUNT_NEAR: f64 = 512.0;
 const HURT: f64 = 50.0;
 /// monsters this near an objective's spot count against going there
 const DANGER_NEAR: f64 = 640.0;
+/// ammo for what she has counts as this much further, outmatched by something she knows of
+const AMMO_OUTMATCHED: f64 = 2.0;
 /// below this, with something shooting at her: back off out of its sight
 const RETREAT_HEALTH: f64 = 40.0;
 /// cover looked for among the places she's been this near...
@@ -45,12 +47,24 @@ const COVER_RANGE: f64 = 768.0;
 const COVER_SPOTS: usize = 48;
 /// a retreat is over once nothing that shoots has been in sight this long
 const CLEAR_TICS: i64 = 35;
+/// a step this far ahead, into a firing sniper's sight from cover, held back
+const EDGE_LOOK: f64 = 48.0;
+/// a way across ground in sight of a hitscan shooter she can't take on counts this many times
+/// its length...
+const EXPOSED: f64 = 3.0;
+/// ...that ground judged this far from it at most...
+const EXPOSURE_RANGE: f64 = 2048.0;
+/// ...and again once it's moved this far, or this long on
+const EXPOSURE_MOVED: f64 = 64.0;
+const EXPOSURE_AGAIN: i64 = 35;
 /// a post (cover to fight from) looked for among the places she knows of this near...
-const POST_RANGE: f64 = 1024.0;
+const POST_RANGE: f64 = 1536.0;
 /// ...the nearest this many of them...
-const POST_LOOKS: usize = 2000;
+const POST_LOOKS: usize = 3000;
 /// ...looked at on a grid this fine...
-const POST_GRID: f64 = 32.0;
+const POST_GRID: f64 = 48.0;
+/// ...each counting for this much nearer for every unit it's further from them
+const POST_FAR: f64 = 0.5;
 /// ...with somewhere they'd see her this near it (to step out to and shoot from)
 const POST_PEEK: f64 = 128.0;
 /// on the way to one this long at most
@@ -159,6 +173,8 @@ struct Fight {
     completion: Option<Completionist>,
     /// what she was doing each time she died (lives before this one)
     deaths: Vec<Death>,
+    /// the way's been worked out under new costs: choose again (once)
+    rethink: bool,
 }
 
 /// A death: where, and what she was going for.
@@ -257,13 +273,18 @@ pub struct Player {
     /// places she's stood lately with nothing shooting at her and nothing hurting her, oldest
     /// first: the way back out of an ambush
     trail: Vec<Point>,
+    /// the ground in sight of hitscan shooters she can't take on, as last worked out: when, and
+    /// from where they were
+    exposure: Option<(i64, Vec<Point>)>,
+    /// when holding at the edge of cover was last logged
+    edge_log: i64,
 }
 
 impl Player {
     pub fn new(nav: Rc<Navigator>, knowledge: Knowledge) -> Player {
         Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
-            fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new() },
+            fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false },
             retreat: None,
             bait_tic: -1_000_000_000,
             retreat_tic: -1_000_000_000,
@@ -271,6 +292,8 @@ impl Player {
             last_pos: (0.0, 0.0),
             plight: Plight::default(),
             trail: Vec::new(),
+            exposure: None,
+            edge_log: i64::MIN / 2,
         }
     }
 
@@ -309,6 +332,7 @@ impl Player {
         for line in std::mem::take(&mut self.fight.combat.log) {
             self.explorer.log.push(format!("  [fight] {line}"));
         }
+        self.keep_out_of_sight(obs);
         let busy = self.explorer.follower.as_ref().is_some_and(RouteFollower::in_jump);
         let (errand, toward) = if busy { (String::new(), None) } else { self.fight.errand(&self.explorer, obs).map_or((String::new(), None), |(e, at)| (e, Some(at))) };
         self.fight.combat.toward = toward;
@@ -319,7 +343,10 @@ impl Player {
         let retreat = !busy && self.retreating(obs);
         if retreat {
             self.explorer.hold(obs, last);
-            let c = self.retreat.as_mut().map_or_else(Controls::default, |r| r.route.act(obs));
+            let mut c = self.retreat.as_mut().map_or_else(Controls::default, |r| r.route.act(obs));
+            if self.hold_at_edge(obs, &c) {
+                (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
+            }
             return match d {
                 Some(d) if d.moving.is_some() && d.why.starts_with("dodging") => self.fight.combat.controls(obs, &d, None), // (a missile about to hit still comes first)
                 Some(d) => self.fight.combat.controls(obs, &d, Some(&c)),
@@ -328,7 +355,14 @@ impl Player {
         }
         if let Some(d) = d.as_ref().filter(|d| d.takeover) {
             self.explorer.hold(obs, last);
-            return self.fight.combat.controls(obs, d, None);
+            let mut c = self.fight.combat.controls(obs, d, None);
+            // (the fight's own way too, unless it's out of the way of something: keeping clear
+            // took her out into the spider mastermind's sight as surely as a route)
+            let escaping = ["dodging", "ducking", "ducked", "out of", "out from", "away from"].iter().any(|w| d.why.starts_with(w));
+            if !escaping && self.hold_at_edge(obs, &c) {
+                (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
+            }
+            return c;
         }
         let mut c = self.explorer.act(obs, last, &mut self.fight);
         for line in std::mem::take(&mut self.fight.pending_log) {
@@ -342,8 +376,17 @@ impl Player {
                 self.fight.combat.readied(obs);
             }
         }
+        if d.is_none() && self.hold_at_edge(obs, &c) {
+            (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
+        }
         match d {
-            Some(d) => self.fight.combat.controls(obs, &d, Some(&c)),
+            Some(d) => {
+                let mut c = self.fight.combat.controls(obs, &d, Some(&c));
+                if self.hold_at_edge(obs, &c) {
+                    (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
+                }
+                c
+            }
             None => c,
         }
     }
@@ -716,6 +759,101 @@ impl Player {
         None
     }
 
+    /// On her way, hidden, about to step into the sight of a sniper that's firing (heard: its
+    /// guns; at her, as far as she knows, unless she can see it's at something else): not yet.
+    /// Once it stops, it winds up again before its next burst (the spider mastermind's 20 tics of
+    /// turning to her, after a chase step or two), time to get across to the next cover. The
+    /// user's: a player hears when its attack's over. E3M8: the way to a post taken into its
+    /// bursts at 600, dead in a second.
+    fn hold_at_edge(&mut self, obs: &Observation, c: &Controls) -> bool {
+        if c.forward.hypot(c.strafe) < 1.0 {
+            return false;
+        }
+        let firing: Vec<Seen> = self
+            .fight
+            .combat
+            .remaining()
+            .into_iter()
+            .filter(|s| self.fight.combat.sniper(obs, s.name))
+            .filter(|s| {
+                let now = self.fight.combat.alive.get(&s.id);
+                let seen = self.fight.combat.visible.iter().find(|t| t.id == s.id);
+                now.is_some_and(|t| first_shot(t.name).is_some_and(|f| t.attack >= f)) && seen.is_none_or(|t| t.after_her)
+            })
+            .collect();
+        if firing.is_empty() {
+            return false;
+        }
+        let pos = obs.pos();
+        let way = (obs.angle - c.turn + (-c.strafe).atan2(c.forward).to_degrees()).to_radians();
+        let ahead = (pos.0 + way.cos() * EDGE_LOOK, pos.1 + way.sin() * EDGE_LOOK);
+        let hidden_now = !firing.iter().any(|s| self.fight.combat.shot_from(obs, s, pos));
+        let seen_ahead = firing.iter().any(|s| self.fight.combat.shot_from(obs, s, ahead));
+        if hidden_now && seen_ahead {
+            if obs.tic - self.edge_log > 35 {
+                self.edge_log = obs.tic;
+                self.log(format!("tic {}: holding at the edge of cover till the {} stops firing", obs.tic, firing[0].name));
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Ways across ground a hitscan shooter she can't take on would see her on (from where she
+    /// last saw it) count for `EXPOSED` times their length: round the back of what's between them
+    /// rather than across the open. The user's, for E3M8: staying on the other side of the
+    /// building from the spider mastermind; every hit she took was on her way to a box of rockets
+    /// or a door, across the ring in its sight. Worked out again once one's moved, or a while on.
+    fn keep_out_of_sight(&mut self, obs: &Observation) {
+        let them: Vec<Seen> = self
+            .fight
+            .combat
+            .remaining()
+            .into_iter()
+            .filter(|s| s.awake && self.fight.combat.sniper(obs, s.name))
+            // (not one she can see fighting something else: it won't shoot her till it's done
+            // or she hurts it, the time to cross; out of sight, taken to be after her. A monster
+            // sees all round once awake (A_Chase): its target's what counts, not its facing)
+            .filter(|s| self.fight.combat.visible.iter().find(|t| t.id == s.id).is_none_or(|t| t.after_her))
+            .collect();
+        let at: Vec<Point> = them.iter().map(Seen::pos).collect();
+        if at.is_empty() {
+            if self.exposure.take().is_some() {
+                self.explorer.view().set_exposure(Vec::new());
+            }
+            return;
+        }
+        let fresh = self.exposure.as_ref().is_some_and(|(tic, was)| {
+            obs.tic - tic < EXPOSURE_AGAIN && was.len() == at.len() && was.iter().zip(&at).all(|(&a, &b)| dist(a, b) < EXPOSURE_MOVED)
+        });
+        if fresh {
+            return;
+        }
+        let nav = Rc::clone(&self.explorer.nav);
+        let heights = self.fight.combat.heights(obs).to_vec();
+        let los = &self.fight.combat.los;
+        let exposure: Vec<f64> = (0..nav.mesh.polys.len())
+            .map(|pi| {
+                if nav.mesh.polys[pi].is_none() {
+                    return 1.0;
+                }
+                let c = nav.poly_center(pi);
+                let z = heights.get(nav.sector_of_poly(pi)).map_or(0.0, |h| h.0);
+                let seen = them.iter().any(|s| {
+                    dist(c, s.pos()) < EXPOSURE_RANGE && {
+                        let eye = Body { x: s.x, y: s.y, z: s.z, height: monster(s.name).map_or(56.0, |m| m.height) };
+                        los.clear(eye, Body { x: c.0, y: c.1, z, height: PLAYER_HEIGHT }, &heights)
+                    }
+                });
+                if seen { EXPOSED } else { 1.0 }
+            })
+            .collect();
+        // (first seen: the way she's on was chosen without it; again)
+        self.fight.rethink |= self.exposure.is_none();
+        self.explorer.view().set_exposure(exposure);
+        self.exposure = Some((obs.tic, at));
+    }
+
     /// Out in the open in a long fight with a hitscan shooter: to the nearest place she knows of
     /// (seen or been) that none of them can see, with somewhere near it they can (a corner to
     /// step out from and back behind), by a way that doesn't go through them. The user's, for
@@ -757,8 +895,9 @@ impl Player {
                 los.clear(eye, Body { x: p.0, y: p.1, z, height: PLAYER_HEIGHT }, &heights)
             })
         };
-        let mut posts = Vec::new();
-        for &(_, p, z) in grid.iter().take(POST_LOOKS) {
+        let from_them = |p: Point| shooters.iter().map(|t| dist(p, (t.x, t.y))).fold(f64::INFINITY, f64::min);
+        let mut posts: Vec<(f64, Point)> = Vec::new();
+        for &(d, p, z) in grid.iter().take(POST_LOOKS) {
             if seen(p, z) {
                 continue;
             }
@@ -770,14 +909,15 @@ impl Player {
                 })
             });
             if peek {
-                posts.push(p);
-                if posts.len() >= 4 {
-                    break;
-                }
+                // (the far side of something, the further from them the better, not only the
+                // nearest: the user's, E3M8's building between her and the spider mastermind,
+                // 500 off with it 1500 away; its bullets spread, the further the fewer land)
+                posts.push((d - POST_FAR * from_them(p), p));
             }
         }
+        posts.sort_by(|a, b| a.0.total_cmp(&b.0));
         let found = posts.len();
-        for g in posts {
+        for g in posts.into_iter().take(4).map(|(_, p)| p) {
             if let Some(f) = self.go_to_point(obs, g, &shooters, "post", PAST_CLEAR, false) {
                 self.log(format!("tic {}: in the open: to a post at ({:.0}, {:.0}), health {:.0}", obs.tic, g.0, g.1, obs.health.unwrap_or(0.0)));
                 return Some(f);
@@ -1124,16 +1264,42 @@ impl Hooks for Fight {
         if died > 0 || here >= DEATH_ZONE_COUNT {
             return true;
         }
-        let near: Vec<&str> = self.combat.remaining().iter().filter(|s| dist(s.pos(), obj.goal) < DANGER_NEAR).map(|s| s.name).collect();
+        // (and a hitscan shooter that'd see her there, however far: E3M8 from a pistol start, rocket
+        // boxes picked up in the spider mastermind's sight, 0/16, the building with the plasma
+        // rifle and the blue armor left shut)
+        let known = self.combat.remaining();
+        let near: Vec<&str> = known.iter().filter(|s| dist(s.pos(), obj.goal) < DANGER_NEAR || self.combat.shot_from(obs, s, obj.goal)).map(|s| s.name).collect();
         if !near.is_empty() && self.combat.too_much(obs, &near, LEAVE_BE) {
             return true;
         }
         obj.kind == Kind::Item && self.not_worth_it(obs, obj)
     }
 
+    /// Ammo for the guns she has, with a monster she knows of about that she can't take on: as if
+    /// twice as far (unless she's short). More of the same won't change that; what might is
+    /// somewhere not yet seen, a door not yet tried (another gun, armor, cover). E3M8 from a
+    /// pistol start: boxes of rockets picked up in the open, the spider mastermind wandering into
+    /// sight of each, the building with the plasma rifle and the blue armor never opened (8/16
+    /// got them with this, 0/16 without; at half as far, 0/16).
+    fn weigh(&mut self, obs: &Observation, obj: &Objective) -> f64 {
+        let ammo = obj.kind == Kind::Item && obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).is_some_and(|t| ammo_item(t.name).is_some());
+        if !ammo || self.combat.short_of_ammo(obs) {
+            return 1.0;
+        }
+        let known: Vec<&'static str> = self.combat.remaining().iter().filter(|s| s.awake).map(|s| s.name).collect();
+        if known.iter().any(|n| self.combat.too_much(obs, &[n], LEAVE_BE)) {
+            AMMO_OUTMATCHED
+        } else {
+            1.0
+        }
+    }
+
     /// Something to fight with come into what she knows of the map (a better gun; ammo, when
     /// she's short): go for it now (once for each).
     fn interrupt(&mut self, x: &Explorer, obs: &Observation, obj: &Objective) -> bool {
+        if std::mem::take(&mut self.rethink) {
+            return true;
+        }
         if obj.urgent || obj.kind == Kind::Exit {
             return false;
         }

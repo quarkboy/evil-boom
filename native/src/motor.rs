@@ -89,6 +89,8 @@ pub struct Observation {
     /// weapon slot -> ammo for it
     pub ammo: Option<Vec<(i32, i32)>>,
     pub armor: Option<f64>,
+    /// 1 green (takes a third of each hit), 2 blue (half); 0 none
+    pub armor_type: Option<i32>,
     /// has the super shotgun (slot 3 then brings it up)
     pub super_shotgun: Option<bool>,
     /// has the chainsaw (slot 1 then brings it up, unless she's berserk)

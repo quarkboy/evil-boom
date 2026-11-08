@@ -45,6 +45,10 @@ const GIVEN_UP_TICS: i64 = 30 * 35;
 /// a ceiling seen coming down this lately, this low over its floor, is a crusher at work
 const CRUSH_TICS: i64 = 2 * 35;
 const CRUSH_GAP: f64 = 120.0;
+/// a monster's way of going judged over this many tics (a walker's steps come every 2-4)...
+const TRACK_TICS: i64 = 12;
+/// ...and over at least this many
+const TRACK_MIN: i64 = 6;
 /// a floor seen coming up this lately with this little room left over it, likewise
 const FLOOR_CRUSH_GAP: f64 = 72.0;
 /// health lost lately: over this long (tics)
@@ -195,6 +199,8 @@ pub struct Combat {
     duck_until: i64,
     /// when there was last nowhere to duck from one
     no_duck_tic: i64,
+    /// where each monster in sight has been lately: (tic, x, y), oldest first
+    tracks: BTreeMap<i32, std::collections::VecDeque<(i64, f64, f64)>>,
     /// the trigger was down last tic
     trigger_held: bool,
     /// health lost lately: (tic, how much)
@@ -269,6 +275,7 @@ impl Combat {
             duck_way: None,
             duck_until: 0,
             no_duck_tic: i64::MIN / 2,
+            tracks: BTreeMap::new(),
             trigger_held: false,
             damage: Vec::new(),
             spent: 0.0,
@@ -289,6 +296,7 @@ impl Combat {
     pub fn restart(&mut self) {
         self.alive.clear();
         self.visible.clear();
+        self.tracks.clear();
         self.target = None;
         self.health = None;
         self.hurt_tic = -1_000_000_000;
@@ -408,6 +416,14 @@ impl Combat {
                 || dist(seen.pos(), (seen.x0, seen.y0)) > WAKE_DISTANCE
                 || t.vx.hypot(t.vy) > WAKE_SPEED
                 || norm(t.angle - seen.angle0).abs() > WAKE_TURN;
+            let track = self.tracks.entry(t.id).or_default();
+            if track.back().is_some_and(|&(tic, _, _)| obs.tic - tic > TRACK_TICS) {
+                track.clear(); // (out of sight a while: where it was then says nothing)
+            }
+            track.push_back((obs.tic, t.x, t.y));
+            while track.front().is_some_and(|&(tic, _, _)| obs.tic - tic > TRACK_TICS) {
+                track.pop_front();
+            }
             self.visible.push(t.clone());
         }
         // (barrels as monsters are seen: in her view (or near), nothing in the way; kept while
@@ -609,6 +625,9 @@ impl Combat {
             .into_iter()
             .filter(|s| s.awake && obs.tic - s.tic < LOST_TICS && mon(s.name).attack != Attack::None && dist(s.pos(), pos) < ENGAGE_RANGE)
             .filter(|s| self.given_up.get(&s.id).is_none_or(|&until| obs.tic >= until))
+            // (not after one she can't take on: out of its sight's where she wants to be; E3M8,
+            // the spider mastermind gone behind something, walked after with a pistol)
+            .filter(|s| !self.too_much(obs, &[s.name], arsenal::OUTMATCHED))
             .max_by(|a, b| mon(a.name).threat.total_cmp(&mon(b.name).threat))?;
         let mut ghost = self.alive.get(&s.id)?.clone();
         (ghost.x, ghost.y, ghost.z, ghost.vx, ghost.vy) = (s.x, s.y, s.z, 0.0, 0.0);
@@ -699,6 +718,35 @@ impl Combat {
             return f64::INFINITY;
         }
         obs.health.unwrap_or(100.0) / rate
+    }
+
+    /// Could a hitscan shooter she knows of, awake, from where she last saw it, see her at p? (Its
+    /// bullets reach whatever it sees, however far.)
+    pub fn shot_from(&mut self, obs: &Observation, s: &Seen, p: Point) -> bool {
+        let m = mon(s.name);
+        if !s.awake || !self.sniper(obs, s.name) {
+            return false;
+        }
+        let floor = self.floor_at(obs, p);
+        let heights = self.heights(obs).to_vec();
+        self.los.clear(Body { x: s.x, y: s.y, z: s.z, height: m.height }, Body { x: p.0, y: p.1, z: floor, height: PLAYER_HEIGHT }, &heights)
+    }
+
+    /// How t's moving, a tic: its momentum, or walking (a monster walks by steps, not momentum:
+    /// its momentum's nothing as it goes), how far it's gone over the last few tics. For leading a
+    /// rocket or a plasma ball: E3M8, 90 rockets at the spider mastermind walking 4 a tic, 1000
+    /// off, aimed where it was, 200 damage done.
+    pub fn moving(&self, t: &Thing) -> Point {
+        if t.vx.hypot(t.vy) > 0.5 {
+            return (t.vx, t.vy);
+        }
+        match self.tracks.get(&t.id).and_then(|tr| Some((*tr.front()?, *tr.back()?))) {
+            Some(((t0, x0, y0), (t1, x1, y1))) if t1 - t0 >= TRACK_MIN => {
+                let dt = (t1 - t0) as f64;
+                ((x1 - x0) / dt, (y1 - y0) / dt)
+            }
+            _ => (0.0, 0.0),
+        }
     }
 
     /// Was there nowhere to duck from a hitscan shooter's fire just now (in a long fight with

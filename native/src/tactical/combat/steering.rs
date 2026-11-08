@@ -66,7 +66,7 @@ const SHELTER_LATE: f64 = 16.0;
 const RUN: f64 = 14.0;
 
 /// ducking from a hitscan shooter only in a fight longer than this (s)...
-const DUCK_FIGHT: f64 = 4.0;
+pub(super) const DUCK_FIGHT: f64 = 4.0;
 /// ...with this many tics to get out of its sight, once it's firing (it fires on for as long as
 /// it sees her: any way out of its sight shortens the burst; 8, E3M8, nowhere in 84, a burst of
 /// 120 tics stood in)...

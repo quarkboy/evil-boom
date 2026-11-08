@@ -158,6 +158,10 @@ impl RouteFollower {
                 // seen, the chain takes the rest; MAP02's corridor of them, the one in the way round
                 // a corner from anywhere clear of the others)
                 let group: Vec<Point> = self.barrel_chain(&barrels, at, at).into_iter().map(|(b, _)| b).collect();
+                // (not on a floor that hurts: she stays where she shoots from till the chain's done;
+                // E1M3, a post on nukage, the barrel not to be had from there, dead standing on it)
+                let nav = &self.view.nav;
+                cands.retain(|&q| nav.poly_at(q).is_none_or(|p| nav.damage.get(nav.sector_of_poly(p)).is_none_or(|&d| d == 0)));
                 let mut seen: Vec<(Point, Point)> =
                     cands.into_iter().filter_map(|q| group.iter().copied().filter(|&b| !self.use_walled(q, b)).min_by(|a, b| dist(*a, q).total_cmp(&dist(*b, q))).map(|b| (q, b))).collect();
                 seen.sort_by(|a, b| dist(a.0, pos).total_cmp(&dist(b.0, pos)));

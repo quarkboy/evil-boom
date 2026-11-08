@@ -277,6 +277,7 @@ impl Engine {
             weapons: Some(weapons),
             ammo: Some(vec![(1, 0), (2, clip), (3, shell), (4, clip), (5, rocket), (6, cell), (7, cell)]),
             armor: Some(f64::from(p.armor)),
+            armor_type: Some(p.armortype),
             super_shotgun: Some(p.weaponowned[8] != 0),
             chainsaw: Some(p.weaponowned[7] != 0),
             berserk: Some(p.strength != 0),

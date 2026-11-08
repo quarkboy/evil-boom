@@ -292,7 +292,11 @@ impl Combat {
         let nav = &self.nav;
         let Some(here) = nav.poly_at(obs.pos()) else { return false };
         let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
-        let floor0 = floor_of(here).floor;
+        // (where she stands, not the floor under her middle: on a ledge's lip, her middle over the
+        // drop, the game keeps her up at the highest floor her box is on; judged from the floor
+        // below, the drop wasn't one. MAP06, walked off a crate top 552 down, then along the lip
+        // of a nukage channel she couldn't climb out of, closing in on an imp)
+        let floor0 = obs.z.map_or(floor_of(here).floor, |z| z.max(floor_of(here).floor));
         let mut floor;
         if self.clear_run(obs, d, length) < length {
             return false;

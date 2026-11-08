@@ -887,11 +887,8 @@ impl Explorer {
             options.retain(|o| segs.iter().all(|&(a, b)| segment_distance(a, b, o.goal, o.goal) >= EXIT_MARGIN));
         }
         let pos = obs.pos();
-        options.sort_by(|a, b| {
-            (a.priority(), dist(a.goal, pos) * a.kind.weight())
-                .partial_cmp(&(b.priority(), dist(b.goal, pos) * b.kind.weight()))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        options
+        let mut weighed: Vec<(f64, Objective)> = options.into_iter().map(|o| (dist(o.goal, pos) * o.kind.weight() * hooks.weigh(obs, &o), o)).collect();
+        weighed.sort_by(|a, b| (a.1.priority(), a.0).partial_cmp(&(b.1.priority(), b.0)).unwrap_or(std::cmp::Ordering::Equal));
+        weighed.into_iter().map(|(_, o)| o).collect()
     }
 }

@@ -231,6 +231,9 @@ pub struct NavCore {
     pub callbacks: Callbacks,
     /// what the player knows of the map, if not everything (`restrict`)
     pub known: Option<Known>,
+    /// per poly: how many times its length a way across it counts for (in sight of something
+    /// she'd rather not be seen by); empty: none
+    pub exposure: Vec<f64>,
 }
 
 /// The part of the map the player knows: the polys that can be walked into, and the
@@ -266,6 +269,7 @@ impl NavCore {
             seg_lines,
             callbacks,
             known: None,
+            exposure: Vec::new(),
         }
     }
 

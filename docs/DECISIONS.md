@@ -1004,3 +1004,51 @@ Results (HNTR, one life): E1 7.5 (7/8), E2 6.9 -> 7.0 (6/8), E3 7.0 -> 6.9 (0/8 
 won), Doom II 7.6 -> 7.8; arenas combat 120/128, Doom II 229 -> 230; autoaim arena own-rocket hits
 21 -> 19, crates 76 -> 77/80 and 26 -> 21; plasma autoaim arena (arenas/autoaim-plasma.txt) 81 ->
 83/112. E3M8 with an E3M7 loadout: 0/4 -> 1/6, the spider left at 370-1720 rather than 1300-2250.
+
+## E3M8 on HMP, boss fights, ledges (2026-11-08)
+
+Traced from E3M8 (the Spider Mastermind) from a pistol start on HMP and with the loadout she
+brings from E3M7; each rule general, the map only its test.
+
+- **Outmatched** counts a hitscan shooter however far (its bullets get there), but only a
+  "sniper": one she couldn't see off in 4 s with what she has (`sniper`), not a zombieman across
+  the map. It weighs her too (the user's): longer to kill than she'd last against it, her health
+  with her armor's share of each hit (a third green, half blue: `lasts`), is outmatched.
+- **No chasing** ("keeping at it") a monster she can't take on.
+- **Taking a sniper on** (`takes_on`): once she'd see it off before it saw her off (gun, health,
+  armor; not ammo, picked up as she goes), the outmatched moves don't apply to it and she stands
+  and fights, whatever it's after; otherwise she keeps clear.
+- **Leading walkers**: a monster walks by steps, its momentum nothing; tracked over 12 tics, the
+  rocket or plasma ball led by that (90 rockets at the spider, aimed where it was, 200 damage).
+- **Weapon churn**: the gun in hand counts as 15% quicker (another must be clearly better: the
+  chaingun and plasma rifle swapped 17 times at 700-880); nothing readied for the next fight
+  while an awake monster she knows of is about (the shotgun up each time the spider went out of
+  sight, 14 times). E3M8 with the E3M7 loadout: HNTR 9 -> 13/16, HMP 2 -> 7/16.
+- **A boss in sight**: others further than 384 not shot (left to it: infighting, the user's).
+- **Danger**: an objective a sniper (from where she last saw it) could see counts as near it.
+  **Ammo** counts as twice as far with something she can't take on about (the building's plasma
+  rifle and blue armor first: 8/16 got them, 0/16 without; half as far, 0/16).
+- **Posts** look out to 1536, the far side of what's between her and them preferred (the user's:
+  the other side of the building). **Exposure**: ways across ground a sniper after her would see
+  her on count 3x (she routes round; replanned once when it first appears); one she can see busy
+  with another monster doesn't count. **Hold at the edge** (the user's: a player hears when its
+  attack's over): hidden, about to step into the sight of a sniper that's firing, she waits for
+  it to stop (its wind-up then gives time to cross).
+- **Ledges**: the fight's `safe` judges a drop from where she stands, not the floor under her
+  middle (on a lip, her middle over the drop, the game keeps her up: MAP06, walked off a crate top
+  552 down, then along a nukage channel's lip and in); a route ending within 48 of a drop is
+  arrived at slowly (E1M3, run at a pit's lip off a step down, airborne, over); no barrel firing
+  spot on a floor that hurts.
+- The observation carries her armor type; the death line what's in sight's health.
+
+Tried and dropped: counting known ammo on the map toward outmatched (no effect); fighting a
+sniper from cover even outmatched (every pistol start dead at 25-36 s); a landing margin for drops
+(the MAP06 falls weren't the landing).
+
+Results (HNTR, one life, 8 seeds, last set): E1 7.5 -> 8.0 (8/8 through), E2 7.0 -> 6.1 (2/8),
+E3 6.9 -> 5.0, Doom II 7.8 -> 7.1 (16 seeds; MAP06 10/16 failed); arenas combat 120 -> 119/128,
+doom2 230 -> 228/240. The sets swung a lot between builds (E1 6.1 / 8.0, E2 8.0 / 6.1 on small
+changes): routes shift and meet other old weaknesses. E3M8: from E3M7's loadout HNTR 13/16, HMP
+7/16; from a pistol start on HMP 1/16. Committed with these numbers (the user's call: the rules
+are sound, tune later). The regression set changes to Doom E1-E3 episodes plus Doom II single
+levels from a pistol start (the user's: MAP06 is a gimmick map, no test).
