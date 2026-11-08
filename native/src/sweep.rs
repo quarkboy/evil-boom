@@ -343,8 +343,10 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
             let seen: Vec<String> = p.combat().visible.iter().map(|t| format!("{} {:.0} away", t.name, crate::geom::dist((t.x, t.y), pos))).collect();
             let doing = p.explorer.current.as_ref().map_or("-".to_string(), |c| c.label.clone());
             let msg = format!(
-                "tic {}: killed: health {:.0}, armor {:.0}, weapon {}, weapons {:?}, ammo {:?}; in sight: {}; doing: {doing}",
+                "tic {}: killed at ({:.0}, {:.0}): health {:.0}, armor {:.0}, weapon {}, weapons {:?}, ammo {:?}; in sight: {}; doing: {doing}",
                 e.tic,
+                pos.0,
+                pos.1,
                 ob.health.unwrap_or(0.0),
                 ob.armor.unwrap_or(0.0),
                 ob.weapon.unwrap_or(0),

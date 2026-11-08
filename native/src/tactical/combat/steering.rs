@@ -34,6 +34,9 @@ const W_SURROUND: f64 = 1.5;
 const W_KEEP: f64 = 0.8;
 const W_EXPOSED: f64 = 1.5;
 const W_OFF_FLOOR: f64 = 10.0;
+const W_BARREL: f64 = 4.0;
+/// with anything shooting in sight, kept this far from a barrel's middle (its blast and a margin)
+const BARREL_KEEP: f64 = 192.0;
 
 /// tics before a shotgun's ready that she comes back out for the shot
 const RELOAD_BACK: f64 = 12.0;
@@ -189,6 +192,7 @@ impl Combat {
         let shooting = target.is_some_and(|t| matches!(mon(t.name).attack, Attack::Missile | Attack::Hitscan));
         let spread_now = spread(pos, &them.iter().map(|t| (t.x, t.y)).collect::<Vec<_>>());
         let hurting = self.on_hurting_floor(obs);
+        let shooters = them.iter().any(|m| matches!(mon(m.name).attack, Attack::Hitscan | Attack::Missile));
         let crushed = self.under_crusher(obs);
         let hitscanners: Vec<Thing> = them.iter().filter(|m| mon(m.name).attack == Attack::Hitscan).cloned().collect();
         // (a shotgun reloading: out of her target's sight too till it's ready, then back; Astra's
@@ -214,6 +218,16 @@ impl Combat {
             let mut s = W_ROOM * room / ROOM + W_OPEN * self.openness(obs, ahead, OPEN);
             if hurting && self.gets_off(obs, d, LOOK.min(room)) {
                 s += W_OFF_FLOOR; // (off the floor that's hurting her, before anything)
+            }
+            // (not by a barrel with anything shooting in sight: a shot at her, or past her, sets it
+            // off; MAP02, fighting shotgun guys 35 from one, 76 off her in one go)
+            if shooters {
+                for b in obs.barrels.iter().flatten() {
+                    let gap = crate::motor::follower::blast_gap(ahead, *b);
+                    if gap < BARREL_KEEP {
+                        s -= W_BARREL * (BARREL_KEEP - gap) / BARREL_KEEP;
+                    }
+                }
             }
             if crushed && self.gets_out(obs, d, LOOK.min(room).max(48.0)) {
                 s += 2.0 * W_OFF_FLOOR; // (out from under a crusher, before even that)
