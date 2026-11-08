@@ -1,15 +1,19 @@
 {
-  // Recommended extensions for working on Evil DOOM (VS Code offers them on opening the repo).
+  // Recommended extensions for working on Evil DOOM, set up for VS Code on Windows connected to
+  // WSL (Fedora). "Remote - WSL" runs on the Windows side; the rest run in WSL, and VS Code offers
+  // to install them there when the repo is opened through the WSL connection.
   "recommendations": [
+    // the connection into WSL (Windows side)
+    "ms-vscode-remote.remote-wsl",
     // Rust: the nav core, the bot, the `evil` binary (native/)
     "rust-lang.rust-analyzer",
-    // debugging the Rust binary (works with the MSVC toolchain this repo builds with)
+    // debugging the Rust binary on Linux (LLDB; `sudo dnf install lldb` in Fedora if it asks)
     "vadimcn.vscode-lldb",
     // Cargo.toml editing
     "tamasfe.even-better-toml",
     // crate versions in Cargo.toml at a glance
     "fill-labs.dependi",
-    // C: dsda/evil_api.c and the DSDA-Doom sources it's built with
+    // C: dsda/evil_api.c and the DSDA-Doom sources it's built with (gcc's headers in WSL)
     "ms-vscode.cpptools",
     // CMake for DSDA-Doom's build
     "ms-vscode.cmake-tools",
