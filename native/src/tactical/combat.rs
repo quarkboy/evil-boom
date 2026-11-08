@@ -73,6 +73,8 @@ pub const LEAVE_BE: f64 = 15.0;
 pub(super) const LOW_HEALTH: f64 = 35.0;
 /// with something shooting in sight, keep this far from barrels
 const BARREL_CLEAR: f64 = 160.0;
+/// a barrel's height (seen over a ledge this high or not)
+const BARREL_HEIGHT: f64 = 42.0;
 
 /// a monster seen after another, not her, this long: they're fighting each other: leave them
 const INFIGHT_TICS: i32 = 18;
@@ -133,6 +135,8 @@ pub struct Combat {
     pub alive: BTreeMap<i32, Thing>,
     /// monsters she can see now
     pub visible: Vec<Thing>,
+    /// barrels she's seen that are still there
+    pub barrels_seen: Vec<Point>,
     pub target: Option<i32>,
     pub kills: i32,
     pub log: Vec<String>,
@@ -210,6 +214,7 @@ impl Combat {
             known: BTreeMap::new(),
             alive: BTreeMap::new(),
             visible: Vec::new(),
+            barrels_seen: Vec::new(),
             target: None,
             kills: 0,
             log: Vec::new(),
@@ -372,6 +377,25 @@ impl Combat {
                 || t.vx.hypot(t.vy) > WAKE_SPEED
                 || norm(t.angle - seen.angle0).abs() > WAKE_TURN;
             self.visible.push(t.clone());
+        }
+        // (barrels as monsters are seen: in her view (or near), nothing in the way; kept while
+        // they're there)
+        let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
+        // (the same barrel pushed by shots is still the one she saw)
+        self.barrels_seen = self.barrels_seen.iter().filter_map(|&b| crate::motor::follower::barrel_now(obs, b)).collect();
+        self.barrels_seen.dedup_by(|a, b| dist(*a, *b) < 1.0);
+        for &b in &barrels {
+            let d = dist(b, pos);
+            if d >= ENGAGE_RANGE || self.barrels_seen.iter().any(|&x| dist(x, b) < 1.0) {
+                continue;
+            }
+            if !(d < NEAR || norm(heading(pos, b) - obs.angle).abs() < FOV) {
+                continue;
+            }
+            let floor = self.nav.poly_at(b).map_or(0.0, |p| self.heights_now.get(self.nav.sector_of_poly(p)).map_or(0.0, |h| h.0));
+            if self.los.clear(me, Body { x: b.0, y: b.1, z: floor, height: BARREL_HEIGHT }, &self.heights_now) {
+                self.barrels_seen.push(b);
+            }
         }
         self.watch_infighting(obs);
     }

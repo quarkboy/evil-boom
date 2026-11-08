@@ -818,3 +818,25 @@ Results (HNTR, one life, 8 seeds; Doom II 16): E1 4.1 -> 7.5 (4/8 through, from 
 3.8, E3 5.6 -> 5.2 (1/8 through, the first), Doom II 8.6 -> 8.2 (paths change; E2 seed 0's new
 end, E2M4 stuck, is exploration: no routes, 2 barrel lines in the log); 263 levels over the set
 against 249. Arenas unchanged.
+
+## Barrels cleared on sight (2026-11-08)
+
+The user: shoot any barrel she sees, since barrels are dangerous from being blown up by enemy
+fire too. Before, barrels were shot only when one blocked her way.
+
+- **Seen**: barrels as monsters are (in view or near, nothing in the way: `Combat::barrels_seen`),
+  kept while they're there.
+- **Offered** (the fight's hooks, `Kind::Barrel`): each seen barrel within 1024, with nothing in
+  sight (in a fight, the fight's barrel rules) and the ammo (the pistol with 10, or the shotgun
+  with 12 shells: the barrel rule's guns); one objective a barrel, given up on as any other is
+  (the explorer's backoff).
+- **Done** (`Step::barrel`): the follower takes the barrel on as the step starts, from the
+  nearest post out of every blast of its chain (the barrel-in-the-way routine: stay there if out
+  of every blast, else the run off checked against the chain).
+- **Pushed barrels**: a hit thrusts a barrel by its damage x 100 / its mass 100 (a pistol shot:
+  6-20 units), so a barrel is the one there was if it's within 48 of where that was (it was taken
+  for gone after each hit and shot at again as another, 16 times in E1M1).
+
+Results (HNTR, one life): E1 7.5 -> 7.4 (4/8 through), E2 3.8 -> 2.8 (2/8; six die on E2M2, five
+of them crushers, reached now rather than stuck before), E3 5.2 -> 5.5, Doom II 8.2 -> 8.6; 263
+levels over the set either way; runs with barrel damage 5 -> 4. Arenas unchanged.

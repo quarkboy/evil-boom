@@ -273,12 +273,16 @@ impl Explorer {
             key,
             label: obj.label.clone(),
             expects: Vec::new(),
+            barrel: None,
         };
         let last = match obj.kind {
             Kind::Frontier | Kind::Recheck | Kind::Visit | Kind::Noise | Kind::Room | Kind::Item | Kind::Hunt | Kind::Wall | Kind::Secret => {
                 step(Action::Walk, None, None)
             }
             Kind::Key => step(Action::Pickup, None, obj.key),
+            // (towards it; the follower takes it on at once, from the nearest place out of its
+            // chain's blasts)
+            Kind::Barrel => Step { barrel: obj.look_at, ..step(Action::Walk, None, None) },
             Kind::Teleporter => step(Action::Cross, obj.trigger.clone(), None),
             _ => {
                 let t = obj.trigger.clone()?;

@@ -116,6 +116,13 @@ const HITS: f64 = 0.5;
 const COST_FLOOR: f64 = 10.0;
 /// seconds a better gun is worth going for anyway (the fights to come)
 const GUN_WORTH: f64 = 10.0;
+/// barrels this near her (as the crow flies) are cleared...
+const BARREL_NEAR: f64 = 1024.0;
+/// ...from a place she can get to this near one (the follower finds where to shoot from)...
+const BARREL_SPOT: f64 = 256.0;
+/// ...with this much for the pistol, or this many shells for the shotgun
+const BARREL_BULLETS: i32 = 10;
+const BARREL_SHELLS: i32 = 12;
 
 /// (barons' and knights' fireballs don't hurt each other)
 fn species(name: &str) -> &str {
@@ -614,7 +621,7 @@ impl Player {
         if through < clear {
             return None; // (not past them)
         }
-        let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, label: label.to_string(), expects: Vec::new() };
+        let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, barrel: None, label: label.to_string(), expects: Vec::new() };
         Some(RouteFollower::new(view, vec![step], obs.keys.unwrap_or_default(), Some(live), false, obs.tic))
     }
 
@@ -703,7 +710,7 @@ impl Player {
             let goal = view.nav.poly_center(pi);
             let Some(path) = view.find_path(obs.pos(), goal, &live, None) else { continue };
             self.log(format!("tic {}: falling back to cover at ({:.0}, {:.0}), health {:.0}", obs.tic, goal.0, goal.1, obs.health.unwrap_or(0.0)));
-            let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, label: "cover".into(), expects: Vec::new() };
+            let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, barrel: None, label: "cover".into(), expects: Vec::new() };
             return Some(RouteFollower::new(Rc::clone(&view), vec![step], obs.keys.unwrap_or_default(), Some(live), false, obs.tic));
         }
         None
@@ -711,6 +718,35 @@ impl Player {
 }
 
 impl Fight {
+    /// Barrels she's seen, near, with nothing in sight and the ammo for it: each to be shot from out
+    /// of its chain's blasts (the follower's), before a shot sets it off by her, hers at something
+    /// beside it or a monster's at her (the user's: barrels are dangerous wherever they are).
+    fn barrels(&self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
+        if !self.combat.visible.is_empty() {
+            return Vec::new(); // (in a fight, the fight's: shot by what they'd take with them)
+        }
+        let ammo = |slot: i32| obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n);
+        let held = obs.weapons.clone().unwrap_or_default();
+        // (the barrel rule: the shotgun with 12 shells and more, else single pistol taps)
+        if !(held.contains(&2) && ammo(2) >= BARREL_BULLETS) && !(held.contains(&3) && ammo(3) >= BARREL_SHELLS) {
+            return Vec::new();
+        }
+        let nav = &x.nav;
+        let mut out = Vec::new();
+        for &b in &self.combat.barrels_seen {
+            if dist(b, pos) > BARREL_NEAR {
+                continue;
+            }
+            let Some(pi) = reach.iter().copied().filter(|&pi| dist(nav.poly_center(pi), b) < BARREL_SPOT).min_by(|&p, &q| dist(nav.poly_center(p), b).total_cmp(&dist(nav.poly_center(q), b))) else { continue };
+            let mut o = Objective::new(Kind::Barrel, nav.poly_center(pi), format!("clear the barrel at ({:.0}, {:.0})", b.0, b.1));
+            o.look_at = Some(b);
+            // (one objective a barrel, by where it is: given up on as any other is)
+            o.reveals = std::iter::once(((b.0.round() as i64) << 32) | (b.1.round() as i64 & 0xffff_ffff)).collect();
+            out.push(o);
+        }
+        out
+    }
+
     fn new_gun(obs: &Observation, name: &str) -> bool {
         if name == "SuperShotgun" {
             return obs.super_shotgun != Some(true);
@@ -929,6 +965,7 @@ impl Hooks for Fight {
     /// Items she could use now; with --complete, every counted item she's seen too.
     fn wanted(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let mut out = self.supplies(x, obs, reach, pos);
+        out.extend(self.barrels(x, obs, reach, pos));
         if let Some(c) = &mut self.completion {
             for o in c.wanted(x, obs, reach, pos) {
                 if !out.iter().any(|w| w.thing.is_some() && w.thing == o.thing) {
@@ -963,10 +1000,11 @@ impl Hooks for Fight {
         out
     }
 
-    fn gone(&mut self, _obs: &Observation, obj: &Objective) -> bool {
+    fn gone(&mut self, obs: &Observation, obj: &Objective) -> bool {
         match obj.kind {
             Kind::Item => obj.thing.is_none_or(|t| !self.present.contains(&t)),
             Kind::Hunt => obj.thing.is_none_or(|t| !self.combat.alive.contains_key(&t)),
+            Kind::Barrel => obj.look_at.is_none_or(|b| crate::motor::follower::barrel_now(obs, b).is_none()),
             _ => false,
         }
     }

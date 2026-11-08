@@ -74,6 +74,14 @@ impl RouteFollower {
         if self.barrel.is_some() {
             return self.shoot_barrel(obs);
         }
+        // (a barrel to clear on this step: taken on at once, shot from the nearest place out of
+        // every blast of its chain, then on)
+        if let Some(b) = self.step().barrel.filter(|_| self.barrel_step != Some(self.step_i)).and_then(|b| super::barrel_now(obs, b)) {
+            self.barrel_step = Some(self.step_i);
+            self.log.add(obs.tic, format!("clearing the barrel at ({:.0}, {:.0})", b.0, b.1));
+            self.barrel = Some((b, obs.tic));
+            return self.shoot_barrel(obs);
+        }
         let nav = Rc::clone(&self.view);
         let step = self.step().clone();
         // (the floor she's walking on going down when nothing she's doing means it to (no move

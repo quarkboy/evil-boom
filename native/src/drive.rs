@@ -433,7 +433,7 @@ fn goto(s: &mut Setup, goal: Point, full: bool) {
             println!("  no way there, knowing the whole map");
             return;
         };
-        let walk = crate::walkthrough::Step { path: None, action: crate::walkthrough::Action::Walk, trigger: None, key: None, label: "go there".into(), expects: Vec::new() };
+        let walk = crate::walkthrough::Step { path: None, action: crate::walkthrough::Action::Walk, trigger: None, key: None, label: "go there".into(), expects: Vec::new(), barrel: None };
         let steps = steps_from_legs(&view, &route.legs, Some(walk), Some(&states));
         (view, steps, states)
     } else {

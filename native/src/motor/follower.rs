@@ -81,6 +81,15 @@ pub fn tap_rounds(obs: &Observation, slot: i32) -> i32 {
 /// tics between shots at a barrel or a wall (the pistol ready again, the trigger let go: a first shot each time)
 pub const BARREL_TAP: i64 = 20;
 
+/// a barrel is the one there was if it's this near where that was: shots push them (a hit
+/// thrusts by its damage times 100 over the mass, a barrel's 100: 6-20 units a pistol shot)
+pub const BARREL_TRACK: f64 = 48.0;
+
+/// The barrel there is now, of one that was at `at` (pushed about by shots).
+pub fn barrel_now(obs: &Observation, at: Point) -> Option<Point> {
+    obs.barrels.iter().flatten().copied().filter(|&b| dist(b, at) < BARREL_TRACK).min_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at)))
+}
+
 /// the longest wait for a lift to come back before crossing its line
 const CROSS_REST_WAIT: i64 = 8 * 35;
 
@@ -250,6 +259,8 @@ pub struct RouteFollower {
     /// (mortal) the barrel's shot from somewhere out of every blast of its chain: she stays
     /// there till it's over, no running off
     barrel_stay: bool,
+    /// the step whose barrel (`Step::barrel`) she's taken on already
+    barrel_step: Option<i64>,
     /// shot and gone: how many barrels there were, and since when (the chain going off: not back
     /// till none has gone for a while)
     barrel_settle: Option<(usize, i64)>,
@@ -360,6 +371,7 @@ impl RouteFollower {
             barrel_flee: None,
             barrel_flee_way: Vec::new(),
             barrel_stay: false,
+            barrel_step: None,
             barrel_settle: None,
             barrel_way: Vec::new(),
             barrel_best: None,

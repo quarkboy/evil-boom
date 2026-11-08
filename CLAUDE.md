@@ -26,7 +26,8 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   effects by using/seeing them. Keep the omniscient planner underneath; knowledge filters it.
 - **Combat: survivable first, realistic later.** Escape routes, retreats, unsafe zones, mid-fight
   pickups now; awareness limited to sight/sound later. Don't add new omniscient shortcuts casually.
-- **Barrels:** shotgun within ~320 with 12+ shells, else single pistol taps (first shot is
+- **Barrels:** any barrel she's seen is cleared (no monster in sight), from out of every blast of
+  its chain; shotgun within ~320 with 12+ shells, else single pistol taps (first shot is
   accurate). Walls/switches shot with pistol taps.
 - **Rust only**, idiomatic, no `#[allow]`s, no warnings: `cargo clippy --release --all-targets`
   clean. Don't run `cargo fmt` (it reformats ~74 files; the code isn't fmt-formatted).
@@ -72,13 +73,12 @@ another case in a chain.
 
 ## Where things stand (2026-11-08)
 
-Last bot change: shot barrels kept till they've blown, stay put when shot from out of every
-blast. HNTR, one life, 8 seeds: E1 7.5 (4/8 through; E1M8 deaths), E2 3.8 (2/8 through; E2M2
-stuck/died, E2M4 stuck: no routes), E3 5.2 (1/8 through; E3M4 deaths), Doom II 8.2 (16 seeds;
-MAP12 stuck, MAP08 deaths: the Cyberdemon/Baron room); berserk arena 14/32. Open items: the user's
-barrel rule (shoot any barrel she sees, from clear of the chain's blast); E1M8 (the barons, dead in
-seconds); two or more revenants with berserk; deliberate infighting only for heavies; several
-missile-firing monsters can still keep her dodging.
+Last bot change: barrels cleared on sight. HNTR, one life, 8 seeds: E1 7.4 (4/8 through; E1M8
+deaths), E2 2.8 (2/8 through; six die on E2M2, five to crushers), E3 5.5 (E3M4, E3M9, E3M8),
+Doom II 8.6 (16 seeds; MAP12 stuck, MAP08 deaths: the Cyberdemon/Baron room); berserk arena
+14/32. Open items: E2M2's crushers (caught again and again over minutes); E1M8 (the barons); two
+or more revenants with berserk; deliberate infighting only for heavies; several missile-firing
+monsters can still keep her dodging.
 
 ## The Linux port (done 2026-11-08)
 

@@ -71,6 +71,9 @@ pub enum Kind {
     Wall,
     /// a sector she found a secret in, another life: back into it
     Secret,
+    /// a barrel she's seen: shot from out of its chain's blasts, before a shot (hers or a
+    /// monster's) sets it off by her (the user's)
+    Barrel,
 }
 
 impl Kind {
@@ -88,6 +91,7 @@ impl Kind {
             Kind::Teleporter => 1.2,
             Kind::Recheck => 3.0,
             Kind::Hunt => 1.5,
+            Kind::Barrel => 0.7,
         }
     }
 }

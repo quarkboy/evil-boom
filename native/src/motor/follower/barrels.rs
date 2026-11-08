@@ -1,6 +1,6 @@
 //! Clearing barrels, choosing a firing position and escaping chain explosions.
 
-use super::{along, barrel_gun, blast_gap, RouteFollower, BARREL_TAP};
+use super::{along, barrel_gun, barrel_now, blast_gap, RouteFollower, BARREL_TAP};
 use crate::geom::{dist, segment_distance, Point};
 use crate::motor::{heading, norm, Controls, Observation, FULL_SPEED};
 use crate::navigator::{States, PLAYER_RADIUS};
@@ -108,11 +108,16 @@ impl RouteFollower {
             }
             self.barrel_settle = None;
         }
-        let Some((at, since)) = self.barrel else { return self.walk(obs) };
+        let Some((was, since)) = self.barrel else { return self.walk(obs) };
         let pos = obs.pos();
         // (mortal: time to walk off to somewhere outside the blasts first)
         let give_up = if self.mortal { BARREL_GIVE_UP_FAR } else { BARREL_GIVE_UP };
-        if !obs.barrels.iter().flatten().any(|&b| dist(b, at) < 8.0) || obs.tic - since > give_up {
+        // (the same barrel, pushed by the shots at it: E1M1's, a pistol tap moving it 8 units,
+        // taken for gone, shot at again as another, 16 times)
+        let now = barrel_now(obs, was);
+        let at = now.unwrap_or(was);
+        self.barrel = Some((at, since));
+        if now.is_none() || obs.tic - since > give_up {
             self.barrel = None;
             self.barrel_post = None;
             self.barrel_way.clear();

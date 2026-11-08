@@ -61,6 +61,8 @@ pub struct Step {
     pub key: Option<Key>,
     pub label: String,
     pub expects: Vec<Expect>,
+    /// a barrel to clear on the way: shot first, from somewhere out of every blast of its chain
+    pub barrel: Option<Point>,
 }
 
 /// Heights as the logs show them (whole numbers without a point, as Python's ints).
@@ -170,9 +172,9 @@ pub fn steps_from_legs(view: &View, legs: &[Leg], goal_step: Option<Step>, state
             let also: BTreeSet<usize> = if next.is_some_and(|n| t.shift_from.is_some() && n.shift_from == t.shift_from) { effects.iter().map(|(s, _)| *s).collect() } else { BTreeSet::new() };
             let expects = expects_of(view, &t, Some(&legs[i + 1].path), Some(&effects), &also);
             running = view.nav.apply_trigger(&running, &t);
-            steps.push(Step { path: Some(leg.path.clone()), action: action_for(&t), label: format!("line {}: {}", t.line, t.info.description), trigger: Some(t), key: None, expects });
+            steps.push(Step { path: Some(leg.path.clone()), action: action_for(&t), label: format!("line {}: {}", t.line, t.info.description), trigger: Some(t), key: None, expects, barrel: None });
         } else if let Some(k) = leg.key {
-            steps.push(Step { path: Some(leg.path.clone()), action: Action::Pickup, trigger: None, key: Some(k), label: format!("pick up {}", k.name()), expects: Vec::new() });
+            steps.push(Step { path: Some(leg.path.clone()), action: Action::Pickup, trigger: None, key: Some(k), label: format!("pick up {}", k.name()), expects: Vec::new(), barrel: None });
         }
     }
     if let (Some(mut g), Some(last)) = (goal_step, legs.last()) {
@@ -196,7 +198,7 @@ fn exit_step(t: &TriggerLine) -> Step {
         Action::Use => Action::Exit,
         a => a,
     };
-    Step { path: None, action, trigger: Some(t.clone()), key: None, label: format!("exit via line {}", t.line), expects: Vec::new() }
+    Step { path: None, action, trigger: Some(t.clone()), key: None, label: format!("exit via line {}", t.line), expects: Vec::new(), barrel: None }
 }
 
 /// From the map's starting heights, finish the level: one search whose goal is any exit,

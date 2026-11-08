@@ -35,3 +35,6 @@ dsda/spike/target/
 
 # git worktrees kept inside the checkout
 .worktrees/
+
+# agent worktrees (Claude Code)
+.claude/worktrees/
