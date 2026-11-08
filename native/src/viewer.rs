@@ -267,6 +267,16 @@ struct Watch {
 }
 
 pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> {
+    let (w, watch) = first_watch(wad, map_name, o)?;
+    if o.headless {
+        return headless(watch, &w, o);
+    }
+    let title = format!("evil-doom explorer: {}", watch.map_name);
+    show(watch, &title, o.episode.then_some((&w, o)))
+}
+
+/// The WAD and the watcher for the first level.
+fn first_watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(Wad, Watch), String> {
     let iwad = resolve_wad(wad);
     let w = Wad::open(&iwad)?;
     let map_name = map_name.to_uppercase();
@@ -282,10 +292,149 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
         engine.set_god();
     }
     let watch = level(&w, m, nav, engine, o)?;
-    if o.headless {
-        return headless(watch, &w, o);
+    Ok((w, watch))
+}
+
+/// the HUD's corner map: zoomed in this much, round her
+const HUD_ZOOM: f64 = 3.0;
+
+/// What a recording shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecordView {
+    /// the game's own view
+    Game,
+    /// the whole watcher window (the game, the map of what she knows, her log)
+    Full,
+    /// the game's view with what she's at over it (health, ammo, what she's doing, the fight,
+    /// a map in the corner)
+    Hud,
+}
+
+/// How to record.
+pub struct RecordOptions {
+    pub out: std::path::PathBuf,
+    pub view: RecordView,
+    /// the video's size (None: the view's own; the game's, 1280x960)
+    pub size: Option<(u32, u32)>,
+    /// a frame kept every this many tics (2: twice as fast)
+    pub every: u32,
+    pub ffmpeg: std::path::PathBuf,
+}
+
+/// ffmpeg: on the path, else where winget put it.
+pub fn find_ffmpeg() -> Option<std::path::PathBuf> {
+    let ok = |p: &std::path::Path| std::process::Command::new(p).arg("-version").stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success());
+    if ok(Path::new("ffmpeg")) {
+        return Some("ffmpeg".into());
     }
-    show(watch, &format!("evil-doom explorer: {map_name}"), o.episode.then_some((&w, o)))
+    let local = std::env::var_os("LOCALAPPDATA")?;
+    let packages = Path::new(&local).join("Microsoft").join("WinGet").join("Packages");
+    for e in std::fs::read_dir(&packages).ok()?.flatten() {
+        if !e.file_name().to_string_lossy().to_lowercase().contains("ffmpeg") {
+            continue;
+        }
+        for b in std::fs::read_dir(e.path()).ok()?.flatten() {
+            let exe = b.path().join("bin").join("ffmpeg.exe");
+            if ok(&exe) {
+                return Some(exe);
+            }
+        }
+    }
+    None
+}
+
+/// The run watched, as fast as it goes, into an MP4 (ffmpeg encoding the frames piped to it):
+/// the level (and with --episode the ones after), as a watch plays it.
+pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) -> Result<(), String> {
+    use std::io::Write;
+    let (w, mut watch) = first_watch(wad, map_name, o)?;
+    let (fw, fh) = match r.view {
+        RecordView::Full => (W, H),
+        RecordView::Hud => (GAME.2, GAME.3),
+        RecordView::Game => {
+            watch.tic();
+            watch.frame.as_ref().map(|f| (f.0, f.1)).ok_or("the game drew nothing")?
+        }
+    };
+    let (ow, oh) = r.size.unwrap_or(match r.view {
+        RecordView::Game => (1280, 960),
+        _ => (fw as u32, fh as u32),
+    });
+    // (Doom's pixels are taller than wide: the game's view stretched to 4:3; crisp)
+    let scale = format!("scale={ow}:{oh}:flags={}", if r.view == RecordView::Game { "neighbor" } else { "bicubic" });
+    let mut ff = std::process::Command::new(&r.ffmpeg)
+        .args(["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr0", "-s", &format!("{fw}x{fh}"), "-r", "35", "-i", "-"])
+        .args(["-vf", &scale, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"])
+        .arg(&r.out)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("{}: {e}", r.ffmpeg.display()))?;
+    let mut pipe = ff.stdin.take().ok_or("no pipe to ffmpeg")?;
+    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H) };
+    if r.view == RecordView::Hud {
+        // (the corner map round her, near enough to read)
+        (watch.follow, watch.zoom) = (true, HUD_ZOOM);
+    }
+    let mut bytes: Vec<u8> = Vec::with_capacity(fw * fh * 4);
+    let mut start = watch.engine.tic;
+    let mut n: u64 = 0;
+    loop {
+        while !watch.engine.finished() && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE {
+            watch.tic();
+            n += 1;
+            if !n.is_multiple_of(u64::from(r.every.max(1))) {
+                continue;
+            }
+            bytes.clear();
+            match r.view {
+                RecordView::Game => {
+                    let Some((gw, gh, px)) = &watch.frame else { continue };
+                    if (*gw, *gh) != (fw, fh) {
+                        continue;
+                    }
+                    for &i in px {
+                        bytes.extend_from_slice(&watch.palette[usize::from(i)].to_le_bytes());
+                    }
+                }
+                RecordView::Full => {
+                    watch.draw(&mut canvas);
+                    for &p in &canvas.px {
+                        bytes.extend_from_slice(&p.to_le_bytes());
+                    }
+                }
+                RecordView::Hud => {
+                    watch.draw_hud(&mut canvas);
+                    for y in GAME.1..GAME.1 + GAME.3 {
+                        for &p in &canvas.px[y * W + GAME.0..y * W + GAME.0 + GAME.2] {
+                            bytes.extend_from_slice(&p.to_le_bytes());
+                        }
+                    }
+                }
+            }
+            pipe.write_all(&bytes).map_err(|e| format!("ffmpeg: {e}"))?;
+        }
+        let t = watch.engine.tally();
+        let how = if watch.engine.exited() { "EXITED" } else if watch.engine.dead() { "DIED" } else { "TIME" };
+        println!("{}: {how} items {}/{}, {:.0}s game", watch.map_name, t[0].0, t[0].1, (watch.engine.tic - start) as f64 / TICRATE);
+        if !(o.episode && watch.engine.exited()) {
+            break;
+        }
+        match next_level(watch, &w, o)? {
+            Some(next) => watch = next,
+            None => break,
+        }
+        if r.view == RecordView::Hud {
+            (watch.follow, watch.zoom) = (true, HUD_ZOOM);
+        }
+        start = watch.engine.tic;
+    }
+    drop(pipe);
+    let status = ff.wait().map_err(|e| e.to_string())?;
+    if !status.success() {
+        return Err(format!("ffmpeg failed ({status})"));
+    }
+    println!("written {}", r.out.display());
+    Ok(())
 }
 
 /// The watch played through without a window, as fast as it goes (the time cap as a run's):
@@ -594,6 +743,67 @@ impl Watch {
             let s: String = line.split(" | ").next().unwrap_or("").chars().take(98).collect();
             y = c.text(&s, (LOG.0 + 8, y), colour, 1);
         }
+    }
+
+    /// The game's view with what she's at over it: the level, the time, health, armour, ammo at
+    /// the top; what she's doing and what the fight's doing at the bottom; the map of what she
+    /// knows in a corner (drawn where the watcher has it, shrunk into the view).
+    fn draw_hud(&self, c: &mut Canvas) {
+        c.clip = (0, 0, W, H);
+        c.fill((0, 0, W, H), BG);
+        self.draw_map(c);
+        // (the map, shrunk into the top right of the view, before the game's drawn over the rest)
+        let (mw, mh) = (GAME.2 * 3 / 10, GAME.2 * 3 / 10 * MAP.3 / MAP.2);
+        let small: Vec<u32> = (0..mh)
+            .flat_map(|y| (0..mw).map(move |x| (MAP.0 + x * MAP.2 / mw, MAP.1 + y * MAP.3 / mh)))
+            .map(|(x, y)| c.px[y * W + x])
+            .collect();
+        c.clip = (0, 0, W, H);
+        self.draw_game(c);
+        let (mx, my) = (GAME.0 + GAME.2 - mw - 8, GAME.1 + 40);
+        for y in 0..mh {
+            for x in 0..mw {
+                let p = small[y * mw + x];
+                let i = (my + y) * W + mx + x;
+                // (half see-through over the view)
+                let q = c.px[i];
+                let mix = |s: u32| (((p >> s) & 255) * 3 / 4 + ((q >> s) & 255) / 4) << s;
+                c.px[i] = mix(16) | mix(8) | mix(0);
+            }
+        }
+        let bar = |c: &mut Canvas, y: usize| {
+            for yy in y..y + 26 {
+                for x in GAME.0..GAME.0 + GAME.2 {
+                    let i = yy * W + x;
+                    let q = c.px[i];
+                    c.px[i] = (q >> 1) & 0x007f_7f7f;
+                }
+            }
+        };
+        bar(c, GAME.1 + 4);
+        // (above the game's status bar, a sixth of its view)
+        let low = GAME.1 + GAME.3 - GAME.3 * 32 / 200;
+        bar(c, low - 58);
+        bar(c, low - 30);
+        if let Some(obs) = &self.obs {
+            let ammo: Vec<String> = [2, 3, 5, 6].iter().map(|&s| obs.ammo.iter().flatten().find(|(x, _)| *x == s).map_or(0, |(_, n)| *n).to_string()).collect();
+            let secs = (self.engine.tic as f64 / TICRATE) as i64;
+            let top = format!(
+                "{}  {}:{:02}   health {:.0}  armor {:.0}   ammo {}",
+                self.map_name,
+                secs / 60,
+                secs % 60,
+                obs.health.unwrap_or(0.0),
+                obs.armor.unwrap_or(0.0),
+                ammo.join("/")
+            );
+            c.text(&top, (GAME.0 + 8, GAME.1 + 9), TEXT, 2);
+        }
+        let doing = self.agent.x().current.as_ref().map_or("-".to_string(), |o| o.label.clone());
+        c.text(&format!("doing: {}", doing.chars().take(48).collect::<String>()), (GAME.0 + 8, low - 53), TEXT, 2);
+        let fight = self.agent.player().map_or("", |p| p.combat().mode());
+        let fight = if fight.is_empty() { "no fight" } else { fight };
+        c.text(&format!("fight: {}", fight.chars().take(48).collect::<String>()), (GAME.0 + 8, low - 25), (255, 200, 120), 2);
     }
 
     fn draw_map(&self, c: &mut Canvas) {

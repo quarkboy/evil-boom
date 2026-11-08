@@ -784,6 +784,11 @@ impl Combat {
         obs.health.unwrap_or(100.0) / rate
     }
 
+    /// What the fight's doing now ("" with none on).
+    pub fn mode(&self) -> &str {
+        &self.mode
+    }
+
     /// A switch to the ready gun asked for (not again till it's had time).
     pub fn readied(&mut self, obs: &Observation) {
         self.switch_tic = obs.tic;

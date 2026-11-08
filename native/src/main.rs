@@ -17,6 +17,8 @@
 //!   evil arena-one FILE NAME [--seed N]         one of them, once; its log to out/arena/NAME.txt
 //!   evil arena-watch FILE NAME [--seed N] [--speed X]   one of them, watched (space pause, N a
 //!                                               tic at a time, +/- speed)
+//!   evil record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
+//!       [--ffmpeg PATH] [run options]   a watch played as fast as it goes into an MP4 (ffmpeg)
 //!   evil watch <wad> <map> [--speed X] [--all] [--episode] [run options]
 //!       watch her play, with what she knows beside the game (space pause, +/- speed, A the
 //!       whole map, F follow, wheel zoom, Esc quit)
@@ -35,6 +37,7 @@ use cli::{option_args, run_options};
 use evildoom::config::resolve_wad;
 use evildoom::navigator::Navigator;
 use evildoom::specials::classify_line;
+#[cfg(feature = "viewer")]
 use evildoom::sweep::run_map;
 use evildoom::wad::{load_map, Wad};
 use std::collections::{BTreeSet, VecDeque};
@@ -410,6 +413,54 @@ fn sweep(args: &[String]) -> Result<(), String> {
 
 #[cfg(feature = "viewer")]
 fn watch(args: &[String]) -> Result<(), String> {
+    let (w, names, o) = watch_options(args)?;
+    let [wad, map] = names.as_slice() else { return Err("usage: evil watch <wad> <map> [options]".into()) };
+    if o.snapshot.is_some() {
+        // (a picture: the run as a sweep plays it, nothing drawn till then)
+        let (outcome, detail) = run_map(wad, map, &o)?;
+        println!("RESULT {outcome} {detail}");
+        return Ok(());
+    }
+    evildoom::viewer::watch(wad, map, &w)
+}
+
+/// A run watched into an MP4 (see `viewer::record`): evil record <wad> <map> <out.mp4>
+/// [--view game|full|hud] [--size WxH] [--speed N] [--ffmpeg PATH] [--episode] [run options].
+#[cfg(feature = "viewer")]
+fn record(args: &[String]) -> Result<(), String> {
+    use evildoom::viewer::{RecordOptions, RecordView};
+    let (mut view, mut size, mut every, mut ffmpeg) = (RecordView::Hud, None, 1u32, None);
+    let mut rest = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--view" => {
+                view = match it.next().map(String::as_str) {
+                    Some("game") => RecordView::Game,
+                    Some("full") => RecordView::Full,
+                    Some("hud") => RecordView::Hud,
+                    _ => return Err("--view game|full|hud".into()),
+                };
+            }
+            "--size" => {
+                let v = it.next().ok_or("--size WxH")?;
+                let (x, y) = v.split_once(['x', 'X']).ok_or("--size WxH")?;
+                size = Some((x.parse().map_err(|_| "--size WxH")?, y.parse().map_err(|_| "--size WxH")?));
+            }
+            "--speed" => every = it.next().and_then(|v| v.parse().ok()).ok_or("--speed N (whole times as fast)")?,
+            "--ffmpeg" => ffmpeg = Some(std::path::PathBuf::from(it.next().ok_or("--ffmpeg PATH")?)),
+            _ => rest.push(a.clone()),
+        }
+    }
+    let (w, names, _) = watch_options(&rest)?;
+    let [wad, map, out] = names.as_slice() else { return Err("usage: evil record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode] [options]".into()) };
+    let ffmpeg = ffmpeg.or_else(evildoom::viewer::find_ffmpeg).ok_or("no ffmpeg found (on the path, or winget's): --ffmpeg PATH")?;
+    evildoom::viewer::record(wad, map, &w, &RecordOptions { out: out.into(), view, size, every, ffmpeg })
+}
+
+/// The watcher's options among `args`: (them, the names left, the run options).
+#[cfg(feature = "viewer")]
+fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec<String>, evildoom::sweep::RunOptions), String> {
     let (o, _, rest) = run_options(args)?;
     let mut w = evildoom::viewer::WatchOptions {
         speed: 1.0,
@@ -440,18 +491,11 @@ fn watch(args: &[String]) -> Result<(), String> {
             _ => names.push(a.clone()),
         }
     }
-    let [wad, map] = names.as_slice() else { return Err("usage: evil watch <wad> <map> [options]".into()) };
     if w.episode {
         w.lives = 1; // (an episode watched as it's played: one life)
     }
-    if o.snapshot.is_some() {
-        // (a picture: the run as a sweep plays it, nothing drawn till then)
-        let (outcome, detail) = run_map(wad, map, &o)?;
-        println!("RESULT {outcome} {detail}");
-        return Ok(());
-    }
     w.focus = o.focus;
-    evildoom::viewer::watch(wad, map, &w)
+    Ok((w, names, o))
 }
 
 #[cfg(not(feature = "viewer"))]
@@ -619,6 +663,8 @@ fn main() -> ExitCode {
         Some("sector") if args.len() >= 4 => sector(&args[1], &args[2], &args[3..]),
         Some("run-map") => run_one(&args[1..]),
         Some("episode") => episode(&args[1..]),
+        #[cfg(feature = "viewer")]
+        Some("record") => record(&args[1..]),
         Some("episode-one") => episode_one(&args[1..]),
         Some("drive") => drive(&args[1..]),
         Some("sweep") => sweep(&args[1..]),

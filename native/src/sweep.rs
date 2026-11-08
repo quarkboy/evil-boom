@@ -4,6 +4,7 @@
 mod setup;
 mod status;
 
+#[cfg(feature = "viewer")]
 pub(crate) use setup::broken_secrets;
 pub use setup::{setup, Setup};
 
