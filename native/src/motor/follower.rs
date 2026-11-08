@@ -405,6 +405,12 @@ impl RouteFollower {
         self.sprint.is_some() || self.run.is_some() || self.lineup_tic.is_some()
     }
 
+    /// Shooting something with the gun it picks for that (a barrel in the way, its blasts
+    /// waited out; a switch to shoot): the gun's the route's for now.
+    pub fn shooting(&self) -> bool {
+        self.barrel.is_some() || self.barrel_flee.is_some() || self.barrel_settle.is_some() || usize::try_from(self.step_i).ok().and_then(|i| self.steps.get(i)).is_some_and(|s| s.action == crate::walkthrough::Action::Shoot)
+    }
+
     /// Run-jumps still to come on the route.
     pub fn jumps_ahead(&self) -> bool {
         let from = usize::try_from(self.step_i).unwrap_or(0);

@@ -66,6 +66,9 @@ fn priority(name: &str, d: f64) -> f64 {
     }
 }
 
+/// tics to the first shot of a gun already up
+const FIRST_SHOT: f64 = 4.0;
+
 /// seconds a weapon switch costs
 const SWITCH_COST: f64 = 0.8;
 
@@ -342,6 +345,20 @@ impl Combat {
         self.best_gun(obs, t, |_| d)
     }
 
+    /// The gun to have up with no fight on (and nothing else asking for one: a barrel tapped
+    /// with the pistol, then the pistol kept, the next fight begun with it, MAP02): the super
+    /// shotgun or the shotgun, the chaingun, plasma, whichever first has a few shots in it; the
+    /// pistol only for want of any. Not the rocket launcher or the BFG (round a corner into
+    /// something close), nor the fist. None: what she has up will do.
+    pub fn ready_gun(&self, obs: &Observation) -> Option<i32> {
+        let held = Self::held(obs);
+        let want = [(3, 4), (4, 20), (6, 40), (2, 1)].into_iter().find(|&(slot, shots)| {
+            let w = weapon_in(slot, obs.super_shotgun);
+            held.contains(&slot) && Self::ammo(obs, slot) >= w.ammo_per_shot * shots
+        })?;
+        (obs.weapon != Some(want.0) && obs.tic - self.switch_tic > SWITCH_WAIT).then_some(want.0)
+    }
+
     /// The gun she'd rather fight t with, wherever she stood: each gun judged from the nearest
     /// place in its window (and the way there): the super shotgun for hell knights, closing in,
     /// not the pistol from where she happens to be (all 50 shells kept to the end, dead).
@@ -441,7 +458,10 @@ impl Combat {
             return 1e4 + d;
         }
         let per_shot = w.damage_on(&info) * w.hits(info.radius, d);
-        (f64::from(info.health) / per_shot.max(0.1)).max(1.0) * w.cycle / TICRATE
+        // (the first shot goes at once, the rest a reload apart: a zombieman 65 off, one shotgun
+        // blast, was counted a whole reload and lost to two pistol shots, MAP02)
+        let shots = (f64::from(info.health) / per_shot.max(0.1)).max(1.0);
+        ((shots - 1.0) * w.cycle + FIRST_SHOT) / TICRATE
     }
 
     /// This tic's turn (positive is clockwise) towards `aim`.

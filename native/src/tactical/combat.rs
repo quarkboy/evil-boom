@@ -693,6 +693,11 @@ impl Combat {
 
     // --- helpers ----------------------------------------------------------------------------
 
+    /// A switch to the ready gun asked for (not again till it's had time).
+    pub fn readied(&mut self, obs: &Observation) {
+        self.switch_tic = obs.tic;
+    }
+
     /// Every sector's floor and ceiling now (made once a tic: it's asked for a lot).
     pub fn heights(&mut self, obs: &Observation) -> &[(f64, f64)] {
         self.refresh_tic_cache(obs);

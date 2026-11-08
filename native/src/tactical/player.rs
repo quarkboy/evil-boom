@@ -160,9 +160,17 @@ impl Player {
             self.explorer.hold(obs, last);
             return self.fight.combat.controls(obs, d, None);
         }
-        let c = self.explorer.act(obs, last, &mut self.fight);
+        let mut c = self.explorer.act(obs, last, &mut self.fight);
         for line in std::mem::take(&mut self.fight.pending_log) {
             self.explorer.log.push(format!("  [fight] {line}"));
+        }
+        let shooting = self.explorer.follower.as_ref().is_some_and(RouteFollower::shooting);
+        if d.is_none() && c.weapon == 0 && !shooting {
+            // (no fight: the gun for the next one up, the fight's call)
+            if let Some(slot) = self.fight.combat.ready_gun(obs) {
+                c.weapon = slot;
+                self.fight.combat.readied(obs);
+            }
         }
         match d {
             Some(d) => self.fight.combat.controls(obs, &d, Some(&c)),
