@@ -43,6 +43,22 @@ pub fn blast_gap(a: Point, b: Point) -> f64 {
     (a.0 - b.0).abs().max((a.1 - b.1).abs())
 }
 
+/// What to shoot a barrel this far off with: the shotgun (or the super shotgun) when there are
+/// shells to spare and it's near enough for most of the pellets to land, one blast and it's gone
+/// (20 health, the user's: surer than taps); else the pistol, single taps.
+pub fn barrel_gun(obs: &Observation, d: f64) -> i32 {
+    if d < BARREL_SHOTGUN_RANGE && obs.weapons.as_ref().is_some_and(|w| w.contains(&3)) && obs.ammo.iter().flatten().any(|&(s, n)| s == 3 && n >= BARREL_SHELLS) {
+        3
+    } else {
+        tap_gun(obs)
+    }
+}
+
+/// a barrel shot with the shotgun only this near (its spread)...
+const BARREL_SHOTGUN_RANGE: f64 = 320.0;
+/// ...and with this many shells or more
+const BARREL_SHELLS: i32 = 12;
+
 /// What to shoot something with: the pistol (the shotgun if there's nothing for it), whatever's
 /// in hand: not the BFG with 20 cells of the 40 it needs (MAP23), nor a missile, which sets off no
 /// gun line.

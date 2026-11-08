@@ -1,6 +1,6 @@
 //! Clearing barrels, choosing a firing position and escaping chain explosions.
 
-use super::{along, blast_gap, tap_gun, RouteFollower, BARREL_TAP};
+use super::{along, barrel_gun, blast_gap, RouteFollower, BARREL_TAP};
 use crate::geom::{dist, segment_distance, Point};
 use crate::motor::{heading, norm, Controls, Observation, FULL_SPEED};
 use crate::navigator::{States, PLAYER_RADIUS};
@@ -201,7 +201,7 @@ impl RouteFollower {
         let mut c = self.motion.hold(obs, (0.0, 0.0), Some(look));
         // (single taps, the trigger let go between: the first shot of a burst goes straight,
         // only held ones spread)
-        let gun = tap_gun(obs);
+        let gun = barrel_gun(obs, dist(pos, at));
         if obs.weapon != Some(gun) {
             c.weapon = gun;
         } else if norm(look - obs.angle).abs() < 2.0 && obs.tic - self.barrel_shot >= BARREL_TAP {

@@ -171,9 +171,11 @@ impl Explorer {
                 } else if off < 4.0 && obs.tic < until - WALL_TICS && !exit {
                     c.use_ = true;
                     self.look_until = Some(obs.tic + WALL_TICS); // (pressed: now watch)
-                } else if off < 4.0 && obs.tic > until - WALL_TICS + 4 && obs.tic < until - 8 {
+                } else if off < 4.0 && obs.tic > until - WALL_TICS + 4 && obs.tic < until - 8 && obj.round {
                     // (and a few shots: some walls answer to a gun, not a hand; with the pistol,
-                    // single taps: a rocket sets off no wall, and blows up in her face; MAP11)
+                    // single taps: a rocket sets off no wall, and blows up in her face; MAP11. Only
+                    // in a round of walls, coming back to search, not one tried on the way: a gun
+                    // line's rare, and a shot wakes what hears it; the user's)
                     let gun = crate::motor::follower::tap_gun(obs);
                     if obs.weapon != Some(gun) {
                         c.weapon = gun;
@@ -182,7 +184,7 @@ impl Explorer {
                         self.wall_shot = obs.tic;
                     }
                 }
-                if c.use_ {
+                if c.use_ && obj.round {
                     // (out with the pistol as she presses, ready to shoot after)
                     c.weapon = crate::motor::follower::tap_gun(obs);
                 }
