@@ -1,0 +1,206 @@
+# Rockets and moving among crates and columns (evil-boom arena arenas/crates.txt; the user's:
+# a stress test for her rockets and movement): E2M7's crate hall (x 2624..3840, y 992..2112;
+# crates 64 high and full height scattered through it), eight solid columns put about it at
+# random (not in her map knowledge; a missile goes over them, 16 high to it), six imps among
+# them, the rocket launcher; ten layouts.
+# Generated: 23 crate blocks avoided by 40 (her) and 32 (imps).
+
+arena crates-1
+map doom E2M7
+at 3569 1742 45
+give rocket rocket=40
+spawn TallGreenColumn 3102 1062 0
+spawn TallRedColumn 3155 1240 0
+spawn TallGreenColumn 2916 1752 0
+spawn TallGreenColumn 3069 1885 0
+spawn TallGreenColumn 2846 1751 0
+spawn TechPillar 3464 1217 0
+spawn TechPillar 3495 1855 0
+spawn TechPillar 2889 1601 0
+spawn DoomImp 2930 1312 33
+spawn DoomImp 3397 1279 69
+spawn DoomImp 2768 2008 341
+spawn DoomImp 2901 1392 27
+spawn DoomImp 3196 2054 319
+spawn DoomImp 2901 1907 346
+seconds 90
+
+arena crates-2
+map doom E2M7
+at 3592 1057 135
+give rocket rocket=40
+spawn TallRedColumn 3721 1872 0
+spawn TallRedColumn 3118 1411 0
+spawn TallGreenColumn 3319 1672 0
+spawn TechPillar 2685 1817 0
+spawn TechPillar 3485 2024 0
+spawn TallRedColumn 3493 1726 0
+spawn TallGreenColumn 3234 1994 0
+spawn TechPillar 3691 1704 0
+spawn DoomImp 3118 1137 350
+spawn DoomImp 3300 1431 308
+spawn DoomImp 2996 1178 348
+spawn DoomImp 2667 1970 315
+spawn DoomImp 2867 2032 306
+spawn DoomImp 2732 1573 329
+seconds 90
+
+arena crates-3
+map doom E2M7
+at 3257 1463 135
+give rocket rocket=40
+spawn TallGreenColumn 2798 1302 0
+spawn TallGreenColumn 2778 1645 0
+spawn TallRedColumn 2657 1615 0
+spawn TallRedColumn 3003 1835 0
+spawn TechPillar 3574 1719 0
+spawn TallRedColumn 2721 1952 0
+spawn TallRedColumn 3623 2042 0
+spawn TallGreenColumn 3419 1766 0
+spawn DoomImp 2732 1069 36
+spawn DoomImp 3792 1661 200
+spawn DoomImp 2841 1039 45
+spawn DoomImp 2740 1848 323
+spawn DoomImp 2875 1789 319
+spawn DoomImp 2913 1257 30
+seconds 90
+
+arena crates-4
+map doom E2M7
+at 3228 1395 315
+give rocket rocket=40
+spawn TallRedColumn 3167 1499 0
+spawn TechPillar 2655 1367 0
+spawn TallRedColumn 2730 1322 0
+spawn TallGreenColumn 3035 2002 0
+spawn TallGreenColumn 3496 1998 0
+spawn TallRedColumn 2664 1247 0
+spawn TallGreenColumn 2902 1618 0
+spawn TallRedColumn 2949 2012 0
+spawn DoomImp 3560 1837 233
+spawn DoomImp 2844 1953 304
+spawn DoomImp 2742 1058 34
+spawn DoomImp 3597 1632 212
+spawn DoomImp 3686 2047 234
+spawn DoomImp 2992 1919 294
+seconds 90
+
+arena crates-5
+map doom E2M7
+at 3369 1768 135
+give rocket rocket=40
+spawn TallRedColumn 3563 2012 0
+spawn TallRedColumn 3566 1374 0
+spawn TallRedColumn 2697 1853 0
+spawn TallGreenColumn 3375 1068 0
+spawn TallRedColumn 3492 1135 0
+spawn TechPillar 2736 1566 0
+spawn TechPillar 3148 1026 0
+spawn TallGreenColumn 3143 1528 0
+spawn DoomImp 2982 1025 62
+spawn DoomImp 2851 1538 23
+spawn DoomImp 3103 1176 65
+spawn DoomImp 3689 2049 221
+spawn DoomImp 3143 1239 66
+spawn DoomImp 3148 1102 71
+seconds 90
+
+arena crates-6
+map doom E2M7
+at 3211 2002 270
+give rocket rocket=40
+spawn TallGreenColumn 3689 1633 0
+spawn TallGreenColumn 3428 1538 0
+spawn TallRedColumn 3320 1354 0
+spawn TallRedColumn 3605 1897 0
+spawn TallGreenColumn 3427 1641 0
+spawn TallRedColumn 2677 1857 0
+spawn TallGreenColumn 3037 1098 0
+spawn TallGreenColumn 2906 1322 0
+spawn DoomImp 3650 1791 154
+spawn DoomImp 3282 1289 95
+spawn DoomImp 3755 1736 153
+spawn DoomImp 3392 1162 102
+spawn DoomImp 3266 1505 96
+spawn DoomImp 2675 1132 58
+seconds 90
+
+arena crates-7
+map doom E2M7
+at 2879 1572 180
+give rocket rocket=40
+spawn TallRedColumn 3395 1648 0
+spawn TallRedColumn 3117 1025 0
+spawn TallRedColumn 2942 1315 0
+spawn TallGreenColumn 3762 1960 0
+spawn TallGreenColumn 3218 1355 0
+spawn TallRedColumn 2753 1861 0
+spawn TallRedColumn 3697 1625 0
+spawn TechPillar 2849 1767 0
+spawn DoomImp 3797 1278 162
+spawn DoomImp 2703 2002 292
+spawn DoomImp 3471 1926 210
+spawn DoomImp 2918 1030 94
+spawn DoomImp 3712 1903 201
+spawn DoomImp 3008 1048 103
+seconds 90
+
+arena crates-8
+map doom E2M7
+at 3664 1888 90
+give rocket rocket=40
+spawn TechPillar 3702 1822 0
+spawn TallRedColumn 3811 1701 0
+spawn TallGreenColumn 3302 1491 0
+spawn TechPillar 2968 2002 0
+spawn TallRedColumn 2663 1480 0
+spawn TallGreenColumn 2853 2028 0
+spawn TechPillar 3739 1701 0
+spawn TallRedColumn 3708 2047 0
+spawn DoomImp 3102 1844 4
+spawn DoomImp 2948 1028 50
+spawn DoomImp 3695 1198 92
+spawn DoomImp 2869 1570 21
+spawn DoomImp 3226 1672 26
+spawn DoomImp 3384 1272 65
+seconds 90
+
+arena crates-9
+map doom E2M7
+at 3037 1785 45
+give rocket rocket=40
+spawn TechPillar 2685 1732 0
+spawn TallGreenColumn 3629 1970 0
+spawn TallGreenColumn 3585 1359 0
+spawn TechPillar 2673 1152 0
+spawn TallRedColumn 2749 1249 0
+spawn TallRedColumn 3049 1962 0
+spawn TallGreenColumn 2803 1242 0
+spawn TallGreenColumn 2926 1249 0
+spawn DoomImp 3170 1374 107
+spawn DoomImp 3718 1484 156
+spawn DoomImp 3442 1730 172
+spawn DoomImp 3730 1637 168
+spawn DoomImp 3231 1348 113
+spawn DoomImp 3728 1988 196
+seconds 90
+
+arena crates-10
+map doom E2M7
+at 2843 1537 45
+give rocket rocket=40
+spawn TallGreenColumn 3673 1179 0
+spawn TallGreenColumn 3559 1849 0
+spawn TallGreenColumn 2913 1299 0
+spawn TallRedColumn 2662 1211 0
+spawn TallRedColumn 2794 1709 0
+spawn TallRedColumn 3675 1234 0
+spawn TallGreenColumn 3181 1333 0
+spawn TallGreenColumn 2885 1409 0
+spawn DoomImp 3036 1029 110
+spawn DoomImp 3273 1345 155
+spawn DoomImp 3450 1147 147
+spawn DoomImp 3568 1374 167
+spawn DoomImp 3710 1914 203
+spawn DoomImp 3666 2064 212
+seconds 90

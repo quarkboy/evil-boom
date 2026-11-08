@@ -186,9 +186,12 @@ pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool, sound: bool) -> Res
     }
     let mut ids: Vec<i32> = Vec::new();
     for sp in &s.spawns {
-        let kind = type_of(&sp.name).ok_or_else(|| format!("{}: no such monster", sp.name))?;
+        let kind = type_of(&sp.name).ok_or_else(|| format!("{}: no such thing", sp.name))?;
         let id = e.game.spawn(kind, sp.x, sp.y, sp.angle, sp.ambush).ok_or_else(|| format!("{}: can't spawn at ({}, {})", sp.name, sp.x, sp.y))?;
-        ids.push(id);
+        // (the fight is its monsters: solid columns put about for it aren't to be killed)
+        if crate::tactical::bestiary::monster(&sp.name).is_some() {
+            ids.push(id);
+        }
     }
     let knowledge = Knowledge::new(Rc::clone(&nav), true, true);
     let agent = Agent::new(&nav, knowledge, s.skill, false, 1);
@@ -247,6 +250,11 @@ pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Out
         log.extend(l[log_n.min(l.len())..].iter().cloned());
         log_n = l.len();
         e.step(&ctl);
+        // (every hit on her, as the runs have them: what a lost fight was lost to)
+        for h in e.take_hits() {
+            let armor = if h.armor > 0 { format!(" (and {} armor)", h.armor) } else { String::new() };
+            log.push(format!("tic {}: hit for {}{armor} by {}", e.tic, h.health, h.from()));
+        }
         c = Some(ctl);
     };
     let ob = e.observe();

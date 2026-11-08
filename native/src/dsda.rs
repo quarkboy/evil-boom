@@ -558,6 +558,11 @@ pub fn type_name(kind: i32) -> Option<&'static str> {
         69 => "Shell",
         70 => "ShellBox",
         71 => "Backpack",
+        // (solid decorations, for arenas: in the way of her and of what she shoots low, 16 high
+        // to a missile as all things of theirs are; MT_MISC32, MT_MISC34, MT_MISC48)
+        82 => "TallGreenColumn",
+        84 => "TallRedColumn",
+        98 => "TechPillar",
         72 => "BFG9000",
         73 => "Chaingun",
         74 => "Chainsaw",
