@@ -65,6 +65,8 @@ evil drive doom E2M4 --from out/runs/DOOM_E2M4_expert.run@1418 --script cmds.txt
                                             # take her over at a moment of a recorded run
 ```
 
+See [docs/DEBUGGING.md](docs/DEBUGGING.md) for how to trace a failed run.
+
 For tracing a run: `run-map ... --snapshot S --focus X,Y,ZOOM` (a picture of the run at S, the
 map zoomed on a place), `--from FILE@S` (play a recorded run back to S, then the bot as it is
 now), and `EVIL_DEBUG_OBJECTIVES=from-to` (every option she weighed, those tics).
@@ -73,3 +75,24 @@ Run options: `--lives N` (unlimited unless given), `--max-seconds S` (all lives 
 `--seed N|random` (0 unless given), `--peek` (she knows the whole map), `--secrets` (out only with
 every secret), `--expert` (every item, then out), `--stall S` (the 100% runs: over after S game
 seconds with nothing new), `--fight SKILL` (monsters in), `--mortal` (no god mode).
+
+## License
+
+Evil DOOM is free software, licensed under the **GNU General Public License, version 2 or (at
+your option) any later version** (GPL-2.0-or-later); see [LICENSE](LICENSE). That's the license of
+the engine it is built on and with:
+
+- **DSDA-Doom** (<https://github.com/kraflab/dsda-doom>, GPL-2.0-or-later; from PrBoom+ and id
+  Software's Doom source). It isn't included here: `dsda/README.md` says how to fetch it (we use
+  commit `eb8eb98`, v0.30.1). Our changes to it are `dsda/dsda-doom.patch`, and `dsda/evil_api.c`
+  is compiled into it. Both are under the same license.
+- The movement simulator (`native/src/jumps/physics.rs`) follows ZDoom 2.8.1's player movement
+  code function by function, itself derived from id Software's Doom source (GPL).
+
+If you distribute built binaries (`evil` with `libdsda-evil`), the GPL requires that you also
+make the complete corresponding source available: this repository, plus DSDA-Doom at that commit
+with the patch applied.
+
+No game data is included. You need your own copy of the DOOM / DOOM II IWADs; WAD files are
+never committed (see `.gitignore`). DOOM is a trademark of id Software; this project is not
+affiliated with or endorsed by id Software, ZeniMax or Bethesda.

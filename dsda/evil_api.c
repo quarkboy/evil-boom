@@ -1,3 +1,14 @@
+/* Copyright (C) 2026 Samuel Pinansky
+ *
+ * This program is free software; you can redistribute it and/or modify it under the terms of
+ * the GNU General Public License as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version. It is built into DSDA-Doom
+ * (GPL-2.0-or-later) and uses its sources. See LICENSE.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
+ * the GNU General Public License for more details. */
+
 /* Evil's way into DSDA-Doom: the game run a tic at a time, in-process, nothing drawn or
  * heard, and its state read straight out of memory (no copying the whole world into
  * objects every tic, as ViZDoom does).

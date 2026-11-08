@@ -2,6 +2,7 @@
 name = "evildoom"
 version = "0.1.0"
 edition = "2021"
+license = "GPL-2.0-or-later"
 description = "Evil: a Doom bot that explores and finishes levels, playing DSDA-Doom in-process"
 
 [lib]

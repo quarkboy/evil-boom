@@ -31,3 +31,6 @@ native/target/
 native/target-dev/
 third_party/
 dsda/spike/target/
+
+# git worktrees kept inside the checkout
+.worktrees/
