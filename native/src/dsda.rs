@@ -68,6 +68,9 @@ pub struct PlayerState {
     pub message_tic: c_int,
     /// ...and what it said (nul-terminated)
     pub message: [c_char; 96],
+    /// 0 none, 1 green, 2 blue
+    pub armortype: c_int,
+    pub backpack: c_int,
 }
 
 /// Where the game is (`evil_status`).

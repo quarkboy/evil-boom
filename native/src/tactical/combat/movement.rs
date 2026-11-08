@@ -194,6 +194,18 @@ impl Combat {
         [(0.0, 0.0), side, (-side.0, -side.1)].into_iter().map(|o| self.clear_line(obs, (obs.x + o.0, obs.y + o.1), d, length)).fold(length, f64::min)
     }
 
+    /// Is she standing on a floor that hurts? Then that's no reason not to go a way (every way
+    /// is over it; E1M5: stood still in the nukage, fighting, to death, 257 bullets left).
+    pub(super) fn on_hurting_floor(&self, obs: &Observation) -> bool {
+        self.nav.poly_at(obs.pos()).is_some_and(|p| self.nav.damage[self.nav.sector_of_poly(p)] != 0)
+    }
+
+    /// Does going `length` that way get her off a floor that hurts?
+    pub(super) fn gets_off(&self, obs: &Observation, d: Point, length: f64) -> bool {
+        let p = (obs.x + d.0 * length, obs.y + d.1 * length);
+        self.nav.poly_in(p).is_some_and(|q| self.nav.damage[self.nav.sector_of_poly(q)] == 0)
+    }
+
     /// How open it is round p: the mean of how far she could go from there each way, up to
     /// `length` (a corner's little; the middle of a hall all of it).
     pub fn openness(&self, obs: &Observation, p: Point, length: f64) -> f64 {
@@ -220,7 +232,7 @@ impl Combat {
             let back = length * (i.max(1) - 1) as f64 / n as f64;
             let Some(p) = nav.poly_in(q) else { return back };
             let h = floor_of(p);
-            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || nav.damage[nav.sector_of_poly(p)] != 0 {
+            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || (nav.damage[nav.sector_of_poly(p)] != 0 && !self.on_hurting_floor(obs)) {
                 return back;
             }
             floor = h.floor;
@@ -267,7 +279,7 @@ impl Combat {
             if h.floor - floor > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT {
                 break;
             }
-            if floor - h.floor > MAX_STEP || nav.damage[nav.sector_of_poly(p)] != 0 {
+            if floor - h.floor > MAX_STEP || (nav.damage[nav.sector_of_poly(p)] != 0 && !self.on_hurting_floor(obs)) {
                 return false;
             }
             floor = h.floor;

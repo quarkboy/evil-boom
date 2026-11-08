@@ -69,6 +69,9 @@ pub struct Engine {
     message_tic: i32,
     sectors: Vec<(f64, f64)>,
     mobjs: Vec<Mobj>,
+    /// what she has at the start of the level (and every start again): what she brought from
+    /// the one before, playing an episode through
+    pub carry: Option<crate::dsda::Loadout>,
 }
 
 impl Engine {
@@ -115,12 +118,22 @@ impl Engine {
             message_tic: -1,
             sectors: Vec::new(),
             mobjs: Vec::new(),
+            carry: None,
         })
     }
 
     pub fn start(&mut self) {
         self.new_game();
         self.tic = WARMUP_TICS;
+    }
+
+    /// What she has now, to carry into the next level as Doom does (weapons, ammo, the backpack,
+    /// health, armour; not keys or powers).
+    pub fn loadout(&self) -> crate::dsda::Loadout {
+        let p = self.game.player();
+        let weapons = p.weaponowned.iter().enumerate().filter(|(_, &o)| o != 0).fold(0, |m, (i, _)| m | (1 << i));
+        let [clip, shell, cell, rocket] = p.ammo;
+        crate::dsda::Loadout { weapons, clip, shell, cell, rocket, backpack: p.backpack != 0, health: p.health, armor: p.armor, armor_type: p.armortype }
     }
 
     /// The level from the start again (`keep_time`: the tic count carries on).
@@ -137,6 +150,9 @@ impl Engine {
         self.message_tic = -1;
         for _ in 0..WARMUP_TICS {
             self.game.tic(TicCmd::default());
+        }
+        if let Some(l) = &self.carry {
+            self.game.give(l);
         }
         if self.god {
             self.game.god(true);

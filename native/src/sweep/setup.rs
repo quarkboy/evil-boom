@@ -57,6 +57,7 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool) -> Result<S
     nav.keep_verified();
     let nav = Rc::new(nav);
     let mut e = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn, seed: o.seed })?;
+    e.carry.clone_from(&o.carry);
     e.start();
     if !o.mortal {
         e.set_god();

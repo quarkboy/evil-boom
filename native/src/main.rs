@@ -3,6 +3,8 @@
 //!   evil sweep <wad> [maps...] [<wad> [maps...]] [--jobs N] [run options]
 //!       many maps at once, a process a map; a line each as they finish, then a summary
 //!   evil run-map <wad> <map> [run options]      one map; its log goes to out/explore
+//!   evil episode <wad> <first map> [run options]   an episode on one life from that map, what
+//!                                               she has carried from level to level
 //!   evil dump-nav <wad> <map>                   the level's analysis (for comparing)
 //!   evil follow <wad> <map>                     plan the level, follow the plan (seed 0)
 //!   evil drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
@@ -198,8 +200,78 @@ fn follow(wad: &str, map: &str) -> Result<(), String> {
 fn run_one(args: &[String]) -> Result<(), String> {
     let (o, _, rest) = run_options(args)?;
     let [wad, map] = rest.as_slice() else { return Err("usage: evil run-map <wad> <map> [options]".into()) };
-    let (outcome, detail) = run_map(wad, map, &o)?;
-    println!("RESULT {outcome} {detail}");
+    let r = evildoom::sweep::run_map_full(wad, map, &o)?;
+    // (what she got out with, for the next level of an episode; the secret exit taken)
+    if let Some(l) = &r.carry {
+        println!("CARRY {}{}", cli::carry_arg(l), if r.secret { " SECRET" } else { "" });
+    }
+    println!("RESULT {} {}", r.outcome, r.detail);
+    Ok(())
+}
+
+/// The map after `map` in an episode played through, by the exit taken (None: the end).
+fn next_map(map: &str, secret: bool) -> Option<String> {
+    let up = map.to_uppercase();
+    if let Some(n) = up.strip_prefix("MAP").and_then(|n| n.parse::<u32>().ok()) {
+        return match (n, secret) {
+            (30, _) => None,
+            (15, true) => Some("MAP31".into()),
+            (31, true) => Some("MAP32".into()),
+            (31 | 32, _) => Some("MAP16".into()),
+            _ => Some(format!("MAP{:02}", n + 1)),
+        };
+    }
+    let b = up.as_bytes();
+    let (e, m) = (char::from(*b.get(1)?), b.get(3)?.checked_sub(b'0')?);
+    // (the secret exit's level, and the one after it the secret level goes back to)
+    let secret_from = match e {
+        '1' => 3,
+        '2' => 5,
+        '3' => 6,
+        _ => 2,
+    };
+    match (m, secret) {
+        (8, _) => None,
+        (9, _) => Some(format!("E{e}M{}", secret_from + 1)),
+        (_, true) => Some(format!("E{e}M9")),
+        _ => Some(format!("E{e}M{}", m + 1)),
+    }
+}
+
+/// An episode played through on one life from `first`: each level started with what she got
+/// out of the one before (weapons, ammo, the backpack, health, armour; not keys or powers), on
+/// by the exit taken (the secret exit to the secret level), till she dies, gets stuck, or it
+/// ends. A process a level.
+fn episode(args: &[String]) -> Result<(), String> {
+    let (mut o, _, rest) = run_options(args)?;
+    let [wad, first] = rest.as_slice() else { return Err("usage: evil episode <wad> <first map> [run options]".into()) };
+    o.lives = 1;
+    let me = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut map = Some(first.to_uppercase());
+    let mut carry: Option<String> = None;
+    let mut done = 0;
+    while let Some(m) = map.take() {
+        let mut cmd = Command::new(&me);
+        cmd.arg("run-map").arg(wad).arg(&m).args(option_args(&o));
+        if let Some(c) = &carry {
+            cmd.arg("--carry").arg(c);
+        }
+        let out = cmd.stderr(Stdio::null()).output().map_err(|e| e.to_string())?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        let result = text.lines().find_map(|l| l.strip_prefix("RESULT ")).unwrap_or("ERROR (no result)").to_string();
+        let next = text.lines().find_map(|l| l.strip_prefix("CARRY "));
+        println!("{m}: {result}");
+        let Some(next) = next else { break };
+        done += 1;
+        let (c, secret) = next.split_once(' ').map_or((next, false), |(c, s)| (c, s == "SECRET"));
+        if let Ok(l) = cli::parse_carry(c) {
+            println!("    out with health {} armor {}, weapons {:#b}, ammo {}/{}/{}/{}{}", l.health, l.armor, l.weapons, l.clip, l.shell, l.cell, l.rocket, if l.backpack { ", backpack" } else { "" });
+        }
+        carry = Some(c.to_string());
+        map = next_map(&m, secret);
+    }
+    println!("
+{done} levels on one life");
     Ok(())
 }
 
@@ -494,6 +566,7 @@ fn main() -> ExitCode {
         Some("follow") if args.len() == 3 => follow(&args[1], &args[2]),
         Some("sector") if args.len() >= 4 => sector(&args[1], &args[2], &args[3..]),
         Some("run-map") => run_one(&args[1..]),
+        Some("episode") => episode(&args[1..]),
         Some("drive") => drive(&args[1..]),
         Some("sweep") => sweep(&args[1..]),
         Some("watch") => watch(&args[1..]),

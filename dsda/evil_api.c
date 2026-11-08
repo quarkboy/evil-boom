@@ -71,6 +71,8 @@ typedef struct {
   int allmap;          /* has the computer area map (vanilla: a second can't be picked up) */
   int message_tic;     /* when the game last gave her a message (-1: never) */
   char message[96];    /* ...and what it said */
+  int armortype;       /* 0 none, 1 green, 2 blue */
+  int backpack;
 } evil_player;
 
 extern int evil_fixed_seed;      /* (SDL/i_system.c, patched) */
@@ -350,6 +352,8 @@ EVIL_API void evil_player_state(evil_player *out)
   out->damagecount = p->damagecount;
   out->allmap = p->powers[pw_allmap] != 0;
   out->message_tic = evil_message_tic;
+  out->armortype = p->armortype;
+  out->backpack = p->backpack ? 1 : 0;
   if (evil_message)
     snprintf(out->message, sizeof out->message, "%s", evil_message);
   if (p->mo)

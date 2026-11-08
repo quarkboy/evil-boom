@@ -36,6 +36,7 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--secrets" => o.secrets = true,
             "--mortal" => o.mortal = true,
             "--complete" => o.complete = true,
+            "--carry" => o.carry = Some(parse_carry(&value("--carry")?)?),
             _ => rest.push(a.clone()),
         }
     }
@@ -48,6 +49,29 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
         }
     }
     Ok((o, jobs, rest))
+}
+
+/// A loadout as `--carry` gives it: weapons (a bit each, by the game's numbering), clip, shell,
+/// cell, rocket, backpack (0/1), health, armor, armor type.
+pub(crate) fn parse_carry(v: &str) -> Result<evildoom::dsda::Loadout, String> {
+    let n: Vec<i32> = v.split(',').map(|x| x.trim().parse().map_err(|_| format!("--carry: {v}"))).collect::<Result<_, _>>()?;
+    let [weapons, clip, shell, cell, rocket, backpack, health, armor, armor_type] = n.as_slice() else { return Err(format!("--carry: nine numbers, not {v}")) };
+    Ok(evildoom::dsda::Loadout {
+        weapons: *weapons,
+        clip: *clip,
+        shell: *shell,
+        cell: *cell,
+        rocket: *rocket,
+        backpack: *backpack != 0,
+        health: *health,
+        armor: *armor,
+        armor_type: *armor_type,
+    })
+}
+
+/// A loadout as `--carry` takes it.
+pub(crate) fn carry_arg(l: &evildoom::dsda::Loadout) -> String {
+    format!("{},{},{},{},{},{},{},{},{}", l.weapons, l.clip, l.shell, l.cell, l.rocket, i32::from(l.backpack), l.health, l.armor, l.armor_type)
 }
 
 /// The options as they'd be given again (for the child processes).

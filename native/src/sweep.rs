@@ -56,6 +56,9 @@ pub struct RunOptions {
     pub expert: bool,
     /// monsters in, at this skill (4: Ultra-Violence), and she fights them (0: none)
     pub fight: i32,
+    /// what she starts with (and has again at every start again): playing an episode through,
+    /// what she ended the level before with
+    pub carry: Option<crate::dsda::Loadout>,
     /// every kill, item and secret there is (going by the tally's counts, as the automap shows
     /// them), then the exit: monsters in (UV unless --fight says), the items and secrets runs
     /// together
@@ -75,6 +78,7 @@ impl Default for RunOptions {
             expert: false,
             fight: 0,
             complete: false,
+            carry: None,
             seed: Some(0),
             snapshot: None,
             focus: None,
@@ -234,7 +238,20 @@ pub fn plan_here(nav: &Rc<Navigator>, obs: &Observation, max_seconds: f64) -> Le
 }
 
 /// Play one map; (outcome, detail). Writes the log to out/explore/<IWAD>_<MAP>.txt.
+/// One map played: the outcome, its detail; and, if she got out, what she has to carry on with
+/// and whether by the secret exit.
+pub struct MapRun {
+    pub outcome: String,
+    pub detail: String,
+    pub carry: Option<crate::dsda::Loadout>,
+    pub secret: bool,
+}
+
 pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, String), String> {
+    run_map_full(wad, map_name, o).map(|r| (r.outcome, r.detail))
+}
+
+pub fn run_map_full(wad: &str, map_name: &str, o: &RunOptions) -> Result<MapRun, String> {
     let Setup { iwad, w, m, map_name, skill, nav, mut e, mut agent, mut deaths, mut c, mut obs, mut rec, secrets_short } =
         setup(wad, map_name, o, o.snapshot.is_some())?;
     let t0 = Instant::now();
@@ -471,10 +488,12 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
     }
     let branch = if o.from.is_some() { "_branch" } else { "" };
     rec.write(&out_dir().join("runs").join(format!("{stem}_{map_name}{}{branch}.run", mode_suffix(o))))?;
+    let carry = exited.then(|| e.loadout());
+    let secret = exited && e.secret_exit();
     if o.snapshot.is_some() {
         snapshot(&w, m, &map_name, e, agent, o.focus)?;
     }
-    Ok((outcome.to_string(), detail))
+    Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret })
 }
 
 #[cfg(feature = "viewer")]

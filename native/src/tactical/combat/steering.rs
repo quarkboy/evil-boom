@@ -33,6 +33,7 @@ const W_ACROSS: f64 = 1.2;
 const W_SURROUND: f64 = 1.5;
 const W_KEEP: f64 = 0.8;
 const W_EXPOSED: f64 = 1.5;
+const W_OFF_FLOOR: f64 = 10.0;
 
 /// tics before a shotgun's ready that she comes back out for the shot
 const RELOAD_BACK: f64 = 12.0;
@@ -187,6 +188,7 @@ impl Combat {
         }
         let shooting = target.is_some_and(|t| matches!(mon(t.name).attack, Attack::Missile | Attack::Hitscan));
         let spread_now = spread(pos, &them.iter().map(|t| (t.x, t.y)).collect::<Vec<_>>());
+        let hurting = self.on_hurting_floor(obs);
         let hitscanners: Vec<Thing> = them.iter().filter(|m| mon(m.name).attack == Attack::Hitscan).cloned().collect();
         // (a shotgun reloading: out of her target's sight too till it's ready, then back; Astra's
         // branch's reload cover)
@@ -209,6 +211,9 @@ impl Combat {
             let room = self.clear_run(obs, d, ROOM);
             let ahead = (pos.0 + d.0 * LOOK.min(room), pos.1 + d.1 * LOOK.min(room));
             let mut s = W_ROOM * room / ROOM + W_OPEN * self.openness(obs, ahead, OPEN);
+            if hurting && self.gets_off(obs, d, LOOK.min(room)) {
+                s += W_OFF_FLOOR; // (off the floor that's hurting her, before anything)
+            }
             for m in &them {
                 let info = mon(m.name);
                 let w = (info.threat + 1.0).sqrt();
