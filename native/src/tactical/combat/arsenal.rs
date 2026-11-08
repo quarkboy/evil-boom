@@ -37,6 +37,8 @@ const FIRST_SHOT: f64 = 4.0;
 
 /// seconds a weapon switch costs
 const SWITCH_COST: f64 = 0.8;
+/// the BFG's spray reaches this far from her
+const BFG_SPRAY: f64 = 1024.0;
 /// the gun in hand counts as taking this share of its time (another must be that much better)
 const HELD_KEEP: f64 = 0.85;
 
@@ -119,6 +121,9 @@ impl Combat {
 
     /// Would these take her longer than `secs` to kill, or more than her ammo's worth?
     pub fn too_much(&self, obs: &Observation, names: &[&str], secs: f64) -> bool {
+        if self.invulnerable(obs.tic) {
+            return false; // (nothing can hurt her: whatever it is, now's the time)
+        }
         let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
         // (berserk, against nothing but what she'd punch: the fist, ammo or none)
         if Self::fists_for(obs, names) {
@@ -260,7 +265,12 @@ impl Combat {
         let here = dist((t.x, t.y), obs.pos());
         let held = Self::held(obs);
         let info = mon(t.name);
-        let crowd = self.visible.len();
+        // (what the BFG's spray would take in: forty lines from her a quarter turn wide along the
+        // shot, 1024 out (A_BFGSpray), not everything in sight: 40 cells a go on single
+        // cacodemons 180 off with others about, E3M4; on a demon 1474 off, beyond the spray)
+        let me = obs.pos();
+        let shot = crate::motor::heading(me, (t.x, t.y));
+        let crowd = self.visible.iter().filter(|m| dist((m.x, m.y), me) < BFG_SPRAY && crate::motor::norm(crate::motor::heading(me, (m.x, m.y)) - shot).abs() < 45.0).count();
         // (a boss seen and still about, t not it: the big guns' ammo kept for it, as a player
         // would; E3M8, 138 cells on two cacodemons, the spider mastermind left to 22 rockets)
         let saving = !info.boss && self.remaining().iter().any(|m| m.id != t.id && mon(m.name).boss);
@@ -371,6 +381,12 @@ impl Combat {
         // (the first shot goes at once, the rest a reload apart: a zombieman 65 off, one shotgun
         // blast, was counted a whole reload and lost to two pistol shots, MAP02)
         let shots = (f64::from(info.health) / per_shot.max(0.1)).max(1.0);
-        ((shots - 1.0) * w.cycle + FIRST_SHOT) / TICRATE
+        // (and the launch: the rocket out 8 tics after the trigger, the BFG's ball 30)
+        let launch = match w.slot {
+            5 => 8.0,
+            7 => 30.0,
+            _ => 0.0,
+        };
+        ((shots - 1.0) * w.cycle + FIRST_SHOT + launch) / TICRATE
     }
 }

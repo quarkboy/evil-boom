@@ -188,6 +188,9 @@ impl Combat {
     /// A rocket's way to t clear its whole width (MAP32: one fired past a pillar's corner beside
     /// her, the line from her eye clear, the rocket's side not: 86 off her).
     fn rocket_lane_clear(&mut self, obs: &Observation, t: &Thing) -> bool {
+        if self.invulnerable(obs.tic) {
+            return true;
+        }
         // (from where she is and from where she'll be when it comes out: the launcher lets
         // it go 8 tics after the trigger, and she'd run up beside the pillar by then)
         let now = obs.pos();
@@ -476,6 +479,9 @@ impl Combat {
 
     /// Is a rocket at t sure not to blow up by her (E1M9's died at 88 health, nothing in sight)?
     pub(super) fn rocket_safe(&self, obs: &Observation, t: &Thing) -> bool {
+        if self.invulnerable(obs.tic) {
+            return true; // (her own blast can't hurt her either)
+        }
         let pos = obs.pos();
         let clear = crate::tactical::bestiary::weapon(5).splash + 48.0;
         if dist((t.x, t.y), pos) < clear + mon(t.name).radius {

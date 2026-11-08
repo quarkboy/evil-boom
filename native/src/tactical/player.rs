@@ -37,6 +37,8 @@ const HUNT_NEAR: f64 = 512.0;
 const HURT: f64 = 50.0;
 /// monsters this near an objective's spot count against going there
 const DANGER_NEAR: f64 = 640.0;
+/// the way to something urgent passes nothing she can't take on closer than this (and its radius)
+const WAY_CLEAR: f64 = 320.0;
 /// ammo for what she has counts as this much further, outmatched by something she knows of
 const AMMO_OUTMATCHED: f64 = 2.0;
 /// below this, with something shooting at her: back off out of its sight
@@ -466,6 +468,9 @@ impl Player {
     /// - out: surrounded;
     /// - bait: a heavy she can't kill soon, with others for its shots to land on.
     fn start_retreat(&mut self, obs: &Observation) -> Option<Retreat> {
+        if self.fight.combat.invulnerable(obs.tic) {
+            return None; // (nothing to fall back from)
+        }
         let health = obs.health.unwrap_or(100.0);
         let (kind, route) = if (health < RETREAT_HEALTH && !self.shooters().is_empty()) || self.vile(obs) {
             self.retreat_tic = obs.tic;
@@ -766,7 +771,7 @@ impl Player {
     /// user's: a player hears when its attack's over. E3M8: the way to a post taken into its
     /// bursts at 600, dead in a second.
     fn hold_at_edge(&mut self, obs: &Observation, c: &Controls) -> bool {
-        if c.forward.hypot(c.strafe) < 1.0 {
+        if c.forward.hypot(c.strafe) < 1.0 || self.fight.combat.invulnerable(obs.tic) {
             return false;
         }
         let firing: Vec<Seen> = self
@@ -805,12 +810,13 @@ impl Player {
     /// building from the spider mastermind; every hit she took was on her way to a box of rockets
     /// or a door, across the ring in its sight. Worked out again once one's moved, or a while on.
     fn keep_out_of_sight(&mut self, obs: &Observation) {
+        let unhurt = self.fight.combat.invulnerable(obs.tic);
         let them: Vec<Seen> = self
             .fight
             .combat
             .remaining()
             .into_iter()
-            .filter(|s| s.awake && self.fight.combat.sniper(obs, s.name))
+            .filter(|s| !unhurt && s.awake && self.fight.combat.sniper(obs, s.name))
             // (not one she can see fighting something else: it won't shoot her till it's done
             // or she hurts it, the time to cross; out of sight, taken to be after her. A monster
             // sees all round once awake (A_Chase): its target's what counts, not its facing)
@@ -953,6 +959,23 @@ impl Player {
 }
 
 impl Fight {
+    /// The way to p (as the crow flies) not past anything about she can't take on: the run for
+    /// the invulnerability not straight through what it's for (E3M9's, behind the cyberdemon:
+    /// run at past it, one rocket, dead at full health). Till it's moved off the line, kept clear.
+    fn clear_way_to(&self, obs: &Observation, p: Point) -> bool {
+        let pos = obs.pos();
+        self.combat
+            .remaining()
+            .iter()
+            .filter(|s| s.awake && self.combat.too_much(obs, &[s.name], LEAVE_BE))
+            .all(|s| segment_point_distance(pos, p, s.pos()) > WAY_CLEAR + monster(s.name).map_or(20.0, |m| m.radius))
+    }
+
+    /// Something about she can't take on (awake, known): invulnerability's for that.
+    fn needs_invulnerability(&self, obs: &Observation) -> bool {
+        self.combat.remaining().iter().any(|s| s.awake && self.combat.too_much(obs, &[s.name], LEAVE_BE))
+    }
+
     /// Barrels she's seen, near, with nothing in sight and the ammo for it: each to be shot from out
     /// of its chain's blasts (the follower's), before a shot sets it off by her, hers at something
     /// beside it or a monster's at her (the user's: barrels are dangerous wherever they are).
@@ -1054,6 +1077,10 @@ impl Fight {
             .flatten()
             .filter(|t| !self.offered.contains(&t.id))
             .filter(|t| {
+                if t.name == "InvulnerabilitySphere" {
+                    // (in the middle of a fight she can't win as she is: what wins it)
+                    return dist((t.x, t.y), pos) < 2.0 * ITEM_RANGE && self.needs_invulnerability(obs) && self.clear_way_to(obs, (t.x, t.y));
+                }
                 if let Some(slot) = weapon_item(t.name).filter(|&s| s != 1 && held.contains(&s) && !Self::new_gun(obs, t.name)) {
                     // (one she has: its ammo)
                     short && held.contains(&slot) && dist((t.x, t.y), pos) < ITEM_RANGE
@@ -1090,7 +1117,8 @@ impl Fight {
             let d = dist((t.x, t.y), pos);
             // how much it's needed (0: not at all, 1: badly)
             let mut need = 0.0;
-            if weapon_item(t.name).is_some() && Self::new_gun(obs, t.name) {
+            let invulnerability = t.name == "InvulnerabilitySphere" && self.needs_invulnerability(obs) && self.clear_way_to(obs, (t.x, t.y));
+            if invulnerability || (weapon_item(t.name).is_some() && Self::new_gun(obs, t.name)) {
                 need = 1.0;
             } else if let Some(slot) = weapon_item(t.name).filter(|&s| s != 1) {
                 // (a gun she has already is its ammo: a shotgun guy's dropped one, 4 shells; left
@@ -1117,7 +1145,11 @@ impl Fight {
             }
             let Some(goal) = x.touch_spot((t.x, t.y), reach) else { continue };
             let mut why = "";
-            if weapon_item(t.name).is_some() && need > 0.0 && self.better_gun(obs, t.name) {
+            if invulnerability {
+                // (E3M9's, behind the cyberdemon, spotted mid-fight and left for the blue key, a
+                // wall, a noise; killed at full health by one of its rockets)
+                why = " (something about she can't take on)";
+            } else if weapon_item(t.name).is_some() && need > 0.0 && self.better_gun(obs, t.name) {
                 why = " (a better gun)";
             } else if short && (weapon_item(t.name).is_some() || ammo_item(t.name).is_some()) {
                 why = " (out of ammo)";
@@ -1249,6 +1281,14 @@ impl Hooks for Fight {
     fn dangerous(&mut self, obs: &Observation, obj: &Objective) -> bool {
         if matches!(obj.kind, Kind::Exit | Kind::Key) {
             return false; // (worth it whatever: the way on)
+        }
+        // (invulnerability kept for a fight that needs it: not picked up in passing, its thirty
+        // seconds spent on nothing; with something about she can't take on, it's what she goes for)
+        if obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).is_some_and(|t| t.name == "InvulnerabilitySphere") {
+            return !self.needs_invulnerability(obs);
+        }
+        if self.combat.invulnerable(obs.tic) {
+            return false; // (nothing can hurt her: the risky ones now)
         }
         // (died going for it: not first again; twice, not at all. And a place she's died at again
         // and again, whatever for: MAP04's corner, five lives for the shotgun, the chaingun,

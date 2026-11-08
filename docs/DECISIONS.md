@@ -1052,3 +1052,26 @@ changes): routes shift and meet other old weaknesses. E3M8: from E3M7's loadout 
 7/16; from a pistol start on HMP 1/16. Committed with these numbers (the user's call: the rules
 are sound, tune later). The regression set changes to Doom E1-E3 episodes plus Doom II single
 levels from a pistol start (the user's: MAP06 is a gimmick map, no test).
+
+## Invulnerability and the BFG (2026-11-08)
+
+The user's: better planning for both (seen in an E3 run). From the game's own:
+- **Invulnerability** is known from its pickup message ("Invulnerability!": 30 s, the last 3 not
+  counted on), as a player knows it. While it lasts nothing outmatches her; no retreats, ducking,
+  dodging, holding at edges or keeping out of sight; her own rockets safe; hurting floors fine (drops
+  still not); nothing too dangerous to go for.
+- **Kept for a high-risk fight** (the user's: super high priority then): a sphere isn't gone for
+  unless something she knows of, awake, outmatches her (`needs_invulnerability`); then it's urgent
+  (before keys) and an errand mid-fight, so long as the way to it doesn't pass within 320 (and
+  its radius) of what she can't take on: kept clear of till it moves off the line. E3M9 (E3
+  loadout, 8 seeds): its sphere behind the cyberdemon; spotted and left: killed by it 1/8; run at
+  straight past it: 5/8; with a clear way: 0/8, the cyberdemon killed 8/8.
+- **BFG**: the launch (30 tics; the rocket's 8) counted in the time to kill; while her ball's in the
+  air no ducking (A_BFGSpray: forty lines from her, ±45° along its flight, 1024 out, when it
+  lands); its crowd counted in that cone, not all in sight. Tried and dropped: no BFG unless a
+  boss or 3 in the spray (E3M4: plasma at close cacodemons spent 186 cells and died; the BFG, 120,
+  through).
+
+Results (new set: Doom episodes, Doom II single levels from a pistol start; HNTR, one life):
+E1 8.0 (8/8), E2 6.1 -> 5.9 (2 -> 3/8 through), E3 5.0 -> 6.5 (0 -> 1/8), Doom II 23 -> 24/32;
+arenas combat 119 -> 118/128, doom2 228.

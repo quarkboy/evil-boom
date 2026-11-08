@@ -45,6 +45,10 @@ const GIVEN_UP_TICS: i64 = 30 * 35;
 /// a ceiling seen coming down this lately, this low over its floor, is a crusher at work
 const CRUSH_TICS: i64 = 2 * 35;
 const CRUSH_GAP: f64 = 120.0;
+/// invulnerability lasts this long (INVULNTICS)...
+const INVULNERABLE_TICS: i64 = 30 * 35;
+/// ...the last of it not counted on
+const INVULNERABLE_SPARE: i64 = 3 * 35;
 /// a monster's way of going judged over this many tics (a walker's steps come every 2-4)...
 const TRACK_TICS: i64 = 12;
 /// ...and over at least this many
@@ -199,6 +203,8 @@ pub struct Combat {
     duck_until: i64,
     /// when there was last nowhere to duck from one
     no_duck_tic: i64,
+    /// invulnerable till this tic (from the pickup's message: 30 s, as a player knows it)
+    invulnerable_until: i64,
     /// where each monster in sight has been lately: (tic, x, y), oldest first
     tracks: BTreeMap<i32, std::collections::VecDeque<(i64, f64, f64)>>,
     /// the trigger was down last tic
@@ -276,6 +282,7 @@ impl Combat {
             duck_until: 0,
             no_duck_tic: i64::MIN / 2,
             tracks: BTreeMap::new(),
+            invulnerable_until: i64::MIN / 2,
             trigger_held: false,
             damage: Vec::new(),
             spent: 0.0,
@@ -297,6 +304,7 @@ impl Combat {
         self.alive.clear();
         self.visible.clear();
         self.tracks.clear();
+        self.invulnerable_until = i64::MIN / 2;
         self.target = None;
         self.health = None;
         self.hurt_tic = -1_000_000_000;
@@ -310,6 +318,9 @@ impl Combat {
 
     pub fn observe(&mut self, obs: &Observation) {
         let pos = obs.pos();
+        if obs.message.as_deref().is_some_and(|m| m.starts_with("Invulnerability")) {
+            self.invulnerable_until = obs.tic + INVULNERABLE_TICS;
+        }
         if let Some(v) = obs.velocity {
             self.velocity = v;
         } else if let Some(l) = self.last_pos {
@@ -517,7 +528,8 @@ impl Combat {
     /// something that wants the controls (a run-up, a jump). `errand`: the route's going for
     /// something to fight with: the fight only aims and shoots on the way.
     pub fn decide(&mut self, obs: &Observation, busy: bool, errand: &str) -> Option<Decision> {
-        let missiles = self.incoming(obs);
+        // (invulnerable: nothing to dodge, a missile does nothing)
+        let missiles = if self.invulnerable(obs.tic) { Vec::new() } else { self.incoming(obs) };
         let target = self.pick_target(obs);
         if target.is_none() && missiles.is_empty() {
             return self.no_target(obs, busy, errand);
@@ -592,8 +604,14 @@ impl Combat {
                 barrel_away = self.away_from_barrels(obs, b);
             }
         }
-        let vile = if busy { None } else { self.vile_fire(obs) };
-        let duck = if busy || vile.is_some() { None } else { self.duck(obs) };
+        // (invulnerable: nothing to hide from; her BFG ball in the air: in their sight till it
+        // lands, its spray from where she is)
+        let unhurt = self.invulnerable(obs.tic);
+        if unhurt {
+            barrel_away = None;
+        }
+        let vile = if busy || unhurt { None } else { self.vile_fire(obs) };
+        let duck = if busy || unhurt || vile.is_some() || self.bfg_flying(obs) { None } else { self.duck(obs) };
         let s = tree::Situation { pos, busy, errand, missiles, target, aim, health, threat, outmatched, close, barrel_away, vile, duck };
         (s, fire, weapon)
     }
@@ -730,6 +748,19 @@ impl Combat {
         let floor = self.floor_at(obs, p);
         let heights = self.heights(obs).to_vec();
         self.los.clear(Body { x: s.x, y: s.y, z: s.z, height: m.height }, Body { x: p.0, y: p.1, z: floor, height: PLAYER_HEIGHT }, &heights)
+    }
+
+    /// Invulnerable, with time enough left to make something of it (the last seconds counted out:
+    /// not caught in the open as it wears off)?
+    pub fn invulnerable(&self, tic: i64) -> bool {
+        tic < self.invulnerable_until - INVULNERABLE_SPARE
+    }
+
+    /// Her own BFG ball in the air: its spray comes from where she is when it lands, along the
+    /// way it flew (A_BFGSpray: forty lines from her, a quarter turn wide, 1024 out), so she
+    /// stays where she can see them till then.
+    pub fn bfg_flying(&self, obs: &Observation) -> bool {
+        obs.things.iter().flatten().any(|t| t.name == "BFGBall" && t.owner == 0)
     }
 
     /// How t's moving, a tic: its momentum, or walking (a monster walks by steps, not momentum:

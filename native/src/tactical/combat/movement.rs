@@ -322,7 +322,7 @@ impl Combat {
             if h.floor - floor > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT {
                 break;
             }
-            if floor - h.floor > MAX_STEP || (self.hurts(obs, nav.sector_of_poly(p)) && !self.on_hurting_floor(obs)) {
+            if floor - h.floor > MAX_STEP || (self.hurts(obs, nav.sector_of_poly(p)) && !self.on_hurting_floor(obs) && !self.invulnerable(obs.tic)) {
                 return false;
             }
             floor = h.floor;
