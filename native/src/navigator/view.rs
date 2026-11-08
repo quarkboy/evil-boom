@@ -446,7 +446,7 @@ impl View {
     }
 
     pub fn local_doors(&self, keys: Keys) -> Doors {
-        Navigator::local_doors(&self.triggers, keys)
+        Navigator::local_doors(&self.triggers, keys, &self.nav.map)
     }
 
     /// How the flood fill gets from `start` to `goal` with these heights, if it does: a line a

@@ -380,6 +380,7 @@ impl RouteFollower {
         controls.use_ = use_;
         if use_ {
             self.last_use = obs.tic;
+            self.log.add(obs.tic, format!("pressing for sector {sector} after {:.1}s", waited as f64 / TICRATE));
         }
         // nothing to press here: it may need a walk-over line crossing again (a blazing lift
         // that went back up), so replan from the live heights after a few seconds; at once if

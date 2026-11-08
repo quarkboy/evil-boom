@@ -419,10 +419,18 @@ impl Navigator {
 
     /// Doors she can open herself (DR/D1 lines) with these keys: sector -> (open heights,
     /// polys it can be used from).
-    pub fn local_doors(triggers: &[TriggerLine], keys: Keys) -> Doors {
+    pub fn local_doors(triggers: &[TriggerLine], keys: Keys, map: &MapData) -> Doors {
         let mut out = Doors::default();
         for t in triggers {
-            if !matches!(t.info.trigger, Trigger::DR | Trigger::D1) || !t.info.lock.satisfied(keys) {
+            // (and a door's own face with a repeatable switch on it, pressed as a door is: MAP02's
+            // first door, blazing, shut again when she came back to it, waited at as at a lift)
+            let face_switch = t.info.trigger == Trigger::SR
+                && t.info.category.is_door()
+                && t.linedef().is_some_and(|li| {
+                    let (f, b) = map.sides(li);
+                    [f, b].into_iter().flatten().any(|s| t.effects.iter().any(|(e, _)| *e == s))
+                });
+            if !(matches!(t.info.trigger, Trigger::DR | Trigger::D1) || face_switch) || !t.info.lock.satisfied(keys) {
                 continue;
             }
             for (s, hs) in &t.effects {
