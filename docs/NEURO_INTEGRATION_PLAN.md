@@ -1,562 +1,232 @@
 # Neuro-controlled Doom: architecture and implementation plan
 
-Date: 2026-11-07
+Date: 2026-11-08 (revised from the 2026-11-07 draft)
 
-Status: proposed architecture; implementation has not begun. This document records
-the agreed direction and implementation plan. Timing targets and defaults below
-must be validated experimentally.
+Status: agreed direction; implementation not begun. The classifier and style design (section 5)
+needs its own design pass before it is built. Timings and defaults are to be measured.
 
-## Purpose and agreed roles
+## Purpose
 
-Evil gives persistent instructions covering exploration, combat, resources, and
-progression. An internal classifier interprets those instructions against the
-known game state. The existing Rust bot validates and executes them.
+Evil plays Doom through the bot. She decides **where to go and what to do** (exploration is
+hers), and she shapes **how the bot plays** (its fighting style, risk, weapons, resources) in her
+own words. The Rust bot keeps everything that has to happen faster than a language model can
+answer: moving, aiming, dodging, the fight from tic to tic. It executes her decisions and her
+style, and it never acts on goals of its own.
 
-- **Commander:** Evil through the Neuro games SDK. For testing, a configurable GPT
-  model acts as Evil through a mock Neuro server. This is an LLM role, not a Jev role.
-- **Internal classifier:** local TEV or hosted Jev through a TypeSafe-compatible
-  SystemOne interface. It interprets instructions and selects among feasible
-  tactical or exploration choices. Hosted Jev is suitable for testing; measure
-  its latency and quality separately from local TEV.
-- **Executor:** deterministic Rust navigation, combat, and motor control at 35 Hz.
-- **Operator console:** a separate web page showing the API interface, classifier
-  decisions, bot state, and troubleshooting controls.
-- **Stream output:** the game-only DSDA-rendered display, separate from the console.
+| Role | Who | Speed |
+|---|---|---|
+| Commander | Evil, through the Neuro games SDK (a GPT stand-in through a mock Neuro server for testing) | seconds |
+| Style and small-decision classifier | a fast local model (TEV), hosted Jev for testing | tens to hundreds of ms |
+| Executor | the Rust bot: navigation, combat, motor control at 35 Hz | every tic |
 
-Evil supplies natural language as an action argument. No speech transcription
-integration is necessary. The game does not pause to wait for model responses.
+The game never pauses for a model.
 
-## 1. Process architecture
+## 1. What Evil does
 
-```mermaid
-flowchart TD
-    Evil["Evil / Neuro SDK server"]
-    Mock["GPT stand-in / mock Neuro server"]
-    UI["Operator web console"]
+### Exploration: directed by her
 
-    subgraph Supervisor["Integration supervisor"]
-        SDK["Neuro connection + action registry"]
-        Intent["Instruction interpretation + intent lifecycle"]
-        Classifier["TypeSafe-compatible classifier client"]
-        Events["Event journal + console API"]
-    end
+The bot doesn't explore on its own initiative in this mode. When it isn't forced to react (a fight,
+a hazard), it **waits for Evil's next decision**, holding a safe position (and, after a short
+wait, forcing one: section 3). She decides with:
 
-    Model["Local TEV / hosted Jev"]
+- **Lists** of what's known: unexplored openings (frontiers), doors and switches not yet tried,
+  items seen, keys and locked doors, the exit if seen, monsters remembered. These come from what
+  the explorer already generates internally (its objectives and their reasons), filtered by what
+  she has seen (the automap rule: nothing she hasn't seen).
+- **Inspection** of one thing: where it is relative to her and to named places, the way there
+  (its length, known hazards, monsters remembered near it), what it's likely for.
+- **Orders**: go to / try / pick up / explore toward a listed thing; explore a direction or an
+  area; go back to a named place; stop; leave the level by the exit.
 
-    subgraph Worker["Game worker"]
-        Knowledge["Perception + known world"]
-        Options["Exploration and combat candidates"]
-        Control["Intent executor + control arbitration"]
-        Motor["Deterministic motor"]
-        DSDA["DSDA engine + game-only display"]
-    end
+Orders run to completion, failure or replacement; the bot reports which, and waits again.
 
-    Evil <-->|WebSocket| SDK
-    Mock <-->|Same protocol, alternate connection| SDK
-    UI <-->|HTTP + event stream| Events
-    SDK <--> Intent
-    Intent <--> Classifier
-    Classifier <-->|SystemOne API| Model
-    Intent <-->|Commands and snapshots| Control
-    Knowledge --> Options
-    Options --> Classifier
-    DSDA --> Knowledge
-    Control --> Motor
-    Motor --> DSDA
-    Worker --> Events
-    SDK --> Events
-    Classifier --> Events
-```
+### Naming places
 
-| Component | Owns |
-|---|---|
-| Integration supervisor | Neuro connection, classifier requests, interpretation, operator API, logs, worker lifecycle |
-| Game worker | DSDA, knowledge, navigation, combat, executable intent, 35 Hz simulation |
-| Classifier service | Local TEV inference; hosted Jev substitutes through configuration |
-| Browser console | Presentation and operator commands |
-| Mock Evil server | GPT-based testing of the real integration interface |
+Doom maps have no room names. The bot gives each known place and thing a stable ID and a short
+generated description (from keys, doors, items, lifts, damaging floors, size, direction). **Naming
+is left to Evil** ("call that the slime pit"); the bot doesn't suggest names. Her names are used
+from then on in both directions: her orders and the bot's reports. Names are map-local and persist
+across deaths on that map. A name too long (over about 32 characters) or already used for
+something else on the map is refused with a failing result saying why, so she picks another; it
+isn't truncated or changed (a name she didn't choose is one she won't use).
 
-The browser is optional at runtime. Closing it must not affect gameplay.
+### Style: how the bot plays, set by her
 
-DSDA has a one-engine-per-process constraint (`native/src/engine.rs`). A worker
-process isolates engine crashes and distinguishes restarting the game from
-restarting the integration. The supervisor and console remain available during
-worker recovery.
+She describes how to play in free form ("play aggressive", "save the rockets", "don't waste the
+BFG on small stuff", "keep your distance from that cyberdemon", "snipe from cover"). The
+classifier turns that into **style parameters** (section 5) the fight and the explorer read. The
+values we've been tuning by hand become her settings, with our tuned values as the default style.
 
-Use bounded local IPC for commands, events, and compact immutable snapshots.
-Do not issue RPCs for each movement tic. Engine access remains on its owning
-thread. Do not pass engine objects or navigation internals to network workers.
-Specify framing, protocol version, startup handshake, and worker exit reporting.
-If standard output carries IPC, send diagnostic text elsewhere.
+## 2. Context: what she's told
 
-## 2. Typed control boundary
+- **Status**, short and regular (rate-limited, only when something changed): health, armor,
+  weapons, ammo, keys, current order and its progress.
+- **Events**: order completed or failed (and why), something new seen (key, exit, weapon,
+  powerup, big monster), damage taken heavily, low ammo or health, death, level complete.
+  One line each, coalesced, never repeating what she already has.
+- **On request**: the lists and inspections above.
 
-The central object is a persistent `Intent`, not a raw string passed through every
-subsystem:
+Context is the stream experience: too much floods her, too little leaves her blind. Budgets and
+wording are tuned by watching real runs.
 
-```text
-Intent
-  id, revision, source, original instruction
-  objective or bounded sequence of objectives
-  resolved references
-  hard constraints
-  soft preferences
-  permitted autonomous behavior
-  completion and failure conditions
-  scope and expiration
-```
+## 3. Action interface (structured)
 
-Example instruction:
-
-> Explore the east side, pick up shells along the way, and don't leave the level.
-
-Example interpretation:
-
-```text
-Objective: explore known eastern frontiers
-Opportunistic pickups: shells, within a limited detour
-Hard constraint: do not activate an exit
-Combat: defend while maintaining exploration objective
-Completion: no eligible eastern frontiers remain
-```
-
-Separate hard constraints from preferences:
-
-- “Never use the BFG” prohibits BFG selection.
-- “Prefer the shotgun” permits another weapon when justified.
-- “Avoid fighting” changes engagement policy; document its self-defense default.
-- “Stand still and don't fire” explicitly disables ordinary movement and firing
-  assistance.
-
-Do not silently reinterpret every instruction as “maximize survival.” Evil may
-make bad decisions. Assistance operates within the command contract, including
-explicitly permitted emergency behavior.
-
-```text
-received → interpreting → active
-                          ↔ suspended
-                          → completed / blocked / cancelled / superseded
-```
-
-Combat can suspend exploration without losing the destination. Resume the same
-intent after the interruption. Define map-local and session-level policy scopes
-explicitly so constraints do not accidentally survive or disappear on transitions.
-
-## 3. Refactor the current bot around that boundary
-
-Useful existing foundations are `native/src/play.rs`, `native/src/drive.rs`,
-`native/src/knowledge/explorer.rs`, and `native/src/tactical/player.rs`.
-
-| Existing area | Proposed change |
-|---|---|
-| `Agent` | Add directed mode using existing navigation and combat machinery |
-| Explorer candidate generation | Produce inspectable options independently of selection |
-| Explorer ranking | Return score components and reasons alongside ordering |
-| Objective execution | Accept an explicit objective and intent constraints |
-| Combat player | Separate tactical proposals from final control ownership |
-| Drive commands | Consume shared inspection/control services |
-| Replay | Record external decisions, settings changes, and application tics |
-
-Retain the autonomous controller as a baseline and explicitly selectable mode.
-A directed session must not silently complete the whole level when Evil stops
-responding. Continue the current delegation, then use documented idle behavior.
-
-## 4. Knowledge-filtered drive information
-
-Create a `PerceivedWorld`; do not send raw engine observations to either model.
-Include:
-
-- Health, armor, ammunition, weapons, keys, and effects.
-- Visible enemies and explicitly marked last-seen information.
-- Discovered items, doors, switches, exits, and frontiers.
-- Known route restrictions and observed hazards.
-- Current objective, route progress, failures, and discoveries.
-- Available exploration and tactical candidates.
-
-Each candidate needs a stable ID, readable label, and supporting information:
-
-```text
-Objective: east passage
-ID: map-7/frontier-18
-Purpose: reveal unexplored area
-Route: reachable through known corridor
-Cost: moderate travel distance
-Risk: crosses an exposed doorway
-Alternative: nearby shell pickup
-Recommendation: second choice; health pickup currently ranks higher
-```
-
-Use map-generation IDs, not positions such as “option 3.” Rankings change while
-entity identity should remain stable. Resolve known aliases where unambiguous;
-validate that references still exist and are actionable.
-
-Distinguish observed facts, inferences, unknown information, and operator-only
-ground truth. Unknown key locations remain unknown. Full-map routing, warping,
-and other drive debugging powers are not part of Evil's normal action set.
-
-## 5. Evil's action interface
-
-Start with a small, expressive set:
+Neuro actions take a JSON schema; Evil fills parameters herself. Stable registrations; availability
+changes only at lifecycle transitions; references validated at execution time, not by
+re-registering enums as things change.
 
 | Action | Arguments | Purpose |
 |---|---|---|
-| `doom_direct` | `instruction`, optional `mode: replace/amend` | Exploration, combat, resource, or combined orders |
-| `doom_inspect` | `topic`, optional `reference` | Objectives, routes, supplies, threats, orders, progress |
-| `doom_choose` | `objective_id`, optional `instruction` | Select a known candidate precisely |
-| `doom_cancel` | Optional `intent_id` | Cancel current or specified order |
-| `doom_start` | Available scenario/map choice | Start a session |
-| `doom_restart` | No required arguments | Restart when permitted |
-| `doom_next_level` | No required arguments | Proceed from completion |
+| `doom_list` | `what`: frontiers / doors / items / keys / monsters / places | What she can act on |
+| `doom_inspect` | `ref` (ID or her name) | One thing in detail |
+| `doom_go` | `ref`, optional `then` | Go to, try, pick up, explore at a listed thing |
+| `doom_explore` | `direction` or `ref` | Explore toward a direction or around a place |
+| `doom_name` | `ref`, `name` | Name a place or thing |
+| `doom_style` | `instruction` (free text) | Change how the bot plays (classifier) |
+| `doom_stop` | none | Cancel the current order; hold |
+| `doom_exit` | none | Leave by the known exit |
+| `doom_start` / `doom_restart` / `doom_next_level` | as available | Lifecycle |
 
-`doom_direct` is primary. For example:
-
-> Find the blue key, conserve cells, and investigate that lift if it helps.
-
-`doom_choose` avoids semantic target guessing when Evil already knows the desired
-candidate. `doom_inspect` provides concise answers with relevant IDs and supports
-follow-up inspection. It should not dump every internal field.
-
-## 6. SDK lifecycle and acknowledgements
-
-Keep schemas stable; change availability at lifecycle transitions:
-
-| State | Available actions |
+| State | Available |
 |---|---|
-| Ready | Start, inspect |
-| Playing | Direct, choose, inspect, cancel |
-| Dead | Restart, inspect |
-| Complete | Next level, restart, inspect |
-| Loading/resetting | Inspect/status where appropriate |
+| Ready | start, list, inspect |
+| Playing | all but lifecycle |
+| Dead | restart, list, inspect |
+| Level complete | next level, restart, list, inspect |
 
-Do not re-register target enums when enemies move or items disappear. Validate
-references at execution time. The current SDK guidance favors stable registrations.
+### Fitting the SDK (checked against the spec, best practices and changelog, 2026-11-08)
 
-The adapter must implement:
+- **Waiting for her is a force.** The bot waiting for her next decision is the game "blocked on
+  her decision", which the SDK handles with `actions/force`: without one she gets distracted and
+  forgets the game. Timeout-then-force: when the bot goes idle, give her a few seconds to act on
+  her own, then force with `state` (status and the current options, Markdown), a short `query`,
+  `ephemeral_context: true` (the option lists are bulky and change), and `priority: "medium"`
+  (real time, but not cutting her off; `"high"` only if something is attacking while she talks).
+- **One force at a time**, waited out; a new one can cancel the one in progress. Our actions are
+  non-disposable, so she may act just before or after a force resolves: the handler accepts any
+  valid action at any time, independent of the force state (the SDK's ActionWindow pattern).
+- **Results within seconds, after validation, before execution.** The server gives up after about
+  20 s and Neuro is frozen until it arrives. A successful result's `message` says what changed for
+  her ("Heading for the blue door, about 600 units, past the slime pit."), per the latest
+  guidance. A failure during a force is retried automatically, so failure messages are actionable
+  ("No 'east door'; known doors: ..."). A request that's valid but can't be done now (a door
+  already open) is `success: true` with an explanation, to avoid a retry loop.
+- **Completion is context**, not a second result: "Reached the blue door; it needs the blue key."
+- **Context**: Markdown without `#` headings, occasional and meaningful, never a stream of
+  position updates. Status and routine updates `silent: true`; events worth a reaction on stream
+  (a boss sighted, a key found, nearly dead, the level done) `silent: false`. Rules and controls
+  once at startup and at each new level.
+- **Schemas**: `type: "object"`, simple keywords only (no `oneOf`, `additionalProperties`,
+  `$ref`, ...). Enums for fixed sets (`doom_list`'s `what`); a free string for references whose
+  options change (validated by us, failing with the valid options). One action with a few
+  parameters rather than chained forces (each link is a round trip).
+- **Stable registration.** Register everything at startup; changes only at real lifecycle
+  transitions, which are rare (start, death, level end). Names prefixed `doom_` (names are shared
+  with any other integration connected to her).
+- **Unknown or stale actions** get a failing result, never silence.
+- **Reconnect**: re-send `startup`, re-register at once. Her context survives a disconnect, so
+  the resync is a short status, not a replay.
+- **Startup acknowledgement** carries `characterId` (`evil` for Evil Neuro): log it.
+- **Information**: what a human player would have (the SDK's "don't let her cheat"; our
+  automap rule). Be painfully explicit; lists of ~20 are fine.
+- **Testing**: Randy (the SDK's mock: random actions, only when forced, HTTP to inject actions)
+  for protocol basics; neuro-api-tony (the mock the published integrations name for local testing) for
+  manual play; our GPT stand-in as a third mock for whole-level runs. Malformed data has to be tested
+  by us: Randy never sends it.
+- **Implementation**: the protocol is small (eight message types); a module of our own over
+  `tungstenite` is simpler to own than the community `neuro-sama` crate (unendorsed, last
+  changes unknown), though its schema types are a useful reference. Vendor-prefix any custom
+  commands; unknown commands are silently ignored by the server.
 
-- Text WebSocket messages, startup first, then current action registration.
-- Both outer-message parsing and parsing of the action's JSON-string arguments.
-- Validation independent of the advertised JSON schema.
-- Duplicate action protection and cached results scoped to connection/session.
-- Prompt success/failure results, including unknown or stale actions.
-- At most one outstanding forced decision; no invented force-cancellation API.
-- Reconnection, startup, re-registration, and compact current-state synchronization.
-- Lifecycle registration diffs; remove disposable actions before acknowledging
-  their transition where needed to avoid repeat-action races.
+## 4. The executor (the bot)
 
-For natural-language orders, distinguish accepting an interpretation job from
-accepting an executable plan:
+- **Directed mode.** The explorer's objective generation stays; its own selection becomes
+  optional. In directed mode objectives come only from Evil's orders; when none is active the
+  bot holds a safe spot and waits. The autonomous mode stays as a baseline and for tests.
+- **Reflexes stay in Rust.** Dodging, ducking, crushers, falling, barrel blasts, arch-vile fire,
+  the BFG's hold: immediate, every tic, never waiting on a model.
+- **Fights.** Self-defence is automatic; whether to stand, pursue, break off or avoid is part of
+  the style (and of her orders: "avoid fights" changes engagement within its documented
+  self-defence floor).
+- **Perceived world.** Everything model-facing comes from a `PerceivedWorld` snapshot built from
+  the bot's knowledge (what she's seen and learned), never raw engine state. Facts, inferences
+  and unknowns are marked as such.
+- **Arbitration.** One owner of movement, aim, fire and weapon at a time; commitments (a rocket or
+  BFG shot under way) are explicit and can't be stolen.
 
-1. Validate and enqueue the interpretation request.
-2. Return “Instruction received; interpreting it.”
-3. Keep the previous valid order active while interpretation runs.
-4. Validate the interpretation against the current world.
-5. Activate it and report the interpretation, or explain the ambiguity.
+## 5. Classifier and style (needs its own design pass)
 
-The action description must document this asynchronous contract. Receipt does
-not mean understanding or completion. Send subsequent updates as context, not a
-second terminal action result.
+Two jobs for the fast classifier:
 
-A later instruction invalidates older pending interpretations. Cancellation is
-direct and does not wait for classification. A forced decision must never be a
-dependency of immediate projectile avoidance. Define disconnected behavior as
-bounded continuation of existing orders, not permission for new autonomous goals.
+1. **Style interpretation.** Free text from `doom_style` (and style parts of other instructions)
+   -> changes to a set of style parameters. The classifier chooses among supplied values; it
+   doesn't invent parameters. Ambiguous or unsupported requests come back to Evil as such.
+2. **Small fight decisions**, where speed matters and her style should show: weapon choice, target
+   choice, engage / hold / break off, when to spend a powerup. Rust supplies the feasible options;
+   the classifier picks one in the style's terms; Rust revalidates before acting. At most one
+   request in flight; stale answers dropped (correlated by map, order, option set and tic);
+   deterministic fallback when it's slow or down.
 
-## 7. Classifier responsibilities
+**Style parameters** to be designed from the bot's existing tuned constants, for example:
+aggression (stand / pursue / keep clear thresholds), preferred range, risk tolerance (outmatched
+test, retreat health), ammo policy (conserve per kind, boss reserve), weapon preferences and
+prohibitions, powerup policy (invulnerability, BFG), infighting use, cover use. Each has a range, a
+default (today's tuned value), and documented effect.
 
-Use separate prompts, budgets, evaluation sets, and telemetry for two jobs.
+This means reorganising much of the fight code so its decisions read from one style object and
+expose their options, rather than from constants scattered through the tree. The design pass
+decides the parameter set, the decision points handed to the classifier, and how much of the
+combat tree becomes classifier-selectable.
 
-### Instruction interpretation
+## 6. First slice (thin, to prove the idea; not to be optimised for long)
 
-- Determine objective category.
-- Resolve references against known places and entities.
-- Identify constraints and preferences.
-- Determine replacement versus amendment.
-- Detect ambiguity, unsupported requests, and conflicting requirements.
+1. Directed mode in the bot: orders from a queue, waiting when idle, completion and failure
+   reports. Lists and inspection from the explorer's own objectives. Generated descriptions and
+   naming.
+2. The Neuro adapter in the existing binary (its own thread), the structured actions above minus
+   `doom_style`, status and event context.
+3. A mock Neuro server: scripted first, then a GPT stand-in through the same adapter.
+4. The current viewer window and log as the console.
 
-A classifier chooses among supplied answers; it is not a generator of arbitrary
-plans. Define a supported intent vocabulary and bounded composition scheme.
-Clarify unsupported or ambiguous instructions rather than inventing approximations.
-Parse explicit numbers deterministically, validate all resolved fields together,
-and include an unknown/none/clarification outcome where appropriate.
+Gate: a GPT stand-in completes a level by listing, inspecting and ordering, with the bot waiting
+between orders and reporting truthfully.
 
-### Situational selection
+## 7. Later stages
 
-- Choose exploration options within the current delegation.
-- Choose among feasible combat plans.
-- Evaluate permitted detours.
-- Recommend suspension or reassessment when conditions change.
-
-For combat, supply complete candidate maneuvers rather than independently choosing
-target, weapon, and movement that may be incompatible. Examples:
-
-- Move behind the left pillar to break the archvile's line of sight.
-- Maintain distance and fire plasma at the archvile.
-- Retreat along the known corridor.
-- Hold fire to preserve an ongoing infight.
-
-Rust generates feasible candidates, applies hard constraints, and revalidates the
-selected result before execution. The model does not compute collision geometry
-or issue raw movement commands.
-
-Use a provider adapter for endpoint, model, credentials, timeouts, and capability
-limits. TEV through Ollama and hosted Jev share the SystemOne request shape.
-Keep prompts compact, record exact model/runtime versions, and benchmark both
-TEV sizes against actual Doom cases. Confidence concentration is not correctness;
-choose acceptance thresholds on held-out examples. Do not assume equal confidence
-semantics or equal quality merely because APIs are compatible.
-
-## 8. Scheduling and control ownership
-
-Initial targets, subject to measurement:
-
-| Activity | Schedule |
+| Stage | Deliverable |
 |---|---|
-| Motor and immediate hazards | Every tic, 35 Hz |
-| Combat classification | Event-triggered, initially capped around 2–5 Hz |
-| Exploration selection | Completion, blockage, discovery, changed intent |
-| Instruction interpretation | New instruction/amendment |
-| Console snapshots | Approximately 5–10 Hz |
-| Context to Evil | Meaningful changes and requested inspection |
+| Style | Style parameters, `doom_style`, the classifier (interpretation first, then small fight decisions) |
+| Console | A web console: messages, orders, classifier decisions, bot state, troubleshooting controls |
+| Robustness | A worker process for the engine (crash isolation), reconnects, restart, live settings |
+| Replay | Recorded controls and decisions, decision replay against other models |
+| Stream rehearsal | Game-only capture, long runs through connection and inference failures |
 
-Normally allow one tactical inference request in flight. Coalesce new observations
-instead of accumulating a backlog. Keep interpretation and tactical scheduling
-distinct so routine tactical requests do not starve new orders.
+Carried over from the earlier draft, to apply in these stages: correlation IDs and staleness on
+every model answer; settings applied atomically at a tic boundary with revisions; the console never
+mutates the engine directly; localhost binding and server-side credentials; a developer
+ground-truth view never leaks into model-facing snapshots; restarts clear map-local orders unless
+carried explicitly.
 
-Correlate responses with:
+## 8. Measures
 
-```text
-session generation
-map generation
-intent revision
-candidate-set revision
-observation tic
-configuration revision
-```
+Instruction fidelity (did the bot do what she said, within her style), order completion and
+failure honesty, waiting time between orders, survival and progress, context volume, classifier
+latency (p50/p95/p99), stale and fallback rates, and whether her style changes are visible in play.
+Winning alone isn't the measure.
 
-Discard results for old maps, superseded orders, expired observations, or invalid
-candidates. Deadlines and freshness budgets are configurable and measured on the
-target hardware. Timeouts keep deterministic execution/fallback running within
-existing constraints; they never freeze simulation.
+## References
 
-One arbiter owns movement, aiming, firing, and weapon switching. Represent weapon
-and interaction commitments explicitly. The observed BFG regression is mandatory
-coverage: navigation must not steal aim between attack start and projectile
-launch. Releasing the trigger cannot cancel an already committed shot.
-
-## 9. Web console
-
-The console should answer: what did Evil request, what did the classifier choose,
-what did the bot do, and why did they differ?
-
-| View | Contents |
-|---|---|
-| Overview | Game status, health/ammo, instruction, objective/tactic, component health |
-| Neuro interface | Messages, registrations, results, pending force, connection history |
-| Interpretation | Original text, interpreted intent, references, constraints, ambiguity |
-| Classifier | Requests, options, answers, distributions, latency, timeouts, stale rejection |
-| Drive/exploration | Candidates, ranking factors, routes, known map, blocked objectives |
-| Combat | Target, weapon, maneuver, cover, threats, control ownership |
-| Timeline/replay | Correlated events, bookmarks, exports, run comparisons |
-| Settings | Effective/pending values, validation errors, revision history |
-
-Selecting an instruction filters to its classification, execution, and outcome.
-Show recorded evidence and code selection reasons; do not fabricate model reasoning
-when the model only returned a classification.
-
-The console map can show known geometry, routes, and enemy memories. An explicitly
-marked developer ground-truth view must not contaminate model-facing snapshots.
-The game capture surface has no operator panels or diagnostic overlays.
-
-Serve a bundled TypeScript application from the supervisor. Normal operation
-should not require a separate frontend development server. Use HTTP for commands
-and snapshots plus an event stream with sequence IDs and resynchronization.
-
-## 10. Troubleshooting commands
-
-| Control | Meaning |
-|---|---|
-| Reconnect Neuro | Replace connection, register actions, synchronize current state |
-| Reconnect classifier | Recreate client and invalidate pending requests |
-| Disable classifier | Deterministic fallback within current intent constraints |
-| Restart level | Reset game and map knowledge; invalidate references/routes/decisions |
-| Restart worker | Recover engine process while preserving console and logs |
-| Cancel instruction | Use normal cancellation lifecycle |
-| Pause/single-step | Explicit developer operation, never a model-wait mechanism |
-| Inject instruction | Normal ingestion path, labeled operator-originated |
-| Export diagnostic bundle | Relevant settings, events, decisions, replay |
-
-By default a restart clears map-specific instructions. Carrying orders across a
-reset is explicit. Every command has an ID and accepted/applied/failed states.
-HTTP acceptance is not proof of game application.
-
-Apply mutations through the worker command queue at a defined tic boundary. The
-web server never mutates engine objects directly. Queue overload must be visible
-and must not silently lose cancellation or reset commands.
-
-Bind to localhost by default. Authenticate mutation requests, validate browser
-origins, and keep API secrets server-side. Redact credentials from API views and
-exported logs. Remote console access is a separately configured capability.
-
-## 11. Live configuration
-
-| Category | Examples |
-|---|---|
-| Live | Context frequency, telemetry detail, classifier cadence, tactical weights |
-| Replan required | Search budget, exploration scoring, detour allowance |
-| Connection replacement | Neuro URL, classifier endpoint, credentials |
-| Level/worker restart | WAD, map, skill, engine compatibility |
-| Fixed during run | Replay-sensitive engine settings |
-
-For each change:
-
-1. Validate ranges and cross-field constraints.
-2. Show its application category.
-3. Apply atomically as a configuration revision.
-4. Invalidate affected plans or inference results.
-5. Record the application tic.
-6. Allow rollback to the previous revision.
-
-Separate temporary changes from saving defaults. Expose curated, documented
-parameters rather than every constant as an unexplained slider. Settings describe
-units, defaults, bounds, and whether they affect reproducibility.
-
-## 12. Events and reproducibility
-
-Use typed events including:
-
-```text
-InstructionReceived
-InterpretationCompleted
-IntentActivated
-ObjectiveSelected
-ClassifierRequested
-ClassifierReturned
-ClassifierResultDiscarded
-ControlOverride
-ObjectiveBlocked
-SettingsApplied
-ConnectionChanged
-LevelReset
-```
-
-Include sequence number, wall time, game tic where applicable, generation IDs,
-and instruction/request correlation IDs.
-
-Maintain bounded in-memory console history, an append-only run journal, periodic
-snapshots, and per-tic control recordings with integration metadata. A slow browser
-or journal consumer cannot block the game. Coalesce routine snapshots and report
-dropped telemetry explicitly; identify runs with incomplete recordings.
-
-Two replay modes:
-
-- **Gameplay replay:** recorded controls, no model calls.
-- **Decision replay:** recorded observations/instructions evaluated by another
-  model or controller for comparison.
-
-Exact gameplay reproduction must not require the same model response a second
-time. Record engine/WAD identity, seed, code version, settings revisions, prompts,
-model version, selected answers, and their application order.
-
-## 13. Proposed code organization
-
-```text
-native/src/
-  control/
-    intent.rs
-    lifecycle.rs
-    executor.rs
-    arbitration.rs
-    commitments.rs
-  perception/
-    snapshot.rs
-    references.rs
-    summaries.rs
-  exploration/
-    candidates.rs
-    evaluation.rs
-    execution.rs
-  tactical/
-    ...existing combat machinery...
-  protocol/
-    commands.rs
-    events.rs
-    snapshots.rs
-    configuration.rs
-
-integration/
-  supervisor/
-  neuro/
-  classifier/
-  console_api/
-  mock_neuro/
-
-console/
-  src/
-    overview/
-    neuro/
-    decisions/
-    exploration/
-    combat/
-    settings/
-    timeline/
-```
-
-Choose exact crate boundaries during implementation. Navigation and combat must
-not depend on HTTP, Neuro messages, or browser components. Share versioned DTOs
-between the worker and supervisor; avoid duplicating domain rules in the UI.
-
-The historical `docs/DECISIONS.md` needs reconciliation: its Python/ViZDoom-first
-topology and rapidly changing action enums no longer describe the intended
-Rust/DSDA architecture. Preserve historical findings while documenting superseded
-decisions explicitly.
-
-## 14. Implementation stages and acceptance gates
-
-| Stage | Deliverable | Gate |
-|---|---|---|
-| 1. Control boundary | Intents, snapshots, directed mode, arbitration | Autonomous baseline survives refactor; direct orders constrain execution |
-| 2. Supervisor/console | Worker management, journal, overview, reset, settings | Console survives worker failure; browser disconnect cannot affect gameplay |
-| 3. Neuro adapter | Stable lifecycle, actions, reconnect | Scripted malformed/stale/duplicate-action protocol tests pass |
-| 4. GPT stand-in | Mock Neuro server with configurable GPT commander | Uses actual SDK adapter, changing availability, delayed responses |
-| 5. Interpretation | Jev/TEV shadow evaluation, then activation | Held-out instruction tests pass before activation |
-| 6. Tactical assistance | Exploration/combat selection | Measured benefit without instruction-compliance regression |
-| 7. Stream rehearsal | Game-only capture, console, recovery | Extended runs tolerate connection/inference failures without hidden pauses |
-
-First milestone: a directed bot with `doom_direct`, `doom_inspect`, a basic console,
-and a scripted commander. Establish control contracts and observability before
-adding the GPT stand-in and classifier.
-
-### Validation matrix
-
-- Instructions: negation, amendments, multiple clauses, ambiguous references,
-  impossible requests, conflicting constraints, unsupported plans.
-- SDK: malformed nested JSON, duplicate IDs, stale actions, reconnects, pending
-  forces, changes in action availability, result-versus-completion semantics.
-- Lifecycle: death during inference, reset during inference, worker crash,
-  superseding instructions, API loss during execution, console reconnect.
-- Control: BFG launch commitment, exploration resumption after combat, exit
-  prohibition, weapon constraints, bounded detours, cancellation.
-- Performance: tic budget, inference p50/p95/p99, candidate generation overhead,
-  GPU contention, browser/log backpressure, request queue bounds.
-- Replay: reproduce controls without model calls; settings and external decisions
-  applied at recorded tics; disclose incomplete logs.
-
-Use existing combat arenas and real-map scenarios, plus exploration fixtures.
-Compare hosted Jev and local TEV with identical recorded inputs, live runs at actual
-latencies, and controlled added-delay experiments to separate quality from speed.
-Evaluate held-out cases and seeds, not only demonstrations used to tune prompts.
-
-Measure instruction fidelity, survival, damage, ammunition waste, objective time,
-unnecessary detours, target switching, stale responses, fallback frequency,
-recovery behavior, and operator visibility. Winning alone is insufficient.
-
-## Primary references
-
-Checked while preparing this plan on 2026-11-07. Pin and recheck protocol/runtime
-versions when implementing.
+Check and pin versions when implementing.
 
 - [Neuro API specification](https://github.com/VedalAI/neuro-sdk/blob/main/API/SPECIFICATION.md)
 - [Neuro integration best practices](https://github.com/VedalAI/neuro-sdk/blob/main/API/BEST_PRACTICES.md)
+- [Neuro SDK changelog](https://github.com/VedalAI/neuro-sdk/blob/main/CHANGELOG.md) (read 2026-11-08: latest entry 21 August 2026)
+- [Randy](https://github.com/VedalAI/neuro-sdk/tree/main/Randy) and [neuro-api-tony](https://github.com/Pasu4/neuro-api-tony) (mock servers)
+- Published integrations: in [Hollow Knight](https://github.com/VedalAI/neuro-hollow-knight) and
+  Cyberpunk, Vedal plays and Neuro is a companion (tactics, shooting at him, directions): not a
+  precedent for her controlling the game. Where she plays (Slay the Spire 2, Inscryption, Pokémon
+  Platinum) the games are turn-based or menu-driven. None has her directing a real-time game, so
+  the waiting and forcing design here is ours to work out and measure.
 - [TEV in Ollama and the SystemOne interface](https://ollama.com/library/tev1)
 - [Together TEV repository](https://github.com/togethercomputer/tev1)
 - [TypeSafe Choice documentation](https://docs.typesafe.ai/primitives/choice)
