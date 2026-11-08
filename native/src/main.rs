@@ -8,6 +8,12 @@
 //!   evil drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
 //!   evil sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things,
 //!                                               the run-jumps landing there (and their check)
+//!   evil arena FILE [names...] [--jobs N] [--seeds K]
+//!       the fights set up in FILE (see arena.rs), each K times (seeds 0..K), a process a go;
+//!       a line each, then how each scenario went: won, lost, drawn
+//!   evil arena-one FILE NAME [--seed N]         one of them, once; its log to out/arena/NAME.txt
+//!   evil arena-watch FILE NAME [--seed N] [--speed X]   one of them, watched (space pause, N a
+//!                                               tic at a time, +/- speed)
 //!   evil watch <wad> <map> [--speed X] [--all] [run options]
 //!       watch her play, with what she knows beside the game (space pause, +/- speed, A the
 //!       whole map, F follow, wheel zoom, Esc quit)
@@ -329,6 +335,158 @@ fn watch(_args: &[String]) -> Result<(), String> {
     Err("built without the viewer (the `viewer` feature)".into())
 }
 
+/// One arena scenario, once: a RESULT line, its fight's log to out/arena/NAME[_seed].txt.
+fn arena_one(args: &[String]) -> Result<(), String> {
+    let mut seed: Option<u32> = Some(0);
+    let mut rest: Vec<&String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--seed" {
+            let v = args.get(i + 1).ok_or("--seed N")?;
+            seed = if v == "random" { None } else { Some(v.parse().map_err(|_| "--seed N")?) };
+            i += 2;
+            continue;
+        }
+        rest.push(&args[i]);
+        i += 1;
+    }
+    let [file, name] = rest.as_slice() else { return Err("usage: evil arena-one FILE NAME [--seed N]".into()) };
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let scenarios = evildoom::arena::parse(&text)?;
+    let s = scenarios.iter().find(|s| &s.name == *name).ok_or_else(|| format!("{name}: not in {file}"))?;
+    let mut log = Vec::new();
+    let o = evildoom::arena::run(s, seed, &mut log)?;
+    let dir = evildoom::config::out_dir().join("arena");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let tag = seed.map_or("random".to_string(), |s| s.to_string());
+    std::fs::write(dir.join(format!("{name}_{tag}.txt")), log.join("\n")).map_err(|e| e.to_string())?;
+    println!("RESULT {} {:.0}s health {} armor {} kills {}/{}", o.result, o.seconds, o.health, o.armor, o.kills, o.monsters);
+    Ok(())
+}
+
+/// One arena scenario, watched in the viewer's window.
+#[cfg(feature = "viewer")]
+fn arena_watch(args: &[String]) -> Result<(), String> {
+    let (mut seed, mut speed) = (Some(0), 1.0);
+    let mut rest: Vec<&String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--seed" => {
+                let v = args.get(i + 1).ok_or("--seed N")?;
+                seed = if v == "random" { None } else { Some(v.parse().map_err(|_| "--seed N")?) };
+                i += 2;
+            }
+            "--speed" => {
+                speed = args.get(i + 1).and_then(|v| v.parse().ok()).ok_or("--speed X")?;
+                i += 2;
+            }
+            _ => {
+                rest.push(&args[i]);
+                i += 1;
+            }
+        }
+    }
+    let [file, name] = rest.as_slice() else { return Err("usage: evil arena-watch FILE NAME [--seed N] [--speed X]".into()) };
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let scenarios = evildoom::arena::parse(&text)?;
+    let s = scenarios.iter().find(|s| &s.name == *name).ok_or_else(|| format!("{name}: not in {file}"))?;
+    let p = evildoom::arena::prepare(s, seed, true)?;
+    evildoom::viewer::watch_prepared(&p.wad, p.map, &s.map, p.engine, p.agent, speed, &format!("evil-doom arena: {name}"))
+}
+
+/// The arena's scenarios (those named, else all), each `seeds` times, `jobs` at a time.
+fn arena(args: &[String]) -> Result<(), String> {
+    let (mut jobs, mut seeds) = (8usize, 3u32);
+    let mut rest: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--jobs" => {
+                jobs = args.get(i + 1).and_then(|v| v.parse().ok()).ok_or("--jobs N")?;
+                i += 2;
+            }
+            "--seeds" => {
+                seeds = args.get(i + 1).and_then(|v| v.parse().ok()).ok_or("--seeds K")?;
+                i += 2;
+            }
+            _ => {
+                rest.push(args[i].clone());
+                i += 1;
+            }
+        }
+    }
+    let file = rest.first().ok_or("usage: evil arena FILE [names...] [--jobs N] [--seeds K]")?.clone();
+    let text = std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?;
+    let names: Vec<String> = evildoom::arena::parse(&text)?.into_iter().map(|s| s.name).filter(|n| rest.len() < 2 || rest[1..].contains(n)).collect();
+    let mut todo: VecDeque<(String, u32)> = names.iter().flat_map(|n| (0..seeds).map(move |k| (n.clone(), k))).collect();
+    let total = todo.len();
+    let me = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut running: Vec<(String, u32, Child)> = Vec::new();
+    let mut tally: std::collections::BTreeMap<String, [u32; 4]> = std::collections::BTreeMap::new();
+    // (health left, a lost fight's none; seconds taken, won)
+    let mut left: std::collections::BTreeMap<String, (f64, f64)> = std::collections::BTreeMap::new();
+    let mut n = 0;
+    while !todo.is_empty() || !running.is_empty() {
+        while running.len() < jobs.max(1) {
+            let Some((name, k)) = todo.pop_front() else { break };
+            let child = Command::new(&me)
+                .args(["arena-one", &file, &name, "--seed", &k.to_string()])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .map_err(|e| e.to_string())?;
+            running.push((name, k, child));
+        }
+        let Some(i) = running.iter_mut().position(|(_, _, c)| c.try_wait().ok().flatten().is_some()) else {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            continue;
+        };
+        let (name, k, mut child) = running.swap_remove(i);
+        let mut out = String::new();
+        if let Some(s) = child.stdout.take() {
+            out = BufReader::new(s).lines().map_while(Result::ok).find(|l| l.starts_with("RESULT ")).unwrap_or_default();
+        }
+        if out.is_empty() {
+            let err = child.stderr.take().map(|s| BufReader::new(s).lines().map_while(Result::ok).collect::<Vec<_>>().join(" ")).unwrap_or_default();
+            out = format!("RESULT ERROR {err}");
+        }
+        let line = out.trim_start_matches("RESULT ").to_string();
+        let t = tally.entry(name.clone()).or_default();
+        let words: Vec<&str> = line.split(' ').collect();
+        let after = |k: &str| words.iter().position(|w| *w == k).and_then(|i| words.get(i + 1)).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+        let l = left.entry(name.clone()).or_default();
+        if words.first() == Some(&"WON") {
+            l.0 += after("health");
+            l.1 += words.get(1).and_then(|s| s.trim_end_matches('s').parse::<f64>().ok()).unwrap_or(0.0);
+        }
+        match words.first().copied() {
+            Some("WON") => t[0] += 1,
+            Some("LOST") => t[1] += 1,
+            Some("DRAWN") => t[2] += 1,
+            _ => t[3] += 1,
+        }
+        n += 1;
+        println!("[{n:3}/{total}] {name} (seed {k}): {line}");
+    }
+    println!();
+    let (mut won, mut health) = (0, 0.0);
+    for (name, [w, l, d, e]) in &tally {
+        won += w;
+        let (h, s) = left.get(name).copied().unwrap_or_default();
+        health += h;
+        let runs = f64::from(w + l + d + e).max(1.0);
+        println!(
+            "{name:24} won {w:2}  lost {l:2}  drawn {d:2}  health left {:5.1}  {:4.0}s a win{}",
+            h / runs,
+            s / f64::from(*w).max(1.0),
+            if *e > 0 { format!("  errors {e}") } else { String::new() }
+        );
+    }
+    println!("\n{won}/{total} won, health left {:.1} a fight", health / (total as f64).max(1.0));
+    Ok(())
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
@@ -339,6 +497,10 @@ fn main() -> ExitCode {
         Some("drive") => drive(&args[1..]),
         Some("sweep") => sweep(&args[1..]),
         Some("watch") => watch(&args[1..]),
+        Some("arena") => arena(&args[1..]),
+        Some("arena-one") => arena_one(&args[1..]),
+        #[cfg(feature = "viewer")]
+        Some("arena-watch") => arena_watch(&args[1..]),
         _ => Err("usage: evil sweep|run-map|watch|drive|dump-nav|follow|sector ... (see the source's header)".into()),
     };
     match result {

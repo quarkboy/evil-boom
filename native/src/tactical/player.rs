@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::bestiary::{ammo_item, armor_item, health_item, monster, weapon_in, weapon_item, Attack, SUPER_SHOTGUN};
-use super::combat::{segment_point_distance, Combat, OUTMATCHED};
+use super::combat::{segment_point_distance, spread, Combat, LEAVE_BE};
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
 use crate::knowledge::explorer::{Explorer, Hooks, Kind, Objective};
@@ -560,8 +560,8 @@ impl Hooks for Fight {
         if obj.urgent || obj.kind == Kind::Exit {
             return false;
         }
-        let hp: f64 = self.combat.remaining().iter().filter(|s| dist(s.pos(), obj.goal) < DANGER_NEAR).map(|s| mhealth(s.name)).sum();
-        hp / self.combat.firepower(obs) > OUTMATCHED
+        let near: Vec<&str> = self.combat.remaining().iter().filter(|s| dist(s.pos(), obj.goal) < DANGER_NEAR).map(|s| s.name).collect();
+        !near.is_empty() && self.combat.too_much(obs, &near, LEAVE_BE)
     }
 
     /// Something to fight with come into what she knows of the map (a better gun; ammo, when
@@ -577,16 +577,3 @@ impl Hooks for Fight {
     }
 }
 
-/// How far round `at` the points are spread (degrees: 360 less the widest gap).
-fn spread(at: Point, points: &[Point]) -> f64 {
-    if points.len() < 2 {
-        return 0.0;
-    }
-    let mut b: Vec<f64> = points.iter().map(|p| (p.1 - at.1).atan2(p.0 - at.0).to_degrees().rem_euclid(360.0)).collect();
-    b.sort_by(f64::total_cmp);
-    let mut widest = b[0] + 360.0 - b[b.len() - 1];
-    for w in b.windows(2) {
-        widest = widest.max(w[1] - w[0]);
-    }
-    360.0 - widest
-}

@@ -50,6 +50,16 @@ pub struct Thing {
     pub vy: f64,
     pub vz: f64,
     pub angle: f64,
+    pub health: i32,
+    /// a missile: the type of what fired it (0 the player; -1 none)
+    pub owner: i32,
+    /// its state now (what it's doing: an arch-vile starting a fire, a cyberdemon aiming)
+    pub state: i32,
+    /// a monster: it's after her
+    pub after_her: bool,
+    /// a monster: tics into its attack, from its first frame (as she'd see it winding up: an
+    /// arch-vile raising its hands, a cyberdemon aiming); -1 not attacking
+    pub attack: i32,
 }
 
 /// What she sees of the game a tic.

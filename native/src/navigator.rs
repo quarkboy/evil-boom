@@ -378,6 +378,12 @@ impl Navigator {
         self.mesh.poly_at(p)
     }
 
+    /// The poly p's really in: None in the solid between rooms (a pillar's inside), where the
+    /// BSP still gives some subsector.
+    pub fn poly_in(&self, p: Point) -> Option<usize> {
+        self.mesh.poly_at(p).filter(|&q| self.mesh.contains(q, p))
+    }
+
     pub fn sector_of_poly(&self, poly: usize) -> usize {
         self.mesh.poly(poly).sector
     }

@@ -52,6 +52,10 @@ typedef struct {
   double radius, height;
   int health;
   unsigned long long flags;
+  int owner_type;  /* a missile: the type of what fired it (its target), -1: none */
+  int state;       /* its state now (an index into states[]: what it's doing) */
+  int after_her;   /* a monster: its target is the player */
+  int attack;      /* a monster: tics into its (missile) attack, from its first frame; -1: not attacking */
 } evil_mobj;
 
 typedef struct {
@@ -193,6 +197,12 @@ EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
   cmd->forwardmove = (signed char)forward;
   cmd->sidemove = (signed char)side;
   cmd->angleturn = (signed short)turn;
+  /* (the slot's weapon, as G_BuildTiccmd picks it outside demo compatibility: slot 3 the super
+   * shotgun once she has it; without, a slot-3 press asked for a shotgun she hadn't) */
+  if ((buttons & BT_CHANGE) && gamemode == commercial &&
+      ((buttons & BT_WEAPONMASK) >> BT_WEAPONSHIFT) == wp_shotgun &&
+      players[consoleplayer].weaponowned[wp_supershotgun])
+    buttons = (buttons & ~BT_WEAPONMASK) | (wp_supershotgun << BT_WEAPONSHIFT);
   cmd->buttons = (byte)buttons;
   M_Ticker();
   G_Ticker();
@@ -262,6 +272,29 @@ EVIL_API int evil_sectors(double *out, int max)
   return numsectors;
 }
 
+/* How far into its missile attack mo is: the tics from the attack's first frame to now, along
+ * the frames it goes through (-1: it isn't in them). */
+static int attack_tics(const mobj_t *mo)
+{
+  statenum_t first = mo->info->missilestate;
+  statenum_t at = first;
+  int tics = 0, i;
+  if (first == S_NULL || !mo->state)
+    return -1;
+  for (i = 0; i < 16 && at != S_NULL; i++)
+  {
+    if (&states[at] == mo->state)
+      return tics + (states[at].tics - mo->tics);
+    if (states[at].tics < 0)
+      return -1;
+    tics += states[at].tics;
+    at = states[at].nextstate;
+    if (at == first || at == mo->info->seestate || at == mo->info->spawnstate)
+      return -1;
+  }
+  return -1;
+}
+
 /* The things about (monsters, missiles, items, decorations, corpses), up to max. Returns
  * how many there are in all. */
 EVIL_API int evil_mobjs(evil_mobj *out, int max)
@@ -287,6 +320,10 @@ EVIL_API int evil_mobjs(evil_mobj *out, int max)
       o->radius = fx(mo->radius); o->height = fx(mo->height);
       o->health = mo->health;
       o->flags = mo->flags;
+      o->owner_type = (mo->flags & MF_MISSILE) && mo->target ? (int)mo->target->type : -1;
+      o->state = mo->state ? (int)(mo->state - states) : -1;
+      o->after_her = mo->target && mo->target->player ? 1 : 0;
+      o->attack = (mo->flags & MF_COUNTKILL) || mo->type == MT_SKULL ? attack_tics(mo) : -1;
     }
     n++;
   }
@@ -321,4 +358,78 @@ EVIL_API void evil_player_state(evil_player *out)
     out->angle = degrees(p->mo->angle);
     out->momx = fx(p->mo->momx); out->momy = fx(p->mo->momy); out->momz = fx(p->mo->momz);
   }
+}
+
+/* Spawn a thing of type `type` (mobjtype_t) on the floor at (x, y), facing `angle` (degrees);
+ * `ambush`: deaf (waits to see her). Returns its evil_id, or -1. For arenas: the fight set up
+ * where wanted, the level's own monsters left out (-nomonsters). */
+EVIL_API int evil_spawn(int type, double x, double y, double angle, int ambush)
+{
+  mobj_t *mo;
+  dboolean fits;
+  if (gamestate != GS_LEVEL || type < 0 || type >= num_mobj_types)
+    return -1;
+  mo = P_SpawnMobj((fixed_t)(x * 65536.0), (fixed_t)(y * 65536.0), ONFLOORZ, type);
+  if (!mo)
+    return -1;
+  P_MapStart();
+  fits = P_CheckPosition(mo, mo->x, mo->y);
+  P_MapEnd();
+  if (!fits)
+  {
+    P_RemoveMobj(mo);  /* (in a wall, or on another) */
+    return -1;
+  }
+  mo->angle = (angle_t)(long long)(angle / 360.0 * 4294967296.0);
+  if (ambush)
+    mo->flags |= MF_AMBUSH;
+  if (mo->flags & MF_COUNTKILL)
+    totalkills++;
+  return mo->evil_id;
+}
+
+/* Take every pickup off the level (an arena's fight with only what she's given). Returns how many
+ * went. */
+EVIL_API int evil_clear_items(void)
+{
+  thinker_t *th, *next;
+  int n = 0;
+  if (gamestate != GS_LEVEL)
+    return 0;
+  for (th = thinkercap.next; th != &thinkercap; th = next)
+  {
+    next = th->next;
+    if (th->function == P_MobjThinker && (((mobj_t *)th)->flags & MF_SPECIAL))
+    {
+      P_RemoveMobj((mobj_t *)th);
+      n++;
+    }
+  }
+  return n;
+}
+
+/* Give her a loadout: weapons by weapontype_t bit (fist 0, pistol 1, shotgun 2, chaingun 3,
+ * missile 4, plasma 5, bfg 6, chainsaw 7, supershotgun 8), ammo (clip, shell, cell, missile),
+ * the backpack, health and armor (armortype 1 green, 2 blue). For arenas. */
+EVIL_API void evil_give(int weapons, int clip, int shell, int cell, int missile, int backpack, int health, int armor, int armortype)
+{
+  player_t *p = &players[consoleplayer];
+  int i;
+  for (i = 0; i < NUMWEAPONS && i < 9; i++)
+    p->weaponowned[i] = (weapons >> i) & 1;
+  if (backpack && !p->backpack)
+  {
+    p->backpack = true;
+    for (i = 0; i < NUMAMMO; i++)
+      p->maxammo[i] *= 2;
+  }
+  p->ammo[am_clip] = clip < p->maxammo[am_clip] ? clip : p->maxammo[am_clip];
+  p->ammo[am_shell] = shell < p->maxammo[am_shell] ? shell : p->maxammo[am_shell];
+  p->ammo[am_cell] = cell < p->maxammo[am_cell] ? cell : p->maxammo[am_cell];
+  p->ammo[am_misl] = missile < p->maxammo[am_misl] ? missile : p->maxammo[am_misl];
+  p->health = health;
+  if (p->mo)
+    p->mo->health = health;
+  p->armorpoints[0] = armor;
+  p->armortype = armortype;
 }

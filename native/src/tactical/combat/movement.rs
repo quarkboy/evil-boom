@@ -3,7 +3,7 @@
 use super::{clearance, miss_by, Combat, DODGE_TICS};
 use crate::geom::{dist, Point};
 use crate::motor::{heading, norm, Observation, Thing, FRICTION, RUN_THRUST};
-use crate::navigator::{MAX_STEP, PLAYER_HEIGHT};
+use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::tactical::bestiary::{missile, weapon_in, Weapon};
 use std::collections::BTreeSet;
 
@@ -28,25 +28,40 @@ impl Combat {
         let mut out: Vec<(f64, Thing)> = Vec::new();
         for t in obs.things.iter().flatten() {
             let Some(m) = missile(t.name) else { continue };
+            if t.owner == 0 || t.vx.hypot(t.vy) < 1.0 {
+                // (hers: her own plasma and rockets, dodged before, the fight given up; or gone
+                // off already, standing in its blast frames, met as she runs at it)
+                continue;
+            }
             if t.name == "LostSoul" && t.vx.hypot(t.vy) < 8.0 {
                 continue;
             }
-            // (relative to her, as she's going)
-            let (rvx, rvy) = (t.vx - vel.0, t.vy - vel.1);
-            let v2 = rvx * rvx + rvy * rvy;
-            if v2 < 1.0 {
+            // (relative to her, as she's going, and were she to stop: aimed at where she was, it
+            // hits if she turns back into it, as a route does, round a corner: Cyberdemon's
+            // rockets met head on, 3 tics off)
+            let Some((when, miss)) = [vel, (0.0, 0.0)]
+                .into_iter()
+                .filter_map(|v| {
+                    let (rvx, rvy) = (t.vx - v.0, t.vy - v.1);
+                    let v2 = rvx * rvx + rvy * rvy;
+                    if v2 < 1.0 {
+                        return None;
+                    }
+                    let (rx, ry) = (pos.0 - t.x, pos.1 - t.y);
+                    let when = (rx * rvx + ry * rvy) / v2;
+                    if !(0.0 < when && when < DODGE_TICS as f64) {
+                        return None;
+                    }
+                    let hz = t.z + t.vz * when;
+                    if !(z - 24.0 < hz && hz < z + PLAYER_HEIGHT + 24.0) {
+                        return None;
+                    }
+                    Some((when, (t.x + rvx * when - pos.0).hypot(t.y + rvy * when - pos.1)))
+                })
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+            else {
                 continue;
-            }
-            let (rx, ry) = (pos.0 - t.x, pos.1 - t.y);
-            let when = (rx * rvx + ry * rvy) / v2;
-            if !(0.0 < when && when < DODGE_TICS as f64) {
-                continue;
-            }
-            let miss = (t.x + rvx * when - pos.0).hypot(t.y + rvy * when - pos.1);
-            let hz = t.z + t.vz * when;
-            if !(z - 24.0 < hz && hz < z + PLAYER_HEIGHT + 24.0) {
-                continue;
-            }
+            };
             if !self.dodging.contains(&t.id) && miss > clearance(&m) {
                 continue;
             }
@@ -82,9 +97,15 @@ impl Combat {
             if !self.safe(obs, way, 64.0) {
                 continue;
             }
-            let mut s =
-                missiles.iter().filter_map(|t| missile(t.name).map(|m| miss_by(pos, self.velocity, way, t) - clearance(&m))).fold(f64::INFINITY, f64::min);
+            let room = self.clear_run(obs, way, 16.0 * DODGE_TICS as f64);
+            let mut s = missiles.iter().filter_map(|t| missile(t.name).map(|m| miss_by(pos, self.velocity, way, room, t) - clearance(&m))).fold(f64::INFINITY, f64::min);
             s = s.min(48.0); // (clear is clear: then the rest decides)
+            // (among those, where there's room after: dodged along a wall into a corner, the next
+            // rocket had her)
+            let ahead = (pos.0 + way.0 * room.min(160.0), pos.1 + way.1 * room.min(160.0));
+            if s >= 0.0 {
+                s += 24.0 * self.openness(obs, ahead, 192.0);
+            }
             if let Some(dw) = self.dodge_way {
                 s += 6.0 * (way.0 * dw.0 + way.1 * dw.1);
             }
@@ -164,6 +185,49 @@ impl Combat {
         self.safe(obs, d, 48.0).then_some(d)
     }
 
+    /// How far she could go that way (up to `length`): floor all the way, no step up or drop she
+    /// couldn't come back from, room to stand, nothing that hurts.
+    pub(super) fn clear_run(&self, obs: &Observation, d: Point, length: f64) -> f64 {
+        // (her middle and both sides: MAP07, the middle clear past a block's corner, the side
+        // caught on it, pushing that way for ever)
+        let side = (-d.1 * PLAYER_RADIUS, d.0 * PLAYER_RADIUS);
+        [(0.0, 0.0), side, (-side.0, -side.1)].into_iter().map(|o| self.clear_line(obs, (obs.x + o.0, obs.y + o.1), d, length)).fold(length, f64::min)
+    }
+
+    /// How open it is round p: the mean of how far she could go from there each way, up to
+    /// `length` (a corner's little; the middle of a hall all of it).
+    pub(super) fn openness(&self, obs: &Observation, p: Point, length: f64) -> f64 {
+        let n = 8;
+        (0..n)
+            .map(|i| {
+                let a = 2.0 * std::f64::consts::PI * f64::from(i) / f64::from(n);
+                self.clear_line(obs, p, (a.cos(), a.sin()), length)
+            })
+            .sum::<f64>()
+            / f64::from(n)
+            / length
+    }
+
+    fn clear_line(&self, obs: &Observation, from: Point, d: Point, length: f64) -> f64 {
+        let nav = &self.nav;
+        let Some(here) = nav.poly_at(from).or_else(|| nav.poly_at(obs.pos())) else { return 0.0 };
+        let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
+        let mut floor = floor_of(here).floor;
+        let n = ((length / 16.0).floor() as usize).max(2);
+        for i in 0..=n {
+            let f = length * i as f64 / n as f64;
+            let q = (from.0 + d.0 * f, from.1 + d.1 * f);
+            let back = length * (i.max(1) - 1) as f64 / n as f64;
+            let Some(p) = nav.poly_in(q) else { return back };
+            let h = floor_of(p);
+            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || nav.damage[nav.sector_of_poly(p)] != 0 {
+                return back;
+            }
+            floor = h.floor;
+        }
+        length
+    }
+
     /// A monster near and in front: walking on would walk into it.
     pub(super) fn blocking(&self, obs: &Observation, t: Option<&Thing>) -> bool {
         t.is_some_and(|t| dist((t.x, t.y), obs.pos()) < 320.0 && norm(heading(obs.pos(), (t.x, t.y)) - obs.angle).abs() < 60.0)
@@ -178,17 +242,9 @@ impl Combat {
         let Some(here) = nav.poly_at(obs.pos()) else { return false };
         let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
         let floor0 = floor_of(here).floor;
-        let mut floor = floor0;
-        let n = ((length / 16.0).floor() as usize).max(2);
-        for i in 1..=n {
-            let f = length * i as f64 / n as f64;
-            let q = (obs.x + d.0 * f, obs.y + d.1 * f);
-            let Some(p) = nav.poly_at(q) else { return false };
-            let h = floor_of(p);
-            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || nav.damage[nav.sector_of_poly(p)] != 0 {
-                return false;
-            }
-            floor = h.floor;
+        let mut floor;
+        if self.clear_run(obs, d, length) < length {
+            return false;
         }
         // (the slide: a wall or a step up stops her, which is all right; a drop or a hurting floor
         // isn't)
@@ -206,7 +262,7 @@ impl Combat {
             y += vy;
             vx *= FRICTION;
             vy *= FRICTION;
-            let Some(p) = nav.poly_at((x, y)) else { break };
+            let Some(p) = nav.poly_in((x, y)) else { break };
             let h = floor_of(p);
             if h.floor - floor > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT {
                 break;

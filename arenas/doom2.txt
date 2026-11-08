@@ -1,0 +1,314 @@
+# Doom II fights (evil arena arenas/doom2.txt): the map's own pickups taken out, only what's given.
+#
+# MAP32's hall (floor 0, ceiling 256, x -500..1400, y 3450..6000; six pillars down its sides at
+# x -256..0 and 896..1152): she starts at (448, 3900) facing north, the monsters across it
+# (y 5450..5600).
+# MAP16's south field (rocks for cover at about (250, -1550), (550, -1400), (400, -1700); the
+# octagon's wall to the north-west): she starts at (600, -1850), the monsters north (y -1300..-850).
+
+# --- one kind at a time, in the open -------------------------------------------------------
+
+arena zombies-pistol
+map doom2 MAP32
+at 448 3900 90
+give pistol clip=100
+spawn Zombieman 188 5550 270
+spawn Zombieman 448 5580 270
+spawn Zombieman 708 5550 270
+spawn ShotgunGuy 88 5450 270
+spawn ShotgunGuy 808 5450 270
+seconds 90
+
+arena imps-shotgun
+map doom2 MAP32
+at 448 3900 90
+give shotgun shell=40
+spawn DoomImp 88 5550 270
+spawn DoomImp 288 5580 270
+spawn DoomImp 448 5550 270
+spawn DoomImp 608 5580 270
+spawn DoomImp 808 5550 270
+spawn DoomImp 448 5450 270
+seconds 120
+
+arena demons-ssg
+map doom2 MAP32
+at 448 3900 90
+give ssg shell=40
+spawn Demon 188 5550 270
+spawn Demon 448 5580 270
+spawn Demon 708 5550 270
+spawn Demon 448 5450 270
+seconds 120
+
+arena chaingunners
+map doom2 MAP32
+at 448 3900 90
+give shotgun chaingun shell=40 clip=200 armor=100 green
+spawn ChaingunGuy 88 5550 270
+spawn ChaingunGuy 448 5580 270
+spawn ChaingunGuy 808 5550 270
+seconds 120
+
+arena hellknights-ssg
+map doom2 MAP32
+at 448 3900 90
+give ssg shell=50 armor=100 green
+spawn HellKnight 188 5550 270
+spawn HellKnight 448 5580 270
+spawn HellKnight 708 5550 270
+seconds 150
+
+arena cacos-rockets
+map doom2 MAP32
+at 448 3900 90
+give shotgun rocket shell=40 rocket=30 armor=100 green
+spawn Cacodemon 88 5550 270
+spawn Cacodemon 448 5580 270
+spawn Cacodemon 808 5550 270
+seconds 150
+
+arena revenants-ssg
+map doom2 MAP32
+at 448 3900 90
+give ssg rocket shell=50 rocket=20 armor=100 green
+spawn Revenant 88 5550 270
+spawn Revenant 448 5580 270
+spawn Revenant 808 5550 270
+seconds 150
+
+arena mancubi-rockets
+map doom2 MAP32
+at 448 3900 90
+give ssg rocket shell=40 rocket=40 armor=100 green
+spawn Fatso 188 5550 270
+spawn Fatso 708 5550 270
+seconds 150
+
+arena arachnos-plasma
+map doom2 MAP32
+at 448 3900 90
+give shotgun plasma shell=40 cell=300 armor=100 green
+spawn Arachnotron 188 5530 270
+spawn Arachnotron 708 5530 270
+seconds 150
+
+arena pain-elementals
+map doom2 MAP32
+at 448 3900 90
+give shotgun chaingun rocket shell=40 clip=200 rocket=20 armor=100 green
+spawn PainElemental 188 5550 270
+spawn PainElemental 708 5550 270
+seconds 150
+
+arena lost-souls
+map doom2 MAP32
+at 448 3900 90
+give shotgun chaingun shell=40 clip=200
+spawn LostSoul 88 5550 270
+spawn LostSoul 288 5580 270
+spawn LostSoul 448 5550 270
+spawn LostSoul 608 5580 270
+spawn LostSoul 808 5550 270
+spawn LostSoul 448 5450 270
+seconds 120
+
+# --- the special ones ------------------------------------------------------------------------
+
+arena archvile-solo
+map doom2 MAP32
+at 448 3900 90
+give ssg rocket plasma shell=50 rocket=20 cell=200 armor=100 green
+spawn Archvile 448 5550 270
+seconds 150
+
+arena archvile-pack
+map doom2 MAP32
+at 448 3900 90
+give ssg chaingun rocket shell=50 clip=200 rocket=20 armor=100 green
+spawn Archvile 448 5580 270
+spawn DoomImp 88 5550 270
+spawn DoomImp 808 5550 270
+spawn ShotgunGuy 288 5450 270
+spawn HellKnight 608 5450 270
+seconds 180
+
+arena cyberdemon
+map doom2 MAP32
+at 448 3900 90
+give rocket plasma rocket=50 cell=300 armor=200 blue
+spawn Cyberdemon 448 5550 270
+seconds 240
+
+arena cyberdemon-rockets-only
+map doom2 MAP32
+at 448 3900 90
+give rocket rocket=50 armor=100 green
+spawn Cyberdemon 448 5550 270
+seconds 240
+
+arena spider-mastermind
+map doom2 MAP32
+at 448 3900 90
+give rocket plasma chaingun rocket=50 cell=300 clip=200 armor=200 blue
+spawn SpiderMastermind 448 5500 270
+seconds 240
+
+# --- mixes -----------------------------------------------------------------------------------
+
+arena mixed-hell
+map doom2 MAP32
+at 448 3900 90
+give ssg chaingun rocket plasma shell=50 clip=200 rocket=30 cell=300 armor=200 blue backpack
+spawn DoomImp 88 5550 270
+spawn DoomImp 808 5550 270
+spawn ShotgunGuy 288 5450 270
+spawn ChaingunGuy 608 5580 270
+spawn Cacodemon 448 5580 270
+spawn Revenant 708 5450 270
+spawn HellKnight 188 5580 270
+spawn Demon 448 5450 270
+seconds 200
+
+arena surrounded
+map doom2 MAP32
+at 448 4736 90
+give shotgun chaingun shell=40 clip=200
+spawn Demon 448 5300 270
+spawn Demon 448 4200 90
+spawn DoomImp 1300 4736 180
+spawn DoomImp -400 4736 0
+spawn ShotgunGuy 1000 5400 225
+spawn ShotgunGuy -100 4100 45
+seconds 150
+
+arena low-ammo
+map doom2 MAP32
+at 448 3900 90
+give shotgun shell=12 clip=40
+spawn DoomImp 88 5550 270
+spawn DoomImp 448 5550 270
+spawn DoomImp 808 5550 270
+spawn ShotgunGuy 288 5450 270
+spawn ShotgunGuy 608 5450 270
+seconds 150
+
+# --- with cover (MAP16's south field) --------------------------------------------------------
+
+arena chaingunners-cover
+map doom2 MAP16
+at 600 -1850 90
+give shotgun chaingun shell=40 clip=200
+spawn ChaingunGuy 0 -1250 270
+spawn ChaingunGuy 700 -1000 270
+spawn ChaingunGuy 1000 -850 270
+spawn ChaingunGuy 1100 -1100 270
+seconds 150
+
+arena sergeants-cover
+map doom2 MAP16
+at 600 -1850 90
+give shotgun shell=40 clip=50
+spawn ShotgunGuy -150 -1300 270
+spawn ShotgunGuy 0 -1250 270
+spawn ShotgunGuy 700 -1000 270
+spawn ShotgunGuy 800 -1000 270
+spawn ShotgunGuy 1000 -850 270
+spawn ShotgunGuy 1100 -1100 270
+seconds 150
+
+arena spider-cover
+map doom2 MAP16
+at 600 -1850 90
+give rocket plasma chaingun rocket=40 cell=200 clip=200 armor=100 green
+spawn SpiderMastermind 950 -1150 270
+seconds 240
+
+arena cyberdemon-cover
+map doom2 MAP16
+at 600 -1850 90
+give rocket plasma rocket=40 cell=200 armor=100 green
+spawn Cyberdemon 950 -1150 270
+seconds 240
+
+# --- infighting: a heavy behind others, its shots landing on them ----------------------------
+
+arena infight-cyber-barons
+map doom2 MAP32
+at 448 3900 90
+give rocket plasma rocket=30 cell=300 armor=200 blue
+spawn Cyberdemon 448 5850 270
+spawn BaronOfHell 250 5300 270
+spawn BaronOfHell 650 5300 270
+spawn BaronOfHell 448 5150 270
+seconds 300
+
+arena infight-spider-zombies
+map doom2 MAP32
+at 448 3900 90
+give shotgun chaingun plasma shell=40 clip=200 cell=300 armor=100 green
+spawn SpiderMastermind 448 5800 270
+spawn ShotgunGuy 200 5200 270
+spawn ShotgunGuy 700 5200 270
+spawn ChaingunGuy 448 5100 270
+spawn Zombieman 300 5000 270
+spawn Zombieman 600 5000 270
+seconds 300
+
+arena infight-imps-knights
+map doom2 MAP32
+at 448 3900 90
+give ssg rocket shell=50 rocket=20 armor=100 green
+spawn DoomImp 150 5800 270
+spawn DoomImp 448 5850 270
+spawn DoomImp 750 5800 270
+spawn HellKnight 300 5100 270
+spawn HellKnight 600 5100 270
+seconds 200
+
+# --- indoors (MAP27's big low room: ceiling 128, a cross-shaped pillar at (-480, -50)) ------
+
+arena indoor-mix
+map doom2 MAP27
+at -1000 -100 0
+give shotgun chaingun shell=40 clip=150 armor=50 green
+spawn DoomImp 400 -100 180
+spawn DoomImp 500 -300 180
+spawn ShotgunGuy 700 0 180
+spawn ShotgunGuy 800 -300 180
+spawn Demon 600 150 180
+spawn Demon 100 -250 180
+spawn ChaingunGuy 1000 100 180
+seconds 180
+
+arena indoor-hell
+map doom2 MAP27
+at -1000 -100 0
+give ssg rocket shell=40 rocket=20 armor=100 green
+spawn BaronOfHell 600 150 180
+spawn Revenant 700 0 180
+spawn Revenant 800 -300 180
+spawn DoomImp 400 -100 180
+spawn DoomImp 300 -150 180
+seconds 200
+
+arena indoor-cacos
+map doom2 MAP27
+at -1000 -100 0
+give shotgun rocket shell=40 rocket=20 armor=100 green
+spawn Cacodemon 400 -100 180
+spawn Cacodemon 600 150 180
+spawn Cacodemon 800 -300 180
+spawn Cacodemon 1000 100 180
+seconds 200
+
+arena indoor-close
+map doom2 MAP27
+at -200 100 0
+give ssg shell=30
+spawn Demon 100 -250 90
+spawn Demon 400 -100 180
+spawn Spectre -900 150 0
+spawn DoomImp 600 150 180
+spawn ShotgunGuy 300 -150 180
+seconds 150
