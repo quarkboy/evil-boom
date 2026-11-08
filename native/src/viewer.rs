@@ -370,6 +370,8 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
         .spawn()
         .map_err(|e| format!("{}: {e}", r.ffmpeg.display()))?;
     let mut pipe = ff.stdin.take().ok_or("no pipe to ffmpeg")?;
+    println!("recording {} at {ow}x{oh} (the view {fw}x{fh})", r.out.display());
+    let mut began = Instant::now();
     let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H) };
     if r.view == RecordView::Hud {
         // (the corner map round her, near enough to read)
@@ -412,7 +414,16 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
                 }
             }
             pipe.write_all(&bytes).map_err(|e| format!("ffmpeg: {e}"))?;
+            // (how far: the game time recorded, a line written over every game second)
+            if (watch.engine.tic - start) % TICRATE as i64 == 0 {
+                let secs = (watch.engine.tic - start) as f64 / TICRATE;
+                let real = began.elapsed().as_secs_f64().max(1e-3);
+                eprint!("
+  {} {}:{:02} game  ({:.1}x real time)   ", watch.map_name, secs as i64 / 60, secs as i64 % 60, secs / real);
+                let _ = std::io::stderr().flush();
+            }
         }
+        eprintln!();
         let t = watch.engine.tally();
         let how = if watch.engine.exited() { "EXITED" } else if watch.engine.dead() { "DIED" } else { "TIME" };
         println!("{}: {how} items {}/{}, {:.0}s game", watch.map_name, t[0].0, t[0].1, (watch.engine.tic - start) as f64 / TICRATE);
@@ -427,6 +438,7 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
             (watch.follow, watch.zoom) = (true, HUD_ZOOM);
         }
         start = watch.engine.tic;
+        began = Instant::now(); // (the rate level by level)
     }
     drop(pipe);
     let status = ff.wait().map_err(|e| e.to_string())?;
