@@ -35,6 +35,10 @@ const RECENT_SIGHT_TICS: i64 = 35;
 const WAKE_DISTANCE: f64 = 16.0;
 const WAKE_SPEED: f64 = 0.5;
 const WAKE_TURN: f64 = 1.0;
+/// closing in on something out of reach this long without getting it in reach: left...
+const CLOSE_GIVE_UP: i64 = 20 * 35;
+/// ...for this long
+const GIVEN_UP_TICS: i64 = 30 * 35;
 /// health lost lately: over this long (tics)
 const DAMAGE_WINDOW: i64 = 5 * 35;
 /// an awake monster out of sight this long is still fought (where it was)
@@ -184,6 +188,10 @@ pub struct Combat {
     trigger_held: bool,
     /// health lost lately: (tic, how much)
     damage: Vec<(i64, f64)>,
+    /// out of reach, closed in on since when, by id...
+    closing_since: BTreeMap<i32, i64>,
+    /// ...and given up on till when
+    given_up: BTreeMap<i32, i64>,
     /// the gun last fired and when (its reload)
     pub(super) last_shot: Option<(i32, i64)>,
 }
@@ -228,6 +236,8 @@ impl Combat {
             vile_until: 0,
             trigger_held: false,
             damage: Vec::new(),
+            closing_since: BTreeMap::new(),
+            given_up: BTreeMap::new(),
             last_shot: None,
         }
     }
@@ -449,14 +459,14 @@ impl Combat {
         SLOTS.iter().any(|&s| s != 1 && held.contains(&s) && Self::ammo(obs, s) >= weapon_in(s, obs.super_shotgun).ammo_per_shot)
     }
 
-    /// Low on shots, three times as many as short of ammo (after a death for want of it).
-    pub fn low_on_ammo(&self, obs: &Observation) -> bool {
-        self.shots(obs) < 3 * SHORT_OF_AMMO
-    }
-
     /// Next to nothing left to shoot with (the fist doesn't count).
     pub fn short_of_ammo(&self, obs: &Observation) -> bool {
         self.shots(obs) < SHORT_OF_AMMO
+    }
+
+    /// Shots left for the guns she has (the fist, the chaingun's and BFG's shared ammo aside).
+    pub fn shots_left(&self, obs: &Observation) -> i32 {
+        self.shots(obs)
     }
 
     fn shots(&self, obs: &Observation) -> i32 {
@@ -524,6 +534,9 @@ impl Combat {
         let health = obs.health.unwrap_or(100.0);
         let threat = self.threats();
         let outmatched = self.outmatched(obs);
+        if let Some(t) = target.as_ref().filter(|t| self.reachable(obs, t)) {
+            self.closing_since.remove(&t.id); // (got it in reach: the clock again, next time)
+        }
         let close: Vec<Thing> = self
             .visible
             .iter()
@@ -575,7 +588,7 @@ impl Combat {
         } else if let Some(woken) = target.as_ref().map(|t| self.would_wake(obs, t)).filter(|w| !w.is_empty()) {
             fire = false;
             why = format!("sneaking past (a shot would wake {woken})");
-        } else if let Some(t) = target.as_ref().filter(|t| !self.reachable(obs, t) && t.after_her && !outmatched && self.known.get(&t.id).is_some_and(|s| s.awake)) {
+        } else if let Some(t) = target.as_ref().filter(|t| !self.reachable(obs, t) && t.after_her && !outmatched && self.known.get(&t.id).is_some_and(|s| s.awake) && self.still_closing(obs, t.id)) {
             // (after her, only too far for the guns she has: closer, as a player would; a
             // cacodemon hanging back out of the shotgun's reach)
             let gun = self.preferred_gun(obs, t);
@@ -638,6 +651,23 @@ impl Combat {
         Some(Decision { takeover, aim, fire, weapon, moving, why })
     }
 
+    /// Closing in on t, out of reach: still worth it? Not once she's been at it this long without
+    /// getting it in reach (E1M9's imps across the gap, 800 off, closed in on and lost sight of
+    /// for an hour): then it's left a while.
+    fn still_closing(&mut self, obs: &Observation, id: i32) -> bool {
+        if self.given_up.get(&id).is_some_and(|&until| obs.tic < until) {
+            return false;
+        }
+        let since = *self.closing_since.entry(id).or_insert(obs.tic);
+        if obs.tic - since > CLOSE_GIVE_UP {
+            self.closing_since.remove(&id);
+            self.given_up.insert(id, obs.tic + GIVEN_UP_TICS);
+            self.log.push(format!("tic {}: can't get at {id}: leaving it a while", obs.tic));
+            return false;
+        }
+        true
+    }
+
     /// An awake monster that was after her gone out of sight a moment ago (behind a pillar,
     /// round a corner): she keeps fighting it, aimed where it was, keeping her distance, rather
     /// than going about her business (MAP32: walked up to a cyberdemon behind a pillar).
@@ -647,6 +677,7 @@ impl Combat {
             .remaining()
             .into_iter()
             .filter(|s| s.awake && obs.tic - s.tic < LOST_TICS && mon(s.name).attack != Attack::None && dist(s.pos(), pos) < ENGAGE_RANGE)
+            .filter(|s| self.given_up.get(&s.id).is_none_or(|&until| obs.tic >= until))
             .max_by(|a, b| mon(a.name).threat.total_cmp(&mon(b.name).threat))?;
         let mut ghost = self.alive.get(&s.id)?.clone();
         (ghost.x, ghost.y, ghost.z, ghost.vx, ghost.vy) = (s.x, s.y, s.z, 0.0, 0.0);

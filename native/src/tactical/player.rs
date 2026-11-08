@@ -67,6 +67,23 @@ const SPOT_RANGE: f64 = 1024.0;
 const PISTOL_ONLY: f64 = 25.0;
 /// units a second she gets along a route, about (turns, doors, lifts)
 const RUN_SPEED: f64 = 400.0;
+/// the trail back: a place every this far, at most this many
+const TRAIL_STEP: f64 = 48.0;
+const TRAIL_LEN: usize = 96;
+/// an ambush: losing health faster than this (a second), or this many close...
+const AMBUSH_RATE: f64 = 6.0;
+const AMBUSH_COUNT: usize = 3;
+const AMBUSH_NEAR: f64 = 512.0;
+/// ...where it's tight (the mean way out round her this short a share of this)...
+const TIGHT: f64 = 0.45;
+const OPEN_LOOK: f64 = 256.0;
+/// ...or they're spread round her this far (degrees)
+const SIDES: f64 = 120.0;
+/// backing out: to somewhere on the way she came at least this far back...
+const BACK_MIN: f64 = 128.0;
+/// ...that none of them see, or this far from them all; at most this long
+const BACK_CLEAR: f64 = 768.0;
+const BACK_TICS: i64 = 6 * 35;
 /// a hit this big with nothing close: a blast
 const BLAST_HIT: f64 = 40.0;
 /// below this health, losing it fast enough to be dead within this long (s): health first
@@ -74,6 +91,11 @@ const SURVIVE_HEALTH: f64 = 80.0;
 const SURVIVE_SECS: f64 = 8.0;
 /// died going for something this many times: not again
 const DEATHS_GIVE_UP: usize = 2;
+/// a goal this near where she's died this many times (any reason but want of ammo) waits; this
+/// many, even when urgent
+const DEATH_ZONE: f64 = 256.0;
+const DEATH_ZONE_COUNT: usize = 2;
+const DEATH_ZONE_URGENT: usize = 3;
 /// a goal this near where she died going for the same kind of thing is the same
 const SAME_GOAL: f64 = 96.0;
 /// monsters this near the way to an item can shoot at her on it
@@ -168,6 +190,9 @@ pub struct Player {
     last_pos: Point,
     /// and what things were like for her
     plight: Plight,
+    /// places she's stood lately with nothing shooting at her and nothing hurting her, oldest
+    /// first: the way back out of an ambush
+    trail: Vec<Point>,
 }
 
 impl Player {
@@ -182,6 +207,7 @@ impl Player {
             shooters_tic: -1_000_000_000,
             last_pos: (0.0, 0.0),
             plight: Plight::default(),
+            trail: Vec::new(),
         }
     }
 
@@ -208,6 +234,7 @@ impl Player {
         self.fight.combat.restart();
         self.retreat = None;
         self.fight.combat.hold_fire = false;
+        self.trail.clear();
     }
 
     pub fn act(&mut self, obs: &Observation, last: Option<&Controls>) -> Controls {
@@ -215,6 +242,7 @@ impl Player {
         self.fight.present = obs.things.iter().flatten().map(|t| t.id).collect();
         self.fight.combat.observe(obs);
         self.plight = self.plight_now(obs);
+        self.keep_trail(obs);
         for line in std::mem::take(&mut self.fight.combat.log) {
             self.explorer.log.push(format!("  [fight] {line}"));
         }
@@ -282,7 +310,12 @@ impl Player {
             self.shooters_tic = obs.tic;
         }
         if let Some(r) = &self.retreat {
-            let mut over = if matches!(self.retreat_why, "out" | "bait") { obs.tic - self.retreat_tic > OUT_TICS } else { obs.tic - self.shooters_tic > CLEAR_TICS };
+            let mut over = match self.retreat_why {
+                "out" | "bait" => obs.tic - self.retreat_tic > OUT_TICS,
+                // (backed out far enough once nothing's shooting, or long enough)
+                "back" => obs.tic - self.shooters_tic > CLEAR_TICS || obs.tic - self.retreat_tic > BACK_TICS,
+                _ => obs.tic - self.shooters_tic > CLEAR_TICS,
+            };
             if self.retreat_why == "bait" && self.fight.combat.visible.iter().any(|t| self.fight.combat.infighting(t)) {
                 over = true; // (they're at it: leave them to it)
             }
@@ -305,6 +338,14 @@ impl Player {
             self.retreat_tic = obs.tic;
             self.retreat = self.find_cover(obs);
             self.retreat_why = "cover";
+        } else if let Some(why) = self.ambushed(obs) {
+            self.retreat_tic = obs.tic;
+            self.retreat = self.back_out(obs, why);
+            self.retreat_why = "back";
+            if self.retreat.is_none() && self.surrounded(obs) {
+                self.retreat = self.out_of_it(obs);
+                self.retreat_why = "out";
+            }
         } else if self.surrounded(obs) {
             self.retreat_tic = obs.tic;
             self.retreat = self.out_of_it(obs);
@@ -319,6 +360,77 @@ impl Player {
             }
         }
         self.retreat.is_some()
+    }
+
+    /// Where she stands now, while nothing's shooting at her and nothing's hurting her: on the
+    /// trail back.
+    fn keep_trail(&mut self, obs: &Observation) {
+        let calm = self.shooters().is_empty() && self.fight.combat.damage_rate(obs.tic) == 0.0 && !self.plight.hurting_floor;
+        if !calm {
+            return;
+        }
+        let pos = obs.pos();
+        if self.trail.last().is_none_or(|&p| dist(p, pos) > TRAIL_STEP) {
+            self.trail.push(pos);
+            if self.trail.len() > TRAIL_LEN {
+                self.trail.remove(0);
+            }
+        }
+    }
+
+    /// Caught in a bad place: in a fight that's going badly (losing health fast, or several
+    /// awake close by) where she can't fight well (walls close round her, a floor that hurts,
+    /// them on more than one side). Why, if so (MAP29's ambushes in tight spaces: out, or kill
+    /// fast, the user's).
+    fn ambushed(&mut self, obs: &Observation) -> Option<String> {
+        let them = self.shooters();
+        if them.is_empty() {
+            return None;
+        }
+        let pos = obs.pos();
+        let close: Vec<Point> = self.fight.combat.against_her().iter().filter(|t| dist((t.x, t.y), pos) < AMBUSH_NEAR).map(|t| (t.x, t.y)).collect();
+        let losing = self.fight.combat.damage_rate(obs.tic) > AMBUSH_RATE;
+        if !losing && close.len() < AMBUSH_COUNT {
+            return None;
+        }
+        let open = self.fight.combat.openness(obs, pos, OPEN_LOOK);
+        let sides = spread(pos, &close);
+        let bad = if self.plight.hurting_floor {
+            "on a floor that hurts"
+        } else if open < TIGHT {
+            "a tight spot"
+        } else if sides > SIDES {
+            "them on several sides"
+        } else {
+            return None;
+        };
+        Some(format!("{bad}, {}", if losing { "losing health fast" } else { "several close" }))
+    }
+
+    /// Back the way she came, to the nearest place on it none of them can see her (or well clear
+    /// of them all), by a way not through them.
+    fn back_out(&mut self, obs: &Observation, why: String) -> Option<RouteFollower> {
+        let them: Vec<Thing> = self.fight.combat.against_her();
+        let pos = obs.pos();
+        let nav = Rc::clone(&self.explorer.nav);
+        let heights = self.fight.combat.heights(obs).to_vec();
+        let trail: Vec<Point> = self.trail.iter().rev().copied().filter(|&p| dist(p, pos) > BACK_MIN).collect();
+        for p in trail {
+            let Some(pi) = nav.poly_at(p) else { continue };
+            let body = Body { x: p.0, y: p.1, z: heights[nav.sector_of_poly(pi)].0, height: PLAYER_HEIGHT };
+            let seen = them.iter().any(|t| {
+                let eye = Body { x: t.x, y: t.y, z: t.z, height: monster(t.name).map_or(56.0, |m| m.height) };
+                self.fight.combat.los.clear(eye, body, &heights)
+            });
+            let clear = them.iter().all(|t| dist((t.x, t.y), p) > BACK_CLEAR);
+            if !seen || clear {
+                if let Some(f) = self.go_to(obs, pi, &them, "back out") {
+                    self.log(format!("tic {}: caught in {why}: backing out the way she came to ({:.0}, {:.0})", obs.tic, p.0, p.1));
+                    return Some(f);
+                }
+            }
+        }
+        None
     }
 
     /// The places she's been, not on hurting floors, between `near` and `far` from her: nearest
@@ -548,9 +660,10 @@ impl Fight {
         let armor = obs.armor.unwrap_or(0.0);
         let held = obs.weapons.clone().unwrap_or_default();
         let ammo = |s: i32| f64::from(obs.ammo.iter().flatten().find(|(x, _)| *x == s).map_or(0, |(_, n)| *n));
-        // (then ammo and guns before anything else; sooner once she's died for want of it)
-        let starved = self.deaths.iter().any(|d| d.why == "out of ammo");
-        let short = self.combat.short_of_ammo(obs) || (starved && self.combat.low_on_ammo(obs));
+        // (then ammo and guns before anything else. Not sooner for having died for want of it:
+        // made urgent, past the dangers, MAP12's start, the ammo there walked into for half the
+        // map)
+        let short = self.combat.short_of_ammo(obs);
         let mut out = Vec::new();
         for t in obs.things.iter().flatten() {
             let Some(p) = x.nav.poly_at((t.x, t.y)) else { continue };
@@ -714,15 +827,18 @@ impl Hooks for Fight {
         if matches!(obj.kind, Kind::Exit | Kind::Key) {
             return false; // (worth it whatever: the way on)
         }
-        // (died going for it: not first again; twice, not at all)
+        // (died going for it: not first again; twice, not at all. And a place she's died at again
+        // and again, whatever for: MAP04's corner, five lives for the shotgun, the chaingun,
+        // a wall, the key there)
         let died = self.died_for(obj);
-        if died >= DEATHS_GIVE_UP {
+        let here = self.deaths.iter().filter(|d| d.why != "out of ammo" && dist(d.at, obj.goal) < DEATH_ZONE).count();
+        if died >= DEATHS_GIVE_UP || here >= DEATH_ZONE_URGENT {
             return true;
         }
         if obj.urgent {
             return false;
         }
-        if died > 0 {
+        if died > 0 || here >= DEATH_ZONE_COUNT {
             return true;
         }
         let near: Vec<&str> = self.combat.remaining().iter().filter(|s| dist(s.pos(), obj.goal) < DANGER_NEAR).map(|s| s.name).collect();

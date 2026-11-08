@@ -196,7 +196,7 @@ impl Combat {
 
     /// How open it is round p: the mean of how far she could go from there each way, up to
     /// `length` (a corner's little; the middle of a hall all of it).
-    pub(super) fn openness(&self, obs: &Observation, p: Point, length: f64) -> f64 {
+    pub fn openness(&self, obs: &Observation, p: Point, length: f64) -> f64 {
         let n = 8;
         (0..n)
             .map(|i| {
