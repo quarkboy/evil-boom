@@ -464,11 +464,6 @@ impl Combat {
         self.shots(obs) < SHORT_OF_AMMO
     }
 
-    /// Shots left for the guns she has (the fist, the chaingun's and BFG's shared ammo aside).
-    pub fn shots_left(&self, obs: &Observation) -> i32 {
-        self.shots(obs)
-    }
-
     fn shots(&self, obs: &Observation) -> i32 {
         let held = Self::held(obs);
         let shots: i32 = SLOTS
