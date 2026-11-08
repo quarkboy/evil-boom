@@ -39,6 +39,9 @@ const WAKE_TURN: f64 = 1.0;
 const CLOSE_GIVE_UP: i64 = 20 * 35;
 /// ...for this long
 const GIVEN_UP_TICS: i64 = 30 * 35;
+/// a ceiling seen coming down this lately, this low over its floor, is a crusher at work
+const CRUSH_TICS: i64 = 2 * 35;
+const CRUSH_GAP: f64 = 120.0;
 /// health lost lately: over this long (tics)
 const DAMAGE_WINDOW: i64 = 5 * 35;
 /// an awake monster out of sight this long is still fought (where it was)
@@ -188,6 +191,9 @@ pub struct Combat {
     trigger_held: bool,
     /// health lost lately: (tic, how much)
     damage: Vec<(i64, f64)>,
+    /// each sector's ceiling last tic, and when it was last seen coming down
+    ceilings: Vec<f64>,
+    ceiling_down: Vec<i64>,
     /// out of reach, closed in on since when, by id...
     closing_since: BTreeMap<i32, i64>,
     /// ...and given up on till when
@@ -236,6 +242,8 @@ impl Combat {
             vile_until: 0,
             trigger_held: false,
             damage: Vec::new(),
+            ceilings: Vec::new(),
+            ceiling_down: Vec::new(),
             closing_since: BTreeMap::new(),
             given_up: BTreeMap::new(),
             last_shot: None,
@@ -265,6 +273,17 @@ impl Combat {
             self.velocity = (pos.0 - l.0, pos.1 - l.1);
         }
         self.last_pos = Some(pos);
+        // (ceilings coming down: crushers, where a fight's moves don't go)
+        if self.ceilings.len() != obs.heights.len() {
+            self.ceilings = obs.heights.iter().map(|h| h.ceiling).collect();
+            self.ceiling_down = vec![i64::MIN / 2; obs.heights.len()];
+        }
+        for (i, h) in obs.heights.iter().enumerate() {
+            if h.ceiling < self.ceilings[i] - 0.01 {
+                self.ceiling_down[i] = obs.tic;
+            }
+            self.ceilings[i] = h.ceiling;
+        }
         if let Some(h) = obs.health {
             if let Some(before) = self.health.filter(|&before| h < before) {
                 self.hurt_tic = obs.tic;
@@ -562,6 +581,11 @@ impl Combat {
         } else if let Some(m) = &first_missile {
             moving = self.dodge(obs, &missiles);
             why = format!("dodging {}", m.name);
+        } else if self.under_crusher(obs) && !busy {
+            // (out from under it first, whatever else)
+            let gun = target.as_ref().map_or_else(|| self.gun(obs), |t| self.preferred_gun(obs, t));
+            moving = self.steer(obs, target.as_ref(), &gun);
+            why = "out from under a crusher".into();
         } else if let Some(away) = barrel_away {
             // (MAP23: a mancubus's fireball set off the barrels she stood by)
             moving = Some(away);
@@ -737,6 +761,12 @@ impl Combat {
     /// The last hit she took: (tic, health lost).
     pub fn last_hit(&self) -> Option<(i64, f64)> {
         self.damage.last().copied()
+    }
+
+    /// Is sector s a crusher at work: its ceiling coming down lately, and low (E2M2: backed off
+    /// under one fighting a demon, crushed)?
+    pub fn crushing(&self, obs: &Observation, s: usize) -> bool {
+        self.ceiling_down.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && obs.heights.get(s).is_some_and(|h| h.ceiling - h.floor < CRUSH_GAP)
     }
 
     /// Health lost a second lately (over the last few seconds).

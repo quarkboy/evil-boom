@@ -755,6 +755,22 @@ impl RouteFollower {
                             && obs.height(x).is_some_and(|l| (l.floor - init[x].floor).abs() < 0.5 && (l.ceiling - init[x].ceiling).abs() < 0.5))
                 })
                 .collect();
+            // (what it works on its way already where it sends it: pressed, a noise looked round
+            // at before the press was counted; again would do nothing, or turn a door back. E2M1's
+            // door 379: eight seconds waited for it to open, then pressed again)
+            let toward = |x: usize| {
+                obs.height(x).is_some_and(|l| {
+                    t.effects.iter().filter(|(e, _)| *e == x).flat_map(|(_, hs)| hs).any(|h| {
+                        let (df, dc) = (l.floor - init[x].floor, l.ceiling - init[x].ceiling);
+                        (df.abs() > 0.5 && df * (h.floor - init[x].floor) > 0.0) || (dc.abs() > 0.5 && dc * (h.ceiling - init[x].ceiling) > 0.0)
+                    })
+                })
+            };
+            if !busy.is_empty() && busy.iter().all(|&x| toward(x)) {
+                self.log.add(obs.tic, format!("line {}'s already doing what it does: on", t.line));
+                self.next_step(obs.tic);
+                return controls;
+            }
             // (its own timer: MAP19's door switch, pressed with the lift set off on the way still
             // running, did nothing, forty-odd times)
             if !busy.is_empty() && self.rest_logged != self.step_i {

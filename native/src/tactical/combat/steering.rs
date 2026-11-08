@@ -189,6 +189,7 @@ impl Combat {
         let shooting = target.is_some_and(|t| matches!(mon(t.name).attack, Attack::Missile | Attack::Hitscan));
         let spread_now = spread(pos, &them.iter().map(|t| (t.x, t.y)).collect::<Vec<_>>());
         let hurting = self.on_hurting_floor(obs);
+        let crushed = self.under_crusher(obs);
         let hitscanners: Vec<Thing> = them.iter().filter(|m| mon(m.name).attack == Attack::Hitscan).cloned().collect();
         // (a shotgun reloading: out of her target's sight too till it's ready, then back; Astra's
         // branch's reload cover)
@@ -213,6 +214,9 @@ impl Combat {
             let mut s = W_ROOM * room / ROOM + W_OPEN * self.openness(obs, ahead, OPEN);
             if hurting && self.gets_off(obs, d, LOOK.min(room)) {
                 s += W_OFF_FLOOR; // (off the floor that's hurting her, before anything)
+            }
+            if crushed && self.gets_out(obs, d, LOOK.min(room).max(48.0)) {
+                s += 2.0 * W_OFF_FLOOR; // (out from under a crusher, before even that)
             }
             for m in &them {
                 let info = mon(m.name);

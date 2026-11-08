@@ -38,6 +38,9 @@ const GLANCE_GAP: i64 = 5 * 35;
 /// tics after a walk-over line goes off unseen, before looking
 const GLANCE_AFTER: i64 = 8;
 
+/// a wall-looking trip whose wall's been seen ends this near its spot
+const ROOM_NEAR: f64 = 160.0;
+
 impl Explorer {
     /// Stop and look: towards a sound she couldn't see the source of, or round about when
     /// something went off underfoot and nothing's been seen or heard to happen.
@@ -301,6 +304,12 @@ impl Explorer {
             if obj.reveals.iter().any(|&p| known.contains(&(p as usize))) {
                 return self.ends(obs, "seen it on the way");
             }
+        }
+        if obj.kind == Kind::Room && self.seen_to(&obj) && dist(obs.pos(), obj.goal) < ROOM_NEAR {
+            // (the wall seen already, nearly there: on, not up to the spot to stop and look; E2M2's
+            // crates, a stop at each face. Only nearly there: the way there shows more, E2M1's
+            // way on, missed ending them as soon as seen)
+            return self.ends(obs, "seen it on the way");
         }
         if obj.kind == Kind::Teleporter && obj.trigger.as_ref().is_some_and(|t| usize::try_from(t.line).is_ok_and(|li| k.teleports.contains_key(&li))) {
             return self.ends(obs, "been through");

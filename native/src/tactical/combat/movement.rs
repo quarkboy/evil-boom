@@ -200,6 +200,17 @@ impl Combat {
         self.nav.poly_at(obs.pos()).is_some_and(|p| self.nav.damage[self.nav.sector_of_poly(p)] != 0)
     }
 
+    /// Is she under a crusher at work?
+    pub(super) fn under_crusher(&self, obs: &Observation) -> bool {
+        self.nav.poly_at(obs.pos()).is_some_and(|p| self.crushing(obs, self.nav.sector_of_poly(p)))
+    }
+
+    /// Does going `length` that way get her out from under a crusher?
+    pub(super) fn gets_out(&self, obs: &Observation, d: Point, length: f64) -> bool {
+        let p = (obs.x + d.0 * length, obs.y + d.1 * length);
+        self.nav.poly_in(p).is_some_and(|q| !self.crushing(obs, self.nav.sector_of_poly(q)))
+    }
+
     /// Does going `length` that way get her off a floor that hurts?
     pub(super) fn gets_off(&self, obs: &Observation, d: Point, length: f64) -> bool {
         let p = (obs.x + d.0 * length, obs.y + d.1 * length);
@@ -232,7 +243,8 @@ impl Combat {
             let back = length * (i.max(1) - 1) as f64 / n as f64;
             let Some(p) = nav.poly_in(q) else { return back };
             let h = floor_of(p);
-            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || (nav.damage[nav.sector_of_poly(p)] != 0 && !self.on_hurting_floor(obs)) {
+            let s = nav.sector_of_poly(p);
+            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || (nav.damage[s] != 0 && !self.on_hurting_floor(obs)) || (self.crushing(obs, s) && !self.under_crusher(obs)) {
                 return back;
             }
             floor = h.floor;
