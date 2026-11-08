@@ -18,7 +18,7 @@ use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
 use crate::geom::{dist, Point};
 use crate::los::{Body, LineOfSight};
-use crate::motor::{heading, norm, Controls, Observation, Thing, FRICTION, RUN_THRUST};
+use crate::motor::{heading, norm, Controls, Observation, Thing, FRICTION, RUN_THRUST, TICRATE};
 use crate::navigator::{Navigator, PLAYER_HEIGHT, PLAYER_RADIUS};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -35,6 +35,8 @@ const RECENT_SIGHT_TICS: i64 = 35;
 const WAKE_DISTANCE: f64 = 16.0;
 const WAKE_SPEED: f64 = 0.5;
 const WAKE_TURN: f64 = 1.0;
+/// health lost lately: over this long (tics)
+const DAMAGE_WINDOW: i64 = 5 * 35;
 /// an awake monster out of sight this long is still fought (where it was)
 const LOST_TICS: i64 = 3 * 35;
 /// outmatched by an awake monster this near: keeping clear of it, not getting past
@@ -180,6 +182,8 @@ pub struct Combat {
     vile_until: i64,
     /// the trigger was down last tic
     trigger_held: bool,
+    /// health lost lately: (tic, how much)
+    damage: Vec<(i64, f64)>,
     /// the gun last fired and when (its reload)
     pub(super) last_shot: Option<(i32, i64)>,
 }
@@ -223,6 +227,7 @@ impl Combat {
             vile_way: None,
             vile_until: 0,
             trigger_held: false,
+            damage: Vec::new(),
             last_shot: None,
         }
     }
@@ -253,6 +258,7 @@ impl Combat {
         if let Some(h) = obs.health {
             if let Some(before) = self.health.filter(|&before| h < before) {
                 self.hurt_tic = obs.tic;
+                self.damage.push((obs.tic, before - h));
                 // (what by: what's gone off by her, what's up against her)
                 let by: Vec<String> = obs
                     .things
@@ -443,8 +449,17 @@ impl Combat {
         SLOTS.iter().any(|&s| s != 1 && held.contains(&s) && Self::ammo(obs, s) >= weapon_in(s, obs.super_shotgun).ammo_per_shot)
     }
 
+    /// Low on shots, three times as many as short of ammo (after a death for want of it).
+    pub fn low_on_ammo(&self, obs: &Observation) -> bool {
+        self.shots(obs) < 3 * SHORT_OF_AMMO
+    }
+
     /// Next to nothing left to shoot with (the fist doesn't count).
     pub fn short_of_ammo(&self, obs: &Observation) -> bool {
+        self.shots(obs) < SHORT_OF_AMMO
+    }
+
+    fn shots(&self, obs: &Observation) -> i32 {
         let held = Self::held(obs);
         let shots: i32 = SLOTS
             .iter()
@@ -453,7 +468,7 @@ impl Combat {
             .filter(|(_, w)| w.ammo_per_shot > 0)
             .map(|(s, w)| Self::ammo(obs, s) / w.ammo_per_shot)
             .sum();
-        shots < SHORT_OF_AMMO
+        shots
     }
 
     // --- deciding ---------------------------------------------------------------------------
@@ -692,6 +707,26 @@ impl Combat {
     }
 
     // --- helpers ----------------------------------------------------------------------------
+
+    /// The last hit she took: (tic, health lost).
+    pub fn last_hit(&self) -> Option<(i64, f64)> {
+        self.damage.last().copied()
+    }
+
+    /// Health lost a second lately (over the last few seconds).
+    pub fn damage_rate(&mut self, tic: i64) -> f64 {
+        self.damage.retain(|&(t, _)| tic - t < DAMAGE_WINDOW);
+        self.damage.iter().map(|(_, d)| d).sum::<f64>() / (DAMAGE_WINDOW as f64 / TICRATE)
+    }
+
+    /// Seconds till she's dead at the rate she's been losing health lately (a lot: not losing any).
+    pub fn time_to_death(&mut self, obs: &Observation) -> f64 {
+        let rate = self.damage_rate(obs.tic);
+        if rate <= 0.0 {
+            return f64::INFINITY;
+        }
+        obs.health.unwrap_or(100.0) / rate
+    }
 
     /// A switch to the ready gun asked for (not again till it's had time).
     pub fn readied(&mut self, obs: &Observation) {

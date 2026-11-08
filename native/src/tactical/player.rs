@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::bestiary::{ammo_item, armor_item, health_item, monster, weapon_in, weapon_item, Attack, SUPER_SHOTGUN};
-use super::combat::{segment_point_distance, spread, Combat, LEAVE_BE};
+use super::combat::{segment_point_distance, spread, Combat, Seen, LEAVE_BE};
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
 use crate::knowledge::explorer::{Explorer, Hooks, Kind, Objective};
@@ -67,6 +67,21 @@ const SPOT_RANGE: f64 = 1024.0;
 const PISTOL_ONLY: f64 = 25.0;
 /// units a second she gets along a route, about (turns, doors, lifts)
 const RUN_SPEED: f64 = 400.0;
+/// a hit this big with nothing close: a blast
+const BLAST_HIT: f64 = 40.0;
+/// below this health, losing it fast enough to be dead within this long (s): health first
+const SURVIVE_HEALTH: f64 = 80.0;
+const SURVIVE_SECS: f64 = 8.0;
+/// died going for something this many times: not again
+const DEATHS_GIVE_UP: usize = 2;
+/// a goal this near where she died going for the same kind of thing is the same
+const SAME_GOAL: f64 = 96.0;
+/// monsters this near the way to an item can shoot at her on it
+const EXPOSED_NEAR: f64 = 768.0;
+/// of a monster's threat (damage a second, roughly), this much lands
+const HITS: f64 = 0.5;
+/// below this, whatever an item's worth, the way to it's all right
+const COST_FLOOR: f64 = 10.0;
 /// seconds a better gun is worth going for anyway (the fights to come)
 const GUN_WORTH: f64 = 10.0;
 
@@ -93,6 +108,50 @@ struct Fight {
     present: BTreeSet<i32>,
     /// --complete: every counted item too, and the level again for ones out of reach
     completion: Option<Completionist>,
+    /// what she was doing each time she died (lives before this one)
+    deaths: Vec<Death>,
+}
+
+/// A death: where, and what she was going for.
+#[derive(Clone, Debug)]
+struct Death {
+    at: Point,
+    kind: Kind,
+    goal: Point,
+    label: String,
+    why: &'static str,
+}
+
+/// What things were like for her a moment ago (what killed her, at a restart).
+#[derive(Clone, Copy, Debug, Default)]
+struct Plight {
+    armed: bool,
+    hurting_floor: bool,
+    surrounded: bool,
+    outmatched: bool,
+    /// the last hit's size, and whether anything was close then
+    last_hit: f64,
+    close: bool,
+}
+
+impl Plight {
+    /// Why she died, as best it can tell: a blast (a barrel, a rocket: one big hit, nothing
+    /// close), out of ammo, on a floor that hurts (a pit), surrounded, outmatched, else worn down.
+    fn why(&self) -> &'static str {
+        if self.last_hit >= BLAST_HIT && !self.close {
+            "a blast"
+        } else if !self.armed {
+            "out of ammo"
+        } else if self.hurting_floor {
+            "on a floor that hurts"
+        } else if self.surrounded {
+            "surrounded"
+        } else if self.outmatched {
+            "outmatched"
+        } else {
+            "worn down"
+        }
+    }
 }
 
 pub struct Player {
@@ -105,18 +164,24 @@ pub struct Player {
     retreat_tic: i64,
     /// when something that shoots was last in sight
     shooters_tic: i64,
+    /// where she was last tic (where she died, at a restart)
+    last_pos: Point,
+    /// and what things were like for her
+    plight: Plight,
 }
 
 impl Player {
     pub fn new(nav: Rc<Navigator>, knowledge: Knowledge) -> Player {
         Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
-            fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None },
+            fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new() },
             retreat: None,
             retreat_why: "",
             bait_tic: -1_000_000_000,
             retreat_tic: -1_000_000_000,
             shooters_tic: -1_000_000_000,
+            last_pos: (0.0, 0.0),
+            plight: Plight::default(),
         }
     }
 
@@ -131,6 +196,14 @@ impl Player {
     }
 
     pub fn restart(&mut self) {
+        // (dead with something on: noted, so as not to walk into it again the same way; MAP29's
+        // green armor down in the nukage under fire, five lives running. A level again asked for
+        // for what's left has nothing on)
+        if let Some(cur) = &self.explorer.current {
+            let d = Death { at: self.last_pos, kind: cur.kind, goal: cur.goal, label: cur.label.clone(), why: self.plight.why() };
+            self.explorer.log.push(format!("  [fight] died at ({:.0}, {:.0}) going for: {} ({})", d.at.0, d.at.1, d.label, d.why));
+            self.fight.deaths.push(d);
+        }
         self.explorer.restart();
         self.fight.combat.restart();
         self.retreat = None;
@@ -138,8 +211,10 @@ impl Player {
     }
 
     pub fn act(&mut self, obs: &Observation, last: Option<&Controls>) -> Controls {
+        self.last_pos = obs.pos();
         self.fight.present = obs.things.iter().flatten().map(|t| t.id).collect();
         self.fight.combat.observe(obs);
+        self.plight = self.plight_now(obs);
         for line in std::mem::take(&mut self.fight.combat.log) {
             self.explorer.log.push(format!("  [fight] {line}"));
         }
@@ -176,6 +251,18 @@ impl Player {
             Some(d) => self.fight.combat.controls(obs, &d, Some(&c)),
             None => c,
         }
+    }
+
+    fn plight_now(&mut self, obs: &Observation) -> Plight {
+        let nav = &self.explorer.nav;
+        let pos = obs.pos();
+        let hurting_floor = nav.poly_at(pos).is_some_and(|p| self.explorer.knowledge.damaging(nav.sector_of_poly(p)));
+        let c = &self.fight.combat;
+        let (last_hit, close) = match c.last_hit() {
+            Some((tic, amount)) if obs.tic - tic <= 1 => (amount, c.alive.values().any(|t| dist((t.x, t.y), pos) < 128.0)),
+            _ => (self.plight.last_hit, self.plight.close),
+        };
+        Plight { armed: c.armed(obs), hurting_floor, surrounded: self.surrounded(obs), outmatched: c.outmatched(obs), last_hit, close }
     }
 
     // --- backing off ------------------------------------------------------------------------
@@ -461,7 +548,9 @@ impl Fight {
         let armor = obs.armor.unwrap_or(0.0);
         let held = obs.weapons.clone().unwrap_or_default();
         let ammo = |s: i32| f64::from(obs.ammo.iter().flatten().find(|(x, _)| *x == s).map_or(0, |(_, n)| *n));
-        let short = self.combat.short_of_ammo(obs); // (then ammo and guns before anything else)
+        // (then ammo and guns before anything else; sooner once she's died for want of it)
+        let starved = self.deaths.iter().any(|d| d.why == "out of ammo");
+        let short = self.combat.short_of_ammo(obs) || (starved && self.combat.low_on_ammo(obs));
         let mut out = Vec::new();
         for t in obs.things.iter().flatten() {
             let Some(p) = x.nav.poly_at((t.x, t.y)) else { continue };
@@ -500,6 +589,9 @@ impl Fight {
                 why = " (out of ammo)";
             } else if health < HURT && health_item(t.name).is_some_and(|(a, _)| a >= 10) {
                 why = " (hurt)";
+            } else if health < SURVIVE_HEALTH && health_item(t.name).is_some_and(|(a, _)| a >= 10) && self.combat.time_to_death(obs) < SURVIVE_SECS {
+                // (losing health fast, not yet down to the rest: off for it now, while she can)
+                why = " (to survive)";
             }
             let worth = (why == " (a better gun)").then(|| self.gun_worth(obs, t.name) * RUN_SPEED);
             if worth.is_some_and(|w| d > w) {
@@ -514,6 +606,60 @@ impl Fight {
         out
     }
 
+}
+
+impl Fight {
+    /// How many times she's died going for obj (the same kind of thing at the same place).
+    fn died_for(&self, obj: &Objective) -> usize {
+        self.deaths
+            .iter()
+            .filter(|d| d.why != "out of ammo")
+            // (by place: a level again spawns everything afresh, new ids; MAP12's clips by the
+            // start, died going for 130 times)
+            .filter(|d| d.kind == obj.kind && dist(d.goal, obj.goal) < SAME_GOAL)
+            .count()
+    }
+
+    /// Would going for item obj likely cost more than it's worth: the damage from what's awake
+    /// and can see the way there and back, for as long as that takes, against what it gives
+    /// (health she'd get, armour; ammo or a gun when she's short)? And with nothing to shoot
+    /// with, anything but ammo or a gun while something's about (MAP29: a green armor down a
+    /// pit, under fire, no ammo).
+    fn not_worth_it(&mut self, obs: &Observation, obj: &Objective) -> bool {
+        let Some(t) = obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).cloned() else { return false };
+        let pos = obs.pos();
+        let health = obs.health.unwrap_or(100.0);
+        let armor = obs.armor.unwrap_or(0.0);
+        let short = self.combat.short_of_ammo(obs);
+        let worth = if let Some((amount, cap)) = health_item(t.name) {
+            f64::from(amount).min(f64::from(cap) - health).max(1.0)
+        } else if let Some((amount, cap)) = armor_item(t.name) {
+            0.5 * f64::from(amount).min(f64::from(cap) - armor).max(1.0)
+        } else if ammo_item(t.name).is_some() {
+            if short { 60.0 } else { 15.0 }
+        } else if weapon_item(t.name).is_some() {
+            if Self::new_gun(obs, t.name) { 60.0 } else { 15.0 }
+        } else {
+            5.0
+        };
+        let way = dist(pos, obj.goal);
+        let exposed = 2.0 * way / RUN_SPEED; // (there and back, seconds)
+        let threats: Vec<Seen> = self
+            .combat
+            .remaining()
+            .into_iter()
+            .filter(|s| s.awake && monster(s.name).is_some_and(|m| m.attack != Attack::None) && segment_point_distance(pos, obj.goal, s.pos()) < EXPOSED_NEAR)
+            .collect();
+        if threats.is_empty() {
+            return false;
+        }
+        let supplies = ammo_item(t.name).is_some() || weapon_item(t.name).is_some();
+        if !self.combat.armed(obs) && !supplies {
+            return true;
+        }
+        let cost: f64 = threats.iter().map(|s| monster(s.name).map_or(0.0, |m| m.threat) * HITS * exposed).sum();
+        cost > worth && cost > COST_FLOOR
+    }
 }
 
 impl Hooks for Fight {
@@ -565,11 +711,25 @@ impl Hooks for Fight {
     /// Monsters she knows of by the objective's spot she couldn't take on with what she has?
     /// (Supplies she badly needs and the exit are worth it anyway.)
     fn dangerous(&mut self, obs: &Observation, obj: &Objective) -> bool {
-        if obj.urgent || obj.kind == Kind::Exit {
+        if matches!(obj.kind, Kind::Exit | Kind::Key) {
+            return false; // (worth it whatever: the way on)
+        }
+        // (died going for it: not first again; twice, not at all)
+        let died = self.died_for(obj);
+        if died >= DEATHS_GIVE_UP {
+            return true;
+        }
+        if obj.urgent {
             return false;
         }
+        if died > 0 {
+            return true;
+        }
         let near: Vec<&str> = self.combat.remaining().iter().filter(|s| dist(s.pos(), obj.goal) < DANGER_NEAR).map(|s| s.name).collect();
-        !near.is_empty() && self.combat.too_much(obs, &near, LEAVE_BE)
+        if !near.is_empty() && self.combat.too_much(obs, &near, LEAVE_BE) {
+            return true;
+        }
+        obj.kind == Kind::Item && self.not_worth_it(obs, obj)
     }
 
     /// Something to fight with come into what she knows of the map (a better gun; ammo, when
