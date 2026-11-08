@@ -12,6 +12,8 @@
 //!       the fights set up in FILE (see arena.rs), each K times (seeds 0..K), a process a go;
 //!       a line each, then how each scenario went: won, lost, drawn
 //!   evil arena-one FILE NAME [--seed N]         one of them, once; its log to out/arena/NAME.txt
+//!   evil arena-watch FILE NAME [--seed N] [--speed X]   one of them, watched (space pause, N a
+//!                                               tic at a time, +/- speed)
 //!   evil watch <wad> <map> [--speed X] [--all] [run options]
 //!       watch her play, with what she knows beside the game (space pause, +/- speed, A the
 //!       whole map, F follow, wheel zoom, Esc quit)
@@ -362,6 +364,37 @@ fn arena_one(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// One arena scenario, watched in the viewer's window.
+#[cfg(feature = "viewer")]
+fn arena_watch(args: &[String]) -> Result<(), String> {
+    let (mut seed, mut speed) = (Some(0), 1.0);
+    let mut rest: Vec<&String> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--seed" => {
+                let v = args.get(i + 1).ok_or("--seed N")?;
+                seed = if v == "random" { None } else { Some(v.parse().map_err(|_| "--seed N")?) };
+                i += 2;
+            }
+            "--speed" => {
+                speed = args.get(i + 1).and_then(|v| v.parse().ok()).ok_or("--speed X")?;
+                i += 2;
+            }
+            _ => {
+                rest.push(&args[i]);
+                i += 1;
+            }
+        }
+    }
+    let [file, name] = rest.as_slice() else { return Err("usage: evil arena-watch FILE NAME [--seed N] [--speed X]".into()) };
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let scenarios = evildoom::arena::parse(&text)?;
+    let s = scenarios.iter().find(|s| &s.name == *name).ok_or_else(|| format!("{name}: not in {file}"))?;
+    let p = evildoom::arena::prepare(s, seed, true)?;
+    evildoom::viewer::watch_prepared(&p.wad, p.map, &s.map, p.engine, p.agent, speed, &format!("evil-doom arena: {name}"))
+}
+
 /// The arena's scenarios (those named, else all), each `seeds` times, `jobs` at a time.
 fn arena(args: &[String]) -> Result<(), String> {
     let (mut jobs, mut seeds) = (8usize, 3u32);
@@ -466,6 +499,8 @@ fn main() -> ExitCode {
         Some("watch") => watch(&args[1..]),
         Some("arena") => arena(&args[1..]),
         Some("arena-one") => arena_one(&args[1..]),
+        #[cfg(feature = "viewer")]
+        Some("arena-watch") => arena_watch(&args[1..]),
         _ => Err("usage: evil sweep|run-map|watch|drive|dump-nav|follow|sector ... (see the source's header)".into()),
     };
     match result {

@@ -34,6 +34,9 @@ const W_SURROUND: f64 = 1.5;
 const W_KEEP: f64 = 0.8;
 const W_EXPOSED: f64 = 1.5;
 
+/// tics before a shotgun's ready that she comes back out for the shot
+const RELOAD_BACK: f64 = 12.0;
+
 /// still this long pushing one way: not that way for a while
 const STUCK_TICS: i64 = 6;
 
@@ -185,6 +188,9 @@ impl Combat {
         let shooting = target.is_some_and(|t| matches!(mon(t.name).attack, Attack::Missile | Attack::Hitscan));
         let spread_now = spread(pos, &them.iter().map(|t| (t.x, t.y)).collect::<Vec<_>>());
         let hitscanners: Vec<Thing> = them.iter().filter(|m| mon(m.name).attack == Attack::Hitscan).cloned().collect();
+        // (a shotgun reloading: out of her target's sight too till it's ready, then back; Astra's
+        // branch's reload cover)
+        let reloading = matches!(obs.weapon, Some(3)) && self.last_shot.is_some_and(|(s, tic)| s == 3 && ((obs.tic - tic) as f64) < gun.cycle - RELOAD_BACK);
         self.refresh_tic_cache(obs);
         let mut best: Option<(f64, Point)> = None;
         for i in 0..WAYS {
@@ -218,7 +224,7 @@ impl Combat {
             // (hitscanners besides her target that'd see her there: one at a time from cover, not
             // all of them at once)
             let ahead_body = Body { x: ahead.0, y: ahead.1, z: self.z(obs), height: PLAYER_HEIGHT };
-            for m in hitscanners.iter().filter(|m| Some(m.id) != target.map(|t| t.id)) {
+            for m in hitscanners.iter().filter(|m| reloading || Some(m.id) != target.map(|t| t.id)) {
                 let eye = Body { x: m.x, y: m.y, z: m.z, height: mon(m.name).height };
                 if self.los.clear(eye, ahead_body, &self.heights_now) {
                     s -= W_EXPOSED * mon(m.name).threat / 4.0;

@@ -27,6 +27,7 @@ use crate::knowledge::model::Knowledge;
 use crate::motor::{Controls, TICRATE};
 use crate::navigator::Navigator;
 use crate::play::Agent;
+use crate::map::MapData;
 use crate::wad::{load_map, Wad};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -151,15 +152,25 @@ pub fn parse(text: &str) -> Result<Vec<Scenario>, String> {
     Ok(out)
 }
 
-/// Play scenario `s` (one a process: the engine is all globals). The fight's log goes to `log`.
-pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Outcome, String> {
+/// A scenario set up: the engine (her put where it says with the loadout, the monsters spawned,
+/// the map's pickups out unless kept), her agent, the monsters' ids, and the WAD and map.
+pub struct Prepared {
+    pub engine: Engine,
+    pub agent: Agent,
+    pub ids: Vec<i32>,
+    pub wad: Wad,
+    pub map: Arc<MapData>,
+}
+
+/// Set scenario `s` up (`drawn`: the game draws its frames, for watching).
+pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool) -> Result<Prepared, String> {
     let iwad = resolve_wad(&s.wad);
     let w = Wad::open(&iwad)?;
     let m = Arc::new(load_map(&w, &s.map, &[])?);
     let mut nav = Navigator::new(Arc::clone(&m), s.skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
-    let mut e = Engine::new(&iwad, &s.map, &Options { skill: s.skill, nomonsters: true, objects: true, drawn: false, seed })?;
+    let mut e = Engine::new(&iwad, &s.map, &Options { skill: s.skill, nomonsters: true, objects: true, drawn, seed })?;
     e.start();
     // (a tic for the level to be there)
     e.step(&Controls::default());
@@ -179,7 +190,13 @@ pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Out
         ids.push(id);
     }
     let knowledge = Knowledge::new(Rc::clone(&nav), true, true);
-    let mut agent = Agent::new(&nav, knowledge, s.skill, false, 1);
+    let agent = Agent::new(&nav, knowledge, s.skill, false, 1);
+    Ok(Prepared { engine: e, agent, ids, wad: w, map: m })
+}
+
+/// Play scenario `s` (one a process: the engine is all globals). The fight's log goes to `log`.
+pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Outcome, String> {
+    let Prepared { engine: mut e, mut agent, ids, .. } = prepare(s, seed, false)?;
     let start = e.tic;
     let until = start + (s.seconds * TICRATE) as i64;
     let mut c: Option<Controls> = None;

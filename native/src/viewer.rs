@@ -235,6 +235,8 @@ struct Hold {
 
 struct Watch {
     hold: Option<Hold>,
+    /// no switches or doors (an arena's fight)
+    no_use: bool,
     m: Arc<MapData>,
     map_name: String,
     engine: Engine,
@@ -286,7 +288,22 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     watch.hold = hold;
     watch.speed = o.speed;
     watch.show_all = o.show_all;
-    let mut window = Window::new(&format!("evil-doom explorer: {map_name}"), W, H, WindowOptions { resize: true, scale: Scale::FitScreen, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() }).map_err(|e| e.to_string())?;
+    show(watch, &format!("evil-doom explorer: {map_name}"))
+}
+
+/// A fight set up already (an arena: the engine with its monsters spawned and her loadout given,
+/// drawn; her agent), watched: one life, no switches or doors (as `evil arena` plays it).
+pub fn watch_prepared(w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, agent: Agent, speed: f64, title: &str) -> Result<(), String> {
+    let mut watch = Watch::new(w, m, map_name, engine, agent, None, 0);
+    watch.speed = speed;
+    watch.no_use = true;
+    show(watch, title)
+}
+
+/// The window, till it's shut or Esc: space pauses, N (or the right arrow) steps a tic while
+/// paused, +/- the speed, A the whole map, F follow, the wheel zooms.
+fn show(mut watch: Watch, title: &str) -> Result<(), String> {
+    let mut window = Window::new(title, W, H, WindowOptions { resize: true, scale: Scale::FitScreen, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() }).map_err(|e| e.to_string())?;
     window.set_target_fps(60);
     let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H) };
     let mut last = Instant::now();
@@ -295,6 +312,7 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
         for key in window.get_keys_pressed(KeyRepeat::No) {
             match key {
                 K::Space => watch.paused = !watch.paused,
+                K::N | K::Right if watch.paused && !watch.engine.finished() => watch.tic(),
                 K::Equal | K::NumPadPlus => watch.speed = (watch.speed * 2.0).min(16.0),
                 K::Minus | K::NumPadMinus => watch.speed = (watch.speed / 2.0).max(0.25),
                 K::A => watch.show_all = !watch.show_all,
@@ -381,6 +399,7 @@ impl Watch {
         let bounds = (xs.clone().fold(f64::INFINITY, f64::min), ys.clone().fold(f64::INFINITY, f64::min), xs.fold(f64::NEG_INFINITY, f64::max), ys.fold(f64::NEG_INFINITY, f64::max));
         Watch {
             hold: None,
+            no_use: false,
             m,
             map_name: map_name.to_string(),
             engine,
@@ -405,7 +424,10 @@ impl Watch {
     fn tic(&mut self) {
         let obs = self.engine.observe();
         self.frame = self.engine.frame();
-        let c = self.agent.act(&obs, self.controls.as_ref());
+        let mut c = self.agent.act(&obs, self.controls.as_ref());
+        if self.no_use {
+            c.use_ = false;
+        }
         self.engine.step(&c);
         self.controls = Some(c);
         if let Some(h) = self.hold.as_mut().filter(|_| obs.tic % TICRATE as i64 == 0) {

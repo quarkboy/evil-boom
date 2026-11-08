@@ -181,7 +181,7 @@ pub struct Combat {
     /// the trigger was down last tic
     trigger_held: bool,
     /// the gun last fired and when (its reload)
-    last_shot: Option<(i32, i64)>,
+    pub(super) last_shot: Option<(i32, i64)>,
 }
 
 impl Combat {
