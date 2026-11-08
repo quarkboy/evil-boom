@@ -87,6 +87,13 @@ impl RouteFollower {
             .collect()
     }
 
+    /// The sectors doors she knows of move (and nothing that crushes): a door coming down on her
+    /// doesn't hurt (the game moves it with NO_CRUSH, and most go back up off her).
+    pub(super) fn doors(&self) -> BTreeSet<usize> {
+        let crushers = self.crushers();
+        self.view.triggers.iter().filter(|t| t.info.category.is_door()).flat_map(|t| t.effects.iter().map(|(s, _)| *s)).filter(|s| !crushers.contains(s)).collect()
+    }
+
     /// (mortal) A crusher just ahead on the way, coming down or too low to be under: wait at its
     /// edge till it's on its way up with room, then through without stopping (E4M7's, on the way
     /// to its teleporter: pinned under it, waiting for it to rise, killed 53 times).
@@ -95,13 +102,16 @@ impl RouteFollower {
             return None;
         }
         let crushers = self.crushers();
+        // (MAP02's first door, a blazing one shutting as she came back to it: waited at it as at a
+        // crusher, eight seconds, every time)
+        let doors = self.doors();
         let mesh = &self.view.nav.mesh;
         let here = mesh.poly_at(obs.pos()).map(|p| mesh.poly(p).sector);
         let path = self.step().path.clone()?;
         let pos = obs.pos();
         // (a crusher she knows of, or any ceiling she sees on its way down, or up without room
         // yet: one she doesn't know may be a crusher too; a shut door standing still is a door's)
-        let moving = |s: usize| (obs.heights[s].ceiling - self.prev_live[s].ceiling).abs() > 0.01;
+        let moving = |s: usize| !doors.contains(&s) && (obs.heights[s].ceiling - self.prev_live[s].ceiling).abs() > 0.01;
         // (under one already, any of her: no stopping there to wait for the next; E4M7's two side
         // by side, waited at the second under the first)
         let r = PLAYER_RADIUS + 2.0;
