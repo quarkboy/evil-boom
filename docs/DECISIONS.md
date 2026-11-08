@@ -946,3 +946,22 @@ rocket's bottom (her feet + 32: the 32-high steps) was "clear" and flown into.
 Results (HNTR, one life): crate arena 74/80 -> 75/80 (lost 6 -> 0 or 1, health left 77 -> 85);
 deaths her own rockets led 5 -> 1, their damage 897 -> 589 over the set; E1 7.5 (7/8), E2 6.6 ->
 6.9 (6/8), E3 6.9 -> 6.6, Doom II 8.0 -> 7.7, Doom II arena 227 -> 228; 296 -> 291 levels.
+
+## Rockets where autoaim sends them (2026-11-08)
+
+The user: autoaim catches human players, a rocket tilted down at what's below into a ledge's lip
+(firing down into a pit) or into a railing it would fly over level. The lane was judged toward the
+target and the way she faces; the game sends it to the first monster on her way within 1024, or
+5.6 degrees to one side then the other (P_SpawnPlayerMissile, P_AimLineAttack), swinging and
+tilting it to that one. `autoaim` predicts it (to the monster's middle: the game aims at what's seen
+of it, above a railing higher, so the middle is the nearer of the two to what's in between); the
+lane and the last resort judge that way too.
+
+Arena: arenas/autoaim.txt (tools/autoaim_arena.py): ledges over pits found in Doom/Doom II
+(E1M6, MAP03, MAP08, MAP09, MAP20) and MAP14's railings, the imps where a shot down reaches them
+(autoaim's 100/160 slope); a spawn that doesn't fit is put at the nearest spot round it.
+
+Results (HNTR, one life): autoaim arena own-rocket hits 31 -> 21; crate arena 75 -> 76/80; over
+the set runs with own-rocket damage 13 -> 7, damage 589 -> 405; E1 7.5, E2 6.9, E3 6.6 -> 7.0,
+Doom II 7.7 -> 7.6, Doom II arena 228 -> 229; 291 -> 293 levels. MAP09's pit: she holds fire at the
+lip and never steps up to clear it (next: stepping for a rocket shot).

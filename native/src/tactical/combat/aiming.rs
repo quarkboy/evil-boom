@@ -57,6 +57,10 @@ const ROCKET_BOTTOM: f64 = 32.0;
 const ROCKET_HEIGHT: f64 = 8.0;
 /// a rocket going off further than this from her doesn't reach her (its blast 128, her radius 16)
 const ROCKET_CLEAR: f64 = 160.0;
+/// autoaim looks this far for something to aim at, and this many degrees to either side when
+/// there's nothing straight ahead (ANG90/16, 1<<26)
+const AUTOAIM_RANGE: f64 = 1024.0;
+const AUTOAIM_SPREAD: f64 = 5.625;
 
 /// a pain elemental nearer than this isn't shot with rockets (its souls come out in front)
 const PAIN_NEAR: f64 = 512.0;
@@ -171,11 +175,43 @@ impl Combat {
         // way, at full health, in her face)
         // (only as far as its blast could come back to her: beyond, something in the way is a
         // miss, no harm; checked all the way, she held fire at a cyberdemon till it had her)
+        // (and the way the game will send it: autoaim swings it to whatever's first on her way,
+        // or 5.6 degrees off it, and down or up at it: into a ledge's lip firing down into a pit,
+        // a railing it'd fly over level; the user's)
         [now, then].into_iter().all(|pos| {
             let d = dist((t.x, t.y), pos).max(1.0);
             let len = d.min(ROCKET_CLEAR + ROCKET_MARGIN);
-            [heading(pos, (t.x, t.y)), obs.angle].into_iter().all(|h| self.rocket_flies(obs, pos, h, len, Some(mid)))
+            let (h, at) = self.autoaim(obs, pos, obs.angle);
+            [heading(pos, (t.x, t.y)), obs.angle].into_iter().all(|h| self.rocket_flies(obs, pos, h, len, Some(mid))) && self.rocket_flies(obs, pos, h, len, at)
         })
+    }
+
+    /// Where the game sends a rocket fired from `pos` facing `facing` (P_SpawnPlayerMissile's
+    /// autoaim, P_AimLineAttack): the first monster on that way within 1024, else on the way 5.6
+    /// degrees to one side, then the other: the rocket's way swung to it, climbing or dipping to
+    /// it (to its middle: the game aims at what's seen of it, above a railing higher, so its
+    /// middle is the nearer of the two to what's in between); none, straight on and level.
+    pub(super) fn autoaim(&self, obs: &Observation, pos: Point, facing: f64) -> (f64, Option<f64>) {
+        for off in [0.0, AUTOAIM_SPREAD, -AUTOAIM_SPREAD] {
+            let h = facing + off;
+            let (ux, uy) = (h.to_radians().cos(), h.to_radians().sin());
+            let first = obs
+                .things
+                .iter()
+                .flatten()
+                .filter(|m| monster(m.name).is_some() && m.health > 0)
+                .filter_map(|m| {
+                    let (dx, dy) = (m.x - pos.0, m.y - pos.1);
+                    let along = dx * ux + dy * uy;
+                    let side = (dx * uy - dy * ux).abs();
+                    (along > 0.0 && along < AUTOAIM_RANGE && side < mon(m.name).radius).then_some((along, m.z + mon(m.name).height / 2.0))
+                })
+                .min_by(|a, b| a.0.total_cmp(&b.0));
+            if let Some((_, mid)) = first {
+                return (h, Some(mid));
+            }
+        }
+        (facing, None)
     }
 
     /// Would a rocket fired from `pos` the way `h` (degrees) get `len` with nothing in its box's
@@ -208,10 +244,15 @@ impl Combat {
     /// away from what it'd hit).
     pub(super) fn rocket_way_out(&mut self, obs: &Observation) -> Option<f64> {
         let pos = obs.pos();
-        if self.rocket_flies(obs, pos, obs.angle, ROCKET_CLEAR, None) {
+        // (each way as autoaim will take it from there)
+        let goes = |c: &mut Self, facing: f64| {
+            let (h, at) = c.autoaim(obs, pos, facing);
+            c.rocket_flies(obs, pos, h, ROCKET_CLEAR, at)
+        };
+        if goes(self, obs.angle) {
             return None;
         }
-        (1..=18).flat_map(|k| [f64::from(k) * 10.0, -f64::from(k) * 10.0]).map(|d| obs.angle + d).find(|&h| self.rocket_flies(obs, pos, h, ROCKET_CLEAR, None))
+        (1..=18).flat_map(|k| [f64::from(k) * 10.0, -f64::from(k) * 10.0]).map(|d| obs.angle + d).find(|&h| goes(self, h))
     }
 
     fn shot_clear_from(&mut self, obs: &Observation, from: Point, at: Point, z: f64, h: f64) -> bool {

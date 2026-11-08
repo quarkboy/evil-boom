@@ -187,7 +187,16 @@ pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool, sound: bool) -> Res
     let mut ids: Vec<i32> = Vec::new();
     for sp in &s.spawns {
         let kind = type_of(&sp.name).ok_or_else(|| format!("{}: no such thing", sp.name))?;
-        let id = e.game.spawn(kind, sp.x, sp.y, sp.angle, sp.ambush).ok_or_else(|| format!("{}: can't spawn at ({}, {})", sp.name, sp.x, sp.y))?;
+        // (where it's put, else the nearest spot round it where it fits, up to 96 off: a place
+        // picked from the map's lines can be a hair too tight for the thing)
+        let rings = std::iter::once((0.0, 0.0)).chain((1..=6).flat_map(|r| (0..8).map(move |k| {
+            let a = f64::from(k) * std::f64::consts::FRAC_PI_4;
+            (a.cos() * 16.0 * f64::from(r), a.sin() * 16.0 * f64::from(r))
+        })));
+        let id = rings
+            .into_iter()
+            .find_map(|(dx, dy)| e.game.spawn(kind, sp.x + dx, sp.y + dy, sp.angle, sp.ambush))
+            .ok_or_else(|| format!("{}: can't spawn at ({}, {}) or near it", sp.name, sp.x, sp.y))?;
         // (the fight is its monsters: solid columns put about for it aren't to be killed)
         if crate::tactical::bestiary::monster(&sp.name).is_some() {
             ids.push(id);

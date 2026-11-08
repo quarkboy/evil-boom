@@ -60,13 +60,18 @@ for wad, mp, stand, pit, rail in SITES:
         within_d = 64 if rail is None else 96
         me = spot(rnd, segs, stand, 20, near=edge, within=edge)
         if me is None: print('no spot', mp, stand); continue
-        imps = []
-        while len(imps) < 5:
-            p = spot(rnd, segs, pit, 24)
-            if p and all(math.hypot(p[0]-q[0], p[1]-q[1]) > 48 for q in imps): imps.append(p)
-        cx = sum(p[0] for p in imps)/5; cy = sum(p[1] for p in imps)/5
-        ang = math.degrees(math.atan2(cy-me[1], cx-me[0])) % 360
+        # (where a shot down can get to them: autoaim reaches 100/160 of a unit down a unit out, so
+        # no nearer than the drop over that, and some)
         drop = secs[stand][0] - secs[pit][0]
+        reach = max(256, drop / 0.625 + 48)
+        imps = []
+        for _ in range(4000):
+            if len(imps) == 5: break
+            p = spot(rnd, segs, pit, 32)
+            if p and math.hypot(p[0]-me[0], p[1]-me[1]) > reach and all(math.hypot(p[0]-q[0], p[1]-q[1]) > 64 for q in imps): imps.append(p)
+        if len(imps) < 3: print('too few imps far enough', mp, stand); continue
+        cx = sum(p[0] for p in imps)/len(imps); cy = sum(p[1] for p in imps)/len(imps)
+        ang = math.degrees(math.atan2(cy-me[1], cx-me[0])) % 360
         kind = 'pit' if rail is None else 'rail'
         out += [f'arena {kind}-{mp.lower()}-{stand}-{v+1}', f'# her on sector {stand} (floor {secs[stand][0]}), them in sector {pit} (floor {secs[pit][0]}, {drop:+} below)' + ('' if rail is None else f', over railing sector {rail} (floor {secs[rail][0]})'),
                 f'map {wad} {mp}', f'at {me[0]:.0f} {me[1]:.0f} {ang:.0f}', 'give rocket rocket=40']
