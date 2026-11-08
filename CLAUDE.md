@@ -60,6 +60,8 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
 - **Parity checks** (a refactor meant to change nothing): one run of one episode's levels
   (e.g. `episode doom E1M1 --seeds 1` with the regression flags) compared line for line with
   the old build's; runs are deterministic, so that's enough. Not the whole suite (the user's).
+- **Staggered sets** (the user's): start each set of the regression run ~20 s after the one
+  before rather than waiting for it (the load drops once a set's first seeds finish).
 - Sweeps (when asked): 12 parallel jobs (`--jobs 12` on this laptop; episodes and arenas too);
   one sweep type at a time, expert first; the next only
   with no per-level regressions so far.
