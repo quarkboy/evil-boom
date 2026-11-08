@@ -3,8 +3,9 @@
 //!   evil sweep <wad> [maps...] [<wad> [maps...]] [--jobs N] [run options]
 //!       many maps at once, a process a map; a line each as they finish, then a summary
 //!   evil run-map <wad> <map> [run options]      one map; its log goes to out/explore
-//!   evil episode <wad> <first map> [run options]   an episode on one life from that map, what
-//!                                               she has carried from level to level
+//!   evil episode <wad> <first map> [--seeds K] [run options]   an episode on one life from that
+//!                                               map, what she has carried level to level; K seeds
+//!                                               (8) side by side, --jobs at a time
 //!   evil dump-nav <wad> <map>                   the level's analysis (for comparing)
 //!   evil follow <wad> <map>                     plan the level, follow the plan (seed 0)
 //!   evil drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
@@ -238,41 +239,86 @@ fn next_map(map: &str, secret: bool) -> Option<String> {
     }
 }
 
-/// An episode played through on one life from `first`: each level started with what she got
-/// out of the one before (weapons, ammo, the backpack, health, armour; not keys or powers), on
-/// by the exit taken (the secret exit to the secret level), till she dies, gets stuck, or it
-/// ends. A process a level.
+/// Episodes played through on one life from `first`, a run each for `--seeds K` seeds (8 unless
+/// told), `--jobs` of them at once: each level begun with what she got out of the one before
+/// (weapons, ammo, the backpack, health, armour; not keys or powers), on by the exit taken (the
+/// secret exit to the secret level), till she dies, gets stuck, or the episode ends. A process a
+/// level; each seed's levels one after another, the seeds side by side.
 fn episode(args: &[String]) -> Result<(), String> {
-    let (mut o, _, rest) = run_options(args)?;
-    let [wad, first] = rest.as_slice() else { return Err("usage: evil episode <wad> <first map> [run options]".into()) };
+    let (mut o, jobs, rest) = run_options(args)?;
+    let mut seeds = 8u32;
+    let mut names = Vec::new();
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        if a == "--seeds" {
+            seeds = it.next().and_then(|v| v.parse().ok()).ok_or("--seeds K")?;
+        } else {
+            names.push(a.clone());
+        }
+    }
+    let [wad, first] = names.as_slice() else { return Err("usage: evil episode <wad> <first map> [--seeds K] [run options]".into()) };
     o.lives = 1;
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
+    let base = o.seed.unwrap_or(0);
+    let todo = std::sync::Mutex::new((base..base + seeds).collect::<VecDeque<u32>>());
+    let done = std::sync::Mutex::new(Vec::new());
+    std::thread::scope(|s| {
+        for _ in 0..jobs.clamp(1, seeds as usize) {
+            s.spawn(|| {
+                while let Some(seed) = todo.lock().ok().and_then(|mut q| q.pop_front()) {
+                    let mut os = o.clone();
+                    os.seed = Some(seed);
+                    let (levels, end) = episode_chain(&me, wad, first, &os);
+                    if let Ok(mut d) = done.lock() {
+                        d.push((seed, levels, end));
+                    }
+                }
+            });
+        }
+    });
+    let mut done = done.into_inner().map_err(|e| e.to_string())?;
+    done.sort_by_key(|d| d.0);
+    println!();
+    for (seed, levels, end) in &done {
+        println!("seed {seed}: {levels} levels, {end}");
+    }
+    let mean = done.iter().map(|d| d.1 as f64).sum::<f64>() / done.len().max(1) as f64;
+    let through = done.iter().filter(|d| d.2 == "the episode through").count();
+    println!();
+    println!("{mean:.1} levels on one life on average; the episode through in {through}/{}", done.len());
+    Ok(())
+}
+
+/// One episode on one life (see `episode`): how many levels she got through, and how it ended.
+fn episode_chain(me: &std::path::Path, wad: &str, first: &str, o: &evildoom::sweep::RunOptions) -> (usize, String) {
+    let seed = o.seed.unwrap_or(0);
     let mut map = Some(first.to_uppercase());
     let mut carry: Option<String> = None;
-    let mut done = 0;
+    let mut levels = 0;
     while let Some(m) = map.take() {
-        let mut cmd = Command::new(&me);
-        cmd.arg("run-map").arg(wad).arg(&m).args(option_args(&o));
+        let mut cmd = Command::new(me);
+        cmd.arg("run-map").arg(wad).arg(&m).args(option_args(o));
         if let Some(c) = &carry {
             cmd.arg("--carry").arg(c);
         }
-        let out = cmd.stderr(Stdio::null()).output().map_err(|e| e.to_string())?;
+        let Ok(out) = cmd.stderr(Stdio::null()).output() else { return (levels, format!("{m}: couldn't run")) };
         let text = String::from_utf8_lossy(&out.stdout);
         let result = text.lines().find_map(|l| l.strip_prefix("RESULT ")).unwrap_or("ERROR (no result)").to_string();
-        let next = text.lines().find_map(|l| l.strip_prefix("CARRY "));
-        println!("{m}: {result}");
-        let Some(next) = next else { break };
-        done += 1;
+        let mut line = format!("seed {seed} {m}: {}", result.chars().take(70).collect::<String>());
+        let Some(next) = text.lines().find_map(|l| l.strip_prefix("CARRY ")) else {
+            println!("{line}");
+            return (levels, format!("{m}: {}", result.split(' ').next().unwrap_or("?")));
+        };
+        levels += 1;
         let (c, secret) = next.split_once(' ').map_or((next, false), |(c, s)| (c, s == "SECRET"));
         if let Ok(l) = cli::parse_carry(c) {
-            println!("    out with health {} armor {}, weapons {:#b}, ammo {}/{}/{}/{}{}", l.health, l.armor, l.weapons, l.clip, l.shell, l.cell, l.rocket, if l.backpack { ", backpack" } else { "" });
+            line.push_str(&format!(" | out with health {} armor {}, ammo {}/{}/{}/{}", l.health, l.armor, l.clip, l.shell, l.cell, l.rocket));
         }
+        println!("{line}");
         carry = Some(c.to_string());
         map = next_map(&m, secret);
     }
-    println!("
-{done} levels on one life");
-    Ok(())
+    (levels, "the episode through".to_string())
 }
 
 fn drive(args: &[String]) -> Result<(), String> {
