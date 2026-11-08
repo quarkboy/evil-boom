@@ -47,6 +47,11 @@ pub(super) const SWITCH_WAIT: i64 = 40;
 
 /// tics from the trigger to the rocket (S_MISSILE1, then A_FireMissile)
 pub(super) const ROCKET_DELAY: f64 = 8.0;
+/// the BFG's spray: this far from her, this far either side of the ball's way (A_BFGSpray)
+const BFG_REACH: f64 = 1024.0;
+const BFG_CONE: f64 = 45.0;
+/// the BFG's ball leaves this long after the trigger
+pub(super) const BFG_DELAY: i64 = 30;
 /// with a boss in sight, others this far off aren't shot (left to it)
 const LEAVE_TO_BOSS: f64 = 384.0;
 /// a rocket's speed, a tic
@@ -100,6 +105,28 @@ impl Combat {
             }
             if best.as_ref().is_none_or(|(bs, _)| s > *bs) {
                 best = Some((s, t));
+            }
+        }
+        // (the BFG up: the one whose line puts the most in its spray, forty lines from her a
+        // quarter turn wide along the ball's way, 1024 out; the ball goes to the first on her
+        // line, the spray the way it went)
+        if obs.weapon == Some(7) {
+            let me = obs.pos();
+            let in_cone = |c: &Self, m: &Thing| {
+                let at = heading(me, (m.x, m.y));
+                c.visible.iter().filter(|o| dist((o.x, o.y), me) < BFG_REACH && crate::motor::norm(heading(me, (o.x, o.y)) - at).abs() < BFG_CONE).map(|o| mon(o.name).threat.max(0.5)).sum::<f64>()
+            };
+            // (of those she has a shot at, in the spray's reach: not one she can't hit, stood at
+            // for an hour, E3M4)
+            let shots: Vec<Thing> = self.visible.clone().into_iter().filter(|m| mon(m.name).attack != Attack::None && dist((m.x, m.y), me) < BFG_REACH).collect();
+            let mut hittable = Vec::new();
+            for m in shots {
+                if self.can_hit(obs, &m, None) {
+                    hittable.push(m);
+                }
+            }
+            if let Some(m) = hittable.into_iter().max_by(|a, b| in_cone(self, a).total_cmp(&in_cone(self, b))) {
+                best = Some((0.0, m));
             }
         }
         self.target = best.as_ref().map(|(_, t)| t.id);

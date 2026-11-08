@@ -468,8 +468,8 @@ impl Player {
     /// - out: surrounded;
     /// - bait: a heavy she can't kill soon, with others for its shots to land on.
     fn start_retreat(&mut self, obs: &Observation) -> Option<Retreat> {
-        if self.fight.combat.invulnerable(obs.tic) {
-            return None; // (nothing to fall back from)
+        if self.fight.combat.invulnerable(obs.tic) || self.fight.combat.bfg_flying(obs) {
+            return None; // (nothing to fall back from; or her BFG's spray to come, from where she is)
         }
         let health = obs.health.unwrap_or(100.0);
         let (kind, route) = if (health < RETREAT_HEALTH && !self.shooters().is_empty()) || self.vile(obs) {

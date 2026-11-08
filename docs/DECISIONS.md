@@ -1075,3 +1075,23 @@ The user's: better planning for both (seen in an E3 run). From the game's own:
 Results (new set: Doom episodes, Doom II single levels from a pistol start; HNTR, one life):
 E1 8.0 (8/8), E2 6.1 -> 5.9 (2 -> 3/8 through), E3 5.0 -> 6.5 (0 -> 1/8), Doom II 23 -> 24/32;
 arenas combat 119 -> 118/128, doom2 228.
+
+## The BFG's aim and hold; melee chases given up; dodging across, not along (2026-11-08)
+
+- **BFG aim**: with it up, the target is the monster (one she has a shot at, within 1024) whose line
+  puts the most threat in the spray, ±45° of the ball's way (A_BFGSpray: the ball goes to the
+  first on her line, the spray along the way it went, from her).
+- **BFG hold**: from the trigger (the ball leaves 30 tics on) till it lands, she stands still (a
+  survival node after dodging): no ducking, retreats or posts, the route not walked on; the spray
+  comes from where she is.
+- **Melee chases** (the user's): closing in to get at something in melee has its own clock, as the
+  out-of-reach chase has (20 s, then left 30 s); that clock never ran for melee, a melee target
+  always counting as reachable. E3M4: a demon she couldn't get at, closed in on and lost sight of
+  for an hour (1905/2462 s -> 750/806 s).
+- **Dodging** (the user's): among ways that clear, across a missile's way rather than along it
+  (24 x |cos| off). Backing straight off outran an imp's ball (16 to its 10) and scored as clear,
+  then open room ahead decided: off down the room, the ball after her.
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 5.9 -> 7.1 (3 -> 7/8 through), E3 6.5 (1 -> 2/8),
+Doom II pistol-start levels 24/32 (MAP10 0 -> 3/4); arenas combat 118 -> 119/128 (health left
+83.7 -> 85.0), doom2 228/240 (85.8 -> 86.5).

@@ -8,6 +8,8 @@ use crate::tactical::bestiary::{missile, weapon_in, Weapon};
 use std::collections::BTreeSet;
 
 const DODGE_WAYS: usize = 16;
+/// a dodge along a missile's way (straight from it or at it) counts this much less than across it
+const DODGE_ALONG: f64 = 24.0;
 
 /// a clear dodge's worth for going the way she's going (an errand), all the way: as much as
 /// room after it (24)
@@ -109,6 +111,18 @@ impl Combat {
             let ahead = (pos.0 + way.0 * room.min(160.0), pos.1 + way.1 * room.min(160.0));
             if s >= 0.0 {
                 s += 24.0 * self.openness(obs, ahead, 192.0);
+                // (across its way, not along it: a step aside clears its line for good; backing
+                // straight off only puts it off, the faster she is the further, and it follows
+                // her down the room. The user's: backing off along a fireball's path, far back,
+                // when a strafe would do)
+                let along = missiles
+                    .iter()
+                    .filter_map(|t| {
+                        let v = t.vx.hypot(t.vy);
+                        (v > 0.5).then(|| ((way.0 * t.vx + way.1 * t.vy) / v).abs())
+                    })
+                    .fold(0.0, f64::max);
+                s -= DODGE_ALONG * along;
             }
             if let Some(dw) = self.dodge_way {
                 s += 6.0 * (way.0 * dw.0 + way.1 * dw.1);

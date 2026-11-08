@@ -227,6 +227,8 @@ pub struct Combat {
     closing_since: BTreeMap<i32, i64>,
     /// ...and given up on till when
     given_up: BTreeMap<i32, i64>,
+    /// closing in on each to get at it in melee, since when (given up after a while, as out of reach)
+    pub(super) melee_since: BTreeMap<i32, i64>,
     /// the gun last fired and when (its reload)
     pub(super) last_shot: Option<(i32, i64)>,
 }
@@ -295,6 +297,7 @@ impl Combat {
             ceiling_down: Vec::new(),
             closing_since: BTreeMap::new(),
             given_up: BTreeMap::new(),
+            melee_since: BTreeMap::new(),
             last_shot: None,
         }
     }
@@ -616,6 +619,17 @@ impl Combat {
         (s, fire, weapon)
     }
 
+    /// Has she given up on getting at id a while?
+    pub(super) fn given_up_on(&self, obs: &Observation, id: i32) -> bool {
+        self.given_up.get(&id).is_some_and(|&until| obs.tic < until)
+    }
+
+    /// Give up on getting at id a while.
+    pub(super) fn give_up(&mut self, obs: &Observation, id: i32) {
+        self.given_up.insert(id, obs.tic + GIVEN_UP_TICS);
+        self.log.push(format!("tic {}: can't get at {id}: leaving it a while", obs.tic));
+    }
+
     /// Closing in on t, out of reach: still worth it? Not once she's been at it this long without
     /// getting it in reach (E1M9's imps across the gap, 800 off, closed in on and lost sight of
     /// for an hour): then it's left a while.
@@ -760,7 +774,8 @@ impl Combat {
     /// way it flew (A_BFGSpray: forty lines from her, a quarter turn wide, 1024 out), so she
     /// stays where she can see them till then.
     pub fn bfg_flying(&self, obs: &Observation) -> bool {
-        obs.things.iter().flatten().any(|t| t.name == "BFGBall" && t.owner == 0)
+        let charging = self.last_shot.is_some_and(|(slot, tic)| slot == 7 && obs.tic - tic <= aiming::BFG_DELAY + 1);
+        charging || obs.things.iter().flatten().any(|t| t.name == "BFGBall" && t.owner == 0)
     }
 
     /// How t's moving, a tic: its momentum, or walking (a monster walks by steps, not momentum:

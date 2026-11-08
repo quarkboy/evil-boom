@@ -76,13 +76,12 @@ another case in a chain.
 
 ## Where things stand (2026-11-08)
 
-Last bot change: invulnerability kept for a high-risk fight and played on while it lasts; the
-BFG's launch and spray (DECISIONS.md). New regression set (HNTR, one life): E1 8.0 (8/8 through),
-E2 5.9 (3/8), E3 6.5 (1/8), Doom II pistol-start levels 24/32 (MAP01 4, 02 4, 03 3, 04 4, 05 4,
-08 1, 10 0, 12 4); arenas combat 118/128, doom2 228/240. E3M8 from E3M7's loadout HNTR 13/16, HMP
-7/16. Sets swing a lot between builds: judge across sets. Open items: BFG aiming (where the cone
-goes, staying put till it lands), E2 deaths (E2M8, E2M4), E3M4/E3M9 stucks, Doom II MAP08 and
-MAP10, E3M8 cover-to-cover (a cover graph).
+Last bot change: the BFG's aim and hold, melee chases given up, dodging across a missile's way
+(DECISIONS.md). Regression set (HNTR, one life): E1 8.0 (8/8 through), E2 7.1 (7/8), E3 6.5
+(2/8), Doom II pistol-start levels 24/32 (MAP01 4, 02 4, 03 3, 04 4, 05 3, 08 0, 10 3, 12 3);
+arenas combat 119/128, doom2 228/240. E3M8 from E3M7's loadout HNTR 13/16, HMP 7/16. Sets swing
+between builds: judge across sets. Open items: Doom II MAP08 (0/4), MAP03/MAP05 stucks, E3M4/E3M9
+stucks, E3M8 cover-to-cover (a cover graph).
 
 ## The Linux port (done 2026-11-08)
 

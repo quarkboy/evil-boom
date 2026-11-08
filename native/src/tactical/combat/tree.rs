@@ -26,7 +26,7 @@
 //! overrides them.
 
 use super::style::{window, Style};
-use super::{mon, Combat, Decision, KEEP_CLEAR, LOW_HEALTH, STAND_THREAT};
+use super::{mon, Combat, Decision, CLOSE_GIVE_UP, KEEP_CLEAR, LOW_HEALTH, STAND_THREAT};
 use crate::geom::{dist, Point};
 use crate::motor::{heading, Observation, Thing};
 use crate::tactical::bestiary::Attack;
@@ -75,7 +75,7 @@ impl Act {
 type Node = fn(&mut Combat, &Observation, &Situation) -> Option<Act>;
 
 /// Before anything else: out of the way of what would kill her outright.
-const SURVIVE: [Node; 5] = [out_of_vile_sight, ducking, dodging, off_crusher, off_barrel];
+const SURVIVE: [Node; 6] = [out_of_vile_sight, ducking, dodging, bfg_hold, off_crusher, off_barrel];
 /// In a jump, the route has the legs.
 const BUSY: [Node; 1] = [busy];
 /// The weapon she'd fight her target with fought up close.
@@ -127,6 +127,12 @@ fn dodging(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     Some(Act::new(moving, why))
 }
 
+/// Her BFG charging or its ball in the air: still, where she is (the spray comes from her when it
+/// lands, along its way: walked round a corner, it hits the wall). Missiles still dodged first.
+fn bfg_hold(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
+    c.bfg_flying(obs).then(|| Act::new(None, "holding still for the BFG's spray".into()))
+}
+
 /// Out from under a crusher first, whatever else.
 fn off_crusher(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if !c.under_crusher(obs) || s.busy {
@@ -163,10 +169,22 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if Style::of(&w, t) != Style::Melee {
         return None;
     }
+    if c.given_up_on(obs, t.id) {
+        return None;
+    }
     let d = dist((t.x, t.y), s.pos);
     Some(if d > w.reach + mon(t.name).radius - MELEE_SLACK {
+        // (not for ever: one she can't get at, given up a while, as out of reach is; E3M4, a
+        // demon closed in on and lost sight of, round and round, an hour)
+        let since = *c.melee_since.entry(t.id).or_insert(obs.tic);
+        if obs.tic - since > CLOSE_GIVE_UP {
+            c.melee_since.remove(&t.id);
+            c.give_up(obs, t.id);
+            return None;
+        }
         Act::new(c.closing_in(obs, t, None), format!("closing in on {} (melee)", t.name))
     } else {
+        c.melee_since.remove(&t.id);
         Act::new(None, format!("at {} (melee)", t.name))
     })
 }
