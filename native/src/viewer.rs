@@ -216,8 +216,15 @@ pub struct WatchOptions {
     /// a 100% run gives up on what's left (for the exit) after this long with nothing more
     /// collected or learned
     pub stall_seconds: f64,
+    /// the most game time a level's given (headless)
+    pub max_seconds: f64,
     /// what she starts with (an episode's level: what she brought from the one before)
     pub carry: Option<crate::dsda::Loadout>,
+    /// on through the episode, level after level, what she gets out with carried (one life)
+    pub episode: bool,
+    /// no window: played through as fast as it goes, a line a level (checking a watch plays as
+    /// the run did)
+    pub headless: bool,
     pub seed: Option<u32>,
     /// the map view centred on a point, zoomed in this much (for looking at one place)
     pub focus: Option<(f64, f64, f64)>,
@@ -237,6 +244,8 @@ struct Watch {
     hold: Option<Hold>,
     /// no switches or doors (an arena's fight)
     no_use: bool,
+    /// secrets found so far (as the tally has them)
+    secrets_seen: i32,
     m: Arc<MapData>,
     map_name: String,
     engine: Engine,
@@ -272,6 +281,39 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     if !o.mortal {
         engine.set_god();
     }
+    let watch = level(&w, m, nav, engine, o)?;
+    if o.headless {
+        return headless(watch, &w, o);
+    }
+    show(watch, &format!("evil-doom explorer: {map_name}"), o.episode.then_some((&w, o)))
+}
+
+/// The watch played through without a window, as fast as it goes (the time cap as a run's):
+/// a line as each level ends.
+fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
+    let mut start = watch.engine.tic;
+    loop {
+        while !watch.engine.finished() && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE {
+            watch.tic();
+        }
+        let t = watch.engine.tally();
+        let how = if watch.engine.exited() { "EXITED" } else if watch.engine.dead() { "DIED" } else { "TIME" };
+        println!("{}: {how} items {}/{}, {:.0}s game", watch.map_name, t[0].0, t[0].1, (watch.engine.tic - start) as f64 / TICRATE);
+        if !(o.episode && watch.engine.exited()) {
+            return Ok(());
+        }
+        match next_level(watch, w, o)? {
+            Some(next) => watch = next,
+            None => return Ok(()),
+        }
+        start = watch.engine.tic;
+    }
+}
+
+/// The watcher for the level the engine's on: Evil in it afresh, as a run starts her.
+fn level(w: &Wad, m: Arc<MapData>, nav: Rc<Navigator>, engine: Engine, o: &WatchOptions) -> Result<Watch, String> {
+    let map_name = engine.map_name.clone();
+    let skill = if o.fight > 0 { o.fight } else { 3 };
     // (seeing as a run does: watched, a run plays as it did; the user's)
     let knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
     let mut agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives);
@@ -285,11 +327,29 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
         agent.x_mut().exit_last = true;
         agent.x_mut().secrets_mode = true;
     }
-    let mut watch = Watch::new(&w, m, &map_name, engine, agent, o.focus, o.lives - 1);
+    let mut watch = Watch::new(w, m, &map_name, engine, agent, o.focus, o.lives - 1);
     watch.hold = hold;
     watch.speed = o.speed;
     watch.show_all = o.show_all;
-    show(watch, &format!("evil-doom explorer: {map_name}"))
+    Ok(watch)
+}
+
+/// The episode's next level, once she's out of this one: what she got out with carried, the
+/// map the exit she took leads to (None: the episode's over).
+fn next_level(watch: Watch, w: &Wad, o: &WatchOptions) -> Result<Option<Watch>, String> {
+    let secret = watch.engine.secret_exit();
+    let Some(next) = crate::sweep::next_map(&watch.map_name, secret) else { return Ok(None) };
+    let (speed, show_all, follow) = (watch.speed, watch.show_all, watch.follow);
+    let mut engine = watch.engine;
+    engine.carry = Some(engine.loadout());
+    let m = Arc::new(load_map(w, &next, &[])?);
+    let skill = if o.fight > 0 { o.fight } else { 3 };
+    let mut nav = Navigator::new(Arc::clone(&m), skill)?;
+    nav.keep_verified();
+    engine.goto(&next)?;
+    let mut watch = level(w, m, Rc::new(nav), engine, o)?;
+    (watch.speed, watch.show_all, watch.follow) = (speed, show_all, follow);
+    Ok(Some(watch))
 }
 
 /// A fight set up already (an arena: the engine with its monsters spawned and her loadout given,
@@ -298,12 +358,12 @@ pub fn watch_prepared(w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, 
     let mut watch = Watch::new(w, m, map_name, engine, agent, None, 0);
     watch.speed = speed;
     watch.no_use = true;
-    show(watch, title)
+    show(watch, title, None)
 }
 
 /// The window, till it's shut or Esc: space pauses, N (or the right arrow) steps a tic while
 /// paused, +/- the speed, A the whole map, F follow, the wheel zooms.
-fn show(mut watch: Watch, title: &str) -> Result<(), String> {
+fn show(mut watch: Watch, title: &str, episode: Option<(&Wad, &WatchOptions)>) -> Result<(), String> {
     let mut window = Window::new(title, W, H, WindowOptions { resize: true, scale: Scale::FitScreen, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() }).map_err(|e| e.to_string())?;
     window.set_target_fps(60);
     let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H) };
@@ -344,6 +404,19 @@ fn show(mut watch: Watch, title: &str) -> Result<(), String> {
         while owed >= 1.0 && !watch.paused && !watch.engine.finished() {
             watch.tic();
             owed -= 1.0;
+        }
+        if let Some((w, o)) = episode.filter(|_| watch.engine.exited()) {
+            // (out: on to the next level, what she got out with carried)
+            let name = watch.map_name.clone();
+            let carried = watch.engine.loadout();
+            match next_level(watch, w, o)? {
+                Some(next) => {
+                    watch = next;
+                    println!("{name} done: on to {} with health {} armor {}, ammo {}/{}/{}/{}", watch.map_name, carried.health, carried.armor, carried.clip, carried.shell, carried.cell, carried.rocket);
+                    window.set_title(&format!("evil-doom explorer: {} (from {name}: health {} armor {})", watch.map_name, carried.health, carried.armor));
+                }
+                None => return Ok(()), // (the episode's over)
+            }
         }
         if watch.paused {
             owed = 0.0;
@@ -401,6 +474,7 @@ impl Watch {
         Watch {
             hold: None,
             no_use: false,
+            secrets_seen: 0,
             m,
             map_name: map_name.to_string(),
             engine,
@@ -424,6 +498,15 @@ impl Watch {
 
     fn tic(&mut self) {
         let obs = self.engine.observe();
+        // (a secret found told her, as a run tells her: watched, it plays as it did)
+        let found = self.engine.tally()[2].0;
+        if found > self.secrets_seen {
+            if let Some(p) = self.agent.x().nav.poly_at(obs.pos()) {
+                let s = self.agent.x().nav.sector_of_poly(p);
+                self.agent.x_mut().found_secret(s, obs.tic);
+            }
+        }
+        self.secrets_seen = found;
         self.frame = self.engine.frame();
         let mut c = self.agent.act(&obs, self.controls.as_ref());
         if self.no_use {

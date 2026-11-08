@@ -136,6 +136,15 @@ EVIL_API void evil_new_game(int skill, int episode, int map, int no_monsters)
  * `value` (fixed 1: the same run every time, given the same commands; for testing: a barrel
  * took a different number of shots each run, and all after went its own way). From the next
  * new game on. */
+extern int evil_spawned;  /* (p_mobj.c, patched) */
+
+/* Things numbered from 1 again (a level started in this process as in a new one: an episode
+ * watched level after level, played as each level was in a process of its own). */
+EVIL_API void evil_reset_ids(void)
+{
+  evil_spawned = 0;
+}
+
 EVIL_API void evil_seed(int fixed, unsigned long value)
 {
   evil_fixed_seed = fixed != 0;

@@ -48,7 +48,7 @@ const GOTO_TICS: i64 = 90 * 35;
 
 pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), String> {
     let text = std::fs::read_to_string(script).map_err(|e| format!("{}: {e}", script.display()))?;
-    let mut s = setup(wad, map, o, true)?;
+    let mut s = setup(wad, map, o, true, None)?;
     let mut listed: Vec<Objective> = Vec::new();
     println!("at tic {} ({:.1}s)", s.e.tic, s.e.tic as f64 / TICRATE);
     for (i, raw) in text.lines().enumerate() {

@@ -128,6 +128,7 @@ type PowerFn = unsafe extern "C" fn(c_int, c_int);
 type SpawnFn = unsafe extern "C" fn(c_int, f64, f64, f64, c_int) -> c_int;
 type GiveFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int);
 type ClearFn = unsafe extern "C" fn() -> c_int;
+type ResetIdsFn = unsafe extern "C" fn();
 
 static LOADED: AtomicBool = AtomicBool::new(false);
 
@@ -150,6 +151,7 @@ pub struct Dsda {
     spawn_fn: Option<SpawnFn>,
     give_fn: Option<GiveFn>,
     clear_fn: Option<ClearFn>,
+    reset_ids_fn: Option<ResetIdsFn>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
     _argv: Vec<CString>,
     _argv_ptrs: Vec<*mut c_char>,
@@ -193,6 +195,8 @@ impl Dsda {
         let give_fn = sym(b"evil_give").ok().map(|p| unsafe { std::mem::transmute::<*const (), GiveFn>(p) });
         // SAFETY: as above, evil_clear_items's signature; optional.
         let clear_fn = sym(b"evil_clear_items").ok().map(|p| unsafe { std::mem::transmute::<*const (), ClearFn>(p) });
+        // SAFETY: as above, evil_reset_ids's signature; optional.
+        let reset_ids_fn = sym(b"evil_reset_ids").ok().map(|p| unsafe { std::mem::transmute::<*const (), ResetIdsFn>(p) });
         let argv: Vec<CString> =
             std::iter::once("evil".to_string()).chain(args.iter().cloned()).map(CString::new).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
         let mut argv_ptrs: Vec<*mut c_char> = argv.iter().map(|a| a.as_ptr().cast_mut()).collect();
@@ -214,6 +218,7 @@ impl Dsda {
             spawn_fn,
             give_fn,
             clear_fn,
+            reset_ids_fn,
             _argv: argv,
             _argv_ptrs: argv_ptrs,
             _lib: lib,
@@ -243,6 +248,14 @@ impl Dsda {
         // SAFETY: plain values into the game; see `load`.
         let id = unsafe { f(kind, x, y, angle, c_int::from(ambush)) };
         (id >= 0).then_some(id)
+    }
+
+    /// Number things from 1 again (as a new process does); false if the library hasn't the call.
+    pub fn reset_ids(&self) -> bool {
+        let Some(f) = self.reset_ids_fn else { return false };
+        // SAFETY: no arguments; see `load`.
+        unsafe { f() };
+        true
     }
 
     /// Take every pickup off the level: how many went (None: no such call in the library).

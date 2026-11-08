@@ -47,7 +47,9 @@ pub struct Setup {
     pub secrets_short: i32,
 }
 
-pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool) -> Result<Setup, String> {
+/// `engine`: the game already going (an episode's next level, in the same process: on to this
+/// map with what she carries), else a new one.
+pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Option<Engine>) -> Result<Setup, String> {
     let iwad = resolve_wad(wad);
     let w = Wad::open(&iwad)?;
     let map_name = map_name.to_uppercase();
@@ -56,9 +58,17 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool) -> Result<S
     let mut nav = Navigator::new(Arc::clone(&m), skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
-    let mut e = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn, seed: o.seed })?;
+    let fresh = engine.is_none();
+    let mut e = match engine {
+        Some(e) => e,
+        None => Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn, seed: o.seed })?,
+    };
     e.carry.clone_from(&o.carry);
-    e.start();
+    if fresh {
+        e.start();
+    } else {
+        e.goto(&map_name)?;
+    }
     if !o.mortal {
         e.set_god();
     }

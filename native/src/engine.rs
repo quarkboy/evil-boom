@@ -136,6 +136,17 @@ impl Engine {
         crate::dsda::Loadout { weapons, clip, shell, cell, rocket, backpack: p.backpack != 0, health: p.health, armor: p.armor, armor_type: p.armortype }
     }
 
+    /// On to another map, started as a new process would start it (things numbered afresh), with
+    /// `carry` (an episode's next level).
+    pub fn goto(&mut self, map_name: &str) -> Result<(), String> {
+        let (episode, map) = episode_map(map_name)?;
+        (self.episode, self.map) = (episode, map);
+        self.map_name = map_name.to_uppercase();
+        self.game.reset_ids();
+        self.start();
+        Ok(())
+    }
+
     /// The level from the start again (`keep_time`: the tic count carries on).
     pub fn restart(&mut self, keep_time: bool) {
         let tic = self.tic;

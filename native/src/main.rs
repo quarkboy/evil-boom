@@ -17,7 +17,7 @@
 //!   evil arena-one FILE NAME [--seed N]         one of them, once; its log to out/arena/NAME.txt
 //!   evil arena-watch FILE NAME [--seed N] [--speed X]   one of them, watched (space pause, N a
 //!                                               tic at a time, +/- speed)
-//!   evil watch <wad> <map> [--speed X] [--all] [run options]
+//!   evil watch <wad> <map> [--speed X] [--all] [--episode] [run options]
 //!       watch her play, with what she knows beside the game (space pause, +/- speed, A the
 //!       whole map, F follow, wheel zoom, Esc quit)
 //!
@@ -210,35 +210,6 @@ fn run_one(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// The map after `map` in an episode played through, by the exit taken (None: the end).
-fn next_map(map: &str, secret: bool) -> Option<String> {
-    let up = map.to_uppercase();
-    if let Some(n) = up.strip_prefix("MAP").and_then(|n| n.parse::<u32>().ok()) {
-        return match (n, secret) {
-            (30, _) => None,
-            (15, true) => Some("MAP31".into()),
-            (31, true) => Some("MAP32".into()),
-            (31 | 32, _) => Some("MAP16".into()),
-            _ => Some(format!("MAP{:02}", n + 1)),
-        };
-    }
-    let b = up.as_bytes();
-    let (e, m) = (char::from(*b.get(1)?), b.get(3)?.checked_sub(b'0')?);
-    // (the secret exit's level, and the one after it the secret level goes back to)
-    let secret_from = match e {
-        '1' => 3,
-        '2' => 5,
-        '3' => 6,
-        _ => 2,
-    };
-    match (m, secret) {
-        (8, _) => None,
-        (9, _) => Some(format!("E{e}M{}", secret_from + 1)),
-        (_, true) => Some(format!("E{e}M9")),
-        _ => Some(format!("E{e}M{}", m + 1)),
-    }
-}
-
 /// Episodes played through on one life from `first`, a run each for `--seeds K` seeds (8 unless
 /// told), `--jobs` of them at once: each level begun with what she got out of the one before
 /// (weapons, ammo, the backpack, health, armour; not keys or powers), on by the exit taken (the
@@ -280,7 +251,10 @@ fn episode(args: &[String]) -> Result<(), String> {
     done.sort_by_key(|d| d.0);
     println!();
     for (seed, levels, end) in &done {
+        let mut os = o.clone();
+        os.seed = Some(*seed);
         println!("seed {seed}: {levels} levels, {end}");
+        println!("    to watch it all: evil watch {wad} {first} {} --episode", option_args(&os).join(" "));
     }
     let mean = done.iter().map(|d| d.1 as f64).sum::<f64>() / done.len().max(1) as f64;
     let through = done.iter().filter(|d| d.2 == "the episode through").count();
@@ -289,39 +263,59 @@ fn episode(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// One episode on one life (see `episode`): how many levels she got through, and how it ended.
+/// One episode on one life (see `episode`), in a process of its own (`episode-one`): a line for
+/// each level as it ends, then how many levels she got through, and how it ended.
 fn episode_chain(me: &std::path::Path, wad: &str, first: &str, o: &evildoom::sweep::RunOptions) -> (usize, String) {
     let seed = o.seed.unwrap_or(0);
+    let Ok(mut child) = Command::new(me).arg("episode-one").arg(wad).arg(first).args(option_args(o)).stdout(Stdio::piped()).stderr(Stdio::null()).spawn() else {
+        return (0, "couldn't run".into());
+    };
+    let mut end = (0, "no result".to_string());
+    if let Some(out) = child.stdout.take() {
+        for line in BufReader::new(out).lines().map_while(Result::ok) {
+            if let Some(l) = line.strip_prefix("LEVEL ") {
+                println!("seed {seed} {l}");
+            } else if let Some(l) = line.strip_prefix("WATCH ") {
+                println!("    to watch: {l}");
+            } else if let Some(l) = line.strip_prefix("END ") {
+                let (n, how) = l.split_once(' ').unwrap_or((l, ""));
+                end = (n.parse().unwrap_or(0), how.to_string());
+            }
+        }
+    }
+    let _ = child.wait();
+    end
+}
+
+/// One episode on one life in this process, the game going on from level to level as Doom's
+/// does (what she gets out with carried; see `episode`). Lines: LEVEL (each level's result),
+/// WATCH (how to watch the level it ended on), END (levels got through, how it ended).
+fn episode_one(args: &[String]) -> Result<(), String> {
+    let (mut o, _, rest) = run_options(args)?;
+    let [wad, first] = rest.as_slice() else { return Err("usage: evil episode-one <wad> <first map> [run options]".into()) };
+    o.lives = 1;
     let mut map = Some(first.to_uppercase());
-    let mut carry: Option<String> = None;
+    let mut engine = None;
     let mut levels = 0;
     while let Some(m) = map.take() {
-        let mut cmd = Command::new(me);
-        cmd.arg("run-map").arg(wad).arg(&m).args(option_args(o));
-        if let Some(c) = &carry {
-            cmd.arg("--carry").arg(c);
-        }
-        let Ok(out) = cmd.stderr(Stdio::null()).output() else { return (levels, format!("{m}: couldn't run")) };
-        let text = String::from_utf8_lossy(&out.stdout);
-        let result = text.lines().find_map(|l| l.strip_prefix("RESULT ")).unwrap_or("ERROR (no result)").to_string();
-        let mut line = format!("seed {seed} {m}: {}", result.chars().take(70).collect::<String>());
-        // (how to watch this level as it went: the same seed, what she came in with)
-        let watch = format!("evil watch {wad} {m} {}{}", option_args(o).join(" "), carry.as_ref().map_or(String::new(), |c| format!(" --carry {c}")));
-        let Some(next) = text.lines().find_map(|l| l.strip_prefix("CARRY ")) else {
-            println!("{line}");
-            println!("    to watch: {watch}");
-            return (levels, format!("{m}: {}", result.split(' ').next().unwrap_or("?")));
+        let r = evildoom::sweep::run_map_in(wad, &m, &o, engine.take())?;
+        let line = format!("{m}: {} {}", r.outcome, r.detail.chars().take(70).collect::<String>());
+        let Some(l) = r.carry else {
+            println!("LEVEL {line}");
+            let mut os = o.clone();
+            os.carry = None;
+            println!("WATCH evil watch {wad} {first} {} --episode", option_args(&os).join(" "));
+            println!("END {levels} {m}: {}", r.outcome);
+            return Ok(());
         };
         levels += 1;
-        let (c, secret) = next.split_once(' ').map_or((next, false), |(c, s)| (c, s == "SECRET"));
-        if let Ok(l) = cli::parse_carry(c) {
-            line.push_str(&format!(" | out with health {} armor {}, ammo {}/{}/{}/{}", l.health, l.armor, l.clip, l.shell, l.cell, l.rocket));
-        }
-        println!("{line}");
-        carry = Some(c.to_string());
-        map = next_map(&m, secret);
+        println!("LEVEL {line} | out with health {} armor {}, ammo {}/{}/{}/{}", l.health, l.armor, l.clip, l.shell, l.cell, l.rocket);
+        o.carry = Some(l);
+        engine = r.engine;
+        map = evildoom::sweep::next_map(&m, r.secret);
     }
-    (levels, "the episode through".to_string())
+    println!("END {levels} the episode through");
+    Ok(())
 }
 
 fn drive(args: &[String]) -> Result<(), String> {
@@ -429,6 +423,9 @@ fn watch(args: &[String]) -> Result<(), String> {
         complete: o.complete,
         stall_seconds: o.stall_seconds,
         carry: o.carry.clone(),
+        episode: false,
+        headless: false,
+        max_seconds: o.max_seconds,
         seed: o.seed,
         focus: None,
     };
@@ -438,10 +435,15 @@ fn watch(args: &[String]) -> Result<(), String> {
         match a.as_str() {
             "--speed" => w.speed = it.next().and_then(|v| v.parse().ok()).ok_or("--speed: a number")?,
             "--all" => w.show_all = true,
+            "--episode" => w.episode = true,
+            "--headless" => w.headless = true,
             _ => names.push(a.clone()),
         }
     }
     let [wad, map] = names.as_slice() else { return Err("usage: evil watch <wad> <map> [options]".into()) };
+    if w.episode {
+        w.lives = 1; // (an episode watched as it's played: one life)
+    }
     if o.snapshot.is_some() {
         // (a picture: the run as a sweep plays it, nothing drawn till then)
         let (outcome, detail) = run_map(wad, map, &o)?;
@@ -617,6 +619,7 @@ fn main() -> ExitCode {
         Some("sector") if args.len() >= 4 => sector(&args[1], &args[2], &args[3..]),
         Some("run-map") => run_one(&args[1..]),
         Some("episode") => episode(&args[1..]),
+        Some("episode-one") => episode_one(&args[1..]),
         Some("drive") => drive(&args[1..]),
         Some("sweep") => sweep(&args[1..]),
         Some("watch") => watch(&args[1..]),

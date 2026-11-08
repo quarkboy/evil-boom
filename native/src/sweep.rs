@@ -216,6 +216,35 @@ pub(crate) fn progress(e: &Engine, x: &Explorer, o: &RunOptions) -> [usize; 7] {
     ]
 }
 
+/// The map after `map` in an episode played through, by the exit taken (None: the end).
+pub fn next_map(map: &str, secret: bool) -> Option<String> {
+    let up = map.to_uppercase();
+    if let Some(n) = up.strip_prefix("MAP").and_then(|n| n.parse::<u32>().ok()) {
+        return match (n, secret) {
+            (30, _) => None,
+            (15, true) => Some("MAP31".into()),
+            (31, true) => Some("MAP32".into()),
+            (31 | 32, _) => Some("MAP16".into()),
+            _ => Some(format!("MAP{:02}", n + 1)),
+        };
+    }
+    let b = up.as_bytes();
+    let (e, m) = (char::from(*b.get(1)?), b.get(3)?.checked_sub(b'0')?);
+    // (the secret exit's level, and the one after it the secret level goes back to)
+    let secret_from = match e {
+        '1' => 3,
+        '2' => 5,
+        '3' => 6,
+        _ => 2,
+    };
+    match (m, secret) {
+        (8, _) => None,
+        (9, _) => Some(format!("E{e}M{}", secret_from + 1)),
+        (_, true) => Some(format!("E{e}M9")),
+        _ => Some(format!("E{e}M{}", m + 1)),
+    }
+}
+
 /// (recordings of different kinds of run kept apart)
 fn mode_suffix(o: &RunOptions) -> String {
     let mut out = String::new();
@@ -245,6 +274,8 @@ pub struct MapRun {
     pub detail: String,
     pub carry: Option<crate::dsda::Loadout>,
     pub secret: bool,
+    /// the game, for an episode's next level in the same process
+    pub engine: Option<Engine>,
 }
 
 pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, String), String> {
@@ -252,8 +283,13 @@ pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, Str
 }
 
 pub fn run_map_full(wad: &str, map_name: &str, o: &RunOptions) -> Result<MapRun, String> {
+    run_map_in(wad, map_name, o, None)
+}
+
+/// A map played in the game already going if there is one (see `setup`).
+pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engine>) -> Result<MapRun, String> {
     let Setup { iwad, w, m, map_name, skill, nav, mut e, mut agent, mut deaths, mut c, mut obs, mut rec, secrets_short } =
-        setup(wad, map_name, o, o.snapshot.is_some())?;
+        setup(wad, map_name, o, o.snapshot.is_some(), engine)?;
     let t0 = Instant::now();
     let mut idle_since: Option<i64> = None;
     let (mut t_engine, mut t_observe, mut t_think) = (0.0, 0.0, 0.0);
@@ -492,8 +528,9 @@ pub fn run_map_full(wad: &str, map_name: &str, o: &RunOptions) -> Result<MapRun,
     let secret = exited && e.secret_exit();
     if o.snapshot.is_some() {
         snapshot(&w, m, &map_name, e, agent, o.focus)?;
+        return Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, engine: None });
     }
-    Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret })
+    Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, engine: Some(e) })
 }
 
 #[cfg(feature = "viewer")]
