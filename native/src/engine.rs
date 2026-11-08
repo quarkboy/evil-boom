@@ -230,13 +230,17 @@ impl Engine {
         let mut barrels = Vec::new();
         let mut things = self.objects.then(Vec::new);
         for m in &self.mobjs {
+            let name = dsda::type_name(m.kind);
+            // (a barrel going off is a barrel till it's gone: hit, it blows 15 tics later, its
+            // death frames, and until then it's the most dangerous one there; E1M5's, shot, left
+            // out at once, taken for gone and walked past as it blew)
+            if name == Some("ExplosiveBarrel") {
+                barrels.push((m.x, m.y));
+            }
             if m.kind == 0 || m.flags & dsda::MF_CORPSE != 0 || (m.flags & dsda::MF_SHOOTABLE != 0 && m.health <= 0) {
                 continue;
             }
-            let Some(name) = dsda::type_name(m.kind) else { continue };
-            if name == "ExplosiveBarrel" {
-                barrels.push((m.x, m.y));
-            }
+            let Some(name) = name else { continue };
             if let Some(things) = things.as_mut() {
                 let category = category(name);
                 if !matches!(name, "DoomPlayer" | "BossTarget") && category != "Other" {

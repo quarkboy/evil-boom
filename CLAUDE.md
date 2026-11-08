@@ -72,12 +72,13 @@ another case in a chain.
 
 ## Where things stand (2026-11-08)
 
-Last bot change: crushers in every phase. HNTR, one life, 8 seeds: E1 4.1 (1/8 through; the rest
-end at E1M3-E1M5, E1M5 with her own barrel blasts), E2 4.2 (3/8 through; E2M2 stuck/died), E3 5.6
-(three to E3M8), Doom II 8.6 (16 seeds; MAP12 stuck, MAP08 deaths: the Cyberdemon/Baron room);
-berserk arena 14/32. Open items: barrels (the user: shoot any barrel she sees, from clear of the
-chain's blast; E1M5's deaths are her own barrel blasts); two or more revenants with berserk;
-deliberate infighting only for heavies; several missile-firing monsters can still keep her dodging.
+Last bot change: shot barrels kept till they've blown, stay put when shot from out of every
+blast. HNTR, one life, 8 seeds: E1 7.5 (4/8 through; E1M8 deaths), E2 3.8 (2/8 through; E2M2
+stuck/died, E2M4 stuck: no routes), E3 5.2 (1/8 through; E3M4 deaths), Doom II 8.2 (16 seeds;
+MAP12 stuck, MAP08 deaths: the Cyberdemon/Baron room); berserk arena 14/32. Open items: the user's
+barrel rule (shoot any barrel she sees, from clear of the chain's blast); E1M8 (the barons, dead in
+seconds); two or more revenants with berserk; deliberate infighting only for heavies; several
+missile-firing monsters can still keep her dodging.
 
 ## The Linux port (done 2026-11-08)
 

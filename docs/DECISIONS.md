@@ -798,3 +798,23 @@ at all till it rises (a slow crusher's round trip: ~100 tics, a hit every 4).
 
 Results (HNTR, one life): E1 3.6 -> 4.1 (1/8 through, the first), E2 3.6 -> 4.2, E3 3.6 -> 5.6
 (three to the E3M8 boss), Doom II 7.9 -> 8.6; arenas unchanged.
+
+## A shot barrel isn't gone till it's blown (2026-11-08)
+
+E1 ended at E1M3-E1M5 in 7 of 8 seeds; at E1M5 every hit that mattered was her own barrel
+blast. Traced (E1 seed 0, E1M5, tic by tic): a barrel in the way, a post chosen 155 off it (out
+of every blast), the barrel shot from there; then "off back the way she came", which started 27
+off the barrel (where she stood when she chose the post), and the barrel, hit, was left out of
+what she saw at once, so it counted as gone: she ran back past it as it went off, 15 tics after
+the hit (its death frames), 66 health and 34 armor, dead.
+
+- **Barrels till they're gone**: the observation keeps a barrel going off (its death frames,
+  before and after the blast) as a barrel; it's the most dangerous one there.
+- **Shot from out of every blast, she stays**: `flee_safe` says so (no run checked then, none
+  needed), the post's run off is dropped, and the settle after holds where she is rather than
+  backing off from the nearest barrel (towards another, across the hall).
+
+Results (HNTR, one life, 8 seeds; Doom II 16): E1 4.1 -> 7.5 (4/8 through, from 1); E2 4.2 ->
+3.8, E3 5.6 -> 5.2 (1/8 through, the first), Doom II 8.6 -> 8.2 (paths change; E2 seed 0's new
+end, E2M4 stuck, is exploration: no routes, 2 barrel lines in the log); 263 levels over the set
+against 249. Arenas unchanged.

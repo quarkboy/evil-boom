@@ -247,6 +247,9 @@ pub struct RouteFollower {
     barrel_flee: Option<i64>,
     /// ...along this way (the next first)
     barrel_flee_way: Vec<Point>,
+    /// (mortal) the barrel's shot from somewhere out of every blast of its chain: she stays
+    /// there till it's over, no running off
+    barrel_stay: bool,
     /// shot and gone: how many barrels there were, and since when (the chain going off: not back
     /// till none has gone for a while)
     barrel_settle: Option<(usize, i64)>,
@@ -356,6 +359,7 @@ impl RouteFollower {
             barrel_post: None,
             barrel_flee: None,
             barrel_flee_way: Vec::new(),
+            barrel_stay: false,
             barrel_settle: None,
             barrel_way: Vec::new(),
             barrel_best: None,
