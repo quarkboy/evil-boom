@@ -38,7 +38,7 @@ const W_EXPOSED: f64 = 1.5;
 const STUCK_TICS: i64 = 6;
 
 /// an arch-vile's fire goes off this long into its attack (A_VileAttack, S_VILE_ATK10)
-const VILE_BLAST: i32 = 66;
+pub(super) const VILE_BLAST: i32 = 66;
 
 /// its blast goes off this far short of her, towards it...
 const FIRE_SHORT: f64 = 24.0;

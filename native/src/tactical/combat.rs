@@ -180,6 +180,8 @@ pub struct Combat {
     vile_until: i64,
     /// the trigger was down last tic
     trigger_held: bool,
+    /// the gun last fired and when (its reload)
+    last_shot: Option<(i32, i64)>,
 }
 
 impl Combat {
@@ -221,6 +223,7 @@ impl Combat {
             vile_way: None,
             vile_until: 0,
             trigger_held: false,
+            last_shot: None,
         }
     }
 
@@ -675,6 +678,9 @@ impl Combat {
             c.attack = false;
         }
         self.trigger_held = c.attack;
+        if let Some(s) = obs.weapon.filter(|_| c.attack) {
+            self.last_shot = Some((s, obs.tic));
+        }
         if d.weapon != 0 {
             c.weapon = d.weapon;
         }

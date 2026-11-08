@@ -36,6 +36,13 @@ const FAR_HITS: f64 = 0.2;
 /// a weapon switch asked for: give it this long before asking again
 const SWITCH_WAIT: i64 = 40;
 
+/// an arch-vile winding up: its kill time counts this much...
+const VILE_KILL_WEIGHT: f64 = 0.35;
+/// ...and its fire going off unflinched this many seconds' worth
+const VILE_MISSED: f64 = 8.0;
+/// its pain chance (10/256 a hit)
+const VILE_PAIN: f64 = 10.0 / 256.0;
+
 /// pain rolls a second worth twice a gun's kill time, against an arch-vile
 const FLINCH_ROLLS: f64 = 6.0;
 
@@ -365,13 +372,22 @@ impl Combat {
                 continue;
             }
             let d = at(&w);
+            if slot == 1 && !Self::in_reach(&w, t, d) {
+                continue; // (not the fist for being free when nothing reaches: as Astra's branch has it)
+            }
             let mut c = self.time_to_kill(&w, t, d) + (d - here).abs() / GET_THERE;
             if w.ammo_per_shot > 0 {
                 let shots = (f64::from(info.health) / (w.damage_on(&info) * w.hits(info.radius, d)).max(1.0)).max(1.0);
                 let (per, low) = ammo_cost(slot);
                 c += shots * f64::from(w.ammo_per_shot) * per * (low / f64::from(have)).max(1.0);
             }
-            if info.attack == Attack::Fire {
+            if info.attack == Attack::Fire && t.attack >= 0 {
+                // (winding up its fire: what counts is the chance of a flinch before it goes off,
+                // the shots that land in time, after the switch, the reload, the launch, the
+                // flight; Astra's branch's reckoning)
+                let chance = self.interrupt_chance(obs, &w, t, d, f64::from(super::steering::VILE_BLAST - t.attack));
+                c = VILE_KILL_WEIGHT * c + VILE_MISSED * (1.0 - chance);
+            } else if info.attack == Attack::Fire {
                 // (an arch-vile flinches out of its fire one hit in 25: the super shotgun's 20
                 // pellets, plasma's stream, the chaingun's, stun it best)
                 c /= 1.0 + w.flinch_rolls(info.radius, d) / FLINCH_ROLLS;
@@ -388,6 +404,34 @@ impl Combat {
             }
         }
         best
+    }
+
+    /// The chance a shot at t with w makes it flinch within `window` tics: the shots that land
+    /// in time (a switch first, what's left of the reload, the launch, the flight), each hit
+    /// a roll of its pain chance.
+    fn interrupt_chance(&self, obs: &Observation, w: &Weapon, t: &Thing, d: f64, window: f64) -> f64 {
+        if w.ammo_per_shot == 0 {
+            return 0.0;
+        }
+        let ready = if Some(w.slot) != obs.weapon {
+            SWITCH_WAIT as f64
+        } else {
+            self.last_shot.filter(|&(s, _)| s == w.slot).map_or(0.0, |(_, tic)| (tic as f64 + w.cycle - obs.tic as f64).max(0.0))
+        };
+        let launch = match w.slot {
+            3 => 3.0,
+            5 => 8.0,
+            7 => 46.0,
+            _ => 0.0,
+        };
+        let flight = if w.hitscan { 0.0 } else { d / w.speed.max(1.0) };
+        let left = window - ready - launch - flight;
+        if left < 0.0 {
+            return 0.0;
+        }
+        let shots = ((left / w.cycle).floor() + 1.0).min(f64::from(Self::ammo(obs, w.slot) / w.ammo_per_shot));
+        let rolls = w.pellets * w.hits(mon(t.name).radius, d);
+        1.0 - (1.0 - VILE_PAIN).powf(shots * rolls)
     }
 
     /// Seconds of shooting it'd take (a lot, out of the gun's reach: anything else first).
