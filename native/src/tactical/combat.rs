@@ -172,6 +172,9 @@ pub struct Combat {
     /// missiles being dodged (till they've gone by)
     dodging: BTreeSet<i32>,
     dodge_way: Option<Point>,
+    /// where the route's taking her mid-fight (an errand: health, a gun, ammo), for dodging
+    /// towards (the user's: on to it while dodging, not stuck dodging where she stands)
+    pub toward: Option<Point>,
     last_pos: Option<Point>,
     velocity: Point,
     barrel_way: Option<Point>,
@@ -235,6 +238,7 @@ impl Combat {
             hit_cache: BTreeMap::new(),
             dodging: BTreeSet::new(),
             dodge_way: None,
+            toward: None,
             last_pos: None,
             velocity: (0.0, 0.0),
             barrel_way: None,
@@ -616,7 +620,7 @@ impl Combat {
             why = format!("out of the {name}'s sight");
         } else if let Some(m) = &first_missile {
             moving = self.dodge(obs, &missiles);
-            why = format!("dodging {}", m.name);
+            why = if errand.is_empty() { format!("dodging {}", m.name) } else { format!("dodging {} on the way to the {errand}", m.name) };
         } else if self.under_crusher(obs) && !busy {
             // (out from under it first, whatever else)
             let gun = target.as_ref().map_or_else(|| self.gun(obs), |t| self.preferred_gun(obs, t));
@@ -634,7 +638,7 @@ impl Combat {
             let t = nearest.clone();
             let gun = self.preferred_gun(obs, &t);
             moving = self.steer(obs, Some(&t), &gun).or_else(|| self.away_from(obs, (t.x, t.y)));
-            why = format!("backing off from {}", nearest.name);
+            why = if errand.is_empty() { format!("backing off from {}", nearest.name) } else { format!("backing off from {} towards the {errand}", nearest.name) };
         } else if !errand.is_empty() {
             why = format!("shooting on the way to {errand}");
         } else if !self.armed(obs) {

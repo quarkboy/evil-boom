@@ -1,0 +1,23 @@
+# Health mid-fight (evil arena arenas/health.txt): hurt, something on her, health close by.
+# E3M8's open centre (see combat.txt). The user's: 1% health, a cacodemon on her, the medikit in
+# the room never gone for.
+
+arena caco-medikit
+map doom E3M8
+at 176 200 90
+give shotgun shell=30 health=5
+spawn Cacodemon 176 500 270
+spawn Medikit 480 260 0
+spawn Medikit 480 320 0
+seconds 60
+
+arena imps-stimpacks
+map doom E3M8
+at 176 200 90
+give shotgun shell=30 health=10
+spawn DoomImp -200 1000 270
+spawn DoomImp 600 1000 270
+spawn Stimpack -150 260 0
+spawn Stimpack -150 320 0
+spawn Medikit -150 380 0
+seconds 60

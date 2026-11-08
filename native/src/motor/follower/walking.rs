@@ -1,6 +1,6 @@
 //! Path tracking, landing caution, pickup approach and recovery from obstacles.
 
-use super::{last_point, roll_speed, stops, Drop, Phase, RouteFollower, SegEnd, Segment, CROSS_REST_WAIT, PRESS_RANGE};
+use super::{last_point, roll_speed, stops, Drop, Phase, RouteFollower, Run, SegEnd, Segment, CROSS_REST_WAIT, PRESS_RANGE};
 use crate::geom::{cells, closest_point, dist, segment_distance, Point};
 use crate::motor::{heading, Controls, Observation, Track, BRAKE, FULL_SPEED, TICRATE};
 use crate::nav::{can_cross, Heights};
@@ -76,6 +76,25 @@ impl RouteFollower {
         }
         let nav = Rc::clone(&self.view);
         let step = self.step().clone();
+        // (the floor she's walking on going down when nothing she's doing means it to (no move
+        // she's waiting on, not the step's own line): the user's rule, for the nearest floor
+        // that stays put at once. E3M1: walked over the way over the blood, its first stone
+        // went down under her, walked on to the jump she'd planned, off its corner into the blood)
+        if let Some(s) = nav.nav.mesh.poly_at(obs.pos()).map(|p| nav.nav.sector_of_poly(p)) {
+            let on_floor = obs.z.is_none_or(|z| z <= obs.heights[s].floor + 0.5);
+            let going_down = obs.height(s).is_some_and(|l| l.floor < nav.nav.movers.initial[s].floor - 0.5);
+            let expected = self.watches.iter().any(|w| w.expect.sector == s && !w.over) || step.trigger.as_ref().is_some_and(|t| t.effect(s).is_some());
+            // (and only with somewhere to run to: down in the pit already, it's for the explorer
+            // to find the way out)
+            // (and only a floor going down into what hurts, as the triggers that move it have it:
+            // a lift going down under her is a lift, E1M2's, run off two thousand times)
+            let into_harm = || nav.nav.triggers.iter().any(|t| t.info.trigger.walked() && t.effect(s).is_some() && nav.nav.floor_after(t, s) == Some(true));
+            if on_floor && going_down && self.sinking.contains(&s) && !expected && into_harm() && self.run_path(obs).is_some() {
+                self.log.add(obs.tic, format!("sector {s} going down under her: running for the nearest floor that stays put"));
+                self.run = Some(Run { heading: obs.angle, sector: None, next: obs.tic });
+                return self.run_step(obs);
+            }
+        }
         if let Some(t) = step.trigger.as_ref().filter(|t| step.action == Action::Cross && t.info.trigger == Trigger::WR && !t.permanent()) {
             if !self.cross_ready {
                 // A lift line to cross for its window: if the lift's away already (set off on the

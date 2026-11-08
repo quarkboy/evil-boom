@@ -257,6 +257,8 @@ pub struct RouteFollower {
     /// the tic of the last shot at it
     barrel_shot: i64,
     sinking: BTreeSet<usize>,
+    /// the floor that stays put a run over sinking floors is making for (logged when it changes)
+    run_for: Option<usize>,
     lineup_tic: Option<i64>,
     brake_until: i64,
     /// (sector, live heights, since)
@@ -359,6 +361,7 @@ impl RouteFollower {
             barrel_best: None,
             barrel_shot: -1_000_000_000,
             sinking,
+            run_for: None,
             lineup_tic: None,
             brake_until: -1,
             jump_wait: None,

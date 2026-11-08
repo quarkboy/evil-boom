@@ -9,6 +9,10 @@ use std::collections::BTreeSet;
 
 const DODGE_WAYS: usize = 16;
 
+/// a clear dodge's worth for going the way she's going (an errand), all the way: as much as
+/// room after it (24)
+const W_TOWARD: f64 = 24.0;
+
 /// going some way: pushing that way this long, then...
 const PUSH_TICS: usize = 8;
 
@@ -108,6 +112,12 @@ impl Combat {
             }
             if let Some(dw) = self.dodge_way {
                 s += 6.0 * (way.0 * dw.0 + way.1 * dw.1);
+            }
+            // (and, as clear, the way she's going: health, a gun, ammo across the room; dodging
+            // where she stood, a rocket after a rocket, she never got there)
+            if let Some(to) = self.toward.filter(|&to| s >= 0.0 && dist(to, pos) > 1.0) {
+                let d = dist(to, pos);
+                s += W_TOWARD * (way.0 * (to.0 - pos.0) + way.1 * (to.1 - pos.1)) / d;
             }
             if best.is_none_or(|(bs, _)| s > bs) {
                 best = Some((s, way));

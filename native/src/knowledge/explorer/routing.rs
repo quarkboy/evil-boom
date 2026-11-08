@@ -17,6 +17,9 @@ const PLAN_SECONDS: f64 = 600.0;
 const HEALTH_MARGIN: f64 = 25.0;
 /// a route ending on a floor that hurts counts this many hurts there (doing it, getting off)
 const END_STAY: f64 = 2.0;
+/// what a floor that hurts does at the worst (20 a hit), for one she knows hurts and the map
+/// doesn't say how much
+const WORST_FLOOR: i32 = 20;
 
 /// her pace on a route, units a tic (a little under running, for the turns)
 const ROUTE_PACE: f64 = 12.0;
@@ -94,7 +97,7 @@ impl Explorer {
             for (s, len) in self.wades(&leg.path.waypoints, states) {
                 let t = len / ROUTE_PACE;
                 let felt = self.nav.damage[s];
-                let per = f64::from(if felt > 0 { felt } else { 20 });
+                let per = f64::from(if felt > 0 { felt } else { WORST_FLOOR });
                 let rate = if tics + t < suit_left {
                     if per >= 20.0 {
                         per * 5.0 / 256.0
@@ -294,7 +297,9 @@ impl Explorer {
             // (ending on a floor that hurts: the time there doing it, and the way back off it too,
             // not only the way in; MAP08's pit under the door, 20 a second, a door pressed from it
             // the last thing to do, dropped into at 54 health and died there, stuck, every time)
-            let end = self.nav.poly_at(obj.goal).map(|p| self.nav.damage[self.nav.sector_of_poly(p)]).unwrap_or(0);
+            // (as she knows it: a floor changed to one that hurts since, E3M1's way over the blood
+            // gone down into it, at the worst floors' if the map has none for it)
+            let end = self.nav.poly_at(obj.goal).map(|p| self.nav.sector_of_poly(p)).filter(|&s| self.knowledge.damaging(s)).map_or(0, |s| self.nav.damage[s].max(WORST_FLOOR));
             if end > 0 && obj.kind != Kind::Exit && self.knowledge.suit_until.is_none_or(|u| u < obs.tic) {
                 cost = 2.0 * cost + f64::from(end) * END_STAY;
             }
@@ -308,7 +313,10 @@ impl Explorer {
             // she's been down before and got out again is all right: MAP24's)
             let k = &self.knowledge;
             let here = nav.poly_at(obs.pos()).map(|p| nav.sector_of_poly(p));
-            let escaped: BTreeSet<usize> = k.visited.iter().map(|&p| nav.sector_of_poly(p)).filter(|s| Some(*s) != here).collect();
+            // (not one that's gone down into what hurts since: crossing it before, it was a
+            // walkway still, E3M1's, dropped into after to look at a wall, no way out)
+            let escaped: BTreeSet<usize> =
+                k.visited.iter().map(|&p| nav.sector_of_poly(p)).filter(|s| Some(*s) != here && k.changed_floor.get(s) != Some(&true)).collect();
             let mut wade = 0.0;
             for leg in &route.legs {
                 for n in &leg.path.steps {

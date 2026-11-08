@@ -35,6 +35,7 @@ const W_KEEP: f64 = 0.8;
 const W_EXPOSED: f64 = 1.5;
 const W_OFF_FLOOR: f64 = 10.0;
 const W_BARREL: f64 = 4.0;
+const W_TOWARD: f64 = 1.5;
 /// with anything shooting in sight, kept this far from a barrel's middle (its blast and a margin)
 const BARREL_KEEP: f64 = 192.0;
 
@@ -263,6 +264,12 @@ impl Combat {
             }
             if let Some(k) = self.steer_way {
                 s += W_KEEP * (d.0 * k.0 + d.1 * k.1);
+            }
+            // (the way she's going, an errand (health, a gun, ammo): backing off towards it, not
+            // round and round where she is; the user's: 1% health, a cacodemon on her, the
+            // medikit in the room never got to)
+            if let Some(to) = self.toward.filter(|&to| dist(to, pos) > 1.0) {
+                s += W_TOWARD * (d.0 * (to.0 - pos.0) + d.1 * (to.1 - pos.1)) / dist(to, pos);
             }
             if best.is_none_or(|(bs, _)| s > bs) {
                 best = Some((s, d));

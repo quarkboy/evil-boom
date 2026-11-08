@@ -29,6 +29,8 @@ fn ammo_max(slot: i32) -> f64 {
 
 /// items further than this (as the crow flies) only when they're needed badly
 const ITEM_RANGE: f64 = 1536.0;
+/// a health pickup the route's going for this near is gone on to mid-fight
+const HEAL_NEAR: f64 = 512.0;
 /// a monster's last known spot: hunted from the reachable poly nearest it, this near
 const HUNT_NEAR: f64 = 512.0;
 /// below this health, health items come first
@@ -51,6 +53,14 @@ const SURROUNDED_COUNT: usize = 3;
 const SURROUNDED_SPREAD: f64 = 160.0;
 /// getting out: at most this long (then the fight goes on from there)
 const OUT_TICS: i64 = 4 * 35;
+/// out of ammo: off for ammo this long at most, before thinking again
+const AMMO_TICS: i64 = 20 * 35;
+/// out of ammo and none known: away to somewhere she's been at most this far
+const AMMO_AWAY: f64 = 1536.0;
+/// a way away is no nearer than this to any monster than she is now
+const AMMO_MARGIN: f64 = 16.0;
+/// a way somewhere passes no monster nearer than this
+const PAST_CLEAR: f64 = 96.0;
 /// monsters whose attacks, landing on others, set them fighting
 const HEAVIES: [&str; 7] = ["Cyberdemon", "SpiderMastermind", "Fatso", "Arachnotron", "Revenant", "BaronOfHell", "HellKnight"];
 /// a heavy taking longer than this (s) to kill with what she has: let others take its shots...
@@ -247,7 +257,8 @@ impl Player {
             self.explorer.log.push(format!("  [fight] {line}"));
         }
         let busy = self.explorer.follower.as_ref().is_some_and(RouteFollower::in_jump);
-        let errand = if busy { String::new() } else { self.fight.errand(&self.explorer, obs) };
+        let (errand, toward) = if busy { (String::new(), None) } else { self.fight.errand(&self.explorer, obs).map_or((String::new(), None), |(e, at)| (e, Some(at))) };
+        self.fight.combat.toward = toward;
         let d = self.fight.combat.decide(obs, busy, &errand);
         let retreat = !busy && self.retreating(obs);
         if retreat {
@@ -312,6 +323,8 @@ impl Player {
         if let Some(r) = &self.retreat {
             let mut over = match self.retreat_why {
                 "out" | "bait" => obs.tic - self.retreat_tic > OUT_TICS,
+                // (armed again, or long enough)
+                "for ammo" => self.fight.combat.armed(obs) || obs.tic - self.retreat_tic > AMMO_TICS,
                 // (backed out far enough once nothing's shooting, or long enough)
                 "back" => obs.tic - self.shooters_tic > CLEAR_TICS || obs.tic - self.retreat_tic > BACK_TICS,
                 _ => obs.tic - self.shooters_tic > CLEAR_TICS,
@@ -338,6 +351,13 @@ impl Player {
             self.retreat_tic = obs.tic;
             self.retreat = self.find_cover(obs);
             self.retreat_why = "cover";
+        } else if !self.fight.combat.armed(obs) && !self.fight.combat.against_her().is_empty() {
+            // (nothing to shoot with and something after her: away, for ammo, not fists at it;
+            // the user's. E3M1 on UV: out of bullets, a cacodemon on her, "getting past" on to a
+            // door, chased round till its fireballs had her)
+            self.retreat_tic = obs.tic;
+            self.retreat = self.for_ammo(obs);
+            self.retreat_why = "for ammo";
         } else if let Some(why) = self.ambushed(obs) {
             self.retreat_tic = obs.tic;
             self.retreat = self.back_out(obs, why);
@@ -414,7 +434,11 @@ impl Player {
         let pos = obs.pos();
         let nav = Rc::clone(&self.explorer.nav);
         let heights = self.fight.combat.heights(obs).to_vec();
-        let trail: Vec<Point> = self.trail.iter().rev().copied().filter(|&p| dist(p, pos) > BACK_MIN).collect();
+        // (not back onto a floor that hurts now: the way she came may have gone down into it,
+        // E3M1's way over the blood, backed out down it into the blood from imps on the far bank)
+        let k = &self.explorer.knowledge;
+        let trail: Vec<Point> =
+            self.trail.iter().rev().copied().filter(|&p| dist(p, pos) > BACK_MIN && nav.poly_at(p).is_none_or(|pi| !k.damaging(nav.sector_of_poly(pi)))).collect();
         for p in trail {
             let Some(pi) = nav.poly_at(p) else { continue };
             let body = Body { x: p.0, y: p.1, z: heights[nav.sector_of_poly(pi)].0, height: PLAYER_HEIGHT };
@@ -478,14 +502,69 @@ impl Player {
         None
     }
 
+    /// Out of ammo with something after her: to the nearest ammo or gun she knows of that she
+    /// can use, by a way not past them; else to the spot she's been that's furthest from them.
+    /// Through doors if need be (E3M1: the doors shut behind her, every way off through one).
+    fn for_ammo(&mut self, obs: &Observation) -> Option<RouteFollower> {
+        let them = self.fight.combat.against_her();
+        let pos = obs.pos();
+        // (no nearer to any of them than she is: one on her already, every way off starts by
+        // it, and away is still away)
+        let nearest = them.iter().map(|m| dist((m.x, m.y), pos)).fold(f64::INFINITY, f64::min);
+        let clear = PAST_CLEAR.min(nearest - AMMO_MARGIN).max(0.0);
+        let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
+        let known = self.explorer.knowledge.known_polys();
+        let nav = Rc::clone(&self.explorer.nav);
+        let mut ammo: Vec<(f64, usize, &'static str)> = obs
+            .things
+            .iter()
+            .flatten()
+            .filter(|t| {
+                weapon_item(t.name).is_some_and(|s| s != 1 && s != 8)
+                    || ammo_item(t.name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))
+            })
+            .filter_map(|t| nav.poly_at((t.x, t.y)).filter(|p| known.contains(p)).map(|p| (dist((t.x, t.y), pos), p, t.name)))
+            .collect();
+        ammo.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for (_, pi, name) in ammo.into_iter().take(6) {
+            if let Some(f) = self.go_to_clear(obs, pi, &them, "for ammo", clear, true) {
+                self.log(format!("tic {}: out of ammo: away for the {name}", obs.tic));
+                return Some(f);
+            }
+        }
+        let mut spots: Vec<(f64, usize)> = self
+            .visited_spots(obs, 128.0, AMMO_AWAY, COVER_SPOTS)
+            .into_iter()
+            .map(|(_, pi)| (them.iter().map(|m| dist((m.x, m.y), nav.poly_center(pi))).fold(f64::INFINITY, f64::min), pi))
+            .collect();
+        spots.sort_by(|a, b| b.0.total_cmp(&a.0));
+        // (all of them, furthest first: the furthest may be beyond a lift, no way there for a
+        // plain way; E3M1's start, back down the lift from the cacodemon's room)
+        for (_, pi) in spots {
+            if let Some(f) = self.go_to_clear(obs, pi, &them, "for ammo", clear, true) {
+                self.log(format!("tic {}: out of ammo, none known: away from them", obs.tic));
+                return Some(f);
+            }
+        }
+        self.log(format!("tic {}: out of ammo: no way off for ammo or away that isn't past them", obs.tic));
+        None
+    }
+
     /// A way to that poly (not past monsters), if there is one.
     fn go_to(&mut self, obs: &Observation, pi: usize, them: &[Thing], label: &str) -> Option<RouteFollower> {
+        self.go_to_clear(obs, pi, them, label, PAST_CLEAR, false)
+    }
+
+    /// A way to that poly passing no monster closer than `clear` (`doors`: through doors she
+    /// can open, else none).
+    fn go_to_clear(&mut self, obs: &Observation, pi: usize, them: &[Thing], label: &str, clear: f64, doors: bool) -> Option<RouteFollower> {
         let view = self.explorer.view();
         let live: States = obs.heights.iter().map(|&h| vec![h]).collect();
         let goal = view.nav.poly_center(pi);
-        let path = view.find_path(obs.pos(), goal, &live, None)?;
+        let openable = doors.then(|| view.local_doors(obs.keys.unwrap_or_default()));
+        let path = view.find_path(obs.pos(), goal, &live, openable.as_ref())?;
         let through = path.waypoints.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).flat_map(|(a, b)| them.iter().map(move |t| segment_point_distance(a, b, (t.x, t.y)))).fold(f64::INFINITY, f64::min);
-        if through < 96.0 {
+        if through < clear {
             return None; // (not past them)
         }
         let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, label: label.to_string(), expects: Vec::new() };
@@ -615,17 +694,29 @@ impl Fight {
         GUN_WORTH + (hp / now - hp / w.dps().max(now)).max(0.0)
     }
 
-    /// What she's going for to fight with, if that's what the route's for; or, mid-fight, with
+    /// What she's going for to fight with (and where it is), if that's what the route's for; or, mid-fight, with
     /// only the pistol or next to no ammo, something to fight with she hasn't turned aside for
     /// yet (MAP09's hot start, the shotgun across the room).
-    fn errand(&self, x: &Explorer, obs: &Observation) -> String {
-        if let Some(cur) = x.current.as_ref().filter(|c| c.kind == Kind::Item && c.urgent) {
-            return cur.label.strip_prefix("pick up ").unwrap_or(&cur.label).to_string();
+    fn errand(&self, x: &Explorer, obs: &Observation) -> Option<(String, Point)> {
+        if let Some(cur) = x.current.as_ref().filter(|c| c.kind == Kind::Item) {
+            // (the item's class name, before what the label adds: "pick up Medikit (to heal)")
+            let name = cur.label.strip_prefix("pick up ").unwrap_or(&cur.label);
+            let name = name.split(' ').next().unwrap_or(name);
+            if cur.urgent {
+                return Some((name.to_string(), cur.goal));
+            }
+            // (health she's on her way to and can use, close by: on to it, shooting on the way.
+            // The user's: a cacodemon on her, the medikit the explorer was going for in the
+            // room, fought where she stood and never picked up)
+            let heals = health_item(name).is_some_and(|(amount, cap)| amount >= 10 && obs.health.unwrap_or(100.0) < f64::from(cap));
+            if heals && dist(cur.goal, obs.pos()) < HEAL_NEAR {
+                return Some((name.to_string(), cur.goal));
+            }
         }
         if self.combat.firepower(obs) > PISTOL_ONLY && !self.combat.short_of_ammo(obs) {
-            return String::new();
+            return None;
         }
-        self.errands(x, obs).first().map_or(String::new(), |t| t.name.to_string())
+        self.errands(x, obs).first().map(|t| (t.name.to_string(), (t.x, t.y)))
     }
 
     /// Guns and ammo she knows where they are and hasn't turned aside for yet: better guns worth

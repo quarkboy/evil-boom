@@ -1,11 +1,12 @@
 //! Lining up, executing and judging jumps and runs over sinking floors.
 
 use super::{run_controls, RouteFollower, Run};
-use crate::geom::{closest_point, dist, Point, Seg};
+use crate::geom::{closest_on_portal, closest_point, dist, funnel, oriented, Point, Seg, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::jumps::RunStart;
 use crate::motor::{fmt_live, heading, norm, Controls, Observation, TICRATE};
 use crate::navigator::{Jump, MAX_STEP};
-use std::collections::BTreeSet;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, BTreeSet};
 use std::rc::Rc;
 
 /// tics between re-aims running over sinking floors
@@ -15,6 +16,10 @@ const RUN_REAIM: i64 = 4;
 const RUN_AHEAD_SINK: f64 = 4.0;
 /// how far round to look for solid ground off a sinking floor
 const RUN_LOOK: f64 = 1024.0;
+/// how far along a way over sinking floors to look for one that stays put
+const RUN_PATH_LOOK: f64 = 2048.0;
+/// how far onto the floor that stays put the run aims
+const RUN_INTO: f64 = 48.0;
 /// units a tic she covers running across (near full speed)
 const RUN_SPEED: f64 = 16.0;
 /// units a tic a floor goes down (Doom's lowering floors, FLOORSPEED)
@@ -117,13 +122,27 @@ impl RouteFollower {
         };
         if on_ground && here_sector.is_some_and(|s| !self.sinking.contains(&s)) {
             self.run = None;
+            self.run_for = None;
             self.log.add(obs.tic, format!("ran across to ({:.0}, {:.0}) sector {}", obs.x, obs.y, here_sector.unwrap_or(0)));
-            if !self.replan(obs, "after the run", false) {
-                return self.fail(obs, "nowhere to go after the run");
-            }
-            return self.walk(obs);
+            // (where she was going is forgotten, the user's rule: maybe gone down too, the way
+            // back to it surely; the explorer chooses again from here. E3M1: across to the far
+            // bank, then back for the old goal on the first stone, now in the blood, dropped in)
+            return self.fail(obs, "ran off a floor going down: what she was going for is for choosing again");
         }
         let Some(run) = self.run else { return self.walk(obs) };
+        // (the way to the nearest floor that stays put, along the floors she can still step
+        // onto, steered along every tic: a winding way of them is followed round its bends)
+        if let (true, Some(sector)) = (on_ground, here_sector) {
+            if let Some((h, target)) = self.run_path(obs) {
+                if self.run_for != Some(target) {
+                    self.log.add(obs.tic, format!("running off sector {sector} for sector {target}, the nearest floor that stays put"));
+                    self.run_for = Some(target);
+                }
+                self.run = Some(Run { heading: h, sector: Some(sector), next: obs.tic + RUN_REAIM });
+                self.motion.rate = 0.0;
+                return run_controls(obs.angle, h);
+            }
+        }
         if on_ground && (obs.tic >= run.next || here_sector != run.sector) {
             let Some(sector) = here_sector else { return self.walk(obs) };
             // (on the heading she's on if it's still as good: turning about on every look
@@ -151,6 +170,87 @@ impl RouteFollower {
         run_controls(obs.angle, self.run.map_or(obs.angle, |r| r.heading))
     }
 
+    /// The heading along the shortest way (string-pulled through the navmesh) to the nearest
+    /// floor that stays put, over floors she can step onto as they are now (no hurting floors;
+    /// sinking ones not gone too low yet), and the sector it gets to. The user's rule: the
+    /// floor going down, where she was going is forgotten, for the nearest ground that holds.
+    /// (E3M1's way over the blood winds: a heading held for the fan's run went off a bend into
+    /// the blood, or braked her to a stop on a floor going down.)
+    pub(super) fn run_path(&self, obs: &Observation) -> Option<(f64, usize)> {
+        let nav = &self.view.nav;
+        let mesh = &nav.mesh;
+        let start = mesh.poly_at(obs.pos())?;
+        let height = |s: usize| obs.height(s).map_or((nav.movers.initial[s].floor, nav.movers.initial[s].ceiling), |l| (l.floor, l.ceiling));
+        let solid = |s: usize| nav.damage[s] == 0 && !self.sinking.contains(&s);
+        let n = mesh.polys.len();
+        let mut cost = vec![f64::INFINITY; n];
+        let mut entry = vec![obs.pos(); n];
+        let mut came: Vec<Option<(usize, usize)>> = vec![None; n];
+        cost[start] = 0.0;
+        let mut open = BinaryHeap::new();
+        open.push(Reverse((0u64, start)));
+        // (the floors that stay put she can get to, nearest first: the first poly of each)
+        let mut found: Vec<usize> = Vec::new();
+        while let Some(Reverse((_, p))) = open.pop() {
+            let s = mesh.poly(p).sector;
+            if p != start && solid(s) {
+                if !found.iter().any(|&g| mesh.poly(g).sector == s) {
+                    found.push(p);
+                }
+                continue;
+            }
+            if cost[p] > RUN_PATH_LOOK {
+                continue;
+            }
+            let (f, c) = height(s);
+            for &qi in &mesh.poly(p).portals {
+                let q = &mesh.portals[qi];
+                let o = q.other(p);
+                let so = mesh.poly(o).sector;
+                let (fo, co) = height(so);
+                if nav.damage[so] != 0 || fo > f + MAX_STEP || co.min(c) - fo.max(f) < PLAYER_HEIGHT || dist(q.p1, q.p2) < 2.0 * PLAYER_RADIUS {
+                    continue;
+                }
+                let at = closest_on_portal(entry[p], q.p1, q.p2);
+                let k = cost[p] + dist(entry[p], at);
+                if k < cost[o] {
+                    (cost[o], entry[o], came[o]) = (k, at, Some((p, qi)));
+                    open.push(Reverse(((k * 16.0) as u64, o)));
+                }
+            }
+        }
+        // (the way to one, and where it heads first)
+        let way = |goal: usize| {
+            let mut portals = Vec::new();
+            let mut p = goal;
+            while let Some((from, qi)) = came[p] {
+                let q = &mesh.portals[qi];
+                portals.push(oriented(q.p1, q.p2, mesh.poly(from).center));
+                p = from;
+            }
+            portals.reverse();
+            // (well onto it, not its edge)
+            let (into, centre) = (entry[goal], mesh.poly(goal).center);
+            let d = dist(into, centre).max(1.0);
+            let end = (into.0 + (centre.0 - into.0) / d * d.min(RUN_INTO), into.1 + (centre.1 - into.1) / d * d.min(RUN_INTO));
+            let next = funnel(obs.pos(), end, &portals).get(1).copied().unwrap_or(end);
+            heading(obs.pos(), next)
+        };
+        // (the one she's making for while she still can, bends and all; else the nearest on
+        // ahead of her, the way she was going (back is the way she came, a floor gone down
+        // behind her maybe, and on is the way on: E3M1's way over the blood, its trigger once
+        // only, back to where she'd started was the level lost); else the nearest)
+        let d = self.motion.disp;
+        let going = (d.0.hypot(d.1) > 2.0).then(|| d.1.atan2(d.0).to_degrees());
+        let goal = found
+            .iter()
+            .copied()
+            .find(|&g| Some(mesh.poly(g).sector) == self.run_for)
+            .or_else(|| found.iter().copied().find(|&g| going.is_none_or(|a| norm(way(g) - a).abs() < 90.0)))
+            .or_else(|| found.first().copied())?;
+        Some((way(goal), mesh.poly(goal).sector))
+    }
+
     /// The direction to push (from a fan all round: pushing back against her momentum may be
     /// what keeps her on) whose simulated run lands, off this floor, on the nearest floor that
     /// stays put; else on the sinking floor nearest one, to run on from. Where she was going
@@ -173,16 +273,23 @@ impl RouteFollower {
         let start = RunStart { pos: obs.pos(), vel: d, z: obs.z.unwrap_or(f), angle: obs.angle };
         let headings: Vec<f64> = offs.iter().map(|o| going + o).collect();
         let landings = nav.jump_lab.run_landings(&start, &heights, sector, &headings, 70);
-        // (the banks: the edges where a floor that stays put meets the nukage or a sinking floor,
-        // near enough to matter; a room behind the pit's wall is no nearer for being close)
+        // (one not yet going down holds a while once she's on it; one going down already is
+        // lower every tic)
+        let moving = |s: usize| heights[s].0 < nav.movers.initial[s].floor - 0.5;
         let solid = |s: usize| nav.damage[s] == 0 && !self.sinking.contains(&s);
+        // (footing that holds: solid ground, and a sinking floor not going down yet, which goes
+        // only once she's on it: a path of them is ground till she's along it, E3M1's way over
+        // the blood, the far bank further than a floor sinks in the time to run there)
+        let holds = |s: usize| solid(s) || (s != sector && nav.damage[s] == 0 && !moving(s));
+        // (the banks: the edges where footing that holds meets the nukage or a floor going down,
+        // near enough to matter; a room behind the pit's wall is no nearer for being close)
         let near_solid: Vec<(Seg, f64)> = nav
             .mesh
             .portals
             .iter()
             .filter_map(|q| {
                 let (sa, sb) = (nav.sector_of_poly(q.a), nav.sector_of_poly(q.b));
-                let bank = match (solid(sa), solid(sb)) {
+                let bank = match (holds(sa), holds(sb)) {
                     (true, false) => sa,
                     (false, true) => sb,
                     _ => return None,
@@ -190,7 +297,7 @@ impl RouteFollower {
                 (dist(closest_point(obs.pos(), q.p1, q.p2), obs.pos()) < RUN_LOOK).then_some(((q.p1, q.p2), heights[bank].0))
             })
             .collect();
-        // (how far a sinking landing leaves her from solid ground she could still step up onto
+        // (how far a sinking landing leaves her from footing that holds she could still step up onto
         // when she got there, the floor under her going down all the while)
         let to_solid = |at: Point, floor: f64| {
             near_solid
@@ -200,9 +307,6 @@ impl RouteFollower {
                 .map(|(d, _)| d)
                 .fold(f64::INFINITY, f64::min)
         };
-        // (one not yet going down holds a while once she's on it; one going down already is
-        // lower every tic)
-        let moving = |s: usize| heights[s].0 < nav.movers.initial[s].floor - 0.5;
         // (best first: the heading she's on while it still lands somewhere she'd get off from;
         // else the one nearest straight on, her momentum kept (the user's: turning about loses
         // the speed the gaps need, and a long run aimed at the far bank slid off the side of the
