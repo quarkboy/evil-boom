@@ -904,3 +904,23 @@ the floor, too late. Rule: no glance while any of her is under a sector she hear
 Results (HNTR, one life): E1 7.4 -> 7.2 (4/8 -> 5/8 through), E2 7.0 -> 7.1 (4/8 -> 7/8 through),
 E3 4.9 -> 6.9 (4 to the E3M8 boss), Doom II 8.3 -> 8.2; 287 -> 301 levels; no crusher deaths
 left in the set. Arenas unchanged.
+
+## Barrels in a fight with biters (2026-11-08)
+
+E1M8's start (traced from pistol starts, 0/8 out): the yard is a grid of some 20 barrels, the
+demons among them (the user: it's meant for blowing the barrels to take most of them). She walked
+in to fight them and her own shots set the barrels off round her.
+
+- **No shot through a barrel whose chain would reach her** (`barrel_in_line`): a bullet takes the
+  first thing on its line; within the gun's spread at that distance (a missile: what its box
+  touches), a barrel ahead of the target whose chain (each within a blast of the one before)
+  comes within a blast of her holds her fire.
+- **Clear of barrels whenever she's fighting**, not only with something shooting in sight: the
+  "away from a barrel" move and the steering's barrel penalty; her shots set them off too.
+- Tried and dropped: barrels by monsters shot only with their whole chain clear of her (stricter
+  than "that barrel well clear"): fewer barrel kills, Doom II 8.0 -> 7.5 in the A/B, and E1M8
+  didn't need it.
+
+Results (HNTR, one life): E1M8 from a pistol start 0/8 -> 8/8 out. Sets: E1 7.2 -> 7.5 (5/8 ->
+7/8 through), E2 7.1 -> 6.6 (E2M7: her own rockets, launched 8 tics after the trigger into a
+wall she'd turned to: next), E3 6.9, Doom II 8.2 -> 8.0; 301 -> 296 levels. Arenas unchanged.

@@ -73,12 +73,12 @@ another case in a chain.
 
 ## Where things stand (2026-11-08)
 
-Last bot change: no looking round under a moving ceiling. HNTR, one life, 8 seeds: E1 7.2 (5/8
-through; E1M8 deaths), E2 7.1 (7/8 through), E3 6.9 (E3M8 boss deaths, E3M6/E3M9 stucks), Doom II
-8.2 (16 seeds; MAP12 stuck, MAP08 deaths: the Cyberdemon/Baron room, MAP05/MAP06); no crusher
-deaths in the set; berserk arena 14/32. Open items: E1M8 (the barons) and E3M8 (the Spider
-Mastermind); Doom II's MAP05-MAP08 and MAP12; two or more revenants with berserk; deliberate
-infighting only for heavies; several missile-firing monsters can still keep her dodging.
+Last bot change: barrels in a fight with biters (no shot through a barrel whose chain reaches her;
+clear of barrels in any fight). HNTR, one life, 8 seeds: E1 7.5 (7/8 through), E2 6.6 (5/8
+through; E2M7 own rockets), E3 6.9 (E3M8: the Spider Mastermind), Doom II 8.0 (16 seeds; MAP12
+stuck, MAP08 deaths, MAP05/MAP06); berserk arena 14/32. Open items: her own rockets (launched 8
+tics after the trigger, the lane judged at the trigger); E3M8; Doom II MAP05-MAP08 and MAP12; two
+or more revenants with berserk; deliberate infighting only for heavies.
 
 ## The Linux port (done 2026-11-08)
 

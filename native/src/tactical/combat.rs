@@ -531,7 +531,9 @@ impl Combat {
         let shooting = self.visible.iter().any(|t| matches!(mon(t.name).attack, Attack::Hitscan | Attack::Missile));
         let barrel = obs.barrels.iter().flatten().copied().reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a });
         let mut barrel_away = None;
-        if first_missile.is_none() && !busy && shooting {
+        // (with something shooting in sight, or her shooting at something: a shot, hers or theirs,
+        // sets a barrel off; E1M8's demons, biters only, fought among the barrels)
+        if first_missile.is_none() && !busy && (shooting || target.is_some()) {
             if let Some(b) = barrel.filter(|&b| dist(b, pos) < BARREL_CLEAR + 64.0) {
                 barrel_away = self.away_from_barrels(obs, b);
             }

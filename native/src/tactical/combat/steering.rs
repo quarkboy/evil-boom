@@ -222,7 +222,9 @@ impl Combat {
             }
             // (not by a barrel with anything shooting in sight: a shot at her, or past her, sets it
             // off; MAP02, fighting shotgun guys 35 from one, 76 off her in one go)
-            if shooters {
+            // (and with her shooting at something: her shots set them off as well, E1M8's demons,
+            // biters only, fought among its barrels)
+            if shooters || target.is_some() {
                 for b in obs.barrels.iter().flatten() {
                     let gap = crate::motor::follower::blast_gap(ahead, *b);
                     if gap < BARREL_KEEP {

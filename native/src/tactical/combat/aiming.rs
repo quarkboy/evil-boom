@@ -3,6 +3,7 @@
 
 use super::style::Style;
 use super::{mon, segment_point_distance, Combat, BARREL_CLEAR};
+use crate::motor::follower::blast_gap;
 use crate::geom::{dist, Point};
 use crate::los::Body;
 use crate::motor::{heading, norm, Observation, Thing};
@@ -14,8 +15,17 @@ const AIM_TURN: f64 = 18.0;
 
 const TURN_ACCEL: f64 = 5.0;
 
-/// a barrel this near a monster (and well clear of her) is shot instead
+/// a barrel this near a monster (its chain all clear of her) is shot instead
 const BARREL_NEAR: f64 = 96.0;
+/// a barrel's blast is clear of her this far off (its 128 and her radius, and a little), by
+/// `blast_gap`...
+const BARREL_SAFE: f64 = 150.0;
+/// ...and sets off another this near (its blast and the other's radius)
+const BARREL_CHAIN: f64 = 138.0;
+/// a barrel's radius
+const BARREL_RADIUS: f64 = 10.0;
+/// her missiles' radius, about (a rocket's 11, plasma's 13)
+const MISSILE_RADIUS: f64 = 13.0;
 
 /// getting clear of barrels: at most this long at a time...
 const BARREL_TICS: i64 = 2 * 35;
@@ -111,6 +121,8 @@ impl Combat {
             "rocket not safe"
         } else if !self.can_hit(obs, t, None) {
             "no shot (too steep, or something in the way)"
+        } else if Self::barrel_in_line(obs, &w, t) {
+            "a barrel in the line of fire, its chain by her"
         } else {
             ""
         };
@@ -194,14 +206,14 @@ impl Combat {
 
     /// A barrel she can see right by a monster, well clear of her: shoot that.
     pub(super) fn barrel_shot(&mut self, obs: &Observation) -> Option<Point> {
-        let pos = obs.pos();
         let barrels: Vec<Point> = obs
             .barrels
             .iter()
             .flatten()
             .copied()
-            .filter(|&b| dist(b, pos) > BARREL_CLEAR + 64.0 && self.visible.iter().any(|t| dist(b, (t.x, t.y)) < BARREL_NEAR + mon(t.name).radius))
+            .filter(|&b| dist(b, obs.pos()) > BARREL_CLEAR + 64.0 && self.visible.iter().any(|t| dist(b, (t.x, t.y)) < BARREL_NEAR + mon(t.name).radius))
             .collect();
+        let pos = obs.pos();
         if barrels.is_empty() {
             return None;
         }
@@ -211,6 +223,44 @@ impl Combat {
             .into_iter()
             .filter(|&b| self.los.clear(me, Body { x: b.0, y: b.1, z: self.floor_at(obs, b), height: 32.0 }, &self.heights_now))
             .reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a })
+    }
+
+    /// Would every barrel a blast at `b` sets off, in turn (each within a blast of the one
+    /// before), go off clear of her? Not her distance from the one shot alone: E1M8's yard of
+    /// barrels, shot from among them, all of it round her (walls not counted: rather a shot
+    /// missed than a blast through a gap).
+    pub(super) fn chain_clear(obs: &Observation, b: Point) -> bool {
+        let pos = obs.pos();
+        let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
+        let mut chain = vec![b];
+        let mut i = 0;
+        while i < chain.len() {
+            let c = chain[i];
+            if blast_gap(pos, c) < BARREL_SAFE {
+                return false;
+            }
+            for &x in &barrels {
+                if blast_gap(c, x) < BARREL_CHAIN && !chain.iter().any(|&y| dist(x, y) < 1.0) {
+                    chain.push(x);
+                }
+            }
+            i += 1;
+        }
+        true
+    }
+
+    /// A barrel on the line of a shot at t (up to t, within the gun's spread) whose chain would go
+    /// off by her: a bullet takes the first thing on its line (E1M8: demons fought among the
+    /// barrels, the pistol's shots at them into the barrels beside her).
+    fn barrel_in_line(obs: &Observation, w: &crate::tactical::bestiary::Weapon, t: &Thing) -> bool {
+        let pos = obs.pos();
+        let d = dist((t.x, t.y), pos);
+        // (a bullet: anywhere in the spread at that distance; a missile: what its box touches)
+        let width = |along: f64| if w.hitscan { BARREL_RADIUS + along * w.spread.max(1.0).to_radians().tan() } else { BARREL_RADIUS + MISSILE_RADIUS };
+        obs.barrels.iter().flatten().copied().any(|b| {
+            let along = dist(b, pos);
+            along < d && segment_point_distance(pos, (t.x, t.y), b) < width(along) && !Self::chain_clear(obs, b)
+        })
     }
 
     pub(super) fn floor_at(&self, obs: &Observation, p: Point) -> f64 {
