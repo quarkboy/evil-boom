@@ -46,12 +46,17 @@ const ROCKET_WARY: i64 = 3 * 35;
 pub(super) const SWITCH_WAIT: i64 = 40;
 
 /// tics from the trigger to the rocket (S_MISSILE1, then A_FireMissile)
-const ROCKET_DELAY: f64 = 8.0;
+pub(super) const ROCKET_DELAY: f64 = 8.0;
 
 /// a rocket's radius: it moves as a box this far each way along x and y, not a circle
 const ROCKET_RADIUS: f64 = 11.0;
-/// kept clear beyond the rocket's box each side of its way
-const ROCKET_MARGIN: f64 = 2.0;
+/// kept clear beyond the rocket's box each side of its way (a miss is better than a near thing)
+const ROCKET_MARGIN: f64 = 8.0;
+/// a rocket's bottom over her feet as it comes out, and its height
+const ROCKET_BOTTOM: f64 = 32.0;
+const ROCKET_HEIGHT: f64 = 8.0;
+/// a rocket going off further than this from her doesn't reach her (its blast 128, her radius 16)
+const ROCKET_CLEAR: f64 = 160.0;
 
 /// a pain elemental nearer than this isn't shot with rockets (its souls come out in front)
 const PAIN_NEAR: f64 = 512.0;
@@ -160,20 +165,53 @@ impl Combat {
         // it go 8 tics after the trigger, and she'd run up beside the pillar by then)
         let now = obs.pos();
         let then = (now.0 + self.velocity.0 * ROCKET_DELAY, now.1 + self.velocity.1 * ROCKET_DELAY);
-        let h = mon(t.name).height;
+        let mid = t.z + mon(t.name).height / 2.0;
+        // (the way to it, and the way she faces: it goes where she faces, and she fires within a
+        // couple of degrees of it; the arena's crates, a corner clipped 3 units off the target's
+        // way, at full health, in her face)
+        // (only as far as its blast could come back to her: beyond, something in the way is a
+        // miss, no harm; checked all the way, she held fire at a cyberdemon till it had her)
         [now, then].into_iter().all(|pos| {
             let d = dist((t.x, t.y), pos).max(1.0);
-            let (ux, uy) = ((t.x - pos.0) / d, (t.y - pos.1) / d);
-            // (the box's reach to the side of its way: its radius flying along an axis, 1.4
-            // times that on the diagonal; MAP08: one fired out of an alcove at 115 degrees,
-            // the jamb's corner 14.5 off its way, the box 14.6 wide there, in her face)
-            let half = ROCKET_RADIUS * (ux.abs() + uy.abs()) + ROCKET_MARGIN;
-            let side = (-uy * half, ux * half);
-            [1.0, -1.0].into_iter().all(|k| {
-                let o = (side.0 * k, side.1 * k);
-                self.shot_clear_from(obs, (pos.0 + o.0, pos.1 + o.1), (t.x + o.0, t.y + o.1), t.z, h)
+            let len = d.min(ROCKET_CLEAR + ROCKET_MARGIN);
+            [heading(pos, (t.x, t.y)), obs.angle].into_iter().all(|h| self.rocket_flies(obs, pos, h, len, Some(mid)))
+        })
+    }
+
+    /// Would a rocket fired from `pos` the way `h` (degrees) get `len` with nothing in its box's
+    /// way, at its own height (its bottom at her feet + 32, its top + 40, climbing to `to_mid` if
+    /// aimed at something there): a step as high as its bottom stops it as a wall does (the
+    /// arena's 32-high steps, seen over, flown into), and the box reaches a corner its middle
+    /// passes (its radius on an axis, 1.4 times it on the diagonal, and some: a miss is better
+    /// than one in her face, the user's).
+    pub(super) fn rocket_flies(&mut self, obs: &Observation, pos: Point, h: f64, len: f64, to_mid: Option<f64>) -> bool {
+        let (ux, uy) = (h.to_radians().cos(), h.to_radians().sin());
+        let half = ROCKET_RADIUS * (ux.abs() + uy.abs()) + ROCKET_MARGIN;
+        let foot = self.z(obs);
+        let (bottom, top) = (foot + ROCKET_BOTTOM - 0.5, foot + ROCKET_BOTTOM + ROCKET_HEIGHT + 0.5);
+        let rise = to_mid.map_or(0.0, |m| m - (foot + ROCKET_BOTTOM + ROCKET_HEIGHT / 2.0));
+        self.refresh_tic_cache(obs);
+        [0.0, 1.0, -1.0].into_iter().all(|k| {
+            let from = (pos.0 - uy * half * k, pos.1 + ux * half * k);
+            let to = (from.0 + ux * len, from.1 + uy * len);
+            [bottom, top].into_iter().all(|z| {
+                let me = Body { x: from.0, y: from.1, z: z - 3.0, height: 4.0 }; // (its eye, 0.75 up, at z)
+                let at = Body { x: to.0, y: to.1, z: z + rise - 0.5, height: 1.0 };
+                self.los.clear(me, at, &self.heights_now)
             })
         })
+    }
+
+    /// (a rocket on its way out, the way she faces now going into something near) The nearest
+    /// heading to her facing with a clear lane far enough out that its blast won't reach her:
+    /// the last resort once the trigger's pressed (the user's: it can't be called back; turned
+    /// away from what it'd hit).
+    pub(super) fn rocket_way_out(&mut self, obs: &Observation) -> Option<f64> {
+        let pos = obs.pos();
+        if self.rocket_flies(obs, pos, obs.angle, ROCKET_CLEAR, None) {
+            return None;
+        }
+        (1..=18).flat_map(|k| [f64::from(k) * 10.0, -f64::from(k) * 10.0]).map(|d| obs.angle + d).find(|&h| self.rocket_flies(obs, pos, h, ROCKET_CLEAR, None))
     }
 
     fn shot_clear_from(&mut self, obs: &Observation, from: Point, at: Point, z: f64, h: f64) -> bool {

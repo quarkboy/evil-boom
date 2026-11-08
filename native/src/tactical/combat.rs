@@ -478,7 +478,16 @@ impl Combat {
             return self.no_target(obs, busy, errand);
         }
         let (s, fire, weapon) = self.size_up(obs, busy, errand, missiles, target);
-        let act = tree::engage(self, obs, &s);
+        let mut act = tree::engage(self, obs, &s);
+        // (a rocket on its way out, 8 tics after the trigger, the way she faces then: if that way
+        // it'd go off near her, turned to the nearest way it won't, the last resort, the trigger
+        // pressed and no calling it back; the user's)
+        if self.last_shot.is_some_and(|(slot, tic)| slot == 5 && ((obs.tic - tic) as f64) < aiming::ROCKET_DELAY) && s.vile.is_none() {
+            if let Some(h) = self.rocket_way_out(obs) {
+                act.aim = Some(h);
+                act.why = "turned off a rocket's way out into something near".into();
+            }
+        }
         let aim = act.aim.or(s.aim);
         let fire = fire && !act.hold_fire && !self.hold_fire;
         let why = act.why;

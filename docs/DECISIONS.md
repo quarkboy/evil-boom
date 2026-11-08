@@ -924,3 +924,25 @@ in to fight them and her own shots set the barrels off round her.
 Results (HNTR, one life): E1M8 from a pistol start 0/8 -> 8/8 out. Sets: E1 7.2 -> 7.5 (5/8 ->
 7/8 through), E2 7.1 -> 6.6 (E2M7: her own rockets, launched 8 tics after the trigger into a
 wall she'd turned to: next), E3 6.9, Doom II 8.2 -> 8.0; 301 -> 296 levels. Arenas unchanged.
+
+## Rockets: the lane at its own height, the way she faces, and turned off at the last (2026-11-08)
+
+The crate arena (arenas/crates.txt) made her own rockets the loss: 5 of 6 lost fights, one rocket
+at full health. Logged per rocket (where it came out, where it went off): it went off at an
+obstacle's edge, never on it. Two causes: the lane was judged toward the target, but a rocket
+goes where she faces, and she fires within a couple of degrees (a crate's corner clipped 3 off
+the target's way); and the lane was judged as seeing, from her eyes, so a step as high as a
+rocket's bottom (her feet + 32: the 32-high steps) was "clear" and flown into.
+
+- **The lane at the rocket's height** (`rocket_flies`): rays at its bottom and top (her feet + 32
+  and + 40, climbing or dipping to the target's middle), its box's reach each side (radius, 1.4x
+  on the diagonal) and 8 more (a miss is better than a near thing, the user's); toward the target
+  and the way she faces; only as far as a blast could come back to her (160 + 8): beyond, a miss
+  (checked all the way she held fire at a cyberdemon till it had her: Doom II 7.4).
+- **The last resort** (the user's: the trigger can't be called back): each tic till the rocket's
+  out (8 after the trigger), if the way she faces would put it off within 160, turned to the nearest
+  way that won't.
+
+Results (HNTR, one life): crate arena 74/80 -> 75/80 (lost 6 -> 0 or 1, health left 77 -> 85);
+deaths her own rockets led 5 -> 1, their damage 897 -> 589 over the set; E1 7.5 (7/8), E2 6.6 ->
+6.9 (6/8), E3 6.9 -> 6.6, Doom II 8.0 -> 7.7, Doom II arena 227 -> 228; 296 -> 291 levels.
