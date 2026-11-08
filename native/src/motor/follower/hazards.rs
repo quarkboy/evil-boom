@@ -2,7 +2,7 @@
 
 use super::{run_controls, RouteFollower};
 use crate::geom::{dist, Point};
-use crate::motor::{heading, Controls, Observation, FULL_SPEED};
+use crate::motor::{heading, Controls, Observation, FRICTION, FULL_SPEED, RUN_THRUST};
 use crate::navigator::{closest_on_portal, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap};
@@ -18,6 +18,27 @@ const CRUSH_ESCAPE: f64 = 64.0;
 
 /// (mortal, at a goal) a ceiling coming down this near her box (a step on) is waited out
 const CRUSH_STEP: f64 = 24.0;
+
+/// (mortal) a crusher's crossing: room kept over her head the whole way under it (a player can't
+/// move under less than her height)...
+const CROSS_HEADROOM: f64 = 2.0;
+/// ...counting on getting along this much slower than she could, and out this many tics later
+const CROSS_PACE: f64 = 0.85;
+const CROSS_SLACK: f64 = 4.0;
+/// a crossing begun is gone through, not waited out again halfway, for this long
+const CROSS_COMMIT: i64 = 3 * 35;
+
+/// Tics to go `d` from `v0` units a tic, running straight on (thrust and friction as Doom has
+/// them), at `CROSS_PACE` of it.
+fn run_tics(v0: f64, d: f64) -> f64 {
+    let (mut v, mut x, mut k) = (v0, 0.0, 0.0);
+    while x < d && k < 400.0 {
+        v = (v + RUN_THRUST) * FRICTION;
+        x += v * CROSS_PACE;
+        k += 1.0;
+    }
+    k
+}
 
 /// how far a way out from under a ceiling coming down is looked for
 const ESCAPE_LOOK: f64 = 512.0;
@@ -231,6 +252,77 @@ impl RouteFollower {
         Some(self.motion.hold(obs, (0.0, 0.0), self.look))
     }
 
+    /// Sector s's crossing on the way from here (`polys`, hers first): how far her front is from
+    /// getting under it (0: under it already) and how far her back from being out the far side.
+    /// None: the way doesn't come out of it in the look ahead (it ends in there: a switch in a
+    /// crusher's alcove).
+    fn crossing(&self, obs: &Observation, polys: &[usize], s: usize) -> Option<(f64, f64)> {
+        let mesh = &self.view.nav.mesh;
+        let pos = obs.pos();
+        // (the way's length portal to portal, not as the crow flies: E3M4's ring round a pillar,
+        // its way through half round it, judged a straight dash, pinned)
+        let (mut at, mut along) = (pos, 0.0);
+        let mut d_in = (mesh.poly_at(pos).map(|p| mesh.poly(p).sector) == Some(s)).then_some(0.0);
+        for w in polys.windows(2) {
+            let (cur, nxt) = (w[0], w[1]);
+            let pi = mesh.poly(cur).portals.iter().copied().find(|&pi| mesh.portals[pi].other(cur) == nxt)?;
+            let portal = &mesh.portals[pi];
+            let p = closest_on_portal(at, portal.p1, portal.p2);
+            along += dist(at, p);
+            at = p;
+            let (a, b) = (mesh.poly(cur).sector, mesh.poly(nxt).sector);
+            match d_in {
+                None if b == s => d_in = Some((along - PLAYER_RADIUS).max(0.0)),
+                Some(d) if a == s && b != s => return Some((d, along + PLAYER_RADIUS)),
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// From `from` tics on to `to`, does sector s's ceiling leave her room (her height and
+    /// `CROSS_HEADROOM`)? It's taken to go on as a crusher does, at its pace last seen, between
+    /// its floor + 8 and its top, turning at each.
+    fn room_through(&self, obs: &Observation, s: usize, from: f64, to: f64) -> bool {
+        let (now, before) = (obs.heights[s], self.prev_live[s]);
+        let need = now.floor + PLAYER_HEIGHT + CROSS_HEADROOM;
+        let top = self.view.nav.movers.initial[s].ceiling.max(now.ceiling);
+        let bottom = now.floor + 8.0;
+        let pace = self.ceiling_pace.get(&s).copied().unwrap_or(0.0);
+        let mut dir = if now.ceiling > before.ceiling + 0.01 {
+            1.0
+        } else if now.ceiling < before.ceiling - 0.01 || top - now.ceiling < 0.5 {
+            -1.0
+        } else if now.ceiling - bottom < 0.5 {
+            1.0
+        } else {
+            0.0 // (stopped where it is)
+        };
+        let mut h = now.ceiling;
+        let mut k = 0.0;
+        while k <= to {
+            if k >= from && h < need {
+                return false;
+            }
+            h += dir * pace;
+            if h >= top {
+                (h, dir) = (top, -1.0);
+            } else if h <= bottom {
+                (h, dir) = (bottom, 1.0);
+            }
+            k += 1.0;
+        }
+        true
+    }
+
+    /// Would she be through sector s's crossing (from where she is on the way) with room over her
+    /// all the way, setting off (or going on) now? None: no crossing out of it known.
+    fn through_in_time(&self, obs: &Observation, polys: &[usize], s: usize) -> Option<bool> {
+        let (d_in, d_out) = self.crossing(obs, polys, s)?;
+        let v0 = self.motion.speed();
+        Some(self.room_through(obs, s, run_tics(v0, d_in), run_tics(v0, d_out) + CROSS_SLACK))
+    }
+
     /// (mortal) A crusher just ahead on the way, coming down or too low to be under: wait at its
     /// edge till it's on its way up with room, then through without stopping (E4M7's, on the way
     /// to its teleporter: pinned under it, waiting for it to rise, killed 53 times).
@@ -257,6 +349,7 @@ impl RouteFollower {
             .filter_map(|(dx, dy)| mesh.poly_at((pos.0 + dx, pos.1 + dy)))
             .map(|p| mesh.poly(p).sector)
             .any(|s| crushers.contains(&s) || moving(s));
+        let polys: Vec<usize> = path.polys.iter().skip(self.poly_i).take(32).copied().collect();
         if under {
             // (but with it coming down on her and not much room left, out from under it now, by
             // the nearest way to a ceiling that isn't: E3M4's ring round the pillar, its slow
@@ -268,7 +361,10 @@ impl RouteFollower {
                 .iter()
                 .filter_map(|&(dx, dy)| mesh.poly_at((pos.0 + dx, pos.1 + dy)).map(|p| (mesh.poly(p).sector, (dx, dy))))
                 .find(|&(s, _)| moving_down(s));
-            if let Some((s, offset)) = pressing {
+            // (on through, if she'll be out the far side with room over her all the way: back
+            // out of a fast one she's halfway under is caught as surely; E2M2's passage, 64
+            // across, its fast crusher open some 16 tics a time)
+            if let Some((s, offset)) = pressing.filter(|&(s, _)| self.through_in_time(obs, &polys, s) != Some(true)) {
                 if let Some(c) = self.escape_crusher(obs, s, offset, &doors) {
                     return Some(c);
                 }
@@ -278,8 +374,7 @@ impl RouteFollower {
         }
         // (by where the way goes into it, not its middle: E4M7's, its middle far off, run into)
         let mut ahead = None;
-        let polys: Vec<usize> = path.polys.iter().skip(self.poly_i).take(16).copied().collect();
-        for w in polys.windows(2) {
+        for w in polys.windows(2).take(15) {
             let (cur, nxt) = (w[0], w[1]);
             let Some(pi) = mesh.poly(cur).portals.iter().copied().find(|&pi| mesh.portals[pi].other(cur) == nxt) else { break };
             let portal = &mesh.portals[pi];
@@ -296,11 +391,27 @@ impl RouteFollower {
             self.crusher_wait = None;
             return None;
         };
+        // (a crossing timed and begun: gone through, not waited out halfway)
+        if self.crusher_cross.is_some_and(|(c, since)| c == s && obs.tic - since < CROSS_COMMIT) {
+            return None;
+        }
         let (now, before) = (obs.heights[s], self.prev_live[s]);
         let rising = now.ceiling > before.ceiling + 0.01;
         let still = (now.ceiling - before.ceiling).abs() < 0.01;
         let room = now.ceiling - now.floor >= PLAYER_HEIGHT + CRUSH_ROOM;
-        if (room && (rising || still)) || (still && !crushers.contains(&s)) {
+        // (by time, where the way comes out of it: set off when she'd be under it only while it
+        // leaves her room, from her front getting there to her back out of it, at her pace from
+        // where she is; rising with room wasn't enough for a fast one, open some 16 tics, 96 units
+        // to cross from a standstill, E2M2's, caught under it again and again. A way that ends in
+        // there, as before: in once it's rising with room)
+        // (and only while it's going up, or still with room: in on its way down, however the sums
+        // came out, was a dash to beat it, E3M4's slow one round the pillar, pinned)
+        let go = match self.through_in_time(obs, &polys, s) {
+            Some(t) => t && (rising || (still && room)),
+            None => (room && (rising || still)) || (still && !crushers.contains(&s)),
+        };
+        if go {
+            self.crusher_cross = Some((s, obs.tic));
             self.crusher_wait = None;
             return None;
         }

@@ -242,8 +242,8 @@ pub struct Knowledge {
     moving: BTreeSet<usize>,
     /// sector -> the tic it was last heard moving
     moved_at: BTreeMap<usize, i64>,
-    /// once-only lines set off: did they take?
-    taking: Vec<(Fired, BTreeSet<usize>)>,
+    /// once-only lines set off: did they take? (with what they act on, and its heights then)
+    taking: Vec<(Fired, BTreeSet<usize>, BTreeMap<usize, Heights>)>,
     /// per linedef: the subsectors its segs bound
     line_subsectors: BTreeMap<usize, BTreeSet<usize>>,
 }

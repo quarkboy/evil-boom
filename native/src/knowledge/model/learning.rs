@@ -5,7 +5,7 @@ use crate::motor::{Controls, Observation};
 use crate::nav::Heights;
 use crate::navigator::{States, TriggerLine, SHOT_HEIGHT};
 use crate::specials::{Category, Trigger};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 impl Knowledge {
     /// Sector s is seen at new heights: put it down to the latest line fired before it started
@@ -199,7 +199,8 @@ impl Knowledge {
         if info.trigger.once() {
             let targets = self.targets(li);
             if targets.iter().any(|t| tic - self.moved_at.get(t).copied().unwrap_or(-1_000_000_000) < BUSY_TICS) {
-                self.taking.push((f, targets));
+                let then: BTreeMap<usize, Heights> = targets.iter().filter_map(|&t| self.seen_heights.get(&t).map(|&h| (t, h))).collect();
+                self.taking.push((f, targets, then));
             }
         }
     }
@@ -243,15 +244,15 @@ impl Knowledge {
     pub(super) fn took(&mut self, tic: i64) {
         let taking = std::mem::take(&mut self.taking);
         let mut still = Vec::new();
-        for (f, targets) in taking {
+        for (f, targets, then) in taking {
             // (from the tic it's seen pressed: a door moves in the tic of the press, seen in the same
             // look as the press is; MAP19's door 464, opened for good, taken not to have, and
             // pressed again for ever once line 443 had shut it on its timer)
-            if targets.iter().any(|t| self.moved_at.get(t).copied().unwrap_or(-1) >= f.tic) {
+            if targets.iter().any(|&t| self.moved_at.get(&t).copied().unwrap_or(-1) >= f.tic && self.moved_its_way(&f, t, then.get(&t))) {
                 continue; // (it took)
             }
             if tic - f.tic < TAKE_TICS {
-                still.push((f, targets));
+                still.push((f, targets, then));
                 continue;
             }
             if self.already_so(&f, &targets) {
@@ -263,6 +264,29 @@ impl Knowledge {
             self.events.push(format!("tic {tic}: line {} didn't take (what it moves was busy): not used up", f.line));
         }
         self.taking = still;
+    }
+
+    /// Has sector s moved, since line f was set off, the way f moves it: nearer where f puts it
+    /// than it was then (`then`)? A sector busy with another mover moves too, its own way: the
+    /// press, turned down by the game (EV_DoFloor skips a sector already moving), isn't used up
+    /// (E2M2's: a once-only switch to lower a lift's pillar, pressed as the lift rose under her,
+    /// taken as used, and her stranded on it in a shaft of the ceiling for the hour). Not known
+    /// where f puts it, or where s was: any move counts.
+    fn moved_its_way(&self, f: &Fired, s: usize, then: Option<&Heights>) -> bool {
+        let (Some(&then), Some(&now)) = (then, self.seen_heights.get(&s)) else { return true };
+        let ends: Vec<Heights> = self
+            .by_line
+            .get(&f.line)
+            .into_iter()
+            .flatten()
+            .filter_map(|&ti| self.fired_effects.get(&(ti, f.tic)))
+            .flat_map(|e| e.iter().filter(|(t, _)| *t == s).flat_map(|(_, hs)| hs.iter().copied()))
+            .collect();
+        if ends.is_empty() {
+            return true;
+        }
+        let off = |h: Heights| ends.iter().map(|e| (h.floor - e.floor).abs() + (h.ceiling - e.ceiling).abs()).fold(f64::INFINITY, f64::min);
+        off(now) < off(then) - 0.5
     }
 
     /// Was everything line f moves left where it is for good by the last line she set off that

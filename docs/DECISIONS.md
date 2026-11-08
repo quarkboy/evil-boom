@@ -840,3 +840,30 @@ fire too. Before, barrels were shot only when one blocked her way.
 Results (HNTR, one life): E1 7.5 -> 7.4 (4/8 through), E2 3.8 -> 2.8 (2/8; six die on E2M2, five
 of them crushers, reached now rather than stuck before), E3 5.2 -> 5.5, Doom II 8.2 -> 8.6; 263
 levels over the set either way; runs with barrel damage 5 -> 4. Arenas unchanged.
+
+## E2M2: once-only lines that didn't take, and crushers by time (2026-11-08)
+
+Traced first by a helper session in its own worktree (the user asked for it in parallel), then
+applied here.
+
+- **A once-only line pressed while another mover has its sector** (E2 seeds 3, 4: stranded for
+  the hour on a lift's pillar with 8 units over her head): the game uses up an S1 switch or W1
+  line only if its action starts (p_switch.c, p_spec.c), and a floor action skips a sector that
+  has a floor mover already; her knowledge took it as used because the sector moved after the
+  press (the lift's doing), never offered it again. Now it took only if a target moved, since
+  the press, nearer where that line puts it (`Knowledge::moved_its_way`); not known where: any
+  move, as before.
+- **Fast crushers** (E2 seeds 5, 6: a 64-wide passage, its fast crusher open some 16 tics a cycle,
+  caught under it again and again): "rising with room" let her start from a standstill with too
+  little time to cross. Now a crossing is timed (`through_in_time`): the ceiling simulated at its
+  pace last seen between floor + 8 and its top, her run from her pace now along the way (portal
+  to portal: E3M4's ring round a pillar, a straight line was half its length); in only if there's
+  room over her from her front getting under to her back out of it, and only while it's going up
+  (or still with room: in on its way down on the sums was a dash to beat it, E3M4's slow one);
+  then gone through, not waited out halfway; under one coming down, on through if she'd be out
+  with room all the way, else out from under as before. A crusher's pace is by the tics since
+  she last looked (the fight had her in between: a slow one taken to move 23 a tic).
+
+Results (HNTR, one life): E1 7.4 -> 7.4 (4/8), E2 2.8 -> 5.8 (2/8 -> 3/8 through; none end on
+E2M2), E3 5.5 -> 4.9 (E3M4/E3M5 crushers, by the A/B the timed crossing's: next), Doom II 8.6 ->
+8.4; 263 -> 279 levels over the set. Arenas unchanged.

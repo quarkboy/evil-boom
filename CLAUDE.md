@@ -73,12 +73,12 @@ another case in a chain.
 
 ## Where things stand (2026-11-08)
 
-Last bot change: barrels cleared on sight. HNTR, one life, 8 seeds: E1 7.4 (4/8 through; E1M8
-deaths), E2 2.8 (2/8 through; six die on E2M2, five to crushers), E3 5.5 (E3M4, E3M9, E3M8),
-Doom II 8.6 (16 seeds; MAP12 stuck, MAP08 deaths: the Cyberdemon/Baron room); berserk arena
-14/32. Open items: E2M2's crushers (caught again and again over minutes); E1M8 (the barons); two
-or more revenants with berserk; deliberate infighting only for heavies; several missile-firing
-monsters can still keep her dodging.
+Last bot change: once-only lines judged by their own effect; crushers crossed by time. HNTR, one
+life, 8 seeds: E1 7.4 (4/8 through; E1M8 deaths), E2 5.8 (3/8 through; E2M4 stucks), E3 4.9
+(E3M4/E3M5 crushers: slow ones, a late escape), Doom II 8.4 (16 seeds; MAP12 stuck, MAP08
+deaths: the Cyberdemon/Baron room); berserk arena 14/32. Open items: E3's slow crushers; E1M8
+(the barons); E2M4 stucks; two or more revenants with berserk; deliberate infighting only for
+heavies; several missile-firing monsters can still keep her dodging.
 
 ## The Linux port (done 2026-11-08)
 

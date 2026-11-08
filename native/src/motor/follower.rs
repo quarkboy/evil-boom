@@ -324,6 +324,12 @@ pub struct RouteFollower {
     prev_live: Vec<Heights>,
     /// (mortal) waiting at the edge of a crusher for it to come up, logged
     crusher_wait: Option<usize>,
+    /// (mortal) a crusher's crossing timed and begun: its sector, and since when
+    crusher_cross: Option<(usize, i64)>,
+    /// sector -> how fast its ceiling was last seen moving (units a tic)
+    ceiling_pace: BTreeMap<usize, f64>,
+    /// when the heights were last looked at (the fight may have had her between)
+    seen_tic: Option<i64>,
 }
 
 impl RouteFollower {
@@ -422,6 +428,9 @@ impl RouteFollower {
             live: Vec::new(),
             prev_live: Vec::new(),
             crusher_wait: None,
+            crusher_cross: None,
+            ceiling_pace: BTreeMap::new(),
+            seen_tic: None,
         };
         f.next_step(tic);
         f
@@ -725,9 +734,17 @@ impl RouteFollower {
         if self.seen_heights.len() != obs.heights.len() {
             self.seen_heights = obs.heights.clone();
         }
+        // (a pace by the tics since she last looked: the fight had her in between, E3M4's slow
+        // crusher taken to move 23 units a tic)
+        let since = self.seen_tic.map_or(1, |t| (obs.tic - t).max(1)) as f64;
+        self.seen_tic = Some(obs.tic);
         for (sec, &h) in obs.heights.iter().enumerate() {
             if self.seen_heights[sec] != h {
                 self.moved_at.insert(sec, obs.tic);
+                let moved = (h.ceiling - self.seen_heights[sec].ceiling).abs();
+                if moved > 0.01 {
+                    self.ceiling_pace.insert(sec, moved / since);
+                }
             }
             self.seen_heights[sec] = h;
         }
