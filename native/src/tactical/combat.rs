@@ -175,6 +175,11 @@ pub struct Combat {
     /// where the route's taking her mid-fight (an errand: health, a gun, ammo), for dodging
     /// towards (the user's: on to it while dodging, not stuck dodging where she stands)
     pub toward: Option<Point>,
+    /// floors she knows have turned to something that hurts since the map began (kept from what
+    /// she knows by the player)
+    pub changed_floors: BTreeSet<usize>,
+    /// floors a walked-over line lowers into something that hurts (going down: as good as hurting)
+    sinks_into_harm: BTreeSet<usize>,
     last_pos: Option<Point>,
     velocity: Point,
     barrel_way: Option<Point>,
@@ -213,6 +218,9 @@ pub struct Combat {
 
 impl Combat {
     pub fn new(nav: Rc<Navigator>) -> Combat {
+        let sinks_into_harm = (0..nav.map.sectors.len())
+            .filter(|&s| nav.triggers.iter().any(|t| t.info.trigger.walked() && t.effect(s).is_some() && nav.floor_after(t, s) == Some(true)))
+            .collect();
         Combat {
             los: LineOfSight::new(&nav.map),
             hearing: Hearing::new(&nav.map),
@@ -239,6 +247,8 @@ impl Combat {
             dodging: BTreeSet::new(),
             dodge_way: None,
             toward: None,
+            changed_floors: BTreeSet::new(),
+            sinks_into_harm,
             last_pos: None,
             velocity: (0.0, 0.0),
             barrel_way: None,

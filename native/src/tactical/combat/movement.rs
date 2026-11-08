@@ -207,7 +207,17 @@ impl Combat {
     /// Is she standing on a floor that hurts? Then that's no reason not to go a way (every way
     /// is over it; E1M5: stood still in the nukage, fighting, to death, 257 bullets left).
     pub(super) fn on_hurting_floor(&self, obs: &Observation) -> bool {
-        self.nav.poly_at(obs.pos()).is_some_and(|p| self.nav.damage[self.nav.sector_of_poly(p)] != 0)
+        self.nav.poly_at(obs.pos()).is_some_and(|p| self.hurts(obs, self.nav.sector_of_poly(p)))
+    }
+
+    /// Does sector s's floor hurt, or is it about to: by the map; as she knows it (seen turn to
+    /// something that hurts since: `changed_floors`); or going down now to where it will (a
+    /// walkway into the blood, E3M1's: backed off from imps on the far bank onto a stone
+    /// just going down, not much of a step yet, in the blood with it a moment later).
+    pub(super) fn hurts(&self, obs: &Observation, s: usize) -> bool {
+        self.nav.damage[s] != 0
+            || self.changed_floors.contains(&s)
+            || (self.sinks_into_harm.contains(&s) && obs.height(s).is_some_and(|h| h.floor < self.nav.movers.initial[s].floor - 0.5))
     }
 
     /// Is she under a crusher at work?
@@ -224,7 +234,7 @@ impl Combat {
     /// Does going `length` that way get her off a floor that hurts?
     pub(super) fn gets_off(&self, obs: &Observation, d: Point, length: f64) -> bool {
         let p = (obs.x + d.0 * length, obs.y + d.1 * length);
-        self.nav.poly_in(p).is_some_and(|q| self.nav.damage[self.nav.sector_of_poly(q)] == 0)
+        self.nav.poly_in(p).is_some_and(|q| !self.hurts(obs, self.nav.sector_of_poly(q)))
     }
 
     /// How open it is round p: the mean of how far she could go from there each way, up to
@@ -254,7 +264,7 @@ impl Combat {
             let Some(p) = nav.poly_in(q) else { return back };
             let h = floor_of(p);
             let s = nav.sector_of_poly(p);
-            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || (nav.damage[s] != 0 && !self.on_hurting_floor(obs)) || (self.crushing(obs, s) && !self.under_crusher(obs)) {
+            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || (self.hurts(obs, s) && !self.on_hurting_floor(obs)) || (self.crushing(obs, s) && !self.under_crusher(obs)) {
                 return back;
             }
             floor = h.floor;
@@ -301,7 +311,7 @@ impl Combat {
             if h.floor - floor > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT {
                 break;
             }
-            if floor - h.floor > MAX_STEP || (nav.damage[nav.sector_of_poly(p)] != 0 && !self.on_hurting_floor(obs)) {
+            if floor - h.floor > MAX_STEP || (self.hurts(obs, nav.sector_of_poly(p)) && !self.on_hurting_floor(obs)) {
                 return false;
             }
             floor = h.floor;
