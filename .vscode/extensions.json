@@ -1,0 +1,21 @@
+{
+  // Recommended extensions for working on Evil DOOM (VS Code offers them on opening the repo).
+  "recommendations": [
+    // Rust: the nav core, the bot, the `evil` binary (native/)
+    "rust-lang.rust-analyzer",
+    // debugging the Rust binary (works with the MSVC toolchain this repo builds with)
+    "vadimcn.vscode-lldb",
+    // Cargo.toml editing
+    "tamasfe.even-better-toml",
+    // crate versions in Cargo.toml at a glance
+    "fill-labs.dependi",
+    // C: dsda/evil_api.c and the DSDA-Doom sources it's built with
+    "ms-vscode.cpptools",
+    // CMake for DSDA-Doom's build
+    "ms-vscode.cmake-tools",
+    // tools/*.py
+    "ms-python.python",
+    // compiler errors and clippy warnings inline
+    "usernamehw.errorlens"
+  ]
+}

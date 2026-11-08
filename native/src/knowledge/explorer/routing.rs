@@ -335,10 +335,55 @@ impl Explorer {
                 return None;
             }
         }
+        if obj.kind != Kind::Exit && self.dead_end(&route, obj, obs, &view) {
+            return None;
+        }
         if obj.kind != Kind::Exit && !obj.risky && self.shuts_in(&route, obj, obs, &view) {
             return None;
         }
         Some(steps_from_legs(&view, &route.legs, Some(last), Some(&states)))
+    }
+
+    /// Does the route drop her somewhere she couldn't get back from, with nothing there to try
+    /// (no part of the map she hasn't seen beyond it, no switch or door she hasn't tried)? A pit,
+    /// risky or not: E3M3, everything else far off, the nearest a drop of 48 into a pool she'd
+    /// seen all round, walls on every side, its floor hurting after all, died in it pressing walls.
+    pub(super) fn dead_end(&mut self, route: &Route, obj: &Objective, obs: &Observation, view: &View) -> bool {
+        // (a teleporter is a way on of itself: MAP09's, refused as a pit it's the way out of)
+        if obj.kind == Kind::Teleporter || !route.legs.iter().any(|leg| leg.path.steps.iter().any(|n| n.contains("one-way drop"))) {
+            return false;
+        }
+        let nav = Rc::clone(&self.nav);
+        let (Some(end), Some(here)) = (nav.poly_at(obj.goal), nav.poly_at(obs.pos())) else { return false };
+        let doors = view.local_doors(route.keys);
+        let mut states = route.states.clone();
+        for (&d, o) in &doors {
+            for &h in &o.heights {
+                add_height(&mut states[d], h);
+            }
+        }
+        let actions: Vec<&TriggerLine> = view.triggers.iter().filter(|t| !t.effects.is_empty()).collect();
+        let after = view.saturate(end, &states, route.keys, &[], &actions).0;
+        if after.contains(&here) {
+            return false;
+        }
+        let k = &self.knowledge;
+        let known = k.known_polys();
+        if after.iter().any(|&pi| nav.mesh.poly(pi).portals.iter().any(|&q| !known.contains(&nav.mesh.portals[q].other(pi)))) {
+            return false;
+        }
+        let by_line: BTreeMap<usize, &TriggerLine> = nav.triggers.iter().filter_map(|t| t.linedef().map(|li| (li, t))).collect();
+        if k.interactables().iter().any(|li| by_line.get(li).is_some_and(|t| !t.activators.is_disjoint(&after))) {
+            return false;
+        }
+        // (nor with a teleporter there: a way out)
+        if nav.teleports.iter().any(|tp| !tp.src_polys.is_disjoint(&after)) {
+            return false;
+        }
+        if self.current.as_ref().is_none_or(|c| c.ident() != obj.ident()) {
+            self.log.push(format!("tic {}: '{}': a drop into somewhere with no way back and nothing there to try ({} polys)", obs.tic, obj.label, after.len()));
+        }
+        true
     }
 
     /// Would the walk-over lines the route goes over cut her off at its end, where she wouldn't

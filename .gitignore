@@ -21,7 +21,8 @@ _vizdoom/
 out/
 
 # Editors / OS
-.vscode/
+.vscode/*
+!.vscode/extensions.json
 .idea/
 Thumbs.db
 .DS_Store

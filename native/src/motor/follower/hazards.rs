@@ -1,16 +1,26 @@
 //! Waiting for crushers and escaping a ceiling that pins the player.
 
-use super::RouteFollower;
+use super::{run_controls, RouteFollower};
 use crate::geom::{dist, Point};
 use crate::motor::{heading, Controls, Observation, FULL_SPEED};
-use crate::navigator::{closest_on_portal, PLAYER_HEIGHT, PLAYER_RADIUS};
-use std::collections::BTreeSet;
+use crate::navigator::{closest_on_portal, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
+use std::cmp::Reverse;
+use std::collections::{BTreeSet, BinaryHeap};
 
 /// (mortal) a crusher this near ahead on the way is waited for at its edge...
 const CRUSH_LOOK: f64 = 192.0;
 
 /// ...till it's going up with this much more room than she needs
 const CRUSH_ROOM: f64 = 8.0;
+
+/// coming down on her with less room than this left over her head: out from under it, not on
+const CRUSH_ESCAPE: f64 = 64.0;
+
+/// how far a way out from under a ceiling coming down is looked for
+const ESCAPE_LOOK: f64 = 512.0;
+
+/// how far into the floor out from under it she aims
+const ESCAPE_INTO: f64 = 32.0;
 
 /// the longest wait under a ceiling too low for her before it counts as being stuck
 const PINNED_WAIT: i64 = 10 * 35;
@@ -94,6 +104,60 @@ impl RouteFollower {
         self.view.triggers.iter().filter(|t| t.info.category.is_door()).flat_map(|t| t.effects.iter().map(|(s, _)| *s)).filter(|s| !crushers.contains(s)).collect()
     }
 
+    /// The heading along the shortest way out from under ceilings on the move (`moving`) to the
+    /// nearest floor with room for her under a ceiling that stays put.
+    fn out_from_under(&self, obs: &Observation, moving: &dyn Fn(usize) -> bool) -> Option<f64> {
+        let mesh = &self.view.nav.mesh;
+        let start = mesh.poly_at(obs.pos())?;
+        let n = mesh.polys.len();
+        let mut cost = vec![f64::INFINITY; n];
+        let mut entry = vec![obs.pos(); n];
+        let mut came: Vec<Option<(usize, usize)>> = vec![None; n];
+        cost[start] = 0.0;
+        let mut open = BinaryHeap::new();
+        open.push(Reverse((0u64, start)));
+        let mut goal = None;
+        while let Some(Reverse((_, p))) = open.pop() {
+            let s = mesh.poly(p).sector;
+            if p != start && !moving(s) {
+                goal = Some(p);
+                break;
+            }
+            if cost[p] > ESCAPE_LOOK {
+                continue;
+            }
+            let h = obs.heights[s];
+            for &qi in &mesh.poly(p).portals {
+                let q = &mesh.portals[qi];
+                let o = q.other(p);
+                let ho = obs.heights[mesh.poly(o).sector];
+                if ho.floor > h.floor + MAX_STEP || ho.ceiling - ho.floor < PLAYER_HEIGHT || dist(q.p1, q.p2) < 2.0 * PLAYER_RADIUS {
+                    continue;
+                }
+                let at = closest_on_portal(entry[p], q.p1, q.p2);
+                let k = cost[p] + dist(entry[p], at);
+                if k < cost[o] {
+                    (cost[o], entry[o], came[o]) = (k, at, Some((p, qi)));
+                    open.push(Reverse(((k * 16.0) as u64, o)));
+                }
+            }
+        }
+        // (the first portal of the way, crossed well into the next poly)
+        let mut p = goal?;
+        let mut first = None;
+        while let Some((from, qi)) = came[p] {
+            first = Some((qi, p));
+            p = from;
+        }
+        let (qi, beyond) = first?;
+        let q = &mesh.portals[qi];
+        let at = closest_on_portal(obs.pos(), q.p1, q.p2);
+        let c = mesh.poly(beyond).center;
+        let d = dist(at, c).max(1.0);
+        let aim = (at.0 + (c.0 - at.0) / d * d.min(ESCAPE_INTO), at.1 + (c.1 - at.1) / d * d.min(ESCAPE_INTO));
+        Some(heading(obs.pos(), aim))
+    }
+
     /// (mortal) A crusher just ahead on the way, coming down or too low to be under: wait at its
     /// edge till it's on its way up with room, then through without stopping (E4M7's, on the way
     /// to its teleporter: pinned under it, waiting for it to rise, killed 53 times).
@@ -121,6 +185,36 @@ impl RouteFollower {
             .map(|p| mesh.poly(p).sector)
             .any(|s| crushers.contains(&s) || moving(s));
         if under {
+            // (but with it coming down on her and not much room left, out from under it now, by
+            // the nearest way to a ceiling that isn't: E3M4's ring round the pillar, its slow
+            // crusher already on its way down, the way on round inside it, caught at head
+            // height, pinned there, Doom moving her nowhere, till dead)
+            let moving_down = |s: usize| obs.heights[s].ceiling < self.prev_live[s].ceiling - 0.01 && obs.heights[s].ceiling - obs.heights[s].floor - PLAYER_HEIGHT < CRUSH_ESCAPE;
+            // (any of her under it: a crusher crushes whatever's even partly under it)
+            let pressing = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
+                .iter()
+                .filter_map(|&(dx, dy)| mesh.poly_at((pos.0 + dx, pos.1 + dy)).map(|p| (mesh.poly(p).sector, (dx, dy))))
+                .find(|&(s, _)| moving_down(s));
+            if let Some((s, (dx, dy))) = pressing {
+                // (her middle under it: the way out; only an edge of her: straight away from that
+                // edge, E3M4's, waiting at the crusher's edge a corner over it, held there)
+                let way = if dx == 0.0 && dy == 0.0 {
+                    self.out_from_under(obs, &|q| !doors.contains(&q) && (obs.heights[q].ceiling - self.prev_live[q].ceiling).abs() > 0.01)
+                } else {
+                    Some(heading((pos.0 + dx, pos.1 + dy), pos))
+                };
+                if let Some(h) = way {
+                    if self.crusher_wait != Some(s) {
+                        self.log.add(obs.tic, format!("the ceiling of sector {s} coming down on her: out from under it"));
+                        self.crusher_wait = Some(s);
+                    }
+                    self.progress_tic = obs.tic;
+                    self.step_tic = obs.tic;
+                    self.motion.rate = 0.0;
+                    // (full speed whichever way she's facing: backing out at a walk, caught)
+                    return Some(run_controls(obs.angle, h));
+                }
+            }
             self.crusher_wait = None;
             return None;
         }
