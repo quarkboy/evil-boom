@@ -318,6 +318,9 @@ pub struct RecordOptions {
     pub size: Option<(u32, u32)>,
     /// a frame kept every this many tics (2: twice as fast)
     pub every: u32,
+    /// x264's quality (lower: better and bigger; 18 about lossless to the eye) and speed preset
+    pub crf: u32,
+    pub preset: String,
     pub ffmpeg: std::path::PathBuf,
 }
 
@@ -364,7 +367,7 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
     let scale = format!("scale={ow}:{oh}:flags={}", if r.view == RecordView::Game { "neighbor" } else { "bicubic" });
     let mut ff = std::process::Command::new(&r.ffmpeg)
         .args(["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr0", "-s", &format!("{fw}x{fh}"), "-r", "35", "-i", "-"])
-        .args(["-vf", &scale, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p"])
+        .args(["-vf", &scale, "-c:v", "libx264", "-preset", &r.preset, "-crf", &r.crf.to_string(), "-pix_fmt", "yuv420p"])
         .arg(&r.out)
         .stdin(std::process::Stdio::piped())
         .spawn()
@@ -766,9 +769,21 @@ impl Watch {
         self.draw_map(c);
         // (the map, shrunk into the top right of the view, before the game's drawn over the rest)
         let (mw, mh) = (GAME.2 * 3 / 10, GAME.2 * 3 / 10 * MAP.3 / MAP.2);
+        // (each pixel the brightest of the block of the map it stands for: a line a pixel wide
+        // still there shrunk, not caught or missed as the map moves, shimmering)
+        let bright = |p: u32| ((p >> 16) & 255) * 3 + ((p >> 8) & 255) * 6 + (p & 255);
         let small: Vec<u32> = (0..mh)
-            .flat_map(|y| (0..mw).map(move |x| (MAP.0 + x * MAP.2 / mw, MAP.1 + y * MAP.3 / mh)))
-            .map(|(x, y)| c.px[y * W + x])
+            .flat_map(|y| (0..mw).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                let (x0, x1) = (MAP.0 + x * MAP.2 / mw, MAP.0 + ((x + 1) * MAP.2 / mw).max(x * MAP.2 / mw + 1));
+                let (y0, y1) = (MAP.1 + y * MAP.3 / mh, MAP.1 + ((y + 1) * MAP.3 / mh).max(y * MAP.3 / mh + 1));
+                (y0..y1).flat_map(|yy| (x0..x1).map(move |xx| (xx, yy))).map(|(xx, yy)| c.px[yy * W + xx]).max_by_key(|&p| bright(p)).unwrap_or(0)
+            })
+            .collect();
+        // (and two pixels wide: each the brightest of it and the ones right of and below it)
+        let small: Vec<u32> = (0..mh)
+            .flat_map(|y| (0..mw).map(move |x| (x, y)))
+            .map(|(x, y)| [(x, y), ((x + 1).min(mw - 1), y), (x, (y + 1).min(mh - 1))].iter().map(|&(a, b)| small[b * mw + a]).max_by_key(|&p| bright(p)).unwrap_or(0))
             .collect();
         c.clip = (0, 0, W, H);
         self.draw_game(c);

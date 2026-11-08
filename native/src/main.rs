@@ -18,7 +18,8 @@
 //!   evil arena-watch FILE NAME [--seed N] [--speed X]   one of them, watched (space pause, N a
 //!                                               tic at a time, +/- speed)
 //!   evil record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
-//!       [--ffmpeg PATH] [run options]   a watch played as fast as it goes into an MP4 (ffmpeg)
+//!       [--crf N] [--preset P] [--ffmpeg PATH] [run options]   a watch played as fast as it goes
+//!       into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told)
 //!   evil watch <wad> <map> [--speed X] [--all] [--episode] [run options]
 //!       watch her play, with what she knows beside the game (space pause, +/- speed, A the
 //!       whole map, F follow, wheel zoom, Esc quit)
@@ -430,6 +431,7 @@ fn watch(args: &[String]) -> Result<(), String> {
 fn record(args: &[String]) -> Result<(), String> {
     use evildoom::viewer::{RecordOptions, RecordView};
     let (mut view, mut size, mut every, mut ffmpeg) = (RecordView::Hud, None, 1u32, None);
+    let (mut crf, mut preset) = (20u32, "veryfast".to_string());
     let mut rest = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -449,13 +451,15 @@ fn record(args: &[String]) -> Result<(), String> {
             }
             "--speed" => every = it.next().and_then(|v| v.parse().ok()).ok_or("--speed N (whole times as fast)")?,
             "--ffmpeg" => ffmpeg = Some(std::path::PathBuf::from(it.next().ok_or("--ffmpeg PATH")?)),
+            "--crf" => crf = it.next().and_then(|v| v.parse().ok()).ok_or("--crf N (0-51; 20 unless told)")?,
+            "--preset" => preset = it.next().ok_or("--preset NAME (ultrafast .. veryslow)")?.clone(),
             _ => rest.push(a.clone()),
         }
     }
     let (w, names, _) = watch_options(&rest)?;
     let [wad, map, out] = names.as_slice() else { return Err("usage: evil record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode] [options]".into()) };
     let ffmpeg = ffmpeg.or_else(evildoom::viewer::find_ffmpeg).ok_or("no ffmpeg found (on the path, or winget's): --ffmpeg PATH")?;
-    evildoom::viewer::record(wad, map, &w, &RecordOptions { out: out.into(), view, size, every, ffmpeg })
+    evildoom::viewer::record(wad, map, &w, &RecordOptions { out: out.into(), view, size, every, crf, preset, ffmpeg })
 }
 
 /// The watcher's options among `args`: (them, the names left, the run options).
