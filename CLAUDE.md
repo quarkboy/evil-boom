@@ -68,11 +68,13 @@ another case in a chain.
 
 ## Where things stand (2026-11-08)
 
-Last bot change e3627ef. Doom 1 on HNTR, one life, 8 seeds: E1 3.6 levels (ends at E1M5),
-E2 2.8 with 2 of 8 through (E2M2 stuck), E3 4.0 (all die in E3M5, crushers). Doom II 7.9
-(MAP12 stuck 7/16, MAP08 deaths: the Cyberdemon/Baron room). Open items: berserk isn't observed
-(no fist tactics, out-of-ammo retreat ignores it); deliberate infighting only for heavies; several
-missile-firing monsters can still keep her dodging.
+Last bot change c89d5e6 (berserk and the chainsaw, the Melee style). HNTR, one life, 8 seeds:
+E1 3.6 (ends at E1M5), E2 3.6 with 3 of 8 through, E3 3.6 (E3M4/E3M5 crushers), Doom II 7.9
+(16 seeds; MAP12 stuck, MAP08 deaths: the Cyberdemon/Baron room); berserk arena 14/32. Open
+items: crushers (E3's end, and new paths run into them); two or more revenants with berserk
+(the run in under their tracers, the second punching her); Doom II seed 0 stuck on MAP03 (0/9
+items, exploration); deliberate infighting only for heavies; several missile-firing monsters can
+still keep her dodging.
 
 ## The Linux port (done 2026-11-08)
 
