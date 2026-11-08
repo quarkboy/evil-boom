@@ -186,11 +186,44 @@ impl Plight {
     }
 }
 
+/// Why she's falling back: each kind starts on its own rule (`Player::start_retreat`, in that
+/// order) and ends on its own (`Player::retreat_over`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RetreatKind {
+    /// hurt, with something that shoots in sight (or an arch-vile): out of their sight
+    Cover,
+    /// nothing to shoot with and something after her: to ammo, or away
+    ForAmmo,
+    /// caught in a bad place: back the way she came
+    Back,
+    /// surrounded: out of the middle of them
+    Out,
+    /// a heavy she can't kill soon: where its shots land on the others
+    Bait,
+}
+
+impl RetreatKind {
+    fn name(self) -> &'static str {
+        match self {
+            RetreatKind::Cover => "cover",
+            RetreatKind::ForAmmo => "for ammo",
+            RetreatKind::Back => "back",
+            RetreatKind::Out => "out",
+            RetreatKind::Bait => "bait",
+        }
+    }
+}
+
+/// A retreat under way: why, and the way there.
+struct Retreat {
+    kind: RetreatKind,
+    route: RouteFollower,
+}
+
 pub struct Player {
     pub explorer: Explorer,
     fight: Fight,
-    retreat: Option<RouteFollower>,
-    retreat_why: &'static str,
+    retreat: Option<Retreat>,
     bait_tic: i64,
     /// when the last retreat started or found no cover
     retreat_tic: i64,
@@ -211,7 +244,6 @@ impl Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
             fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new() },
             retreat: None,
-            retreat_why: "",
             bait_tic: -1_000_000_000,
             retreat_tic: -1_000_000_000,
             shooters_tic: -1_000_000_000,
@@ -265,7 +297,7 @@ impl Player {
         let retreat = !busy && self.retreating(obs);
         if retreat {
             self.explorer.hold(obs, last);
-            let c = self.retreat.as_mut().map_or_else(Controls::default, |r| r.act(obs));
+            let c = self.retreat.as_mut().map_or_else(Controls::default, |r| r.route.act(obs));
             return match d {
                 Some(d) if d.moving.is_some() && d.why.starts_with("dodging") => self.fight.combat.controls(obs, &d, None), // (a missile about to hit still comes first)
                 Some(d) => self.fight.combat.controls(obs, &d, Some(&c)),
@@ -316,26 +348,15 @@ impl Player {
         self.explorer.log.push(format!("  [fight] {s}"));
     }
 
-    /// Is she falling back: hurt, with something that shoots in sight, to the nearest place
-    /// she's been that nothing in sight can see (and on from there, the explorer's way)?
+    /// Is she falling back? A retreat under way goes on till it's there, it fails, or its own
+    /// end comes; else, not too soon after the last, one may start.
     fn retreating(&mut self, obs: &Observation) -> bool {
         if !self.shooters().is_empty() {
             self.shooters_tic = obs.tic;
         }
         if let Some(r) = &self.retreat {
-            let mut over = match self.retreat_why {
-                "out" | "bait" => obs.tic - self.retreat_tic > OUT_TICS,
-                // (armed again, or long enough)
-                "for ammo" => self.fight.combat.armed(obs) || obs.tic - self.retreat_tic > AMMO_TICS,
-                // (backed out far enough once nothing's shooting, or long enough)
-                "back" => obs.tic - self.shooters_tic > CLEAR_TICS || obs.tic - self.retreat_tic > BACK_TICS,
-                _ => obs.tic - self.shooters_tic > CLEAR_TICS,
-            };
-            if self.retreat_why == "bait" && self.fight.combat.visible.iter().any(|t| self.fight.combat.infighting(t)) {
-                over = true; // (they're at it: leave them to it)
-            }
-            if r.done || r.failed || over {
-                let msg = if r.done { "got there".to_string() } else { format!("{} over", self.retreat_why) };
+            if r.route.done || r.route.failed || self.retreat_over(obs, r.kind) {
+                let msg = if r.route.done { "got there".to_string() } else { format!("{} over", r.kind.name()) };
                 self.log(format!("tic {}: {msg}", obs.tic));
                 self.retreat = None;
                 self.fight.combat.hold_fire = false;
@@ -345,43 +366,67 @@ impl Player {
             }
             return self.retreat.is_some();
         }
-        let health = obs.health.unwrap_or(100.0);
         if obs.tic - self.retreat_tic < RETREAT_AGAIN {
             return false;
         }
-        if (health < RETREAT_HEALTH && !self.shooters().is_empty()) || self.vile(obs) {
+        self.retreat = self.start_retreat(obs);
+        self.retreat.is_some()
+    }
+
+    /// A retreat's own end: getting out and baiting after a while (baiting too once they're at
+    /// each other: leave them to it); for ammo once armed again, or after a while; backing out
+    /// once nothing's shot at her for a moment, or after a while; cover once nothing's shot at
+    /// her for a moment.
+    fn retreat_over(&self, obs: &Observation, kind: RetreatKind) -> bool {
+        let since = obs.tic - self.retreat_tic;
+        let calm = obs.tic - self.shooters_tic > CLEAR_TICS;
+        match kind {
+            RetreatKind::Out => since > OUT_TICS,
+            RetreatKind::Bait => since > OUT_TICS || self.fight.combat.visible.iter().any(|t| self.fight.combat.infighting(t)),
+            RetreatKind::ForAmmo => self.fight.combat.armed(obs) || since > AMMO_TICS,
+            RetreatKind::Back => calm || since > BACK_TICS,
+            RetreatKind::Cover => calm,
+        }
+    }
+
+    /// A retreat to start, the first whose rule holds (a rule that holds with no way to go still
+    /// counts as a try: not again for a while):
+    /// - cover: hurt, with something that shoots in sight, or an arch-vile;
+    /// - for ammo: nothing to shoot with and something after her (away, for ammo, not fists at
+    ///   it; the user's. E3M1 on UV: out of bullets, a cacodemon on her, "getting past" on to a
+    ///   door, chased round till its fireballs had her);
+    /// - back: ambushed in a bad place (out of the middle of them instead, surrounded, with no
+    ///   way back);
+    /// - out: surrounded;
+    /// - bait: a heavy she can't kill soon, with others for its shots to land on.
+    fn start_retreat(&mut self, obs: &Observation) -> Option<Retreat> {
+        let health = obs.health.unwrap_or(100.0);
+        let (kind, route) = if (health < RETREAT_HEALTH && !self.shooters().is_empty()) || self.vile(obs) {
             self.retreat_tic = obs.tic;
-            self.retreat = self.find_cover(obs);
-            self.retreat_why = "cover";
+            (RetreatKind::Cover, self.find_cover(obs))
         } else if !self.fight.combat.armed(obs) && !self.fight.combat.against_her().is_empty() {
-            // (nothing to shoot with and something after her: away, for ammo, not fists at it;
-            // the user's. E3M1 on UV: out of bullets, a cacodemon on her, "getting past" on to a
-            // door, chased round till its fireballs had her)
             self.retreat_tic = obs.tic;
-            self.retreat = self.for_ammo(obs);
-            self.retreat_why = "for ammo";
+            (RetreatKind::ForAmmo, self.for_ammo(obs))
         } else if let Some(why) = self.ambushed(obs) {
             self.retreat_tic = obs.tic;
-            self.retreat = self.back_out(obs, why);
-            self.retreat_why = "back";
-            if self.retreat.is_none() && self.surrounded(obs) {
-                self.retreat = self.out_of_it(obs);
-                self.retreat_why = "out";
+            match self.back_out(obs, why) {
+                Some(r) => (RetreatKind::Back, Some(r)),
+                None if self.surrounded(obs) => (RetreatKind::Out, self.out_of_it(obs)),
+                None => (RetreatKind::Back, None),
             }
         } else if self.surrounded(obs) {
             self.retreat_tic = obs.tic;
-            self.retreat = self.out_of_it(obs);
-            self.retreat_why = "out";
+            (RetreatKind::Out, self.out_of_it(obs))
         } else if obs.tic - self.bait_tic > BAIT_AGAIN {
-            if let Some(b) = self.baiting(obs) {
-                self.retreat_tic = obs.tic;
-                self.bait_tic = obs.tic;
-                self.retreat = Some(b);
-                self.retreat_why = "bait";
-                self.fight.combat.hold_fire = true;
-            }
-        }
-        self.retreat.is_some()
+            let b = self.baiting(obs)?;
+            self.retreat_tic = obs.tic;
+            self.bait_tic = obs.tic;
+            self.fight.combat.hold_fire = true;
+            (RetreatKind::Bait, Some(b))
+        } else {
+            return None;
+        };
+        route.map(|route| Retreat { kind, route })
     }
 
     /// Where she stands now, while nothing's shooting at her and nothing's hurting her: on the

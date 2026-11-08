@@ -1,11 +1,12 @@
-//! Target selection, weapon choice, line of fire and blast safety.
+//! Target selection, aiming and the trigger, line of fire and blast safety (the weapon choice:
+//! `arsenal`).
 
-use super::{ammo_cost, mon, segment_point_distance, Combat, BARREL_CLEAR, ENGAGE_RANGE, SLOTS};
+use super::{mon, segment_point_distance, Combat, BARREL_CLEAR};
 use crate::geom::{dist, Point};
 use crate::los::Body;
-use crate::motor::{heading, norm, Observation, Thing, TICRATE};
+use crate::motor::{heading, norm, Observation, Thing};
 use crate::navigator::PLAYER_HEIGHT;
-use crate::tactical::bestiary::{monster, weapon_in, Attack, Weapon};
+use crate::tactical::bestiary::{monster, weapon_in, Attack};
 
 /// degrees a tic, turning to aim
 const AIM_TURN: f64 = 18.0;
@@ -30,21 +31,8 @@ const AUTOAIM: f64 = 100.0 / 160.0;
 /// a biter seen this lately near her rules out rockets
 const ROCKET_WARY: i64 = 3 * 35;
 
-/// something that shoots back from anywhere: shot at past a gun's reach while this much lands
-const FAR_HITS: f64 = 0.2;
-
 /// a weapon switch asked for: give it this long before asking again
-const SWITCH_WAIT: i64 = 40;
-
-/// an arch-vile winding up: its kill time counts this much...
-const VILE_KILL_WEIGHT: f64 = 0.35;
-/// ...and its fire going off unflinched this many seconds' worth
-const VILE_MISSED: f64 = 8.0;
-/// its pain chance (10/256 a hit)
-const VILE_PAIN: f64 = 10.0 / 256.0;
-
-/// pain rolls a second worth twice a gun's kill time, against an arch-vile
-const FLINCH_ROLLS: f64 = 6.0;
+pub(super) const SWITCH_WAIT: i64 = 40;
 
 /// tics from the trigger to the rocket (S_MISSILE1, then A_FireMissile)
 const ROCKET_DELAY: f64 = 8.0;
@@ -65,34 +53,6 @@ fn priority(name: &str, d: f64) -> f64 {
         "PainElemental" => 2.5,
         "LostSoul" if d > 320.0 => 0.4,
         _ => 1.0,
-    }
-}
-
-/// tics to the first shot of a gun already up
-const FIRST_SHOT: f64 = 4.0;
-
-/// seconds a weapon switch costs
-const SWITCH_COST: f64 = 0.8;
-
-/// units a second she closes in or backs off by, fighting (strafing as she goes)
-const GET_THERE: f64 = 250.0;
-
-/// How near to t she'd fight it from with w, and how far: the gun's own (its spread, its blast)
-/// and what t does up close (claws, bites; a cyberdemon's rockets too quick to dodge).
-pub fn window(w: &Weapon, t: &Thing) -> (f64, f64) {
-    let s = standoff(t.name);
-    (w.keep.0.max(s), w.keep.1.max(s + 256.0))
-}
-
-/// The nearest she'd fight a monster from, whatever the gun.
-pub fn standoff(name: &str) -> f64 {
-    match name {
-        "Cyberdemon" | "SpiderMastermind" => 640.0,
-        "Fatso" => 400.0,
-        "Arachnotron" | "Revenant" | "PainElemental" => 256.0,
-        "Demon" | "Spectre" | "HellKnight" | "BaronOfHell" | "Cacodemon" => 160.0,
-        "DoomImp" | "LostSoul" => 128.0,
-        _ => 0.0,
     }
 }
 
@@ -156,19 +116,6 @@ impl Combat {
             self.held_fire = held_fire.to_string();
         }
         (aim, on && held_fire.is_empty(), weapon)
-    }
-
-    /// Close enough to shoot at with w: inside its reach, or (at something that hurts her from
-    /// anywhere) as far as enough of a shot still lands.
-    pub fn in_reach(w: &Weapon, t: &Thing, d: f64) -> bool {
-        let info = mon(t.name);
-        if d >= ENGAGE_RANGE {
-            return false;
-        }
-        if d < w.reach + if w.slot == 1 { info.radius } else { 0.0 } {
-            return true;
-        }
-        info.attack == Attack::Hitscan && w.slot != 1 && w.hits(info.radius, d) >= FAR_HITS
     }
 
     /// Would a shot at t get to it, as Doom aims one (not too steep, nothing in the way); else out
@@ -301,7 +248,7 @@ impl Combat {
     }
 
     /// Is a rocket at t sure not to blow up by her (E1M9's died at 88 health, nothing in sight)?
-    fn rocket_safe(&self, obs: &Observation, t: &Thing) -> bool {
+    pub(super) fn rocket_safe(&self, obs: &Observation, t: &Thing) -> bool {
         let pos = obs.pos();
         let clear = crate::tactical::bestiary::weapon(5).splash + 48.0;
         if dist((t.x, t.y), pos) < clear + mon(t.name).radius {
@@ -345,130 +292,6 @@ impl Combat {
             }
         }
         true
-    }
-
-    /// The gun that'd see t off soonest from here, counting the switch and what its ammo is worth.
-    fn weapon_for(&self, obs: &Observation, t: &Thing, d: f64) -> i32 {
-        self.best_gun(obs, t, |_| d)
-    }
-
-    /// The gun to have up with no fight on (and nothing else asking for one: a barrel tapped
-    /// with the pistol, then the pistol kept, the next fight begun with it, MAP02): the super
-    /// shotgun or the shotgun, the chaingun, plasma, whichever first has a few shots in it; the
-    /// pistol only for want of any. Not the rocket launcher or the BFG (round a corner into
-    /// something close), nor the fist. None: what she has up will do.
-    pub fn ready_gun(&self, obs: &Observation) -> Option<i32> {
-        let held = Self::held(obs);
-        let want = [(3, 4), (4, 20), (6, 40), (2, 1)].into_iter().find(|&(slot, shots)| {
-            let w = weapon_in(slot, obs.super_shotgun);
-            held.contains(&slot) && Self::ammo(obs, slot) >= w.ammo_per_shot * shots
-        })?;
-        (obs.weapon != Some(want.0) && obs.tic - self.switch_tic > SWITCH_WAIT).then_some(want.0)
-    }
-
-    /// The gun she'd rather fight t with, wherever she stood: each gun judged from the nearest
-    /// place in its window (and the way there): the super shotgun for hell knights, closing in,
-    /// not the pistol from where she happens to be (all 50 shells kept to the end, dead).
-    pub(super) fn preferred_gun(&self, obs: &Observation, t: &Thing) -> Weapon {
-        let d = dist((t.x, t.y), obs.pos());
-        let slot = self.best_gun(obs, t, |w| {
-            let (near, far) = window(w, t);
-            d.clamp(near, far)
-        });
-        weapon_in(slot, obs.super_shotgun)
-    }
-
-    /// The gun that'd see t off soonest, each judged at the distance `at` gives for it (and the
-    /// time to get there).
-    fn best_gun(&self, obs: &Observation, t: &Thing, at: impl Fn(&Weapon) -> f64) -> i32 {
-        let here = dist((t.x, t.y), obs.pos());
-        let held = Self::held(obs);
-        let info = mon(t.name);
-        let crowd = self.visible.len();
-        let (mut best, mut cost) = (obs.weapon.unwrap_or(2), f64::INFINITY);
-        for &slot in &SLOTS {
-            if !held.contains(&slot) {
-                continue;
-            }
-            let w = weapon_in(slot, obs.super_shotgun);
-            let have = Self::ammo(obs, slot);
-            if (w.ammo_per_shot > 0 && have < w.ammo_per_shot) || (slot == 5 && !self.rocket_safe(obs, t)) {
-                continue;
-            }
-            let d = at(&w);
-            if slot == 1 && !Self::in_reach(&w, t, d) {
-                continue; // (not the fist for being free when nothing reaches: as Astra's branch has it)
-            }
-            let mut c = self.time_to_kill(&w, t, d) + (d - here).abs() / GET_THERE;
-            if w.ammo_per_shot > 0 {
-                let shots = (f64::from(info.health) / (w.damage_on(&info) * w.hits(info.radius, d)).max(1.0)).max(1.0);
-                let (per, low) = ammo_cost(slot);
-                c += shots * f64::from(w.ammo_per_shot) * per * (low / f64::from(have)).max(1.0);
-            }
-            if info.attack == Attack::Fire && t.attack >= 0 {
-                // (winding up its fire: what counts is the chance of a flinch before it goes off,
-                // the shots that land in time, after the switch, the reload, the launch, the
-                // flight; Astra's branch's reckoning)
-                let chance = self.interrupt_chance(obs, &w, t, d, f64::from(super::steering::VILE_BLAST - t.attack));
-                c = VILE_KILL_WEIGHT * c + VILE_MISSED * (1.0 - chance);
-            } else if info.attack == Attack::Fire {
-                // (an arch-vile flinches out of its fire one hit in 25: the super shotgun's 20
-                // pellets, plasma's stream, the chaingun's, stun it best)
-                c /= 1.0 + w.flinch_rolls(info.radius, d) / FLINCH_ROLLS;
-            }
-            if slot == 7 && (info.boss || crowd >= 4) {
-                c *= 0.3;
-            }
-            if Some(slot) != obs.weapon {
-                c += SWITCH_COST;
-            }
-            if c < cost {
-                best = slot;
-                cost = c;
-            }
-        }
-        best
-    }
-
-    /// The chance a shot at t with w makes it flinch within `window` tics: the shots that land
-    /// in time (a switch first, what's left of the reload, the launch, the flight), each hit
-    /// a roll of its pain chance.
-    fn interrupt_chance(&self, obs: &Observation, w: &Weapon, t: &Thing, d: f64, window: f64) -> f64 {
-        if w.ammo_per_shot == 0 {
-            return 0.0;
-        }
-        let ready = if Some(w.slot) != obs.weapon {
-            SWITCH_WAIT as f64
-        } else {
-            self.last_shot.filter(|&(s, _)| s == w.slot).map_or(0.0, |(_, tic)| (tic as f64 + w.cycle - obs.tic as f64).max(0.0))
-        };
-        let launch = match w.slot {
-            3 => 3.0,
-            5 => 8.0,
-            7 => 46.0,
-            _ => 0.0,
-        };
-        let flight = if w.hitscan { 0.0 } else { d / w.speed.max(1.0) };
-        let left = window - ready - launch - flight;
-        if left < 0.0 {
-            return 0.0;
-        }
-        let shots = ((left / w.cycle).floor() + 1.0).min(f64::from(Self::ammo(obs, w.slot) / w.ammo_per_shot));
-        let rolls = w.pellets * w.hits(mon(t.name).radius, d);
-        1.0 - (1.0 - VILE_PAIN).powf(shots * rolls)
-    }
-
-    /// Seconds of shooting it'd take (a lot, out of the gun's reach: anything else first).
-    fn time_to_kill(&self, w: &Weapon, t: &Thing, d: f64) -> f64 {
-        let info = mon(t.name);
-        if !Self::in_reach(w, t, d) {
-            return 1e4 + d;
-        }
-        let per_shot = w.damage_on(&info) * w.hits(info.radius, d);
-        // (the first shot goes at once, the rest a reload apart: a zombieman 65 off, one shotgun
-        // blast, was counted a whole reload and lost to two pistol shots, MAP02)
-        let shots = (f64::from(info.health) / per_shot.max(0.1)).max(1.0);
-        ((shots - 1.0) * w.cycle + FIRST_SHOT) / TICRATE
     }
 
     /// This tic's turn (positive is clockwise) towards `aim`.

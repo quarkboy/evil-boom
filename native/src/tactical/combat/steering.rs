@@ -2,7 +2,7 @@
 //! distance from each monster (her target's window, the others' standoffs), going across their
 //! line of fire, not ending up between them, and keeping on the way she's going.
 
-use super::aiming::{standoff, window};
+use super::style::{standoff, window};
 use super::{mon, segment_point_distance, spread, Combat};
 use crate::geom::{dist, Point};
 use crate::los::Body;

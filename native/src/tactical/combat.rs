@@ -11,8 +11,11 @@
 //! of sight in front of her (or near, or she's being hurt), then remembered where last seen.
 
 mod aiming;
+mod arsenal;
 mod movement;
 mod steering;
+mod style;
+mod tree;
 
 use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
@@ -63,19 +66,9 @@ const SPLASH: f64 = 112.0;
 const CLOSE: f64 = 160.0;
 /// this much threat in sight: stand and fight rather than walk on
 const STAND_THREAT: f64 = 6.0;
-/// ...unless killing what's in sight would take longer than this (s), or more ammo than she
-/// has: then get past it
-const OUTMATCHED: f64 = 30.0;
 /// monsters standing about (or by where she's going) she'd take longer than this to kill: left
 /// be
 pub const LEAVE_BE: f64 = 15.0;
-/// of what she shoots that would land (the spread allowed for), this much does (her ammo's
-/// worth, roughly)
-const AMMO_LANDS: f64 = 0.9;
-/// ...outmatched only clearly short of it (fifty rockets for a cyberdemon will about do)
-const SHORT_BY: f64 = 0.8;
-/// fewer shots than this for the guns held: supplies come first
-const SHORT_OF_AMMO: i32 = 15;
 /// ...or below this health, anything in sight
 const LOW_HEALTH: f64 = 35.0;
 /// with something shooting in sight, keep this far from barrels
@@ -83,17 +76,6 @@ const BARREL_CLEAR: f64 = 160.0;
 
 /// a monster seen after another, not her, this long: they're fighting each other: leave them
 const INFIGHT_TICS: i32 = 18;
-
-/// What using up ammo costs, in seconds of fighting a unit, and below how much the cost goes up.
-fn ammo_cost(slot: i32) -> (f64, f64) {
-    match slot {
-        2 | 4 => (0.01, 20.0),
-        3 => (0.05, 8.0),
-        5 => (0.3, 4.0),
-        6 => (0.015, 40.0),
-        _ => (0.015, 80.0),
-    }
-}
 
 const SLOTS: [i32; 7] = [1, 2, 3, 4, 5, 6, 7];
 
@@ -431,70 +413,6 @@ impl Combat {
         self.against_her().iter().map(|t| mon(t.name).threat).sum()
     }
 
-    fn held(obs: &Observation) -> Vec<i32> {
-        obs.weapons.clone().unwrap_or_else(|| vec![1, 2])
-    }
-
-    fn ammo(obs: &Observation, slot: i32) -> i32 {
-        obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n)
-    }
-
-    /// Damage a second she can do with the best gun she has ammo for (the fist's, else).
-    pub fn firepower(&self, obs: &Observation) -> f64 {
-        let held = Self::held(obs);
-        SLOTS
-            .iter()
-            .filter(|s| held.contains(s))
-            .map(|&s| weapon_in(s, obs.super_shotgun))
-            .filter(|w| w.ammo_per_shot == 0 || Self::ammo(obs, w.slot) >= w.ammo_per_shot)
-            .map(|w| w.dps())
-            .fold(f64::NEG_INFINITY, f64::max)
-    }
-
-    /// Would killing what's in sight take too long with what she has (a room of barons with the
-    /// pistol: MAP08 at pistol start), or more ammo than she has (a cyberdemon, ten rockets)?
-    pub fn outmatched(&self, obs: &Observation) -> bool {
-        let near: Vec<&'static str> = self.visible.iter().filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0).map(|t| t.name).collect();
-        self.too_much(obs, &near, OUTMATCHED)
-    }
-
-    /// Would these take her longer than `secs` to kill, or more than her ammo's worth?
-    pub fn too_much(&self, obs: &Observation, names: &[&str], secs: f64) -> bool {
-        let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
-        if hp / self.firepower(obs) > secs {
-            return true;
-        }
-        // (what each kind of ammo's worth, with the best gun she has for it; bosses take no blast)
-        let held = Self::held(obs);
-        let boss = names.iter().any(|n| mon(n).boss);
-        let radius = names.iter().map(|n| mon(n).radius).fold(20.0, f64::max);
-        let mut worth = 0.0;
-        for pool in [&[2, 4][..], &[3], &[5], &[6, 7]] {
-            let best = pool
-                .iter()
-                .filter(|s| held.contains(s))
-                .map(|&s| {
-                    let w = weapon_in(s, obs.super_shotgun);
-                    let per = if boss && s == 5 { w.damage / 2.0 } else { w.damage };
-                    f64::from(Self::ammo(obs, s) / w.ammo_per_shot.max(1)) * per * w.hits(radius, 384.0)
-                })
-                .fold(0.0, f64::max);
-            worth += best;
-        }
-        let melee = held.contains(&1) && self.firepower(obs) == weapon_in(1, None).dps();
-        !melee && worth * AMMO_LANDS < SHORT_BY * hp
-    }
-
-    /// Can any gun she has ammo for get to t from here?
-    pub fn reachable(&self, obs: &Observation, t: &Thing) -> bool {
-        let held = Self::held(obs);
-        let d = dist((t.x, t.y), obs.pos());
-        SLOTS.iter().any(|&s| {
-            let w = weapon_in(s, obs.super_shotgun);
-            held.contains(&s) && Self::ammo(obs, s) >= w.ammo_per_shot && Self::in_reach(&w, t, d)
-        })
-    }
-
     /// If t is standing about, and a shot would be heard by enough monsters she's seen standing
     /// about too that she'd be outmatched once they're awake: what it'd wake (else "").
     fn would_wake(&mut self, obs: &Observation, t: &Thing) -> String {
@@ -521,63 +439,36 @@ impl Combat {
         format!("{}: {}", sleepers.len(), names.into_iter().collect::<Vec<_>>().join(", "))
     }
 
-    /// Has she a gun with ammo for it (more than the fist)?
-    pub fn armed(&self, obs: &Observation) -> bool {
-        let held = Self::held(obs);
-        SLOTS.iter().any(|&s| s != 1 && held.contains(&s) && Self::ammo(obs, s) >= weapon_in(s, obs.super_shotgun).ammo_per_shot)
-    }
-
-    /// Next to nothing left to shoot with (the fist doesn't count).
-    pub fn short_of_ammo(&self, obs: &Observation) -> bool {
-        self.shots(obs) < SHORT_OF_AMMO
-    }
-
-    fn shots(&self, obs: &Observation) -> i32 {
-        let held = Self::held(obs);
-        let shots: i32 = SLOTS
-            .iter()
-            .filter(|&&s| held.contains(&s) && s != 4 && s != 7)
-            .map(|&s| (s, super::bestiary::weapon(s)))
-            .filter(|(_, w)| w.ammo_per_shot > 0)
-            .map(|(s, w)| Self::ammo(obs, s) / w.ammo_per_shot)
-            .sum();
-        shots
-    }
-
     // --- deciding ---------------------------------------------------------------------------
 
     /// What the fight needs this tic (None: nothing). `busy`: the route is in the middle of
     /// something that wants the controls (a run-up, a jump). `errand`: the route's going for
     /// something to fight with: the fight only aims and shoots on the way.
     pub fn decide(&mut self, obs: &Observation, busy: bool, errand: &str) -> Option<Decision> {
-        let pos = obs.pos();
         let missiles = self.incoming(obs);
-        let first_missile = missiles.first().cloned();
         let target = self.pick_target(obs);
-        if target.is_none() && first_missile.is_none() {
-            if !busy && errand.is_empty() {
-                // (hidden from an arch-vile's fire: staying hidden comes first)
-                if let Some((name, way)) = self.vile_fire(obs) {
-                    let why = format!("out of the {name}'s sight");
-                    if why != self.mode {
-                        self.log.push(format!("tic {}: {why}", obs.tic));
-                        self.mode = why.clone();
-                    }
-                    let aim = self.vile_face().map(|v| heading(obs.pos(), v));
-                    return Some(Decision { takeover: true, aim, fire: false, weapon: 0, moving: way, why });
-                }
-                if let Some(d) = self.lost_sight(obs) {
-                    return Some(d);
-                }
-            }
-            if !self.mode.is_empty() {
-                self.log.push(format!("tic {}: fight over ({} kills; {:.0} rounds spent, {:.0} damage done)", obs.tic, self.kills, self.spent, self.dealt));
-                (self.spent, self.dealt) = (0.0, 0.0);
-            }
-            self.mode.clear();
-            self.target = None;
-            return None;
+        if target.is_none() && missiles.is_empty() {
+            return self.no_target(obs, busy, errand);
         }
+        let (s, fire, weapon) = self.size_up(obs, busy, errand, missiles, target);
+        let act = tree::engage(self, obs, &s);
+        let aim = act.aim.or(s.aim);
+        let fire = fire && !act.hold_fire && !self.hold_fire;
+        let why = act.why;
+        let takeover = (!busy && !["shooting on the way", "getting past", "out of", "sneaking"].iter().any(|p| why.starts_with(p))) || !s.missiles.is_empty() || s.vile.is_some();
+        if why != self.mode {
+            let t = s.target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {:.0} threat; health {:.0})", t.name, t.id, s.threat, s.health));
+            self.log.push(format!("tic {}: {why}{t}", obs.tic));
+            self.mode = why.clone();
+        }
+        Some(Decision { takeover, aim, fire, weapon, moving: act.moving, why })
+    }
+
+    /// The fight as it stands, for the tree: the aim and the trigger at the target (or a barrel
+    /// by it), the weapon to switch to, and what the nodes look at.
+    fn size_up<'a>(&mut self, obs: &Observation, busy: bool, errand: &'a str, missiles: Vec<Thing>, target: Option<Thing>) -> (tree::Situation<'a>, bool, i32) {
+        let pos = obs.pos();
+        let first_missile = missiles.first().cloned();
         let (mut aim, mut fire, mut weapon) = (None, false, 0);
         if let Some(t) = &target {
             let (a, f, w) = self.aim_and_fire(obs, t);
@@ -612,8 +503,6 @@ impl Combat {
             .collect();
         let shooting = self.visible.iter().any(|t| matches!(mon(t.name).attack, Attack::Hitscan | Attack::Missile));
         let barrel = obs.barrels.iter().flatten().copied().reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a });
-        let mut moving = None;
-        let why: String;
         let mut barrel_away = None;
         if first_missile.is_none() && !busy && shooting {
             if let Some(b) = barrel.filter(|&b| dist(b, pos) < BARREL_CLEAR + 64.0) {
@@ -621,103 +510,8 @@ impl Combat {
             }
         }
         let vile = if busy { None } else { self.vile_fire(obs) };
-        if let Some((name, way)) = vile {
-            // (its fire goes off only if it can still see her)
-            moving = way;
-            if let Some(v) = self.vile_face() {
-                aim = Some(heading(pos, v)); // (facing it: the blast's put the far side of the shelter)
-            }
-            why = format!("out of the {name}'s sight");
-        } else if let Some(m) = &first_missile {
-            moving = self.dodge(obs, &missiles);
-            why = if errand.is_empty() { format!("dodging {}", m.name) } else { format!("dodging {} on the way to the {errand}", m.name) };
-        } else if self.under_crusher(obs) && !busy {
-            // (out from under it first, whatever else)
-            let gun = target.as_ref().map_or_else(|| self.gun(obs), |t| self.preferred_gun(obs, t));
-            moving = self.steer(obs, target.as_ref(), &gun);
-            why = "out from under a crusher".into();
-        } else if let Some(away) = barrel_away {
-            // (MAP23: a mancubus's fireball set off the barrels she stood by)
-            moving = Some(away);
-            why = "away from a barrel".into();
-        } else if busy {
-            why = "shooting on the way".into();
-        // (out of ammo, a demon that follows for ever: backing off got her nowhere, MAP22; the
-        // route takes her past it, faster than it)
-        } else if let Some(nearest) = close.iter().filter(|_| self.armed(obs) || health < LOW_HEALTH).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos))) {
-            let t = nearest.clone();
-            let gun = self.preferred_gun(obs, &t);
-            moving = self.steer(obs, Some(&t), &gun).or_else(|| self.away_from(obs, (t.x, t.y)));
-            why = if errand.is_empty() { format!("backing off from {}", nearest.name) } else { format!("backing off from {} towards the {errand}", nearest.name) };
-        } else if !errand.is_empty() {
-            why = format!("shooting on the way to {errand}");
-        } else if !self.armed(obs) {
-            // (MAP05, MAP11: out of ammo, fist out, walked up to imps to punch them)
-            why = "out of ammo: getting past".into();
-        } else if let Some(woken) = target.as_ref().map(|t| self.would_wake(obs, t)).filter(|w| !w.is_empty()) {
-            fire = false;
-            why = format!("sneaking past (a shot would wake {woken})");
-        } else if let Some(t) = target.as_ref().filter(|t| !self.reachable(obs, t) && t.after_her && !outmatched && self.known.get(&t.id).is_some_and(|s| s.awake) && self.still_closing(obs, t.id)) {
-            // (after her, only too far for the guns she has: closer, as a player would; a
-            // cacodemon hanging back out of the shotgun's reach)
-            let gun = self.preferred_gun(obs, t);
-            moving = self.steer(obs, Some(t), &gun).or_else(|| self.closing_in(obs, t, None));
-            why = format!("closing in on {} (out of reach)", t.name);
-        } else if target.as_ref().is_some_and(|t| !self.reachable(obs, t)) {
-            why = "out of reach: going on".into();
-        } else if let Some(way) = target
-            .as_ref()
-            .filter(|t| self.visible.len() == 1 && dist((t.x, t.y), pos) < 512.0 && !self.can_hit(obs, t, None))
-            .and_then(|t| self.shot_way(obs, t))
-        {
-            moving = Some(way);
-            why = format!("stepping for a shot at {}", target.as_ref().map_or("", |t| t.name));
-        } else if let Some(t) = target.as_ref().filter(|t| outmatched && self.known.get(&t.id).is_some_and(|s| s.awake) && dist((t.x, t.y), pos) < KEEP_CLEAR) {
-            // (outmatched by something awake and after her: the route walked her up to the
-            // cyberdemon with a rocket or two short; keep her distance, still shooting)
-            let gun = self.preferred_gun(obs, t);
-            moving = self.steer(obs, Some(t), &gun);
-            why = format!("outmatched: keeping clear of {}", t.name);
-        } else if outmatched {
-            why = "getting past".into(); // (shooting on the way, the route going on)
-        } else if let Some(way) = target
-            .as_ref()
-            .filter(|t| mon(t.name).attack != Attack::None && dist((t.x, t.y), pos) < aiming::window(&self.preferred_gun(obs, t), t).0)
-            .and_then(|t| {
-                let gun = self.preferred_gun(obs, t);
-                self.steer(obs, Some(t), &gun).or_else(|| self.keeping_off(obs, t, aim))
-            })
-        {
-            // (too near for the gun she has, or for them to miss)
-            moving = Some(way);
-            why = format!("keeping off from {}", target.as_ref().map_or("", |t| t.name));
-        } else if threat >= STAND_THREAT || health < LOW_HEALTH || self.blocking(obs, target.as_ref()) {
-            let mut w = "standing and fighting".to_string();
-            if let Some(t) = &target {
-                let gun = self.preferred_gun(obs, t);
-                let d = dist((t.x, t.y), pos);
-                moving = self.steer(obs, Some(t), &gun);
-                if !Self::in_reach(&gun, t, d) || d > aiming::window(&gun, t).1 {
-                    moving = moving.or_else(|| self.closing_in(obs, t, None));
-                    w = format!("closing in on {}", t.name);
-                }
-            } else {
-                moving = self.strafe_dir(obs, aim);
-            }
-            why = w;
-        } else {
-            why = "shooting on the way".into();
-        }
-        if self.hold_fire {
-            fire = false;
-        }
-        let takeover = (!busy && !["shooting on the way", "getting past", "out of", "sneaking"].iter().any(|p| why.starts_with(p))) || first_missile.is_some() || vile.is_some();
-        if why != self.mode {
-            let t = target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {threat:.0} threat; health {health:.0})", t.name, t.id));
-            self.log.push(format!("tic {}: {why}{t}", obs.tic));
-            self.mode = why.clone();
-        }
-        Some(Decision { takeover, aim, fire, weapon, moving, why })
+        let s = tree::Situation { pos, busy, errand, missiles, target, aim, health, threat, outmatched, close, barrel_away, vile };
+        (s, fire, weapon)
     }
 
     /// Closing in on t, out of reach: still worth it? Not once she's been at it this long without

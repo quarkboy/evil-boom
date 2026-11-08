@@ -721,3 +721,25 @@ stay `evildoom`.
   7.9, MAP12 stuck 7/16). Expert sweep, 68 maps, seed 0, 8 jobs: **48/68 with every item**,
   56 exited, 10 stuck (the 8 boss maps, E1M4 44/45, MAP21 17/18, MAP26 45/58), 2 stalled
   (E4M6, MAP14), in **207 s** wall-clock.
+
+## The fight as a tree (2026-11-08)
+
+The user: a clear decision for which weapon, a clear one for how to fight with it, and a state
+tree for the fight rather than one long chain of cases. Restructured with no change in play
+(checked: every seed of the regression set and every arena run the same as before).
+
+- **The tree** (`tactical/combat/tree.rs`): each tic, the first node that applies acts. Nothing
+  in sight: out of a vile's sight · lost sight of it · the fight over. A target or a missile:
+  *survive* (out of a vile's sight, dodging, out from under a crusher, away from a barrel) ·
+  *busy* (in a jump: shooting on the way) · *fight* (backing off from what claws, to the errand,
+  out of ammo: getting past, sneaking past, closing in out of reach, out of reach: going on,
+  stepping for a shot, outmatched: keeping clear / getting past, keeping off, standing and
+  fighting, shooting on the way). The aim and trigger are sized up first (`Combat::size_up`); a
+  node only overrides them. Nodes keep the branches' own code: one may look, keep something (a
+  clock, the steering's way) and pass.
+- **Which weapon** (`combat/arsenal.rs`): slots as the game brings them up, ammo, armed,
+  firepower, outmatched, and the gun for a monster, every rule for it in `best_gun`.
+- **How to fight with it** (`combat/style.rs`): a weapon's window at a monster and its reach.
+- **Retreats** (`player.rs`): an explicit state, `Retreat { kind, route }`, kinds cover / for
+  ammo / back / out / bait, started by `start_retreat` (the first rule that holds, in that order)
+  and ended by `retreat_over` (each kind its own).

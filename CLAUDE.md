@@ -56,6 +56,13 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   one sweep type at a time, expert first; the next only
   with no per-level regressions so far.
 
+## Where the fight's code is
+
+`tactical/combat/tree.rs` is the fight, a node a decision (see its header); `combat/arsenal.rs`
+which weapon; `combat/style.rs` how to fight with it; retreats are `Retreat`/`RetreatKind` in
+`tactical/player.rs`. New behaviour goes in as a node (or a style, a rule in `best_gun`), not as
+another case in a chain.
+
 ## Where things stand (2026-11-08)
 
 Last bot change e3627ef. Doom 1 on HNTR, one life, 8 seeds: E1 3.6 levels (ends at E1M5),
