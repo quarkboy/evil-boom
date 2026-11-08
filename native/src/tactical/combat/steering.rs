@@ -48,6 +48,11 @@ const FIRE_HEIGHT: f64 = 16.0;
 /// a hiding place this deep in an arch-vile's shadow, along the way there
 const SHADOW: f64 = 48.0;
 
+/// a blast shelter (something low between her and the arch-vile) only this near...
+const SHELTER_NEAR: f64 = 96.0;
+/// ...and only with this few tics left (and the way there)
+const SHELTER_LATE: f64 = 16.0;
+
 /// she covers about this much a tic, running
 const RUN: f64 = 14.0;
 
@@ -94,7 +99,7 @@ impl Combat {
                     far += 16.0;
                     continue;
                 }
-                if hug.is_none_or(|(hf, _)| far < hf) {
+                if far <= SHELTER_NEAR && hug.is_none_or(|(hf, _)| far < hf) {
                     let to = dist(p, (vile.x, vile.y)).max(1.0);
                     let blast = Body { x: p.0 + (vile.x - p.0) / to * FIRE_SHORT, y: p.1 + (vile.y - p.1) / to * FIRE_SHORT, z, height: FIRE_HEIGHT };
                     if !self.los.clear(blast, me, &self.heights_now) {
@@ -120,6 +125,9 @@ impl Combat {
                 far += 16.0;
             }
         }
+        // (the blast shelter only at the last moment and close by: going for it sooner, or
+        // further, cost more shooting than it saved, as Astra's branch measured)
+        let hug = hug.filter(|&(far, _)| left <= SHELTER_LATE + far / RUN);
         let Some((_, spot)) = best.or(hug) else {
             self.vile_until = 0; // (nowhere to hide: fight on)
             return None;
@@ -138,6 +146,14 @@ impl Combat {
             if best.is_none() { " (its blast blocked there)" } else { "" }
         ));
         Some((vile.name, self.towards(obs, spot)))
+    }
+
+    /// Sheltering from an arch-vile's blast rather than out of its sight: where it is, to face
+    /// (the fire's put by her facing; turned away, the shelter fails).
+    pub(super) fn vile_face(&self) -> Option<Point> {
+        let (_, id, _) = self.vile_way?;
+        // (still in its sight: sheltering from the blast, not hidden)
+        self.visible.iter().find(|t| t.id == id).map(|v| (v.x, v.y))
     }
 
     /// Is there room for her at p (all of her, not only her middle)?

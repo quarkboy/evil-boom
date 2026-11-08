@@ -475,7 +475,8 @@ impl Combat {
                         self.log.push(format!("tic {}: {why}", obs.tic));
                         self.mode = why.clone();
                     }
-                    return Some(Decision { takeover: true, aim: None, fire: false, weapon: 0, moving: way, why });
+                    let aim = self.vile_face().map(|v| heading(obs.pos(), v));
+                    return Some(Decision { takeover: true, aim, fire: false, weapon: 0, moving: way, why });
                 }
                 if let Some(d) = self.lost_sight(obs) {
                     return Some(d);
@@ -531,6 +532,9 @@ impl Combat {
         if let Some((name, way)) = vile {
             // (its fire goes off only if it can still see her)
             moving = way;
+            if let Some(v) = self.vile_face() {
+                aim = Some(heading(pos, v)); // (facing it: the blast's put the far side of the shelter)
+            }
             why = format!("out of the {name}'s sight");
         } else if let Some(m) = &first_missile {
             moving = self.dodge(obs, &missiles);
