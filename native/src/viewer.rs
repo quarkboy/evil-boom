@@ -681,6 +681,10 @@ impl Watch {
             c.use_ = false;
         }
         self.engine.step(&c);
+        for h in self.engine.take_hits() {
+            let armor = if h.armor > 0 { format!(" (and {} armor)", h.armor) } else { String::new() };
+            self.agent.x_mut().log.push(format!("tic {}: hit for {}{armor} by {}", self.engine.tic, h.health, h.from()));
+        }
         self.controls = Some(c);
         if let Some(h) = self.hold.as_mut().filter(|_| obs.tic % TICRATE as i64 == 0) {
             let now = progress(&self.engine, self.agent.x(), &h.o);

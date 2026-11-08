@@ -3,7 +3,6 @@
 use super::{turn_to, Explorer, Hooks, Kind, Objective, ARRIVE_SLACK, JUMP_MISSES, LOOK_TICS, STUCK_TIMES};
 use crate::geom::dist;
 use crate::knowledge::model::{Heard, How, Note};
-use crate::motor::follower::RouteFollower;
 use crate::motor::{Controls, Observation};
 use std::collections::BTreeSet;
 
@@ -298,14 +297,19 @@ impl Explorer {
             }
             return true;
         }
+        // (in the middle of a run of jumps, or running over a floor sinking under her: nothing
+        // ends the route but its end, not even something seen on the way; MAP08: a wall seen as
+        // she landed on the sinking block, the route ended there, stopped on it, down with it into
+        // the pit, every run)
+        let committed = self.follower.as_ref().is_some_and(|f| f.in_jump() || f.jumps_ahead());
         let k = &self.knowledge;
-        if obj.kind == Kind::Frontier {
+        if obj.kind == Kind::Frontier && !committed {
             let known = k.known_polys();
             if obj.reveals.iter().any(|&p| known.contains(&(p as usize))) {
                 return self.ends(obs, "seen it on the way");
             }
         }
-        if obj.kind == Kind::Room && self.seen_to(&obj) && dist(obs.pos(), obj.goal) < ROOM_NEAR {
+        if obj.kind == Kind::Room && !committed && self.seen_to(&obj) && dist(obs.pos(), obj.goal) < ROOM_NEAR {
             // (the wall seen already, nearly there: on, not up to the spot to stop and look; E2M2's
             // crates, a stop at each face. Only nearly there: the way there shows more, E2M1's
             // way on, missed ending them as soon as seen)
@@ -314,7 +318,7 @@ impl Explorer {
         if obj.kind == Kind::Teleporter && obj.trigger.as_ref().is_some_and(|t| usize::try_from(t.line).is_ok_and(|li| k.teleports.contains_key(&li))) {
             return self.ends(obs, "been through");
         }
-        if obj.kind != Kind::Exit && !self.exit_last && k.exits().len() > self.exits_seen {
+        if obj.kind != Kind::Exit && !committed && !self.exit_last && k.exits().len() > self.exits_seen {
             return self.ends(obs, "an exit came into view");
         }
         if hooks.gone(obs, &obj) {
@@ -324,7 +328,7 @@ impl Explorer {
         self.urgent_n = k.heard.len();
         // (something just went off out of sight: go and look first; not half way through a run
         // of jumps: MAP08's)
-        let jumping = self.follower.as_ref().is_some_and(RouteFollower::jumps_ahead);
+        let jumping = committed;
         if !(obj.kind == Kind::Noise && obj.urgent) && !jumping && heard.iter().any(|h| self.urgent(h, obs.tic) && self.worth_a_look(h)) {
             return self.ends(obs, "something went off out of sight");
         }

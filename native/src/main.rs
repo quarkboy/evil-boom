@@ -210,6 +210,7 @@ fn run_one(args: &[String]) -> Result<(), String> {
     if let Some(l) = &r.carry {
         println!("CARRY {}{}", cli::carry_arg(l), if r.secret { " SECRET" } else { "" });
     }
+    println!("DAMAGE {}", r.damage);
     println!("RESULT {} {}", r.outcome, r.detail);
     Ok(())
 }
@@ -279,6 +280,8 @@ fn episode_chain(me: &std::path::Path, wad: &str, first: &str, o: &evildoom::swe
         for line in BufReader::new(out).lines().map_while(Result::ok) {
             if let Some(l) = line.strip_prefix("LEVEL ") {
                 println!("seed {seed} {l}");
+            } else if let Some(l) = line.strip_prefix("DAMAGE ") {
+                println!("    damage taken: {l}");
             } else if let Some(l) = line.strip_prefix("WATCH ") {
                 println!("    to watch: {l}");
             } else if let Some(l) = line.strip_prefix("END ") {
@@ -306,6 +309,7 @@ fn episode_one(args: &[String]) -> Result<(), String> {
         let line = format!("{m}: {} {}", r.outcome, r.detail.chars().take(70).collect::<String>());
         let Some(l) = r.carry else {
             println!("LEVEL {line}");
+            println!("DAMAGE {}", r.damage);
             let mut os = o.clone();
             os.carry = None;
             println!("WATCH evil watch {wad} {first} {} --episode", option_args(&os).join(" "));

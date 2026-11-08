@@ -49,8 +49,10 @@ const FLINCH_ROLLS: f64 = 6.0;
 /// tics from the trigger to the rocket (S_MISSILE1, then A_FireMissile)
 const ROCKET_DELAY: f64 = 8.0;
 
-/// half a rocket's width, and a little
-const ROCKET_HALF: f64 = 13.0;
+/// a rocket's radius: it moves as a box this far each way along x and y, not a circle
+const ROCKET_RADIUS: f64 = 11.0;
+/// kept clear beyond the rocket's box each side of its way
+const ROCKET_MARGIN: f64 = 2.0;
 
 /// a pain elemental nearer than this isn't shot with rockets (its souls come out in front)
 const PAIN_NEAR: f64 = 512.0;
@@ -197,7 +199,12 @@ impl Combat {
         let h = mon(t.name).height;
         [now, then].into_iter().all(|pos| {
             let d = dist((t.x, t.y), pos).max(1.0);
-            let side = (-(t.y - pos.1) / d * ROCKET_HALF, (t.x - pos.0) / d * ROCKET_HALF);
+            let (ux, uy) = ((t.x - pos.0) / d, (t.y - pos.1) / d);
+            // (the box's reach to the side of its way: its radius flying along an axis, 1.4
+            // times that on the diagonal; MAP08: one fired out of an alcove at 115 degrees,
+            // the jamb's corner 14.5 off its way, the box 14.6 wide there, in her face)
+            let half = ROCKET_RADIUS * (ux.abs() + uy.abs()) + ROCKET_MARGIN;
+            let side = (-uy * half, ux * half);
             [1.0, -1.0].into_iter().all(|k| {
                 let o = (side.0 * k, side.1 * k);
                 self.shot_clear_from(obs, (pos.0 + o.0, pos.1 + o.1), (t.x + o.0, t.y + o.1), t.z, h)

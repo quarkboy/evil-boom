@@ -78,6 +78,75 @@ index bbdfdb6..9721b2e 100644
    if (dsda_ShowMessages() && player == &players[displayplayer])
      dsda_QueueMessage(str, message_normal);
  }
+diff --git a/prboom2/src/p_inter.c b/prboom2/src/p_inter.c
+index c941fd6..9aaca67 100644
+--- a/prboom2/src/p_inter.c
++++ b/prboom2/src/p_inter.c
+@@ -1226,7 +1226,41 @@ static dboolean P_InfightingImmune(mobj_t *target, mobj_t *source)
+ 
+ static dboolean P_MorphMonster(mobj_t * actor);
+ 
++// Evil (evil-doom): every hit on the player kept, what it took and where it came from.
++evil_hit_t evil_hits[EVIL_HITS];
++int evil_hit_count;
++
++static void P_DamageMobjReal(mobj_t *target,mobj_t *inflictor, mobj_t *source, int damage);
++
+ void P_DamageMobj(mobj_t *target,mobj_t *inflictor, mobj_t *source, int damage)
++{
++  player_t *player = target->player;
++  int health, armor;
++  if (!player)
++  {
++    P_DamageMobjReal(target, inflictor, source, damage);
++    return;
++  }
++  health = player->health;
++  armor = player->armorpoints[ARMOR_ARMOR];
++  P_DamageMobjReal(target, inflictor, source, damage);
++  if (player->health < health || player->armorpoints[ARMOR_ARMOR] < armor)
++  {
++    evil_hit_t *h = &evil_hits[evil_hit_count % EVIL_HITS];
++    h->health = health - player->health;
++    h->armor = armor - player->armorpoints[ARMOR_ARMOR];
++    h->inflictor = inflictor ? (int)inflictor->type : -1;
++    h->source = source ? (int)source->type : -1;
++    h->self = source == target;
++    h->cause = inflictor || source ? 0
++             : target->ceilingz - target->floorz < target->height ? 1
++             : damage >= 10000 ? 3
++             : 2;
++    evil_hit_count++;
++  }
++}
++
++static void P_DamageMobjReal(mobj_t *target,mobj_t *inflictor, mobj_t *source, int damage)
+ {
+   player_t *player;
+   dboolean justhit = false;          /* killough 11/98 */
+diff --git a/prboom2/src/p_inter.h b/prboom2/src/p_inter.h
+index 3ec7d91..b728628 100644
+--- a/prboom2/src/p_inter.h
++++ b/prboom2/src/p_inter.h
+@@ -48,6 +48,18 @@
+ dboolean P_GivePower(player_t *, int);
+ void P_TouchSpecialThing(mobj_t *special, mobj_t *toucher);
+ void P_DamageMobj(mobj_t *target,mobj_t *inflictor,mobj_t *source,int damage);
++
++// Evil (evil-doom): the hits on the player, the last EVIL_HITS of them (evil_hit_count in all)
++typedef struct
++{
++  int health, armor;     // what it took
++  int inflictor, source; // thing types (-1: none): what hit her, whose it was
++  int self;              // her own (a rocket of hers, a barrel she set off)
++  int cause;             // 0 a thing, 1 a crusher, 2 the floor, 3 something else
++} evil_hit_t;
++#define EVIL_HITS 64
++extern evil_hit_t evil_hits[EVIL_HITS];
++extern int evil_hit_count;
+ void P_HealMobj(mobj_t *mo, int num);
+ int P_PlayerHealthIncrease(int value);
+ 
 diff --git a/prboom2/src/p_mobj.c b/prboom2/src/p_mobj.c
 index 9c2a92c..bca1d02 100644
 --- a/prboom2/src/p_mobj.c

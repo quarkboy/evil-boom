@@ -21,7 +21,7 @@ use crate::replay::Entry;
 use crate::wad::Wad;
 use crate::walkthrough::{plan_from, LevelPlan, Rest};
 use status::Status;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -275,8 +275,30 @@ pub struct MapRun {
     pub detail: String,
     pub carry: Option<crate::dsda::Loadout>,
     pub secret: bool,
+    /// what hurt her, most first (see `damage_summary`)
+    pub damage: String,
     /// the game, for an episode's next level in the same process
     pub engine: Option<Engine>,
+}
+
+/// The damage she took by where it came from, most first, with the tics of the hits (the
+/// first few, to look up in the log): "ShotgunGuy 45 (+10 armor) at tic 1583 (45s), 1614".
+fn damage_summary(damage: &BTreeMap<String, (i32, i32, Vec<i64>)>) -> String {
+    const SHOWN: usize = 4;
+    let mut d: Vec<_> = damage.iter().collect();
+    d.sort_by_key(|(_, (h, a, _))| std::cmp::Reverse(h + a));
+    d.iter()
+        .map(|(from, (h, a, tics))| {
+            let armor = if *a > 0 { format!(" (+{a} armor)") } else { String::new() };
+            let mut at: Vec<String> = tics.iter().take(SHOWN).map(i64::to_string).collect();
+            at[0] = format!("{} ({:.0}s)", tics[0], tics[0] as f64 / TICRATE);
+            if tics.len() > SHOWN {
+                at.push(format!("+{} more", tics.len() - SHOWN));
+            }
+            format!("{from} {h}{armor} at tic {}", at.join(", "))
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 pub fn run_map(wad: &str, map_name: &str, o: &RunOptions) -> Result<(String, String), String> {
@@ -316,6 +338,9 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     let mut best_life = (0, 0);
     // (the secrets tally so far this life: up by one, she's just found the one where she stands)
     let mut secrets_seen = 0;
+    // (what hurt her, and how much: health, armour, by where it came from; the last hit)
+    let mut damage: BTreeMap<String, (i32, i32, Vec<i64>)> = BTreeMap::new();
+    let mut last_hit: Option<String> = None;
     while (e.tic as f64) < until * TICRATE {
         if o.expert || o.secrets {
             let now = progress(&e, agent.x());
@@ -343,10 +368,11 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
             let seen: Vec<String> = p.combat().visible.iter().map(|t| format!("{} {:.0} away", t.name, crate::geom::dist((t.x, t.y), pos))).collect();
             let doing = p.explorer.current.as_ref().map_or("-".to_string(), |c| c.label.clone());
             let msg = format!(
-                "tic {}: killed at ({:.0}, {:.0}): health {:.0}, armor {:.0}, weapon {}, weapons {:?}, ammo {:?}; in sight: {}; doing: {doing}",
+                "tic {}: killed at ({:.0}, {:.0}) by {}: health {:.0}, armor {:.0}, weapon {}, weapons {:?}, ammo {:?}; in sight: {}; doing: {doing}",
                 e.tic,
                 pos.0,
                 pos.1,
+                last_hit.as_deref().unwrap_or("?"),
                 ob.health.unwrap_or(0.0),
                 ob.armor.unwrap_or(0.0),
                 ob.weapon.unwrap_or(0),
@@ -436,6 +462,15 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
             idle_since = None;
         }
         e.step(&ctl);
+        for h in e.take_hits() {
+            let from = h.from();
+            let armor = if h.armor > 0 { format!(" (and {} armor)", h.armor) } else { String::new() };
+            agent.x_mut().log.push(format!("tic {}: hit for {}{armor} by {from}", e.tic, h.health));
+            let d = damage.entry(from.clone()).or_default();
+            (d.0, d.1) = (d.0 + h.health, d.1 + h.armor);
+            d.2.push(e.tic);
+            last_hit = Some(from);
+        }
         rec.entries.push(Entry::Tic(ob.tic, ctl));
         {
             let k = &agent.x().knowledge;
@@ -516,6 +551,8 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     if o.complete {
         detail = format!("kills {}/{}, {detail}", tally[1].0, tally[1].1);
     }
+    let hurt = damage_summary(&damage);
+    lines.push(format!("damage taken: {}", if hurt.is_empty() { "none" } else { &hurt }));
     lines.push(format!("RESULT {outcome} {detail}"));
     let dir = log_dir();
     let _ = std::fs::create_dir_all(&dir);
@@ -531,9 +568,9 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     let secret = exited && e.secret_exit();
     if o.snapshot.is_some() {
         snapshot(&w, m, &map_name, e, agent, o.focus)?;
-        return Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, engine: None });
+        return Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, engine: None });
     }
-    Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, engine: Some(e) })
+    Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, engine: Some(e) })
 }
 
 #[cfg(feature = "viewer")]

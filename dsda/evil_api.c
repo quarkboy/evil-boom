@@ -19,6 +19,7 @@
 #include "m_random.h"
 #include "p_mobj.h"
 #include "p_map.h"
+#include "p_inter.h"
 #include "p_tick.h"
 #include "r_state.h"
 #include "i_system.h"
@@ -143,6 +144,30 @@ extern int evil_spawned;  /* (p_mobj.c, patched) */
 EVIL_API void evil_reset_ids(void)
 {
   evil_spawned = 0;
+}
+
+/* The hits on her since the last call (up to max; the oldest of a long run of them lost):
+ * six numbers each, as evil_hit_t has them (health, armor, inflictor, source, self, cause).
+ * Returns how many. */
+static int evil_hits_read;
+
+EVIL_API int evil_hits_since(int *out, int max)
+{
+  int n = 0;
+  if (evil_hit_count - evil_hits_read > EVIL_HITS)
+    evil_hits_read = evil_hit_count - EVIL_HITS;
+  if (evil_hits_read > evil_hit_count)
+    evil_hits_read = evil_hit_count;
+  while (evil_hits_read < evil_hit_count && n < max)
+  {
+    evil_hit_t *h = &evil_hits[evil_hits_read % EVIL_HITS];
+    int *o = out + 6 * n;
+    o[0] = h->health; o[1] = h->armor; o[2] = h->inflictor; o[3] = h->source;
+    o[4] = h->self; o[5] = h->cause;
+    evil_hits_read++;
+    n++;
+  }
+  return n;
 }
 
 EVIL_API void evil_seed(int fixed, unsigned long value)

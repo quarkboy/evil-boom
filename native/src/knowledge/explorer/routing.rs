@@ -15,6 +15,8 @@ const PLAN_SECONDS: f64 = 600.0;
 
 /// Minimum health a route must leave her with in mortal runs.
 const HEALTH_MARGIN: f64 = 25.0;
+/// a route ending on a floor that hurts counts this many hurts there (doing it, getting off)
+const END_STAY: f64 = 2.0;
 
 /// her pace on a route, units a tic (a little under running, for the turns)
 const ROUTE_PACE: f64 = 12.0;
@@ -288,7 +290,14 @@ impl Explorer {
             // (mortal: no way that costs more health than she has to spare, risky or not; noted,
             // for healing or a suit to go for. Not while down on a floor that hurts: staying
             // costs more than any way off it, the user's)
-            let cost = self.route_damage(&route.legs, &states, obs);
+            let mut cost = self.route_damage(&route.legs, &states, obs);
+            // (ending on a floor that hurts: the time there doing it, and the way back off it too,
+            // not only the way in; MAP08's pit under the door, 20 a second, a door pressed from it
+            // the last thing to do, dropped into at 54 health and died there, stuck, every time)
+            let end = self.nav.poly_at(obj.goal).map(|p| self.nav.damage[self.nav.sector_of_poly(p)]).unwrap_or(0);
+            if end > 0 && obj.kind != Kind::Exit && self.knowledge.suit_until.is_none_or(|u| u < obs.tic) {
+                cost = 2.0 * cost + f64::from(end) * END_STAY;
+            }
             if cost > 0.0 && obs.health.unwrap_or(100.0) - cost < HEALTH_MARGIN {
                 self.short_of_health = Some(obs.tic);
                 return None;

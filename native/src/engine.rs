@@ -72,6 +72,8 @@ pub struct Engine {
     /// what she has at the start of the level (and every start again): what she brought from
     /// the one before, playing an episode through
     pub carry: Option<crate::dsda::Loadout>,
+    /// the hits on her since they were last taken (`take_hits`)
+    hits: Vec<crate::dsda::Hit>,
 }
 
 impl Engine {
@@ -119,6 +121,7 @@ impl Engine {
             sectors: Vec::new(),
             mobjs: Vec::new(),
             carry: None,
+            hits: Vec::new(),
         })
     }
 
@@ -268,6 +271,13 @@ impl Engine {
             weapon: c.weapon,
         });
         self.tic += 1;
+        let hits = self.game.hits();
+        self.hits.extend(hits);
+    }
+
+    /// The hits on her since the last call.
+    pub fn take_hits(&mut self) -> Vec<crate::dsda::Hit> {
+        std::mem::take(&mut self.hits)
     }
 
     /// The game's frame as drawn (the view and status bar): (width, height, palette indices).

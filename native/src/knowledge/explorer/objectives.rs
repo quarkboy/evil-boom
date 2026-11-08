@@ -403,6 +403,13 @@ impl Explorer {
                     })
                     .map(|o| Objective { label: format!("{} (risky)", o.label), risky: true, ..o })
                     .filter(|o| this.fresh(o, tic))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    // (risky as to the way there, not as to what's there: MAP08's box of rockets in
+                    // the cyberdemon's room, the last thing to do, walked in for at 137 health)
+                    // (items only: they're to be had or not; the ways on, through it if need be:
+                    // MAP06's spider's hall)
+                    .filter(|o| o.kind != Kind::Item || !hooks.dangerous(obs, o))
                     .collect();
             }
             let mut kept: Vec<Objective> = Vec::new();

@@ -129,6 +129,7 @@ type SpawnFn = unsafe extern "C" fn(c_int, f64, f64, f64, c_int) -> c_int;
 type GiveFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int);
 type ClearFn = unsafe extern "C" fn() -> c_int;
 type ResetIdsFn = unsafe extern "C" fn();
+type HitsFn = unsafe extern "C" fn(*mut c_int, c_int) -> c_int;
 
 static LOADED: AtomicBool = AtomicBool::new(false);
 
@@ -152,6 +153,7 @@ pub struct Dsda {
     give_fn: Option<GiveFn>,
     clear_fn: Option<ClearFn>,
     reset_ids_fn: Option<ResetIdsFn>,
+    hits_fn: Option<HitsFn>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
     _argv: Vec<CString>,
     _argv_ptrs: Vec<*mut c_char>,
@@ -197,6 +199,8 @@ impl Dsda {
         let clear_fn = sym(b"evil_clear_items").ok().map(|p| unsafe { std::mem::transmute::<*const (), ClearFn>(p) });
         // SAFETY: as above, evil_reset_ids's signature; optional.
         let reset_ids_fn = sym(b"evil_reset_ids").ok().map(|p| unsafe { std::mem::transmute::<*const (), ResetIdsFn>(p) });
+        // SAFETY: as above, evil_hits_since's signature; optional.
+        let hits_fn = sym(b"evil_hits_since").ok().map(|p| unsafe { std::mem::transmute::<*const (), HitsFn>(p) });
         let argv: Vec<CString> =
             std::iter::once("evil".to_string()).chain(args.iter().cloned()).map(CString::new).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
         let mut argv_ptrs: Vec<*mut c_char> = argv.iter().map(|a| a.as_ptr().cast_mut()).collect();
@@ -219,6 +223,7 @@ impl Dsda {
             give_fn,
             clear_fn,
             reset_ids_fn,
+            hits_fn,
             _argv: argv,
             _argv_ptrs: argv_ptrs,
             _lib: lib,
@@ -256,6 +261,33 @@ impl Dsda {
         // SAFETY: no arguments; see `load`.
         unsafe { f() };
         true
+    }
+
+    /// The hits on her since the last call (none in a library without the call).
+    pub fn hits(&self) -> Vec<Hit> {
+        let Some(f) = self.hits_fn else { return Vec::new() };
+        const MAX: usize = 64;
+        let mut raw = [0 as c_int; 6 * MAX];
+        // SAFETY: room for MAX hits of six ints each, as the call is told; see `load`.
+        let n = unsafe { f(raw.as_mut_ptr(), MAX as c_int) }.clamp(0, MAX as c_int) as usize;
+        raw.as_chunks::<6>()
+            .0
+            .iter()
+            .take(n)
+            .map(|&[health, armor, inflictor, source, own, cause]| Hit {
+                health,
+                armor,
+                inflictor: (inflictor >= 0).then_some(inflictor),
+                source: (source >= 0).then_some(source),
+                own: own != 0,
+                cause: match cause {
+                    0 => HitCause::Thing,
+                    1 => HitCause::Crusher,
+                    2 => HitCause::Floor,
+                    _ => HitCause::Other,
+                },
+            })
+            .collect()
     }
 
     /// Take every pickup off the level: how many went (None: no such call in the library).
@@ -381,6 +413,60 @@ pub struct Loadout {
     pub health: i32,
     pub armor: i32,
     pub armor_type: i32,
+}
+
+/// What hurt her, as the game has it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HitCause {
+    /// a thing (a monster's attack, a missile, a barrel going up)
+    Thing,
+    /// a ceiling coming down on her
+    Crusher,
+    /// a floor that hurts
+    Floor,
+    /// the level otherwise (a death line, a telefrag)
+    Other,
+}
+
+/// A hit on her: what it took and where it came from.
+#[derive(Clone, Copy, Debug)]
+pub struct Hit {
+    pub health: i32,
+    pub armor: i32,
+    /// the thing type that hit her (a missile, a barrel, the monster itself for a bullet or a bite)
+    pub inflictor: Option<i32>,
+    /// whose it was (the monster that fired it, whoever set the barrel off)
+    pub source: Option<i32>,
+    /// her own (a rocket of hers too close, a barrel she shot)
+    pub own: bool,
+    pub cause: HitCause,
+}
+
+impl Hit {
+    /// Where it came from, for the log and the tallies: "ShotgunGuy", "Cyberdemon's Rocket",
+    /// "her own Rocket", "a barrel set off by her", "a crusher", "the floor".
+    pub fn from(&self) -> String {
+        let name = |k: i32| type_name(k).map_or_else(|| format!("thing type {k}"), str::to_string);
+        match self.cause {
+            HitCause::Crusher => return "a crusher".into(),
+            HitCause::Floor => return "the floor".into(),
+            HitCause::Other => return "the level".into(),
+            HitCause::Thing => {}
+        }
+        let barrel = type_of("ExplosiveBarrel");
+        match (self.inflictor, self.source) {
+            (Some(i), s) if Some(i) == barrel => match s {
+                _ if self.own => "a barrel set off by her".into(),
+                Some(s) if Some(s) != barrel => format!("a barrel set off by {}", name(s)),
+                _ => "a barrel".into(),
+            },
+            (Some(i), _) if self.own => format!("her own {}", name(i)),
+            (Some(i), Some(s)) if i != s => format!("{}'s {}", name(s), name(i)),
+            (Some(i), _) => name(i),
+            (None, Some(s)) => name(s),
+            (None, None) => "something".into(),
+        }
+    }
 }
 
 /// The type number of a thing Evil knows by `name` (`type_name` backwards).

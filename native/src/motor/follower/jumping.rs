@@ -1,11 +1,11 @@
 //! Lining up, executing and judging jumps and runs over sinking floors.
 
-use super::{last_point, run_controls, RouteFollower, Run};
-use crate::geom::dist;
+use super::{run_controls, RouteFollower, Run};
+use crate::geom::{closest_point, dist, Point, Seg};
 use crate::jumps::RunStart;
 use crate::motor::{fmt_live, heading, norm, Controls, Observation, TICRATE};
 use crate::navigator::{Jump, MAX_STEP};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::rc::Rc;
 
 /// tics between re-aims running over sinking floors
@@ -13,6 +13,12 @@ const RUN_REAIM: i64 = 4;
 
 /// how much lower a sinking floor is taken to be by the time she's off it
 const RUN_AHEAD_SINK: f64 = 4.0;
+/// how far round to look for solid ground off a sinking floor
+const RUN_LOOK: f64 = 1024.0;
+/// units a tic she covers running across (near full speed)
+const RUN_SPEED: f64 = 16.0;
+/// units a tic a floor goes down (Doom's lowering floors, FLOORSPEED)
+const SINK_RATE: f64 = 1.0;
 
 /// a jump goes without settling if what it needs runs out sooner
 const JUMP_HURRY: f64 = 2.0 * TICRATE;
@@ -120,7 +126,11 @@ impl RouteFollower {
         let Some(run) = self.run else { return self.walk(obs) };
         if on_ground && (obs.tic >= run.next || here_sector != run.sector) {
             let Some(sector) = here_sector else { return self.walk(obs) };
-            match self.run_heading(obs, sector) {
+            // (on the heading she's on if it's still as good: turning about on every look
+            // loses the speed the next gap needs; MAP08's, swung from one platform to the next
+            // and back, off the edge between them)
+            let keep = run.sector.map(|_| run.heading);
+            match self.run_heading(obs, sector, keep) {
                 None => {
                     self.run = None;
                     self.log.add(obs.tic, "no heading off the sinking floor lands anywhere");
@@ -129,7 +139,12 @@ impl RouteFollower {
                     }
                     return self.walk(obs);
                 }
-                Some(h) => self.run = Some(Run { heading: h, sector: Some(sector), next: obs.tic + RUN_REAIM }),
+                Some((h, why, land)) => {
+                    if self.run.is_none_or(|r| norm(r.heading - h).abs() > 20.0) {
+                        self.log.add(obs.tic, format!("running at {h:.0} degrees off sector {sector}, for sector {land} ({why})"));
+                    }
+                    self.run = Some(Run { heading: h, sector: Some(sector), next: obs.tic + RUN_REAIM });
+                }
             }
         }
         self.motion.rate = 0.0;
@@ -137,38 +152,81 @@ impl RouteFollower {
     }
 
     /// The direction to push (from a fan all round: pushing back against her momentum may be
-    /// what keeps her on) whose simulated run lands, off this floor, on the floor whose path to
-    /// the step's goal is shortest.
-    fn run_heading(&self, obs: &Observation, sector: usize) -> Option<f64> {
+    /// what keeps her on) whose simulated run lands, off this floor, on the nearest floor that
+    /// stays put; else on the sinking floor nearest one, to run on from. Where she was going
+    /// doesn't come into it: the floor going down under her, wherever it was is going too, maybe
+    /// (MAP08's: a look at a wall from the platform she was running over, every way off judged
+    /// by the way back to it, none, stood there and went down with it). The user's rule.
+    fn run_heading(&self, obs: &Observation, sector: usize, keep: Option<f64>) -> Option<(f64, &'static str, usize)> {
         let nav = &self.view.nav;
-        let goal = self.step().path.as_ref().and_then(last_point)?;
         let mut heights: Vec<(f64, f64)> =
             nav.movers.initial.iter().enumerate().map(|(s, h)| obs.height(s).map_or((h.floor, h.ceiling), |l| (l.floor, l.ceiling))).collect();
         let (f, c) = heights[sector];
         heights[sector] = (f - RUN_AHEAD_SINK, c); // (it keeps going down meanwhile)
-        let live = Self::live_states(obs);
-        let doors = self.view.local_doors(self.keys);
         let d = self.motion.disp;
         let going = if d.0.hypot(d.1) > 2.0 { d.1.atan2(d.0).to_degrees() } else { obs.angle };
-        let offs: Vec<f64> = (-12..12).map(|i| f64::from(i) * 15.0).collect();
+        let mut offs: Vec<f64> = (-12..12).map(|i| f64::from(i) * 15.0).collect();
+        if let Some(k) = keep {
+            offs.push(norm(k - going));
+        }
+        let kept = keep.map(|k| norm(k - going));
         let start = RunStart { pos: obs.pos(), vel: d, z: obs.z.unwrap_or(f), angle: obs.angle };
         let headings: Vec<f64> = offs.iter().map(|o| going + o).collect();
         let landings = nav.jump_lab.run_landings(&start, &heights, sector, &headings, 70);
-        let mut cost_from: BTreeMap<usize, Option<f64>> = BTreeMap::new();
-        let mut best: Option<(f64, f64, f64)> = None;
+        // (the banks: the edges where a floor that stays put meets the nukage or a sinking floor,
+        // near enough to matter; a room behind the pit's wall is no nearer for being close)
+        let solid = |s: usize| nav.damage[s] == 0 && !self.sinking.contains(&s);
+        let near_solid: Vec<(Seg, f64)> = nav
+            .mesh
+            .portals
+            .iter()
+            .filter_map(|q| {
+                let (sa, sb) = (nav.sector_of_poly(q.a), nav.sector_of_poly(q.b));
+                let bank = match (solid(sa), solid(sb)) {
+                    (true, false) => sa,
+                    (false, true) => sb,
+                    _ => return None,
+                };
+                (dist(closest_point(obs.pos(), q.p1, q.p2), obs.pos()) < RUN_LOOK).then_some(((q.p1, q.p2), heights[bank].0))
+            })
+            .collect();
+        // (how far a sinking landing leaves her from solid ground she could still step up onto
+        // when she got there, the floor under her going down all the while)
+        let to_solid = |at: Point, floor: f64| {
+            near_solid
+                .iter()
+                .map(|((a, b), h)| (dist(at, closest_point(at, *a, *b)), *h))
+                .filter(|(d, h)| *h <= floor - d / RUN_SPEED * SINK_RATE + MAX_STEP)
+                .map(|(d, _)| d)
+                .fold(f64::INFINITY, f64::min)
+        };
+        // (one not yet going down holds a while once she's on it; one going down already is
+        // lower every tic)
+        let moving = |s: usize| heights[s].0 < nav.movers.initial[s].floor - 0.5;
+        // (best first: the heading she's on while it still lands somewhere she'd get off from;
+        // else the one nearest straight on, her momentum kept (the user's: turning about loses
+        // the speed the gaps need, and a long run aimed at the far bank slid off the side of the
+        // platforms, MAP08); then solid ground, a floor not going down yet, one going down)
+        let mut best: Option<(bool, f64, u8, f64, f64, usize)> = None;
         for (off, landing) in offs.iter().zip(landings) {
             let Some((at, land)) = landing else { continue };
             if nav.damage[land] != 0 || heights[land].0 < f - MAX_STEP {
                 continue; // (into the nukage)
             }
-            let cost = *cost_from.entry(land).or_insert_with(|| self.view.find_path(at, goal, &live, Some(&doors)).map(|p| p.cost));
-            if let Some(cost) = cost {
-                if best.is_none_or(|(bc, bo, _)| (cost, off.abs()) < (bc, bo)) {
-                    best = Some((cost, off.abs(), going + off));
-                }
+            let (tier, cost) = if solid(land) {
+                (0, dist(obs.pos(), at))
+            } else {
+                (if moving(land) { 2 } else { 1 }, to_solid(at, heights[land].0))
+            };
+            if cost.is_infinite() {
+                continue; // (no solid ground she'd make from there)
+            }
+            let new = Some(*off) != kept;
+            if best.is_none_or(|(bn, bo, bt, bc, _, _)| (new, off.abs(), tier, cost) < (bn, bo, bt, bc)) {
+                best = Some((new, off.abs(), tier, cost, going + off, land));
             }
         }
-        best.map(|b| b.2)
+        best.map(|(_, _, tier, _, h, land)| (h, ["solid ground", "a sinking floor not going down yet", "a sinking floor going down"][usize::from(tier)], land))
     }
 
     /// A run-jump done: once she's on a floor again, did it come down on its landing?
