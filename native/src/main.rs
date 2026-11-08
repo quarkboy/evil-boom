@@ -305,8 +305,11 @@ fn episode_chain(me: &std::path::Path, wad: &str, first: &str, o: &evildoom::swe
         let text = String::from_utf8_lossy(&out.stdout);
         let result = text.lines().find_map(|l| l.strip_prefix("RESULT ")).unwrap_or("ERROR (no result)").to_string();
         let mut line = format!("seed {seed} {m}: {}", result.chars().take(70).collect::<String>());
+        // (how to watch this level as it went: the same seed, what she came in with)
+        let watch = format!("evil watch {wad} {m} {}{}", option_args(o).join(" "), carry.as_ref().map_or(String::new(), |c| format!(" --carry {c}")));
         let Some(next) = text.lines().find_map(|l| l.strip_prefix("CARRY ")) else {
             println!("{line}");
+            println!("    to watch: {watch}");
             return (levels, format!("{m}: {}", result.split(' ').next().unwrap_or("?")));
         };
         levels += 1;
@@ -425,6 +428,7 @@ fn watch(args: &[String]) -> Result<(), String> {
         secrets: o.secrets,
         complete: o.complete,
         stall_seconds: o.stall_seconds,
+        carry: o.carry.clone(),
         seed: o.seed,
         focus: None,
     };

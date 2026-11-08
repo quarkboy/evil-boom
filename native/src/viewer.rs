@@ -39,8 +39,6 @@ const GAME: Rect = (0, 0, 800, 600);
 const LOG: Rect = (0, 600, 800, 300);
 const MAP: Rect = (800, 0, 800, 520);
 const PANEL: Rect = (800, 520, 800, 380);
-/// the knowledge's sight works out what a view this wide shows (the frames' width)
-const VIEW_WIDTH: i32 = 640;
 
 type Rgb = (u8, u8, u8);
 const BG: Rgb = (12, 12, 16);
@@ -218,6 +216,8 @@ pub struct WatchOptions {
     /// a 100% run gives up on what's left (for the exit) after this long with nothing more
     /// collected or learned
     pub stall_seconds: f64,
+    /// what she starts with (an episode's level: what she brought from the one before)
+    pub carry: Option<crate::dsda::Loadout>,
     pub seed: Option<u32>,
     /// the map view centred on a point, zoomed in this much (for looking at one place)
     pub focus: Option<(f64, f64, f64)>,
@@ -267,12 +267,13 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     nav.keep_verified();
     let nav = Rc::new(nav);
     let mut engine = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn: true, seed: o.seed })?;
+    engine.carry.clone_from(&o.carry);
     engine.start();
     if !o.mortal {
         engine.set_god();
     }
-    let mut knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
-    knowledge.width = VIEW_WIDTH;
+    // (seeing as a run does: watched, a run plays as it did; the user's)
+    let knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
     let mut agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives);
     // (a 100% run as a sweep plays it: the exit held back while what it's after is short, given
     // up on after a stall)
