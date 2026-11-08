@@ -736,6 +736,11 @@ impl Knowledge {
 
     /// Has sector s been still, after moving, for at least `tics` (by the sounds of its starts and
     /// stops)? Not if it's moving, or never seen to move.
+    /// Is sector s moving now, as she hears it?
+    pub fn is_moving(&self, s: usize) -> bool {
+        self.moving.contains(&s)
+    }
+
     pub fn stopped_for(&self, s: usize, tic: i64, tics: i64) -> bool {
         !self.moving.contains(&s) && self.stopped_at.get(&s).is_some_and(|&t| tic - t >= tics)
     }

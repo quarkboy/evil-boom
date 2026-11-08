@@ -891,3 +891,16 @@ Results (HNTR, one life): E1 7.4 -> 7.4 (4/8), E2 5.8 -> 7.0 (3/8 -> 4/8 through
 stucks), E3 4.9 -> 4.9, Doom II 8.4 -> 8.3; 279 -> 287 levels. E3's crusher deaths on routes
 (E3M4's ring, E3M5's alcoves) are still to trace: with the fight's escape on mid-route too, E3 was
 5.8 but E2 1.2.
+
+## No looking round under a moving ceiling (2026-11-08)
+
+The last crusher deaths (E3 seeds 3, 7, E3M4), traced tic by tic: a route into E3M4's ring of a
+slow crusher round its pillar, in as it went up; a line walked over on the way, and the explorer
+stopped her to look round at what it had done (`glance`), half a second stood still as the
+ceiling came down 160 -> 132; the route's crusher rules don't run while the explorer has her
+looking, and the fight leaves crushers to a route under way, so nothing got her out till 59 over
+the floor, too late. Rule: no glance while any of her is under a sector she hears moving.
+
+Results (HNTR, one life): E1 7.4 -> 7.2 (4/8 -> 5/8 through), E2 7.0 -> 7.1 (4/8 -> 7/8 through),
+E3 4.9 -> 6.9 (4 to the E3M8 boss), Doom II 8.3 -> 8.2; 287 -> 301 levels; no crusher deaths
+left in the set. Arenas unchanged.

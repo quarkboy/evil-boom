@@ -531,9 +531,17 @@ impl Explorer {
                 self.sector = Some(s);
             }
         }
-        // (no looking round in the middle of a jump: MAP08's)
+        // (no looking round in the middle of a jump: MAP08's; nor with any of her under something
+        // she hears moving: the route's crusher rules don't run while she looks, E3M4's ring of a
+        // slow crusher, stood still in it half a second to see what a line had done as it came
+        // down, pinned)
         let busy = self.follower.as_ref().is_some_and(RouteFollower::in_jump);
-        if !busy {
+        let r = crate::navigator::PLAYER_RADIUS + 2.0;
+        let under_mover = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
+            .iter()
+            .filter_map(|(dx, dy)| self.nav.poly_at((obs.x + dx, obs.y + dy)))
+            .any(|p| self.knowledge.is_moving(self.nav.sector_of_poly(p)));
+        if !busy && !under_mover {
             if let Some(g) = self.glance(obs) {
                 return g;
             }
