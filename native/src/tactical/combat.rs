@@ -191,6 +191,12 @@ pub struct Combat {
     trigger_held: bool,
     /// health lost lately: (tic, how much)
     damage: Vec<(i64, f64)>,
+    /// (the log's: rounds spent this fight, and the health monsters lost, as the engine has it;
+    /// nothing's decided by them)
+    spent: f64,
+    dealt: f64,
+    ammo_was: Vec<(i32, i32)>,
+    health_was: BTreeMap<i32, i32>,
     /// each sector's ceiling last tic, and when it was last seen coming down
     ceilings: Vec<f64>,
     ceiling_down: Vec<i64>,
@@ -242,6 +248,10 @@ impl Combat {
             vile_until: 0,
             trigger_held: false,
             damage: Vec::new(),
+            spent: 0.0,
+            dealt: 0.0,
+            ammo_was: Vec::new(),
+            health_was: BTreeMap::new(),
             ceilings: Vec::new(),
             ceiling_down: Vec::new(),
             closing_since: BTreeMap::new(),
@@ -273,6 +283,31 @@ impl Combat {
             self.velocity = (pos.0 - l.0, pos.1 - l.1);
         }
         self.last_pos = Some(pos);
+        // (for the log: rounds gone, health monsters lost; pools shared by two guns counted once)
+        let ammo: Vec<(i32, i32)> = obs.ammo.clone().unwrap_or_default();
+        for &(s, n) in &ammo {
+            if matches!(s, 4 | 7) {
+                continue;
+            }
+            if let Some(&(_, before)) = self.ammo_was.iter().find(|(x, _)| *x == s) {
+                if n < before {
+                    self.spent += f64::from(before - n);
+                }
+            }
+        }
+        self.ammo_was = ammo;
+        let mut now: BTreeMap<i32, i32> = BTreeMap::new();
+        for t in obs.things.iter().flatten().filter(|t| monster(t.name).is_some()) {
+            if let Some(&h) = self.health_was.get(&t.id) {
+                if t.health < h {
+                    self.dealt += f64::from(h - t.health.max(0));
+                }
+            }
+            now.insert(t.id, t.health);
+        }
+        // (gone: killed, what it had left the last of it)
+        self.dealt += self.health_was.iter().filter(|(id, _)| !now.contains_key(id)).map(|(_, &h)| f64::from(h.max(0))).sum::<f64>();
+        self.health_was = now;
         // (ceilings coming down: crushers, where a fight's moves don't go)
         if self.ceilings.len() != obs.heights.len() {
             self.ceilings = obs.heights.iter().map(|h| h.ceiling).collect();
@@ -522,7 +557,8 @@ impl Combat {
                 }
             }
             if !self.mode.is_empty() {
-                self.log.push(format!("tic {}: fight over ({} kills)", obs.tic, self.kills));
+                self.log.push(format!("tic {}: fight over ({} kills; {:.0} rounds spent, {:.0} damage done)", obs.tic, self.kills, self.spent, self.dealt));
+                (self.spent, self.dealt) = (0.0, 0.0);
             }
             self.mode.clear();
             self.target = None;
