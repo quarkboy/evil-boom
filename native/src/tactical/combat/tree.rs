@@ -64,18 +64,20 @@ pub(super) struct Act {
     pub aim: Option<f64>,
     /// the trigger let go
     pub hold_fire: bool,
+    /// the route keeps the legs (whatever else: missiles flying)
+    pub route: bool,
 }
 
 impl Act {
     fn new(moving: Option<Point>, why: String) -> Act {
-        Act { moving, why, aim: None, hold_fire: false }
+        Act { moving, why, aim: None, hold_fire: false, route: false }
     }
 }
 
 type Node = fn(&mut Combat, &Observation, &Situation) -> Option<Act>;
 
 /// Before anything else: out of the way of what would kill her outright.
-const SURVIVE: [Node; 6] = [out_of_vile_sight, ducking, dodging, bfg_hold, off_crusher, off_barrel];
+const SURVIVE: [Node; 6] = [off_crusher, out_of_vile_sight, ducking, dodging, bfg_hold, off_barrel];
 /// In a jump, the route has the legs.
 const BUSY: [Node; 1] = [busy];
 /// The weapon she'd fight her target with fought up close.
@@ -133,13 +135,28 @@ fn bfg_hold(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
     c.bfg_flying(obs).then(|| Act::new(None, "holding still for the BFG's spray".into()))
 }
 
-/// Out from under a crusher first, whatever else.
+/// Out from under a crusher first, whatever else (a missile maybe hits; a crusher at work
+/// does). With a route under way, its way: the route's own crusher logic times the crossing and
+/// has her out through or back by the nearest way to room overhead. Without, the shortest
+/// straight way out. Not the fight's steering: under a crusher every way is clear to it, and it
+/// kept her under one after an imp 2000 off, 7 a hit three times over (E2M2, seed 7).
 fn off_crusher(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    if !c.under_crusher(obs) || s.busy {
+    // (any crusher at work, between its strokes too: no place for a fight)
+    if !c.under_crusher(obs) && !c.in_crusher(obs) {
         return None;
     }
-    let gun = s.target.as_ref().map_or_else(|| c.gun(obs), |t| c.preferred_gun(obs, t));
-    let moving = c.steer(obs, s.target.as_ref(), &gun);
+    if c.routed {
+        let mut a = Act::new(None, "out from under a crusher (the route's way)".into());
+        a.route = true;
+        return Some(a);
+    }
+    if s.busy {
+        return None;
+    }
+    let moving = c.way_out_of_crusher(obs).or_else(|| {
+        let gun = s.target.as_ref().map_or_else(|| c.gun(obs), |t| c.preferred_gun(obs, t));
+        c.steer(obs, s.target.as_ref(), &gun)
+    });
     Some(Act::new(moving, "out from under a crusher".into()))
 }
 

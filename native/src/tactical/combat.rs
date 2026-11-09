@@ -44,6 +44,9 @@ const CLOSE_GIVE_UP: i64 = 20 * 35;
 const GIVEN_UP_TICS: i64 = 30 * 35;
 /// a ceiling seen coming down this lately, this low over its floor, is a crusher at work
 const CRUSH_TICS: i64 = 2 * 35;
+/// a crusher come down lower than she stands this lately is at work (tics: a slow one's stroke,
+/// down and up, is some 5 s)
+const ACTIVE_CRUSHER: i64 = 6 * 35;
 const CRUSH_GAP: f64 = 120.0;
 /// invulnerability lasts this long (INVULNTICS)...
 const INVULNERABLE_TICS: i64 = 30 * 35;
@@ -230,6 +233,8 @@ pub struct Combat {
     floors: Vec<f64>,
     floor_up: Vec<i64>,
     ceiling_down: Vec<i64>,
+    /// ...and last came down lower than she stands (a crusher at work, between strokes too)
+    crushed_low: Vec<i64>,
     /// out of reach, closed in on since when, by id...
     closing_since: BTreeMap<i32, i64>,
     /// ...and given up on till when
@@ -302,6 +307,7 @@ impl Combat {
             floors: Vec::new(),
             floor_up: Vec::new(),
             ceiling_down: Vec::new(),
+            crushed_low: Vec::new(),
             closing_since: BTreeMap::new(),
             given_up: BTreeMap::new(),
             melee_since: BTreeMap::new(),
@@ -366,6 +372,7 @@ impl Combat {
         if self.ceilings.len() != obs.heights.len() {
             self.ceilings = obs.heights.iter().map(|h| h.ceiling).collect();
             self.ceiling_down = vec![i64::MIN / 2; obs.heights.len()];
+            self.crushed_low = vec![i64::MIN / 2; obs.heights.len()];
         }
         if self.floors.len() != obs.heights.len() {
             self.floors = obs.heights.iter().map(|h| h.floor).collect();
@@ -374,6 +381,9 @@ impl Combat {
         for (i, h) in obs.heights.iter().enumerate() {
             if h.ceiling < self.ceilings[i] - 0.01 {
                 self.ceiling_down[i] = obs.tic;
+                if h.ceiling - h.floor < PLAYER_HEIGHT {
+                    self.crushed_low[i] = obs.tic;
+                }
             }
             self.ceilings[i] = h.ceiling;
             if h.floor > self.floors[i] + 0.01 {
@@ -580,7 +590,7 @@ impl Combat {
         let aim = act.aim.or(s.aim);
         let fire = fire && !act.hold_fire && !self.hold_fire;
         let why = act.why;
-        let takeover = (!busy && !["shooting on the way", "getting past", "out of", "sneaking"].iter().any(|p| why.starts_with(p))) || !s.missiles.is_empty() || s.vile.is_some();
+        let takeover = !act.route && ((!busy && !["shooting on the way", "getting past", "out of", "sneaking"].iter().any(|p| why.starts_with(p))) || !s.missiles.is_empty() || s.vile.is_some());
         if why != self.mode {
             let t = s.target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {:.0} threat; health {:.0})", t.name, t.id, s.threat, s.health));
             self.log.push(format!("tic {}: {why}{t}", obs.tic));
@@ -760,6 +770,13 @@ impl Combat {
     /// than her height left under the ceiling (E2M4's secret: a floor raised to crush, walked
     /// onto over its W1 line, stood on with nothing left to do till it had her; a lift ends
     /// level with a floor beside it, room enough over it).
+    /// A crusher at work in sector s: its ceiling come down lower than she stands within the last
+    /// ACTIVE_CRUSHER tics, at the top of its stroke now or not. Where the fight's moves don't go
+    /// (the user's: active crushers no-go), not just while it's on its way down.
+    pub fn crusher_active(&self, obs: &Observation, s: usize) -> bool {
+        self.crushed_low.get(s).is_some_and(|&t| obs.tic - t < ACTIVE_CRUSHER)
+    }
+
     pub fn crushing(&self, obs: &Observation, s: usize) -> bool {
         let gap = obs.heights.get(s).map_or(f64::INFINITY, |h| h.ceiling - h.floor);
         (self.ceiling_down.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < CRUSH_GAP)

@@ -235,6 +235,20 @@ impl Combat {
     }
 
     /// Is she under a crusher at work?
+    /// A crusher sector the fight's moves keep out of: on its way down, or at work at all.
+    pub(super) fn no_go_crusher(&self, obs: &Observation, s: usize) -> bool {
+        self.crushing(obs, s) || self.crusher_active(obs, s)
+    }
+
+    /// Is any of her in a crusher sector at work, coming down or not (`no_go_crusher`)?
+    pub(super) fn in_crusher(&self, obs: &Observation) -> bool {
+        let r = PLAYER_RADIUS + 2.0;
+        [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
+            .iter()
+            .filter_map(|(dx, dy)| self.nav.poly_at((obs.x + dx, obs.y + dy)))
+            .any(|p| self.no_go_crusher(obs, self.nav.sector_of_poly(p)))
+    }
+
     /// Is any of her under a crusher at work? A crusher crushes whatever's even partly under it,
     /// and her middle out from under it isn't all of her (E3M5: her middle just out of a crusher's
     /// alcove, 14 units of her still under it, the fight let go, the route walked her back in).
@@ -246,10 +260,42 @@ impl Combat {
             .any(|p| self.crushing(obs, self.nav.sector_of_poly(p)))
     }
 
+    /// The shortest straight way out from under a crusher at work (with no route to take her): of
+    /// sixteen headings, the one that gets all of her to a floor with no crusher at work over it
+    /// soonest, walking (no step up or drop she couldn't come back from, nothing that hurts).
+    pub(super) fn way_out_of_crusher(&self, obs: &Observation) -> Option<Point> {
+        let nav = &self.nav;
+        let pos = obs.pos();
+        let floor0 = nav.poly_at(pos).and_then(|p| obs.height(nav.sector_of_poly(p))).map(|h| h.floor)?;
+        (0..16)
+            .filter_map(|i| {
+                let a = f64::from(i) * std::f64::consts::PI / 8.0;
+                let d = (a.cos(), a.sin());
+                let mut floor = floor0;
+                for k in 1..=48 {
+                    let f = f64::from(k) * 8.0;
+                    let q = (pos.0 + d.0 * f, pos.1 + d.1 * f);
+                    let s = nav.sector_of_poly(nav.poly_in(q)?);
+                    let h = obs.height(s)?;
+                    if (h.floor - floor).abs() > MAX_STEP || (self.hurts(obs, s) && !self.on_hurting_floor(obs)) {
+                        return None;
+                    }
+                    // (all of her out: her middle a radius and a bit past the last of it)
+                    if !self.no_go_crusher(obs, s) && self.gets_out(obs, d, f + PLAYER_RADIUS + 2.0) {
+                        return Some((f, d));
+                    }
+                    floor = h.floor;
+                }
+                None
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(_, d)| d)
+    }
+
     /// Does going `length` that way get her out from under a crusher?
     pub(super) fn gets_out(&self, obs: &Observation, d: Point, length: f64) -> bool {
         let p = (obs.x + d.0 * length, obs.y + d.1 * length);
-        self.nav.poly_in(p).is_some_and(|q| !self.crushing(obs, self.nav.sector_of_poly(q)))
+        self.nav.poly_in(p).is_some_and(|q| !self.no_go_crusher(obs, self.nav.sector_of_poly(q)))
     }
 
     /// Does going `length` that way get her off a floor that hurts?
@@ -285,7 +331,7 @@ impl Combat {
             let Some(p) = nav.poly_in(q) else { return back };
             let h = floor_of(p);
             let s = nav.sector_of_poly(p);
-            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || (self.hurts(obs, s) && !self.on_hurting_floor(obs)) || (self.crushing(obs, s) && !self.under_crusher(obs)) {
+            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || (self.hurts(obs, s) && !self.on_hurting_floor(obs)) || (self.no_go_crusher(obs, s) && !self.in_crusher(obs)) {
                 return back;
             }
             floor = h.floor;

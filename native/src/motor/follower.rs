@@ -445,6 +445,11 @@ impl RouteFollower {
     }
 
     /// In the middle of a run-jump (lining up, sprinting, running over sinking floors).
+    /// A crusher's crossing timed and begun: the route's to finish, not to be stopped part way.
+    pub fn crossing_crusher(&self) -> bool {
+        self.crusher_cross.is_some()
+    }
+
     pub fn in_jump(&self) -> bool {
         self.sprint.is_some() || self.run.is_some() || self.lineup_tic.is_some()
     }
