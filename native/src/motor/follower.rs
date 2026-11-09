@@ -449,6 +449,11 @@ impl RouteFollower {
         self.sprint.is_some() || self.run.is_some() || self.lineup_tic.is_some()
     }
 
+    /// Running over (or off) floors going down under her: done only on a floor that stays put.
+    pub fn running_off(&self) -> bool {
+        self.run.is_some()
+    }
+
     /// Shooting something with the gun it picks for that (a barrel in the way, its blasts
     /// waited out; a switch to shoot): the gun's the route's for now.
     pub fn shooting(&self) -> bool {

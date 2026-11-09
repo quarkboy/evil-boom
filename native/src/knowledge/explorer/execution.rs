@@ -3,6 +3,7 @@
 use super::{turn_to, Explorer, Hooks, Kind, Objective, ARRIVE_SLACK, JUMP_MISSES, LOOK_TICS, STUCK_TIMES};
 use crate::geom::dist;
 use crate::knowledge::model::{Heard, How, Note};
+use crate::motor::follower::RouteFollower;
 use crate::motor::{Controls, Observation};
 use std::collections::BTreeSet;
 
@@ -270,6 +271,12 @@ impl Explorer {
             None => return true,
             Some(f) => (f.done, f.failed),
         };
+        // (what it was for got on the way, then off a floor going down: done, not failed; the run
+        // off ends as a failure, for the explorer to choose again from where she's got to)
+        if failed && hooks.gone(obs, &obj) {
+            self.log.push(format!("tic {}: '{}' got on the way, then off a floor going down", obs.tic, obj.label));
+            return self.ends(obs, "gone");
+        }
         if done || failed {
             if failed {
                 let why = self.follower.as_ref().and_then(|f| f.log.events.iter().rev().find(|e| e.contains("FAILED")).cloned()).unwrap_or_default();
@@ -323,7 +330,10 @@ impl Explorer {
         if !self.directed && obj.kind != Kind::Exit && !committed && !self.exit_last && k.exits().len() > self.exits_seen {
             return self.ends(obs, "an exit came into view");
         }
-        if hooks.gone(obs, &obj) {
+        // (gone, but running off a floor going down: on till she's on one that stays put, the
+        // user's rule; E3M1 directed, the shotgun on a stone in the blood got as the stone went
+        // down, the run off ended with the objective, and she stood on it, waiting, into the blood)
+        if hooks.gone(obs, &obj) && !self.follower.as_ref().is_some_and(RouteFollower::running_off) {
             return self.ends(obs, "gone");
         }
         let heard: Vec<Heard> = k.heard[self.urgent_n.min(k.heard.len())..].to_vec();

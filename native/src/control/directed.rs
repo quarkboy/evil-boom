@@ -129,6 +129,8 @@ pub struct Director {
     told_dead: bool,
     /// when she last tried getting off a floor that hurts
     off_tried: i64,
+    /// told she's on a floor that hurts with no known way off (till she's off it)
+    told_trapped: bool,
     /// the areas the last list found nothing more to explore in, and not where she is
     done_areas: std::collections::BTreeSet<String>,
     /// a switch pressed: its line, what it's called, and till when to watch for what it did (what
@@ -609,6 +611,7 @@ impl Director {
         let pos = obs.pos();
         let Some(here) = nav.poly_at(pos) else { return false };
         if !agent.x().knowledge.damaging(nav.sector_of_poly(here)) {
+            self.told_trapped = false;
             return false;
         }
         let v = obs.velocity.unwrap_or((0.0, 0.0));
@@ -635,6 +638,12 @@ impl Director {
             if agent.x_mut().take(obs, o) {
                 return true;
             }
+        }
+        // (no way off she knows of: hers to hear, once, not to die waiting in silence; E3M1, the
+        // stone gone down into the blood, the bank 40 up all round)
+        if !self.told_trapped {
+            self.told_trapped = true;
+            self.report(obs, false, format!("She's on a floor that hurts with no way off it that she knows of (health {:.0}).", obs.health.unwrap_or(0.0)));
         }
         false
     }
@@ -798,7 +807,6 @@ impl Director {
     }
 }
 
-/// An objective's stable id: its kind, and what it's about (a thing, a line, else its spot).
 /// An objective as the order in hand remembers taking it: the explorer's ident, and the wall for
 /// pressing one (every wall has the same ident: an explore with secrets took one and ended).
 type Taken = (Ident, Option<usize>);
@@ -807,6 +815,7 @@ fn taken_key(o: &Objective) -> Taken {
     (o.ident(), o.wall)
 }
 
+/// An objective's stable id: its kind, and what it's about (a thing, a line, else its spot).
 fn id_of(o: &Objective) -> String {
     let kind = match o.kind {
         Kind::Exit => "exit",
