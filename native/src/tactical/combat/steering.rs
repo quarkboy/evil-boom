@@ -8,7 +8,7 @@ use crate::geom::{dist, Point};
 use crate::los::Body;
 use crate::motor::{Observation, Thing};
 use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
-use crate::tactical::bestiary::{first_shot, weapon_in, Attack, Weapon};
+use crate::tactical::bestiary::{claw_max, first_shot, weapon_in, Attack, Weapon};
 
 const WAYS: usize = 16;
 
@@ -36,6 +36,9 @@ const W_EXPOSED: f64 = 1.5;
 const W_OFF_FLOOR: f64 = 10.0;
 const W_BARREL: f64 = 4.0;
 const W_TOWARD: f64 = 1.5;
+/// a claw's reach, centre to centre: MELEERANGE (64) less 20 plus her radius (p_enemy.c
+/// `P_CheckMeleeRange`), and a stride of it (8-10) on top: 60 + 20
+const CLAW_REACH: f64 = 80.0;
 
 /// with anything shooting in sight, kept this far from a barrel's middle (its blast and a margin)
 const BARREL_KEEP: f64 = 192.0;
@@ -284,6 +287,11 @@ impl Combat {
         // branch's reload cover)
         let reloading = matches!(obs.weapon, Some(3)) && self.last_shot.is_some_and(|(s, tic)| s == 3 && ((obs.tic - tic) as f64) < gun.cycle - RELOAD_BACK);
         self.refresh_tic_cache(obs);
+        // (not towards an errand in the claws' reach of something one hit of which could kill her:
+        // E2M3, 35 health, out of ammo, the shell she backed off towards 50 from a baron, 10-80 a
+        // hit, kept her by it till it hit)
+        let health = obs.health.unwrap_or(100.0);
+        let errand_way = self.toward.filter(|&to| dist(to, pos) > 1.0 && !them.iter().any(|m| claw_max(m.name) >= health && dist(to, (m.x, m.y)) < CLAW_REACH));
         let mut best: Option<(f64, Point)> = None;
         for i in 0..WAYS {
             let a = 2.0 * std::f64::consts::PI * i as f64 / WAYS as f64;
@@ -354,7 +362,7 @@ impl Combat {
             // (the way she's going, an errand (health, a gun, ammo): backing off towards it, not
             // round and round where she is; the user's: 1% health, a cacodemon on her, the
             // medikit in the room never got to)
-            if let Some(to) = self.toward.filter(|&to| dist(to, pos) > 1.0) {
+            if let Some(to) = errand_way {
                 s += W_TOWARD * (d.0 * (to.0 - pos.0) + d.1 * (to.1 - pos.1)) / dist(to, pos);
             }
             if best.is_none_or(|(bs, _)| s > bs) {

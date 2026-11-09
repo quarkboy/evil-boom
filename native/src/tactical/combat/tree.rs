@@ -29,7 +29,7 @@ use super::style::{window, Style};
 use super::{mon, Combat, Decision, CLOSE_GIVE_UP, KEEP_CLEAR, LOW_HEALTH, STAND_THREAT};
 use crate::geom::{dist, Point};
 use crate::motor::{heading, Observation, Thing};
-use crate::tactical::bestiary::Attack;
+use crate::tactical::bestiary::{claw_max, Attack};
 
 /// The fight as it stands this tic, sized up before the tree.
 pub(super) struct Situation<'a> {
@@ -215,12 +215,14 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
 
 // --- the fight ---------------------------------------------------------------------------------
 
-/// Backing off from the nearest thing that claws, close (armed, or low). (Out of ammo, a demon
-/// that follows for ever: backing off got her nowhere, MAP22; the route takes her past it,
-/// faster than it.)
+/// Backing off from the nearest thing that claws, close (armed, or low, or one hit of it could
+/// kill her). (Out of ammo, a demon that follows for ever: backing off got her nowhere, MAP22;
+/// the route takes her past it, faster than it. Not past one whose claw can take all she has:
+/// E2M3, out of ammo at 35, the route to a shell went by a baron, 10-80 a hit.)
 fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let pos = s.pos;
-    let nearest = s.close.iter().filter(|_| c.armed(obs) || s.health < LOW_HEALTH).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
+    let armed = c.armed(obs);
+    let nearest = s.close.iter().filter(|t| armed || s.health < LOW_HEALTH || claw_max(t.name) >= s.health).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
     let t = nearest.clone();
     let gun = c.preferred_gun(obs, &t);
     let moving = c.steer(obs, Some(&t), &gun).or_else(|| c.away_from(obs, (t.x, t.y)));

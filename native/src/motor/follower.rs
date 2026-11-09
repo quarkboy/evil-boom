@@ -788,7 +788,11 @@ impl RouteFollower {
         if let Some(last) = self.last_pos {
             if self.step().action == Action::Cross && !self.crossed {
                 let (a, b) = nav.nav.map.line_seg(self.trigger_line_no());
-                self.crossed = segments_cross(last, pos, a, b);
+                // (a teleporter goes off only crossed from its front, the right of its run, as
+                // the engine has it: over it from behind is not crossing it)
+                let from_front = (b.0 - a.0) * (last.1 - a.1) - (b.1 - a.1) * (last.0 - a.0) < 0.0;
+                let front_only = self.step().trigger.as_ref().is_some_and(|t| t.info.category == crate::specials::Category::Teleport);
+                self.crossed = segments_cross(last, pos, a, b) && (from_front || !front_only);
             }
         }
         self.last_pos = Some(pos);

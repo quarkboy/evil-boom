@@ -430,7 +430,7 @@ impl Player {
             self.shooters_tic = obs.tic;
         }
         if let Some(r) = &self.retreat {
-            if r.route.done || r.route.failed || self.retreat_over(obs, r.kind) {
+            if r.route.done || r.route.failed || self.retreat_over(obs, r.kind) || (r.kind == RetreatKind::ForAmmo && self.walled_off(obs, &r.route)) {
                 let msg = if r.route.done { "got there".to_string() } else { format!("{} over", r.kind.name()) };
                 self.log(format!("tic {}: {msg}", obs.tic));
                 self.retreat = None;
@@ -463,6 +463,17 @@ impl Player {
             RetreatKind::Cover => calm,
             RetreatKind::Post => since > POST_TICS,
         }
+    }
+
+    /// Unarmed, the rest of her way runs into one of them: it's moved onto her way since she
+    /// chose it, and nothing moves it off (E2M5 on UV: a demon between her and the clip she was
+    /// off for, pushed against, bitten from 96 health to 29).
+    fn walled_off(&self, obs: &Observation, route: &RouteFollower) -> bool {
+        let path = route.planned_path(Some(obs.pos()));
+        self.fight.combat.against_her().iter().any(|t| {
+            let touch = monster(t.name).map_or(20.0, |m| m.radius) + PLAYER_RADIUS;
+            path.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).any(|(a, b)| segment_point_distance(a, b, (t.x, t.y)) < touch)
+        })
     }
 
     /// A retreat to start, the first whose rule holds (a rule that holds with no way to go still

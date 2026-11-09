@@ -57,6 +57,19 @@ pub fn monster(name: &str) -> Option<Monster> {
     })
 }
 
+/// The most one claw, bite or charge of it can take off her (p_enemy.c: the imp's and the lost
+/// soul's 3-24, the demon's 4-40, the cacodemon's and the revenant's fist 10-60 and 6-60, the
+/// baron's and the knight's 10-80); 0 for what doesn't hurt up close.
+pub fn claw_max(name: &str) -> f64 {
+    match name {
+        "DoomImp" | "LostSoul" => 24.0,
+        "Demon" | "Spectre" => 40.0,
+        "Cacodemon" | "Revenant" => 60.0,
+        "BaronOfHell" | "HellKnight" => 80.0,
+        _ => 0.0,
+    }
+}
+
 /// A hitscan shooter's wind-up: the tics from the first frame of its attack (turning to face
 /// her, as she'd see it) to its first shot (info.c: the spider mastermind's 20 tics of
 /// `A_FaceTarget`, then a burst every 4 for as long as it sees her; the zombies' 10).

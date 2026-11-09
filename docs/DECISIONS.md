@@ -1158,3 +1158,28 @@ Pistol-start single levels on all four skills, four helper sessions a round, eac
 
 Results (HNTR, one life): E1 8.0 (8/8), E2 7.4 -> 7.8 (7 -> 6/8 through: E2M8's cyberdemon twice),
 E3 6.8 -> 7.5 (0 -> 1/8), Doom II 27/32; arenas unchanged.
+
+## Level campaign, round 2: teleporters from the front, ammo errands through monsters, one-hit claws (2026-11-09)
+
+Round 2: E2M3, E2M5, E2M7, E2M8 (pistol start, all four skills).
+
+- **A teleporter goes off only crossed from its front** (E2M7 HNTR: a WR teleporter reached from
+  behind on a pad by nukage, the Cross step counted done either way, "didn't take me anywhere",
+  the only way out dropped, died in the nukage): EV_Teleport does nothing from side 1; the step is
+  crossed only from the front, so from behind she goes back over it from the front. HNTR seeds
+  0-2 exit (died).
+- **A walk for ammo ends when one of them steps onto its way** (E2M5 UV: out of ammo, a demon
+  moved between her and the clip, pushed against, bitten from 96 to 29): the rest of the planned
+  path passing a monster after her nearer than their bodies touching ends the retreat. UV still
+  dies (out of ammo by 218 s).
+- **One hit that could kill her** (E2M3 UV: out of ammo at 35, a shell under a baron, its claw
+  10-80): she backs off from a clawer whose biggest hit (p_enemy.c: imp, lost soul 24; demon 40;
+  cacodemon, revenant 60; baron, knight 80) is her health or more, armed or not, and the pull
+  towards an errand stops when it's within that one's reach (80). UV lives longer on 3 of 4 seeds;
+  still dies.
+- E2M8 traced, not fixed: an objective chosen before the cyberdemon woke is never vetted again,
+  and losing sight of it a moment ends the fight and hands her back to a way into its view.
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 7.8 -> 7.4 (6 -> 7/8 through), E3 7.5 -> 7.1 (1/8),
+Doom II 27 -> 28/32; arenas unchanged. The new E3 failures (her own rocket at a lost soul 150
+off, E3M7; E3M9's arrival ambush holding the fist) are outside these changes: to triage.
