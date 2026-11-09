@@ -192,6 +192,9 @@ pub struct Combat {
     pub changed_floors: BTreeSet<usize>,
     /// floors a walked-over line lowers into something that hurts (going down: as good as hurting)
     sinks_into_harm: BTreeSet<usize>,
+    /// sectors only doors move: a door closing on her goes back up, or rests on her, and does
+    /// no damage (vanilla T_VerticalDoor), so its ceiling coming down is no crusher
+    doors: BTreeSet<usize>,
     last_pos: Option<Point>,
     velocity: Point,
     barrel_way: Option<Point>,
@@ -255,7 +258,14 @@ impl Combat {
         let sinks_into_harm = (0..nav.map.sectors.len())
             .filter(|&s| nav.triggers.iter().any(|t| t.info.trigger.walked() && t.effect(s).is_some() && nav.floor_after(t, s) == Some(true)))
             .collect();
+        let doors = (0..nav.map.sectors.len())
+            .filter(|&s| {
+                let mut movers = nav.triggers.iter().filter(|t| t.sectors.contains(&s)).peekable();
+                movers.peek().is_some() && movers.all(|t| t.info.category.is_door())
+            })
+            .collect();
         Combat {
+            doors,
             los: LineOfSight::new(&nav.map),
             hearing: Hearing::new(&nav.map),
             nav,
@@ -790,7 +800,7 @@ impl Combat {
     /// ACTIVE_CRUSHER tics, at the top of its stroke now or not. Where the fight's moves don't go
     /// (the user's: active crushers no-go), not just while it's on its way down.
     pub fn crusher_active(&self, obs: &Observation, s: usize) -> bool {
-        self.crushed_low.get(s).is_some_and(|&t| obs.tic - t < ACTIVE_CRUSHER)
+        !self.doors.contains(&s) && self.crushed_low.get(s).is_some_and(|&t| obs.tic - t < ACTIVE_CRUSHER)
     }
 
     /// Is sector s a crusher she knows of, stopped (or not) too low to get out from under if it
@@ -806,7 +816,7 @@ impl Combat {
 
     pub fn crushing(&self, obs: &Observation, s: usize) -> bool {
         let gap = obs.heights.get(s).map_or(f64::INFINITY, |h| h.ceiling - h.floor);
-        (self.ceiling_down.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < CRUSH_GAP)
+        (!self.doors.contains(&s) && self.ceiling_down.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < CRUSH_GAP)
             || (self.floor_up.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < FLOOR_CRUSH_GAP)
     }
 

@@ -1204,3 +1204,25 @@ Round 3: E2M9, E3M2, E3M3, E3M4.
 
 Results (HNTR, one life): E1 8.0 (8/8), E2 7.4 -> 7.1 (7 -> 6/8 through), E3 7.1 -> 7.2 (1 -> 3/8),
 Doom II 28 -> 27/32; arenas unchanged. E3M6's stucks (3) are as before on the level alone.
+
+## Level campaign, round 4: a crusher crossing ends, doors aren't crushers (2026-11-09)
+
+Round 4: E3M5, E3M6, E3M7, E3M8.
+
+- **A crusher crossing ends once she's out from under it with none ahead** (E3M8 HNTR: a door just
+  opened taken for a crusher, a crossing timed, never cleared: `crossing_crusher()` kept the fight
+  "busy" for the rest of the route while a cacodemon came up and bit her for 60). Cleared out
+  from under with none ahead, and while waiting at an edge. HNTR seed 0 46 -> 73 s.
+- **A sector only doors move is no crusher to the fight** (E3M5 HMP: a DR door closed onto her
+  box's edge, taken for a crusher at work, "out from under a crusher" handed her to the route,
+  parked at the door under fireballs): vanilla's T_VerticalDoor never hurts (a closing door goes
+  back up, a close-only one rests on her). HMP seed 1 exits, seed 0 124 -> 160 s; UV 588 -> 786 s.
+- Traced, not fixed: E3M6 UV (out of ammo, walked past a cacodemon whose bite isn't a one-hit
+  kill); E3M7 UV (out of ammo, fleeing across blood at 5.5 a tic: `Motion::go` slows her moving
+  off her facing, the route's assumption, while the fight holds her facing; Doom runs her
+  backwards at full speed; both versions of a fix moved HMP seed 0 the wrong way).
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 7.1 -> 7.8 (6/8 through; only E2M8 stops it), E3 7.2 ->
+6.8 (3 -> 0/8; E3M8 six times, E3M4 twice), Doom II 27 -> 25/32 (MAP12 seeds 0 and 3, MAP05 seed 3:
+the runs part by two tics at a door no longer taken for a crusher; latent, for the Doom II pass);
+arenas unchanged.

@@ -347,8 +347,12 @@ impl RouteFollower {
                 break;
             }
         }
+        // (out from under it and none ahead: a crossing begun is over, the legs the fight's again;
+        // kept, the fight left her to the route for the rest of it, E3M8's door taken for one,
+        // stood at by the route as a cacodemon came up and bit her for 60)
         let Some((s, entry)) = ahead else {
             self.crusher_wait = None;
+            self.crusher_cross = None;
             return None;
         };
         // (a crossing timed and begun: gone through, not waited out halfway)
@@ -387,6 +391,8 @@ impl RouteFollower {
             self.crusher_wait = None;
             return None;
         }
+        // (waiting is no crossing)
+        self.crusher_cross = None;
         if self.crusher_wait != Some(s) {
             self.log.add(obs.tic, format!("waiting for the crusher (sector {s}) to come up"));
             self.crusher_wait = Some(s);
