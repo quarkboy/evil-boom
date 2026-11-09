@@ -51,16 +51,16 @@ impl Explorer {
             .collect()
     }
 
-    /// Every wall she suspects of hiding something, as a round's objectives (pressed, then shot):
-    /// a search for secrets asked for (Evil's explore with secrets), not just the few best a round
-    /// of the walls takes when there's nothing else. Her reach as last brought up to date.
+    /// The walls worth a search for secrets asked for (Evil's explore with secrets): every one with
+    /// more to go on than one weak sign, not just the few best a round of the walls takes when
+    /// there's nothing else; pressed, and bumped and shot too only where the wall's face stands
+    /// out (as a mapper marks a switch or a gun line). Not every wall with a blank behind it,
+    /// pressed and shot: the user's, watching E1M1's start room searched wall by wall, sixteen of
+    /// them. Her reach as last brought up to date.
     pub fn suspected_walls(&mut self, obs: &Observation) -> Vec<Objective> {
         let reach = self.reach.clone();
-        self.suspected(obs, &reach, false)
-            .into_iter()
-            .filter(|w| self.standable(w.2, false))
-            .map(|(score, li, stand, mid)| wall_objective(score, li, stand, mid, true))
-            .collect()
+        let found: Vec<(f64, usize, Point, Point)> = self.suspected(obs, &reach, false).into_iter().filter(|w| w.0 > SUSPICION_MIN && self.standable(w.2, false)).collect();
+        found.into_iter().map(|(score, li, stand, mid)| wall_objective(score, li, stand, mid, self.knowledge.marked(li))).collect()
     }
 
     /// The walls she suspects from where she can get to now, best first: (score, line, where
