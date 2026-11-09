@@ -121,6 +121,13 @@ impl Seen {
     }
 }
 
+/// how near a monster with a gun or missiles has to be to count as fighting her (`engaged`)
+const ENGAGED_RANGED: f64 = 1536.0;
+/// ...a lost soul, that charges from a distance
+const ENGAGED_CHARGE: f64 = 768.0;
+/// ...one that only claws or bites
+const ENGAGED_MELEE: f64 = 384.0;
+
 #[derive(Clone, Debug)]
 pub struct Decision {
     /// the fight needs the movement too
@@ -493,6 +500,28 @@ impl Combat {
     /// Monsters seen that are still about (to hunt down).
     pub fn remaining(&self) -> Vec<Seen> {
         self.known.iter().filter(|(i, _)| self.alive.contains_key(i)).map(|(_, s)| s.clone()).collect()
+    }
+
+    /// The monsters she's in a fight with: in sight, awake, after her, and able to hurt her from
+    /// where they are (one with a gun or missiles within ENGAGED_RANGED of her, a lost soul
+    /// within ENGAGED_CHARGE, a clawing one within ENGAGED_MELEE). Not a zombieman across the
+    /// map, nor a demon over a pit: what pauses her exploring (the user's: "in a fight" isn't
+    /// anything awake in sight).
+    pub fn engaged(&self, obs: &Observation) -> Vec<Thing> {
+        let pos = obs.pos();
+        self.against_her()
+            .into_iter()
+            .filter(|t| t.health > 0 && t.after_her && self.known.get(&t.id).is_some_and(|k| k.awake))
+            .filter(|t| {
+                let d = dist((t.x, t.y), pos);
+                match mon(t.name).attack {
+                    Attack::Hitscan | Attack::Missile | Attack::Fire => d < ENGAGED_RANGED,
+                    Attack::Charge => d < ENGAGED_CHARGE,
+                    Attack::Melee => d < ENGAGED_MELEE,
+                    Attack::None => false,
+                }
+            })
+            .collect()
     }
 
     pub fn threats(&self) -> f64 {

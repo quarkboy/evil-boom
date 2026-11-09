@@ -28,6 +28,8 @@ const PRESS_WATCH: i64 = 3 * 35;
 
 /// waiting on a floor that hurts: off it tried this often (tics)...
 const OFF_AGAIN: i64 = 35;
+/// how long nothing's fought her before a paused explore order goes on (tics)
+const RESUME_CALM: i64 = 2 * 35;
 /// how far (along the way there) she goes for a pickup by herself, waiting
 const PICKUP_RANGE: f64 = 1024.0;
 /// the nearest pickups tried for a way there, waiting
@@ -128,8 +130,8 @@ pub struct Director {
     names: BTreeMap<String, String>,
     places: Option<Places>,
     pub reports: Vec<Report>,
-    /// what's been told already: exits, items, monsters (ids), the health mark passed, keys and
-    /// weapons held, dead
+    /// what's been told already: exits, switches and doors, items, monsters (ids), the health
+    /// mark passed, keys and weapons held, dead
     told_exits: std::collections::BTreeSet<String>,
     told_items: std::collections::BTreeSet<i32>,
     told_monsters: std::collections::BTreeSet<i32>,
@@ -141,6 +143,12 @@ pub struct Director {
     off_tried: i64,
     /// told she's on a floor that hurts with no known way off (till she's off it)
     told_trapped: bool,
+    /// an explore order paused for a fight (she fights; it goes on once it's over); and told so
+    /// (once an order: the status says the rest)
+    paused: bool,
+    told_paused: bool,
+    /// since when nothing's been fighting her (None: something is)
+    calm_since: Option<i64>,
     /// the areas the last list found nothing more to explore in, and not where she is
     done_areas: std::collections::BTreeSet<String>,
     /// a switch pressed: its line, what it's called, and till when to watch for what it did (what
@@ -220,8 +228,8 @@ impl Director {
     pub fn doing(&self, agent: &Agent) -> String {
         let doing = match &self.doing {
             Some(Doing::Once(_, w)) => format!("going to {w}"),
-            Some(Doing::Area(_, w, secrets)) => format!("exploring {w}{}", with_secrets(*secrets)),
-            Some(Doing::Way(b, secrets)) => format!("exploring {}{}", compass(*b), with_secrets(*secrets)),
+            Some(Doing::Area(_, w, secrets)) => format!("exploring {w}{}{}", with_secrets(*secrets), if self.paused { " (paused for the fight)" } else { "" }),
+            Some(Doing::Way(b, secrets)) => format!("exploring {}{}{}", compass(*b), with_secrets(*secrets), if self.paused { " (paused for the fight)" } else { "" }),
             Some(Doing::Off) => "getting off a hurting floor".to_string(),
             Some(Doing::Pickup) => "picking up nearby".to_string(),
             None if agent.x().current.is_some() => "busy".to_string(),
@@ -247,7 +255,7 @@ impl Director {
         let keys: Vec<String> = obs.keys.unwrap_or_default().iter().map(|k| key_name(k).to_string()).collect();
         let doing = self.doing(agent);
         // (in a fight: what's in sight, the nearest; an order then is held up by it unless rushed)
-        let fight = agent.player().map(|p| p.combat().visible.iter().filter(|t| t.category == "Monster" && t.health > 0).cloned().collect::<Vec<_>>()).unwrap_or_default();
+        let fight = engaged(agent, obs);
         let doing = if fight.is_empty() {
             doing
         } else {
@@ -346,11 +354,28 @@ impl Director {
         if obs.tic % 5 != 0 {
             return;
         }
-        for e in self.objectives_of(agent, obs, &[Kind::Exit]) {
-            if self.told_exits.insert(e.id.clone()) {
-                let line = self.describe(&e, obs);
-                self.event(obs, true, format!("Exit found: {line}."));
+        // (exits, switches and doors as they come into view, mid-fight too: a switch the fight
+        // swung her round to see is hers to rush to, not news for an explore order's end that a
+        // fight puts off; the user's, MAP07)
+        let (mut switches, mut doors) = (Vec::new(), Vec::new());
+        for e in self.objectives_of(agent, obs, &[Kind::Exit, Kind::Switch, Kind::Door]) {
+            if !self.told_exits.insert(e.id.clone()) {
+                continue;
             }
+            let line = self.describe(&e, obs);
+            if e.id.starts_with("exit-") {
+                self.event(obs, true, format!("Exit found: {line}."));
+            } else if e.id.starts_with("switch-") {
+                switches.push(line);
+            } else {
+                doors.push(line);
+            }
+        }
+        if !switches.is_empty() {
+            self.event(obs, true, format!("Switch{} found: {}.", if switches.len() == 1 { "" } else { "es" }, switches.join(", ")));
+        }
+        if !doors.is_empty() {
+            self.event(obs, false, format!("Door{} found: {}.", if doors.len() == 1 { "" } else { "s" }, doors.join(", ")));
         }
         let known = agent.x().knowledge.known_polys();
         let nav = std::rc::Rc::clone(&agent.x().nav);
@@ -570,7 +595,11 @@ impl Director {
         }
         if let Some((o, rush)) = self.queue.pop_front() {
             self.start(agent, obs, o);
-            agent.x_mut().press_on = rush && self.doing.is_some();
+            // (a single target only: a sweep of a room, rushed, is a run about it under fire)
+            agent.x_mut().press_on = rush && matches!(self.doing, Some(Doing::Once(..)));
+            return;
+        }
+        if self.explore_paused(agent, obs) {
             return;
         }
         let ended = agent.x_mut().ended.take();
@@ -631,6 +660,41 @@ impl Director {
         }
     }
 
+    /// An explore order and a fight: paused while something's fighting her (the objective in
+    /// hand dropped, the fight free to move her; what it shows her she maps all the same), on
+    /// again after RESUME_CALM with nothing fighting her. True while paused. (The user's: a sweep
+    /// of look-at spots under fire never ended in MAP07's arena, rushed or not.)
+    fn explore_paused(&mut self, agent: &mut Agent, obs: &Observation) -> bool {
+        let fighting = !engaged(agent, obs).is_empty();
+        if fighting {
+            self.calm_since = None;
+        } else if self.calm_since.is_none() {
+            self.calm_since = Some(obs.tic);
+        }
+        if !matches!(self.doing, Some(Doing::Area(..) | Doing::Way(..))) {
+            self.paused = false;
+            return false;
+        }
+        if fighting && !self.paused {
+            self.paused = true;
+            let x = agent.x_mut();
+            if let Some(cur) = x.current.take() {
+                self.taken.remove(&taken_key(&cur)); // (to be taken again, if it's still to do)
+            }
+            x.follower = None;
+            x.ended = None;
+            // (told once: in an arena it goes on and off, each time a word in her context)
+            if !self.told_paused {
+                self.told_paused = true;
+                self.report(obs, true, "Exploring paused while she's fighting; it goes on after.".into());
+            }
+        }
+        if self.paused && self.calm_since.is_some_and(|t| obs.tic - t >= RESUME_CALM) {
+            self.paused = false;
+        }
+        self.paused
+    }
+
     fn start(&mut self, agent: &mut Agent, obs: &Observation, o: Order) {
         // (a new order replaces the one in hand, without a word: she gave it)
         self.doing = None;
@@ -639,6 +703,7 @@ impl Director {
         x.follower = None;
         x.ended = None;
         self.taken.clear();
+        self.told_paused = false;
         match o {
             Order::Stop => self.report(obs, true, "Stopped.".into()),
             Order::Exit => match self.objectives_of(agent, obs, &[Kind::Exit]).into_iter().next() {
@@ -1060,4 +1125,9 @@ fn lock_name(l: crate::specials::Lock) -> Option<&'static str> {
         Lock::Any => "any key",
         _ => "all keys",
     })
+}
+
+/// The monsters fighting her now (`Combat::engaged`: able to hurt her from where they are).
+fn engaged(agent: &Agent, obs: &Observation) -> Vec<crate::motor::Thing> {
+    agent.player().map(|p| p.combat().engaged(obs)).unwrap_or_default()
 }

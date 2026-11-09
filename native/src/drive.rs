@@ -35,7 +35,7 @@
 //!   list TOPIC [N]      what she knows of: areas, doors, items, monsters, exits (ids, names,
 //!                       which way, how far)
 //!   name ID NAME...     a name for something listed (refused when too long or taken)
-//!   order go REF [risky] [sure] [rush] | order explore REF|DIR [secrets 1-3] [rush] | order exit [sure] | order stop
+//!   order go REF [risky] [sure] [rush] | order explore REF|DIR [secrets 1-3] | order exit [sure] | order stop
 //!                       (leaving the level with something left asks first: sure to leave anyway)
 //!                       an order (REF an id or a name; DIR n, ne, east, ...)
 //!   run SECONDS         play on (directed) till she's done and waiting, or SECONDS; the reports

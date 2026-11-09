@@ -71,7 +71,7 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
                 }
                 Some("exit") => Order::Exit,
                 Some("stop") => Order::Stop,
-                _ => return Err("order go REF [risky] [sure] [rush] | explore REF|DIR [secrets 1-3] [rush] | exit [sure] | stop".into()),
+                _ => return Err("order go REF [risky] [sure] [rush] | explore REF|DIR [secrets 1-3] | exit [sure] | stop".into()),
             };
             d.order_rushed(o, rush);
             Ok(Vec::new())
