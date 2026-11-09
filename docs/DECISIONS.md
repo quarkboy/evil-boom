@@ -1992,3 +1992,19 @@ Over the 20-minute pass (rounds A-N, 54 levels not beaten on UV): from E1 8.0, E
 28/32, arenas 119/128 and 226/240 to E1 8.0, E2 7.5, E3 7.8, Doom II 29/32, arenas 119/128 and
 223/240, with exits gained on many levels' seeds (see each round). Next, as the user set it: larger
 changes, then the 40-minute pass; paused here at the user's word.
+
+## The score: every level, HMP and UV, eight random seeds (the user, 2026-11-09)
+
+Progress is measured by a score, not the regression set (the user's call: an episode counts a
+late level only when everything before it went right, unfair to later levels; single-seed
+surveys swing with one seed; arena fights are too artificial to count, a tool for trying ideas
+only). `evil-boom score` plays every level of Doom (E1-E4, 36) and Doom II (32) from a pistol start
+on one life (mortal), on HMP and UV, eight random seeds each (1088 runs), a TSV row a run
+(`out/score/`). A run scores 1 for getting out, else half the share of the level's monsters killed
+(partial credit, the user's measure: how far into the fight she got; the half keeps a run that
+kills all and dies below one that gets out); a level's score is its runs' mean; the score is the
+mean over levels and skills, each the same weight. Beside it, how consistently levels are beaten
+(the user wants that optimized too): the spread (each level's variance of its runs' points,
+averaged), and the levels beaten on every run and on none. `score-report A.tsv B.tsv` compares
+sets: the score's own noise between measurements, and which levels move most. `run-map`'s RESULT
+line now always carries `kills x/y`.

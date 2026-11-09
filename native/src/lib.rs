@@ -37,6 +37,7 @@ pub mod plan;
 pub mod play;
 pub mod replay;
 pub mod sight;
+pub mod score;
 pub mod specials;
 mod stats;
 pub mod tactical;

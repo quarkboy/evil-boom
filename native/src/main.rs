@@ -6,6 +6,10 @@
 //!   evil-boom episode <wad> <first map> [--seeds K] [run options]   an episode on one life from that
 //!                                               map, what she has carried level to level; K seeds
 //!                                               (8) side by side, --jobs at a time
+//!   evil-boom score [doom|doom2 [maps...]]... [--skills 3,4] [--seeds K] [--jobs N] [--out FILE]
+//!       the bot's score: every level, pistol start, one life, K random seeds a skill (HMP and
+//!       UV, 8); a row a run (out/score/), then the report (see score.rs)
+//!   evil-boom score-report FILE...                   the report of score TSVs (more: how far apart)
 //!   evil-boom dump-nav <wad> <map>                   the level's analysis (for comparing)
 //!   evil-boom neuro-mock [--port N] [FILE]           a stand-in Neuro server (port 8000): actions sent
 //!                                               from FILE (out/neuro/actions.txt) as lines are added,
@@ -754,6 +758,8 @@ fn main() -> ExitCode {
         Some("episode-one") => episode_one(&args[1..]),
         Some("drive") => drive(&args[1..]),
         Some("sweep") => sweep(&args[1..]),
+        Some("score") => evildoom::score::run(&args[1..]),
+        Some("score-report") if args.len() >= 2 => evildoom::score::report_files(&args[1..]),
         Some("watch") => watch(&args[1..]),
         Some("arena") => arena(&args[1..]),
         Some("arena-one") => arena_one(&args[1..]),

@@ -552,9 +552,8 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     if o.secrets {
         detail = format!("secrets {}/{}, {detail}", tally[2].0.max(best_life.1), tally[2].1);
     }
-    if o.complete {
-        detail = format!("kills {}/{}, {detail}", tally[1].0, tally[1].1);
-    }
+    // (the kills always: the score's partial credit for a run that doesn't get out)
+    detail = format!("kills {}/{}, {detail}", tally[1].0, tally[1].1);
     let hurt = damage_summary(&damage);
     lines.push(format!("damage taken: {}", if hurt.is_empty() { "none" } else { &hurt }));
     lines.push(format!("RESULT {outcome} {detail}"));
