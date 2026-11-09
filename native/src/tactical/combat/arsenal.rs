@@ -4,6 +4,7 @@
 
 use super::style::window;
 use super::aiming::SWITCH_WAIT;
+use super::steering::CLAW_REACH;
 use super::tree::MELEE_SLACK;
 use super::{mon, Combat, LOW_HEALTH, SLOTS};
 use crate::geom::dist;
@@ -373,7 +374,12 @@ impl Combat {
                 continue;
             }
             let health = obs.health.unwrap_or(100.0);
-            if slot == 1 && ((w == CHAINSAW && !melee_at(&w, t.name)) || (health < LOW_HEALTH && w != weapon(1)) || claw_max(t.name) >= health) && self.guns_armed(obs) {
+            // (brought up in its reach, a claw comes before the first blow: the switch, 16 tics
+            // down and 16 up (LOWERSPEED, RAISESPEED), is longer than any claw's cycle, a demon's
+            // 24; MAP28 HMP, the saw brought up 50 off a demon at 43 health, 69 bullets in the
+            // pistol: bitten to 15 mid-switch, then backing off with the saw up, dead)
+            let claws = if obs.weapon != Some(1) && here < CLAW_REACH { 2.0 } else { 1.0 };
+            if slot == 1 && ((w == CHAINSAW && !melee_at(&w, t.name)) || (health < LOW_HEALTH && w != weapon(1)) || claws * claw_max(t.name) >= health) && self.guns_armed(obs) {
                 // (not the saw at what it won't keep flinching, with a gun to hand: a cacodemon's
                 // bites, a baron's claws come through it; nor the saw or the berserk fist at
                 // anything, hurt: E3M4, at 14 health, up to a demon with the saw, one bite; nor

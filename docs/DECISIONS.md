@@ -1917,3 +1917,24 @@ gap less 32, a window of about 6 tics on the lift's climb; 108 a hit, three ride
 brain as an exit objective whose activators are floors (a mover's range among them) from which a
 rocket spawns inside the opening on the line to it, and a node that fires in the window; rockets
 kept for it.
+
+## 20-minute pass, round L: no fist or saw brought up within two claws of death (2026-11-09)
+
+Round L: MAP28, MAP29, MAP30, MAP32.
+
+- **Bringing up the fist or saw in a claw's reach weighs two claws, not one** (MAP28 HMP: a demon 50
+  off at 43 health, its bite up to 40; `best_gun` picked the chainsaw, cheaper than the pistol, the
+  one-claw rule letting it; the switch takes some 32 tics, more than a demon's 24-tic bite cycle,
+  bitten for 28 mid-switch, then the saw ruled out and `SWITCH_WAIT` holding the pistol back,
+  bitten dead): if the fist or saw isn't up yet and the target's within claw reach, two claws are
+  weighed against her health. MAP28 HMP seed 2 19 -> 53 s. Regression set level.
+- Dropped after the regression set: MAP32's aim held where she faced at the press till the shot
+  goes out, for every gun (the pistol's bullet 4 tics after the press, the shotguns' 3; a fight
+  flapping on and off swung her 10-20 degrees through each; MAP32 exits 6/16 -> 7/16 seeds): E3 8.0
+  -> 6.6.
+- Traced, not built: MAP30 (the brain: see the entry above, the user's call that she may know of
+  it); MAP29 (a run-jump landed 50 degrees off its line into lava with the fight shooting through
+  the sprint, unproven; a one-way drop into lava for a wall look; an SR lift line reachable from the
+  lava never tried).
+
+Results (HNTR, one life): unchanged: E1 8.0, E2 7.5, E3 8.0, Doom II 29/32; arenas 119/128, 223/240.

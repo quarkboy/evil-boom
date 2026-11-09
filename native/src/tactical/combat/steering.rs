@@ -38,7 +38,7 @@ const W_BARREL: f64 = 4.0;
 const W_TOWARD: f64 = 1.5;
 /// a claw's reach, centre to centre: MELEERANGE (64) less 20 plus her radius (p_enemy.c
 /// `P_CheckMeleeRange`), and a stride of it (8-10) on top: 60 + 20
-const CLAW_REACH: f64 = 80.0;
+pub(super) const CLAW_REACH: f64 = 80.0;
 
 /// with anything shooting in sight, kept this far from a barrel's middle (its blast and a margin)
 const BARREL_KEEP: f64 = 192.0;
