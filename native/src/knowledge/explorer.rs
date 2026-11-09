@@ -348,6 +348,10 @@ pub struct Explorer {
     pads: (BTreeSet<usize>, Vec<(Point, Point)>),
     /// where she could get to, with nothing at all to do
     trapped: Option<BTreeSet<usize>>,
+    /// things whoever directs her wants picked up whenever it's safe (directed play's own
+    /// pickups: bonuses, health that won't go to waste, ammo with room for it; the user's): offered
+    /// as items, past the same checks as any (danger, cut off)
+    pub spares: BTreeSet<i32>,
     suspecting: Suspecting,
     /// walls pressed round about since there was last anything else to do (the 100% runs)
     panic_tries: usize,
@@ -470,6 +474,7 @@ impl Explorer {
             exits_open: true,
             trapped: None,
             suspecting: Suspecting::No,
+            spares: BTreeSet::new(),
             panic_tries: 0,
             strong_only: false,
             waiting_reopen: false,

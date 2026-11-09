@@ -133,15 +133,16 @@ impl Places {
 
     /// A few words for an area: how big, what's notable.
     pub fn sketch(a: &Area) -> String {
+        // (short: Evil reads it, and her context is precious, the user's)
         let size = match a.size {
-            s if s < 256.0 * 256.0 => "a small",
-            s if s < 640.0 * 640.0 => "a",
-            s if s < 1280.0 * 1280.0 => "a large",
-            _ => "a huge",
+            s if s < 256.0 * 256.0 => "small ",
+            s if s < 640.0 * 640.0 => "",
+            s if s < 1280.0 * 1280.0 => "large ",
+            _ => "huge ",
         };
-        let what = if a.outdoors { "outdoor area" } else { "room" };
-        let hurts = if a.hurts { " with a floor that hurts" } else { "" };
-        format!("{size} {what}{hurts}")
+        let what = if a.outdoors { "outdoors" } else { "room" };
+        let hurts = if a.hurts { ", floor hurts" } else { "" };
+        format!("{size}{what}{hurts}")
     }
 }
 

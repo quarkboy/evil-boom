@@ -19,13 +19,7 @@ use crate::navigator::{Navigator, States, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::walkthrough::{Action, Step};
 
 /// the most of each ammo she can carry (without a backpack), by weapon slot
-fn ammo_max(slot: i32) -> f64 {
-    match slot {
-        2 | 4 => 200.0,
-        3 | 5 => 50.0,
-        _ => 300.0,
-    }
-}
+use crate::tactical::bestiary::ammo_max;
 
 /// items further than this (as the crow flies) only when they're needed badly
 const ITEM_RANGE: f64 = 1536.0;

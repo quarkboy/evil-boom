@@ -101,6 +101,8 @@ pub struct Observation {
     pub velocity: Option<Point>,
     /// has the computer area map
     pub allmap: Option<bool>,
+    /// has a backpack (twice the ammo carried)
+    pub backpack: Option<bool>,
     /// what the game just told her
     pub message: Option<String>,
 }

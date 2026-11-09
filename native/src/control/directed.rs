@@ -28,8 +28,12 @@ const PRESS_WATCH: i64 = 3 * 35;
 
 /// waiting on a floor that hurts: off it tried this often (tics)...
 const OFF_AGAIN: i64 = 35;
+/// how far (along the way there) she goes for a pickup by herself, waiting
+const PICKUP_RANGE: f64 = 1024.0;
+/// the nearest pickups tried for a way there, waiting
+const PICKUP_TRIES: usize = 4;
 /// an item listed that counts for the level's items tally (the rest are just pickups)
-const COUNTS: &str = " (counts for the items tally)";
+const COUNTS: &str = " (tally)";
 /// ...to the best of this many places
 const OFF_TRIES: usize = 6;
 
@@ -107,6 +111,8 @@ enum Doing {
     Way(f64, bool),
     /// off a floor that hurts, her own doing (not news)
     Off,
+    /// a pickup she takes by herself, waiting (not news)
+    Pickup,
 }
 
 #[derive(Default)]
@@ -214,20 +220,22 @@ impl Director {
         }
         let keys: Vec<String> = obs.keys.unwrap_or_default().iter().map(|k| key_name(k).to_string()).collect();
         let doing = match &self.doing {
-            Some(Doing::Once(_, w)) => format!("going: {w}"),
+            Some(Doing::Once(_, w)) => format!("going to {w}"),
             Some(Doing::Area(_, w, secrets)) => format!("exploring {w}{}", with_secrets(*secrets)),
             Some(Doing::Way(b, secrets)) => format!("exploring {}{}", compass(*b), with_secrets(*secrets)),
-            Some(Doing::Off) => "getting off a floor that hurts".to_string(),
+            Some(Doing::Off) => "getting off a hurting floor".to_string(),
+            Some(Doing::Pickup) => "picking up nearby".to_string(),
             None if agent.x().current.is_some() => "busy".to_string(),
-            None => "waiting for orders".to_string(),
+            None => "waiting".to_string(),
         };
+        // (short: what Evil reads costs her context, the user's)
         format!(
-            "Health {:.0}, armor {:.0}; weapons: {}; ammo: {}; keys: {}; {}; {doing}",
+            "Health {:.0}, armor {:.0}; {}; {}; {}; {}; {doing}",
             obs.health.unwrap_or(0.0),
             obs.armor.unwrap_or(0.0),
-            if weapons.is_empty() { "none".to_string() } else { weapons.join(", ") },
-            if pools.is_empty() { "none".to_string() } else { pools.join(", ") },
-            if keys.is_empty() { "none".to_string() } else { keys.join(", ") },
+            if weapons.is_empty() { "no weapons".to_string() } else { weapons.join(", ") },
+            if pools.is_empty() { "no ammo".to_string() } else { pools.join(", ") },
+            if keys.is_empty() { "no keys".to_string() } else { keys.join(", ") },
             self.tally.line()
         )
     }
@@ -252,11 +260,11 @@ impl Director {
         let pickups = seen.len() - counted;
         let mut left = Vec::new();
         for (n, one, many) in [
-            (explore, "thing known to explore", "things known to explore"),
-            (switches, "switch not pressed", "switches not pressed"),
-            (doors, "door not tried", "doors not tried"),
-            (counted, "item seen that counts for the items tally", "items seen that count for the items tally"),
-            (pickups, "other pickup seen and not taken", "other pickups seen and not taken"),
+            (explore, "to explore", "to explore"),
+            (switches, "switch", "switches"),
+            (doors, "door", "doors"),
+            (counted, "tally item", "tally items"),
+            (pickups, "other pickup", "other pickups"),
         ] {
             if n > 0 {
                 left.push(format!("{n} {}", if n == 1 { one } else { many }));
@@ -266,7 +274,7 @@ impl Director {
             return None;
         }
         let known = if left.is_empty() { String::new() } else { format!("{}; ", left.join(", ")) };
-        Some(format!("There's still something left to do here: {known}{}. Leaving ends the level. Are you sure? To leave anyway, send it again with sure set to true.", self.tally.line()))
+        Some(format!("Still here: {known}{}. Leave anyway? Resend with sure: true.", self.tally.line()))
     }
 
     /// What's new since last told: an exit, things of note seen, monsters, keys and weapons got,
@@ -284,8 +292,8 @@ impl Director {
         // (health falling past a mark, each told once till she's above it again)
         let mark = [25, 50].into_iter().find(|&m| health < f64::from(m));
         if mark != self.health_mark {
-            if let Some(m) = mark.filter(|m| self.health_mark.is_none_or(|h| *m < h)) {
-                self.event(obs, true, format!("Health down to {health:.0} (under {m})."));
+            if mark.is_some_and(|m| self.health_mark.is_none_or(|h| m < h)) {
+                self.event(obs, true, format!("Health down to {health:.0}."));
             }
             self.health_mark = mark;
         }
@@ -309,7 +317,7 @@ impl Director {
         for e in self.objectives_of(agent, obs, &[Kind::Exit]) {
             if self.told_exits.insert(e.id.clone()) {
                 let line = self.describe(&e, obs);
-                self.event(obs, true, format!("Found an exit: {line}."));
+                self.event(obs, true, format!("Exit found: {line}."));
             }
         }
         let known = agent.x().knowledge.known_polys();
@@ -351,7 +359,7 @@ impl Director {
             let nearest = new.iter().map(|m| m.2).min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b))).unwrap_or(pos);
             let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
             let dangerous = new.iter().any(|m| crate::tactical::bestiary::monster(m.1).is_some_and(|i| i.boss || i.threat >= 6.0));
-            self.event(obs, dangerous, format!("Monsters sighted: {} (nearest {} {:.0}).", what.join(", "), compass(heading(pos, nearest)), dist(pos, nearest)));
+            self.event(obs, dangerous, format!("Monsters: {} ({} {:.0}).", what.join(", "), compass(heading(pos, nearest)), dist(pos, nearest)));
         }
     }
 
@@ -391,14 +399,14 @@ impl Director {
                         let mut what = Places::sketch(a);
                         let in_it = here.is_some_and(|s| a.sectors.contains(&s));
                         if in_it {
-                            what.push_str(", where she is");
+                            what.push_str(", here");
                         } else if left == 0 {
                             done.insert(a.id.clone());
                         }
                         what.push_str(&match (left, hiding) {
-                            (0, 0) => ", explored (including secrets)".to_string(),
-                            (0, n) => format!(", explored ({n} wall{} could hide secrets)", if n == 1 { "" } else { "s" }),
-                            (n, _) => format!(", {n} things to explore"),
+                            (0, 0) => ", explored, secrets too".to_string(),
+                            (0, n) => format!(", explored, {n} wall{} to search", if n == 1 { "" } else { "s" }),
+                            (n, _) => format!(", {n} to explore"),
                         });
                         Entry { id: a.id.clone(), what, at: a.center }
                     })
@@ -411,7 +419,8 @@ impl Director {
                 let mut out = self.objectives_of(agent, obs, &[Kind::Switch]);
                 for e in &mut out {
                     let effect = e.id.strip_prefix("switch-l").and_then(|l| l.parse().ok()).and_then(|l| self.effect_of(agent, obs, l));
-                    e.what = format!("a switch not pressed yet; {}", effect.map_or("what it does isn't known yet".to_string(), |w| format!("it {w}")));
+                    let lock = std::mem::take(&mut e.what);
+                    e.what = [effect.unwrap_or_else(|| "effect unknown".to_string()), lock].into_iter().filter(|w| !w.is_empty()).collect::<Vec<_>>().join(", ");
                 }
                 out
             }
@@ -438,8 +447,8 @@ impl Director {
                 .into_iter()
                 .map(|(id, name, at, tic, awake)| {
                     let when = (obs.tic - tic) as f64 / 35.0;
-                    let seen = if when < 1.0 { "in sight".to_string() } else { format!("last seen {when:.0}s ago") };
-                    Entry { id: format!("monster-{id}"), what: format!("{name}, {seen}{}", if awake { "" } else { ", not stirred yet" }), at }
+                    let seen = if when < 1.0 { "in sight".to_string() } else { format!("seen {when:.0}s ago") };
+                    Entry { id: format!("monster-{id}"), what: format!("{name}, {seen}{}", if awake { "" } else { ", asleep" }), at }
                 })
                 .collect(),
         };
@@ -478,7 +487,16 @@ impl Director {
         let d = dist(pos, e.at);
         let name = self.names.get(&e.id).map_or(String::new(), |n| format!(" \"{n}\""));
         let way = if d < 64.0 { "here".to_string() } else { format!("{} {:.0}", compass(heading(pos, e.at)), d) };
-        format!("{}{name}: {} ({way})", e.id, e.what)
+        let what = if e.what.is_empty() { String::new() } else { format!(": {}", e.what) };
+        format!("{}{name}{what} ({way})", e.id)
+    }
+
+    /// Something by id in a report: the id, her name for it, a thing's kind (no more: she has the
+    /// list for the rest).
+    fn tag(&self, id: &str, obs: &Observation) -> String {
+        let name = self.names.get(id).map_or(String::new(), |n| format!(" \"{n}\""));
+        let thing = id.split_once("-t").and_then(|(_, n)| n.parse::<i32>().ok()).and_then(|n| obs.things.iter().flatten().find(|t| t.id == n)).map_or(String::new(), |t| format!(" ({})", t.name));
+        format!("{id}{name}{thing}")
     }
 
     /// The id a reference means: one of her names, else itself.
@@ -507,13 +525,14 @@ impl Director {
     /// order taken up.
     pub fn tick(&mut self, agent: &mut Agent, obs: &Observation) {
         self.events(agent, obs);
+        agent.x_mut().spares = obs.things.iter().flatten().filter(|t| spare(t.name, obs)).map(|t| t.id).collect();
         if let Some((line, what, until)) = self.pressed.clone() {
             let effect = self.effect_of(agent, obs, line);
             if effect.is_some() || obs.tic >= until {
                 self.pressed = None;
                 self.report(obs, true, match effect {
-                    Some(w) => format!("Pressed {what}: it {w}."),
-                    None => format!("Pressed {what}: nothing seen to change."),
+                    Some(w) => format!("Pressed {what}: {w}."),
+                    None => format!("Pressed {what}: no change seen."),
                 });
             }
         }
@@ -532,7 +551,15 @@ impl Director {
                     self.off_tried = obs.tic;
                     if self.off_hurting_floor(agent, obs) {
                         self.doing = Some(Doing::Off);
+                    } else if self.pick_up_nearby(agent, obs) {
+                        self.doing = Some(Doing::Pickup);
                     }
+                }
+            }
+            // (one picked up: the next straight away, if there's one, not a tic waiting between)
+            Some(Doing::Pickup) => {
+                if self.pick_up_nearby(agent, obs) {
+                    self.doing = Some(Doing::Pickup);
                 }
             }
             Some(Doing::Off) => {}
@@ -541,7 +568,7 @@ impl Director {
                 // (a switch pressed: what it did told when she's seen it, or after a while)
                 match id.strip_prefix("switch-l").and_then(|l| l.parse::<usize>().ok()).filter(|_| ok) {
                     Some(l) => self.pressed = Some((l, id.clone(), obs.tic + PRESS_WATCH)),
-                    None => self.report(obs, ok, if ok { format!("Done: {what}") } else { format!("Couldn't: {what} ({why})") }),
+                    None => self.report(obs, ok, if ok { format!("Done: {what}.") } else { format!("Couldn't: {what} ({why}).") }),
                 }
             }
             Some(Doing::Area(id, what, secrets)) => {
@@ -549,7 +576,7 @@ impl Director {
                     self.doing = Some(Doing::Area(id, what, secrets));
                 } else {
                     let found = self.found(agent, obs, secrets, |d, a, o| d.in_area(a, &id, o));
-                    self.report(obs, true, format!("Explored {what}{}: nothing more known to do there.{found}", if secrets { ", secrets searched too" } else { "" }));
+                    self.report(obs, true, format!("Explored {what}{}.{found}", if secrets { ", secrets too" } else { "" }));
                 }
             }
             Some(Doing::Way(b, secrets)) => {
@@ -559,27 +586,25 @@ impl Director {
                     self.doing = Some(Doing::Way(b, secrets));
                 } else {
                     let found = self.found(agent, obs, secrets, fits);
-                    self.report(obs, true, format!("Explored {}{}: nothing more known that way.{found}", compass(b), if secrets { ", secrets searched too" } else { "" }));
+                    self.report(obs, true, format!("Explored {}{}.{found}", compass(b), if secrets { ", secrets too" } else { "" }));
                 }
             }
         }
     }
 
     fn start(&mut self, agent: &mut Agent, obs: &Observation, o: Order) {
-        // (a new order replaces the one in hand)
-        if self.doing.take().is_some() {
-            self.report(obs, true, "Dropped what she was doing (a new order)".into());
-        }
+        // (a new order replaces the one in hand, without a word: she gave it)
+        self.doing = None;
         let x = agent.x_mut();
         x.current = None;
         x.follower = None;
         x.ended = None;
         self.taken.clear();
         match o {
-            Order::Stop => self.report(obs, true, "Stopped; waiting".into()),
+            Order::Stop => self.report(obs, true, "Stopped.".into()),
             Order::Exit => match self.objectives_of(agent, obs, &[Kind::Exit]).into_iter().next() {
                 Some(e) => self.go(agent, obs, &e.id, false),
-                None => self.report(obs, false, "No exit known yet".into()),
+                None => self.report(obs, false, "No exit known yet.".into()),
             },
             Order::Go(r, risky) => {
                 let id = self.resolve(&r);
@@ -588,28 +613,28 @@ impl Director {
             Order::ExploreArea(r, secrets) => {
                 let id = self.resolve(&r);
                 let Some(a) = self.places(agent).by_id(&id).cloned() else {
-                    self.report(obs, false, format!("No area \"{r}\"; list the areas for their ids"));
+                    self.report(obs, false, format!("No area \"{r}\"."));
                     return;
                 };
-                let what = self.describe(&Entry { id: a.id.clone(), what: Places::sketch(&a), at: a.center }, obs);
+                let what = self.tag(&a.id, obs);
                 let fits = |d: &Self, a2: &Agent, o: &Objective| d.in_area(a2, &id, o);
                 if self.next_in(agent, obs, secrets, fits) {
-                    self.report(obs, true, format!("Exploring {what}{}", with_secrets(secrets)));
+                    self.report(obs, true, format!("Exploring {what}{}.", with_secrets(secrets)));
                     self.doing = Some(Doing::Area(id, what, secrets));
                 } else {
                     let found = self.found(agent, obs, secrets, fits);
-                    self.report(obs, true, format!("Nothing more known to {} in {what}.{found}", if secrets { "explore or search" } else { "explore" }));
+                    self.report(obs, true, format!("Nothing to {} in {what}.{found}", if secrets { "explore or search" } else { "explore" }));
                 }
             }
             Order::ExploreWay(b, secrets) => {
                 let pos = obs.pos();
                 let fits = move |_: &Self, _: &Agent, o: &Objective| dist(pos, o.goal) > 64.0 && norm(heading(pos, o.goal) - b).abs() < EXPLORE_CONE;
                 if self.next_in(agent, obs, secrets, fits) {
-                    self.report(obs, true, format!("Exploring {}{}", compass(b), with_secrets(secrets)));
+                    self.report(obs, true, format!("Exploring {}{}.", compass(b), with_secrets(secrets)));
                     self.doing = Some(Doing::Way(b, secrets));
                 } else {
                     let found = self.found(agent, obs, secrets, fits);
-                    self.report(obs, false, format!("Nothing known to {} {}.{found}", if secrets { "explore or search" } else { "explore" }, compass(b)));
+                    self.report(obs, false, format!("Nothing to {} {}.{found}", if secrets { "explore or search" } else { "explore" }, compass(b)));
                 }
             }
         }
@@ -655,7 +680,24 @@ impl Director {
         // stone gone down into the blood, the bank 40 up all round)
         if !self.told_trapped {
             self.told_trapped = true;
-            self.report(obs, false, format!("She's on a floor that hurts with no way off it that she knows of (health {:.0}).", obs.health.unwrap_or(0.0)));
+            self.report(obs, false, format!("On a hurting floor, no known way off (health {:.0}).", obs.health.unwrap_or(0.0)));
+        }
+        false
+    }
+
+    /// Waiting: the nearest pickup she takes by herself (`spare`), if it's safe: one the explorer
+    /// offers (past its checks for danger and for being cut off), by a way with nothing that hurts,
+    /// not far. True if she's off for it.
+    fn pick_up_nearby(&mut self, agent: &mut Agent, obs: &Observation) -> bool {
+        let spares = agent.x().spares.clone();
+        let mut options: Vec<Objective> = self.open_objectives(agent, obs).into_iter().filter(|o| o.kind == Kind::Item && !o.risky && o.thing.is_some_and(|t| spares.contains(&t))).collect();
+        let pos = obs.pos();
+        options.sort_by(|a, b| dist(pos, a.goal).total_cmp(&dist(pos, b.goal)));
+        for o in options.into_iter().take(PICKUP_TRIES) {
+            let near = agent.x_mut().route_to(&o, obs).is_some_and(|st| crate::knowledge::explorer::route_length(&st) <= PICKUP_RANGE);
+            if near && agent.x_mut().take(obs, o) {
+                return true;
+            }
         }
         false
     }
@@ -671,7 +713,7 @@ impl Director {
         }
         if let Some(t) = id.split_once("-t").and_then(|(_, n)| n.parse::<i32>().ok()).and_then(|n| obs.things.iter().flatten().find(|t| t.id == n)) {
             let x = agent.x();
-            let at = x.touch_spot((t.x, t.y), &x.reach).ok_or_else(|| format!("No known way to the {} yet: she hasn't seen a way to where it is. Explore near it first.", t.name))?;
+            let at = x.touch_spot((t.x, t.y), &x.reach).ok_or_else(|| format!("No known way to the {} yet; explore near it.", t.name))?;
             let mut o = Objective::new(Kind::Item, at, format!("pick up {}", t.name));
             o.thing = Some(t.id);
             return Ok(o);
@@ -679,7 +721,7 @@ impl Director {
         // (or what she's doing this moment: listed a moment ago, then taken up by the order in hand
         // as she got to it; GPT-Evil's door-l148, "here" in the list, "nothing to go to" a tic later)
         let current = agent.x().current.clone().filter(|o| id_of(o) == id);
-        open.into_iter().find(|o| id_of(o) == id).or(current).ok_or_else(|| format!("Nothing \"{id}\" to go to now (done, gone, or never seen). List for what there is."))
+        open.into_iter().find(|o| id_of(o) == id).or(current).ok_or_else(|| format!("Nothing \"{id}\" to go to (done, gone or unknown)."))
     }
 
     /// Could she go to `r` now (risky: past what she'd rather not, if it won't kill her)? What
@@ -688,17 +730,17 @@ impl Director {
         let id = self.resolve(r);
         let mut obj = self.objective_for(agent, obs, &id)?;
         obj.risky = risky;
-        let what = self.describe(&Entry { id: id.clone(), what: obj.label.clone(), at: obj.goal }, obs);
+        let what = self.tag(&id, obs);
         if agent.x_mut().route_to(&obj, obs).is_some() {
             return Ok(what);
         }
         if !risky {
             obj.risky = true;
             if agent.x_mut().route_to(&obj, obs).is_some() {
-                return Err(format!("The only known way to {what} crosses a floor that hurts (or something else she'd rather avoid). Send it again with risky set to go anyway."));
+                return Err(format!("The only known way to {what} crosses a hurting floor (or worse); resend with risky: true."));
             }
         }
-        Err(format!("No known way to {what} from here that she'd survive."))
+        Err(format!("No survivable way to {what} known."))
     }
 
     /// Go to (try, pick up) something by id.
@@ -711,12 +753,12 @@ impl Director {
             }
         };
         obj.risky = risky;
-        let what = self.describe(&Entry { id: id.to_string(), what: obj.label.clone(), at: obj.goal }, obs);
+        let what = self.tag(id, obs);
         if agent.x_mut().take(obs, obj) {
-            self.report(obs, true, format!("Going: {what}"));
+            self.report(obs, true, format!("Going to {what}."));
             self.doing = Some(Doing::Once(id.to_string(), what));
         } else {
-            self.report(obs, false, format!("No way to {what} from here"));
+            self.report(obs, false, format!("No way to {what}."));
         }
     }
 
@@ -733,8 +775,22 @@ impl Director {
         out
     }
 
+    /// The explorer's objectives of those kinds as entries: doors, switches, exits (what each
+    /// is: only what the id doesn't say, a key it needs, a secret exit; not the explorer's label).
     fn objectives_of(&self, agent: &mut Agent, obs: &Observation, kinds: &[Kind]) -> Vec<Entry> {
-        self.open_objectives(agent, obs).into_iter().filter(|o| kinds.contains(&o.kind)).map(|o| Entry { id: id_of(&o), what: o.label.clone(), at: o.goal }).collect()
+        self.open_objectives(agent, obs)
+            .into_iter()
+            .filter(|o| kinds.contains(&o.kind))
+            .map(|o| {
+                let info = o.trigger.as_ref().map(|t| &t.info);
+                let what = match info {
+                    Some(i) if i.category == crate::specials::Category::SecretExit => "secret exit".to_string(),
+                    Some(i) => lock_name(i.lock).map_or(String::new(), |k| format!("needs {k}")),
+                    None => String::new(),
+                };
+                Entry { id: id_of(&o), what, at: o.goal }
+            })
+            .collect()
     }
 
     /// What an exploring order leaves to her, as sentences for its end ("" if nothing): the
@@ -746,7 +802,7 @@ impl Director {
             walls.extend(agent.x_mut().suspected_walls(obs));
             let n = walls.iter().filter(|o| is_search(o) && fits(self, agent, o)).map(id_of).collect::<std::collections::BTreeSet<_>>().len();
             if n > 0 {
-                out.push_str(&format!(" {n} wall{} there could hide secrets (explore with secrets set to search {}).", if n == 1 { "" } else { "s" }, if n == 1 { "it" } else { "them" }));
+                out.push_str(&format!(" {n} wall{} to search for secrets.", if n == 1 { "" } else { "s" }));
             }
         }
         out
@@ -759,8 +815,8 @@ impl Director {
         if found.is_empty() {
             return String::new();
         }
-        let lines: Vec<String> = found.iter().map(|o| self.describe(&Entry { id: id_of(o), what: "switch".into(), at: o.goal }, obs)).collect();
-        format!(" Found {} switch{} not pressed yet (doom_press to press one): {}.", found.len(), if found.len() == 1 { "" } else { "es" }, lines.join("; "))
+        let lines: Vec<String> = found.iter().map(|o| self.describe(&Entry { id: id_of(o), what: String::new(), at: o.goal }, obs)).collect();
+        format!(" Switches: {}.", lines.join(", "))
     }
 
     /// What a line (a switch) does, as far as she knows: from having set it off, or another of the
@@ -776,7 +832,7 @@ impl Director {
         areas.sort_by(|a, b| a.id.cmp(&b.id));
         areas.dedup_by(|a, b| a.id == b.id);
         let wheres: Vec<String> = areas.iter().map(|a| format!("{} ({} {:.0})", a.id, compass(heading(pos, a.center)), dist(pos, a.center))).collect();
-        Some(format!("moves something in {}", wheres.join(", ")))
+        Some(format!("moves {}", wheres.join(", ")))
     }
 
     /// Is objective o one of exploring area `id`'s: done standing in it? (Looking out of it from
@@ -879,7 +935,7 @@ fn key_name(k: crate::specials::Key) -> &'static str {
 
 /// A heading (degrees, 0 east, 90 north) as a compass point.
 pub fn compass(h: f64) -> &'static str {
-    const POINTS: [&str; 8] = ["east", "north-east", "north", "north-west", "west", "south-west", "south", "south-east"];
+    const POINTS: [&str; 8] = ["E", "NE", "N", "NW", "W", "SW", "S", "SE"];
     POINTS[((h.rem_euclid(360.0) + 22.5) / 45.0) as usize % 8]
 }
 
@@ -913,8 +969,40 @@ fn is_search(o: &Objective) -> bool {
 
 fn with_secrets(secrets: bool) -> &'static str {
     if secrets {
-        ", searching for secrets too"
+        " +secrets"
     } else {
         ""
     }
+}
+
+/// A pickup she takes by herself whenever it's safe (the user's): bonuses below 200, health that
+/// heals her without going to waste, ammo with room for all of it.
+fn spare(name: &str, obs: &Observation) -> bool {
+    use crate::tactical::bestiary::{ammo_item, ammo_max, health_item};
+    let health = obs.health.unwrap_or(100.0);
+    match name {
+        "HealthBonus" => health < 200.0,
+        "ArmorBonus" => obs.armor.unwrap_or(0.0) < 200.0,
+        "Stimpack" | "Medikit" => health_item(name).is_some_and(|(amount, cap)| health + f64::from(amount) <= f64::from(cap)),
+        "Backpack" => false,
+        _ => ammo_item(name).is_some_and(|(slots, amount)| {
+            let slot = slots[0];
+            let have = obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n);
+            let max = ammo_max(slot) * if obs.backpack == Some(true) { 2.0 } else { 1.0 };
+            f64::from(have + amount) <= max
+        }),
+    }
+}
+
+/// What a lock needs, as she'd say it (None: nothing).
+fn lock_name(l: crate::specials::Lock) -> Option<&'static str> {
+    use crate::specials::Lock;
+    Some(match l {
+        Lock::None => return None,
+        Lock::Red | Lock::RedCard | Lock::RedSkull => "red key",
+        Lock::Blue | Lock::BlueCard | Lock::BlueSkull => "blue key",
+        Lock::Yellow | Lock::YellowCard | Lock::YellowSkull => "yellow key",
+        Lock::Any => "any key",
+        _ => "all keys",
+    })
 }

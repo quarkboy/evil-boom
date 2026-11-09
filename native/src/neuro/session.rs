@@ -33,23 +33,23 @@ pub struct Session {
 /// The actions, as registered (descriptions and schemas Neuro reads as they are).
 pub fn actions() -> Vec<Value> {
     let s = |props: Value, required: &[&str]| json!({ "type": "object", "properties": props, "required": required });
+    // (short: every word here is in Evil's context for the whole game, the user's)
     vec![
-        json!({ "name": "doom_list", "description": "List what you know of in the level: areas (rooms and places with something left to explore, where she is, and those you've named; set all for every area), doors not yet tried, switches not yet pressed (and what each does, if known), items, monsters, exits. Each has an id to use in other actions.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
-        json!({ "name": "doom_press", "description": "Press a switch (by its id or your name for it). Exploring doesn't press switches: they can do anything, so that's your call. She reports what it did, if she sees.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
-        json!({ "name": "doom_inspect", "description": "Say what one thing is, which way and how far, by its id or your name for it.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
-        json!({ "name": "doom_go", "description": "Go to a place, pick up an item, try a door or switch, or take an exit, by its id or your name for it. She does it and reports back. Set risky to go even where she'd rather not (across a floor that hurts), as long as it won't kill her. Taking an exit with something left to do asks you first; set sure to leave anyway.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" } }), &["ref"]) }),
-        json!({ "name": "doom_explore", "description": "Explore an area (by its id or your name for it) or a direction (north, south-east, ...), until there's nothing more known to explore there. Set secrets to also search for secrets: she presses (and shoots) every wall there she suspects of hiding something, which takes a while.", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "boolean" } }), &["target"]) }),
-        json!({ "name": "doom_name", "description": format!("Give something a name of your own (up to {NAME_MAX} characters), to use instead of its id from then on."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
-        json!({ "name": "doom_exit", "description": "Leave the level by the exit she knows of (ends the level). With something left to do, it asks you first; set sure to leave anyway.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
-        json!({ "name": "doom_stop", "description": "Stop what she's doing and wait." }),
-        json!({ "name": "doom_status", "description": "Her health, armor, weapons, ammo, keys, and what she's doing." }),
+        json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids. Areas: only unexplored, current and named ones unless all.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
+        json!({ "name": "doom_press", "description": "Press a switch. Exploring never presses them.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
+        json!({ "name": "doom_inspect", "description": "What something is and where.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
+        json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" } }), &["ref"]) }),
+        json!({ "name": "doom_explore", "description": "Explore an area or a direction (N, NE, ...). secrets: also search walls (slow).", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "boolean" } }), &["target"]) }),
+        json!({ "name": "doom_name", "description": format!("Name something (up to {NAME_MAX} characters); the name then works as its id."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
+        json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
+        json!({ "name": "doom_stop", "description": "Stop and wait." }),
+        json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, current order." }),
     ]
 }
 
 /// The rules, told on connecting and at each level.
-const BRIEFING: &str = "You're directing a Doom player. She moves, aims, shoots and dodges by herself; you decide where she goes and what she explores. \
-Use doom_list to see what's known (areas, doors, switches, items, monsters, exits: each with an id), doom_explore to explore an area or a direction (with secrets set to search its walls for secrets too), doom_go to go to something, \
-doom_press to press a switch (exploring finds switches but leaves pressing them to you), doom_name to name things your way, doom_exit to finish the level. She reports what happens and waits for you when she's done.";
+const BRIEFING: &str = "You direct a Doom player. She moves, fights and takes spare health, armor and ammo herself; you choose where she goes. \
+Ids come from doom_list; your names work as ids. \"NE 400\": north-east, 400 units away. (tally): counts for the items %. She waits for orders when done.";
 
 impl Session {
     pub fn new(url: &str) -> Session {
@@ -112,7 +112,7 @@ impl Session {
             self.idle_since = obs.tic;
         } else if !self.forced && obs.tic - self.idle_since >= IDLE_FORCE {
             let state = self.state(agent, obs);
-            self.link.force(&state, "She's waiting for your next order. Where should she go, or what should she explore?", &["doom_explore", "doom_go", "doom_exit", "doom_list", "doom_inspect", "doom_name", "doom_status"], "medium");
+            self.link.force(&state, "She's waiting. Next order?", &["doom_explore", "doom_go", "doom_exit", "doom_list", "doom_inspect", "doom_name", "doom_status"], "medium");
             self.forced = true;
             log.push("neuro: waiting on her: decision forced".into());
         }
@@ -122,7 +122,7 @@ impl Session {
     /// Her state and options, for a forced decision (Markdown, no top-level heading).
     fn state(&mut self, agent: &mut Agent, obs: &Observation) -> String {
         let mut s = format!("## Status\n{}\n", self.director.status(agent, obs));
-        for (topic, title, n) in [(Topic::Areas, "Areas", 8), (Topic::Exits, "Exits", 3), (Topic::Doors, "Doors not yet tried", 5), (Topic::Switches, "Switches not yet pressed", 5), (Topic::Items, "Items seen", 6)] {
+        for (topic, title, n) in [(Topic::Areas, "Areas", 8), (Topic::Exits, "Exits", 3), (Topic::Doors, "Doors", 5), (Topic::Switches, "Switches", 5), (Topic::Items, "Items", 6)] {
             let (list, hidden) = self.director.brief(agent, obs, topic, false);
             if list.is_empty() && hidden == 0 {
                 continue;
@@ -132,7 +132,7 @@ impl Session {
                 s.push_str(&format!("- {}\n", self.director.describe(e, obs)));
             }
             if hidden > 0 {
-                s.push_str(&format!("- (and {hidden} explored areas)\n"));
+                s.push_str(&format!("- +{hidden} explored\n"));
             }
         }
         s
@@ -149,25 +149,25 @@ impl Session {
         let sure = args.get("sure").and_then(Value::as_bool).unwrap_or(false);
         match name {
             "doom_list" => {
-                let Some(topic) = arg("what").and_then(Topic::parse) else { return (false, "List what? One of: areas, doors, items, monsters, exits.".into()) };
+                let Some(topic) = arg("what").and_then(Topic::parse) else { return (false, "what: areas, doors, switches, items, monsters or exits.".into()) };
                 let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
                 let (list, hidden) = self.director.brief(agent, obs, topic, all);
-                let more = if hidden > 0 { format!("\n(and {hidden} explored areas: list with all to see them)") } else { String::new() };
+                let more = if hidden > 0 { format!("\n(+{hidden} explored; all: true lists them)") } else { String::new() };
                 if list.is_empty() {
                     return (true, format!("None known yet.{more}"));
                 }
                 let lines: Vec<String> = list.iter().take(LIST_MAX).map(|e| format!("- {}", self.director.describe(e, obs))).collect();
-                (true, format!("{} known:\n{}{more}", list.len(), lines.join("\n")))
+                (true, format!("{}{more}", lines.join("\n")))
             }
             "doom_inspect" => {
-                let Some(r) = arg("ref") else { return (false, "Inspect what? Give an id from doom_list, or your name for it.".into()) };
+                let Some(r) = arg("ref") else { return (false, "ref: an id or name.".into()) };
                 match self.director.find(agent, obs, r) {
                     Some(e) => (true, self.director.describe(&e, obs)),
-                    None => (false, format!("Nothing known as \"{r}\". Use doom_list for ids.")),
+                    None => (false, format!("Nothing known as \"{r}\".")),
                 }
             }
             "doom_go" => {
-                let Some(r) = arg("ref") else { return (false, "Go to what? Give an id from doom_list, or your name for it.".into()) };
+                let Some(r) = arg("ref") else { return (false, "ref: an id or name.".into()) };
                 let risky = args.get("risky").and_then(Value::as_bool).unwrap_or(false);
                 if self.director.resolve(r).starts_with("exit-") && !sure {
                     if let Some(q) = self.director.exit_check(agent, obs) {
@@ -175,68 +175,67 @@ impl Session {
                     }
                 }
                 match self.director.check_go(agent, obs, r, risky) {
-                    Ok(what) => {
+                    Ok(_) => {
                         self.director.order(Order::Go(r.to_string(), risky));
-                        (true, format!("On her way: {what}. She'll report when she's there or if she can't."))
+                        (true, "OK.".into())
                     }
                     // (not to be retried as it is: the reason says what would do)
                     Err(why) => (false, why),
                 }
             }
             "doom_press" => {
-                let Some(r) = arg("ref") else { return (false, "Press what? A switch's id from doom_list switches, or your name for it.".into()) };
+                let Some(r) = arg("ref") else { return (false, "ref: a switch's id or name.".into()) };
                 let id = self.director.resolve(r);
                 if !id.starts_with("switch-") && !id.starts_with("door-") {
-                    return (false, format!("\"{r}\" isn't a switch. doom_list switches for the switches."));
+                    return (false, format!("\"{r}\" isn't a switch."));
                 }
                 match self.director.check_go(agent, obs, r, false) {
-                    Ok(what) => {
+                    Ok(_) => {
                         self.director.order(Order::Go(r.to_string(), false));
-                        (true, format!("On her way to press it: {what}. She'll say what it did."))
+                        (true, "OK.".into())
                     }
                     Err(why) => (false, why),
                 }
             }
             "doom_explore" => {
-                let Some(t) = arg("target") else { return (false, "Explore what? An area's id or your name for it, or a direction (north, south-east, ...).".into()) };
+                let Some(t) = arg("target") else { return (false, "target: an area or a direction (N, NE, ...).".into()) };
                 let secrets = args.get("secrets").and_then(Value::as_bool).unwrap_or(false);
-                let too = if secrets { " (searching for secrets too)" } else { "" };
                 if let Some(b) = bearing(t) {
                     self.director.order(Order::ExploreWay(b, secrets));
-                    (true, format!("Exploring {t}{too}; she'll report when there's nothing more that way."))
+                    (true, "OK.".into())
                 } else if self.director.is_area(agent, t) {
                     self.director.order(Order::ExploreArea(t.to_string(), secrets));
-                    (true, format!("Exploring {t}{too}; she'll report when there's nothing more there."))
+                    (true, "OK.".into())
                 } else {
-                    (false, format!("\"{t}\" isn't an area or a direction. Use doom_list areas for areas, or say north, south-east, ..."))
+                    (false, format!("\"{t}\" isn't an area or a direction."))
                 }
             }
             "doom_name" => {
-                let (Some(r), Some(n)) = (arg("ref"), arg("name")) else { return (false, "Name what, and what as? Give ref and name.".into()) };
-                let Some(e) = self.director.find(agent, obs, r) else { return (false, format!("Nothing known as \"{r}\" to name. Use doom_list for ids.")) };
+                let (Some(r), Some(n)) = (arg("ref"), arg("name")) else { return (false, "Give ref and name.".into()) };
+                let Some(e) = self.director.find(agent, obs, r) else { return (false, format!("Nothing known as \"{r}\".")) };
                 match self.director.name(&e.id, n) {
                     Ok(()) => (true, format!("{} is \"{n}\" now.", e.id)),
-                    Err(why) => (false, format!("Not named: {why}. Pick another name.")),
+                    Err(why) => (false, format!("Not named: {why}.")),
                 }
             }
             "doom_exit" => {
                 if self.director.list(agent, obs, Topic::Exits).is_empty() {
                     // (not a failure to retry: nothing to do about it but explore)
-                    (true, "No exit known yet: explore to find one.".into())
+                    (true, "No exit known yet.".into())
                 } else if let Some(q) = self.director.exit_check(agent, obs).filter(|_| !sure) {
                     // (a question, not a failure: Neuro would send it again as it was)
                     (true, q)
                 } else {
                     self.director.order(Order::Exit);
-                    (true, "Heading for the exit.".into())
+                    (true, "Going to the exit.".into())
                 }
             }
             "doom_stop" => {
                 self.director.order(Order::Stop);
-                (true, "Stopping; she'll wait for your next order.".into())
+                (true, "OK.".into())
             }
             "doom_status" => (true, self.director.status(agent, obs)),
-            _ => (false, format!("There's no action \"{name}\" in Doom.")),
+            _ => (false, format!("No action \"{name}\".")),
         }
     }
 }

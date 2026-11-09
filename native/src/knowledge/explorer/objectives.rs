@@ -268,6 +268,7 @@ impl Explorer {
         out.extend(self.unfinished(&reach, pos));
         out.extend(self.unvisited(&reach, pos));
         out.extend(self.healing(obs, &reach));
+        out.extend(self.spare_pickups(obs, &reach));
         out.extend(self.get_off(obs, &reach));
         out.extend(self.secrets_again(&reach, pos));
         out.extend(self.noises(&reach, pos, obs.tic));
@@ -794,6 +795,26 @@ impl Explorer {
                 let mut o = Objective::new(Kind::Item, spot, format!("pick up {} ({why})", t.name));
                 o.thing = Some(t.id);
                 o.urgent = health < HEAL_BELOW;
+                out.push(o);
+            }
+        }
+        out
+    }
+
+    /// The pickups whoever directs her wants had when safe (`spares`), seen and to be got to.
+    fn spare_pickups(&self, obs: &Observation, reach: &BTreeSet<usize>) -> Vec<Objective> {
+        if self.spares.is_empty() {
+            return Vec::new();
+        }
+        let known = self.knowledge.known_polys();
+        let mut out = Vec::new();
+        for t in obs.things.iter().flatten().filter(|t| self.spares.contains(&t.id)) {
+            if !self.nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
+                continue;
+            }
+            if let Some(spot) = self.touch_spot((t.x, t.y), reach) {
+                let mut o = Objective::new(Kind::Item, spot, format!("pick up {}", t.name));
+                o.thing = Some(t.id);
                 out.push(o);
             }
         }

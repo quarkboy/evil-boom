@@ -256,6 +256,15 @@ pub fn weapon_item(name: &str) -> Option<i32> {
 }
 
 /// Ammo pickups -> (the slots it's for, how much).
+/// The most of a weapon slot's ammo she can carry, without a backpack (twice it with one).
+pub fn ammo_max(slot: i32) -> f64 {
+    match slot {
+        2 | 4 => 200.0,
+        3 | 5 => 50.0,
+        _ => 300.0,
+    }
+}
+
 pub fn ammo_item(name: &str) -> Option<(&'static [i32], i32)> {
     Some(match name {
         "Clip" => (&[2, 4], 10),

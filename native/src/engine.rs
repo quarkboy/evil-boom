@@ -283,6 +283,7 @@ impl Engine {
             berserk: Some(p.strength != 0),
             velocity: Some((p.momx, p.momy)),
             allmap: Some(p.allmap != 0),
+            backpack: Some(p.backpack != 0),
             message,
         }
     }
