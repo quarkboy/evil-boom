@@ -74,6 +74,9 @@ impl RouteFollower {
         if self.barrel.is_some() {
             return self.shoot_barrel(obs);
         }
+        if let Some(c) = self.keep_off_lit_chain(obs) {
+            return c;
+        }
         // (a barrel to clear on this step: taken on at once, shot from the nearest place out of
         // every blast of its chain, then on)
         if let Some(b) = self.step().barrel.filter(|_| self.barrel_step != Some(self.step_i)).and_then(|b| super::barrel_now(obs, b)) {

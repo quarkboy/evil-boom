@@ -269,6 +269,8 @@ pub struct RouteFollower {
     /// shot and gone: how many barrels there were, and since when (the chain going off: not back
     /// till none has gone for a while)
     barrel_settle: Option<(usize, i64)>,
+    /// kept off a chain of barrels going off that she didn't set off (logged once a wait)
+    chain_wait: bool,
     /// ...and the way there (its waypoints, the next first)
     barrel_way: Vec<Point>,
     /// ...and the nearest she's got to it, and when
@@ -387,6 +389,7 @@ impl RouteFollower {
             barrel_stay: false,
             barrel_step: None,
             barrel_settle: None,
+            chain_wait: false,
             barrel_way: Vec::new(),
             barrel_best: None,
             barrel_shot: -1_000_000_000,

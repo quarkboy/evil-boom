@@ -76,10 +76,10 @@ another case in a chain.
 
 ## Where things stand (2026-11-09)
 
-Last bot change: level campaign rounds 1-9 (round 9: no coasting off a ledge in a fight, a gun urgent only on a way she can take; round 8: closing in round a corner, SLIME10-12 hurt; round 7: health an errand only near, a cheap way not refused for health; round 6: a jump given up only for a body in the way, switches from a hurting floor at a dead end; round 5: a melee she can't land, a monster in an errand's way) (barrels going off, waits that aren't coming, a hurting floor's own cost; teleporters from the front, ammo walks through monsters, one-hit claws); before it, crushers by kind (slow ones hold her: no-go stopped low, set off from the edge
+Last bot change: level campaign rounds 1-10 (round 10: a barrel chain going off kept off out of a fight too; round 9: no coasting off a ledge in a fight, a gun urgent only on a way she can take; round 8: closing in round a corner, SLIME10-12 hurt; round 7: health an errand only near, a cheap way not refused for health; round 6: a jump given up only for a body in the way, switches from a hurting floor at a dead end; round 5: a melee she can't land, a monster in an errand's way) (barrels going off, waits that aren't coming, a hurting floor's own cost; teleporters from the front, ammo walks through monsters, one-hit claws); before it, crushers by kind (slow ones hold her: no-go stopped low, set off from the edge
 first; fast ones a damage cost), spent W1 teleporters walkable, the escape from under a crusher
 with all of her out, no stepping for a shot in nukage (DECISIONS.md). Regression set (HNTR, one
-life): E1 8.0 (8/8 through), E2 7.0 (6/8), E3 7.9 (4/8), Doom II pistol-start levels 28/32;
+life): E1 8.0 (8/8 through), E2 7.4 (7/8), E3 8.0 (4/8), Doom II pistol-start levels 28/32;
 arenas combat 118/128, doom2 226/240. Sets swing between builds: judge across sets. Open items:
 Doom II MAP08, E2M4 seed 5's pit drop (dead_end let it through), E3M9's arrival ambush, E3M6
 stucks/deaths, E3M8 deaths, the stepping-for-a-shot flip at 512 off hurting floors.

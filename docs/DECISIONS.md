@@ -1337,3 +1337,22 @@ Round 9: Doom II MAP18-MAP21.
 
 Results (HNTR, one life): E1 8.0 (8/8), E2 7.8 -> 7.0 (6/8), E3 6.6 -> 7.9 (1 -> 4/8 through), Doom
 II 27 -> 28/32 (only MAP08 fails); arenas combat 119 -> 118/128, doom2 226/240.
+
+## Level campaign, round 10: a barrel chain going off, kept off out of a fight too (2026-11-09)
+
+Round 10: Doom II MAP22-MAP25.
+
+- **A barrel chain going off, out of a fight** (MAP23: a mancubus's fireballs set the start room's
+  barrels going; the fight over, the route walked her into the chain burning through the field,
+  dead): the follower handled only barrels she shot herself. Now, with any barrel going off, she
+  works out its chain (each within a blast of one going off, in turn): a blast reaching her, away
+  from its nearest barrel; one reaching where she's moving within 15 tics (a barrel's death
+  frames), she holds; on once neither. MAP23 ITYTD seed 0 7 -> 19 s, seed 2 5 -> 20 s.
+- Traced, not fixed: MAP22 HMP (health spent on repeated risky trips over nukage, then the lift's
+  switch, pressed only from the nukage, refused at 16 health); MAP24 UV (sleeping imps make every
+  near objective dangerous; the super shotgun on a ledge spotted, never an objective); MAP25 (a
+  stepping stone with five barrels: the next run-up past the middle one, which can't be shot from
+  out of the blasts; the planner takes barrels inside a poly as walkable).
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 7.0 -> 7.4 (6 -> 7/8), E3 7.9 -> 8.0 (4/8), Doom II
+28/32; arenas 118/128, 226/240.

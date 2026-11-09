@@ -63,7 +63,56 @@ struct Post {
     stay: bool,
 }
 
+/// The barrel nearest `p` of a chain going off (each barrel hit, and every one its blast sets
+/// off in turn) whose blast reaches `p`.
+fn lit_chain_by(obs: &Observation, p: Point) -> Option<Point> {
+    let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
+    let mut chain: Vec<Point> = obs.barrels_lit.clone();
+    let mut i = 0;
+    while i < chain.len() {
+        let c = chain[i];
+        for &x in &barrels {
+            if blast_gap(c, x) < BARREL_CHAIN && !chain.iter().any(|&y| dist(x, y) < 1.0) {
+                chain.push(x);
+            }
+        }
+        i += 1;
+    }
+    chain.into_iter().filter(|&b| blast_gap(p, b) < BARREL_SAFE).min_by(|a, b| blast_gap(*a, p).total_cmp(&blast_gap(*b, p)))
+}
+
 impl RouteFollower {
+    /// Barrels going off that she didn't set off (a monster's shot, a blast): off out of their
+    /// chain's blasts if they reach her, else no further on while they'd reach where she'll be
+    /// as they go (MAP23: walked on after a chain going off down the field ahead of her, into
+    /// it, 24 health). The chain burns out a barrel a blast (15 tics) at a time: then on.
+    pub(super) fn keep_off_lit_chain(&mut self, obs: &Observation) -> Option<Controls> {
+        let pos = obs.pos();
+        let v = obs.velocity.unwrap_or((0.0, 0.0));
+        let by = lit_chain_by(obs, pos);
+        let ahead = by.is_none()
+            && (1..=4).any(|k| {
+                let f = BARREL_DELAY * f64::from(k) / 4.0;
+                lit_chain_by(obs, (pos.0 + v.0 * f, pos.1 + v.1 * f)).is_some()
+            });
+        if by.is_none() && !ahead {
+            self.chain_wait = false;
+            return None;
+        }
+        if !self.chain_wait {
+            self.log.add(obs.tic, "barrels going off ahead: keeping out of their blasts till they're done");
+            self.chain_wait = true;
+        }
+        self.progress_tic = obs.tic;
+        Some(match by {
+            Some(b) => {
+                let h = heading(b, pos);
+                self.motion.go(obs, h, FULL_SPEED, Some(h))
+            }
+            None => self.motion.hold(obs, (0.0, 0.0), None),
+        })
+    }
+
     /// Back out of its blast (128 units) and shoot the barrel in the way, then carry on.
     pub(super) fn shoot_barrel(&mut self, obs: &Observation) -> Controls {
         if let Some(until) = self.barrel_flee {
