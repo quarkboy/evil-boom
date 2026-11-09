@@ -13,8 +13,8 @@
 //!    ├─ busy           (a jump: the route keeps the legs) shooting on the way
 //!    ├─ melee          (the weapon she'd fight it with, up close: `Style::Melee`) closing in
 //!    │                 · at it
-//!    └─ fight          backing off from what claws · shooting on the way to an errand ·
-//!                      out of ammo: getting past · sneaking past · closing in (out of reach) ·
+//!    └─ fight          backing off from what claws · sneaking past · shooting on the way to an
+//!                      errand · out of ammo: getting past · closing in (out of reach) ·
 //!                      out of reach: going on · stepping for a shot · outmatched: keeping
 //!                      clear · getting past · keeping off · standing and fighting ·
 //!                      shooting on the way
@@ -88,9 +88,9 @@ const MELEE: [Node; 1] = [melee];
 /// The fight itself.
 const FIGHT: [Node; 13] = [
     backing_off,
+    sneaking,
     to_errand,
     unarmed,
-    sneaking,
     closing_out_of_reach,
     out_of_reach,
     stepping_for_shot,
@@ -267,6 +267,10 @@ fn unarmed(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
     (!c.armed(obs)).then(|| Act::new(None, "out of ammo: getting past".into()))
 }
 
+/// A shot that would wake a sleeping pack worth too much isn't fired, on an errand too (the route
+/// keeps the legs, on to it). (E3M5 UV: out of ammo, the way to a clip through a room of seven
+/// sleeping demons she'd sneaked past three times; on the errand she shot at them on the way, the
+/// last bullets woke all seven, bitten to death.)
 fn sneaking(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let woken = s.target.as_ref().map(|t| c.would_wake(obs, t)).filter(|w| !w.is_empty())?;
     let mut a = Act::new(None, format!("sneaking past (a shot would wake {woken})"));

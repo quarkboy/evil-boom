@@ -1586,3 +1586,35 @@ arenas 119/128, 227 -> 226/240.
   health). E2M8 UV seeds 0-3: 1/4 exits either way (seed 0 now, seed 2 before), each living as
   long or longer (328/162/410/265 -> 449/162/571/329 s). Regression set level: only cyberdemon
   arena fights move, both ways (doom2 arena 226 -> 225).
+
+## 20-minute pass, round C: a sleeping pack not woken on an errand; the way to a gun out of reach weighed (2026-11-09)
+
+Round C: E2M9, E3M3, E3M4, E3M5.
+
+- **A shot that would wake a sleeping pack isn't fired on an errand either** (E3M5 UV: out of ammo
+  and off for a clip, through a room of seven sleeping demons she'd sneaked past five times; on
+  the errand `to_errand` came before `sneaking`, "shooting on the way to Clip" at a demon, her last
+  bullets woke all seven, bitten to death with the fist): `sneaking` now comes before `to_errand`
+  in the fight tree: no shot that would wake a pack worth too much, errand or not; the route keeps
+  the legs. UV seed 0 422 -> 1040 s.
+- **A frontier into a better gun's sector, out of reach, weighed as a switch is** (E3M4 HMP: a
+  chaingun and a dropped shotgun seen on ground with no known way on; the frontier that was the
+  way to both (and the exit) risky for its monsters, the risky pass by travel alone took two
+  cacodemons over a hurting floor with the pistol): with a better gun seen and out of reach, a
+  frontier whose unseen polys are in its sector counts a quarter as far (`SWITCH_FOR_GUN`, as for
+  switches). E3M4 HMP seeds 1 and 2 exit (1/10 -> 3/10 over HMP/UV seeds 0-3 and the two lower).
+- Dropped after the regression set: E3M4's "no look round again for a walk-over line set off
+  before" (two crusher-stop lines across a stair crossed back and forth in a fight, a look at each):
+  E2 7.2 -> 7.8 and E3 7.4 -> 7.9, but Doom II 25 -> 23 (MAP12 seed 2 stuck: line 511, a W1 floor
+  raise whose effect a later crossing would have shown, never learned, never planned with; MAP12
+  seed 3, MAP10 seed 1). What's wanted: the look skipped only for lines whose effect can't be seen
+  from where she is (to do).
+- Traced, not fixed: E3M3 UV (the start crowd eats 50 bullets; the shotgun behind a switch with
+  imps near it is `dangerous` before it's weighed; saving the pistol for the switch is the idea);
+  E2M9 (four barons, damage spread over three, none killed; focus fire lost ITYTD exits because the
+  back-off follows the target, stepping from a far wounded baron into a near one's claws: back off
+  from the nearest clawer instead; ammo behind a baron dropped by `clear_way_to` while a Medikit is
+  urgent, the explorer and `for_ammo` pulling her back and forth).
+
+Results (HNTR, one life): E1 8.0, E2 7.2 (6/8), E3 7.4 -> 7.6 (1/8), Doom II 25/32; arenas 119/128,
+225/240.

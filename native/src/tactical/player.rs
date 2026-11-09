@@ -175,6 +175,8 @@ struct Fight {
     rethink: bool,
     /// a better gun seen that she can't get to (as of the last list of things to do)
     gun_out_of_reach: bool,
+    /// the polys not yet seen of the sectors such guns lie in
+    toward_gun: BTreeSet<i64>,
 }
 
 /// A death: where, and what she was going for.
@@ -284,7 +286,7 @@ impl Player {
     pub fn new(nav: Rc<Navigator>, knowledge: Knowledge) -> Player {
         Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
-            fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false, gun_out_of_reach: false },
+            fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false, gun_out_of_reach: false, toward_gun: BTreeSet::new() },
             retreat: None,
             bait_tic: -1_000_000_000,
             retreat_tic: -1_000_000_000,
@@ -1322,9 +1324,21 @@ impl Hooks for Fight {
     /// Items she could use now; with --complete, every counted item she's seen too.
     fn wanted(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let known = x.knowledge.known_polys();
-        self.gun_out_of_reach = obs.things.iter().flatten().any(|t| {
-            weapon_item(t.name).is_some() && self.better_gun(obs, t.name) && x.nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p) && !reach.contains(&p))
-        });
+        let gun_sectors: BTreeSet<usize> = obs
+            .things
+            .iter()
+            .flatten()
+            .filter(|t| weapon_item(t.name).is_some() && self.better_gun(obs, t.name))
+            .filter_map(|t| x.nav.poly_at((t.x, t.y)))
+            .filter(|p| known.contains(p) && !reach.contains(p))
+            .map(|p| x.nav.sector_of_poly(p))
+            .collect();
+        self.gun_out_of_reach = !gun_sectors.is_empty();
+        let mesh = &x.nav.mesh;
+        self.toward_gun = (0..mesh.polys.len())
+            .filter(|&p| mesh.polys[p].as_ref().is_some_and(|q| gun_sectors.contains(&q.sector)) && !known.contains(&p))
+            .map(|p| p as i64)
+            .collect();
         let mut out = self.supplies(x, obs, reach, pos);
         out.extend(self.barrels(x, obs, reach, pos));
         if let Some(c) = &mut self.completion {
@@ -1421,6 +1435,14 @@ impl Hooks for Fight {
         // start, HMP and UV: the shotgun up on a floor a switch lowers, seen at the start, the
         // switch left for the walls, the level played out with the pistol, dead out of ammo)
         if obj.kind == Kind::Switch && self.gun_out_of_reach {
+            return SWITCH_FOR_GUN;
+        }
+        // (and a look into the unseen part of the ground it lies on: the likeliest way to it on
+        // foot. E3M4 from a pistol start: the shotgun guy's dropped shotgun and a chaingun seen
+        // on ground she hadn't found the way onto, 20 shells in hand; with only ways past
+        // monsters left, the nearest taken, two cacodemons over a hurting floor with the pistol,
+        // the ammo gone, bitten to death)
+        if obj.kind == Kind::Frontier && !obj.reveals.is_disjoint(&self.toward_gun) {
             return SWITCH_FOR_GUN;
         }
         let ammo = obj.kind == Kind::Item && obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).is_some_and(|t| ammo_item(t.name).is_some());
