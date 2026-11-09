@@ -309,6 +309,11 @@ impl Player {
         &self.fight.combat
     }
 
+    /// Monsters she's seen that are still about: (id, kind, where last seen, when, awake).
+    pub fn known_monsters(&self) -> Vec<(i32, &'static str, crate::geom::Point, i64, bool)> {
+        self.fight.combat.remaining().into_iter().map(|s| (s.id, s.name, s.pos(), s.tic, s.awake)).collect()
+    }
+
     /// Her options now, best first, the fight's own wants in (supplies, barrels).
     pub fn ranked(&mut self, obs: &Observation, risky: bool) -> Vec<crate::knowledge::explorer::Objective> {
         self.explorer.ranked(obs, risky, &mut self.fight)

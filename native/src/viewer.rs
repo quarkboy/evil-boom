@@ -231,6 +231,68 @@ pub struct WatchOptions {
     pub focus: Option<(f64, f64, f64)>,
     /// the game's sound and music out loud (the window only; off while paused or not at x1)
     pub sound: bool,
+    /// directed play: orders read from this file as they're added to it (control::script's
+    /// commands, a line each), what comes back written beside it (FILE.out) and into the log
+    pub directed: Option<std::path::PathBuf>,
+}
+
+/// A watched game's orders, from a file added to as it plays.
+struct Feed {
+    director: crate::control::directed::Director,
+    input: std::path::PathBuf,
+    /// how much of it's been read
+    read: usize,
+    out: std::path::PathBuf,
+    /// reports shown so far
+    shown: usize,
+}
+
+impl Feed {
+    fn new(input: &Path) -> Feed {
+        if !input.exists() {
+            let _ = std::fs::write(input, "");
+        }
+        let out = input.with_extension("out");
+        let _ = std::fs::write(&out, "");
+        // (from its start: the file is this game's orders, and a saved one plays back)
+        Feed { director: crate::control::directed::Director::new(), input: input.to_path_buf(), read: 0, out, shown: 0 }
+    }
+
+    /// The tic's orders read and carried out, the reports since; the lines for the log.
+    fn tic(&mut self, agent: &mut Agent, obs: &Observation) -> Vec<String> {
+        let mut lines = Vec::new();
+        if obs.tic % 5 == 0 {
+            if let Ok(bytes) = std::fs::read(&self.input) {
+                if bytes.len() > self.read {
+                    let text = String::from_utf8_lossy(&bytes[self.read..]).to_string();
+                    // (whole lines only: one still being written waits)
+                    let upto = text.rfind('\n').map_or(0, |i| i + 1);
+                    self.read += upto;
+                    for cmd in text[..upto].lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+                        lines.push(format!(">> {cmd}"));
+                        match crate::control::script::command(&mut self.director, agent, obs, cmd) {
+                            Ok(out) => lines.extend(out.into_iter().map(|l| format!("<< {l}"))),
+                            Err(e) => lines.push(format!("<< refused: {e}")),
+                        }
+                    }
+                }
+            }
+        }
+        self.director.tick(agent, obs);
+        for r in &self.director.reports[self.shown..] {
+            lines.push(format!("<< [{:.1}s] {}{}", r.tic as f64 / 35.0, if r.ok { "" } else { "FAILED: " }, r.text));
+        }
+        self.shown = self.director.reports.len();
+        if !lines.is_empty() {
+            use std::io::Write;
+            if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(&self.out) {
+                for l in &lines {
+                    let _ = writeln!(f, "{l}");
+                }
+            }
+        }
+        lines
+    }
 }
 
 /// A 100% run's exit held back (see sweep::hold_exit), and its stall clock.
@@ -245,6 +307,8 @@ struct Hold {
 
 struct Watch {
     hold: Option<Hold>,
+    /// directed play's orders, if it's directed
+    feed: Option<Feed>,
     /// no switches or doors (an arena's fight)
     no_use: bool,
     /// secrets found so far (as the tally has them)
@@ -504,7 +568,11 @@ fn level(w: &Wad, m: Arc<MapData>, nav: Rc<Navigator>, engine: Engine, o: &Watch
         agent.x_mut().exit_last = true;
         agent.x_mut().secrets_mode = true;
     }
+    if o.directed.is_some() {
+        crate::control::directed::Director::take_over(&mut agent);
+    }
     let mut watch = Watch::new(w, m, &map_name, engine, agent, o.focus, o.lives - 1);
+    watch.feed = o.directed.as_deref().map(Feed::new);
     watch.hold = hold;
     watch.speed = o.speed;
     watch.show_all = o.show_all;
@@ -660,6 +728,7 @@ impl Watch {
         let bounds = (xs.clone().fold(f64::INFINITY, f64::min), ys.clone().fold(f64::INFINITY, f64::min), xs.fold(f64::NEG_INFINITY, f64::max), ys.fold(f64::NEG_INFINITY, f64::max));
         Watch {
             hold: None,
+            feed: None,
             no_use: false,
             secrets_seen: 0,
             m,
@@ -698,6 +767,11 @@ impl Watch {
         }
         self.secrets_seen = found;
         self.frame = self.engine.frame();
+        if let Some(feed) = &mut self.feed {
+            for l in feed.tic(&mut self.agent, &obs) {
+                self.agent.x_mut().log.push(l);
+            }
+        }
         let mut c = self.agent.act(&obs, self.controls.as_ref());
         if self.no_use {
             c.use_ = false;

@@ -32,9 +32,10 @@
 //!
 //! Directed play (what Evil will do through the Neuro integration; `control::directed`):
 //!   directed            she chooses nothing herself from now; she's given orders
-//!   list [N]            the options she can be told to go for (ids, names, which way, how far)
-//!   name ID NAME...     a name for an option (refused when too long or taken)
-//!   order go REF | order explore DIR | order exit | order stop
+//!   list TOPIC [N]      what she knows of: areas, doors, items, monsters, exits (ids, names,
+//!                       which way, how far)
+//!   name ID NAME...     a name for something listed (refused when too long or taken)
+//!   order go REF | order explore REF|DIR | order exit | order stop
 //!                       an order (REF an id or a name; DIR n, ne, east, ...)
 //!   run SECONDS         play on (directed) till she's done and waiting, or SECONDS; the reports
 
@@ -42,7 +43,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use crate::config::out_dir;
-use crate::control::directed::{bearing, Director, Order};
+use crate::control::directed::Director;
 use crate::geom::{dist, Point};
 use crate::knowledge::explorer::{Ident, Kind, Objective};
 use crate::motor::follower::RouteFollower;
@@ -292,31 +293,12 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 Director::take_over(&mut s.agent);
                 println!("  directed: waiting for orders");
             }
-            "list" => {
-                let n = w.get(1).and_then(|v| v.parse().ok()).unwrap_or(20);
+            "list" | "name" | "order" => {
                 let obs = s.obs();
-                let options = director.options(&mut s.agent, &obs);
-                println!("  {} options", options.len());
-                for c in options.iter().take(n) {
-                    println!("    {}", director.describe(c, &obs));
-                }
-            }
-            "name" => {
-                let id = w.get(1).ok_or("name ID NAME")?;
-                match director.name(id, &w[2..].join(" ")) {
-                    Ok(()) => println!("  named"),
+                match crate::control::script::command(&mut director, &mut s.agent, &obs, line) {
+                    Ok(out) => out.iter().for_each(|l| println!("  {l}")),
                     Err(e) => println!("  refused: {e}"),
                 }
-            }
-            "order" => {
-                let o = match w.get(1).copied() {
-                    Some("go") => Order::Go(w[2..].join(" ")),
-                    Some("explore") => Order::Explore(w.get(2).and_then(|d| bearing(d)).ok_or("order explore DIR (n, ne, east, ...)")?),
-                    Some("exit") => Order::Exit,
-                    Some("stop") => Order::Stop,
-                    _ => return Err(format!("line {}: order go REF | explore DIR | exit | stop", i + 1)),
-                };
-                director.order(o);
             }
             "run" => {
                 let secs = num(1)?;

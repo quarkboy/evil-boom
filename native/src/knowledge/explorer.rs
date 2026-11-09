@@ -618,7 +618,14 @@ impl Explorer {
         let (ok, why) = match (&self.follower, self.end_why.take()) {
             (_, Some(e)) => e,
             (Some(f), None) if f.done && !f.failed => (true, "done".to_string()),
-            _ => (false, "stopped".to_string()),
+            _ => {
+                // (not over: a plan anew wanted (a jump missed); the same again, if there's a way)
+                self.follower = None;
+                if self.take(obs, obj.clone()) {
+                    return;
+                }
+                (false, "no way there now".to_string())
+            }
         };
         self.log.push(format!("tic {}: '{}' over: {}", obs.tic, obj.label, why));
         self.ended = Some(Ended { label: obj.label, ok, why });
