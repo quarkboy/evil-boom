@@ -43,7 +43,8 @@ impl Completionist {
         Completionist { restarts, no_way_back: None, asked_for: None }
     }
 
-    fn counted(name: &str, obs: &Observation) -> bool {
+    /// Does a thing of this name count for the items tally now (a computer map after the first doesn't)?
+    pub fn counted(name: &str, obs: &Observation) -> bool {
         COUNTED.contains(&name) && !(name == "Allmap" && obs.allmap == Some(true))
     }
 }

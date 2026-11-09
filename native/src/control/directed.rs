@@ -28,6 +28,8 @@ const PRESS_WATCH: i64 = 3 * 35;
 
 /// waiting on a floor that hurts: off it tried this often (tics)...
 const OFF_AGAIN: i64 = 35;
+/// an item listed that counts for the level's items tally (the rest are just pickups)
+const COUNTS: &str = " (counts for the items tally)";
 /// ...to the best of this many places
 const OFF_TRIES: usize = 6;
 
@@ -242,13 +244,19 @@ impl Director {
         let explore = count(&|o| explores(o, false));
         let switches = count(&|o| o.kind == Kind::Switch);
         let doors = count(&|o| o.kind == Kind::Door);
-        let items = self.list(agent, obs, Topic::Items).len();
+        // (the items tally's own apart from the rest: "12 items seen" beside "items 5/6" read as
+        // a contradiction, the user's and GPT-Evil's E3M1; ammo and health she was full of are
+        // pickups, not the tally's)
+        let seen = self.list(agent, obs, Topic::Items);
+        let counted = seen.iter().filter(|e| e.what.ends_with(COUNTS)).count();
+        let pickups = seen.len() - counted;
         let mut left = Vec::new();
         for (n, one, many) in [
             (explore, "thing known to explore", "things known to explore"),
             (switches, "switch not pressed", "switches not pressed"),
             (doors, "door not tried", "doors not tried"),
-            (items, "item seen and not picked up", "items seen and not picked up"),
+            (counted, "item seen that counts for the items tally", "items seen that count for the items tally"),
+            (pickups, "other pickup seen and not taken", "other pickups seen and not taken"),
         ] {
             if n > 0 {
                 left.push(format!("{n} {}", if n == 1 { one } else { many }));
@@ -416,7 +424,11 @@ impl Director {
                     .flatten()
                     .filter(|t| matches!(t.category, "Weapon" | "Ammo" | "Health" | "Armor" | "Key" | "Powerup"))
                     .filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)))
-                    .map(|t| Entry { id: format!("{}-t{}", if t.category == "Key" { "key" } else { "item" }, t.id), what: t.name.to_string(), at: (t.x, t.y) })
+                    .map(|t| Entry {
+                        id: format!("{}-t{}", if t.category == "Key" { "key" } else { "item" }, t.id),
+                        what: if crate::knowledge::completion::Completionist::counted(t.name, obs) { format!("{}{COUNTS}", t.name) } else { t.name.to_string() },
+                        at: (t.x, t.y),
+                    })
                     .collect()
             }
             Topic::Monsters => agent
