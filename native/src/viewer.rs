@@ -46,6 +46,8 @@ const BG: Rgb = (12, 12, 16);
 const DIM: Rgb = (120, 120, 130);
 const TEXT: Rgb = (220, 220, 220);
 const HEAD: Rgb = (255, 210, 120);
+/// what Evil said (the GPT stand-in's words)
+const SAID: Rgb = (200, 160, 255);
 
 fn kind_colour(k: Kind) -> Rgb {
     match k {
@@ -851,6 +853,10 @@ impl Watch {
             for l in neuro.tic(&mut self.agent, &obs) {
                 self.agent.x_mut().log.push(l);
             }
+            // (and what the GPT stand-in said, if it's in this program)
+            for s in crate::neuro::gpt::take_said() {
+                self.agent.x_mut().log.push(format!("evil says: {}", s.replace('\n', " ")));
+            }
         }
         let mut c = self.agent.act(&obs, self.controls.as_ref());
         if self.no_use {
@@ -968,9 +974,11 @@ impl Watch {
         let (fit, rows_fit) = c.fits(1, LOG.2 - 16, LOG.3 - (y - LOG.1));
         let (width, rows_max) = (fit.saturating_sub(3).max(10), rows_fit);
         let mut rows: Vec<(String, (u8, u8, u8))> = Vec::new();
-        for line in self.agent.x().log.iter().rev().filter(|l| l.starts_with(">> ") || l.starts_with("<< ") || l.starts_with("neuro: ")) {
+        for line in self.agent.x().log.iter().rev().filter(|l| is_evil_line(l) || l.starts_with("neuro: ")) {
             let colour = if line.starts_with(">> ") {
                 (255, 220, 120)
+            } else if line.starts_with("evil says: ") {
+                SAID
             } else if line.contains("(!)") || line.contains("FAILED") {
                 (255, 140, 140)
             } else if line.starts_with("neuro: ") {
@@ -989,6 +997,51 @@ impl Watch {
         for (s, colour) in rows.into_iter().skip(skip) {
             y = c.text(&s, (LOG.0 + 8, y), colour, 1);
         }
+    }
+
+    /// The last few lines between the game and Evil (her actions, the news, what she said), in a
+    /// dimmed box ending at `bottom`, wrapped to the view's width.
+    fn draw_hud_talk(&self, c: &mut Canvas, bottom: usize) {
+        const ROWS: usize = 6;
+        let scale = c.text_scale;
+        c.text_scale = 1.5;
+        let (width, _) = c.fits(1, GAME.2 - 24, GAME.3);
+        let line_h = c.glyph(1) + (3.0 * c.text_scale).round() as usize;
+        let mut rows: Vec<(String, Rgb)> = Vec::new();
+        for line in self.agent.x().log.iter().rev().filter(|l| is_evil_line(l)) {
+            let (text, colour) = if let Some(t) = line.strip_prefix(">> ") {
+                (format!("Evil: {t}"), (255, 220, 120))
+            } else if let Some(t) = line.strip_prefix("evil says: ") {
+                (format!("Evil: \"{t}\""), SAID)
+            } else {
+                let t = line.trim_start_matches("<< ");
+                let notable = t.contains("(!)") || t.contains("FAILED");
+                // (without the orders file's time and the notable mark: the colour says it)
+                let t = t.split_once("s] ").filter(|(at, _)| at.starts_with('[')).map_or(t, |(_, rest)| rest);
+                (t.trim_start_matches("(!) ").to_string(), if notable { (255, 150, 150) } else { TEXT })
+            };
+            let chars: Vec<char> = text.chars().collect();
+            let wrapped: Vec<(String, Rgb)> = chars.chunks(width.max(10)).map(|ch| (ch.iter().collect(), colour)).collect();
+            rows.splice(0..0, wrapped);
+            if rows.len() >= ROWS {
+                break;
+            }
+        }
+        let rows: Vec<(String, Rgb)> = rows.split_off(rows.len().saturating_sub(ROWS));
+        if !rows.is_empty() {
+            let top = bottom.saturating_sub(rows.len() * line_h + 8);
+            for yy in top..bottom {
+                for x in GAME.0..GAME.0 + GAME.2 {
+                    let i = yy * W + x;
+                    c.px[i] = (c.px[i] >> 1) & 0x007f_7f7f;
+                }
+            }
+            let mut y = top + 4;
+            for (s, colour) in rows {
+                y = c.text(&s, (GAME.0 + 12, y), colour, 1);
+            }
+        }
+        c.text_scale = scale;
     }
 
     /// The game's view with what she's at over it: the level, the time, health, armour, ammo at
@@ -1057,8 +1110,14 @@ impl Watch {
             );
             c.text(&top, (GAME.0 + 8, GAME.1 + 9), TEXT, 2);
         }
-        let doing = self.agent.x().current.as_ref().map_or("-".to_string(), |o| o.label.clone());
-        c.text(&format!("doing: {}", doing.chars().take(48).collect::<String>()), (GAME.0 + 8, low - 53), TEXT, 2);
+        // (directed: her orders, not the explorer's objective; and what passes between the game and
+        // her above it, the latest few, for a recording of an LLM playing: the user's)
+        let director = self.neuro.as_ref().map(|n| &n.director).or(self.feed.as_ref().map(|f| &f.director));
+        let doing = director.map_or_else(|| self.agent.x().current.as_ref().map_or("-".to_string(), |o| o.label.clone()), |d| d.doing(&self.agent));
+        c.text(&format!("{}: {}", if director.is_some() { "order" } else { "doing" }, doing.chars().take(46).collect::<String>()), (GAME.0 + 8, low - 53), TEXT, 2);
+        if director.is_some() {
+            self.draw_hud_talk(c, low - 62);
+        }
         let fight = self.agent.player().map_or("", |p| p.combat().mode());
         let fight = if fight.is_empty() { "no fight" } else { fight };
         c.text(&format!("fight: {}", fight.chars().take(48).collect::<String>()), (GAME.0 + 8, low - 25), (255, 200, 120), 2);
@@ -1263,4 +1322,10 @@ impl Watch {
             y = c.text(&s, (right, y), colour, 1);
         }
     }
+}
+
+/// A line of the log between the game and Evil: her action (>>), what she's told (<<), what she
+/// said.
+fn is_evil_line(l: &str) -> bool {
+    l.starts_with(">> ") || l.starts_with("<< ") || l.starts_with("evil says: ")
 }

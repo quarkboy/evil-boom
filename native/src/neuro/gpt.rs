@@ -92,6 +92,15 @@ enum Event {
 /// What the model's side asks the WebSocket side to send: an action (id, name, data).
 type Send = (String, String, Option<String>);
 
+/// What the stand-in has said (its text, not its actions), for a game in the same program to show
+/// (`take_said`): Neuro's own words go to the stream, never to the game, but the stand-in's can.
+static SAID: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// What the stand-in has said since last asked.
+pub fn take_said() -> Vec<String> {
+    SAID.lock().map(|mut s| std::mem::take(&mut *s)).unwrap_or_default()
+}
+
 pub fn serve(port: u16, config_path: &Path) -> Result<(), String> {
     let config = configured(config_path)?;
     let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
@@ -288,6 +297,9 @@ impl<F: Fn(String)> Brain<F> {
             };
             if !reply.text.trim().is_empty() {
                 (self.say)(format!("EVIL says: {}", reply.text.trim()));
+                if let Ok(mut said) = SAID.lock() {
+                    said.push(reply.text.trim().to_string());
+                }
             }
             for item in reply.items {
                 self.push(item);

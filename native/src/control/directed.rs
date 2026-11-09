@@ -216,6 +216,24 @@ impl Director {
         self.told_dead = false;
     }
 
+    /// What she's doing on her orders, in a few words ("exploring area-0 +secrets 2, rushing").
+    pub fn doing(&self, agent: &Agent) -> String {
+        let doing = match &self.doing {
+            Some(Doing::Once(_, w)) => format!("going to {w}"),
+            Some(Doing::Area(_, w, secrets)) => format!("exploring {w}{}", with_secrets(*secrets)),
+            Some(Doing::Way(b, secrets)) => format!("exploring {}{}", compass(*b), with_secrets(*secrets)),
+            Some(Doing::Off) => "getting off a hurting floor".to_string(),
+            Some(Doing::Pickup) => "picking up nearby".to_string(),
+            None if agent.x().current.is_some() => "busy".to_string(),
+            None => "waiting".to_string(),
+        };
+        if agent.x().press_on {
+            format!("{doing}, rushing")
+        } else {
+            doing
+        }
+    }
+
     /// Her state in a line: health, armor, weapons, ammo, keys, what she's doing.
     pub fn status(&self, agent: &Agent, obs: &Observation) -> String {
         let weapons: Vec<&str> = obs.weapons.iter().flatten().map(|&w| weapon_name(w, obs)).collect();
@@ -227,15 +245,7 @@ impl Director {
             }
         }
         let keys: Vec<String> = obs.keys.unwrap_or_default().iter().map(|k| key_name(k).to_string()).collect();
-        let doing = match &self.doing {
-            Some(Doing::Once(_, w)) => format!("going to {w}"),
-            Some(Doing::Area(_, w, secrets)) => format!("exploring {w}{}", with_secrets(*secrets)),
-            Some(Doing::Way(b, secrets)) => format!("exploring {}{}", compass(*b), with_secrets(*secrets)),
-            Some(Doing::Off) => "getting off a hurting floor".to_string(),
-            Some(Doing::Pickup) => "picking up nearby".to_string(),
-            None if agent.x().current.is_some() => "busy".to_string(),
-            None => "waiting".to_string(),
-        };
+        let doing = self.doing(agent);
         // (in a fight: what's in sight, the nearest; an order then is held up by it unless rushed)
         let fight = agent.player().map(|p| p.combat().visible.iter().filter(|t| t.category == "Monster" && t.health > 0).cloned().collect::<Vec<_>>()).unwrap_or_default();
         let doing = if fight.is_empty() {
@@ -248,8 +258,7 @@ impl Director {
             }
             let near = fight.iter().map(|t| (t.x, t.y)).min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b))).unwrap_or(pos);
             let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
-            let rushed = if agent.x().press_on { ", rushing" } else { "" };
-            format!("{doing}{rushed}; fighting {} ({} {:.0})", what.join(", "), compass(heading(pos, near)), dist(pos, near))
+            format!("{doing}; fighting {} ({} {:.0})", what.join(", "), compass(heading(pos, near)), dist(pos, near))
         };
         // (short: what Evil reads costs her context, the user's)
         format!(
