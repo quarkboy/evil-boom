@@ -1029,7 +1029,10 @@ impl Player {
             return None;
         }
         let seen = self.seen_from(obs, &spots, &shooters, false);
-        let hidden: Vec<usize> = spots.iter().zip(&seen).filter(|(&(d, _), &v)| v == 0.0 && d > 32.0).map(|(&(_, pi), _)| pi).collect();
+        // (not in a door shut now: hidden only while it's shut, and open with her in it; MAP20,
+        // fallen back to the door out of a cyberdemon's lane, rockets on her waiting at it)
+        let open = |pi: usize| obs.heights.get(self.explorer.nav.sector_of_poly(pi)).is_some_and(|h| h.ceiling - h.floor >= PLAYER_HEIGHT);
+        let hidden: Vec<usize> = spots.iter().zip(&seen).filter(|(&(d, pi), &v)| v == 0.0 && d > 32.0 && open(pi)).map(|(&(_, pi), _)| pi).collect();
         if hidden.is_empty() {
             self.log(format!("tic {}: no cover in reach", obs.tic));
             return None;

@@ -203,9 +203,12 @@ pub const BERSERK_FIST: Weapon = Weapon { damage: 110.0, ..weapon_const(1) };
 /// The chainsaw: A_Saw's 2-20 (berserk or not) a 4-tic frame, the trigger held.
 pub const CHAINSAW: Weapon = Weapon { cycle: 4.0, ..weapon_const(1) };
 
-/// (the fist, as a constant to build the others on)
+/// (the fist, as a constant to build the others on. Its reach is MELEERANGE from her centre to
+/// the target's: the punch's trace starts at her centre and meets a body on its diagonal, which
+/// runs through its centre (p_maputl.c PIT_AddThingIntercepts), so its radius adds nothing;
+/// A_Saw's is one more)
 const fn weapon_const(slot: i32) -> Weapon {
-    Weapon { reach: 80.0, keep: (0.0, 64.0), ..Weapon::new(slot, 0, 11.0, 22.0) }
+    Weapon { reach: 64.0, keep: (0.0, 64.0), ..Weapon::new(slot, 0, 11.0, 22.0) }
 }
 
 /// The most health a monster may have for her to go at it with her fists, berserk. A punch is

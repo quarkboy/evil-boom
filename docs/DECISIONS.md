@@ -1844,3 +1844,38 @@ Round I: MAP16, MAP17, MAP18, MAP19.
 
 Results (HNTR, one life): E1 8.0, E2 7.6 -> 7.8 (6/8), E3 7.2 -> 8.0 (1/8), Doom II 27/32; arenas
 119 -> 118/128, 223 -> 222/240 (spider and cyberdemon fights both ways).
+
+## 20-minute pass, round J: a barrel chain judged whole; a dodge clear of the hit; the fist's true reach; no knife-edge squeezes (2026-11-09)
+
+Round J: MAP20, MAP21, MAP22, MAP23.
+
+- **Barrels judged by the whole chain, and the chain outrun** (MAP23, every skill dead at 4-5 s:
+  the start hall one chain of barrels, a mancubus behind a row): a barrel by a monster is shot
+  only if its whole chain goes off clear of her (`barrel_shot` checked only the barrel's own 224);
+  a way away from barrels mustn't bring her nearer any barrel near where it ends (it took her from
+  one row into the next), else that node steps aside; a chain going off is fled from the barrel
+  that goes off first (fewest blasts from a lit one, then nearest: it burns a barrel a blast); and
+  keeping clear of what outmatches her, while the route walks her away from it (within 90
+  degrees) the route keeps the legs. MAP23 start hall survived (5 -> 9-29 s); no exit yet.
+- **A dodge clear of each missile's hit, not its blast** (MAP20: the cyberdemon's rockets down a
+  corridor 128 wide, a blast needing 151; no dodge "clear", so the retreat's route had the legs and
+  stood her at a shut door 12 off a rocket's line, 100 at full health): a dodge counts as clear when
+  it clears every missile's own hit (`hit_clearance`: the blast and up to 160 more); no duck whose
+  way crosses a missile's hit (the duck from the spider ran her across a rocket's line); no cover
+  in a sector that's shut now (hidden only behind the shut door, in the doorway once there).
+- **The fist's and saw's reach is 64, middle to middle** (MAP22 HNTR: berserk, punching a
+  chaingunner from 68-77 off, not one landing, shot 16 times): the punch's trace runs `MELEERANGE`
+  (64) from her middle, and a monster's hit where it crosses the diagonal through its middle
+  (`PIT_AddThingIntercepts`), so its radius adds nothing; reach 64 middle to middle in `in_reach`,
+  the melee node and the arsenal, the stop 12 short (`MELEE_SLACK` 24 -> 12). MAP22 HNTR seed 0 and
+  HMP seed 2 exit, HNTR seed 2 dies (net +1).
+- **No squeeze past shut sectors** (MAP21: hundreds of "stuck" at a gap exactly the box's 32 wide,
+  between a wall and a bar's end or two bars' corners 24 apart both ways; the engine lets her
+  through only at the exact unit moving exactly along it, which the follower never hits):
+  `fits_truly_near` (a smaller box fitting within 8 of each squeeze point, ad0e9fe) is gone, a
+  squeeze past shut sectors she can't open is no way, and an objective's stand spot must fit the
+  box with half a unit of play (`with_play`). MAP21 no monsters seed 0 stuck -> exits (61/61
+  sectors); with monsters, deaths in the gap become stucks further on (a run-jump way not found).
+
+Results (HNTR, one life): E1 8.0, E2 7.8 -> 7.5 (cyberdemon deaths on E2M8), E3 8.0 (1 -> 3/8),
+Doom II 27 -> 29/32 (MAP08 and MAP12 seed 2); arenas 118 -> 119/128, 222 -> 223/240.

@@ -495,10 +495,12 @@ impl Fitter<'_> {
                     // (no way round a line that sets something off is no way at all: MAP13's path
                     // over the corner of the exit pad, held back, as a squeeze past a wall)
                     let trips = hits.iter().any(|e| self.nav.seg_lines.get(e).is_some_and(|li| self.nav.trip_lines.contains(li) && !self.exempt.contains(li)));
-                    // (but past shut sectors only where the box doesn't fit at all: not where it
-                    // fits with no room to spare, MAP21's cage of door bars, the gaps between them
-                    // 32, the box's width, a way in Doom; MAP18's 24 is short)
-                    if trips || (self.shut_in(&hits) && !self.fits_truly_near(&points, &ignore)) {
+                    // (and past shut sectors only, even where the box fits with no room to spare:
+                    // MAP21's cage of door bars, the gaps between them 32, the box's width, a way in
+                    // Doom only on the exact unit, which she never hits, and a box fitting near each
+                    // squeeze isn't one getting through, the bars' corners 24 apart both ways;
+                    // pushed at for the hour. MAP18's 24 is short)
+                    if trips || self.shut_in(&hits) {
                         self.squeezes.hard = true;
                     }
                 }
@@ -506,16 +508,6 @@ impl Fitter<'_> {
             out.push(b);
         }
         out
-    }
-
-    /// Does the box fit, without the checks' slack (P_CheckPosition lets one touching a line
-    /// by), somewhere within 8 of each of these spots?
-    fn fits_truly_near(&mut self, spots: &[Point], ignore: &HashSet<SegKey>) -> bool {
-        let offsets: Vec<Point> = (-4..=4).flat_map(|i| (-4..=4).map(move |j| (f64::from(i) * 2.0, f64::from(j) * 2.0))).collect();
-        spots.iter().all(|&p| offsets.iter().any(|&(dx, dy)| {
-            let c = (p.0 + dx, p.1 + dy);
-            self.nav.mesh.poly_at(c).is_some() && self.box_hits_at(c, c, PLAYER_RADIUS - BOX_SLACK, ignore).is_empty()
-        }))
     }
 
     /// Up to about 6 spots between a and b where the box overlaps something.

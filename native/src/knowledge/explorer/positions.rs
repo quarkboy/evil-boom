@@ -79,8 +79,7 @@ impl Explorer {
             return ok;
         }
         let probe = self.nav.jump_lab.at_heights(heights);
-        let ok = self.stands_with(q, heights, &probe)
-            && (!play || [(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)].iter().all(|(dx, dy)| probe.fits_at((q.0 + dx, q.1 + dy)).0));
+        let ok = self.stands_with(q, heights, &probe) && (!play || with_play(&probe, q));
         cache.answers.insert(key, ok);
         ok
     }
@@ -176,7 +175,10 @@ impl Explorer {
         let heights = self.roomiest();
         let mesh = &self.nav.mesh;
         let probe = self.nav.jump_lab.at_heights(&heights);
-        let clear = |q: Point| self.stands_with(q, &heights, &probe);
+        // (with play: a spot where the box fits only to the unit, between a wall and a shut door's
+        // edge exactly 32 apart, is one the follower never gets to: MAP21's cage of door bars,
+        // pushed at for the hour)
+        let clear = |q: Point| self.stands_with(q, &heights, &probe) && with_play(&probe, q);
         if clear(spot) {
             return spot;
         }
@@ -196,4 +198,9 @@ impl Explorer {
         }
         spot
     }
+}
+
+/// Does the box fit half a unit to either side of `q`, each way (not only to the unit there)?
+fn with_play(probe: &crate::jumps::PlayerSim<'_>, q: Point) -> bool {
+    [(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)].iter().all(|(dx, dy)| probe.fits_at((q.0 + dx, q.1 + dy)).0)
 }

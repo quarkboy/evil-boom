@@ -373,7 +373,7 @@ impl Combat {
                 // and never a shot for 600 tics, then clawed to death)
                 continue;
             }
-            if slot == 1 && melee_at(&w, t.name) && here > w.reach + info.radius - MELEE_SLACK && pelted && self.guns_armed(obs) {
+            if slot == 1 && melee_at(&w, t.name) && here > w.reach - MELEE_SLACK && pelted && self.guns_armed(obs) {
                 // (nor going in up close, a gun to hand, while others shoot at her: straight in
                 // and standing at one, every other's shots free; MAP01 UV, the saw taken to the
                 // nearest of five imps, killed by the other four's fireballs, 67 bullets unfired.

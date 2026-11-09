@@ -1,6 +1,6 @@
 //! Missile avoidance, strafing and checking safe escape directions.
 
-use super::{clearance, miss_by, Combat, DODGE_TICS};
+use super::{clearance, hit_clearance, miss_by, Combat, DODGE_TICS};
 use crate::geom::{dist, segments_cross, Point};
 use crate::motor::{heading, norm, Observation, Thing, FRICTION, RUN_THRUST};
 use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS, TELEPORTERS_FOR_PLAYERS};
@@ -110,13 +110,16 @@ impl Combat {
         if let Some(w) = self.dodge_way {
             ways.push(w);
         }
-        let mut best: Option<(f64, Point)> = None;
+        let mut best: Option<(f64, Point, f64)> = None;
         for way in ways {
             if !self.safe(obs, way, 64.0) {
                 continue;
             }
             let room = self.clear_run(obs, way, 16.0 * DODGE_TICS as f64);
-            let mut s = missiles.iter().filter_map(|t| missile(t.name).map(|m| miss_by(pos, self.velocity, way, room, t) - clearance(&m))).fold(f64::INFINITY, f64::min);
+            let misses: Vec<(f64, f64)> = missiles.iter().filter_map(|t| missile(t.name).map(|m| (miss_by(pos, self.velocity, way, room, t), m))).map(|(d, m)| (d - clearance(&m), d - hit_clearance(&m))).collect();
+            let mut s = misses.iter().map(|m| m.0).fold(f64::INFINITY, f64::min);
+            // (clear of the missile itself, its blast or not)
+            let hit = misses.iter().map(|m| m.1).fold(f64::INFINITY, f64::min);
             s = s.min(48.0); // (clear is clear: then the rest decides)
             // (among those, where there's room after: dodged along a wall into a corner, the next
             // rocket had her)
@@ -149,16 +152,25 @@ impl Combat {
             if let Some(p) = prefer.filter(|_| s >= 0.0) {
                 s += 2.0 * W_TOWARD * (way.0 * p.0 + way.1 * p.1);
             }
-            if best.is_none_or(|(bs, _)| s > bs) {
-                best = Some((s, way));
+            if best.is_none_or(|(bs, _, _)| s > bs) {
+                best = Some((s, way, hit));
             }
         }
         self.dodge_way = best.map(|b| b.1);
-        self.dodge_clear = best.is_some_and(|b| b.0 >= 0.0);
+        self.dodge_clear = best.is_some_and(|b| b.2 >= 0.0);
         self.dodge_way
     }
 
-    /// Did the last dodge find a way clear of every missile coming?
+    /// Would going `way` (none: coasting where she is) keep her clear of every one of these
+    /// missiles' own hit, blasts or not?
+    pub(super) fn clear_of_hits(&self, obs: &Observation, missiles: &[Thing], way: Option<Point>) -> bool {
+        let (way, room) = way.map_or(((0.0, 0.0), f64::INFINITY), |w| (w, self.clear_run(obs, w, 16.0 * DODGE_TICS as f64)));
+        missiles.iter().all(|t| missile(t.name).is_none_or(|m| miss_by(obs.pos(), self.velocity, way, room, t) >= hit_clearance(&m)))
+    }
+
+    /// Did the last dodge find a way clear of every missile coming? Of a rocket's hit, that is,
+    /// its blast or not: a hit is its blast and up to 160 more (MAP20: in a corridor narrower
+    /// than any blast, dodging given up for the retreat's legs, stood in the rocket's line)
     pub fn dodge_clear(&self) -> bool {
         self.dodge_clear
     }

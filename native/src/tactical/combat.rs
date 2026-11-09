@@ -189,7 +189,7 @@ pub struct Combat {
     homing_since: BTreeMap<i32, i64>,
     shake_spot: Option<(i32, Option<Point>)>,
     dodge_way: Option<Point>,
-    /// does that way take her out of every missile's way (not just the least bad)?
+    /// does that way take her out of every missile's way (its hit; a blast may still reach her)?
     dodge_clear: bool,
     /// where the route's taking her mid-fight (an errand: health, a gun, ammo), for dodging
     /// towards (the user's: on to it while dodging, not stuck dodging where she stands)
@@ -1056,7 +1056,12 @@ impl Combat {
 
 /// How far a missile's middle has to pass from hers to miss (and its blast).
 fn clearance(m: &Missile) -> f64 {
-    PLAYER_RADIUS + m.radius + DODGE_MARGIN + if m.splash { SPLASH } else { 0.0 }
+    hit_clearance(m) + if m.splash { SPLASH } else { 0.0 }
+}
+
+/// ...and this far, clear of the missile itself (its blast or not)
+fn hit_clearance(m: &Missile) -> f64 {
+    PLAYER_RADIUS + m.radius + DODGE_MARGIN
 }
 
 /// How near t comes to her as it goes by, if she runs `way` from now (stopped once she's gone

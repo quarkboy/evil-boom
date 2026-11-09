@@ -60,7 +60,7 @@ impl Combat {
         if d >= ENGAGE_RANGE {
             return false;
         }
-        if d < w.reach + if w.slot == 1 { info.radius } else { 0.0 } {
+        if d < w.reach {
             return true;
         }
         info.attack == Attack::Hitscan && w.slot != 1 && w.hits(info.radius, d) >= FAR_HITS

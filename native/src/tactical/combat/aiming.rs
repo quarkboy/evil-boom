@@ -417,14 +417,16 @@ impl Combat {
         away
     }
 
-    /// A barrel she can see right by a monster, well clear of her: shoot that.
+    /// A barrel she can see right by a monster, well clear of her, and the barrels it sets off in
+    /// turn too: shoot that (MAP23: one by the mancubus 320 off her, its chain through the
+    /// field of barrels she stood in, the blasts on her, dead in 5 s).
     pub(super) fn barrel_shot(&mut self, obs: &Observation) -> Option<Point> {
         let barrels: Vec<Point> = obs
             .barrels
             .iter()
             .flatten()
             .copied()
-            .filter(|&b| dist(b, obs.pos()) > BARREL_CLEAR + 64.0 && self.visible.iter().any(|t| dist(b, (t.x, t.y)) < BARREL_NEAR + mon(t.name).radius))
+            .filter(|&b| dist(b, obs.pos()) > BARREL_CLEAR + 64.0 && self.visible.iter().any(|t| dist(b, (t.x, t.y)) < BARREL_NEAR + mon(t.name).radius) && Self::chain_clear(obs, b))
             .collect();
         let pos = obs.pos();
         if barrels.is_empty() {
@@ -439,13 +441,26 @@ impl Combat {
     }
 
     /// A barrel going off (hit: it blows 15 tics later) whose blast, or its chain's, reaches her:
-    /// the barrel nearest her, to get away from.
+    /// of the chain's barrels whose blasts reach her, the one that goes off first (fewest blasts
+    /// from one going off; the chain burns a barrel a blast at a time), the nearest of those, to
+    /// get away from. Not the nearest barrel of all: MAP23's hall of barrels, the chain burning
+    /// down it towards her, away from the nearest one by the wall and back from the next, till it
+    /// got there, dead.
     pub(super) fn lit_barrel_by(obs: &Observation) -> Option<Point> {
         let pos = obs.pos();
-        if obs.barrels_lit.iter().all(|&l| Self::chain_clear(obs, l)) {
-            return None;
+        let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
+        let mut chain: Vec<(Point, u32)> = obs.barrels_lit.iter().map(|&l| (l, 0)).collect();
+        let mut i = 0;
+        while i < chain.len() {
+            let (c, hops) = chain[i];
+            for &x in &barrels {
+                if blast_gap(c, x) < BARREL_CHAIN && !chain.iter().any(|&(y, _)| dist(x, y) < 1.0) {
+                    chain.push((x, hops + 1));
+                }
+            }
+            i += 1;
         }
-        obs.barrels.iter().flatten().copied().min_by(|a, b| blast_gap(*a, pos).total_cmp(&blast_gap(*b, pos)))
+        chain.into_iter().filter(|&(b, _)| blast_gap(pos, b) < BARREL_SAFE).min_by(|a, b| a.1.cmp(&b.1).then(blast_gap(a.0, pos).total_cmp(&blast_gap(b.0, pos)))).map(|(b, _)| b)
     }
 
     /// Would every barrel a blast at `b` sets off, in turn (each within a blast of the one
@@ -518,11 +533,14 @@ impl Combat {
         self.barrel_way
     }
 
-    /// Does going that way (a second's run) leave her further from every barrel near her?
+    /// Does going that way (a second's run) leave her further from every barrel near her, and
+    /// near no other there? (MAP23: a hall of barrels, every spot by some; away from the row
+    /// beside her was into the next, back and forth between them till the mancubus's fireballs
+    /// set them off, dead.)
     fn clear_of_barrels(&self, obs: &Observation, d: Point) -> bool {
         let pos = obs.pos();
         let ahead = (pos.0 + d.0 * 96.0, pos.1 + d.1 * 96.0);
-        obs.barrels.iter().flatten().filter(|&&b| dist(b, pos) < BARREL_CLEAR).all(|&b| dist(b, ahead) > dist(b, pos))
+        obs.barrels.iter().flatten().filter(|&&b| dist(b, pos) < BARREL_CLEAR || dist(b, ahead) < BARREL_CLEAR).all(|&b| dist(b, ahead) > dist(b, pos))
     }
 
     /// How far off a rocket's burst must be from her: its blast and a margin.

@@ -119,9 +119,14 @@ fn out_of_vile_sight(c: &mut Combat, _obs: &Observation, s: &Situation) -> Optio
 }
 
 /// Out of a hitscan shooter's sight before its first shot (it turns to her first), in a long
-/// fight: shooting on the way, as sized up.
-fn ducking(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
+/// fight: shooting on the way, as sized up. Not into a missile's way: then the dodge (a rocket's
+/// hit is up to 160 and its blast; MAP20, ducked from the spider mastermind's sight across a
+/// cyberdemon's rocket's line, 90 health gone at once).
+fn ducking(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let (name, way) = s.duck?;
+    if !c.clear_of_hits(obs, &s.missiles, way) {
+        return None;
+    }
     Some(Act::new(way, format!("ducking out of the {name}'s sight")))
 }
 
@@ -186,9 +191,11 @@ fn busy(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
 
 // --- up close ----------------------------------------------------------------------------------
 
-/// punching or sawing: this much inside the weapon's reach (its centre's, by her target's
-/// radius) she stops closing in (it steps about; the punch reaches 64 past her front)
-pub(super) const MELEE_SLACK: f64 = 24.0;
+/// punching or sawing: this much inside the weapon's reach, centre to centre, she stops closing
+/// in (it steps about). Not more: up against a demon she's 46 off. (MAP22 HNTR: berserk, stood
+/// 68-77 off a chaingunner, inside the old 64-past-her-front-plus-its-radius, every punch short
+/// of its centre, 16 of its bullets to 10 health)
+pub(super) const MELEE_SLACK: f64 = 12.0;
 /// closing in to hit it in melee, no nearer by this much (units)...
 const MELEE_GAIN: f64 = 32.0;
 /// ...in this long (tics): it's out of her reach, given up a while
@@ -219,7 +226,7 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         c.give_up(obs, t.id);
         return None;
     }
-    Some(if d > w.reach + mon(t.name).radius - MELEE_SLACK {
+    Some(if d > w.reach - MELEE_SLACK {
         // (nor closing in on what she gets no nearer: the way straight at it is blocked, a ledge
         // above her or a wall between, and the fist has nothing else; MAP14 HMP, out of ammo,
         // berserk, a chaingunner up on a ledge 300 off, walked at from below for 16 s of its
@@ -354,8 +361,17 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
             if let Some(way) = c.out_of_sight_of(obs, t) {
                 a.moving = Some(way);
                 a.why = format!("outmatched: out of {}'s sight (ammo kept)", t.name);
+                return Some(a);
             }
         }
+    }
+    // (the route walking her away from it already: on along it, further each step. The
+    // steering holds her at a distance, in its fire; MAP23, a mancubus across a hall of barrels,
+    // held 400 off among them till its fireballs set them off round her, dead)
+    if c.route_way.is_some_and(|way| norm(way - heading((t.x, t.y), pos)).abs() < 90.0) {
+        a.moving = None;
+        a.route = true;
+        a.why.push_str(": on along the route, away");
     }
     Some(a)
 }
