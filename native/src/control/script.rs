@@ -1,7 +1,8 @@
 //! Directed play's commands as text, one a line: what a scripted commander (a `drive` script, or
 //! someone typing into the file a watched game reads) says, and what comes back.
 //!
-//!   list TOPIC [N]      what she knows of: areas, doors, items, monsters, exits
+//!   list TOPIC [all] [N] what she knows of: areas (those explored only with all), doors, items,
+//!                       monsters, exits
 //!   name ID NAME...     a name for something listed (refused when too long or taken)
 //!   order go REF [risky] | order explore REF|DIR | order exit | order stop
 //!                       an order (REF an id or a name; DIR n, ne, east, ...)
@@ -19,11 +20,15 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
     let w: Vec<&str> = line.split_whitespace().collect();
     match w.first().copied() {
         Some("list") => {
-            let topic = w.get(1).and_then(|t| Topic::parse(t)).ok_or("list areas|doors|items|monsters|exits [N]")?;
-            let n = w.get(2).and_then(|v| v.parse().ok()).unwrap_or(20);
-            let entries = d.list(agent, obs, topic);
+            let topic = w.get(1).and_then(|t| Topic::parse(t)).ok_or("list areas|doors|items|monsters|exits [all] [N]")?;
+            let all = w.contains(&"all");
+            let n = w.iter().skip(2).find_map(|v| v.parse().ok()).unwrap_or(20);
+            let (entries, hidden) = d.brief(agent, obs, topic, all);
             let mut out = vec![format!("{} known", entries.len())];
             out.extend(entries.iter().take(n).map(|e| format!("  {}", d.describe(e, obs))));
+            if hidden > 0 {
+                out.push(format!("  and {hidden} explored areas (list areas all to see them)"));
+            }
             Ok(out)
         }
         Some("name") => {

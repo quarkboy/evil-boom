@@ -122,6 +122,8 @@ pub struct Director {
     told_dead: bool,
     /// when she last tried getting off a floor that hurts
     off_tried: i64,
+    /// the areas the last list found nothing more to explore in, and not where she is
+    done_areas: std::collections::BTreeSet<String>,
 }
 
 impl Director {
@@ -299,17 +301,24 @@ impl Director {
                         seen.insert(a.id.clone(), a);
                     }
                 }
-                seen.values()
+                let mut done = std::collections::BTreeSet::new();
+                let entries = seen
+                    .values()
                     .map(|a| {
                         let left = open.iter().filter(|o| nav.poly_at(o.goal).is_some_and(|p| a.sectors.contains(&nav.sector_of_poly(p)))).count();
                         let mut what = Places::sketch(a);
-                        if here.is_some_and(|s| a.sectors.contains(&s)) {
+                        let in_it = here.is_some_and(|s| a.sectors.contains(&s));
+                        if in_it {
                             what.push_str(", where she is");
+                        } else if left == 0 {
+                            done.insert(a.id.clone());
                         }
                         what.push_str(&if left == 0 { ", nothing more known to explore".to_string() } else { format!(", {left} things to explore") });
                         Entry { id: a.id.clone(), what, at: a.center }
                     })
-                    .collect()
+                    .collect();
+                self.done_areas = done;
+                entries
             }
             Topic::Doors => self.objectives_of(agent, obs, &[Kind::Door, Kind::Switch]),
             Topic::Exits => self.objectives_of(agent, obs, &[Kind::Exit]),
@@ -338,6 +347,19 @@ impl Director {
         };
         out.sort_by(|a, b| dist(pos, a.at).total_cmp(&dist(pos, b.at)));
         out
+    }
+
+    /// A list as she's shown it: areas with nothing more to explore left out (unless `all`), but
+    /// where she is and those she's named kept; and how many were left out.
+    pub fn brief(&mut self, agent: &mut Agent, obs: &Observation, topic: Topic, all: bool) -> (Vec<Entry>, usize) {
+        let entries = self.list(agent, obs, topic);
+        if all || topic != Topic::Areas {
+            return (entries, 0);
+        }
+        let n = entries.len();
+        let kept: Vec<Entry> = entries.into_iter().filter(|e| !self.done_areas.contains(&e.id) || self.names.contains_key(&e.id)).collect();
+        let hidden = n - kept.len();
+        (kept, hidden)
     }
 
     /// What a reference (an id or one of her names) is, among everything listable now.

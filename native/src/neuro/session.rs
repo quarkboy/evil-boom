@@ -34,7 +34,7 @@ pub struct Session {
 pub fn actions() -> Vec<Value> {
     let s = |props: Value, required: &[&str]| json!({ "type": "object", "properties": props, "required": required });
     vec![
-        json!({ "name": "doom_list", "description": "List what you know of in the level: areas (rooms and places, and what's left to explore in each), doors (and switches) not yet tried, items, monsters, exits. Each has an id to use in other actions.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "items", "monsters", "exits"] } }), &["what"]) }),
+        json!({ "name": "doom_list", "description": "List what you know of in the level: areas (rooms and places with something left to explore, where she is, and those you've named; set all for every area), doors (and switches) not yet tried, items, monsters, exits. Each has an id to use in other actions.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
         json!({ "name": "doom_inspect", "description": "Say what one thing is, which way and how far, by its id or your name for it.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
         json!({ "name": "doom_go", "description": "Go to a place, pick up an item, try a door or switch, or take an exit, by its id or your name for it. She does it and reports back. Set risky to go even where she'd rather not (across a floor that hurts), as long as it won't kill her.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_explore", "description": "Explore an area (by its id or your name for it) or a direction (north, south-east, ...), until there's nothing more known to explore there.", "schema": s(json!({ "target": { "type": "string" } }), &["target"]) }),
@@ -122,13 +122,16 @@ impl Session {
     fn state(&mut self, agent: &mut Agent, obs: &Observation) -> String {
         let mut s = format!("## Status\n{}\n", self.director.status(agent, obs));
         for (topic, title, n) in [(Topic::Areas, "Areas", 8), (Topic::Exits, "Exits", 3), (Topic::Doors, "Doors and switches not yet tried", 5), (Topic::Items, "Items seen", 6)] {
-            let list = self.director.list(agent, obs, topic);
-            if list.is_empty() {
+            let (list, hidden) = self.director.brief(agent, obs, topic, false);
+            if list.is_empty() && hidden == 0 {
                 continue;
             }
             s.push_str(&format!("\n## {title}\n"));
             for e in list.iter().take(n) {
                 s.push_str(&format!("- {}\n", self.director.describe(e, obs)));
+            }
+            if hidden > 0 {
+                s.push_str(&format!("- (and {hidden} explored areas)\n"));
             }
         }
         s
@@ -145,12 +148,14 @@ impl Session {
         match name {
             "doom_list" => {
                 let Some(topic) = arg("what").and_then(Topic::parse) else { return (false, "List what? One of: areas, doors, items, monsters, exits.".into()) };
-                let list = self.director.list(agent, obs, topic);
+                let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
+                let (list, hidden) = self.director.brief(agent, obs, topic, all);
+                let more = if hidden > 0 { format!("\n(and {hidden} explored areas: list with all to see them)") } else { String::new() };
                 if list.is_empty() {
-                    return (true, "None known yet.".into());
+                    return (true, format!("None known yet.{more}"));
                 }
                 let lines: Vec<String> = list.iter().take(LIST_MAX).map(|e| format!("- {}", self.director.describe(e, obs))).collect();
-                (true, format!("{} known:\n{}", list.len(), lines.join("\n")))
+                (true, format!("{} known:\n{}{more}", list.len(), lines.join("\n")))
             }
             "doom_inspect" => {
                 let Some(r) = arg("ref") else { return (false, "Inspect what? Give an id from doom_list, or your name for it.".into()) };
