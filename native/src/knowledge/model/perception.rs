@@ -276,6 +276,27 @@ impl Knowledge {
         self.felt.get(&s).copied().unwrap_or_else(|| self.looks_damaging(s))
     }
 
+    /// What a hit from sector s's floor would do, as she'd reckon it: what the map says, but for
+    /// one it doesn't (one that only looks like it hurts) the most a floor of the same look has
+    /// done to her, `worst` if she's felt none. (E4M1 HMP: a door pressed from a nukage trench
+    /// that doesn't hurt, beside a pit of the same nukage she'd waded at 5 a hit, reckoned at 20
+    /// a hit, 27 at 37 health: refused, nothing else to do for the hour.)
+    pub fn floor_hit(&self, s: usize, worst: i32) -> i32 {
+        let said = self.nav.damage[s];
+        if said > 0 {
+            return said;
+        }
+        let tex = &self.nav.map.sectors[s].floor_tex;
+        let sectors = &self.nav.map.sectors;
+        self.felt
+            .iter()
+            .filter(|&(&f, &hurt)| hurt && sectors[f].floor_tex.eq_ignore_ascii_case(tex))
+            .map(|(&f, _)| self.nav.damage[f])
+            .filter(|&d| d > 0)
+            .max()
+            .unwrap_or(worst)
+    }
+
     /// A sound from something she knows moves and set off a moment before (a door closing behind
     /// her, a lift coming back), or from right beside her: nothing new. One she set off long
     /// before moving again is news (E1M6's door that shut on her opened again 30 s later).

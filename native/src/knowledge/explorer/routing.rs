@@ -87,8 +87,7 @@ impl Explorer {
         for leg in legs {
             for (s, len) in self.wades(&leg.path.waypoints, states) {
                 let t = len / ROUTE_PACE;
-                let felt = self.nav.damage[s];
-                let per = f64::from(if felt > 0 { felt } else { WORST_FLOOR });
+                let per = f64::from(self.knowledge.floor_hit(s, WORST_FLOOR));
                 let rate = if tics + t < suit_left {
                     if per >= 20.0 {
                         per * 5.0 / 256.0
@@ -115,12 +114,10 @@ impl Explorer {
     /// floors' if the map has none for it.
     fn expected_damage(&self, legs: &[crate::navigator::Leg], obj: &Objective, states: &States, obs: &Observation) -> f64 {
         let way = self.route_damage(legs, states, obs);
-        let end = self.nav.poly_at(obj.goal).map(|p| self.nav.sector_of_poly(p)).filter(|&s| self.knowledge.damaging(s)).map_or(0, |s| match self.nav.damage[s] {
-            // (the worst only for one the map doesn't say: 5 a hit counted as 20, E1M9's lip over
-            // the nukage at 68 health, every way on refused as costing too much, stood there)
-            0 => WORST_FLOOR,
-            d => d,
-        });
+        // (the worst only for one the map doesn't say, and none of its look felt: 5 a hit counted
+        // as 20, E1M9's lip over the nukage at 68 health, every way on refused as costing too
+        // much, stood there)
+        let end = self.nav.poly_at(obj.goal).map(|p| self.nav.sector_of_poly(p)).filter(|&s| self.knowledge.damaging(s)).map_or(0, |s| self.knowledge.floor_hit(s, WORST_FLOOR));
         // (through her armor, which takes its share of a floor's hits as of any: E2M4 HNTR, 80
         // health and blue armor, a secret door pressed from the lava counted 70, 35 it'd cost;
         // refused, nothing left to do)

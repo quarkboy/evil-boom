@@ -1938,3 +1938,27 @@ Round L: MAP28, MAP29, MAP30, MAP32.
   lava never tried).
 
 Results (HNTR, one life): unchanged: E1 8.0, E2 7.5, E3 8.0, Doom II 29/32; arenas 119/128, 223/240.
+
+## 20-minute pass, round M (episode 4): a floor priced by what one like it has done; no chasing what's out of sight over a hurting floor (2026-11-09)
+
+Round M: E4M1, E4M2, E4M3, E4M4.
+
+- **A floor that looks like one that hurt her is priced at what that one did** (E4M1 HMP, stuck the
+  hour: the red door pressed from a nukage trench the map gives no damage, never stood on, so
+  priced at the worst a floor does, 20 a hit, 26.7 at 37 health against the 25 margin, refused;
+  the pit beside it with the same flat had hurt her 5 a hit): a floor she takes to hurt that the
+  map gives no damage for is priced at the most a floor with the same flat has done to her
+  (`floor_hit`), the worst only if none like it ever has, along a route and at its end. E4M1 HMP
+  seed 0 gets through the red door (still stuck past it: a never-hurt BLOOD3 floor priced at 20).
+- **No chasing what's gone out of sight while on a floor that hurts** (E4M2 HNTR: a lava hall under
+  a suit, a demon with no shot at it (too steep) seen and lost by turns, "keeping at it" after it
+  for 1500 tics till the suit ran out, 125 of lava; E4M3 HMP the same over a cacodemon): on a
+  floor that hurts by the map (a suit's time runs out), `lost_sight` doesn't take the controls;
+  the route's way off comes first. E4M2 ITYTD seeds 0-7 exits 4 -> 5, HNTR 1 -> 3.
+- Dropped after the regression set: E4M3's `standing` on a hurting floor judged by the route's way
+  rather than her facing (E3 8.0 -> 7.0 with it, chaotically: taking out either it or the
+  `lost_sight` guard gives 8.0); E4M4's re-path at the act phase when a fight has pulled her off
+  the spot (pressed from 1100 off, a straight line over lava): the doom2 arena 223 -> 221
+  (cyberdemon fights).
+
+Results (HNTR, one life): E1 8.0, E2 7.5, E3 8.0 -> 7.8, Doom II 29/32; arenas 119/128, 223/240.
