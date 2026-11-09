@@ -29,6 +29,8 @@ const TAP_AMMO: [&str; 7] = ["Clip", "ClipBox", "Shell", "ShellBox", "Backpack",
 
 /// a threshold's spot: this far over the line
 const THRESHOLD_IN: f64 = 8.0;
+/// How far over a line never walked over she makes for.
+const SEAM_IN: f64 = 32.0;
 
 /// the expert's run: no goal this near a walk-over exit line (she'd slide over)
 const EXIT_MARGIN: f64 = 64.0;
@@ -490,6 +492,10 @@ impl Explorer {
         if !x.is_empty() {
             return x;
         }
+        let x = usable(self, hooks, self.seams(&reach, pos));
+        if !x.is_empty() {
+            return x;
+        }
         let x = usable(self, hooks, again);
         if !x.is_empty() {
             return x;
@@ -574,6 +580,54 @@ impl Explorer {
                 o.reveals = BTreeSet::from([pi as i64]);
                 out.push(o);
                 break;
+            }
+        }
+        out
+    }
+
+    /// Lines she has stood on both sides of and never walked over, between sectors with nothing
+    /// to tell them apart as she first saw them (floor, ceiling, flats, light: a split only a
+    /// trigger or a mover needs; one of them moved since, a ledge now, still one):
+    /// over each, to the side away from her. (MAP12: a W1 floor raise between two slime sectors,
+    /// each walked into across other lines, the way on)
+    fn seams(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
+        let (k, mesh) = (&self.knowledge, &self.nav.mesh);
+        let sectors = &self.nav.map.sectors;
+        let alike = |a: usize, b: usize| {
+            let (x, y) = (&sectors[a], &sectors[b]);
+            let (hx, hy) = (k.first_heights.get(&a), k.first_heights.get(&b));
+            hx.is_some() && hx == hy && x.floor_tex == y.floor_tex && x.ceiling_tex == y.ceiling_tex && x.light == y.light
+        };
+        let mut done: BTreeSet<usize> = BTreeSet::new();
+        let mut out = Vec::new();
+        for &pi in reach.intersection(&k.visited) {
+            for &q in &mesh.poly(pi).portals {
+                let portal = &mesh.portals[q];
+                let other = portal.other(pi);
+                let Some(li) = portal.linedef.filter(|li| !k.crossed.contains(li) && !done.contains(li)) else { continue };
+                let (a, b) = (mesh.poly(pi).sector, mesh.poly(other).sector);
+                if a == b || !k.visited.contains(&other) || !reach.contains(&other) || !alike(a, b) {
+                    continue;
+                }
+                let mid = ((portal.p1.0 + portal.p2.0) / 2.0, (portal.p1.1 + portal.p2.1) / 2.0);
+                // (the far side from her: from where she is, over it)
+                let far = [pi, other].into_iter().max_by(|&x, &y| dist(mesh.poly(x).center, pos).total_cmp(&dist(mesh.poly(y).center, pos))).unwrap_or(other);
+                let d = dist(mid, mesh.poly(far).center);
+                if d < 1e-6 {
+                    continue;
+                }
+                // (in far enough that getting there is going over: not done within arrival of it)
+                let c = mesh.poly(far).center;
+                let at = |depth: f64| (mid.0 + (c.0 - mid.0) / d * depth, mid.1 + (c.1 - mid.1) / d * depth);
+                let Some(spot) = [SEAM_IN, THRESHOLD_IN].map(at).into_iter().find(|&p| mesh.poly_at(p) == Some(far) && self.standable(p, false)) else { continue };
+                done.insert(li);
+                let mut o = Objective::new(Kind::Visit, spot, format!("walk over line {li}"));
+                o.reveals = BTreeSet::from([far as i64]);
+                // (the line, tried once the trip's over, gone over or not: a spot over it can be
+                // got to round it, and from the far side the next one's spot back; E1M5, two of
+                // them in turn for the hour)
+                o.wall = Some(li);
+                out.push(o);
             }
         }
         out

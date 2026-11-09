@@ -218,7 +218,15 @@ impl RouteFollower {
         }
         if obs.tic - self.progress_tic > STUCK_TICS {
             self.unsticks += 1;
-            if self.unsticks > UNSTICKS_BEFORE_REPLAN {
+            // (on a floor that hurts, a new way at once, no backing off first: each try costs her
+            // health, and the way the plan saw may have gone with a floor that moved under her;
+            // MAP15 HNTR, a ledge lowered into lava by the line she crossed, the walk planned from
+            // up there into the side of a stair, backed off twice, dead before the new path)
+            let burning = {
+                let nav = &self.view.nav;
+                nav.poly_at(pos).is_some_and(|p| nav.damage.get(nav.sector_of_poly(p)).is_some_and(|&d| d != 0))
+            };
+            if self.unsticks > UNSTICKS_BEFORE_REPLAN || burning {
                 // (with the heights as they are: the way the plan saw may be shut now; MAP23's
                 // squeezed past a timed door that had shut, re-pathed the same way for ever)
                 if !self.replan(obs, "stuck", true) {

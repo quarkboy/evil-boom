@@ -220,6 +220,10 @@ impl Explorer {
             }
             self.drop_objective(&obj, obs, if obj.kind == Kind::Hunt { "not there" } else { "couldn't pick it up" });
         }
+        // (a line to walk over: tried, whichever way the trip went)
+        if let Some(li) = obj.wall.filter(|_| obj.kind == Kind::Visit) {
+            self.knowledge.crossed.insert(li);
+        }
         self.look_until = None;
         self.follower = None;
         None

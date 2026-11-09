@@ -169,6 +169,8 @@ pub struct Knowledge {
     pub sectors: BTreeSet<usize>,
     /// as last seen
     pub seen_heights: BTreeMap<usize, Heights>,
+    /// sector -> its heights when she first saw it
+    pub first_heights: BTreeMap<usize, Heights>,
     /// sector -> the last tic it was in view
     pub seen_tic: BTreeMap<usize, i64>,
     pub fired: Vec<Fired>,
@@ -178,6 +180,8 @@ pub struct Knowledge {
     pub teleports: BTreeMap<usize, Point>,
     /// polys stood in
     pub visited: BTreeSet<usize>,
+    /// lines walked over (from one poly into the next across them)
+    pub crossed: BTreeSet<usize>,
     /// polys seen into (or in front of a mapped line)
     pub seen_polys: BTreeSet<usize>,
     pub heard: Vec<Heard>,
@@ -317,11 +321,13 @@ impl Knowledge {
             mapped: BTreeSet::new(),
             sectors: BTreeSet::new(),
             seen_heights: BTreeMap::new(),
+            first_heights: BTreeMap::new(),
             seen_tic: BTreeMap::new(),
             fired: Vec::new(),
             learned: BTreeMap::new(),
             teleports: BTreeMap::new(),
             visited: BTreeSet::new(),
+            crossed: BTreeSet::new(),
             seen_polys: BTreeSet::new(),
             heard: Vec::new(),
             felt: BTreeMap::new(),
@@ -652,6 +658,7 @@ impl Knowledge {
         }
         self.suit_until = None;
         self.changed_floor.clear();
+        self.crossed.clear(); // (the walk-over lines set again)
         self.last = None;
         self.standing = None;
         self.hurt_on = None;

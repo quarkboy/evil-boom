@@ -1758,3 +1758,54 @@ Round G: MAP09, MAP10, MAP11, MAP12.
 
 Results (HNTR, one life): E1 8.0, E2 7.9 (7/8), E3 7.9 -> 8.0 (3 -> 4/8), Doom II 28 -> 27/32 (MAP12
 seed 1 stuck on line 511); arenas 119/128, 223/240.
+
+## 20-minute pass, round H: seams walked over; two crushers side by side; a stalled melee given up; a hurting floor's replan at once (2026-11-09)
+
+Round H: MAP12's walk-over line, MAP13, MAP14, MAP15.
+
+- **Lines between look-alike sectors she's stood on both sides of, never walked over** (MAP12 HNTR
+  seed 1 stuck: line 511, a W1 floor raise between two slime sectors, each entered across other
+  lines, so no threshold over it was ever offered; "try the wall" stood her 40 units short):
+  she keeps the lines her middle has gone over (`crossed`, cleared on a restart) and each
+  sector's heights when first seen (`first_heights`); with nothing left before the things given
+  up on, she walks over each line between two reachable polys she has stood in whose sectors
+  looked the same when first seen (heights, flats, light: a split only a trigger or a mover
+  needs), 32 units into the side away from her (`seams`). MAP12 HNTR seed 1 stuck -> exit (937 s);
+  seeds 0, 2, 3 and fight 1 seed 0 exit as before, fight 3 seed 0 dies as before (567 s).
+- **A crusher the way goes into straight out of another is judged before the first is entered,
+  and from under any of her** (MAP13 UV: a fast crusher, a slow one beyond it with the plasma
+  rifle in it; under the fast one, the follower's "under one already" branch never looked ahead, so
+  she walked on into the slow one on its way down, pinned under its edge; and the escape took only
+  the first ceiling coming down over her box, through the fast one in time, the slow one over her
+  edge ignored). Now (`hazards.rs`): the walking rule's go for a crusher also needs the one straight
+  after it open now (`open_now`); under one (any of her), the next crusher out of where her middle
+  is not open now (and no crossing of it begun) is out from under all of them (`escape_crusher`),
+  not on into it nor a wait at its edge under one (E4M7's); and every ceiling coming down on her is
+  weighed for the escape, not the first found.
+
+Results, MAP13 seeds 0-3 (ITYTD seed 0): ITYTD exits (1547 -> 1209 s); crusher deaths 5 -> 2 of 12
+(UV s0, HMP s1, s2 gone; HNTR s2 is the fight falling back to cover from inside the slow crusher
+with the rifle in hand, HMP s3 out of ammo, the route's crusher_guard not the walking phase:
+traced to there, not fixed). No exit anywhere on HNTR-UV either way.
+- (The seams, after the regression set: a seam is tried once its trip is over, gone over or not;
+  a spot past a line can be got to round it, and E1M5 walked two of them in turn for the hour, E1
+  8.0 -> 7.0.)
+- **A melee that gets no nearer is given up, and a ledge stays a ledge** (MAP14 HMP: out of ammo,
+  berserk; a chaingunner on a ledge 300 off she can't climb to, walked at with the fist 16 s till
+  dead; the melee node's give-up is 20 s without the target's health dropping, and `armed()` counted
+  the berserk fist with everything after her punchable, so the ammo retreat never began): closing
+  in that gains under 32 units in 3 s gives it up (`MELEE_GAIN`/`MELEE_STALL`) and remembers its
+  sector: while it's still there and she isn't, it's out of her fist's reach (`out_of_fist_reach`),
+  and the berserk fist counts as arming her only if nothing after her is. MAP14 HMP seed 3 exits;
+  seeds 0-2 live longer.
+- **Stuck on a floor that hurts, a new path at once** (MAP15 HNTR seeds 2 and 3: a walk-over line
+  lowered the ledge she was on into lava; the walk, planned from up there, ran into a step 32 over
+  the lava, and the follower backed off twice before a new path, 3 s at 20 a second): on a hurting
+  floor no backing off first.
+- Dropped after the regression set: MAP15's rocket hold through the launch tic, turned back to the
+  press's facing only if still clear (no self-rocket damage on MAP15): the combat arena 119 -> 117
+  (arch-vile and revenant fights).
+
+Results (HNTR, one life): E1 8.0, E2 7.9 -> 7.6 (5/8), E3 8.0 -> 7.2 (4 -> 0/8; no one change: each
+taken out alone gives 7.2-7.4, the spider mastermind's fight by seed), Doom II 27/32 (MAP12 seed 1
+exits, MAP10 seed 0 dies at the exit); arenas 119/128, 223/240.

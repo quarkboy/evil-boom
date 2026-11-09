@@ -278,6 +278,37 @@ impl RouteFollower {
         Some(self.room_through(obs, s, run_tics(v0, d_in), run_tics(v0, d_out) + CROSS_SLACK))
     }
 
+    /// Could she go into sector s now, on the way (`polys`, hers first)? Through it in time, and
+    /// only while it's going up or still with room; a way that ends in there, in once it's rising
+    /// with room (or still with room; or still and no crusher). With the crossing's timing (None:
+    /// none out of it known).
+    fn crossable(&self, obs: &Observation, polys: &[usize], s: usize, crushers: &BTreeSet<usize>) -> (bool, Option<bool>) {
+        let (now, before) = (obs.heights[s], self.prev_live[s]);
+        let rising = now.ceiling > before.ceiling + 0.01;
+        let still = (now.ceiling - before.ceiling).abs() < 0.01;
+        let room = now.ceiling - now.floor >= PLAYER_HEIGHT + CRUSH_ROOM;
+        let timed = self.through_in_time(obs, polys, s);
+        let go = match timed {
+            Some(t) => t && (rising || (still && room)),
+            None => (room && (rising || still)) || (still && !crushers.contains(&s)),
+        };
+        (go, timed)
+    }
+
+    /// Could she go into crusher s now, and on into the one straight after it, if any?
+    fn open_now(&self, obs: &Observation, polys: &[usize], s: usize, crushers: &BTreeSet<usize>, doors: &BTreeSet<usize>) -> bool {
+        self.crossable(obs, polys, s, crushers).0 && self.crusher_after(obs, polys, s, crushers, doors).is_none_or(|b| self.crossable(obs, polys, b, crushers).0)
+    }
+
+    /// The crusher (or ceiling on the move) the way goes into straight out of sector s, if it
+    /// does: none between, so no waiting for it but under s.
+    fn crusher_after(&self, obs: &Observation, polys: &[usize], s: usize, crushers: &BTreeSet<usize>, doors: &BTreeSet<usize>) -> Option<usize> {
+        let mesh = &self.view.nav.mesh;
+        let (_, b) = polys.windows(2).map(|w| (mesh.poly(w[0]).sector, mesh.poly(w[1]).sector)).find(|&(a, b)| a == s && b != s)?;
+        let moving = !doors.contains(&b) && (obs.heights[b].ceiling - self.prev_live[b].ceiling).abs() > 0.01;
+        (crushers.contains(&b) || moving).then_some(b)
+    }
+
     /// (mortal) A crusher just ahead on the way, coming down or too low to be under: wait at its
     /// edge till it's on its way up with room, then through without stopping (E4M7's, on the way
     /// to its teleporter: pinned under it, waiting for it to rise, killed 53 times).
@@ -316,14 +347,24 @@ impl RouteFollower {
             // height, pinned there, Doom moving her nowhere, till dead)
             let moving_down = |s: usize| obs.heights[s].ceiling < self.prev_live[s].ceiling - 0.01 && obs.heights[s].ceiling - obs.heights[s].floor - PLAYER_HEIGHT < CRUSH_ESCAPE;
             // (any of her under it: a crusher crushes whatever's even partly under it)
+            // (on through, if she'll be out the far side with room over her all the way: back
+            // out of a fast one she's halfway under is caught as surely; E2M2's passage, 64
+            // across, its fast crusher open some 16 tics a time. Every one coming down on her, not
+            // the first found: MAP13's two side by side, through the one over her middle in time,
+            // on under the edge of the other, pinned)
             let pressing = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
                 .iter()
                 .filter_map(|&(dx, dy)| mesh.poly_at((pos.0 + dx, pos.1 + dy)).map(|p| (mesh.poly(p).sector, (dx, dy))))
-                .find(|&(s, _)| moving_down(s));
-            // (on through, if she'll be out the far side with room over her all the way: back
-            // out of a fast one she's halfway under is caught as surely; E2M2's passage, 64
-            // across, its fast crusher open some 16 tics a time)
-            if let Some((s, offset)) = pressing.filter(|&(s, _)| self.through_in_time(obs, &polys, s) != Some(true)) {
+                .find(|&(s, _)| moving_down(s) && self.through_in_time(obs, &polys, s) != Some(true));
+            // (the way on out of where her middle is into a crusher she couldn't go into now (the
+            // walking rule's, the one after it too): out from under all of them, not on into it,
+            // nor a wait at its edge under one; MAP13's fast crusher, a slow one beyond with the
+            // plasma rifle in it, walked into on its way down, pinned under its edge; and the fast
+            // one walked into on its way down, an edge of her under it already. A crossing begun
+            // is gone through)
+            let committed = |b: usize| self.crusher_cross.is_some_and(|(c, since)| c == b && obs.tic - since < CROSS_COMMIT);
+            let next_closed = here.and_then(|h| self.crusher_after(obs, &polys, h, &crushers, &doors)).filter(|&b| !committed(b) && !self.open_now(obs, &polys, b, &crushers, &doors));
+            if let Some((s, offset)) = pressing.or_else(|| here.zip(next_closed).map(|(h, _)| (h, (0.0, 0.0)))) {
                 self.crusher_cross = None;
                 if let Some(c) = self.escape_crusher(obs, s, offset, &doors) {
                     return Some(c);
@@ -360,7 +401,6 @@ impl RouteFollower {
             return None;
         }
         let (now, before) = (obs.heights[s], self.prev_live[s]);
-        let rising = now.ceiling > before.ceiling + 0.01;
         let still = (now.ceiling - before.ceiling).abs() < 0.01;
         let room = now.ceiling - now.floor >= PLAYER_HEIGHT + CRUSH_ROOM;
         // (by time, where the way comes out of it: set off when she'd be under it only while it
@@ -378,11 +418,10 @@ impl RouteFollower {
                 return Some(c);
             }
         }
-        let timed = self.through_in_time(obs, &polys, s);
-        let go = match timed {
-            Some(t) => t && (rising || (still && room)),
-            None => (room && (rising || still)) || (still && !crushers.contains(&s)),
-        };
+        let (go, timed) = self.crossable(obs, &polys, s, &crushers);
+        // (and out of it into another she couldn't go into now: not in, a wait under the first is
+        // no wait, MAP13's fast crusher to a slow one, the second come down on her)
+        let go = go && self.crusher_after(obs, &polys, s, &crushers, &doors).is_none_or(|b| self.crossable(obs, &polys, b, &crushers).0);
         if go {
             // (committed to only a crossing that comes out the far side: one into an alcove under
             // it is waited at again, pulled out of it as it came down, E3M5's switch, walked back

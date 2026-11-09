@@ -99,6 +99,14 @@ impl Knowledge {
             if dist(last.pos(), obs.pos()) > TELEPORT_JUMP {
                 self.teleported(&last, obs);
             } else {
+                // (the lines her middle went over)
+                let (a, b) = (last.pos(), obs.pos());
+                let near = crate::geom::cells_around(a, b, 1.0).filter_map(|c| nav.mesh.line_grid.get(&c)).flatten();
+                let over: Vec<usize> = near.copied().filter(|&li| {
+                    let (p, q) = m.line_seg(li);
+                    crate::geom::segments_cross(a, b, p, q)
+                }).collect();
+                self.crossed.extend(over);
                 self.detect_fired(&last, obs, controls);
             }
             self.last = Some(last);
@@ -106,6 +114,7 @@ impl Knowledge {
         for &s in &in_view {
             self.seen_tic.insert(s, obs.tic);
             let now = obs.heights[s];
+            self.first_heights.entry(s).or_insert(now);
             if self.seen_heights.get(&s).is_some_and(|&h| h != now) {
                 self.saw_move(s, obs.tic, now);
             }

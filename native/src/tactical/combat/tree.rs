@@ -189,6 +189,10 @@ fn busy(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
 /// punching or sawing: this much inside the weapon's reach (its centre's, by her target's
 /// radius) she stops closing in (it steps about; the punch reaches 64 past her front)
 pub(super) const MELEE_SLACK: f64 = 24.0;
+/// closing in to hit it in melee, no nearer by this much (units)...
+const MELEE_GAIN: f64 = 32.0;
+/// ...in this long (tics): it's out of her reach, given up a while
+const MELEE_STALL: i64 = 3 * 35;
 
 /// Straight at it, then standing at it hitting. The steering's pull to the gun's window, fine
 /// for a gun's 500 units, left her circling a revenant 100-200 off, never in the fist's reach,
@@ -199,7 +203,7 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if Style::of(&w, t) != Style::Melee {
         return None;
     }
-    if c.given_up_on(obs, t.id) {
+    if c.out_of_fist_reach(obs, t) {
         return None;
     }
     let d = dist((t.x, t.y), s.pos);
@@ -216,6 +220,21 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         return None;
     }
     Some(if d > w.reach + mon(t.name).radius - MELEE_SLACK {
+        // (nor closing in on what she gets no nearer: the way straight at it is blocked, a ledge
+        // above her or a wall between, and the fist has nothing else; MAP14 HMP, out of ammo,
+        // berserk, a chaingunner up on a ledge 300 off, walked at from below for 16 s of its
+        // bullets, to death, with ammo known about)
+        let (nearest, at, _) = c.melee_nearest.get(&t.id).copied().filter(|&(_, _, last)| obs.tic - last <= MELEE_STALL).unwrap_or((d, obs.tic, obs.tic));
+        let (nearest, at) = if d < nearest - MELEE_GAIN { (d, obs.tic) } else { (nearest, at) };
+        if obs.tic - at > MELEE_STALL {
+            c.melee_nearest.remove(&t.id);
+            if let Some(sector) = c.sector_at((t.x, t.y)) {
+                c.fist_stalled.insert(t.id, sector);
+            }
+            c.give_up(obs, t.id);
+            return None;
+        }
+        c.melee_nearest.insert(t.id, (nearest, at, obs.tic));
         Act::new(c.closing_in(obs, t, None), format!("closing in on {} (melee)", t.name))
     } else {
         Act::new(None, format!("at {} (melee)", t.name))

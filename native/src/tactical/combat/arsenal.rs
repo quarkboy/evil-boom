@@ -234,9 +234,11 @@ impl Combat {
     }
 
     /// Has she a gun with ammo for it (more than the fist), or her fists berserk with nothing
-    /// after her she wouldn't punch?
+    /// after her she wouldn't punch, or can't get at? (MAP14 HMP: a chaingunner up on a ledge
+    /// shooting her, berserk and out of ammo; "armed", the ammo she knew of never gone for)
     pub fn armed(&self, obs: &Observation) -> bool {
-        self.guns_armed(obs) || Self::fists_for(obs, &self.against_her().iter().map(|t| t.name).collect::<Vec<_>>())
+        let them = self.against_her();
+        self.guns_armed(obs) || (Self::fists_for(obs, &them.iter().map(|t| t.name).collect::<Vec<_>>()) && !them.iter().any(|t| self.out_of_fist_reach(obs, t)))
     }
 
     /// Has she a gun with ammo for it (more than slot 1's)?

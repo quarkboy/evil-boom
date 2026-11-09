@@ -269,6 +269,11 @@ pub struct Combat {
     /// fighting each in melee without hurting it, since when, and its health then (given up
     /// after a while, as out of reach)
     pub(super) melee_since: BTreeMap<i32, (i64, i32)>,
+    /// closing in on each to hit it in melee: the nearest she's got, when, and when last closing
+    /// in (given up once she gets no nearer a while)
+    pub(super) melee_nearest: BTreeMap<i32, (f64, i64, i64)>,
+    /// the sector each stood in when closing in on it to hit it in melee got her no nearer
+    pub(super) fist_stalled: BTreeMap<i32, usize>,
     /// the gun last fired and when (its reload)
     pub(super) last_shot: Option<(i32, i64)>,
     /// the way she faced as she last pressed the rocket launcher's trigger (the rocket leaves along
@@ -361,6 +366,8 @@ impl Combat {
             given_up: BTreeMap::new(),
             no_shot_since: BTreeMap::new(),
             melee_since: BTreeMap::new(),
+            melee_nearest: BTreeMap::new(),
+            fist_stalled: BTreeMap::new(),
             last_shot: None,
             rocket_facing: None,
         }
@@ -763,6 +770,18 @@ impl Combat {
     /// Has she given up on getting at id a while?
     pub(super) fn given_up_on(&self, obs: &Observation, id: i32) -> bool {
         self.given_up.get(&id).is_some_and(|&until| obs.tic < until)
+    }
+
+    /// Out of her fist's reach: given up on, or still on the floor it stood on when closing in on
+    /// it got her no nearer, and she's not (a ledge above her stays one, walked along or not;
+    /// MAP14 HMP, the same chaingunner walked at again once the give-up ran out, to death).
+    pub(super) fn out_of_fist_reach(&self, obs: &Observation, t: &Thing) -> bool {
+        self.given_up_on(obs, t.id) || self.fist_stalled.get(&t.id).is_some_and(|&s| self.sector_at((t.x, t.y)) == Some(s) && self.sector_at(obs.pos()) != Some(s))
+    }
+
+    /// The sector under a point.
+    pub(super) fn sector_at(&self, p: Point) -> Option<usize> {
+        self.nav.poly_at(p).map(|pi| self.nav.sector_of_poly(pi))
     }
 
     /// Give up on getting at id a while.
