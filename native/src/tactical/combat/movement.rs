@@ -348,9 +348,18 @@ impl Combat {
         length
     }
 
-    /// A monster near and in front: walking on would walk into it.
+    /// A monster near and in front of her (as she faces: whatever she's fighting close, the route
+    /// waits for).
     pub(super) fn blocking(&self, obs: &Observation, t: Option<&Thing>) -> bool {
         t.is_some_and(|t| dist((t.x, t.y), obs.pos()) < 320.0 && norm(heading(obs.pos(), (t.x, t.y)) - obs.angle).abs() < 60.0)
+    }
+
+    /// A monster near and ahead the way the route walks her: walking on would walk into it. (Not
+    /// the way she faces: she faces what she aims at, so judged by facing anything near she was
+    /// shooting at was in her way; E2M3, UV, cacodemons she couldn't kill kept clear of with the
+    /// ammo kept every other tic, shot at the tics between, the pistol emptied on them.)
+    pub(super) fn in_her_way(&self, obs: &Observation, t: &Thing) -> bool {
+        self.route_way.is_some_and(|way| dist((t.x, t.y), obs.pos()) < 320.0 && norm(heading(obs.pos(), (t.x, t.y)) - way).abs() < 60.0)
     }
 
     /// Is it all right to go `length` that way: floor all the way, no drop or step up she

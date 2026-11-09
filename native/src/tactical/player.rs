@@ -383,6 +383,9 @@ impl Player {
             self.explorer.log.push(format!("  [fight] {line}"));
         }
         let shooting = self.explorer.follower.as_ref().is_some_and(RouteFollower::shooting);
+        if d.is_none() {
+            self.fight.combat.route_walks(obs, &c);
+        }
         if d.is_none() && c.weapon == 0 && !shooting {
             // (no fight: the gun for the next one up, the fight's call)
             if let Some(slot) = self.fight.combat.ready_gun(obs) {

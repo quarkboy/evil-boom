@@ -1507,3 +1507,13 @@ rules: E3M6 seed 6 shut in past a WR door-close line (the open E3M6 stucks), E3M
 stopped crusher started again by a walk-over line one sector before its edge (`set_off_first`
 knows only lines on its own edge), E3M8 seed 7 (the Cyberdemon). Doom II MAP12 seed 0: berserk
 fists at a cacodemon, as before, this time killed.
+- **What's in her way is the way the route walks her, for keeping ammo** (E2M3 UV, found by round
+  A's helper): the outmatched node keeps its ammo for a target it can't kill unless that target is
+  in her way. "In her way" was `blocking()`, "near and in front" by her facing; she faces what she
+  aims at, so anything she aimed at within 320 was in her way, and the hold flipped tic by tic (~30
+  pistol rounds into cacodemons). Now `in_her_way` judges it by the way the route last walked her
+  (the route's controls, kept while the fight holds the route). `blocking()` keeps its facing
+  sense for `standing` (the route waits while she fights what's close in front): changed there
+  too (v41), the route walked on through close fights, E2 7.0 -> 7.9 but E3 7.0 -> 5.6 and Doom II
+  27 -> 25 (her own rocket pressed walking on, MAP10/MAP12). Ammo hold only: E3 7.0 -> 7.1 (1/8),
+  doom2 arena 226 -> 227, the rest the same.

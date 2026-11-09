@@ -197,6 +197,10 @@ pub struct Combat {
     doors: BTreeSet<usize>,
     last_pos: Option<Point>,
     velocity: Point,
+    /// the way the route last walked her (in the world, whichever way she was turned to aim;
+    /// kept while the fight holds the route): what's in her way is what's that way, not where
+    /// she's facing (None: the route standing her still)
+    route_way: Option<f64>,
     barrel_way: Option<Point>,
     barrel_since: i64,
     barrel_rest_until: i64,
@@ -302,6 +306,7 @@ impl Combat {
             sinks_into_harm,
             last_pos: None,
             velocity: (0.0, 0.0),
+            route_way: None,
             barrel_way: None,
             barrel_since: 0,
             barrel_rest_until: -1_000_000_000,
@@ -350,6 +355,7 @@ impl Combat {
         self.dodging.clear();
         self.last_pos = None;
         self.velocity = (0.0, 0.0);
+        self.route_way = None;
     }
 
     // --- what's about -----------------------------------------------------------------------
@@ -749,10 +755,18 @@ impl Combat {
         Some(Decision { takeover: true, aim: Some(heading(pos, s.pos())), fire: false, weapon: 0, moving, why })
     }
 
+    /// The route's controls this tic (the way it walks her, for what's in her way).
+    pub fn route_walks(&mut self, obs: &Observation, b: &Controls) {
+        self.route_way = (b.forward.hypot(b.strafe) > 0.0).then(|| obs.angle - b.turn + (-b.strafe).atan2(b.forward).to_degrees());
+    }
+
     /// The controls for a decision: over the route's (`base`: only the aim and the trigger are
     /// the fight's), or all of them.
     pub fn controls(&mut self, obs: &Observation, d: &Decision, base: Option<&Controls>) -> Controls {
         let turn = self.turn(obs, d.aim);
+        if let Some(b) = base {
+            self.route_walks(obs, b);
+        }
         let mut c = match base {
             Some(b) if !d.takeover => {
                 let mut c = Controls { forward: b.forward, strafe: b.strafe, turn, use_: b.use_, run: b.run, weapon: b.weapon, ..Controls::default() };
