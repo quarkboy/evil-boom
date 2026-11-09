@@ -428,37 +428,60 @@ impl RouteFollower {
             .find_map(|t| crate::specials::crusher_kind(t.info.special))
     }
 
-    /// (mortal) Going into stopped crusher s across portal `entry`: if that's over a line that
-    /// sets it off, and it'd have her before she's out the far side (and its stroke's more than
-    /// she'd take on), step just over the line to set it off and let it come up first. None: on
-    /// as it is. Fails the step if even backing out from the line wouldn't beat it.
+    /// (mortal) Going into stopped crusher s across portal `entry`: if a line on the way in sets it
+    /// off (its edge, or one crossed just before it), and it'd have her before she's out the far
+    /// side (and its stroke's more than she'd take on), step just over that line to set it off and
+    /// let it come up first. None: on as it is. Fails the step if even backing out from the line
+    /// wouldn't beat it.
     fn set_off_first(&mut self, obs: &Observation, polys: &[usize], s: usize, entry: usize) -> Option<Controls> {
         let nav = std::rc::Rc::clone(&self.view.nav);
         let mesh = &nav.mesh;
-        let portal = &mesh.portals[entry];
-        let li = portal.linedef?;
-        let kind = self.starts_crusher(li, s)?;
+        // (the last line on the way that sets it off, up to and over its edge: E3M4's, its start
+        // lines a ring 8 out from its edge; over one, the crusher set off with her a step from
+        // under it, on into it at a run, pinned, crushed. Where her middle crosses it, how far
+        // along, and the way over it)
+        let (mut at, mut along) = (obs.pos(), 0.0);
+        let mut found = None;
+        let mut entry_along = None;
+        for w in polys.windows(2) {
+            let (cur, nxt) = (w[0], w[1]);
+            let pi = mesh.poly(cur).portals.iter().copied().find(|&pi| mesh.portals[pi].other(cur) == nxt)?;
+            let portal = &mesh.portals[pi];
+            let p = closest_on_portal(at, portal.p1, portal.p2);
+            along += dist(at, p);
+            at = p;
+            if let Some(kind) = portal.linedef.and_then(|li| self.starts_crusher(li, s).map(|k| (li, k))) {
+                found = Some((kind, pi, at, along, mesh.poly(nxt).center));
+            }
+            if pi == entry {
+                entry_along = Some(along);
+                break;
+            }
+        }
+        let ((li, kind), pi, at, trig_along, beyond) = found?;
+        let gap = entry_along? - trig_along;
+        let portal = &mesh.portals[pi];
         let h = obs.heights[s];
         let room = crate::crush::room_tics(h, kind);
         if crate::crush::stroke_cost(kind, obs) <= crate::knowledge::RISK_SHARE * obs.health.unwrap_or(100.0) {
             return None;
         }
-        // (it starts as her middle crosses the line, her front a radius in; out the far side
-        // then, from where she is at her pace, or not)
-        if let Some((d_in, d_out)) = self.crossing(obs, polys, s) {
+        // (it starts as her middle crosses the line; out the far side then, from where she is at
+        // her pace, or not)
+        if let Some((_, d_out)) = self.crossing(obs, polys, s) {
             let v0 = self.motion.speed();
-            if room >= run_tics(v0, d_out) - run_tics(v0, d_in + PLAYER_RADIUS) + CROSS_SLACK {
+            if room >= run_tics(v0, d_out) - run_tics(v0, trig_along) + CROSS_SLACK {
                 return None;
             }
         }
-        // (stepped over at a crawl and straight back: all of her out before it's at her head)
+        // (stepped over at a crawl and straight back: all of her out before it's at her head; a
+        // line out from its edge, as much less back as it's out)
         let (a, b) = nav.map.line_seg(li);
         let length = dist(a, b).max(1e-6);
         let (nx, ny) = ((b.1 - a.1) / length, -(b.0 - a.0) / length);
-        let at = closest_on_portal(obs.pos(), portal.p1, portal.p2);
-        let into = mesh.poly_at((at.0 + nx, at.1 + ny)).is_some_and(|p| mesh.poly(p).sector == s);
-        let sign = if into { 1.0 } else { -1.0 };
-        let clear = PLAYER_RADIUS * (nx.abs() + ny.abs()) + KICK_PAST + 1.0;
+        let at = closest_on_portal(at, portal.p1, portal.p2);
+        let sign = if (beyond.0 - at.0) * nx + (beyond.1 - at.1) * ny > 0.0 { 1.0 } else { -1.0 };
+        let clear = (PLAYER_RADIUS * (nx.abs() + ny.abs()) + KICK_PAST - gap).max(0.0) + 1.0;
         if room < run_tics(-KICK_SPEED, clear) + CROSS_SLACK {
             return Some(self.fail(obs, &format!("the crusher (sector {s}) has stopped too low to get through or set off from its edge")));
         }

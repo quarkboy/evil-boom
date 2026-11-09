@@ -1517,3 +1517,11 @@ fists at a cacodemon, as before, this time killed.
   too (v41), the route walked on through close fights, E2 7.0 -> 7.9 but E3 7.0 -> 5.6 and Doom II
   27 -> 25 (her own rocket pressed walking on, MAP10/MAP12). Ammo hold only: E3 7.0 -> 7.1 (1/8),
   doom2 arena 226 -> 227, the rest the same.
+- **A stopped crusher set off from a line before its edge** (E3M4 seed 1 in round A's regression
+  set: a slow crusher stopped low by a crusher-stop line, its start lines a ring 8 units out from
+  its edge; walking in, she crossed one and was under it as it came down, pinned, crushed 36
+  times): `set_off_first` knew only a start line on the crusher's own edge. Now it takes the last
+  line on the way in, up to and over the edge, that sets it off: the timing runs from her middle
+  crossing that line, and she's set off from it at a crawl, backing off only as far as all of her
+  is out of the crusher (less by how far out the line is). E3 7.1 -> 7.5 (E3M6 seed 6 through), the
+  rest the same.
