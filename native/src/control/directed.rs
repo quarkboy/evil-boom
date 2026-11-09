@@ -77,12 +77,13 @@ pub enum Order {
     /// would rather not cross on its own (a floor that hurts), if it's a way there that won't kill
     /// her
     Go(String, bool),
-    /// explore an area (by id or name) till there's nothing more known to do in it; secrets: the
-    /// walls she suspects of hiding something pressed too (slow, so hers to ask for, the user's)
-    ExploreArea(String, bool),
+    /// explore an area (by id or name) till there's nothing more known to do in it; and search
+    /// its walls for secrets this thoroughly (0 not, 3 every suspicious one: slow, so hers to ask
+    /// for, the user's)
+    ExploreArea(String, u8),
     /// explore that way (degrees, 0 east, 90 north) till there's nothing more known that way;
-    /// secrets as for an area
-    ExploreWay(f64, bool),
+    /// the search as for an area
+    ExploreWay(f64, u8),
     /// out by an exit she knows
     Exit,
     /// stop and wait
@@ -105,10 +106,10 @@ pub struct Report {
 enum Doing {
     /// one objective: its id, what it's called
     Once(String, String),
-    /// objectives inside an area, one after another (and its suspected walls, if secrets)
-    Area(String, String, bool),
-    /// objectives that way, one after another (secrets as for an area)
-    Way(f64, bool),
+    /// objectives inside an area, one after another (and its walls searched, that thoroughly)
+    Area(String, String, u8),
+    /// objectives that way, one after another (the search as for an area)
+    Way(f64, u8),
     /// off a floor that hurts, her own doing (not news)
     Off,
     /// a pickup she takes by herself, waiting (not news)
@@ -249,7 +250,7 @@ impl Director {
             return None;
         }
         let count = |f: &dyn Fn(&Objective) -> bool| open.iter().filter(|o| f(o)).map(id_of).collect::<std::collections::BTreeSet<_>>().len();
-        let explore = count(&|o| explores(o, false));
+        let explore = count(&|o| explores(o));
         let switches = count(&|o| o.kind == Kind::Switch);
         let doors = count(&|o| o.kind == Kind::Door);
         // (the items tally's own apart from the rest: "12 items seen" beside "items 5/6" read as
@@ -377,7 +378,7 @@ impl Director {
         let mut out: Vec<Entry> = match topic {
             Topic::Areas => {
                 let open = self.open_objectives(agent, obs);
-                let walls = agent.x_mut().suspected_walls(obs);
+                let walls = agent.x_mut().suspected_walls(obs, 3);
                                 let known = agent.x().knowledge.known_polys();
                 let nav = std::rc::Rc::clone(&agent.x().nav);
                 let here = nav.poly_at(pos).map(|p| nav.sector_of_poly(p));
@@ -394,8 +395,8 @@ impl Director {
                     .values()
                     .map(|a| {
                         let inside = |o: &&Objective| nav.poly_at(o.goal).is_some_and(|p| a.sectors.contains(&nav.sector_of_poly(p)));
-                        let left = open.iter().filter(|o| explores(o, false)).filter(inside).count();
-                        let hiding = open.iter().chain(&walls).filter(|o| is_search(o)).filter(inside).map(id_of).collect::<std::collections::BTreeSet<_>>().len();
+                        let left = open.iter().filter(|o| explores(o)).filter(inside).count();
+                        let hiding = by_thoroughness(walls.iter().filter(inside));
                         let mut what = Places::sketch(a);
                         let in_it = here.is_some_and(|s| a.sectors.contains(&s));
                         if in_it {
@@ -404,8 +405,8 @@ impl Director {
                             done.insert(a.id.clone());
                         }
                         what.push_str(&match (left, hiding) {
-                            (0, 0) => ", explored, secrets too".to_string(),
-                            (0, n) => format!(", explored, {n} wall{} to search", if n == 1 { "" } else { "s" }),
+                            (0, [0, 0, 0]) => ", explored, no walls to search".to_string(),
+                            (0, [a, b, c]) => format!(", explored, {a}/{b}/{c} walls to search"),
                             (n, _) => format!(", {n} to explore"),
                         });
                         Entry { id: a.id.clone(), what, at: a.center }
@@ -575,8 +576,8 @@ impl Director {
                 if self.next_in(agent, obs, secrets, |d, a, o| d.in_area(a, &id, o)) {
                     self.doing = Some(Doing::Area(id, what, secrets));
                 } else {
-                    let found = self.found(agent, obs, secrets, |d, a, o| d.in_area(a, &id, o));
-                    self.report(obs, true, format!("Explored {what}{}.{found}", if secrets { ", secrets too" } else { "" }));
+                    let found = self.found(agent, obs, |d, a, o| d.in_area(a, &id, o));
+                    self.report(obs, true, format!("Explored {what}{}.{found}", searched(secrets)));
                 }
             }
             Some(Doing::Way(b, secrets)) => {
@@ -585,8 +586,8 @@ impl Director {
                 if self.next_in(agent, obs, secrets, fits) {
                     self.doing = Some(Doing::Way(b, secrets));
                 } else {
-                    let found = self.found(agent, obs, secrets, fits);
-                    self.report(obs, true, format!("Explored {}{}.{found}", compass(b), if secrets { ", secrets too" } else { "" }));
+                    let found = self.found(agent, obs, fits);
+                    self.report(obs, true, format!("Explored {}{}.{found}", compass(b), searched(secrets)));
                 }
             }
         }
@@ -622,8 +623,8 @@ impl Director {
                     self.report(obs, true, format!("Exploring {what}{}.", with_secrets(secrets)));
                     self.doing = Some(Doing::Area(id, what, secrets));
                 } else {
-                    let found = self.found(agent, obs, secrets, fits);
-                    self.report(obs, true, format!("Nothing to {} in {what}.{found}", if secrets { "explore or search" } else { "explore" }));
+                    let found = self.found(agent, obs, fits);
+                    self.report(obs, true, format!("Nothing to {} in {what}.{found}", if secrets > 0 { "explore or search" } else { "explore" }));
                 }
             }
             Order::ExploreWay(b, secrets) => {
@@ -633,8 +634,8 @@ impl Director {
                     self.report(obs, true, format!("Exploring {}{}.", compass(b), with_secrets(secrets)));
                     self.doing = Some(Doing::Way(b, secrets));
                 } else {
-                    let found = self.found(agent, obs, secrets, fits);
-                    self.report(obs, false, format!("Nothing to {} {}.{found}", if secrets { "explore or search" } else { "explore" }, compass(b)));
+                    let found = self.found(agent, obs, fits);
+                    self.report(obs, false, format!("Nothing to {} {}.{found}", if secrets > 0 { "explore or search" } else { "explore" }, compass(b)));
                 }
             }
         }
@@ -794,16 +795,13 @@ impl Director {
     }
 
     /// What an exploring order leaves to her, as sentences for its end ("" if nothing): the
-    /// switches found and not pressed, and (not searching) the walls that could hide secrets.
-    fn found(&mut self, agent: &mut Agent, obs: &Observation, secrets: bool, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> String {
+    /// switches found and not pressed, and the walls still to search at each thoroughness.
+    fn found(&mut self, agent: &mut Agent, obs: &Observation, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> String {
         let mut out = self.switches_found(agent, obs, &fits);
-        if !secrets {
-            let mut walls = self.open_objectives(agent, obs);
-            walls.extend(agent.x_mut().suspected_walls(obs));
-            let n = walls.iter().filter(|o| is_search(o) && fits(self, agent, o)).map(id_of).collect::<std::collections::BTreeSet<_>>().len();
-            if n > 0 {
-                out.push_str(&format!(" {n} wall{} to search for secrets.", if n == 1 { "" } else { "s" }));
-            }
+        let walls = agent.x_mut().suspected_walls(obs, 3);
+        let [a, b, c] = by_thoroughness(walls.iter().filter(|o| fits(self, agent, o)));
+        if c > 0 {
+            out.push_str(&format!(" Walls to search: {a}/{b}/{c}."));
         }
         out
     }
@@ -846,17 +844,13 @@ impl Director {
 
     /// The best of the explorer's objectives that `fits` (and an exploring one: not out by an exit,
     /// not off through a teleporter), taken up. False if there's none (or no way to any).
-    fn next_in(&mut self, agent: &mut Agent, obs: &Observation, secrets: bool, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> bool {
-        let mut options = self.open_objectives(agent, obs);
-        if secrets {
-            // (every wall she suspects, not just the strong ones by her the explorer offers)
-            let walls = agent.x_mut().suspected_walls(obs);
-            let have: std::collections::BTreeSet<String> = options.iter().map(id_of).collect();
-            options.extend(walls.into_iter().filter(|w| !have.contains(&id_of(w))));
-        }
-        let mut options: Vec<Objective> = options.into_iter().filter(|o| explores(o, secrets)).filter(|o| !self.taken.contains(&taken_key(o))).filter(|o| fits(self, agent, o)).collect();
-        // (the searching after the rest, as a player does: what's in plain sight first)
-        options.sort_by_key(is_search);
+    fn next_in(&mut self, agent: &mut Agent, obs: &Observation, secrets: u8, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> bool {
+        let open = self.open_objectives(agent, obs);
+        // (the walls searched that thoroughly, not the strong ones by her the explorer offers;
+        // after the rest, as a player does: what's in plain sight first)
+        let walls = agent.x_mut().suspected_walls(obs, secrets);
+        let options: Vec<Objective> =
+            open.into_iter().filter(explores).chain(walls).filter(|o| !self.taken.contains(&taken_key(o))).filter(|o| fits(self, agent, o)).collect();
         for o in options {
             let id = taken_key(&o);
             if agent.x_mut().take(obs, o) {
@@ -955,11 +949,34 @@ pub fn bearing(s: &str) -> Option<f64> {
     })
 }
 
-/// Is o one of exploring's (secrets: searching too)? Not out by an exit or a teleporter, not after
-/// a noise or a monster; nor a switch: pressing one is hers to decide, it may set off anything
-/// (exploring finds them and says so, the user's); nor, unless asked, pressing walls for secrets.
-fn explores(o: &Objective, secrets: bool) -> bool {
-    !matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Noise | Kind::Recheck | Kind::Hunt | Kind::Switch) && (secrets || !is_search(o))
+/// Is o one of exploring's? Not out by an exit or a teleporter, not after a noise or a monster;
+/// nor a switch: pressing one is hers to decide, it may set off anything (exploring finds them and
+/// says so, the user's); nor pressing walls for secrets (a search asked for adds its own).
+fn explores(o: &Objective) -> bool {
+    !matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Noise | Kind::Recheck | Kind::Hunt | Kind::Switch) && !is_search(o)
+}
+
+/// The walls among `walls` (a search's, their suspicion the secret score) to search at each
+/// thoroughness, 1 to 3.
+fn by_thoroughness<'a>(walls: impl Iterator<Item = &'a Objective>) -> [usize; 3] {
+    let mut n = [0; 3];
+    for o in walls {
+        for (count, (press, _)) in n.iter_mut().zip(crate::knowledge::model::THOROUGHNESS) {
+            if o.suspicion >= press {
+                *count += 1;
+            }
+        }
+    }
+    n
+}
+
+/// An exploring order's end, its search said: ", secrets 2 too".
+fn searched(secrets: u8) -> String {
+    if secrets > 0 {
+        format!(", secrets {secrets} too")
+    } else {
+        String::new()
+    }
 }
 
 /// Searching for secrets: pressing a wall she suspects, back into a secret sector.
@@ -967,11 +984,11 @@ fn is_search(o: &Objective) -> bool {
     matches!(o.kind, Kind::Wall | Kind::Secret)
 }
 
-fn with_secrets(secrets: bool) -> &'static str {
-    if secrets {
-        " +secrets"
+fn with_secrets(secrets: u8) -> String {
+    if secrets > 0 {
+        format!(" +secrets {secrets}")
     } else {
-        ""
+        String::new()
     }
 }
 

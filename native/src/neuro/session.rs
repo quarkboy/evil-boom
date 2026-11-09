@@ -35,11 +35,11 @@ pub fn actions() -> Vec<Value> {
     let s = |props: Value, required: &[&str]| json!({ "type": "object", "properties": props, "required": required });
     // (short: every word here is in Evil's context for the whole game, the user's)
     vec![
-        json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids. Areas: only unexplored, current and named ones unless all.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
+        json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids. Areas: only unexplored, current and named ones unless all; a/b/c walls to search: at secrets 1/2/3.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
         json!({ "name": "doom_press", "description": "Press a switch. Exploring never presses them.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
         json!({ "name": "doom_inspect", "description": "What something is and where.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
         json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" } }), &["ref"]) }),
-        json!({ "name": "doom_explore", "description": "Explore an area or a direction (N, NE, ...). secrets: also search walls (slow).", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "boolean" } }), &["target"]) }),
+        json!({ "name": "doom_explore", "description": "Explore an area or a direction (N, NE, ...). secrets: also search its walls, 1 the likeliest few, 2 most, 3 every suspicious one (slow).", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "integer", "enum": [0, 1, 2, 3] } }), &["target"]) }),
         json!({ "name": "doom_name", "description": format!("Name something (up to {NAME_MAX} characters); the name then works as its id."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
@@ -199,7 +199,12 @@ impl Session {
             }
             "doom_explore" => {
                 let Some(t) = arg("target") else { return (false, "target: an area or a direction (N, NE, ...).".into()) };
-                let secrets = args.get("secrets").and_then(Value::as_bool).unwrap_or(false);
+                // (0-3; true, as it was, the middle one)
+                let secrets = match args.get("secrets") {
+                    Some(Value::Bool(true)) => 2,
+                    Some(v) => v.as_u64().map_or(0, |n| n.min(3) as u8),
+                    None => 0,
+                };
                 if let Some(b) = bearing(t) {
                     self.director.order(Order::ExploreWay(b, secrets));
                     (true, "OK.".into())

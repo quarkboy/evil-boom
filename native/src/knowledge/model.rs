@@ -11,7 +11,7 @@
 mod learning;
 mod perception;
 mod walls;
-pub use walls::{Signs, Wall, SECRET_MIN};
+pub use walls::{Signs, Wall, THOROUGHNESS};
 
 use crate::geom::{cells, dist, Point};
 use crate::map::ML_MAPPED;

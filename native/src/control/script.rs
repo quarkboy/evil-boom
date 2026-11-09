@@ -55,13 +55,15 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
                     _ => Order::Go(w[2..].join(" "), false),
                 },
                 Some("explore") => {
-                    let secrets = w.len() > 3 && w.last() == Some(&"secrets");
-                    let r = w[2..w.len() - usize::from(secrets)].join(" ");
+                    // (secrets N: the walls searched that thoroughly, 1-3; secrets alone, 2)
+                    let at = w.iter().rposition(|x| *x == "secrets").filter(|&i| i > 2);
+                    let secrets = at.map_or(0, |i| w.get(i + 1).and_then(|n| n.parse::<u8>().ok()).unwrap_or(2).min(3));
+                    let r = w[2..at.unwrap_or(w.len())].join(" ");
                     bearing(&r).map_or(Order::ExploreArea(r, secrets), |b| Order::ExploreWay(b, secrets))
                 }
                 Some("exit") => Order::Exit,
                 Some("stop") => Order::Stop,
-                _ => return Err("order go REF [risky] [sure] | explore REF|DIR [secrets] | exit [sure] | stop".into()),
+                _ => return Err("order go REF [risky] [sure] | explore REF|DIR [secrets 1-3] | exit [sure] | stop".into()),
             };
             d.order(o);
             Ok(Vec::new())

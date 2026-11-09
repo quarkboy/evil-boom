@@ -2,7 +2,7 @@
 
 use super::{route_length, Explorer, Hooks, Kind, Objective, Spots, Suspecting, GIVE_UP_TICS, JUMP_MISSES, STUCK_TIMES, WHILE_OPEN};
 use crate::geom::{dist, Point};
-use crate::knowledge::model::{Behind, Note, Wall, SECRET_MIN, SUSPICION_MIN};
+use crate::knowledge::model::{Behind, Note, Wall, SUSPICION_MIN, THOROUGHNESS};
 use crate::motor::follower::RouteFollower;
 use crate::motor::Observation;
 use crate::navigator::TriggerLine;
@@ -57,15 +57,18 @@ impl Explorer {
     /// out (as a mapper marks a switch or a gun line). Not every wall with a blank behind it,
     /// pressed and shot: the user's, watching E1M1's start room searched wall by wall, sixteen of
     /// them. Her reach as last brought up to date.
-    pub fn suspected_walls(&mut self, obs: &Observation) -> Vec<Objective> {
-        let found: Vec<(f64, usize, Point, Point)> = self.secret_suspects(obs).into_iter().filter(|w| self.standable(w.2, false)).collect();
-        found.into_iter().map(|(score, li, stand, mid)| wall_objective(score, li, stand, mid, self.knowledge.marked(li))).collect()
+    /// At `thoroughness` 1-3 (0: none): pressed from a `secret_score` of THOROUGHNESS's first,
+    /// shot too (a round's) from its second; the objective's suspicion its secret score.
+    pub fn suspected_walls(&mut self, obs: &Observation, thoroughness: u8) -> Vec<Objective> {
+        let Some(&(press, shoot)) = usize::from(thoroughness).checked_sub(1).and_then(|i| THOROUGHNESS.get(i)) else { return Vec::new() };
+        let found: Vec<(f64, usize, Point, Point)> = self.secret_suspects(obs).into_iter().filter(|w| w.0 >= press && self.standable(w.2, false)).collect();
+        found.into_iter().map(|(score, li, stand, mid)| wall_objective(score, li, stand, mid, score >= shoot)).collect()
     }
 
-    /// The walls a search for secrets presses, best first (one for each place behind): those
-    /// with a `secret_score` of SECRET_MIN or more (the survey's weights, not the rounds' score:
-    /// with the rounds' over 2, the same secrets with a quarter more walls). Her reach as last
-    /// brought up to date.
+    /// The walls a search for secrets might press, best first (one for each place behind): those
+    /// with a `secret_score` the most thorough search goes to (the survey's weights, not the
+    /// rounds' score: with the rounds' over 2, the same secrets with a quarter more walls). Her
+    /// reach as last brought up to date.
     fn secret_suspects(&mut self, obs: &Observation) -> Vec<(f64, usize, Point, Point)> {
         let reach = self.reach.clone();
         let known = self.knowledge.known_polys();
@@ -79,7 +82,7 @@ impl Explorer {
             let Wall::Suspect { signs, behind, stand, aim } = w else { continue };
             let score = signs.secret_score();
             let key = behind.unwrap_or(Behind::Line(li));
-            if score >= SECRET_MIN && best.get(&key).is_none_or(|b| b.0 < score) {
+            if score >= THOROUGHNESS[2].0 && best.get(&key).is_none_or(|b| b.0 < score) {
                 best.insert(key, (score, li, stand, aim));
             }
         }

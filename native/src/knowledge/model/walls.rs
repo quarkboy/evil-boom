@@ -472,9 +472,13 @@ pub struct Signs {
     pub panel: f64,
 }
 
-/// A search for secrets asked for (Evil's explore with secrets) presses the walls with a
-/// `secret_score` this high or more.
-pub const SECRET_MIN: f64 = 1.0;
+/// A search for secrets asked for (Evil's explore with secrets 1-3): at each thoroughness, the
+/// `secret_score` a wall needs to be pressed, and to be shot too (a gun line is rarer than a hand
+/// one: higher). Over Doom E1-E3 and Doom II, every area searched once she'd explored all she
+/// could (`evil-boom secret-survey`): 1 presses 8-9 walls a map (2-2.5 shot) and gets to 64-70%
+/// of the secrets behind walls the rubric weighs; 2, 34-38 (8-9 shot), 86-90%, the gun secrets 5
+/// of 6; 3, 122-152 (31-35 shot), all of them. (The user's: 0 none, 3 everything suspicious.)
+pub const THOROUGHNESS: [(f64, f64); 3] = [(4.0, 7.0), (1.0, 4.0), (-1.5, 1.5)];
 
 impl Signs {
     /// How likely the wall hides a secret, for a search for one asked for: each sign's log2 lift
