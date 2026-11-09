@@ -90,7 +90,11 @@ impl RouteFollower {
         // went down under her, walked on to the jump she'd planned, off its corner into the blood)
         if let Some(s) = nav.nav.mesh.poly_at(obs.pos()).map(|p| nav.nav.sector_of_poly(p)) {
             let on_floor = obs.z.is_none_or(|z| z <= obs.heights[s].floor + 0.5);
-            let going_down = obs.height(s).is_some_and(|l| l.floor < nav.nav.movers.initial[s].floor - 0.5);
+            // (going down now, lower than a tic ago: not just lower than it started. A floor gone
+            // down for good is a floor, nukage or not: E2M1's bridge over the nukage, lowered into
+            // it the first time across, "going down under her" each time after, run off twelve
+            // times, the door past it never got to; seeds 3 and 6 stuck)
+            let going_down = obs.height(s).zip(self.prev_live.get(s)).is_some_and(|(l, p)| l.floor < p.floor - 0.01);
             let expected = self.watches.iter().any(|w| w.expect.sector == s && !w.over) || step.trigger.as_ref().is_some_and(|t| t.effect(s).is_some());
             // (and only with somewhere to run to: down in the pit already, it's for the explorer
             // to find the way out)

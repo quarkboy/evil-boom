@@ -382,21 +382,23 @@ impl Explorer {
                     .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
                     .is_some_and(|t| nav.map.things.iter().any(|m| (m.x - t.x).abs() < 1.0 && (m.y - t.y).abs() < 1.0))
         };
+        // (no switch pressed from a floor that hurts while there's floor that doesn't to get to:
+        // what a switch does is anyone's guess, and shut in there is dead, a suit on or not (it
+        // runs out). E2M2: seed 2, an 80 drop into a nukage pit for one; seed 1, waded in with a
+        // suit on; both presses raised the pit's one low way out, sealed in, dead. Shut in already,
+        // no floor that doesn't in reach, it's hers to try: E1M4's lift switch)
+        let shut_in = !reach.iter().any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)));
+        let switch_in_harm = |this: &Self, o: &Objective| o.kind == Kind::Switch && !shut_in && nav.poly_at(o.goal).is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)));
         let mut usable = |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
+            let objectives: Vec<Objective> = objectives.into_iter().filter(|o| !switch_in_harm(this, o)).collect();
             if risky {
                 // nothing safe left: anything, one-way drops and nukage and all; but not for a
                 // sound (MAP09: a noise far off took her down into a pit), and never away from
                 // every way out there is, as far as she knows (MAP24's secret ledge over the
                 // nukage pit: the level given up for a look)
-                // (nor down onto a floor that hurts to press a switch she's not tried: what it does
-                // is anyone's guess, and stuck there is dead; E2M2 seed 2, an 80 drop into a
-                // nukage pit for one, whose press raised the pit's one low way out, a minute of
-                // it to death. Down there already, it's hers to try: E1M4's lift switch)
-                let off_harm = !this.on_hurting_floor(obs);
                 return objectives
                     .into_iter()
                     .filter(|o| o.kind != Kind::Noise)
-                    .filter(|o| !(o.kind == Kind::Switch && off_harm && nav.poly_at(o.goal).is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)))))
                     .filter(|o| {
                         exit_polys.is_empty()
                             || o.kind == Kind::Exit
