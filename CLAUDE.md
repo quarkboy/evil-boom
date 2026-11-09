@@ -53,8 +53,9 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   each (1088 runs, ~17 min at `--jobs 12`; a progress window pops up). A run scores 1 for an exit,
   else half its kill share; the score is the mean over level-skills. Consistency counts too: the
   levels beaten on every run, and each level's spread. `score-report A.tsv B.tsv` compares sets
-  (TSVs in `out/score/`). Its own noise: about +-0.006 a measurement, so a change of 0.02 or more
-  is real; a single level's points move about +-0.07 by seed alone. Judge a change by it; commit
+  (TSVs in `out/score/`). Its own noise: about +-0.008 a measurement (seven sets of near-identical
+  builds: 0.428-0.448), so one set against another needs 0.02-0.025 to be real; for smaller
+  effects, two sets a build; a single level's points move about +-0.07 by seed alone. Judge a change by it; commit
   messages give the before/after score.
 - **Arenas aren't part of the score** (the user's: too artificial). Use them while developing a
   fight idea, not to judge it.
