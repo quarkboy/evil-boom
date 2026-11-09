@@ -328,6 +328,18 @@ impl Director {
         out
     }
 
+    /// What a reference (an id or one of her names) is, among everything listable now.
+    pub fn find(&mut self, agent: &mut Agent, obs: &Observation, r: &str) -> Option<Entry> {
+        let id = self.resolve(r);
+        [Topic::Areas, Topic::Doors, Topic::Items, Topic::Exits, Topic::Monsters].into_iter().find_map(|t| self.list(agent, obs, t).into_iter().find(|e| e.id == id))
+    }
+
+    /// Is something listed under that id or name an area?
+    pub fn is_area(&mut self, agent: &Agent, r: &str) -> bool {
+        let id = self.resolve(r);
+        self.places(agent).by_id(&id).is_some()
+    }
+
     /// One line for an entry: its id, her name for it, what it is, which way and how far.
     pub fn describe(&self, e: &Entry, obs: &Observation) -> String {
         let pos = obs.pos();

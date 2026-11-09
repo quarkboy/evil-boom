@@ -234,6 +234,8 @@ pub struct WatchOptions {
     /// directed play: orders read from this file as they're added to it (control::script's
     /// commands, a line each), what comes back written beside it (FILE.out) and into the log
     pub directed: Option<std::path::PathBuf>,
+    /// directed play by Neuro: the WebSocket URL of Neuro (or `evil-boom neuro-mock`)
+    pub neuro: Option<String>,
 }
 
 /// A watched game's orders, from a file added to as it plays.
@@ -312,6 +314,8 @@ struct Watch {
     hold: Option<Hold>,
     /// directed play's orders, if it's directed
     feed: Option<Feed>,
+    /// directed by Neuro
+    neuro: Option<crate::neuro::session::Session>,
     /// no switches or doors (an arena's fight)
     no_use: bool,
     /// secrets found so far (as the tally has them)
@@ -571,11 +575,12 @@ fn level(w: &Wad, m: Arc<MapData>, nav: Rc<Navigator>, engine: Engine, o: &Watch
         agent.x_mut().exit_last = true;
         agent.x_mut().secrets_mode = true;
     }
-    if o.directed.is_some() {
+    if o.directed.is_some() || o.neuro.is_some() {
         crate::control::directed::Director::take_over(&mut agent);
     }
     let mut watch = Watch::new(w, m, &map_name, engine, agent, o.focus, o.lives - 1);
     watch.feed = o.directed.as_deref().map(Feed::new);
+    watch.neuro = o.neuro.as_deref().map(crate::neuro::session::Session::new);
     watch.hold = hold;
     watch.speed = o.speed;
     watch.show_all = o.show_all;
@@ -732,6 +737,7 @@ impl Watch {
         Watch {
             hold: None,
             feed: None,
+            neuro: None,
             no_use: false,
             secrets_seen: 0,
             m,
@@ -772,6 +778,11 @@ impl Watch {
         self.frame = self.engine.frame();
         if let Some(feed) = &mut self.feed {
             for l in feed.tic(&mut self.agent, &obs) {
+                self.agent.x_mut().log.push(l);
+            }
+        }
+        if let Some(neuro) = &mut self.neuro {
+            for l in neuro.tic(&mut self.agent, &obs) {
                 self.agent.x_mut().log.push(l);
             }
         }

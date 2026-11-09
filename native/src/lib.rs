@@ -31,6 +31,7 @@ pub mod motor;
 pub mod movers;
 pub mod nav;
 pub mod navigator;
+pub mod neuro;
 pub mod plan;
 pub mod play;
 pub mod replay;

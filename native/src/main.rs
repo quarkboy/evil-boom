@@ -7,6 +7,9 @@
 //!                                               map, what she has carried level to level; K seeds
 //!                                               (8) side by side, --jobs at a time
 //!   evil-boom dump-nav <wad> <map>                   the level's analysis (for comparing)
+//!   evil-boom neuro-mock [--port N] [FILE]           a stand-in Neuro server (port 8000): actions sent
+//!                                               from FILE (out/neuro/actions.txt) as lines are added,
+//!                                               everything the game sends shown and in FILE.log
 //!   evil-boom follow <wad> <map>                     plan the level, follow the plan (seed 0)
 //!   evil-boom drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
 //!   evil-boom sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things,
@@ -20,12 +23,13 @@
 //!   evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
 //!       [--crf N] [--preset P] [--ffmpeg PATH] [run options]   a watch played as fast as it goes
 //!       into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told)
-//!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [--directed FILE] [run options]
+//!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [--directed FILE] [--neuro URL] [run options]
 //!       watch her play, with what she knows beside the game, the game's sound on (space pause,
 //!       +/- speed, A the whole map, F follow, M mute, wheel zoom, Esc quit; the sound off while
 //!       paused or not at x1). --directed FILE: directed play, orders read from FILE as lines are
 //!       added to it (list, name, order: see control::script), what comes back in the log and in
-//!       FILE.out
+//!       FILE.out. --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
+//!       or evil-boom neuro-mock)
 //!
 //! Run options: --lives N (unlimited), --max-seconds S (3600, all lives together), --seed N|random (0), --peek, --secrets,
 //! --expert, --fight SKILL, --mortal, --complete (every kill, item and secret, then out: --fight 4
@@ -495,6 +499,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
         focus: None,
         sound: true,
         directed: None,
+        neuro: None,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -505,6 +510,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
             "--episode" => w.episode = true,
             "--headless" => w.headless = true,
             "--mute" => w.sound = false,
+            "--neuro" => w.neuro = Some(it.next().cloned().unwrap_or_else(|| "ws://127.0.0.1:8000".into())),
             "--directed" => w.directed = Some(std::path::PathBuf::from(it.next().ok_or("--directed FILE (orders, a line each, read as they're added)")?)),
             _ => names.push(a.clone()),
         }
@@ -681,6 +687,11 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("dump-nav") if args.len() == 3 => dump_nav(&args[1], &args[2]),
+        Some("neuro-mock") => {
+            let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);
+            let file = args.iter().skip(1).rfind(|a| !a.starts_with("--") && a.parse::<u16>().is_err()).cloned().unwrap_or_else(|| "out/neuro/actions.txt".into());
+            evildoom::neuro::mock::serve(port, std::path::Path::new(&file))
+        }
         Some("follow") if args.len() == 3 => follow(&args[1], &args[2]),
         Some("sector") if args.len() >= 4 => sector(&args[1], &args[2], &args[3..]),
         Some("run-map") => run_one(&args[1..]),

@@ -22,6 +22,8 @@ viewer = ["dep:minifb", "dep:font8x8", "dep:png"]
 libloading = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# (the Neuro integration's WebSocket: plain ws:// to a local server, no TLS)
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 sha2 = "0.10"
 # (X11 only: its Wayland window has no decorations where the compositor gives none, WSLg among
 # them; X11 windows get them there and on Wayland desktops through XWayland)
