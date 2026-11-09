@@ -1809,3 +1809,38 @@ traced to there, not fixed). No exit anywhere on HNTR-UV either way.
 Results (HNTR, one life): E1 8.0, E2 7.9 -> 7.6 (5/8), E3 8.0 -> 7.2 (4 -> 0/8; no one change: each
 taken out alone gives 7.2-7.4, the spider mastermind's fight by seed), Doom II 27/32 (MAP12 seed 1
 exits, MAP10 seed 0 dies at the exit); arenas 119/128, 223/240.
+
+## 20-minute pass, round I: a retreat keeps its legs over a dodge that clears nothing; the fist not up for what it can't reach; a way past the monster already at her (2026-11-09)
+
+Round I: MAP16, MAP17, MAP18, MAP19.
+
+- **A retreat's legs kept from a dodge that clears nothing; the dodge leans its way** (MAP16 HNTR:
+  the blue skull on a small raised platform, its trap's imps; "backing out the way she came", yet
+  per-tic positions within 20 of the key from the retreat's start till dead, 197 from fireballs:
+  on so small a ledge `safe()` turns down almost every way, the dodge had none or flipped two
+  opposite ways tic by tic, standing her still, and its pull was the errand's goal, the key under
+  her): retreating, a dodge takes the legs only with a way clear of every missile coming
+  (`dodge_clear`: its best score >= 0); falling back, it leans towards the retreat route's next
+  point (`RETREAT_AHEAD` on), not the errand. MAP16 ITYTD and HNTR seeds 0-3: 0/8 -> 8/8 exit.
+- **The fist not up for what it can't reach while a gun has a shot** (MAP17 HNTR, stuck the hour:
+  berserk, a pain elemental on a ledge 80 up; the melee given up, `best_gun` kept the fist, free and
+  fastest up close; the tree flipped between stepping for a shot and closing in 16,000 times each,
+  149 bullets and 50 shells never fired): `best_gun` passes the fist over for a target out of her
+  fist's reach (given up on, or where a stalled melee left it) while any gun has a shot in it.
+  MAP17 HNTR seed 2 exits, the others much further; ITYTD seed 2 stuck instead (a revenant 1200
+  off closed in on for the hour: a shot but no reach, nothing gives it up; to do).
+- **A way off for ammo isn't walled off by the monster already at her** (MAP19 ITYTD: the pistol
+  empty, two spectres at 47 and 55; `for_ammo`'s way, passing no nearer than she was, was called off
+  the next tic by `walled_off`, which counted any monster within touch of the way, the one beside
+  her too; every retry the same, bitten to death on the spot): a monster walls off her way only if
+  the way passes within touch of it and nearer it than she is now (less `AMMO_MARGIN`), the test
+  `for_ammo` picks by. And (MAP18) a for-ammo way called off as walled off counts as that try: the
+  cover branch goes to cover for `RETREAT_AGAIN` (it flipped ammo, over, ammo, tic by tic, under
+  fireballs).
+- Seen, to do: a lip over a demon pit (MAP19: her box on the ledge, her middle over the pit, bitten
+  from below with no shot, `blocking()`'s facing sense exempting it from the no-shot give-up);
+  MAP16 HMP/UV's arch-vile at 30-39 s; MAP18's opening imps (the far nearly-dead one targeted while
+  two claw her).
+
+Results (HNTR, one life): E1 8.0, E2 7.6 -> 7.8 (6/8), E3 7.2 -> 8.0 (1/8), Doom II 27/32; arenas
+119 -> 118/128, 223 -> 222/240 (spider and cyberdemon fights both ways).

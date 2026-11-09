@@ -154,7 +154,13 @@ impl Combat {
             }
         }
         self.dodge_way = best.map(|b| b.1);
+        self.dodge_clear = best.is_some_and(|b| b.0 >= 0.0);
         self.dodge_way
+    }
+
+    /// Did the last dodge find a way clear of every missile coming?
+    pub fn dodge_clear(&self) -> bool {
+        self.dodge_clear
     }
 
     /// Back off from `what`: straight away if the floor's safe that way, else as near that as is.

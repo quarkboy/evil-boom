@@ -69,6 +69,8 @@ const POST_PEEK: f64 = 128.0;
 const POST_TICS: i64 = 6 * 35;
 /// after a retreat that found no cover, not again for this long
 const RETREAT_AGAIN: i64 = 3 * 35;
+/// a retreat's way, for a dodge to take: its next point at least this far on
+const RETREAT_AHEAD: f64 = 32.0;
 /// monsters this near, this many of them, spread round her this far (degrees): get out
 const SURROUNDED_NEAR: f64 = 640.0;
 const SURROUNDED_COUNT: usize = 3;
@@ -268,6 +270,8 @@ pub struct Player {
     retreat_tic: i64,
     /// the last retreat tried was for cover
     tried_cover: bool,
+    /// when a way off for ammo was last called off with one of them on it
+    walled_tic: i64,
     /// when something that shoots was last in sight
     shooters_tic: i64,
     /// where she was last tic (where she died, at a restart)
@@ -293,6 +297,7 @@ impl Player {
             bait_tic: -1_000_000_000,
             retreat_tic: -1_000_000_000,
             tried_cover: false,
+            walled_tic: -1_000_000_000,
             shooters_tic: -1_000_000_000,
             last_pos: (0.0, 0.0),
             plight: Plight::default(),
@@ -352,7 +357,11 @@ impl Player {
         // E2M2 seed 7, a crossing begun, an imp seen 2000 off, the fight's steering under it)
         let busy = self.explorer.follower.as_ref().is_some_and(|f| f.jumping() || f.crossing_crusher());
         let (errand, toward) = if busy { (String::new(), None) } else { self.fight.errand(&self.explorer, obs).map_or((String::new(), None), |(e, at)| (e, Some(at))) };
-        self.fight.combat.toward = toward;
+        // (falling back, the retreat's way is the way she's going: a dodge as clear along it
+        // takes it, not the errand's. Its errand the key she stood on, she dodged back and forth
+        // over it under fire from all round, the way back out never taken)
+        let back = self.retreat.as_ref().and_then(|r| r.route.planned_path(Some(obs.pos())).into_iter().flatten().find(|&p| dist(p, obs.pos()) > RETREAT_AHEAD));
+        self.fight.combat.toward = if busy { toward } else { back.or(toward) };
         self.fight.combat.routed = self.explorer.follower.as_ref().is_some_and(|f| !f.done && !f.failed);
         // (what she knows of floors gone to something that hurts, for where the fight takes her)
         self.fight.combat.changed_floors = self.explorer.knowledge.changed_floor.iter().filter(|(_, &h)| h).map(|(&s, _)| s).collect();
@@ -367,8 +376,17 @@ impl Player {
                 (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
             }
             return match d {
-                Some(d) if d.moving.is_some() && d.why.starts_with("dodging") => self.fight.combat.controls(obs, &d, None), // (a missile about to hit still comes first)
-                Some(d) => self.fight.combat.controls(obs, &d, Some(&c)),
+                // (a missile about to hit still comes first, when there's a way clear of it)
+                Some(d) if d.moving.is_some() && d.why.starts_with("dodging") && self.fight.combat.dodge_clear() => self.fight.combat.controls(obs, &d, None),
+                // (a dodge with no way to step doesn't stand her still: the retreat's legs go on.
+                // Stood on a ledge every step off it a drop, fireballs from all round, she stood
+                // dodging nowhere, the way back out never walked, till they had her)
+                Some(mut d) => {
+                    if d.why.starts_with("dodging") {
+                        d.takeover = false;
+                    }
+                    self.fight.combat.controls(obs, &d, Some(&c))
+                }
                 None => c,
             };
         }
@@ -442,7 +460,11 @@ impl Player {
             self.shooters_tic = obs.tic;
         }
         if let Some(r) = &self.retreat {
-            if r.route.done || r.route.failed || self.retreat_over(obs, r.kind) || (r.kind == RetreatKind::ForAmmo && self.walled_off(obs, &r.route)) {
+            let walled = r.kind == RetreatKind::ForAmmo && self.walled_off(obs, &r.route);
+            if walled {
+                self.walled_tic = obs.tic;
+            }
+            if r.route.done || r.route.failed || self.retreat_over(obs, r.kind) || walled {
                 let msg = if r.route.done { "got there".to_string() } else { format!("{} over", r.kind.name()) };
                 self.log(format!("tic {}: {msg}", obs.tic));
                 self.retreat = None;
@@ -482,11 +504,15 @@ impl Player {
 
     /// Unarmed, the rest of her way runs into one of them: it's moved onto her way since she
     /// chose it, and nothing moves it off (E2M5 on UV: a demon between her and the clip she was
-    /// off for, pushed against, bitten from 96 health to 29).
+    /// off for, pushed against, bitten from 96 health to 29). One beside her already walls off
+    /// only a way that takes her nearer it, as `for_ammo` chose: a way leading off from beside it
+    /// isn't into it (MAP19 ITYTD: two spectres on her, the way away dropped the tic after it was
+    /// chosen, every time, bitten to death where she stood).
     fn walled_off(&self, obs: &Observation, route: &RouteFollower) -> bool {
-        let path = route.planned_path(Some(obs.pos()));
+        let pos = obs.pos();
+        let path = route.planned_path(Some(pos));
         self.fight.combat.against_her().iter().any(|t| {
-            let touch = monster(t.name).map_or(20.0, |m| m.radius) + PLAYER_RADIUS;
+            let touch = (monster(t.name).map_or(20.0, |m| m.radius) + PLAYER_RADIUS).min(dist((t.x, t.y), pos) - AMMO_MARGIN);
             path.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).any(|(a, b)| segment_point_distance(a, b, (t.x, t.y)) < touch)
         })
     }
@@ -515,7 +541,12 @@ impl Player {
             // and the cover's end is when they stop shooting. The ammo first, cover if there's no
             // way off for it. E1M5 UV: fists out at 13 health, an imp's fireballs, a demon on her;
             // hid from the imp 190 tics, the demon followed, dead as the cover ended)
-            match unarmed.then(|| self.for_ammo(obs)).flatten() {
+            // (and a way off for ammo just called off, one of them on it, is that tried: cover,
+            // not the next way off past them, called off the tic after. MAP18 HNTR: out of
+            // shells, cacodemons on her, a way off chosen and called off every tic for 30 tics
+            // under their fireballs)
+            let walled = obs.tic - self.walled_tic < RETREAT_AGAIN;
+            match (unarmed && !walled).then(|| self.for_ammo(obs)).flatten() {
                 Some(r) => (RetreatKind::ForAmmo, Some(r)),
                 None => (RetreatKind::Cover, self.find_cover(obs)),
             }

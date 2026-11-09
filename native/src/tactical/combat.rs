@@ -189,6 +189,8 @@ pub struct Combat {
     homing_since: BTreeMap<i32, i64>,
     shake_spot: Option<(i32, Option<Point>)>,
     dodge_way: Option<Point>,
+    /// does that way take her out of every missile's way (not just the least bad)?
+    dodge_clear: bool,
     /// where the route's taking her mid-fight (an errand: health, a gun, ammo), for dodging
     /// towards (the user's: on to it while dodging, not stuck dodging where she stands)
     pub toward: Option<Point>,
@@ -328,6 +330,7 @@ impl Combat {
             homing_since: BTreeMap::new(),
             shake_spot: None,
             dodge_way: None,
+            dodge_clear: false,
             toward: None,
             changed_floors: BTreeSet::new(),
             sinks_into_harm,

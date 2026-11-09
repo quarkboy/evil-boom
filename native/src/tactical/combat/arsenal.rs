@@ -356,6 +356,13 @@ impl Combat {
                 // Anything that fights back is weighed as it is: wider, E3 lost 0.8 levels)
                 continue;
             }
+            if slot == 1 && self.guns_armed(obs) && self.out_of_fist_reach(obs, t) {
+                // (nor at anything closing in on has failed to get her to, a gun with a shot in it
+                // to hand: chosen for its speed up close, it walked her at it again and again;
+                // MAP17, the berserk fist up for a pain elemental on a ledge 276 off and 80 up,
+                // given up on, a chaingun with 149 bullets, stood under it for the hour)
+                continue;
+            }
             let health = obs.health.unwrap_or(100.0);
             if slot == 1 && ((w == CHAINSAW && !melee_at(&w, t.name)) || (health < LOW_HEALTH && w != weapon(1)) || claw_max(t.name) >= health) && self.guns_armed(obs) {
                 // (not the saw at what it won't keep flinching, with a gun to hand: a cacodemon's
