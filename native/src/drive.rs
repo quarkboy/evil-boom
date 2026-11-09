@@ -35,7 +35,7 @@
 //!   list TOPIC [N]      what she knows of: areas, doors, items, monsters, exits (ids, names,
 //!                       which way, how far)
 //!   name ID NAME...     a name for something listed (refused when too long or taken)
-//!   order go REF | order explore REF|DIR | order exit | order stop
+//!   order go REF [risky] | order explore REF|DIR [secrets] | order exit | order stop
 //!                       an order (REF an id or a name; DIR n, ne, east, ...)
 //!   run SECONDS         play on (directed) till she's done and waiting, or SECONDS; the reports
 
@@ -293,7 +293,7 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 Director::take_over(&mut s.agent);
                 println!("  directed: waiting for orders");
             }
-            "list" | "name" | "order" | "check" | "status" => {
+            "list" | "name" | "order" | "check" | "status" | "log" => {
                 let obs = s.obs();
                 match crate::control::script::command(&mut director, &mut s.agent, &obs, line) {
                     Ok(out) => out.iter().for_each(|l| println!("  {l}")),

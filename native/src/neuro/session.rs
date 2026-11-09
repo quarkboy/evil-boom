@@ -38,7 +38,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_press", "description": "Press a switch (by its id or your name for it). Exploring doesn't press switches: they can do anything, so that's your call. She reports what it did, if she sees.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
         json!({ "name": "doom_inspect", "description": "Say what one thing is, which way and how far, by its id or your name for it.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
         json!({ "name": "doom_go", "description": "Go to a place, pick up an item, try a door or switch, or take an exit, by its id or your name for it. She does it and reports back. Set risky to go even where she'd rather not (across a floor that hurts), as long as it won't kill her.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" } }), &["ref"]) }),
-        json!({ "name": "doom_explore", "description": "Explore an area (by its id or your name for it) or a direction (north, south-east, ...), until there's nothing more known to explore there.", "schema": s(json!({ "target": { "type": "string" } }), &["target"]) }),
+        json!({ "name": "doom_explore", "description": "Explore an area (by its id or your name for it) or a direction (north, south-east, ...), until there's nothing more known to explore there. Set secrets to also search for secrets: she presses (and shoots) every wall there she suspects of hiding something, which takes a while.", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_name", "description": format!("Give something a name of your own (up to {NAME_MAX} characters), to use instead of its id from then on."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level by the exit she knows of (ends the level)." }),
         json!({ "name": "doom_stop", "description": "Stop what she's doing and wait." }),
@@ -48,7 +48,7 @@ pub fn actions() -> Vec<Value> {
 
 /// The rules, told on connecting and at each level.
 const BRIEFING: &str = "You're directing a Doom player. She moves, aims, shoots and dodges by herself; you decide where she goes and what she explores. \
-Use doom_list to see what's known (areas, doors, switches, items, monsters, exits: each with an id), doom_explore to explore an area or a direction, doom_go to go to something, \
+Use doom_list to see what's known (areas, doors, switches, items, monsters, exits: each with an id), doom_explore to explore an area or a direction (with secrets set to search its walls for secrets too), doom_go to go to something, \
 doom_press to press a switch (exploring finds switches but leaves pressing them to you), doom_name to name things your way, doom_exit to finish the level. She reports what happens and waits for you when she's done.";
 
 impl Session {
@@ -193,12 +193,14 @@ impl Session {
             }
             "doom_explore" => {
                 let Some(t) = arg("target") else { return (false, "Explore what? An area's id or your name for it, or a direction (north, south-east, ...).".into()) };
+                let secrets = args.get("secrets").and_then(Value::as_bool).unwrap_or(false);
+                let too = if secrets { " (searching for secrets too)" } else { "" };
                 if let Some(b) = bearing(t) {
-                    self.director.order(Order::ExploreWay(b));
-                    (true, format!("Exploring {t}; she'll report when there's nothing more that way."))
+                    self.director.order(Order::ExploreWay(b, secrets));
+                    (true, format!("Exploring {t}{too}; she'll report when there's nothing more that way."))
                 } else if self.director.is_area(agent, t) {
-                    self.director.order(Order::ExploreArea(t.to_string()));
-                    (true, format!("Exploring {t}; she'll report when there's nothing more there."))
+                    self.director.order(Order::ExploreArea(t.to_string(), secrets));
+                    (true, format!("Exploring {t}{too}; she'll report when there's nothing more there."))
                 } else {
                     (false, format!("\"{t}\" isn't an area or a direction. Use doom_list areas for areas, or say north, south-east, ..."))
                 }

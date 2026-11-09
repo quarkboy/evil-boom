@@ -258,13 +258,7 @@ impl Explorer {
                 .suspected(obs, &reach, false)
                 .into_iter()
                 .filter(|w| w.0 >= NEAR_SUSPECT && dist(w.2, pos) <= NEAR_WALL && self.standable(w.2, false))
-                .map(|(score, li, stand, mid)| {
-                    let mut o = Objective::new(Kind::Wall, stand, format!("try the wall (line {li}, {score:.1})"));
-                    o.look_at = Some(mid);
-                    o.wall = Some(li);
-                    o.suspicion = score;
-                    o
-                })
+                .map(|(score, li, stand, mid)| super::selection::wall_objective(score, li, stand, mid, false))
                 .collect();
             out.extend(near);
         }

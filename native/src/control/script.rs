@@ -42,12 +42,13 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
                     _ => Order::Go(w[2..].join(" "), false),
                 },
                 Some("explore") => {
-                    let r = w[2..].join(" ");
-                    bearing(&r).map_or(Order::ExploreArea(r), Order::ExploreWay)
+                    let secrets = w.len() > 3 && w.last() == Some(&"secrets");
+                    let r = w[2..w.len() - usize::from(secrets)].join(" ");
+                    bearing(&r).map_or(Order::ExploreArea(r, secrets), |b| Order::ExploreWay(b, secrets))
                 }
                 Some("exit") => Order::Exit,
                 Some("stop") => Order::Stop,
-                _ => return Err("order go REF | explore REF|DIR | exit | stop".into()),
+                _ => return Err("order go REF [risky] | explore REF|DIR [secrets] | exit | stop".into()),
             };
             d.order(o);
             Ok(Vec::new())

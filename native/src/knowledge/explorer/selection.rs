@@ -47,14 +47,19 @@ impl Explorer {
             // further off, waited)
             .filter(|(score, _, stand, _)| !(self.strong_only && *score <= SUSPICION_MIN) && self.standable(*stand, false))
             .take(if panic { PANIC_WALLS } else { SUSPECTS })
-            .map(|(score, li, stand, mid)| {
-                let mut o = Objective::new(Kind::Wall, stand, format!("try the wall (line {li}, {score:.1})"));
-                o.look_at = Some(mid);
-                o.wall = Some(li);
-                o.suspicion = score;
-                o.round = true;
-                o
-            })
+            .map(|(score, li, stand, mid)| wall_objective(score, li, stand, mid, true))
+            .collect()
+    }
+
+    /// Every wall she suspects of hiding something, as a round's objectives (pressed, then shot):
+    /// a search for secrets asked for (Evil's explore with secrets), not just the few best a round
+    /// of the walls takes when there's nothing else. Her reach as last brought up to date.
+    pub fn suspected_walls(&mut self, obs: &Observation) -> Vec<Objective> {
+        let reach = self.reach.clone();
+        self.suspected(obs, &reach, false)
+            .into_iter()
+            .filter(|w| self.standable(w.2, false))
+            .map(|(score, li, stand, mid)| wall_objective(score, li, stand, mid, true))
             .collect()
     }
 
@@ -331,4 +336,15 @@ impl Explorer {
             _ => false,
         }
     }
+}
+
+/// Pressing a suspected wall (line `li`, `score` its suspicion) from `stand`, facing `mid`; `round`:
+/// searched for (bumped, shot too), not just tried on the way.
+pub(super) fn wall_objective(score: f64, li: usize, stand: Point, mid: Point, round: bool) -> Objective {
+    let mut o = Objective::new(Kind::Wall, stand, format!("try the wall (line {li}, {score:.1})"));
+    o.look_at = Some(mid);
+    o.wall = Some(li);
+    o.suspicion = score;
+    o.round = round;
+    o
 }

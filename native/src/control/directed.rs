@@ -71,10 +71,12 @@ pub enum Order {
     /// would rather not cross on its own (a floor that hurts), if it's a way there that won't kill
     /// her
     Go(String, bool),
-    /// explore an area (by id or name) till there's nothing more known to do in it
-    ExploreArea(String),
-    /// explore that way (degrees, 0 east, 90 north) till there's nothing more known that way
-    ExploreWay(f64),
+    /// explore an area (by id or name) till there's nothing more known to do in it; secrets: the
+    /// walls she suspects of hiding something pressed too (slow, so hers to ask for, the user's)
+    ExploreArea(String, bool),
+    /// explore that way (degrees, 0 east, 90 north) till there's nothing more known that way;
+    /// secrets as for an area
+    ExploreWay(f64, bool),
     /// out by an exit she knows
     Exit,
     /// stop and wait
@@ -97,10 +99,10 @@ pub struct Report {
 enum Doing {
     /// one objective: its id, what it's called
     Once(String, String),
-    /// objectives inside an area, one after another
-    Area(String, String),
-    /// objectives that way, one after another
-    Way(f64),
+    /// objectives inside an area, one after another (and its suspected walls, if secrets)
+    Area(String, String, bool),
+    /// objectives that way, one after another (secrets as for an area)
+    Way(f64, bool),
     /// off a floor that hurts, her own doing (not news)
     Off,
 }
@@ -111,7 +113,7 @@ pub struct Director {
     doing: Option<Doing>,
     /// the objectives taken for the order in hand: not taken again for it (the explorer may go on
     /// offering one it counts as done: E1M1, a wall "not seen yet" taken every tic, stood on)
-    taken: std::collections::BTreeSet<Ident>,
+    taken: std::collections::BTreeSet<Taken>,
     /// id -> her name for it (this map)
     names: BTreeMap<String, String>,
     places: Option<Places>,
@@ -182,8 +184,8 @@ impl Director {
         let keys: Vec<String> = obs.keys.unwrap_or_default().iter().map(|k| key_name(k).to_string()).collect();
         let doing = match &self.doing {
             Some(Doing::Once(_, w)) => format!("going: {w}"),
-            Some(Doing::Area(_, w)) => format!("exploring {w}"),
-            Some(Doing::Way(b)) => format!("exploring {}", compass(*b)),
+            Some(Doing::Area(_, w, secrets)) => format!("exploring {w}{}", with_secrets(*secrets)),
+            Some(Doing::Way(b, secrets)) => format!("exploring {}{}", compass(*b), with_secrets(*secrets)),
             Some(Doing::Off) => "getting off a floor that hurts".to_string(),
             None if agent.x().current.is_some() => "busy".to_string(),
             None => "waiting for orders".to_string(),
@@ -298,7 +300,8 @@ impl Director {
         let mut out: Vec<Entry> = match topic {
             Topic::Areas => {
                 let open = self.open_objectives(agent, obs);
-                let known = agent.x().knowledge.known_polys();
+                let walls = agent.x_mut().suspected_walls(obs);
+                                let known = agent.x().knowledge.known_polys();
                 let nav = std::rc::Rc::clone(&agent.x().nav);
                 let here = nav.poly_at(pos).map(|p| nav.sector_of_poly(p));
                 let places = self.places(agent);
@@ -313,7 +316,9 @@ impl Director {
                 let entries = seen
                     .values()
                     .map(|a| {
-                        let left = open.iter().filter(|o| nav.poly_at(o.goal).is_some_and(|p| a.sectors.contains(&nav.sector_of_poly(p)))).count();
+                        let inside = |o: &&Objective| nav.poly_at(o.goal).is_some_and(|p| a.sectors.contains(&nav.sector_of_poly(p)));
+                        let left = open.iter().filter(|o| explores(o, false)).filter(inside).count();
+                        let hiding = open.iter().chain(&walls).filter(|o| is_search(o)).filter(inside).map(id_of).collect::<std::collections::BTreeSet<_>>().len();
                         let mut what = Places::sketch(a);
                         let in_it = here.is_some_and(|s| a.sectors.contains(&s));
                         if in_it {
@@ -321,7 +326,11 @@ impl Director {
                         } else if left == 0 {
                             done.insert(a.id.clone());
                         }
-                        what.push_str(&if left == 0 { ", nothing more known to explore".to_string() } else { format!(", {left} things to explore") });
+                        what.push_str(&match (left, hiding) {
+                            (0, 0) => ", explored (including secrets)".to_string(),
+                            (0, n) => format!(", explored ({n} wall{} could hide secrets)", if n == 1 { "" } else { "s" }),
+                            (n, _) => format!(", {n} things to explore"),
+                        });
                         Entry { id: a.id.clone(), what, at: a.center }
                     })
                     .collect();
@@ -462,22 +471,22 @@ impl Director {
                     None => self.report(obs, ok, if ok { format!("Done: {what}") } else { format!("Couldn't: {what} ({why})") }),
                 }
             }
-            Some(Doing::Area(id, what)) => {
-                if self.next_in(agent, obs, |d, a, o| d.in_area(a, &id, o)) {
-                    self.doing = Some(Doing::Area(id, what));
+            Some(Doing::Area(id, what, secrets)) => {
+                if self.next_in(agent, obs, secrets, |d, a, o| d.in_area(a, &id, o)) {
+                    self.doing = Some(Doing::Area(id, what, secrets));
                 } else {
-                    let found = self.switches_found(agent, obs, |d, a, o| d.in_area(a, &id, o));
-                    self.report(obs, true, format!("Explored {what}: nothing more known to do there.{found}"));
+                    let found = self.found(agent, obs, secrets, |d, a, o| d.in_area(a, &id, o));
+                    self.report(obs, true, format!("Explored {what}{}: nothing more known to do there.{found}", if secrets { ", secrets searched too" } else { "" }));
                 }
             }
-            Some(Doing::Way(b)) => {
+            Some(Doing::Way(b, secrets)) => {
                 let pos = obs.pos();
                 let fits = move |_: &Self, _: &Agent, o: &Objective| dist(pos, o.goal) > 64.0 && norm(heading(pos, o.goal) - b).abs() < EXPLORE_CONE;
-                if self.next_in(agent, obs, fits) {
-                    self.doing = Some(Doing::Way(b));
+                if self.next_in(agent, obs, secrets, fits) {
+                    self.doing = Some(Doing::Way(b, secrets));
                 } else {
-                    let found = self.switches_found(agent, obs, fits);
-                    self.report(obs, true, format!("Explored {}: nothing more known that way.{found}", compass(b)));
+                    let found = self.found(agent, obs, secrets, fits);
+                    self.report(obs, true, format!("Explored {}{}: nothing more known that way.{found}", compass(b), if secrets { ", secrets searched too" } else { "" }));
                 }
             }
         }
@@ -503,27 +512,31 @@ impl Director {
                 let id = self.resolve(&r);
                 self.go(agent, obs, &id, risky);
             }
-            Order::ExploreArea(r) => {
+            Order::ExploreArea(r, secrets) => {
                 let id = self.resolve(&r);
                 let Some(a) = self.places(agent).by_id(&id).cloned() else {
                     self.report(obs, false, format!("No area \"{r}\"; list the areas for their ids"));
                     return;
                 };
                 let what = self.describe(&Entry { id: a.id.clone(), what: Places::sketch(&a), at: a.center }, obs);
-                if self.next_in(agent, obs, |d, a2, o| d.in_area(a2, &id, o)) {
-                    self.report(obs, true, format!("Exploring {what}"));
-                    self.doing = Some(Doing::Area(id, what));
+                let fits = |d: &Self, a2: &Agent, o: &Objective| d.in_area(a2, &id, o);
+                if self.next_in(agent, obs, secrets, fits) {
+                    self.report(obs, true, format!("Exploring {what}{}", with_secrets(secrets)));
+                    self.doing = Some(Doing::Area(id, what, secrets));
                 } else {
-                    self.report(obs, true, format!("Nothing more known to explore in {what}"));
+                    let found = self.found(agent, obs, secrets, fits);
+                    self.report(obs, true, format!("Nothing more known to {} in {what}.{found}", if secrets { "explore or search" } else { "explore" }));
                 }
             }
-            Order::ExploreWay(b) => {
+            Order::ExploreWay(b, secrets) => {
                 let pos = obs.pos();
-                if self.next_in(agent, obs, |_, _, o| dist(pos, o.goal) > 64.0 && norm(heading(pos, o.goal) - b).abs() < EXPLORE_CONE) {
-                    self.report(obs, true, format!("Exploring {}", compass(b)));
-                    self.doing = Some(Doing::Way(b));
+                let fits = move |_: &Self, _: &Agent, o: &Objective| dist(pos, o.goal) > 64.0 && norm(heading(pos, o.goal) - b).abs() < EXPLORE_CONE;
+                if self.next_in(agent, obs, secrets, fits) {
+                    self.report(obs, true, format!("Exploring {}{}", compass(b), with_secrets(secrets)));
+                    self.doing = Some(Doing::Way(b, secrets));
                 } else {
-                    self.report(obs, false, format!("Nothing known to explore {}", compass(b)));
+                    let found = self.found(agent, obs, secrets, fits);
+                    self.report(obs, false, format!("Nothing known to {} {}.{found}", if secrets { "explore or search" } else { "explore" }, compass(b)));
                 }
             }
         }
@@ -644,6 +657,21 @@ impl Director {
         self.open_objectives(agent, obs).into_iter().filter(|o| kinds.contains(&o.kind)).map(|o| Entry { id: id_of(&o), what: o.label.clone(), at: o.goal }).collect()
     }
 
+    /// What an exploring order leaves to her, as sentences for its end ("" if nothing): the
+    /// switches found and not pressed, and (not searching) the walls that could hide secrets.
+    fn found(&mut self, agent: &mut Agent, obs: &Observation, secrets: bool, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> String {
+        let mut out = self.switches_found(agent, obs, &fits);
+        if !secrets {
+            let mut walls = self.open_objectives(agent, obs);
+            walls.extend(agent.x_mut().suspected_walls(obs));
+            let n = walls.iter().filter(|o| is_search(o) && fits(self, agent, o)).map(id_of).collect::<std::collections::BTreeSet<_>>().len();
+            if n > 0 {
+                out.push_str(&format!(" {n} wall{} there could hide secrets (explore with secrets set to search {}).", if n == 1 { "" } else { "s" }, if n == 1 { "it" } else { "them" }));
+            }
+        }
+        out
+    }
+
     /// The switches not pressed yet that `fits` (where she'd press them from), as a sentence for an
     /// exploring order's end ("" if none).
     fn switches_found(&mut self, agent: &mut Agent, obs: &Observation, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> String {
@@ -682,18 +710,19 @@ impl Director {
 
     /// The best of the explorer's objectives that `fits` (and an exploring one: not out by an exit,
     /// not off through a teleporter), taken up. False if there's none (or no way to any).
-    fn next_in(&mut self, agent: &mut Agent, obs: &Observation, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> bool {
-        let options: Vec<Objective> = self
-            .open_objectives(agent, obs)
-            .into_iter()
-            // (nor switches: pressing one is hers to decide, it may set off anything; exploring
-            // finds them and says so, the user's)
-            .filter(|o| !matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Noise | Kind::Recheck | Kind::Hunt | Kind::Switch))
-            .filter(|o| !self.taken.contains(&o.ident()))
-            .filter(|o| fits(self, agent, o))
-            .collect();
+    fn next_in(&mut self, agent: &mut Agent, obs: &Observation, secrets: bool, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> bool {
+        let mut options = self.open_objectives(agent, obs);
+        if secrets {
+            // (every wall she suspects, not just the strong ones by her the explorer offers)
+            let walls = agent.x_mut().suspected_walls(obs);
+            let have: std::collections::BTreeSet<String> = options.iter().map(id_of).collect();
+            options.extend(walls.into_iter().filter(|w| !have.contains(&id_of(w))));
+        }
+        let mut options: Vec<Objective> = options.into_iter().filter(|o| explores(o, secrets)).filter(|o| !self.taken.contains(&taken_key(o))).filter(|o| fits(self, agent, o)).collect();
+        // (the searching after the rest, as a player does: what's in plain sight first)
+        options.sort_by_key(is_search);
         for o in options {
-            let id = o.ident();
+            let id = taken_key(&o);
             if agent.x_mut().take(obs, o) {
                 self.taken.insert(id);
                 return true;
@@ -711,6 +740,14 @@ impl Director {
 }
 
 /// An objective's stable id: its kind, and what it's about (a thing, a line, else its spot).
+/// An objective as the order in hand remembers taking it: the explorer's ident, and the wall for
+/// pressing one (every wall has the same ident: an explore with secrets took one and ended).
+type Taken = (Ident, Option<usize>);
+
+fn taken_key(o: &Objective) -> Taken {
+    (o.ident(), o.wall)
+}
+
 fn id_of(o: &Objective) -> String {
     let kind = match o.kind {
         Kind::Exit => "exit",
@@ -780,4 +817,24 @@ pub fn bearing(s: &str) -> Option<f64> {
         "se" | "southeast" => 315.0,
         _ => return None,
     })
+}
+
+/// Is o one of exploring's (secrets: searching too)? Not out by an exit or a teleporter, not after
+/// a noise or a monster; nor a switch: pressing one is hers to decide, it may set off anything
+/// (exploring finds them and says so, the user's); nor, unless asked, pressing walls for secrets.
+fn explores(o: &Objective, secrets: bool) -> bool {
+    !matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Noise | Kind::Recheck | Kind::Hunt | Kind::Switch) && (secrets || !is_search(o))
+}
+
+/// Searching for secrets: pressing a wall she suspects, back into a secret sector.
+fn is_search(o: &Objective) -> bool {
+    matches!(o.kind, Kind::Wall | Kind::Secret)
+}
+
+fn with_secrets(secrets: bool) -> &'static str {
+    if secrets {
+        ", searching for secrets too"
+    } else {
+        ""
+    }
 }
