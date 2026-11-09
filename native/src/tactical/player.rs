@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::bestiary::{ammo_item, armor_item, first_shot, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
-use super::combat::{segment_point_distance, spread, Combat, Seen, LEAVE_BE};
+use super::combat::{segment_point_distance, spread, Combat, Move, Seen, LEAVE_BE};
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
 use crate::knowledge::explorer::{Explorer, Hooks, Kind, Objective};
@@ -188,6 +188,30 @@ struct Fight {
     toward_gun: BTreeSet<i64>,
 }
 
+/// Why she died, as best her plight then tells.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Cause {
+    Blast,
+    Unarmed,
+    HurtingFloor,
+    Surrounded,
+    Outmatched,
+    WornDown,
+}
+
+impl Cause {
+    fn label(self) -> &'static str {
+        match self {
+            Cause::Blast => "a blast",
+            Cause::Unarmed => "out of ammo",
+            Cause::HurtingFloor => "on a floor that hurts",
+            Cause::Surrounded => "surrounded",
+            Cause::Outmatched => "outmatched",
+            Cause::WornDown => "worn down",
+        }
+    }
+}
+
 /// A death: where, and what she was going for.
 #[derive(Clone, Debug)]
 struct Death {
@@ -195,7 +219,7 @@ struct Death {
     kind: Kind,
     goal: Point,
     label: String,
-    why: &'static str,
+    why: Cause,
 }
 
 /// What things were like for her a moment ago (what killed her, at a restart).
@@ -213,19 +237,19 @@ struct Plight {
 impl Plight {
     /// Why she died, as best it can tell: a blast (a barrel, a rocket: one big hit, nothing
     /// close), out of ammo, on a floor that hurts (a pit), surrounded, outmatched, else worn down.
-    fn why(&self) -> &'static str {
+    fn why(&self) -> Cause {
         if self.last_hit >= BLAST_HIT && !self.close {
-            "a blast"
+            Cause::Blast
         } else if !self.armed {
-            "out of ammo"
+            Cause::Unarmed
         } else if self.hurting_floor {
-            "on a floor that hurts"
+            Cause::HurtingFloor
         } else if self.surrounded {
-            "surrounded"
+            Cause::Surrounded
         } else if self.outmatched {
-            "outmatched"
+            Cause::Outmatched
         } else {
-            "worn down"
+            Cause::WornDown
         }
     }
 }
@@ -340,7 +364,7 @@ impl Player {
         // for what's left has nothing on)
         if let Some(cur) = &self.explorer.current {
             let d = Death { at: self.last_pos, kind: cur.kind, goal: cur.goal, label: cur.label.clone(), why: self.plight.why() };
-            self.explorer.log.push(format!("  [fight] died at ({:.0}, {:.0}) going for: {} ({})", d.at.0, d.at.1, d.label, d.why));
+            self.explorer.log.push(format!("  [fight] died at ({:.0}, {:.0}) going for: {} ({})", d.at.0, d.at.1, d.label, d.why.label()));
             self.fight.deaths.push(d);
         }
         self.explorer.restart();
@@ -384,12 +408,12 @@ impl Player {
             }
             return match d {
                 // (a missile about to hit still comes first, when there's a way clear of it)
-                Some(d) if d.moving.is_some() && d.why.starts_with("dodging") && self.fight.combat.dodge_clear() => self.fight.combat.controls(obs, &d, None),
+                Some(d) if d.moving.is_some() && d.kind == Move::Dodging && self.fight.combat.dodge_clear() => self.fight.combat.controls(obs, &d, None),
                 // (a dodge with no way to step doesn't stand her still: the retreat's legs go on.
                 // Stood on a ledge every step off it a drop, fireballs from all round, she stood
                 // dodging nowhere, the way back out never walked, till they had her)
                 Some(mut d) => {
-                    if d.why.starts_with("dodging") {
+                    if d.kind == Move::Dodging {
                         d.takeover = false;
                     }
                     let pressing = self.retreat.as_ref().is_some_and(|r| r.route.pressing(obs.tic));
@@ -403,8 +427,7 @@ impl Player {
             let mut c = self.fight.combat.controls(obs, d, None);
             // (the fight's own way too, unless it's out of the way of something: keeping clear
             // took her out into the spider mastermind's sight as surely as a route)
-            let escaping = ["dodging", "ducking", "ducked", "out of", "out from", "away from"].iter().any(|w| d.why.starts_with(w));
-            if !escaping && self.hold_at_edge(obs, &c) {
+            if !d.kind.escaping() && self.hold_at_edge(obs, &c) {
                 (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
             }
             return c;
@@ -1427,7 +1450,7 @@ impl Fight {
     fn died_for(&self, obj: &Objective) -> usize {
         self.deaths
             .iter()
-            .filter(|d| d.why != "out of ammo")
+            .filter(|d| d.why != Cause::Unarmed)
             // (by place: a level again spawns everything afresh, new ids; MAP12's clips by the
             // start, died going for 130 times)
             .filter(|d| d.kind == obj.kind && dist(d.goal, obj.goal) < SAME_GOAL)
@@ -1564,7 +1587,7 @@ impl Hooks for Fight {
         // and again, whatever for: MAP04's corner, five lives for the shotgun, the chaingun,
         // a wall, the key there)
         let died = self.died_for(obj);
-        let here = self.deaths.iter().filter(|d| d.why != "out of ammo" && dist(d.at, obj.goal) < DEATH_ZONE).count();
+        let here = self.deaths.iter().filter(|d| d.why != Cause::Unarmed && dist(d.at, obj.goal) < DEATH_ZONE).count();
         if died >= DEATHS_GIVE_UP || here >= DEATH_ZONE_URGENT {
             return true;
         }

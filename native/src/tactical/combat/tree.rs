@@ -25,6 +25,7 @@
 //! did. The aim and the trigger are sized up before the tree (`Situation`): a node only
 //! overrides them.
 
+use super::moves::{HeldFire, Move};
 use super::style::{window, Style};
 use super::{mon, Combat, Decision, CLOSE_GIVE_UP, KEEP_CLEAR, LOW_HEALTH, STAND_THREAT};
 use crate::geom::{dist, Point};
@@ -61,7 +62,10 @@ pub(super) struct Situation<'a> {
 
 /// What a node has her do.
 pub(super) struct Act {
+    /// which decision it is: what the rest of her goes by
+    pub kind: Move,
     pub moving: Option<Point>,
+    /// the same, for the log
     pub why: String,
     /// turned to this rather than as sized up
     pub aim: Option<f64>,
@@ -72,8 +76,8 @@ pub(super) struct Act {
 }
 
 impl Act {
-    fn new(moving: Option<Point>, why: String) -> Act {
-        Act { moving, why, aim: None, hold_fire: false, route: false }
+    fn new(kind: Move, moving: Option<Point>, why: String) -> Act {
+        Act { kind, moving, why, aim: None, hold_fire: false, route: false }
     }
 }
 
@@ -104,7 +108,7 @@ const FIGHT: [Node; 13] = [
 
 /// What she does, a target or a missile about: the first node that applies.
 pub(super) fn engage(c: &mut Combat, obs: &Observation, s: &Situation) -> Act {
-    SURVIVE.iter().chain(&BUSY).chain(&MELEE).chain(&FIGHT).find_map(|node| node(c, obs, s)).unwrap_or_else(|| Act::new(None, "shooting on the way".into()))
+    SURVIVE.iter().chain(&BUSY).chain(&MELEE).chain(&FIGHT).find_map(|node| node(c, obs, s)).unwrap_or_else(|| Act::new(Move::ShootingOnTheWay, None, "shooting on the way".into()))
 }
 
 // --- survive -----------------------------------------------------------------------------------
@@ -113,7 +117,7 @@ pub(super) fn engage(c: &mut Combat, obs: &Observation, s: &Situation) -> Act {
 /// blast's put the far side of the shelter.
 fn out_of_vile_sight(c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
     let (name, way) = s.vile?;
-    let mut a = Act::new(way, format!("out of the {name}'s sight"));
+    let mut a = Act::new(Move::OutOfVileSight, way, format!("out of the {name}'s sight"));
     a.aim = c.vile_face().map(|v| heading(s.pos, v));
     Some(a)
 }
@@ -127,7 +131,7 @@ fn ducking(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if !c.clear_of_hits(obs, &s.missiles, way) {
         return None;
     }
-    Some(Act::new(way, format!("ducking out of the {name}'s sight")))
+    Some(Act::new(Move::Ducking, way, format!("ducking out of the {name}'s sight")))
 }
 
 fn dodging(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
@@ -135,17 +139,17 @@ fn dodging(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     // (a homing one going round her: dodged towards a corner it'll fly into, never into it)
     if let Some((name, way)) = c.shake_off(obs, &s.missiles) {
         let moving = c.dodge(obs, &s.missiles, way);
-        return Some(Act::new(moving, format!("shaking off {name} round a corner")));
+        return Some(Act::new(Move::ShakingOff, moving, format!("shaking off {name} round a corner")));
     }
     let moving = c.dodge(obs, &s.missiles, None);
     let why = if s.errand.is_empty() { format!("dodging {}", m.name) } else { format!("dodging {} on the way to the {}", m.name, s.errand) };
-    Some(Act::new(moving, why))
+    Some(Act::new(Move::Dodging, moving, why))
 }
 
 /// Her BFG charging or its ball in the air: still, where she is (the spray comes from her when it
 /// lands, along its way: walked round a corner, it hits the wall). Missiles still dodged first.
 fn bfg_hold(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
-    c.bfg_flying(obs).then(|| Act::new(None, "holding still for the BFG's spray".into()))
+    c.bfg_flying(obs).then(|| Act::new(Move::BfgHold, None, "holding still for the BFG's spray".into()))
 }
 
 /// Out from under a crusher first, whatever else (a missile maybe hits; a crusher at work
@@ -159,7 +163,7 @@ fn off_crusher(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         return None;
     }
     if c.routed {
-        let mut a = Act::new(None, "out from under a crusher (the route's way)".into());
+        let mut a = Act::new(Move::OffCrusher, None, "out from under a crusher (the route's way)".into());
         a.route = true;
         return Some(a);
     }
@@ -170,23 +174,23 @@ fn off_crusher(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         let gun = s.target.as_ref().map_or_else(|| c.gun(obs), |t| c.preferred_gun(obs, t));
         c.steer(obs, s.target.as_ref(), &gun)
     });
-    Some(Act::new(moving, "out from under a crusher".into()))
+    Some(Act::new(Move::OffCrusher, moving, "out from under a crusher".into()))
 }
 
 /// A barrel going off by her: its blast (up to 128) before any missile's dodge.
 fn off_lit_barrel(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
-    s.barrel_lit.map(|away| Act::new(Some(away), "away from a barrel going off".into()))
+    s.barrel_lit.map(|away| Act::new(Move::OffLitBarrel, Some(away), "away from a barrel going off".into()))
 }
 
 /// (MAP23: a mancubus's fireball set off the barrels she stood by)
 fn off_barrel(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
-    s.barrel_away.map(|away| Act::new(Some(away), "away from a barrel".into()))
+    s.barrel_away.map(|away| Act::new(Move::OffBarrel, Some(away), "away from a barrel".into()))
 }
 
 // --- busy --------------------------------------------------------------------------------------
 
 fn busy(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
-    s.busy.then(|| Act::new(None, "shooting on the way".into()))
+    s.busy.then(|| Act::new(Move::ShootingOnTheWay, None, "shooting on the way".into()))
 }
 
 // --- up close ----------------------------------------------------------------------------------
@@ -242,9 +246,9 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
             return None;
         }
         c.melee_nearest.insert(t.id, (nearest, at, obs.tic));
-        Act::new(c.closing_in(obs, t, None), format!("closing in on {} (melee)", t.name))
+        Act::new(Move::MeleeClosing, c.closing_in(obs, t, None), format!("closing in on {} (melee)", t.name))
     } else {
-        Act::new(None, format!("at {} (melee)", t.name))
+        Act::new(Move::MeleeAt, None, format!("at {} (melee)", t.name))
     })
 }
 
@@ -262,7 +266,7 @@ fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
     let gun = c.preferred_gun(obs, &t);
     let moving = c.steer(obs, Some(&t), &gun).or_else(|| c.away_from(obs, (t.x, t.y)));
     let why = if s.errand.is_empty() { format!("backing off from {}", nearest.name) } else { format!("backing off from {} towards the {}", nearest.name, s.errand) };
-    Some(Act::new(moving, why))
+    Some(Act::new(Move::BackingOff, moving, why))
 }
 
 /// On to the errand, shooting on the way; turned to a monster standing against her on the way to
@@ -273,7 +277,7 @@ fn to_errand(c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
     if s.errand.is_empty() {
         return None;
     }
-    let mut a = Act::new(None, format!("shooting on the way to {}", s.errand));
+    let mut a = Act::new(Move::ToErrand, None, format!("shooting on the way to {}", s.errand));
     let way = c.toward.map(|to| heading(s.pos, to));
     let in_the_way = c.visible.iter().filter(|t| mon(t.name).attack != Attack::None).find(|t| {
         dist((t.x, t.y), s.pos) < PLAYER_RADIUS + mon(t.name).radius + ERRAND_CONTACT && way.is_some_and(|w| norm(heading(s.pos, (t.x, t.y)) - w).abs() < 60.0)
@@ -290,7 +294,7 @@ const ERRAND_CONTACT: f64 = 16.0;
 
 /// (MAP05, MAP11: out of ammo, fist out, walked up to imps to punch them)
 fn unarmed(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
-    (!c.armed(obs)).then(|| Act::new(None, "out of ammo: getting past".into()))
+    (!c.armed(obs)).then(|| Act::new(Move::Unarmed, None, "out of ammo: getting past".into()))
 }
 
 /// A shot that would wake a sleeping pack worth too much isn't fired, on an errand too (the route
@@ -299,7 +303,7 @@ fn unarmed(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
 /// last bullets woke all seven, bitten to death.)
 fn sneaking(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let woken = s.target.as_ref().map(|t| c.would_wake(obs, t)).filter(|w| !w.is_empty())?;
-    let mut a = Act::new(None, format!("sneaking past (a shot would wake {woken})"));
+    let mut a = Act::new(Move::Sneaking, None, format!("sneaking past (a shot would wake {woken})"));
     a.hold_fire = true;
     Some(a)
 }
@@ -310,11 +314,11 @@ fn closing_out_of_reach(c: &mut Combat, obs: &Observation, s: &Situation) -> Opt
     let t = s.target.as_ref().filter(|t| !c.reachable(obs, t) && t.after_her && !s.outmatched && c.known.get(&t.id).is_some_and(|k| k.awake) && c.still_closing(obs, t.id))?;
     let gun = c.preferred_gun(obs, t);
     let moving = c.steer(obs, Some(t), &gun).or_else(|| c.closing_in(obs, t, None));
-    Some(Act::new(moving, format!("closing in on {} (out of reach)", t.name)))
+    Some(Act::new(Move::ClosingOutOfReach, moving, format!("closing in on {} (out of reach)", t.name)))
 }
 
 fn out_of_reach(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    s.target.as_ref().is_some_and(|t| !c.reachable(obs, t)).then(|| Act::new(None, "out of reach: going on".into()))
+    s.target.as_ref().is_some_and(|t| !c.reachable(obs, t)).then(|| Act::new(Move::OutOfReach, None, "out of reach: going on".into()))
 }
 
 /// The only one in sight, near, and no shot at it from here: a step to where there is. Not on a
@@ -327,7 +331,7 @@ fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option
     }
     let pos = s.pos;
     let way = s.target.as_ref().filter(|t| c.visible.len() == 1 && dist((t.x, t.y), pos) < 512.0 && !c.can_hit(obs, t, None)).and_then(|t| c.shot_way(obs, t))?;
-    Some(Act::new(Some(way), format!("stepping for a shot at {}", s.target.as_ref().map_or("", |t| t.name))))
+    Some(Act::new(Move::SteppingForShot, Some(way), format!("stepping for a shot at {}", s.target.as_ref().map_or("", |t| t.name))))
 }
 
 /// Plasma up and autoaim taking it short of the target (into a ledge's lip with them down in a pit,
@@ -335,9 +339,9 @@ fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option
 /// ledge (the user's: on till the weapon can hit, not falling down). Not for rockets (see
 /// `plasma_spot`).
 fn stepping_for_plasma(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    let t = s.target.as_ref().filter(|_| obs.weapon == Some(6) && c.held_fire == "plasma wouldn't get there")?;
+    let t = s.target.as_ref().filter(|_| obs.weapon == Some(6) && c.held_fire == Some(HeldFire::PlasmaBlocked))?;
     let way = c.plasma_spot(obs, t)?;
-    Some(Act::new(Some(way), format!("stepping for a shot at {} (its way blocked)", t.name)))
+    Some(Act::new(Move::SteppingForShot, Some(way), format!("stepping for a shot at {} (its way blocked)", t.name)))
 }
 
 /// Fought where it stands, whatever else: a sniper she'd see off first (`takes_on`), or,
@@ -354,7 +358,7 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
     let t = s.target.as_ref().filter(|t| s.outmatched && !fought(c, obs, s, t) && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < KEEP_CLEAR)?;
     let gun = c.preferred_gun(obs, t);
     let moving = c.steer(obs, Some(t), &gun);
-    let mut a = Act::new(moving, format!("outmatched: keeping clear of {}", t.name));
+    let mut a = Act::new(Move::KeepingClear, moving, format!("outmatched: keeping clear of {}", t.name));
     // (and no ammo spent on it when all she has couldn't kill it, unless it's in her way: every
     // round a round short for what she can kill; E4M4, two cacodemons kept clear of and shot at
     // till every gun was empty, then bitten to death unarmed)
@@ -367,6 +371,7 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
         if mon(t.name).attack == Attack::Hitscan {
             if let Some(way) = c.out_of_sight_of(obs, t) {
                 a.moving = Some(way);
+                a.kind = Move::HidingFromOutmatcher;
                 a.why = format!("outmatched: out of {}'s sight (ammo kept)", t.name);
                 return Some(a);
             }
@@ -385,7 +390,7 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
 
 /// Outmatched: shooting on the way, the route going on.
 fn outmatched_get_past(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    (s.outmatched && !s.target.as_ref().is_some_and(|t| fought(c, obs, s, t))).then(|| Act::new(None, "getting past".into()))
+    (s.outmatched && !s.target.as_ref().is_some_and(|t| fought(c, obs, s, t))).then(|| Act::new(Move::GettingPast, None, "getting past".into()))
 }
 
 /// Too near for the gun she'd fight it with, or for them to miss.
@@ -395,7 +400,7 @@ fn keeping_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         let gun = c.preferred_gun(obs, t);
         c.steer(obs, Some(t), &gun).or_else(|| c.keeping_off(obs, t, s.aim))
     })?;
-    Some(Act::new(Some(way), format!("keeping off from {}", s.target.as_ref().map_or("", |t| t.name))))
+    Some(Act::new(Move::KeepingOff, Some(way), format!("keeping off from {}", s.target.as_ref().map_or("", |t| t.name))))
 }
 
 /// Enough in sight, low, or in the way: the route waits; into the gun's window, else across the
@@ -417,6 +422,7 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if !(s.threat >= STAND_THREAT || s.health < LOW_HEALTH || duel || c.blocking(obs, s.target.as_ref())) {
         return None;
     }
+    let mut kind = Move::Standing;
     let mut why = "standing and fighting".to_string();
     let moving = if let Some(t) = &s.target {
         let gun = c.preferred_gun(obs, t);
@@ -424,17 +430,18 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         let mut moving = c.steer(obs, Some(t), &gun);
         if !Combat::in_reach(&gun, t, d) || d > window(&gun, t).1 {
             moving = moving.or_else(|| c.closing_in(obs, t, None));
+            kind = Move::ClosingIn;
             why = format!("closing in on {}", t.name);
         }
         moving
     } else {
         c.strafe_dir(obs, s.aim)
     };
-    Some(Act::new(moving, why))
+    Some(Act::new(kind, moving, why))
 }
 
 fn shooting_on_the_way(_c: &mut Combat, _obs: &Observation, _s: &Situation) -> Option<Act> {
-    Some(Act::new(None, "shooting on the way".into()))
+    Some(Act::new(Move::ShootingOnTheWay, None, "shooting on the way".into()))
 }
 
 // --- nothing in sight --------------------------------------------------------------------------
@@ -456,7 +463,7 @@ impl Combat {
                 self.log.push(format!("tic {}: {why}", obs.tic));
                 self.mode = why.clone();
             }
-            return Some(Decision { takeover: true, aim: None, fire: false, weapon: 0, moving, why });
+            return Some(Decision { kind: Move::OffCrusher, takeover: true, aim: None, fire: false, weapon: 0, moving, why });
         }
         if !busy && errand.is_empty() {
             if let Some((name, way)) = self.vile_fire(obs) {
@@ -466,7 +473,7 @@ impl Combat {
                     self.mode = why.clone();
                 }
                 let aim = self.vile_face().map(|v| heading(obs.pos(), v));
-                return Some(Decision { takeover: true, aim, fire: false, weapon: 0, moving: way, why });
+                return Some(Decision { kind: Move::OutOfVileSight, takeover: true, aim, fire: false, weapon: 0, moving: way, why });
             }
             if let Some((_, way)) = self.duck(obs) {
                 // (out of its sight now: held there till its fire's broken off)
@@ -475,7 +482,7 @@ impl Combat {
                     self.log.push(format!("tic {}: {why}", obs.tic));
                     self.mode = why.clone();
                 }
-                return Some(Decision { takeover: true, aim: None, fire: false, weapon: 0, moving: way, why });
+                return Some(Decision { kind: Move::Ducked, takeover: true, aim: None, fire: false, weapon: 0, moving: way, why });
             }
             if let Some(d) = self.lost_sight(obs) {
                 return Some(d);

@@ -2078,3 +2078,31 @@ within the score's noise (+-0.006); stalled runs 69 -> 45 of 1088; on the eight 
   HMP seed 1105803694's health went on a revisit estimated at 2.8 that cost 28, the wait for a lift
   standing in the nukage not counted (the estimate counts the time walking on a floor, not
   waiting on it): to do.
+
+## Restructuring, step 1: the fight's decision as a type (2026-11-09)
+
+The first step of the restructuring towards a decision model (a classifier answering small
+questions: which target, what stance, whether to take a risk) over rules whose numbers can be
+varied. What the rest of her did about a fight decision went by the first words of its log label
+(`why.starts_with("dodging")`, a list of prefixes for "the route keeps her legs", another for
+"getting out of the way"), so rewording a log line could change her play, and nothing outside
+could name a decision.
+
+- `tactical/combat/moves.rs`: `Move`, one variant a decision (the tree's nodes, the three made
+  with nothing in sight, the rocket's two after the tree). `Act` and `Decision` carry it as
+  `kind`; `why` stays, for the log and the viewer only.
+- The prefix lists are two properties of a `Move`: `route_goes_on` (was "shooting on the way",
+  "getting past", "out of", "sneaking": the last node, an errand, getting past, an arch-vile's
+  sight, out of reach, out of ammo, sneaking) and `escaping` (was "dodging", "ducking", "ducked",
+  "out of", "out from", "away from"). "out of" had caught three unrelated labels by accident
+  ("out of the X's sight", "out of reach: going on", "out of ammo: getting past"): the same three
+  are named in `route_goes_on`; of them only the arch-vile's can be a takeover, so only it is in
+  `escaping`.
+- Why the trigger's held (`HeldFire`) and why she died (`Cause`) are enums too: the plasma step
+  and the death count compared their strings.
+- Left as they are (not the fight's): the explorer's drop reasons ("no route", "stuck" read out
+  of the follower's log line), `directed.rs`'s "pressed", the sweep's "stranded". For step 5 (the
+  arbiter), when those layers get typed outcomes.
+
+Nothing changes: the parity set (16 maps, HMP seed 1 and UV seed 2, 32 runs) is line for line the
+same as before.

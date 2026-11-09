@@ -13,10 +13,13 @@
 mod aiming;
 mod arsenal;
 mod movement;
+mod moves;
 mod steering;
 mod style;
 mod tree;
 
+pub use moves::Move;
+use moves::HeldFire;
 use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
 use crate::geom::{dist, Point};
@@ -134,6 +137,8 @@ const ENGAGED_MELEE: f64 = 384.0;
 
 #[derive(Clone, Debug)]
 pub struct Decision {
+    /// which decision it is (the label, `why`, is for the log)
+    pub kind: Move,
     /// the fight needs the movement too
     pub takeover: bool,
     /// the angle to turn to, if fighting at all
@@ -170,7 +175,7 @@ pub struct Combat {
     strafe_until: i64,
     rate: f64,
     mode: String,
-    held_fire: String,
+    held_fire: Option<HeldFire>,
     /// the monster a rocket's way at was last blocked close by (whatever's up), and when: not the
     /// launcher for it for a while after (the user's: a safer weapon, rather than a rocket held;
     /// a while, not each tic it's clear: E2M8, the cyberdemon, 24 switches back and forth)
@@ -319,7 +324,7 @@ impl Combat {
             strafe_until: 0,
             rate: 0.0,
             mode: String::new(),
-            held_fire: String::new(),
+            held_fire: None,
             rocket_blocked: None,
             hold_fire: false,
             infight: BTreeMap::new(),
@@ -678,7 +683,7 @@ impl Combat {
             // turn after; E3M9, the last rocket pressed at a baron as it died, the route turned her
             // for the door through the launch, out into the wall by her, dead at 53)
             if let Some((aim, _)) = self.rocket_held(obs) {
-                return Some(Decision { takeover: false, aim: Some(aim), fire: false, weapon: 0, moving: None, why: "holding a rocket's way till it's out".into() });
+                return Some(Decision { kind: Move::RocketHeld, takeover: false, aim: Some(aim), fire: false, weapon: 0, moving: None, why: "holding a rocket's way till it's out".into() });
             }
             return self.no_target(obs, busy, errand);
         }
@@ -691,6 +696,7 @@ impl Combat {
             if let Some((aim, out)) = self.rocket_held(obs) {
                 act.aim = Some(aim);
                 if out {
+                    act.kind = Move::RocketTurnedOff;
                     act.why = "turned off a rocket's way out into something near".into();
                 }
             }
@@ -698,13 +704,14 @@ impl Combat {
         let aim = act.aim.or(s.aim);
         let fire = fire && !act.hold_fire && !self.hold_fire;
         let why = act.why;
-        let takeover = !act.route && ((!busy && !["shooting on the way", "getting past", "out of", "sneaking"].iter().any(|p| why.starts_with(p))) || !s.missiles.is_empty() || s.vile.is_some());
+        let kind = act.kind;
+        let takeover = !act.route && ((!busy && !kind.route_goes_on()) || !s.missiles.is_empty() || s.vile.is_some());
         if why != self.mode {
             let t = s.target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {:.0} threat; health {:.0})", t.name, t.id, s.threat, s.health));
             self.log.push(format!("tic {}: {why}{t}", obs.tic));
             self.mode = why.clone();
         }
-        Some(Decision { takeover, aim, fire, weapon, moving: act.moving, why })
+        Some(Decision { kind, takeover, aim, fire, weapon, moving: act.moving, why })
     }
 
     /// The fight as it stands, for the tree: the aim and the trigger at the target (or a barrel
@@ -865,7 +872,7 @@ impl Combat {
             self.log.push(format!("tic {}: {why}", obs.tic));
             self.mode = why.clone();
         }
-        Some(Decision { takeover: true, aim: Some(heading(pos, s.pos())), fire: false, weapon: 0, moving, why })
+        Some(Decision { kind: Move::LostSight, takeover: true, aim: Some(heading(pos, s.pos())), fire: false, weapon: 0, moving, why })
     }
 
     /// The route's controls this tic (the way it walks her, for what's in her way).

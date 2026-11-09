@@ -1,6 +1,7 @@
 //! Target selection, aiming and the trigger, line of fire and blast safety (the weapon choice:
 //! `arsenal`).
 
+use super::moves::HeldFire;
 use super::style::Style;
 use super::{mon, segment_point_distance, Combat, BARREL_CLEAR};
 use crate::motor::follower::blast_gap;
@@ -178,31 +179,31 @@ impl Combat {
         let tolerance = 1.5f64.max((info.radius * 0.7).atan2(d.max(1.0)).to_degrees());
         let on = norm(aim - obs.angle).abs() < tolerance;
         let held_fire = if !Self::in_reach(&w, t, d) {
-            "out of reach"
+            Some(HeldFire::OutOfReach)
         } else if held == 5 && (!self.rocket_safe(obs, t) || blocked) {
-            "rocket not safe"
+            Some(HeldFire::RocketNotSafe)
         } else if held == 6 && !self.projectile_reaches(obs, t, pos, PLASMA_RADIUS) {
-            "plasma wouldn't get there"
+            Some(HeldFire::PlasmaBlocked)
         } else if !mon(t.name).boss && d > LEAVE_TO_BOSS && self.visible.iter().any(|b| b.id != t.id && mon(b.name).boss) {
             // (a boss in sight: the others left to it, not near her; its fire lands on them and
             // they turn on it, her ammo kept for it. The user's: infighting, E3M8 from a pistol
             // start, 1400 of 3000-odd damage's worth of ammo spent on two cacodemons and a baron,
             // out of ammo with the spider mastermind at 1000-2000)
-            "left to the boss"
+            Some(HeldFire::LeftToBoss)
         } else if !self.can_hit(obs, t, None) {
-            "no shot (too steep, or something in the way)"
+            Some(HeldFire::NoShot)
         } else if Self::barrel_in_line(obs, &w, t) {
-            "a barrel in the line of fire, its chain by her"
+            Some(HeldFire::BarrelInLine)
         } else {
-            ""
+            None
         };
         if held_fire != self.held_fire {
-            if !held_fire.is_empty() {
-                self.log.push(format!("tic {}: holding fire at {} {}, {d:.0} off: {held_fire}", obs.tic, t.name, t.id));
+            if let Some(h) = held_fire {
+                self.log.push(format!("tic {}: holding fire at {} {}, {d:.0} off: {}", obs.tic, t.name, t.id, h.label()));
             }
-            self.held_fire = held_fire.to_string();
+            self.held_fire = held_fire;
         }
-        (aim, on && held_fire.is_empty(), weapon)
+        (aim, on && held_fire.is_none(), weapon)
     }
 
     /// Would a shot at t get to it, as Doom aims one (not too steep, nothing in the way); else out
