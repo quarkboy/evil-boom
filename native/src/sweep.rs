@@ -66,6 +66,9 @@ pub struct RunOptions {
     pub complete: bool,
     /// the game's random numbers from this; None: the clock
     pub seed: Option<u32>,
+    /// the things reported even with no fight (items seen: the secret survey's walls with an
+    /// item behind them)
+    pub things: bool,
 }
 
 impl Default for RunOptions {
@@ -85,6 +88,7 @@ impl Default for RunOptions {
             focus: None,
             from: None,
             stall_seconds: 300.0,
+            things: false,
         }
     }
 }

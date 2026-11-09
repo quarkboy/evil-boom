@@ -60,13 +60,48 @@ impl Knowledge {
         panic: bool,
         unreached_places: Option<&dyn Fn(Point, f64) -> bool>,
     ) -> Vec<(f64, usize, Point, Point)> {
+        let ctx = self.wall_context(reach, unreached_items, unreached_places);
+        let mut best: BTreeMap<Behind, (f64, usize, Point, Point)> = BTreeMap::new();
+        let mut order: Vec<Behind> = Vec::new();
+        for &li in &self.mapped {
+            let Wall::Suspect { signs, behind, stand, aim } = self.wall_signs(li, &ctx) else { continue };
+            let score = signs.score();
+            if score < SUSPICION_MIN && !panic {
+                continue;
+            }
+            let key = behind.unwrap_or(Behind::Line(li));
+            match best.get(&key) {
+                Some(b) if b.0 >= score => {}
+                Some(_) => {
+                    best.insert(key, (score, li, stand, aim));
+                }
+                None => {
+                    order.push(key);
+                    best.insert(key, (score, li, stand, aim));
+                }
+            }
+        }
+        // (best first; ties in the order first found, as a stable sort of Python's dict has it)
+        let mut out: Vec<(f64, usize, Point, Point)> = order.iter().map(|k| best[k]).collect();
+        out.sort_by(|a, b| b.0.total_cmp(&a.0));
+        out
+    }
+
+    /// Every wall she's mapped as `suspicious` sees it, whatever its score: its signs, or why it's
+    /// no wall to try at all (for the survey of the maps' secrets, `evil-boom secret-survey`).
+    pub fn wall_survey(&self, reach: &BTreeSet<usize>, unreached_items: &[Point], unreached_places: Option<&dyn Fn(Point, f64) -> bool>) -> Vec<(usize, Wall)> {
+        let ctx = self.wall_context(reach, unreached_items, unreached_places);
+        self.mapped.iter().map(|&li| (li, self.wall_signs(li, &ctx))).collect()
+    }
+
+    /// What every wall's weighed against: where she can get to, what she's seen.
+    fn wall_context<'a>(&self, reach: &'a BTreeSet<usize>, unreached_items: &'a [Point], unreached_places: Option<&'a dyn Fn(Point, f64) -> bool>) -> WallContext<'a> {
         let nav = Rc::clone(&self.nav);
-        let (m, mesh) = (&nav.map, &nav.mesh);
+        let m = &nav.map;
+        let mesh = &nav.mesh;
         let init = &nav.movers.initial;
         let reach_sectors: BTreeSet<usize> = reach.iter().map(|&p| mesh.poly(p).sector).collect();
         let keys = self.last.as_ref().and_then(|l| l.keys).unwrap_or_default();
-        let mut best: BTreeMap<Behind, (f64, usize, Point, Point)> = BTreeMap::new();
-        let mut order: Vec<Behind> = Vec::new();
         let known = self.known_polys();
         // (the exit signs she's seen: the middles of lines showing one)
         let signs: Vec<Point> = self
@@ -90,135 +125,134 @@ impl Knowledge {
         // it shut, then tried "as a wall" and pressed shut again, and she with it in the closet)
         let now = self.last.as_ref().map_or(0, |l| l.tic);
         let lately: BTreeSet<usize> = self.fired.iter().filter(|f| now - f.tic < PRESSED_LATELY).map(|f| f.line).collect();
-        for &li in &self.mapped {
-            if self.tried_walls.get(&li).is_some_and(|k| k.covers(keys)) || self.looks_interactive(li) || lately.contains(&li) {
-                continue;
-            }
-            let line = &m.linedefs[li];
-            if line.front == NO_SIDEDEF {
-                continue;
-            }
-            let (a, b) = m.line_seg(li);
-            let length = dist(a, b);
-            if length < 16.0 {
-                continue;
-            }
-            let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
-            // (the front is right of v1->v2; use only works from there)
-            let (nx, ny) = ((b.1 - a.1) / length, -(b.0 - a.0) / length);
-            let (front, back) = m.sides(li);
-            let Some(front) = front else { continue };
-            // (something set into a two-sided wall, a grate or a panel: a thing to shoot, from
-            // further off: MAP19's)
-            let target = back.is_some() && !matches!(m.sidedefs[usize::from(line.front)].middle.as_str(), "" | "-");
-            let dists: &[f64] = if target { &[40.0, 96.0, 160.0, 256.0] } else { &[40.0] };
-            // (in front of its middle; else, the box not fitting there, of another part of it:
-            // MAP11's secret door, a column of pillars in front of its middle; facing that part)
-            // (and on the floor she'd be on there, not up on something beside it the box overlaps:
-            // MAP15's lift crate, pressed from beside the crate next to it, picked a spot with the
-            // box over that one's top, 128 up, and was never offered)
-            let fits = |q: Point| {
-                mesh.poly_at(q).is_some_and(|p| {
-                    reach.contains(&p) && {
-                        let (clear, floor, ceiling) = nav.jump_lab.fits_at_heights(q, &heights);
-                        clear && ceiling - floor >= PLAYER_HEIGHT && floor - heights[mesh.poly(p).sector].0 <= MAX_STEP
-                    }
-                })
-            };
-            let Some(mut stand) = dists.iter().map(|d| (mid.0 + nx * d, mid.1 + ny * d)).find(|&q| mesh.poly_at(q).is_some_and(|p| reach.contains(&p))) else {
-                continue;
-            };
-            let mut aim = mid;
-            if !fits(stand) {
-                let along = [0.25, 0.75, 0.1, 0.9].iter().map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t));
-                if let Some((q, w)) = along.flat_map(|w| dists.iter().chain(&[24.0]).map(move |d| ((w.0 + nx * d, w.1 + ny * d), w))).find(|&(q, _)| fits(q)) {
-                    (stand, aim) = (q, w);
+        WallContext { reach, reach_sectors, keys, known, signs, heights, lately, unreached_items, unreached_places }
+    }
+
+    /// One wall's signs, or why it's none to try (`suspicious`, the rubric).
+    fn wall_signs(&self, li: usize, ctx: &WallContext) -> Wall {
+        let nav = Rc::clone(&self.nav);
+        let (m, mesh) = (&nav.map, &nav.mesh);
+        let init = &nav.movers.initial;
+        let WallContext { reach, reach_sectors, keys, known, heights, lately, unreached_items, unreached_places, .. } = ctx;
+        let (reach, keys, unreached_items, unreached_places) = (*reach, *keys, *unreached_items, *unreached_places);
+        if self.tried_walls.get(&li).is_some_and(|k| k.covers(keys)) {
+            return Wall::Skip("tried");
+        }
+        if self.looks_interactive(li) {
+            return Wall::Skip("looks interactive");
+        }
+        if lately.contains(&li) {
+            return Wall::Skip("pressed lately");
+        }
+        let line = &m.linedefs[li];
+        if line.front == NO_SIDEDEF {
+            return Wall::Skip("no front side");
+        }
+        let (a, b) = m.line_seg(li);
+        let length = dist(a, b);
+        if length < 16.0 {
+            return Wall::Skip("too short");
+        }
+        let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
+        // (the front is right of v1->v2; use only works from there)
+        let (nx, ny) = ((b.1 - a.1) / length, -(b.0 - a.0) / length);
+        let (front, back) = m.sides(li);
+        let Some(front) = front else { return Wall::Skip("no front side") };
+        // (something set into a two-sided wall, a grate or a panel: a thing to shoot, from
+        // further off: MAP19's)
+        let target = back.is_some() && !matches!(m.sidedefs[usize::from(line.front)].middle.as_str(), "" | "-");
+        let dists: &[f64] = if target { &[40.0, 96.0, 160.0, 256.0] } else { &[40.0] };
+        // (in front of its middle; else, the box not fitting there, of another part of it:
+        // MAP11's secret door, a column of pillars in front of its middle; facing that part)
+        // (and on the floor she'd be on there, not up on something beside it the box overlaps:
+        // MAP15's lift crate, pressed from beside the crate next to it, picked a spot with the
+        // box over that one's top, 128 up, and was never offered)
+        let fits = |q: Point| {
+            mesh.poly_at(q).is_some_and(|p| {
+                reach.contains(&p) && {
+                    let (clear, floor, ceiling) = nav.jump_lab.fits_at_heights(q, heights);
+                    clear && ceiling - floor >= PLAYER_HEIGHT && floor - heights[mesh.poly(p).sector].0 <= MAX_STEP
                 }
-            }
-            let mut score = if target { 1.0 } else { 0.0 };
-            let mut behind = back.map(Behind::Sector);
-            let (odd, neighbours) = self.odd(li);
-            if let Some(bk) = back {
-                // (as she last saw them: a stair since built makes a wall of what was floor)
-                let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
-                let (fh, bh) = (h(front), h(bk));
-                // (a niche she can see into but not step into is a wall all the same: bump into it
-                // and it's plain; E4M4's niche with the torch, pressed, lowers the lift to a secret)
-                let closed = line.blocks_player() || fh.ceiling.min(bh.ceiling) - fh.floor.max(bh.floor) < PLAYER_HEIGHT || bh.floor - fh.floor > MAX_STEP;
-                if !closed && odd {
-                    // (a way through, but with a face above or below it unlike the walls round it,
-                    // where a switch can be: MAP28's red-eyed skull): only that counts
-                    behind = None;
-                } else if !closed || reach_sectors.contains(&bk) {
-                    continue; // (a way through, or somewhere she gets to anyway)
-                } else if line.flags & ML_SECRET == 0 {
-                    score += 3.0; // (the automap draws it as not a wall)
-                }
-                if closed && bh.floor - fh.floor > MAX_STEP {
-                    score += 1.0; // (a raised platform's side: a lift?)
-                }
-            }
-            let far = (mid.0 - nx * 64.0, mid.1 - ny * 64.0);
-            if unreached_items.iter().any(|&it| dist(far, it) < 160.0) {
-                score += 2.0;
-                // (and a gap under it, or over it, the item seen through: a door left ajar, as
-                // good a sign as the automap's: E4M5's berserk, under a wall 8 off the floor)
-                let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
-                if back.is_some_and(|bk| {
-                    let (fh, bh) = (h(front), h(bk));
-                    fh.ceiling.min(bh.ceiling) > fh.floor.max(bh.floor)
-                }) {
-                    score += 3.0;
-                }
-            }
-            // (somewhere she's seen and can't get to, just behind: the way there may be here)
-            if unreached_places.is_some_and(|near| near(far, 128.0)) {
-                score += 2.0;
-            }
-            // (an exit sign hung in front of it: the way out's through here, as a player reads
-            // it; MAP05's yellow door, its face the walls' own TEKBRON2, the sign 50 in front)
-            let ahead = (mid.0 + nx * 48.0, mid.1 + ny * 48.0);
-            if signs.iter().any(|&q| dist(q, ahead) < EXIT_SIGN_NEAR) {
-                score += 3.0;
-            }
-            // (a blank on her map behind it, walled round by what she has mapped: room for
-            // somewhere she's never seen, as a player reads the automap: E1M6's secret room
-            // behind the south wall of the alcove)
-            let deep = (mid.0 - nx * BLANK_DEPTH, mid.1 - ny * BLANK_DEPTH);
-            if !mesh.poly_at(deep).is_some_and(|p| known.contains(&p)) && self.walled_round(deep) {
-                score += 2.0;
-            }
-            if odd {
-                score += 1.5;
-                if length <= 96.0 {
-                    score += 0.5;
-                }
-                // (one panel unlike the same panel either side of it: a mark, the way a mapper
-                // shows a switch: MAP28's symbol between two plain panels)
-                let faces: BTreeSet<String> = neighbours.iter().map(|&n| self.face(&m.linedefs[n])).collect();
-                if neighbours.len() >= 2 && faces.len() == 1 {
-                    score += 1.5;
-                }
-            }
-            if score < SUSPICION_MIN && !panic {
-                continue;
-            }
-            let key = behind.unwrap_or(Behind::Line(li));
-            match best.get(&key) {
-                Some(b) if b.0 >= score => {}
-                Some(_) => {
-                    best.insert(key, (score, li, stand, aim));
-                }
-                None => {
-                    order.push(key);
-                    best.insert(key, (score, li, stand, aim));
-                }
+            })
+        };
+        let Some(mut stand) = dists.iter().map(|d| (mid.0 + nx * d, mid.1 + ny * d)).find(|&q| mesh.poly_at(q).is_some_and(|p| reach.contains(&p))) else {
+            return Wall::Skip("nowhere to stand in reach");
+        };
+        let mut aim = mid;
+        if !fits(stand) {
+            let along = [0.25, 0.75, 0.1, 0.9].iter().map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t));
+            if let Some((q, w)) = along.flat_map(|w| dists.iter().chain(&[24.0]).map(move |d| ((w.0 + nx * d, w.1 + ny * d), w))).find(|&(q, _)| fits(q)) {
+                (stand, aim) = (q, w);
             }
         }
-        // (best first; ties in the order first found, as a stable sort of Python's dict has it)
-        let mut out: Vec<(f64, usize, Point, Point)> = order.iter().map(|k| best[k]).collect();
-        out.sort_by(|a, b| b.0.total_cmp(&a.0));
-        out
+        let mut signs = Signs { target: if target { 1.0 } else { 0.0 }, ..Signs::default() };
+        let mut behind = back.map(Behind::Sector);
+        let (odd, neighbours) = self.odd(li);
+        if let Some(bk) = back {
+            // (as she last saw them: a stair since built makes a wall of what was floor)
+            let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
+            let (fh, bh) = (h(front), h(bk));
+            // (a niche she can see into but not step into is a wall all the same: bump into it
+            // and it's plain; E4M4's niche with the torch, pressed, lowers the lift to a secret)
+            let closed = line.blocks_player() || fh.ceiling.min(bh.ceiling) - fh.floor.max(bh.floor) < PLAYER_HEIGHT || bh.floor - fh.floor > MAX_STEP;
+            if !closed && odd {
+                // (a way through, but with a face above or below it unlike the walls round it,
+                // where a switch can be: MAP28's red-eyed skull): only that counts
+                behind = None;
+            } else if !closed {
+                return Wall::Skip("a way through");
+            } else if reach_sectors.contains(&bk) {
+                return Wall::Skip("reaches behind anyway");
+            } else if line.flags & ML_SECRET == 0 {
+                signs.not_wall = 3.0; // (the automap draws it as not a wall)
+            }
+            if closed && bh.floor - fh.floor > MAX_STEP {
+                signs.platform = 1.0; // (a raised platform's side: a lift?)
+            }
+        }
+        let far = (mid.0 - nx * 64.0, mid.1 - ny * 64.0);
+        if unreached_items.iter().any(|&it| dist(far, it) < 160.0) {
+            signs.item_behind = 2.0;
+            // (and a gap under it, or over it, the item seen through: a door left ajar, as
+            // good a sign as the automap's: E4M5's berserk, under a wall 8 off the floor)
+            let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
+            if back.is_some_and(|bk| {
+                let (fh, bh) = (h(front), h(bk));
+                fh.ceiling.min(bh.ceiling) > fh.floor.max(bh.floor)
+            }) {
+                signs.item_gap = 3.0;
+            }
+        }
+        // (somewhere she's seen and can't get to, just behind: the way there may be here)
+        if unreached_places.is_some_and(|near| near(far, 128.0)) {
+            signs.place_behind = 2.0;
+        }
+        // (an exit sign hung in front of it: the way out's through here, as a player reads
+        // it; MAP05's yellow door, its face the walls' own TEKBRON2, the sign 50 in front)
+        let ahead = (mid.0 + nx * 48.0, mid.1 + ny * 48.0);
+        if ctx.signs.iter().any(|&q| dist(q, ahead) < EXIT_SIGN_NEAR) {
+            signs.exit_sign = 3.0;
+        }
+        // (a blank on her map behind it, walled round by what she has mapped: room for
+        // somewhere she's never seen, as a player reads the automap: E1M6's secret room
+        // behind the south wall of the alcove)
+        let deep = (mid.0 - nx * BLANK_DEPTH, mid.1 - ny * BLANK_DEPTH);
+        if !mesh.poly_at(deep).is_some_and(|p| known.contains(&p)) && self.walled_round(deep) {
+            signs.blank_behind = 2.0;
+        }
+        if odd {
+            signs.odd = 1.5;
+            if length <= 96.0 {
+                signs.short = 0.5;
+            }
+            // (one panel unlike the same panel either side of it: a mark, the way a mapper
+            // shows a switch: MAP28's symbol between two plain panels)
+            let faces: BTreeSet<String> = neighbours.iter().map(|&n| self.face(&m.linedefs[n])).collect();
+            if neighbours.len() >= 2 && faces.len() == 1 {
+                signs.panel = 1.5;
+            }
+        }
+        Wall::Suspect { signs, behind, stand, aim }
     }
 
     /// Is `p` walled round by lines she has mapped, every way (up, down, left, right) within
@@ -387,5 +421,85 @@ impl Knowledge {
             .flat_map(|v| self.ends.get(v).into_iter().flatten().copied())
             .filter(|&n| n != li && m.front_sector(&m.linedefs[n]) == front)
             .collect()
+    }
+}
+
+/// What `wall_signs` weighs every wall against (`wall_context`).
+struct WallContext<'a> {
+    reach: &'a BTreeSet<usize>,
+    reach_sectors: BTreeSet<usize>,
+    keys: crate::specials::Keys,
+    known: BTreeSet<usize>,
+    /// the middles of the exit signs she's seen
+    signs: Vec<Point>,
+    heights: Vec<(f64, f64)>,
+    lately: BTreeSet<usize>,
+    unreached_items: &'a [Point],
+    unreached_places: Option<&'a dyn Fn(Point, f64) -> bool>,
+}
+
+/// One wall as the rubric sees it: why it's no wall to try, or its signs.
+#[derive(Clone, Debug)]
+pub enum Wall {
+    Skip(&'static str),
+    Suspect { signs: Signs, behind: Option<Behind>, stand: Point, aim: Point },
+}
+
+/// What a wall shows, each sign the points it adds to its suspicion (0: not there).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Signs {
+    /// two-sided with a middle texture: a grate or panel set in it
+    pub target: f64,
+    /// two-sided, closed, not flagged secret: the automap draws it as not a wall
+    pub not_wall: f64,
+    /// the side of a raised platform
+    pub platform: f64,
+    /// an item she can't get to just behind
+    pub item_behind: f64,
+    /// ...seen through a gap over or under the wall
+    pub item_gap: f64,
+    /// somewhere she's seen and can't get to just behind
+    pub place_behind: f64,
+    /// an exit sign in front
+    pub exit_sign: f64,
+    /// a blank on her map behind, walled round
+    pub blank_behind: f64,
+    /// a face unlike the walls either side
+    pub odd: f64,
+    /// ...on a short wall
+    pub short: f64,
+    /// ...one panel between two alike
+    pub panel: f64,
+}
+
+impl Signs {
+    /// The suspicion: the signs' points (added in the rubric's order).
+    pub fn score(&self) -> f64 {
+        [self.target, self.not_wall, self.platform, self.item_behind, self.item_gap, self.place_behind, self.exit_sign, self.blank_behind, self.odd, self.short, self.panel].iter().sum()
+    }
+
+    /// Every sign's name, in the rubric's order.
+    pub fn named_all(&self) -> [&'static str; 11] {
+        ["target", "not_wall", "platform", "item_behind", "item_gap", "place_behind", "exit_sign", "blank_behind", "odd", "short", "panel"]
+    }
+
+    /// The signs there, by name, as (name, points).
+    pub fn named(&self) -> Vec<(&'static str, f64)> {
+        [
+            ("target", self.target),
+            ("not_wall", self.not_wall),
+            ("platform", self.platform),
+            ("item_behind", self.item_behind),
+            ("item_gap", self.item_gap),
+            ("place_behind", self.place_behind),
+            ("exit_sign", self.exit_sign),
+            ("blank_behind", self.blank_behind),
+            ("odd", self.odd),
+            ("short", self.short),
+            ("panel", self.panel),
+        ]
+        .into_iter()
+        .filter(|(_, v)| *v > 0.0)
+        .collect()
     }
 }

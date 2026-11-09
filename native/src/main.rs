@@ -10,6 +10,9 @@
 //!   evil-boom neuro-mock [--port N] [FILE]           a stand-in Neuro server (port 8000): actions sent
 //!                                               from FILE (out/neuro/actions.txt) as lines are added,
 //!                                               everything the game sends shown and in FILE.log
+//!   evil-boom secret-survey <wad> <map>... [--jobs N]   the maps' secrets: the lines pressed or shot
+//!       to reveal each, and how the wall rubric scores them and every other wall once she's
+//!       explored all she can (out/survey/<WAD>.tsv, .txt)
 //!   evil-boom neuro-gpt [--port N] [--config FILE]   a language model as Evil (config/neuro-gpt.json, and
 //!                                               config/neuro-gpt.local.json for the key): log in
 //!                                               out/neuro/gpt.log
@@ -713,6 +716,17 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("dump-nav") if args.len() == 3 => dump_nav(&args[1], &args[2]),
+        Some("secret-survey") => {
+            // (one map in this process, its rows out: the survey's children)
+            let one = args.iter().any(|a| a == "--one");
+            let jobs = args.iter().position(|a| a == "--jobs").and_then(|i| args.get(i + 1)).and_then(|j| j.parse().ok()).unwrap_or(12);
+            let words: Vec<String> = args[1..].iter().filter(|a| !a.starts_with("--")).filter(|a| a.parse::<usize>().is_err()).cloned().collect();
+            match (words.split_first(), one) {
+                (Some((wad, maps)), true) if maps.len() == 1 => evildoom::survey::survey_map(wad, &maps[0]),
+                (Some((wad, maps)), false) if !maps.is_empty() => evildoom::survey::survey(wad, maps, jobs),
+                _ => Err("usage: evil-boom secret-survey <wad> <map>... [--jobs N]".into()),
+            }
+        }
         Some("neuro-gpt") => {
             let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);
             let config = args.iter().position(|a| a == "--config").and_then(|i| args.get(i + 1)).map_or_else(|| evildoom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from);

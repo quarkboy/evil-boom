@@ -11,6 +11,7 @@
 mod learning;
 mod perception;
 mod walls;
+pub use walls::{Signs, Wall};
 
 use crate::geom::{cells, dist, Point};
 use crate::map::ML_MAPPED;
@@ -748,7 +749,7 @@ impl Knowledge {
 
 /// What a suspected wall hides: the sector behind it, or (none) the line itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum Behind {
+pub enum Behind {
     Sector(usize),
     Line(usize),
 }

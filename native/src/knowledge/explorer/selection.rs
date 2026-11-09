@@ -63,19 +63,36 @@ impl Explorer {
         found.into_iter().map(|(score, li, stand, mid)| wall_objective(score, li, stand, mid, self.knowledge.marked(li))).collect()
     }
 
-    /// The walls she suspects from where she can get to now, best first: (score, line, where
-    /// to stand, the wall's middle). (`drive`'s walls.)
-    pub fn suspected(&mut self, obs: &Observation, reach: &BTreeSet<usize>, panic: bool) -> Vec<(f64, usize, Point, Point)> {
+    /// Every wall she's mapped as the rubric sees it now, from where she can get to: its signs,
+    /// or why it's none to try (`evil-boom secret-survey`).
+    pub fn wall_survey(&self, obs: &Observation) -> Vec<(usize, crate::knowledge::model::Wall)> {
         let mesh = Arc::clone(&self.nav.mesh);
         let known = self.knowledge.known_polys();
-        let unreached: Vec<Point> = obs
-            .things
+        let unreached = self.unreached_items(obs, &self.reach);
+        let places = Spots::new(known.difference(&self.reach).map(|&p| mesh.poly(p).center));
+        let near = |q: Point, r: f64| places.near(q, r);
+        self.knowledge.wall_survey(&self.reach, &unreached, Some(&near))
+    }
+
+    /// Items she's seen and can't get to (what a wall in front of one is suspected for).
+    fn unreached_items(&self, obs: &Observation, reach: &BTreeSet<usize>) -> Vec<Point> {
+        let mesh = &self.nav.mesh;
+        let known = self.knowledge.known_polys();
+        obs.things
             .iter()
             .flatten()
             .filter(|t| matches!(t.category, "Health" | "Armor" | "Ammo" | "Weapon" | "Powerup" | "Key"))
             .filter(|t| mesh.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p) && !reach.contains(&p)))
             .map(|t| (t.x, t.y))
-            .collect();
+            .collect()
+    }
+
+    /// The walls she suspects from where she can get to now, best first: (score, line, where
+    /// to stand, the wall's middle). (`drive`'s walls.)
+    pub fn suspected(&mut self, obs: &Observation, reach: &BTreeSet<usize>, panic: bool) -> Vec<(f64, usize, Point, Point)> {
+        let mesh = Arc::clone(&self.nav.mesh);
+        let known = self.knowledge.known_polys();
+        let unreached = self.unreached_items(obs, reach);
         // (the same again while nothing it goes by has changed: asked for every list of what she
         // could do, for the strong suspects by her, every wall of the level weighed each time)
         let key = {
@@ -152,6 +169,7 @@ impl Explorer {
             self.panic_tries = 0;
         }
         if !found && perceive && self.suspecting == Suspecting::No {
+            self.out_of_options.get_or_insert(obs.tic);
             // (nothing else: walls that might hide something, pressed in turn)
             self.suspecting = Suspecting::Walls;
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);

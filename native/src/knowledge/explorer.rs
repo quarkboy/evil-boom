@@ -352,6 +352,9 @@ pub struct Explorer {
     /// pickups: bonuses, health that won't go to waste, ammo with room for it; the user's): offered
     /// as items, past the same checks as any (danger, cut off)
     pub spares: BTreeSet<i32>,
+    /// when she first had nothing else to do but try walls (the survey's moment: everything
+    /// explored but for what's hidden)
+    pub out_of_options: Option<i64>,
     suspecting: Suspecting,
     /// walls pressed round about since there was last anything else to do (the 100% runs)
     panic_tries: usize,
@@ -475,6 +478,7 @@ impl Explorer {
             trapped: None,
             suspecting: Suspecting::No,
             spares: BTreeSet::new(),
+            out_of_options: None,
             panic_tries: 0,
             strong_only: false,
             waiting_reopen: false,

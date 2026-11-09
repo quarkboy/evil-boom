@@ -39,6 +39,7 @@ pub mod sight;
 pub mod specials;
 mod stats;
 pub mod tactical;
+pub mod survey;
 pub mod sweep;
 pub mod things;
 #[cfg(feature = "viewer")]
