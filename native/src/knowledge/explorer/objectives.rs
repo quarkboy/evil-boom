@@ -118,7 +118,8 @@ impl Explorer {
         let nav = Rc::clone(&self.nav);
         let view = self.view();
         let pos = obs.pos();
-        let Some(here) = nav.poly_at(pos) else { return Vec::new() };
+        // (from the floor she's on: on a lip, not the drop her middle's over)
+        let Some(here) = nav.poly_at(self.standing_point(obs)) else { return Vec::new() };
         let keys = obs.keys.unwrap_or_default();
         let states = self.states();
         // (what she could get to using what she's learned: the planner works out how)

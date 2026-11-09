@@ -2,7 +2,8 @@
 
 use super::{Explorer, ARRIVE_SLACK};
 use crate::geom::{dist, Point};
-use crate::navigator::{MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT};
+use crate::motor::Observation;
+use crate::navigator::{MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT, PLAYER_RADIUS};
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
@@ -33,6 +34,29 @@ impl Explorer {
     /// Can the box stand at q, come to from the floor there: clear of walls and things, room
     /// overhead, and not hanging over a floor more than a step higher (MAP16)? `play`: with a
     /// little play round it, for a spot to stop at (MAP21's look-out between a wall and key bars).
+    /// Where she stands, for planning from: her middle, unless that's over a floor below her
+    /// feet while she's held up on a lip (the game keeps her at the highest floor under her box);
+    /// then the nearest point under her box on the floor she's on. E2M2: a demon's bite knocked
+    /// her onto the lip of a nukage pit, her middle over it; planned from inside the pit, the
+    /// next objective one down in it, walked off into it, no way out (seeds 5 and 6).
+    pub fn standing_point(&self, obs: &Observation) -> Point {
+        let pos = obs.pos();
+        let Some(z) = obs.z else { return pos };
+        let floor_at = |q: Point| self.nav.poly_at(q).and_then(|p| obs.height(self.nav.sector_of_poly(p))).map(|h| h.floor);
+        // (only over a drop she couldn't step back up: off a step, a moment above the floor below,
+        // she's where her middle is; E2M1, a route from the step's top edge, none)
+        if floor_at(pos).is_none_or(|f| f >= z - MAX_STEP) {
+            return pos;
+        }
+        let r = PLAYER_RADIUS - 1.0;
+        [(r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r), (r, r), (r, -r), (-r, r), (-r, -r)]
+            .into_iter()
+            .map(|(dx, dy)| (pos.0 + dx, pos.1 + dy))
+            .filter(|&q| floor_at(q).is_some_and(|f| (f - z).abs() < 1.0))
+            .min_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)))
+            .unwrap_or(pos)
+    }
+
     pub fn standable(&self, q: Point, play: bool) -> bool {
         // (at the heights she last saw, not the map's starting ones: a door opened since, a
         // floor risen)

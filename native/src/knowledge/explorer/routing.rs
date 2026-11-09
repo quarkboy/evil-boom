@@ -232,9 +232,11 @@ impl Explorer {
         // (the once-only lines she's used this life are spent: E3M4's door)
         let fired = self.spent_once();
         let budget = (self.plan_expansions >> self.budget_cuts.min(MAX_BUDGET_CUTS)).max(MIN_EXPANSIONS.min(self.plan_expansions));
+        // (from the floor she's on: on a lip, not the drop her middle's over)
+        let start = self.standing_point(obs);
         let plan = |goal: Point| {
             view.plan(
-                obs.pos(),
+                start,
                 &[goal],
                 &Plan {
                     keys,
