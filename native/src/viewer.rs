@@ -619,7 +619,7 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
     // (the log as it's written, to follow live: tail -f)
     let live = out_dir().join("watch").join("live.log");
     std::fs::create_dir_all(live.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-    let mut log = std::fs::File::create(&live).map_err(|e| e.to_string())?;
+    let mut log = crate::config::Log::create(&live, &o.seed.map_or_else(String::new, |s| format!("s{s}"))).map_err(|e| e.to_string())?;
     println!("log: {}{}", live.display(), if o.paced { format!(" (at x{})", o.speed) } else { String::new() });
     loop {
         let mut shown = 0;

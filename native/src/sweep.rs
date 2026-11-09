@@ -561,7 +561,8 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     let dir = log_dir();
     let _ = std::fs::create_dir_all(&dir);
     let stem = iwad.file_stem().map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase());
-    let _ = std::fs::write(dir.join(format!("{stem}_{map_name}.txt")), lines.join("\n") + "\n");
+    // (and kept, by the commit, the time and the seed: not written over by the next run)
+    let _ = crate::config::write_log(&dir.join(format!("{stem}_{map_name}.txt")), &o.seed.map_or_else(|| "random".to_string(), |s| format!("s{s}")), &(lines.join("\n") + "\n"));
     {
         let k = &agent.x().knowledge;
         rec.entries.extend(k.journal[journal_n.min(k.journal.len())..].iter().map(|(t, nt)| Entry::Note(*t, nt.clone())));

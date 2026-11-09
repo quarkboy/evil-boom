@@ -24,15 +24,12 @@ How to find out why a run went wrong, from the evidence the runs leave, before c
 
 ## The log: out/explore/\<IWAD\>_\<MAP\>.txt
 
-Every `run-map` writes its whole log here, **overwriting** it. Runs of the same map in parallel
-clobber each other, so run seeds one after another and copy the file after each:
-
-```
-for s in 0 1 2 3; do
-  evil-boom run-map doom2 MAP08 ... --seed $s | grep "DAMAGE\|RESULT"
-  cp out/explore/DOOM2_MAP08.txt /tmp/x08_$s.txt
-done
-```
+Every `run-map` writes its whole log here, overwriting it (the latest), and keeps a copy named by
+the seed, the commit and the time it started (UTC):
+`out/explore/DOOM2_MAP08.s3.e1fed91-20261109-051726.txt` (`-dirty` after the commit: built with
+changes not committed). So runs in parallel, or one after another, each leave their own; the
+same for the arenas' logs (out/arena), the headless watcher's live log (out/watch/live.log) and
+the GPT stand-in's (out/neuro/gpt.log).
 
 What's in it, by line shape:
 

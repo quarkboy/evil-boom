@@ -136,7 +136,7 @@ fn run(listener: &TcpListener, config: &Config) -> Result<(), String> {
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let log_path = crate::config::out_dir().join("neuro").join("gpt.log");
     std::fs::create_dir_all(log_path.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-    let log = std::sync::Arc::new(std::sync::Mutex::new(std::fs::File::create(&log_path).map_err(|e| e.to_string())?));
+    let log = std::sync::Arc::new(std::sync::Mutex::new(crate::config::Log::create(&log_path, "").map_err(|e| e.to_string())?));
     let say = {
         let log = std::sync::Arc::clone(&log);
         move |line: String| {

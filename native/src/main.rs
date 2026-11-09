@@ -588,7 +588,7 @@ fn arena_one(args: &[String]) -> Result<(), String> {
     let dir = evildoom::config::out_dir().join("arena");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let tag = seed.map_or("random".to_string(), |s| s.to_string());
-    std::fs::write(dir.join(format!("{name}_{tag}.txt")), log.join("\n")).map_err(|e| e.to_string())?;
+    evildoom::config::write_log(&dir.join(format!("{name}_{tag}.txt")), "", &log.join("\n")).map_err(|e| e.to_string())?;
     println!("RESULT {} {:.0}s health {} armor {} kills {}/{}", o.result, o.seconds, o.health, o.armor, o.kills, o.monsters);
     Ok(())
 }
