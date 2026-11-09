@@ -50,7 +50,9 @@ impl Row {
         if self.kills.1 == 0 {
             0.0
         } else {
-            f64::from(self.kills.0) / f64::from(self.kills.1)
+            // (at most all of them: monsters a level makes as it goes (a pain elemental's lost
+            // souls, a spawner's) count as kills but not in its total; MAP30 UV, 1.6 of it)
+            (f64::from(self.kills.0) / f64::from(self.kills.1)).min(1.0)
         }
     }
 

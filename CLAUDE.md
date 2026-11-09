@@ -47,25 +47,24 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
 
 ## Testing
 
-- **No full sweeps without asking.** Up to 8 chosen levels (or seeds) per test is fine.
+- **The score is the measure of progress** (the user's, 2026-11-09; it replaces the old
+  regression set of episodes, a Doom II HNTR sweep and arenas): `evil-boom score` plays all 68
+  levels (Doom E1-E4, Doom II) from a pistol start, one life, mortal, on HMP and UV, 8 random seeds
+  each (1088 runs, ~17 min at `--jobs 12`; a progress window pops up). A run scores 1 for an exit,
+  else half its kill share; the score is the mean over level-skills. Consistency counts too: the
+  levels beaten on every run, and each level's spread. `score-report A.tsv B.tsv` compares sets
+  (TSVs in `out/score/`). Its own noise: about +-0.006 a measurement, so a change of 0.02 or more
+  is real; a single level's points move about +-0.07 by seed alone. Judge a change by it; commit
+  messages give the before/after score.
+- **Arenas aren't part of the score** (the user's: too artificial). Use them while developing a
+  fight idea, not to judge it.
+- **No other full sweeps without asking.** Up to 8 chosen levels (or seeds) per test is fine.
 - For a movement/exploration fix: that level alone, a good loadout so combat doesn't confound it
   (`--carry 287,200,50,0,20,1,100,100,1`; format in docs/DEBUGGING.md), several seeds, one at a
-  time (each run-map overwrites `out/explore/<IWAD>_<MAP>.txt`). Then an episode or pistol-start
-  check.
-- Regression set (the user's, 2026-11-08; HNTR = `--fight 2`, `--mortal`, one life):
-  `evil-boom episode doom E1M1 --fight 2 --mortal --seeds 8` (and E2M1, E3M1), Doom II as single
-  levels from a pistol start, `evil-boom sweep doom2 MAP01 MAP02 MAP03 MAP04 MAP05 MAP08 MAP10
-  MAP12 --fight 2 --mortal --lives 1 --seed N` for seeds 0-3 (no gimmick maps: MAP06's crushers,
-  MAP07), and `evil-boom arena arenas/combat.txt --seeds 8` and `arenas/doom2.txt`. Compare with the numbers
-  in the last commits' messages; within a few tenths of a level is seed noise.
-- **Parity checks** (a refactor meant to change nothing): one run of one episode's levels
-  (e.g. `episode doom E1M1 --seeds 1` with the regression flags) compared line for line with
-  the old build's; runs are deterministic, so that's enough. Not the whole suite (the user's).
-- **Staggered sets** (the user's): start each set of the regression run ~20 s after the one
-  before rather than waiting for it (the load drops once a set's first seeds finish).
-- Sweeps (when asked): 12 parallel jobs (`--jobs 12` on this laptop; episodes and arenas too);
-  one sweep type at a time, expert first; the next only
-  with no per-level regressions so far.
+  time (each run-map overwrites `out/explore/<IWAD>_<MAP>.txt`), then the score.
+- **Parity checks** (a refactor meant to change nothing): a handful of `run-map`s on fixed seeds
+  compared line for line with the old build's; runs are deterministic, so that's enough.
+- 12 parallel jobs (`--jobs 12` on this laptop).
 
 ## Where the fight's code is
 
@@ -76,14 +75,18 @@ another case in a chain.
 
 ## Where things stand (2026-11-09)
 
-Last bot change: 20-minute pass round N (episode 4: an out-of-reach ammo goal dropped, no retreat from a route to ammo that keeps clear), the pass's last round; before it, round M (episode 4: a floor priced by what one like it did, no chasing out of sight over a hurting floor); before it, round L (no fist or saw brought up within two claws of death); before it, round K (a quick hitscanner fought where it stands when outmatched); before it, round J (barrel chains judged whole, a dodge clear of the hit, the fist's true reach, no knife-edge squeezes); before it, round I (a retreat keeps its legs over a dodge that clears nothing, the fist not up for what it can't reach, a way past the monster already at her); before it, round H (seams walked over, two crushers side by side, a stalled melee given up, a hurting floor's replan at once); before it, round G (a target with no shot at it given up after 20 s, no margin at a dead end, kill first only what she'd kill soon); before it, round F (floor damage through armor, out of a hitscanner's sight round a corner, rockets judged from rocket range); before it, round E (no saw rush past shooters, cover in time and through doors, an errand's way clear of all by it); before it, round D (a lift's rising floor no crusher, a better gun by the boss, no far ammo errand mid-fight, no standing on a hurting floor); before it, round C (no shot waking a sleeping pack on an errand, a frontier to an unreachable better gun weighed as a switch); before it, the ammo hold counts what she's put into the monster; before it, 20-minute pass round B (box-aware crusher escape, no fight move over a teleport line's front, ammo worth being cut off for) with a wall tried once pressed, a rocket's way held after the fight, homing missiles shaken off round a corner; before it, a stopped crusher set off from a start line before its edge; before it, the ammo hold's "in her way" by the route's way, not her facing; before it, 20-minute pass round A (unarmed and shot at, to the ammo before cover; a floor hurts the same each time; a purposeful wade looked round before wading back, a self-shutting door no way out); before it, a shut-in's trigger lines past the risk cap, a rocket's way held through its launch, no ammo spent on what she can't kill; before it, level campaign rounds 1-14 (round 14: unseen walls a way out of a pit, a switch before walls in one, no fist at a killer; round 13: out of ammo to the ammo itself, harmless floors learned unprotected; round 12: unarmed the route keeps the turn, Keens fought; round 11: lining up a jump isn't a jump; round 10: a barrel chain going off kept off out of a fight too; round 9: no coasting off a ledge in a fight, a gun urgent only on a way she can take; round 8: closing in round a corner, SLIME10-12 hurt; round 7: health an errand only near, a cheap way not refused for health; round 6: a jump given up only for a body in the way, switches from a hurting floor at a dead end; round 5: a melee she can't land, a monster in an errand's way) (barrels going off, waits that aren't coming, a hurting floor's own cost; teleporters from the front, ammo walks through monsters, one-hit claws); before it, crushers by kind (slow ones hold her: no-go stopped low, set off from the edge
-first; fast ones a damage cost), spent W1 teleporters walkable, the escape from under a crusher
-with all of her out, no stepping for a shot in nukage (DECISIONS.md). Regression set (HNTR, one
-life): E1 8.0 (8/8 through), E2 7.5 (4/8), E3 7.8 (2/8), Doom II pistol-start levels 29/32;
-arenas combat 119/128, doom2 223/240. Sets swing between builds: judge across sets. Open items:
-Doom II MAP08, E2M4 seed 5's pit drop (dead_end let it through), E3M9's arrival ambush, E3M6
-deaths, E3M8 deaths, the stepping-for-a-shot flip at
-512 off hurting floors, MAP10's barons at the exit line.
+Last bot changes: the level campaign (2026-11-09): a 10-minute pass (rounds 1-14) and a
+20-minute pass (rounds A-N) of worktree agents over every pistol-start level failing on UV, each
+round merged, regression-checked and committed (details per round in DECISIONS.md). Seed-0
+single-level exits, campaign start -> now: ITYTD 52 -> 55, HNTR 45 -> 49, HMP 21 -> 29, UV 14 -> 13
+of 68. Then the score replaced the regression set.
+
+Score (c600b62, all 68 levels, HMP+UV, 8 seeds): 0.435 (HMP 0.54, UV 0.33; exits 33%, kills 50%;
+18-21 of 136 level-skills beaten every run, 60 never). Paused before the 40-minute pass (the
+user's); the larger changes waiting first: the route's speed cut kept under the fight's aim
+(`Motion::go`, crawling backwards over lava), ammo running out early on UV, rockets held at packed
+crowds, the MAP30 brain (the user: she may know of it), closed door sectors taken as passable
+(E4M6).
 
 ## The Linux port (done 2026-11-08)
 
