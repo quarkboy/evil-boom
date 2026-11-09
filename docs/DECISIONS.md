@@ -2134,3 +2134,32 @@ time, so neither a tuning run nor a decision model could vary one.
 
 Nothing changes: the parity set (32 runs) is line for line the same; a file changing three
 numbers does change the runs it's given to.
+
+## Restructuring, step 3: one assessment a tic (2026-11-09)
+
+"Is she outmatched", "what's shooting at her", "is she short of ammo", "is she surrounded" were
+each worked out afresh by whichever rule asked, some seventy times a tic between the fight's
+tree, the retreats, the errands and the explorer's hooks, a few of them (surrounded, an
+arch-vile she can't kill in a moment, what shoots) by the player's own versions. Nothing said, in
+one place, what a decision had been made on.
+
+- `tactical/combat/assess.rs`: `Assessment`, worked out once as she looks (`Combat::observe`'s
+  last step) and kept as `Combat::now`: her place and health, invulnerable or not, what's
+  against her (and of it what shoots, what she's in a fight with), the threat, her firepower,
+  guns with ammo, short of ammo, outmatched, surrounded, an arch-vile to hide from, the rate
+  she's losing health and the seconds that leaves. Every rule reads `now`; the functions that
+  work the answers out are private to the fight (the builder's), so there's one way to ask.
+- The tree's `Situation` lost what `now` has (health, threat, outmatched): it's the fight's
+  options this tic (target, aim, missiles, the ways out); `now` is how things stand.
+- What isn't in it, and why. `armed`: a monster given up on is out of her fist's reach, and the
+  tree gives up mid-tic, so it stays a question to the fight (which reads `now` for the rest).
+  `bfg_flying`: changed by this tic's trigger. The hurting floor under her: the explorer's
+  knowledge, the player's `Plight` still. And the supposing questions ("with that gun in hand,
+  could she take what's by it?"): the arsenal's functions take the observation supposed, so
+  they keep working from one (`too_much`, `sniper`, `takes_on`, `ammo_short_*`, `firepower`).
+- Next on it (not done): a line logged at each decision with the assessment it was made on, and
+  a way to force a choice, before any model is attached.
+
+Nothing changes: the parity set (32 runs) and a second set (12 more maps, HMP and UV on other
+seeds, three lives for the start-again path: 24 runs, 28 deaths) are line for line the same as
+the build before.

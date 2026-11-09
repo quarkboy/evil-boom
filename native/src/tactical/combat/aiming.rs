@@ -69,7 +69,7 @@ impl Combat {
     pub(super) fn pick_target(&mut self, obs: &Observation) -> Option<Thing> {
         let pos = obs.pos();
         let mut best: Option<(f64, Thing)> = None;
-        let against = self.against_her();
+        let against = self.now.against_her.clone();
         let hitscanners: Vec<i32> = against.iter().filter(|t| mon(t.name).attack == Attack::Hitscan).map(|t| t.id).collect();
         for t in against {
             let info = mon(t.name);
@@ -197,7 +197,7 @@ impl Combat {
     /// A rocket's way to t clear its whole width (MAP32: one fired past a pillar's corner beside
     /// her, the line from her eye clear, the rocket's side not: 86 off her).
     fn rocket_lane_clear(&mut self, obs: &Observation, t: &Thing) -> bool {
-        if self.invulnerable(obs.tic) {
+        if self.now.invulnerable {
             return true;
         }
         // (from where she is and from where she'll be when it comes out: the launcher lets
@@ -522,7 +522,7 @@ impl Combat {
 
     /// Is a rocket at t sure not to blow up by her (E1M9's died at 88 health, nothing in sight)?
     pub(super) fn rocket_safe(&self, obs: &Observation, t: &Thing) -> bool {
-        if self.invulnerable(obs.tic) {
+        if self.now.invulnerable {
             return true; // (her own blast can't hurt her either)
         }
         let pos = obs.pos();

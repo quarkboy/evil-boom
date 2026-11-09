@@ -33,7 +33,7 @@ impl Combat {
     /// there's none (then she shoots: nothing else helps).
     pub(super) fn vile_fire(&mut self, obs: &Observation) -> Option<(&'static str, Option<Point>)> {
         let pos = obs.pos();
-        let Some(vile) = self.against_her().into_iter().filter(|t| (0..VILE_BLAST).contains(&t.attack) && mon(t.name).attack == Attack::Fire).min_by_key(|t| t.attack) else {
+        let Some(vile) = self.now.against_her.iter().filter(|t| (0..VILE_BLAST).contains(&t.attack) && mon(t.name).attack == Attack::Fire).min_by_key(|t| t.attack).cloned() else {
             // (out of its sight now: stay there till it's gone off)
             if obs.tic >= self.vile_until {
                 self.vile_way = None;
@@ -145,11 +145,13 @@ impl Combat {
         let w = weapon_in(obs.weapon.unwrap_or(2), obs);
         let pos = obs.pos();
         let shooter = self
-            .against_her()
-            .into_iter()
+            .now
+            .against_her
+            .iter()
             .filter(|t| first_shot(t.name).is_some() && t.attack >= 0)
             .filter(|t| self.time_to_kill(&w, t, dist((t.x, t.y), pos)) > self.tune.hide.duck_fight)
-            .min_by_key(|t| t.attack);
+            .min_by_key(|t| t.attack)
+            .cloned();
         let Some(t) = shooter else {
             if obs.tic >= self.duck_until {
                 self.duck_way = None;
@@ -198,7 +200,7 @@ impl Combat {
     pub(super) fn shake_off(&mut self, obs: &Observation, missiles: &[Thing]) -> Option<(&'static str, Option<Point>)> {
         // (with nothing else in sight after her: in a fight, dodged as it comes, running off round
         // a corner from the revenant still shooting walked her into the arachnotron's plasma)
-        if !self.against_her().is_empty() {
+        if !self.now.against_her.is_empty() {
             return None;
         }
         let t = missiles.iter().find(|t| self.homing_since.get(&t.id).is_some_and(|&since| obs.tic - since >= self.tune.hide.shake_after))?;
@@ -276,7 +278,7 @@ impl Combat {
     /// The way to move fighting `target` with `gun` (None: nowhere safe).
     pub(super) fn steer(&mut self, obs: &Observation, target: Option<&Thing>, gun: &Weapon) -> Option<Point> {
         let pos = obs.pos();
-        let mut them = self.against_her();
+        let mut them = self.now.against_her.clone();
         if let Some(t) = target.filter(|t| !them.iter().any(|m| m.id == t.id)) {
             them.push(t.clone()); // (out of sight just now: where it was)
         }
@@ -293,7 +295,7 @@ impl Combat {
         // (not towards an errand in the claws' reach of something one hit of which could kill her:
         // E2M3, 35 health, out of ammo, the shell she backed off towards 50 from a baron, 10-80 a
         // hit, kept her by it till it hit)
-        let health = obs.health.unwrap_or(100.0);
+        let health = self.now.health;
         let errand_way = self.toward.filter(|&to| dist(to, pos) > 1.0 && !them.iter().any(|m| claw_max(m.name) >= health && dist(to, (m.x, m.y)) < CLAW_REACH));
         let mut best: Option<(f64, Point)> = None;
         for i in 0..WAYS {

@@ -380,14 +380,10 @@ impl Player {
             Some((tic, amount)) if obs.tic - tic <= 1 => (amount, c.alive.values().any(|t| dist((t.x, t.y), pos) < 128.0)),
             _ => (self.plight.last_hit, self.plight.close),
         };
-        Plight { armed: c.armed(obs), hurting_floor, surrounded: self.surrounded(obs), outmatched: c.outmatched(obs), last_hit, close }
+        Plight { armed: c.armed(obs), hurting_floor, surrounded: c.now.surrounded, outmatched: c.now.outmatched, last_hit, close }
     }
 
     // --- backing off ------------------------------------------------------------------------
-
-    fn shooters(&self) -> Vec<Thing> {
-        self.fight.combat.against_her().into_iter().filter(|t| monster(t.name).is_some_and(|m| matches!(m.attack, Attack::Hitscan | Attack::Missile | Attack::Fire))).collect()
-    }
 
     fn log(&mut self, s: String) {
         self.explorer.log.push(format!("  [fight] {s}"));
@@ -396,7 +392,7 @@ impl Player {
     /// Is she falling back? A retreat under way goes on till it's there, it fails, or its own
     /// end comes; else, not too soon after the last, one may start.
     fn retreating(&mut self, obs: &Observation) -> bool {
-        if !self.shooters().is_empty() {
+        if !self.fight.combat.now.shooters.is_empty() {
             self.shooters_tic = obs.tic;
         }
         if let Some(r) = &self.retreat {
@@ -418,7 +414,7 @@ impl Player {
         // (a try at some other retreat that found no way doesn't hold off cover when it's due:
         // MAP04 UV, a way back tried and not found at full health, cover due 105 tics later at
         // 28, too late)
-        if obs.tic - self.retreat_tic < self.fight.tune.retreat.again && (self.tried_cover || !self.cover_due(obs)) {
+        if obs.tic - self.retreat_tic < self.fight.tune.retreat.again && (self.tried_cover || !self.cover_due()) {
             return false;
         }
         self.retreat = self.start_retreat(obs);
@@ -451,7 +447,7 @@ impl Player {
     fn walled_off(&self, obs: &Observation, route: &RouteFollower) -> bool {
         let pos = obs.pos();
         let path = route.planned_path(Some(pos));
-        self.fight.combat.against_her().iter().any(|t| {
+        self.fight.combat.now.against_her.iter().any(|t| {
             let touch = (monster(t.name).map_or(20.0, |m| m.radius) + PLAYER_RADIUS).min(dist((t.x, t.y), pos) - self.fight.tune.retreat.ammo_margin);
             path.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).any(|(a, b)| segment_point_distance(a, b, (t.x, t.y)) < touch)
         })
@@ -468,15 +464,15 @@ impl Player {
     /// - out: surrounded;
     /// - bait: a heavy she can't kill soon, with others for its shots to land on.
     fn start_retreat(&mut self, obs: &Observation) -> Option<Retreat> {
-        if self.fight.combat.invulnerable(obs.tic) || self.fight.combat.bfg_flying(obs) {
+        if self.fight.combat.now.invulnerable || self.fight.combat.bfg_flying(obs) {
             return None; // (nothing to fall back from; or her BFG's spray to come, from where she is)
         }
-        let unarmed = !self.fight.combat.armed(obs) && !self.fight.combat.against_her().is_empty();
-        let on_way = unarmed && !self.vile(obs) && self.on_for_ammo(obs);
-        let (kind, route) = if self.vile(obs) {
+        let unarmed = !self.fight.combat.armed(obs) && !self.fight.combat.now.against_her.is_empty();
+        let on_way = unarmed && !self.fight.combat.now.vile && self.on_for_ammo(obs);
+        let (kind, route) = if self.fight.combat.now.vile {
             self.retreat_tic = obs.tic;
             (RetreatKind::Cover, self.find_cover(obs))
-        } else if self.cover_due(obs) {
+        } else if self.cover_due() {
             self.retreat_tic = obs.tic;
             // (unarmed, cover doesn't end it: nothing she does from there kills what's after her,
             // and the cover's end is when they stop shooting. The ammo first, cover if there's no
@@ -502,10 +498,10 @@ impl Player {
             self.retreat_tic = obs.tic;
             match self.back_out(obs, why) {
                 Some(r) => (RetreatKind::Back, Some(r)),
-                None if self.surrounded(obs) => (RetreatKind::Out, self.out_of_it(obs)),
+                None if self.fight.combat.now.surrounded => (RetreatKind::Out, self.out_of_it(obs)),
                 None => (RetreatKind::Back, None),
             }
-        } else if self.surrounded(obs) {
+        } else if self.fight.combat.now.surrounded {
             self.retreat_tic = obs.tic;
             (RetreatKind::Out, self.out_of_it(obs))
         } else if obs.tic - self.bait_tic > self.fight.tune.retreat.bait_again {
@@ -525,16 +521,15 @@ impl Player {
     /// the time she'd get to cover as far off as it's looked for, at the rate she's losing health
     /// (MAP04 UV: a pack of hitscanners raking her in the open, 67 to 28 in 8 tics, the cover 600
     /// back; gone for at 28, dead on the way).
-    fn cover_due(&mut self, obs: &Observation) -> bool {
-        let health = obs.health.unwrap_or(100.0);
-        let rate = self.fight.combat.damage_rate(obs.tic);
-        (health < self.fight.tune.retreat.health || health - rate * self.fight.tune.retreat.cover_range / RUN_SPEED < self.fight.tune.retreat.health) && !self.shooters().is_empty()
+    fn cover_due(&mut self) -> bool {
+        let (health, rate) = (self.fight.combat.now.health, self.fight.combat.now.damage_rate);
+        (health < self.fight.tune.retreat.health || health - rate * self.fight.tune.retreat.cover_range / RUN_SPEED < self.fight.tune.retreat.health) && !self.fight.combat.now.shooters.is_empty()
     }
 
     /// Where she stands now, while nothing's shooting at her and nothing's hurting her: on the
     /// trail back.
     fn keep_trail(&mut self, obs: &Observation) {
-        let calm = self.shooters().is_empty() && self.fight.combat.damage_rate(obs.tic) == 0.0 && !self.plight.hurting_floor;
+        let calm = self.fight.combat.now.shooters.is_empty() && self.fight.combat.now.damage_rate == 0.0 && !self.plight.hurting_floor;
         if !calm {
             return;
         }
@@ -552,13 +547,13 @@ impl Player {
     /// them on more than one side). Why, if so (MAP29's ambushes in tight spaces: out, or kill
     /// fast, the user's).
     fn ambushed(&mut self, obs: &Observation) -> Option<String> {
-        let them = self.shooters();
+        let them = self.fight.combat.now.shooters.clone();
         if them.is_empty() {
             return None;
         }
         let pos = obs.pos();
-        let close: Vec<Point> = self.fight.combat.against_her().iter().filter(|t| dist((t.x, t.y), pos) < self.fight.tune.retreat.ambush_near).map(|t| (t.x, t.y)).collect();
-        let losing = self.fight.combat.damage_rate(obs.tic) > self.fight.tune.retreat.ambush_rate;
+        let close: Vec<Point> = self.fight.combat.now.against_her.iter().filter(|t| dist((t.x, t.y), pos) < self.fight.tune.retreat.ambush_near).map(|t| (t.x, t.y)).collect();
+        let losing = self.fight.combat.now.damage_rate > self.fight.tune.retreat.ambush_rate;
         if !losing && close.len() < self.fight.tune.retreat.ambush_count {
             return None;
         }
@@ -579,7 +574,7 @@ impl Player {
     /// Back the way she came, to the nearest place on it none of them can see her (or well clear
     /// of them all), by a way not through them.
     fn back_out(&mut self, obs: &Observation, why: String) -> Option<RouteFollower> {
-        let them: Vec<Thing> = self.fight.combat.against_her();
+        let them: Vec<Thing> = self.fight.combat.now.against_her.clone();
         let pos = obs.pos();
         let nav = Rc::clone(&self.explorer.nav);
         let heights = self.fight.combat.heights(obs).to_vec();
@@ -620,8 +615,8 @@ impl Player {
     /// With a heavy after her she can't see off quickly and monsters of another kind near it:
     /// to a place she's been where its shots at her go through them, holding fire.
     fn baiting(&mut self, obs: &Observation) -> Option<RouteFollower> {
-        let them = self.fight.combat.against_her();
-        let fp = self.fight.combat.firepower(obs);
+        let them = self.fight.combat.now.against_her.clone();
+        let fp = self.fight.combat.now.firepower;
         let heavies: Vec<&Thing> = them.iter().filter(|h| HEAVIES.contains(&h.name) && mhealth(h.name) / fp > self.fight.tune.retreat.bait_heavy).collect();
         if heavies.is_empty() {
             return None;
@@ -657,7 +652,7 @@ impl Player {
     /// No plain way to ammo but on her way for some already (`on_way`): on with that, not away.
     /// No way to ammo at all, not hurt (`keep_on`), and her way on clear of them: on with it.
     fn for_ammo(&mut self, obs: &Observation, on_way: bool, keep_on: bool) -> Option<RouteFollower> {
-        let them = self.fight.combat.against_her();
+        let them = self.fight.combat.now.against_her.clone();
         let pos = obs.pos();
         // (no nearer to any of them than she is: one on her already, every way off starts by
         // it, and away is still away)
@@ -747,7 +742,7 @@ impl Player {
         if !(weapon_item(name).is_some_and(|s| s != 1 && s != 8) || ammo_item(name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))) {
             return false;
         }
-        let them = self.fight.combat.against_her();
+        let them = self.fight.combat.now.against_her.clone();
         let nearest = them.iter().map(|m| dist((m.x, m.y), obs.pos())).fold(f64::INFINITY, f64::min);
         let clear = self.fight.tune.errands.past_clear.min(nearest - self.fight.tune.retreat.ammo_margin).max(0.0);
         keeps_clear(obs, f, &them, clear)
@@ -782,20 +777,6 @@ impl Player {
         }
         let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, barrel: None, label: label.to_string(), expects: Vec::new() };
         Some(RouteFollower::new(view, vec![step], obs.keys.unwrap_or_default(), Some(live), false, obs.tic))
-    }
-
-    /// An arch-vile in sight she can't kill in a moment: out of its sight, whatever her health
-    /// (MAP11: three deaths at 50-70 health, one in sight).
-    fn vile(&self, obs: &Observation) -> bool {
-        let fp = self.fight.combat.firepower(obs);
-        self.fight.combat.against_her().iter().any(|t| t.name == "Archvile" && mhealth(t.name) / fp > self.fight.tune.retreat.vile_kill)
-    }
-
-    /// Several monsters near her, and round her rather than all one side.
-    fn surrounded(&self, obs: &Observation) -> bool {
-        let pos = obs.pos();
-        let near: Vec<Point> = self.fight.combat.against_her().iter().filter(|t| dist((t.x, t.y), pos) < self.fight.tune.retreat.surrounded_near && monster(t.name).is_some_and(|m| m.attack != Attack::None)).map(|t| (t.x, t.y)).collect();
-        near.len() >= self.fight.tune.retreat.surrounded_count && spread(pos, &near) > self.fight.tune.retreat.surrounded_spread
     }
 
     /// Seen-by score of spots, by the monsters' eyes.
@@ -858,7 +839,7 @@ impl Player {
     /// user's: a player hears when its attack's over. E3M8: the way to a post taken into its
     /// bursts at 600, dead in a second.
     fn hold_at_edge(&mut self, obs: &Observation, c: &Controls) -> bool {
-        if c.forward.hypot(c.strafe) < 1.0 || self.fight.combat.invulnerable(obs.tic) {
+        if c.forward.hypot(c.strafe) < 1.0 || self.fight.combat.now.invulnerable {
             return false;
         }
         let firing: Vec<Seen> = self
@@ -897,7 +878,7 @@ impl Player {
     /// building from the spider mastermind; every hit she took was on her way to a box of rockets
     /// or a door, across the ring in its sight. Worked out again once one's moved, or a while on.
     fn keep_out_of_sight(&mut self, obs: &Observation) {
-        let unhurt = self.fight.combat.invulnerable(obs.tic);
+        let unhurt = self.fight.combat.now.invulnerable;
         let them: Vec<Seen> = self
             .fight
             .combat
@@ -953,7 +934,7 @@ impl Player {
     /// E3M8: the building in the middle, across the open to get to it, rather than standing in
     /// the open with the spider mastermind's bursts.
     fn find_post(&mut self, obs: &Observation) -> Option<RouteFollower> {
-        let shooters = self.shooters();
+        let shooters = self.fight.combat.now.shooters.clone();
         if shooters.is_empty() {
             return None;
         }
@@ -1021,7 +1002,7 @@ impl Player {
     }
 
     fn find_cover(&mut self, obs: &Observation) -> Option<RouteFollower> {
-        let shooters = self.shooters();
+        let shooters = self.fight.combat.now.shooters.clone();
         let spots = self.visited_spots(obs, f64::NEG_INFINITY, self.fight.tune.retreat.cover_range, COVER_SPOTS);
         if spots.is_empty() {
             return None;
@@ -1186,7 +1167,7 @@ impl Fight {
     /// (and some, for what's to come).
     fn gun_worth(&self, obs: &Observation, name: &str) -> f64 {
         let w = Self::gun(obs, name);
-        let now = self.combat.firepower(obs);
+        let now = self.combat.now.firepower;
         let hp: f64 = self.combat.remaining().iter().map(|s| mhealth(s.name)).sum();
         self.tune.errands.gun_worth + (hp / now - hp / w.dps().max(now)).max(0.0)
     }
@@ -1209,7 +1190,7 @@ impl Fight {
             // MAP10 UV, at 38 a stimpack 1100 off across a yard of imps and zombiemen, walked
             // on into them shooting, down to 3 and dead; the fight's own retreats and cover
             // are what keep her alive there, and its 10 don't pay for the way)
-            let heals = health_item(name).is_some_and(|(amount, cap)| amount >= 10 && obs.health.unwrap_or(100.0) < f64::from(cap));
+            let heals = health_item(name).is_some_and(|(amount, cap)| amount >= 10 && self.combat.now.health < f64::from(cap));
             // (ammo, urgent, only within the reach ammo is turned aside for mid-fight: HMP, six
             // rockets too near four cacodemons to fire, a rocket box 3900 off the errand, backed
             // off "towards" it into them from 180 health to dead)
@@ -1221,7 +1202,7 @@ impl Fight {
                 return Some((name.to_string(), cur.goal));
             }
         }
-        if self.combat.firepower(obs) > self.tune.errands.pistol_only && !self.combat.short_of_ammo(obs) {
+        if self.combat.now.firepower > self.tune.errands.pistol_only && !self.combat.now.short_of_ammo {
             return None;
         }
         self.errands(x, obs).first().map(|t| (t.name.to_string(), (t.x, t.y)))
@@ -1232,7 +1213,7 @@ impl Fight {
     fn errands(&self, x: &Explorer, obs: &Observation) -> Vec<Thing> {
         let known = x.knowledge.known_polys();
         let pos = obs.pos();
-        let short = self.combat.short_of_ammo(obs);
+        let short = self.combat.now.short_of_ammo;
         let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
         obs.things
             .iter()
@@ -1262,14 +1243,14 @@ impl Fight {
     /// Items she has seen that she could use now.
     fn supplies(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let known = x.knowledge.known_polys();
-        let health = obs.health.unwrap_or(100.0);
+        let health = self.combat.now.health;
         let armor = obs.armor.unwrap_or(0.0);
         let held = obs.weapons.clone().unwrap_or_default();
         let ammo = |s: i32| f64::from(obs.ammo.iter().flatten().find(|(x, _)| *x == s).map_or(0, |(_, n)| *n));
         // (then ammo and guns before anything else. Not sooner for having died for want of it:
         // made urgent, past the dangers, MAP12's start, the ammo there walked into for half the
         // map)
-        let short = self.combat.short_of_ammo(obs);
+        let short = self.combat.now.short_of_ammo;
         let mut out = Vec::new();
         for t in obs.things.iter().flatten() {
             let Some(p) = x.nav.poly_at((t.x, t.y)) else { continue };
@@ -1322,7 +1303,7 @@ impl Fight {
                 why = " (out of ammo)";
             } else if health < self.tune.errands.hurt && health_item(t.name).is_some_and(|(a, _)| a >= 10) {
                 why = " (hurt)";
-            } else if health < self.tune.errands.survive_health && health_item(t.name).is_some_and(|(a, _)| a >= 10) && self.combat.time_to_death(obs) < self.tune.errands.survive_secs {
+            } else if health < self.tune.errands.survive_health && health_item(t.name).is_some_and(|(a, _)| a >= 10) && self.combat.now.time_to_death < self.tune.errands.survive_secs {
                 // (losing health fast, not yet down to the rest: off for it now, while she can)
                 why = " (to survive)";
             }
@@ -1361,9 +1342,9 @@ impl Fight {
     fn not_worth_it(&mut self, obs: &Observation, obj: &Objective) -> bool {
         let Some(t) = obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).cloned() else { return false };
         let pos = obs.pos();
-        let health = obs.health.unwrap_or(100.0);
+        let health = self.combat.now.health;
         let armor = obs.armor.unwrap_or(0.0);
-        let short = self.combat.short_of_ammo(obs);
+        let short = self.combat.now.short_of_ammo;
         let worth = if let Some((amount, cap)) = health_item(t.name) {
             f64::from(amount).min(f64::from(cap) - health).max(1.0)
         } else if let Some((amount, cap)) = armor_item(t.name) {
@@ -1399,7 +1380,7 @@ impl Hooks for Fight {
     /// Ammo or a gun she's off for because she's short of ammo.
     fn worth_cut_off(&mut self, obs: &Observation, obj: &Objective) -> bool {
         let Some(t) = obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)) else { return false };
-        obj.urgent && (ammo_item(t.name).is_some() || weapon_item(t.name).is_some()) && self.combat.short_of_ammo(obs)
+        obj.urgent && (ammo_item(t.name).is_some() || weapon_item(t.name).is_some()) && self.combat.now.short_of_ammo
     }
 
     /// Items she could use now; with --complete, every counted item she's seen too.
@@ -1476,7 +1457,7 @@ impl Hooks for Fight {
         if obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).is_some_and(|t| t.name == "InvulnerabilitySphere") {
             return !self.needs_invulnerability(obs);
         }
-        if self.combat.invulnerable(obs.tic) {
+        if self.combat.now.invulnerable {
             return false; // (nothing can hurt her: the risky ones now)
         }
         // (died going for it: not first again; twice, not at all. And a place she's died at again
@@ -1527,7 +1508,7 @@ impl Hooks for Fight {
             return self.tune.errands.switch_for_gun;
         }
         let ammo = obj.kind == Kind::Item && obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).is_some_and(|t| ammo_item(t.name).is_some());
-        if !ammo || self.combat.short_of_ammo(obs) {
+        if !ammo || self.combat.now.short_of_ammo {
             return 1.0;
         }
         let known: Vec<&'static str> = self.combat.remaining().iter().filter(|s| s.awake).map(|s| s.name).collect();

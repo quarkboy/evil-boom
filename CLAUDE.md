@@ -77,6 +77,9 @@ another case in a chain. What the rest of her does about a fight decision goes b
 what it's worth) goes in `tactical/tuning.rs` (`Tuning`, read as `self.tune.<group>.<field>`;
 `evil-boom tuning` prints the defaults, `--tuning FILE` changes any of them for a run); a fact
 about the engine stays a `const` where it's used.
+How things stand this tic (outmatched, what's against her, short of ammo, surrounded) is
+`Combat::now` (`combat/assess.rs`), worked out once as she looks: a rule reads it, it doesn't work
+its own answer out.
 
 ## Where things stand (2026-11-09)
 

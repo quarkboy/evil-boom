@@ -67,7 +67,7 @@ impl Combat {
 
     /// Would killing what's in sight take too long with what she has (a room of barons with the
     /// pistol: MAP08 at pistol start), or more ammo than she has (a cyberdemon, ten rockets)?
-    pub fn outmatched(&self, obs: &Observation) -> bool {
+    pub(super) fn outmatched(&self, obs: &Observation) -> bool {
         // (a hitscan shooter however far: its bullets get there. E3M8 from a pistol start, the
         // spider mastermind 1298 off with a pistol and two rockets: closed in on)
         let near: Vec<&'static str> = self.visible.iter().filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0 || self.sniper(obs, t.name)).map(|t| t.name).collect();
@@ -209,7 +209,7 @@ impl Combat {
     /// after her she wouldn't punch, or can't get at? (MAP14 HMP: a chaingunner up on a ledge
     /// shooting her, berserk and out of ammo; "armed", the ammo she knew of never gone for)
     pub fn armed(&self, obs: &Observation) -> bool {
-        let them = self.against_her();
+        let them = &self.now.against_her;
         self.guns_armed(obs) || (Self::fists_for(obs, &them.iter().map(|t| t.name).collect::<Vec<_>>()) && !them.iter().any(|t| self.out_of_fist_reach(obs, t)))
     }
 
@@ -225,7 +225,7 @@ impl Combat {
     }
 
     /// Next to nothing left to shoot with (the fist doesn't count).
-    pub fn short_of_ammo(&self, obs: &Observation) -> bool {
+    pub(super) fn short_of_ammo(&self, obs: &Observation) -> bool {
         self.shots(obs) < self.tune.guns.short_of_ammo
     }
 
@@ -297,7 +297,7 @@ impl Combat {
         let (mut best, mut cost) = (obs.weapon.unwrap_or(2), f64::INFINITY);
         let mut blocked = None;
         // (others awake shooting at her from a distance, t aside)
-        let pelted = self.engaged(obs).iter().any(|m| m.id != t.id && matches!(mon(m.name).attack, Attack::Hitscan | Attack::Missile | Attack::Fire));
+        let pelted = self.now.engaged.iter().any(|m| m.id != t.id && matches!(mon(m.name).attack, Attack::Hitscan | Attack::Missile | Attack::Fire));
         // (the pistol only for want of any other gun with a shot in it, never for its reach: the
         // user's, MAP07, the super shotgun put away for it at mancubi 800 off. Taps at barrels,
         // switches and walls are the route's own gun, not this)

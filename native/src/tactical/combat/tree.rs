@@ -23,7 +23,8 @@
 //! The nodes are tried in that order and the first to give an `Act` wins. A node may look,
 //! keep something (a clock, the steering's way) and still pass, as the branches it was cut from
 //! did. The aim and the trigger are sized up before the tree (`Situation`): a node only
-//! overrides them.
+//! overrides them. How things stand besides (her health, the threat, outmatched or not) is
+//! `c.now`, the tic's assessment.
 
 use super::moves::{HeldFire, Move};
 use super::style::{window, Style};
@@ -45,9 +46,6 @@ pub(super) struct Situation<'a> {
     pub target: Option<Thing>,
     /// where she'd aim (the target, or a barrel by it)
     pub aim: Option<f64>,
-    pub health: f64,
-    pub threat: f64,
-    pub outmatched: bool,
     /// clawing monsters in sight, close
     pub close: Vec<Thing>,
     /// the way away from a barrel by her, with something shooting in sight
@@ -251,7 +249,7 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
 fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let pos = s.pos;
     let armed = c.armed(obs);
-    let nearest = s.close.iter().filter(|t| armed || s.health < c.tune.engage.low_health || claw_max(t.name) >= s.health).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
+    let nearest = s.close.iter().filter(|t| armed || c.now.health < c.tune.engage.low_health || claw_max(t.name) >= c.now.health).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
     let t = nearest.clone();
     let gun = c.preferred_gun(obs, &t);
     let moving = c.steer(obs, Some(&t), &gun).or_else(|| c.away_from(obs, (t.x, t.y)));
@@ -298,7 +296,7 @@ fn sneaking(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
 /// After her, only too far for the guns she has: closer, as a player would (a cacodemon
 /// hanging back out of the shotgun's reach).
 fn closing_out_of_reach(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    let t = s.target.as_ref().filter(|t| !c.reachable(obs, t) && t.after_her && !s.outmatched && c.known.get(&t.id).is_some_and(|k| k.awake) && c.still_closing(obs, t.id))?;
+    let t = s.target.as_ref().filter(|t| !c.reachable(obs, t) && t.after_her && !c.now.outmatched && c.known.get(&t.id).is_some_and(|k| k.awake) && c.still_closing(obs, t.id))?;
     let gun = c.preferred_gun(obs, t);
     let moving = c.steer(obs, Some(t), &gun).or_else(|| c.closing_in(obs, t, None));
     Some(Act::new(Move::ClosingOutOfReach, moving, format!("closing in on {} (out of reach)", t.name)))
@@ -334,15 +332,15 @@ fn stepping_for_plasma(c: &mut Combat, obs: &Observation, s: &Situation) -> Opti
 /// Fought where it stands, whatever else: a sniper she'd see off first (`takes_on`), or,
 /// outmatched, a hitscan shooter she'd see off quick (`quick_hitscan`): kept clear of or walked
 /// on past, its bullets reach her all the same.
-fn fought(c: &Combat, obs: &Observation, s: &Situation, t: &Thing) -> bool {
-    c.takes_on(obs, t.name) || (s.outmatched && c.quick_hitscan(obs, t.name))
+fn fought(c: &Combat, obs: &Observation, t: &Thing) -> bool {
+    c.takes_on(obs, t.name) || (c.now.outmatched && c.quick_hitscan(obs, t.name))
 }
 
 /// Outmatched by something awake and after her: keep her distance, still shooting (the route
 /// walked her up to the cyberdemon with a rocket or two short).
 fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let pos = s.pos;
-    let t = s.target.as_ref().filter(|t| s.outmatched && !fought(c, obs, s, t) && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < c.tune.engage.keep_clear)?;
+    let t = s.target.as_ref().filter(|t| c.now.outmatched && !fought(c, obs, t) && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < c.tune.engage.keep_clear)?;
     let gun = c.preferred_gun(obs, t);
     let moving = c.steer(obs, Some(t), &gun);
     let mut a = Act::new(Move::KeepingClear, moving, format!("outmatched: keeping clear of {}", t.name));
@@ -377,7 +375,7 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
 
 /// Outmatched: shooting on the way, the route going on.
 fn outmatched_get_past(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    (s.outmatched && !s.target.as_ref().is_some_and(|t| fought(c, obs, s, t))).then(|| Act::new(Move::GettingPast, None, "getting past".into()))
+    (c.now.outmatched && !s.target.as_ref().is_some_and(|t| fought(c, obs, t))).then(|| Act::new(Move::GettingPast, None, "getting past".into()))
 }
 
 /// Too near for the gun she'd fight it with, or for them to miss.
@@ -405,8 +403,8 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if s.target.as_ref().is_some_and(|t| c.no_shot_long(obs, t)) {
         return None;
     }
-    let duel = s.target.as_ref().is_some_and(|t| fought(c, obs, s, t));
-    if !(s.threat >= c.tune.engage.stand_threat || s.health < c.tune.engage.low_health || duel || c.blocking(obs, s.target.as_ref())) {
+    let duel = s.target.as_ref().is_some_and(|t| fought(c, obs, t));
+    if !(c.now.threat >= c.tune.engage.stand_threat || c.now.health < c.tune.engage.low_health || duel || c.blocking(obs, s.target.as_ref())) {
         return None;
     }
     let mut kind = Move::Standing;

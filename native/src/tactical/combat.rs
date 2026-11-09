@@ -12,12 +12,14 @@
 
 mod aiming;
 mod arsenal;
+mod assess;
 mod movement;
 mod moves;
 mod steering;
 mod style;
 mod tree;
 
+pub use assess::Assessment;
 pub use moves::Move;
 use moves::HeldFire;
 use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
@@ -92,6 +94,8 @@ pub struct Combat {
     nav: Rc<Navigator>,
     /// the numbers she judges by (the player's, shared)
     pub(super) tune: Rc<Tuning>,
+    /// how things stand this tic (see `assess.rs`): worked out once, as she looks
+    pub now: Assessment,
     pub los: LineOfSight,
     hearing: Hearing,
     /// every monster seen, by id
@@ -244,6 +248,7 @@ impl Combat {
         let lifts = moved_only_by(|c| c == Category::Lift);
         Combat {
             tune,
+            now: Assessment::default(),
             doors,
             lifts,
             los: LineOfSight::new(&nav.map),
@@ -325,6 +330,7 @@ impl Combat {
     pub fn restart(&mut self) {
         self.alive.clear();
         self.visible.clear();
+        self.now.nothing_in_sight();
         self.tracks.clear();
         self.put_in.clear();
         self.invulnerable_until = i64::MIN / 2;
@@ -506,6 +512,7 @@ impl Combat {
             }
         }
         self.watch_infighting(obs);
+        self.now = self.assess(obs);
     }
 
     /// Which monsters in sight are after each other, not her: facing another, not her, and
@@ -531,8 +538,8 @@ impl Combat {
         self.infight.get(&t.id).copied().unwrap_or(0) >= self.tune.senses.infight_tics
     }
 
-    /// The monsters in sight that are after her (not each other).
-    pub fn against_her(&self) -> Vec<Thing> {
+    /// The monsters in sight that are after her (not each other): `now.against_her`.
+    fn seen_against_her(&self) -> Vec<Thing> {
         self.visible.iter().filter(|t| !self.infighting(t)).cloned().collect()
     }
 
@@ -548,7 +555,7 @@ impl Combat {
     /// anything awake in sight).
     pub fn engaged(&self, obs: &Observation) -> Vec<Thing> {
         let pos = obs.pos();
-        self.against_her()
+        self.seen_against_her()
             .into_iter()
             .filter(|t| t.health > 0 && t.after_her && self.known.get(&t.id).is_some_and(|k| k.awake))
             .filter(|t| {
@@ -563,10 +570,6 @@ impl Combat {
             .collect()
     }
 
-    pub fn threats(&self) -> f64 {
-        self.against_her().iter().map(|t| mon(t.name).threat).sum()
-    }
-
     /// If t is standing about, and a shot would be heard by enough monsters she's seen standing
     /// about too that she'd be outmatched once they're awake: what it'd wake (else "").
     fn would_wake(&mut self, obs: &Observation, t: &Thing) -> String {
@@ -574,7 +577,7 @@ impl Combat {
         if s.awake {
             return String::new(); // (the fist too wakes what hears it: P_FireWeapon's noise alert, no weapon WPF_SILENT)
         }
-        if self.against_her().iter().any(|o| self.known.get(&o.id).is_some_and(|k| k.awake)) {
+        if self.now.against_her.iter().any(|o| self.known.get(&o.id).is_some_and(|k| k.awake)) {
             return String::new(); // (already in a fight)
         }
         let Some(here) = self.nav.poly_at(obs.pos()) else { return String::new() };
@@ -586,7 +589,7 @@ impl Combat {
             .filter(|m| !m.awake && self.nav.poly_at(m.pos()).is_some_and(|p| heard.contains(&self.nav.sector_of_poly(p))))
             .collect();
         let hp: f64 = sleepers.iter().map(|m| f64::from(mon(m.name).health)).sum();
-        if sleepers.len() < 2 || hp / self.firepower(obs) <= self.tune.engage.leave_be {
+        if sleepers.len() < 2 || hp / self.now.firepower <= self.tune.engage.leave_be {
             return String::new();
         }
         let names: BTreeSet<&str> = sleepers.iter().map(|m| m.name).collect();
@@ -616,7 +619,7 @@ impl Combat {
     /// something to fight with: the fight only aims and shoots on the way.
     pub fn decide(&mut self, obs: &Observation, busy: bool, errand: &str) -> Option<Decision> {
         // (invulnerable: nothing to dodge, a missile does nothing)
-        let missiles = if self.invulnerable(obs.tic) { Vec::new() } else { self.incoming(obs) };
+        let missiles = if self.now.invulnerable { Vec::new() } else { self.incoming(obs) };
         let target = self.pick_target(obs);
         if target.is_none() && missiles.is_empty() {
             // (the fight over with a rocket still to go out: the way held all the same, the route's
@@ -647,7 +650,7 @@ impl Combat {
         let kind = act.kind;
         let takeover = !act.route && ((!busy && !kind.route_goes_on()) || !s.missiles.is_empty() || s.vile.is_some());
         if why != self.mode {
-            let t = s.target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {:.0} threat; health {:.0})", t.name, t.id, s.threat, s.health));
+            let t = s.target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {:.0} threat; health {:.0})", t.name, t.id, self.now.threat, self.now.health));
             self.log.push(format!("tic {}: {why}{t}", obs.tic));
             self.mode = why.clone();
         }
@@ -676,9 +679,6 @@ impl Combat {
                 }
             }
         }
-        let health = obs.health.unwrap_or(100.0);
-        let threat = self.threats();
-        let outmatched = self.outmatched(obs);
         if let Some(t) = target.as_ref().filter(|t| self.reachable(obs, t)) {
             self.closing_since.remove(&t.id); // (got it in reach: the clock again, next time)
         }
@@ -703,7 +703,7 @@ impl Combat {
         }
         // (invulnerable: nothing to hide from; her BFG ball in the air: in their sight till it
         // lands, its spray from where she is)
-        let unhurt = self.invulnerable(obs.tic);
+        let unhurt = self.now.invulnerable;
         if unhurt {
             barrel_away = None;
         }
@@ -713,7 +713,7 @@ impl Combat {
         let barrel_lit = if busy || unhurt { None } else { Self::lit_barrel_by(obs).and_then(|b| self.away_from(obs, b)) };
         let vile = if busy || unhurt { None } else { self.vile_fire(obs) };
         let duck = if busy || unhurt || vile.is_some() || self.bfg_flying(obs) { None } else { self.duck(obs) };
-        let s = tree::Situation { pos, busy, errand, missiles, target, aim, health, threat, outmatched, close, barrel_away, barrel_lit, vile, duck };
+        let s = tree::Situation { pos, busy, errand, missiles, target, aim, close, barrel_away, barrel_lit, vile, duck };
         (s, fire, weapon)
     }
 
@@ -914,19 +914,10 @@ impl Combat {
             || (!self.lifts.contains(&s) && self.floor_up.get(s).is_some_and(|&t| obs.tic - t < self.tune.senses.crush_tics) && gap < self.tune.senses.floor_crush_gap)
     }
 
-    /// Health lost a second lately (over the last few seconds).
-    pub fn damage_rate(&mut self, tic: i64) -> f64 {
+    /// Health lost a second lately (over the last few seconds): `now.damage_rate`.
+    fn damage_rate(&mut self, tic: i64) -> f64 {
         self.damage.retain(|&(t, _)| tic - t < self.tune.senses.damage_window);
         self.damage.iter().map(|(_, d)| d).sum::<f64>() / (self.tune.senses.damage_window as f64 / TICRATE)
-    }
-
-    /// Seconds till she's dead at the rate she's been losing health lately (a lot: not losing any).
-    pub fn time_to_death(&mut self, obs: &Observation) -> f64 {
-        let rate = self.damage_rate(obs.tic);
-        if rate <= 0.0 {
-            return f64::INFINITY;
-        }
-        obs.health.unwrap_or(100.0) / rate
     }
 
     /// Could a hitscan shooter she knows of, awake, from where she last saw it, see her at p? (Its
