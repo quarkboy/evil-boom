@@ -233,6 +233,11 @@ pub struct Combat {
     floors: Vec<f64>,
     floor_up: Vec<i64>,
     ceiling_down: Vec<i64>,
+    /// crusher sectors she knows of, by kind (their lines learned; kept from what she knows by
+    /// the player)
+    pub crushers: BTreeMap<usize, crate::specials::CrusherKind>,
+    /// per crusher sector: tics to be out of it at the worst (`out_tics`)
+    crusher_out: BTreeMap<usize, f64>,
     /// ...and last came down lower than she stands (a crusher at work, between strokes too)
     crushed_low: Vec<i64>,
     /// out of reach, closed in on since when, by id...
@@ -307,6 +312,8 @@ impl Combat {
             floors: Vec::new(),
             floor_up: Vec::new(),
             ceiling_down: Vec::new(),
+            crushers: BTreeMap::new(),
+            crusher_out: BTreeMap::new(),
             crushed_low: Vec::new(),
             closing_since: BTreeMap::new(),
             given_up: BTreeMap::new(),
@@ -390,6 +397,11 @@ impl Combat {
                 self.floor_up[i] = obs.tic;
             }
             self.floors[i] = h.floor;
+        }
+        for &s in self.crushers.keys() {
+            if !self.crusher_out.contains_key(&s) {
+                self.crusher_out.insert(s, crate::crush::out_tics(&self.nav, &obs.heights, s));
+            }
         }
         if let Some(h) = obs.health {
             if let Some(before) = self.health.filter(|&before| h < before) {
@@ -775,6 +787,17 @@ impl Combat {
     /// (the user's: active crushers no-go), not just while it's on its way down.
     pub fn crusher_active(&self, obs: &Observation, s: usize) -> bool {
         self.crushed_low.get(s).is_some_and(|&t| obs.tic - t < ACTIVE_CRUSHER)
+    }
+
+    /// Is sector s a crusher she knows of, stopped (or not) too low to get out from under if it
+    /// starts again: less room over her head, in tics, than getting out of it takes at the worst,
+    /// and its stroke more than she'd take on (one that holds her: always; a fast one: more than a
+    /// tenth of her health, the user's). E2M4's slow one: stopped 9 over her head, run into
+    /// chasing an imp, its own start line its edge, set off; 9 tics, going the wrong way at full
+    /// speed, pinned, crushed.
+    pub fn crusher_trap(&self, obs: &Observation, s: usize) -> bool {
+        let (Some(&kind), Some(&out), Some(h)) = (self.crushers.get(&s), self.crusher_out.get(&s), obs.height(s)) else { return false };
+        crate::crush::trap(h, kind, out, crate::knowledge::RISK_SHARE * obs.health.unwrap_or(100.0), obs)
     }
 
     pub fn crushing(&self, obs: &Observation, s: usize) -> bool {

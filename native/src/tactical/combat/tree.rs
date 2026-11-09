@@ -250,8 +250,14 @@ fn out_of_reach(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act>
     s.target.as_ref().is_some_and(|t| !c.reachable(obs, t)).then(|| Act::new(None, "out of reach: going on".into()))
 }
 
-/// The only one in sight, near, and no shot at it from here: a step to where there is.
+/// The only one in sight, near, and no shot at it from here: a step to where there is. Not on a
+/// floor that hurts: the step keeps her on it, a hurt every 32 tics, for a shot she can take on
+/// the way off (E3M5's nukage pit, an imp on the ledge above 500 off: stepped away for the angle,
+/// out past 512, the route's way off brought her back in, 570 tics of it, dead).
 fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    if c.on_hurting_floor(obs) {
+        return None;
+    }
     let pos = s.pos;
     let way = s.target.as_ref().filter(|t| c.visible.len() == 1 && dist((t.x, t.y), pos) < 512.0 && !c.can_hit(obs, t, None)).and_then(|t| c.shot_way(obs, t))?;
     Some(Act::new(Some(way), format!("stepping for a shot at {}", s.target.as_ref().map_or("", |t| t.name))))

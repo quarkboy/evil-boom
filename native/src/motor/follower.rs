@@ -326,6 +326,9 @@ pub struct RouteFollower {
     crusher_wait: Option<usize>,
     /// (mortal) a crusher's crossing timed and begun: its sector, and since when
     crusher_cross: Option<(usize, i64)>,
+    /// (mortal) setting off a stopped crusher from its edge, to cross it when it comes up: its
+    /// sector, since when, and the spot just over its line she steps to
+    crusher_kick: Option<(usize, i64, Point)>,
     /// sector -> how fast its ceiling was last seen moving (units a tic)
     ceiling_pace: BTreeMap<usize, f64>,
     /// when the heights were last looked at (the fight may have had her between)
@@ -429,6 +432,7 @@ impl RouteFollower {
             prev_live: Vec::new(),
             crusher_wait: None,
             crusher_cross: None,
+            crusher_kick: None,
             ceiling_pace: BTreeMap::new(),
             seen_tic: None,
         };
@@ -445,9 +449,10 @@ impl RouteFollower {
     }
 
     /// In the middle of a run-jump (lining up, sprinting, running over sinking floors).
-    /// A crusher's crossing timed and begun: the route's to finish, not to be stopped part way.
+    /// A crusher's crossing timed and begun, or one being set off from its edge: the route's to
+    /// finish, not to be stopped part way.
     pub fn crossing_crusher(&self) -> bool {
-        self.crusher_cross.is_some()
+        self.crusher_cross.is_some() || self.crusher_kick.is_some()
     }
 
     pub fn in_jump(&self) -> bool {

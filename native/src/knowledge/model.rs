@@ -672,6 +672,22 @@ impl Knowledge {
     /// Triggers whose effect on some sectors she has learned, with those sectors; also the
     /// other lines of the same mechanism as far as they're mapped, which she takes to do the
     /// same.
+    /// The sectors crushers she's learned the lines of move (not their stops), by kind (one that
+    /// holds her over one that doesn't, if two move a sector).
+    pub fn crusher_sectors(&self) -> BTreeMap<usize, crate::specials::CrusherKind> {
+        let mut out: BTreeMap<usize, crate::specials::CrusherKind> = BTreeMap::new();
+        for (t, sectors) in self.known_triggers() {
+            let Some(kind) = crate::specials::crusher_kind(t.info.special) else { continue };
+            for s in sectors {
+                let e = out.entry(s).or_insert(kind);
+                if kind.holds && !e.holds {
+                    *e = kind;
+                }
+            }
+        }
+        out
+    }
+
     pub fn known_triggers(&self) -> Vec<(TriggerLine, BTreeSet<usize>)> {
         let mut by_mechanism: BTreeMap<Mechanism, BTreeSet<usize>> = BTreeMap::new();
         for (&i, sectors) in &self.learned {

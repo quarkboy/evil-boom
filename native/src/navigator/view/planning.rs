@@ -253,7 +253,7 @@ impl View {
                     .poly(p)
                     .portals
                     .iter()
-                    .filter(|&&pi| n.passable(pi, p, states_all, Some(&doors_all)))
+                    .filter(|&&pi| n.passable(pi, p, states_all, Some(&doors_all), self.spent()))
                     .map(|&pi| (mesh.portals[pi].other(p), Step::Portal(pi)))
                     .collect();
                 moves.extend(
@@ -281,7 +281,7 @@ impl View {
                             needed_h.insert((s, h.key()), h);
                         }
                     }
-                    Some(Step::Portal(pi)) if !n.passable(pi, prev, states0, None) => {
+                    Some(Step::Portal(pi)) if !n.passable(pi, prev, states0, None, self.spent()) => {
                         let (sa, sb) = (n.sector_of_poly(prev), n.sector_of_poly(p));
                         let pairs: Vec<(Heights, Heights)> = states_all[sa]
                             .iter()

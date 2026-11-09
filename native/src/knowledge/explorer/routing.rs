@@ -1,5 +1,8 @@
 //! Planning objectives, caching failed searches and checking route risk.
 
+use crate::det::HashMap;
+use crate::knowledge::RISK_SHARE;
+use crate::nav::Heights;
 use super::{Explorer, GoalKey, Kind, Objective, KEEP_REACH};
 use crate::geom::{dist, segments_cross, Point};
 use crate::motor::Observation;
@@ -35,10 +38,6 @@ const MIN_EXPANSIONS: usize = 200;
 
 /// ...and is whole again after this long with none that did
 const MAXED_RESET: i64 = 20 * 35;
-
-/// the share of her health a route may cost her on floors that hurt and still not be a risk (the
-/// user's: "10% or less of current health = not risky")
-const RISK_SHARE: f64 = 0.1;
 
 /// Map units between midpoint samples of a route's exposure to damaging floors.
 const DAMAGE_SAMPLE_STEP: f64 = 16.0;
@@ -122,6 +121,38 @@ impl Explorer {
         }
         let stay = if matches!(obj.kind, Kind::Item | Kind::Key) { 0.0 } else { f64::from(end) * END_STAY };
         2.0 * way + stay
+    }
+
+    /// (mortal) Ways into a crusher she knows across a line that sets it off, stopped where she
+    /// last saw it too low to get out from under once it starts (crush::trap): what getting
+    /// through costs, on a path, is the follower setting it off from the edge and waiting a
+    /// stroke for it to come up again; so much farther at her pace on a route. A way round
+    /// shorter than that is better, none: through it so. (E2M4's, stopped 9 over her head, the
+    /// way west across its own start line, walked in: set off, pinned, crushed.)
+    fn crusher_entry_costs(&mut self, view: &View, states: &States, obs: &Observation) {
+        let mut costs: HashMap<usize, (usize, f64)> = HashMap::default();
+        if self.knowledge.mortal {
+            let nav = Rc::clone(&self.nav);
+            let rest: Vec<Heights> = states.iter().enumerate().map(|(s, hs)| hs.first().copied().unwrap_or(nav.movers.initial[s])).collect();
+            let afford = RISK_SHARE * obs.health.unwrap_or(100.0);
+            for (t, sectors) in self.knowledge.known_triggers() {
+                let (Some(kind), Some(li)) = (crate::specials::crusher_kind(t.info.special), t.linedef()) else { continue };
+                if !t.info.trigger.walked() {
+                    continue;
+                }
+                for s in sectors {
+                    // (where she last saw it, and it's not known to be on the move)
+                    let [h] = states[s].as_slice() else { continue };
+                    let out = *self.crusher_out.entry(s).or_insert_with(|| crate::crush::out_tics(&nav, &rest, s));
+                    if crate::crush::trap(*h, kind, out, afford, obs) {
+                        let top = nav.movers.initial[s].ceiling.max(h.ceiling);
+                        let stroke = 2.0 * (top - h.floor - crate::crush::BOTTOM) / kind.speed;
+                        costs.insert(li, (s, stroke * ROUTE_PACE));
+                    }
+                }
+            }
+        }
+        view.set_entry_costs(costs);
     }
 
     /// Steps to get to an objective and do it, through what's known (using switches she has
@@ -228,6 +259,7 @@ impl Explorer {
         let nav = Rc::clone(&self.nav);
         let keys = obs.keys.unwrap_or_default();
         let states = self.states();
+        self.crusher_entry_costs(&view, &states, obs);
         let k = &self.knowledge;
         let mut key_items: Vec<(Key, Vec<(usize, Point)>)> = Vec::new();
         for th in k.known_things() {

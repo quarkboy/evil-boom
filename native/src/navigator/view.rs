@@ -38,15 +38,24 @@ impl Core {
 
     pub(super) fn new(n: &Navigator) -> Core {
         let mesh = &n.mesh;
+        // (a teleport line's front crossed only by views that know it's gone off: NavCore::open)
+        let all_teleports = teleport_lines(&n.map);
         let adj: Vec<Vec<Edge>> = (0..mesh.polys.len())
             .map(|p| {
                 let Some(poly) = &mesh.polys[p] else { return Vec::new() };
                 poly.portals
                     .iter()
-                    .filter(|&&pi| n.statically_passable(pi, p))
+                    .filter(|&&pi| n.statically_passable(pi, p, &all_teleports))
                     .map(|&pi| {
                         let to = mesh.portals[pi].other(p);
-                        Edge { portal: pi, to, from_sector: poly.sector, to_sector: mesh.poly(to).sector, linedef: mesh.portals[pi].linedef }
+                        Edge {
+                            portal: pi,
+                            to,
+                            from_sector: poly.sector,
+                            to_sector: mesh.poly(to).sector,
+                            linedef: mesh.portals[pi].linedef,
+                            teleport: n.front_teleport(pi, p),
+                        }
                     })
                     .collect()
             })
@@ -179,12 +188,20 @@ impl Default for Plan<'_> {
 
 static EMPTY: &BTreeSet<usize> = &BTreeSet::new();
 
+/// A view's knowledge: the polys she may go into, the teleport lines she knows go somewhere, and
+/// those that no longer do (once-only ones she's gone through: lines like any other now).
+pub struct Restriction {
+    pub polys: BTreeSet<usize>,
+    pub teleports: BTreeSet<usize>,
+    pub spent: BTreeSet<usize>,
+}
+
 /// The navigator as she knows the level.
 pub struct View {
     pub nav: Rc<Navigator>,
     pub triggers: Vec<TriggerLine>,
-    /// (polys she may go into, teleport lines she knows); None: everything
-    restriction: Option<(BTreeSet<usize>, BTreeSet<usize>)>,
+    /// what she knows; None: everything
+    restriction: Option<Restriction>,
     /// jumps (navigator.jumps indices) she won't take
     banned_jumps: BTreeSet<usize>,
     key_positions: Vec<(Key, Vec<Point>)>,
@@ -201,18 +218,12 @@ impl Navigator {
         View::new(Rc::clone(self), self.triggers.clone(), None, self.key_positions(), BTreeSet::new())
     }
 
-    /// A view for what she knows: only `polys` can be walked into, only `teleports` taken, only
-    /// `triggers` (as far as she's learned their effects) used, and keys only where
-    /// `key_positions` says; and not the jumps in `banned_jumps` (navigator.jumps indices).
-    pub fn restricted_to(
-        self: &Rc<Self>,
-        polys: BTreeSet<usize>,
-        teleports: BTreeSet<usize>,
-        triggers: Vec<TriggerLine>,
-        key_positions: Vec<(Key, Vec<Point>)>,
-        banned_jumps: BTreeSet<usize>,
-    ) -> View {
-        View::new(Rc::clone(self), triggers, Some((polys, teleports)), key_positions, banned_jumps)
+    /// A view for what she knows (`restriction`): only its polys can be walked into, only its
+    /// teleports taken, only `triggers` (as far as she's learned their effects) used, and keys
+    /// only where `key_positions` says; and not the jumps in `banned_jumps` (navigator.jumps
+    /// indices).
+    pub fn restricted_to(self: &Rc<Self>, restriction: Restriction, triggers: Vec<TriggerLine>, key_positions: Vec<(Key, Vec<Point>)>, banned_jumps: BTreeSet<usize>) -> View {
+        View::new(Rc::clone(self), triggers, Some(restriction), key_positions, banned_jumps)
     }
 
     /// The gate lines at portal `pi` that block the box coming from poly `frm`: she can't get
@@ -249,9 +260,10 @@ impl Navigator {
     }
 
     /// Can she cross this portal from poly `frm`? With `doors`, a door sector counts as open
-    /// entered from a poly it can be used from, or standing in it.
-    pub fn passable(&self, pi: usize, frm: usize, states: &States, doors: Option<&Doors>) -> bool {
-        if !self.statically_passable(pi, frm) {
+    /// entered from a poly it can be used from, or standing in it; `spent`: teleport lines that
+    /// no longer teleport.
+    pub fn passable(&self, pi: usize, frm: usize, states: &States, doors: Option<&Doors>, spent: &BTreeSet<usize>) -> bool {
+        if !self.statically_passable(pi, frm, spent) {
             return false;
         }
         let to = self.mesh.portals[pi].other(frm);
@@ -391,7 +403,7 @@ impl View {
     fn new(
         nav: Rc<Navigator>,
         triggers: Vec<TriggerLine>,
-        restriction: Option<(BTreeSet<usize>, BTreeSet<usize>)>,
+        restriction: Option<Restriction>,
         key_positions: Vec<(Key, Vec<Point>)>,
         banned_jumps: BTreeSet<usize>,
     ) -> View {
@@ -418,6 +430,19 @@ impl View {
         }
     }
 
+    /// Crossing these lines into these sectors costs this many more units on a path (line ->
+    /// (sector, units); empty: none).
+    pub fn set_entry_costs(&self, costs: HashMap<usize, (usize, f64)>) {
+        if let Some(nav) = self.nav.core.borrow_mut().nav.as_mut() {
+            nav.entry_cost = costs;
+        }
+    }
+
+    /// The teleport lines that no longer teleport, as far as she knows.
+    pub fn spent(&self) -> &BTreeSet<usize> {
+        self.restriction.as_ref().map_or(EMPTY, |r| &r.spent)
+    }
+
     fn with_core<T>(&self, f: impl FnOnce(&mut NavCore, &mut PlanCaches) -> T) -> T {
         let mut core = self.nav.core.borrow_mut();
         let core = &mut *core;
@@ -433,10 +458,13 @@ impl View {
                 })
                 .collect();
             match &self.restriction {
-                Some((polys, teleports)) => {
-                    nav.restrict(Some(polys.iter().copied().collect::<HashSet<usize>>()), Some(teleports.iter().copied().collect()), banned)
-                }
-                None => nav.restrict(None, None, banned),
+                Some(r) => nav.restrict(
+                    Some(r.polys.iter().copied().collect::<HashSet<usize>>()),
+                    Some(r.teleports.iter().copied().collect()),
+                    r.spent.iter().copied().collect(),
+                    banned,
+                ),
+                None => nav.restrict(None, None, HashSet::default(), banned),
             }
             core.caches = PlanCaches::default();
             core.owner = self.id;
@@ -543,9 +571,9 @@ impl View {
                     if sa == sb {
                         continue;
                     }
-                    if doors.is_some_and(|d| d.contains_key(&sb)) && !n.passable(pi, frm, states, None) {
+                    if doors.is_some_and(|d| d.contains_key(&sb)) && !n.passable(pi, frm, states, None, self.spent()) {
                         notes.push(format!("open door (sector {sb})"));
-                    } else if !n.passable(pi, poly, states, doors) {
+                    } else if !n.passable(pi, poly, states, doors, self.spent()) {
                         let low = |s: usize| states[s].iter().map(|h| h.floor).fold(f64::INFINITY, f64::min);
                         let drop = low(sa) - low(sb);
                         if drop > MAX_STEP {

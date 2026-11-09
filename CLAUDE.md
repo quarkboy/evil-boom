@@ -74,14 +74,15 @@ which weapon; `combat/style.rs` how to fight with it; retreats are `Retreat`/`Re
 `tactical/player.rs`. New behaviour goes in as a node (or a style, a rule in `best_gun`), not as
 another case in a chain.
 
-## Where things stand (2026-11-08)
+## Where things stand (2026-11-09)
 
-Last bot change: the BFG's aim and hold, melee chases given up, dodging across a missile's way
-(DECISIONS.md). Regression set (HNTR, one life): E1 8.0 (8/8 through), E2 7.1 (7/8), E3 6.5
-(2/8), Doom II pistol-start levels 24/32 (MAP01 4, 02 4, 03 3, 04 4, 05 3, 08 0, 10 3, 12 3);
-arenas combat 119/128, doom2 228/240. E3M8 from E3M7's loadout HNTR 13/16, HMP 7/16. Sets swing
-between builds: judge across sets. Open items: Doom II MAP08 (0/4), MAP03/MAP05 stucks, E3M4/E3M9
-stucks, E3M8 cover-to-cover (a cover graph).
+Last bot change: crushers by kind (slow ones hold her: no-go stopped low, set off from the edge
+first; fast ones a damage cost), spent W1 teleporters walkable, the escape from under a crusher
+with all of her out, no stepping for a shot in nukage (DECISIONS.md). Regression set (HNTR, one
+life): E1 8.0 (8/8 through), E2 7.4 (7/8), E3 6.8 (0/8), Doom II pistol-start levels 27/32;
+arenas combat 119/128, doom2 226/240. Sets swing between builds: judge across sets. Open items:
+Doom II MAP08, E2M4 seed 5's pit drop (dead_end let it through), E3M9's arrival ambush, E3M6
+stucks/deaths, E3M8 deaths, the stepping-for-a-shot flip at 512 off hurting floors.
 
 ## The Linux port (done 2026-11-08)
 

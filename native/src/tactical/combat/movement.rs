@@ -235,9 +235,10 @@ impl Combat {
     }
 
     /// Is she under a crusher at work?
-    /// A crusher sector the fight's moves keep out of: on its way down, or at work at all.
+    /// A crusher sector the fight's moves keep out of: on its way down, at work at all, or one
+    /// she knows stopped too low to get out from under if it starts again.
     pub(super) fn no_go_crusher(&self, obs: &Observation, s: usize) -> bool {
-        self.crushing(obs, s) || self.crusher_active(obs, s)
+        self.crushing(obs, s) || self.crusher_active(obs, s) || self.crusher_trap(obs, s)
     }
 
     /// Is any of her in a crusher sector at work, coming down or not (`no_go_crusher`)?

@@ -87,6 +87,8 @@ pub struct Edge {
     pub from_sector: usize,
     pub to_sector: usize,
     pub linedef: Option<usize>,
+    /// the teleport line it crosses from the front: open only once that's gone off for good
+    pub teleport: Option<usize>,
 }
 
 /// A line near a portal that the box only gets past if the sectors round it are open.
@@ -234,6 +236,9 @@ pub struct NavCore {
     /// per poly: how many times its length a way across it counts for (in sight of something
     /// she'd rather not be seen by); empty: none
     pub exposure: Vec<f64>,
+    /// line -> (sector, units): crossing the line into the sector costs that much more (a
+    /// crusher she'd set off going in, stopped too low to be under when it starts)
+    pub entry_cost: HashMap<usize, (usize, f64)>,
 }
 
 /// The part of the map the player knows: the polys that can be walked into, and the
@@ -241,6 +246,8 @@ pub struct NavCore {
 pub struct Known {
     pub polys: Vec<bool>,
     pub teleports: HashSet<usize>,
+    /// teleport lines that no longer teleport (walked over like any other)
+    pub spent: HashSet<usize>,
     /// (poly, teleport index) edges not to take
     pub banned: HashSet<(usize, usize)>,
 }
@@ -270,12 +277,14 @@ impl NavCore {
             callbacks,
             known: None,
             exposure: Vec::new(),
+            entry_cost: HashMap::default(),
         }
     }
 
-    /// Limit flood fills and path-finding to these polys and teleport lines (None: all).
-    /// `banned`: (poly, teleport index) edges she won't take (jumps she keeps missing).
-    pub fn restrict(&mut self, polys: Option<HashSet<usize>>, teleports: Option<HashSet<usize>>, banned: HashSet<(usize, usize)>) {
+    /// Limit flood fills and path-finding to these polys and teleport lines (None: all), walking
+    /// over the `spent` teleport lines. `banned`: (poly, teleport index) edges she won't take
+    /// (jumps she keeps missing).
+    pub fn restrict(&mut self, polys: Option<HashSet<usize>>, teleports: Option<HashSet<usize>>, spent: HashSet<usize>, banned: HashSet<(usize, usize)>) {
         self.known = polys.map(|ps| {
             let mut known = vec![false; self.mesh.polys.len()];
             for p in ps {
@@ -283,7 +292,7 @@ impl NavCore {
                     *k = true;
                 }
             }
-            Known { polys: known, teleports: teleports.unwrap_or_default(), banned }
+            Known { polys: known, teleports: teleports.unwrap_or_default(), spent, banned }
         });
     }
 
@@ -374,7 +383,7 @@ impl NavCore {
     /// a move for good (`late`) or at any: for each, whether she's at the far sector's after it.
     fn phased_crossings(&mut self, e: Edge, frm: usize, late: bool, st: &mut dyn HeightSource, doors: Option<&Doors>, after: &AfterOnly) -> [bool; 2] {
         let mut out = [false; 2];
-        if self.gates.contains_key(&e.portal) && !self.fits_now(e.portal, frm, st, doors) {
+        if !self.open(e) || (self.gates.contains_key(&e.portal) && !self.fits_now(e.portal, frm, st, doors)) {
             return out;
         }
         if e.from_sector == e.to_sector {
@@ -395,9 +404,18 @@ impl NavCore {
         out
     }
 
+    /// Is edge `e` there to cross at all: not over a teleport line's front, unless she knows it
+    /// no longer teleports?
+    fn open(&self, e: Edge) -> bool {
+        e.teleport.is_none_or(|t| self.known.as_ref().is_some_and(|k| k.spent.contains(&t)))
+    }
+
     /// Can edge `i` of `poly`'s adjacency be crossed now?
     fn edge_passable(&mut self, poly: usize, i: usize, st: &mut dyn HeightSource, doors: Option<&Doors>) -> bool {
         let e = self.adj[poly][i];
+        if !self.open(e) {
+            return false;
+        }
         if self.gates.contains_key(&e.portal) && !self.fits_now(e.portal, poly, st, doors) {
             return false;
         }

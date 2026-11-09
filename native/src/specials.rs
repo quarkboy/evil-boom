@@ -592,3 +592,26 @@ mod tests {
         assert_eq!(classify_sector(0x80 | (3 << 5)).damage, 20);
     }
 }
+
+/// A crusher's kind, as its line's special has it (DSDA's p_ceilng.c): how fast it comes down
+/// (units a tic), and whether it slows to an eighth of that on something under it (vanilla's
+/// slow ones, and Boom's generalized ones under 3x their speed: then it holds her there till
+/// she's dead) or keeps on through (the fast ones: one stroke through her).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CrusherKind {
+    pub speed: f64,
+    pub holds: bool,
+}
+
+/// The kind of crusher a line's special starts; None for anything else (a crusher-stop line too).
+pub fn crusher_kind(special: u16) -> Option<CrusherKind> {
+    match special {
+        6 | 77 => Some(CrusherKind { speed: 2.0, holds: false }),
+        25 | 49 | 73 | 141 => Some(CrusherKind { speed: 1.0, holds: true }),
+        0x2F80..0x3000 => {
+            let code = (special & 0x18) >> 3;
+            Some(CrusherKind { speed: f64::from(1u16 << code), holds: code <= 1 })
+        }
+        _ => None,
+    }
+}

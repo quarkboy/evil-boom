@@ -2,5 +2,10 @@
 //! (`explorer`).
 
 pub mod completion;
+
+/// the share of her health something on the way may cost her and still not be a risk (the
+/// user's: "10% or less of current health = not risky"): floors that hurt, a fast crusher's stroke
+pub const RISK_SHARE: f64 = 0.1;
+
 pub mod explorer;
 pub mod model;

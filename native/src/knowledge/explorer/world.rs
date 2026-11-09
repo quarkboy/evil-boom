@@ -5,7 +5,7 @@ use crate::geom::Point;
 use crate::knowledge::model::How;
 use crate::movers::cycles_back;
 use crate::nav::Heights;
-use crate::navigator::{add_height, States, TriggerLine, View};
+use crate::navigator::{add_height, Restriction, States, TriggerLine, View};
 use crate::specials::{Category, Key, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -226,7 +226,7 @@ impl Explorer {
         }
         let teleports: BTreeSet<usize> = k.teleports.keys().copied().filter(|l| !spent_teleports.contains(l)).collect();
         let banned = if fresh { BTreeSet::new() } else { self.banned_jumps() };
-        self.nav.restricted_to(polys, teleports, triggers, keys_at, banned)
+        self.nav.restricted_to(Restriction { polys, teleports, spent: spent_teleports }, triggers, keys_at, banned)
     }
 
     /// The run-jumps left out: those missed too often (and, unless with nothing else to do,

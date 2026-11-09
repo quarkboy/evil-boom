@@ -108,7 +108,8 @@ impl NavCore {
                 if self.enterable(self.adj[poly][i].to) && self.edge_passable(poly, i, st, doors) {
                     let e = self.adj[poly][i];
                     let q = &self.mesh.portals[e.portal];
-                    moves.push((e.to, closest_on_portal(here, q.p1, q.p2), Via::Portal(e.portal), 0.0));
+                    let extra = e.linedef.and_then(|l| self.entry_cost.get(&l)).filter(|&&(s, _)| s == e.to_sector).map_or(0.0, |&(_, c)| c);
+                    moves.push((e.to, closest_on_portal(here, q.p1, q.p2), Via::Portal(e.portal), extra));
                 }
             }
             for ti in 0..self.tele[poly].len() {

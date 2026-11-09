@@ -322,6 +322,8 @@ pub struct Explorer {
     /// (mortal runs) when a route last cost more health than she had to spare (floors that hurt:
     /// healing or a suit would do)
     short_of_health: Option<i64>,
+    /// per crusher sector: tics to get out of it at the worst (crush::out_tics)
+    crusher_out: BTreeMap<usize, f64>,
     /// a suit on, last she looked (what cost too much then gets another go once it's on)
     suited: bool,
     /// the secrets run: every secret, then out
@@ -468,6 +470,7 @@ impl Explorer {
             patience: 1.0,
             restart_wanted: false,
             short_of_health: None,
+            crusher_out: BTreeMap::new(),
             suited: false,
             pressed_knowing: BTreeMap::new(),
             secrets_mode: false,

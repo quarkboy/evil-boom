@@ -283,19 +283,26 @@ impl Navigator {
     }
 
     /// Is the portal ruled out whatever the heights (a blocking line, a teleport line walked
-    /// from its front: that's the teleport, not a walk; a gap the box never fits)?
-    pub fn statically_passable(&self, portal: usize, frm: usize) -> bool {
+    /// from its front: that's the teleport, not a walk; a gap the box never fits)? Teleport lines
+    /// in `spent` are walked over like any other: once-only ones gone off, the game clears their
+    /// special (E3M9's, in the way east, the way back that way after it).
+    pub fn statically_passable(&self, portal: usize, frm: usize, spent: &BTreeSet<usize>) -> bool {
         let p = &self.mesh.portals[portal];
         if let Some(li) = p.linedef {
             let line = &self.map.linedefs[li];
             if line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0 {
                 return false;
             }
-            if TELEPORTERS_FOR_PLAYERS.contains(&line.special) && self.mesh.poly(frm).lines_front.contains(&li) {
+            if self.front_teleport(portal, frm).is_some_and(|t| !spent.contains(&t)) {
                 return false;
             }
         }
         self.portal_fits[portal]
+    }
+
+    /// The teleport line portal `portal` crosses from its front, coming from poly `frm`.
+    pub fn front_teleport(&self, portal: usize, frm: usize) -> Option<usize> {
+        self.mesh.portals[portal].linedef.filter(|&li| TELEPORTERS_FOR_PLAYERS.contains(&self.map.linedefs[li].special) && self.mesh.poly(frm).lines_front.contains(&li))
     }
 }
 

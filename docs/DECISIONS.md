@@ -1095,3 +1095,41 @@ arenas combat 119 -> 118/128, doom2 228.
 Results (HNTR, one life): E1 8.0 (8/8), E2 5.9 -> 7.1 (3 -> 7/8 through), E3 6.5 (1 -> 2/8),
 Doom II pistol-start levels 24/32 (MAP10 0 -> 3/4); arenas combat 118 -> 119/128 (health left
 83.7 -> 85.0), doom2 228/240 (85.8 -> 86.5).
+
+## Crushers by kind; spent teleporters; out from under all of her; no stepping for a shot in nukage (2026-11-09)
+
+- **Out from under all of her** (E2M2's crusher corridor): the escape from a ceiling coming down
+  aims for a poly whose middle has her whole box clear of moving ceilings, not the first poly not
+  moving (her middle out, an edge still under, pinned against the wall beside). 32/32 E2M2 seeds
+  exit (30/32 before).
+- **Spent teleporters** (E3M9's stuck, 3 of 8 E3 seeds): a W1 teleporter she's gone through this
+  life is a line like any other (vanilla clears its special; she's only taken to have gone through
+  one when she was teleported, so in every complevel). The navigator never walked a teleport line
+  from its front; E3M9's red key lies east past an 8-wide strip with one in it, so after the
+  ambush there, out to heal, the way back was a wall. Now her view (`Restriction::spent`) opens
+  those portals; the omniscient planner is unchanged.
+- **Crushers by kind** (DSDA's p_ceilng.c, p_map.c; `crush.rs`): 10 every 4th tic while the ceiling
+  is lower than she's tall; she can't move then. Slow ones (25, 49, 73, 141, Boom's under 3x)
+  slow to an eighth on her: held, dead. Fast ones (6, 77) keep on: one stroke, 120 raw at the
+  worst, armor taking its share.
+  - **The fight** (E2M4: a slow crusher stopped 9 over her head, chased into after an imp across
+    its own start line, set off, pinned in 9 tics): a crusher she knows is no-go, stopped or not,
+    when its room over her head in tics is less than getting out of it takes at the worst (from
+    its farthest point, starting at full speed the wrong way) and its stroke costs more than she'd
+    take on (slow: always; fast: more than a tenth of her health, the user's).
+  - **Routes** (the user's (c)): crossing a crusher's start line into it while it's stopped like
+    that costs a stroke of it in distance (a way round shorter than that is better), and the
+    follower, at such an entry, steps 2 over the line at a crawl, out as it starts, waits at the
+    edge and crosses on its way up (the timing it had). If backing out wouldn't beat the ceiling,
+    the step fails. A crusher stands still a tic as it turns: still longer than 2 tics is stopped.
+- **No stepping for a shot on a floor that hurts** (E3M5's nukage pit, 4 deaths in 4 sets): an imp
+  on the ledge above 500 off, no shot from the pit; stepping for one goes away from a target
+  above (the angle), out past the 512 the node applies within, the route's way off brought her
+  back in: 570 tics of it, dead, at 5.5 a second (the fight's back-out is from 6). The step only
+  kept her on the floor; she shoots on the way off. E3M5 8/8 seeds (6/8).
+  Not done: the same flip at 512 off a hurting floor (a stall, not seen yet).
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 7.8 -> 7.4 (7/8 through), E3 6.5 -> 6.8 (1 -> 0/8 through;
+no E3M9 stucks, no E3M5 deaths), Doom II 27/32; arenas combat 119/128, doom2 226/240. E2M4 seed 5
+(stuck: dropped into a pit for a blue armor, its only way out a teleporter behind a door she
+hadn't seen) and E3M9's ambush on arrival are older problems met in a different state.

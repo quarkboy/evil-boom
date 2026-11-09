@@ -24,6 +24,18 @@ pub(crate) const TURN_ACCEL: f64 = 1.0;
 pub const MAX_MOVE: f64 = 50.0;
 /// ~16 units a tic, with a little in reserve
 pub const FULL_SPEED: f64 = RUN_THRUST * 0.97 / (1.0 - FRICTION);
+
+/// Tics to go `d` from `v0` units a tic (negative: going the other way), running straight on
+/// (thrust and friction as Doom has them), at `pace` of it.
+pub fn run_tics(v0: f64, d: f64, pace: f64) -> f64 {
+    let (mut v, mut x, mut k) = (v0, 0.0, 0.0);
+    while x < d && k < 400.0 {
+        v = (v + RUN_THRUST) * FRICTION;
+        x += v * pace;
+        k += 1.0;
+    }
+    k
+}
 /// deceleration assumed when planning speed (units a tic, per tic)
 pub const BRAKE: f64 = 1.5;
 /// moving up to this far off the facing direction costs no speed
