@@ -33,7 +33,7 @@ the GPT stand-in's (out/neuro/gpt.log).
 
 What's in it, by line shape:
 
-- `tic N: <objective> (k steps) | ...`: the explorer choosing an objective.
+- `tic N: <objective> (k steps, A along, S straight) | ...`: the explorer choosing an objective (its route's length and its straight line from her: far longer along than straight is a long way round).
 - `tic N: dropped '<objective>' (<why>)`: an objective given up.
 - `    [  12.3s] ...`: the route follower (steps, jumps, "landed at", "sinking: running on",
   "running at H degrees off sector S, for sector T (why)", stuck, replans).
