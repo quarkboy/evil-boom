@@ -760,11 +760,14 @@ impl Combat {
             }
             _ => {
                 let mut c = Controls { turn, ..Controls::default() };
+                let facing = obs.angle - turn; // (thrust goes the way faced after this tic's turn)
                 if let Some(m) = d.moving {
-                    let facing = obs.angle - turn; // (thrust goes the way faced after this tic's turn)
                     let rel = norm(m.1.atan2(m.0).to_degrees() - facing).to_radians();
                     c.forward = 50.0 * rel.cos();
                     c.strafe = -50.0 * rel.sin();
+                } else if self.coasting_off(obs) {
+                    // (nowhere the fight wants her: not where the speed she has would take her)
+                    (c.forward, c.strafe) = crate::motor::brake(obs, facing);
                 }
                 c
             }

@@ -366,17 +366,35 @@ impl Combat {
         // below, the drop wasn't one. MAP06, walked off a crate top 552 down, then along the lip
         // of a nukage channel she couldn't climb out of, closing in on an imp)
         let floor0 = obs.z.map_or(floor_of(here).floor, |z| z.max(floor_of(here).floor));
-        let mut floor;
         if self.clear_run(obs, d, length) < length {
             return false;
         }
-        // (the slide: a wall or a step up stops her, which is all right; a drop or a hurting floor
-        // isn't)
+        self.slide_ok(obs, floor0, Some(d))
+    }
+
+    /// Would letting go of the controls now leave her where she stands, or near it: does the
+    /// speed she has carry her over a drop she couldn't come back from, or onto a floor that
+    /// hurts? (MAP19: landed from a run-jump on a strip 16 wide over a pit, the fight took the
+    /// controls with nowhere it wanted her to go, and the jump's speed carried her off the lip
+    /// into the pit, no way out of it.)
+    pub(super) fn coasting_off(&self, obs: &Observation) -> bool {
+        let nav = &self.nav;
+        let Some(here) = nav.poly_at(obs.pos()) else { return false };
+        let floor = obs.height(nav.sector_of_poly(here)).map_or(0.0, |h| h.floor);
+        !self.slide_ok(obs, obs.z.map_or(floor, |z| z.max(floor)), None)
+    }
+
+    /// The slide from where she is, pushing `push` the first `PUSH_TICS` (None: not at all), from
+    /// standing at `floor0`: a wall or a step up stops her, which is all right; a drop or a
+    /// hurting floor isn't.
+    fn slide_ok(&self, obs: &Observation, floor0: f64, push: Option<Point>) -> bool {
+        let nav = &self.nav;
+        let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
         let (mut x, mut y) = obs.pos();
         let (mut vx, mut vy) = self.velocity;
-        floor = floor0;
+        let mut floor = floor0;
         for k in 0..SLIDE_TICS {
-            if k < PUSH_TICS {
+            if let Some(d) = push.filter(|_| k < PUSH_TICS) {
                 vx += RUN_THRUST * d.0;
                 vy += RUN_THRUST * d.1;
             } else if vx * vx + vy * vy < 1.0 {

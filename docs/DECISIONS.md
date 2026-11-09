@@ -1314,3 +1314,26 @@ Round 8: Doom II MAP14-MAP17.
 
 Results (HNTR, one life): E1 8.0 (8/8), E2 7.9 -> 7.8 (6/8), E3 6.2 -> 6.6 (1/8; E3M4 deaths
 gone), Doom II 27/32; arenas unchanged.
+
+## Level campaign, round 9: no coasting off a ledge in a fight, a gun urgent only on a way she can take (2026-11-09)
+
+Round 9: Doom II MAP18-MAP21.
+
+- **The fight brakes rather than coast off a ledge** (MAP19 HMP: a run-jump onto a 16-wide strip
+  over a demon pit; the fight took the legs with no safe move and gave no thrust, the jump's speed
+  slid her 33 units off the lip into the pit, stuck there for the hour): with the legs and no move
+  of its own, the fight runs its slide check with no push; if her speed would take her over a drop
+  she can't climb back or onto a floor that hurts, she brakes (`coasting_off`).
+- **A gun or ammo is urgent only on a way past nothing she couldn't take on with it** (MAP20: a
+  rocket launcher by the cyberdemon, urgent, so every danger check skipped, gone for again and again
+  under its rockets; a launcher on the floor is 2 rockets): urgent only when the straight way to it
+  passes nothing she couldn't take on armed with it (`clear_way_to` on what she'd have); otherwise
+  an ordinary objective, danger checks and all. MAP20 ITYTD 62 -> 168 s, HNTR 23 -> 45 s.
+- Left out after the regression set: MAP21's "a press carried out of the use ray's reach fails
+  the step" (a dodge over a teleporter left her pressing a door 1500 off, the door written off).
+  Failing cost the Doom II arena 4 fights (doors in boss arenas' cover dropped mid-fight); walking
+  back to the press spot instead cost Doom II three levels (back into the fire). To revisit.
+- Traced, not fixed: MAP18 (out of ammo by 116 s on HNTR; an untried teleporter into cacodemons).
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 7.8 -> 7.0 (6/8), E3 6.6 -> 7.9 (1 -> 4/8 through), Doom
+II 27 -> 28/32 (only MAP08 fails); arenas combat 119 -> 118/128, doom2 226/240.

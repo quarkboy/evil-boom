@@ -1049,6 +1049,38 @@ impl Fight {
         }
     }
 
+    /// What she'd have with that gun or ammo picked up: the ammo, or the gun and the ammo a gun
+    /// lying about comes with (twice its clip: two rockets, eight shells, twenty bullets, forty
+    /// cells).
+    fn armed_with(obs: &Observation, name: &str) -> Observation {
+        let mut o = obs.clone();
+        let (pool, comes): (&[i32], i32) = if let Some(slot) = weapon_item(name).filter(|&s| s != 1) {
+            let held = o.weapons.get_or_insert_with(|| vec![1, 2]);
+            if !held.contains(&slot) {
+                held.push(slot);
+            }
+            let clip = match slot {
+                3 => "Shell",
+                5 => "RocketAmmo",
+                6 | 7 => "Cell",
+                _ => "Clip",
+            };
+            ammo_item(clip).map_or((&[], 0), |(pool, n)| (pool, 2 * n))
+        } else if let Some((pool, n)) = ammo_item(name).filter(|_| name != "Backpack") {
+            (pool, n)
+        } else {
+            return o;
+        };
+        let ammo = o.ammo.get_or_insert_with(Vec::new);
+        for &s in pool {
+            match ammo.iter_mut().find(|(k, _)| *k == s) {
+                Some((_, n)) => *n += comes,
+                None => ammo.push((s, comes)),
+            }
+        }
+        o
+    }
+
     /// Would that gun do more than the best she has (worth dropping what she's doing for)?
     fn better_gun(&self, obs: &Observation, name: &str) -> bool {
         name != "Chainsaw" && Self::new_gun(obs, name) && Self::gun(obs, name).dps() > self.combat.firepower(obs)
@@ -1179,6 +1211,11 @@ impl Fight {
                 // (E3M9's, behind the cyberdemon, spotted mid-fight and left for the blue key, a
                 // wall, a noise; killed at full health by one of its rockets)
                 why = " (something about she can't take on)";
+            } else if (weapon_item(t.name).is_some() || ammo_item(t.name).is_some()) && !self.clear_way_to(&Self::armed_with(obs, t.name), (t.x, t.y)) {
+                // (something to fight with, but on the way something she couldn't take on even
+                // with it: not worth dropping everything for. MAP20, a rocket launcher by the
+                // cyberdemon, no ammo left, gone for again and again under its rockets for the
+                // two it holds)
             } else if weapon_item(t.name).is_some() && need > 0.0 && self.better_gun(obs, t.name) {
                 why = " (a better gun)";
             } else if short && (weapon_item(t.name).is_some() || ammo_item(t.name).is_some()) {
