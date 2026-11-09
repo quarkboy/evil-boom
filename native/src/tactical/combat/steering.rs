@@ -68,6 +68,14 @@ const SHELTER_LATE: f64 = 16.0;
 /// she covers about this much a tic, running
 const RUN: f64 = 14.0;
 
+/// a homing missile dodged this long (tics) is going round her: shaken off round a corner...
+const SHAKE_AFTER: i64 = 3 * 35;
+
+/// ...no further off than this straight off, or this by the mesh
+const SHAKE_REACH: f64 = 384.0;
+
+const SHAKE_FAR: f64 = 1536.0;
+
 /// ducking from a hitscan shooter only in a fight longer than this (s)...
 pub(super) const DUCK_FIGHT: f64 = 4.0;
 /// ...with this many tics to get out of its sight, once it's firing (it fires on for as long as
@@ -241,6 +249,47 @@ impl Combat {
         }
         self.duck_until = obs.tic + i64::from(to_shot) + DUCK_HOLD;
         Some((t.name, self.towards(obs, spot)))
+    }
+
+    /// A homing missile dodged so long it's going round her (dodged, it comes round again, and
+    /// again: MAP10, four revenant tracers bunched into one, dodged for the rest of the hour):
+    /// the way to the nearest place it can't see her, round a corner it flies into on its way
+    /// after her, as a player shakes one off, once nothing else in sight is after her. None: none,
+    /// or nowhere out of its sight in reach.
+    pub(super) fn shake_off(&mut self, obs: &Observation, missiles: &[Thing]) -> Option<(&'static str, Option<Point>)> {
+        // (with nothing else in sight after her: in a fight, dodged as it comes, running off round
+        // a corner from the revenant still shooting walked her into the arachnotron's plasma)
+        if !self.against_her().is_empty() {
+            return None;
+        }
+        let t = missiles.iter().find(|t| self.homing_since.get(&t.id).is_some_and(|&since| obs.tic - since >= SHAKE_AFTER))?;
+        let eye = Body { x: t.x, y: t.y, z: t.z, height: 8.0 };
+        let held = self.shake_spot.filter(|&(id, _)| id == t.id).map(|(_, spot)| spot);
+        let spot = match held {
+            Some(spot) => spot,
+            None => {
+                let spot = self.shadow_spot(obs, eye, SHAKE_REACH).map(|(_, spot)| spot);
+                match spot {
+                    Some(p) => self.log.push(format!("tic {}: shaking off {} {}: to ({:.0}, {:.0})", obs.tic, t.name, t.id, p.0, p.1)),
+                    None => self.log.push(format!("tic {}: shaking off {} {} round a corner", obs.tic, t.name, t.id)),
+                }
+                self.shake_spot = Some((t.id, spot));
+                spot
+            }
+        };
+        if let Some(spot) = spot {
+            return Some((t.name, self.towards(obs, spot)));
+        }
+        // (nowhere straight off: round a corner by the mesh, the nearest place whose middle it
+        // can't see; a big open room's way out, worked out afresh as it comes after her)
+        let z = self.z(obs);
+        let mesh = std::sync::Arc::clone(&self.nav.mesh);
+        let hidden = |p: usize| {
+            let c = mesh.poly(p).center;
+            self.fits(obs, c) && !self.los.clear(eye, Body { x: c.0, y: c.1, z, height: PLAYER_HEIGHT }, &self.heights_now)
+        };
+        let h = crate::motor::follower::nearest_heading(&mesh, obs, &hidden, SHAKE_FAR)?.to_radians();
+        Some((t.name, Some((h.cos(), h.sin()))))
     }
 
     /// Sheltering from an arch-vile's blast rather than out of its sight: where it is, to face

@@ -1556,3 +1556,25 @@ Round B: E2M4, E2M5, E2M7, E2M8.
 
 Results (HNTR, one life): E1 8.0, E2 7.0 (5 -> 6/8), E3 7.5 -> 6.6 (E3M6 seed 4 stuck: a secret
 door's wall try interrupted, fixed next), Doom II 27/32; arenas 119/128, 227/240.
+- **A wall's try counts once it's pressed** (E3M6, round B's regression set, twice: shut in by a
+  closing door, the way out a secret door she could open from her side; its try began as she
+  stepped over a line that lowers a floor, the look round that set off took the press's time, and
+  the wall, marked tried on arrival, was never offered again: stuck the hour): a wall is tried when
+  pressed, or when its time runs out unpressed; a look round before the press starts the try again
+  after (not after a press: a second press shuts some doors again).
+- **A rocket's way held through its launch after the fight's over too** (E3M9: the last rocket
+  pressed at a baron as it died; the fight over, the route turned her for a door through the 8
+  tics before launch, the rocket out into the wall by her, dead at 53): with nothing left to fight
+  and a rocket still to go out, the fight keeps the aim (its way out if one's needed, else the way
+  she faced at the press), the legs the route's.
+- **A homing missile going round her is shaken off round a corner** (MAP10: four revenant tracers
+  bunched into one, dodged till the hour ran out): a homing missile (the revenant's tracer) still
+  dodged 3 s on, with nothing else in sight after her, steers the dodge (among the ways clear of
+  it) towards the nearest place it can't see her: straight off if there's one within 384, else
+  round corners by the mesh (`nearest_heading`, from the crusher escape's search). Overriding the
+  dodge instead ran her into the bunch (195 at once). In a fight (things in sight after her) it's
+  dodged as before: running off round a corner walked her into an arachnotron's plasma.
+
+Results (HNTR, one life), with round B: E1 8.0, E2 7.0 -> 7.2 (6/8), E3 6.6 -> 7.4 (1/8), Doom II 27
+-> 25/32 (MAP10 seeds 0 and 2 killed by barons at the exit line; seed 0 was the tracers' hour);
+arenas 119/128, 227 -> 226/240.

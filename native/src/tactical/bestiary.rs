@@ -88,17 +88,20 @@ pub struct Missile {
     /// roughly, on a direct hit
     pub damage: f64,
     pub splash: bool,
+    /// steers after her as it flies (A_Tracer): dodged, it comes round again, till it hits
+    /// something
+    pub homing: bool,
 }
 
 pub fn missile(name: &str) -> Option<Missile> {
-    let m = |radius, speed, damage| Missile { radius, speed, damage, splash: false };
+    let m = |radius, speed, damage| Missile { radius, speed, damage, splash: false, homing: false };
     Some(match name {
         "DoomImpBall" => m(6.0, 10.0, 12.0),
         "CacodemonBall" => m(6.0, 10.0, 20.0),
         "BaronBall" => m(6.0, 15.0, 32.0),
         "ArachnotronPlasma" | "PlasmaBall" => m(13.0, 25.0, 20.0),
         "FatShot" => m(6.0, 20.0, 32.0),
-        "RevenantTracer" => m(11.0, 10.0, 40.0),
+        "RevenantTracer" => Missile { homing: true, ..m(11.0, 10.0, 40.0) },
         "Rocket" => Missile { splash: true, ..m(11.0, 20.0, 80.0) },
         "BFGBall" => m(13.0, 25.0, 400.0),
         "SpawnShot" => m(6.0, 10.0, 0.0), // (the Icon of Sin's cubes)

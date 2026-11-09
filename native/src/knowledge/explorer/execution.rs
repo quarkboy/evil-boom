@@ -85,6 +85,12 @@ impl Explorer {
 
     fn start_glance(&mut self, obs: &Observation, bearing: Option<f64>, why: &str) -> Controls {
         self.last_glance = obs.tic;
+        // (a wall's try not yet pressed starts again after: the look takes the time it had)
+        if let Some(wall) = self.current.as_ref().filter(|o| o.kind == Kind::Wall).and_then(|o| o.wall) {
+            if !self.knowledge.tried_walls.contains_key(&wall) {
+                self.look_until = None;
+            }
+        }
         self.log.push(format!("tic {}: {why}: looking {}", obs.tic, if bearing.is_none() { "round" } else { "that way" }));
         self.glance_until = Some(obs.tic + LOOK_TICS);
         self.glance_at = bearing;
@@ -144,9 +150,12 @@ impl Explorer {
         } else if obj.kind == Kind::Wall {
             // face it, press use, watch a moment (what it does, if anything, the knowledge sees)
             let wall = obj.wall.unwrap_or(0);
+            // (tried once pressed, or once the time for it's up unpressed: not on arrival, a look
+            // round taking the time to press it; E3M6, the secret door out of a room a closed door
+            // shut her in, its try begun as she stepped over a line that lowers a floor, the look
+            // round the press's time, the wall never pressed and never tried again, stuck)
             if self.look_until.is_none() {
                 self.look_until = Some(obs.tic + WALL_TICS + 20);
-                self.knowledge.note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
             }
             let at = obj.look_at.unwrap_or(obj.goal);
             let bearing = (at.1 - obs.y).atan2(at.0 - obs.x).to_degrees();
@@ -174,6 +183,7 @@ impl Explorer {
                 } else if off < 4.0 && obs.tic < until - WALL_TICS && !exit {
                     c.use_ = true;
                     self.look_until = Some(obs.tic + WALL_TICS); // (pressed: now watch)
+                    self.knowledge.note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
                 } else if off < 4.0 && obs.tic > until - WALL_TICS + 4 && obs.tic < until - 8 && obj.round {
                     // (and a few shots: some walls answer to a gun, not a hand; with the pistol,
                     // single taps: a rocket sets off no wall, and blows up in her face; MAP11. Only
@@ -193,6 +203,7 @@ impl Explorer {
                 }
                 return Some(c);
             }
+            self.knowledge.note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
         } else if matches!(obj.kind, Kind::Item | Kind::Hunt) && !hooks.gone(obs, &obj) {
             if obj.kind == Kind::Item {
                 // Doom picks things up only moving onto them: come down on one from a ledge and

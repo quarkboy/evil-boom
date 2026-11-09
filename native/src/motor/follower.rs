@@ -8,6 +8,7 @@
 
 mod barrels;
 mod hazards;
+pub use hazards::nearest_heading;
 mod interactions;
 mod jumping;
 mod walking;

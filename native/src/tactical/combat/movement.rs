@@ -81,6 +81,15 @@ impl Combat {
         }
         let here: BTreeSet<i32> = out.iter().map(|(_, t)| t.id).collect();
         self.dodging.retain(|i| here.contains(i));
+        for (_, t) in out.iter().filter(|(_, t)| missile(t.name).is_some_and(|m| m.homing)) {
+            self.homing_since.entry(t.id).or_insert(obs.tic);
+        }
+        // (one that's gone by and come round again is still the one: kept while it flies)
+        let flying: BTreeSet<i32> = obs.things.iter().flatten().map(|t| t.id).collect();
+        self.homing_since.retain(|i, _| flying.contains(i));
+        if self.shake_spot.is_some_and(|(i, _)| !self.homing_since.contains_key(&i)) {
+            self.shake_spot = None;
+        }
         if here.is_empty() {
             self.dodge_way = None;
         }
@@ -90,7 +99,7 @@ impl Combat {
 
     /// The way to run that keeps her furthest from all of them as they go by, where the floor's
     /// safe; the way she's going already when it's as good (no dithering).
-    pub(super) fn dodge(&mut self, obs: &Observation, missiles: &[Thing]) -> Option<Point> {
+    pub(super) fn dodge(&mut self, obs: &Observation, missiles: &[Thing], prefer: Option<Point>) -> Option<Point> {
         let pos = obs.pos();
         let mut ways: Vec<Point> = (0..DODGE_WAYS)
             .map(|i| {
@@ -135,6 +144,10 @@ impl Combat {
             if let Some(to) = self.toward.filter(|&to| s >= 0.0 && dist(to, pos) > 1.0) {
                 let d = dist(to, pos);
                 s += W_TOWARD * (way.0 * (to.0 - pos.0) + way.1 * (to.1 - pos.1)) / d;
+            }
+            // (and a way she'd rather go, as clear: round a corner from a homing one)
+            if let Some(p) = prefer.filter(|_| s >= 0.0) {
+                s += 2.0 * W_TOWARD * (way.0 * p.0 + way.1 * p.1);
             }
             if best.is_none_or(|(bs, _)| s > bs) {
                 best = Some((s, way));

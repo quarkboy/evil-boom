@@ -515,6 +515,19 @@ impl RouteFollower {
 /// on the way to the nearest poly not under one, steps she can take, room to stand, aimed well
 /// into the poly beyond.
 fn escape_heading(mesh: &Mesh, obs: &Observation, moving: &dyn Fn(usize) -> bool) -> Option<f64> {
+    // (somewhere all of her is out from under: her box, at a poly's middle, every corner on floor
+    // with no ceiling moving over it; not her middle out with an edge still under, E2M2's
+    // crusher corridor, her west half under sector 23 as it came down, her middle on the floor
+    // beside it taken for out, slid along the wall there, pinned)
+    let r = PLAYER_RADIUS + 2.0;
+    let clear = |c: Point| [(-r, -r), (r, -r), (r, r), (-r, r)].iter().all(|(dx, dy)| mesh.poly_at((c.0 + dx, c.1 + dy)).is_some_and(|q| !moving(mesh.poly(q).sector)));
+    nearest_heading(mesh, obs, &|p| !moving(mesh.poly(p).sector) && clear(mesh.poly(p).center), ESCAPE_LOOK)
+}
+
+/// The heading to the nearest poly that's a `goal`, by the mesh, no further than `look` along the
+/// way: the first portal on the way, steps she can take, room to stand, aimed well into the poly
+/// beyond (her own poly a goal: its middle).
+pub fn nearest_heading(mesh: &Mesh, obs: &Observation, goal_poly: &dyn Fn(usize) -> bool, look: f64) -> Option<f64> {
     let start = mesh.poly_at(obs.pos())?;
     let n = mesh.polys.len();
     let mut cost = vec![f64::INFINITY; n];
@@ -524,19 +537,13 @@ fn escape_heading(mesh: &Mesh, obs: &Observation, moving: &dyn Fn(usize) -> bool
     let mut open = BinaryHeap::new();
     open.push(Reverse((0u64, start)));
     let mut goal = None;
-    // (somewhere all of her is out from under: her box, at a poly's middle, every corner on floor
-    // with no ceiling moving over it; not her middle out with an edge still under, E2M2's
-    // crusher corridor, her west half under sector 23 as it came down, her middle on the floor
-    // beside it taken for out, slid along the wall there, pinned)
-    let r = PLAYER_RADIUS + 2.0;
-    let clear = |c: Point| [(-r, -r), (r, -r), (r, r), (-r, r)].iter().all(|(dx, dy)| mesh.poly_at((c.0 + dx, c.1 + dy)).is_some_and(|q| !moving(mesh.poly(q).sector)));
     while let Some(Reverse((_, p))) = open.pop() {
         let s = mesh.poly(p).sector;
-        if !moving(s) && clear(mesh.poly(p).center) {
+        if goal_poly(p) {
             goal = Some(p);
             break;
         }
-        if cost[p] > ESCAPE_LOOK {
+        if cost[p] > look {
             continue;
         }
         let h = obs.heights[s];

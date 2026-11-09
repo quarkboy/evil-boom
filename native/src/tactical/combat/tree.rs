@@ -127,7 +127,12 @@ fn ducking(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
 
 fn dodging(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let m = s.missiles.first()?;
-    let moving = c.dodge(obs, &s.missiles);
+    // (a homing one going round her: dodged towards a corner it'll fly into, never into it)
+    if let Some((name, way)) = c.shake_off(obs, &s.missiles) {
+        let moving = c.dodge(obs, &s.missiles, way);
+        return Some(Act::new(moving, format!("shaking off {name} round a corner")));
+    }
+    let moving = c.dodge(obs, &s.missiles, None);
     let why = if s.errand.is_empty() { format!("dodging {}", m.name) } else { format!("dodging {} on the way to the {}", m.name, s.errand) };
     Some(Act::new(moving, why))
 }

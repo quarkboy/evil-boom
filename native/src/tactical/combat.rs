@@ -183,6 +183,10 @@ pub struct Combat {
     hit_cache: BTreeMap<(i32, u64), bool>,
     /// missiles being dodged (till they've gone by)
     dodging: BTreeSet<i32>,
+    /// homing missiles being dodged: since when; and where out of the sight of the one being
+    /// shaken off she's going
+    homing_since: BTreeMap<i32, i64>,
+    shake_spot: Option<(i32, Option<Point>)>,
     dodge_way: Option<Point>,
     /// where the route's taking her mid-fight (an errand: health, a gun, ammo), for dodging
     /// towards (the user's: on to it while dodging, not stuck dodging where she stands)
@@ -300,6 +304,8 @@ impl Combat {
             heights_now: Vec::new(),
             hit_cache: BTreeMap::new(),
             dodging: BTreeSet::new(),
+            homing_since: BTreeMap::new(),
+            shake_spot: None,
             dodge_way: None,
             toward: None,
             changed_floors: BTreeSet::new(),
@@ -353,6 +359,8 @@ impl Combat {
         self.hurt_tic = -1_000_000_000;
         self.mode.clear();
         self.dodging.clear();
+        self.homing_since.clear();
+        self.shake_spot = None;
         self.last_pos = None;
         self.velocity = (0.0, 0.0);
         self.route_way = None;
@@ -599,6 +607,22 @@ impl Combat {
 
     // --- deciding ---------------------------------------------------------------------------
 
+    /// A rocket on its way out (8 tics after the trigger, the way she faces then): the way to
+    /// face till it's out, and whether that's turning off a way it'd go off near her (the last
+    /// resort, the trigger pressed and no calling it back; the user's). Else held the way it was
+    /// judged safe: MAP32 UV, the trigger pressed at an SS, a new target the tic after, swung 86
+    /// degrees through the launch, the rocket out mid-turn into the wall beside her, dead at 31.
+    /// Tracking within 10 degrees instead did worse over the regression set: E3 8.2 -> 7.2.
+    fn rocket_held(&mut self, obs: &Observation) -> Option<(f64, bool)> {
+        if !self.last_shot.is_some_and(|(slot, tic)| slot == 5 && ((obs.tic - tic) as f64) < aiming::ROCKET_DELAY) {
+            return None;
+        }
+        if let Some(h) = self.rocket_way_out(obs) {
+            return Some((h, true));
+        }
+        self.rocket_facing.map(|f| (f, false))
+    }
+
     /// What the fight needs this tic (None: nothing). `busy`: the route is in the middle of
     /// something that wants the controls (a run-up, a jump). `errand`: the route's going for
     /// something to fight with: the fight only aims and shoots on the way.
@@ -607,6 +631,12 @@ impl Combat {
         let missiles = if self.invulnerable(obs.tic) { Vec::new() } else { self.incoming(obs) };
         let target = self.pick_target(obs);
         if target.is_none() && missiles.is_empty() {
+            // (the fight over with a rocket still to go out: the way held all the same, the route's
+            // turn after; E3M9, the last rocket pressed at a baron as it died, the route turned her
+            // for the door through the launch, out into the wall by her, dead at 53)
+            if let Some((aim, _)) = self.rocket_held(obs) {
+                return Some(Decision { takeover: false, aim: Some(aim), fire: false, weapon: 0, moving: None, why: "holding a rocket's way till it's out".into() });
+            }
             return self.no_target(obs, busy, errand);
         }
         let (s, fire, weapon) = self.size_up(obs, busy, errand, missiles, target);
@@ -614,16 +644,12 @@ impl Combat {
         // (a rocket on its way out, 8 tics after the trigger, the way she faces then: if that way
         // it'd go off near her, turned to the nearest way it won't, the last resort, the trigger
         // pressed and no calling it back; the user's)
-        if self.last_shot.is_some_and(|(slot, tic)| slot == 5 && ((obs.tic - tic) as f64) < aiming::ROCKET_DELAY) && s.vile.is_none() {
-            if let Some(h) = self.rocket_way_out(obs) {
-                act.aim = Some(h);
-                act.why = "turned off a rocket's way out into something near".into();
-            } else if let Some(f) = self.rocket_facing {
-                // (held the way it was judged safe till it's away: MAP32 UV, the trigger pressed
-                // at an SS, a new target the tic after, swung 86 degrees through the launch, the
-                // rocket out mid-turn into the wall beside her, dead at 31. Tracking within 10
-                // degrees instead did worse over the regression set: E3 8.2 -> 7.2)
-                act.aim = Some(f);
+        if s.vile.is_none() {
+            if let Some((aim, out)) = self.rocket_held(obs) {
+                act.aim = Some(aim);
+                if out {
+                    act.why = "turned off a rocket's way out into something near".into();
+                }
             }
         }
         let aim = act.aim.or(s.aim);
