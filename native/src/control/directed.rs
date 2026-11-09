@@ -23,6 +23,9 @@ pub const NAME_MAX: usize = 32;
 /// exploring a way: what's this far either side of it
 const EXPLORE_CONE: f64 = 50.0;
 
+/// a switch pressed: watched this long (tics) for what it did
+const PRESS_WATCH: i64 = 3 * 35;
+
 /// waiting on a floor that hurts: off it tried this often (tics)...
 const OFF_AGAIN: i64 = 35;
 /// ...to the best of this many places
@@ -33,6 +36,7 @@ const OFF_TRIES: usize = 6;
 pub enum Topic {
     Areas,
     Doors,
+    Switches,
     Items,
     Monsters,
     Exits,
@@ -42,7 +46,8 @@ impl Topic {
     pub fn parse(s: &str) -> Option<Topic> {
         Some(match s.to_lowercase().as_str() {
             "areas" | "places" | "rooms" => Topic::Areas,
-            "doors" | "switches" => Topic::Doors,
+            "doors" => Topic::Doors,
+            "switches" | "buttons" => Topic::Switches,
             "items" | "keys" => Topic::Items,
             "monsters" | "enemies" => Topic::Monsters,
             "exits" | "exit" => Topic::Exits,
@@ -90,8 +95,8 @@ pub struct Report {
 
 /// An order being carried out.
 enum Doing {
-    /// one objective
-    Once(String),
+    /// one objective: its id, what it's called
+    Once(String, String),
     /// objectives inside an area, one after another
     Area(String, String),
     /// objectives that way, one after another
@@ -124,6 +129,9 @@ pub struct Director {
     off_tried: i64,
     /// the areas the last list found nothing more to explore in, and not where she is
     done_areas: std::collections::BTreeSet<String>,
+    /// a switch pressed: its line, what it's called, and till when to watch for what it did (what
+    /// it moves is learned seeing it move, a moment after)
+    pressed: Option<(usize, String, i64)>,
 }
 
 impl Director {
@@ -145,7 +153,7 @@ impl Director {
 
     /// Doing nothing, waiting for an order?
     pub fn idle(&self, agent: &Agent) -> bool {
-        self.queue.is_empty() && self.doing.is_none() && agent.x().current.is_none()
+        self.queue.is_empty() && self.doing.is_none() && self.pressed.is_none() && agent.x().current.is_none()
     }
 
     /// A new map: names, orders, places and what's been told are the old map's.
@@ -173,7 +181,7 @@ impl Director {
         }
         let keys: Vec<String> = obs.keys.unwrap_or_default().iter().map(|k| key_name(k).to_string()).collect();
         let doing = match &self.doing {
-            Some(Doing::Once(w)) => format!("going: {w}"),
+            Some(Doing::Once(_, w)) => format!("going: {w}"),
             Some(Doing::Area(_, w)) => format!("exploring {w}"),
             Some(Doing::Way(b)) => format!("exploring {}", compass(*b)),
             Some(Doing::Off) => "getting off a floor that hurts".to_string(),
@@ -320,7 +328,15 @@ impl Director {
                 self.done_areas = done;
                 entries
             }
-            Topic::Doors => self.objectives_of(agent, obs, &[Kind::Door, Kind::Switch]),
+            Topic::Doors => self.objectives_of(agent, obs, &[Kind::Door]),
+            Topic::Switches => {
+                let mut out = self.objectives_of(agent, obs, &[Kind::Switch]);
+                for e in &mut out {
+                    let effect = e.id.strip_prefix("switch-l").and_then(|l| l.parse().ok()).and_then(|l| self.effect_of(agent, obs, l));
+                    e.what = format!("a switch not pressed yet; {}", effect.map_or("what it does isn't known yet".to_string(), |w| format!("it {w}")));
+                }
+                out
+            }
             Topic::Exits => self.objectives_of(agent, obs, &[Kind::Exit]),
             Topic::Items => {
                 let known = agent.x().knowledge.known_polys();
@@ -365,7 +381,7 @@ impl Director {
     /// What a reference (an id or one of her names) is, among everything listable now.
     pub fn find(&mut self, agent: &mut Agent, obs: &Observation, r: &str) -> Option<Entry> {
         let id = self.resolve(r);
-        [Topic::Areas, Topic::Doors, Topic::Items, Topic::Exits, Topic::Monsters].into_iter().find_map(|t| self.list(agent, obs, t).into_iter().find(|e| e.id == id))
+        [Topic::Areas, Topic::Doors, Topic::Switches, Topic::Items, Topic::Exits, Topic::Monsters].into_iter().find_map(|t| self.list(agent, obs, t).into_iter().find(|e| e.id == id))
     }
 
     /// Is something listed under that id or name an area?
@@ -409,6 +425,16 @@ impl Director {
     /// order taken up.
     pub fn tick(&mut self, agent: &mut Agent, obs: &Observation) {
         self.events(agent, obs);
+        if let Some((line, what, until)) = self.pressed.clone() {
+            let effect = self.effect_of(agent, obs, line);
+            if effect.is_some() || obs.tic >= until {
+                self.pressed = None;
+                self.report(obs, true, match effect {
+                    Some(w) => format!("Pressed {what}: it {w}."),
+                    None => format!("Pressed {what}: nothing seen to change."),
+                });
+            }
+        }
         if let Some(o) = self.queue.pop_front() {
             self.start(agent, obs, o);
             return;
@@ -428,23 +454,30 @@ impl Director {
                 }
             }
             Some(Doing::Off) => {}
-            Some(Doing::Once(what)) => {
+            Some(Doing::Once(id, what)) => {
                 let (ok, why) = ended.map_or((false, "stopped".to_string()), |e| (e.ok, e.why));
-                self.report(obs, ok, if ok { format!("Done: {what}") } else { format!("Couldn't: {what} ({why})") });
+                // (a switch pressed: what it did told when she's seen it, or after a while)
+                match id.strip_prefix("switch-l").and_then(|l| l.parse::<usize>().ok()).filter(|_| ok) {
+                    Some(l) => self.pressed = Some((l, id.clone(), obs.tic + PRESS_WATCH)),
+                    None => self.report(obs, ok, if ok { format!("Done: {what}") } else { format!("Couldn't: {what} ({why})") }),
+                }
             }
             Some(Doing::Area(id, what)) => {
-                if !self.next_in(agent, obs, |d, a, o| d.in_area(a, &id, o)) {
-                    self.report(obs, true, format!("Explored {what}: nothing more known to do there"));
-                } else {
+                if self.next_in(agent, obs, |d, a, o| d.in_area(a, &id, o)) {
                     self.doing = Some(Doing::Area(id, what));
+                } else {
+                    let found = self.switches_found(agent, obs, |d, a, o| d.in_area(a, &id, o));
+                    self.report(obs, true, format!("Explored {what}: nothing more known to do there.{found}"));
                 }
             }
             Some(Doing::Way(b)) => {
                 let pos = obs.pos();
-                if !self.next_in(agent, obs, |_, _, o| dist(pos, o.goal) > 64.0 && norm(heading(pos, o.goal) - b).abs() < EXPLORE_CONE) {
-                    self.report(obs, true, format!("Explored {}: nothing more known that way", compass(b)));
-                } else {
+                let fits = move |_: &Self, _: &Agent, o: &Objective| dist(pos, o.goal) > 64.0 && norm(heading(pos, o.goal) - b).abs() < EXPLORE_CONE;
+                if self.next_in(agent, obs, fits) {
                     self.doing = Some(Doing::Way(b));
+                } else {
+                    let found = self.switches_found(agent, obs, fits);
+                    self.report(obs, true, format!("Explored {}: nothing more known that way.{found}", compass(b)));
                 }
             }
         }
@@ -588,7 +621,7 @@ impl Director {
         let what = self.describe(&Entry { id: id.to_string(), what: obj.label.clone(), at: obj.goal }, obs);
         if agent.x_mut().take(obs, obj) {
             self.report(obs, true, format!("Going: {what}"));
-            self.doing = Some(Doing::Once(what));
+            self.doing = Some(Doing::Once(id.to_string(), what));
         } else {
             self.report(obs, false, format!("No way to {what} from here"));
         }
@@ -611,6 +644,33 @@ impl Director {
         self.open_objectives(agent, obs).into_iter().filter(|o| kinds.contains(&o.kind)).map(|o| Entry { id: id_of(&o), what: o.label.clone(), at: o.goal }).collect()
     }
 
+    /// The switches not pressed yet that `fits` (where she'd press them from), as a sentence for an
+    /// exploring order's end ("" if none).
+    fn switches_found(&mut self, agent: &mut Agent, obs: &Observation, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> String {
+        let found: Vec<Objective> = self.open_objectives(agent, obs).into_iter().filter(|o| o.kind == Kind::Switch && fits(self, agent, o)).collect();
+        if found.is_empty() {
+            return String::new();
+        }
+        let lines: Vec<String> = found.iter().map(|o| self.describe(&Entry { id: id_of(o), what: "switch".into(), at: o.goal }, obs)).collect();
+        format!(" Found {} switch{} not pressed yet (doom_press to press one): {}.", found.len(), if found.len() == 1 { "" } else { "es" }, lines.join("; "))
+    }
+
+    /// What a line (a switch) does, as far as she knows: from having set it off, or another of the
+    /// same mechanism. None if not known (never pressed: she's no way to know).
+    fn effect_of(&mut self, agent: &mut Agent, obs: &Observation, line: usize) -> Option<String> {
+        let sectors = agent.x().knowledge.known_triggers().into_iter().find(|(t, _)| t.line == line as i64).map(|(_, s)| s)?;
+        if sectors.is_empty() {
+            return None;
+        }
+        let pos = obs.pos();
+        let places = self.places(agent);
+        let mut areas: Vec<&Area> = sectors.iter().map(|&s| places.area_of(s)).collect();
+        areas.sort_by(|a, b| a.id.cmp(&b.id));
+        areas.dedup_by(|a, b| a.id == b.id);
+        let wheres: Vec<String> = areas.iter().map(|a| format!("{} ({} {:.0})", a.id, compass(heading(pos, a.center)), dist(pos, a.center))).collect();
+        Some(format!("moves something in {}", wheres.join(", ")))
+    }
+
     /// Is objective o one of exploring area `id`'s: done standing in it? (Looking out of it from
     /// inside, into a doorway or at the next room's wall, is exploring it; standing in the next
     /// room looking back isn't: E1M1, "explore the room" through a door to the next room's edge.)
@@ -626,7 +686,9 @@ impl Director {
         let options: Vec<Objective> = self
             .open_objectives(agent, obs)
             .into_iter()
-            .filter(|o| !matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Noise | Kind::Recheck | Kind::Hunt))
+            // (nor switches: pressing one is hers to decide, it may set off anything; exploring
+            // finds them and says so, the user's)
+            .filter(|o| !matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Noise | Kind::Recheck | Kind::Hunt | Kind::Switch))
             .filter(|o| !self.taken.contains(&o.ident()))
             .filter(|o| fits(self, agent, o))
             .collect();
