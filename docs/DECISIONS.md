@@ -2071,3 +2071,10 @@ within the score's noise (+-0.006); stalled runs 69 -> 45 of 1088; on the eight 
   (the health margin's refusals) comes back (`refused_now`). The seed: 681 s -> 19 s real (it now
   dies at 719 s game instead of stalling). E1M9 HMP's stuck seeds: 2 of 4 exit, 2 stall, the same
   with or without this (an interaction of the round's merged fixes, to trace).
+- **No risky way for what little it's worth** (the user's: the health a way costs against what
+  it's for): with nothing safe left, a place seen already looked at again, a monster gone from
+  where it was last seen, and a sound (already) aren't offered as risky; they keep the tenth-of-
+  health cap. Score 0.437 -> 0.448 (HMP 0.543 -> 0.537, UV 0.331 -> 0.358). Traced alongside: E1M9
+  HMP seed 1105803694's health went on a revisit estimated at 2.8 that cost 28, the wait for a lift
+  standing in the nukage not counted (the estimate counts the time walking on a floor, not
+  waiting on it): to do.

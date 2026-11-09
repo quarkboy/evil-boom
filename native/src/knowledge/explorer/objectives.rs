@@ -415,13 +415,16 @@ impl Explorer {
                 objectives.retain(|o| o.kind != Kind::Wall);
             }
             if risky {
-                // nothing safe left: anything, one-way drops and nukage and all; but not for a
-                // sound (MAP09: a noise far off took her down into a pit), and never away from
+                // nothing safe left: anything, one-way drops and nukage and all; but not for what
+                // little it's worth: a sound (MAP09: a noise far off took her down into a pit), a
+                // place seen already looked at again, a monster gone from where it was last seen
+                // (the health a way costs against what it's for, as a player weighs it: nothing new
+                // to find there, the floor's hits for nothing); and never away from
                 // every way out there is, as far as she knows (MAP24's secret ledge over the
                 // nukage pit: the level given up for a look)
                 return objectives
                     .into_iter()
-                    .filter(|o| o.kind != Kind::Noise)
+                    .filter(|o| !matches!(o.kind, Kind::Noise | Kind::Recheck | Kind::Hunt))
                     .filter(|o| {
                         exit_polys.is_empty()
                             || o.kind == Kind::Exit
