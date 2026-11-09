@@ -386,8 +386,9 @@ impl Explorer {
         // what a switch does is anyone's guess, and shut in there is dead, a suit on or not (it
         // runs out). E2M2: seed 2, an 80 drop into a nukage pit for one; seed 1, waded in with a
         // suit on; both presses raised the pit's one low way out, sealed in, dead. Shut in already,
-        // no floor that doesn't in reach, it's hers to try: E1M4's lift switch)
-        let shut_in = !reach.iter().any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)));
+        // no floor that doesn't in reach, it's hers to try: E1M4's lift switch; and with nothing
+        // else at all to do, walls and all, as `harm_ok` has it)
+        let shut_in = self.harm_ok || !reach.iter().any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)));
         let switch_in_harm = |this: &Self, o: &Objective| o.kind == Kind::Switch && !shut_in && nav.poly_at(o.goal).is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)));
         let mut usable = |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
             let objectives: Vec<Objective> = objectives.into_iter().filter(|o| !switch_in_harm(this, o)).collect();

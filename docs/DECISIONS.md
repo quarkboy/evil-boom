@@ -1249,3 +1249,26 @@ Round 5: E3M9, Doom II MAP03, MAP04, MAP05.
 
 Results (HNTR, one life): E1 8.0 (8/8), E2 7.8 -> 7.9 (7/8 through), E3 6.8 -> 6.2 (0 -> 1/8; E3M6's
 teleporter stuck, E3M9's arrival), Doom II 25 -> 26/32; arenas unchanged.
+
+## Level campaign, round 6: a jump given up only for a body in the way; switches from a hurting floor at a dead end (2026-11-09)
+
+Round 6: Doom II MAP06-MAP09.
+
+- **A run-jump is given up only for a monster's body in the way** (round 5's rule, "stopped short
+  of the takeoff", broke MAP06 ITYTD/HNTR: knocked aside mid-sprint, stood a moment, the plasma
+  rifle's jump given up, stuck; and missed MAP05 HMP's imps, against her just past the takeoff):
+  stopped a quarter second into the sprint with a living monster's box touching hers ahead (towards
+  the takeoff, or past it the landing). MAP05 ITYTD/HMP and MAP06 ITYTD/HNTR seed 0 exit.
+- **At a dead end, switches pressed from a floor that hurts** (MAP09: the start an island in a
+  nukage pit, the lifts' switches pressed from the nukage, all left out by "no switch from a
+  hurting floor with floor that doesn't in reach", the island counting): once nothing at all is
+  left (walls, the panic round, the second goes), they're offered. MAP09 with no monsters exits.
+- Dropped after the regression set: MAP08's rocket judged at its window's distance (MAP08 seed 1
+  lost, none gained) and MAP07's re-plan when a seen gun comes in reach (MAP07 HMP seed 2 and MAP10
+  seed 0 lost, MAP07 UV seed 0 gained). With both, E3 was 8.1 (4/8 through) but E2 6.8, Doom II 24.
+- Traced, not fixed: MAP06 UV (a better gun urgent skips the danger check: the spider by the
+  plasma rifle); MAP10 HNTR (with MAP07's change) killed by her own rocket at full health beside a
+  door, the fight 8 tics over: to trace.
+
+Results (HNTR, one life): unchanged: E1 8.0 (8/8), E2 7.9 (7/8), E3 6.2 (1/8), Doom II 26/32;
+arenas 119/128, 226/240.

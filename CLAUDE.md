@@ -76,7 +76,7 @@ another case in a chain.
 
 ## Where things stand (2026-11-09)
 
-Last bot change: level campaign rounds 1-5 (round 5: a blocked sprint, a melee she can't land, a monster in an errand's way) (barrels going off, waits that aren't coming, a hurting floor's own cost; teleporters from the front, ammo walks through monsters, one-hit claws); before it, crushers by kind (slow ones hold her: no-go stopped low, set off from the edge
+Last bot change: level campaign rounds 1-6 (round 6: a jump given up only for a body in the way, switches from a hurting floor at a dead end; round 5: a melee she can't land, a monster in an errand's way) (barrels going off, waits that aren't coming, a hurting floor's own cost; teleporters from the front, ammo walks through monsters, one-hit claws); before it, crushers by kind (slow ones hold her: no-go stopped low, set off from the edge
 first; fast ones a damage cost), spent W1 teleporters walkable, the escape from under a crusher
 with all of her out, no stepping for a shot in nukage (DECISIONS.md). Regression set (HNTR, one
 life): E1 8.0 (8/8 through), E2 7.9 (7/8), E3 6.2 (1/8), Doom II pistol-start levels 26/32;

@@ -392,12 +392,23 @@ impl RouteFollower {
             self.brake_until = obs.tic + 2 * 35;
             return self.walk(obs);
         }
-        // still short of the takeoff and stopped, a quarter second into the sprint: something's
-        // in the way (a monster's body: MAP05, imps clawing her for four seconds of pushing at
-        // them). The jump's off; the route too, so the fight has the legs again
-        if flown < 0.0 && obs.tic - since > 8 && self.motion.speed() < 2.0 {
+        // stopped a quarter second into the sprint with a monster's body against her on the way
+        // (to the takeoff, or past it to the landing): in the way (MAP05, imps at the takeoff,
+        // clawing her for the four seconds of pushing at them). The jump's off; the route too, so
+        // the fight has the legs again. Only for a body there: knocked aside mid-sprint, stopped
+        // a moment, she runs on (MAP06, the plasma rifle's jump given up for it, stuck)
+        let pos = obs.pos();
+        let to = heading(pos, if flown < 0.0 { jump.takeoff } else { jump.dest });
+        let body_ahead = obs.things.iter().flatten().any(|t| {
+            t.category == "Monster"
+                && t.health > 0
+                // (bodies are boxes: touching on both axes)
+                && crate::tactical::bestiary::monster(t.name).is_some_and(|m| (t.x - pos.0).abs().max((t.y - pos.1).abs()) < m.radius + PLAYER_RADIUS + 8.0)
+                && norm(heading(pos, (t.x, t.y)) - to).abs() < 90.0
+        });
+        if obs.tic - since > 8 && self.motion.speed() < 2.0 && body_ahead {
             self.sprint = None;
-            return self.fail(obs, "run-jump blocked short of the takeoff");
+            return self.fail(obs, "run-jump blocked by a monster");
         }
         let diff = norm(jump.facing(hd) - obs.angle);
         self.motion.rate = 0.0;

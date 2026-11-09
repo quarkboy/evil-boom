@@ -372,6 +372,8 @@ pub struct Explorer {
     waiting_reopen: bool,
     /// strafing run-jumps allowed (nothing else to do)
     strafe_ok: bool,
+    /// switches pressed from a floor that hurts allowed (nothing else at all to do)
+    harm_ok: bool,
     /// when she last shot at a wall she was trying (single taps)
     wall_shot: i64,
     /// what she knew when what was given up on last had its other go: another once she knows
@@ -494,6 +496,7 @@ impl Explorer {
             strong_only: false,
             waiting_reopen: false,
             strafe_ok: false,
+            harm_ok: false,
             wall_shot: -1_000_000,
             retried: None,
             debug_tics: debug_tics(),

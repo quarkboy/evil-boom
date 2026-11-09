@@ -186,6 +186,7 @@ impl Explorer {
         self.exits_open = !self.exit_last;
         let perceive = self.knowledge.perceive;
         self.strafe_ok = false;
+        self.harm_ok = false;
         let mut found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
         if !found && self.nav.jumps.iter().any(|j| j.strafe) {
             // (nothing else: what a strafing run gets to, MAP03's well)
@@ -286,6 +287,18 @@ impl Explorer {
                 self.knowledge.note(Note::Stuck(p, STUCK_TIMES - 1));
             }
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        }
+        if !found {
+            // (nothing at all else, walls and all: a switch pressed from a floor that hurts, the
+            // only way on left; shut in already, what it might shut is no worse than staying.
+            // MAP09's start, an island in a nukage pit, its lifts out switches on the pit's walls)
+            self.harm_ok = true;
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+            if found {
+                self.log.push(format!("tic {}: nothing else to do: switches from a floor that hurts", obs.tic));
+            } else {
+                self.harm_ok = false;
+            }
         }
         if !found {
             if self.current.is_some() {
