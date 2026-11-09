@@ -5,7 +5,8 @@
 //! status panel: what she's doing, the objectives she could pick, what she has found.
 //!
 //! Keys: space pause, +/- speed, A the whole map (faint: what she doesn't know), F follow her
-//! on the map, M mute the game's sound, mouse wheel zoom the map, Esc quit.
+//! on the map, M mute the game's sound, L the log panel: the whole log or only what passes
+//! between the game and Evil, mouse wheel zoom the map, Esc quit.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -343,6 +344,8 @@ struct Watch {
     sound_on: bool,
     show_all: bool,
     follow: bool,
+    /// the log panel showing only what passes between the game and Evil (L; the user's)
+    evil_log: bool,
     zoom: f64,
     center: Option<Point>,
     bounds: (f64, f64, f64, f64),
@@ -662,6 +665,7 @@ fn show(mut watch: Watch, title: &str, episode: Option<(&Wad, &WatchOptions)>) -
                 K::Minus | K::NumPadMinus => watch.speed = (watch.speed / 2.0).max(0.25),
                 K::A => watch.show_all = !watch.show_all,
                 K::F => watch.follow = !watch.follow,
+                K::L => watch.evil_log = !watch.evil_log,
                 K::M => watch.muted = !watch.muted,
                 _ => {}
             }
@@ -785,6 +789,7 @@ impl Watch {
             sound_on: false,
             show_all: false,
             follow: false,
+            evil_log: false,
             zoom: focus.map_or(1.0, |f| f.2),
             center: focus.map(|f| (f.0, f.1)),
             bounds,
@@ -891,12 +896,23 @@ impl Watch {
 
     fn draw_log(&self, c: &mut Canvas) {
         c.fill(LOG, (20, 20, 26));
-        let mut y = c.text("Log", (LOG.0 + 8, LOG.1 + 4), HEAD, 2);
         let x = self.agent.x();
-        let tic_of = |s: &str| if s.starts_with("tic ") { s.split(':').next().and_then(|t| t.split_whitespace().last()).and_then(|t| t.parse::<i64>().ok()).unwrap_or(0) } else { 0 };
-        let mut merged: Vec<&String> = x.log.iter().rev().take(40).rev().chain(x.knowledge.events.iter().rev().take(40).rev()).collect();
-        merged.sort_by_key(|s| tic_of(s));
-        for line in merged.iter().rev().take(24).rev() {
+        if self.evil_log {
+            self.draw_evil_log(c);
+            return;
+        }
+        let mut y = c.text("Log (L: Evil only)", (LOG.0 + 8, LOG.1 + 4), HEAD, 2);
+        let tic_of = |s: &str| if s.starts_with("tic ") { s.split(':').next().and_then(|t| t.split_whitespace().last()).and_then(|t| t.parse::<i64>().ok()) } else { None };
+        // (a line without a tic of its own (Evil's, the orders') at the last one before it: not
+        // sorted to the top, out of sight)
+        let mut last = 0;
+        let mut merged: Vec<(i64, &String)> = x.log.iter().rev().take(40).rev().map(|l| {
+            last = tic_of(l).unwrap_or(last);
+            (last, l)
+        }).collect();
+        merged.extend(x.knowledge.events.iter().rev().take(40).rev().map(|l| (tic_of(l).unwrap_or(0), l)));
+        merged.sort_by_key(|(t, _)| *t);
+        for (_, line) in merged.iter().rev().take(24).rev() {
             let colour = if line.contains("dropped") {
                 (255, 140, 140)
             } else if line.contains("learned") {
@@ -905,6 +921,36 @@ impl Watch {
                 TEXT
             };
             let s: String = line.split(" | ").next().unwrap_or("").chars().take(98).collect();
+            y = c.text(&s, (LOG.0 + 8, y), colour, 1);
+        }
+    }
+
+    /// The log panel with only what passes between the game and Evil: her actions (>>), what
+    /// she's told (<<), the connection; whole, wrapped, the latest at the bottom.
+    fn draw_evil_log(&self, c: &mut Canvas) {
+        const WIDTH: usize = 95;
+        const ROWS: usize = 24;
+        let mut y = c.text("Evil (L: whole log)", (LOG.0 + 8, LOG.1 + 4), HEAD, 2);
+        let mut rows: Vec<(String, (u8, u8, u8))> = Vec::new();
+        for line in self.agent.x().log.iter().rev().filter(|l| l.starts_with(">> ") || l.starts_with("<< ") || l.starts_with("neuro: ")) {
+            let colour = if line.starts_with(">> ") {
+                (255, 220, 120)
+            } else if line.contains("(!)") || line.contains("FAILED") {
+                (255, 140, 140)
+            } else if line.starts_with("neuro: ") {
+                (140, 220, 255)
+            } else {
+                TEXT
+            };
+            let chars: Vec<char> = line.chars().collect();
+            let wrapped: Vec<String> = chars.chunks(WIDTH).enumerate().map(|(i, ch)| format!("{}{}", if i > 0 { "   " } else { "" }, ch.iter().collect::<String>())).collect();
+            rows.splice(0..0, wrapped.into_iter().map(|w| (w, colour)));
+            if rows.len() >= ROWS {
+                break;
+            }
+        }
+        let skip = rows.len().saturating_sub(ROWS);
+        for (s, colour) in rows.into_iter().skip(skip) {
             y = c.text(&s, (LOG.0 + 8, y), colour, 1);
         }
     }

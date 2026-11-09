@@ -31,7 +31,7 @@
 //!       into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told)
 //!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [--directed FILE] [--neuro URL] [--gpt [CONFIG]] [--headless] [run options]
 //!       watch her play, with what she knows beside the game, the game's sound on (space pause,
-//!       +/- speed, A the whole map, F follow, M mute, wheel zoom, Esc quit; the sound off while
+//!       +/- speed, A the whole map, F follow, M mute, L Evil's log, wheel zoom, Esc quit; the sound off while
 //!       paused or not at x1). --directed FILE: directed play, orders read from FILE as lines are
 //!       added to it (list, name, order: see control::script), what comes back in the log and in
 //!       FILE.out. --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
