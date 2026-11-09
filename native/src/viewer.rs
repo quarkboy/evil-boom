@@ -493,8 +493,18 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
     let mut bytes: Vec<u8> = Vec::with_capacity(fw * fh * 4);
     let mut start = watch.engine.tic;
     let mut n: u64 = 0;
+    // (directed, by Neuro or the GPT stand-in or an orders file: the game at its own pace, real
+    // time, whoever directs her thinking on the clock; the user's. The video's speed is --speed's)
+    let real_time = o.neuro.is_some() || o.directed.is_some();
     loop {
+        let (paced_from, paced_tic) = (Instant::now(), watch.engine.tic);
         while !watch.engine.finished() && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE {
+            if real_time {
+                let due = paced_from + std::time::Duration::from_secs_f64((watch.engine.tic - paced_tic) as f64 / TICRATE);
+                if let Some(wait) = due.checked_duration_since(Instant::now()) {
+                    std::thread::sleep(wait);
+                }
+            }
             watch.tic();
             n += 1;
             if !n.is_multiple_of(u64::from(r.every.max(1))) {

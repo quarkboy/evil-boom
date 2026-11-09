@@ -27,8 +27,9 @@
 //!   evil-boom arena-watch FILE NAME [--seed N] [--speed X] [--mute]   one of them, watched (space
 //!                                               pause, N a tic at a time, +/- speed, M mute)
 //!   evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
-//!       [--crf N] [--preset P] [--ffmpeg PATH] [run options]   a watch played as fast as it goes
-//!       into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told)
+//!       [--crf N] [--preset P] [--ffmpeg PATH] [--gpt [CONFIG]] [--neuro URL] [run options]   a watch
+//!       played as fast as it goes into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told);
+//!       directed (--gpt, --neuro, --directed), in real time
 //!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [--directed FILE] [--neuro URL] [--gpt [CONFIG]] [--headless] [run options]
 //!       watch her play, with what she knows beside the game, the game's sound on (space pause,
 //!       +/- speed, A the whole map, F follow, M mute, L Evil's log, T text size, wheel zoom, Esc quit; the sound off while
@@ -486,8 +487,12 @@ fn record(args: &[String]) -> Result<(), String> {
             _ => rest.push(a.clone()),
         }
     }
-    let (w, names, _) = watch_options(&rest)?;
+    let (mut w, names, _) = watch_options(&rest)?;
     let [wad, map, out] = names.as_slice() else { return Err("usage: evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode] [options]".into()) };
+    if let Some(config) = &w.gpt {
+        // (the stand-in in this program, as watch has it; directed, it plays in real time)
+        w.neuro = Some(evildoom::neuro::gpt::start(config)?);
+    }
     let ffmpeg = ffmpeg.or_else(evildoom::viewer::find_ffmpeg).ok_or("no ffmpeg found (on the path, or winget's on Windows): --ffmpeg PATH")?;
     evildoom::viewer::record(wad, map, &w, &RecordOptions { out: out.into(), view, size, every, crf, preset, ffmpeg })
 }
