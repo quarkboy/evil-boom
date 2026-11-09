@@ -91,6 +91,8 @@ pub struct Observation {
     pub weapon: Option<i32>,
     /// where explosive barrels are now
     pub barrels: Option<Vec<Point>>,
+    /// those of them going off: hit, blowing up in their death frames (15 tics), still there
+    pub barrels_lit: Vec<Point>,
     pub health: Option<f64>,
     /// radiation suits picked up so far
     pub suits: Option<i32>,

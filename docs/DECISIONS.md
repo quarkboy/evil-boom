@@ -1133,3 +1133,28 @@ Results (HNTR, one life): E1 8.0 (8/8), E2 7.8 -> 7.4 (7/8 through), E3 6.5 -> 6
 no E3M9 stucks, no E3M5 deaths), Doom II 27/32; arenas combat 119/128, doom2 226/240. E2M4 seed 5
 (stuck: dropped into a pit for a blue armor, its only way out a teleporter behind a door she
 hadn't seen) and E3M9's ambush on arrival are older problems met in a different state.
+
+## Level campaign, round 1: barrels going off, waits that aren't coming, a hurting floor's own cost (2026-11-09)
+
+Pistol-start single levels on all four skills, four helper sessions a round, each with one level
+(the user's). Round 1: E1M5, E1M6, E1M9, E2M2.
+
+- **A barrel going off** (E1M6 UV: one set off by a fireball, its blast set off a second and
+  pushed it her way, met while dodging the imp's last fireball): the observation has the barrels
+  at 0 health still there (hit: 15 tics from blowing); a survive node, before ducking and dodging,
+  takes her away from the nearest barrel when one going off, or its chain, would reach her (walls
+  not counted). E1M6 UV seeds 0-2 exit (died).
+- **A wait for a sector that isn't coming** (E1M5 UV: a platform still rising from the move before
+  ignored the lowering line she crossed, as vanilla's EV_DoFloor skips a sector with a mover; she
+  waited in the nukage, counted "coming" for 1.5x its travel + 10 s, dead): it's coming only while
+  it's getting nearer the heights wanted (within a second). E1M5 UV: died -> stuck (on the
+  lowered platform, every way "no route": to trace).
+- **A hurting floor at the end of a route costs what the map says** (E1M9: 5 a hit counted as 20,
+  every way on from a lip over the nukage refused at 68 health): the worst (20) only for a floor
+  the map gives none for, as on the way. E1M9 still stuck (the way off the floor cuts into a wade
+  to a timed door).
+- E2M2 UV traced, not fixed: out of ammo early, the ammo errand into awake monsters, the fist
+  chosen over the pistol against melee-only monsters.
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 7.4 -> 7.8 (7 -> 6/8 through: E2M8's cyberdemon twice),
+E3 6.8 -> 7.5 (0 -> 1/8), Doom II 27/32; arenas unchanged.

@@ -50,6 +50,8 @@ pub(super) struct Situation<'a> {
     pub close: Vec<Thing>,
     /// the way away from a barrel by her, with something shooting in sight
     pub barrel_away: Option<Point>,
+    /// the way away from a barrel going off whose blast (or its chain's) reaches her
+    pub barrel_lit: Option<Point>,
     /// an arch-vile's fire to get out of the sight of: its name, the way
     pub vile: Option<(&'static str, Option<Point>)>,
     /// a hitscan shooter's fire to duck out of the sight of: its name, the way
@@ -77,7 +79,7 @@ impl Act {
 type Node = fn(&mut Combat, &Observation, &Situation) -> Option<Act>;
 
 /// Before anything else: out of the way of what would kill her outright.
-const SURVIVE: [Node; 6] = [off_crusher, out_of_vile_sight, ducking, dodging, bfg_hold, off_barrel];
+const SURVIVE: [Node; 7] = [off_crusher, out_of_vile_sight, off_lit_barrel, ducking, dodging, bfg_hold, off_barrel];
 /// In a jump, the route has the legs.
 const BUSY: [Node; 1] = [busy];
 /// The weapon she'd fight her target with fought up close.
@@ -158,6 +160,11 @@ fn off_crusher(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         c.steer(obs, s.target.as_ref(), &gun)
     });
     Some(Act::new(moving, "out from under a crusher".into()))
+}
+
+/// A barrel going off by her: its blast (up to 128) before any missile's dodge.
+fn off_lit_barrel(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
+    s.barrel_lit.map(|away| Act::new(Some(away), "away from a barrel going off".into()))
 }
 
 /// (MAP23: a mancubus's fireball set off the barrels she stood by)

@@ -130,6 +130,11 @@ struct Watch {
     /// when it got there
     reached: Option<i64>,
     late: bool,
+    /// how far off the expected heights it was last tic, and the last tic it got nearer: a
+    /// sector already moving keeps its mover and ignores the trigger (vanilla's EV_DoFloor
+    /// skips a sector with one), so one not closing in isn't on its way
+    gap: Option<f64>,
+    closing: i64,
     /// its hold window has run out
     over: bool,
     /// the step that fired it
@@ -539,6 +544,8 @@ impl RouteFollower {
                         line: t.line,
                         reached: None,
                         late: false,
+                        gap: None,
+                        closing: tic,
                         over: false,
                         step: self.step_i,
                         used: false,

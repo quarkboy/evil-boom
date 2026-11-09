@@ -404,11 +404,14 @@ impl RouteFollower {
             return Some(self.motion.hold(obs, want, Some((obs.angle + 10.0).rem_euclid(360.0))));
         }
         // still on its way to where the plan has it (MAP29's floor that takes half a minute to
-        // rise to the walkway): nothing to replan, just wait
-        let coming = self
-            .watches
-            .iter()
-            .any(|w| w.expect.sector == sector && w.reached.is_none() && ((obs.tic - w.since) as f64) < 1.5 * w.expect.travel + 10.0 * TICRATE);
+        // rise to the walkway): nothing to replan, just wait; but not for one that's stopped or
+        // going the other way (still finishing the move before, so the trigger did nothing)
+        let coming = self.watches.iter().any(|w| {
+            w.expect.sector == sector
+                && w.reached.is_none()
+                && ((obs.tic - w.since) as f64) < 1.5 * w.expect.travel + 10.0 * TICRATE
+                && obs.tic - w.closing <= 35
+        });
         if coming && !opener {
             self.wait_tic = Some(obs.tic - waited.min(4 * 35)); // (keeps "waited" short)
             return Some(self.motion.hold(obs, want, Some(look)));
@@ -473,6 +476,11 @@ impl RouteFollower {
                 continue;
             }
             let at = (live.floor - e.heights.floor).abs() < 1.0 && (live.ceiling - e.heights.ceiling).abs() < 1.0;
+            let gap = (live.floor - e.heights.floor).abs() + (live.ceiling - e.heights.ceiling).abs();
+            if w.gap.is_some_and(|g| gap < g - 0.01) {
+                w.closing = obs.tic;
+            }
+            w.gap = Some(gap);
             match w.reached {
                 None => {
                     if at {

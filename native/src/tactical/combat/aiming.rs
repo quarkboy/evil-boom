@@ -427,6 +427,16 @@ impl Combat {
             .reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a })
     }
 
+    /// A barrel going off (hit: it blows 15 tics later) whose blast, or its chain's, reaches her:
+    /// the barrel nearest her, to get away from.
+    pub(super) fn lit_barrel_by(obs: &Observation) -> Option<Point> {
+        let pos = obs.pos();
+        if obs.barrels_lit.iter().all(|&l| Self::chain_clear(obs, l)) {
+            return None;
+        }
+        obs.barrels.iter().flatten().copied().min_by(|a, b| blast_gap(*a, pos).total_cmp(&blast_gap(*b, pos)))
+    }
+
     /// Would every barrel a blast at `b` sets off, in turn (each within a blast of the one
     /// before), go off clear of her? Not her distance from the one shot alone: E1M8's yard of
     /// barrels, shot from among them, all of it round her (walls not counted: rather a shot

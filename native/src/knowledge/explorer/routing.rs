@@ -115,7 +115,12 @@ impl Explorer {
     /// floors' if the map has none for it.
     fn expected_damage(&self, legs: &[crate::navigator::Leg], obj: &Objective, states: &States, obs: &Observation) -> f64 {
         let way = self.route_damage(legs, states, obs);
-        let end = self.nav.poly_at(obj.goal).map(|p| self.nav.sector_of_poly(p)).filter(|&s| self.knowledge.damaging(s)).map_or(0, |s| self.nav.damage[s].max(WORST_FLOOR));
+        let end = self.nav.poly_at(obj.goal).map(|p| self.nav.sector_of_poly(p)).filter(|&s| self.knowledge.damaging(s)).map_or(0, |s| match self.nav.damage[s] {
+            // (the worst only for one the map doesn't say: 5 a hit counted as 20, E1M9's lip over
+            // the nukage at 68 health, every way on refused as costing too much, stood there)
+            0 => WORST_FLOOR,
+            d => d,
+        });
         if end == 0 || obj.kind == Kind::Exit || self.knowledge.suit_until.is_some_and(|u| u >= obs.tic) {
             return way;
         }

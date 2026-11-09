@@ -664,9 +664,13 @@ impl Combat {
         if unhurt {
             barrel_away = None;
         }
+        // (a barrel going off by her, whoever set it off: away from it before a missile's dodge,
+        // its blast the worse; E1M6's, set off by another's blast and pushed her way, met
+        // dodging an imp's fireball)
+        let barrel_lit = if busy || unhurt { None } else { Self::lit_barrel_by(obs).and_then(|b| self.away_from(obs, b)) };
         let vile = if busy || unhurt { None } else { self.vile_fire(obs) };
         let duck = if busy || unhurt || vile.is_some() || self.bfg_flying(obs) { None } else { self.duck(obs) };
-        let s = tree::Situation { pos, busy, errand, missiles, target, aim, health, threat, outmatched, close, barrel_away, vile, duck };
+        let s = tree::Situation { pos, busy, errand, missiles, target, aim, health, threat, outmatched, close, barrel_away, barrel_lit, vile, duck };
         (s, fire, weapon)
     }
 

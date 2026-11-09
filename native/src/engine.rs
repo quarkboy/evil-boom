@@ -240,6 +240,7 @@ impl Engine {
         let heights: Vec<Heights> = self.sectors.iter().map(|&(floor, ceiling)| Heights { floor, ceiling }).collect();
         self.game.things(&mut self.mobjs);
         let mut barrels = Vec::new();
+        let mut barrels_lit = Vec::new();
         let mut things = self.objects.then(Vec::new);
         for m in &self.mobjs {
             let name = dsda::type_name(m.kind);
@@ -248,6 +249,9 @@ impl Engine {
             // out at once, taken for gone and walked past as it blew)
             if name == Some("ExplosiveBarrel") {
                 barrels.push((m.x, m.y));
+                if m.health <= 0 {
+                    barrels_lit.push((m.x, m.y));
+                }
             }
             if m.kind == 0 || m.flags & dsda::MF_CORPSE != 0 || (m.flags & dsda::MF_SHOOTABLE != 0 && m.health <= 0) {
                 continue;
@@ -283,6 +287,7 @@ impl Engine {
             z: Some(p.z),
             weapon: Some(dsda::weapon_slot(p.readyweapon)),
             barrels: Some(barrels),
+            barrels_lit,
             health: Some(f64::from(p.health)),
             suits: Some(self.suits),
             things,
