@@ -2008,3 +2008,58 @@ mean over levels and skills, each the same weight. Beside it, how consistently l
 averaged), and the levels beaten on every run and on none. `score-report A.tsv B.tsv` compares
 sets: the score's own noise between measurements, and which levels move most. `run-map`'s RESULT
 line now always carries `kills x/y`.
+
+## Stuck round: eight agents on the levels that stall most (2026-11-09)
+
+The first round judged by the score. Eight agents, 30 minutes each, on the levels with most
+stalled runs in the baseline (MAP19, E4M1, MAP21, E3M7, MAP06, E4M5, E4M6, E1M9), each measuring
+its level with `score` before and after; seven fixes merged.
+
+- **No standing at a target with no shot, in front of her or not; a route waiting to press has
+  the turn** (E4M5: on a 16-wide ledge over the exit's pit, a shotgun guy below too steep for
+  either to hit, `standing` held 300 s, its no-shot give-up exempted by `blocking()` (facing: she
+  faces what she aims at); and falling back to cover behind a shut door, the fight kept her turned
+  to an imp 1100 off, the door never pressed for 6000 tics): the give-up applies in front too; while
+  a route waits at a door or switch to press it and she hasn't fired this tic, the route turns her
+  (`RouteFollower::pressing`, `Player::press_turn`). E4M5 0.52 -> 0.68-0.84, stalls 5 -> 0 of 16.
+- **Edges a few units off are the same boundary** (MAP19 HMP: the lift out of the demon pit had no
+  mesh portal: a corridor poly's edge, from a seg whose rounded split vertex is extended about
+  twice its length, lay 2.1 off the lift's line against a tolerance of 2; the pit a dead end, the
+  hour): `shared_segment` within 3 units. 26 of 68 maps gain 1-7 portals, none lose any.
+- **A dead end's look into the unseen needs no margin; a wade from one isn't an urgent way back;
+  a still mover on a hurting floor replanned at once** (E1M9 HMP: on a dry island in a nukage pit,
+  the way on a room past a door the island's edge opens; "look into" it refused by the 25 margin,
+  the dead-end pass lifting it only for lines to set off and skipping what was refused earlier the
+  same think; waded in, "get off the floor" sent her straight back; a door re-crossed while moving
+  (EV_DoDoor ignores it) waited at in the nukage): a frontier look takes margin 0 under `harm_ok`
+  and the pass retries same-think refusals; wading in from a dead end (`waded_dead_end`) makes the
+  way back a weighed option and counts her shut in (switches from the floor offered); a mover
+  standing still with nothing coming, on a hurting floor, is replanned after half a second. The 4
+  stuck HMP seeds exit.
+- **A floor changed to one that hurts priced by its model; a dead end's other ways may leave her
+  one hit** (E3M7 UV: at 18 health the blue key's pickup lowered the floor round its alcove into
+  blood (W1 lowerAndChange copies the model sector's special: 10 a hit), priced at the worst 20,
+  every way out refused): `changed_floor` keeps the floor's hit (`Navigator::floor_hit_after`); under
+  `harm_ok` a way that isn't a line or a look is taken if what she'd have left covers one hit of
+  its hardest floor (margin 0 for those killed her in a wade of 40 at 41).
+- **Teleported away while at a step's goal: the step walked again** (MAP21: a dodge stepped her onto
+  a teleporter beside the yellow bars' press spot; the follower, still in its act phase, pressed
+  from 1300 off three times, and the bars were written off): moved unexpectedly while acting or
+  fetching, the step starts over as a walk from where she is.
+- **Unarmed, no "away" off a route that keeps clear** (MAP06 HMP: unarmed, the blue card's lift
+  window missed every 3 s by "away from them" to a far spot, 20 game minutes): with no ammo
+  reachable clear of them, no hitscanner after her, not hurt, and the explorer's route keeping 96
+  from them all, she stays on it.
+- **Walls given up one at a time; dry ones first when she's on dry floor** (E4M6: on a ledge in a
+  lava field, the way out a hidden door in the ledge's own wall; the panic round's 12 walls all
+  far, across lava; and every wall objective shared one identity, so one dropped "no route" benched
+  them all): a wall is identified by its line; in a panic round, mortal, unsuited and on dry floor,
+  walls reached without crossing a hurting floor come first.
+- Not fixed: E4M1 (past the red door, "no route to the exit" even for the omniscient planner at
+  21-29 health; shut in or its pricing, to trace).
+- Seen: one MAP22 HMP run thought for 679 s of real time over 758 game seconds (39 tics/s): the
+  planner, to trace (the stall cutoff counts game time, so it bounds this only slowly).
+
+Score (all 68 levels, HMP+UV, 8 seeds): 0.428 -> 0.437 (HMP 0.513 -> 0.543, UV 0.343 -> 0.331),
+within the score's noise (+-0.006); stalled runs 69 -> 45 of 1088; on the eight levels, stalls 31
+-> 17, MAP19 HMP exits 0/8 -> 3/8, E3M7 HMP 1/8 -> 3/8.

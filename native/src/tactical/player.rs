@@ -157,6 +157,13 @@ fn species(name: &str) -> &str {
     }
 }
 
+/// The rest of a route passes none of them nearer than `clear`.
+fn keeps_clear(obs: &Observation, f: &RouteFollower, them: &[Thing], clear: f64) -> bool {
+    let path = f.planned_path(Some(obs.pos()));
+    !path.is_empty()
+        && path.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).all(|(a, b)| them.iter().all(|t| segment_point_distance(a, b, (t.x, t.y)) >= clear))
+}
+
 fn mhealth(name: &str) -> f64 {
     monster(name).map_or(0.0, |m| f64::from(m.health))
 }
@@ -364,7 +371,7 @@ impl Player {
         self.fight.combat.toward = if busy { toward } else { back.or(toward) };
         self.fight.combat.routed = self.explorer.follower.as_ref().is_some_and(|f| !f.done && !f.failed);
         // (what she knows of floors gone to something that hurts, for where the fight takes her)
-        self.fight.combat.changed_floors = self.explorer.knowledge.changed_floor.iter().filter(|(_, &h)| h).map(|(&s, _)| s).collect();
+        self.fight.combat.changed_floors = self.explorer.knowledge.changed_floor.iter().filter(|(_, &h)| h != 0).map(|(&s, _)| s).collect();
         // (and the crushers she knows of, for where they could have her if they start again)
         self.fight.combat.crushers = self.explorer.knowledge.crusher_sectors();
         let d = self.fight.combat.decide(obs, busy, &errand);
@@ -385,7 +392,8 @@ impl Player {
                     if d.why.starts_with("dodging") {
                         d.takeover = false;
                     }
-                    self.fight.combat.controls(obs, &d, Some(&c))
+                    let pressing = self.retreat.as_ref().is_some_and(|r| r.route.pressing(obs.tic));
+                    Self::press_turn(self.fight.combat.controls(obs, &d, Some(&c)), &c, pressing)
                 }
                 None => c,
             };
@@ -421,7 +429,8 @@ impl Player {
         }
         match d {
             Some(d) => {
-                let mut c = self.fight.combat.controls(obs, &d, Some(&c));
+                let pressing = self.explorer.follower.as_ref().is_some_and(|f| f.pressing(obs.tic));
+                let mut c = Self::press_turn(self.fight.combat.controls(obs, &d, Some(&c)), &c, pressing);
                 if self.hold_at_edge(obs, &c) {
                     (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
                 }
@@ -429,6 +438,18 @@ impl Player {
             }
             None => c,
         }
+    }
+
+    /// The fight's controls over a route's (`route`): turned the route's way while the route's
+    /// waiting to press a door or switch and nothing's fired this tic. Use goes where she faces;
+    /// turned to aim at what she isn't shooting, the press never came (E4M5 UV: falling back to
+    /// cover behind a shut door, 3 shells, an imp 1100 off out of reach aimed at, 6000 tics at
+    /// the door, never pressed).
+    fn press_turn(mut c: Controls, route: &Controls, pressing: bool) -> Controls {
+        if pressing && !c.attack {
+            c.turn = route.turn;
+        }
+        c
     }
 
     fn plight_now(&mut self, obs: &Observation) -> Plight {
@@ -547,7 +568,7 @@ impl Player {
             // shells, cacodemons on her, a way off chosen and called off every tic for 30 tics
             // under their fireballs)
             let walled = obs.tic - self.walled_tic < RETREAT_AGAIN;
-            match (unarmed && !walled).then(|| self.for_ammo(obs, on_way)).flatten() {
+            match (unarmed && !walled).then(|| self.for_ammo(obs, on_way, false)).flatten() {
                 Some(r) => (RetreatKind::ForAmmo, Some(r)),
                 None if on_way => (RetreatKind::ForAmmo, None),
                 None => (RetreatKind::Cover, self.find_cover(obs)),
@@ -557,7 +578,7 @@ impl Player {
             (RetreatKind::Post, self.find_post(obs))
         } else if unarmed {
             self.retreat_tic = obs.tic;
-            (RetreatKind::ForAmmo, self.for_ammo(obs, on_way))
+            (RetreatKind::ForAmmo, self.for_ammo(obs, on_way, true))
         } else if let Some(why) = self.ambushed(obs) {
             self.retreat_tic = obs.tic;
             match self.back_out(obs, why) {
@@ -715,7 +736,8 @@ impl Player {
     /// can use, by a way not past them; else to the spot she's been that's furthest from them.
     /// Through doors if need be (E3M1: the doors shut behind her, every way off through one).
     /// No plain way to ammo but on her way for some already (`on_way`): on with that, not away.
-    fn for_ammo(&mut self, obs: &Observation, on_way: bool) -> Option<RouteFollower> {
+    /// No way to ammo at all, not hurt (`keep_on`), and her way on clear of them: on with it.
+    fn for_ammo(&mut self, obs: &Observation, on_way: bool, keep_on: bool) -> Option<RouteFollower> {
         let them = self.fight.combat.against_her();
         let pos = obs.pos();
         // (no nearer to any of them than she is: one on her already, every way off starts by
@@ -758,6 +780,20 @@ impl Player {
             self.log(format!("tic {}: out of ammo: on her way for it already", obs.tic));
             return None;
         }
+        // (no way to ammo clear of them, and her own way on keeps clear of them: on with it, not
+        // away. Away finds no ammo; her way on is where new ammo turns up, and every away drags
+        // her off it, a lift's window missed each time. MAP06 HMP: out of shells at 198 health, a
+        // demon 300-700 off and imps across the map; the way on a lift pressed and ridden in 5 s,
+        // away every 3 s, 20 game minutes of it). Clear by the full margin, not the nearer one
+        // `clear` allows: with one on her, away gains distance her way on doesn't (MAP06 HMP: two
+        // imps 45 off clawing her while she waited on a lift, 120 health to 19). And none of them
+        // a hitscanner: no way is clear of its shots (MAP06 HMP: a chaingunner and a sergeant
+        // raking her on her way across their room, dead)
+        let hitscan = them.iter().any(|t| monster(t.name).is_some_and(|m| matches!(m.attack, Attack::Hitscan)));
+        if keep_on && !hitscan && self.route_clear(obs, &them, PAST_CLEAR) {
+            self.log(format!("tic {}: out of ammo, none to get to: on her way, clear of them", obs.tic));
+            return None;
+        }
         let mut spots: Vec<(f64, usize)> = self
             .visited_spots(obs, 128.0, AMMO_AWAY, COVER_SPOTS)
             .into_iter()
@@ -793,12 +829,14 @@ impl Player {
             return false;
         }
         let them = self.fight.combat.against_her();
-        let pos = obs.pos();
-        let nearest = them.iter().map(|m| dist((m.x, m.y), pos)).fold(f64::INFINITY, f64::min);
+        let nearest = them.iter().map(|m| dist((m.x, m.y), obs.pos())).fold(f64::INFINITY, f64::min);
         let clear = PAST_CLEAR.min(nearest - AMMO_MARGIN).max(0.0);
-        let path = f.planned_path(Some(pos));
-        !path.is_empty()
-            && path.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).all(|(a, b)| them.iter().all(|t| segment_point_distance(a, b, (t.x, t.y)) >= clear))
+        keeps_clear(obs, f, &them, clear)
+    }
+
+    /// The explorer's way on, the rest of it, passes none of them nearer than `clear`.
+    fn route_clear(&self, obs: &Observation, them: &[Thing], clear: f64) -> bool {
+        self.explorer.current.is_some() && self.explorer.follower.as_ref().is_some_and(|f| keeps_clear(obs, f, them, clear))
     }
 
     /// A way to that poly (not past monsters), if there is one.

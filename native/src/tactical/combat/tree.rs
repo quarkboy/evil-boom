@@ -406,8 +406,11 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if c.on_hurting_floor(obs) && !c.blocking(obs, s.target.as_ref()) {
         return None;
     }
-    // (not for one she's had no shot at a long while: see `no_shot_long`)
-    if !c.blocking(obs, s.target.as_ref()) && s.target.as_ref().is_some_and(|t| c.no_shot_long(obs, t)) {
+    // (not for one she's had no shot at a long while, see `no_shot_long`; in front of her or
+    // not: she faces what she aims at, and standing gets her no shot either way. E4M5 UV, landed
+    // on a ledge over a pit, a shotgun guy below too steep to aim at, the route's drop into the
+    // pit held 300 s, "standing and fighting")
+    if s.target.as_ref().is_some_and(|t| c.no_shot_long(obs, t)) {
         return None;
     }
     let duel = s.target.as_ref().is_some_and(|t| fought(c, obs, s, t));

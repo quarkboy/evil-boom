@@ -163,7 +163,9 @@ impl Objective {
     }
 
     pub fn ident(&self) -> Ident {
-        let line = if self.pad.is_empty() { self.trigger.as_ref().map(|t| t.line) } else { None };
+        // (a wall by its line: not every wall given up on with the one that had no way there,
+        // the walls of the floor she stood on with the far ones out of reach. E4M6 UV)
+        let line = if self.pad.is_empty() { self.trigger.as_ref().map(|t| t.line).or(self.wall.map(|w| w as i64)) } else { None };
         (self.kind, line, self.pad.clone(), self.key, self.reveals.clone(), self.risky, self.thing)
     }
 
@@ -381,6 +383,11 @@ pub struct Explorer {
     /// her health when she stepped onto a floor that hurts for a risky objective there (on
     /// purpose, not fallen in), while she's still down on it
     waded: Option<f64>,
+    /// the objective she's on was taken up with nothing else at all to do (`harm_ok`)
+    from_dead_end: bool,
+    /// she waded in from a dead end (`from_dead_end`), while she's still down on it: the floor
+    /// she left is where there was nothing to do
+    waded_dead_end: bool,
     /// when she last shot at a wall she was trying (single taps)
     wall_shot: i64,
     /// what she knew when what was given up on last had its other go: another once she knows
@@ -504,6 +511,8 @@ impl Explorer {
             waiting_reopen: false,
             strafe_ok: false,
             harm_ok: false,
+            from_dead_end: false,
+            waded_dead_end: false,
             waded: None,
             wall_shot: -1_000_000,
             retried: None,
@@ -575,11 +584,13 @@ impl Explorer {
         if let Some(s) = self.nav.poly_at(obs.pos()).map(|p| self.nav.sector_of_poly(p)) {
             if self.nav.damage[s] == 0 {
                 self.waded = None;
+                self.waded_dead_end = false;
             }
             if Some(s) != self.sector {
                 let meant = self.current.as_ref().is_some_and(|o| o.risky && self.nav.poly_at(o.goal).is_some_and(|p| self.knowledge.damaging(self.nav.sector_of_poly(p))));
                 if meant && self.waded.is_none() && self.knowledge.damaging(s) {
                     self.waded = obs.health;
+                    self.waded_dead_end = self.from_dead_end;
                 }
                 if self.nav.damage[s] != 0 {
                     let doing = self.follower.as_ref().map_or("-".to_string(), RouteFollower::objective);

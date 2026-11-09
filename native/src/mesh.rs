@@ -88,9 +88,12 @@ fn bounds(vs: &[Point]) -> (f64, f64, f64, f64) {
 }
 
 /// The overlap of two collinear segments, or None (with some tolerance for nodebuilder
-/// rounding).
+/// rounding: a poly's edge is its seg's line carried to the poly's corners, and a seg ending at
+/// a split vertex rounded to whole units leans off its linedef; carried twice its length, the
+/// lean reaches past 2 units. MAP19: a lift's diagonal face, a poly's edge on it 2.1 off at one
+/// end, had no portal: the lift was a wall, the way up out of a pit never planned)
 fn shared_segment(a1: Point, a2: Point, b1: Point, b2: Point) -> Option<(Point, Point)> {
-    let tol = 2.0;
+    let tol = 3.0;
     let d = (a2.0 - a1.0, a2.1 - a1.1);
     let length = d.0.hypot(d.1);
     if length < 1e-6 {

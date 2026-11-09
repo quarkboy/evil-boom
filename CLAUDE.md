@@ -79,10 +79,12 @@ Last bot changes: the level campaign (2026-11-09): a 10-minute pass (rounds 1-14
 20-minute pass (rounds A-N) of worktree agents over every pistol-start level failing on UV, each
 round merged, regression-checked and committed (details per round in DECISIONS.md). Seed-0
 single-level exits, campaign start -> now: ITYTD 52 -> 55, HNTR 45 -> 49, HMP 21 -> 29, UV 14 -> 13
-of 68. Then the score replaced the regression set.
+of 68. Then the score replaced the regression set, and a stuck round (8 agents on the most-stalled
+levels) took stalls from 69 to 45 a measurement.
 
-Score (c600b62, all 68 levels, HMP+UV, 8 seeds): 0.435 (HMP 0.54, UV 0.33; exits 33%, kills 50%;
-18-21 of 136 level-skills beaten every run, 60 never). Paused before the 40-minute pass (the
+Score (all 68 levels, HMP+UV, 8 seeds): 0.437 (HMP 0.54, UV 0.33; exits 34%, kills 50%; 18 of 136
+level-skills beaten every run, 60 never; 45 stalled runs). A MAP22 HMP run thought 679 s real for
+758 game s: the planner, to trace. Paused before the 40-minute pass (the
 user's); the larger changes waiting first: the route's speed cut kept under the fight's aim
 (`Motion::go`, crawling backwards over lava), ammo running out early on UV, rockets held at packed
 crowds, the MAP30 brain (the user: she may know of it), closed door sectors taken as passable

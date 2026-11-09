@@ -334,6 +334,7 @@ impl RouteFollower {
             }
         }
         if opener {
+            self.press_tic = Some(obs.tic);
             // use traces 64 straight ahead and stops at the first wall: face the door's middle,
             // then press
             let facing = norm(look - obs.angle).abs() < 10.0;
@@ -364,6 +365,7 @@ impl RouteFollower {
                     let k = k.max(0.5f64.min(8.0 / length)).min(0.5f64.max(1.0 - 8.0 / length));
                     let point = (la.0 + (lb.0 - la.0) * k, la.1 + (lb.1 - la.1) * k);
                     look = heading(pos, point);
+                    self.press_tic = Some(obs.tic);
                     if dist(pos, point) > PRESS_RANGE {
                         let gap = dist(pos, point) - PRESS_RANGE + 4.0;
                         let h = look.to_radians();
@@ -416,7 +418,14 @@ impl RouteFollower {
             self.wait_tic = Some(obs.tic - waited.min(4 * 35)); // (keeps "waited" short)
             return Some(self.motion.hold(obs, want, Some(look)));
         }
-        if missed || (!opener && waited == 5 * 35 && !switch_nearby) {
+        // (on a floor that hurts, a mover standing still with nothing on its way and nothing to
+        // press isn't waited for the few seconds: each costs her health, and nothing she does
+        // there moves it. A nukage room's door a walk-over line opens, crossed again while it
+        // stood open, which the game ignores (EV_DoDoor skips a sector with a mover): shut as
+        // she got there, waited at in the wade, dead before the 5 s were up)
+        let burning = nav.poly_at(pos).is_some_and(|p| nav.damage.get(nav.sector_of_poly(p)).is_some_and(|&d| d != 0));
+        let hopeless = burning && still && waited >= 35 / 2 && (waited - 35 / 2) % 35 == 0; // (a try a second)
+        if missed || (!opener && (waited == 5 * 35 || hopeless) && !switch_nearby) {
             let why = if missed { format!("missed sector {sector}'s window") } else { format!("sector {sector} not coming") };
             if self.replan(obs, &why, true) {
                 return Some(self.motion.hold(obs, (0.0, 0.0), Some(look)));

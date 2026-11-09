@@ -270,8 +270,8 @@ impl Knowledge {
 
     /// Does she take sector s's floor to hurt: as found out by standing on it, else by its look.
     pub fn damaging(&self, s: usize) -> bool {
-        if let Some(&c) = self.changed_floor.get(&s) {
-            return c; // (seen changed since: MAP08's walkway gone to nukage)
+        if let Some(&hit) = self.changed_floor.get(&s) {
+            return hit != 0; // (seen changed since: MAP08's walkway gone to nukage)
         }
         self.felt.get(&s).copied().unwrap_or_else(|| self.looks_damaging(s))
     }
@@ -281,7 +281,13 @@ impl Knowledge {
     /// done to her, `worst` if she's felt none. (E4M1 HMP: a door pressed from a nukage trench
     /// that doesn't hurt, beside a pit of the same nukage she'd waded at 5 a hit, reckoned at 20
     /// a hit, 27 at 37 health: refused, nothing else to do for the hour.)
+    /// One seen changed to a floor that hurts: its model's hit, as the map says. (E3M7 UV: the
+    /// blue key's alcove ringed by a floor gone down into the blood beside it, 10 a hit, reckoned
+    /// at 20 by its old look.)
     pub fn floor_hit(&self, s: usize, worst: i32) -> i32 {
+        if let Some(&hit) = self.changed_floor.get(&s).filter(|&&hit| hit > 0) {
+            return hit;
+        }
         let said = self.nav.damage[s];
         if said > 0 {
             return said;

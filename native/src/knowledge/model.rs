@@ -214,9 +214,9 @@ pub struct Knowledge {
     /// again and watched (rechecked: (tried key, life) done)
     pub doubts: BTreeMap<(Mechanism, usize), i64>,
     pub rechecked: BTreeSet<(Mechanism, i32)>,
-    /// sector -> does it hurt now, for floors seen moved by a line that changes their type
-    /// (this life)
-    pub changed_floor: BTreeMap<usize, bool>,
+    /// sector -> what a hit from its floor does now (0: it doesn't hurt), for floors seen moved
+    /// by a line that changes their type (this life)
+    pub changed_floor: BTreeMap<usize, i32>,
     /// a radiation suit on till this tic
     pub suit_until: Option<i64>,
     /// tries at the level so far

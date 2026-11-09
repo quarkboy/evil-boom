@@ -457,15 +457,21 @@ impl Navigator {
     /// neighbour's flat and type (MAP08's trap drops a walkway into the nukage); raising to
     /// the next higher one and changing texture clears the type.
     pub fn floor_after(&self, t: &TriggerLine, s: usize) -> Option<bool> {
+        self.floor_hit_after(t, s).map(|hit| hit != 0)
+    }
+
+    /// What a hit from sector s's floor does once trigger t has moved it (0: it doesn't hurt),
+    /// if t changes its type: the type it takes is its model's, so its hit too.
+    pub fn floor_hit_after(&self, t: &TriggerLine, s: usize) -> Option<i32> {
         let special = if t.line >= 0 { Some(t.info.special) } else { None };
         match special {
             Some(37) => {
                 let around = self.movers.neighbors(s);
                 // (by the map's floors: a trench's initial height is its sides')
                 let model = around.iter().copied().min_by(|&a, &b| self.map.sectors[a].floor.total_cmp(&self.map.sectors[b].floor))?;
-                Some(self.damage[model] != 0)
+                Some(self.damage[model])
             }
-            Some(20 | 22 | 47 | 68) => Some(false),
+            Some(20 | 22 | 47 | 68) => Some(0),
             _ => None,
         }
     }

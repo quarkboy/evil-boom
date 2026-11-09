@@ -104,6 +104,16 @@ impl Explorer {
         total
     }
 
+    /// The hardest hit of any floor that hurts on the way to obj or where it ends: what the
+    /// game's clock can add to the damage `expected_damage` spreads over the time (a floor hits
+    /// once every 32 tics of the level's clock, so a wade can take one more hit than its time's
+    /// share, by when it starts).
+    fn hardest_floor_hit(&self, legs: &[crate::navigator::Leg], obj: &Objective, states: &States) -> f64 {
+        let end = self.nav.poly_at(obj.goal).map(|p| self.nav.sector_of_poly(p)).filter(|&s| self.knowledge.damaging(s));
+        let way = legs.iter().flat_map(|leg| self.wades(&leg.path.waypoints, states)).map(|(s, _)| s);
+        way.chain(end).map(|s| self.knowledge.floor_hit(s, WORST_FLOOR)).max().map_or(0.0, f64::from)
+    }
+
     /// The health going to obj by these legs and doing it would cost her: the way there on floors
     /// that hurt; ending on one, the way back off it too, and (but for picking something up) the
     /// time there doing it. (MAP08's pit under the door, 20 a second, a door pressed from it the
@@ -349,13 +359,26 @@ impl Explorer {
             // A tenth of her health or less is no risk, short or not (the user's rule for any
             // risk): nothing to wait for. (MAP12's caco closet, the fight that opened it leaving
             // her 13 under a suit, every way back over the nukage, half a point, refused for good)
-            // Nothing else at all to do (`harm_ok`), a line to set off: the margin waits for
-            // healing or a suit there's no way to, for ever; only a way that'd take all she has is
-            // refused. (A nukage pit's island, health worn to 37 by the wading for walls, the
-            // lifts' switches a wade of 15 off, refused at 22 against 25: stood there the hour)
+            // Nothing else at all to do (`harm_ok`): the margin waits for healing or a suit
+            // there's no way to, for ever (health doesn't come back by itself); only a way that'd
+            // take all she has is refused: a line to set off (A nukage pit's island, health worn
+            // to 37 by the wading for walls, the lifts' switches a wade of 15 off, refused at 22
+            // against 25: stood there the hour), or a look into somewhere she hasn't seen, the
+            // other way a pit opens (as `dead_end` has it; a dry island in a nukage pit at 28
+            // health, the way on a room past a door the island's edge opens, a wade of 17 off,
+            // refused against 25: stood there the hour); any other way, by the most it can take,
+            // one hit of its hardest floor over the time's share. (E3M7 UV: at 18 after a fight,
+            // the blue key's alcove ringed by the floor its pickup lowered into blood, every way
+            // out 7 of it, the medikits 20: stood there the hour. HMP: at 41, a wade of 40 taken
+            // with nothing over: dead in it)
             let cost = self.expected_damage(&route.legs, obj, &states, obs);
             let health = obs.health.unwrap_or(100.0);
-            let margin = if self.harm_ok && obj.trigger.is_some() { 0.0 } else { HEALTH_MARGIN };
+            let way_on = obj.trigger.is_some() || obj.kind == Kind::Frontier;
+            let margin = match (self.harm_ok, way_on) {
+                (true, true) => 0.0,
+                (true, false) => self.hardest_floor_hit(&route.legs, obj, &states),
+                (false, _) => HEALTH_MARGIN,
+            };
             if cost > RISK_SHARE * health && health - cost < margin {
                 self.short_of_health = Some(obs.tic);
                 return None;
@@ -372,7 +395,7 @@ impl Explorer {
             // (not one that's gone down into what hurts since: crossing it before, it was a
             // walkway still, E3M1's, dropped into after to look at a wall, no way out)
             let escaped: BTreeSet<usize> =
-                k.visited.iter().map(|&p| nav.sector_of_poly(p)).filter(|s| Some(*s) != here && k.changed_floor.get(s) != Some(&true)).collect();
+                k.visited.iter().map(|&p| nav.sector_of_poly(p)).filter(|s| Some(*s) != here && !k.changed_floor.get(s).is_some_and(|&h| h != 0)).collect();
             for leg in &route.legs {
                 for n in &leg.path.steps {
                     if !n.contains("one-way drop") {

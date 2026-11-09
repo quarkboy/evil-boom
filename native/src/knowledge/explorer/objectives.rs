@@ -397,13 +397,18 @@ impl Explorer {
         // shut, too far a wade back in for her health)
         let safe = |polys: &BTreeSet<usize>| polys.iter().any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)));
         let stays_shut = self.knowledge.damaging(nav.sector_of_poly(here)) && !safe(&way_back(here));
-        let shut_in = self.harm_ok || stays_shut || !safe(&reach);
+        // (nor is the dry floor she waded off from a dead end: there was nothing to do there,
+        // so a switch down here is hers to try, before going back to stand on it. E1M9 HMP: an
+        // island in a nukage pit, nothing left on it, waded through a door the island's lines
+        // open into the room with the lift out; straight back to the island, too low for the
+        // wade again, the lift's switch never pressed)
+        let shut_in = self.harm_ok || self.waded_dead_end || stays_shut || !safe(&reach);
         let switch_in_harm = |this: &Self, o: &Objective| o.kind == Kind::Switch && !shut_in && nav.poly_at(o.goal).is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)));
         // (down in a pit whose floor hurts, no floor that doesn't in reach: every second there
         // costs health, so a switch or door she can see, a way out someone built, before a guess
         // at a plain wall. E4M8: a missed jump into the lava, three walls tried by the lift's
         // switch, dead on the way to it)
-        let in_pit = self.knowledge.mortal && self.on_hurting_floor(obs) && (stays_shut || !safe(&reach));
+        let in_pit = self.knowledge.mortal && self.on_hurting_floor(obs) && (stays_shut || self.waded_dead_end || !safe(&reach));
         let mut usable = |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
             let mut objectives: Vec<Objective> = objectives.into_iter().filter(|o| !switch_in_harm(this, o)).collect();
             if in_pit && objectives.iter().any(|o| matches!(o.kind, Kind::Switch | Kind::Door)) {
@@ -843,7 +848,7 @@ impl Explorer {
             return Vec::new();
         }
         let health = obs.health.unwrap_or(100.0);
-        let meant = self.waded.is_some_and(|h| health - (h - health) > super::routing::HEALTH_MARGIN);
+        let meant = self.waded_dead_end || self.waded.is_some_and(|h| health - (h - health) > super::routing::HEALTH_MARGIN);
         if meant && !risky {
             return Vec::new();
         }

@@ -36,9 +36,9 @@ impl Knowledge {
                 } else if !self.doubts.contains_key(&key) && !self.learned.get(&ti).is_some_and(|l| l.contains(&s)) {
                     self.doubts.insert(key, tic);
                 }
-                if let Some(hurts) = self.nav.floor_after(&t, s) {
-                    if self.changed_floor.get(&s) != Some(&hurts) {
-                        self.changed_floor.insert(s, hurts);
+                if let Some(hit) = self.nav.floor_hit_after(&t, s) {
+                    let hurts = hit != 0;
+                    if self.changed_floor.insert(s, hit).is_none_or(|was| (was != 0) != hurts) {
                         self.events.push(format!("tic {tic}: sector {s}'s floor {}", if hurts { "turns to something that hurts" } else { "is safe now" }));
                     }
                 }

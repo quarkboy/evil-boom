@@ -326,6 +326,8 @@ pub struct RouteFollower {
     mover_heights: Option<Heights>,
     mover_still_since: i64,
     last_use: i64,
+    /// the tic she last stood turned for a press at a door or switch she was waiting at
+    press_tic: Option<i64>,
     speed_cap: f64,
     live: Vec<Heights>,
     /// the heights the tic before (which way a ceiling's going)
@@ -435,6 +437,7 @@ impl RouteFollower {
             action_tic: None,
             mover_heights: None,
             mover_still_since: 0,
+            press_tic: None,
             last_use: -USE_EVERY,
             speed_cap: f64::INFINITY,
             live: Vec::new(),
@@ -484,6 +487,12 @@ impl RouteFollower {
     /// waited out; a switch to shoot): the gun's the route's for now.
     pub fn shooting(&self) -> bool {
         self.barrel.is_some() || self.barrel_flee.is_some() || self.barrel_settle.is_some() || usize::try_from(self.step_i).ok().and_then(|i| self.steps.get(i)).is_some_and(|s| s.action == crate::walkthrough::Action::Shoot)
+    }
+
+    /// Waiting at a door or switch to press it this tic: her turn is the press's (use goes
+    /// where she faces).
+    pub fn pressing(&self, tic: i64) -> bool {
+        self.press_tic == Some(tic)
     }
 
     /// Run-jumps still to come on the route.
@@ -795,6 +804,13 @@ impl RouteFollower {
                 self.enter_segment(obs.tic);
             } else {
                 self.log.add(obs.tic, format!("moved unexpectedly to ({:.0}, {:.0})", obs.x, obs.y));
+                if matches!(self.phase, Phase::Act | Phase::Fetch) {
+                    // (teleported off the spot she was acting from: a press from there is no
+                    // try, the use ray reaches 64. Walk back to it. MAP21: a dodge at a key bar
+                    // onto the teleporter beside it, the bar pressed from across the map three
+                    // times and given up as doing nothing)
+                    self.start_step(obs.tic);
+                }
                 self.settle_until = obs.tic; // (judge where she is straight away)
             }
         }

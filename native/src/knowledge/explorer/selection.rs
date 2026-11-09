@@ -37,8 +37,16 @@ impl Explorer {
     pub(super) fn walls(&mut self, obs: &Observation, reach: &BTreeSet<usize>, panic: bool) -> Vec<Objective> {
         let mut found = self.suspected(obs, reach, panic);
         if panic {
-            // (all of them: those with somewhere she can't get to behind first, nearest first)
-            found.sort_by(|a, b| (-a.0).total_cmp(&-b.0).then(dist(a.2, obs.pos()).total_cmp(&dist(b.2, obs.pos()))));
+            // (all of them: those with somewhere she can't get to behind first, nearest first;
+            // but before them those she can get to without a floor that hurts, unsuited: her
+            // reach runs on over such floors, but with the health it takes gone, routes there
+            // refuse them, and a round of far walls there left the walls of the dry floor she
+            // was stranded on, a hidden door among them, never tried. E4M6 UV: health 9, a dry
+            // ledge in a lava field, 12 far walls dropped "no route" every round for 300 s)
+            let dry = self.dry_reach(obs, reach);
+            let mesh = &self.nav.mesh;
+            let wet = |p: Point| !mesh.poly_at(p).is_some_and(|pi| dry.contains(&pi));
+            found.sort_by(|a, b| wet(a.2).cmp(&wet(b.2)).then((-a.0).total_cmp(&-b.0)).then(dist(a.2, obs.pos()).total_cmp(&dist(b.2, obs.pos()))));
         }
         found
             .into_iter()
@@ -49,6 +57,29 @@ impl Explorer {
             .take(if panic { PANIC_WALLS } else { SUSPECTS })
             .map(|(score, li, stand, mid)| wall_objective(score, li, stand, mid, true))
             .collect()
+    }
+
+    /// The part of her reach she can walk to from where she stands without setting foot on a
+    /// floor that hurts (empty if she's on one, suited, or immortal: then every floor's alike).
+    fn dry_reach(&self, obs: &Observation, reach: &BTreeSet<usize>) -> BTreeSet<usize> {
+        let mesh = &self.nav.mesh;
+        let k = &self.knowledge;
+        let mut dry = BTreeSet::new();
+        let Some(here) = mesh.poly_at(obs.pos()) else { return dry };
+        if !k.mortal || k.protected(obs.tic) || k.damaging(mesh.poly(here).sector) {
+            return dry;
+        }
+        let mut todo = vec![here];
+        dry.insert(here);
+        while let Some(p) = todo.pop() {
+            for &q in &mesh.poly(p).portals {
+                let n = mesh.portals[q].other(p);
+                if reach.contains(&n) && !k.damaging(mesh.poly(n).sector) && dry.insert(n) {
+                    todo.push(n);
+                }
+            }
+        }
+        dry
     }
 
     /// The walls worth a search for secrets asked for (Evil's explore with secrets): every one with
@@ -187,6 +218,7 @@ impl Explorer {
         let perceive = self.knowledge.perceive;
         self.strafe_ok = false;
         self.harm_ok = false;
+        self.from_dead_end = false;
         let mut found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
         if !found && self.nav.jumps.iter().any(|j| j.strafe) {
             // (nothing else: what a strafing run gets to, MAP03's well)
@@ -292,11 +324,19 @@ impl Explorer {
             // (nothing at all else, walls and all: a switch pressed from a floor that hurts, the
             // only way on left; shut in already, what it might shut is no worse than staying.
             // MAP09's start, an island in a nukage pit, its lifts out switches on the pit's walls)
+            // What the passes before refused this very think gets the pass too: refused under
+            // the margin it lifts. (A dry island in a nukage pit at 28 health, the walk-over line
+            // that opens the pit's door a wade of 7 off, refused at 21 against 25 and so left
+            // out of this pass: stood there the hour)
+            let tic = obs.tic;
+            self.dropped.retain(|_, &mut t| t != tic);
             self.harm_ok = true;
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
             if found {
                 self.log.push(format!("tic {}: nothing else to do: switches from a floor that hurts", obs.tic));
-            } else {
+            }
+            self.from_dead_end = found;
+            if !found {
                 self.harm_ok = false;
             }
         }
