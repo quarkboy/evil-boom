@@ -472,7 +472,40 @@ pub struct Signs {
     pub panel: f64,
 }
 
+/// A search for secrets asked for (Evil's explore with secrets) presses the walls with a
+/// `secret_score` this high or more.
+pub const SECRET_MIN: f64 = 1.0;
+
 impl Signs {
+    /// How likely the wall hides a secret, for a search for one asked for: each sign's log2 lift
+    /// (how much more often it's on a wall that's pressed or shot into a secret than on any
+    /// other wall), and for the signs nearly every secret wall has, what its absence says. From
+    /// `evil-boom secret-survey` over Doom's E1-E3 and Doom II (86 secret walls, 18,667 others;
+    /// each lift shrunk toward 1 as if 4 more secret walls had shown the other walls' rate,
+    /// rounded to halves; the exit sign, never on a secret wall, counts nothing either way: it's
+    /// the way out's). Fitted on Doom alone it kept the same Doom II secrets with a fifth fewer
+    /// walls; with SECRET_MIN, the same 78 of 86 as a score over 2 with a quarter fewer walls.
+    /// (The rubric's own `score` stays for the rounds of walls she makes by herself: the way on,
+    /// not only secrets.)
+    pub fn secret_score(&self) -> f64 {
+        // (each sign: there, and not there)
+        let w = |there: f64, present: f64, absent: f64| if there > 0.0 { present } else { absent };
+        [
+            w(self.target, 1.5, 0.0),
+            w(self.not_wall, 3.0, -0.5),
+            w(self.platform, 1.5, 0.0),
+            w(self.item_behind, 4.5, -0.5),
+            w(self.item_gap, 4.0, 0.0),
+            w(self.place_behind, 1.5, -3.0),
+            w(self.blank_behind, 3.5, 0.0),
+            w(self.odd, 1.5, -1.0),
+            w(self.short, 1.5, -0.5),
+            w(self.panel, 2.5, -0.5),
+        ]
+        .iter()
+        .sum()
+    }
+
     /// The suspicion: the signs' points (added in the rubric's order).
     pub fn score(&self) -> f64 {
         [self.target, self.not_wall, self.platform, self.item_behind, self.item_gap, self.place_behind, self.exit_sign, self.blank_behind, self.odd, self.short, self.panel].iter().sum()

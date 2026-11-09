@@ -282,6 +282,8 @@ pub struct Explorer {
     no_route: BTreeMap<GoalKey, (u64, i64)>,
     /// the walls she suspected last, and a hash of all that went into it (see `suspected`)
     suspects: Option<(u64, Vec<Suspect>)>,
+    /// the same for a search for secrets asked for (`secret_suspects`), by its own score
+    secret_suspects: Option<(u64, Vec<Suspect>)>,
     /// what standable() found, at the heights then (see `standable_at`)
     standable_cache: std::cell::RefCell<StandableCache>,
     /// the most plan steps a route is searched for in (`drive budget`)
@@ -439,6 +441,7 @@ impl Explorer {
             no_route: BTreeMap::new(),
             standable_cache: std::cell::RefCell::new(StandableCache::default()),
             suspects: None,
+            secret_suspects: None,
             plan_expansions: PLAN_EXPANSIONS,
             budget_cuts: 0,
             maxed_tic: i64::MIN / 2,

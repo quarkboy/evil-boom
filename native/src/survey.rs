@@ -227,12 +227,13 @@ pub fn survey_map(wad: &str, map: &str) -> Result<(), String> {
             view(walls.get(&li))
         };
         println!(
-            "ROW\t{map_name}\t{li}\t{}\t{trigger}\t{}\t{}\t{status}\t{:.1}\t{}",
+            "ROW\t{map_name}\t{li}\t{}\t{trigger}\t{}\t{}\t{status}\t{:.1}\t{}\t{:.1}",
             revealing.get(&li).map_or(String::new(), |s| list(s)),
             u8::from(l.flags & ML_SECRET != 0),
             u8::from(k.looks_interactive(li)),
             signs.map_or(0.0, |s| s.score()),
-            signs.map_or(String::new(), |s| s.named().iter().map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join(","))
+            signs.map_or(String::new(), |s| s.named().iter().map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join(",")),
+            signs.map_or(f64::NAN, |s| s.secret_score())
         );
     }
     Ok(())
@@ -249,6 +250,8 @@ struct Row {
     status: String,
     score: f64,
     signs: Vec<String>,
+    /// the secret search's score (NaN: not weighed)
+    secret_score: f64,
 }
 
 /// The maps, a process each (`jobs` at once), gathered: the rows to out/survey/<WAD>.tsv, the
@@ -277,7 +280,7 @@ pub fn survey(wad: &str, maps: &[String], jobs: usize) -> Result<(), String> {
             let f: Vec<&str> = l.split('\t').collect();
             match f.first() {
                 Some(&"MAP") => maps_lines.push(f[1..].join("\t")),
-                Some(&"ROW") if f.len() >= 10 => rows.push(Row {
+                Some(&"ROW") if f.len() >= 11 => rows.push(Row {
                     map: f[1].into(),
                     line: f[2].parse().unwrap_or(0),
                     reveals: f[3].into(),
@@ -287,6 +290,7 @@ pub fn survey(wad: &str, maps: &[String], jobs: usize) -> Result<(), String> {
                     status: f[7].into(),
                     score: f[8].parse().unwrap_or(0.0),
                     signs: f[9].split(',').filter(|s| !s.is_empty()).map(|s| s.split('=').next().unwrap_or("").to_string()).collect(),
+                    secret_score: f[10].parse().unwrap_or(f64::NAN),
                 }),
                 _ => {}
             }
@@ -295,7 +299,7 @@ pub fn survey(wad: &str, maps: &[String], jobs: usize) -> Result<(), String> {
     let stem = crate::config::resolve_wad(wad).file_stem().map_or_else(|| "WAD".into(), |s| s.to_string_lossy().to_uppercase());
     let dir = crate::config::out_dir().join("survey");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let mut tsv = String::from("map\tline\treveals\ttrigger\tml_secret\tlooks_interactive\tstatus\tscore\tsigns\n");
+    let mut tsv = String::from("map\tline\treveals\ttrigger\tml_secret\tlooks_interactive\tstatus\tscore\tsigns\tsecret_score\n");
     for text in outputs.values() {
         for l in text.lines().filter_map(|l| l.strip_prefix("ROW\t")) {
             tsv.push_str(l);
@@ -367,6 +371,14 @@ fn report(maps: &[String], rows: &[Row]) -> String {
     for t in THRESHOLDS {
         let a = hidden_secret.iter().filter(|r| r.score >= t).count();
         let b = others.iter().filter(|r| r.score >= t).count();
+        say(format!("  {t:5.1}   {a:4} ({:3.0}%)   {b:6}   {:.1}%", 100.0 * a as f64 / hidden_secret.len().max(1) as f64, 100.0 * a as f64 / (a + b).max(1) as f64));
+    }
+    say(String::new());
+    say(format!("== The secret search's score (secret_score; it presses those at {} or over)", crate::knowledge::model::SECRET_MIN));
+    say("  score>=   revealing   others   share of those at or over it that reveal".into());
+    for t in [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0] {
+        let a = hidden_secret.iter().filter(|r| r.secret_score >= t).count();
+        let b = others.iter().filter(|r| r.secret_score >= t).count();
         say(format!("  {t:5.1}   {a:4} ({:3.0}%)   {b:6}   {:.1}%", 100.0 * a as f64 / hidden_secret.len().max(1) as f64, 100.0 * a as f64 / (a + b).max(1) as f64));
     }
     say(String::new());

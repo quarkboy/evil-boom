@@ -2,12 +2,12 @@
 
 use super::{route_length, Explorer, Hooks, Kind, Objective, Spots, Suspecting, GIVE_UP_TICS, JUMP_MISSES, STUCK_TIMES, WHILE_OPEN};
 use crate::geom::{dist, Point};
-use crate::knowledge::model::{Note, SUSPICION_MIN};
+use crate::knowledge::model::{Behind, Note, Wall, SECRET_MIN, SUSPICION_MIN};
 use crate::motor::follower::RouteFollower;
 use crate::motor::Observation;
 use crate::navigator::TriggerLine;
 use crate::walkthrough::Step;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 /// objectives routed and compared by the way there, each pick
@@ -58,9 +58,55 @@ impl Explorer {
     /// pressed and shot: the user's, watching E1M1's start room searched wall by wall, sixteen of
     /// them. Her reach as last brought up to date.
     pub fn suspected_walls(&mut self, obs: &Observation) -> Vec<Objective> {
-        let reach = self.reach.clone();
-        let found: Vec<(f64, usize, Point, Point)> = self.suspected(obs, &reach, false).into_iter().filter(|w| w.0 > SUSPICION_MIN && self.standable(w.2, false)).collect();
+        let found: Vec<(f64, usize, Point, Point)> = self.secret_suspects(obs).into_iter().filter(|w| self.standable(w.2, false)).collect();
         found.into_iter().map(|(score, li, stand, mid)| wall_objective(score, li, stand, mid, self.knowledge.marked(li))).collect()
+    }
+
+    /// The walls a search for secrets presses, best first (one for each place behind): those
+    /// with a `secret_score` of SECRET_MIN or more (the survey's weights, not the rounds' score:
+    /// with the rounds' over 2, the same secrets with a quarter more walls). Her reach as last
+    /// brought up to date.
+    fn secret_suspects(&mut self, obs: &Observation) -> Vec<(f64, usize, Point, Point)> {
+        let reach = self.reach.clone();
+        let known = self.knowledge.known_polys();
+        let unreached = self.unreached_items(obs, &reach);
+        let key = self.suspect_key(&reach, &known, &unreached, false);
+        if let Some((_, found)) = self.secret_suspects.as_ref().filter(|(k, _)| *k == key) {
+            return found.clone();
+        }
+        let mut best: BTreeMap<Behind, (f64, usize, Point, Point)> = BTreeMap::new();
+        for (li, w) in self.wall_survey(obs) {
+            let Wall::Suspect { signs, behind, stand, aim } = w else { continue };
+            let score = signs.secret_score();
+            let key = behind.unwrap_or(Behind::Line(li));
+            if score >= SECRET_MIN && best.get(&key).is_none_or(|b| b.0 < score) {
+                best.insert(key, (score, li, stand, aim));
+            }
+        }
+        let mut found: Vec<(f64, usize, Point, Point)> = best.into_values().collect();
+        found.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+        self.secret_suspects = Some((key, found.clone()));
+        found
+    }
+
+    /// What the walls' suspicion goes by, hashed: the same, the same walls suspected.
+    fn suspect_key(&self, reach: &BTreeSet<usize>, known: &BTreeSet<usize>, unreached: &[Point], panic: bool) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let k = &self.knowledge;
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        k.mapped.hash(&mut h);
+        k.tried_walls.hash(&mut h);
+        for (s, x) in &k.seen_heights {
+            (s, x.key()).hash(&mut h);
+        }
+        k.last.as_ref().and_then(|l| l.keys).unwrap_or_default().hash(&mut h);
+        known.hash(&mut h);
+        reach.hash(&mut h);
+        for p in unreached {
+            (p.0.to_bits(), p.1.to_bits()).hash(&mut h);
+        }
+        panic.hash(&mut h);
+        h.finish()
     }
 
     /// Every wall she's mapped as the rubric sees it now, from where she can get to: its signs,
@@ -95,24 +141,7 @@ impl Explorer {
         let unreached = self.unreached_items(obs, reach);
         // (the same again while nothing it goes by has changed: asked for every list of what she
         // could do, for the strong suspects by her, every wall of the level weighed each time)
-        let key = {
-            use std::hash::{Hash, Hasher};
-            let k = &self.knowledge;
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            k.mapped.hash(&mut h);
-            k.tried_walls.hash(&mut h);
-            for (s, x) in &k.seen_heights {
-                (s, x.key()).hash(&mut h);
-            }
-            k.last.as_ref().and_then(|l| l.keys).unwrap_or_default().hash(&mut h);
-            known.hash(&mut h);
-            reach.hash(&mut h);
-            for p in &unreached {
-                (p.0.to_bits(), p.1.to_bits()).hash(&mut h);
-            }
-            panic.hash(&mut h);
-            h.finish()
-        };
+        let key = self.suspect_key(reach, &known, &unreached, panic);
         if let Some((_, found)) = self.suspects.as_ref().filter(|(k, _)| *k == key) {
             return found.clone();
         }
