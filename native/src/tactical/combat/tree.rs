@@ -348,8 +348,13 @@ fn keeping_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
 }
 
 /// Enough in sight, low, or in the way: the route waits; into the gun's window, else across the
-/// line of fire.
+/// line of fire. Not on a floor that hurts, unless it's in her way: the route held there costs a
+/// hurt every 32 tics, the route's way off is the fight's way too (E3M6 HMP: low, ten lost souls
+/// 1100-1400 off out of reach, the route over the nukage held for "closing in", 48 to 0).
 fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    if c.on_hurting_floor(obs) && !c.blocking(obs, s.target.as_ref()) {
+        return None;
+    }
     let duel = s.target.as_ref().is_some_and(|t| c.takes_on(obs, t.name));
     if !(s.threat >= STAND_THREAT || s.health < LOW_HEALTH || duel || c.blocking(obs, s.target.as_ref())) {
         return None;

@@ -1102,7 +1102,12 @@ impl Fight {
 
     /// Would that gun do more than the best she has (worth dropping what she's doing for)?
     fn better_gun(&self, obs: &Observation, name: &str) -> bool {
-        name != "Chainsaw" && Self::new_gun(obs, name) && Self::gun(obs, name).dps() > self.combat.firepower(obs)
+        // (judged on a boss she knows of still about, if any: what the level's fight comes down
+        // to, and it takes no rocket's blast. E3M8 from a pistol start: the plasma rifle 246 off
+        // "no better" than the launcher, so not gone for first; the spider mastermind wandered
+        // into sight of it, it was left, and she was shot down with the rockets spent)
+        let boss = self.combat.remaining().iter().filter_map(|s| monster(s.name)).find(|m| m.boss);
+        name != "Chainsaw" && Self::new_gun(obs, name) && Combat::dps_on(&Self::gun(obs, name), boss.as_ref()) > self.combat.firepower_on(obs, boss.as_ref())
     }
 
     /// Seconds of walking a gun is worth: what it'd save killing what she knows is still about
@@ -1133,7 +1138,11 @@ impl Fight {
             // on into them shooting, down to 3 and dead; the fight's own retreats and cover
             // are what keep her alive there, and its 10 don't pay for the way)
             let heals = health_item(name).is_some_and(|(amount, cap)| amount >= 10 && obs.health.unwrap_or(100.0) < f64::from(cap));
-            if cur.urgent && health_item(name).is_none() {
+            // (ammo, urgent, only within the reach ammo is turned aside for mid-fight: HMP, six
+            // rockets too near four cacodemons to fire, a rocket box 3900 off the errand, backed
+            // off "towards" it into them from 180 health to dead)
+            let near = dist(cur.goal, obs.pos()) < ITEM_RANGE;
+            if cur.urgent && health_item(name).is_none() && (near || ammo_item(name).is_none()) {
                 return Some((name.to_string(), cur.goal));
             }
             if heals && dist(cur.goal, obs.pos()) < HEAL_NEAR {

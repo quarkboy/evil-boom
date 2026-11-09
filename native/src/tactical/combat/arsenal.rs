@@ -7,7 +7,7 @@ use super::aiming::SWITCH_WAIT;
 use super::{mon, Combat, LOW_HEALTH, SLOTS};
 use crate::geom::dist;
 use crate::motor::{Observation, Thing, TICRATE};
-use crate::tactical::bestiary::{claw_max, melee_at, punchable, weapon, weapon_in, Attack, Weapon, CHAINSAW};
+use crate::tactical::bestiary::{claw_max, melee_at, punchable, weapon, weapon_in, Attack, Monster, Weapon, CHAINSAW};
 
 /// The launcher, its way blocked, kept (waited with) when the next gun would take this many
 /// times as long.
@@ -81,14 +81,24 @@ impl Combat {
     /// plain fist, berserk or not, the chainsaw or not; the berserk fist counts against what it'd
     /// punch, `too_much`).
     pub fn firepower(&self, obs: &Observation) -> f64 {
+        self.firepower_on(obs, None)
+    }
+
+    /// ...on m, if given (a boss takes no rocket's blast).
+    pub fn firepower_on(&self, obs: &Observation, m: Option<&Monster>) -> f64 {
         let held = Self::held(obs);
         SLOTS
             .iter()
             .filter(|s| held.contains(s))
             .map(|&s| if s == 1 { weapon(1) } else { weapon_in(s, obs) })
             .filter(|w| w.ammo_per_shot == 0 || Self::ammo(obs, w.slot) >= w.ammo_per_shot)
-            .map(|w| w.dps())
+            .map(|w| Self::dps_on(&w, m))
             .fold(f64::NEG_INFINITY, f64::max)
+    }
+
+    /// A gun's damage a second on m, if given, else on anything.
+    pub fn dps_on(w: &Weapon, m: Option<&Monster>) -> f64 {
+        m.map_or(w.dps(), |m| w.dps() * w.damage_on(m) / w.damage.max(1.0))
     }
 
     /// Would killing what's in sight take too long with what she has (a room of barons with the
@@ -155,8 +165,13 @@ impl Combat {
     /// the rest: E2M8 UV, fifty rockets held "short" of its full health all the fight, killed with
     /// it at half.
     pub fn ammo_short_against(&self, obs: &Observation, t: &Thing) -> bool {
-        let hp = f64::from(mon(t.name).health) - self.put_in.get(&t.id).copied().unwrap_or(0.0);
-        self.ammo_short_of(obs, &[t.name], hp.max(0.0))
+        self.ammo_short_of_killing(obs, t.id, t.name)
+    }
+
+    /// The same, by the monster's id and kind (one known of, not in sight).
+    pub fn ammo_short_of_killing(&self, obs: &Observation, id: i32, name: &str) -> bool {
+        let hp = f64::from(mon(name).health) - self.put_in.get(&id).copied().unwrap_or(0.0);
+        self.ammo_short_of(obs, &[name], hp.max(0.0))
     }
 
     fn ammo_short_of(&self, obs: &Observation, names: &[&str], hp: f64) -> bool {

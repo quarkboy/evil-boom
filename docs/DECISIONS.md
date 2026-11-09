@@ -1618,3 +1618,41 @@ Round C: E2M9, E3M3, E3M4, E3M5.
 
 Results (HNTR, one life): E1 8.0, E2 7.2 (6/8), E3 7.4 -> 7.6 (1/8), Doom II 25/32; arenas 119/128,
 225/240.
+
+## 20-minute pass, round D: a lift's floor is no crusher; a better gun by the boss; a far ammo errand; no standing on a hurting floor (2026-11-09)
+
+Round D: E3M6, E3M7, E3M8, E3M9.
+
+- **Sectors only lifts move aren't crushers when their floor comes up** (E3M9 UV seed 0: a
+  thin lift-as-door sector, floor 64 to 0 and back, by the switch she was pressing; her box's
+  edge over it as it rose made her "under a crusher", `off_crusher` gave the route the legs
+  (waiting at the lift) over the dodge, a cyberdemon rocket due in 21 tics hit, 136 at once): a
+  plat that doesn't crush reverses when blocked (vanilla T_PlatRaise), and no lift crushes, so
+  like doors' ceilings, a lift-only sector's rising floor isn't `crushing`. E3M9 seed 0: UV
+  died 357 s -> exits, HNTR died -> exits, HMP lives 176 -> 405 s, ITYTD exits as before; UV
+  seeds 1-3 unchanged.
+- **A better gun judged against the boss she knows is alive** (E3M8 ITYTD: the plasma rifle 246 off
+  not urgent, the launcher "better" by its blast, 252 against 205 a second; the spider mastermind
+  takes no blast (P_RadiusAttack skips it); the rifle then ruled out as dangerous, rockets spent on
+  cacodemons, kept clear of the spider with the pistol, shot down): `better_gun` compares guns by
+  damage a second on a boss she knows is still alive (`firepower_on`/`dps_on`: a rocket on a boss
+  by its hit alone), so the gun better against it is "a better gun", urgent, past the danger
+  filter. E3M8 ITYTD seed 2 exits (the first E3M8 exit); seed 0 has the spider down to 120.
+- **No standing still on a floor that hurts** (E3M6 HMP: on the exit route over nukage at 28
+  health, ten lost souls 1100-1400 off, `standing` (low health) held the route "closing in", dead
+  on the floor): on a hurting floor `standing` passes unless the target's in her way; the route
+  goes on, shooting (as `stepping_for_shot`).
+- **A far ammo item isn't the fight's errand** (E3M7 HMP: four cacodemons, every rocket "not safe";
+  the urgent RocketBox 3938 off made the fight's errand, backed off "towards" it into them): mid-fight
+  an urgent ammo item is the errand only within `ITEM_RANGE` (as the explorer's own turn-aside for
+  ammo; health already 512). Out of ammo, the for-ammo retreat still routes her to it. HMP seed 0
+  exits again.
+- Dropped after the regression set: E3M6's rocket check with her own run projected over the whole
+  flight (E3M6 HMP: the route running her at a cacodemon, a rocket fired 621 off burst 107 from her).
+  Over the flight for every shot, the arch-vile arena lost 2 (arch-viles 1063 off "not safe");
+  narrowed to the route having her legs, Doom II MAP10 seed 3 died holding 7 rockets "not safe" on
+  the way. What's wanted instead: when a rocket's held for her own run, the fight stops her for it.
+
+Results (HNTR, one life): E1 8.0, E2 7.2 -> 6.9 (seeds both ways: E2M4 seed 5's stuck and an E2M8
+death gone, E2M2 seed 0 (the crusher corridor) and two E2M8 deaths new), E3 7.6 (1/8), Doom II
+25/32; arenas 119/128, 225/240.

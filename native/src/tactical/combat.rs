@@ -20,6 +20,7 @@ mod tree;
 use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
 use crate::geom::{dist, Point};
+use crate::specials::Category;
 use crate::los::{Body, LineOfSight};
 use crate::motor::{heading, norm, Controls, Observation, Thing, FRICTION, RUN_THRUST, TICRATE};
 use crate::navigator::{Navigator, PLAYER_HEIGHT, PLAYER_RADIUS};
@@ -199,6 +200,10 @@ pub struct Combat {
     /// sectors only doors move: a door closing on her goes back up, or rests on her, and does
     /// no damage (vanilla T_VerticalDoor), so its ceiling coming down is no crusher
     doors: BTreeSet<usize>,
+    /// sectors only lifts move: a lift coming up on her goes back down (vanilla T_PlatRaise
+    /// reverses a plat that doesn't crush, and none of the lifts do), so its floor coming up is no
+    /// crusher either
+    lifts: BTreeSet<usize>,
     last_pos: Option<Point>,
     velocity: Point,
     /// the way the route last walked her (in the world, whichever way she was turned to aim;
@@ -273,14 +278,19 @@ impl Combat {
         let sinks_into_harm = (0..nav.map.sectors.len())
             .filter(|&s| nav.triggers.iter().any(|t| t.info.trigger.walked() && t.effect(s).is_some() && nav.floor_after(t, s) == Some(true)))
             .collect();
-        let doors = (0..nav.map.sectors.len())
-            .filter(|&s| {
-                let mut movers = nav.triggers.iter().filter(|t| t.sectors.contains(&s)).peekable();
-                movers.peek().is_some() && movers.all(|t| t.info.category.is_door())
-            })
-            .collect();
+        let moved_only_by = |only: fn(Category) -> bool| -> BTreeSet<usize> {
+            (0..nav.map.sectors.len())
+                .filter(|&s| {
+                    let mut movers = nav.triggers.iter().filter(|t| t.sectors.contains(&s)).peekable();
+                    movers.peek().is_some() && movers.all(|t| only(t.info.category))
+                })
+                .collect()
+        };
+        let doors = moved_only_by(Category::is_door);
+        let lifts = moved_only_by(|c| c == Category::Lift);
         Combat {
             doors,
+            lifts,
             los: LineOfSight::new(&nav.map),
             hearing: Hearing::new(&nav.map),
             nav,
@@ -896,7 +906,7 @@ impl Combat {
     pub fn crushing(&self, obs: &Observation, s: usize) -> bool {
         let gap = obs.heights.get(s).map_or(f64::INFINITY, |h| h.ceiling - h.floor);
         (!self.doors.contains(&s) && self.ceiling_down.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < CRUSH_GAP)
-            || (self.floor_up.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < FLOOR_CRUSH_GAP)
+            || (!self.lifts.contains(&s) && self.floor_up.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < FLOOR_CRUSH_GAP)
     }
 
     /// Health lost a second lately (over the last few seconds).
