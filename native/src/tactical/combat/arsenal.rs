@@ -7,7 +7,7 @@ use super::aiming::SWITCH_WAIT;
 use super::{mon, Combat, LOW_HEALTH, SLOTS};
 use crate::geom::dist;
 use crate::motor::{Observation, Thing, TICRATE};
-use crate::tactical::bestiary::{melee_at, punchable, weapon, weapon_in, Attack, Weapon, CHAINSAW};
+use crate::tactical::bestiary::{claw_max, melee_at, punchable, weapon, weapon_in, Attack, Weapon, CHAINSAW};
 
 /// The launcher, its way blocked, kept (waited with) when the next gun would take this many
 /// times as long.
@@ -301,10 +301,14 @@ impl Combat {
                 // Anything that fights back is weighed as it is: wider, E3 lost 0.8 levels)
                 continue;
             }
-            if slot == 1 && ((w == CHAINSAW && !melee_at(&w, t.name)) || (obs.health.unwrap_or(100.0) < LOW_HEALTH && w != weapon(1))) && self.guns_armed(obs) {
+            let health = obs.health.unwrap_or(100.0);
+            if slot == 1 && ((w == CHAINSAW && !melee_at(&w, t.name)) || (health < LOW_HEALTH && w != weapon(1)) || claw_max(t.name) >= health) && self.guns_armed(obs) {
                 // (not the saw at what it won't keep flinching, with a gun to hand: a cacodemon's
                 // bites, a baron's claws come through it; nor the saw or the berserk fist at
-                // anything, hurt: E3M4, at 14 health, up to a demon with the saw, one bite)
+                // anything, hurt: E3M4, at 14 health, up to a demon with the saw, one bite; nor
+                // any fist at what one claw of could kill her: E4M7, the berserk fist up for a
+                // baron at 41 health, 29 rockets and 64 shells by, backing off out of its reach
+                // and never a shot for 600 tics, then clawed to death)
                 continue;
             }
             let mut c = self.time_to_kill(&w, t, d) + (d - here).abs() / GET_THERE;

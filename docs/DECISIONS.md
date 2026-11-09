@@ -1414,3 +1414,26 @@ Round 13: Doom E4M2-E4M5.
 
 Results (HNTR, one life): unchanged: E1 8.0, E2 7.4 (7/8), E3 8.0 (4/8), Doom II 28/32; arenas
 118/128, 226/240.
+
+## Level campaign, round 14: unseen walls a way out of a pit, a switch before walls in one, no fist at a killer (2026-11-09)
+
+Round 14: Doom E4M6-E4M9. The end of the 10-minute pass.
+
+- **A drop isn't a dead end while there are walls down there she hasn't seen** (E4M6 ITYTD stuck:
+  the only way on a drop into a lava pit whose way out is lifts on walls unseen from above; the
+  dead-end check counted unknown map, known switches and teleporters, not unseen walls). A pit seen
+  all round is still refused. ITYTD stuck -> dies later (sniped on a ledge).
+- **On a hurting floor with no floor that doesn't in reach, switches and doors before walls** (E4M8:
+  a missed jump into a lava pit, the way out a lift switch 404 off; the risky pass ranked plain walls
+  75 off first, three tried, 170 tics of lava, dead): walls are dropped while a switch or door is on
+  offer; a seen switch was built as a way out, a wall's a guess. E4M8 seed 0 ITYTD, HNTR, HMP exit
+  (all four died).
+- **No fist at what one hit of could kill her, with a gun to hand** (E4M7 HMP: berserk at 41 health,
+  the fist free and so chosen at a baron, the tree backing off: 600 tics without a shot fired):
+  `claw_max` >= health rules the fist out when she has a gun with ammo. E4M7 HMP 1/4 -> 3/4 exits.
+- Dropped after the regression set: E4M9's "not moving" judged from her position change rather than
+  her momentum (pinned against a demon's box, momentum building, 4 bites): right by the mechanics,
+  but E3 8.0 -> 5.4 (E3M6 stuck three times). To revisit.
+
+Results (HNTR, one life): E1 8.0, E2 7.4 (7/8), E3 8.0 -> 7.9 (3/8), Doom II 28/32; arenas 118/128,
+226/240.

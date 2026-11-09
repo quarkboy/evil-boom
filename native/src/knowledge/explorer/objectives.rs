@@ -390,8 +390,16 @@ impl Explorer {
         // else at all to do, walls and all, as `harm_ok` has it)
         let shut_in = self.harm_ok || !reach.iter().any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)));
         let switch_in_harm = |this: &Self, o: &Objective| o.kind == Kind::Switch && !shut_in && nav.poly_at(o.goal).is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)));
+        // (down in a pit whose floor hurts, no floor that doesn't in reach: every second there
+        // costs health, so a switch or door she can see, a way out someone built, before a guess
+        // at a plain wall. E4M8: a missed jump into the lava, three walls tried by the lift's
+        // switch, dead on the way to it)
+        let in_pit = self.knowledge.mortal && self.on_hurting_floor(obs) && !reach.iter().any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)));
         let mut usable = |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
-            let objectives: Vec<Objective> = objectives.into_iter().filter(|o| !switch_in_harm(this, o)).collect();
+            let mut objectives: Vec<Objective> = objectives.into_iter().filter(|o| !switch_in_harm(this, o)).collect();
+            if in_pit && objectives.iter().any(|o| matches!(o.kind, Kind::Switch | Kind::Door)) {
+                objectives.retain(|o| o.kind != Kind::Wall);
+            }
             if risky {
                 // nothing safe left: anything, one-way drops and nukage and all; but not for a
                 // sound (MAP09: a noise far off took her down into a pit), and never away from

@@ -430,6 +430,13 @@ impl Explorer {
         if nav.teleports.iter().any(|tp| !tp.src_polys.is_disjoint(&after)) {
             return false;
         }
+        // (nor with walls round it she hasn't seen yet: any of them could be the switch out.
+        // E4M6's lava pit, seen from above all over, the lifts out of it worked by their sides
+        // down in it, never looked at: refused as a pit with nothing in it)
+        let sectors: BTreeSet<usize> = after.iter().map(|&p| nav.sector_of_poly(p)).collect();
+        if k.unseen_walls().iter().any(|(s, _)| sectors.contains(s)) {
+            return false;
+        }
         if self.current.as_ref().is_none_or(|c| c.ident() != obj.ident()) {
             self.log.push(format!("tic {}: '{}': a drop into somewhere with no way back and nothing there to try ({} polys)", obs.tic, obj.label, after.len()));
         }
