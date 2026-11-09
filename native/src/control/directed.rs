@@ -134,6 +134,9 @@ pub struct Director {
     /// mark passed, keys and weapons held, dead
     told_exits: std::collections::BTreeSet<String>,
     told_items: std::collections::BTreeSet<i32>,
+    /// items seen she couldn't get to (told when she can), and those told so
+    out_of_reach: std::collections::BTreeSet<i32>,
+    told_reachable: std::collections::BTreeSet<i32>,
     told_monsters: std::collections::BTreeSet<i32>,
     health_mark: Option<i32>,
     had_keys: Option<crate::specials::Keys>,
@@ -219,6 +222,8 @@ impl Director {
         self.places = None;
         self.told_exits.clear();
         self.told_items.clear();
+        self.out_of_reach.clear();
+        self.told_reachable.clear();
         self.told_monsters.clear();
         self.health_mark = None;
         self.told_dead = false;
@@ -357,19 +362,22 @@ impl Director {
         // (exits, switches and doors as they come into view, mid-fight too: a switch the fight
         // swung her round to see is hers to rush to, not news for an explore order's end that a
         // fight puts off; the user's, MAP07)
-        let (mut switches, mut doors) = (Vec::new(), Vec::new());
+        let (mut exits, mut switches, mut doors) = (Vec::new(), Vec::new(), Vec::new());
         for e in self.objectives_of(agent, obs, &[Kind::Exit, Kind::Switch, Kind::Door]) {
             if !self.told_exits.insert(e.id.clone()) {
                 continue;
             }
             let line = self.describe(&e, obs);
             if e.id.starts_with("exit-") {
-                self.event(obs, true, format!("Exit found: {line}."));
+                exits.push(line);
             } else if e.id.starts_with("switch-") {
                 switches.push(line);
             } else {
                 doors.push(line);
             }
+        }
+        if !exits.is_empty() {
+            self.event(obs, true, format!("Exit{} found: {}.", if exits.len() == 1 { "" } else { "s" }, exits.join(", ")));
         }
         if !switches.is_empty() {
             self.event(obs, true, format!("Switch{} found: {}.", if switches.len() == 1 { "" } else { "es" }, switches.join(", ")));
@@ -397,6 +405,7 @@ impl Director {
         if !seen.is_empty() {
             self.event(obs, true, format!("Spotted: {}.", seen.join("; ")));
         }
+        self.newly_reachable(agent, obs);
         // (monsters seen for the first time, together: how many of each, the nearest; worth a
         // reaction when one's dangerous)
         let new: Vec<(i32, &'static str, Point)> = agent
@@ -417,6 +426,42 @@ impl Director {
             let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
             let dangerous = new.iter().any(|m| crate::tactical::bestiary::monster(m.1).is_some_and(|i| i.boss || i.threat >= 6.0));
             self.event(obs, dangerous, format!("Monsters: {} ({} {:.0}).", what.join(", "), compass(heading(pos, nearest)), dist(pos, nearest)));
+        }
+    }
+
+    /// Items she's seen and couldn't get to that she now can (a floor gone down to them, a lift,
+    /// a door: whatever opened the way, seen), told: the user's, MAP07's weapons on the platforms
+    /// the switches lower, no word that they could be had. Notable if any's worth a decision
+    /// (a gun she hasn't, a powerup, armor, a key).
+    fn newly_reachable(&mut self, agent: &Agent, obs: &Observation) {
+        let x = agent.x();
+        let known = x.knowledge.known_polys();
+        let held = obs.weapons.clone().unwrap_or_default();
+        let mut now = Vec::new();
+        let mut notable = false;
+        for t in obs.things.iter().flatten().filter(|t| matches!(t.category, "Weapon" | "Ammo" | "Health" | "Armor" | "Key" | "Powerup")) {
+            if !x.nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
+                continue;
+            }
+            let reachable = x.touch_spot((t.x, t.y), &x.reach).is_some();
+            if !reachable {
+                // (each told once: a door that shuts again would tell it again and again)
+                if !self.told_reachable.contains(&t.id) {
+                    self.out_of_reach.insert(t.id);
+                }
+            } else if self.out_of_reach.remove(&t.id) {
+                self.told_reachable.insert(t.id);
+                let id = format!("{}-t{}", if t.category == "Key" { "key" } else { "item" }, t.id);
+                notable |= match t.category {
+                    "Weapon" => crate::tactical::bestiary::weapon_item(t.name).is_some_and(|w| !held.contains(&w)),
+                    "Key" | "Powerup" | "Armor" => true,
+                    _ => matches!(t.name, "Soulsphere" | "Megasphere" | "Berserk"),
+                };
+                now.push(self.describe(&Entry { id, what: t.name.to_string(), at: (t.x, t.y) }, obs));
+            }
+        }
+        if !now.is_empty() {
+            self.event(obs, notable, format!("Now reachable: {}.", now.join("; ")));
         }
     }
 
