@@ -1656,3 +1656,39 @@ Round D: E3M6, E3M7, E3M8, E3M9.
 Results (HNTR, one life): E1 8.0, E2 7.2 -> 6.9 (seeds both ways: E2M4 seed 5's stuck and an E2M8
 death gone, E2M2 seed 0 (the crusher corridor) and two E2M8 deaths new), E3 7.6 (1/8), Doom II
 25/32; arenas 119/128, 225/240.
+
+## 20-minute pass, round E (Doom II): no saw rush past shooters; cover through doors and in time; an errand's way clear of them all (2026-11-09)
+
+Round E: MAP01, MAP03, MAP04, MAP05.
+
+- **No closing in with the saw or the berserk fist with a shooter about** (MAP01 UV: the chainsaw
+  picked against an imp of five, 84 health; the melee node walked her in and stood her at it while
+  the other four fireballed and clawed her to death, 0 rounds fired the level): `best_gun` skips the
+  up-close weapons when she'd have to close in (the target past the melee node's "at it" distance),
+  another engaged monster attacks from range, and she has a gun with ammo. One already at her still
+  gets the saw. MAP01 UV seeds 0-7: 7/8 -> 8/8.
+- **Cover in time, through doors, not held off by another retreat's failure** (MAP04 UV: through a
+  door that shut behind her into a yard of hitscanners on a better-gun errand; every cover spot back
+  behind the shut door, routed with no doors, all failed silently; cover only due under 40 health;
+  a failed try at another retreat at full health held every retreat off 105 tics): cover is routed
+  through ways open now, then through doors she can open (as the ammo retreat); due also when, at
+  the rate she's losing health, she'd be under the retreat line by the time she'd run the cover
+  range (`cover_due`); a failed different retreat doesn't hold off cover. MAP04 UV still dies
+  (later); the killer is the urgent better-gun errand past `dangerous` (to do).
+- **An errand for ammo or a gun is clear only of everything by the way together** (MAP05 UV: out of
+  ammo, four shells in a yard with three awake imps; each imp alone "killable" with four shells,
+  the super shotgun's blasts counted at 200 each against 60-health imps): as if she had the item,
+  what she'd have must kill all of them awake by the way, each shot counted no further than the
+  toughest one's health (`ammo_short_for_each`, `clear_way_armed`; only this check: in
+  `ammo_short_of` everywhere it cost MAP05 HMP its exit). MAP05 UV seed 0 31 -> 52 s.
+- Dropped after the regression set: MAP03's "the fight's errand is the retreat's way while backing
+  out", "a clawer touching her when she's pinned gets shot" and "no backing off towards an errand
+  nearer the clawer" (HMP 4/6 -> 6/6 but HNTR seed 2 stuck in the regression set: a one-way drop
+  into a pit whose way out is a floor she'd raised, and UV 3/6 -> 2/6, the errand taking her back
+  into the closet trap at low health). What's wanted: no going back on an errand into the room just
+  backed out of; no one-way drop where the only way out is a mover not as it needs to be.
+- Seen, to trace: E2M4's "nothing left to do" stucks (regression seeds, and HNTR seed 0 on its own)
+  with unseen polys past a door, one-way drops and a teleporter she's used.
+
+Results (HNTR, one life): E1 8.0, E2 6.9 -> 6.1 (E2M4 seed 3 stuck, two cyberdemon deaths on E2M8),
+E3 7.6 (1 -> 4/8 through), Doom II 25 -> 26/32 (MAP12 seed 0); arenas 119/128, 225/240.

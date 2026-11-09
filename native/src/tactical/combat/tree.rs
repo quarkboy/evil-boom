@@ -188,7 +188,7 @@ fn busy(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
 
 /// punching or sawing: this much inside the weapon's reach (its centre's, by her target's
 /// radius) she stops closing in (it steps about; the punch reaches 64 past her front)
-const MELEE_SLACK: f64 = 24.0;
+pub(super) const MELEE_SLACK: f64 = 24.0;
 
 /// Straight at it, then standing at it hitting. The steering's pull to the gun's window, fine
 /// for a gun's 500 units, left her circling a revenant 100-200 off, never in the fist's reach,

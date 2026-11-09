@@ -266,6 +266,8 @@ pub struct Player {
     bait_tic: i64,
     /// when the last retreat started or found no cover
     retreat_tic: i64,
+    /// the last retreat tried was for cover
+    tried_cover: bool,
     /// when something that shoots was last in sight
     shooters_tic: i64,
     /// where she was last tic (where she died, at a restart)
@@ -290,6 +292,7 @@ impl Player {
             retreat: None,
             bait_tic: -1_000_000_000,
             retreat_tic: -1_000_000_000,
+            tried_cover: false,
             shooters_tic: -1_000_000_000,
             last_pos: (0.0, 0.0),
             plight: Plight::default(),
@@ -450,7 +453,10 @@ impl Player {
             }
             return self.retreat.is_some();
         }
-        if obs.tic - self.retreat_tic < RETREAT_AGAIN {
+        // (a try at some other retreat that found no way doesn't hold off cover when it's due:
+        // MAP04 UV, a way back tried and not found at full health, cover due 105 tics later at
+        // 28, too late)
+        if obs.tic - self.retreat_tic < RETREAT_AGAIN && (self.tried_cover || !self.cover_due(obs)) {
             return false;
         }
         self.retreat = self.start_retreat(obs);
@@ -499,12 +505,11 @@ impl Player {
         if self.fight.combat.invulnerable(obs.tic) || self.fight.combat.bfg_flying(obs) {
             return None; // (nothing to fall back from; or her BFG's spray to come, from where she is)
         }
-        let health = obs.health.unwrap_or(100.0);
         let unarmed = !self.fight.combat.armed(obs) && !self.fight.combat.against_her().is_empty();
         let (kind, route) = if self.vile(obs) {
             self.retreat_tic = obs.tic;
             (RetreatKind::Cover, self.find_cover(obs))
-        } else if health < RETREAT_HEALTH && !self.shooters().is_empty() {
+        } else if self.cover_due(obs) {
             self.retreat_tic = obs.tic;
             // (unarmed, cover doesn't end it: nothing she does from there kills what's after her,
             // and the cover's end is when they stop shooting. The ammo first, cover if there's no
@@ -539,7 +544,18 @@ impl Player {
         } else {
             return None;
         };
+        self.tried_cover = kind == RetreatKind::Cover;
         route.map(|route| Retreat { kind, route })
+    }
+
+    /// Hurt, with something shooting at her in sight: under RETREAT_HEALTH, or as low as that by
+    /// the time she'd get to cover as far off as it's looked for, at the rate she's losing health
+    /// (MAP04 UV: a pack of hitscanners raking her in the open, 67 to 28 in 8 tics, the cover 600
+    /// back; gone for at 28, dead on the way).
+    fn cover_due(&mut self, obs: &Observation) -> bool {
+        let health = obs.health.unwrap_or(100.0);
+        let rate = self.fight.combat.damage_rate(obs.tic);
+        (health < RETREAT_HEALTH || health - rate * COVER_RANGE / RUN_SPEED < RETREAT_HEALTH) && !self.shooters().is_empty()
     }
 
     /// Where she stands now, while nothing's shooting at her and nothing's hurting her: on the
@@ -989,9 +1005,17 @@ impl Player {
         }
         let view = self.explorer.view();
         let live: States = obs.heights.iter().map(|&h| vec![h]).collect();
-        for pi in hidden.into_iter().take(4) {
+        // (open now first; else through a door she can open: the one she came in by may have
+        // shut behind her. MAP04 UV: out of the start room through a door that closes again,
+        // into the chaingunners' yard; at 28 health the only cover was back behind it, not
+        // found shut, shot down where she stood)
+        let doors = view.local_doors(obs.keys.unwrap_or_default());
+        let hidden: Vec<usize> = hidden.into_iter().take(4).collect();
+        let found = [None, Some(&doors)].into_iter().find_map(|d| hidden.iter().find_map(|&pi| {
             let goal = view.nav.poly_center(pi);
-            let Some(path) = view.find_path(obs.pos(), goal, &live, None) else { continue };
+            view.find_path(obs.pos(), goal, &live, d).map(|path| (goal, path))
+        }));
+        if let Some((goal, path)) = found {
             self.log(format!("tic {}: falling back to cover at ({:.0}, {:.0}), health {:.0}", obs.tic, goal.0, goal.1, obs.health.unwrap_or(0.0)));
             let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, barrel: None, label: "cover".into(), expects: Vec::new() };
             return Some(RouteFollower::new(Rc::clone(&view), vec![step], obs.keys.unwrap_or_default(), Some(live), false, obs.tic));
@@ -1011,6 +1035,22 @@ impl Fight {
             .iter()
             .filter(|s| s.awake && self.combat.too_much(obs, &[s.name], LEAVE_BE))
             .all(|s| segment_point_distance(pos, p, s.pos()) > WAY_CLEAR + monster(s.name).map_or(20.0, |m| m.radius))
+    }
+
+    /// The way to the ammo or gun at p, armed with it (obs): clear as above, and all of what's
+    /// awake by it together not more than it and what she has would kill. Each alone may be
+    /// nothing (MAP05 UV: three imps round a box of four shells, no ammo left; the way clear of
+    /// every one of them, gone down to it with the fist and clawed to death with it in hand).
+    fn clear_way_armed(&self, obs: &Observation, p: Point) -> bool {
+        let pos = obs.pos();
+        let by: Vec<&str> = self
+            .combat
+            .remaining()
+            .iter()
+            .filter(|s| s.awake && segment_point_distance(pos, p, s.pos()) <= WAY_CLEAR + monster(s.name).map_or(20.0, |m| m.radius))
+            .map(|s| s.name)
+            .collect();
+        self.clear_way_to(obs, p) && !self.combat.ammo_short_for_each(obs, &by)
     }
 
     /// Something about she can't take on (awake, known): invulnerability's for that.
@@ -1239,7 +1279,7 @@ impl Fight {
                 // (E3M9's, behind the cyberdemon, spotted mid-fight and left for the blue key, a
                 // wall, a noise; killed at full health by one of its rockets)
                 why = " (something about she can't take on)";
-            } else if (weapon_item(t.name).is_some() || ammo_item(t.name).is_some()) && !self.clear_way_to(&Self::armed_with(obs, t.name), (t.x, t.y)) {
+            } else if (weapon_item(t.name).is_some() || ammo_item(t.name).is_some()) && !self.clear_way_armed(&Self::armed_with(obs, t.name), (t.x, t.y)) {
                 // (something to fight with, but on the way something she couldn't take on even
                 // with it: not worth dropping everything for. MAP20, a rocket launcher by the
                 // cyberdemon, no ammo left, gone for again and again under its rockets for the

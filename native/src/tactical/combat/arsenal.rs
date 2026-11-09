@@ -4,6 +4,7 @@
 
 use super::style::window;
 use super::aiming::SWITCH_WAIT;
+use super::tree::MELEE_SLACK;
 use super::{mon, Combat, LOW_HEALTH, SLOTS};
 use crate::geom::dist;
 use crate::motor::{Observation, Thing, TICRATE};
@@ -157,7 +158,17 @@ impl Combat {
     /// (with the fist her best, never: punching costs nothing)?
     pub fn ammo_short_for(&self, obs: &Observation, names: &[&str]) -> bool {
         let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
-        self.ammo_short_of(obs, names, hp)
+        self.ammo_short_of(obs, names, hp, f64::INFINITY)
+    }
+
+    /// ...of killing every one of these, a shot's worth no more than the most any one of them
+    /// takes: what's past its health is spent on its body, not the next one's. Two blasts of the
+    /// super shotgun kill two imps, not the three they'd add up to (MAP05 UV: gone down to three
+    /// for a box of four shells, nothing else to shoot with, clawed dead with it in hand).
+    pub fn ammo_short_for_each(&self, obs: &Observation, names: &[&str]) -> bool {
+        let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
+        let most = names.iter().map(|n| f64::from(mon(n).health)).fold(0.0, f64::max);
+        self.ammo_short_of(obs, names, hp, most)
     }
 
     /// ...of killing this one, what she's put into it already off (as she reckons it: so many
@@ -171,10 +182,10 @@ impl Combat {
     /// The same, by the monster's id and kind (one known of, not in sight).
     pub fn ammo_short_of_killing(&self, obs: &Observation, id: i32, name: &str) -> bool {
         let hp = f64::from(mon(name).health) - self.put_in.get(&id).copied().unwrap_or(0.0);
-        self.ammo_short_of(obs, &[name], hp.max(0.0))
+        self.ammo_short_of(obs, &[name], hp.max(0.0), f64::INFINITY)
     }
 
-    fn ammo_short_of(&self, obs: &Observation, names: &[&str], hp: f64) -> bool {
+    fn ammo_short_of(&self, obs: &Observation, names: &[&str], hp: f64, most: f64) -> bool {
         // (what each kind of ammo's worth, with the best gun she has for it; bosses take no blast)
         let held = Self::held(obs);
         let boss = names.iter().any(|n| mon(n).boss);
@@ -187,7 +198,7 @@ impl Combat {
                 .map(|&s| {
                     let w = weapon_in(s, obs);
                     let per = if boss && s == 5 { w.damage / 2.0 } else { w.damage };
-                    f64::from(Self::ammo(obs, s) / w.ammo_per_shot.max(1)) * per * w.hits(radius, 384.0)
+                    f64::from(Self::ammo(obs, s) / w.ammo_per_shot.max(1)) * (per * w.hits(radius, 384.0)).min(most)
                 })
                 .fold(0.0, f64::max);
             worth += best;
@@ -311,6 +322,8 @@ impl Combat {
         let saving = !info.boss && self.remaining().iter().any(|m| m.id != t.id && mon(m.name).boss);
         let (mut best, mut cost) = (obs.weapon.unwrap_or(2), f64::INFINITY);
         let mut blocked = None;
+        // (others awake shooting at her from a distance, t aside)
+        let pelted = self.engaged(obs).iter().any(|m| m.id != t.id && matches!(mon(m.name).attack, Attack::Hitscan | Attack::Missile | Attack::Fire));
         // (the pistol only for want of any other gun with a shot in it, never for its reach: the
         // user's, MAP07, the super shotgun put away for it at mancubi 800 off. Taps at barrels,
         // switches and walls are the route's own gun, not this)
@@ -344,6 +357,13 @@ impl Combat {
                 // any fist at what one claw of could kill her: E4M7, the berserk fist up for a
                 // baron at 41 health, 29 rockets and 64 shells by, backing off out of its reach
                 // and never a shot for 600 tics, then clawed to death)
+                continue;
+            }
+            if slot == 1 && melee_at(&w, t.name) && here > w.reach + info.radius - MELEE_SLACK && pelted && self.guns_armed(obs) {
+                // (nor going in up close, a gun to hand, while others shoot at her: straight in
+                // and standing at one, every other's shots free; MAP01 UV, the saw taken to the
+                // nearest of five imps, killed by the other four's fireballs, 67 bullets unfired.
+                // One already in reach is sawn)
                 continue;
             }
             let mut c = self.time_to_kill(&w, t, d) + (d - here).abs() / GET_THERE;
