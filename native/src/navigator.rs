@@ -254,9 +254,16 @@ pub struct Navigator {
     caches: RefCell<Caches>,
     /// the flood fill, path-finding and plan core, set up for one view at a time
     core: RefCell<view::Core>,
+    /// sight with heights, as a shot sees (`sight`): built when first asked for
+    los: std::cell::OnceCell<crate::los::LineOfSight>,
 }
 
 impl Navigator {
+    /// Sight between two bodies with heights (a shot's: what's between, at the heights given).
+    pub fn sight(&self) -> &crate::los::LineOfSight {
+        self.los.get_or_init(|| crate::los::LineOfSight::new(&self.map))
+    }
+
     /// The level's analysis (`keep_verified` then drops the jumps that don't come off; share
     /// it in an Arc after).
     pub fn new(map: Arc<MapData>, skill: i32) -> Result<Navigator, String> {
@@ -344,6 +351,7 @@ impl Navigator {
             jump_lab,
             caches: RefCell::new(Caches::default()),
             core: RefCell::new(core),
+            los: std::cell::OnceCell::new(),
         };
         let found = jumps::find_jumps_cached(&nav);
         nav.set_jumps(found);

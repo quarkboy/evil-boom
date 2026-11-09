@@ -42,6 +42,8 @@ const BARREL_POSTS: usize = 12;
 
 /// a barrel's radius (a shot at another that passes this near it hits it instead)
 const BARREL_RADIUS: f64 = 10.0;
+/// a barrel's height (what a shot at it has to get to)
+const BARREL_HEIGHT: f64 = 42.0;
 
 /// Candidate retreat positions sampled backwards along the incoming path.
 const BACKTRACK_POINTS: usize = 64;
@@ -162,8 +164,23 @@ impl RouteFollower {
                 // E1M3, a post on nukage, the barrel not to be had from there, dead standing on it)
                 let nav = &self.view.nav;
                 cands.retain(|&q| nav.poly_at(q).is_none_or(|p| nav.damage.get(nav.sector_of_poly(p)).is_none_or(|&d| d == 0)));
-                let mut seen: Vec<(Point, Point)> =
-                    cands.into_iter().filter_map(|q| group.iter().copied().filter(|&b| !self.use_walled(q, b)).min_by(|a, b| dist(*a, q).total_cmp(&dist(*b, q))).map(|b| (q, b))).collect();
+                // (and from where a shot would get to it, heights and all: a ledge, a step, a low
+                // ceiling between take the shot as surely as a wall; the user's, posts chosen the
+                // barrel couldn't be hit from, the shots into the floor or a lip)
+                let heights: Vec<(f64, f64)> = obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
+                let floor_at = |p: Point| nav.poly_at(p).map(|i| obs.heights[nav.sector_of_poly(i)].floor);
+                let shot = |q: Point, b: Point| match (floor_at(q), floor_at(b)) {
+                    (Some(fq), Some(fb)) => nav.sight().clear(
+                        crate::los::Body { x: q.0, y: q.1, z: fq, height: crate::navigator::PLAYER_HEIGHT },
+                        crate::los::Body { x: b.0, y: b.1, z: fb, height: BARREL_HEIGHT },
+                        &heights,
+                    ),
+                    _ => false,
+                };
+                let mut seen: Vec<(Point, Point)> = cands
+                    .into_iter()
+                    .filter_map(|q| group.iter().copied().filter(|&b| !self.use_walled(q, b) && shot(q, b)).min_by(|a, b| dist(*a, q).total_cmp(&dist(*b, q))).map(|b| (q, b)))
+                    .collect();
                 seen.sort_by(|a, b| dist(a.0, pos).total_cmp(&dist(b.0, pos)));
                 let mut best: Option<Post> = None;
                 let crushers = self.crushers();

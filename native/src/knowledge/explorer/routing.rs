@@ -36,11 +36,9 @@ const MIN_EXPANSIONS: usize = 200;
 /// ...and is whole again after this long with none that did
 const MAXED_RESET: i64 = 20 * 35;
 
-/// how far over a hurting floor a route may go, normally...
-const WADE_LIMIT: f64 = 256.0;
-
-/// ...and not at all below this health
-const WADE_HEALTH: f64 = 50.0;
+/// the share of her health a route may cost her on floors that hurt and still not be a risk (the
+/// user's: "10% or less of current health = not risky")
+const RISK_SHARE: f64 = 0.1;
 
 /// Map units between midpoint samples of a route's exposure to damaging floors.
 const DAMAGE_SAMPLE_STEP: f64 = 16.0;
@@ -50,12 +48,6 @@ const MAX_BUDGET_CUTS: u32 = 16;
 const ALTERNATE_ACTIVATORS: usize = 3;
 
 impl Explorer {
-    /// How far a path goes on floors she takes to hurt: not over them (a hurting pit well below
-    /// a walkway she runs along, or jumps across: MAP24).
-    pub(super) fn wading(&self, waypoints: &[Option<Point>], heights: &States) -> f64 {
-        self.wades(waypoints, heights).iter().map(|(_, d)| d).sum()
-    }
-
     /// The stretches of a path down on floors she takes to hurt, in order: (sector, length).
     fn wades(&self, waypoints: &[Option<Point>], heights: &States) -> Vec<(usize, f64)> {
         let (mesh, k) = (&self.nav.mesh, &self.knowledge);
@@ -112,6 +104,24 @@ impl Explorer {
             }
         }
         total
+    }
+
+    /// The health going to obj by these legs and doing it would cost her: the way there on floors
+    /// that hurt; ending on one, the way back off it too, and (but for picking something up) the
+    /// time there doing it. (MAP08's pit under the door, 20 a second, a door pressed from it the
+    /// last thing to do, dropped into at 54 health and died there, stuck, every time; E3M5, a wall
+    /// to look at in a room whose floor hurt, counted the way in only: in and off and in again,
+    /// each a tenth of her health or less, 47 s of it to death.) As she knows the floors: one
+    /// changed to one that hurts since (E3M1's way over the blood gone down into it) at the worst
+    /// floors' if the map has none for it.
+    fn expected_damage(&self, legs: &[crate::navigator::Leg], obj: &Objective, states: &States, obs: &Observation) -> f64 {
+        let way = self.route_damage(legs, states, obs);
+        let end = self.nav.poly_at(obj.goal).map(|p| self.nav.sector_of_poly(p)).filter(|&s| self.knowledge.damaging(s)).map_or(0, |s| self.nav.damage[s].max(WORST_FLOOR));
+        if end == 0 || obj.kind == Kind::Exit || self.knowledge.suit_until.is_some_and(|u| u >= obs.tic) {
+            return way;
+        }
+        let stay = if matches!(obj.kind, Kind::Item | Kind::Key) { 0.0 } else { f64::from(end) * END_STAY };
+        2.0 * way + stay
     }
 
     /// Steps to get to an objective and do it, through what's known (using switches she has
@@ -299,31 +309,24 @@ impl Explorer {
             // (mortal: no way that costs more health than she has to spare, risky or not; noted,
             // for healing or a suit to go for. Not while down on a floor that hurts: staying
             // costs more than any way off it, the user's)
-            let mut cost = self.route_damage(&route.legs, &states, obs);
-            // (ending on a floor that hurts: the time there doing it, and the way back off it too,
-            // not only the way in; MAP08's pit under the door, 20 a second, a door pressed from it
-            // the last thing to do, dropped into at 54 health and died there, stuck, every time)
-            // (as she knows it: a floor changed to one that hurts since, E3M1's way over the blood
-            // gone down into it, at the worst floors' if the map has none for it)
-            let end = self.nav.poly_at(obj.goal).map(|p| self.nav.sector_of_poly(p)).filter(|&s| self.knowledge.damaging(s)).map_or(0, |s| self.nav.damage[s].max(WORST_FLOOR));
-            if end > 0 && obj.kind != Kind::Exit && self.knowledge.suit_until.is_none_or(|u| u < obs.tic) {
-                cost = 2.0 * cost + f64::from(end) * END_STAY;
-            }
+            let cost = self.expected_damage(&route.legs, obj, &states, obs);
             if cost > 0.0 && obs.health.unwrap_or(100.0) - cost < HEALTH_MARGIN {
                 self.short_of_health = Some(obs.tic);
                 return None;
             }
         }
         if obj.kind != Kind::Exit && !obj.risky && !self.knowledge.protected(obs.tic) {
-            // (nukage and the like only for a few steps, and never dropping into it; but where
-            // she's been down before and got out again is all right: MAP24's)
+            // (nukage and the like only for what it costs a tenth of her health or less (the
+            // user's: risk is the damage against what she has; E2M2's blue key, 385 of nukage,
+            // a hit or two of 5, waited for as risky over 100 s while far-off things went
+            // first), and never dropping into it; but where she's been down before and got out
+            // again is all right: MAP24's)
             let k = &self.knowledge;
             let here = nav.poly_at(obs.pos()).map(|p| nav.sector_of_poly(p));
             // (not one that's gone down into what hurts since: crossing it before, it was a
             // walkway still, E3M1's, dropped into after to look at a wall, no way out)
             let escaped: BTreeSet<usize> =
                 k.visited.iter().map(|&p| nav.sector_of_poly(p)).filter(|s| Some(*s) != here && k.changed_floor.get(s) != Some(&true)).collect();
-            let mut wade = 0.0;
             for leg in &route.legs {
                 for n in &leg.path.steps {
                     if !n.contains("one-way drop") {
@@ -335,9 +338,9 @@ impl Explorer {
                         }
                     }
                 }
-                wade += self.wading(&leg.path.waypoints, &states);
             }
-            if wade > WADE_LIMIT || (wade > 0.0 && obs.health.is_some_and(|h| h < WADE_HEALTH)) {
+            let damage = self.expected_damage(&route.legs, obj, &states, obs);
+            if damage > RISK_SHARE * obs.health.unwrap_or(100.0) {
                 return None;
             }
         }

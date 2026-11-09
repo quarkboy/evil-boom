@@ -361,6 +361,8 @@ impl Explorer {
         self.allowed = GIVE_UP_TICS.max((route_length(&steps) / ROUTE_SPEED) as i64 + ROUTE_SLACK);
         self.exits_seen = self.knowledge.exits().len();
         let n = steps.len();
+        // (how far it is, as the crow flies and along the way: for reading a run's ordering)
+        let (along, straight) = (route_length(&steps), dist(obs.pos(), obj.goal));
         let states = self.states();
         let view = self.view();
         let mut follower = RouteFollower::new(view, steps, obs.keys.unwrap_or_default(), Some(states), false, obs.tic);
@@ -368,7 +370,7 @@ impl Explorer {
         follower.mortal = self.knowledge.mortal;
         self.follower = Some(follower);
         self.follower_seen = 0;
-        self.log.push(format!("tic {}: {} ({n} steps) | {}", obs.tic, obj.label, self.knowledge.summary()));
+        self.log.push(format!("tic {}: {} ({n} steps, {along:.0} along, {straight:.0} straight) | {}", obs.tic, obj.label, self.knowledge.summary()));
         if let Some(li) = obj.trigger.as_ref().filter(|_| obj.kind == Kind::Switch).and_then(TriggerLine::linedef) {
             self.pressed_knowing.insert(li, self.knowledge.known_summary());
         }

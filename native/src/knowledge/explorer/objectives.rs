@@ -6,7 +6,7 @@ use crate::knowledge::model::Heard;
 use crate::motor::Observation;
 use crate::movers::cycles_back;
 use crate::nav::can_cross;
-use crate::navigator::{add_height, TeleEdge, TriggerLine, PLAYER_HEIGHT};
+use crate::navigator::{add_height, TeleEdge, TriggerLine, MAX_STEP, PLAYER_HEIGHT};
 use crate::specials::{classify_line, Category, Key, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -828,6 +828,48 @@ impl Explorer {
         out
     }
 
+    /// How far she'd walk to a point (`travel`'s, a function of the goal): the shortest way through
+    /// the polys of her reach from where she stands, between them at the portals' middles, no step
+    /// up more than she can climb (at the heights she knows: a lift or door at any it can be). A
+    /// point that's not in it (a teleporter's way, a jump) counts its straight line twice over.
+    pub(super) fn travel(&self, obs: &Observation) -> impl Fn(Point) -> f64 {
+        use std::cmp::Reverse;
+        use std::collections::BinaryHeap;
+        let mesh = Arc::clone(&self.nav.mesh);
+        let start_pt = self.standing_point(obs);
+        let states = self.states();
+        let floors = |p: usize| states[mesh.poly(p).sector].iter().map(|h| h.floor);
+        let mut best: BTreeMap<usize, (f64, Point)> = BTreeMap::new();
+        if let Some(start) = mesh.poly_at(start_pt) {
+            let mut heap = BinaryHeap::from([(Reverse(0u64), start)]);
+            best.insert(start, (0.0, start_pt));
+            while let Some((Reverse(bits), p)) = heap.pop() {
+                let (d, at) = best[&p];
+                if f64::from_bits(bits) > d {
+                    continue;
+                }
+                let high = floors(p).fold(f64::NEG_INFINITY, f64::max);
+                for &pi in &mesh.poly(p).portals {
+                    let portal = &mesh.portals[pi];
+                    let q = portal.other(p);
+                    if !self.reach.contains(&q) || floors(q).fold(f64::INFINITY, f64::min) - high > MAX_STEP {
+                        continue;
+                    }
+                    let mid = ((portal.p1.0 + portal.p2.0) / 2.0, (portal.p1.1 + portal.p2.1) / 2.0);
+                    let nd = d + dist(at, mid);
+                    if best.get(&q).is_none_or(|&(od, _)| nd < od) {
+                        best.insert(q, (nd, mid));
+                        heap.push((Reverse(nd.to_bits()), q));
+                    }
+                }
+            }
+        }
+        move |goal: Point| match mesh.poly_at(goal).and_then(|p| best.get(&p)) {
+            Some(&(d, at)) => d + dist(at, goal),
+            None => TRAVEL_UNKNOWN * dist(start_pt, goal),
+        }
+    }
+
     /// The tally went up with her in sector `s`: a secret there.
     pub fn found_secret(&mut self, s: usize, tic: i64) {
         if self.secret_sectors.insert(s) {
@@ -908,9 +950,16 @@ impl Explorer {
             let segs = self.pads.1.clone();
             options.retain(|o| segs.iter().all(|&(a, b)| segment_distance(a, b, o.goal, o.goal) >= EXIT_MARGIN));
         }
-        let pos = obs.pos();
-        let mut weighed: Vec<(f64, Objective)> = options.into_iter().map(|o| (dist(o.goal, pos) * o.kind.weight() * hooks.weigh(obs, &o), o)).collect();
+        // (near as she'd walk it, not as the crow flies: the user's, E2M2, a wall 224 off as the
+        // crow flies and 4287 along the way, taken first; a tenth of the objectives with ways four
+        // times their straight line or more, a quarter of all the walking)
+        let travel = self.travel(obs);
+        let mut weighed: Vec<(f64, Objective)> = options.into_iter().map(|o| (travel(o.goal) * o.kind.weight() * hooks.weigh(obs, &o), o)).collect();
         weighed.sort_by(|a, b| (a.1.priority(), a.0).partial_cmp(&(b.1.priority(), b.0)).unwrap_or(std::cmp::Ordering::Equal));
         weighed.into_iter().map(|(_, o)| o).collect()
     }
 }
+
+/// a point her reach gets to by no walk the travel field knows (a teleporter, a jump): counted
+/// this many times its straight line
+const TRAVEL_UNKNOWN: f64 = 2.0;
