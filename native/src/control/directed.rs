@@ -118,7 +118,8 @@ enum Doing {
 
 #[derive(Default)]
 pub struct Director {
-    queue: VecDeque<Order>,
+    /// orders to carry out, each with whether to rush it (press on mid-fight)
+    queue: VecDeque<(Order, bool)>,
     doing: Option<Doing>,
     /// the objectives taken for the order in hand: not taken again for it (the explorer may go on
     /// offering one it counts as done: E1M1, a wall "not seen yet" taken every tic, stood on)
@@ -188,7 +189,13 @@ impl Director {
     }
 
     pub fn order(&mut self, o: Order) {
-        self.queue.push_back(o);
+        self.queue.push_back((o, false));
+    }
+
+    /// An order rushed (`rush`): pressed on with mid-fight, shooting and dodging on the way, not
+    /// stopped for the fight (still getting clear of what claws, and away when nearly dead).
+    pub fn order_rushed(&mut self, o: Order, rush: bool) {
+        self.queue.push_back((o, rush));
     }
 
     /// Doing nothing, waiting for an order?
@@ -228,6 +235,21 @@ impl Director {
             Some(Doing::Pickup) => "picking up nearby".to_string(),
             None if agent.x().current.is_some() => "busy".to_string(),
             None => "waiting".to_string(),
+        };
+        // (in a fight: what's in sight, the nearest; an order then is held up by it unless rushed)
+        let fight = agent.player().map(|p| p.combat().visible.iter().filter(|t| t.category == "Monster" && t.health > 0).cloned().collect::<Vec<_>>()).unwrap_or_default();
+        let doing = if fight.is_empty() {
+            doing
+        } else {
+            let pos = obs.pos();
+            let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+            for t in &fight {
+                *counts.entry(t.name).or_insert(0) += 1;
+            }
+            let near = fight.iter().map(|t| (t.x, t.y)).min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b))).unwrap_or(pos);
+            let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
+            let rushed = if agent.x().press_on { ", rushing" } else { "" };
+            format!("{doing}{rushed}; fighting {} ({} {:.0})", what.join(", "), compass(heading(pos, near)), dist(pos, near))
         };
         // (short: what Evil reads costs her context, the user's)
         format!(
@@ -537,13 +559,17 @@ impl Director {
                 });
             }
         }
-        if let Some(o) = self.queue.pop_front() {
+        if let Some((o, rush)) = self.queue.pop_front() {
             self.start(agent, obs, o);
+            agent.x_mut().press_on = rush && self.doing.is_some();
             return;
         }
         let ended = agent.x_mut().ended.take();
         if agent.x().current.is_some() {
             return;
+        }
+        if self.doing.is_none() || matches!(self.doing, Some(Doing::Off | Doing::Pickup)) {
+            agent.x_mut().press_on = false; // (her own doing: no order's rush)
         }
         match self.doing.take() {
             None => {
@@ -567,7 +593,10 @@ impl Director {
             Some(Doing::Once(id, what)) => {
                 let (ok, why) = ended.map_or((false, "stopped".to_string()), |e| (e.ok, e.why));
                 // (a switch pressed: what it did told when she's seen it, or after a while)
-                match id.strip_prefix("switch-l").and_then(|l| l.parse::<usize>().ok()).filter(|_| ok) {
+                // (pressed and nothing seen to change is pressed all the same: what it moved may be
+                // out of sight, MAP07's platform across the arena; not "couldn't")
+                let pressed = ok || why.starts_with("pressed");
+                match id.strip_prefix("switch-l").and_then(|l| l.parse::<usize>().ok()).filter(|_| pressed) {
                     Some(l) => self.pressed = Some((l, id.clone(), obs.tic + PRESS_WATCH)),
                     None => self.report(obs, ok, if ok { format!("Done: {what}.") } else { format!("Couldn't: {what} ({why}).") }),
                 }

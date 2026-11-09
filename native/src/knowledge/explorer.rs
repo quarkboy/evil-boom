@@ -357,6 +357,10 @@ pub struct Explorer {
     /// when she first had nothing else to do but try walls (the survey's moment: everything
     /// explored but for what's hidden)
     pub out_of_options: Option<i64>,
+    /// directed: the objective in hand pressed on with mid-fight, shooting and dodging on the
+    /// way, not stopped for the fight (Evil's rush, the user's: MAP07's arena, a switch never got
+    /// to for the mancubi chased)
+    pub press_on: bool,
     suspecting: Suspecting,
     /// walls pressed round about since there was last anything else to do (the 100% runs)
     panic_tries: usize,
@@ -482,6 +486,7 @@ impl Explorer {
             suspecting: Suspecting::No,
             spares: BTreeSet::new(),
             out_of_options: None,
+            press_on: false,
             panic_tries: 0,
             strong_only: false,
             waiting_reopen: false,

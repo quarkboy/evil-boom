@@ -1048,6 +1048,10 @@ impl Fight {
     /// only the pistol or next to no ammo, something to fight with she hasn't turned aside for
     /// yet (MAP09's hot start, the shotgun across the room).
     fn errand(&self, x: &Explorer, obs: &Observation) -> Option<(String, Point)> {
+        // (an order to press on with, mid-fight: the objective in hand is the errand)
+        if let Some(cur) = x.current.as_ref().filter(|_| x.press_on) {
+            return Some((cur.label.clone(), cur.goal));
+        }
         if let Some(cur) = x.current.as_ref().filter(|c| c.kind == Kind::Item) {
             // (the item's class name, before what the label adds: "pick up Medikit (to heal)")
             let name = cur.label.strip_prefix("pick up ").unwrap_or(&cur.label);

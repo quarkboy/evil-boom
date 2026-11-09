@@ -36,14 +36,14 @@ pub fn actions() -> Vec<Value> {
     // (short: every word here is in Evil's context for the whole game, the user's)
     vec![
         json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids. Areas: only unexplored, current and named ones unless all; a/b/c walls to search: at secrets 1/2/3.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
-        json!({ "name": "doom_press", "description": "Press a switch. Exploring never presses them.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
+        json!({ "name": "doom_press", "description": "Press a switch. Exploring never presses them. rush: as for doom_go.", "schema": s(json!({ "ref": { "type": "string" }, "rush": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_inspect", "description": "What something is and where.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
-        json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" } }), &["ref"]) }),
-        json!({ "name": "doom_explore", "description": "Explore an area or a direction (N, NE, ...). secrets: also search its walls, 1 the likeliest few, 2 most, 3 every suspicious one (slow).", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "integer", "enum": [0, 1, 2, 3] } }), &["target"]) }),
+        json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left. rush: keep going mid-fight, shooting and dodging on the way.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" }, "rush": { "type": "boolean" } }), &["ref"]) }),
+        json!({ "name": "doom_explore", "description": "Explore an area or a direction (N, NE, ...). secrets: also search its walls, 1 the likeliest few, 2 most, 3 every suspicious one (slow). rush: as for doom_go.", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "integer", "enum": [0, 1, 2, 3] }, "rush": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_name", "description": format!("Name something (up to {NAME_MAX} characters); the name then works as its id."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
-        json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, current order." }),
+        json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, current order, what she's fighting." }),
     ]
 }
 
@@ -147,6 +147,7 @@ impl Session {
         };
         let arg = |k: &str| args.get(k).and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty());
         let sure = args.get("sure").and_then(Value::as_bool).unwrap_or(false);
+        let rush = args.get("rush").and_then(Value::as_bool).unwrap_or(false);
         match name {
             "doom_list" => {
                 let Some(topic) = arg("what").and_then(Topic::parse) else { return (false, "what: areas, doors, switches, items, monsters or exits.".into()) };
@@ -176,7 +177,7 @@ impl Session {
                 }
                 match self.director.check_go(agent, obs, r, risky) {
                     Ok(_) => {
-                        self.director.order(Order::Go(r.to_string(), risky));
+                        self.director.order_rushed(Order::Go(r.to_string(), risky), rush);
                         (true, "OK.".into())
                     }
                     // (not to be retried as it is: the reason says what would do)
@@ -191,7 +192,7 @@ impl Session {
                 }
                 match self.director.check_go(agent, obs, r, false) {
                     Ok(_) => {
-                        self.director.order(Order::Go(r.to_string(), false));
+                        self.director.order_rushed(Order::Go(r.to_string(), false), rush);
                         (true, "OK.".into())
                     }
                     Err(why) => (false, why),
@@ -206,10 +207,10 @@ impl Session {
                     None => 0,
                 };
                 if let Some(b) = bearing(t) {
-                    self.director.order(Order::ExploreWay(b, secrets));
+                    self.director.order_rushed(Order::ExploreWay(b, secrets), rush);
                     (true, "OK.".into())
                 } else if self.director.is_area(agent, t) {
-                    self.director.order(Order::ExploreArea(t.to_string(), secrets));
+                    self.director.order_rushed(Order::ExploreArea(t.to_string(), secrets), rush);
                     (true, "OK.".into())
                 } else {
                     (false, format!("\"{t}\" isn't an area or a direction."))

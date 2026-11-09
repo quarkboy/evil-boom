@@ -35,7 +35,7 @@
 //!   list TOPIC [N]      what she knows of: areas, doors, items, monsters, exits (ids, names,
 //!                       which way, how far)
 //!   name ID NAME...     a name for something listed (refused when too long or taken)
-//!   order go REF [risky] [sure] | order explore REF|DIR [secrets 1-3] | order exit [sure] | order stop
+//!   order go REF [risky] [sure] [rush] | order explore REF|DIR [secrets 1-3] [rush] | order exit [sure] | order stop
 //!                       (leaving the level with something left asks first: sure to leave anyway)
 //!                       an order (REF an id or a name; DIR n, ne, east, ...)
 //!   run SECONDS         play on (directed) till she's done and waiting, or SECONDS; the reports
@@ -306,6 +306,8 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 let start = s.e.tic;
                 let mut shown = director.reports.len();
                 let mut started = false;
+                // (her own log too, as she plays: what the fight and the explorer did)
+                let mut logged = s.agent.x().log.len();
                 while ((s.e.tic - start) as f64) < secs * TICRATE && !s.e.finished() {
                     let obs = s.e.observe();
                     director.tally = crate::control::directed::Tally::of(s.e.tally());
@@ -316,6 +318,11 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                     started |= !director.idle(&s.agent) || director.reports.len() > shown;
                     shown = director.reports.len();
                     let c = s.agent.act(&obs, s.c.as_ref());
+                    let log = &s.agent.x().log;
+                    for l in &log[logged.min(log.len())..] {
+                        println!("  | {l}");
+                    }
+                    logged = log.len();
                     s.e.step(&c);
                     s.c = Some(c);
                     s.obs = Some(obs);
