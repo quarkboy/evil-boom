@@ -294,6 +294,13 @@ impl Combat {
             if slot == 1 && !Self::in_reach(&w, t, d) {
                 continue; // (not the fist for being free when nothing reaches: as Astra's branch has it)
             }
+            if slot == 1 && info.attack == Attack::None && self.given_up_on(obs, t.id) {
+                // (nor at something harmless she's given up getting at: free to punch, it's
+                // chosen for that, but closing in is what failed; MAP32's Keens hung over a ledge,
+                // punched at for a minute with 30 bullets in the pistol, a cyberdemon about.
+                // Anything that fights back is weighed as it is: wider, E3 lost 0.8 levels)
+                continue;
+            }
             if slot == 1 && ((w == CHAINSAW && !melee_at(&w, t.name)) || (obs.health.unwrap_or(100.0) < LOW_HEALTH && w != weapon(1))) && self.guns_armed(obs) {
                 // (not the saw at what it won't keep flinching, with a gun to hand: a cacodemon's
                 // bites, a baron's claws come through it; nor the saw or the berserk fist at

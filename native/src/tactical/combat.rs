@@ -431,7 +431,7 @@ impl Combat {
             self.health = Some(h);
         }
         let monsters: BTreeMap<i32, Thing> =
-            obs.things.iter().flatten().filter(|t| monster(t.name).is_some() && t.name != "CommanderKeen").map(|t| (t.id, t.clone())).collect();
+            obs.things.iter().flatten().filter(|t| monster(t.name).is_some()).map(|t| (t.id, t.clone())).collect();
         for i in self.alive.keys() {
             if !monsters.contains_key(i) {
                 if let Some(s) = self.known.get(i) {
@@ -746,7 +746,10 @@ impl Combat {
         let mut c = match base {
             Some(b) if !d.takeover => {
                 let mut c = Controls { forward: b.forward, strafe: b.strafe, turn, use_: b.use_, run: b.run, weapon: b.weapon, ..Controls::default() };
-                if d.aim.is_none() {
+                // (nothing to shoot with: aiming fires nothing, and the route's turn is what
+                // faces a shut door on her way to press it; MAP31, HMP, out of ammo and off for
+                // more, turned to the SS shooting her, 450 tics at a door she never pressed)
+                if d.aim.is_none() || !self.armed(obs) {
                     c.turn = b.turn;
                 } else {
                     // (the route's way in the world, whichever way she's turned to aim)

@@ -1375,3 +1375,24 @@ Round 11: Doom II MAP26-MAP29.
 
 Results (HNTR, one life): unchanged: E1 8.0, E2 7.4 (7/8), E3 8.0 (4/8), Doom II 28/32; arenas
 118/128, 226/240.
+
+## Level campaign, round 12: unarmed, the route keeps the turn; Commander Keens fought (2026-11-09)
+
+Round 12: Doom II MAP30-MAP32, Doom E4M1.
+
+- **Unarmed, the route keeps the turn** (MAP31 HMP: out of ammo, a retreat for ammo through a door
+  that had shut again; the fight's decision merged with the route turned her to aim at an SS, the
+  route presses a door only facing it: 450 tics in front of it, shot down): with nothing to shoot
+  with (`armed()` false), the route's turn stands in a merged decision. MAP31 HMP seeds 0, 1 live
+  longer; no exit lost over seeds 0-3 on all skills.
+- **Commander Keens are monsters to the fight** (MAP32: the exit behind tag 666, opened by the last
+  Keen's death; the fight left Keens out, so never shot, no exit seen); and **no fist at something
+  harmless she's given up getting at** (Keens over a ledge, punched at for a minute with bullets in
+  the pistol). For anything that fights back, wider, it cost E3 0.8 levels.
+- Traced, not fixed: MAP30 (the brain isn't a target or an exit trigger to her, and is killed only by
+  rocket splash fired level through a slot from the lift, unseen: a new behaviour); E4M1 UV (a
+  baron through a narrow opening, the rocket's lane blocked, 12 rockets unused: nothing moves her to
+  a clear lane).
+
+Results (HNTR, one life): unchanged: E1 8.0, E2 7.4 (7/8), E3 8.0 (4/8), Doom II 28/32; arenas
+118/128, 226/240.
