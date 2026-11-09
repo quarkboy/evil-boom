@@ -576,12 +576,14 @@ impl Explorer {
         }
         if self.directed {
             // (given objectives only: when the one in hand ends, how, and then nothing till the
-            // next is given; standing, looking round)
+            // next is given; standing still where she is, facing as she is: not turning round and
+            // round, the user's)
             if (self.current.is_some() || self.follower.is_some()) && self.need_new(obs, hooks) {
                 self.note_end(obs);
             }
             if self.current.is_none() {
-                return turn_to(obs, None);
+                let (forward, strafe) = crate::motor::brake(obs, obs.angle);
+                return Controls { forward, strafe, ..Controls::default() };
             }
         } else if self.need_new(obs, hooks) && (self.current.is_some() || self.follower.is_some() || obs.tic - self.idle_since >= IDLE_RETRY) {
             self.next(obs, hooks);

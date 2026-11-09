@@ -23,6 +23,11 @@ pub const NAME_MAX: usize = 32;
 /// exploring a way: what's this far either side of it
 const EXPLORE_CONE: f64 = 50.0;
 
+/// waiting on a floor that hurts: off it tried this often (tics)...
+const OFF_AGAIN: i64 = 35;
+/// ...to the best of this many places
+const OFF_TRIES: usize = 6;
+
 /// What a list is of.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Topic {
@@ -91,6 +96,8 @@ enum Doing {
     Area(String, String),
     /// objectives that way, one after another
     Way(f64),
+    /// off a floor that hurts, her own doing (not news)
+    Off,
 }
 
 #[derive(Default)]
@@ -113,6 +120,8 @@ pub struct Director {
     had_keys: Option<crate::specials::Keys>,
     had_weapons: Option<Vec<i32>>,
     told_dead: bool,
+    /// when she last tried getting off a floor that hurts
+    off_tried: i64,
 }
 
 impl Director {
@@ -165,6 +174,7 @@ impl Director {
             Some(Doing::Once(w)) => format!("going: {w}"),
             Some(Doing::Area(_, w)) => format!("exploring {w}"),
             Some(Doing::Way(b)) => format!("exploring {}", compass(*b)),
+            Some(Doing::Off) => "getting off a floor that hurts".to_string(),
             None if agent.x().current.is_some() => "busy".to_string(),
             None => "waiting for orders".to_string(),
         };
@@ -386,7 +396,16 @@ impl Director {
             return;
         }
         match self.doing.take() {
-            None => {}
+            None => {
+                // (waiting: never on a floor that hurts)
+                if self.queue.is_empty() && obs.tic - self.off_tried >= OFF_AGAIN {
+                    self.off_tried = obs.tic;
+                    if self.off_hurting_floor(agent, obs) {
+                        self.doing = Some(Doing::Off);
+                    }
+                }
+            }
+            Some(Doing::Off) => {}
             Some(Doing::Once(what)) => {
                 let (ok, why) = ended.map_or((false, "stopped".to_string()), |e| (e.ok, e.why));
                 self.report(obs, ok, if ok { format!("Done: {what}") } else { format!("Couldn't: {what} ({why})") });
@@ -453,6 +472,44 @@ impl Director {
                 }
             }
         }
+    }
+
+    /// Waiting on a floor that hurts: to the nearest known floor that doesn't, the way she was
+    /// going rather than back (through what she came for, out the far side: the user's, an item
+    /// in nukage picked up and stood on after, waiting for the next order). True if she's off to it.
+    fn off_hurting_floor(&mut self, agent: &mut Agent, obs: &Observation) -> bool {
+        let nav = std::rc::Rc::clone(&agent.x().nav);
+        let pos = obs.pos();
+        let Some(here) = nav.poly_at(pos) else { return false };
+        if !agent.x().knowledge.damaging(nav.sector_of_poly(here)) {
+            return false;
+        }
+        let v = obs.velocity.unwrap_or((0.0, 0.0));
+        let way = if v.0.hypot(v.1) > 1.0 { v.1.atan2(v.0).to_degrees() } else { obs.angle };
+        let _ = self.open_objectives(agent, obs); // (what she can get to, up to date)
+        let x = agent.x();
+        let mut spots: Vec<(f64, Point)> = x
+            .reach
+            .iter()
+            .filter(|&&p| !x.knowledge.damaging(nav.sector_of_poly(p)))
+            .map(|&p| {
+                let c = nav.poly_center(p);
+                // (behind her counts as up to twice as far)
+                let back = norm(heading(pos, c) - way).abs() / 180.0;
+                (dist(pos, c) * (1.0 + back), c)
+            })
+            .collect();
+        spots.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for (_, c) in spots.into_iter().take(OFF_TRIES) {
+            let x = agent.x();
+            let at = x.stand_spot_for(c, &x.reach);
+            let mut o = Objective::new(Kind::Visit, at, "off the floor that hurts");
+            o.risky = true; // (in it already: the way out may wade)
+            if agent.x_mut().take(obs, o) {
+                return true;
+            }
+        }
+        false
     }
 
     /// The objective going to (trying, picking up) `id` would be; why not, if there's none.
