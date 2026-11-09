@@ -209,17 +209,23 @@ impl Knowledge {
         if self.standing.is_none_or(|(x, _)| x != s) {
             self.standing = Some((s, obs.tic));
         }
-        let hurt = self.last.as_ref().is_some_and(|last| matches!((obs.health, last.health), (Some(now), Some(before)) if now < before));
-        if hurt {
-            // (a floor hurts on the level's clock, every 32 tics: hurt again on the same floor a
-            // multiple of that later, it's the floor; once alone may be a monster's shot)
-            if let Some((ps, pt)) = self.hurt_on {
+        let lost = self.last.as_ref().and_then(|last| match (obs.health, last.health) {
+            (Some(now), Some(before)) if now < before => Some(before - now),
+            _ => None,
+        });
+        if let Some(lost) = lost {
+            // (a floor hurts on the level's clock, every 32 tics, and the same each time: hurt
+            // again on the same floor a multiple of that later, by as much, it's the floor; once
+            // alone may be a monster's shot, and so may two: E1M7 UV, a zombieman's 15 and a
+            // shotgunner's 9 on a plain floor 96 tics apart, taken for the floor, and the room
+            // the whole level goes through refused)
+            if let Some((ps, pt, pl)) = self.hurt_on {
                 let gap = obs.tic - pt;
-                if ps == s && 0 < gap && gap <= FLOOR_CONFIRM && gap % FLOOR_PERIOD == 0 {
+                if ps == s && 0 < gap && gap <= FLOOR_CONFIRM && gap % FLOOR_PERIOD == 0 && (lost - pl).abs() < 0.5 {
                     self.learn_floor(s, true, obs.tic);
                 }
             }
-            self.hurt_on = Some((s, obs.tic));
+            self.hurt_on = Some((s, obs.tic, lost));
         } else {
             // (only time on it unprotected counts: under a suit no floor hurts, so the clock
             // starts when the suit runs out, not when she stepped on)

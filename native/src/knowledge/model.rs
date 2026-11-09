@@ -226,8 +226,8 @@ pub struct Knowledge {
     pub last: Option<Observation>,
     /// (sector, since tic) on its floor
     standing: Option<(usize, i64)>,
-    /// (sector, tic) last hurt standing on it
-    hurt_on: Option<(usize, i64)>,
+    /// (sector, tic, health lost) last hurt standing on it
+    hurt_on: Option<(usize, i64, f64)>,
     /// vertex -> lines ending there
     ends: BTreeMap<usize, Vec<usize>>,
     /// sector -> the smaller side of its bounding box (thin: a door)

@@ -270,7 +270,7 @@ impl Explorer {
         out.extend(self.unvisited(&reach, pos));
         out.extend(self.healing(obs, &reach));
         out.extend(self.spare_pickups(obs, &reach));
-        out.extend(self.get_off(obs, &reach));
+        out.extend(self.get_off(obs, &reach, risky));
         out.extend(self.secrets_again(&reach, pos));
         out.extend(self.noises(&reach, pos, obs.tic));
         out.extend(hooks.wanted(self, obs, &reach, pos));
@@ -388,13 +388,20 @@ impl Explorer {
         // suit on; both presses raised the pit's one low way out, sealed in, dead. Shut in already,
         // no floor that doesn't in reach, it's hers to try: E1M4's lift switch; and with nothing
         // else at all to do, walls and all, as `harm_ok` has it)
-        let shut_in = self.harm_ok || !reach.iter().any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)));
+        // A floor that doesn't hurt only through a door that shuts again by itself, with nothing
+        // on her side to open it, is no way out either: shut in once it shuts, whatever she does
+        // (E1M9: a nukage room behind a door walk-over lines outside open for a few seconds,
+        // the lift out of it a switch inside, never pressed while the door stood open; once
+        // shut, too far a wade back in for her health)
+        let safe = |polys: &BTreeSet<usize>| polys.iter().any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)));
+        let stays_shut = self.knowledge.damaging(nav.sector_of_poly(here)) && !safe(&way_back(here));
+        let shut_in = self.harm_ok || stays_shut || !safe(&reach);
         let switch_in_harm = |this: &Self, o: &Objective| o.kind == Kind::Switch && !shut_in && nav.poly_at(o.goal).is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)));
         // (down in a pit whose floor hurts, no floor that doesn't in reach: every second there
         // costs health, so a switch or door she can see, a way out someone built, before a guess
         // at a plain wall. E4M8: a missed jump into the lava, three walls tried by the lift's
         // switch, dead on the way to it)
-        let in_pit = self.knowledge.mortal && self.on_hurting_floor(obs) && !reach.iter().any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)));
+        let in_pit = self.knowledge.mortal && self.on_hurting_floor(obs) && (stays_shut || !safe(&reach));
         let mut usable = |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
             let mut objectives: Vec<Objective> = objectives.into_iter().filter(|o| !switch_in_harm(this, o)).collect();
             if in_pit && objectives.iter().any(|o| matches!(o.kind, Kind::Switch | Kind::Door)) {
@@ -767,8 +774,19 @@ impl Explorer {
 
     /// (mortal runs) Down on a floor that hurts: off it, to the nearest floor that doesn't she
     /// can get to (the user's: "if you fall in, head for the nearest floor that doesn't hurt").
-    fn get_off(&self, obs: &Observation, reach: &BTreeSet<usize>) -> Vec<Objective> {
+    /// Waded in on purpose, for a risky objective there, she looks round where she waded to
+    /// before wading back: off it only as one of the risky options, by how far, while what
+    /// she has left after paying for the way back (as much again as it's cost her since) is
+    /// over the margin. (E1M9: through a door the nukage's walk-over lines open for a few
+    /// seconds, into a nukage room whose only way on is a lift's switch inside: the look she
+    /// went for done in the doorway, straight back out every time, the switch never seen)
+    fn get_off(&self, obs: &Observation, reach: &BTreeSet<usize>, risky: bool) -> Vec<Objective> {
         if !self.knowledge.mortal || !self.on_hurting_floor(obs) {
+            return Vec::new();
+        }
+        let health = obs.health.unwrap_or(100.0);
+        let meant = self.waded.is_some_and(|h| health - (h - health) > super::routing::HEALTH_MARGIN);
+        if meant && !risky {
             return Vec::new();
         }
         let mesh = &self.nav.mesh;
@@ -781,7 +799,7 @@ impl Explorer {
         best.map(|p| {
             let mut o = Objective::new(Kind::Visit, mesh.poly(p).center, "get off the floor that hurts");
             o.reveals = BTreeSet::from([p as i64]);
-            o.urgent = true;
+            o.urgent = !meant;
             o
         })
         .into_iter()

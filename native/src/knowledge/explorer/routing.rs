@@ -17,7 +17,7 @@ use std::time::Instant;
 const PLAN_SECONDS: f64 = 600.0;
 
 /// Minimum health a route must leave her with in mortal runs.
-const HEALTH_MARGIN: f64 = 25.0;
+pub(super) const HEALTH_MARGIN: f64 = 25.0;
 /// a route ending on a floor that hurts counts this many hurts there (doing it, getting off)
 const END_STAY: f64 = 2.0;
 /// what a floor that hurts does at the worst (20 a hit), for one she knows hurts and the map

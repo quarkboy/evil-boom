@@ -1470,3 +1470,40 @@ Results (HNTR, one life): E1 8.0, E2 7.4 -> 7.0 (4/8), E3 7.9 -> 8.2 (2/8), Doom
 - Tried and dropped: targets weighed by time to kill (threat over the kind's health, softened):
   Doom II 28 -> 25 (MAP10 twice, MAP02), E3 8.2 -> 7.6. Too broad; a narrower form (hitscanners in
   range over slow missile monsters) is for later.
+
+## 20-minute pass, round A: unarmed to the ammo before cover; a floor hurts the same each time; a purposeful wade looked round (2026-11-09)
+
+The 20-minute pass takes the 54 levels still not beaten on UV (pistol start, seed 0), four agents a
+round, 20 minutes each. Round A: E1M5, E1M7, E1M9, E2M3.
+
+- **Unarmed and shot at, the ammo before cover** (E1M5 UV: fists out at 13 health, an imp's
+  fireballs and a demon on her; hid from the imp 190 tics, the demon followed, dead as the cover
+  ended): low and shot at with no gun that has ammo, cover doesn't end anything (the cover ends
+  when they stop shooting, and nothing she does there kills them): the retreat is for ammo, cover
+  only when there's no way to any. E1M5 UV seed 0 exits.
+- **A floor hurts the same each time** (E1M7 UV: a zombieman's 15 and a shotgunner's 9 on a plain
+  floor 96 tics apart taken for the floor, and the room the whole level goes through refused): a
+  floor's damage comes every 32 tics and is the same amount each time, so a second hurt only
+  confirms the floor when it's a multiple of 32 tics after the first *and by as much*. E1M7 UV
+  seed 0 exits.
+- **A purposeful wade looked round before wading back; a door that shuts by itself no way out**
+  (E1M9: a nukage room behind a door that walk-over lines outside open for a few seconds, the only
+  way on a lift switch inside; she waded in for a look, turned straight back at the doorway every
+  time, the switch never seen; once the door shut, too far a wade back for her health): stepped
+  onto a hurting floor on purpose for a risky objective there, getting off isn't urgent while what
+  she'd have left after paying the way back again is over the margin (it's one of the risky
+  options, by distance); and safe floor reached only through a door that closes by itself with
+  nothing on her side to open it doesn't count as a way out (`shut_in`, `in_pit`). E1M9
+  ITYTD/HNTR/HMP seed 1 exit.
+- Traced, not fixed: E2M3 UV (out of ammo by 535 s, then 800 s unarmed). `blocking()` ("a monster
+  near and in front: walking on would walk into it") judges *in front* by her facing, and she faces
+  what she aims at: anything she shoots within 320 is "in her way". The outmatched node's ammo hold
+  flipped every tic and ~30 pistol rounds went into cacodemons she couldn't kill. Punching lost
+  souls unarmed (a claw that can't kill her) was tried: the mechanic works, the runs went either way.
+
+Results (HNTR, one life): E1 8.0, E2 7.0 (4 -> 5/8), E3 8.2 -> 7.0 (2 -> 0/8), Doom II 28 -> 27/32;
+arenas 119/128, 226/240. E3's losses traced to failures the new runs walked into, none of the
+rules: E3M6 seed 6 shut in past a WR door-close line (the open E3M6 stucks), E3M4 seed 1 under a
+stopped crusher started again by a walk-over line one sector before its edge (`set_off_first`
+knows only lines on its own edge), E3M8 seed 7 (the Cyberdemon). Doom II MAP12 seed 0: berserk
+fists at a cacodemon, as before, this time killed.

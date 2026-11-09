@@ -374,6 +374,9 @@ pub struct Explorer {
     strafe_ok: bool,
     /// switches pressed from a floor that hurts allowed (nothing else at all to do)
     harm_ok: bool,
+    /// her health when she stepped onto a floor that hurts for a risky objective there (on
+    /// purpose, not fallen in), while she's still down on it
+    waded: Option<f64>,
     /// when she last shot at a wall she was trying (single taps)
     wall_shot: i64,
     /// what she knew when what was given up on last had its other go: another once she knows
@@ -497,6 +500,7 @@ impl Explorer {
             waiting_reopen: false,
             strafe_ok: false,
             harm_ok: false,
+            waded: None,
             wall_shot: -1_000_000,
             retried: None,
             debug_tics: debug_tics(),
@@ -565,7 +569,14 @@ impl Explorer {
         }
         self.knowledge.update(obs, last);
         if let Some(s) = self.nav.poly_at(obs.pos()).map(|p| self.nav.sector_of_poly(p)) {
+            if self.nav.damage[s] == 0 {
+                self.waded = None;
+            }
             if Some(s) != self.sector {
+                let meant = self.current.as_ref().is_some_and(|o| o.risky && self.nav.poly_at(o.goal).is_some_and(|p| self.knowledge.damaging(self.nav.sector_of_poly(p))));
+                if meant && self.waded.is_none() && self.knowledge.damaging(s) {
+                    self.waded = obs.health;
+                }
                 if self.nav.damage[s] != 0 {
                     let doing = self.follower.as_ref().map_or("-".to_string(), RouteFollower::objective);
                     self.log.push(format!(

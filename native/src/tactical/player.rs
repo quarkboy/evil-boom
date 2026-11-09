@@ -495,13 +495,24 @@ impl Player {
             return None; // (nothing to fall back from; or her BFG's spray to come, from where she is)
         }
         let health = obs.health.unwrap_or(100.0);
-        let (kind, route) = if (health < RETREAT_HEALTH && !self.shooters().is_empty()) || self.vile(obs) {
+        let unarmed = !self.fight.combat.armed(obs) && !self.fight.combat.against_her().is_empty();
+        let (kind, route) = if self.vile(obs) {
             self.retreat_tic = obs.tic;
             (RetreatKind::Cover, self.find_cover(obs))
+        } else if health < RETREAT_HEALTH && !self.shooters().is_empty() {
+            self.retreat_tic = obs.tic;
+            // (unarmed, cover doesn't end it: nothing she does from there kills what's after her,
+            // and the cover's end is when they stop shooting. The ammo first, cover if there's no
+            // way off for it. E1M5 UV: fists out at 13 health, an imp's fireballs, a demon on her;
+            // hid from the imp 190 tics, the demon followed, dead as the cover ended)
+            match unarmed.then(|| self.for_ammo(obs)).flatten() {
+                Some(r) => (RetreatKind::ForAmmo, Some(r)),
+                None => (RetreatKind::Cover, self.find_cover(obs)),
+            }
         } else if self.fight.combat.in_the_open(obs.tic) {
             self.retreat_tic = obs.tic;
             (RetreatKind::Post, self.find_post(obs))
-        } else if !self.fight.combat.armed(obs) && !self.fight.combat.against_her().is_empty() {
+        } else if unarmed {
             self.retreat_tic = obs.tic;
             (RetreatKind::ForAmmo, self.for_ammo(obs))
         } else if let Some(why) = self.ambushed(obs) {
