@@ -237,6 +237,9 @@ pub struct Combat {
     spent: f64,
     dealt: f64,
     ammo_was: Vec<(i32, i32)>,
+    /// what she's put into each monster, as she'd reckon it: the rounds gone from the gun up while
+    /// it was her target, at what such a shot does landing at that range (never its health)
+    put_in: BTreeMap<i32, f64>,
     health_was: BTreeMap<i32, i32>,
     /// each sector's ceiling last tic, and when it was last seen coming down
     ceilings: Vec<f64>,
@@ -332,6 +335,7 @@ impl Combat {
             spent: 0.0,
             dealt: 0.0,
             ammo_was: Vec::new(),
+            put_in: BTreeMap::new(),
             health_was: BTreeMap::new(),
             ceilings: Vec::new(),
             floors: Vec::new(),
@@ -353,6 +357,7 @@ impl Combat {
         self.alive.clear();
         self.visible.clear();
         self.tracks.clear();
+        self.put_in.clear();
         self.invulnerable_until = i64::MIN / 2;
         self.target = None;
         self.health = None;
@@ -388,6 +393,20 @@ impl Combat {
             if let Some(&(_, before)) = self.ammo_was.iter().find(|(x, _)| *x == s) {
                 if n < before {
                     self.spent += f64::from(before - n);
+                }
+            }
+        }
+        // (what's gone from the gun up, put into her target, as she'd reckon it)
+        if let (Some(slot), Some(id)) = (obs.weapon, self.target) {
+            let was = self.ammo_was.iter().find(|(x, _)| *x == slot).map(|&(_, n)| n);
+            let now = ammo.iter().find(|(x, _)| *x == slot).map(|&(_, n)| n);
+            if let (Some(was), Some(now)) = (was, now) {
+                if let Some(t) = obs.things.iter().flatten().find(|t| t.id == id).filter(|_| now < was) {
+                    if let Some(m) = monster(t.name) {
+                        let w = weapon_in(slot, obs);
+                        let shots = f64::from(was - now) / f64::from(w.ammo_per_shot.max(1));
+                        *self.put_in.entry(id).or_insert(0.0) += shots * w.damage_on(&m) * w.hits(m.radius, dist((t.x, t.y), pos));
+                    }
                 }
             }
         }

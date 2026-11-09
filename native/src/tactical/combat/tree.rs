@@ -321,7 +321,7 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
     // (and no ammo spent on it when all she has couldn't kill it, unless it's in her way: every
     // round a round short for what she can kill; E4M4, two cacodemons kept clear of and shot at
     // till every gun was empty, then bitten to death unarmed)
-    if c.ammo_short_for(obs, &[t.name]) && !c.in_her_way(obs, t) {
+    if c.ammo_short_against(obs, t) && !c.in_her_way(obs, t) {
         a.hold_fire = true;
         a.why = format!("outmatched: keeping clear of {} (ammo kept)", t.name);
     }

@@ -1578,3 +1578,11 @@ door's wall try interrupted, fixed next), Doom II 27/32; arenas 119/128, 227/240
 Results (HNTR, one life), with round B: E1 8.0, E2 7.0 -> 7.2 (6/8), E3 6.6 -> 7.4 (1/8), Doom II 27
 -> 25/32 (MAP10 seeds 0 and 2 killed by barons at the exit line; seed 0 was the tracers' hour);
 arenas 119/128, 227 -> 226/240.
+- **What she's put into a monster counts against keeping her ammo** (E2M8 UV, found by round B's
+  helper: fifty rockets held "short" of the cyberdemon's 4000 all the fight, killed with it at
+  half): the outmatched node's ammo hold compared all her ammo with the monster's full health.
+  Now `ammo_short_against` takes off what she reckons she's put into it: the rounds gone from the
+  gun up while it was her target, at what such a shot does landing at that range (never its
+  health). E2M8 UV seeds 0-3: 1/4 exits either way (seed 0 now, seed 2 before), each living as
+  long or longer (328/162/410/265 -> 449/162/571/329 s). Regression set level: only cyberdemon
+  arena fights move, both ways (doom2 arena 226 -> 225).

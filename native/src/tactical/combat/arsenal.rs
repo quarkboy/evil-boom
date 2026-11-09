@@ -147,6 +147,19 @@ impl Combat {
     /// (with the fist her best, never: punching costs nothing)?
     pub fn ammo_short_for(&self, obs: &Observation, names: &[&str]) -> bool {
         let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
+        self.ammo_short_of(obs, names, hp)
+    }
+
+    /// ...of killing this one, what she's put into it already off (as she reckons it: so many
+    /// rounds at it, landing as they do at their range). A cyberdemon a few rockets short is worth
+    /// the rest: E2M8 UV, fifty rockets held "short" of its full health all the fight, killed with
+    /// it at half.
+    pub fn ammo_short_against(&self, obs: &Observation, t: &Thing) -> bool {
+        let hp = f64::from(mon(t.name).health) - self.put_in.get(&t.id).copied().unwrap_or(0.0);
+        self.ammo_short_of(obs, &[t.name], hp.max(0.0))
+    }
+
+    fn ammo_short_of(&self, obs: &Observation, names: &[&str], hp: f64) -> bool {
         // (what each kind of ammo's worth, with the best gun she has for it; bosses take no blast)
         let held = Self::held(obs);
         let boss = names.iter().any(|n| mon(n).boss);
