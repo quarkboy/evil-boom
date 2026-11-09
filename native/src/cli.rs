@@ -36,6 +36,7 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--secrets" => o.secrets = true,
             "--mortal" => o.mortal = true,
             "--complete" => o.complete = true,
+            "--stall-out" => o.stall_out = true,
             "--carry" => o.carry = Some(parse_carry(&value("--carry")?)?),
             _ => rest.push(a.clone()),
         }
@@ -90,7 +91,7 @@ pub(crate) fn option_args(o: &RunOptions) -> Vec<String> {
         out.push("--fight".into());
         out.push(o.fight.to_string());
     }
-    for (on, flag) in [(o.peek, "--peek"), (o.secrets, "--secrets"), (o.mortal, "--mortal"), (o.expert, "--expert"), (o.complete, "--complete")] {
+    for (on, flag) in [(o.peek, "--peek"), (o.secrets, "--secrets"), (o.mortal, "--mortal"), (o.expert, "--expert"), (o.complete, "--complete"), (o.stall_out, "--stall-out")] {
         if on {
             out.push(flag.into());
         }

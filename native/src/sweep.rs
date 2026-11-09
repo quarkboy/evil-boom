@@ -69,6 +69,10 @@ pub struct RunOptions {
     /// the things reported even with no fight (items seen: the secret survey's walls with an
     /// item behind them)
     pub things: bool,
+    /// over (STALLED) once `stall_seconds` of game time go by with nothing new: nothing picked up
+    /// or killed, seen, learned, tried or set off (the score's runs: a stuck run plays out the
+    /// hour for its kill share, which by then it has)
+    pub stall_out: bool,
 }
 
 impl Default for RunOptions {
@@ -89,6 +93,7 @@ impl Default for RunOptions {
             from: None,
             stall_seconds: 300.0,
             things: false,
+            stall_out: false,
         }
     }
 }
@@ -208,7 +213,8 @@ pub(crate) fn progress(e: &Engine, x: &Explorer, o: &RunOptions) -> [usize; 7] {
     } else if o.secrets {
         t[2].0
     } else {
-        t[0].0
+        // (the kills as well, with monsters in: a fight going on is something happening)
+        t[0].0 + t[1].0
     };
     [
         usize::try_from(collected).unwrap_or(0),
@@ -346,13 +352,13 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     let mut damage: BTreeMap<String, (i32, i32, Vec<i64>)> = BTreeMap::new();
     let mut last_hit: Option<String> = None;
     while (e.tic as f64) < until * TICRATE {
-        if o.expert || o.secrets {
+        if o.expert || o.secrets || o.stall_out {
             let now = progress(&e, agent.x());
             if now.iter().zip(&best).any(|(n, b)| n > b) {
                 best = std::array::from_fn(|i| now[i].max(best[i]));
                 best_tic = e.tic;
             } else if (e.tic - best_tic) as f64 > o.stall_seconds * TICRATE {
-                if !given_up {
+                if !given_up && (o.expert || o.secrets) {
                     // (what's left out of reach as far as she can tell: out, as a player gives up
                     // on the last secret; a stall's time again to get there. E4M5's second secret)
                     agent.x_mut().log.push(format!("tic {}: nothing more collected, learned or tried in {:.0}s: for the exit", e.tic, o.stall_seconds));

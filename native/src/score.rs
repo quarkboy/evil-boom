@@ -1,6 +1,6 @@
 //! The bot's score: every level from a pistol start on one life (mortal), on the chosen skills
 //! (HMP and UV unless told), each K times on random seeds; a row a run, kept as a TSV, then the
-//! report. A run scores 1 for getting out, else half the share of the level's monsters killed
+//! report (a run with nothing new for 5 game minutes is over: STALLED, as good as stuck). A run scores 1 for getting out, else half the share of the level's monsters killed
 //! (partial credit: how far into the level's fight she got; the user's measure); a level's score
 //! is its runs' mean, the bot's the mean over levels and skills, every level weighing the same
 //! (not an episode's, where a level late in it only counts when everything before it went
@@ -198,7 +198,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         while running.len() < jobs.max(1) {
             let Some(job) = todo.pop_front() else { break };
             let child = Command::new(&me)
-                .args(["run-map", &job.0, &job.1, "--fight", &job.2.to_string(), "--mortal", "--lives", "1", "--seed", &job.3.to_string()])
+                .args(["run-map", &job.0, &job.1, "--fight", &job.2.to_string(), "--mortal", "--lives", "1", "--seed", &job.3.to_string(), "--stall-out"])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
