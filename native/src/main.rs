@@ -26,7 +26,7 @@
 //!   evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
 //!       [--crf N] [--preset P] [--ffmpeg PATH] [run options]   a watch played as fast as it goes
 //!       into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told)
-//!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [--directed FILE] [--neuro URL] [run options]
+//!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [--directed FILE] [--neuro URL] [--headless] [run options]
 //!       watch her play, with what she knows beside the game, the game's sound on (space pause,
 //!       +/- speed, A the whole map, F follow, M mute, wheel zoom, Esc quit; the sound off while
 //!       paused or not at x1). --directed FILE: directed play, orders read from FILE as lines are
@@ -439,6 +439,11 @@ fn watch(args: &[String]) -> Result<(), String> {
         println!("RESULT {outcome} {detail}");
         return Ok(());
     }
+    if w.headless {
+        // (SDL takes Ctrl-C and SIGTERM for its own quit event, which nothing headless reads: left
+        // to the shell, they stop it)
+        std::env::set_var("SDL_NO_SIGNAL_HANDLERS", "1");
+    }
     evildoom::viewer::watch(wad, map, &w)
 }
 
@@ -497,6 +502,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
         carry: o.carry.clone(),
         episode: false,
         headless: false,
+        paced: false,
         max_seconds: o.max_seconds,
         seed: o.seed,
         focus: None,
@@ -508,7 +514,10 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--speed" => w.speed = it.next().and_then(|v| v.parse().ok()).ok_or("--speed: a number")?,
+            "--speed" => {
+                w.speed = it.next().and_then(|v| v.parse().ok()).ok_or("--speed: a number")?;
+                w.paced = true;
+            }
             "--all" => w.show_all = true,
             "--episode" => w.episode = true,
             "--headless" => w.headless = true,

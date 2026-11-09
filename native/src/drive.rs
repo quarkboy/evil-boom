@@ -35,7 +35,8 @@
 //!   list TOPIC [N]      what she knows of: areas, doors, items, monsters, exits (ids, names,
 //!                       which way, how far)
 //!   name ID NAME...     a name for something listed (refused when too long or taken)
-//!   order go REF [risky] | order explore REF|DIR [secrets] | order exit | order stop
+//!   order go REF [risky] [sure] | order explore REF|DIR [secrets] | order exit [sure] | order stop
+//!                       (leaving the level with something left asks first: sure to leave anyway)
 //!                       an order (REF an id or a name; DIR n, ne, east, ...)
 //!   run SECONDS         play on (directed) till she's done and waiting, or SECONDS; the reports
 
@@ -307,6 +308,7 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 let mut started = false;
                 while ((s.e.tic - start) as f64) < secs * TICRATE && !s.e.finished() {
                     let obs = s.e.observe();
+                    director.tally = crate::control::directed::Tally::of(s.e.tally());
                     director.tick(&mut s.agent, &obs);
                     for r in &director.reports[shown..] {
                         println!("  [{:6.1}s] {} {}", r.tic as f64 / TICRATE, if r.ok { "+" } else { "-" }, r.text);

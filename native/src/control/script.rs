@@ -36,6 +36,19 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
             d.name(id, &w[2..].join(" ")).map(|()| vec![format!("named {id} \"{}\"", w[2..].join(" "))])
         }
         Some("order") => {
+            // (sure: leave the level even with something left, as Evil's sure)
+            let sure = w.len() > 2 && w.last() == Some(&"sure");
+            let w = &w[..w.len() - usize::from(sure)];
+            let leaving = match w.get(1).copied() {
+                Some("exit") => true,
+                Some("go") => d.resolve(&w[2..].join(" ")).starts_with("exit-") || w.len() > 3 && d.resolve(&w[2..w.len() - 1].join(" ")).starts_with("exit-"),
+                _ => false,
+            };
+            if leaving && !sure {
+                if let Some(q) = d.exit_check(agent, obs) {
+                    return Ok(vec![format!("{q} (order ... sure)")]);
+                }
+            }
             let o = match w.get(1).copied() {
                 Some("go") => match w.last() {
                     Some(&"risky") => Order::Go(w[2..w.len() - 1].join(" "), true),
@@ -48,7 +61,7 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
                 }
                 Some("exit") => Order::Exit,
                 Some("stop") => Order::Stop,
-                _ => return Err("order go REF [risky] | explore REF|DIR [secrets] | exit | stop".into()),
+                _ => return Err("order go REF [risky] [sure] | explore REF|DIR [secrets] | exit [sure] | stop".into()),
             };
             d.order(o);
             Ok(Vec::new())

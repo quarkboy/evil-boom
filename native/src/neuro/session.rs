@@ -37,10 +37,10 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_list", "description": "List what you know of in the level: areas (rooms and places with something left to explore, where she is, and those you've named; set all for every area), doors not yet tried, switches not yet pressed (and what each does, if known), items, monsters, exits. Each has an id to use in other actions.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
         json!({ "name": "doom_press", "description": "Press a switch (by its id or your name for it). Exploring doesn't press switches: they can do anything, so that's your call. She reports what it did, if she sees.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
         json!({ "name": "doom_inspect", "description": "Say what one thing is, which way and how far, by its id or your name for it.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
-        json!({ "name": "doom_go", "description": "Go to a place, pick up an item, try a door or switch, or take an exit, by its id or your name for it. She does it and reports back. Set risky to go even where she'd rather not (across a floor that hurts), as long as it won't kill her.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" } }), &["ref"]) }),
+        json!({ "name": "doom_go", "description": "Go to a place, pick up an item, try a door or switch, or take an exit, by its id or your name for it. She does it and reports back. Set risky to go even where she'd rather not (across a floor that hurts), as long as it won't kill her. Taking an exit with something left to do asks you first; set sure to leave anyway.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_explore", "description": "Explore an area (by its id or your name for it) or a direction (north, south-east, ...), until there's nothing more known to explore there. Set secrets to also search for secrets: she presses (and shoots) every wall there she suspects of hiding something, which takes a while.", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_name", "description": format!("Give something a name of your own (up to {NAME_MAX} characters), to use instead of its id from then on."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
-        json!({ "name": "doom_exit", "description": "Leave the level by the exit she knows of (ends the level)." }),
+        json!({ "name": "doom_exit", "description": "Leave the level by the exit she knows of (ends the level). With something left to do, it asks you first; set sure to leave anyway.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_stop", "description": "Stop what she's doing and wait." }),
         json!({ "name": "doom_status", "description": "Her health, armor, weapons, ammo, keys, and what she's doing." }),
     ]
@@ -146,6 +146,7 @@ impl Session {
             Some(Err(_)) => return (false, "The action's data wasn't valid JSON.".into()),
         };
         let arg = |k: &str| args.get(k).and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty());
+        let sure = args.get("sure").and_then(Value::as_bool).unwrap_or(false);
         match name {
             "doom_list" => {
                 let Some(topic) = arg("what").and_then(Topic::parse) else { return (false, "List what? One of: areas, doors, items, monsters, exits.".into()) };
@@ -168,6 +169,11 @@ impl Session {
             "doom_go" => {
                 let Some(r) = arg("ref") else { return (false, "Go to what? Give an id from doom_list, or your name for it.".into()) };
                 let risky = args.get("risky").and_then(Value::as_bool).unwrap_or(false);
+                if self.director.resolve(r).starts_with("exit-") && !sure {
+                    if let Some(q) = self.director.exit_check(agent, obs) {
+                        return (true, q);
+                    }
+                }
                 match self.director.check_go(agent, obs, r, risky) {
                     Ok(what) => {
                         self.director.order(Order::Go(r.to_string(), risky));
@@ -217,6 +223,9 @@ impl Session {
                 if self.director.list(agent, obs, Topic::Exits).is_empty() {
                     // (not a failure to retry: nothing to do about it but explore)
                     (true, "No exit known yet: explore to find one.".into())
+                } else if let Some(q) = self.director.exit_check(agent, obs).filter(|_| !sure) {
+                    // (a question, not a failure: Neuro would send it again as it was)
+                    (true, q)
                 } else {
                     self.director.order(Order::Exit);
                     (true, "Heading for the exit.".into())

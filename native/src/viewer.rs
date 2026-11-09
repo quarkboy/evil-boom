@@ -224,8 +224,11 @@ pub struct WatchOptions {
     /// on through the episode, level after level, what she gets out with carried (one life)
     pub episode: bool,
     /// no window: played through as fast as it goes, a line a level (checking a watch plays as
-    /// the run did)
+    /// the run did); its log written to out/watch/live.log as it plays
     pub headless: bool,
+    /// --speed given: headless keeps to it in real time (a language model playing Evil, watched
+    /// through the logs: the user's) rather than flat out
+    pub paced: bool,
     pub seed: Option<u32>,
     /// the map view centred on a point, zoomed in this much (for looking at one place)
     pub focus: Option<(f64, f64, f64)>,
@@ -539,14 +542,37 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
 /// The watch played through without a window, as fast as it goes (the time cap as a run's):
 /// a line as each level ends.
 fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
+    use std::io::Write;
     let mut start = watch.engine.tic;
+    // (the log as it's written, to follow live: tail -f)
+    let live = out_dir().join("watch").join("live.log");
+    std::fs::create_dir_all(live.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
+    let mut log = std::fs::File::create(&live).map_err(|e| e.to_string())?;
+    println!("log: {}{}", live.display(), if o.paced { format!(" (at x{})", o.speed) } else { String::new() });
     loop {
+        let mut shown = 0;
+        let (began, first) = (Instant::now(), watch.engine.tic);
+        let _ = writeln!(log, "== {}", watch.map_name);
         while !watch.engine.finished() && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE {
             watch.tic();
+            let lines = &watch.agent.x().log;
+            let at = watch.engine.tic as f64 / TICRATE;
+            for l in &lines[shown.min(lines.len())..] {
+                let _ = writeln!(log, "[{at:7.1}s] {l}");
+            }
+            shown = lines.len();
+            if o.paced && o.speed > 0.0 {
+                let due = began + std::time::Duration::from_secs_f64((watch.engine.tic - first) as f64 / (TICRATE * o.speed));
+                if let Some(wait) = due.checked_duration_since(Instant::now()) {
+                    std::thread::sleep(wait);
+                }
+            }
         }
         let t = watch.engine.tally();
         let how = if watch.engine.exited() { "EXITED" } else if watch.engine.dead() { "DIED" } else { "TIME" };
-        println!("{}: {how} items {}/{}, {:.0}s game", watch.map_name, t[0].0, t[0].1, (watch.engine.tic - start) as f64 / TICRATE);
+        let line = format!("{}: {how} kills {}/{}, items {}/{}, secrets {}/{}, {:.0}s game", watch.map_name, t[1].0, t[1].1, t[0].0, t[0].1, t[2].0, t[2].1, (watch.engine.tic - start) as f64 / TICRATE);
+        println!("{line}");
+        let _ = writeln!(log, "{line}");
         if !(o.episode && watch.engine.exited()) {
             return Ok(());
         }
@@ -776,12 +802,15 @@ impl Watch {
         }
         self.secrets_seen = found;
         self.frame = self.engine.frame();
+        let tally = crate::control::directed::Tally::of(self.engine.tally());
         if let Some(feed) = &mut self.feed {
+            feed.director.tally = tally;
             for l in feed.tic(&mut self.agent, &obs) {
                 self.agent.x_mut().log.push(l);
             }
         }
         if let Some(neuro) = &mut self.neuro {
+            neuro.director.tally = tally;
             for l in neuro.tic(&mut self.agent, &obs) {
                 self.agent.x_mut().log.push(l);
             }

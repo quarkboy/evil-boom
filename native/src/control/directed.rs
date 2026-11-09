@@ -134,6 +134,33 @@ pub struct Director {
     /// a switch pressed: its line, what it's called, and till when to watch for what it did (what
     /// it moves is learned seeing it move, a moment after)
     pressed: Option<(usize, String, i64)>,
+    /// the level's tally (kills, items, secrets: got, of), as a source port shows it; set each tic
+    /// by whoever runs the game (it's the engine's, not in what she observes)
+    pub tally: Tally,
+}
+
+/// The level's tally: kills, items, secrets, each (got, of).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Tally {
+    pub kills: (i32, i32),
+    pub items: (i32, i32),
+    pub secrets: (i32, i32),
+}
+
+impl Tally {
+    /// From the engine's (items, kills, secrets).
+    pub fn of(t: [(i32, i32); 3]) -> Tally {
+        Tally { items: t[0], kills: t[1], secrets: t[2] }
+    }
+
+    fn line(&self) -> String {
+        let f = |(got, of): (i32, i32)| format!("{got}/{of}");
+        format!("kills {}, items {}, secrets {}", f(self.kills), f(self.items), f(self.secrets))
+    }
+
+    fn complete(&self) -> bool {
+        [self.kills, self.items, self.secrets].iter().all(|(got, of)| got >= of)
+    }
 }
 
 impl Director {
@@ -191,13 +218,45 @@ impl Director {
             None => "waiting for orders".to_string(),
         };
         format!(
-            "Health {:.0}, armor {:.0}; weapons: {}; ammo: {}; keys: {}; {doing}",
+            "Health {:.0}, armor {:.0}; weapons: {}; ammo: {}; keys: {}; {}; {doing}",
             obs.health.unwrap_or(0.0),
             obs.armor.unwrap_or(0.0),
             if weapons.is_empty() { "none".to_string() } else { weapons.join(", ") },
             if pools.is_empty() { "none".to_string() } else { pools.join(", ") },
-            if keys.is_empty() { "none".to_string() } else { keys.join(", ") }
+            if keys.is_empty() { "none".to_string() } else { keys.join(", ") },
+            self.tally.line()
         )
+    }
+
+    /// Leaving now: what she'd leave behind, as a question to be sure (None: nothing left, the
+    /// tally complete and nothing more known to do). The user's: an exit asks first, for now.
+    /// (None too with no exit known: the order says so.)
+    pub fn exit_check(&mut self, agent: &mut Agent, obs: &Observation) -> Option<String> {
+        let open = self.open_objectives(agent, obs);
+        if !open.iter().any(|o| o.kind == Kind::Exit) {
+            return None;
+        }
+        let count = |f: &dyn Fn(&Objective) -> bool| open.iter().filter(|o| f(o)).map(id_of).collect::<std::collections::BTreeSet<_>>().len();
+        let explore = count(&|o| explores(o, false));
+        let switches = count(&|o| o.kind == Kind::Switch);
+        let doors = count(&|o| o.kind == Kind::Door);
+        let items = self.list(agent, obs, Topic::Items).len();
+        let mut left = Vec::new();
+        for (n, one, many) in [
+            (explore, "thing known to explore", "things known to explore"),
+            (switches, "switch not pressed", "switches not pressed"),
+            (doors, "door not tried", "doors not tried"),
+            (items, "item seen and not picked up", "items seen and not picked up"),
+        ] {
+            if n > 0 {
+                left.push(format!("{n} {}", if n == 1 { one } else { many }));
+            }
+        }
+        if left.is_empty() && self.tally.complete() {
+            return None;
+        }
+        let known = if left.is_empty() { String::new() } else { format!("{}; ", left.join(", ")) };
+        Some(format!("There's still something left to do here: {known}{}. Leaving ends the level. Are you sure? To leave anyway, send it again with sure set to true.", self.tally.line()))
     }
 
     /// What's new since last told: an exit, things of note seen, monsters, keys and weapons got,
