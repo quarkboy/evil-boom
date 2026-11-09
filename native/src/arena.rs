@@ -203,7 +203,7 @@ pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool, sound: bool) -> Res
         }
     }
     let knowledge = Knowledge::new(Rc::clone(&nav), true, true);
-    let agent = Agent::new(&nav, knowledge, s.skill, false, 1);
+    let agent = Agent::new(&nav, knowledge, s.skill, false, 1, Rc::default());
     Ok(Prepared { engine: e, agent, ids, wad: w, map: m })
 }
 

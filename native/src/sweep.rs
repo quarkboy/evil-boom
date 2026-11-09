@@ -73,6 +73,9 @@ pub struct RunOptions {
     /// or killed, seen, learned, tried or set off (the score's runs: a stuck run plays out the
     /// hour for its kill share, which by then it has)
     pub stall_out: bool,
+    /// the numbers she judges by, changed from their defaults by this file (see
+    /// `tactical::tuning`)
+    pub tuning: Option<std::path::PathBuf>,
 }
 
 impl Default for RunOptions {
@@ -94,6 +97,7 @@ impl Default for RunOptions {
             stall_seconds: 300.0,
             things: false,
             stall_out: false,
+            tuning: None,
         }
     }
 }

@@ -9,6 +9,7 @@ use crate::knowledge::model::Knowledge;
 use crate::motor::{Controls, Observation};
 use crate::navigator::Navigator;
 use crate::tactical::player::Player;
+use crate::tactical::tuning::Tuning;
 
 pub enum Agent {
     Plain(Box<Explorer>),
@@ -18,10 +19,10 @@ pub enum Agent {
 
 impl Agent {
     /// `fight`: monsters in at that skill (0: none); `expert`: every item, then out (`lives - 1`
-    /// levels again she may ask for).
-    pub fn new(nav: &Rc<Navigator>, knowledge: Knowledge, fight: i32, expert: bool, lives: i32) -> Agent {
+    /// levels again she may ask for); `tune`: the numbers she judges a fight by.
+    pub fn new(nav: &Rc<Navigator>, knowledge: Knowledge, fight: i32, expert: bool, lives: i32, tune: Rc<Tuning>) -> Agent {
         if fight > 0 {
-            let mut p = Player::new(Rc::clone(nav), knowledge);
+            let mut p = Player::new(Rc::clone(nav), knowledge, tune);
             if expert {
                 p.complete(lives - 1); // (every item as well as fighting: --complete)
             }

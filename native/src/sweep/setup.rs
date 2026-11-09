@@ -9,6 +9,7 @@ use crate::map::MapData;
 use crate::motor::{Controls, Observation, TICRATE};
 use crate::navigator::Navigator;
 use crate::play::Agent;
+use crate::tactical::tuning::Tuning;
 use crate::replay::{Entry, Recording};
 use crate::wad::{load_map, Wad};
 use std::collections::BTreeMap;
@@ -73,7 +74,7 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Opt
         e.set_god();
     }
     let knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
-    let mut agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives);
+    let mut agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives, Tuning::from(o.tuning.as_deref())?);
     let secrets_short = broken_secrets(&map_name);
     if o.secrets {
         agent.x_mut().exit_last = true;

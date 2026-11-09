@@ -25,6 +25,7 @@ use crate::knowledge::explorer::{Kind, Objective};
 use crate::sweep::{broken_secrets, hold_exit, progress, RunOptions};
 use crate::knowledge::model::Knowledge;
 use crate::play::Agent;
+use crate::tactical::tuning::Tuning;
 use crate::map::{MapData, ML_DONTDRAW};
 use crate::motor::{Controls, Observation, TICRATE};
 use crate::navigator::Navigator;
@@ -242,6 +243,8 @@ pub struct WatchOptions {
     pub carry: Option<crate::dsda::Loadout>,
     /// on through the episode, level after level, what she gets out with carried (one life)
     pub episode: bool,
+    /// the numbers she judges by, changed by this file
+    pub tuning: Option<std::path::PathBuf>,
     /// no window: played through as fast as it goes, a line a level (checking a watch plays as
     /// the run did); its log written to out/watch/live.log as it plays
     pub headless: bool,
@@ -662,7 +665,7 @@ fn level(w: &Wad, m: Arc<MapData>, nav: Rc<Navigator>, engine: Engine, o: &Watch
     let skill = if o.fight > 0 { o.fight } else { 3 };
     // (seeing as a run does: watched, a run plays as it did; the user's)
     let knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
-    let mut agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives);
+    let mut agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives, Tuning::from(o.tuning.as_deref())?);
     // (a 100% run as a sweep plays it: the exit held back while what it's after is short, given
     // up on after a stall)
     let hold = (o.expert || o.secrets || o.complete).then(|| {

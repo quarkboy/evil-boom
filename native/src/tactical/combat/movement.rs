@@ -1,6 +1,6 @@
 //! Missile avoidance, strafing and checking safe escape directions.
 
-use super::{clearance, hit_clearance, miss_by, Combat, DODGE_TICS};
+use super::{clearance, hit_clearance, miss_by, Combat};
 use crate::geom::{dist, segments_cross, Point};
 use crate::motor::{heading, norm, Observation, Thing, FRICTION, RUN_THRUST};
 use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS, TELEPORTERS_FOR_PLAYERS};
@@ -8,24 +8,12 @@ use crate::tactical::bestiary::{missile, weapon_in, Weapon};
 use std::collections::BTreeSet;
 
 const DODGE_WAYS: usize = 16;
-/// a dodge along a missile's way (straight from it or at it) counts this much less than across it
-const DODGE_ALONG: f64 = 24.0;
-
-/// a clear dodge's worth for going the way she's going (an errand), all the way: as much as
-/// room after it (24)
-const W_TOWARD: f64 = 24.0;
 
 /// going some way: pushing that way this long, then...
 const PUSH_TICS: usize = 8;
 
 /// ...letting go: where she'd slide to in this long must be safe too
 const SLIDE_TICS: usize = 40;
-
-/// a strafe one way lasts between these
-const STRAFE_TICS: (i64, i64) = (18, 40);
-
-/// radians off straight at it she'll veer, closing in, when straight on isn't clear
-const CLOSE_VEER: [f64; 2] = [0.35, 0.7];
 
 impl Combat {
     /// The missiles that'd hit her, soonest first: any that would if she went on as she's going,
@@ -58,7 +46,7 @@ impl Combat {
                     }
                     let (rx, ry) = (pos.0 - t.x, pos.1 - t.y);
                     let when = (rx * rvx + ry * rvy) / v2;
-                    if !(0.0 < when && when < DODGE_TICS as f64) {
+                    if !(0.0 < when && when < self.tune.dodge.within_tics as f64) {
                         return None;
                     }
                     let hz = t.z + t.vz * when;
@@ -71,7 +59,7 @@ impl Combat {
             else {
                 continue;
             };
-            if !self.dodging.contains(&t.id) && miss > clearance(&m) {
+            if !self.dodging.contains(&t.id) && miss > clearance(&self.tune.dodge, &m) {
                 continue;
             }
             if self.dodging.insert(t.id) {
@@ -115,8 +103,8 @@ impl Combat {
             if !self.safe(obs, way, 64.0) {
                 continue;
             }
-            let room = self.clear_run(obs, way, 16.0 * DODGE_TICS as f64);
-            let misses: Vec<(f64, f64)> = missiles.iter().filter_map(|t| missile(t.name).map(|m| (miss_by(pos, self.velocity, way, room, t), m))).map(|(d, m)| (d - clearance(&m), d - hit_clearance(&m))).collect();
+            let room = self.clear_run(obs, way, 16.0 * self.tune.dodge.within_tics as f64);
+            let misses: Vec<(f64, f64)> = missiles.iter().filter_map(|t| missile(t.name).map(|m| (miss_by(&self.tune.dodge, pos, self.velocity, way, room, t), m))).map(|(d, m)| (d - clearance(&self.tune.dodge, &m), d - hit_clearance(&self.tune.dodge, &m))).collect();
             let mut s = misses.iter().map(|m| m.0).fold(f64::INFINITY, f64::min);
             // (clear of the missile itself, its blast or not)
             let hit = misses.iter().map(|m| m.1).fold(f64::INFINITY, f64::min);
@@ -137,7 +125,7 @@ impl Combat {
                         (v > 0.5).then(|| ((way.0 * t.vx + way.1 * t.vy) / v).abs())
                     })
                     .fold(0.0, f64::max);
-                s -= DODGE_ALONG * along;
+                s -= self.tune.dodge.along * along;
             }
             if let Some(dw) = self.dodge_way {
                 s += 6.0 * (way.0 * dw.0 + way.1 * dw.1);
@@ -146,11 +134,11 @@ impl Combat {
             // where she stood, a rocket after a rocket, she never got there)
             if let Some(to) = self.toward.filter(|&to| s >= 0.0 && dist(to, pos) > 1.0) {
                 let d = dist(to, pos);
-                s += W_TOWARD * (way.0 * (to.0 - pos.0) + way.1 * (to.1 - pos.1)) / d;
+                s += self.tune.dodge.toward * (way.0 * (to.0 - pos.0) + way.1 * (to.1 - pos.1)) / d;
             }
             // (and a way she'd rather go, as clear: round a corner from a homing one)
             if let Some(p) = prefer.filter(|_| s >= 0.0) {
-                s += 2.0 * W_TOWARD * (way.0 * p.0 + way.1 * p.1);
+                s += 2.0 * self.tune.dodge.toward * (way.0 * p.0 + way.1 * p.1);
             }
             if best.is_none_or(|(bs, _, _)| s > bs) {
                 best = Some((s, way, hit));
@@ -164,8 +152,8 @@ impl Combat {
     /// Would going `way` (none: coasting where she is) keep her clear of every one of these
     /// missiles' own hit, blasts or not?
     pub(super) fn clear_of_hits(&self, obs: &Observation, missiles: &[Thing], way: Option<Point>) -> bool {
-        let (way, room) = way.map_or(((0.0, 0.0), f64::INFINITY), |w| (w, self.clear_run(obs, w, 16.0 * DODGE_TICS as f64)));
-        missiles.iter().all(|t| missile(t.name).is_none_or(|m| miss_by(obs.pos(), self.velocity, way, room, t) >= hit_clearance(&m)))
+        let (way, room) = way.map_or(((0.0, 0.0), f64::INFINITY), |w| (w, self.clear_run(obs, w, 16.0 * self.tune.dodge.within_tics as f64)));
+        missiles.iter().all(|t| missile(t.name).is_none_or(|m| miss_by(&self.tune.dodge, obs.pos(), self.velocity, way, room, t) >= hit_clearance(&self.tune.dodge, &m)))
     }
 
     /// Did the last dodge find a way clear of every missile coming? Of a rocket's hit, that is,
@@ -219,7 +207,7 @@ impl Combat {
         // knocked back off a chaingunner in a doorway by its bullets, a unit off line with the
         // jamb, stood still out of the fist's reach to death)
         let mut ways = vec![ahead];
-        ways.extend(CLOSE_VEER.iter().flat_map(|&v| [a + v, a - v]).map(|b| (b.cos(), b.sin())));
+        ways.extend(self.tune.dodge.close_veer.iter().flat_map(|&v| [a + v, a - v]).map(|b| (b.cos(), b.sin())));
         if let Some(s) = strafe {
             let mixed = (ahead.0 + s.0, ahead.1 + s.1);
             let n = mixed.0.hypot(mixed.1);
@@ -234,7 +222,7 @@ impl Combat {
     pub(super) fn strafe_dir(&mut self, obs: &Observation, aim: Option<f64>) -> Option<Point> {
         if obs.tic >= self.strafe_until {
             self.strafe = -self.strafe;
-            let (lo, hi) = STRAFE_TICS;
+            let (lo, hi) = self.tune.dodge.strafe_tics;
             self.strafe_until = obs.tic + lo + (obs.tic * 7919).rem_euclid(hi - lo);
         }
         let aim = aim?;

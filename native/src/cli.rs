@@ -37,6 +37,7 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--mortal" => o.mortal = true,
             "--complete" => o.complete = true,
             "--stall-out" => o.stall_out = true,
+            "--tuning" => o.tuning = Some(std::path::PathBuf::from(value("--tuning")?)),
             "--carry" => o.carry = Some(parse_carry(&value("--carry")?)?),
             _ => rest.push(a.clone()),
         }
@@ -95,6 +96,10 @@ pub(crate) fn option_args(o: &RunOptions) -> Vec<String> {
         if on {
             out.push(flag.into());
         }
+    }
+    if let Some(t) = &o.tuning {
+        out.push("--tuning".into());
+        out.push(t.display().to_string());
     }
     out
 }

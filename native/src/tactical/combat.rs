@@ -22,6 +22,7 @@ pub use moves::Move;
 use moves::HeldFire;
 use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
+use super::tuning::{Dodge, Tuning};
 use crate::geom::{dist, Point};
 use crate::specials::Category;
 use crate::los::{Body, LineOfSight};
@@ -30,71 +31,14 @@ use crate::navigator::{Navigator, PLAYER_HEIGHT, PLAYER_RADIUS};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-/// half the view, degrees: monsters in line of sight inside it are seen...
-const FOV: f64 = 55.0;
-/// ...and any this near, in any direction (heard)
-const NEAR: f64 = 384.0;
-/// being hurt: everything in line of sight is noticed for this long
-const HURT_TICS: i64 = 2 * 35;
-/// A recently seen monster can still be noticed outside the usual field of view.
-const RECENT_SIGHT_TICS: i64 = 35;
-/// Movement from the first sighting that counts as waking up (units, units/tic, degrees).
-const WAKE_DISTANCE: f64 = 16.0;
-const WAKE_SPEED: f64 = 0.5;
-const WAKE_TURN: f64 = 1.0;
-/// closing in on something out of reach this long without getting it in reach: left...
-const CLOSE_GIVE_UP: i64 = 20 * 35;
-/// ...for this long
-const GIVEN_UP_TICS: i64 = 30 * 35;
-/// a ceiling seen coming down this lately, this low over its floor, is a crusher at work
-const CRUSH_TICS: i64 = 2 * 35;
-/// a crusher come down lower than she stands this lately is at work (tics: a slow one's stroke,
-/// down and up, is some 5 s)
-const ACTIVE_CRUSHER: i64 = 6 * 35;
-const CRUSH_GAP: f64 = 120.0;
 /// invulnerability lasts this long (INVULNTICS)...
 const INVULNERABLE_TICS: i64 = 30 * 35;
-/// ...the last of it not counted on
-const INVULNERABLE_SPARE: i64 = 3 * 35;
-/// a monster's way of going judged over this many tics (a walker's steps come every 2-4)...
-const TRACK_TICS: i64 = 12;
-/// ...and over at least this many
-const TRACK_MIN: i64 = 6;
-/// a floor seen coming up this lately with this little room left over it, likewise
-const FLOOR_CRUSH_GAP: f64 = 72.0;
-/// health lost lately: over this long (tics)
-const DAMAGE_WINDOW: i64 = 5 * 35;
-/// an awake monster out of sight this long is still fought (where it was)
-const LOST_TICS: i64 = 3 * 35;
-/// outmatched by an awake monster this near: keeping clear of it, not getting past
-const KEEP_CLEAR: f64 = 1024.0;
-/// no shooting at anything further
-const ENGAGE_RANGE: f64 = 2048.0;
-
-/// a missile arriving sooner than this is dodged...
-const DODGE_TICS: i64 = 35;
-/// ...if it would pass nearer than the two radii and this
-const DODGE_MARGIN: f64 = 12.0;
 
 /// a rocket's blast reaches this far (less her radius: 128 in all)
 const SPLASH: f64 = 112.0;
 
-/// a clawing monster nearer than this: back off from it
-const CLOSE: f64 = 160.0;
-/// this much threat in sight: stand and fight rather than walk on
-const STAND_THREAT: f64 = 6.0;
-/// monsters standing about (or by where she's going) she'd take longer than this to kill: left
-/// be
-pub const LEAVE_BE: f64 = 15.0;
-/// ...or below this health, anything in sight
-pub(super) const LOW_HEALTH: f64 = 35.0;
-/// with something shooting in sight, keep this far from barrels
-const BARREL_CLEAR: f64 = 160.0;
 /// a barrel's height (seen over a ledge this high or not)
 const BARREL_HEIGHT: f64 = 42.0;
-
-/// a monster seen after another, not her, this long: they're fighting each other: leave them
-const INFIGHT_TICS: i32 = 18;
 
 const SLOTS: [i32; 7] = [1, 2, 3, 4, 5, 6, 7];
 
@@ -128,13 +72,6 @@ impl Seen {
     }
 }
 
-/// how near a monster with a gun or missiles has to be to count as fighting her (`engaged`)
-const ENGAGED_RANGED: f64 = 1536.0;
-/// ...a lost soul, that charges from a distance
-const ENGAGED_CHARGE: f64 = 768.0;
-/// ...one that only claws or bites
-const ENGAGED_MELEE: f64 = 384.0;
-
 #[derive(Clone, Debug)]
 pub struct Decision {
     /// which decision it is (the label, `why`, is for the log)
@@ -153,6 +90,8 @@ pub struct Decision {
 
 pub struct Combat {
     nav: Rc<Navigator>,
+    /// the numbers she judges by (the player's, shared)
+    pub(super) tune: Rc<Tuning>,
     pub los: LineOfSight,
     hearing: Hearing,
     /// every monster seen, by id
@@ -289,7 +228,7 @@ pub struct Combat {
 }
 
 impl Combat {
-    pub fn new(nav: Rc<Navigator>) -> Combat {
+    pub fn new(nav: Rc<Navigator>, tune: Rc<Tuning>) -> Combat {
         let sinks_into_harm = (0..nav.map.sectors.len())
             .filter(|&s| nav.triggers.iter().any(|t| t.info.trigger.walked() && t.effect(s).is_some() && nav.floor_after(t, s) == Some(true)))
             .collect();
@@ -304,6 +243,7 @@ impl Combat {
         let doors = moved_only_by(Category::is_door);
         let lifts = moved_only_by(|c| c == Category::Lift);
         Combat {
+            tune,
             doors,
             lifts,
             los: LineOfSight::new(&nav.map),
@@ -509,15 +449,15 @@ impl Combat {
         self.alive = monsters;
         self.refresh_tic_cache(obs);
         let me = Body { x: obs.x, y: obs.y, z: self.z(obs), height: PLAYER_HEIGHT };
-        let hurt = obs.tic - self.hurt_tic < HURT_TICS;
+        let hurt = obs.tic - self.hurt_tic < self.tune.senses.hurt_tics;
         self.visible.clear();
         for t in self.alive.values() {
             let d = dist((t.x, t.y), pos);
-            if !(0.0..ENGAGE_RANGE).contains(&d) {
+            if !(0.0..self.tune.engage.range).contains(&d) {
                 continue;
             }
-            let recent = self.known.get(&t.id).is_some_and(|s| obs.tic - s.tic < RECENT_SIGHT_TICS);
-            if !(hurt || recent || d < NEAR || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < FOV) {
+            let recent = self.known.get(&t.id).is_some_and(|s| obs.tic - s.tic < self.tune.senses.recent_sight_tics);
+            if !(hurt || recent || d < self.tune.senses.near || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov) {
                 continue;
             }
             let target = Body { x: t.x, y: t.y, z: t.z, height: mon(t.name).height };
@@ -533,15 +473,15 @@ impl Combat {
             seen.z = t.z;
             seen.tic = obs.tic;
             seen.awake = seen.awake
-                || dist(seen.pos(), (seen.x0, seen.y0)) > WAKE_DISTANCE
-                || t.vx.hypot(t.vy) > WAKE_SPEED
-                || norm(t.angle - seen.angle0).abs() > WAKE_TURN;
+                || dist(seen.pos(), (seen.x0, seen.y0)) > self.tune.senses.wake_distance
+                || t.vx.hypot(t.vy) > self.tune.senses.wake_speed
+                || norm(t.angle - seen.angle0).abs() > self.tune.senses.wake_turn;
             let track = self.tracks.entry(t.id).or_default();
-            if track.back().is_some_and(|&(tic, _, _)| obs.tic - tic > TRACK_TICS) {
+            if track.back().is_some_and(|&(tic, _, _)| obs.tic - tic > self.tune.senses.track_tics) {
                 track.clear(); // (out of sight a while: where it was then says nothing)
             }
             track.push_back((obs.tic, t.x, t.y));
-            while track.front().is_some_and(|&(tic, _, _)| obs.tic - tic > TRACK_TICS) {
+            while track.front().is_some_and(|&(tic, _, _)| obs.tic - tic > self.tune.senses.track_tics) {
                 track.pop_front();
             }
             self.visible.push(t.clone());
@@ -554,10 +494,10 @@ impl Combat {
         self.barrels_seen.dedup_by(|a, b| dist(*a, *b) < 1.0);
         for &b in &barrels {
             let d = dist(b, pos);
-            if d >= ENGAGE_RANGE || self.barrels_seen.iter().any(|&x| dist(x, b) < 1.0) {
+            if d >= self.tune.engage.range || self.barrels_seen.iter().any(|&x| dist(x, b) < 1.0) {
                 continue;
             }
-            if !(d < NEAR || norm(heading(pos, b) - obs.angle).abs() < FOV) {
+            if !(d < self.tune.senses.near || norm(heading(pos, b) - obs.angle).abs() < self.tune.senses.fov) {
                 continue;
             }
             let floor = self.nav.poly_at(b).map_or(0.0, |p| self.heights_now.get(self.nav.sector_of_poly(p)).map_or(0.0, |h| h.0));
@@ -580,7 +520,7 @@ impl Combat {
             }
             let n = self.infight.get(&t.id).copied().unwrap_or(0) + 1;
             now.insert(t.id, n);
-            if n == INFIGHT_TICS {
+            if n == self.tune.senses.infight_tics {
                 self.log.push(format!("tic {}: {} {} is fighting another: leaving it to it", obs.tic, t.name, t.id));
             }
         }
@@ -588,7 +528,7 @@ impl Combat {
     }
 
     pub fn infighting(&self, t: &Thing) -> bool {
-        self.infight.get(&t.id).copied().unwrap_or(0) >= INFIGHT_TICS
+        self.infight.get(&t.id).copied().unwrap_or(0) >= self.tune.senses.infight_tics
     }
 
     /// The monsters in sight that are after her (not each other).
@@ -614,9 +554,9 @@ impl Combat {
             .filter(|t| {
                 let d = dist((t.x, t.y), pos);
                 match mon(t.name).attack {
-                    Attack::Hitscan | Attack::Missile | Attack::Fire => d < ENGAGED_RANGED,
-                    Attack::Charge => d < ENGAGED_CHARGE,
-                    Attack::Melee => d < ENGAGED_MELEE,
+                    Attack::Hitscan | Attack::Missile | Attack::Fire => d < self.tune.engage.engaged_ranged,
+                    Attack::Charge => d < self.tune.engage.engaged_charge,
+                    Attack::Melee => d < self.tune.engage.engaged_melee,
                     Attack::None => false,
                 }
             })
@@ -646,7 +586,7 @@ impl Combat {
             .filter(|m| !m.awake && self.nav.poly_at(m.pos()).is_some_and(|p| heard.contains(&self.nav.sector_of_poly(p))))
             .collect();
         let hp: f64 = sleepers.iter().map(|m| f64::from(mon(m.name).health)).sum();
-        if sleepers.len() < 2 || hp / self.firepower(obs) <= LEAVE_BE {
+        if sleepers.len() < 2 || hp / self.firepower(obs) <= self.tune.engage.leave_be {
             return String::new();
         }
         let names: BTreeSet<&str> = sleepers.iter().map(|m| m.name).collect();
@@ -747,7 +687,7 @@ impl Combat {
             .iter()
             .filter(|t| {
                 let m = mon(t.name);
-                (matches!(m.attack, Attack::Melee | Attack::Charge | Attack::Fire) || m.melee) && dist((t.x, t.y), pos) < CLOSE + m.radius
+                (matches!(m.attack, Attack::Melee | Attack::Charge | Attack::Fire) || m.melee) && dist((t.x, t.y), pos) < self.tune.engage.close + m.radius
             })
             .cloned()
             .collect();
@@ -757,7 +697,7 @@ impl Combat {
         // (with something shooting in sight, or her shooting at something: a shot, hers or theirs,
         // sets a barrel off; E1M8's demons, biters only, fought among the barrels)
         if first_missile.is_none() && !busy && (shooting || target.is_some()) {
-            if let Some(b) = barrel.filter(|&b| dist(b, pos) < BARREL_CLEAR + 64.0) {
+            if let Some(b) = barrel.filter(|&b| dist(b, pos) < self.tune.barrels.keep_clear + 64.0) {
                 barrel_away = self.away_from_barrels(obs, b);
             }
         }
@@ -796,7 +736,7 @@ impl Combat {
 
     /// Give up on getting at id a while.
     pub(super) fn give_up(&mut self, obs: &Observation, id: i32) {
-        self.given_up.insert(id, obs.tic + GIVEN_UP_TICS);
+        self.given_up.insert(id, obs.tic + self.tune.engage.given_up_tics);
         self.log.push(format!("tic {}: can't get at {id}: leaving it a while", obs.tic));
     }
 
@@ -808,9 +748,9 @@ impl Combat {
             return false;
         }
         let since = *self.closing_since.entry(id).or_insert(obs.tic);
-        if obs.tic - since > CLOSE_GIVE_UP {
+        if obs.tic - since > self.tune.engage.close_give_up {
             self.closing_since.remove(&id);
-            self.given_up.insert(id, obs.tic + GIVEN_UP_TICS);
+            self.given_up.insert(id, obs.tic + self.tune.engage.given_up_tics);
             self.log.push(format!("tic {}: can't get at {id}: leaving it a while", obs.tic));
             return false;
         }
@@ -832,9 +772,9 @@ impl Combat {
             return false;
         }
         let (since, last) = self.no_shot_since.get(&t.id).copied().unwrap_or((obs.tic, obs.tic));
-        let since = if obs.tic - last > CLOSE_GIVE_UP { obs.tic } else { since };
+        let since = if obs.tic - last > self.tune.engage.close_give_up { obs.tic } else { since };
         self.no_shot_since.insert(t.id, (since, obs.tic));
-        if obs.tic - since > CLOSE_GIVE_UP {
+        if obs.tic - since > self.tune.engage.close_give_up {
             self.no_shot_since.remove(&t.id);
             self.give_up(obs, t.id);
             return true;
@@ -857,11 +797,11 @@ impl Combat {
         let s = self
             .remaining()
             .into_iter()
-            .filter(|s| s.awake && obs.tic - s.tic < LOST_TICS && mon(s.name).attack != Attack::None && dist(s.pos(), pos) < ENGAGE_RANGE)
+            .filter(|s| s.awake && obs.tic - s.tic < self.tune.engage.lost_tics && mon(s.name).attack != Attack::None && dist(s.pos(), pos) < self.tune.engage.range)
             .filter(|s| self.given_up.get(&s.id).is_none_or(|&until| obs.tic >= until))
             // (not after one she can't take on: out of its sight's where she wants to be; E3M8,
             // the spider mastermind gone behind something, walked after with a pistol)
-            .filter(|s| !self.too_much(obs, &[s.name], arsenal::OUTMATCHED))
+            .filter(|s| !self.too_much(obs, &[s.name], self.tune.guns.outmatched))
             .max_by(|a, b| mon(a.name).threat.total_cmp(&mon(b.name).threat))?;
         let mut ghost = self.alive.get(&s.id)?.clone();
         (ghost.x, ghost.y, ghost.z, ghost.vx, ghost.vy) = (s.x, s.y, s.z, 0.0, 0.0);
@@ -954,7 +894,7 @@ impl Combat {
     /// ACTIVE_CRUSHER tics, at the top of its stroke now or not. Where the fight's moves don't go
     /// (the user's: active crushers no-go), not just while it's on its way down.
     pub fn crusher_active(&self, obs: &Observation, s: usize) -> bool {
-        !self.doors.contains(&s) && self.crushed_low.get(s).is_some_and(|&t| obs.tic - t < ACTIVE_CRUSHER)
+        !self.doors.contains(&s) && self.crushed_low.get(s).is_some_and(|&t| obs.tic - t < self.tune.senses.active_crusher)
     }
 
     /// Is sector s a crusher she knows of, stopped (or not) too low to get out from under if it
@@ -970,14 +910,14 @@ impl Combat {
 
     pub fn crushing(&self, obs: &Observation, s: usize) -> bool {
         let gap = obs.heights.get(s).map_or(f64::INFINITY, |h| h.ceiling - h.floor);
-        (!self.doors.contains(&s) && self.ceiling_down.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < CRUSH_GAP)
-            || (!self.lifts.contains(&s) && self.floor_up.get(s).is_some_and(|&t| obs.tic - t < CRUSH_TICS) && gap < FLOOR_CRUSH_GAP)
+        (!self.doors.contains(&s) && self.ceiling_down.get(s).is_some_and(|&t| obs.tic - t < self.tune.senses.crush_tics) && gap < self.tune.senses.crush_gap)
+            || (!self.lifts.contains(&s) && self.floor_up.get(s).is_some_and(|&t| obs.tic - t < self.tune.senses.crush_tics) && gap < self.tune.senses.floor_crush_gap)
     }
 
     /// Health lost a second lately (over the last few seconds).
     pub fn damage_rate(&mut self, tic: i64) -> f64 {
-        self.damage.retain(|&(t, _)| tic - t < DAMAGE_WINDOW);
-        self.damage.iter().map(|(_, d)| d).sum::<f64>() / (DAMAGE_WINDOW as f64 / TICRATE)
+        self.damage.retain(|&(t, _)| tic - t < self.tune.senses.damage_window);
+        self.damage.iter().map(|(_, d)| d).sum::<f64>() / (self.tune.senses.damage_window as f64 / TICRATE)
     }
 
     /// Seconds till she's dead at the rate she's been losing health lately (a lot: not losing any).
@@ -1004,7 +944,7 @@ impl Combat {
     /// Invulnerable, with time enough left to make something of it (the last seconds counted out:
     /// not caught in the open as it wears off)?
     pub fn invulnerable(&self, tic: i64) -> bool {
-        tic < self.invulnerable_until - INVULNERABLE_SPARE
+        tic < self.invulnerable_until - self.tune.senses.invulnerable_spare
     }
 
     /// Her own BFG ball in the air: its spray comes from where she is when it lands, along the
@@ -1024,7 +964,7 @@ impl Combat {
             return (t.vx, t.vy);
         }
         match self.tracks.get(&t.id).and_then(|tr| Some((*tr.front()?, *tr.back()?))) {
-            Some(((t0, x0, y0), (t1, x1, y1))) if t1 - t0 >= TRACK_MIN => {
+            Some(((t0, x0, y0), (t1, x1, y1))) if t1 - t0 >= self.tune.senses.track_min => {
                 let dt = (t1 - t0) as f64;
                 ((x1 - x0) / dt, (y1 - y0) / dt)
             }
@@ -1069,23 +1009,23 @@ impl Combat {
 }
 
 /// How far a missile's middle has to pass from hers to miss (and its blast).
-fn clearance(m: &Missile) -> f64 {
-    hit_clearance(m) + if m.splash { SPLASH } else { 0.0 }
+fn clearance(tune: &Dodge, m: &Missile) -> f64 {
+    hit_clearance(tune, m) + if m.splash { SPLASH } else { 0.0 }
 }
 
 /// ...and this far, clear of the missile itself (its blast or not)
-fn hit_clearance(m: &Missile) -> f64 {
-    PLAYER_RADIUS + m.radius + DODGE_MARGIN
+fn hit_clearance(tune: &Dodge, m: &Missile) -> f64 {
+    PLAYER_RADIUS + m.radius + tune.margin
 }
 
 /// How near t comes to her as it goes by, if she runs `way` from now (stopped once she's gone
 /// `room`: a wall that way; a rocket by a wall she'd have run into met her there). A rocket's
 /// counted from its middle: its blast (the clearance) does the rest.
-fn miss_by(pos: Point, vel: Point, way: Point, room: f64, t: &Thing) -> f64 {
+fn miss_by(tune: &Dodge, pos: Point, vel: Point, way: Point, room: f64, t: &Thing) -> f64 {
     let (mut x, mut y) = pos;
     let (mut vx, mut vy) = vel;
     let mut nearest = f64::INFINITY;
-    for k in 1..=DODGE_TICS {
+    for k in 1..=tune.within_tics {
         vx += RUN_THRUST * way.0;
         vy += RUN_THRUST * way.1;
         if dist((x + vx, y + vy), pos) > room {

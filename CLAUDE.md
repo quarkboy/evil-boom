@@ -72,7 +72,11 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
 `tactical/combat/tree.rs` is the fight, a node a decision (see its header); `combat/arsenal.rs`
 which weapon; `combat/style.rs` how to fight with it; retreats are `Retreat`/`RetreatKind` in
 `tactical/player.rs`. New behaviour goes in as a node (or a style, a rule in `best_gun`), not as
-another case in a chain.
+another case in a chain. What the rest of her does about a fight decision goes by its `Move`
+(`combat/moves.rs`), never by its log label. A number that's a judgement (how near, how long,
+what it's worth) goes in `tactical/tuning.rs` (`Tuning`, read as `self.tune.<group>.<field>`;
+`evil-boom tuning` prints the defaults, `--tuning FILE` changes any of them for a run); a fact
+about the engine stays a `const` where it's used.
 
 ## Where things stand (2026-11-09)
 

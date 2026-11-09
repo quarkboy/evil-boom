@@ -27,7 +27,7 @@
 
 use super::moves::{HeldFire, Move};
 use super::style::{window, Style};
-use super::{mon, Combat, Decision, CLOSE_GIVE_UP, KEEP_CLEAR, LOW_HEALTH, STAND_THREAT};
+use super::{mon, Combat, Decision};
 use crate::geom::{dist, Point};
 use crate::motor::{heading, norm, Observation, Thing};
 use crate::navigator::PLAYER_RADIUS;
@@ -195,16 +195,6 @@ fn busy(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
 
 // --- up close ----------------------------------------------------------------------------------
 
-/// punching or sawing: this much inside the weapon's reach, centre to centre, she stops closing
-/// in (it steps about). Not more: up against a demon she's 46 off. (MAP22 HNTR: berserk, stood
-/// 68-77 off a chaingunner, inside the old 64-past-her-front-plus-its-radius, every punch short
-/// of its centre, 16 of its bullets to 10 health)
-pub(super) const MELEE_SLACK: f64 = 12.0;
-/// closing in to hit it in melee, no nearer by this much (units)...
-const MELEE_GAIN: f64 = 32.0;
-/// ...in this long (tics): it's out of her reach, given up a while
-const MELEE_STALL: i64 = 3 * 35;
-
 /// Straight at it, then standing at it hitting. The steering's pull to the gun's window, fine
 /// for a gun's 500 units, left her circling a revenant 100-200 off, never in the fist's reach,
 /// and holding the saw at a demon 99 off as it bit her (E3M4).
@@ -225,19 +215,19 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let (since, had) = *c.melee_since.entry(t.id).or_insert((obs.tic, t.health));
     if t.health < had {
         c.melee_since.insert(t.id, (obs.tic, t.health));
-    } else if obs.tic - since > CLOSE_GIVE_UP {
+    } else if obs.tic - since > c.tune.engage.close_give_up {
         c.melee_since.remove(&t.id);
         c.give_up(obs, t.id);
         return None;
     }
-    Some(if d > w.reach - MELEE_SLACK {
+    Some(if d > w.reach - c.tune.engage.melee_slack {
         // (nor closing in on what she gets no nearer: the way straight at it is blocked, a ledge
         // above her or a wall between, and the fist has nothing else; MAP14 HMP, out of ammo,
         // berserk, a chaingunner up on a ledge 300 off, walked at from below for 16 s of its
         // bullets, to death, with ammo known about)
-        let (nearest, at, _) = c.melee_nearest.get(&t.id).copied().filter(|&(_, _, last)| obs.tic - last <= MELEE_STALL).unwrap_or((d, obs.tic, obs.tic));
-        let (nearest, at) = if d < nearest - MELEE_GAIN { (d, obs.tic) } else { (nearest, at) };
-        if obs.tic - at > MELEE_STALL {
+        let (nearest, at, _) = c.melee_nearest.get(&t.id).copied().filter(|&(_, _, last)| obs.tic - last <= c.tune.engage.melee_stall).unwrap_or((d, obs.tic, obs.tic));
+        let (nearest, at) = if d < nearest - c.tune.engage.melee_gain { (d, obs.tic) } else { (nearest, at) };
+        if obs.tic - at > c.tune.engage.melee_stall {
             c.melee_nearest.remove(&t.id);
             if let Some(sector) = c.sector_at((t.x, t.y)) {
                 c.fist_stalled.insert(t.id, sector);
@@ -261,7 +251,7 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
 fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let pos = s.pos;
     let armed = c.armed(obs);
-    let nearest = s.close.iter().filter(|t| armed || s.health < LOW_HEALTH || claw_max(t.name) >= s.health).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
+    let nearest = s.close.iter().filter(|t| armed || s.health < c.tune.engage.low_health || claw_max(t.name) >= s.health).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
     let t = nearest.clone();
     let gun = c.preferred_gun(obs, &t);
     let moving = c.steer(obs, Some(&t), &gun).or_else(|| c.away_from(obs, (t.x, t.y)));
@@ -280,7 +270,7 @@ fn to_errand(c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
     let mut a = Act::new(Move::ToErrand, None, format!("shooting on the way to {}", s.errand));
     let way = c.toward.map(|to| heading(s.pos, to));
     let in_the_way = c.visible.iter().filter(|t| mon(t.name).attack != Attack::None).find(|t| {
-        dist((t.x, t.y), s.pos) < PLAYER_RADIUS + mon(t.name).radius + ERRAND_CONTACT && way.is_some_and(|w| norm(heading(s.pos, (t.x, t.y)) - w).abs() < 60.0)
+        dist((t.x, t.y), s.pos) < PLAYER_RADIUS + mon(t.name).radius + c.tune.engage.errand_contact && way.is_some_and(|w| norm(heading(s.pos, (t.x, t.y)) - w).abs() < 60.0)
     });
     if let Some(t) = in_the_way {
         a.aim = Some(heading(s.pos, (t.x, t.y)));
@@ -288,9 +278,6 @@ fn to_errand(c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
     }
     Some(a)
 }
-
-/// how far past touching a monster still stands in her way
-const ERRAND_CONTACT: f64 = 16.0;
 
 /// (MAP05, MAP11: out of ammo, fist out, walked up to imps to punch them)
 fn unarmed(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
@@ -355,7 +342,7 @@ fn fought(c: &Combat, obs: &Observation, s: &Situation, t: &Thing) -> bool {
 /// walked her up to the cyberdemon with a rocket or two short).
 fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let pos = s.pos;
-    let t = s.target.as_ref().filter(|t| s.outmatched && !fought(c, obs, s, t) && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < KEEP_CLEAR)?;
+    let t = s.target.as_ref().filter(|t| s.outmatched && !fought(c, obs, s, t) && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < c.tune.engage.keep_clear)?;
     let gun = c.preferred_gun(obs, t);
     let moving = c.steer(obs, Some(t), &gun);
     let mut a = Act::new(Move::KeepingClear, moving, format!("outmatched: keeping clear of {}", t.name));
@@ -419,7 +406,7 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         return None;
     }
     let duel = s.target.as_ref().is_some_and(|t| fought(c, obs, s, t));
-    if !(s.threat >= STAND_THREAT || s.health < LOW_HEALTH || duel || c.blocking(obs, s.target.as_ref())) {
+    if !(s.threat >= c.tune.engage.stand_threat || s.health < c.tune.engage.low_health || duel || c.blocking(obs, s.target.as_ref())) {
         return None;
     }
     let mut kind = Move::Standing;
@@ -428,7 +415,7 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         let gun = c.preferred_gun(obs, t);
         let d = dist((t.x, t.y), s.pos);
         let mut moving = c.steer(obs, Some(t), &gun);
-        if !Combat::in_reach(&gun, t, d) || d > window(&gun, t).1 {
+        if !c.in_reach(&gun, t, d) || d > window(&gun, t).1 {
             moving = moving.or_else(|| c.closing_in(obs, t, None));
             kind = Move::ClosingIn;
             why = format!("closing in on {}", t.name);

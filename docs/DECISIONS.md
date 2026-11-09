@@ -2106,3 +2106,31 @@ could name a decision.
 
 Nothing changes: the parity set (16 maps, HMP seed 1 and UV seed 2, 32 runs) is line for line the
 same as before.
+
+## Restructuring, step 2: the tactical layer's judgements in one `Tuning` (2026-11-09)
+
+The fight and the player judged by some 200 `const`s spread over eight files: fixed at compile
+time, so neither a tuning run nor a decision model could vary one.
+
+- `tactical/tuning.rs`: `Tuning`, 152 numbers in eleven groups by what they're about (`senses`,
+  `engage`, `dodge`, `barrels`, `steer`, `hide`, `aim`, `guns`, `errands`, `retreat`, `deaths`),
+  each with the comment its constant had. The defaults are the constants' values. The player owns
+  it (an `Rc`, the fight's `Combat` sharing it) and every rule reads `self.tune.<group>.<field>`;
+  the three free functions that needed one (`miss_by`, `clearance`, `hit_clearance`) take the
+  group; `in_reach` became a method.
+- What's a judgement and what's a fact: a number she could reasonably hold otherwise (a distance
+  kept, a give-up clock, a weight, a threshold of health or time-to-kill) moved; a number the
+  engine fixes (a rocket's speed and box, a blast's reach, autoaim's range, the BFG's delay, an
+  arch-vile's 66 tics), her own speed (`RUN`, `RUN_SPEED`, `GET_THERE`), and a search's
+  resolution or budget (`WAYS`, `PUSH_TICS`, `POST_LOOKS`, the trail's length) stayed `const`:
+  53 left in the tactical layer.
+- From outside: `evil-boom tuning` prints the defaults as JSON; `--tuning FILE` (any run option's
+  place; passed on to a sweep's processes) reads a file naming any groups and fields, a
+  misspelt name an error; `Player::set_tuning` swaps one in mid-level (for a decision model's
+  stance; nothing calls it yet).
+- Not moved yet: the explorer's and the follower's numbers (`knowledge/` 103, `motor/` 85), the
+  bestiary's two (`PUNCH_HEALTH`, `SAW_HEALTH`), the score's own run options. `score` doesn't
+  take `--tuning` yet (step 7's harness).
+
+Nothing changes: the parity set (32 runs) is line for line the same; a file changing three
+numbers does change the runs it's given to.

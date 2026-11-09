@@ -3,7 +3,7 @@
 
 use super::moves::HeldFire;
 use super::style::Style;
-use super::{mon, segment_point_distance, Combat, BARREL_CLEAR};
+use super::{mon, segment_point_distance, Combat};
 use crate::motor::follower::blast_gap;
 use crate::geom::{dist, Point};
 use crate::los::Body;
@@ -11,13 +11,6 @@ use crate::motor::{heading, norm, Observation, Thing};
 use crate::navigator::PLAYER_HEIGHT;
 use crate::tactical::bestiary::{monster, weapon_in, Attack};
 
-/// degrees a tic, turning to aim
-const AIM_TURN: f64 = 18.0;
-
-const TURN_ACCEL: f64 = 5.0;
-
-/// a barrel this near a monster (its chain all clear of her) is shot instead
-const BARREL_NEAR: f64 = 96.0;
 /// a barrel's blast is clear of her this far off (its 128 and her radius, and a little), by
 /// `blast_gap`...
 const BARREL_SAFE: f64 = 150.0;
@@ -28,23 +21,11 @@ const BARREL_RADIUS: f64 = 10.0;
 /// her missiles' radius, about (a rocket's 11, plasma's 13)
 const MISSILE_RADIUS: f64 = 13.0;
 
-/// getting clear of barrels: at most this long at a time...
-const BARREL_TICS: i64 = 2 * 35;
-
-/// ...then not again for this long (E1M7: pressed against a wall for ever)
-const BARREL_REST: i64 = 3 * 35;
-
 /// shots leave her this far above her feet...
 const SHOT_HEIGHT: f64 = 36.0;
 
 /// ...and find what they're aimed at only this steep
 const AUTOAIM: f64 = 100.0 / 160.0;
-
-/// a biter seen this lately near her rules out rockets
-const ROCKET_WARY: i64 = 3 * 35;
-
-/// a weapon switch asked for: give it this long before asking again
-pub(super) const SWITCH_WAIT: i64 = 40;
 
 /// tics from the trigger to the rocket (S_MISSILE1, then A_FireMissile)
 pub(super) const ROCKET_DELAY: f64 = 8.0;
@@ -53,15 +34,11 @@ const BFG_REACH: f64 = 1024.0;
 const BFG_CONE: f64 = 45.0;
 /// the BFG's ball leaves this long after the trigger
 pub(super) const BFG_DELAY: i64 = 30;
-/// with a boss in sight, others this far off aren't shot (left to it)
-const LEAVE_TO_BOSS: f64 = 384.0;
 /// a rocket's speed, a tic
 const ROCKET_SPEED: f64 = 20.0;
 
 /// a rocket's radius: it moves as a box this far each way along x and y, not a circle
 const ROCKET_RADIUS: f64 = 11.0;
-/// kept clear beyond the rocket's box each side of its way (a miss is better than a near thing)
-const ROCKET_MARGIN: f64 = 8.0;
 /// a rocket's bottom over her feet as it comes out, and its height
 const ROCKET_BOTTOM: f64 = 32.0;
 const ROCKET_HEIGHT: f64 = 8.0;
@@ -76,13 +53,6 @@ const PLASMA_RADIUS: f64 = 13.0;
 /// autoaim's line goes out from her feet + this (her middle and 8: P_AimLineAttack's shootz), as
 /// does a projectile's middle (it comes out at her feet + 32, 8 high)
 const AIM_HEIGHT: f64 = 36.0;
-
-/// with a hitscanner about, a monster she'd be longer than this many seconds killing isn't put
-/// first (`priority`)
-const KILL_FIRST: f64 = 8.0;
-
-/// a pain elemental nearer than this isn't shot with rockets (its souls come out in front)
-const PAIN_NEAR: f64 = 512.0;
 
 /// What's to be killed first, beyond its damage: an arch-vile raises the rest, a pain elemental
 /// keeps making more; a lost soul's only worth it once it's near.
@@ -108,7 +78,7 @@ impl Combat {
             // it'd take is the hitscanner's to shoot her in. MAP11 UV from a pistol start: a pain
             // elemental the target, 16 s of pistol, kept clear of while shotgun guys shot her dead)
             let long = f64::from(info.health) / self.firepower_on(obs, Some(&info)).max(1.0);
-            let first = if long > KILL_FIRST && hitscanners.iter().any(|&h| h != t.id) { 1.0 } else { priority(t.name, d) };
+            let first = if long > self.tune.aim.kill_first && hitscanners.iter().any(|&h| h != t.id) { 1.0 } else { priority(t.name, d) };
             let mut s = (info.threat + 1.0) * first / (d + 192.0) * if Some(t.id) == self.target { 1.6 } else { 1.0 };
             let off = norm(heading(pos, (t.x, t.y)) - obs.angle).abs();
             s *= 1.0 - off.min(150.0) / 300.0; // (rather what's in front than what's behind)
@@ -160,7 +130,7 @@ impl Combat {
         let slot = if Style::of(&preferred, t) == Style::Melee { preferred.slot } else { self.weapon_for(obs, t, d) };
         let mut weapon = 0;
         let held = obs.weapon.unwrap_or(2);
-        if slot != held && obs.tic - self.switch_tic > SWITCH_WAIT {
+        if slot != held && obs.tic - self.switch_tic > self.tune.aim.switch_wait {
             weapon = slot;
             self.switch_tic = obs.tic;
             self.log.push(format!("tic {}: switching to {slot} (holding {held}) for {} {d:.0} off", obs.tic, t.name));
@@ -178,13 +148,13 @@ impl Combat {
         let info = mon(t.name);
         let tolerance = 1.5f64.max((info.radius * 0.7).atan2(d.max(1.0)).to_degrees());
         let on = norm(aim - obs.angle).abs() < tolerance;
-        let held_fire = if !Self::in_reach(&w, t, d) {
+        let held_fire = if !self.in_reach(&w, t, d) {
             Some(HeldFire::OutOfReach)
         } else if held == 5 && (!self.rocket_safe(obs, t) || blocked) {
             Some(HeldFire::RocketNotSafe)
         } else if held == 6 && !self.projectile_reaches(obs, t, pos, PLASMA_RADIUS) {
             Some(HeldFire::PlasmaBlocked)
-        } else if !mon(t.name).boss && d > LEAVE_TO_BOSS && self.visible.iter().any(|b| b.id != t.id && mon(b.name).boss) {
+        } else if !mon(t.name).boss && d > self.tune.aim.leave_to_boss && self.visible.iter().any(|b| b.id != t.id && mon(b.name).boss) {
             // (a boss in sight: the others left to it, not near her; its fire lands on them and
             // they turn on it, her ammo kept for it. The user's: infighting, E3M8 from a pistol
             // start, 1400 of 3000-odd damage's worth of ammo spent on two cacodemons and a baron,
@@ -254,11 +224,11 @@ impl Combat {
         };
         [now, then].into_iter().all(|pos| {
             let d = dist((t.x, t.y), pos).max(1.0);
-            let len = d.min(ROCKET_CLEAR / after + ROCKET_MARGIN);
+            let len = d.min(ROCKET_CLEAR / after + self.tune.aim.rocket_margin);
             let to = ((mid - centre) / d).clamp(-AUTOAIM, AUTOAIM);
             let (h, seen, middle) = self.autoaim(obs, pos, obs.angle);
-            [heading(pos, (t.x, t.y)), obs.angle].into_iter().all(|h| self.rocket_flies(obs, pos, h, len, to, (ROCKET_RADIUS, ROCKET_MARGIN)))
-                && [seen, middle].into_iter().all(|slope| self.rocket_flies(obs, pos, h, len, slope, (ROCKET_RADIUS, ROCKET_MARGIN)))
+            [heading(pos, (t.x, t.y)), obs.angle].into_iter().all(|h| self.rocket_flies(obs, pos, h, len, to, (ROCKET_RADIUS, self.tune.aim.rocket_margin)))
+                && [seen, middle].into_iter().all(|slope| self.rocket_flies(obs, pos, h, len, slope, (ROCKET_RADIUS, self.tune.aim.rocket_margin)))
         })
     }
 
@@ -380,9 +350,10 @@ impl Combat {
     pub(super) fn rocket_way_out(&mut self, obs: &Observation) -> Option<f64> {
         let pos = obs.pos();
         // (each way as autoaim will take it from there)
+        let margin = self.tune.aim.rocket_margin;
         let goes = |c: &mut Self, facing: f64| {
             let (h, seen, middle) = c.autoaim(obs, pos, facing);
-            [seen, middle].into_iter().all(|slope| c.rocket_flies(obs, pos, h, ROCKET_CLEAR, slope, (ROCKET_RADIUS, ROCKET_MARGIN)))
+            [seen, middle].into_iter().all(|slope| c.rocket_flies(obs, pos, h, ROCKET_CLEAR, slope, (ROCKET_RADIUS, margin)))
         };
         if goes(self, obs.angle) {
             return None;
@@ -427,7 +398,7 @@ impl Combat {
             .iter()
             .flatten()
             .copied()
-            .filter(|&b| dist(b, obs.pos()) > BARREL_CLEAR + 64.0 && self.visible.iter().any(|t| dist(b, (t.x, t.y)) < BARREL_NEAR + mon(t.name).radius) && Self::chain_clear(obs, b))
+            .filter(|&b| dist(b, obs.pos()) > self.tune.barrels.keep_clear + 64.0 && self.visible.iter().any(|t| dist(b, (t.x, t.y)) < self.tune.barrels.by_monster + mon(t.name).radius) && Self::chain_clear(obs, b))
             .collect();
         let pos = obs.pos();
         if barrels.is_empty() {
@@ -515,12 +486,12 @@ impl Combat {
         }
         if self.barrel_way.is_none() {
             self.barrel_since = obs.tic;
-        } else if obs.tic - self.barrel_since > BARREL_TICS {
+        } else if obs.tic - self.barrel_since > self.tune.barrels.clear_tics {
             self.barrel_way = None;
-            self.barrel_rest_until = obs.tic + BARREL_REST;
+            self.barrel_rest_until = obs.tic + self.tune.barrels.clear_rest;
             return None;
         }
-        if dist(nearest, pos) >= BARREL_CLEAR + if self.barrel_way.is_some() { 64.0 } else { 0.0 } {
+        if dist(nearest, pos) >= self.tune.barrels.keep_clear + if self.barrel_way.is_some() { 64.0 } else { 0.0 } {
             self.barrel_way = None;
             return None;
         }
@@ -541,7 +512,7 @@ impl Combat {
     fn clear_of_barrels(&self, obs: &Observation, d: Point) -> bool {
         let pos = obs.pos();
         let ahead = (pos.0 + d.0 * 96.0, pos.1 + d.1 * 96.0);
-        obs.barrels.iter().flatten().filter(|&&b| dist(b, pos) < BARREL_CLEAR || dist(b, ahead) < BARREL_CLEAR).all(|&b| dist(b, ahead) > dist(b, pos))
+        obs.barrels.iter().flatten().filter(|&&b| dist(b, pos) < self.tune.barrels.keep_clear || dist(b, ahead) < self.tune.barrels.keep_clear).all(|&b| dist(b, ahead) > dist(b, pos))
     }
 
     /// How far off a rocket's burst must be from her: its blast and a margin.
@@ -568,7 +539,7 @@ impl Combat {
                 return false;
             }
         }
-        if t.name == "PainElemental" && dist((t.x, t.y), pos) < PAIN_NEAR {
+        if t.name == "PainElemental" && dist((t.x, t.y), pos) < self.tune.aim.pain_near {
             return false; // (the souls it spits out come between: E... dead at 90 health, one 28 off)
         }
         // (each with how far it could come into the way while the rocket's near her: none for
@@ -587,7 +558,7 @@ impl Combat {
         others.extend(
             self.remaining()
                 .iter()
-                .filter(|m| m.id != t.id && obs.tic - m.tic < ROCKET_WARY && matches!(mon(m.name).attack, Attack::Melee | Attack::Charge))
+                .filter(|m| m.id != t.id && obs.tic - m.tic < self.tune.aim.rocket_wary && matches!(mon(m.name).attack, Attack::Melee | Attack::Charge))
                 .map(|m| (m.x, m.y, mon(m.name).radius, 128.0)),
         );
         // (the leeway only for coming into the way: a rocket bursts on it only there, and one
@@ -615,8 +586,8 @@ impl Combat {
             return 0.0;
         };
         let err = norm(aim - obs.angle);
-        let want = AIM_TURN.min((2.0 * TURN_ACCEL * err.abs()).sqrt()).min(err.abs()).copysign(err);
-        self.rate = (self.rate - TURN_ACCEL).max((self.rate + TURN_ACCEL).min(want));
+        let want = self.tune.aim.aim_turn.min((2.0 * self.tune.aim.turn_accel * err.abs()).sqrt()).min(err.abs()).copysign(err);
+        self.rate = (self.rate - self.tune.aim.turn_accel).max((self.rate + self.tune.aim.turn_accel).min(want));
         if err.abs() < 1.0 {
             self.rate = err;
         }

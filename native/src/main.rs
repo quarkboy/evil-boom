@@ -12,6 +12,8 @@
 //!   evil-boom score-report FILE...                   the report of score TSVs (more: how far apart)
 //!   evil-boom score-watch FILE [--total N]           a score's progress in a small window (`score`
 //!                                               opens one unless --no-window)
+//!   evil-boom tuning                                 the numbers she judges a fight by, as JSON: a file
+//!                                               to change and give a run with --tuning FILE
 //!   evil-boom dump-nav <wad> <map>                   the level's analysis (for comparing)
 //!   evil-boom neuro-mock [--port N] [FILE]           a stand-in Neuro server (port 8000): actions sent
 //!                                               from FILE (out/neuro/actions.txt) as lines are added,
@@ -522,6 +524,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
         stall_seconds: o.stall_seconds,
         carry: o.carry.clone(),
         episode: false,
+        tuning: o.tuning.clone(),
         headless: false,
         paced: false,
         max_seconds: o.max_seconds,
@@ -761,6 +764,10 @@ fn main() -> ExitCode {
         Some("drive") => drive(&args[1..]),
         Some("sweep") => sweep(&args[1..]),
         Some("score") => evildoom::score::run(&args[1..]),
+        Some("tuning") => {
+            println!("{}", evildoom::tactical::tuning::Tuning::default().json());
+            Ok(())
+        }
         Some("score-report") if args.len() >= 2 => evildoom::score::report_files(&args[1..]),
         #[cfg(feature = "viewer")]
         Some("score-watch") => evildoom::score::watch(&args[1..]),
