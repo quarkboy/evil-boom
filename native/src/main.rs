@@ -29,7 +29,7 @@
 //!   evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
 //!       [--crf N] [--preset P] [--ffmpeg PATH] [--gpt [CONFIG]] [--neuro URL] [run options]   a watch
 //!       played as fast as it goes into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told);
-//!       directed (--gpt, --neuro, --directed), in real time
+//!       directed (--gpt, --neuro, --directed), in real time; at x1, with the game's sound
 //!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [--directed FILE] [--neuro URL] [--gpt [CONFIG]] [--headless] [run options]
 //!       watch her play, with what she knows beside the game, the game's sound on (space pause,
 //!       +/- speed, A the whole map, F follow, M mute, L Evil's log, T text size, wheel zoom, Esc quit; the sound off while
@@ -489,6 +489,8 @@ fn record(args: &[String]) -> Result<(), String> {
     }
     let (mut w, names, _) = watch_options(&rest)?;
     let [wad, map, out] = names.as_slice() else { return Err("usage: evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode] [options]".into()) };
+    // (the game's sound, at x1: each tic's beside each frame)
+    w.capture_sound = every == 1;
     if let Some(config) = &w.gpt {
         // (the stand-in in this program, as watch has it; directed, it plays in real time)
         w.neuro = Some(evildoom::neuro::gpt::start(config)?);
@@ -523,6 +525,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
         directed: None,
         neuro: None,
         gpt: None,
+        capture_sound: false,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();

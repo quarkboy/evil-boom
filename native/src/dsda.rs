@@ -133,6 +133,8 @@ type GiveFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int, c_int, c_int, c_i
 type ClearFn = unsafe extern "C" fn() -> c_int;
 type ResetIdsFn = unsafe extern "C" fn();
 type HitsFn = unsafe extern "C" fn(*mut c_int, c_int) -> c_int;
+type GrabSoundFn = unsafe extern "C" fn(*mut i16, c_int) -> c_int;
+type SoundRateFn = unsafe extern "C" fn() -> c_int;
 
 static LOADED: AtomicBool = AtomicBool::new(false);
 
@@ -158,6 +160,8 @@ pub struct Dsda {
     clear_fn: Option<ClearFn>,
     reset_ids_fn: Option<ResetIdsFn>,
     hits_fn: Option<HitsFn>,
+    grab_sound_fn: Option<GrabSoundFn>,
+    sound_rate_fn: Option<SoundRateFn>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
     _argv: Vec<CString>,
     _argv_ptrs: Vec<*mut c_char>,
@@ -207,6 +211,10 @@ impl Dsda {
         let reset_ids_fn = sym(b"evil_reset_ids").ok().map(|p| unsafe { std::mem::transmute::<*const (), ResetIdsFn>(p) });
         // SAFETY: as above, evil_hits_since's signature; optional.
         let hits_fn = sym(b"evil_hits_since").ok().map(|p| unsafe { std::mem::transmute::<*const (), HitsFn>(p) });
+        // SAFETY: as above, evil_grab_sound's signature; optional.
+        let grab_sound_fn = sym(b"evil_grab_sound").ok().map(|p| unsafe { std::mem::transmute::<*const (), GrabSoundFn>(p) });
+        // SAFETY: as above, evil_sound_rate's signature; optional.
+        let sound_rate_fn = sym(b"evil_sound_rate").ok().map(|p| unsafe { std::mem::transmute::<*const (), SoundRateFn>(p) });
         let argv: Vec<CString> =
             std::iter::once("evil".to_string()).chain(args.iter().cloned()).map(CString::new).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
         let mut argv_ptrs: Vec<*mut c_char> = argv.iter().map(|a| a.as_ptr().cast_mut()).collect();
@@ -231,6 +239,8 @@ impl Dsda {
             clear_fn,
             reset_ids_fn,
             hits_fn,
+            grab_sound_fn,
+            sound_rate_fn,
             _argv: argv,
             _argv_ptrs: argv_ptrs,
             _lib: lib,
@@ -251,6 +261,23 @@ impl Dsda {
         // SAFETY: plain values into the game; see `load`.
         unsafe { f(power, tics) };
         true
+    }
+
+    /// The game's sound for the next `samples` sample frames, mixed now (16-bit stereo,
+    /// interleaved), and its sample rate; None without -evilsoundcap (or the call).
+    pub fn grab_sound(&self, samples: usize) -> Option<(u32, Vec<i16>)> {
+        let f = self.grab_sound_fn?;
+        let mut out = vec![0i16; samples * 2];
+        // SAFETY: out holds 2 * samples shorts, all the call writes; see `load`.
+        let rate = unsafe { f(out.as_mut_ptr(), c_int::try_from(samples).ok()?) };
+        u32::try_from(rate).ok().filter(|&r| r > 0).map(|r| (r, out))
+    }
+
+    /// The sound's sample rate (None without the call, or no sound).
+    pub fn sound_rate(&self) -> Option<u32> {
+        let f = self.sound_rate_fn?;
+        // SAFETY: no arguments; see `load`.
+        u32::try_from(unsafe { f() }).ok().filter(|&r| r > 0)
     }
 
     /// Sound on or off (with the game's sound up: a watcher's); no effect without the call.

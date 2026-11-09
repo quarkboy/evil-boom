@@ -44,6 +44,7 @@
 #include "dsda/pause.h"
 #include "dsda/configuration.h"
 #include "s_sound.h"
+#include "i_sound.h"
 
 #ifdef _WIN32
 #define EVIL_API __declspec(dllexport)
@@ -108,9 +109,20 @@ static int exited, secret_exit;
 static double fx(fixed_t v) { return v / 65536.0; }
 static double degrees(angle_t a) { return a * (360.0 / 4294967296.0); }
 
-/* argv as for dsda-doom.exe (-iwad, -skill, -warp, -nodraw, ...). Returns 0 when ready. */
+/* argv as for dsda-doom.exe (-iwad, -skill, -warp, -nodraw, ...), and one of ours: -evilsoundcap,
+ * the sound mixed for the caller (evil_grab_sound) instead of played, as DSDA's video dump has it
+ * (taken out before the game sees the arguments). Returns 0 when ready. */
 EVIL_API int evil_init(int argc, char **argv)
 {
+  int i, kept = 0;
+  for (i = 0; i < argc; i++)
+  {
+    if (!strcmp(argv[i], "-evilsoundcap"))
+      I_SetSoundCap();
+    else
+      argv[kept++] = argv[i];
+  }
+  argc = kept;
   dsda_ParseCommandLineArgs(argc, argv);
   M_LoadDefaults();
   I_PreInitGraphics();
@@ -284,6 +296,27 @@ EVIL_API void evil_sound(int on)
   S_ResetVolume();
   if (!on)
     S_Stop();
+}
+
+/* The game's sound for the next `samples` sample frames (16-bit stereo, interleaved: out holds
+ * 2 * samples), mixed now, as DSDA's video dump takes it a frame at a time; only with
+ * -evilsoundcap. Returns the sample rate, or 0 if there's none to take. A recording's: a tic's
+ * worth after each tic. */
+EVIL_API int evil_grab_sound(short *out, int samples)
+{
+  extern int snd_samplerate;
+  unsigned char *got = I_GrabSound(samples);
+  if (!got)
+    return 0;
+  memcpy(out, got, (size_t)samples * 4);
+  return snd_samplerate;
+}
+
+/* The sound's sample rate (what evil_grab_sound's samples are at). */
+EVIL_API int evil_sound_rate(void)
+{
+  extern int snd_samplerate;
+  return snd_samplerate;
 }
 
 /* Draw the frame as the game would (the player's view, the status bar) and copy it out as

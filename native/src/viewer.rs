@@ -260,6 +260,8 @@ pub struct WatchOptions {
     pub neuro: Option<String>,
     /// directed by the GPT stand-in, started in this program (its config; `neuro` set to it)
     pub gpt: Option<std::path::PathBuf>,
+    /// the game's sound taken a tic at a time, not played (a recording at x1)
+    pub capture_sound: bool,
 }
 
 /// A watched game's orders, from a file added to as it plays.
@@ -393,7 +395,7 @@ fn first_watch(wad: &str, map_name: &str, o: &WatchOptions, sound: bool) -> Resu
     let mut nav = Navigator::new(Arc::clone(&m), skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
-    let mut engine = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn: true, sound, seed: o.seed })?;
+    let mut engine = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn: true, sound, capture: o.capture_sound, seed: o.seed })?;
     engine.carry.clone_from(&o.carry);
     engine.start();
     if !o.mortal {
@@ -477,10 +479,16 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
     if let Some(dir) = r.out.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
+    // (at x1, the game's sound too: taken a tic at a time beside the frames, put with them at the
+    // end; the user's)
+    let video_out = if o.capture_sound { r.out.with_extension("video.mp4") } else { r.out.clone() };
+    let audio_out = r.out.with_extension("audio.raw");
+    let mut audio = if o.capture_sound { Some(std::io::BufWriter::new(std::fs::File::create(&audio_out).map_err(|e| format!("{}: {e}", audio_out.display()))?)) } else { None };
+    let mut audio_rate = 0;
     let mut ff = std::process::Command::new(&r.ffmpeg)
         .args(["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr0", "-s", &format!("{fw}x{fh}"), "-r", "35", "-i", "-"])
         .args(["-vf", &scale, "-c:v", "libx264", "-preset", &r.preset, "-crf", &r.crf.to_string(), "-pix_fmt", "yuv420p"])
-        .arg(&r.out)
+        .arg(&video_out)
         .stdin(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| format!("{}: {e}", r.ffmpeg.display()))?;
@@ -508,6 +516,11 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
                 }
             }
             watch.tic();
+            if let (Some(file), Some((rate, samples))) = (audio.as_mut(), watch.engine.grab_tic_sound()) {
+                audio_rate = rate;
+                let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+                file.write_all(&bytes).map_err(|e| format!("{}: {e}", audio_out.display()))?;
+            }
             n += 1;
             if !n.is_multiple_of(u64::from(r.every.max(1))) {
                 continue;
@@ -569,6 +582,30 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
     let status = ff.wait().map_err(|e| e.to_string())?;
     if !status.success() {
         return Err(format!("ffmpeg failed ({status})"));
+    }
+    if let Some(mut file) = audio.take() {
+        file.flush().map_err(|e| e.to_string())?;
+        drop(file);
+        if audio_rate == 0 {
+            // (no sound to be had from this library: the video as it is)
+            std::fs::rename(&video_out, &r.out).map_err(|e| e.to_string())?;
+            println!("(no sound: the engine library has no capture; rebuild it with tools/build-engine.sh)");
+        } else {
+            let muxed = std::process::Command::new(&r.ffmpeg)
+                .args(["-y", "-loglevel", "error", "-i"])
+                .arg(&video_out)
+                .args(["-f", "s16le", "-ar", &audio_rate.to_string(), "-ac", "2", "-i"])
+                .arg(&audio_out)
+                .args(["-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-shortest"])
+                .arg(&r.out)
+                .status()
+                .map_err(|e| e.to_string())?;
+            if !muxed.success() {
+                return Err(format!("ffmpeg putting the sound with the video failed ({muxed}); the parts are {} and {}", video_out.display(), audio_out.display()));
+            }
+            let _ = std::fs::remove_file(&video_out);
+        }
+        let _ = std::fs::remove_file(&audio_out);
     }
     println!("written {}", r.out.display());
     Ok(())

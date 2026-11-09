@@ -45,13 +45,16 @@ pub struct Options {
     pub drawn: bool,
     /// the game's sound and music, out loud (a watcher's)
     pub sound: bool,
+    /// the game's sound mixed for the caller to take a tic at a time (`grab_sound`), not played
+    /// (a recording's)
+    pub capture: bool,
     /// the game's random numbers from this (testing); None: the clock, as in a real game
     pub seed: Option<u32>,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Options { skill: 3, nomonsters: true, objects: false, drawn: false, sound: false, seed: None }
+        Options { skill: 3, nomonsters: true, objects: false, drawn: false, sound: false, capture: false, seed: None }
     }
 }
 
@@ -87,7 +90,7 @@ impl Engine {
         set_env_default("DOOMDATADIR", &data);
         // (SDL's dummy drivers while the game sets itself up: no sound device, and drawn or not
         // nothing goes to a window of its own)
-        if o.sound {
+        if o.sound && !o.capture {
             // (the system's own, unless one's asked for; not the dummy one set before)
             if std::env::var_os("SDL_AUDIODRIVER").is_some_and(|v| v == "dummy") {
                 std::env::remove_var("SDL_AUDIODRIVER");
@@ -102,7 +105,9 @@ impl Engine {
         let warp: Vec<String> = if map_name.to_uppercase().starts_with("MAP") { vec![map.to_string()] } else { vec![episode.to_string(), map.to_string()] };
         let mut args: Vec<String> =
             ["-iwad", &iwad.to_string_lossy(), "-nomouse", "-skill", &o.skill.to_string()].iter().map(|s| s.to_string()).collect();
-        if !o.sound {
+        if o.capture {
+            args.push("-evilsoundcap".into()); // (a dummy device: mixed for her, not played)
+        } else if !o.sound {
             args.extend(["-nosound".to_string(), "-nomusic".to_string()]);
         }
         if !o.drawn {
@@ -116,7 +121,7 @@ impl Engine {
         let dirs = dll_dirs();
         let game = Dsda::load(&library(), &dirs.iter().map(PathBuf::as_path).collect::<Vec<_>>(), &args)?;
         game.seed(o.seed);
-        if o.sound {
+        if o.sound || o.capture {
             game.sound(true);
         }
         Ok(Engine {
@@ -192,6 +197,13 @@ impl Engine {
     /// The sound on or off for now (paused, or not at the game's own speed); with it up only.
     pub fn sound(&self, on: bool) {
         self.game.sound(on);
+    }
+
+    /// A tic's worth of the game's sound (with `capture`): 16-bit stereo, interleaved, and its
+    /// sample rate. None without capture.
+    pub fn grab_tic_sound(&self) -> Option<(u32, Vec<i16>)> {
+        let rate = self.game.sound_rate()?;
+        self.game.grab_sound((rate as usize).div_ceil(crate::motor::TICRATE as usize))
     }
 
     pub fn set_god(&mut self) {

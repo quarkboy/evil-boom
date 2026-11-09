@@ -171,7 +171,7 @@ pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool, sound: bool) -> Res
     let mut nav = Navigator::new(Arc::clone(&m), s.skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
-    let mut e = Engine::new(&iwad, &s.map, &Options { skill: s.skill, nomonsters: true, objects: true, drawn, sound, seed })?;
+    let mut e = Engine::new(&iwad, &s.map, &Options { skill: s.skill, nomonsters: true, objects: true, drawn, sound, capture: false, seed })?;
     e.start();
     // (a tic for the level to be there)
     e.step(&Controls::default());

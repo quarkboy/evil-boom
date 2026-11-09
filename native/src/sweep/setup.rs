@@ -61,7 +61,7 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Opt
     let fresh = engine.is_none();
     let mut e = match engine {
         Some(e) => e,
-        None => Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert || o.things, drawn, sound: false, seed: o.seed })?,
+        None => Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert || o.things, drawn, sound: false, capture: false, seed: o.seed })?,
     };
     e.carry.clone_from(&o.carry);
     if fresh {
