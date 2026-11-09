@@ -392,6 +392,13 @@ impl RouteFollower {
             self.brake_until = obs.tic + 2 * 35;
             return self.walk(obs);
         }
+        // still short of the takeoff and stopped, a quarter second into the sprint: something's
+        // in the way (a monster's body: MAP05, imps clawing her for four seconds of pushing at
+        // them). The jump's off; the route too, so the fight has the legs again
+        if flown < 0.0 && obs.tic - since > 8 && self.motion.speed() < 2.0 {
+            self.sprint = None;
+            return self.fail(obs, "run-jump blocked short of the takeoff");
+        }
         let diff = norm(jump.facing(hd) - obs.angle);
         self.motion.rate = 0.0;
         let push = flown < if jump.soft { jump.release } else { dist(jump.takeoff, jump.dest) - 8.0 };

@@ -1226,3 +1226,26 @@ Results (HNTR, one life): E1 8.0 (8/8), E2 7.1 -> 7.8 (6/8 through; only E2M8 st
 6.8 (3 -> 0/8; E3M8 six times, E3M4 twice), Doom II 27 -> 25/32 (MAP12 seeds 0 and 3, MAP05 seed 3:
 the runs part by two tics at a door no longer taken for a crusher; latent, for the Doom II pass);
 arenas unchanged.
+
+## Level campaign, round 5: a blocked sprint, a melee she can't land, a monster in an errand's way (2026-11-09)
+
+Round 5: E3M9, Doom II MAP03, MAP04, MAP05.
+
+- **A run-jump's sprint stopped short of the takeoff is blocked** (MAP05 HMP: imps at the takeoff,
+  the sprint pushed into them for its 4 s with the route keeping the legs, 173 health to dead):
+  still short and under 2 a tic a quarter second in, the sprint's off and the route fails; the
+  fight has the legs again. Not counted a missed jump.
+- **A melee that doesn't hurt it is given up** (MAP05 ITYTD stuck: a demon a floor below, in the
+  fist's reach across but too steep to hit, "at it" resetting the clock for 3200 s): the give-up
+  clock goes back only when the target's health does.
+- **A monster in an errand's way is shot first** (MAP04 HMP: a zombieman in the doorway on the way
+  to the shotgun, pushed against for 80 tics while she aimed at the shotgun guys behind, shot down):
+  on an errand, one that attacks, touching-near and within 60 degrees of the way, is turned to and
+  shot (the route keeps the legs). MAP04 HMP seed 0 exits (died at 12 s).
+- Dropped after the regression set: a retreat taken over only by escaping moves, the errand held
+  while retreating (MAP03 UV seed 0 exited with it): arenas 119 -> 115/128 and 226 -> 222/240.
+- Traced, not fixed: E3M9 UV (out of ammo among imps from a door, shots spread over the crowd);
+  MAP03 HMP (backed out of an ambush, the route straight back up the lift into it).
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 7.8 -> 7.9 (7/8 through), E3 6.8 -> 6.2 (0 -> 1/8; E3M6's
+teleporter stuck, E3M9's arrival), Doom II 25 -> 26/32; arenas unchanged.

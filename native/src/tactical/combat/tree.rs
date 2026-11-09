@@ -28,7 +28,8 @@
 use super::style::{window, Style};
 use super::{mon, Combat, Decision, CLOSE_GIVE_UP, KEEP_CLEAR, LOW_HEALTH, STAND_THREAT};
 use crate::geom::{dist, Point};
-use crate::motor::{heading, Observation, Thing};
+use crate::motor::{heading, norm, Observation, Thing};
+use crate::navigator::PLAYER_RADIUS;
 use crate::tactical::bestiary::{claw_max, Attack};
 
 /// The fight as it stands this tic, sized up before the tree.
@@ -197,18 +198,21 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         return None;
     }
     let d = dist((t.x, t.y), s.pos);
+    // (not for ever: one she can't hurt, given up a while, as out of reach is; E3M4, a demon
+    // closed in on and lost sight of, round and round, an hour. The clock goes back only when
+    // it's hurt, not when it's near: a demon on a floor below, close across but out of the
+    // fist's slope, "at" it and off again for an hour, never hit, MAP05 ITYTD)
+    let (since, had) = *c.melee_since.entry(t.id).or_insert((obs.tic, t.health));
+    if t.health < had {
+        c.melee_since.insert(t.id, (obs.tic, t.health));
+    } else if obs.tic - since > CLOSE_GIVE_UP {
+        c.melee_since.remove(&t.id);
+        c.give_up(obs, t.id);
+        return None;
+    }
     Some(if d > w.reach + mon(t.name).radius - MELEE_SLACK {
-        // (not for ever: one she can't get at, given up a while, as out of reach is; E3M4, a
-        // demon closed in on and lost sight of, round and round, an hour)
-        let since = *c.melee_since.entry(t.id).or_insert(obs.tic);
-        if obs.tic - since > CLOSE_GIVE_UP {
-            c.melee_since.remove(&t.id);
-            c.give_up(obs, t.id);
-            return None;
-        }
         Act::new(c.closing_in(obs, t, None), format!("closing in on {} (melee)", t.name))
     } else {
-        c.melee_since.remove(&t.id);
         Act::new(None, format!("at {} (melee)", t.name))
     })
 }
@@ -230,9 +234,28 @@ fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
     Some(Act::new(moving, why))
 }
 
-fn to_errand(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
-    (!s.errand.is_empty()).then(|| Act::new(None, format!("shooting on the way to {}", s.errand)))
+/// On to the errand, shooting on the way; turned to a monster standing against her on the way to
+/// it (the route only pushes into its body): it's shot first. (MAP04, HMP: on her way to a
+/// shotgun, a zombieman in the doorway, 80 tics pushed into while she shot at the shotgun guys
+/// beyond, shot down there.)
+fn to_errand(c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
+    if s.errand.is_empty() {
+        return None;
+    }
+    let mut a = Act::new(None, format!("shooting on the way to {}", s.errand));
+    let way = c.toward.map(|to| heading(s.pos, to));
+    let in_the_way = c.visible.iter().filter(|t| mon(t.name).attack != Attack::None).find(|t| {
+        dist((t.x, t.y), s.pos) < PLAYER_RADIUS + mon(t.name).radius + ERRAND_CONTACT && way.is_some_and(|w| norm(heading(s.pos, (t.x, t.y)) - w).abs() < 60.0)
+    });
+    if let Some(t) = in_the_way {
+        a.aim = Some(heading(s.pos, (t.x, t.y)));
+        a.why = format!("shooting on the way to {}: {} in the way", s.errand, t.name);
+    }
+    Some(a)
 }
+
+/// how far past touching a monster still stands in her way
+const ERRAND_CONTACT: f64 = 16.0;
 
 /// (MAP05, MAP11: out of ammo, fist out, walked up to imps to punch them)
 fn unarmed(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {

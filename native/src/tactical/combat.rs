@@ -247,8 +247,9 @@ pub struct Combat {
     closing_since: BTreeMap<i32, i64>,
     /// ...and given up on till when
     given_up: BTreeMap<i32, i64>,
-    /// closing in on each to get at it in melee, since when (given up after a while, as out of reach)
-    pub(super) melee_since: BTreeMap<i32, i64>,
+    /// fighting each in melee without hurting it, since when, and its health then (given up
+    /// after a while, as out of reach)
+    pub(super) melee_since: BTreeMap<i32, (i64, i32)>,
     /// the gun last fired and when (its reload)
     pub(super) last_shot: Option<(i32, i64)>,
 }
