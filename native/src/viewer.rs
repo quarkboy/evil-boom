@@ -239,6 +239,8 @@ pub struct WatchOptions {
     pub directed: Option<std::path::PathBuf>,
     /// directed play by Neuro: the WebSocket URL of Neuro (or `evil-boom neuro-mock`)
     pub neuro: Option<String>,
+    /// directed by the GPT stand-in, started in this program (its config; `neuro` set to it)
+    pub gpt: Option<std::path::PathBuf>,
 }
 
 /// A watched game's orders, from a file added to as it plays.

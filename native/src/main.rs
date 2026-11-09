@@ -26,13 +26,14 @@
 //!   evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
 //!       [--crf N] [--preset P] [--ffmpeg PATH] [run options]   a watch played as fast as it goes
 //!       into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told)
-//!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [--directed FILE] [--neuro URL] [--headless] [run options]
+//!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [--directed FILE] [--neuro URL] [--gpt [CONFIG]] [--headless] [run options]
 //!       watch her play, with what she knows beside the game, the game's sound on (space pause,
 //!       +/- speed, A the whole map, F follow, M mute, wheel zoom, Esc quit; the sound off while
 //!       paused or not at x1). --directed FILE: directed play, orders read from FILE as lines are
 //!       added to it (list, name, order: see control::script), what comes back in the log and in
 //!       FILE.out. --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
-//!       or evil-boom neuro-mock)
+//!       or evil-boom neuro-mock). --gpt [CONFIG]: directed by the GPT stand-in, run in this
+//!       program (config/neuro-gpt.json unless named; its log out/neuro/gpt.log)
 //!
 //! Run options: --lives N (unlimited), --max-seconds S (3600, all lives together), --seed N|random (0), --peek, --secrets,
 //! --expert, --fight SKILL, --mortal, --complete (every kill, item and secret, then out: --fight 4
@@ -431,8 +432,12 @@ fn sweep(args: &[String]) -> Result<(), String> {
 
 #[cfg(feature = "viewer")]
 fn watch(args: &[String]) -> Result<(), String> {
-    let (w, names, o) = watch_options(args)?;
+    let (mut w, names, o) = watch_options(args)?;
     let [wad, map] = names.as_slice() else { return Err("usage: evil-boom watch <wad> <map> [options]".into()) };
+    if let Some(config) = &w.gpt {
+        // (the stand-in in this program, on a port of its own: one program to run, the user's)
+        w.neuro = Some(evildoom::neuro::gpt::start(config)?);
+    }
     if o.snapshot.is_some() {
         // (a picture: the run as a sweep plays it, nothing drawn till then)
         let (outcome, detail) = run_map(wad, map, &o)?;
@@ -509,6 +514,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
         sound: true,
         directed: None,
         neuro: None,
+        gpt: None,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -523,6 +529,14 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
             "--headless" => w.headless = true,
             "--mute" => w.sound = false,
             "--neuro" => w.neuro = Some(it.next().cloned().unwrap_or_else(|| "ws://127.0.0.1:8000".into())),
+            "--gpt" => {
+                // (its config, if one's named: the next argument, a .json)
+                let named = it.as_slice().first().filter(|a| a.ends_with(".json")).cloned();
+                if named.is_some() {
+                    it.next();
+                }
+                w.gpt = Some(named.map_or_else(|| evildoom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from));
+            }
             "--directed" => w.directed = Some(std::path::PathBuf::from(it.next().ok_or("--directed FILE (orders, a line each, read as they're added)")?)),
             _ => names.push(a.clone()),
         }

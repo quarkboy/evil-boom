@@ -93,11 +93,38 @@ enum Event {
 type Send = (String, String, Option<String>);
 
 pub fn serve(port: u16, config_path: &Path) -> Result<(), String> {
+    let config = configured(config_path)?;
+    let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
+    run(&listener, &config)
+}
+
+/// The stand-in in the background, on a free port, for a game in the same program to connect to
+/// (`watch --gpt`: one program, the user's). Its URL. The configuration's checked first, so a
+/// missing key stops it before the game starts.
+pub fn start(config_path: &Path) -> Result<String, String> {
+    let config = configured(config_path)?;
+    let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("a local port: {e}"))?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    thread::spawn(move || {
+        if let Err(e) = run(&listener, &config) {
+            eprintln!("GPT stand-in stopped: {e}");
+        }
+    });
+    Ok(format!("ws://127.0.0.1:{port}"))
+}
+
+/// The configuration, with a key.
+fn configured(config_path: &Path) -> Result<Config, String> {
     let config = Config::load(config_path)?;
     if config.key().is_empty() {
         return Err(format!("no API key: put \"api_key\" in {}, or set {}", config_path.with_extension("local.json").display(), config.api_key_env));
     }
-    let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
+    Ok(config)
+}
+
+/// Serving games on `listener`, one after another, as they connect.
+fn run(listener: &TcpListener, config: &Config) -> Result<(), String> {
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let log_path = crate::config::out_dir().join("neuro").join("gpt.log");
     std::fs::create_dir_all(log_path.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
     let log = std::sync::Arc::new(std::sync::Mutex::new(std::fs::File::create(&log_path).map_err(|e| e.to_string())?));
