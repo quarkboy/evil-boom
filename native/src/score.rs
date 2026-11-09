@@ -10,6 +10,8 @@
 //!
 //!   evil-boom score [doom|doom2 [maps...]]... [--skills 3,4] [--seeds K] [--jobs N] [--out FILE]
 //!   evil-boom score-report FILE...    the report of one or more score TSVs (more: how far apart)
+//!   evil-boom score-watch FILE [--total N]   a small window showing a score's progress as its
+//!                                     TSV fills (`score` opens one itself unless --no-window)
 
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
@@ -117,6 +119,7 @@ fn random_seed(count: u64) -> u32 {
 
 pub fn run(args: &[String]) -> Result<(), String> {
     let (mut skills, mut seeds, mut jobs, mut out) = (vec![3u32, 4], 8u32, 12usize, None::<String>);
+    let mut window = true;
     let mut groups: Vec<(String, Vec<String>)> = Vec::new();
     let mut i = 0;
     while i < args.len() {
@@ -137,6 +140,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
             "--out" => {
                 out = Some(v.ok_or("--out FILE")?.clone());
                 i += 2;
+            }
+            "--no-window" => {
+                window = false;
+                i += 1;
             }
             t => {
                 let lower = t.to_lowercase();
@@ -179,6 +186,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let mut file = std::fs::File::create(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     writeln!(file, "{}", Row::HEADER).map_err(|e| e.to_string())?;
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
+    // (the progress window, its own process: a failure to open one costs the score nothing)
+    if window && cfg!(feature = "viewer") {
+        let _ = Command::new(&me).arg("score-watch").arg(&path).args(["--total", &total.to_string()]).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+    }
     let mut running: Vec<((String, String, u32, u32), Child)> = Vec::new();
     let mut rows: Vec<Row> = Vec::new();
     while !todo.is_empty() || !running.is_empty() {
@@ -329,4 +340,71 @@ pub fn report(sets: &[Vec<Row>]) -> String {
         out += "\n";
     }
     out
+}
+
+/// A score's progress in a small window, read from its TSV as rows come in, till all `total` are
+/// in (or the window's closed).
+#[cfg(feature = "viewer")]
+pub fn watch(args: &[String]) -> Result<(), String> {
+    use font8x8::legacy::BASIC_LEGACY;
+    use minifb::{Key, Window, WindowOptions};
+    const W: usize = 460;
+    const H: usize = 132;
+    let file = args.first().ok_or("usage: evil-boom score-watch FILE [--total N]")?.clone();
+    let total: usize = args.iter().position(|a| a == "--total").and_then(|i| args.get(i + 1)).and_then(|v| v.parse().ok()).unwrap_or(1088);
+    let mut window = Window::new("Evil: score", W, H, WindowOptions::default()).map_err(|e| e.to_string())?;
+    window.set_target_fps(4);
+    let mut buf = vec![0u32; W * H];
+    let start = std::time::Instant::now();
+    let mut first: Option<(std::time::Instant, usize)> = None;
+    let mut done_at: Option<std::time::Instant> = None;
+    let text = |buf: &mut Vec<u32>, s: &str, x0: usize, y0: usize, color: u32| {
+        for (i, ch) in s.chars().enumerate() {
+            let g = BASIC_LEGACY.get(ch as usize).copied().unwrap_or([0; 8]);
+            for (row, bits) in g.iter().enumerate() {
+                for col in 0..8 {
+                    if bits & (1 << col) != 0 {
+                        for (dy, dx) in [(0, 0), (0, 1), (1, 0), (1, 1)] {
+                            let (x, y) = (x0 + i * 16 + col * 2 + dx, y0 + row * 2 + dy);
+                            if x < W && y < H {
+                                buf[y * W + x] = color;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+    while window.is_open() && !window.is_key_down(Key::Escape) {
+        let rows: Vec<Row> = std::fs::read_to_string(&file).map(|t| t.lines().skip(1).filter_map(Row::from_tsv).collect()).unwrap_or_default();
+        let n = rows.len();
+        // (the time left from the pace since this window first saw rows come in)
+        let now = std::time::Instant::now();
+        let base = *first.get_or_insert((now, n));
+        let rate = if n > base.1 { (n - base.1) as f64 / now.duration_since(base.0).as_secs_f64().max(1.0) } else { 0.0 };
+        let left = if rate > 0.0 { (total.saturating_sub(n)) as f64 / rate } else { f64::NAN };
+        let exits = rows.iter().filter(|r| r.exited()).count();
+        let points = if n == 0 { 0.0 } else { rows.iter().map(Row::points).sum::<f64>() / n as f64 };
+        buf.fill(0x0016_1a20);
+        let share = (n as f64 / total.max(1) as f64).min(1.0);
+        let (bx, by, bw, bh) = (16, 16, W - 32, 26);
+        for y in by..by + bh {
+            for x in bx..bx + bw {
+                let inside = ((x - bx) as f64) < share * bw as f64;
+                buf[y * W + x] = if inside { 0x0040_a060 } else { 0x0030_343c };
+            }
+        }
+        text(&mut buf, &format!("{n}/{total} runs  {:.0}%", share * 100.0), 16, 54, 0x00e0_e0e0);
+        text(&mut buf, &format!("exits {exits}  points {points:.2}"), 16, 78, 0x00b0_d0b0);
+        let eta = if left.is_finite() { format!("{:.0} min left", (left / 60.0).ceil()) } else { format!("{:.0} s in", start.elapsed().as_secs_f64()) };
+        text(&mut buf, &if n >= total { "done".to_string() } else { eta }, 16, 102, 0x00a0_a0b0);
+        window.update_with_buffer(&buf, W, H).map_err(|e| e.to_string())?;
+        if n >= total {
+            // (a moment on "done", then gone)
+            if done_at.get_or_insert(now).elapsed().as_secs() >= 5 {
+                break;
+            }
+        }
+    }
+    Ok(())
 }

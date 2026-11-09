@@ -10,6 +10,8 @@
 //!       the bot's score: every level, pistol start, one life, K random seeds a skill (HMP and
 //!       UV, 8); a row a run (out/score/), then the report (see score.rs)
 //!   evil-boom score-report FILE...                   the report of score TSVs (more: how far apart)
+//!   evil-boom score-watch FILE [--total N]           a score's progress in a small window (`score`
+//!                                               opens one unless --no-window)
 //!   evil-boom dump-nav <wad> <map>                   the level's analysis (for comparing)
 //!   evil-boom neuro-mock [--port N] [FILE]           a stand-in Neuro server (port 8000): actions sent
 //!                                               from FILE (out/neuro/actions.txt) as lines are added,
@@ -760,6 +762,8 @@ fn main() -> ExitCode {
         Some("sweep") => sweep(&args[1..]),
         Some("score") => evildoom::score::run(&args[1..]),
         Some("score-report") if args.len() >= 2 => evildoom::score::report_files(&args[1..]),
+        #[cfg(feature = "viewer")]
+        Some("score-watch") => evildoom::score::watch(&args[1..]),
         Some("watch") => watch(&args[1..]),
         Some("arena") => arena(&args[1..]),
         Some("arena-one") => arena_one(&args[1..]),
