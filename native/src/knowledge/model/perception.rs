@@ -28,8 +28,9 @@ const SUIT_TICS: i64 = 60 * 35;
 /// sounds this close together from the same way are one
 const TICS_SAME_SOUND: i64 = 4;
 
-/// floors that look like they'd hurt (liquids)
-const HAZARD_FLATS: [&str; 4] = ["NUKAGE", "LAVA", "BLOOD", "SLIME0"];
+/// floors that look like they'd hurt (liquids): every frame of their animations, as the game
+/// cycles them (SLIME09-12 one animation: MAP15's pit floored with SLIME12, taken for dry ground)
+const HAZARD_FLATS: [&str; 7] = ["NUKAGE", "LAVA", "BLOOD", "SLIME0", "SLIME10", "SLIME11", "SLIME12"];
 
 impl Knowledge {
     fn see_subsector(&mut self, ss: usize) {

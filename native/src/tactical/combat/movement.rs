@@ -24,6 +24,9 @@ const SLIDE_TICS: usize = 40;
 /// a strafe one way lasts between these
 const STRAFE_TICS: (i64, i64) = (18, 40);
 
+/// radians off straight at it she'll veer, closing in, when straight on isn't clear
+const CLOSE_VEER: [f64; 2] = [0.35, 0.7];
+
 impl Combat {
     /// The missiles that'd hit her, soonest first: any that would if she went on as she's going,
     /// and any she's getting out of the way of that haven't gone by yet.
@@ -180,7 +183,12 @@ impl Combat {
     pub(super) fn closing_in(&mut self, obs: &Observation, t: &Thing, strafe: Option<Point>) -> Option<Point> {
         let a = (t.y - obs.y).atan2(t.x - obs.x);
         let ahead = (a.cos(), a.sin());
+        // (and, straight on not clear, a little to either side of it: a side of her caught on a
+        // doorway's jamb, straight on is no way, a few degrees off slides her past it; MAP14,
+        // knocked back off a chaingunner in a doorway by its bullets, a unit off line with the
+        // jamb, stood still out of the fist's reach to death)
         let mut ways = vec![ahead];
+        ways.extend(CLOSE_VEER.iter().flat_map(|&v| [a + v, a - v]).map(|b| (b.cos(), b.sin())));
         if let Some(s) = strafe {
             let mixed = (ahead.0 + s.0, ahead.1 + s.1);
             let n = mixed.0.hypot(mixed.1);

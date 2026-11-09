@@ -1295,3 +1295,22 @@ Round 7: Doom II MAP10-MAP13.
 
 Results (HNTR, one life): E1 8.0 (8/8), E2 7.9 (7/8), E3 6.2 (1/8) unchanged; Doom II 26 -> 27/32;
 arenas unchanged.
+
+## Level campaign, round 8: closing in round a corner, every frame of a liquid's animation (2026-11-09)
+
+Round 8: Doom II MAP14-MAP17.
+
+- **Closing in, round a corner** (MAP14 HMP: a door jamb in line with her box's edge, `clear_run`
+  0 straight on every tic, `closing_in` gave up and she stood in a chaingunner's fire from 88 to
+  dead): straight on not clear, she veers 20 then 40 degrees either side (still closing) before
+  giving up; Doom slides her past the corner. MAP14 seeds 0-3, all four skills: no exit lost.
+- **A liquid's floor looks like one in every frame of its animation** (MAP15 HNTR: a pit floored
+  SLIME12 taken for dry ground, "SLIME0" matching SLIME01-09 only; dropped into it, the only way
+  out a teleporter, dead): SLIME10-12 too (SLIME09-12 one animation). HNTR seeds 0-3 live longer
+  (none exits yet); ITYTD seed 3 now runs a different way and dies out of ammo to a baron.
+- Traced, not fixed: MAP16 ITYTD (on a pillar under imp fire, a dodge with no safe way still takes
+  over and drops the retreat's legs; with a way, it flips each tic); MAP17 HNTR (an arch-vile's
+  wind-ups with nowhere to hide: fought on from full, cover that doesn't break its sight).
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 7.9 -> 7.8 (6/8), E3 6.2 -> 6.6 (1/8; E3M4 deaths
+gone), Doom II 27/32; arenas unchanged.
