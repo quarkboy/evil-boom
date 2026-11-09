@@ -5,6 +5,7 @@
 //!   name ID NAME...     a name for something listed (refused when too long or taken)
 //!   order go REF | order explore REF|DIR | order exit | order stop
 //!                       an order (REF an id or a name; DIR n, ne, east, ...)
+//!   status              her health, armor, weapons, ammo, keys, what she's doing
 //!   where               where she is, her health, what she's doing
 //!   log [N]             her log's last N lines (40), as the watcher shows it
 
@@ -42,6 +43,7 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
             d.order(o);
             Ok(Vec::new())
         }
+        Some("status") => Ok(vec![d.status(agent, obs)]),
         Some("where") => {
             let x = agent.x();
             let doing = x.current.as_ref().map_or("waiting for orders", |o| o.label.as_str());
@@ -61,6 +63,6 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
             let own: Vec<&String> = log.iter().filter(|l| !l.starts_with(">>") && !l.starts_with("<<")).collect();
             Ok(own[own.len().saturating_sub(n)..].iter().map(|l| format!("| {l}")).collect())
         }
-        _ => Err(format!("unknown command \"{line}\": list, name, order, where, log")),
+        _ => Err(format!("unknown command \"{line}\": list, name, order, status, where, log")),
     }
 }

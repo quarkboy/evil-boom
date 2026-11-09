@@ -73,8 +73,12 @@ pub enum Order {
 #[derive(Clone, Debug)]
 pub struct Report {
     pub tic: i64,
+    /// an order's outcome: done (false: couldn't)
     pub ok: bool,
     pub text: String,
+    /// worth a reaction (a boss sighted, a key, nearly dead), not just to know (Neuro's
+    /// `silent: false`)
+    pub notable: bool,
 }
 
 /// An order being carried out.
@@ -98,6 +102,15 @@ pub struct Director {
     names: BTreeMap<String, String>,
     places: Option<Places>,
     pub reports: Vec<Report>,
+    /// what's been told already: exits, items, monsters (ids), the health mark passed, keys and
+    /// weapons held, dead
+    told_exits: std::collections::BTreeSet<String>,
+    told_items: std::collections::BTreeSet<i32>,
+    told_monsters: std::collections::BTreeSet<i32>,
+    health_mark: Option<i32>,
+    had_keys: Option<crate::specials::Keys>,
+    had_weapons: Option<Vec<i32>>,
+    told_dead: bool,
 }
 
 impl Director {
@@ -122,12 +135,135 @@ impl Director {
         self.queue.is_empty() && self.doing.is_none() && agent.x().current.is_none()
     }
 
-    /// A new map: names, orders and places are the old map's.
+    /// A new map: names, orders, places and what's been told are the old map's.
     pub fn new_map(&mut self) {
         self.queue.clear();
         self.doing = None;
         self.names.clear();
         self.places = None;
+        self.told_exits.clear();
+        self.told_items.clear();
+        self.told_monsters.clear();
+        self.health_mark = None;
+        self.told_dead = false;
+    }
+
+    /// Her state in a line: health, armor, weapons, ammo, keys, what she's doing.
+    pub fn status(&self, agent: &Agent, obs: &Observation) -> String {
+        let weapons: Vec<&str> = obs.weapons.iter().flatten().map(|&w| weapon_name(w, obs)).collect();
+        let ammo = |slot: i32| obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n);
+        let mut pools = Vec::new();
+        for (slot, what) in [(2, "bullets"), (3, "shells"), (5, "rockets"), (6, "cells")] {
+            if ammo(slot) > 0 {
+                pools.push(format!("{} {what}", ammo(slot)));
+            }
+        }
+        let keys: Vec<String> = obs.keys.unwrap_or_default().iter().map(|k| key_name(k).to_string()).collect();
+        let doing = match &self.doing {
+            Some(Doing::Once(w)) => format!("going: {w}"),
+            Some(Doing::Area(_, w)) => format!("exploring {w}"),
+            Some(Doing::Way(b)) => format!("exploring {}", compass(*b)),
+            None if agent.x().current.is_some() => "busy".to_string(),
+            None => "waiting for orders".to_string(),
+        };
+        format!(
+            "Health {:.0}, armor {:.0}; weapons: {}; ammo: {}; keys: {}; {doing}",
+            obs.health.unwrap_or(0.0),
+            obs.armor.unwrap_or(0.0),
+            if weapons.is_empty() { "none".to_string() } else { weapons.join(", ") },
+            if pools.is_empty() { "none".to_string() } else { pools.join(", ") },
+            if keys.is_empty() { "none".to_string() } else { keys.join(", ") }
+        )
+    }
+
+    /// What's new since last told: an exit, things of note seen, monsters, keys and weapons got,
+    /// health running low, death.
+    fn events(&mut self, agent: &mut Agent, obs: &Observation) {
+        let pos = obs.pos();
+        let health = obs.health.unwrap_or(100.0);
+        if health <= 0.0 {
+            if !self.told_dead {
+                self.told_dead = true;
+                self.event(obs, true, "Died.".into());
+            }
+            return;
+        }
+        // (health falling past a mark, each told once till she's above it again)
+        let mark = [25, 50].into_iter().find(|&m| health < f64::from(m));
+        if mark != self.health_mark {
+            if let Some(m) = mark.filter(|m| self.health_mark.is_none_or(|h| *m < h)) {
+                self.event(obs, true, format!("Health down to {health:.0} (under {m})."));
+            }
+            self.health_mark = mark;
+        }
+        if let Some(keys) = obs.keys {
+            let got: Vec<_> = keys.iter().filter(|k| self.had_keys.is_some_and(|h| !h.has(*k))).collect();
+            for k in got {
+                self.event(obs, true, format!("Got the {}.", key_name(k)));
+            }
+            self.had_keys = Some(keys);
+        }
+        if let Some(weapons) = &obs.weapons {
+            let got: Vec<i32> = weapons.iter().copied().filter(|w| self.had_weapons.as_ref().is_some_and(|h| !h.contains(w))).collect();
+            for w in got {
+                self.event(obs, true, format!("Got the {}.", weapon_name(w, obs)));
+            }
+            self.had_weapons = Some(weapons.clone());
+        }
+        if obs.tic % 5 != 0 {
+            return;
+        }
+        for e in self.objectives_of(agent, obs, &[Kind::Exit]) {
+            if self.told_exits.insert(e.id.clone()) {
+                let line = self.describe(&e, obs);
+                self.event(obs, true, format!("Found an exit: {line}."));
+            }
+        }
+        let known = agent.x().knowledge.known_polys();
+        let nav = std::rc::Rc::clone(&agent.x().nav);
+        let held = obs.weapons.clone().unwrap_or_default();
+        let mut seen = Vec::new();
+        for t in obs.things.iter().flatten() {
+            let notable = match t.category {
+                "Key" | "Powerup" => true,
+                "Weapon" => crate::tactical::bestiary::weapon_item(t.name).is_some_and(|w| !held.contains(&w)),
+                "Health" | "Armor" => matches!(t.name, "Soulsphere" | "Megasphere" | "BlueArmor" | "GreenArmor" | "Berserk"),
+                _ => false,
+            };
+            if notable && !self.told_items.contains(&t.id) && nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
+                self.told_items.insert(t.id);
+                let id = format!("{}-t{}", if t.category == "Key" { "key" } else { "item" }, t.id);
+                seen.push(self.describe(&Entry { id, what: t.name.to_string(), at: (t.x, t.y) }, obs));
+            }
+        }
+        if !seen.is_empty() {
+            self.event(obs, true, format!("Spotted: {}.", seen.join("; ")));
+        }
+        // (monsters seen for the first time, together: how many of each, the nearest; worth a
+        // reaction when one's dangerous)
+        let new: Vec<(i32, &'static str, Point)> = agent
+            .player()
+            .map(|p| p.known_monsters())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|m| !self.told_monsters.contains(&m.0))
+            .map(|(id, name, at, _, _)| (id, name, at))
+            .collect();
+        if !new.is_empty() {
+            let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+            for (id, name, _) in &new {
+                self.told_monsters.insert(*id);
+                *counts.entry(name).or_insert(0) += 1;
+            }
+            let nearest = new.iter().map(|m| m.2).min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b))).unwrap_or(pos);
+            let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
+            let dangerous = new.iter().any(|m| crate::tactical::bestiary::monster(m.1).is_some_and(|i| i.boss || i.threat >= 6.0));
+            self.event(obs, dangerous, format!("Monsters sighted: {} (nearest {} {:.0}).", what.join(", "), compass(heading(pos, nearest)), dist(pos, nearest)));
+        }
+    }
+
+    fn event(&mut self, obs: &Observation, notable: bool, text: String) {
+        self.reports.push(Report { tic: obs.tic, ok: true, text, notable });
     }
 
     fn places(&mut self, agent: &Agent) -> &Places {
@@ -226,6 +362,7 @@ impl Director {
     /// Each tic: the order in hand carried on (its next objective, or its end reported); the next
     /// order taken up.
     pub fn tick(&mut self, agent: &mut Agent, obs: &Observation) {
+        self.events(agent, obs);
         if let Some(o) = self.queue.pop_front() {
             self.start(agent, obs, o);
             return;
@@ -350,12 +487,13 @@ impl Director {
         self.open_objectives(agent, obs).into_iter().filter(|o| kinds.contains(&o.kind)).map(|o| Entry { id: id_of(&o), what: o.label.clone(), at: o.goal }).collect()
     }
 
-    /// Is objective o one of exploring area `id`'s (its spot in it, or what it's about)?
+    /// Is objective o one of exploring area `id`'s: done standing in it? (Looking out of it from
+    /// inside, into a doorway or at the next room's wall, is exploring it; standing in the next
+    /// room looking back isn't: E1M1, "explore the room" through a door to the next room's edge.)
     fn in_area(&self, agent: &Agent, id: &str, o: &Objective) -> bool {
         let Some(places) = &self.places else { return false };
         let nav = &agent.x().nav;
-        let in_it = |p: Point| nav.poly_at(p).is_some_and(|q| places.area_of(nav.sector_of_poly(q)).id == id);
-        in_it(o.goal) || o.look_at.is_some_and(in_it)
+        nav.poly_at(o.goal).is_some_and(|q| places.area_of(nav.sector_of_poly(q)).id == id)
     }
 
     /// The best of the explorer's objectives that `fits` (and an exploring one: not out by an exit,
@@ -379,8 +517,10 @@ impl Director {
         false
     }
 
+    /// An order's news: started, done, couldn't (worth a reaction when it's done or couldn't be).
     fn report(&mut self, obs: &Observation, ok: bool, text: String) {
-        self.reports.push(Report { tic: obs.tic, ok, text });
+        let notable = !text.starts_with("Going") && !text.starts_with("Exploring");
+        self.reports.push(Report { tic: obs.tic, ok, text, notable });
     }
 }
 
@@ -403,6 +543,34 @@ fn id_of(o: &Objective) -> String {
         format!("{kind}-l{w}")
     } else {
         format!("{kind}-{:.0}x{:.0}", o.goal.0, o.goal.1)
+    }
+}
+
+/// A weapon slot by name (as she has it: the super shotgun, the chainsaw).
+fn weapon_name(slot: i32, obs: &Observation) -> &'static str {
+    match slot {
+        1 if obs.chainsaw == Some(true) => "chainsaw",
+        1 => "fist",
+        2 => "pistol",
+        3 if obs.super_shotgun == Some(true) => "super shotgun",
+        3 => "shotgun",
+        4 => "chaingun",
+        5 => "rocket launcher",
+        6 => "plasma rifle",
+        7 => "BFG",
+        _ => "?",
+    }
+}
+
+fn key_name(k: crate::specials::Key) -> &'static str {
+    use crate::specials::Key;
+    match k {
+        Key::BlueCard => "blue keycard",
+        Key::YellowCard => "yellow keycard",
+        Key::RedCard => "red keycard",
+        Key::BlueSkull => "blue skull key",
+        Key::YellowSkull => "yellow skull key",
+        Key::RedSkull => "red skull key",
     }
 }
 

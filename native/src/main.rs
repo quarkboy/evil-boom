@@ -99,6 +99,7 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
     let m = load_map(&w, map, &[])?;
     let nav = Navigator::new(Arc::new(m), 3)?;
     let m = &nav.map;
+    let places = evildoom::control::places::Places::build(&nav);
     for arg in sectors {
         let si: usize = arg.parse().map_err(|_| format!("not a sector: {arg}"))?;
         let s = m.sectors.get(si).ok_or_else(|| format!("no sector {si}"))?;
@@ -106,6 +107,8 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
             "sector {si}: floor {} ceiling {} ({} / {}), light {}, special {}, tag {}",
             s.floor, s.ceiling, s.floor_tex, s.ceiling_tex, s.light, s.special, s.tag
         );
+        let area = places.area_of(si);
+        println!("  in {} ({}, {:.0} square units): sectors {:?}", area.id, evildoom::control::places::Places::sketch(area), area.size, area.sectors);
         for l in &m.linedefs {
             let (front, back) = (m.front_sector(l), m.back_sector(l));
             if front != Some(si) && back != Some(si) {

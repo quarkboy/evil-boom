@@ -1,9 +1,10 @@
 //! The level as places a commander can talk about: areas (rooms, halls, corridors) made of sectors.
 //!
 //! Doom maps have no room names, and a sector is often just a step or a patch of light. An area is
-//! the sectors that run into each other at walkable heights across wide openings: a room with its
-//! steps, alcoves and pools stays one area; a doorway, a door, a lift or a narrow gap is where one
-//! area ends and the next begins. Built once from the map (the same for everyone); what she knows
+//! the sectors that run into each other at walkable heights across openings that are much of their
+//! edge: a room with its steps, alcoves and pools stays one area (they share most of their outline
+//! with it); a doorway or an archway (a small part of either side's outline), a door, a lift is
+//! where one area ends and the next begins. Built once from the map (the same for everyone); what she knows
 //! of each comes from what she's seen.
 
 use std::collections::BTreeMap;
@@ -13,8 +14,11 @@ use crate::map::MapData;
 use crate::navigator::{Navigator, MAX_STEP, PLAYER_HEIGHT};
 use crate::specials::{classify_line, Category};
 
-/// two sectors are one area where the openings between them add up to this wide...
-const WIDE: f64 = 128.0;
+/// two sectors are one area where the openings between them are this share of the smaller one's
+/// outline (a step or an alcove: most of it; an archway between rooms: a small part)...
+const SHARED: f64 = 0.25;
+/// ...and at least this wide
+const WIDE: f64 = 64.0;
 
 /// ...an area smaller than this (map units squared) isn't one to talk about (a door, a step)
 pub const SMALL: f64 = 128.0 * 128.0;
@@ -47,6 +51,14 @@ impl Places {
         let movers = moving_sectors(m);
         // (the openings between each pair of sectors, walkable at the map's heights)
         let mut shared: BTreeMap<(usize, usize), f64> = BTreeMap::new();
+        let mut outline = vec![0.0; n];
+        for li in 0..m.linedefs.len() {
+            let (p, q) = m.line_seg(li);
+            let (f, b) = m.sides(li);
+            for s in [f, b].into_iter().flatten() {
+                outline[s] += dist(p, q);
+            }
+        }
         for li in 0..m.linedefs.len() {
             let (Some(a), Some(b)) = m.sides(li) else { continue };
             if a == b || movers[a] || movers[b] {
@@ -69,7 +81,7 @@ impl Places {
             i
         }
         for (&(a, b), &w) in &shared {
-            if w >= WIDE {
+            if w >= WIDE && w >= SHARED * outline[a].min(outline[b]) {
                 let (ra, rb) = (root(&mut parent, a), root(&mut parent, b));
                 if ra != rb {
                     parent[ra.max(rb)] = ra.min(rb);
