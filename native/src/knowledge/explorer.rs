@@ -286,6 +286,10 @@ pub struct Explorer {
     pub stats: RouteStats,
     /// the goals the planner found no way to, and the plan signature then
     no_route: BTreeMap<GoalKey, (u64, i64)>,
+    /// what was given up on for want of a route (the health margin's refusals among them) this
+    /// think, and its tic: the dead-end pass's to take up again, not what was dropped for being
+    /// gone or done
+    refused_now: (i64, BTreeSet<Ident>),
     /// the walls she suspected last, and a hash of all that went into it (see `suspected`)
     suspects: Option<(u64, Vec<Suspect>)>,
     /// the same for a search for secrets asked for (`secret_suspects`), by its own score
@@ -461,6 +465,7 @@ impl Explorer {
             log: Vec::new(),
             stats: RouteStats::default(),
             no_route: BTreeMap::new(),
+            refused_now: (i64::MIN, BTreeSet::new()),
             standable_cache: std::cell::RefCell::new(StandableCache::default()),
             suspects: None,
             secret_suspects: None,

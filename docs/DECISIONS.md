@@ -2063,3 +2063,11 @@ its level with `score` before and after; seven fixes merged.
 Score (all 68 levels, HMP+UV, 8 seeds): 0.428 -> 0.437 (HMP 0.513 -> 0.543, UV 0.343 -> 0.331),
 within the score's noise (+-0.006); stalled runs 69 -> 45 of 1088; on the eight levels, stalls 31
 -> 17, MAP19 HMP exits 0/8 -> 3/8, E3M7 HMP 1/8 -> 3/8.
+- **The dead-end pass takes up again only what had no route** (MAP22 HMP, a run thinking 679 s of
+  real time for 758 of game, 39 tics a second: the stuck round's dead-end pass took up again
+  everything dropped earlier the same think, so a hunted monster dropped "not there" (she stood on
+  its last-seen spot) was taken up again at once, dropped, taken up, every tic, each think routing
+  every wall afresh, 140,000 wall routes): only what was given up for want of a route this think
+  (the health margin's refusals) comes back (`refused_now`). The seed: 681 s -> 19 s real (it now
+  dies at 719 s game instead of stalling). E1M9 HMP's stuck seeds: 2 of 4 exit, 2 stall, the same
+  with or without this (an interaction of the round's merged fixes, to trace).

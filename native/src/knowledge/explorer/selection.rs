@@ -328,8 +328,13 @@ impl Explorer {
             // the margin it lifts. (A dry island in a nukage pit at 28 health, the walk-over line
             // that opens the pit's door a wade of 7 off, refused at 21 against 25 and so left
             // out of this pass: stood there the hour)
+            // (only what had no route: not what was dropped as gone, the monster hunted "not
+            // there", taken up again the same tic, dropped, taken up again, every tic, each think
+            // routing every wall afresh: MAP22 HMP, 39 tics a second, 680 s of thinking)
             let tic = obs.tic;
-            self.dropped.retain(|_, &mut t| t != tic);
+            let refused = std::mem::take(&mut self.refused_now.1);
+            self.dropped.retain(|id, &mut t| t != tic || !refused.contains(id));
+            self.refused_now.1 = refused;
             self.harm_ok = true;
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
             if found {

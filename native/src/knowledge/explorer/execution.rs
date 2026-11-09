@@ -393,6 +393,12 @@ impl Explorer {
     pub(super) fn drop_objective(&mut self, obj: &Objective, obs: &Observation, why: &str) {
         self.end_why = Some((false, why.to_string()));
         let id = obj.ident();
+        if why == "no route" {
+            if self.refused_now.0 != obs.tic {
+                self.refused_now = (obs.tic, BTreeSet::new());
+            }
+            self.refused_now.1.insert(id.clone());
+        }
         self.dropped.insert(id.clone(), obs.tic);
         *self.drop_count.entry(id).or_insert(0) += 1;
         if let Some(w) = obj.wall {
