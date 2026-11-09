@@ -6,7 +6,7 @@
 //!
 //! Keys: space pause, +/- speed, A the whole map (faint: what she doesn't know), F follow her
 //! on the map, M mute the game's sound, L the log panel: the whole log or only what passes
-//! between the game and Evil, mouse wheel zoom the map, Esc quit.
+//! between the game and Evil, T the text size, mouse wheel zoom the map, Esc quit.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -111,7 +111,12 @@ fn key_colour(name: &str) -> Rgb {
 struct Canvas {
     px: Vec<u32>,
     clip: Rect,
+    /// all text this much bigger (T cycles TEXT_SIZES; the user's: it was small)
+    text_scale: f64,
 }
+
+/// the text sizes T cycles through
+const TEXT_SIZES: [f64; 4] = [1.0, 1.25, 1.5, 2.0];
 
 impl Canvas {
     fn put(&mut self, x: i64, y: i64, c: Rgb) {
@@ -181,23 +186,34 @@ impl Canvas {
 
     /// Text in the 8x8 font at `scale`; returns the next line's y.
     fn text(&mut self, s: &str, at: (usize, usize), c: Rgb, scale: usize) -> usize {
+        // (the 8x8 font at any size, each pixel the glyph's nearest)
+        let size = self.glyph(scale);
+        let eff = size as f64 / 8.0;
         let mut x = at.0;
         for ch in s.chars() {
             let glyph = BASIC_LEGACY.get(ch as usize).copied().unwrap_or([0; 8]);
-            for (row, bits) in glyph.iter().enumerate() {
-                for col in 0..8 {
-                    if bits & (1 << col) != 0 {
-                        for sy in 0..scale {
-                            for sx in 0..scale {
-                                self.put((x + col * scale + sx) as i64, (at.1 + row * scale + sy) as i64, c);
-                            }
-                        }
+            for oy in 0..size {
+                let bits = glyph[((oy as f64 / eff) as usize).min(7)];
+                for ox in 0..size {
+                    if bits & (1 << ((ox as f64 / eff) as usize).min(7)) != 0 {
+                        self.put((x + ox) as i64, (at.1 + oy) as i64, c);
                     }
                 }
             }
-            x += 8 * scale;
+            x += size;
         }
-        at.1 + 8 * scale + 3
+        at.1 + size + (3.0 * self.text_scale).round() as usize
+    }
+
+    /// A glyph's side in pixels at `scale` (and the text size).
+    fn glyph(&self, scale: usize) -> usize {
+        (8.0 * scale as f64 * self.text_scale).round() as usize
+    }
+
+    /// How many characters, and lines, of `scale` text fit `width` by `height`.
+    fn fits(&self, scale: usize, width: usize, height: usize) -> (usize, usize) {
+        let g = self.glyph(scale);
+        (width / g.max(1), height / (g + (3.0 * self.text_scale).round() as usize).max(1))
     }
 }
 
@@ -346,6 +362,8 @@ struct Watch {
     follow: bool,
     /// the log panel showing only what passes between the game and Evil (L; the user's)
     evil_log: bool,
+    /// which of TEXT_SIZES the text's drawn at (T)
+    text_size: usize,
     zoom: f64,
     center: Option<Point>,
     bounds: (f64, f64, f64, f64),
@@ -467,7 +485,7 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
     let mut pipe = ff.stdin.take().ok_or("no pipe to ffmpeg")?;
     println!("recording {} at {ow}x{oh} (the view {fw}x{fh})", r.out.display());
     let mut began = Instant::now();
-    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H) };
+    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H), text_scale: 1.0 };
     if r.view == RecordView::Hud {
         // (the corner map round her, near enough to read)
         (watch.follow, watch.zoom) = (true, HUD_ZOOM);
@@ -653,7 +671,7 @@ pub fn watch_prepared(p: crate::arena::Prepared, map_name: &str, speed: f64, sou
 fn show(mut watch: Watch, title: &str, episode: Option<(&Wad, &WatchOptions)>) -> Result<(), String> {
     let mut window = Window::new(title, W, H, WindowOptions { resize: true, scale: Scale::FitScreen, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() }).map_err(|e| e.to_string())?;
     window.set_target_fps(60);
-    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H) };
+    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H), text_scale: 1.0 };
     let mut last = Instant::now();
     let mut owed = 0.0;
     while window.is_open() && !window.is_key_down(K::Escape) {
@@ -666,6 +684,7 @@ fn show(mut watch: Watch, title: &str, episode: Option<(&Wad, &WatchOptions)>) -
                 K::A => watch.show_all = !watch.show_all,
                 K::F => watch.follow = !watch.follow,
                 K::L => watch.evil_log = !watch.evil_log,
+                K::T => watch.text_size = (watch.text_size + 1) % TEXT_SIZES.len(),
                 K::M => watch.muted = !watch.muted,
                 _ => {}
             }
@@ -736,7 +755,7 @@ pub fn snapshot_to(path: &Path, w: &Wad, m: Arc<MapData>, map_name: &str, engine
     watch.options = watch.agent.objectives(&obs);
     watch.options_tic = obs.tic;
     watch.obs = Some(obs);
-    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H) };
+    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H), text_scale: 1.0 };
     watch.draw(&mut canvas);
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
@@ -790,6 +809,7 @@ impl Watch {
             show_all: false,
             follow: false,
             evil_log: false,
+            text_size: 0,
             zoom: focus.map_or(1.0, |f| f.2),
             center: focus.map(|f| (f.0, f.1)),
             bounds,
@@ -864,12 +884,17 @@ impl Watch {
     }
 
     fn draw(&self, c: &mut Canvas) {
+        c.text_scale = TEXT_SIZES[self.text_size];
         c.clip = (0, 0, W, H);
         c.fill((0, 0, W, H), BG);
         self.draw_game(c);
+        // (each panel's text kept inside it, however big)
+        c.clip = LOG;
         self.draw_log(c);
         self.draw_map(c);
+        c.clip = PANEL;
         self.draw_panel(c);
+        c.clip = (0, 0, W, H);
     }
 
     fn draw_game(&self, c: &mut Canvas) {
@@ -912,7 +937,8 @@ impl Watch {
         }).collect();
         merged.extend(x.knowledge.events.iter().rev().take(40).rev().map(|l| (tic_of(l).unwrap_or(0), l)));
         merged.sort_by_key(|(t, _)| *t);
-        for (_, line) in merged.iter().rev().take(24).rev() {
+        let (width, rows) = c.fits(1, LOG.2 - 16, LOG.3 - (y - LOG.1));
+        for (_, line) in merged.iter().rev().take(rows).rev() {
             let colour = if line.contains("dropped") {
                 (255, 140, 140)
             } else if line.contains("learned") {
@@ -920,7 +946,7 @@ impl Watch {
             } else {
                 TEXT
             };
-            let s: String = line.split(" | ").next().unwrap_or("").chars().take(98).collect();
+            let s: String = line.split(" | ").next().unwrap_or("").chars().take(width).collect();
             y = c.text(&s, (LOG.0 + 8, y), colour, 1);
         }
     }
@@ -928,9 +954,9 @@ impl Watch {
     /// The log panel with only what passes between the game and Evil: her actions (>>), what
     /// she's told (<<), the connection; whole, wrapped, the latest at the bottom.
     fn draw_evil_log(&self, c: &mut Canvas) {
-        const WIDTH: usize = 95;
-        const ROWS: usize = 24;
         let mut y = c.text("Evil (L: whole log)", (LOG.0 + 8, LOG.1 + 4), HEAD, 2);
+        let (fit, rows_fit) = c.fits(1, LOG.2 - 16, LOG.3 - (y - LOG.1));
+        let (width, rows_max) = (fit.saturating_sub(3).max(10), rows_fit);
         let mut rows: Vec<(String, (u8, u8, u8))> = Vec::new();
         for line in self.agent.x().log.iter().rev().filter(|l| l.starts_with(">> ") || l.starts_with("<< ") || l.starts_with("neuro: ")) {
             let colour = if line.starts_with(">> ") {
@@ -943,13 +969,13 @@ impl Watch {
                 TEXT
             };
             let chars: Vec<char> = line.chars().collect();
-            let wrapped: Vec<String> = chars.chunks(WIDTH).enumerate().map(|(i, ch)| format!("{}{}", if i > 0 { "   " } else { "" }, ch.iter().collect::<String>())).collect();
+            let wrapped: Vec<String> = chars.chunks(width).enumerate().map(|(i, ch)| format!("{}{}", if i > 0 { "   " } else { "" }, ch.iter().collect::<String>())).collect();
             rows.splice(0..0, wrapped.into_iter().map(|w| (w, colour)));
-            if rows.len() >= ROWS {
+            if rows.len() >= rows_max {
                 break;
             }
         }
-        let skip = rows.len().saturating_sub(ROWS);
+        let skip = rows.len().saturating_sub(rows_max);
         for (s, colour) in rows.into_iter().skip(skip) {
             y = c.text(&s, (LOG.0 + 8, y), colour, 1);
         }
