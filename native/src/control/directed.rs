@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, VecDeque};
 
 use super::places::{Area, Places, SMALL};
 use crate::geom::{dist, Point};
-use crate::knowledge::explorer::{Kind, Objective};
+use crate::knowledge::explorer::{Ident, Kind, Objective};
 use crate::motor::{heading, norm, Observation};
 use crate::play::Agent;
 
@@ -91,6 +91,9 @@ enum Doing {
 pub struct Director {
     queue: VecDeque<Order>,
     doing: Option<Doing>,
+    /// the objectives taken for the order in hand: not taken again for it (the explorer may go on
+    /// offering one it counts as done: E1M1, a wall "not seen yet" taken every tic, stood on)
+    taken: std::collections::BTreeSet<Ident>,
     /// id -> her name for it (this map)
     names: BTreeMap<String, String>,
     places: Option<Places>,
@@ -264,6 +267,7 @@ impl Director {
         x.current = None;
         x.follower = None;
         x.ended = None;
+        self.taken.clear();
         match o {
             Order::Stop => self.report(obs, true, "Stopped; waiting".into()),
             Order::Exit => match self.objectives_of(agent, obs, &[Kind::Exit]).into_iter().next() {
@@ -361,9 +365,18 @@ impl Director {
             .open_objectives(agent, obs)
             .into_iter()
             .filter(|o| !matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Noise | Kind::Recheck | Kind::Hunt))
+            .filter(|o| !self.taken.contains(&o.ident()))
             .filter(|o| fits(self, agent, o))
             .collect();
-        options.into_iter().any(|o| agent.x_mut().take(obs, o))
+        for o in options {
+            let id = o.ident();
+            if agent.x_mut().take(obs, o) {
+                self.taken.insert(id);
+                return true;
+            }
+            self.taken.insert(id); // (no way to it: not tried again for this order either)
+        }
+        false
     }
 
     fn report(&mut self, obs: &Observation, ok: bool, text: String) {

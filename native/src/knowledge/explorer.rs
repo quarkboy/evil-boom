@@ -617,6 +617,8 @@ impl Explorer {
         };
         let (ok, why) = match (&self.follower, self.end_why.take()) {
             (_, Some(e)) => e,
+            // (got there and done with it: arrived() lets the route go)
+            (None, None) => (true, "done".to_string()),
             (Some(f), None) if f.done && !f.failed => (true, "done".to_string()),
             _ => {
                 // (not over: a plan anew wanted (a jump missed); the same again, if there's a way)

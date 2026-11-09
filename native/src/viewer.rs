@@ -249,6 +249,9 @@ struct Feed {
 
 impl Feed {
     fn new(input: &Path) -> Feed {
+        if let Some(dir) = input.parent().filter(|d| !d.as_os_str().is_empty()) {
+            let _ = std::fs::create_dir_all(dir);
+        }
         if !input.exists() {
             let _ = std::fs::write(input, "");
         }

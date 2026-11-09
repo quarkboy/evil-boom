@@ -5,6 +5,8 @@
 //!   name ID NAME...     a name for something listed (refused when too long or taken)
 //!   order go REF | order explore REF|DIR | order exit | order stop
 //!                       an order (REF an id or a name; DIR n, ne, east, ...)
+//!   where               where she is, her health, what she's doing
+//!   log [N]             her log's last N lines (40), as the watcher shows it
 
 use super::directed::{bearing, Director, Order, Topic};
 use crate::motor::Observation;
@@ -40,6 +42,25 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
             d.order(o);
             Ok(Vec::new())
         }
-        _ => Err(format!("unknown command \"{line}\": list, name, order")),
+        Some("where") => {
+            let x = agent.x();
+            let doing = x.current.as_ref().map_or("waiting for orders", |o| o.label.as_str());
+            Ok(vec![format!(
+                "at ({:.0}, {:.0}), facing {:.0}, health {:.0}, armor {:.0}, {:.1}s; doing: {doing}",
+                obs.x,
+                obs.y,
+                obs.angle,
+                obs.health.unwrap_or(0.0),
+                obs.armor.unwrap_or(0.0),
+                obs.tic as f64 / 35.0
+            )])
+        }
+        Some("log") => {
+            let n = w.get(1).and_then(|v| v.parse().ok()).unwrap_or(40);
+            let log = &agent.x().log;
+            let own: Vec<&String> = log.iter().filter(|l| !l.starts_with(">>") && !l.starts_with("<<")).collect();
+            Ok(own[own.len().saturating_sub(n)..].iter().map(|l| format!("| {l}")).collect())
+        }
+        _ => Err(format!("unknown command \"{line}\": list, name, order, where, log")),
     }
 }
