@@ -36,7 +36,7 @@ pub fn actions() -> Vec<Value> {
     vec![
         json!({ "name": "doom_list", "description": "List what you know of in the level: areas (rooms and places, and what's left to explore in each), doors (and switches) not yet tried, items, monsters, exits. Each has an id to use in other actions.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "items", "monsters", "exits"] } }), &["what"]) }),
         json!({ "name": "doom_inspect", "description": "Say what one thing is, which way and how far, by its id or your name for it.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
-        json!({ "name": "doom_go", "description": "Go to a place, pick up an item, try a door or switch, or take an exit, by its id or your name for it. She does it and reports back.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
+        json!({ "name": "doom_go", "description": "Go to a place, pick up an item, try a door or switch, or take an exit, by its id or your name for it. She does it and reports back. Set risky to go even where she'd rather not (across a floor that hurts), as long as it won't kill her.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_explore", "description": "Explore an area (by its id or your name for it) or a direction (north, south-east, ...), until there's nothing more known to explore there.", "schema": s(json!({ "target": { "type": "string" } }), &["target"]) }),
         json!({ "name": "doom_name", "description": format!("Give something a name of your own (up to {NAME_MAX} characters), to use instead of its id from then on."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level by the exit she knows of (ends the level)." }),
@@ -161,11 +161,14 @@ impl Session {
             }
             "doom_go" => {
                 let Some(r) = arg("ref") else { return (false, "Go to what? Give an id from doom_list, or your name for it.".into()) };
-                if self.director.is_area(agent, r) || self.director.find(agent, obs, r).is_some() {
-                    self.director.order(Order::Go(r.to_string()));
-                    (true, format!("On her way to {r}; she'll report when she's there or if she can't."))
-                } else {
-                    (false, format!("Nothing known as \"{r}\" to go to (done, gone, or never seen). Use doom_list for what there is."))
+                let risky = args.get("risky").and_then(Value::as_bool).unwrap_or(false);
+                match self.director.check_go(agent, obs, r, risky) {
+                    Ok(what) => {
+                        self.director.order(Order::Go(r.to_string(), risky));
+                        (true, format!("On her way: {what}. She'll report when she's there or if she can't."))
+                    }
+                    // (not to be retried as it is: the reason says what would do)
+                    Err(why) => (false, why),
                 }
             }
             "doom_explore" => {

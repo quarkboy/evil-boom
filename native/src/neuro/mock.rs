@@ -1,7 +1,8 @@
 //! A stand-in Neuro server (`evil-boom neuro-mock`): the game connects to it as it would to Neuro.
 //! What the game sends (registrations, context, forces with their state, results) is written to a
 //! log, readable; actions are sent from a file as lines are added to it, one a line:
-//! `doom_explore {"target": "north"}`, `doom_list {"what": "areas"}`, `doom_exit`.
+//! `doom_explore {"target": "north"}`, `doom_list {"what": "areas"}`, `doom_exit`; and
+//! `wait-for TEXT`: the lines after it held till the game says something with TEXT in it.
 //! Whoever writes the file plays Evil, by hand or by script.
 
 use std::io::Write;
@@ -30,6 +31,7 @@ pub fn serve(port: u16, actions: &Path) -> Result<(), String> {
     // (actions already in the file are for this session: sent from its start)
     let mut read = 0usize;
     let mut next_id = 1;
+    let mut waiting: Option<String> = None;
     for stream in listener.incoming() {
         let stream = stream.map_err(|e| e.to_string())?;
         let mut ws = tungstenite::accept(stream).map_err(|e| e.to_string())?;
@@ -38,18 +40,30 @@ pub fn serve(port: u16, actions: &Path) -> Result<(), String> {
         if let Err(why) = (|| -> Result<(), String> {
             loop {
                 match ws.read() {
-                    Ok(Message::Text(t)) => say(summary(t.as_str())),
+                    Ok(Message::Text(t)) => {
+                        let line = summary(t.as_str());
+                        if waiting.as_deref().is_some_and(|w| line.contains(w)) {
+                            waiting = None;
+                        }
+                        say(line);
+                    }
                     Ok(Message::Close(_)) => return Err("closed".into()),
                     Ok(_) => {}
                     Err(tungstenite::Error::Io(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
                     Err(e) => return Err(e.to_string()),
                 }
                 let bytes = std::fs::read(actions).unwrap_or_default();
-                if bytes.len() > read {
+                if bytes.len() > read && waiting.is_none() {
                     let text = String::from_utf8_lossy(&bytes[read..]).to_string();
-                    let upto = text.rfind('\n').map_or(0, |i| i + 1);
+                    // (a line at a time, so a wait-for holds what's after it)
+                    let upto = text.find('\n').map_or(0, |i| i + 1);
                     read += upto;
                     for line in text[..upto].lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+                        if let Some(w) = line.strip_prefix("wait-for ") {
+                            say(format!("(waiting for \"{w}\")"));
+                            waiting = Some(w.to_string());
+                            continue;
+                        }
                         let (name, data) = line.split_once(' ').map_or((line, None), |(n, d)| (n, Some(d.trim())));
                         let id = format!("m{next_id}");
                         next_id += 1;

@@ -57,8 +57,10 @@ pub struct Entry {
 /// What she's told to do.
 #[derive(Clone, Debug)]
 pub enum Order {
-    /// go to (or try, or pick up) something listed, by id or name
-    Go(String),
+    /// go to (or try, or pick up) something listed, by id or name; risky: whatever the bot
+    /// would rather not cross on its own (a floor that hurts), if it's a way there that won't kill
+    /// her
+    Go(String, bool),
     /// explore an area (by id or name) till there's nothing more known to do in it
     ExploreArea(String),
     /// explore that way (degrees, 0 east, 90 north) till there's nothing more known that way
@@ -420,12 +422,12 @@ impl Director {
         match o {
             Order::Stop => self.report(obs, true, "Stopped; waiting".into()),
             Order::Exit => match self.objectives_of(agent, obs, &[Kind::Exit]).into_iter().next() {
-                Some(e) => self.go(agent, obs, &e.id),
+                Some(e) => self.go(agent, obs, &e.id, false),
                 None => self.report(obs, false, "No exit known yet".into()),
             },
-            Order::Go(r) => {
+            Order::Go(r, risky) => {
                 let id = self.resolve(&r);
-                self.go(agent, obs, &id);
+                self.go(agent, obs, &id, risky);
             }
             Order::ExploreArea(r) => {
                 let id = self.resolve(&r);
@@ -453,26 +455,54 @@ impl Director {
         }
     }
 
-    /// Go to (try, pick up) something by id.
-    fn go(&mut self, agent: &mut Agent, obs: &Observation, id: &str) {
-        let obj = if let Some(a) = self.places(agent).by_id(id).cloned() {
+    /// The objective going to (trying, picking up) `id` would be; why not, if there's none.
+    fn objective_for(&mut self, agent: &mut Agent, obs: &Observation, id: &str) -> Result<Objective, String> {
+        // (the explorer's options, which also brings what she can get to up to date)
+        let open = self.open_objectives(agent, obs);
+        if let Some(a) = self.places(agent).by_id(id).cloned() {
             let x = agent.x();
             let at = x.stand_spot_for(a.center, &x.reach);
-            Some(Objective::new(Kind::Visit, at, format!("go to {}", Places::sketch(&a))))
-        } else if let Some(t) = id.split_once("-t").and_then(|(_, n)| n.parse::<i32>().ok()).and_then(|n| obs.things.iter().flatten().find(|t| t.id == n)) {
+            return Ok(Objective::new(Kind::Visit, at, format!("go to {}", Places::sketch(&a))));
+        }
+        if let Some(t) = id.split_once("-t").and_then(|(_, n)| n.parse::<i32>().ok()).and_then(|n| obs.things.iter().flatten().find(|t| t.id == n)) {
             let x = agent.x();
-            x.touch_spot((t.x, t.y), &x.reach).map(|at| {
-                let mut o = Objective::new(Kind::Item, at, format!("pick up {}", t.name));
-                o.thing = Some(t.id);
-                o
-            })
-        } else {
-            self.open_objectives(agent, obs).into_iter().find(|o| id_of(o) == id)
+            let at = x.touch_spot((t.x, t.y), &x.reach).ok_or_else(|| format!("No known way to the {} yet: she hasn't seen a way to where it is. Explore near it first.", t.name))?;
+            let mut o = Objective::new(Kind::Item, at, format!("pick up {}", t.name));
+            o.thing = Some(t.id);
+            return Ok(o);
+        }
+        open.into_iter().find(|o| id_of(o) == id).ok_or_else(|| format!("Nothing \"{id}\" to go to now (done, gone, or never seen). List for what there is."))
+    }
+
+    /// Could she go to `r` now (risky: past what she'd rather not, if it won't kill her)? What
+    /// it is, or why not (and what would do it, if risky would).
+    pub fn check_go(&mut self, agent: &mut Agent, obs: &Observation, r: &str, risky: bool) -> Result<String, String> {
+        let id = self.resolve(r);
+        let mut obj = self.objective_for(agent, obs, &id)?;
+        obj.risky = risky;
+        let what = self.describe(&Entry { id: id.clone(), what: obj.label.clone(), at: obj.goal }, obs);
+        if agent.x_mut().route_to(&obj, obs).is_some() {
+            return Ok(what);
+        }
+        if !risky {
+            obj.risky = true;
+            if agent.x_mut().route_to(&obj, obs).is_some() {
+                return Err(format!("The only known way to {what} crosses a floor that hurts (or something else she'd rather avoid). Send it again with risky set to go anyway."));
+            }
+        }
+        Err(format!("No known way to {what} from here that she'd survive."))
+    }
+
+    /// Go to (try, pick up) something by id.
+    fn go(&mut self, agent: &mut Agent, obs: &Observation, id: &str, risky: bool) {
+        let mut obj = match self.objective_for(agent, obs, id) {
+            Ok(o) => o,
+            Err(why) => {
+                self.report(obs, false, why);
+                return;
+            }
         };
-        let Some(obj) = obj else {
-            self.report(obs, false, format!("Nothing \"{id}\" to go to now (done, gone, or not known); list for what there is"));
-            return;
-        };
+        obj.risky = risky;
         let what = self.describe(&Entry { id: id.to_string(), what: obj.label.clone(), at: obj.goal }, obs);
         if agent.x_mut().take(obs, obj) {
             self.report(obs, true, format!("Going: {what}"));

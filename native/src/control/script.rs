@@ -3,8 +3,9 @@
 //!
 //!   list TOPIC [N]      what she knows of: areas, doors, items, monsters, exits
 //!   name ID NAME...     a name for something listed (refused when too long or taken)
-//!   order go REF | order explore REF|DIR | order exit | order stop
+//!   order go REF [risky] | order explore REF|DIR | order exit | order stop
 //!                       an order (REF an id or a name; DIR n, ne, east, ...)
+//!   check REF [risky]   could she go there now (as doom_go asks), and if not, why
 //!   status              her health, armor, weapons, ammo, keys, what she's doing
 //!   where               where she is, her health, what she's doing
 //!   log [N]             her log's last N lines (40), as the watcher shows it
@@ -31,7 +32,10 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
         }
         Some("order") => {
             let o = match w.get(1).copied() {
-                Some("go") => Order::Go(w[2..].join(" ")),
+                Some("go") => match w.last() {
+                    Some(&"risky") => Order::Go(w[2..w.len() - 1].join(" "), true),
+                    _ => Order::Go(w[2..].join(" "), false),
+                },
                 Some("explore") => {
                     let r = w[2..].join(" ");
                     bearing(&r).map_or(Order::ExploreArea(r), Order::ExploreWay)
@@ -44,6 +48,14 @@ pub fn command(d: &mut Director, agent: &mut Agent, obs: &Observation, line: &st
             Ok(Vec::new())
         }
         Some("status") => Ok(vec![d.status(agent, obs)]),
+        Some("check") => {
+            let risky = w.last() == Some(&"risky");
+            let r = w[1..w.len() - usize::from(risky)].join(" ");
+            Ok(vec![match d.check_go(agent, obs, &r, risky) {
+                Ok(what) => format!("could go: {what}"),
+                Err(why) => format!("couldn't: {why}"),
+            }])
+        }
         Some("where") => {
             let x = agent.x();
             let doing = x.current.as_ref().map_or("waiting for orders", |o| o.label.as_str());

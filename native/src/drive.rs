@@ -293,7 +293,7 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 Director::take_over(&mut s.agent);
                 println!("  directed: waiting for orders");
             }
-            "list" | "name" | "order" => {
+            "list" | "name" | "order" | "check" | "status" => {
                 let obs = s.obs();
                 match crate::control::script::command(&mut director, &mut s.agent, &obs, line) {
                     Ok(out) => out.iter().for_each(|l| println!("  {l}")),
