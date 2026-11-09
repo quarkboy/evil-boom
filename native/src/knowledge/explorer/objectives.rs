@@ -388,9 +388,15 @@ impl Explorer {
                 // sound (MAP09: a noise far off took her down into a pit), and never away from
                 // every way out there is, as far as she knows (MAP24's secret ledge over the
                 // nukage pit: the level given up for a look)
+                // (nor down onto a floor that hurts to press a switch she's not tried: what it does
+                // is anyone's guess, and stuck there is dead; E2M2 seed 2, an 80 drop into a
+                // nukage pit for one, whose press raised the pit's one low way out, a minute of
+                // it to death. Down there already, it's hers to try: E1M4's lift switch)
+                let off_harm = !this.on_hurting_floor(obs);
                 return objectives
                     .into_iter()
                     .filter(|o| o.kind != Kind::Noise)
+                    .filter(|o| !(o.kind == Kind::Switch && off_harm && nav.poly_at(o.goal).is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)))))
                     .filter(|o| {
                         exit_polys.is_empty()
                             || o.kind == Kind::Exit
