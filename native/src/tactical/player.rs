@@ -532,6 +532,7 @@ impl Player {
             return None; // (nothing to fall back from; or her BFG's spray to come, from where she is)
         }
         let unarmed = !self.fight.combat.armed(obs) && !self.fight.combat.against_her().is_empty();
+        let on_way = unarmed && !self.vile(obs) && self.on_for_ammo(obs);
         let (kind, route) = if self.vile(obs) {
             self.retreat_tic = obs.tic;
             (RetreatKind::Cover, self.find_cover(obs))
@@ -546,8 +547,9 @@ impl Player {
             // shells, cacodemons on her, a way off chosen and called off every tic for 30 tics
             // under their fireballs)
             let walled = obs.tic - self.walled_tic < RETREAT_AGAIN;
-            match (unarmed && !walled).then(|| self.for_ammo(obs)).flatten() {
+            match (unarmed && !walled).then(|| self.for_ammo(obs, on_way)).flatten() {
                 Some(r) => (RetreatKind::ForAmmo, Some(r)),
+                None if on_way => (RetreatKind::ForAmmo, None),
                 None => (RetreatKind::Cover, self.find_cover(obs)),
             }
         } else if self.fight.combat.in_the_open(obs.tic) {
@@ -555,7 +557,7 @@ impl Player {
             (RetreatKind::Post, self.find_post(obs))
         } else if unarmed {
             self.retreat_tic = obs.tic;
-            (RetreatKind::ForAmmo, self.for_ammo(obs))
+            (RetreatKind::ForAmmo, self.for_ammo(obs, on_way))
         } else if let Some(why) = self.ambushed(obs) {
             self.retreat_tic = obs.tic;
             match self.back_out(obs, why) {
@@ -712,7 +714,8 @@ impl Player {
     /// Out of ammo with something after her: to the nearest ammo or gun she knows of that she
     /// can use, by a way not past them; else to the spot she's been that's furthest from them.
     /// Through doors if need be (E3M1: the doors shut behind her, every way off through one).
-    fn for_ammo(&mut self, obs: &Observation) -> Option<RouteFollower> {
+    /// No plain way to ammo but on her way for some already (`on_way`): on with that, not away.
+    fn for_ammo(&mut self, obs: &Observation, on_way: bool) -> Option<RouteFollower> {
         let them = self.fight.combat.against_her();
         let pos = obs.pos();
         // (no nearer to any of them than she is: one on her already, every way off starts by
@@ -724,7 +727,7 @@ impl Player {
         let nav = Rc::clone(&self.explorer.nav);
         // (to the thing itself, not the middle of the floor it's on: a big floor's middle can be
         // further off it than she reaches, and she'd stop there none the richer, again and again)
-        let mut ammo: Vec<(f64, Point, &'static str)> = obs
+        let mut ammo: Vec<(f64, Point, &'static str, i32)> = obs
             .things
             .iter()
             .flatten()
@@ -733,14 +736,27 @@ impl Player {
                     || ammo_item(t.name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))
             })
             .filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)))
-            .map(|t| (dist((t.x, t.y), pos), (t.x, t.y), t.name))
+            .map(|t| (dist((t.x, t.y), pos), (t.x, t.y), t.name, t.id))
             .collect();
         ammo.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for (_, at, name) in ammo.into_iter().take(6) {
+        let mut refused: Vec<i32> = Vec::new();
+        for (_, at, name, id) in ammo.into_iter().take(6) {
             if let Some(f) = self.go_to_point(obs, at, &them, "for ammo", clear, true) {
                 self.log(format!("tic {}: out of ammo: away for the {name}", obs.tic));
                 return Some(f);
             }
+            refused.push(id);
+        }
+        // (and the errand for one of those given up: unarmed, with no way to it clear of them,
+        // it'd only take her back into them once she's away, again and again. E4M9 UV: a rocket
+        // launcher behind a door that opened on an imp and a baron, 8 rockets in hand, 1200 tics
+        // of off and back in until the route gave up; chosen afresh, with them known)
+        if self.explorer.current.as_ref().is_some_and(|c| c.kind == Kind::Item && c.thing.is_some_and(|t| refused.contains(&t))) {
+            self.explorer.give_up(obs, "out of ammo, no way to it clear of them");
+        }
+        if on_way {
+            self.log(format!("tic {}: out of ammo: on her way for it already", obs.tic));
+            return None;
         }
         let mut spots: Vec<(f64, usize)> = self
             .visited_spots(obs, 128.0, AMMO_AWAY, COVER_SPOTS)
@@ -758,6 +774,31 @@ impl Player {
         }
         self.log(format!("tic {}: out of ammo: no way off for ammo or away that isn't past them", obs.tic));
         None
+    }
+
+    /// Unarmed, the explorer's already on her way to ammo or a gun she can use, by a way not past
+    /// them: when `for_ammo` finds no plain way to any (on the heights as they are: no lifts,
+    /// drops or jumps), that's the way off for ammo. Neither away nor to cover then: nothing she
+    /// does there kills what's after her, and the route takes her back the way she came (E4M7 UV:
+    /// out of ammo at 39 health, an imp 400 off; the way to the ammo by a door, a drop and a
+    /// run-jump; away through the door out of its sight, back through it on the route, 600 s of
+    /// it, every errand dropped).
+    fn on_for_ammo(&self, obs: &Observation) -> bool {
+        let Some(cur) = self.explorer.current.as_ref().filter(|c| c.kind == Kind::Item) else { return false };
+        let Some(f) = self.explorer.follower.as_ref() else { return false };
+        let name = cur.label.strip_prefix("pick up ").unwrap_or(&cur.label);
+        let name = name.split(' ').next().unwrap_or(name);
+        let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
+        if !(weapon_item(name).is_some_and(|s| s != 1 && s != 8) || ammo_item(name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))) {
+            return false;
+        }
+        let them = self.fight.combat.against_her();
+        let pos = obs.pos();
+        let nearest = them.iter().map(|m| dist((m.x, m.y), pos)).fold(f64::INFINITY, f64::min);
+        let clear = PAST_CLEAR.min(nearest - AMMO_MARGIN).max(0.0);
+        let path = f.planned_path(Some(pos));
+        !path.is_empty()
+            && path.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).all(|(a, b)| them.iter().all(|t| segment_point_distance(a, b, (t.x, t.y)) >= clear))
     }
 
     /// A way to that poly (not past monsters), if there is one.

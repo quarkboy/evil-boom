@@ -382,6 +382,14 @@ impl Explorer {
         true
     }
 
+    /// The objective under way given up from outside (a fight's finding), for a fresh choice.
+    pub fn give_up(&mut self, obs: &Observation, why: &str) {
+        if let Some(obj) = self.current.take() {
+            self.follower = None;
+            self.drop_objective(&obj, obs, why);
+        }
+    }
+
     pub(super) fn drop_objective(&mut self, obj: &Objective, obs: &Observation, why: &str) {
         self.end_why = Some((false, why.to_string()));
         let id = obj.ident();

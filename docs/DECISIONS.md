@@ -1962,3 +1962,33 @@ Round M: E4M1, E4M2, E4M3, E4M4.
   (cyberdemon fights).
 
 Results (HNTR, one life): E1 8.0, E2 7.5, E3 8.0 -> 7.8, Doom II 29/32; arenas 119/128, 223/240.
+
+## 20-minute pass, round N (episode 4): an out-of-reach goal for ammo dropped; no retreat from the route to ammo that keeps clear (2026-11-09)
+
+Round N: E4M6, E4M7, E4M8, E4M9. The last of the 20-minute pass.
+
+- **A goal for ammo she can't reach past them is dropped** (E4M9 UV: out of ammo, the rocket
+  launcher behind a door that opened on an imp and a baron; `for_ammo` refused it, no way past
+  them, "away from them", then out of sight the fight ended and the explorer took the same goal
+  back into them, 17 times in 1200 tics): when `for_ammo` finds no ammo or gun reachable without
+  passing what's after her and her goal is one it refused, the goal is dropped
+  (`Explorer::give_up`); the next choice is made knowing they're there. E4M9 HNTR seed 2 exits.
+- **Unarmed, no retreat from a route to ammo that keeps clear of them** (E4M7 UV: out of ammo, the
+  explorer's way to ammo through a door, a drop and a run-jump, which `for_ammo`'s plain way on the
+  heights as they are can't see; "away from them" through the door, the route back through it, for
+  600 s): with nothing from `for_ammo`, if the objective is ammo or a gun she can use and its path
+  keeps `for_ammo`'s clearance, no retreat; the route goes on. Results unchanged (a loop broken).
+- Dropped after the regression set: E4M8's backing off on a hurting floor giving the route the legs
+  (she outruns any clawer) and `standing` judged by the route's way there (E4M8 HMP 1/4 -> 3/4):
+  E3 7.8 -> 6.6 (both parts; the second alone 7.2).
+- Traced, not fixed: E4M6 ITYTD (stuck: a route between two closed door "pillars" 24 apart, floor
+  at ceiling, a blue door raising them; her knowledge takes never-opened door sectors as passable;
+  after the stuck, every objective "no route").
+
+Results (HNTR, one life): unchanged: E1 8.0, E2 7.5 (4/8), E3 7.8 (2/8), Doom II 29/32; arenas
+119/128, 223/240.
+
+Over the 20-minute pass (rounds A-N, 54 levels not beaten on UV): from E1 8.0, E2 7.0, E3 8.2, Doom II
+28/32, arenas 119/128 and 226/240 to E1 8.0, E2 7.5, E3 7.8, Doom II 29/32, arenas 119/128 and
+223/240, with exits gained on many levels' seeds (see each round). Next, as the user set it: larger
+changes, then the 40-minute pass; paused here at the user's word.
