@@ -443,7 +443,11 @@ impl Explorer {
                 let gone = cut.map(|c| c.0);
                 // (worth the risk, however far she can't get back from: the exit, a teleporter,
                 // where it leads is the unknown; a key, it opens the way)
-                let risk_it = matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Key);
+                // (and ammo or a gun the level put there when she's next to out of it: nothing she
+                // can't get back to is worth much without, and there's a way out from where the
+                // level put it. E2M5 on UV: six shots, the clips she'd seen past doors she knew no
+                // way back through, left for walls by a baron she couldn't kill; cornered, dead)
+                let risk_it = matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Key) || (placed(&o) && hooks.worth_cut_off(obs, &o));
                 // (most of what she can get to, and never the way out, as far as she knows: MAP24's
                 // nukage pit, where a wall was worth a one-way drop by the rest of it)
                 let keeps = gone.as_ref().is_some_and(|g| {

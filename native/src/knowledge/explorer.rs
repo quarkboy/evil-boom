@@ -206,6 +206,10 @@ pub trait Hooks {
     fn dangerous(&mut self, _obs: &Observation, _obj: &Objective) -> bool {
         false
     }
+    /// worth going for even where she knows no way back from (as the exit, a key)
+    fn worth_cut_off(&mut self, _obs: &Observation, _obj: &Objective) -> bool {
+        false
+    }
     /// how much further than it is it counts as (1: as far as it is)
     fn weigh(&mut self, _obs: &Observation, _obj: &Objective) -> f64 {
         1.0

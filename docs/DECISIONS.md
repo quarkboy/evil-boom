@@ -1525,3 +1525,34 @@ fists at a cacodemon, as before, this time killed.
   crossing that line, and she's set off from it at a crawl, backing off only as far as all of her
   is out of the crusher (less by how far out the line is). E3 7.1 -> 7.5 (E3M6 seed 6 through), the
   rest the same.
+
+## 20-minute pass, round B: box-aware crusher escape, teleport lines kept out of fight moves, ammo worth being cut off for (2026-11-09)
+
+Round B: E2M4, E2M5, E2M7, E2M8.
+
+- **Out from under a crusher, all of her, round what's in the way** (E2M4 UV: dodging a baronball
+  she set off a fast crusher's walk-over ring, 4 units of her box under its edge; the fight's way
+  out took the first heading whose step 8 out had her middle outside, east along its edge, into a
+  pillar's corner, pinned there till crushed): `way_out_of_crusher` needs room for her whole box at
+  each step (any corner in a wall: not that way), and a heading is out only once all of her box is
+  clear of a crusher at work (`box_in_crusher`, shared with `in_crusher`). E2M4 UV seeds 0-2 exit.
+- **No fight move over a teleport line from its front** (E2M7 HMP: backing off from a demon
+  towards a rocket launcher, over a WR teleporter's front, into a closet with two demons in front
+  of its only way out, bitten to death): `safe`/`slide_ok` run the slide for walls, drops and
+  hurting floors; now also for a player teleport line crossed from its front (P_CrossSpecialLine
+  acts from side 0 only). Taking a teleporter on purpose is the route's. HMP seed 0 160 -> 175 s.
+- **Short of ammo, the ammo is worth being cut off for** (E2M5 UV: out of ammo, three clips and a
+  shell offered, every one past doors she knew no way back through, so cut off by the reach check
+  that only lets the exit, a teleporter or a key cost that much; she explored a dead end instead,
+  the baron followed, cornered): an urgent ammo or gun item the level placed counts as worth it
+  while she's short (`Hooks::worth_cut_off`). UV seed 0 234 -> 378 s.
+- Dropped after the regression set: E2M8's "a mover she waits at that won't move for her" (every
+  known line that moves it a used one-shot or out of reach on the live heights: replan or fail the
+  step): it judged ordinary lifts she was about to call unmovable; E1M7 stuck 7/8, E1 8.0 -> 6.2,
+  Doom II MAP05 stuck x3.
+- Leads noted: `ammo_short_for` compares her ammo with a monster's full health (the cyberdemon's
+  4000: E2M8 UV held 50 rockets "short" all fight); `for_ammo`'s fallback "away" spot can be nearer
+  the monsters; the `to_errand` node spends the last rounds on an outmatched target.
+
+Results (HNTR, one life): E1 8.0, E2 7.0 (5 -> 6/8), E3 7.5 -> 6.6 (E3M6 seed 4 stuck: a secret
+door's wall try interrupted, fixed next), Doom II 27/32; arenas 119/128, 227/240.

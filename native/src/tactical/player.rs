@@ -1313,6 +1313,12 @@ impl Fight {
 }
 
 impl Hooks for Fight {
+    /// Ammo or a gun she's off for because she's short of ammo.
+    fn worth_cut_off(&mut self, obs: &Observation, obj: &Objective) -> bool {
+        let Some(t) = obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)) else { return false };
+        obj.urgent && (ammo_item(t.name).is_some() || weapon_item(t.name).is_some()) && self.combat.short_of_ammo(obs)
+    }
+
     /// Items she could use now; with --complete, every counted item she's seen too.
     fn wanted(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let known = x.knowledge.known_polys();

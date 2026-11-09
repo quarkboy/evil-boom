@@ -1,9 +1,9 @@
 //! Missile avoidance, strafing and checking safe escape directions.
 
 use super::{clearance, miss_by, Combat, DODGE_TICS};
-use crate::geom::{dist, Point};
+use crate::geom::{dist, segments_cross, Point};
 use crate::motor::{heading, norm, Observation, Thing, FRICTION, RUN_THRUST};
-use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
+use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS, TELEPORTERS_FOR_PLAYERS};
 use crate::tactical::bestiary::{missile, weapon_in, Weapon};
 use std::collections::BTreeSet;
 
@@ -251,11 +251,16 @@ impl Combat {
 
     /// Is any of her in a crusher sector at work, coming down or not (`no_go_crusher`)?
     pub(super) fn in_crusher(&self, obs: &Observation) -> bool {
+        self.box_in_crusher(obs, obs.pos())
+    }
+
+    /// Would any of her, stood at p, be in a crusher sector at work (`no_go_crusher`)?
+    fn box_in_crusher(&self, obs: &Observation, p: Point) -> bool {
         let r = PLAYER_RADIUS + 2.0;
         [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
             .iter()
-            .filter_map(|(dx, dy)| self.nav.poly_at((obs.x + dx, obs.y + dy)))
-            .any(|p| self.no_go_crusher(obs, self.nav.sector_of_poly(p)))
+            .filter_map(|(dx, dy)| self.nav.poly_at((p.0 + dx, p.1 + dy)))
+            .any(|q| self.no_go_crusher(obs, self.nav.sector_of_poly(q)))
     }
 
     /// Is any of her under a crusher at work? A crusher crushes whatever's even partly under it,
@@ -271,7 +276,10 @@ impl Combat {
 
     /// The shortest straight way out from under a crusher at work (with no route to take her): of
     /// sixteen headings, the one that gets all of her to a floor with no crusher at work over it
-    /// soonest, walking (no step up or drop she couldn't come back from, nothing that hurts).
+    /// soonest, walking (no step up or drop she couldn't come back from, nothing that hurts, room
+    /// for her box all the way). All of her: her box's corners, not her middle a radius on along
+    /// the heading, which along the crusher's edge never gets her out (E2M4: east along a crusher
+    /// room's side, 4 of her under it, into a pillar's corner, held there 11 strokes).
     pub(super) fn way_out_of_crusher(&self, obs: &Observation) -> Option<Point> {
         let nav = &self.nav;
         let pos = obs.pos();
@@ -289,8 +297,12 @@ impl Combat {
                     if (h.floor - floor).abs() > MAX_STEP || (self.hurts(obs, s) && !self.on_hurting_floor(obs)) {
                         return None;
                     }
-                    // (all of her out: her middle a radius and a bit past the last of it)
-                    if !self.no_go_crusher(obs, s) && self.gets_out(obs, d, f + PLAYER_RADIUS + 2.0) {
+                    // (a corner of her in the solid: a wall or a pillar's corner in the way)
+                    let r = PLAYER_RADIUS - 1.0;
+                    if [(-r, -r), (r, -r), (r, r), (-r, r)].iter().any(|(dx, dy)| nav.poly_in((q.0 + dx, q.1 + dy)).is_none()) {
+                        return None;
+                    }
+                    if !self.box_in_crusher(obs, q) {
                         return Some((f, d));
                     }
                     floor = h.floor;
@@ -394,11 +406,18 @@ impl Combat {
     }
 
     /// The slide from where she is, pushing `push` the first `PUSH_TICS` (None: not at all), from
-    /// standing at `floor0`: a wall or a step up stops her, which is all right; a drop or a
-    /// hurting floor isn't.
+    /// standing at `floor0`: a wall or a step up stops her, which is all right; a drop, a
+    /// hurting floor or a teleporter's front isn't (her middle over it from that side and she's
+    /// somewhere else: E2M7, backing off from a demon over the pad before a rocket launcher, out
+    /// in a closet with two more, out of ammo, its one way out behind them).
     fn slide_ok(&self, obs: &Observation, floor0: f64, push: Option<Point>) -> bool {
         let nav = &self.nav;
         let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
+        let teleports: Vec<(Point, Point)> = nav.map.linedefs.iter().filter(|l| TELEPORTERS_FOR_PLAYERS.contains(&l.special)).map(|l| nav.map.line_seg(l.index)).collect();
+        // (crossing (a, b) from its front, the right of a->b, as the game's P_CrossSpecialLine
+        // and EV_Teleport take it)
+        let side = |(a, b): (Point, Point), p: Point| (b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0);
+        let teleported = |from: Point, to: Point| teleports.iter().any(|&l| side(l, from) <= 0.0 && side(l, to) > 0.0 && segments_cross(from, to, l.0, l.1));
         let (mut x, mut y) = obs.pos();
         let (mut vx, mut vy) = self.velocity;
         let mut floor = floor0;
@@ -408,6 +427,9 @@ impl Combat {
                 vy += RUN_THRUST * d.1;
             } else if vx * vx + vy * vy < 1.0 {
                 break;
+            }
+            if teleported((x, y), (x + vx, y + vy)) {
+                return false;
             }
             x += vx;
             y += vy;
