@@ -276,8 +276,13 @@ impl Combat {
         let saving = !info.boss && self.remaining().iter().any(|m| m.id != t.id && mon(m.name).boss);
         let (mut best, mut cost) = (obs.weapon.unwrap_or(2), f64::INFINITY);
         let mut blocked = None;
+        // (the pistol only for want of any other gun with a shot in it, never for its reach: the
+        // user's, MAP07, the super shotgun put away for it at mancubi 800 off. Taps at barrels,
+        // switches and walls are the route's own gun, not this)
+        let other_gun = held.iter().any(|&s| matches!(s, 3 | 4 | 6 | 7) && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot.max(1))
+            || (held.contains(&5) && Self::ammo(obs, 5) >= 1 && self.rocket_safe(obs, t));
         for &slot in &SLOTS {
-            if !held.contains(&slot) {
+            if !held.contains(&slot) || (slot == 2 && other_gun) {
                 continue;
             }
             let w = weapon_in(slot, obs);
