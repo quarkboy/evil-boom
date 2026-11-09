@@ -263,6 +263,9 @@ pub struct Combat {
     closing_since: BTreeMap<i32, i64>,
     /// ...and given up on till when
     given_up: BTreeMap<i32, i64>,
+    /// stood fighting with no shot at it, since when and last, by id (given up after a while, as
+    /// out of reach)
+    no_shot_since: BTreeMap<i32, (i64, i64)>,
     /// fighting each in melee without hurting it, since when, and its health then (given up
     /// after a while, as out of reach)
     pub(super) melee_since: BTreeMap<i32, (i64, i32)>,
@@ -356,6 +359,7 @@ impl Combat {
             crushed_low: Vec::new(),
             closing_since: BTreeMap::new(),
             given_up: BTreeMap::new(),
+            no_shot_since: BTreeMap::new(),
             melee_since: BTreeMap::new(),
             last_shot: None,
             rocket_facing: None,
@@ -782,6 +786,31 @@ impl Combat {
             return false;
         }
         true
+    }
+
+    /// Standing to fight t, no shot at it from here: given up on a while once she's had none for
+    /// CLOSE_GIVE_UP (a shot at it sets the clock back; so does a fight with it broken off that
+    /// long). Standing gets her no shot: the route goes on, shooting on the way when one comes.
+    /// (Pistol start, ITYTD-HNTR: on an island in a nukage pit, two zombiemen on ledges round it,
+    /// too steep from her, never hitting her either; stood at for the hour, by turns, coming and
+    /// going from sight, her route held and every step on given up as taking too long)
+    pub(super) fn no_shot_long(&mut self, obs: &Observation, t: &Thing) -> bool {
+        if self.given_up_on(obs, t.id) {
+            return true;
+        }
+        if self.can_hit(obs, t, None) {
+            self.no_shot_since.remove(&t.id);
+            return false;
+        }
+        let (since, last) = self.no_shot_since.get(&t.id).copied().unwrap_or((obs.tic, obs.tic));
+        let since = if obs.tic - last > CLOSE_GIVE_UP { obs.tic } else { since };
+        self.no_shot_since.insert(t.id, (since, obs.tic));
+        if obs.tic - since > CLOSE_GIVE_UP {
+            self.no_shot_since.remove(&t.id);
+            self.give_up(obs, t.id);
+            return true;
+        }
+        false
     }
 
     /// An awake monster that was after her gone out of sight a moment ago (behind a pillar,

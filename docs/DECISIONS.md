@@ -1724,3 +1724,37 @@ Round F: E2M4's "nothing left to do" stucks, MAP06, MAP07, MAP08.
 Results (HNTR, one life): E1 8.0, E2 6.1 -> 7.9 (3 -> 7/8), E3 7.6 -> 7.9 (3/8), Doom II 26 -> 28/32
 (MAP08 seed 2 exits); arenas 119/128, 225 -> 223/240 (two draws: indoor cacodemons, the spider
 mastermind's cover).
+
+## 20-minute pass, round G: a target with no shot at it given up; no margin at a dead end; kill first only what she'd kill soon (2026-11-09)
+
+Round G: MAP09, MAP10, MAP11, MAP12.
+
+- **No standing at a target she's had no shot at for 20 s** (MAP09, every skill stuck the hour: an
+  island in a nukage pit, two zombiemen on ledges around it, "no shot (too steep)" at either and
+  them never hitting her; `standing` and "lost sight: keeping at it" held the route, switching
+  between them, every step given up as taking too long, the dead end's fallback never reached):
+  with no shot at a target for `CLOSE_GIVE_UP`, it's given up for `GIVEN_UP_TICS` as an
+  out-of-reach or melee one is (a shot resets the clock, so does a gap over 20 s; one in her way
+  is exempt); `standing` passes to shooting on the way (`no_shot_long`). Narrowed to "not with a
+  fist up, being hurt resets it" it lost the MAP09 exit: kept as is.
+- **No health margin at a dead end** (MAP09: with the route free, the dead end's lift switches,
+  each a wade costing 15 at 37 health, refused by the 25 margin, which waits for healing or a
+  radiation suit she can't reach): with `harm_ok` (a dead end) and a line to set off, only a way
+  that would take all her health is refused. MAP09 ITYTD seeds 0-2 stuck -> exit; HNTR and HMP
+  stuck -> die (at the switch on the floor, 25 health: wall searches in the nukage spent her health
+  before the switches; to do).
+- **Kill first only what she'd kill soon** (MAP11 UV: the pistol at a pain elemental, 400 health,
+  some 16 s of pistol, its 2.5 priority; three shotgun guys by it shot her dead untargeted): the
+  arch-vile's and pain elemental's kill-first boost holds only if she'd kill it within 8 s
+  (`KILL_FIRST`), and drops only with another hitscanner in sight. MAP11 UV seed 0 8 -> 20 s (the
+  shotgun guys killed, the shotgun picked up).
+- Dropped after the regression set: MAP12's berserk fist or saw passed over for a target she
+  wouldn't close in on (HMP seed 0 exits) cost Doom II MAP10 seed 0 (the barons at the exit).
+- Traced, not fixed: MAP10 HMP (a caged cyberdemon behind a window by the only gap in a fence; the
+  objective resumed back to the window after it hit her: `dangerous()` is checked only at the
+  choice; ending it near an unbeatable monster cost HMP seed 1's exit); MAP12's line 511 (a W1
+  floor raise between two slime sectors, the way on, never crossed: walls tried, the slime room not
+  walked; regression seeds stuck on it).
+
+Results (HNTR, one life): E1 8.0, E2 7.9 (7/8), E3 7.9 -> 8.0 (3 -> 4/8), Doom II 28 -> 27/32 (MAP12
+seed 1 stuck on line 511); arenas 119/128, 223/240.

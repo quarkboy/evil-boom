@@ -352,9 +352,14 @@ impl Explorer {
             // A tenth of her health or less is no risk, short or not (the user's rule for any
             // risk): nothing to wait for. (MAP12's caco closet, the fight that opened it leaving
             // her 13 under a suit, every way back over the nukage, half a point, refused for good)
+            // Nothing else at all to do (`harm_ok`), a line to set off: the margin waits for
+            // healing or a suit there's no way to, for ever; only a way that'd take all she has is
+            // refused. (A nukage pit's island, health worn to 37 by the wading for walls, the
+            // lifts' switches a wade of 15 off, refused at 22 against 25: stood there the hour)
             let cost = self.expected_damage(&route.legs, obj, &states, obs);
             let health = obs.health.unwrap_or(100.0);
-            if cost > RISK_SHARE * health && health - cost < HEALTH_MARGIN {
+            let margin = if self.harm_ok && obj.trigger.is_some() { 0.0 } else { HEALTH_MARGIN };
+            if cost > RISK_SHARE * health && health - cost < margin {
                 self.short_of_health = Some(obs.tic);
                 return None;
             }

@@ -76,6 +76,10 @@ const PLASMA_RADIUS: f64 = 13.0;
 /// does a projectile's middle (it comes out at her feet + 32, 8 high)
 const AIM_HEIGHT: f64 = 36.0;
 
+/// with a hitscanner about, a monster she'd be longer than this many seconds killing isn't put
+/// first (`priority`)
+const KILL_FIRST: f64 = 8.0;
+
 /// a pain elemental nearer than this isn't shot with rockets (its souls come out in front)
 const PAIN_NEAR: f64 = 512.0;
 
@@ -94,10 +98,17 @@ impl Combat {
     pub(super) fn pick_target(&mut self, obs: &Observation) -> Option<Thing> {
         let pos = obs.pos();
         let mut best: Option<(f64, Thing)> = None;
-        for t in self.against_her() {
+        let against = self.against_her();
+        let hitscanners: Vec<i32> = against.iter().filter(|t| mon(t.name).attack == Attack::Hitscan).map(|t| t.id).collect();
+        for t in against {
             let info = mon(t.name);
             let d = dist((t.x, t.y), pos);
-            let mut s = (info.threat + 1.0) * priority(t.name, d) / (d + 192.0) * if Some(t.id) == self.target { 1.6 } else { 1.0 };
+            // (one she'd be long at, with another that's hitscan about, isn't put first: the time
+            // it'd take is the hitscanner's to shoot her in. MAP11 UV from a pistol start: a pain
+            // elemental the target, 16 s of pistol, kept clear of while shotgun guys shot her dead)
+            let long = f64::from(info.health) / self.firepower_on(obs, Some(&info)).max(1.0);
+            let first = if long > KILL_FIRST && hitscanners.iter().any(|&h| h != t.id) { 1.0 } else { priority(t.name, d) };
+            let mut s = (info.threat + 1.0) * first / (d + 192.0) * if Some(t.id) == self.target { 1.6 } else { 1.0 };
             let off = norm(heading(pos, (t.x, t.y)) - obs.angle).abs();
             s *= 1.0 - off.min(150.0) / 300.0; // (rather what's in front than what's behind)
             if !self.can_hit(obs, &t, None) {

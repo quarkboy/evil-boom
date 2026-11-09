@@ -364,6 +364,10 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if c.on_hurting_floor(obs) && !c.blocking(obs, s.target.as_ref()) {
         return None;
     }
+    // (not for one she's had no shot at a long while: see `no_shot_long`)
+    if !c.blocking(obs, s.target.as_ref()) && s.target.as_ref().is_some_and(|t| c.no_shot_long(obs, t)) {
+        return None;
+    }
     let duel = s.target.as_ref().is_some_and(|t| c.takes_on(obs, t.name));
     if !(s.threat >= STAND_THREAT || s.health < LOW_HEALTH || duel || c.blocking(obs, s.target.as_ref())) {
         return None;
