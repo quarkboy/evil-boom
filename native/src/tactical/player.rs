@@ -345,7 +345,7 @@ impl Player {
         self.keep_out_of_sight(obs);
         // (in a jump, or crossing a crusher it's timed: the route keeps the legs, the fight shoots;
         // E2M2 seed 7, a crossing begun, an imp seen 2000 off, the fight's steering under it)
-        let busy = self.explorer.follower.as_ref().is_some_and(|f| f.in_jump() || f.crossing_crusher());
+        let busy = self.explorer.follower.as_ref().is_some_and(|f| f.jumping() || f.crossing_crusher());
         let (errand, toward) = if busy { (String::new(), None) } else { self.fight.errand(&self.explorer, obs).map_or((String::new(), None), |(e, at)| (e, Some(at))) };
         self.fight.combat.toward = toward;
         self.fight.combat.routed = self.explorer.follower.as_ref().is_some_and(|f| !f.done && !f.failed);

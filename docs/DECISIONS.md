@@ -1356,3 +1356,22 @@ Round 10: Doom II MAP22-MAP25.
 
 Results (HNTR, one life): E1 8.0 (8/8), E2 7.0 -> 7.4 (6 -> 7/8), E3 7.9 -> 8.0 (4/8), Doom II
 28/32; arenas 118/128, 226/240.
+
+## Level campaign, round 11: lining up a jump isn't a jump (2026-11-09)
+
+Round 11: Doom II MAP26-MAP29.
+
+- **Only a jump under way keeps the fight off the legs** (MAP27 UV: out of ammo at 43 health, routed
+  over a run-jump; at the run-up, the whole jump counted "busy" so the fight couldn't move her, yet
+  it turned her to aim at a spectre, so the line-up never squared her to the takeoff: she stood
+  there, two spectres biting, dead): the sprint and a run over sinking floors keep the legs; lining
+  up is standing with no jump begun, so the fight has them; a line-up it broke off starts its clock
+  again. UV 107 -> 154 s; MAP27 ITYTD/HNTR seeds 0-3 unchanged.
+- Traced, not fixed: MAP26 HMP/UV (out of ammo with dropped chainguns 110-530 off, all rejected as
+  past monsters, "none known" in the log; keeping clear of chaingunners by distance, in their fire);
+  MAP28 (UV: three pain elementals; HMP: the target a cacodemon while a shotgunner 83 off shoots);
+  MAP29 (a lava alcove left only by a plain-textured lift switch; "try the wall" always "no route",
+  even at 78 health: to trace).
+
+Results (HNTR, one life): unchanged: E1 8.0, E2 7.4 (7/8), E3 8.0 (4/8), Doom II 28/32; arenas
+118/128, 226/240.

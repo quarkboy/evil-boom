@@ -467,6 +467,13 @@ impl RouteFollower {
         self.sprint.is_some() || self.run.is_some() || self.lineup_tic.is_some()
     }
 
+    /// Off on a jump: sprinting for the takeoff or running over sinking floors. Not lining up at
+    /// the run-up: standing there is no jump yet, and the fight has the legs (MAP27 UV, at the
+    /// run-up turned to a spectre, never square on, stood still as it bit her to death).
+    pub fn jumping(&self) -> bool {
+        self.sprint.is_some() || self.run.is_some()
+    }
+
     /// Running over (or off) floors going down under her: done only on a floor that stays put.
     pub fn running_off(&self) -> bool {
         self.run.is_some()
@@ -719,6 +726,8 @@ impl RouteFollower {
     /// time stuck.
     pub fn resume(&mut self, tic: i64) {
         self.reset_progress(tic);
+        // (a line-up broken off starts again: its clock would send her off from wherever)
+        self.lineup_tic = None;
     }
 
     fn reset_progress(&mut self, tic: i64) {
