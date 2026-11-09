@@ -1437,3 +1437,26 @@ Round 14: Doom E4M6-E4M9. The end of the 10-minute pass.
 
 Results (HNTR, one life): E1 8.0, E2 7.4 (7/8), E3 8.0 -> 7.9 (3/8), Doom II 28/32; arenas 118/128,
 226/240.
+
+## Larger changes after the 10-minute pass: a rocket's way held through its launch; no ammo spent on what she can't kill (2026-11-09)
+
+The 10-minute pass's re-survey (pistol start, seed 0; exits ITYTD/HNTR/HMP/UV): Doom E1-E3 25/23/20/11
+of 27 (26/22/16/11 before the campaign), E4 7/5/2/1 of 9 (6/5/2/0), Doom II 20/18/4/2 of 32
+(20/18/3/3): 132 -> 138 level-skills.
+
+- **A rocket's way held through its launch** (MAP32 UV, killed by her own rocket at 31 health; MAP30
+  ITYTD, 112 of 182 damage taken her own rockets): the launcher lets the rocket go 8 tics after the
+  trigger, along the way she faces then. Pressed at an SS, the fight took a new target the next
+  tic and swung her 86 degrees through those tics; out mid-turn into the wall beside her. Now, from
+  the press till it's away, her aim is held at the way she faced at the press (the way it was
+  judged safe), unless that way is now unsafe (the turn off a rocket's way out, as before). MAP32
+  UV and HMP: no rocket damage to herself. Tracking within 10 degrees instead (to keep leading a
+  moving target) did worse over the regression set (E3 8.2 -> 7.2), so held.
+- **No ammo spent on what she can't kill, keeping clear of it** (E4M4 HMP/UV: two cacodemons kept
+  clear of and shot at till every gun was empty, then bitten to death unarmed): outmatched and
+  keeping clear of a target all her ammo couldn't kill (`ammo_short_for`, from `too_much`), she
+  holds fire unless it's in her way. Neutral over the regression set; E4M4 still runs dry by other
+  ways into the same fight (what's wanted is not walking into it: the route, to do).
+
+Results (HNTR, one life): E1 8.0, E2 7.4 -> 7.0 (4/8), E3 7.9 -> 8.2 (2/8), Doom II 28/32; arenas
+118 -> 119/128, 226 -> 225/240.

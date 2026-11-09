@@ -252,6 +252,9 @@ pub struct Combat {
     pub(super) melee_since: BTreeMap<i32, (i64, i32)>,
     /// the gun last fired and when (its reload)
     pub(super) last_shot: Option<(i32, i64)>,
+    /// the way she faced as she last pressed the rocket launcher's trigger (the rocket leaves along
+    /// the way she faces 8 tics later)
+    rocket_facing: Option<f64>,
 }
 
 impl Combat {
@@ -330,6 +333,7 @@ impl Combat {
             given_up: BTreeMap::new(),
             melee_since: BTreeMap::new(),
             last_shot: None,
+            rocket_facing: None,
         }
     }
 
@@ -608,6 +612,12 @@ impl Combat {
             if let Some(h) = self.rocket_way_out(obs) {
                 act.aim = Some(h);
                 act.why = "turned off a rocket's way out into something near".into();
+            } else if let Some(f) = self.rocket_facing {
+                // (held the way it was judged safe till it's away: MAP32 UV, the trigger pressed
+                // at an SS, a new target the tic after, swung 86 degrees through the launch, the
+                // rocket out mid-turn into the wall beside her, dead at 31. Tracking within 10
+                // degrees instead did worse over the regression set: E3 8.2 -> 7.2)
+                act.aim = Some(f);
             }
         }
         let aim = act.aim.or(s.aim);
@@ -784,6 +794,9 @@ impl Combat {
         self.trigger_held = c.attack;
         if let Some(s) = obs.weapon.filter(|_| c.attack) {
             self.last_shot = Some((s, obs.tic));
+            if s == 5 {
+                self.rocket_facing = Some(obs.angle);
+            }
         }
         if d.weapon != 0 {
             c.weapon = d.weapon;

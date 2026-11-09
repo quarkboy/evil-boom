@@ -140,6 +140,13 @@ impl Combat {
         if rate > 0.0 && hp / self.firepower(obs) > Self::lasts(obs) / rate {
             return true;
         }
+        self.ammo_short_for(obs, names)
+    }
+
+    /// Would all her ammo, with the best gun she has for each kind, fall short of killing these
+    /// (with the fist her best, never: punching costs nothing)?
+    pub fn ammo_short_for(&self, obs: &Observation, names: &[&str]) -> bool {
+        let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
         // (what each kind of ammo's worth, with the best gun she has for it; bosses take no blast)
         let held = Self::held(obs);
         let boss = names.iter().any(|n| mon(n).boss);

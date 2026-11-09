@@ -312,7 +312,15 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
     let t = s.target.as_ref().filter(|t| s.outmatched && !c.takes_on(obs, t.name) && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < KEEP_CLEAR)?;
     let gun = c.preferred_gun(obs, t);
     let moving = c.steer(obs, Some(t), &gun);
-    Some(Act::new(moving, format!("outmatched: keeping clear of {}", t.name)))
+    let mut a = Act::new(moving, format!("outmatched: keeping clear of {}", t.name));
+    // (and no ammo spent on it when all she has couldn't kill it, unless it's in her way: every
+    // round a round short for what she can kill; E4M4, two cacodemons kept clear of and shot at
+    // till every gun was empty, then bitten to death unarmed)
+    if c.ammo_short_for(obs, &[t.name]) && !c.blocking(obs, Some(t)) {
+        a.hold_fire = true;
+        a.why = format!("outmatched: keeping clear of {} (ammo kept)", t.name);
+    }
+    Some(a)
 }
 
 /// Outmatched: shooting on the way, the route going on.
