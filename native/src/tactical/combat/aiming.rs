@@ -536,28 +536,33 @@ impl Combat {
         if t.name == "PainElemental" && dist((t.x, t.y), pos) < PAIN_NEAR {
             return false; // (the souls it spits out come between: E... dead at 90 health, one 28 off)
         }
-        let mut others: Vec<(f64, f64, f64)> = self.visible.iter().filter(|o| o.id != t.id).map(|o| (o.x, o.y, mon(o.name).radius)).collect();
+        // (each with how far it could come into the way while the rocket's near her: none for
+        // what's in sight, its blast's reach for a claw she's lost sight of)
+        let mut others: Vec<(f64, f64, f64, f64)> = self.visible.iter().filter(|o| o.id != t.id).map(|o| (o.x, o.y, mon(o.name).radius, 0.0)).collect();
         // (and anything close in front she'd see, seen yet or not: a soul just spat out)
         others.extend(
             obs.things
                 .iter()
                 .flatten()
                 .filter(|o| o.id != t.id && monster(o.name).is_some() && dist((o.x, o.y), pos) < clear * 2.0)
-                .map(|o| (o.x, o.y, mon(o.name).radius)),
+                .map(|o| (o.x, o.y, mon(o.name).radius, 0.0)),
         );
-        others.extend(obs.barrels.iter().flatten().map(|b| (b.0, b.1, 10.0)));
+        others.extend(obs.barrels.iter().flatten().map(|b| (b.0, b.1, 10.0, 0.0)));
         // (E1M9: dead at full health, a demon 83 away: it came round a corner into the way)
         others.extend(
             self.remaining()
                 .iter()
                 .filter(|m| m.id != t.id && obs.tic - m.tic < ROCKET_WARY && matches!(mon(m.name).attack, Attack::Melee | Attack::Charge))
-                .map(|m| (m.x, m.y, mon(m.name).radius + 128.0)),
+                .map(|m| (m.x, m.y, mon(m.name).radius, 128.0)),
         );
-        for (x, y, r) in others {
+        // (the leeway only for coming into the way: a rocket bursts on it only there, and one
+        // behind her can't get in front of it; E3M4 UV, demons all round, four rockets held
+        // for every demon 237-344 off till the fist was all she had)
+        for (x, y, r, pad) in others {
             if dist((x, y), pos) < clear + r {
                 return false;
             }
-            if segment_point_distance(pos, (t.x, t.y), (x, y)) < r + 12.0 && dist((x, y), pos) < dist((t.x, t.y), pos) {
+            if segment_point_distance(pos, (t.x, t.y), (x, y)) < r + pad + 12.0 && dist((x, y), pos) < dist((t.x, t.y), pos) + pad {
                 return false;
             }
         }

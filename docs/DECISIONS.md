@@ -1183,3 +1183,24 @@ Round 2: E2M3, E2M5, E2M7, E2M8 (pistol start, all four skills).
 Results (HNTR, one life): E1 8.0 (8/8), E2 7.8 -> 7.4 (6 -> 7/8 through), E3 7.5 -> 7.1 (1/8),
 Doom II 27 -> 28/32; arenas unchanged. The new E3 failures (her own rocket at a lost soul 150
 off, E3M7; E3M9's arrival ambush holding the fist) are outside these changes: to triage.
+
+## Level campaign, round 3: rockets held only for what can get in their way, a switch first for a gun out of reach (2026-11-09)
+
+Round 3: E2M9, E3M2, E3M3, E3M4.
+
+- **Rockets held only for a claw that could come into their way** (E3M4 UV: four rockets held for
+  every demon 237-344 off, "rocket not safe", the pistol spent on them, punched to death by five):
+  a melee monster seen in the last 3 s had its 128 of leeway on the ring round her too, so any
+  within 334, behind her included, held the rocket. A rocket bursts only on what's in its way: the
+  leeway now widens only the way (beside the line to the target, or its reach beyond); the ring is
+  each one's radius plus the blast. E3M4 HMP seed 0 exits (died 194 s); UV lives 53 -> 2939 s.
+- **A switch first, with a better gun in sight she can't get to** (E3M3 HMP/UV: the shotgun up on a
+  floor a switch lowers, seen at the start, the switch ranked with the walls and left all level,
+  out of ammo with the pistol, dead): switches count as a quarter as far while a better gun lies on
+  ground she's seen but can't reach. E3M3 HMP seeds 0, 1 exit (died).
+- Traced, not fixed: E2M9 (out of ammo among barons, the only ammo behind the one door she never
+  opens: no known ammo means visited places, never the unexplored); E3M2 UV (a cover retreat's
+  route ran her into shotgun guys just seen, the fight's way the other way overridden).
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 7.4 -> 7.1 (7 -> 6/8 through), E3 7.1 -> 7.2 (1 -> 3/8),
+Doom II 28 -> 27/32; arenas unchanged. E3M6's stucks (3) are as before on the level alone.

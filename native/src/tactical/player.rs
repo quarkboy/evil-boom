@@ -35,6 +35,8 @@ const DANGER_NEAR: f64 = 640.0;
 const WAY_CLEAR: f64 = 320.0;
 /// ammo for what she has counts as this much further, outmatched by something she knows of
 const AMMO_OUTMATCHED: f64 = 2.0;
+/// a switch counts as this much as far, with a better gun seen that she can't get to
+const SWITCH_FOR_GUN: f64 = 0.25;
 /// below this, with something shooting at her: back off out of its sight
 const RETREAT_HEALTH: f64 = 40.0;
 /// cover looked for among the places she's been this near...
@@ -171,6 +173,8 @@ struct Fight {
     deaths: Vec<Death>,
     /// the way's been worked out under new costs: choose again (once)
     rethink: bool,
+    /// a better gun seen that she can't get to (as of the last list of things to do)
+    gun_out_of_reach: bool,
 }
 
 /// A death: where, and what she was going for.
@@ -280,7 +284,7 @@ impl Player {
     pub fn new(nav: Rc<Navigator>, knowledge: Knowledge) -> Player {
         Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
-            fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false },
+            fight: Fight { combat: Combat::new(nav), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false, gun_out_of_reach: false },
             retreat: None,
             bait_tic: -1_000_000_000,
             retreat_tic: -1_000_000_000,
@@ -1254,6 +1258,10 @@ impl Fight {
 impl Hooks for Fight {
     /// Items she could use now; with --complete, every counted item she's seen too.
     fn wanted(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
+        let known = x.knowledge.known_polys();
+        self.gun_out_of_reach = obs.things.iter().flatten().any(|t| {
+            weapon_item(t.name).is_some() && self.better_gun(obs, t.name) && x.nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p) && !reach.contains(&p))
+        });
         let mut out = self.supplies(x, obs, reach, pos);
         out.extend(self.barrels(x, obs, reach, pos));
         if let Some(c) = &mut self.completion {
@@ -1345,6 +1353,13 @@ impl Hooks for Fight {
     /// sight of each, the building with the plasma rifle and the blue armor never opened (8/16
     /// got them with this, 0/16 without; at half as far, 0/16).
     fn weigh(&mut self, obs: &Observation, obj: &Objective) -> f64 {
+        // (a better gun in sight she can't get to: a switch, what changes the floors and opens
+        // the doors, is the likeliest way there; pressed before the rest. E3M3 from a pistol
+        // start, HMP and UV: the shotgun up on a floor a switch lowers, seen at the start, the
+        // switch left for the walls, the level played out with the pistol, dead out of ammo)
+        if obj.kind == Kind::Switch && self.gun_out_of_reach {
+            return SWITCH_FOR_GUN;
+        }
         let ammo = obj.kind == Kind::Item && obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).is_some_and(|t| ammo_item(t.name).is_some());
         if !ammo || self.combat.short_of_ammo(obs) {
             return 1.0;
