@@ -10,6 +10,9 @@
 //!   evil-boom neuro-mock [--port N] [FILE]           a stand-in Neuro server (port 8000): actions sent
 //!                                               from FILE (out/neuro/actions.txt) as lines are added,
 //!                                               everything the game sends shown and in FILE.log
+//!   evil-boom neuro-gpt [--port N] [--config FILE]   a language model as Evil (config/neuro-gpt.json, and
+//!                                               config/neuro-gpt.local.json for the key): log in
+//!                                               out/neuro/gpt.log
 //!   evil-boom follow <wad> <map>                     plan the level, follow the plan (seed 0)
 //!   evil-boom drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
 //!   evil-boom sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things,
@@ -687,6 +690,11 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("dump-nav") if args.len() == 3 => dump_nav(&args[1], &args[2]),
+        Some("neuro-gpt") => {
+            let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);
+            let config = args.iter().position(|a| a == "--config").and_then(|i| args.get(i + 1)).map_or_else(|| evildoom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from);
+            evildoom::neuro::gpt::serve(port, &config)
+        }
         Some("neuro-mock") => {
             let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);
             let file = args.iter().skip(1).rfind(|a| !a.starts_with("--") && a.parse::<u16>().is_err()).cloned().unwrap_or_else(|| "out/neuro/actions.txt".into());

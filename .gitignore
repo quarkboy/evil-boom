@@ -38,3 +38,6 @@ dsda/spike/target/
 
 # agent worktrees (Claude Code)
 .claude/worktrees/
+
+# (the GPT stand-in's local settings: the API key)
+config/*.local.json
