@@ -1075,13 +1075,16 @@ impl Fight {
             // (the item's class name, before what the label adds: "pick up Medikit (to heal)")
             let name = cur.label.strip_prefix("pick up ").unwrap_or(&cur.label);
             let name = name.split(' ').next().unwrap_or(name);
-            if cur.urgent {
-                return Some((name.to_string(), cur.goal));
-            }
             // (health she's on her way to and can use, close by: on to it, shooting on the way.
             // The user's: a cacodemon on her, the medikit the explorer was going for in the
-            // room, fought where she stood and never picked up)
+            // room, fought where she stood and never picked up. Not one far off, low or not:
+            // MAP10 UV, at 38 a stimpack 1100 off across a yard of imps and zombiemen, walked
+            // on into them shooting, down to 3 and dead; the fight's own retreats and cover
+            // are what keep her alive there, and its 10 don't pay for the way)
             let heals = health_item(name).is_some_and(|(amount, cap)| amount >= 10 && obs.health.unwrap_or(100.0) < f64::from(cap));
+            if cur.urgent && health_item(name).is_none() {
+                return Some((name.to_string(), cur.goal));
+            }
             if heals && dist(cur.goal, obs.pos()) < HEAL_NEAR {
                 return Some((name.to_string(), cur.goal));
             }

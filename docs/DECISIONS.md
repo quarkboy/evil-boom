@@ -1272,3 +1272,26 @@ Round 6: Doom II MAP06-MAP09.
 
 Results (HNTR, one life): unchanged: E1 8.0 (8/8), E2 7.9 (7/8), E3 6.2 (1/8), Doom II 26/32;
 arenas 119/128, 226/240.
+
+## Level campaign, round 7: health an errand only near, a cheap way not refused for health (2026-11-09)
+
+Round 7: Doom II MAP10-MAP13.
+
+- **Mid-fight, health is an errand only within 512** (MAP10 UV: at 38 health a stimpack 1097 off
+  was urgent, and an urgent item was the fight's errand at any distance: every decision "towards
+  the Stimpack" across a yard of imps, zombiemen and shotgun guys with the pistol, dead): urgent or
+  not, as other health was; urgent things that aren't health unchanged. UV 70 -> 82 s, HMP 350 ->
+  449 s (still dying).
+- **A way costing a tenth of her health or less isn't refused for being short of health** (MAP12
+  HNTR stuck: at 13 health every way over the nukage, 0.5 a way under a suit, refused while health
+  less cost was under 25, waiting for healing or a suit she couldn't reach without them; stood on a
+  pillar for the hour): the mortal margin applies only to a way costing more than RISK_SHARE of her
+  health. MAP12 HNTR seed 0 exits.
+- Rejected: MAP13's "no item under a running crusher in a fight" (lost HNTR seed 0: a different
+  run, dead to her own rocket).
+- Traced, not fixed: MAP11 HMP/UV (the target a pain elemental or cacodemon while hitscanners do
+  the damage; keeping clear only of the target); MAP13 (a plasma rifle in a room of two crushers,
+  the urgent objective never interrupted, pinned straddling both).
+
+Results (HNTR, one life): E1 8.0 (8/8), E2 7.9 (7/8), E3 6.2 (1/8) unchanged; Doom II 26 -> 27/32;
+arenas unchanged.

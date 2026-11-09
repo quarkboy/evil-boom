@@ -346,8 +346,12 @@ impl Explorer {
             // (mortal: no way that costs more health than she has to spare, risky or not; noted,
             // for healing or a suit to go for. Not while down on a floor that hurts: staying
             // costs more than any way off it, the user's)
+            // A tenth of her health or less is no risk, short or not (the user's rule for any
+            // risk): nothing to wait for. (MAP12's caco closet, the fight that opened it leaving
+            // her 13 under a suit, every way back over the nukage, half a point, refused for good)
             let cost = self.expected_damage(&route.legs, obj, &states, obs);
-            if cost > 0.0 && obs.health.unwrap_or(100.0) - cost < HEALTH_MARGIN {
+            let health = obs.health.unwrap_or(100.0);
+            if cost > RISK_SHARE * health && health - cost < HEALTH_MARGIN {
                 self.short_of_health = Some(obs.tic);
                 return None;
             }
