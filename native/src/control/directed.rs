@@ -528,7 +528,10 @@ impl Director {
             o.thing = Some(t.id);
             return Ok(o);
         }
-        open.into_iter().find(|o| id_of(o) == id).ok_or_else(|| format!("Nothing \"{id}\" to go to now (done, gone, or never seen). List for what there is."))
+        // (or what she's doing this moment: listed a moment ago, then taken up by the order in hand
+        // as she got to it; GPT-Evil's door-l148, "here" in the list, "nothing to go to" a tic later)
+        let current = agent.x().current.clone().filter(|o| id_of(o) == id);
+        open.into_iter().find(|o| id_of(o) == id).or(current).ok_or_else(|| format!("Nothing \"{id}\" to go to now (done, gone, or never seen). List for what there is."))
     }
 
     /// Could she go to `r` now (risky: past what she'd rather not, if it won't kill her)? What
