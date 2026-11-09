@@ -381,7 +381,13 @@ impl Explorer {
                 }
             }
             let damage = self.expected_damage(&route.legs, obj, &states, obs);
-            if damage > RISK_SHARE * obs.health.unwrap_or(100.0) {
+            // (not while shut in on floors that hurt, for a line to set off: staying costs all
+            // she has, so a tenth of it is no measure, and a switch, a door, a line is the way a
+            // pit opens; E4M2, a lava pit at 32 health, the door's line out refused at 23 against
+            // 3.2, walls tried in the lava till dead. Not for walls or looking: lifted for every
+            // way, she fought and wandered in the lava, worse)
+            let shut_in = self.on_hurting_floor(obs) && self.reach.iter().all(|&p| self.knowledge.damaging(nav.sector_of_poly(p)));
+            if damage > RISK_SHARE * obs.health.unwrap_or(100.0) && !(shut_in && obj.trigger.is_some()) {
                 return None;
             }
         }

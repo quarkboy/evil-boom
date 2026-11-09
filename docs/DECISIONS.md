@@ -1460,3 +1460,13 @@ of 27 (26/22/16/11 before the campaign), E4 7/5/2/1 of 9 (6/5/2/0), Doom II 20/1
 
 Results (HNTR, one life): E1 8.0, E2 7.4 -> 7.0 (4/8), E3 7.9 -> 8.2 (2/8), Doom II 28/32; arenas
 118 -> 119/128, 226 -> 225/240.
+- **Shut in on floors that hurt, a line to set off isn't held to a tenth of her health** (E4M2: a
+  lava pit, no floor that doesn't hurt in reach, at 32 health the door's line out refused, 23
+  against a cap of 3.2; walls tried in the lava till dead): staying costs all she has, so the cap
+  is lifted for objectives with a trigger (switch, door, walk-over or teleport line) while she's on
+  a floor that hurts and all her reach does. Lifted for every way (walls, looking, fighting) was
+  worse (E4M2's helper: HNTR 386 -> 174 s). E4M2 ITYTD seed 0 exits (died). Regression set level
+  (doom2 arena 225 -> 226).
+- Tried and dropped: targets weighed by time to kill (threat over the kind's health, softened):
+  Doom II 28 -> 25 (MAP10 twice, MAP02), E3 8.2 -> 7.6. Too broad; a narrower form (hitscanners in
+  range over slow missile monsters) is for later.
