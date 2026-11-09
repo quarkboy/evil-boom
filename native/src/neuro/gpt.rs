@@ -1,14 +1,16 @@
 //! A language model as Evil (`evil-boom neuro-gpt`): a stand-in Neuro server the game connects to
-//! as it would to Neuro, with a model (any OpenAI-compatible chat API) choosing the actions.
+//! as it would to Neuro, with an OpenAI model choosing the actions through the Responses API.
 //!
-//! The game's registered actions are the model's tools. What the game says (the briefing, reports,
-//! status) goes in as messages; a forced decision asks it to choose now, among the forced actions
-//! (the force's state taken out again after, being ephemeral); the result of each action goes back
-//! to it, and after a look (list, inspect, status) it may act again, a few steps at most. Notable
-//! news (not silent) may prompt it too. What it writes rather than does is what Evil says, logged.
+//! The game's registered actions are the model's function tools (all of them every time; a forced
+//! decision narrows what it may call with an allowed-tools choice, the list itself unchanged). What
+//! the game says (the briefing, reports, status) goes in as user items; a forced decision asks it to
+//! choose now (the force's state given for that request only, being ephemeral); each call's result
+//! goes back as its output; after a look (list, inspect, status) it may act again, a few steps at
+//! most. Notable news (not silent) may prompt it too. What it writes rather than does is what Evil
+//! says, logged. Its output items (reasoning included) are kept in the conversation as returned.
 //!
-//! Configuration: config/neuro-gpt.json (committed: endpoint, model, persona, ...), overlaid by
-//! config/neuro-gpt.local.json (not committed: the API key, or anything to change locally).
+//! Configuration: config/neuro-gpt.json (committed: endpoint, model, reasoning, persona, ...),
+//! overlaid by config/neuro-gpt.local.json (not committed: the API key, anything local).
 
 use std::collections::VecDeque;
 use std::io::Write;
@@ -24,16 +26,19 @@ use tungstenite::Message;
 /// The stand-in's settings (the file's fields; the local file's override them).
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// an OpenAI-compatible API ("https://api.openai.com/v1", "http://localhost:11434/v1" for Ollama)
+    /// the API's base ("https://api.openai.com/v1")
     pub base_url: String,
     pub model: String,
     /// the key itself (the local file), or the environment variable it's in
     pub api_key: String,
     pub api_key_env: String,
-    pub temperature: f64,
-    /// who she is and how she plays (the system prompt)
+    /// reasoning effort ("none", "low", "medium", ...), if any
+    pub reasoning_effort: Option<String>,
+    /// sampling temperature, if any (reasoning models may refuse one)
+    pub temperature: Option<f64>,
+    /// who she is and how she plays (the instructions)
     pub persona: String,
-    /// messages kept (the oldest dropped)
+    /// conversation items kept (the oldest dropped)
     pub history: usize,
     /// actions in a row after a look (list, inspect, status) before waiting again
     pub max_steps: usize,
@@ -61,9 +66,10 @@ impl Config {
             model: s("model", ""),
             api_key: s("api_key", ""),
             api_key_env: s("api_key_env", "OPENAI_API_KEY"),
-            temperature: n("temperature", 0.7),
+            reasoning_effort: v.get("reasoning_effort").and_then(Value::as_str).map(str::to_string),
+            temperature: v.get("temperature").and_then(Value::as_f64),
             persona: s("persona", ""),
-            history: n("history", 60.0) as usize,
+            history: n("history", 80.0) as usize,
             max_steps: n("max_steps", 4.0) as usize,
             act_on_news: v.get("act_on_news").and_then(Value::as_bool).unwrap_or(true),
         })
@@ -88,7 +94,7 @@ type Send = (String, String, Option<String>);
 
 pub fn serve(port: u16, config_path: &Path) -> Result<(), String> {
     let config = Config::load(config_path)?;
-    if config.key().is_empty() && config.base_url.starts_with("https") {
+    if config.key().is_empty() {
         return Err(format!("no API key: put \"api_key\" in {}, or set {}", config_path.with_extension("local.json").display(), config.api_key_env));
     }
     let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
@@ -104,7 +110,7 @@ pub fn serve(port: u16, config_path: &Path) -> Result<(), String> {
             }
         }
     };
-    say(format!("GPT stand-in for Evil on ws://127.0.0.1:{port}: {} at {}; log in {}", config.model, config.base_url, log_path.display()));
+    say(format!("GPT stand-in for Evil on ws://127.0.0.1:{port}: {} (reasoning {}); log in {}", config.model, config.reasoning_effort.as_deref().unwrap_or("default"), log_path.display()));
     for stream in listener.incoming() {
         let stream = stream.map_err(|e| e.to_string())?;
         let mut ws = tungstenite::accept(stream).map_err(|e| e.to_string())?;
@@ -165,20 +171,31 @@ fn pump(ws: &mut tungstenite::WebSocket<std::net::TcpStream>, ev: &Sender<Event>
     }
 }
 
+/// A model's reply.
+struct Reply {
+    /// what it wrote (the message items' text)
+    text: String,
+    /// its function calls: (call id, action name, arguments as JSON text)
+    calls: Vec<(String, String, Option<String>)>,
+    /// its output items, as returned (kept in the conversation)
+    items: Vec<Value>,
+}
+
+/// Actions that only look: after one, she may go on to act.
+const LOOKS: [&str; 3] = ["doom_list", "doom_inspect", "doom_status"];
+
 /// The model's side: the conversation, and when to ask the model.
 struct Brain<F: Fn(String)> {
     config: Config,
     acts: Sender<Send>,
     say: F,
+    /// the game's actions as function tools
     tools: Vec<Value>,
     history: VecDeque<Value>,
     next_id: u64,
     /// events that came in while waiting on a result
     backlog: VecDeque<Event>,
 }
-
-/// Actions that only look: after one, she may go on to act.
-const LOOKS: [&str; 3] = ["doom_list", "doom_inspect", "doom_status"];
 
 impl<F: Fn(String)> Brain<F> {
     fn new(config: Config, acts: Sender<Send>, say: F) -> Self {
@@ -198,7 +215,15 @@ impl<F: Fn(String)> Brain<F> {
                 Event::Gone => return,
                 Event::Actions(a) => {
                     (self.say)(format!("REGISTER {}", a.iter().filter_map(|x| x["name"].as_str()).collect::<Vec<_>>().join(", ")));
-                    self.tools = a;
+                    // (a function tool: the action's name, description, and schema as its parameters;
+                    // not strict, some parameters being optional)
+                    self.tools = a
+                        .iter()
+                        .map(|t| {
+                            let params = if t["schema"].is_object() { t["schema"].clone() } else { json!({ "type": "object", "properties": {} }) };
+                            json!({ "type": "function", "name": t["name"], "description": t["description"], "parameters": params, "strict": false })
+                        })
+                        .collect();
                 }
                 Event::Context { message, silent } => {
                     (self.say)(format!("GAME{} {message}", if silent { " (silent)" } else { "" }));
@@ -216,47 +241,39 @@ impl<F: Fn(String)> Brain<F> {
         }
     }
 
-    /// One turn: the model asked (forced: choose among `names`), its actions sent, their results
-    /// given back; after a look, asked again, a few steps at most.
+    /// One turn: the model asked (forced: it must call one of `names`), its calls sent as actions,
+    /// their results given back; after a look, asked again, a few steps at most.
     fn turn(&mut self, events: &Receiver<Event>, names: Option<&Vec<String>>, ephemeral: Option<String>) {
         let mut steps = 0;
         let mut forced = names.cloned();
         let mut tries = 0;
         loop {
-            let mut messages: Vec<Value> = vec![json!({ "role": "system", "content": self.config.persona })];
-            messages.extend(self.history.iter().cloned());
+            let mut input: Vec<Value> = self.history.iter().cloned().collect();
             if let Some(e) = &ephemeral {
-                messages.push(json!({ "role": "user", "content": e }));
+                input.push(json!({ "role": "user", "content": e }));
             }
-            let tools: Vec<Value> = self
-                .tools
-                .iter()
-                .filter(|t| forced.as_ref().is_none_or(|n| n.iter().any(|x| t["name"].as_str() == Some(x))))
-                .map(|t| json!({ "type": "function", "function": { "name": t["name"], "description": t["description"], "parameters": if t["schema"].is_object() { t["schema"].clone() } else { json!({ "type": "object", "properties": {} }) } } }))
-                .collect();
-            let reply = match self.ask(&messages, &tools, forced.is_some()) {
+            let reply = match self.ask(input, forced.as_deref()) {
                 Ok(r) => r,
                 Err(e) => {
                     (self.say)(format!("MODEL ERROR {e}"));
                     return;
                 }
             };
-            if let Some(text) = reply["content"].as_str().filter(|t| !t.trim().is_empty()) {
-                (self.say)(format!("EVIL says: {}", text.trim()));
+            if !reply.text.trim().is_empty() {
+                (self.say)(format!("EVIL says: {}", reply.text.trim()));
             }
-            let calls = reply["tool_calls"].as_array().cloned().unwrap_or_default();
-            self.push(reply.clone());
-            if calls.is_empty() {
+            for item in reply.items {
+                self.push(item);
+            }
+            if reply.calls.is_empty() {
                 return;
             }
             let mut looked = false;
             let mut failed = false;
-            for c in &calls {
-                let name = c["function"]["name"].as_str().unwrap_or("").to_string();
-                let args = c["function"]["arguments"].as_str().map(str::to_string);
-                let (ok, message) = self.act(events, &name, args.clone());
-                (self.say)(format!("EVIL -> {name} {}\n  {} {message}", args.unwrap_or_default(), if ok { "ok" } else { "FAILED" }));
-                self.push(json!({ "role": "tool", "tool_call_id": c["id"], "content": format!("{}{message}", if ok { "" } else { "Failed: " }) }));
+            for (call_id, name, args) in &reply.calls {
+                let (ok, message) = self.act(events, name, args.clone());
+                (self.say)(format!("EVIL -> {name} {}\n  {} {message}", args.clone().unwrap_or_default(), if ok { "ok" } else { "FAILED" }));
+                self.push(json!({ "type": "function_call_output", "call_id": call_id, "output": format!("{}{message}", if ok { "" } else { "Failed: " }) }));
                 looked |= LOOKS.contains(&name.as_str());
                 failed |= !ok;
             }
@@ -294,34 +311,55 @@ impl<F: Fn(String)> Brain<F> {
         }
     }
 
-    fn push(&mut self, m: Value) {
-        self.history.push_back(m);
+    fn push(&mut self, item: Value) {
+        self.history.push_back(item);
         while self.history.len() > self.config.history {
             self.history.pop_front();
         }
-        // (not starting on a tool result whose call was dropped: the API wants them paired)
-        while self.history.front().is_some_and(|m| m["role"] == "tool") {
+        // (starting on one of the game's messages: never on a reasoning item, a call or an output
+        // whose partner was dropped, which the API refuses)
+        while self.history.front().is_some_and(|m| m["role"] != "user") {
             self.history.pop_front();
         }
     }
 
-    /// The model's reply message (content, tool_calls).
-    fn ask(&self, messages: &[Value], tools: &[Value], required: bool) -> Result<Value, String> {
-        let mut body = json!({ "model": self.config.model, "messages": messages, "temperature": self.config.temperature });
-        if !tools.is_empty() {
-            body["tools"] = json!(tools);
-            body["tool_choice"] = json!(if required { "required" } else { "auto" });
+    /// A response (POST /responses): the conversation as input, the instructions, all the tools,
+    /// and a choice of them: required among `forced` if forced, else up to the model.
+    fn ask(&self, input: Vec<Value>, forced: Option<&[String]>) -> Result<Reply, String> {
+        let mut body = json!({ "model": self.config.model, "instructions": self.config.persona, "input": input });
+        if !self.tools.is_empty() {
+            body["tools"] = Value::Array(self.tools.clone());
+            body["tool_choice"] = match forced {
+                Some(names) => json!({ "type": "allowed_tools", "mode": "required", "tools": names.iter().map(|n| json!({ "type": "function", "name": n })).collect::<Vec<_>>() }),
+                None => json!("auto"),
+            };
         }
-        let mut req = ureq::post(&format!("{}/chat/completions", self.config.base_url.trim_end_matches('/'))).timeout(Duration::from_secs(60));
-        let key = self.config.key();
-        if !key.is_empty() {
-            req = req.set("Authorization", &format!("Bearer {key}"));
+        if let Some(e) = &self.config.reasoning_effort {
+            body["reasoning"] = json!({ "effort": e });
         }
-        let resp: Value = match req.send_json(body) {
+        if let Some(t) = self.config.temperature {
+            body["temperature"] = json!(t);
+        }
+        let url = format!("{}/responses", self.config.base_url.trim_end_matches('/'));
+        let resp: Value = match ureq::post(&url).timeout(Duration::from_secs(180)).set("Authorization", &format!("Bearer {}", self.config.key())).send_json(body) {
             Ok(r) => r.into_json().map_err(|e| e.to_string())?,
-            Err(ureq::Error::Status(code, r)) => return Err(format!("{code}: {}", r.into_string().unwrap_or_default().chars().take(300).collect::<String>())),
+            Err(ureq::Error::Status(code, r)) => return Err(format!("{code}: {}", r.into_string().unwrap_or_default().chars().take(500).collect::<String>())),
             Err(e) => return Err(e.to_string()),
         };
-        resp["choices"][0]["message"].as_object().map(|m| Value::Object(m.clone())).ok_or_else(|| format!("no reply: {}", resp.to_string().chars().take(300).collect::<String>()))
+        let output = resp["output"].as_array().ok_or_else(|| format!("no output: {}", resp.to_string().chars().take(300).collect::<String>()))?;
+        let mut text = String::new();
+        let mut calls = Vec::new();
+        for o in output {
+            match o["type"].as_str().unwrap_or("") {
+                "message" => {
+                    for c in o["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "output_text") {
+                        text.push_str(c["text"].as_str().unwrap_or(""));
+                    }
+                }
+                "function_call" => calls.push((o["call_id"].as_str().unwrap_or("").to_string(), o["name"].as_str().unwrap_or("").to_string(), o["arguments"].as_str().map(str::to_string))),
+                _ => {}
+            }
+        }
+        Ok(Reply { text, calls, items: output.clone() })
     }
 }
