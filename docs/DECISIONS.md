@@ -1906,3 +1906,14 @@ Round K: MAP24, MAP25, MAP26, MAP27.
   counts monsters not known awake).
 
 Results (HNTR, one life): unchanged: E1 8.0, E2 7.5, E3 8.0, Doom II 29/32; arenas 119/128, 223/240.
+
+## The Icon of Sin's brain may be known (the user, 2026-11-09)
+
+The boss brain (MAP30) is hidden behind its wall, but its wake-up sound plays to the whole level:
+she may treat it as known (the user's call). The way to it, traced in round L: `A_BrainDie` ends the
+level on any map; the brain has 250 health behind a slot 32 tall; a rocket (spawned at her z + 32,
+flying level, going off on any floor it meets) gets in only when fired with her z inside the slot's
+gap less 32, a window of about 6 tics on the lift's climb; 108 a hit, three rides. To build: the
+brain as an exit objective whose activators are floors (a mover's range among them) from which a
+rocket spawns inside the opening on the line to it, and a node that fires in the window; rockets
+kept for it.
