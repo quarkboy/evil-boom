@@ -221,8 +221,12 @@ impl Knowledge {
             }
             self.hurt_on = Some((s, obs.tic));
         } else {
-            let since = self.standing.map_or(obs.tic, |x| x.1).max(self.hurt_on.filter(|h| h.0 == s).map_or(0, |h| h.1));
-            if obs.tic - since > FELT_TICS && self.felt.get(&s) != Some(&false) && !self.protected(obs.tic) {
+            // (only time on it unprotected counts: under a suit no floor hurts, so the clock
+            // starts when the suit runs out, not when she stepped on)
+            let since = self.standing.map_or(obs.tic, |x| x.1)
+                .max(self.hurt_on.filter(|h| h.0 == s).map_or(0, |h| h.1))
+                .max(self.suit_until.unwrap_or(0));
+            if obs.tic - since > FELT_TICS && self.felt.get(&s) != Some(&false) {
                 self.learn_floor(s, false, obs.tic);
             }
         }

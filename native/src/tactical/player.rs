@@ -659,7 +659,9 @@ impl Player {
         let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
         let known = self.explorer.knowledge.known_polys();
         let nav = Rc::clone(&self.explorer.nav);
-        let mut ammo: Vec<(f64, usize, &'static str)> = obs
+        // (to the thing itself, not the middle of the floor it's on: a big floor's middle can be
+        // further off it than she reaches, and she'd stop there none the richer, again and again)
+        let mut ammo: Vec<(f64, Point, &'static str)> = obs
             .things
             .iter()
             .flatten()
@@ -667,11 +669,12 @@ impl Player {
                 weapon_item(t.name).is_some_and(|s| s != 1 && s != 8)
                     || ammo_item(t.name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))
             })
-            .filter_map(|t| nav.poly_at((t.x, t.y)).filter(|p| known.contains(p)).map(|p| (dist((t.x, t.y), pos), p, t.name)))
+            .filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)))
+            .map(|t| (dist((t.x, t.y), pos), (t.x, t.y), t.name))
             .collect();
         ammo.sort_by(|a, b| a.0.total_cmp(&b.0));
-        for (_, pi, name) in ammo.into_iter().take(6) {
-            if let Some(f) = self.go_to_clear(obs, pi, &them, "for ammo", clear, true) {
+        for (_, at, name) in ammo.into_iter().take(6) {
+            if let Some(f) = self.go_to_point(obs, at, &them, "for ammo", clear, true) {
                 self.log(format!("tic {}: out of ammo: away for the {name}", obs.tic));
                 return Some(f);
             }

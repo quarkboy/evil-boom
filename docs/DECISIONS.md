@@ -1396,3 +1396,21 @@ Round 12: Doom II MAP30-MAP32, Doom E4M1.
 
 Results (HNTR, one life): unchanged: E1 8.0, E2 7.4 (7/8), E3 8.0 (4/8), Doom II 28/32; arenas
 118/128, 226/240.
+
+## Level campaign, round 13: out of ammo, to the ammo itself; a floor learned harmless only unprotected (2026-11-09)
+
+Round 13: Doom E4M2-E4M5.
+
+- **Out of ammo, to the ammo itself** (E4M5 UV: "away for the Shell" went to the middle of the poly
+  it lay in, 78 off it in a big room, "got there" without touching it, ten times; died out of
+  ammo): to the item's own spot. E4M5 UV seed 0 exits (died at 117 s); no exit lost seeds 0-3.
+- **A floor is learned harmless only from time on it unprotected** (E4M2: lava walked under a suit
+  learned "doesn't hurt after all" the moment the suit ran out): the clock from the latest of
+  stepping on, the last hurt there, and the suit's end.
+- Traced, not fixed: E4M2 (in a one-way lava pit at 32 health, the way out refused by the tenth-of-
+  health cap; lifting the cap on hurting floors made HNTR worse); E4M3 UV (a one-way drop into a
+  crowd at low health for a medikit: routes' risk counts floors, not monsters); E4M4 HMP/UV ("keeping
+  clear" of cacodemons it can't kill while firing at them: every gun emptied).
+
+Results (HNTR, one life): unchanged: E1 8.0, E2 7.4 (7/8), E3 8.0 (4/8), Doom II 28/32; arenas
+118/128, 226/240.
