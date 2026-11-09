@@ -126,6 +126,17 @@ impl Observation {
         (self.x, self.y)
     }
 
+    /// The health `raw` damage costs her through her armor: green takes a third of each hit,
+    /// blue half, while it lasts (vanilla `P_DamageMobj`; a hurting floor's hits too).
+    pub fn through_armor(&self, raw: f64) -> f64 {
+        let share = match self.armor_type {
+            Some(1) => 1.0 / 3.0,
+            Some(2) => 0.5,
+            _ => 0.0,
+        };
+        raw - (raw * share).min(self.armor.unwrap_or(0.0))
+    }
+
     pub fn height(&self, s: usize) -> Option<Heights> {
         self.heights.get(s).copied()
     }

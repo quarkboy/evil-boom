@@ -280,8 +280,15 @@ impl Combat {
         if let Some(spot) = spot {
             return Some((t.name, self.towards(obs, spot)));
         }
-        // (nowhere straight off: round a corner by the mesh, the nearest place whose middle it
-        // can't see; a big open room's way out, worked out afresh as it comes after her)
+        // (nowhere straight off: round a corner by the mesh; a big open room's way out, worked
+        // out afresh as it comes after her)
+        Some((t.name, Some(self.hidden_way(obs, eye)?)))
+    }
+
+    /// The way round a corner by the mesh, `SHAKE_FAR` or less along it, to the nearest place
+    /// whose middle something seeing from `eye` can't see.
+    fn hidden_way(&mut self, obs: &Observation, eye: Body) -> Option<Point> {
+        self.refresh_tic_cache(obs);
         let z = self.z(obs);
         let mesh = std::sync::Arc::clone(&self.nav.mesh);
         let hidden = |p: usize| {
@@ -289,7 +296,15 @@ impl Combat {
             self.fits(obs, c) && !self.los.clear(eye, Body { x: c.0, y: c.1, z, height: PLAYER_HEIGHT }, &self.heights_now)
         };
         let h = crate::motor::follower::nearest_heading(&mesh, obs, &hidden, SHAKE_FAR)?.to_radians();
-        Some((t.name, Some((h.cos(), h.sin()))))
+        Some((h.cos(), h.sin()))
+    }
+
+    /// Out of the sight of a hitscan shooter she's no shot of hers to spend on: the way round a
+    /// corner to where it can't see her (None: nowhere in reach). Its bullets land the same at any
+    /// range, so more distance in its sight keeps her no safer.
+    pub(super) fn out_of_sight_of(&mut self, obs: &Observation, t: &Thing) -> Option<Point> {
+        let eye = Body { x: t.x, y: t.y, z: t.z, height: mon(t.name).height };
+        self.hidden_way(obs, eye)
     }
 
     /// Sheltering from an arch-vile's blast rather than out of its sight: where it is, to face

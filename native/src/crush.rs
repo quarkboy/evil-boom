@@ -32,14 +32,7 @@ pub fn stroke_cost(kind: CrusherKind, obs: &Observation) -> f64 {
         return health;
     }
     let tics = 2.0 * (PLAYER_HEIGHT - BOTTOM) / kind.speed;
-    let raw = (tics / HIT_EVERY).ceil() * HIT;
-    // (green armor takes a third of each hit, blue half, while it lasts)
-    let share = match obs.armor_type {
-        Some(1) => 1.0 / 3.0,
-        Some(2) => 0.5,
-        _ => 0.0,
-    };
-    raw - (raw * share).min(obs.armor.unwrap_or(0.0))
+    obs.through_armor((tics / HIT_EVERY).ceil() * HIT)
 }
 
 /// Tics to get all of her out of sector s at the worst: from its point farthest from a way out

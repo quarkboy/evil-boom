@@ -514,13 +514,18 @@ impl Combat {
         obs.barrels.iter().flatten().filter(|&&b| dist(b, pos) < BARREL_CLEAR).all(|&b| dist(b, ahead) > dist(b, pos))
     }
 
+    /// How far off a rocket's burst must be from her: its blast and a margin.
+    pub(super) fn rocket_clear() -> f64 {
+        crate::tactical::bestiary::weapon(5).splash + 48.0
+    }
+
     /// Is a rocket at t sure not to blow up by her (E1M9's died at 88 health, nothing in sight)?
     pub(super) fn rocket_safe(&self, obs: &Observation, t: &Thing) -> bool {
         if self.invulnerable(obs.tic) {
             return true; // (her own blast can't hurt her either)
         }
         let pos = obs.pos();
-        let clear = crate::tactical::bestiary::weapon(5).splash + 48.0;
+        let clear = Self::rocket_clear();
         if dist((t.x, t.y), pos) < clear + mon(t.name).radius {
             return false;
         }
@@ -562,7 +567,11 @@ impl Combat {
             if dist((x, y), pos) < clear + r {
                 return false;
             }
-            if segment_point_distance(pos, (t.x, t.y), (x, y)) < r + pad + 12.0 && dist((x, y), pos) < dist((t.x, t.y), pos) + pad {
+            // (in the way only where a burst on it reaches her: one in the lane further off
+            // takes the rocket itself; MAP08 HMP, twelve demons coming down a hall 950 off, no
+            // rocket for the pack in its own lane, the pistol out instead)
+            let near_her = dist((x, y), pos) < clear + r + pad;
+            if near_her && segment_point_distance(pos, (t.x, t.y), (x, y)) < r + pad + 12.0 && dist((x, y), pos) < dist((t.x, t.y), pos) + pad {
                 return false;
             }
         }

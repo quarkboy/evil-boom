@@ -335,10 +335,15 @@ impl Combat {
             }
             let w = weapon_in(slot, obs);
             let have = Self::ammo(obs, slot);
-            if (w.ammo_per_shot > 0 && have < w.ammo_per_shot) || (slot == 5 && !self.rocket_safe(obs, t)) {
+            let d = at(&w);
+            // (a rocket's safety judged where she'd fire it from: further out than she is and
+            // past its blast, it's the gun to back off to, not one ruled out by how close t is
+            // now; MAP08, demons on her at 50-180 with 11 rockets, the launcher left out for it,
+            // backing off with the fist up, bitten to death)
+            let safe_there = d > here && d >= Self::rocket_clear() + info.radius;
+            if (w.ammo_per_shot > 0 && have < w.ammo_per_shot) || (slot == 5 && !safe_there && !self.rocket_safe(obs, t)) {
                 continue;
             }
-            let d = at(&w);
             if slot == 1 && !Self::in_reach(&w, t, d) {
                 continue; // (not the fist for being free when nothing reaches: as Astra's branch has it)
             }

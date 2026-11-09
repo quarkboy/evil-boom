@@ -121,11 +121,14 @@ impl Explorer {
             0 => WORST_FLOOR,
             d => d,
         });
+        // (through her armor, which takes its share of a floor's hits as of any: E2M4 HNTR, 80
+        // health and blue armor, a secret door pressed from the lava counted 70, 35 it'd cost;
+        // refused, nothing left to do)
         if end == 0 || obj.kind == Kind::Exit || self.knowledge.suit_until.is_some_and(|u| u >= obs.tic) {
-            return way;
+            return obs.through_armor(way);
         }
         let stay = if matches!(obj.kind, Kind::Item | Kind::Key) { 0.0 } else { f64::from(end) * END_STAY };
-        2.0 * way + stay
+        obs.through_armor(2.0 * way + stay)
     }
 
     /// (mortal) Ways into a crusher she knows across a line that sets it off, stopped where she

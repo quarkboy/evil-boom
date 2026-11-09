@@ -328,6 +328,15 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
     if c.ammo_short_against(obs, t) && !c.in_her_way(obs, t) {
         a.hold_fire = true;
         a.why = format!("outmatched: keeping clear of {} (ammo kept)", t.name);
+        // (a hitscanner's bullets reach her at any range: no shot to take, out of its sight, not
+        // further off in it; MAP06 UV, the spider mastermind 500-700 off, kept clear of back and
+        // forth in its sight 20 s, the straight duck nowhere near enough, shot to death)
+        if mon(t.name).attack == Attack::Hitscan {
+            if let Some(way) = c.out_of_sight_of(obs, t) {
+                a.moving = Some(way);
+                a.why = format!("outmatched: out of {}'s sight (ammo kept)", t.name);
+            }
+        }
     }
     Some(a)
 }

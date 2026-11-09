@@ -1692,3 +1692,35 @@ Round E: MAP01, MAP03, MAP04, MAP05.
 
 Results (HNTR, one life): E1 8.0, E2 6.9 -> 6.1 (E2M4 seed 3 stuck, two cyberdemon deaths on E2M8),
 E3 7.6 (1 -> 4/8 through), Doom II 25 -> 26/32 (MAP12 seed 0); arenas 119/128, 225/240.
+
+## 20-minute pass, round F: floor damage through armor; out of a hitscanner's sight round a corner; rockets judged from rocket range (2026-11-09)
+
+Round F: E2M4's "nothing left to do" stucks, MAP06, MAP07, MAP08.
+
+- **A hurting floor's damage goes through armor** (E2M4 HNTR, stuck the hour, and the regression
+  set's E2M4 stucks: the way on a secret door pressed from a small lava room; with blue armor, her
+  last visit there 10 and 10 armor a hit, the route's cost counted 69.5 of health against 80, under
+  the 25 margin, every way there refused; "nothing left to do"): vanilla `P_DamageMobj` takes a
+  floor's damage through armor like any hit, so the route's floor cost is the raw damage less what
+  her armor takes, while it lasts (`Observation::through_armor`, shared with the crusher stroke's
+  cost). E2M4 HNTR seeds 0 and 3 stuck -> exit; none lost.
+- **Outmatched by a hitscanner she's keeping her ammo from, round a corner out of its sight**
+  (MAP06 UV: the spider mastermind 500-700 off; "keeping clear (ammo kept)" steered her back and
+  forth in its sight for 20 s, not firing; no straight-off spot to duck to; shot down): distance does
+  nothing against hitscan, so with fire held at a hitscanner that outmatches her she goes the mesh's
+  way to the nearest place it can't see (`hidden_way`, the tracers' search). MAP06 UV lives longer
+  on seed 0, shorter on seed 1; no exit either way.
+- **A rocket judged from where she'd fire it, and a pack past its blast no bar** (MAP08 HNTR: the
+  launcher's demon pack; `best_gun` dropped the launcher whenever a rocket wasn't safe from where she
+  stood, so the fist was her gun and she closed in, 11 rockets unfired; and `rocket_safe` refused a
+  rocket for any monster near its path, twelve demons 950 off "not safe"): a rocket judged from
+  further out than she stands, past its blast, isn't ruled out by the target's being close now (she
+  backs off to it); a monster in its path bars it only within blast range of her (`rocket_clear`).
+  MAP08 HNTR seeds 0-3: every one past the ambush, seed 2 exits (died at 52-74 s before).
+- Traced, not fixed: MAP07 UV (the super shotgun against nine arachnotrons; the plasma rifle and
+  launcher behind platform switches whose routes the fight held a minute at full health; re-choosing
+  an "out" retreat's spot and dodging towards its way cost HMP its exit).
+
+Results (HNTR, one life): E1 8.0, E2 6.1 -> 7.9 (3 -> 7/8), E3 7.6 -> 7.9 (3/8), Doom II 26 -> 28/32
+(MAP08 seed 2 exits); arenas 119/128, 225 -> 223/240 (two draws: indoor cacodemons, the spider
+mastermind's cover).
