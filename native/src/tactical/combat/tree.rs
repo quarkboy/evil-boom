@@ -340,11 +340,18 @@ fn stepping_for_plasma(c: &mut Combat, obs: &Observation, s: &Situation) -> Opti
     Some(Act::new(Some(way), format!("stepping for a shot at {} (its way blocked)", t.name)))
 }
 
+/// Fought where it stands, whatever else: a sniper she'd see off first (`takes_on`), or,
+/// outmatched, a hitscan shooter she'd see off quick (`quick_hitscan`): kept clear of or walked
+/// on past, its bullets reach her all the same.
+fn fought(c: &Combat, obs: &Observation, s: &Situation, t: &Thing) -> bool {
+    c.takes_on(obs, t.name) || (s.outmatched && c.quick_hitscan(obs, t.name))
+}
+
 /// Outmatched by something awake and after her: keep her distance, still shooting (the route
 /// walked her up to the cyberdemon with a rocket or two short).
 fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let pos = s.pos;
-    let t = s.target.as_ref().filter(|t| s.outmatched && !c.takes_on(obs, t.name) && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < KEEP_CLEAR)?;
+    let t = s.target.as_ref().filter(|t| s.outmatched && !fought(c, obs, s, t) && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < KEEP_CLEAR)?;
     let gun = c.preferred_gun(obs, t);
     let moving = c.steer(obs, Some(t), &gun);
     let mut a = Act::new(moving, format!("outmatched: keeping clear of {}", t.name));
@@ -378,7 +385,7 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
 
 /// Outmatched: shooting on the way, the route going on.
 fn outmatched_get_past(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    (s.outmatched && !s.target.as_ref().is_some_and(|t| c.takes_on(obs, t.name))).then(|| Act::new(None, "getting past".into()))
+    (s.outmatched && !s.target.as_ref().is_some_and(|t| fought(c, obs, s, t))).then(|| Act::new(None, "getting past".into()))
 }
 
 /// Too near for the gun she'd fight it with, or for them to miss.
@@ -403,7 +410,7 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if !c.blocking(obs, s.target.as_ref()) && s.target.as_ref().is_some_and(|t| c.no_shot_long(obs, t)) {
         return None;
     }
-    let duel = s.target.as_ref().is_some_and(|t| c.takes_on(obs, t.name));
+    let duel = s.target.as_ref().is_some_and(|t| fought(c, obs, s, t));
     if !(s.threat >= STAND_THREAT || s.health < LOW_HEALTH || duel || c.blocking(obs, s.target.as_ref())) {
         return None;
     }

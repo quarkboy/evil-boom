@@ -120,6 +120,15 @@ impl Combat {
         m.attack == Attack::Hitscan && f64::from(m.health) / self.firepower(obs).max(1.0) > super::steering::DUCK_FIGHT
     }
 
+    /// A hitscan shooter she'd see off in a few seconds with what she has (not a sniper): fought,
+    /// outmatched or not, never kept clear of or walked on past. Its bullets land at any range,
+    /// and it's dead sooner than she'd be out of its sight. MAP27 HMP, a room's walls dropped on
+    /// zombiemen, sergeants and chaingunners round her (demons and spectres behind them): the
+    /// crowd outmatching her, each zombieman 40-110 off kept clear of in its sight, 100 to 10.
+    pub fn quick_hitscan(&self, obs: &Observation, name: &str) -> bool {
+        mon(name).attack == Attack::Hitscan && !self.sniper(obs, name)
+    }
+
     /// A sniper she'd see off before it saw her off, with the gun she has and the health and
     /// armor she has (not counting her ammo: what she needs she picks up as she goes). Then it's
     /// fought, from cover, whatever else: kept clear of, its bullets get there anyway; walked on

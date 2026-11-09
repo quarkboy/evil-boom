@@ -1879,3 +1879,30 @@ Round J: MAP20, MAP21, MAP22, MAP23.
 
 Results (HNTR, one life): E1 8.0, E2 7.8 -> 7.5 (cyberdemon deaths on E2M8), E3 8.0 (1 -> 3/8),
 Doom II 27 -> 29/32 (MAP08 and MAP12 seed 2); arenas 118 -> 119/128, 222 -> 223/240.
+
+## 20-minute pass, round K: a quick hitscanner fought where it stands when she's outmatched (2026-11-09)
+
+Round K: MAP24, MAP25, MAP26, MAP27.
+
+- **Outmatched, a hitscanner that dies quickly is fought, not kept clear of** (MAP27 HMP: an ambush
+  room, the door shut behind her, walls dropping on zombiemen, sergeants and chaingunners with
+  demons behind; outmatched by the crowd, each former human "kept clear of" in its sight or "got
+  past" deeper in, 100 -> 10 in 6 s from 40-110 off): hitscan doesn't fall off with range, and a
+  non-sniper hitscanner dies sooner than she'd get out of its sight; outmatched, such a target
+  (`quick_hitscan`) is fought where it stands (no keeping clear or getting past it, `standing`
+  treats it as a duel). MAP27 HMP seed 2 138 -> 996 s, UV seed 3 107 -> 750 s; no exit either way.
+  Regression set level.
+- Dropped after the regression set: MAP24's "along her sides only what stops her box blocks a
+  way" (`clear_run`'s side lines ignoring drops: the dodge on a walkway's edge had no way at all,
+  four fireballs hit; MAP24 HNTR seed 0 exits): E1 8.0 -> 7.2 (E1M3, a dodge mid-run-jump into a
+  nukage pit) and E2 7.5 -> 7.0.
+- Traced, not fixed: MAP25 (backing out over a hurting floor at a crawl: `Motion::go` cuts the
+  route's speed to 15-45% when its way is over 90 degrees from her facing, meant for the route
+  turning to it; with the fight holding her aim the turn never comes and `combat.controls` keeps
+  the cut, 2.4 a tic over a blood pit; Doom backpedals at full speed. And `Fitter::detour` skips the
+  walls her box touches at a segment's end without the crossing check `straighten` has: a detour
+  through the wall she's pressed to); MAP26 UV (ammo gone on the start's chaingunners; a dropped
+  chaingun ruled dangerous; `for_ammo` routes on the heights now, blind to lifts; `dangerous()`
+  counts monsters not known awake).
+
+Results (HNTR, one life): unchanged: E1 8.0, E2 7.5, E3 8.0, Doom II 29/32; arenas 119/128, 223/240.
