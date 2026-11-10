@@ -398,7 +398,7 @@ impl Default for Steer {
             w_off_floor: 10.0,
             w_barrel: 4.0,
             w_toward: 1.5,
-            w_new_ground: 0.0,
+            w_new_ground: 4.0,
             w_unlooked: 0.0,
             unlooked_tics: 70,
             w_out_of_view: 0.0,
@@ -674,6 +674,12 @@ pub struct Retreat {
     pub open_look: f64,
     /// ...or they're spread round her this far (degrees)
     pub sides: f64,
+    /// monsters woken on ground she's never been on: back this far the way she came, onto
+    /// ground she knows, and let them come to her (0: not at all). The user's: standing at
+    /// the edge still leaves her sides open
+    pub fall_back: f64,
+    /// ...and waited there for them this long, none in sight (tics)
+    pub fall_back_wait: i64,
     /// this many monsters first seen within `trap_tics` of each other: a trap sprung, or a room
     /// walked in on: back out the way she came (0: never)
     pub trap_count: usize,
@@ -720,6 +726,8 @@ impl Default for Retreat {
             tight: 0.45,
             open_look: 256.0,
             sides: 120.0,
+            fall_back: 0.0,
+            fall_back_wait: 105,
             trap_count: 0,
             trap_tics: 35,
             back_min: 128.0,

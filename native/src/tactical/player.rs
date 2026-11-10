@@ -163,10 +163,13 @@ pub enum RetreatKind {
     /// in a long fight with a hitscan shooter, out in the open with nowhere near to duck: to
     /// a corner she knows of, across the open if it must be, to fight it from
     Post,
+    /// monsters woken on ground she's never been on: back a little the way she came, to let
+    /// them come to her
+    FallBack,
 }
 
 impl RetreatKind {
-    const ALL: [RetreatKind; 6] = [RetreatKind::Cover, RetreatKind::ForAmmo, RetreatKind::Back, RetreatKind::Out, RetreatKind::Bait, RetreatKind::Post];
+    const ALL: [RetreatKind; 7] = [RetreatKind::Cover, RetreatKind::ForAmmo, RetreatKind::Back, RetreatKind::Out, RetreatKind::Bait, RetreatKind::Post, RetreatKind::FallBack];
 
     fn name(self) -> &'static str {
         match self {
@@ -176,6 +179,7 @@ impl RetreatKind {
             RetreatKind::Out => "out",
             RetreatKind::Bait => "bait",
             RetreatKind::Post => "post",
+            RetreatKind::FallBack => "fall back",
         }
     }
 }
@@ -207,6 +211,10 @@ pub struct Player {
     legs: Legs,
     /// tics she's been pushing and not moving
     pushing_still: i64,
+    /// the monsters she's fallen back from already (`fall_back`): not again for the same ones
+    fallen_for: BTreeSet<i32>,
+    /// fallen back, waiting for them to come to her till this tic
+    wait_until: i64,
     /// the things lying about that she's seen (items, and whatever else isn't a monster or a
     /// missile), by id: seen when the floor they're on was in her view with them on it
     things_seen: BTreeSet<i32>,
@@ -247,6 +255,8 @@ impl Player {
             plight: Plight::default(),
             legs: Legs::Route,
             pushing_still: 0,
+            fallen_for: BTreeSet::new(),
+            wait_until: 0,
             things_seen: BTreeSet::new(),
             advisor: None,
             base_tune: Rc::clone(&tune),
@@ -574,6 +584,19 @@ impl Player {
             }
             return c;
         }
+        // (fallen back, none of them in sight yet: waited for where she is, facing where the
+        // nearest was, not walked back in to them)
+        if d.is_none() && obs.tic < self.wait_until && self.fight.combat.now.against_her.is_empty() {
+            let pos = obs.pos();
+            let near = self.fight.combat.woken_ahead().into_iter().min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)));
+            if let Some(t) = near {
+                self.explorer.hold(obs, last);
+                let most = self.fight.tune.aim.hand_turn;
+                let turn = crate::motor::norm(obs.angle - crate::motor::heading(pos, (t.x, t.y))).clamp(-most, most);
+                let (forward, strafe) = crate::motor::brake(obs, obs.angle - turn);
+                return Controls { forward, strafe, turn, ..Controls::default() };
+            }
+        }
         let mut c = self.explorer.act(obs, last, &mut self.fight);
         for line in std::mem::take(&mut self.fight.pending_log) {
             self.explorer.log.push(format!("  [fight] {line}"));
@@ -648,7 +671,11 @@ impl Player {
             }
             if r.route.done || r.route.failed || self.retreat_over(obs, r.kind) || walled {
                 let msg = if r.route.done { "got there".to_string() } else { format!("{} over", r.kind.name()) };
+                let kind = r.kind;
                 self.log(format!("tic {}: {msg}", obs.tic));
+                if kind == RetreatKind::FallBack {
+                    self.wait_until = obs.tic + self.fight.tune.retreat.fall_back_wait;
+                }
                 self.retreat = None;
                 self.fight.combat.hold_fire = false;
                 if let Some(f) = &mut self.explorer.follower {
@@ -681,6 +708,7 @@ impl Player {
             RetreatKind::Back => calm || since > self.fight.tune.retreat.back_tics,
             RetreatKind::Cover => calm,
             RetreatKind::Post => since > self.fight.tune.retreat.post_tics,
+            RetreatKind::FallBack => since > self.fight.tune.retreat.back_tics,
         }
     }
 
@@ -740,6 +768,9 @@ impl Player {
         } else if unarmed {
             self.retreat_tic = obs.tic;
             (RetreatKind::ForAmmo, self.for_ammo(obs, on_way, true))
+        } else if let Some(r) = self.fall_back(obs) {
+            self.retreat_tic = obs.tic;
+            (RetreatKind::FallBack, Some(r))
         } else if let Some(why) = self.ambushed(obs) {
             self.retreat_tic = obs.tic;
             match self.back_out(obs, why) {
@@ -793,6 +824,31 @@ impl Player {
                 self.trail.remove(0);
             }
         }
+    }
+
+    /// Monsters woken on ground she's never been on, that she hasn't fallen back from yet: back a
+    /// little the way she came, onto ground she knows, to let them come to her.
+    fn fall_back(&mut self, obs: &Observation) -> Option<RouteFollower> {
+        let back = self.fight.tune.retreat.fall_back;
+        if back <= 0.0 {
+            return None;
+        }
+        let woken = self.fight.combat.woken_ahead();
+        if !woken.iter().any(|t| !self.fallen_for.contains(&t.id)) {
+            return None;
+        }
+        self.fallen_for.extend(woken.iter().map(|t| t.id));
+        let pos = obs.pos();
+        let nav = Rc::clone(&self.explorer.nav);
+        let k = &self.explorer.knowledge;
+        // (the nearest place on her trail that far back, not on a floor that hurts)
+        let spot = self.trail.iter().rev().copied().find(|&p| dist(p, pos) >= back && nav.poly_at(p).is_some_and(|pi| !k.damaging(nav.sector_of_poly(pi))))?;
+        let pi = nav.poly_at(spot)?;
+        let them = self.fight.combat.now.about.clone();
+        let f = self.go_to(obs, pi, &them, "fall back")?;
+        self.fight.combat.count("fall backs", 1.0);
+        self.log(format!("tic {}: {} woken on ground she's not been on: back to ({:.0}, {:.0}) to let them come", obs.tic, woken.len(), spot.0, spot.1));
+        Some(f)
     }
 
     /// Caught in a bad place: in a fight that's going badly (losing health fast, or several

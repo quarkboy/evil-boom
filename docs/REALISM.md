@@ -114,6 +114,7 @@ before any of them: 0.445.
 | A monster's footsteps not taken for attacks (work list A1) | 0.383 | -0.0032 ± 0.0028 | 935 / 35 / 48 | a correction; nothing's done with a footstep yet |
 | One hand turns her: no faster than 18 degrees a tic, its rate changed by at most 10 a tic (the user's: a jitter tracking an enemy near cover) | 0.399 | +0.0164 ± 0.0101 | 19 / 381 / 347 | jitters 0.29 a game minute to 0.16; at 6 a tic: 0.08, score -0.0105 ± 0.0101 |
 | Instinct: a monster known where it is for half a second after something comes between (the user's allowance; work list C1) | 0.398 | -0.0019 ± 0.0100 | 27 / 332 / 368 | nothing either way; a full second: +0.0021 ± 0.0100. Kept at half a second |
+| The fight's movement keeps off ground she's never been on (work list B1; the user's watching of E3M3) | 0.397 | -0.0012 ± 0.0100 | 18 / 357 / 365 | health lost to close attackers out of view 5.37 a game minute to 3.51, all health lost 27.4 to 23.8; she dies as often (724 to 723) but later (179 s to 221 s) |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's

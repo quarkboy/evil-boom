@@ -955,6 +955,11 @@ impl Combat {
         })
     }
 
+    /// The monsters about her, awake, that are on ground she's never been on.
+    pub fn woken_ahead(&self) -> Vec<Thing> {
+        self.now.about.iter().filter(|t| self.known.get(&t.id).is_some_and(|k| k.awake) && self.off_known((t.x, t.y))).cloned().collect()
+    }
+
     /// How many monsters she first saw within the last `tics`.
     pub fn newly_seen(&self, tic: i64, tics: i64) -> usize {
         self.known.values().filter(|s| tic - s.first <= tics && !self.dead.contains(&s.id)).count()
