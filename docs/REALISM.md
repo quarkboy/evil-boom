@@ -220,3 +220,7 @@ time. To act on once the watching's done, not before.
 - **E2M3 UV, seed 574408264** (dies at 55 s). She chose to fight a baron with a pistol rather
   than try the risky but necessary run past it. A demon helped trap her too, but it was mostly in
   view (the user's, pretty sure).
+- **E3M3 HMP, seed 2075529707** (dies at 62 s). She kept backing up to dodge or keep off
+  enemies, waking more of them in the rooms behind her, which then came up behind and hit her.
+  She needs a strong pull to stand her ground and fight closer to the enemies, and to dodge
+  missiles sideways, so as not to go into ground she hasn't explored while fighting.
