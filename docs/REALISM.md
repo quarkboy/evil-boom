@@ -106,6 +106,8 @@ before any of them: 0.445.
 | Hearing 2: turning to look at a sound, a hit, a bump (the shortcuts still in) | 0.426 | -0.0051 ± 0.0096 | 161 runs the same to the tic, 288 better, 288 worse | E2M8 UV +0.50, E1M5 UV -0.34, E2M1 UV -0.31 |
 | The reveal when hurt taken out (a hit gives a side to look) | 0.429 | +0.0029 ± 0.0066 | 491 / 198 / 180 | E2M8 UV -0.25, MAP10 HMP +0.23, E3M6 UV +0.22 |
 | Near taken out for missiles (noticed only in her view) | 0.431 | +0.0019 ± 0.0084 | 345 / 237 / 241 | E4M3 HMP -0.49, E1M5 UV -0.44, MAP11 HMP +0.25 |
+| Near taken out for monsters (seen only in her view) | 0.375 | -0.0566 ± 0.0104 | 50 / 292 / 414 | very large: traced, see below |
+| ...with the looking's two faults fixed | 0.382 | -0.0497 ± 0.0106 against before near came out | 32 / 299 / 411 | E1M7 UV -0.44, E3M2 HMP -0.43, E2M2 UV -0.38 |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's
@@ -147,3 +149,13 @@ Not a wandering monster's growls (146 of an imp's in three runs: she'd never sto
 One behaviour for all three: turn to it, and see what her eyes then show. Then the shortcuts
 out, one at a time, each scored: the reveal when hurt; near for missiles; near for monsters
 (the dearest, likely: it's how she knows of anything close behind her).
+
+Near taken out for monsters was the very large drop (0.431 to 0.375). Traced on MAP07 HMP: two
+faults in the looking (a look started again by each new sound, its ways reckoned from mid-turn,
+so never finished; a hit's side looked to 90 degrees and not on round behind), fixed, for 0.007
+of it back. The rest is what near had been besides: her memory. Everything she reckons in a
+fight came from what's in her view now, and a second after; a monster she saw two seconds ago
+and turned from was gone from the threat, from outmatched and surrounded, from the ways her
+steering keeps clear of. Next: monsters seen lately kept in mind where she last saw them (the
+user's: and counted for more than one in sight; one you know is round you and can't place is
+the bigger threat).

@@ -168,7 +168,7 @@ impl Combat {
     pub(super) fn shake_off(&mut self, obs: &Observation, missiles: &[Thing]) -> Option<(&'static str, Option<Point>)> {
         // (with nothing else in sight after her: in a fight, dodged as it comes, running off round
         // a corner from the revenant still shooting walked her into the arachnotron's plasma)
-        if !self.now.against_her.is_empty() {
+        if !self.now.about.is_empty() {
             return None;
         }
         let t = missiles.iter().find(|t| self.homing_since.get(&t.id).is_some_and(|&since| obs.tic - since >= self.tune.hide.shake_after))?;
@@ -224,7 +224,7 @@ impl Combat {
     /// The way to move fighting `target` with `gun` (None: nowhere safe).
     pub(super) fn steer(&mut self, obs: &Observation, target: Option<&Thing>, gun: &Weapon) -> Option<Point> {
         let pos = obs.pos();
-        let mut them = self.now.against_her.clone();
+        let mut them = self.now.about.clone();
         if let Some(t) = target.filter(|t| !them.iter().any(|m| m.id == t.id)) {
             them.push(t.clone()); // (out of sight just now: where it was)
         }

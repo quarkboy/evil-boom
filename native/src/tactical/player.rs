@@ -660,7 +660,7 @@ impl Player {
     fn walled_off(&self, obs: &Observation, route: &RouteFollower) -> bool {
         let pos = obs.pos();
         let path = route.planned_path(Some(pos));
-        self.fight.combat.now.against_her.iter().any(|t| {
+        self.fight.combat.now.about.iter().any(|t| {
             let touch = (monster(t.name).map_or(20.0, |m| m.radius) + PLAYER_RADIUS).min(dist((t.x, t.y), pos) - self.fight.tune.retreat.ammo_margin);
             path.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).any(|(a, b)| segment_point_distance(a, b, (t.x, t.y)) < touch)
         })
@@ -680,7 +680,7 @@ impl Player {
         if self.fight.combat.now.invulnerable || self.fight.combat.bfg_flying(obs) {
             return None; // (nothing to fall back from; or her BFG's spray to come, from where she is)
         }
-        let unarmed = !self.fight.combat.armed(obs) && !self.fight.combat.now.against_her.is_empty();
+        let unarmed = !self.fight.combat.armed(obs) && !self.fight.combat.now.about.is_empty();
         let on_way = unarmed && !self.fight.combat.now.vile && self.on_for_ammo(obs);
         let (kind, route) = if self.fight.combat.now.vile {
             self.retreat_tic = obs.tic;
@@ -771,7 +771,7 @@ impl Player {
             return None;
         }
         let pos = obs.pos();
-        let close: Vec<Point> = self.fight.combat.now.against_her.iter().filter(|t| dist((t.x, t.y), pos) < self.fight.tune.retreat.ambush_near).map(|t| (t.x, t.y)).collect();
+        let close: Vec<Point> = self.fight.combat.now.about.iter().filter(|t| dist((t.x, t.y), pos) < self.fight.tune.retreat.ambush_near).map(|t| (t.x, t.y)).collect();
         let losing = self.fight.combat.now.damage_rate > self.fight.tune.retreat.ambush_rate;
         if !losing && close.len() < self.fight.tune.retreat.ambush_count {
             return None;
@@ -793,7 +793,7 @@ impl Player {
     /// Back the way she came, to the nearest place on it none of them can see her (or well clear
     /// of them all), by a way not through them.
     fn back_out(&mut self, obs: &Observation, why: String) -> Option<RouteFollower> {
-        let them: Vec<Thing> = self.fight.combat.now.against_her.clone();
+        let them: Vec<Thing> = self.fight.combat.now.about.clone();
         let pos = obs.pos();
         let nav = Rc::clone(&self.explorer.nav);
         let heights = self.fight.combat.heights(obs).to_vec();
@@ -831,7 +831,7 @@ impl Player {
     /// With a heavy after her she can't see off quickly and monsters of another kind near it:
     /// to a place she's been where its shots at her go through them, holding fire.
     fn baiting(&mut self, obs: &Observation) -> Option<RouteFollower> {
-        let them = self.fight.combat.now.against_her.clone();
+        let them = self.fight.combat.now.about.clone();
         let fp = self.fight.combat.now.firepower;
         let heavies: Vec<&Thing> = them.iter().filter(|h| HEAVIES.contains(&h.name) && mhealth(h.name) / fp > self.fight.tune.retreat.bait_heavy).collect();
         if heavies.is_empty() {
@@ -868,7 +868,7 @@ impl Player {
     /// No plain way to ammo but on her way for some already (`on_way`): on with that, not away.
     /// No way to ammo at all, not hurt (`keep_on`), and her way on clear of them: on with it.
     fn for_ammo(&mut self, obs: &Observation, on_way: bool, keep_on: bool) -> Option<RouteFollower> {
-        let them = self.fight.combat.now.against_her.clone();
+        let them = self.fight.combat.now.about.clone();
         let pos = obs.pos();
         // (no nearer to any of them than she is: one on her already, every way off starts by
         // it, and away is still away)
@@ -958,7 +958,7 @@ impl Player {
         if !(weapon_item(name).is_some_and(|s| s != 1 && s != 8) || ammo_item(name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))) {
             return false;
         }
-        let them = self.fight.combat.now.against_her.clone();
+        let them = self.fight.combat.now.about.clone();
         let nearest = them.iter().map(|m| dist((m.x, m.y), obs.pos())).fold(f64::INFINITY, f64::min);
         let clear = self.fight.tune.errands.past_clear.min(nearest - self.fight.tune.retreat.ammo_margin).max(0.0);
         keeps_clear(obs, f, &them, clear)

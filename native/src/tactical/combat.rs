@@ -814,6 +814,19 @@ impl Combat {
         (a.hit || !hit_only).then(|| a.ways[0])
     }
 
+    /// The monsters she can't see now but has in mind: seen awake within `senses.memory_tics`,
+    /// not known dead, not found gone from where she left them; each as she last saw it, where
+    /// she last saw it, doing nothing she knows of.
+    pub(super) fn remembered(&self, obs: &Observation) -> Vec<Thing> {
+        self.known
+            .values()
+            .filter(|s| s.awake && !s.lost && !self.dead.contains(&s.id) && obs.tic - s.tic <= self.tune.senses.memory_tics && mon(s.name).attack != Attack::None)
+            .filter(|s| !self.visible.iter().any(|t| t.id == s.id))
+            .filter_map(|s| self.last_seen.get(&s.id))
+            .map(|t| Thing { vx: 0.0, vy: 0.0, vz: 0.0, attack: -1, ..t.clone() })
+            .collect()
+    }
+
     /// Is that monster dead, as far as she knows (seen or heard to die)?
     pub fn known_dead(&self, id: i32) -> bool {
         self.dead.contains(&id)
@@ -864,7 +877,7 @@ impl Combat {
         if s.awake {
             return String::new(); // (the fist too wakes what hears it: P_FireWeapon's noise alert, no weapon WPF_SILENT)
         }
-        if self.now.against_her.iter().any(|o| self.known.get(&o.id).is_some_and(|k| k.awake)) {
+        if self.now.about.iter().any(|o| self.known.get(&o.id).is_some_and(|k| k.awake)) {
             return String::new(); // (already in a fight)
         }
         let Some(here) = self.nav.poly_at(obs.pos()) else { return String::new() };
@@ -978,7 +991,8 @@ impl Combat {
             self.patience.rest(Effort::Closing, t.id); // (got it in reach: the clock again, next time)
         }
         let close: Vec<Thing> = self
-            .visible
+            .now
+            .about
             .iter()
             .filter(|t| {
                 let m = mon(t.name);

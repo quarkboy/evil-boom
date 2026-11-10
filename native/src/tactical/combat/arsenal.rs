@@ -101,7 +101,8 @@ impl Combat {
     /// bullets get there. E3M8 from a pistol start, the spider mastermind 1298 off with a pistol
     /// and two rockets: closed in on): `now.odds`, and `now.outmatched` by it.
     pub(super) fn odds_in_sight(&self, obs: &Observation) -> Odds {
-        let near: Vec<&'static str> = self.visible.iter().filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0 || self.sniper(obs, t.name)).map(|t| t.name).collect();
+        let remembered = self.remembered(obs);
+        let near: Vec<&'static str> = self.visible.iter().chain(&remembered).filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0 || self.sniper(obs, t.name)).map(|t| t.name).collect();
         self.odds(obs, &near)
     }
 
@@ -239,7 +240,7 @@ impl Combat {
     /// after her she wouldn't punch, or can't get at? (MAP14 HMP: a chaingunner up on a ledge
     /// shooting her, berserk and out of ammo; "armed", the ammo she knew of never gone for)
     pub fn armed(&self, obs: &Observation) -> bool {
-        let them = &self.now.against_her;
+        let them = &self.now.about;
         self.guns_armed(obs) || (Self::fists_for(obs, &them.iter().map(|t| t.name).collect::<Vec<_>>()) && !them.iter().any(|t| self.out_of_fist_reach(obs, t)))
     }
 

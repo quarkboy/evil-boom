@@ -107,6 +107,12 @@ pub struct Senses {
     pub heard_firing: i64,
     /// a death seen is followed by its cry within this (tics): that cry isn't another's
     pub cry_due: i64,
+    /// a monster out of her sight is still in her mind, where she last saw it, for this long
+    /// (tics): counted in the threat, kept clear of, not something to shoot
+    pub memory_tics: i64,
+    /// one she knows is about and can't see counts this many times its threat (the user's: one
+    /// you know is round you and don't know where is the bigger threat)
+    pub unseen_threat: f64,
     /// something heard, a hit or a bump is looked round for this long at most (tics)
     pub alert_tics: i64,
     /// turned to within this many degrees of it, she's looked
@@ -136,6 +142,8 @@ impl Default for Senses {
             heard_side: 40.0,
             heard_firing: 12,
             cry_due: 35,
+            memory_tics: 10 * 35,
+            unseen_threat: 1.5,
             alert_tics: 70,
             looked: 10.0,
         }

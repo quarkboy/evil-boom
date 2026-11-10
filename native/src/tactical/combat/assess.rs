@@ -26,11 +26,18 @@ pub struct Assessment {
     pub invulnerable: bool,
     /// the monsters in sight that are after her (not each other)
     pub against_her: Vec<Thing>,
-    /// of those, what shoots: bullets, missiles, an arch-vile's fire
+    /// those she can't see now but saw a little while ago, awake, each as and where she last
+    /// saw it (not moving, not attacking: she doesn't know what it's doing)
+    pub remembered: Vec<Thing>,
+    /// the two together: what's about her, as far as she knows. What she keeps clear of and
+    /// counts the threat of; only what's in sight (`against_her`) is something to shoot
+    pub about: Vec<Thing>,
+    /// of those about, what shoots: bullets, missiles, an arch-vile's fire
     pub shooters: Vec<Thing>,
     /// of those in sight, what she's in a fight with (`Combat::engaged`)
     pub engaged: Vec<Thing>,
-    /// what's against her would do to her, about (damage a second)
+    /// what's about her would do to her (damage a second), one she can't see counted for more
+    /// (`senses.unseen_threat`)
     pub threat: f64,
     /// what her best gun with ammo does (damage a second)
     pub firepower: f64,
@@ -61,6 +68,8 @@ impl Default for Assessment {
             health: 100.0,
             invulnerable: false,
             against_her: Vec::new(),
+            remembered: Vec::new(),
+            about: Vec::new(),
             shooters: Vec::new(),
             engaged: Vec::new(),
             threat: 0.0,
@@ -100,6 +109,7 @@ impl Assessment {
             "damage_rate": finite(self.damage_rate),
             "time_to_death": finite(self.time_to_death),
             "shooters": self.shooters.len(),
+            "remembered": self.remembered.len(),
             "engaged": self.engaged.len(),
             "against_her": them.iter().map(|t| serde_json::json!({"id": t.id, "name": t.name, "away": dist((t.x, t.y), self.pos).round(), "health": t.health})).collect::<Vec<_>>(),
         })
@@ -130,6 +140,8 @@ impl Assessment {
     /// A level started again: nothing in sight any more (the rest stands till she next looks).
     pub(super) fn nothing_in_sight(&mut self) {
         self.against_her.clear();
+        self.remembered.clear();
+        self.about.clear();
         self.shooters.clear();
         self.engaged.clear();
         self.threat = 0.0;
@@ -145,7 +157,9 @@ impl Combat {
     pub(super) fn assess(&mut self, obs: &Observation) -> Assessment {
         let pos = obs.pos();
         let against_her = self.seen_against_her();
-        let shooters = against_her.iter().filter(|t| matches!(mon(t.name).attack, Attack::Hitscan | Attack::Missile | Attack::Fire)).cloned().collect();
+        let remembered = self.remembered(obs);
+        let about: Vec<Thing> = against_her.iter().chain(&remembered).cloned().collect();
+        let shooters = about.iter().filter(|t| matches!(mon(t.name).attack, Attack::Hitscan | Attack::Missile | Attack::Fire)).cloned().collect();
         let firepower = self.firepower(obs);
         let damage_rate = self.damage_rate(obs.tic);
         let health = obs.health.unwrap_or(100.0);
@@ -157,17 +171,19 @@ impl Combat {
             invulnerable: self.invulnerable(obs.tic),
             shooters,
             engaged: self.engaged(obs),
-            threat: against_her.iter().map(|t| mon(t.name).threat).sum(),
+            threat: against_her.iter().map(|t| mon(t.name).threat).sum::<f64>() + self.tune.senses.unseen_threat * remembered.iter().map(|t| mon(t.name).threat).sum::<f64>(),
             firepower,
             guns_armed: self.guns_armed(obs),
             short_of_ammo: self.short_of_ammo(obs),
             odds,
             outmatched: odds.too_much(self.tune.guns.outmatched),
-            surrounded: self.surrounded(pos, &against_her),
+            surrounded: self.surrounded(pos, &about),
             vile: against_her.iter().any(|t| t.name == "Archvile" && f64::from(mon(t.name).health) / firepower > self.tune.retreat.vile_kill),
             damage_rate,
             time_to_death: if damage_rate <= 0.0 { f64::INFINITY } else { health / damage_rate },
             against_her,
+            remembered,
+            about,
         }
     }
 
