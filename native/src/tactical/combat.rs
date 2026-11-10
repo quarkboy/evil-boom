@@ -533,7 +533,9 @@ impl Combat {
                 continue;
             }
             let recent = self.known.get(&t.id).is_some_and(|s| obs.tic - s.tic < self.tune.senses.recent_sight_tics);
-            if !(recent || d < self.tune.senses.near || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov) {
+            // (in her view; or seen a moment ago, the corner of her eye. Not for being near: one
+            // behind her that makes no sound she doesn't know of, till it does, or she backs into it)
+            if !(recent || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov) {
                 continue;
             }
             let target = Body { x: t.x, y: t.y, z: t.z, height: mon(t.name).height };
@@ -600,7 +602,7 @@ impl Combat {
             .filter(|s| !s.lost && !in_sight.contains(&s.id) && !self.dead.contains(&s.id) && obs.tic - s.tic > self.tune.engage.lost_tics)
             .filter(|s| {
                 let d = dist(s.pos(), pos);
-                d < self.tune.engage.range && (d < self.tune.senses.near || norm(heading(pos, s.pos()) - obs.angle).abs() < self.tune.senses.fov) && self.los.clear(me, sight::eye_of(s), &self.heights_now)
+                d < self.tune.engage.range && norm(heading(pos, s.pos()) - obs.angle).abs() < self.tune.senses.fov && self.los.clear(me, sight::eye_of(s), &self.heights_now)
             })
             .map(|s| s.id)
             .collect();

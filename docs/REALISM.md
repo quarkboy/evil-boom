@@ -105,6 +105,7 @@ before any of them: 0.445.
 | Hearing 1: a death by its cry, firing by an attack heard (the game's sounds) | 0.432 | -0.0049 ± 0.007 | see the commit | E3M4 HMP +0.24, E4M8 HMP -0.22, MAP10 HMP +0.22 |
 | Hearing 2: turning to look at a sound, a hit, a bump (the shortcuts still in) | 0.426 | -0.0051 ± 0.0096 | 161 runs the same to the tic, 288 better, 288 worse | E2M8 UV +0.50, E1M5 UV -0.34, E2M1 UV -0.31 |
 | The reveal when hurt taken out (a hit gives a side to look) | 0.429 | +0.0029 ± 0.0066 | 491 / 198 / 180 | E2M8 UV -0.25, MAP10 HMP +0.23, E3M6 UV +0.22 |
+| Near taken out for missiles (noticed only in her view) | 0.431 | +0.0019 ± 0.0084 | 345 / 237 / 241 | E4M3 HMP -0.49, E1M5 UV -0.44, MAP11 HMP +0.25 |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's

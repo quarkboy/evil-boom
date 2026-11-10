@@ -66,7 +66,7 @@ impl Tuning {
 pub struct Senses {
     /// half the view, degrees: monsters in line of sight inside it are seen...
     pub fov: f64,
-    /// ...and any this near, in any direction (heard)
+    /// a barrel this near is noticed whichever way she faces
     pub near: f64,
     /// A recently seen monster can still be noticed outside the usual field of view.
     pub recent_sight_tics: i64,
