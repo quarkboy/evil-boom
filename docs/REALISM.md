@@ -243,3 +243,12 @@ time. To act on once the watching's done, not before.
   At about 90 s she waits in front of a lift, trying to pick up a medikit and failing; then,
   giving up, she backs into a shotgun guy and never turns round, even hit point blank several
   times. The user's: deserves a careful trace.
+  Traced. Two things. (1) The medikit is on a lift she'd sent off herself, crossing its line as
+  she backed away from a spectre; she then waited 20 s "at the mover" for a lift that doesn't
+  come back by itself, and only afterwards tried its switch. A wait for a lift that has no
+  reason to come: to fix with the follower's waits. (2) The shotgun guy: 43 units off at her
+  side, three blasts, never looked at. A hit from the side was only turned to with a target in
+  sight and no missile in the air: here imps' fireballs were flying (so not then), and with
+  the imp gone from sight "lost sight: keeping at it" came before the look (so not then
+  either). Fixed: a hit's turned to with missiles in the air (a dodge is her legs', her eyes
+  are free) and before a monster she's lost sight of.

@@ -1071,8 +1071,11 @@ impl Combat {
                 }
             }
         }
-        // (hit from where she isn't looking: round to it, whatever she was shooting)
-        if s.vile.is_none() && s.missiles.is_empty() {
+        // (hit from where she isn't looking: round to it, whatever she was shooting, and with
+        // missiles in the air too: a dodge is her legs', her eyes are free. E1M6 UV: imps'
+        // fireballs coming, a shotgun guy 43 units off at her side firing into her three times,
+        // never turned to)
+        if s.vile.is_none() {
             if let Some(way) = self.look(obs, true) {
                 act.aim = Some(way);
                 act.hold_fire = true;

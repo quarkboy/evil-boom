@@ -463,6 +463,11 @@ impl Combat {
                 }
                 return Some(Decision { kind: Move::Ducked, yields: false, pressed: false, aim: None, fire: false, weapon: 0, moving: way, why });
             }
+            // (hit from where she isn't looking: that before a monster she's lost sight of. E1M6
+            // UV: "keeping at" an imp gone from sight, a shotgun guy at her side never looked at)
+            if let Some(way) = self.look(obs, true) {
+                return Some(Decision { kind: Move::Looking, yields: true, pressed: false, aim: Some(way), fire: false, weapon: 0, moving: None, why: "looking round".into() });
+            }
             if let Some(d) = self.lost_sight(obs) {
                 return Some(d);
             }
