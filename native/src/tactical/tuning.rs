@@ -98,6 +98,17 @@ pub struct Senses {
     /// her unless it's turned to another monster in sight and not to her (a monster steps in
     /// eight directions, 45 degrees apart)
     pub facing: f64,
+    /// a sound's taken for a monster she knows of out of sight if where she last saw it is
+    /// within this of how far off the sound was (by its loudness)...
+    pub heard_fit: f64,
+    /// ...and on the side it came from, within this much of the balance between her ears (of
+    /// 96 either way)
+    pub heard_side: f64,
+    /// a monster out of sight is firing if its kind's attack was heard this lately (tics: a
+    /// chaingun's shots come four apart)
+    pub heard_firing: i64,
+    /// a death seen is followed by its cry within this (tics): that cry isn't another's
+    pub cry_due: i64,
 }
 
 impl Default for Senses {
@@ -120,6 +131,10 @@ impl Default for Senses {
             floor_crush_gap: 72.0,
             invulnerable_spare: 3 * 35,
             facing: 45.0,
+            heard_fit: 256.0,
+            heard_side: 40.0,
+            heard_firing: 12,
+            cry_due: 35,
         }
     }
 }

@@ -135,6 +135,7 @@ type ResetIdsFn = unsafe extern "C" fn();
 type HitsFn = unsafe extern "C" fn(*mut c_int, c_int) -> c_int;
 type SoundsFn = unsafe extern "C" fn(*mut c_int, c_int) -> c_int;
 type SfxNameFn = unsafe extern "C" fn(c_int, *mut c_char, c_int) -> c_int;
+type MobjSoundsFn = unsafe extern "C" fn(c_int, *mut c_int) -> c_int;
 type GrabSoundFn = unsafe extern "C" fn(*mut i16, c_int) -> c_int;
 type SoundRateFn = unsafe extern "C" fn() -> c_int;
 
@@ -164,6 +165,7 @@ pub struct Dsda {
     hits_fn: Option<HitsFn>,
     sounds_fn: Option<SoundsFn>,
     sfx_name_fn: Option<SfxNameFn>,
+    mobj_sounds_fn: Option<MobjSoundsFn>,
     grab_sound_fn: Option<GrabSoundFn>,
     sound_rate_fn: Option<SoundRateFn>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
@@ -217,6 +219,7 @@ impl Dsda {
         let hits_fn = sym(b"evil_hits_since").ok().map(|p| unsafe { std::mem::transmute::<*const (), HitsFn>(p) });
         // SAFETY: as above, evil_sounds_since's and evil_sfx_name's signatures; optional.
         let sounds_fn = sym(b"evil_sounds_since").ok().map(|p| unsafe { std::mem::transmute::<*const (), SoundsFn>(p) });
+        let mobj_sounds_fn = sym(b"evil_mobj_sounds").ok().map(|p| unsafe { std::mem::transmute::<*const (), MobjSoundsFn>(p) });
         let sfx_name_fn = sym(b"evil_sfx_name").ok().map(|p| unsafe { std::mem::transmute::<*const (), SfxNameFn>(p) });
         // SAFETY: as above, evil_grab_sound's signature; optional.
         let grab_sound_fn = sym(b"evil_grab_sound").ok().map(|p| unsafe { std::mem::transmute::<*const (), GrabSoundFn>(p) });
@@ -248,6 +251,7 @@ impl Dsda {
             hits_fn,
             sounds_fn,
             sfx_name_fn,
+            mobj_sounds_fn,
             grab_sound_fn,
             sound_rate_fn,
             _argv: argv,
@@ -323,6 +327,16 @@ impl Dsda {
         // SAFETY: room for MAX sounds of nine ints each, as the call is told; see `load`.
         let n = unsafe { f(raw.as_mut_ptr(), MAX as c_int) }.clamp(0, MAX as c_int) as usize;
         raw.as_chunks::<9>().0.iter().take(n).copied().collect()
+    }
+
+    /// The sounds a kind of thing makes, by number (0: none): seeing her (a missile: fired),
+    /// attacking, in pain, dying (a missile: going off), wandering. None past the last kind, or
+    /// in a library without the call.
+    pub fn mobj_sounds(&self, kind: i32) -> Option<[i32; 5]> {
+        let f = self.mobj_sounds_fn?;
+        let mut out = [0 as c_int; 5];
+        // SAFETY: room for the five ints the call writes; see `load`.
+        (unsafe { f(kind, out.as_mut_ptr()) } != 0).then_some(out)
     }
 
     /// The game's sounds' names, by number (the first is none's, empty): asked of the game once

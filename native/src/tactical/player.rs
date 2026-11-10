@@ -288,6 +288,11 @@ impl Player {
     /// missiles she's noticed (the fight's senses, `Combat::observe`).
     fn percept(&self, obs: &Observation) -> Observation {
         let mut seen = obs.clone();
+        // (a sound as heard: what it is, how loud, which side; not what made it or where)
+        for s in &mut seen.sounds {
+            s.from = None;
+            s.at = (0.0, 0.0);
+        }
         if let Some(things) = &mut seen.things {
             let c = &self.fight.combat;
             // (a monster in her sight as her senses have it: its health her reckoning)

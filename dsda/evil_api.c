@@ -194,6 +194,21 @@ EVIL_API int evil_sfx_name(int sfx, char *out, int max)
   return 1;
 }
 
+/* The sounds a kind of thing makes, by number (0: none): when it sees her (a missile: as it's
+ * fired), attacking, in pain, dying (a missile: as it goes off), wandering about. The game picks
+ * among a few of some at random (the three "podth", the two "bgsit"): the first is given.
+ * Returns 0 for no such type. */
+EVIL_API int evil_mobj_sounds(int type, int *out)
+{
+  const mobjinfo_t *info;
+  if (type < 0 || type >= num_mobj_types)
+    return 0;
+  info = &mobjinfo[type];
+  out[0] = info->seesound; out[1] = info->attacksound; out[2] = info->painsound;
+  out[3] = info->deathsound; out[4] = info->activesound;
+  return 1;
+}
+
 /* The random numbers: from the clock, as the game has them (fixed 0: a real run), or from
  * `value` (fixed 1: the same run every time, given the same commands; for testing: a barrel
  * took a different number of shots each run, and all after went its own way). From the next

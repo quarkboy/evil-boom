@@ -34,7 +34,7 @@ use crate::decisions::{Journal, Record};
 use crate::geom::{dist, Point};
 use crate::specials::Category;
 use crate::los::{Body, LineOfSight};
-use crate::motor::{heading, norm, Controls, Observation, Thing, FRICTION, RUN_THRUST, TICRATE};
+use crate::motor::{heading, norm, Controls, Heard, Observation, Thing, FRICTION, RUN_THRUST, TICRATE};
 use crate::navigator::{Navigator, PLAYER_HEIGHT, PLAYER_RADIUS};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -48,8 +48,6 @@ const SPLASH: f64 = 112.0;
 /// a barrel's height (seen over a ledge this high or not)
 const BARREL_HEIGHT: f64 = 42.0;
 
-/// a sound's heard this far off, walls or none (S_CLIPPING_DIST)
-const HEARD: f64 = 1200.0;
 /// a missile's height, about (for whether she can see it)
 const MISSILE_HEIGHT: f64 = 8.0;
 
@@ -142,6 +140,10 @@ pub struct Combat {
     last_seen: BTreeMap<i32, Thing>,
     /// the missiles in flight she's noticed (seen as monsters are; her own always)
     pub missiles_seen: BTreeSet<i32>,
+    /// deaths she's seen whose cries are still to come: (when, the kind)
+    cries_due: Vec<(i64, &'static str)>,
+    /// attacks heard lately: (when, the kinds that sound like it)
+    attacks_heard: Vec<(i64, &'static [&'static str])>,
     /// monsters she can see now
     pub visible: Vec<Thing>,
     /// barrels she's seen that are still there
@@ -295,6 +297,8 @@ impl Combat {
             dead: BTreeSet::new(),
             last_seen: BTreeMap::new(),
             missiles_seen: BTreeSet::new(),
+            cries_due: Vec::new(),
+            attacks_heard: Vec::new(),
             visible: Vec::new(),
             barrels_seen: Vec::new(),
             routed: false,
@@ -369,6 +373,8 @@ impl Combat {
         self.last_seen.clear();
         self.missiles_seen.clear();
         self.seen_hurt.clear();
+        self.cries_due.clear();
+        self.attacks_heard.clear();
         self.visible.clear();
         self.now.nothing_in_sight();
         self.tracks.clear();
@@ -488,23 +494,23 @@ impl Combat {
         }
         let monsters: BTreeMap<i32, Thing> =
             obs.things.iter().flatten().filter(|t| monster(t.name).is_some()).map(|t| (t.id, t.clone())).collect();
-        // (gone: dead. Hers to know if she saw it go, or heard it: else it's still about, for all
-        // she knows, where she last saw it)
+        // (gone: dead. Hers to know if she saw it go; else by its cry, if she hears it and can
+        // tell whose it was (`hear`); else it's still about, for all she knows, where she last
+        // saw it)
         let was_visible: BTreeSet<i32> = self.visible.iter().map(|t| t.id).collect();
-        for (i, t) in &self.truth {
-            if monsters.contains_key(i) || self.dead.contains(i) {
+        for i in self.truth.keys() {
+            if monsters.contains_key(i) || self.dead.contains(i) || !was_visible.contains(i) {
                 continue;
             }
             if let Some(s) = self.known.get(i) {
-                let seen = was_visible.contains(i);
-                if seen || dist((t.x, t.y), pos) < HEARD {
-                    self.dead.insert(*i);
-                    self.kills += 1;
-                    self.log.push(format!("tic {}: {} {i} dead{}", obs.tic, s.name, if seen { "" } else { " (heard)" }));
-                }
+                self.dead.insert(*i);
+                self.kills += 1;
+                self.cries_due.push((obs.tic, s.name));
+                self.log.push(format!("tic {}: {} {i} dead", obs.tic, s.name));
             }
         }
         self.truth = monsters;
+        self.hear(obs);
         self.refresh_tic_cache(obs);
         let me = Body { x: obs.x, y: obs.y, z: self.z(obs), height: PLAYER_HEIGHT };
         let hurt = obs.tic - self.hurt_tic < self.tune.senses.hurt_tics;
@@ -660,18 +666,64 @@ impl Combat {
         self.visible.iter().filter(|t| !self.infighting(t)).cloned().collect()
     }
 
+    /// What she makes of this tic's sounds (the game's, as she'd hear them: `Observation::sounds`).
+    /// A death cry: if it's the cry of a death she just saw, that; else one of the kinds that
+    /// cry so has died, about that far off on that side: the one she knows of, out of sight,
+    /// last seen where the cry fits is taken to be it (none fits: she can't tell whose). An
+    /// attack: kept a moment, for whether something out of sight is firing.
+    fn hear(&mut self, obs: &Observation) {
+        let (tune, pos) = (Rc::clone(&self.tune), obs.pos());
+        self.cries_due.retain(|&(tic, _)| obs.tic - tic <= tune.senses.cry_due);
+        self.attacks_heard.retain(|&(tic, _)| obs.tic - tic <= tune.senses.heard_firing);
+        for s in &obs.sounds {
+            match s.what {
+                Heard::Attack => self.attacks_heard.push((obs.tic, s.kinds)),
+                Heard::Death => {
+                    if let Some(i) = self.cries_due.iter().position(|(_, kind)| s.kinds.contains(kind)) {
+                        self.cries_due.remove(i);
+                        continue;
+                    }
+                    // (how far off by how loud: full within 160, nothing at 1200; a boss's cry
+                    // is as loud anywhere, and says nothing of where)
+                    let far = if s.volume >= 127 { 160.0 } else { 1200.0 - f64::from(s.volume) * 1040.0 / 127.0 };
+                    let fits = |k: &Seen| {
+                        if s.own {
+                            return Some(0.0);
+                        }
+                        let d = dist(k.pos(), pos);
+                        let off_by = if s.volume >= 127 { (d - far).max(0.0) } else { (d - far).abs() };
+                        let side = 128.0 - 96.0 * norm(heading(pos, k.pos()) - obs.angle).to_radians().sin();
+                        let side_off = (side - f64::from(s.separation)).abs();
+                        (off_by <= tune.senses.heard_fit && side_off <= tune.senses.heard_side).then_some(off_by / tune.senses.heard_fit + side_off / tune.senses.heard_side)
+                    };
+                    let whose = self
+                        .known
+                        .values()
+                        .filter(|k| s.kinds.contains(&k.name) && !self.dead.contains(&k.id) && !self.visible.iter().any(|t| t.id == k.id))
+                        .filter_map(|k| fits(k).map(|f| (f, k.id, k.name)))
+                        .min_by(|a, b| a.0.total_cmp(&b.0));
+                    if let Some((_, id, name)) = whose {
+                        self.dead.insert(id);
+                        self.kills += 1;
+                        self.log.push(format!("tic {}: {name} {id} dead (heard)", obs.tic));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// Is that monster dead, as far as she knows (seen or heard to die)?
     pub fn known_dead(&self, id: i32) -> bool {
         self.dead.contains(&id)
     }
 
-    /// Is a monster she knows of firing now, as far as she can tell: seen at it, or heard (within
-    /// `HEARD`, in sight or not: a chaingun's heard through walls)?
+    /// Is a monster she knows of firing now, as far as she can tell: seen at it, or its kind's
+    /// attack heard a moment ago (a chaingun's heard through walls, within the game's 1200)?
     pub fn firing(&self, obs: &Observation, s: &Seen) -> bool {
-        let at_it = |t: &Thing| super::bestiary::first_shot(t.name).is_some_and(|f| t.attack >= f);
         match self.visible.iter().find(|t| t.id == s.id) {
-            Some(t) => at_it(t),
-            None => self.truth.get(&s.id).is_some_and(|t| dist((t.x, t.y), obs.pos()) < HEARD && at_it(t)),
+            Some(t) => super::bestiary::first_shot(t.name).is_some_and(|f| t.attack >= f),
+            None => self.attacks_heard.iter().any(|&(tic, kinds)| obs.tic - tic <= self.tune.senses.heard_firing && kinds.contains(&s.name)),
         }
     }
 

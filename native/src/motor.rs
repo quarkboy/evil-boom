@@ -47,12 +47,36 @@ const CORNER_SPAN: f64 = 48.0;
 /// how close to a waypoint before steering on past it
 const CORNER_CUT: f64 = 6.0;
 
+/// What a sound is, as anyone who's played knows it by ear.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Heard {
+    /// a monster's cry on seeing her
+    Sight,
+    /// a monster attacking: a gun, a claw, a wind-up
+    Attack,
+    Pain,
+    Death,
+    /// a monster about, awake
+    Active,
+    /// a missile fired
+    Launch,
+    /// a missile going off
+    Impact,
+    /// anything else: a door, a lift, a switch, her own
+    Other,
+}
+
 /// A sound the game started this tic, as she hears it: Doom's rule (within 1200 units, walls or
 /// none; louder the nearer; its side by which ear, never front or back).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sound {
-    /// the sound's name in the game ("pistol", "firsht", "podth1", "dorcls", ...)
+    /// the sound's name in the game ("dspistol", "dsfirsht", "dspodth1", "dsdorcls", ...)
     pub name: &'static str,
+    /// what it is
+    pub what: Heard,
+    /// the kinds of thing that make this sound for that (several share some: the three former
+    /// humans' death, the fireball of an imp, a cacodemon and a baron); none for `Other`
+    pub kinds: &'static [&'static str],
     /// hers: her own gun, her own grunt, a pickup
     pub own: bool,
     /// 1-127: 127 within 160 units, falling to nothing at 1200

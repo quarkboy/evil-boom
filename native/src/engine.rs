@@ -4,7 +4,7 @@
 
 use crate::config;
 use crate::dsda::{self, Dsda, Mobj, TicCmd};
-use crate::motor::{Controls, Observation, Sound, Thing};
+use crate::motor::{Controls, Heard, Observation, Sound, Thing};
 use crate::nav::Heights;
 use crate::specials::{Key, Keys};
 use crate::tactical::bestiary::category;
@@ -234,6 +234,13 @@ impl Engine {
         self.exited() || self.dead()
     }
 
+    /// What each sound is and what makes it, from the game's own table of things: asked of the
+    /// game once a process.
+    fn sound_book(&self) -> &'static SoundBook {
+        static BOOK: std::sync::OnceLock<SoundBook> = std::sync::OnceLock::new();
+        BOOK.get_or_init(|| SoundBook::new(&self.game))
+    }
+
     pub fn observe(&mut self) -> Observation {
         let p = self.game.player();
         self.game.sectors(&mut self.sectors);
@@ -278,8 +285,15 @@ impl Engine {
             .game
             .sounds()
             .into_iter()
-            .map(|[_tic, sfx, id, kind, own, volume, separation, x, y]| Sound {
-                name: usize::try_from(sfx).ok().and_then(|i| names.get(i)).copied().unwrap_or(""),
+            .map(|[_tic, sfx, id, kind, own, volume, separation, x, y]| {
+                let name = usize::try_from(sfx).ok().and_then(|i| names.get(i)).copied().unwrap_or("");
+                let (what, kinds) = self.sound_book().classify(name, (kind >= 0).then_some(kind));
+                (name, what, kinds, id, kind, own, volume, separation, x, y)
+            })
+            .map(|(name, what, kinds, id, kind, own, volume, separation, x, y)| Sound {
+                name,
+                what,
+                kinds,
                 own: own != 0,
                 volume,
                 separation,
@@ -363,5 +377,80 @@ fn dll_dirs() -> Vec<PathBuf> {
         vec![bin]
     } else {
         Vec::new()
+    }
+}
+
+/// A sound's family: its name less the number the game's variants of it end in ("dspodth2":
+/// "dspodth"; the game picks one of the three at random).
+fn family(name: &str) -> &str {
+    name.trim_end_matches(|c: char| c.is_ascii_digit())
+}
+
+/// What each kind of thing sounds like, and so what a sound heard is.
+struct SoundBook {
+    /// per thing type: its sounds' families (seeing her or fired, attacking, pain, dying or
+    /// going off, wandering; "" none)
+    of: std::collections::BTreeMap<i32, [&'static str; 5]>,
+    /// (family, which of the five) -> the kinds that make it
+    makers: std::collections::BTreeMap<(&'static str, usize), &'static [&'static str]>,
+    /// each kind alone, as a list of one
+    alone: std::collections::BTreeMap<&'static str, &'static [&'static str]>,
+}
+
+impl SoundBook {
+    fn new(game: &dsda::Dsda) -> SoundBook {
+        let names = game.sfx_names();
+        let mut of = std::collections::BTreeMap::new();
+        let mut makers: std::collections::BTreeMap<(&'static str, usize), Vec<&'static str>> = std::collections::BTreeMap::new();
+        let mut alone: std::collections::BTreeMap<&'static str, &'static [&'static str]> = std::collections::BTreeMap::new();
+        let mut kind = 0;
+        while let Some(sounds) = game.mobj_sounds(kind) {
+            if let Some(thing) = dsda::type_name(kind) {
+                let families = sounds.map(|s| usize::try_from(s).ok().and_then(|i| names.get(i)).map_or("", |n| family(n)));
+                for (role, f) in families.iter().enumerate().filter(|(_, f)| !f.is_empty()) {
+                    let list = makers.entry((f, role)).or_default();
+                    if !list.contains(&thing) {
+                        list.push(thing);
+                    }
+                }
+                of.insert(kind, families);
+                alone.insert(thing, &*Box::leak(vec![thing].into_boxed_slice()));
+            }
+            kind += 1;
+        }
+        let makers = makers.into_iter().map(|(k, v)| (k, &*Box::leak(v.into_boxed_slice()))).collect();
+        SoundBook { of, makers, alone }
+    }
+
+    /// What a sound is and the kinds that make it, by its name and the type of thing it came
+    /// from (None: no thing: a boss's cry, heard everywhere, or a door, a switch, her own).
+    fn classify(&self, name: &str, from: Option<i32>) -> (Heard, &'static [&'static str]) {
+        let f = family(name);
+        let made = |role: usize| self.makers.get(&(f, role)).copied();
+        let Some(kind) = from else {
+            // (no thing: a boss's cry, if any kind dies or wakes with it)
+            return made(3).map(|k| (Heard::Death, k)).or_else(|| made(0).map(|k| (Heard::Sight, k))).unwrap_or((Heard::Other, &[]));
+        };
+        let thing = dsda::type_name(kind).unwrap_or("");
+        let missile = crate::tactical::bestiary::missile(thing).is_some() && crate::tactical::bestiary::monster(thing).is_none();
+        // (blown apart: the game's one sound for it, whatever died: A_XScream)
+        if f == "dsslop" {
+            return (Heard::Death, self.alone.get(thing).copied().unwrap_or(&[]));
+        }
+        let role = self.of.get(&kind).and_then(|fs| [3, 0, 2, 1, 4].into_iter().find(|&r| fs[r] == f));
+        match role {
+            Some(0) if missile => (Heard::Launch, made(0).unwrap_or(&[])),
+            Some(3) if missile => (Heard::Impact, made(3).unwrap_or(&[])),
+            Some(0) => (Heard::Sight, made(0).unwrap_or(&[])),
+            Some(1) => (Heard::Attack, made(1).unwrap_or(&[])),
+            Some(2) => (Heard::Pain, made(2).unwrap_or(&[])),
+            Some(3) => (Heard::Death, made(3).unwrap_or(&[])),
+            Some(_) => (Heard::Active, made(4).unwrap_or(&[])),
+            // (a monster's sound that's none of its five: what its attack plays itself, a
+            // zombieman's pistol, a chaingunner's burst. The kind is the game's word for what
+            // made it: a shotgun's blast is a sergeant's, a chaingunner's or a spider's by ear)
+            None if crate::tactical::bestiary::monster(thing).is_some() => (Heard::Attack, self.alone.get(thing).copied().unwrap_or(&[])),
+            None => (Heard::Other, &[]),
+        }
     }
 }

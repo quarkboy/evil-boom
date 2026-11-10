@@ -101,6 +101,7 @@ before any of them: 0.445.
 | O2, O3 monsters out of sight as she last saw them; deaths seen or heard; one not where she left it is lost | 0.439 | +0.0047 ± 0.0071 | 439 / 196 / 198 | MAP05 HMP +0.32, E2M7 UV +0.30, MAP32 HMP -0.23 |
 | O4 a monster's health her reckoning | 0.439 | +0.0000 | 1088 / 0 / 0 | none: no rule went by the number itself, only by its going down in her sight |
 | O5 whom a monster's after by which way it's turned | 0.436 | -0.0028 ± 0.0071 | 459 / 198 / 201 | E3M5 UV +0.28, MAP18 HMP -0.22, MAP25 HMP +0.21 |
+| The engine reporting its sounds (nothing reading them) | 0.436 | +0.0000 | 1088 / 0 / 0 | none: the patch changes nothing in the game |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's
