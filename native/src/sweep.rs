@@ -367,6 +367,7 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     // (what hurt her, and how much: health, armour, by where it came from; the last hit)
     let mut damage: BTreeMap<String, (i32, i32, Vec<i64>)> = BTreeMap::new();
     let mut last_hit: Option<String> = None;
+    let (mut turn_flips, mut last_jitter): (Vec<i64>, i64) = (Vec::new(), i64::MIN / 2);
     while (e.tic as f64) < until * TICRATE {
         if o.expert || o.secrets || o.stall_out {
             let now = progress(&e, agent.x());
@@ -478,6 +479,29 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
         let t2 = Instant::now();
         let log_n = agent.x().log.len();
         let ctl = agent.act(&ob, c.as_ref());
+        // (for measuring: how she turns. A turn one way then the other on the next tic, both
+        // more than a couple of degrees, is a jitter no hand makes; and how fast she turns at
+        // the most, and how sharply the rate changes)
+        if let Some(p) = agent.player_mut() {
+            let was = c.as_ref().map_or(0.0, |c| c.turn);
+            let (now, legs) = (ctl.turn, p.legs());
+            if was * now < 0.0 && was.abs() > 2.0 && now.abs() > 2.0 {
+                turn_flips.push(ob.tic);
+                p.combat_mut().count(&format!("turn reversals, on the {legs:?} legs"), 1.0);
+                // (four in a third of a second: a jitter to look at)
+                if turn_flips.len() >= 4 && ob.tic - turn_flips[turn_flips.len() - 4] <= 12 && ob.tic - last_jitter > 35 {
+                    last_jitter = ob.tic;
+                    p.combat_mut().count("jitters", 1.0);
+                    p.explorer.log.push(format!("tic {}: (measuring) jitter: her turn back and forth four times in a third of a second, the last {was:.0} then {now:.0} degrees", ob.tic));
+                }
+            }
+            if now.abs() > 18.5 {
+                p.combat_mut().count("tics turning over 18 degrees", 1.0);
+            }
+            if (now - was).abs() > 12.0 {
+                p.combat_mut().count("tics the turn changed by over 12 degrees", 1.0);
+            }
+        }
         let t3 = Instant::now();
         if let Some(st) = status.as_mut() {
             st.think(&ob, (t3 - t2).as_secs_f64(), agent.x(), log_n, t0.elapsed().as_secs_f64());
