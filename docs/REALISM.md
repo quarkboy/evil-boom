@@ -102,6 +102,7 @@ before any of them: 0.445.
 | O4 a monster's health her reckoning | 0.439 | +0.0000 | 1088 / 0 / 0 | none: no rule went by the number itself, only by its going down in her sight |
 | O5 whom a monster's after by which way it's turned | 0.436 | -0.0028 ± 0.0071 | 459 / 198 / 201 | E3M5 UV +0.28, MAP18 HMP -0.22, MAP25 HMP +0.21 |
 | The engine reporting its sounds (nothing reading them) | 0.436 | +0.0000 | 1088 / 0 / 0 | none: the patch changes nothing in the game |
+| Hearing 1: a death by its cry, firing by an attack heard (the game's sounds) | 0.432 | -0.0049 ± 0.007 | see the commit | E3M4 HMP +0.24, E4M8 HMP -0.22, MAP10 HMP +0.22 |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's
@@ -118,3 +119,28 @@ O1 changed 829 runs, which looked like O8's timing shift again; it isn't. Traced
 tics, 10 off" dodged before, from a cacodemon she had never seen and with no line of sight to the
 ball; now it isn't noticed. Missiles from what she can't see are common, so the rule touches
 most fights: this cost is the rule's own.
+
+## Hearing and feeling: bearings, then the shortcuts out (the plan, 2026-11-09)
+
+Found after the survey (the user's questions): three shortcuts stand in for senses she didn't
+have. Hurt, she noticed everything in line of sight all round for two seconds. A monster or a
+missile within 384 units with nothing between counted as seen whichever way she faced ("near":
+written as "heard", but Doom has no sound of a missile in flight, and a monster standing still
+makes none). And that near rule was what kept her from backing into a monster: with it gone, one
+behind her isn't known, and she'd push against it till the stuck rule turned her another way,
+never knowing what it was.
+
+What a player has instead, each a direction to look and no more:
+
+1. A sound from something not in view (a launch, a cry on seeing her, an attack): its side by
+   the balance between her ears, front or back unknown, so the way she isn't already looking.
+2. A hit: the status bar's face looks left, right or straight at what hit her (the engine's hit
+   record gets that: the push of a small hit is no bigger than her own stride).
+3. A bump: stopped while pushing where the map she knows has no wall: something's there, the
+   way she was pushing.
+
+Not a wandering monster's growls (146 of an imp's in three runs: she'd never stop turning).
+
+One behaviour for all three: turn to it, and see what her eyes then show. Then the shortcuts
+out, one at a time, each scored: the reveal when hurt; near for missiles; near for monsters
+(the dearest, likely: it's how she knows of anything close behind her).
