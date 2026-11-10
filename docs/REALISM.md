@@ -212,3 +212,8 @@ time. To act on once the watching's done, not before.
   two sides by two shotgun guys. She shouldn't have gone forward to where she was more exposed:
   she should have fought from the corridor behind the door, which she knew was safe. And she
   made it worse by running on into ground she hadn't explored, waking more shotgun guys.
+- **MAP11 HMP, seed 1461101707** (dies at 37 s). She starts shooting at lost souls far off that
+  are harmless, behind bars she can see, and lets a cacodemon and a chaingunner come up on her.
+  A level with a very tricky start ("it's right there in the name"): the best play is to get out
+  of the wide open exposed place with enemies all round, and fight her way into one of the side
+  rooms, where she at least has a wall at her back.
