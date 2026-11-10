@@ -213,9 +213,13 @@ impl Combat {
     /// Her health as it would go under fire: armor takes its share of each hit (a third green,
     /// half blue) till it's gone (P_DamageMobj), so so much more health's worth.
     pub fn lasts(obs: &Observation) -> f64 {
-        let health = obs.health.unwrap_or(100.0).max(0.0);
-        let armor = obs.armor.unwrap_or(0.0).max(0.0);
-        let share = match obs.armor_type.unwrap_or(0) {
+        Self::lasts_with(obs.health.unwrap_or(100.0), obs.armor.unwrap_or(0.0), obs.armor_type.unwrap_or(0))
+    }
+
+    /// ...with that health, and that many points of armor of that kind (1 green, 2 blue).
+    pub fn lasts_with(health: f64, armor: f64, kind: i32) -> f64 {
+        let (health, armor) = (health.max(0.0), armor.max(0.0));
+        let share = match kind {
             1 => 1.0 / 3.0,
             2 => 0.5,
             _ => return health,
@@ -224,6 +228,29 @@ impl Combat {
         // share of it within what she has; else the armor gone first, then health alone)
         let all = health / (1.0 - share);
         if armor >= all * share { all } else { health + armor }
+    }
+
+    /// What picking that up would add to how much she can take (`lasts`), by the game's rules
+    /// for it; nothing if she can't pick it up, and less than nothing where it would lose her
+    /// some. Armor is replaced whole, kind and all, whenever she has fewer points than the
+    /// pickup gives (P_GiveArmor): a green armor over 60 points of blue is 100 of green, a third
+    /// of each hit where it was half, and she lasts less for it; over fewer blue points than
+    /// half her health it's the better. A megaarmor on full health doubles what she can take.
+    pub fn pickup_gain(obs: &Observation, name: &str) -> f64 {
+        let (health, armor, kind) = (obs.health.unwrap_or(100.0), obs.armor.unwrap_or(0.0), obs.armor_type.unwrap_or(0));
+        let after = match name {
+            "GreenArmor" if armor < 100.0 => (health, 100.0, 1),
+            "BlueArmor" if armor < 200.0 => (health, 200.0, 2),
+            "Megasphere" => (200.0, armor.max(200.0), 2),
+            "ArmorBonus" if armor < 200.0 => (health, armor + 1.0, kind.max(1)),
+            "Soulsphere" if health < 200.0 => ((health + 100.0).min(200.0), armor, kind),
+            "HealthBonus" if health < 200.0 => (health + 1.0, armor, kind),
+            "Stimpack" if health < 100.0 => ((health + 10.0).min(100.0), armor, kind),
+            "Medikit" if health < 100.0 => ((health + 25.0).min(100.0), armor, kind),
+            "Berserk" if health < 100.0 => (100.0, armor, kind),
+            _ => return 0.0,
+        };
+        Self::lasts_with(after.0, after.1, after.2) - Self::lasts_with(health, armor, kind)
     }
 
     /// Can any gun she has ammo for get to t from here?

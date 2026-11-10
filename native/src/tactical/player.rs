@@ -1542,7 +1542,6 @@ impl Fight {
     fn supplies(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let known = x.knowledge.known_polys();
         let health = self.combat.now.health;
-        let armor = obs.armor.unwrap_or(0.0);
         let held = obs.weapons.clone().unwrap_or_default();
         let ammo = |s: i32| f64::from(obs.ammo.iter().flatten().find(|(x, _)| *x == s).map_or(0, |(_, n)| *n));
         // (then ammo and guns before anything else. Not sooner for having died for want of it:
@@ -1576,10 +1575,12 @@ impl Fight {
                 if amount >= 10 && health < f64::from(cap) {
                     need = ((f64::from(cap) - health) / 60.0).min(1.0);
                 }
-            } else if let Some((amount, cap)) = armor_item(t.name) {
-                if amount >= 100 && armor < f64::from(cap) * 0.7 {
-                    need = 0.6;
-                }
+            }
+            // (armor, and what brings armor with it: by what it adds to how much she can take.
+            // A megaarmor on no armor is as much again as her health; a green over a few blue
+            // points is less than nothing)
+            if armor_item(t.name).is_some() {
+                need = need.max((Combat::pickup_gain(obs, t.name) / 100.0).min(1.0));
             }
             if need <= 0.1 || (d > self.tune.errands.item_range && need < 0.8) {
                 continue;
@@ -1641,12 +1642,11 @@ impl Fight {
         let Some(t) = obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).cloned() else { return false };
         let pos = obs.pos();
         let health = self.combat.now.health;
-        let armor = obs.armor.unwrap_or(0.0);
         let short = self.combat.now.short_of_ammo;
         let worth = if let Some((amount, cap)) = health_item(t.name) {
             f64::from(amount).min(f64::from(cap) - health).max(1.0)
-        } else if let Some((amount, cap)) = armor_item(t.name) {
-            0.5 * f64::from(amount).min(f64::from(cap) - armor).max(1.0)
+        } else if armor_item(t.name).is_some() {
+            Combat::pickup_gain(obs, t.name).max(1.0)
         } else if ammo_item(t.name).is_some() {
             if short { 60.0 } else { 15.0 }
         } else if weapon_item(t.name).is_some() {
