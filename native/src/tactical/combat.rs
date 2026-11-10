@@ -1052,7 +1052,8 @@ impl Combat {
             if let Some((aim, _)) = self.rocket_held(obs) {
                 return Some(Decision { kind: Move::RocketHeld, yields: true, pressed: false, aim: Some(aim), fire: false, weapon: 0, moving: None, why: "holding a rocket's way till it's out".into() });
             }
-            let d = self.no_target(obs, busy, errand);
+            // (a barred move isn't made here either: `barred`)
+            let d = self.no_target(obs, busy, errand).filter(|d| !self.barred.contains(&d.kind));
             self.last_move = d.as_ref().map(|d| d.kind);
             return d;
         }
