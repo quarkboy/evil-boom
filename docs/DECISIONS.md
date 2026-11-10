@@ -2316,3 +2316,33 @@ grow into (the user's: it's to be expanded a lot).
   for the price of one); the fight's move, a retreat and the next objective as questions (the
   journal has their options already); the journal with how each run ended, as data to train
   tev1 on. Not the tic-by-tic things (a dodge, the aim): at 180 ms those stay the rules'.
+
+## The stream console, Doom's own screens, the stream's window (the user, 2026-11-10)
+
+Built on the `console` branch, merged into main; the whole plan, the protocol and what each
+stage was tested by: `docs/CONSOLE_PLAN.md`.
+
+- **A supervisor, the game its child.** `evil-boom console` serves a plain HTML/JS page (no
+  build step; tiny_http) and starts the game as `watch ... --control ADDR`, a JSON line a
+  message over a local TCP link (`console::Command` down, `FromGame` up, `PROTOCOL`). The
+  supervisor outlives a crash or a hang (restarted at the level it was on, three in two minutes
+  and it stops trying); the game plays on if the console goes. One game a process (DSDA's), so
+  a new WAD is a new child; a level of the same WAD is a goto in the running one.
+- **On the LAN, by a token** (`config/console.local.json`, not committed, with the settings):
+  every API call needs it, from localhost too. Across the web: none of it in the repo; the
+  streamer's own tunnel (Cloudflare Access) in front, the page's paths relative so it serves
+  under a prefix, the login it vouches for named in the log.
+- **Doom's own screens** (`watch --present`, on from the console by default): the title card
+  held (no demos: the user's), the menu walked to the game as a player walks it, the melt, a
+  death watched, the tally and the finales pressed on. The engine draws them
+  (`evil_api.c`'s presentation; `WI_EvilWaiting`, `D_EvilPageDrawer` in the patch); Rust says
+  when, a tic at a time (`viewer/present.rs`). A melt holds the game and keeps its random
+  numbers apart, but the title's tics are in the seed (`rngseed` takes `gametic`), so a
+  presented run isn't the headless run on its seed: the user's call, streams play on random
+  seeds (the console's default). Headless play is untouched: run-maps line for line the same.
+- **The stream's window** (`watch --stream [right|left]`, the console's default): 1920x1080, the
+  game 4:3 at 1440x1080, a 480 column for viewers (the level, her map as she knows it, what
+  she's doing in plain words, what Evil said, the tally, the run, what happened lately). The
+  status bar's things (health, ammo, keys) aren't repeated: the game shows them.
+- **Volume**: DSDA's sfx and music volumes, and a master the patch adds (`evil_master_volume`,
+  a gain in `I_UpdateSound`), each a slider; kept in the settings.

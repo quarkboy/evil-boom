@@ -119,6 +119,13 @@ needed pickup before a far keyed door). Open: A2-A5, B2-B4 (the fall back is bui
 (tracking a walker by its steps), D1-D4, D6, D7; the survey's map-side items (M2-M6) and live
 heights (O6); the three loops of DECISIONS.md's step 5; the advisor to be grown.
 
+## The stream console (2026-11-10)
+
+`evil-boom console` (a web page for the streamer; the game its child, `watch --control`, Doom's
+own screens with `--present`, the stream's 1920x1080 window with `--stream`): `docs/CONSOLE_PLAN.md`,
+and its DECISIONS.md entry. A console's game runs `out/build/release/evil-boom`: as with a
+sweep, don't rebuild under it. Headless runs (run-map, sweep, score) don't touch any of it.
+
 ## The Linux port (done 2026-11-08)
 
 Same results as on Windows (E1 3.6 levels, Doom II 7.9, the same per-seed endings). What it took:
