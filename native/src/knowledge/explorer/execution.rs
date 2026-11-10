@@ -54,6 +54,11 @@ impl Explorer {
                 f.resume(obs.tic); // (MAP24: "stuck" after looking round off a teleporter)
             }
         }
+        // (not standing on a floor that hurts: the look waits till she's off it, each second
+        // there a hit. E1M5 HMP, the user watching: stopped in the nukage to look at a noise)
+        if self.on_hurting_floor(obs) {
+            return None;
+        }
         while self.heard_n < self.knowledge.heard.len() {
             let h = self.knowledge.heard[self.heard_n];
             self.heard_n += 1;
