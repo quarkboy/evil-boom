@@ -309,6 +309,16 @@ impl Combat {
             if let Some(k) = self.steer_way {
                 s += self.tune.steer.w_keep * (d.0 * k.0 + d.1 * k.1);
             }
+            // (a way she hasn't looked along lately: what's there she doesn't know)
+            if self.tune.steer.w_unlooked > 0.0 && obs.tic - self.looked[i] > self.tune.steer.unlooked_tics {
+                s -= self.tune.steer.w_unlooked;
+            }
+            // (from there, facing her target: what she knows is about and would have behind her)
+            if let Some(t) = target.filter(|_| self.tune.steer.w_out_of_view > 0.0) {
+                let facing = crate::motor::heading(ahead, (t.x, t.y));
+                let hidden: f64 = them.iter().filter(|m| m.id != t.id && crate::motor::norm(crate::motor::heading(ahead, (m.x, m.y)) - facing).abs() > self.tune.senses.fov).map(|m| mon(m.name).threat).sum();
+                s -= self.tune.steer.w_out_of_view * hidden / 4.0;
+            }
             // (the way she's going, an errand (health, a gun, ammo): backing off towards it, not
             // round and round where she is; the user's: 1% health, a cacodemon on her, the
             // medikit in the room never got to)

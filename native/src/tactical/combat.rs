@@ -159,6 +159,12 @@ pub struct Combat {
     alert: Option<Alert>,
     /// when she last looked about as she walked (`senses.glance_every`)
     glanced: i64,
+    /// when she last looked round for one she remembers (`senses.check_every`)
+    checked: i64,
+    /// when each way round her (the steering's sixteen) was last in her view
+    pub(super) looked: [i64; 16],
+    /// the fight's move last tic, for measuring
+    pub last_move: Option<Move>,
     /// counts for measuring a run (`STATS`): nothing decides by them
     pub tally: BTreeMap<String, f64>,
     /// attacks heard lately: (when, the kinds that sound like it)
@@ -319,6 +325,9 @@ impl Combat {
             attacks_heard: Vec::new(),
             alert: None,
             glanced: 0,
+            checked: 0,
+            looked: [i64::MIN / 2; 16],
+            last_move: None,
             tally: BTreeMap::new(),
             visible: Vec::new(),
             barrels_seen: Vec::new(),
@@ -662,6 +671,13 @@ impl Combat {
         self.heed(obs);
         self.watch_infighting(obs);
         self.now = self.assess(obs);
+        // (the ways round her that are in her view this tic)
+        for (i, at) in self.looked.iter_mut().enumerate() {
+            if norm(22.5 * i as f64 - obs.angle).abs() < self.tune.senses.fov {
+                *at = obs.tic;
+            }
+        }
+        self.check(obs);
         let what = if !self.now.against_her.is_empty() {
             "tics with something in view"
         } else if !self.now.remembered.is_empty() {
@@ -827,6 +843,19 @@ impl Combat {
         let by = self.tune.senses.glance_angle;
         self.count("glances", 1.0);
         self.alert = Some(Alert { until: obs.tic + self.tune.senses.alert_tics, ways: vec![obs.angle + by, obs.angle - by], hit: false, in_sight: self.visible.iter().map(|t| t.id).collect() });
+    }
+
+    /// One she remembers, close, not looked at for a while: round to where she last saw it.
+    fn check(&mut self, obs: &Observation) {
+        let (every, within) = (self.tune.senses.check_every, self.tune.senses.check_within);
+        if every <= 0 || self.alert.is_some() || obs.tic - self.checked < every {
+            return;
+        }
+        let pos = obs.pos();
+        let Some(way) = self.now.remembered.iter().map(|t| (dist((t.x, t.y), pos), t)).filter(|&(d, _)| d < within).min_by(|a, b| a.0.total_cmp(&b.0)).map(|(_, t)| heading(pos, (t.x, t.y))) else { return };
+        self.checked = obs.tic;
+        self.count("checks", 1.0);
+        self.alert = Some(Alert { until: obs.tic + self.tune.senses.alert_tics, ways: vec![way], hit: true, in_sight: self.visible.iter().map(|t| t.id).collect() });
     }
 
     /// For measuring a run: was she going towards the monster with that id, away from it, or
@@ -1000,6 +1029,7 @@ impl Combat {
         // (invulnerable: nothing to dodge, a missile does nothing)
         let missiles = if self.now.invulnerable { Vec::new() } else { self.incoming(obs) };
         let target = self.pick_target(obs);
+        self.last_move = None;
         if target.is_none() && missiles.is_empty() {
             // (the fight over with a rocket still to go out: the way held all the same, the route's
             // turn after; E3M9, the last rocket pressed at a baron as it died, the route turned her
@@ -1041,6 +1071,7 @@ impl Combat {
             self.journal.note(|| Record { detail: why.clone(), ..Record::new(obs.tic, "move", format!("{kind:?}")) });
             self.mode = why.clone();
         }
+        self.last_move = Some(kind);
         Some(Decision { kind, yields: act.route, pressed, aim, fire, weapon, moving: act.moving, why })
     }
 

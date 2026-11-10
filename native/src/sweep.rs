@@ -517,6 +517,8 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
                             p.combat_mut().count(&format!("unseen near: on the {legs:?} legs"), f64::from(h.health));
                             p.combat_mut().count(&format!("unseen near: {going}"), f64::from(h.health));
                             p.combat_mut().count(&format!("unseen near: {how}, on the {legs:?} legs, {going}"), f64::from(h.health));
+                            let doing = p.combat().last_move.map_or("no move".to_string(), |m| format!("{m:?}"));
+                            p.combat_mut().count(&format!("unseen near, the move: {doing}"), f64::from(h.health));
                         }
                         format!("hurt by a {how}, its source {knew}, {far}, {side}")
                     }

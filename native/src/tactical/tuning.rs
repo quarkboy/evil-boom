@@ -122,6 +122,12 @@ pub struct Senses {
     /// ...and a monster's wandering noise, this loud or louder (128: never; there's always one
     /// somewhere, but one this loud is close)
     pub heed_active_volume: i32,
+    /// a monster she remembers, out of her sight, is looked round for this often (tics; 0:
+    /// never): where she last saw it, the nearest first; there, it's seen again; gone, she knows
+    /// it's moved (the user's: knowing isn't enough, she has to look)
+    pub check_every: i64,
+    /// ...one within this of her
+    pub check_within: f64,
     /// walking a route with nothing to shoot, a look to either side this often (tics; 0: never)
     pub glance_every: i64,
     /// ...this far round (degrees)
@@ -158,6 +164,8 @@ impl Default for Senses {
             cry_due: 35,
             memory_tics: 10 * 35,
             unseen_threat: 1.5,
+            check_every: 0,
+            check_within: 512.0,
             glance_every: 0,
             glance_angle: 90.0,
             heed_volume: 1,
@@ -338,6 +346,13 @@ pub struct Steer {
     pub w_barrel: f64,
     /// towards an errand (health, a gun, ammo)
     pub w_toward: f64,
+    /// a way she isn't looking along and hasn't looked along for `unlooked_tics`: she doesn't
+    /// know what's there (0: not counted)
+    pub w_unlooked: f64,
+    pub unlooked_tics: i64,
+    /// what she knows is about and would have out of her view from there, facing her target
+    /// (by threat; 0: not counted): the user's, keep as many in sight as she can
+    pub w_out_of_view: f64,
     /// with anything shooting in sight, kept this far from a barrel's middle (its blast and a margin)
     pub barrel_keep: f64,
     /// tics before a shotgun's ready that she comes back out for the shot
@@ -364,6 +379,9 @@ impl Default for Steer {
             w_off_floor: 10.0,
             w_barrel: 4.0,
             w_toward: 1.5,
+            w_unlooked: 0.0,
+            unlooked_tics: 70,
+            w_out_of_view: 0.0,
             barrel_keep: 192.0,
             reload_back: 12.0,
             stuck_tics: 6,
