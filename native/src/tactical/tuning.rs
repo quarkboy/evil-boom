@@ -122,6 +122,10 @@ pub struct Senses {
     /// ...and a monster's wandering noise, this loud or louder (128: never; there's always one
     /// somewhere, but one this loud is close)
     pub heed_active_volume: i32,
+    /// instinct (the user's allowance: "cheating a little, but our goal is good streaming
+    /// content"): a monster she was looking at is still known where it is, as it is, for this
+    /// long after something comes between them (tics; 0: not at all)
+    pub instinct_tics: i64,
     /// a monster gone from her sight is taken to have gone on the way it was going for this
     /// long (tics; 0: taken to be where she last saw it): where she looks for it and what she
     /// keeps clear of
@@ -168,6 +172,7 @@ impl Default for Senses {
             cry_due: 35,
             memory_tics: 10 * 35,
             unseen_threat: 1.5,
+            instinct_tics: 17,
             reckon_tics: 0,
             check_every: 0,
             check_within: 512.0,

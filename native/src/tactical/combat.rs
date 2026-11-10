@@ -93,6 +93,8 @@ pub struct Seen {
     pub lost: bool,
     /// how it was moving when she last saw it (a tic)
     pub going: Point,
+    /// when she last had it in her sight with nothing between (`tic` goes on through instinct)
+    pub sighted: i64,
 }
 
 impl Seen {
@@ -559,18 +561,23 @@ impl Combat {
                 continue;
             }
             let target = Body { x: t.x, y: t.y, z: t.z, height: mon(t.name).height };
-            if !self.los.clear(me, target, &self.heights_now) {
+            // (nothing between them; or, by instinct, something come between only a moment ago)
+            let sees = self.los.clear(me, target, &self.heights_now);
+            if !sees && !self.known.get(&t.id).is_some_and(|s| obs.tic - s.sighted <= self.tune.senses.instinct_tics) {
                 continue;
             }
             let seen = self.known.entry(t.id).or_insert_with(|| {
                 self.log.push(format!("tic {}: saw {} {} at ({:.0}, {:.0})", obs.tic, t.name, t.id, t.x, t.y));
-                Seen { id: t.id, name: t.name, x: t.x, y: t.y, z: t.z, tic: obs.tic, first: obs.tic, x0: t.x, y0: t.y, angle0: t.angle, awake: false, lost: false, going: (0.0, 0.0) }
+                Seen { id: t.id, name: t.name, x: t.x, y: t.y, z: t.z, tic: obs.tic, first: obs.tic, x0: t.x, y0: t.y, angle0: t.angle, awake: false, lost: false, going: (0.0, 0.0), sighted: obs.tic }
             });
             seen.x = t.x;
             seen.y = t.y;
             seen.z = t.z;
             seen.tic = obs.tic;
             seen.lost = false;
+            if sees {
+                seen.sighted = obs.tic;
+            }
             if self.dead.remove(&t.id) {
                 self.seen_hurt.remove(&t.id); // (raised again, whole: an arch-vile's work)
             }
