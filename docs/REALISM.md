@@ -224,3 +224,11 @@ time. To act on once the watching's done, not before.
   enemies, waking more of them in the rooms behind her, which then came up behind and hit her.
   She needs a strong pull to stand her ground and fight closer to the enemies, and to dodge
   missiles sideways, so as not to go into ground she hasn't explored while fighting.
+- **MAP07 HMP, seed 1033029263** (dies at 80 s). A map of its own kind, but it shows weaknesses.
+  First: picking up the blur sphere makes the map harder: it makes the missiles aimed at her
+  more random. A rule not to pick one up with mancubi or arachnotrons about might be good.
+  Second: pressing a switch while fighting needs work. Her dodging takes her further from the
+  switch she's going for (and should press: it gives her the better weapons); after dodging
+  there are switches nearer that might be easier, but the objective isn't changed from the one
+  she first chose. So the mancubi get killed, which lets all the arachnotrons out, with her
+  still on the super shotgun: no megasphere, rocket launcher, plasma rifle or chaingun.
