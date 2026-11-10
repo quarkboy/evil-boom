@@ -27,6 +27,7 @@
 //! `c.now`, the tic's assessment.
 
 use super::moves::{HeldFire, Move};
+use super::patience::Effort;
 use super::style::{window, Style};
 use super::{mon, Combat, Decision};
 use crate::geom::{dist, Point};
@@ -210,11 +211,7 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     // closed in on and lost sight of, round and round, an hour. The clock goes back only when
     // it's hurt, not when it's near: a demon on a floor below, close across but out of the
     // fist's slope, "at" it and off again for an hour, never hit, MAP05 ITYTD)
-    let (since, had) = *c.melee_since.entry(t.id).or_insert((obs.tic, t.health));
-    if t.health < had {
-        c.melee_since.insert(t.id, (obs.tic, t.health));
-    } else if obs.tic - since > c.tune.engage.close_give_up {
-        c.melee_since.remove(&t.id);
+    if c.patience.spent(Effort::MeleeUnhurt, t.id, obs.tic, c.tune.engage.close_give_up, Some((f64::from(t.health), 0.0)), None) {
         c.give_up(obs, t.id);
         return None;
     }
@@ -223,17 +220,14 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         // above her or a wall between, and the fist has nothing else; MAP14 HMP, out of ammo,
         // berserk, a chaingunner up on a ledge 300 off, walked at from below for 16 s of its
         // bullets, to death, with ammo known about)
-        let (nearest, at, _) = c.melee_nearest.get(&t.id).copied().filter(|&(_, _, last)| obs.tic - last <= c.tune.engage.melee_stall).unwrap_or((d, obs.tic, obs.tic));
-        let (nearest, at) = if d < nearest - c.tune.engage.melee_gain { (d, obs.tic) } else { (nearest, at) };
-        if obs.tic - at > c.tune.engage.melee_stall {
-            c.melee_nearest.remove(&t.id);
+        let stall = c.tune.engage.melee_stall;
+        if c.patience.spent(Effort::MeleeNoNearer, t.id, obs.tic, stall, Some((d, c.tune.engage.melee_gain)), Some(stall)) {
             if let Some(sector) = c.sector_at((t.x, t.y)) {
                 c.fist_stalled.insert(t.id, sector);
             }
             c.give_up(obs, t.id);
             return None;
         }
-        c.melee_nearest.insert(t.id, (nearest, at, obs.tic));
         Act::new(Move::MeleeClosing, c.closing_in(obs, t, None), format!("closing in on {} (melee)", t.name))
     } else {
         Act::new(Move::MeleeAt, None, format!("at {} (melee)", t.name))

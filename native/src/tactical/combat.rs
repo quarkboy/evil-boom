@@ -15,6 +15,7 @@ mod arsenal;
 mod assess;
 mod movement;
 mod moves;
+mod patience;
 mod sight;
 mod steering;
 mod style;
@@ -24,6 +25,7 @@ pub use assess::Assessment;
 pub use moves::Move;
 pub use sight::{eye, eye_of};
 use moves::HeldFire;
+use patience::{Effort, Patience};
 use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
 use super::tuning::{Dodge, Tuning};
@@ -219,19 +221,9 @@ pub struct Combat {
     crusher_out: BTreeMap<usize, f64>,
     /// ...and last came down lower than she stands (a crusher at work, between strokes too)
     crushed_low: Vec<i64>,
-    /// out of reach, closed in on since when, by id...
-    closing_since: BTreeMap<i32, i64>,
-    /// ...and given up on till when
-    given_up: BTreeMap<i32, i64>,
-    /// stood fighting with no shot at it, since when and last, by id (given up after a while, as
-    /// out of reach)
-    no_shot_since: BTreeMap<i32, (i64, i64)>,
-    /// fighting each in melee without hurting it, since when, and its health then (given up
-    /// after a while, as out of reach)
-    pub(super) melee_since: BTreeMap<i32, (i64, i32)>,
-    /// closing in on each to hit it in melee: the nearest she's got, when, and when last closing
-    /// in (given up once she gets no nearer a while)
-    pub(super) melee_nearest: BTreeMap<i32, (f64, i64, i64)>,
+    /// how long she's been at each monster she's getting nowhere with, and those given up on
+    /// (see `patience.rs`)
+    pub(super) patience: Patience,
     /// the sector each stood in when closing in on it to hit it in melee got her no nearer
     pub(super) fist_stalled: BTreeMap<i32, usize>,
     /// the gun last fired and when (its reload)
@@ -328,11 +320,7 @@ impl Combat {
             crushers: BTreeMap::new(),
             crusher_out: BTreeMap::new(),
             crushed_low: Vec::new(),
-            closing_since: BTreeMap::new(),
-            given_up: BTreeMap::new(),
-            no_shot_since: BTreeMap::new(),
-            melee_since: BTreeMap::new(),
-            melee_nearest: BTreeMap::new(),
+            patience: Patience::default(),
             fist_stalled: BTreeMap::new(),
             last_shot: None,
             rocket_facing: None,
@@ -694,7 +682,7 @@ impl Combat {
             }
         }
         if let Some(t) = target.as_ref().filter(|t| self.reachable(obs, t)) {
-            self.closing_since.remove(&t.id); // (got it in reach: the clock again, next time)
+            self.patience.rest(Effort::Closing, t.id); // (got it in reach: the clock again, next time)
         }
         let close: Vec<Thing> = self
             .visible
@@ -733,7 +721,7 @@ impl Combat {
 
     /// Has she given up on getting at id a while?
     pub(super) fn given_up_on(&self, obs: &Observation, id: i32) -> bool {
-        self.given_up.get(&id).is_some_and(|&until| obs.tic < until)
+        self.patience.given_up(id, obs.tic)
     }
 
     /// Out of her fist's reach: given up on, or still on the floor it stood on when closing in on
@@ -750,7 +738,7 @@ impl Combat {
 
     /// Give up on getting at id a while.
     pub(super) fn give_up(&mut self, obs: &Observation, id: i32) {
-        self.given_up.insert(id, obs.tic + self.tune.engage.given_up_tics);
+        self.patience.give_up(id, obs.tic + self.tune.engage.given_up_tics);
         self.log.push(format!("tic {}: can't get at {id}: leaving it a while", obs.tic));
     }
 
@@ -758,14 +746,11 @@ impl Combat {
     /// getting it in reach (E1M9's imps across the gap, 800 off, closed in on and lost sight of
     /// for an hour): then it's left a while.
     fn still_closing(&mut self, obs: &Observation, id: i32) -> bool {
-        if self.given_up.get(&id).is_some_and(|&until| obs.tic < until) {
+        if self.given_up_on(obs, id) {
             return false;
         }
-        let since = *self.closing_since.entry(id).or_insert(obs.tic);
-        if obs.tic - since > self.tune.engage.close_give_up {
-            self.closing_since.remove(&id);
-            self.given_up.insert(id, obs.tic + self.tune.engage.given_up_tics);
-            self.log.push(format!("tic {}: can't get at {id}: leaving it a while", obs.tic));
+        if self.patience.spent(Effort::Closing, id, obs.tic, self.tune.engage.close_give_up, None, None) {
+            self.give_up(obs, id);
             return false;
         }
         true
@@ -782,14 +767,11 @@ impl Combat {
             return true;
         }
         if self.can_hit(obs, t, None) {
-            self.no_shot_since.remove(&t.id);
+            self.patience.rest(Effort::NoShot, t.id);
             return false;
         }
-        let (since, last) = self.no_shot_since.get(&t.id).copied().unwrap_or((obs.tic, obs.tic));
-        let since = if obs.tic - last > self.tune.engage.close_give_up { obs.tic } else { since };
-        self.no_shot_since.insert(t.id, (since, obs.tic));
-        if obs.tic - since > self.tune.engage.close_give_up {
-            self.no_shot_since.remove(&t.id);
+        let limit = self.tune.engage.close_give_up;
+        if self.patience.spent(Effort::NoShot, t.id, obs.tic, limit, None, Some(limit)) {
             self.give_up(obs, t.id);
             return true;
         }
@@ -812,7 +794,7 @@ impl Combat {
             .remaining()
             .into_iter()
             .filter(|s| s.awake && obs.tic - s.tic < self.tune.engage.lost_tics && mon(s.name).attack != Attack::None && dist(s.pos(), pos) < self.tune.engage.range)
-            .filter(|s| self.given_up.get(&s.id).is_none_or(|&until| obs.tic >= until))
+            .filter(|s| !self.patience.given_up(s.id, obs.tic))
             // (not after one she can't take on: out of its sight's where she wants to be; E3M8,
             // the spider mastermind gone behind something, walked after with a pistol)
             .filter(|s| !self.too_much(obs, &[s.name], self.tune.guns.outmatched))
