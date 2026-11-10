@@ -731,7 +731,11 @@ impl Combat {
 
     /// Something to look at, `ways` round (world degrees, the likeliest first).
     fn alerted(&mut self, obs: &Observation, ways: Vec<f64>, hit: bool, why: &str) {
-        if ways.is_empty() || self.alert.as_ref().is_some_and(|a| a.hit && !hit) {
+        // (one thing at a time: what she's looking round for is looked round for before the
+        // next, its ways reckoned from where she faced when it came; a second cry mid-turn,
+        // reckoned from mid-turn, had her turning to and fro and never round. Only a hit takes
+        // her from a sound)
+        if ways.is_empty() || self.alert.as_ref().is_some_and(|a| a.hit || !hit) {
             return;
         }
         let side = |w: f64| match norm(w - obs.angle) {
@@ -772,14 +776,15 @@ impl Combat {
             self.alerted(obs, ways, false, &format!("heard {what}"));
         }
         for &side in obs.hit_sides.iter().filter(|&&side| side != 0) {
-            // (her right is the lesser angle)
+            // (her right is the lesser angle. The face's side is anywhere from 45 degrees off
+            // to right behind: to that side first, then on round behind)
             let way = obs.angle - 90.0 * f64::from(side);
             let known = self.visible.iter().any(|t| {
                 let rel = norm(heading(obs.pos(), (t.x, t.y)) - obs.angle);
                 rel.abs() > 45.0 && (rel < 0.0) == (side > 0)
             });
             if !known {
-                self.alerted(obs, vec![way], true, "hit from the side");
+                self.alerted(obs, vec![way, obs.angle + 180.0], true, "hit from the side");
             }
         }
     }
