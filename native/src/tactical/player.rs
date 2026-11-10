@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use super::bestiary::{ammo_item, armor_item, first_shot, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
+use super::bestiary::{ammo_item, armor_item, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
 use super::arbiter::{self, Legs};
 use super::combat::{eye, eye_of, segment_point_distance, spread, Combat, Move, Seen};
 use super::tuning::Tuning;
@@ -283,14 +283,17 @@ impl Player {
 
     /// The game as she perceives it: the observation with what she couldn't know taken out
     /// (docs/REALISM.md). What decides anything is given this, not the game's own. So far: only
-    /// the barrels she's seen (where they are now: pushed about, they're the ones she saw), and
-    /// only the things lying about that she's seen (`notice_things`).
+    /// the barrels she's seen (where they are now: pushed about, they're the ones she saw), the
+    /// things lying about that she's seen (`notice_things`), the monsters in her sight and the
+    /// missiles she's noticed (the fight's senses, `Combat::observe`).
     fn percept(&self, obs: &Observation) -> Observation {
         let mut seen = obs.clone();
         if let Some(things) = &mut seen.things {
             let c = &self.fight.combat;
             things.retain(|t| {
-                if monster(t.name).is_none() && super::bestiary::missile(t.name).is_some() {
+                if monster(t.name).is_some() {
+                    c.visible.iter().any(|v| v.id == t.id)
+                } else if super::bestiary::missile(t.name).is_some() {
                     c.missiles_seen.contains(&t.id)
                 } else {
                     !Self::lies_about(t) || self.things_seen.contains(&t.id)
@@ -566,7 +569,7 @@ impl Player {
         let hurting_floor = nav.poly_at(pos).is_some_and(|p| self.explorer.knowledge.damaging(nav.sector_of_poly(p)));
         let c = &self.fight.combat;
         let (last_hit, close) = match c.last_hit() {
-            Some((tic, amount)) if obs.tic - tic <= 1 => (amount, c.alive.values().any(|t| dist((t.x, t.y), pos) < 128.0)),
+            Some((tic, amount)) if obs.tic - tic <= 1 => (amount, c.visible.iter().any(|t| dist((t.x, t.y), pos) < 128.0)),
             _ => (self.plight.last_hit, self.plight.close),
         };
         Plight { armed: c.armed(obs), hurting_floor, surrounded: c.now.surrounded, outmatched: c.now.outmatched, last_hit, close }
@@ -1037,9 +1040,8 @@ impl Player {
             .into_iter()
             .filter(|s| self.fight.combat.sniper(obs, s.name))
             .filter(|s| {
-                let now = self.fight.combat.alive.get(&s.id);
                 let seen = self.fight.combat.visible.iter().find(|t| t.id == s.id);
-                now.is_some_and(|t| first_shot(t.name).is_some_and(|f| t.attack >= f)) && seen.is_none_or(|t| t.after_her)
+                self.fight.combat.firing(obs, s) && seen.is_none_or(|t| t.after_her)
             })
             .collect();
         if firing.is_empty() {
@@ -1620,7 +1622,7 @@ impl Hooks for Fight {
     fn gone(&mut self, obs: &Observation, obj: &Objective) -> bool {
         match obj.kind {
             Kind::Item => obj.thing.is_none_or(|t| !self.present.contains(&t)),
-            Kind::Hunt => obj.thing.is_none_or(|t| !self.combat.alive.contains_key(&t)),
+            Kind::Hunt => obj.thing.is_none_or(|t| !self.combat.remaining().iter().any(|s| s.id == t)),
             Kind::Barrel => obj.look_at.is_none_or(|b| crate::motor::follower::barrel_now(obs, b).is_none()),
             _ => false,
         }

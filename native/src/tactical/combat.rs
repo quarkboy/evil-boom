@@ -48,6 +48,8 @@ const SPLASH: f64 = 112.0;
 /// a barrel's height (seen over a ledge this high or not)
 const BARREL_HEIGHT: f64 = 42.0;
 
+/// a sound's heard this far off, walls or none (S_CLIPPING_DIST)
+const HEARD: f64 = 1200.0;
 /// a missile's height, about (for whether she can see it)
 const MISSILE_HEIGHT: f64 = 8.0;
 
@@ -75,6 +77,9 @@ pub struct Seen {
     pub angle0: f64,
     /// seen to move or turn (else it's standing about: a shot may wake it)
     pub awake: bool,
+    /// not where she last saw it, when she looked there again: she doesn't know where it is
+    /// (till she sees it again)
+    pub lost: bool,
 }
 
 impl Seen {
@@ -127,7 +132,14 @@ pub struct Combat {
     /// every monster seen, by id
     pub known: BTreeMap<i32, Seen>,
     /// every monster about now (as the engine has it)
-    pub alive: BTreeMap<i32, Thing>,
+    /// every monster in the level as it is now: her senses' only (`observe` makes what she
+    /// sees and hears of them out of it); nothing decides by it
+    truth: BTreeMap<i32, Thing>,
+    /// the monsters she knows are dead: seen to die, or heard to (a death's heard within
+    /// `HEARD`, walls or none)
+    dead: BTreeSet<i32>,
+    /// each monster as she last saw it
+    last_seen: BTreeMap<i32, Thing>,
     /// the missiles in flight she's noticed (seen as monsters are; her own always)
     pub missiles_seen: BTreeSet<i32>,
     /// monsters she can see now
@@ -276,7 +288,9 @@ impl Combat {
             hearing: Hearing::new(&nav.map),
             nav,
             known: BTreeMap::new(),
-            alive: BTreeMap::new(),
+            truth: BTreeMap::new(),
+            dead: BTreeSet::new(),
+            last_seen: BTreeMap::new(),
             missiles_seen: BTreeSet::new(),
             visible: Vec::new(),
             barrels_seen: Vec::new(),
@@ -346,7 +360,9 @@ impl Combat {
 
     /// A new life: the level from the start (what's been seen is remembered).
     pub fn restart(&mut self) {
-        self.alive.clear();
+        self.truth.clear();
+        self.dead.clear();
+        self.last_seen.clear();
         self.missiles_seen.clear();
         self.visible.clear();
         self.now.nothing_in_sight();
@@ -463,20 +479,28 @@ impl Combat {
         }
         let monsters: BTreeMap<i32, Thing> =
             obs.things.iter().flatten().filter(|t| monster(t.name).is_some()).map(|t| (t.id, t.clone())).collect();
-        for i in self.alive.keys() {
-            if !monsters.contains_key(i) {
-                if let Some(s) = self.known.get(i) {
+        // (gone: dead. Hers to know if she saw it go, or heard it: else it's still about, for all
+        // she knows, where she last saw it)
+        let was_visible: BTreeSet<i32> = self.visible.iter().map(|t| t.id).collect();
+        for (i, t) in &self.truth {
+            if monsters.contains_key(i) || self.dead.contains(i) {
+                continue;
+            }
+            if let Some(s) = self.known.get(i) {
+                let seen = was_visible.contains(i);
+                if seen || dist((t.x, t.y), pos) < HEARD {
+                    self.dead.insert(*i);
                     self.kills += 1;
-                    self.log.push(format!("tic {}: {} {i} dead", obs.tic, s.name));
+                    self.log.push(format!("tic {}: {} {i} dead{}", obs.tic, s.name, if seen { "" } else { " (heard)" }));
                 }
             }
         }
-        self.alive = monsters;
+        self.truth = monsters;
         self.refresh_tic_cache(obs);
         let me = Body { x: obs.x, y: obs.y, z: self.z(obs), height: PLAYER_HEIGHT };
         let hurt = obs.tic - self.hurt_tic < self.tune.senses.hurt_tics;
         self.visible.clear();
-        for t in self.alive.values() {
+        for t in self.truth.values() {
             let d = dist((t.x, t.y), pos);
             if !(0.0..self.tune.engage.range).contains(&d) {
                 continue;
@@ -491,12 +515,14 @@ impl Combat {
             }
             let seen = self.known.entry(t.id).or_insert_with(|| {
                 self.log.push(format!("tic {}: saw {} {} at ({:.0}, {:.0})", obs.tic, t.name, t.id, t.x, t.y));
-                Seen { id: t.id, name: t.name, x: t.x, y: t.y, z: t.z, tic: obs.tic, first: obs.tic, x0: t.x, y0: t.y, angle0: t.angle, awake: false }
+                Seen { id: t.id, name: t.name, x: t.x, y: t.y, z: t.z, tic: obs.tic, first: obs.tic, x0: t.x, y0: t.y, angle0: t.angle, awake: false, lost: false }
             });
             seen.x = t.x;
             seen.y = t.y;
             seen.z = t.z;
             seen.tic = obs.tic;
+            seen.lost = false;
+            self.dead.remove(&t.id); // (raised again: an arch-vile's work)
             seen.awake = seen.awake
                 || dist(seen.pos(), (seen.x0, seen.y0)) > self.tune.senses.wake_distance
                 || t.vx.hypot(t.vy) > self.tune.senses.wake_speed
@@ -510,6 +536,28 @@ impl Combat {
                 track.pop_front();
             }
             self.visible.push(t.clone());
+        }
+        for t in &self.visible {
+            self.last_seen.insert(t.id, t.clone());
+        }
+        // (one not where she last saw it, the place in her sight again and a while gone by: she
+        // doesn't know where it is)
+        let in_sight: BTreeSet<i32> = self.visible.iter().map(|t| t.id).collect();
+        let looked: Vec<i32> = self
+            .known
+            .values()
+            .filter(|s| !s.lost && !in_sight.contains(&s.id) && !self.dead.contains(&s.id) && obs.tic - s.tic > self.tune.engage.lost_tics)
+            .filter(|s| {
+                let d = dist(s.pos(), pos);
+                d < self.tune.engage.range && (d < self.tune.senses.near || norm(heading(pos, s.pos()) - obs.angle).abs() < self.tune.senses.fov) && self.los.clear(me, sight::eye_of(s), &self.heights_now)
+            })
+            .map(|s| s.id)
+            .collect();
+        for id in looked {
+            if let Some(s) = self.known.get_mut(&id) {
+                s.lost = true;
+                self.log.push(format!("tic {}: {} {id} isn't where she last saw it", obs.tic, s.name));
+            }
         }
         // (missiles: noticed as monsters are, in her view or near, nothing in the way; then
         // followed while they fly. Her own she knows of)
@@ -579,9 +627,26 @@ impl Combat {
         self.visible.iter().filter(|t| !self.infighting(t)).cloned().collect()
     }
 
-    /// Monsters seen that are still about (to hunt down).
+    /// Is that monster dead, as far as she knows (seen or heard to die)?
+    pub fn known_dead(&self, id: i32) -> bool {
+        self.dead.contains(&id)
+    }
+
+    /// Is a monster she knows of firing now, as far as she can tell: seen at it, or heard (within
+    /// `HEARD`, in sight or not: a chaingun's heard through walls)?
+    pub fn firing(&self, obs: &Observation, s: &Seen) -> bool {
+        let at_it = |t: &Thing| super::bestiary::first_shot(t.name).is_some_and(|f| t.attack >= f);
+        match self.visible.iter().find(|t| t.id == s.id) {
+            Some(t) => at_it(t),
+            None => self.truth.get(&s.id).is_some_and(|t| dist((t.x, t.y), obs.pos()) < HEARD && at_it(t)),
+        }
+    }
+
+    /// Monsters seen that are still about, as far as she knows, and where she last saw them (to
+    /// hunt down, to keep clear of): not one she knows is dead, nor one she's seen isn't where
+    /// she left it.
     pub fn remaining(&self) -> Vec<Seen> {
-        self.known.iter().filter(|(i, _)| self.alive.contains_key(i)).map(|(_, s)| s.clone()).collect()
+        self.known.iter().filter(|(i, s)| !self.dead.contains(i) && !s.lost).map(|(_, s)| s.clone()).collect()
     }
 
     /// The monsters she's in a fight with: in sight, awake, after her, and able to hurt her from
@@ -834,7 +899,7 @@ impl Combat {
             // the spider mastermind gone behind something, walked after with a pistol)
             .filter(|s| !self.too_much(obs, &[s.name], self.tune.guns.outmatched))
             .max_by(|a, b| mon(a.name).threat.total_cmp(&mon(b.name).threat))?;
-        let mut ghost = self.alive.get(&s.id)?.clone();
+        let mut ghost = self.last_seen.get(&s.id)?.clone();
         (ghost.x, ghost.y, ghost.z, ghost.vx, ghost.vy) = (s.x, s.y, s.z, 0.0, 0.0);
         let gun = self.preferred_gun(obs, &ghost);
         let moving = self.steer(obs, Some(&ghost), &gun);
