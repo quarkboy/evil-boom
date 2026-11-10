@@ -48,6 +48,9 @@ const SPLASH: f64 = 112.0;
 /// a barrel's height (seen over a ledge this high or not)
 const BARREL_HEIGHT: f64 = 42.0;
 
+/// a missile's height, about (for whether she can see it)
+const MISSILE_HEIGHT: f64 = 8.0;
+
 const SLOTS: [i32; 7] = [1, 2, 3, 4, 5, 6, 7];
 
 fn mon(name: &str) -> super::bestiary::Monster {
@@ -125,6 +128,8 @@ pub struct Combat {
     pub known: BTreeMap<i32, Seen>,
     /// every monster about now (as the engine has it)
     pub alive: BTreeMap<i32, Thing>,
+    /// the missiles in flight she's noticed (seen as monsters are; her own always)
+    pub missiles_seen: BTreeSet<i32>,
     /// monsters she can see now
     pub visible: Vec<Thing>,
     /// barrels she's seen that are still there
@@ -272,6 +277,7 @@ impl Combat {
             nav,
             known: BTreeMap::new(),
             alive: BTreeMap::new(),
+            missiles_seen: BTreeSet::new(),
             visible: Vec::new(),
             barrels_seen: Vec::new(),
             routed: false,
@@ -341,6 +347,7 @@ impl Combat {
     /// A new life: the level from the start (what's been seen is remembered).
     pub fn restart(&mut self) {
         self.alive.clear();
+        self.missiles_seen.clear();
         self.visible.clear();
         self.now.nothing_in_sight();
         self.tracks.clear();
@@ -503,6 +510,23 @@ impl Combat {
                 track.pop_front();
             }
             self.visible.push(t.clone());
+        }
+        // (missiles: noticed as monsters are, in her view or near, nothing in the way; then
+        // followed while they fly. Her own she knows of)
+        let flying: BTreeMap<i32, &Thing> = obs.things.iter().flatten().filter(|t| missile(t.name).is_some() && monster(t.name).is_none()).map(|t| (t.id, t)).collect();
+        self.missiles_seen.retain(|i| flying.contains_key(i));
+        for (&id, t) in &flying {
+            if self.missiles_seen.contains(&id) {
+                continue;
+            }
+            let d = dist((t.x, t.y), pos);
+            let noticed = t.owner == 0
+                || (d < self.tune.engage.range
+                    && (hurt || d < self.tune.senses.near || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov)
+                    && self.los.clear(me, Body { x: t.x, y: t.y, z: t.z, height: MISSILE_HEIGHT }, &self.heights_now));
+            if noticed {
+                self.missiles_seen.insert(id);
+            }
         }
         // (barrels as monsters are seen: in her view (or near), nothing in the way; kept while
         // they're there)

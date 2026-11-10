@@ -288,7 +288,14 @@ impl Player {
     fn percept(&self, obs: &Observation) -> Observation {
         let mut seen = obs.clone();
         if let Some(things) = &mut seen.things {
-            things.retain(|t| !Self::lies_about(t) || self.things_seen.contains(&t.id));
+            let c = &self.fight.combat;
+            things.retain(|t| {
+                if monster(t.name).is_none() && super::bestiary::missile(t.name).is_some() {
+                    c.missiles_seen.contains(&t.id)
+                } else {
+                    !Self::lies_about(t) || self.things_seen.contains(&t.id)
+                }
+            });
         }
         let barrels = &self.fight.combat.barrels_seen;
         seen.barrels = obs.barrels.as_ref().map(|_| barrels.clone());
