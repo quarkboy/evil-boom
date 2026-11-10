@@ -2186,3 +2186,28 @@ make her decide otherwise.
 
 Nothing changes with neither asked for: the parity set is line for line the same, and a run's
 log is the same with the journal on.
+
+## Restructuring, step 4: one of each skill (2026-11-09)
+
+The same skill written out more than once, each copy a little different. Three merged with
+nothing changed in play (both parity sets line for line the same after each):
+
+- **Who can see her where** (`combat/sight.rs`): `Combat::sees(eye, p, z, heights)`, with `eye`
+  and `eye_of` for where a monster sees from. It was written out ten times: the arch-vile's
+  shadow, the duck, the mesh's way round a corner, the steering's exposed ways, a sniper's shot
+  from where it was last seen, the way back out, cover's spots, the ground a sniper watches, a
+  post and its peek. The searches still differ in where they look (straight runs from where she
+  stands, the mesh, the places she's been, a grid over what she knows): those are different
+  skills (a second's duck against a walk to a post), not copies; what they ask of a place is now
+  the one question.
+- **Keeping at a monster she's getting nowhere with** (`combat/patience.rs`): `Patience::spent`
+  for the four clocks that ended in the same give-up (closing in out of reach, no shot,
+  hitting without hurting, walking at it and getting no nearer): a limit, progress by a measure
+  where there is one, afresh after a break where the effort comes and goes. The explorer's and
+  the follower's clocks (an objective's time, a step's, a press's tries, a wait for a lift) are
+  left: each is part of its own state machine, and they come up again with the arbiter (step 5).
+- **Too much for her** (`Odds`, `combat/arsenal.rs`): how long to kill them, how long she'd
+  last, whether her ammo would do; `too_much(secs)` is the asker's line on those (30 s:
+  outmatched; 15 s: left standing about). The assessment carries the odds against what's in
+  sight. `sniper` and `takes_on` keep their own lines (one monster's kill time against a few
+  seconds, and against how long she'd last against it alone).
