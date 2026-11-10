@@ -205,6 +205,9 @@ pub struct Player {
     plight: Plight,
     /// who had her legs last tic (the journal notes a change)
     legs: Legs,
+    /// the things lying about that she's seen (items, and whatever else isn't a monster or a
+    /// missile), by id: seen when the floor they're on was in her view with them on it
+    things_seen: BTreeSet<i32>,
     /// a decision model's say, if a run's asked for one (`crate::advisor`)
     advisor: Option<Advisor>,
     /// the tuning she plays by with no stance over it
@@ -241,6 +244,7 @@ impl Player {
             last_pos: (0.0, 0.0),
             plight: Plight::default(),
             legs: Legs::Route,
+            things_seen: BTreeSet::new(),
             advisor: None,
             base_tune: Rc::clone(&tune),
             stance: (String::new(), 0),
@@ -255,11 +259,37 @@ impl Player {
 
     /// Every item that counts as well (the exit held back till nothing's left: --complete);
     /// `restarts` levels again she may ask for, for ones out of reach.
+    /// Something that lies where it is (an item, a lamp, a column): not a monster or a missile.
+    fn lies_about(t: &Thing) -> bool {
+        t.category != "Monster" && t.category != "Projectile" && monster(t.name).is_none() && super::bestiary::missile(t.name).is_none()
+    }
+
+    /// The things lying about that have come into her view: on a floor in view this tic (as her
+    /// eyes had it the tic before: the explorer's, `Knowledge::seen_tic`). Once seen it's known
+    /// to be there till she sees it isn't. What a monster drops dying round a corner, she finds
+    /// when she looks.
+    fn notice_things(&mut self, obs: &Observation) {
+        let (k, nav) = (&self.explorer.knowledge, &self.explorer.nav);
+        for t in obs.things.iter().flatten().filter(|t| Self::lies_about(t)) {
+            if self.things_seen.contains(&t.id) {
+                continue;
+            }
+            let in_view = nav.poly_at((t.x, t.y)).is_some_and(|p| k.seen_tic.get(&nav.sector_of_poly(p)).is_some_and(|&tic| obs.tic - tic <= 1));
+            if in_view {
+                self.things_seen.insert(t.id);
+            }
+        }
+    }
+
     /// The game as she perceives it: the observation with what she couldn't know taken out
     /// (docs/REALISM.md). What decides anything is given this, not the game's own. So far: only
-    /// the barrels she's seen (where they are now: pushed about, they're the ones she saw).
+    /// the barrels she's seen (where they are now: pushed about, they're the ones she saw), and
+    /// only the things lying about that she's seen (`notice_things`).
     fn percept(&self, obs: &Observation) -> Observation {
         let mut seen = obs.clone();
+        if let Some(things) = &mut seen.things {
+            things.retain(|t| !Self::lies_about(t) || self.things_seen.contains(&t.id));
+        }
         let barrels = &self.fight.combat.barrels_seen;
         seen.barrels = obs.barrels.as_ref().map(|_| barrels.clone());
         seen.barrels_lit.retain(|&l| barrels.iter().any(|&b| dist(b, l) < 1.0));
@@ -420,6 +450,7 @@ impl Player {
         self.fight.present = obs.things.iter().flatten().map(|t| t.id).collect();
         // (her senses take the game as it is; everything after goes by what they made of it)
         self.fight.combat.observe(obs);
+        self.notice_things(obs);
         let seen = self.percept(obs);
         let obs = &seen;
         self.consult(obs);

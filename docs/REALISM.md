@@ -85,3 +85,14 @@ Smallest and safest first, the one with the unknown cost split up and last:
 
 Each is one commit with its score before and after (two measurements a build where the change
 is small: the score's noise is about 0.008 a set).
+
+## Results
+
+Each change scored on the same 1088 runs as the build before it (`score --like`), run for run:
+the mean difference in score, its standard error, and how many runs changed at all. The score
+before any of them: 0.445.
+
+| Change | Score after | Run for run | Runs the same / better / worse | Moved most |
+|---|---|---|---|---|
+| M1 the fight's hurting floors by what she knows | 0.445 | (not paired: 0.448 before, seeds of its own) | | |
+| O7 only the barrels she's seen | 0.451 | +0.0057 ± 0.0044 | 837 / 66 / 42 | E1M8 UV -0.28, E1M4 UV -0.22, E1M5 UV +0.20 |
