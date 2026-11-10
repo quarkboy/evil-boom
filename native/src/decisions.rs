@@ -12,7 +12,8 @@ use serde::Serialize;
 #[derive(Clone, Debug, Serialize)]
 pub struct Record {
     pub tic: i64,
-    /// which kind of decision: "target", "move", "retreat", "objective"
+    /// which kind of decision: "target", "move", "retreat", "objective", "legs" (whose: the
+    /// arbiter's)
     pub point: &'static str,
     /// what was chosen (a `Move`'s name, a monster and its id, an objective's label)
     pub chosen: String,

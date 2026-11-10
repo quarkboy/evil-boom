@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::bestiary::{ammo_item, armor_item, first_shot, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
+use super::arbiter::{self, Legs};
 use super::combat::{eye, eye_of, segment_point_distance, spread, Combat, Move, Seen};
 use super::tuning::Tuning;
 use crate::decisions::Record;
@@ -201,6 +202,8 @@ pub struct Player {
     last_pos: Point,
     /// and what things were like for her
     plight: Plight,
+    /// who had her legs last tic (the journal notes a change)
+    legs: Legs,
     /// retreats she isn't to make (`bar`)
     barred_retreats: Vec<RetreatKind>,
     /// places she's stood lately with nothing shooting at her and nothing hurting her, oldest
@@ -226,6 +229,7 @@ impl Player {
             shooters_tic: -1_000_000_000,
             last_pos: (0.0, 0.0),
             plight: Plight::default(),
+            legs: Legs::Route,
             barred_retreats: Vec::new(),
             trail: Vec::new(),
             exposure: None,
@@ -345,8 +349,13 @@ impl Player {
         // (and the crushers she knows of, for where they could have her if they start again)
         self.fight.combat.crushers = self.explorer.knowledge.crusher_sectors();
         let d = self.fight.combat.decide(obs, busy, &errand);
-        let retreat = !busy && self.retreating(obs);
-        if retreat {
+        let retreating = !busy && self.retreating(obs);
+        let legs = arbiter::arbitrate(d.as_ref(), busy, retreating, self.fight.combat.dodge_clear());
+        if legs != self.legs {
+            self.legs = legs;
+            self.explorer.journal.note(|| Record::new(obs.tic, "legs", format!("{legs:?}")));
+        }
+        if retreating {
             self.explorer.hold(obs, last);
             let mut c = self.retreat.as_mut().map_or_else(Controls::default, |r| r.route.act(obs));
             if self.hold_at_edge(obs, &c) {
@@ -354,23 +363,19 @@ impl Player {
             }
             return match d {
                 // (a missile about to hit still comes first, when there's a way clear of it)
-                Some(d) if d.moving.is_some() && d.kind == Move::Dodging && self.fight.combat.dodge_clear() => self.fight.combat.controls(obs, &d, None),
-                // (a dodge with no way to step doesn't stand her still: the retreat's legs go on.
-                // Stood on a ledge every step off it a drop, fireballs from all round, she stood
-                // dodging nowhere, the way back out never walked, till they had her)
-                Some(mut d) => {
-                    if d.kind == Move::Dodging {
-                        d.takeover = false;
-                    }
+                Some(d) if d.kind == Move::Dodging && legs == Legs::Fight => self.fight.combat.controls(obs, &d, None, true),
+                // (the retreat's legs, the fight aiming over them; or the fight's move, the
+                // retreat's way where its steering leans)
+                Some(d) => {
                     let pressing = self.retreat.as_ref().is_some_and(|r| r.route.pressing(obs.tic));
-                    Self::press_turn(self.fight.combat.controls(obs, &d, Some(&c)), &c, pressing)
+                    Self::press_turn(self.fight.combat.controls(obs, &d, Some(&c), legs == Legs::Fight), &c, pressing)
                 }
                 None => c,
             };
         }
-        if let Some(d) = d.as_ref().filter(|d| d.takeover) {
+        if let Some(d) = d.as_ref().filter(|_| legs == Legs::Fight) {
             self.explorer.hold(obs, last);
-            let mut c = self.fight.combat.controls(obs, d, None);
+            let mut c = self.fight.combat.controls(obs, d, None, true);
             // (the fight's own way too, unless it's out of the way of something: keeping clear
             // took her out into the spider mastermind's sight as surely as a route)
             if !d.kind.escaping() && self.hold_at_edge(obs, &c) {
@@ -399,7 +404,7 @@ impl Player {
         match d {
             Some(d) => {
                 let pressing = self.explorer.follower.as_ref().is_some_and(|f| f.pressing(obs.tic));
-                let mut c = Self::press_turn(self.fight.combat.controls(obs, &d, Some(&c)), &c, pressing);
+                let mut c = Self::press_turn(self.fight.combat.controls(obs, &d, Some(&c), false), &c, pressing);
                 if self.hold_at_edge(obs, &c) {
                     (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
                 }

@@ -105,7 +105,7 @@ impl Move {
 
     /// The route keeps her legs through it (unless a missile's coming or an arch-vile's fire).
     pub fn route_goes_on(self) -> bool {
-        matches!(self, Move::ShootingOnTheWay | Move::ToErrand | Move::GettingPast | Move::OutOfVileSight | Move::OutOfReach | Move::Unarmed | Move::Sneaking)
+        matches!(self, Move::ShootingOnTheWay | Move::ToErrand | Move::GettingPast | Move::OutOfVileSight | Move::OutOfReach | Move::Unarmed | Move::Sneaking | Move::RocketHeld)
     }
 
     /// Out of the way of something: where it takes her isn't second-guessed at a ledge's edge.

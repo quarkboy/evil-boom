@@ -442,7 +442,7 @@ impl Combat {
                 self.log.push(format!("tic {}: {why}", obs.tic));
                 self.mode = why.clone();
             }
-            return Some(Decision { kind: Move::OffCrusher, takeover: true, aim: None, fire: false, weapon: 0, moving, why });
+            return Some(Decision { kind: Move::OffCrusher, yields: false, pressed: false, aim: None, fire: false, weapon: 0, moving, why });
         }
         if !busy && errand.is_empty() {
             if let Some((name, way)) = self.vile_fire(obs) {
@@ -452,7 +452,7 @@ impl Combat {
                     self.mode = why.clone();
                 }
                 let aim = self.vile_face().map(|v| heading(obs.pos(), v));
-                return Some(Decision { kind: Move::OutOfVileSight, takeover: true, aim, fire: false, weapon: 0, moving: way, why });
+                return Some(Decision { kind: Move::OutOfVileSight, yields: false, pressed: true, aim, fire: false, weapon: 0, moving: way, why });
             }
             if let Some((_, way)) = self.duck(obs) {
                 // (out of its sight now: held there till its fire's broken off)
@@ -461,7 +461,7 @@ impl Combat {
                     self.log.push(format!("tic {}: {why}", obs.tic));
                     self.mode = why.clone();
                 }
-                return Some(Decision { kind: Move::Ducked, takeover: true, aim: None, fire: false, weapon: 0, moving: way, why });
+                return Some(Decision { kind: Move::Ducked, yields: false, pressed: false, aim: None, fire: false, weapon: 0, moving: way, why });
             }
             if let Some(d) = self.lost_sight(obs) {
                 return Some(d);

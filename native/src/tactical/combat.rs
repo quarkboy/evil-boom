@@ -84,8 +84,10 @@ impl Seen {
 pub struct Decision {
     /// which decision it is (the label, `why`, is for the log)
     pub kind: Move,
-    /// the fight needs the movement too
-    pub takeover: bool,
+    /// the node said so: the route keeps the legs (whatever else: missiles flying)
+    pub yields: bool,
+    /// a missile coming, or an arch-vile's fire: not walked on through
+    pub pressed: bool,
     /// the angle to turn to, if fighting at all
     pub aim: Option<f64>,
     pub fire: bool,
@@ -94,6 +96,14 @@ pub struct Decision {
     /// the world direction to run in (unit), if moving
     pub moving: Option<Point>,
     pub why: String,
+}
+
+impl Decision {
+    /// Does this move want her legs (`busy`: in a jump or a timed crossing, the route's unless
+    /// she's pressed)? Whether it gets them is the arbiter's (`tactical/arbiter.rs`).
+    pub fn wants_legs(&self, busy: bool) -> bool {
+        !self.yields && ((!busy && !self.kind.route_goes_on()) || self.pressed)
+    }
 }
 
 pub struct Combat {
@@ -628,7 +638,7 @@ impl Combat {
             // turn after; E3M9, the last rocket pressed at a baron as it died, the route turned her
             // for the door through the launch, out into the wall by her, dead at 53)
             if let Some((aim, _)) = self.rocket_held(obs) {
-                return Some(Decision { kind: Move::RocketHeld, takeover: false, aim: Some(aim), fire: false, weapon: 0, moving: None, why: "holding a rocket's way till it's out".into() });
+                return Some(Decision { kind: Move::RocketHeld, yields: true, pressed: false, aim: Some(aim), fire: false, weapon: 0, moving: None, why: "holding a rocket's way till it's out".into() });
             }
             return self.no_target(obs, busy, errand);
         }
@@ -650,14 +660,14 @@ impl Combat {
         let fire = fire && !act.hold_fire && !self.hold_fire;
         let why = act.why;
         let kind = act.kind;
-        let takeover = !act.route && ((!busy && !kind.route_goes_on()) || !s.missiles.is_empty() || s.vile.is_some());
+        let pressed = !s.missiles.is_empty() || s.vile.is_some();
         if why != self.mode {
             let t = s.target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {:.0} threat; health {:.0})", t.name, t.id, self.now.threat, self.now.health));
             self.log.push(format!("tic {}: {why}{t}", obs.tic));
             self.journal.note(|| Record { detail: why.clone(), ..Record::new(obs.tic, "move", format!("{kind:?}")) });
             self.mode = why.clone();
         }
-        Some(Decision { kind, takeover, aim, fire, weapon, moving: act.moving, why })
+        Some(Decision { kind, yields: act.route, pressed, aim, fire, weapon, moving: act.moving, why })
     }
 
     /// The fight as it stands, for the tree: the aim and the trigger at the target (or a barrel
@@ -809,7 +819,7 @@ impl Combat {
             self.log.push(format!("tic {}: {why}", obs.tic));
             self.mode = why.clone();
         }
-        Some(Decision { kind: Move::LostSight, takeover: true, aim: Some(heading(pos, s.pos())), fire: false, weapon: 0, moving, why })
+        Some(Decision { kind: Move::LostSight, yields: false, pressed: false, aim: Some(heading(pos, s.pos())), fire: false, weapon: 0, moving, why })
     }
 
     /// The route's controls this tic (the way it walks her, for what's in her way).
@@ -817,15 +827,17 @@ impl Combat {
         self.route_way = (b.forward.hypot(b.strafe) > 0.0).then(|| obs.angle - b.turn + (-b.strafe).atan2(b.forward).to_degrees());
     }
 
-    /// The controls for a decision: over the route's (`base`: only the aim and the trigger are
-    /// the fight's), or all of them.
-    pub fn controls(&mut self, obs: &Observation, d: &Decision, base: Option<&Controls>) -> Controls {
+    /// The controls for a decision. `legs`: the fight's move has her legs (the arbiter's call);
+    /// else `base`'s do (a route's, the explorer's or a retreat's), and only the aim and the
+    /// trigger are the fight's. `base` is given with the fight's legs too when a route's
+    /// walking under it, for what's in her way.
+    pub fn controls(&mut self, obs: &Observation, d: &Decision, base: Option<&Controls>, legs: bool) -> Controls {
         let turn = self.turn(obs, d.aim);
         if let Some(b) = base {
             self.route_walks(obs, b);
         }
         let mut c = match base {
-            Some(b) if !d.takeover => {
+            Some(b) if !legs => {
                 let mut c = Controls { forward: b.forward, strafe: b.strafe, turn, use_: b.use_, run: b.run, weapon: b.weapon, ..Controls::default() };
                 // (nothing to shoot with: aiming fires nothing, and the route's turn is what
                 // faces a shut door on her way to press it; MAP31, HMP, out of ammo and off for
@@ -856,7 +868,7 @@ impl Combat {
                 c
             }
         };
-        c.attack = d.fire || base.is_some_and(|b| b.attack && !d.takeover);
+        c.attack = d.fire || base.is_some_and(|b| b.attack && !legs);
         // (the rocket launcher and the BFG don't fire again with the trigger held: let go a tic
         // after each press, the game's way to fire the next; held, only the first went)
         if matches!(obs.weapon, Some(5 | 7)) && self.trigger_held {
