@@ -550,6 +550,20 @@ impl Combat {
         }
         // (each as she can know it: its health her reckoning, its kind's less what she's seen
         // it lose, never the game's own number)
+        // (and whom it's after what she can see of it: her, unless it's turned to another
+        // monster in sight and not to her; never the game's own word for its target)
+        let facing = self.tune.senses.facing;
+        let after_her: Vec<bool> = self
+            .visible
+            .iter()
+            .map(|t| {
+                let off = |p: Point| norm(heading((t.x, t.y), p) - t.angle).abs();
+                off(pos) < facing || !self.visible.iter().any(|o| o.id != t.id && off((o.x, o.y)) < facing)
+            })
+            .collect();
+        for (t, after) in self.visible.iter_mut().zip(after_her) {
+            t.after_her = after;
+        }
         for t in &mut self.visible {
             // (one going down she sees going down)
             if t.health > 0 {

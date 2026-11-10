@@ -94,6 +94,10 @@ pub struct Senses {
     pub floor_crush_gap: f64,
     /// invulnerability's last this long isn't counted on
     pub invulnerable_spare: i64,
+    /// a monster turned to something within this many degrees is taken to be after it: after
+    /// her unless it's turned to another monster in sight and not to her (a monster steps in
+    /// eight directions, 45 degrees apart)
+    pub facing: f64,
 }
 
 impl Default for Senses {
@@ -115,6 +119,7 @@ impl Default for Senses {
             crush_gap: 120.0,
             floor_crush_gap: 72.0,
             invulnerable_spare: 3 * 35,
+            facing: 45.0,
         }
     }
 }
