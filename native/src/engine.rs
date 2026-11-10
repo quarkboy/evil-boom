@@ -184,6 +184,11 @@ impl Engine {
         self.tic = if keep_time { tic + WARMUP_TICS } else { WARMUP_TICS };
     }
 
+    /// Her bullets and pellets so far (see `Game::pellets`).
+    pub fn pellets(&self) -> Option<[i32; 7]> {
+        self.game.pellets()
+    }
+
     fn new_game(&mut self) {
         self.game.new_game(self.skill, self.episode, self.map, self.nomonsters);
         self.suits = 0;

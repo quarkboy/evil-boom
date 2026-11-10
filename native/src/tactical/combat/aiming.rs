@@ -48,7 +48,7 @@ const ROCKET_CLEAR: f64 = 160.0;
 /// autoaim looks this far for something to aim at, and this many degrees to either side when
 /// there's nothing straight ahead (ANG90/16, 1<<26)
 const AUTOAIM_RANGE: f64 = 1024.0;
-const AUTOAIM_SPREAD: f64 = 5.625;
+pub(super) const AUTOAIM_SPREAD: f64 = 5.625;
 /// plasma's radius
 const PLASMA_RADIUS: f64 = 13.0;
 /// autoaim's line goes out from her feet + this (her middle and 8: P_AimLineAttack's shootz), as
@@ -185,6 +185,10 @@ impl Combat {
         if held_fire != self.held_fire {
             if let Some(h) = held_fire {
                 self.log.push(format!("tic {}: holding fire at {} {}, {d:.0} off: {}", obs.tic, t.name, t.id, h.label()));
+                if std::env::var_os("EVIL_DEBUG_SHOT").is_some() {
+                    let z = self.z(obs);
+                    self.log.push(format!("    (she's at ({:.0}, {:.0}, {z:.0}), it's at ({:.0}, {:.0}, {:.0}); sectors {:?} {:?})", pos.0, pos.1, t.x, t.y, t.z, self.sector_at(pos), self.sector_at((t.x, t.y))));
+                }
             }
             self.held_fire = held_fire;
         }
@@ -376,7 +380,7 @@ impl Combat {
         (1..=18).flat_map(|k| [f64::from(k) * 10.0, -f64::from(k) * 10.0]).map(|d| obs.angle + d).find(|&h| goes(self, h))
     }
 
-    fn shot_clear_from(&mut self, obs: &Observation, from: Point, at: Point, z: f64, h: f64) -> bool {
+    pub(super) fn shot_clear_from(&mut self, obs: &Observation, from: Point, at: Point, z: f64, h: f64) -> bool {
         let gun = self.z(obs) + SHOT_HEIGHT;
         let d = dist(at, from).max(1.0);
         let (mut lo, mut hi) = (z.max(gun - AUTOAIM * d), (z + h).min(gun + AUTOAIM * d));
@@ -394,6 +398,32 @@ impl Combat {
     /// Where to step for a shot at t she can see but can't hit: back from it when it's above
     /// her, towards it when it's below; None if neither way is safe.
     pub(super) fn shot_way(&mut self, obs: &Observation, t: &Thing) -> Option<Point> {
+        // (first, a step she can see would do it: the nearest spot round her the shot's clear
+        // from. A corner or a wall's end in the way isn't a lip to back off from: MAP12's stair,
+        // a shotgun guy two steps up past the wall beside her, backed off from out of the
+        // doorway, lost, come back for, two minutes of it)
+        const STEPS: [f64; 3] = [24.0, 48.0, 96.0];
+        let pos = obs.pos();
+        let h = mon(t.name).height;
+        for len in STEPS {
+            let mut found: Option<(f64, Point)> = None;
+            for i in 0..8 {
+                let a = f64::from(i) * std::f64::consts::FRAC_PI_4;
+                let d = (a.cos(), a.sin());
+                let spot = (pos.0 + d.0 * len, pos.1 + d.1 * len);
+                if !self.safe(obs, d, len) || !self.shot_clear_from(obs, spot, (t.x, t.y), t.z, h) {
+                    continue;
+                }
+                // (of those as near, the one that keeps most off it)
+                let off = dist(spot, (t.x, t.y));
+                if found.is_none_or(|(o, _)| off > o) {
+                    found = Some((off, d));
+                }
+            }
+            if let Some((_, d)) = found {
+                return Some(d);
+            }
+        }
         let away = self.away_from(obs, (t.x, t.y));
         if t.z <= self.z(obs) {
             if let Some(a) = away {

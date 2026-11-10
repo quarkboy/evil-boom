@@ -52,6 +52,8 @@ const BARREL_HEIGHT: f64 = 42.0;
 const MISSILE_HEIGHT: f64 = 8.0;
 
 const SLOTS: [i32; 7] = [1, 2, 3, 4, 5, 6, 7];
+/// The chaingun fires twice a press: tics from its first bullet to its second (A_FireCGun's frames).
+const CHAINGUN_SECOND: i64 = 4;
 
 fn mon(name: &str) -> super::bestiary::Monster {
     monster(name).unwrap_or(super::bestiary::Monster { radius: 20.0, height: 56.0, health: 100, attack: Attack::None, melee: false, threat: 0.0, boss: false })
@@ -264,10 +266,18 @@ pub struct Combat {
     no_duck_tic: i64,
     /// invulnerable till this tic (from the pickup's message: 30 s, as a player knows it)
     invulnerable_until: i64,
+    /// nothing can hurt her (the pass before a level known beforehand): as invulnerable, all of it
+    pub immune: bool,
     /// where each monster in sight has been lately: (tic, x, y), oldest first
     tracks: BTreeMap<i32, std::collections::VecDeque<(i64, f64, f64)>>,
     /// the trigger was down last tic
     trigger_held: bool,
+    /// when a bullet or a shell last left the gun (by its ammo's count), and the slot's
+    shot_out: Option<(i32, i64)>,
+    /// since when her legs have been held for a shot on its way out
+    line_held: Option<i64>,
+    /// when the first bullet of the press she's in left the gun (the chaingun's second goes 4 on)
+    burst_from: i64,
     /// health lost lately: (tic, how much)
     damage: Vec<(i64, f64)>,
     /// (the log's: rounds spent this fight, and the health monsters lost, as the engine has it;
@@ -394,7 +404,11 @@ impl Combat {
             no_duck_tic: i64::MIN / 2,
             tracks: BTreeMap::new(),
             invulnerable_until: i64::MIN / 2,
+            immune: false,
             trigger_held: false,
+            shot_out: None,
+            line_held: None,
+            burst_from: i64::MIN / 2,
             damage: Vec::new(),
             spent: 0.0,
             dealt: 0.0,
@@ -476,6 +490,42 @@ impl Combat {
                 if n < before {
                     self.spent += f64::from(before - n);
                     *self.tally.entry("rounds spent".to_string()).or_insert(0.0) += f64::from(before - n);
+                    // (a bullet or shell gone with nothing it could hit on her line: into a wall,
+                    // the corner she'd stepped back behind since the trigger. The user's, watching)
+                    if matches!(s, 2 | 3) {
+                        // (the chaingun's second bullet, 4 tics on, is of the same press)
+                        let second = obs.weapon == Some(4) && self.shot_out.is_some_and(|(p, t)| p == s && obs.tic - t <= CHAINGUN_SECOND);
+                        if s == 2 && !second {
+                            self.burst_from = obs.tic;
+                        }
+                        if std::env::var_os("EVIL_DEBUG_SHOT").is_some() {
+                            let gap = self.shot_out.map_or(0, |(_, t)| obs.tic - t);
+                            self.log.push(format!("tic {}: a shot out, gun {:?}, {gap} tics after the last", obs.tic, obs.weapon));
+                        }
+                        self.shot_out = Some((s, obs.tic));
+                        let seen = self.visible.clone();
+                        let on = seen.iter().any(|t| {
+                            let d = dist((t.x, t.y), pos).max(1.0);
+                            let wide = (mon(t.name).radius / d).atan().to_degrees() + aiming::AUTOAIM_SPREAD;
+                            norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < wide && self.shot_clear(obs, (t.x, t.y), t.z, mon(t.name).height)
+                        });
+                        *self.tally.entry("shots (bullets, shells)".to_string()).or_insert(0.0) += 1.0;
+                        if !on {
+                            if std::env::var_os("EVIL_DEBUG_SHOT").is_some() {
+                                let what: Vec<String> = seen
+                                    .iter()
+                                    .map(|t| {
+                                        let clear = self.shot_clear(obs, (t.x, t.y), t.z, mon(t.name).height);
+                                        format!("{} {} {:.0} off, {:.1} degrees off her aim, {}", t.name, t.id, dist((t.x, t.y), pos), norm(heading(pos, (t.x, t.y)) - obs.angle), if clear { "clear" } else { "not clear" })
+                                    })
+                                    .collect();
+                                self.log.push(format!("tic {}: a shot (slot {s}) with nothing on her line; target {:?}, pressed {:?}, the move {:?}; in sight: {}", obs.tic, self.target, self.last_shot, self.last_move, what.join("; ")));
+                            }
+                            *self.tally.entry("shots with nothing on her line".to_string()).or_insert(0.0) += 1.0;
+                            let why = if seen.is_empty() { "nothing in sight" } else { "something in sight" };
+                            *self.tally.entry(format!("shots with nothing on her line: {why}, the move {:?}", self.last_move)).or_insert(0.0) += 1.0;
+                        }
+                    }
                 }
             }
         }
@@ -495,6 +545,7 @@ impl Combat {
         }
         self.ammo_was = ammo;
         let mut now: BTreeMap<i32, i32> = BTreeMap::new();
+        let mut hurt_any = false;
         for t in obs.things.iter().flatten().filter(|t| monster(t.name).is_some()) {
             if let Some(&h) = self.health_was.get(&t.id) {
                 // (seen: in her sight the tic before, the hit landing in front of her)
@@ -502,11 +553,31 @@ impl Combat {
                     *self.seen_hurt.entry(t.id).or_insert(0) += h - t.health.max(0);
                 }
                 if t.health < h {
+                    hurt_any = true;
                     self.dealt += f64::from(h - t.health.max(0));
                     *self.tally.entry("damage dealt".to_string()).or_insert(0.0) += f64::from(h - t.health.max(0));
                 }
             }
             now.insert(t.id, t.health);
+        }
+        // (one killed is gone from the list: hurt, that)
+        hurt_any |= self.health_was.keys().any(|id| !now.contains_key(id) && self.visible.iter().any(|v| v.id == *id));
+        // (a bullet or a shell gone this tic, a monster in sight, and nothing hurt by it)
+        if self.shot_out.is_some_and(|(_, t)| t == obs.tic) && !self.visible.is_empty() && !hurt_any {
+            *self.tally.entry("shots that hurt nothing, a monster in sight".to_string()).or_insert(0.0) += 1.0;
+            *self.tally.entry(format!("shots that hurt nothing, a monster in sight: the move {:?}", self.last_move)).or_insert(0.0) += 1.0;
+            let t = self.target.and_then(|id| self.visible.iter().find(|t| t.id == id).cloned());
+            let how = match &t {
+                None => "no target in sight".to_string(),
+                Some(t) => {
+                    let d = dist((t.x, t.y), pos);
+                    let off = norm(heading(pos, (t.x, t.y)) - obs.angle).abs();
+                    let wide = (mon(t.name).radius / d.max(1.0)).atan().to_degrees();
+                    let clear = self.shot_clear(obs, (t.x, t.y), t.z, mon(t.name).height);
+                    format!("{}, {}, {}", if off < wide { "aimed on it" } else if off < wide + aiming::AUTOAIM_SPREAD { "aimed near it" } else { "aimed off it" }, if clear { "the line clear" } else { "no line" }, if d < 256.0 { "under 256" } else if d < 640.0 { "256-640" } else { "over 640" })
+                }
+            };
+            *self.tally.entry(format!("shots that hurt nothing, gun {}: {how}", obs.weapon.unwrap_or(0))).or_insert(0.0) += 1.0;
         }
         // (gone: killed, what it had left the last of it)
         self.dealt += self.health_was.iter().filter(|(id, _)| !now.contains_key(id)).map(|(_, &h)| f64::from(h.max(0))).sum::<f64>();
@@ -1392,7 +1463,14 @@ impl Combat {
             // (gone a moment, not a tic: one on the edge of a line of sight, in it and out of it
             // tic about as she moves a unit, had her legs passed to and fro between this and the
             // route for a thousand tics; E1M1 UV, a shotgun guy 1600 off through a gap)
-            .filter(|s| s.awake && obs.tic - s.tic >= self.tune.engage.lost_after && obs.tic - s.tic < self.tune.engage.lost_tics && mon(s.name).attack != Attack::None && dist(s.pos(), pos) < self.tune.engage.range)
+            // (a moment by her eyes, not her ears: a step heard says where it is, and dates it,
+            // but it isn't sight of it. MAP12, an arachnotron walking about out of sight, every
+            // step of it a fresh "just lost": not lost for 9 tics, lost for 9, her legs held
+            // to and fro for as long as it walked, the route's every step taking too long)
+            .filter(|s| {
+                let eyes = obs.tic - s.tic.min(s.sighted.saturating_add(self.tune.senses.instinct_tics));
+                s.awake && eyes >= self.tune.engage.lost_after && eyes < self.tune.engage.lost_tics && mon(s.name).attack != Attack::None && dist(s.pos(), pos) < self.tune.engage.range
+            })
             .filter(|s| !self.patience.given_up(s.id, obs.tic))
             // (not after one she can't take on: out of its sight's where she wants to be; E3M8,
             // the spider mastermind gone behind something, walked after with a pistol)
@@ -1463,6 +1541,10 @@ impl Combat {
         if matches!(obs.weapon, Some(5 | 7)) && self.trigger_held {
             c.attack = false;
         }
+        self.keep_line(obs, d, &mut c, legs || base.is_none());
+        if d.fire {
+            self.tap(obs, &mut c);
+        }
         self.trigger_held = c.attack;
         if let Some(s) = obs.weapon.filter(|_| c.attack) {
             self.last_shot = Some((s, obs.tic));
@@ -1474,6 +1556,154 @@ impl Combat {
             c.weapon = d.weapon;
         }
         c
+    }
+
+    /// A bullet or a shell goes from where she is when it leaves the gun, a few tics after the
+    /// trigger (the pistol's 4, the shotguns' 3: the frames before A_FirePistol, A_FireShotgun),
+    /// not from where she pressed it. So the trigger isn't pulled when the speed she has would
+    /// have her, by then, where there's no line to what she's shooting at (her speed, not her
+    /// legs: she can't stop in three tics, and not at all in the air, coming down a stair; the
+    /// user's). And once it's pulled, her legs are held those tics if where they're taking her
+    /// has no line and where she stands has. (The user's, watching: "often the movement back to
+    /// cover is too quick and the shots hit the wall instead of the enemy", "with the shotgun
+    /// even".) Between shots her legs are her own: the rest of the gun's cycle is the time to
+    /// get behind something. Not when the move's one that can't wait (a missile coming, an
+    /// arch-vile's fire).
+    fn keep_line(&mut self, obs: &Observation, d: &Decision, c: &mut Controls, legs: bool) {
+        /// (longer than this with no shot out: the gun's not coming up to fire; a switch, say)
+        const GIVEN_UP: i64 = 12;
+        let Some(held) = obs.weapon.filter(|w| matches!(w, 2..=4) && !d.pressed) else {
+            self.line_held = None;
+            return;
+        };
+        if held == 4 {
+            self.line_held = None;
+            self.keep_burst(obs, c, legs);
+            return;
+        }
+        let delay: i64 = if held == 2 { 4 } else { 3 };
+        let since = self.shot_out.filter(|&(s, _)| s == held).map_or(i64::MAX / 2, |(_, t)| obs.tic - t);
+        let pressed = c.attack || self.last_shot.is_some_and(|(s, t)| s == held && obs.tic - t < delay);
+        // (the trigger held, the next leaves a cycle after the last)
+        let again = weapon_in(held, obs).cycle as i64 - delay;
+        let due = pressed && since >= again - 1;
+        let target = self.target.and_then(|id| self.visible.iter().find(|t| t.id == id).cloned());
+        let (Some(t), true) = (target, due) else {
+            self.line_held = None;
+            return;
+        };
+        let pos = obs.pos();
+        let reach = delay as f64;
+        let h = mon(t.name).height;
+        if !self.shot_clear(obs, (t.x, t.y), t.z, h) {
+            self.line_held = None;
+            return;
+        }
+        // (the trigger not pulled yet, or held and the gun asking whether to fire again)
+        let coast = (pos.0 + self.velocity.0 * reach, pos.1 + self.velocity.1 * reach);
+        if c.attack && d.fire && (!self.trigger_held || since <= again + 1) && !self.shot_clear_from(obs, coast, (t.x, t.y), t.z, h) {
+            c.attack = false;
+            *self.tally.entry("triggers not pulled: no line where she'd be by the shot".to_string()).or_insert(0.0) += 1.0;
+            // (and she slows for it: a line to it and a mind to shoot, she stays in the line
+            // till she can. Else it's out and back round a corner with never a shot; the user's)
+            if legs {
+                (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
+                *self.tally.entry("tics she slowed to get a shot off".to_string()).or_insert(0.0) += 1.0;
+            }
+            self.line_held = None;
+            return;
+        }
+        if !legs || c.forward.hypot(c.strafe) == 0.0 {
+            self.line_held = None;
+            return;
+        }
+        const STRIDE: f64 = 10.0; // (a tic's run, about, from a walk)
+        let way = (obs.angle - c.turn + (-c.strafe).atan2(c.forward).to_degrees()).to_radians();
+        let spot = (pos.0 + way.cos() * STRIDE * reach, pos.1 + way.sin() * STRIDE * reach);
+        if self.shot_clear_from(obs, spot, (t.x, t.y), t.z, h) {
+            self.line_held = None;
+            return;
+        }
+        let from = *self.line_held.get_or_insert(obs.tic);
+        if obs.tic - from > GIVEN_UP {
+            return;
+        }
+        (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
+        *self.tally.entry("tics her legs held for a shot on its way out".to_string()).or_insert(0.0) += 1.0;
+    }
+
+    /// The trigger let go between shots at something far off (the user's "advanced trigger
+    /// control"). A bullet goes dead straight unless the trigger's been held since the shot
+    /// before (P_GunShot's `accurate`: the player's `refire` is 0), and held it's up to 5.6
+    /// degrees off either way, most near the middle ((P_Random - P_Random) << 18). The gun asks
+    /// once a cycle whether the trigger's still down (A_ReFire: the pistol 10 tics after its
+    /// shot, the chaingun 8 after the first of its two): let go for that tic, it comes back to
+    /// ready and the next press is a first shot again, the pistol's a cycle of 19 for 14, the
+    /// chaingun's 10 for 8. So she taps when holding would land less than that share of its
+    /// bullets on a target as wide as this one is from here: the same damage or more a second,
+    /// and every bullet of it on the target.
+    fn tap(&mut self, obs: &Observation, c: &mut Controls) {
+        /// (the most a held shot goes off, degrees)
+        const SPREAD: f64 = 5.6;
+        // (tics from the press's first bullet to the gun's asking; a held cycle over a tapped one)
+        let (asks, worth) = match obs.weapon {
+            Some(2) => (10, 14.0 / 19.0),
+            Some(4) => (8, 8.0 / 10.0),
+            _ => return,
+        };
+        if !c.attack {
+            return;
+        }
+        let Some(t) = self.target.and_then(|id| self.visible.iter().find(|t| t.id == id)) else { return };
+        let half = (mon(t.name).radius / dist((t.x, t.y), obs.pos()).max(1.0)).atan().to_degrees();
+        let lands = if half >= SPREAD { 1.0 } else { 1.0 - (1.0 - half / SPREAD).powi(2) };
+        if lands >= worth {
+            return;
+        }
+        // (she sees the bullet gone a tic after the gun's let it go, and what she does now is
+        // the game's next tic)
+        let since = obs.tic - self.burst_from;
+        if (asks - 2..=asks).contains(&since) {
+            c.attack = false;
+            *self.tally.entry("tics the trigger let go for a straight shot".to_string()).or_insert(0.0) += 1.0;
+        }
+    }
+
+    /// The chaingun's way of the same: it fires as long as the trigger's down, two bullets a
+    /// press, the second 4 tics after the first whether she's let go or not (A_FireCGun, twice).
+    /// Where her speed or her legs would have her out of the line by then, she lets go of the
+    /// trigger, and her legs wait for the burst she's started; then they're her own.
+    fn keep_burst(&mut self, obs: &Observation, c: &mut Controls, legs: bool) {
+        const BURST: i64 = 5;
+        let burst = self.last_shot.is_some_and(|(s, t)| s == 4 && obs.tic - t < BURST);
+        if !c.attack && !burst {
+            return;
+        }
+        let Some(t) = self.target.and_then(|id| self.visible.iter().find(|t| t.id == id).cloned()) else { return };
+        let pos = obs.pos();
+        let h = mon(t.name).height;
+        if !self.shot_clear(obs, (t.x, t.y), t.z, h) {
+            return;
+        }
+        let reach = BURST as f64;
+        let coast = (pos.0 + self.velocity.0 * reach, pos.1 + self.velocity.1 * reach);
+        let mut out = !self.shot_clear_from(obs, coast, (t.x, t.y), t.z, h);
+        if !out && legs && c.forward.hypot(c.strafe) > 0.0 {
+            const STRIDE: f64 = 10.0;
+            let way = (obs.angle - c.turn + (-c.strafe).atan2(c.forward).to_degrees()).to_radians();
+            out = !self.shot_clear_from(obs, (pos.0 + way.cos() * STRIDE * reach, pos.1 + way.sin() * STRIDE * reach), (t.x, t.y), t.z, h);
+        }
+        if !out {
+            return;
+        }
+        if c.attack {
+            c.attack = false;
+            *self.tally.entry("triggers not pulled: no line where she'd be by the shot".to_string()).or_insert(0.0) += 1.0;
+        }
+        if burst && legs {
+            (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
+            *self.tally.entry("tics her legs held for a shot on its way out".to_string()).or_insert(0.0) += 1.0;
+        }
     }
 
     // --- helpers ----------------------------------------------------------------------------
@@ -1532,7 +1762,7 @@ impl Combat {
     /// Invulnerable, with time enough left to make something of it (the last seconds counted out:
     /// not caught in the open as it wears off)?
     pub fn invulnerable(&self, tic: i64) -> bool {
-        tic < self.invulnerable_until - self.tune.senses.invulnerable_spare
+        self.immune || tic < self.invulnerable_until - self.tune.senses.invulnerable_spare
     }
 
     /// Her own BFG ball in the air: its spray comes from where she is when it lands, along the

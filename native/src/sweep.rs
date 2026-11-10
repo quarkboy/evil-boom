@@ -351,10 +351,15 @@ pub fn run_map_full(wad: &str, map_name: &str, o: &RunOptions) -> Result<MapRun,
 /// was a drop into somewhere with no way back and nothing to try, and the level's guns with
 /// it; all 8 runs stood at the start.)
 fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
-    const SCOUT_SECONDS: f64 = 1500.0;
-    const SCOUT_STALL: i64 = 120 * 35;
+    const SCOUT_SECONDS: f64 = 3600.0;
+    const SCOUT_STALL: i64 = 300 * 35;
     e.set_god(true);
     agent.x_mut().knowledge.immune = true;
+    // (and the fight knows it: outmatched and keeping clear of what can't hurt her, off for an
+    // invulnerability across the level, MAP13's pass stood about its first street for 300 s)
+    if let Some(p) = agent.player_mut() {
+        p.combat_mut().immune = true;
+    }
     e.restart(true);
     agent.start_over();
     let start = e.tic;
@@ -405,6 +410,9 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
         x.log.truncate(log_from);
     }
     x.log.push(summary);
+    if let Some(p) = agent.player_mut() {
+        p.combat_mut().immune = false;
+    }
     // (the clock goes on: what she knows is dated by it)
     e.set_god(!mortal);
     e.restart(true);
@@ -468,6 +476,7 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     // (the best so far this life: a level again starts the clock afresh, collecting the same
     // things again counted, the user's call; the run's time cap bounds it)
     let (mut best, mut best_tic) = (progress(&e, agent.x()), e.tic);
+    let pellets_before = e.pellets();
     let mut stalled = false;
     // (the stall clock ran out once: the exit, whatever's left)
     let mut given_up = false;
@@ -785,7 +794,26 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     }
     // (the kills always: the score's partial credit for a run that doesn't get out)
     detail = format!("kills {}/{}, {detail}", tally[1].0, tally[1].1);
-    let stats = agent.player().map_or_else(|| "{}".to_string(), |p| serde_json::to_string(&p.combat().tally).unwrap_or_default());
+    let stats = agent.player().map_or_else(
+        || "{}".to_string(),
+        |p| {
+            // (what her bullets and pellets hit, by the game's own count: the user's measure of
+            // shots into walls, a pellet at a time, a kill by one of seven not hiding the rest)
+            let mut tally = p.combat().tally.clone();
+            if let (Some(a), Some(b)) = (pellets_before, e.pellets()) {
+                let [fired, hit, barrel, after, shots, wide, held] = [0, 1, 2, 3, 4, 5, 6].map(|i| f64::from(b[i] - a[i]));
+                tally.insert("pellets fired with the trigger held".into(), held);
+                tally.insert("shots, by the game's count".into(), shots);
+                tally.insert("shots with no pellet on anything".into(), wide);
+                tally.insert("pellets fired (bullets too)".into(), fired);
+                tally.insert("pellets that hit a monster".into(), hit - barrel);
+                tally.insert("pellets that hit a barrel".into(), barrel);
+                tally.insert("pellets after the kill, the same shot".into(), after);
+                tally.insert("pellets that hit nothing".into(), fired - hit - after);
+            }
+            serde_json::to_string(&tally).unwrap_or_default()
+        },
+    );
     let hurt = damage_summary(&damage);
     lines.push(format!("damage taken: {}", if hurt.is_empty() { "none" } else { &hurt }));
     lines.push(format!("RESULT {outcome} {detail}"));

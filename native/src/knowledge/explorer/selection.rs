@@ -472,7 +472,8 @@ impl Explorer {
         let view = self.view();
         let mut follower = RouteFollower::new(view, steps, obs.keys.unwrap_or_default(), Some(states), false, obs.tic);
         follower.fired.extend(self.spent_once()); // (its replans: not by them either)
-        follower.mortal = self.knowledge.mortal;
+        // (the pass before a known level: nothing can hurt her, a barrel's blast neither)
+        follower.mortal = self.knowledge.mortal && !self.knowledge.immune;
         self.follower = Some(follower);
         self.follower_seen = 0;
         self.log.push(format!("tic {}: {} ({n} steps, {along:.0} along, {straight:.0} straight) | {}", obs.tic, obj.label, self.knowledge.summary()));

@@ -1,6 +1,6 @@
 //! Clearing barrels, choosing a firing position and escaping chain explosions.
 
-use super::{along, barrel_gun, barrel_now, blast_gap, RouteFollower, BARREL_TAP};
+use super::{along, barrel_gun, barrel_now, blast_gap, tap_rounds, RouteFollower, BARREL_TAP};
 use crate::geom::{dist, segment_distance, Point};
 use crate::motor::{heading, norm, Controls, Observation, FULL_SPEED};
 use crate::navigator::{States, PLAYER_RADIUS};
@@ -179,6 +179,31 @@ impl RouteFollower {
         }
         self.progress_tic = obs.tic;
         let look = heading(pos, at);
+        // (nothing to shoot it with: not stood before it for the 20 s all the same, the trigger
+        // pulled on nothing; MAP23, her rounds gone on lost souls, a barrel before the switch,
+        // seven times over. Able to be hurt, the step fails, and what she's out of is what's
+        // gone for; not able to be, she walks up and punches it. The user's)
+        if ![2, 3, 4].into_iter().any(|slot| tap_rounds(obs, slot) > 0) {
+            if self.mortal {
+                self.barrel = None;
+                self.barrel_post = None;
+                self.barrel_way.clear();
+                self.barrel_best = None;
+                return self.fail(obs, "a barrel in the way, and nothing to shoot it with");
+            }
+            /// (the fist's reach is 64 from her middle to its; a little inside it)
+            const PUNCH_FROM: f64 = 56.0;
+            if dist(pos, at) > PUNCH_FROM {
+                return self.motion.go(obs, look, FULL_SPEED, Some(look));
+            }
+            let mut c = self.motion.hold(obs, (0.0, 0.0), Some(look));
+            if obs.weapon != Some(1) {
+                c.weapon = 1;
+            } else if norm(look - obs.angle).abs() < 10.0 {
+                c.attack = true;
+            }
+            return c;
+        }
         // (mortal: outside the blast of every barrel it sets off in turn, however long backing off
         // takes; E1M4's, shot from 70 away with a wall behind her, killed her. The user's: a
         // barrel blown up sets off those beside it)

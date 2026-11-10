@@ -130,6 +130,22 @@ impl Explorer {
         let t_sat = Instant::now();
         let (reach, states_all, _) = view.saturate(here, &states, keys, &[], &actions);
         self.stats.saturate_secs += t_sat.elapsed().as_secs_f64();
+        if std::env::var_os("EVIL_DEBUG_REACH").is_some_and(|v| v.to_str().and_then(|t| t.parse::<i64>().ok()) == Some(obs.tic)) {
+            let sectors: BTreeSet<usize> = reach.iter().map(|&p| nav.sector_of_poly(p)).collect();
+            self.log.push(format!("tic {}: reach from poly {here} (sector {}): {} polys, sectors {sectors:?}", obs.tic, nav.sector_of_poly(here), reach.len()));
+            for &p in &reach {
+                let poly = nav.mesh.poly(p);
+                self.log.push(format!("  poly {p}: {:?}", poly.vertices.iter().map(|v| (v.0.round(), v.1.round())).collect::<Vec<_>>()));
+                for &pi in &nav.mesh.poly(p).portals {
+                    let portal = &nav.mesh.portals[pi];
+                    let o = portal.other(p);
+                    if !reach.contains(&o) {
+                        self.log.push(format!("    (poly {o}: {:?})", nav.mesh.poly(o).vertices.iter().map(|v| (v.0.round(), v.1.round())).collect::<Vec<_>>()));
+                        self.log.push(format!("    out of reach past the portal ({:.0}, {:.0})-({:.0}, {:.0}) (line {:?}), {:.0} wide, into sector {}", portal.p1.0, portal.p1.1, portal.p2.0, portal.p2.1, portal.linedef, dist(portal.p1, portal.p2), nav.sector_of_poly(o)));
+                    }
+                }
+            }
+        }
         self.reach = reach.clone();
         self.reach_states = states_all.clone();
         // (what she can get to only while a door or lift she's pressed open is open: go now, as a
@@ -487,6 +503,15 @@ impl Explorer {
                 if goals.iter().enumerate().any(|(j, g)| j != i && g.is_some_and(|g| lost[i].contains(&g))) {
                     o.later = true;
                     o.label = format!("{}{LATER}", o.label);
+                }
+            }
+            // (something she needs now that would cut her off waits all the same while there's
+            // something she needs now that wouldn't: MAP24, out of ammo, the rockets down a 512
+            // drop into a corner of the pit gone for before a clip and a shotgun a little
+            // farther, and the level's doors and teleporters with them, left above for good)
+            if kept.iter().any(|o| o.kind == Kind::Item && o.urgent && !o.later) {
+                for o in kept.iter_mut().filter(|o| o.kind == Kind::Item && o.later) {
+                    o.urgent = false;
                 }
             }
             kept

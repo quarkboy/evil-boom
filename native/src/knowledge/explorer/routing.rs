@@ -439,7 +439,11 @@ impl Explorer {
         }
         let nav = Rc::clone(&self.nav);
         let (Some(end), Some(here)) = (nav.poly_at(obj.goal), nav.poly_at(obs.pos())) else { return false };
-        let doors = view.local_doors(route.keys);
+        // (with the key it's for in hand: on a level she knows, the door it opens is the way on
+        // from where it lies, and nothing unseen is left there to say so. MAP02 known
+        // beforehand: its blue key refused 23 times, the level's hour stood out)
+        let keys = obj.key.map_or(route.keys, |kk| route.keys.with(kk));
+        let doors = view.local_doors(keys);
         let mut states = route.states.clone();
         for (&d, o) in &doors {
             for &h in &o.heights {
@@ -447,11 +451,15 @@ impl Explorer {
             }
         }
         let actions: Vec<&TriggerLine> = view.triggers.iter().filter(|t| !t.effects.is_empty()).collect();
-        let after = view.saturate(end, &states, route.keys, &[], &actions).0;
+        let after = view.saturate(end, &states, keys, &[], &actions).0;
         if after.contains(&here) {
             return false;
         }
         let k = &self.knowledge;
+        // (nor is it a dead end with a way out of the level from it)
+        if view.triggers.iter().any(|t| t.linedef().is_some_and(|li| k.is_exit(li)) && !t.activators.is_disjoint(&after)) {
+            return false;
+        }
         let known = k.known_polys();
         if after.iter().any(|&pi| nav.mesh.poly(pi).portals.iter().any(|&q| !known.contains(&nav.mesh.portals[q].other(pi)))) {
             return false;

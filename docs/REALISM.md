@@ -367,6 +367,48 @@ Each line: the change, its score run for run against the build before on the sam
   way (known -0.003, blind -0.001); left at 10.
 - What a monster drops is forgotten between lives (only what the map placed is remembered
   by where it is).
+- **A shot's line kept till it's out** (the user's, watching: "often the movement back to
+  cover is too quick and the shots hit the wall instead of the enemy", "with the shotgun
+  even", "this still happens while moving on stairs"). A bullet leaves the pistol 4 tics
+  after the trigger, a shell 3, from where she is then: the fight looked at the line only at
+  the press. Now the trigger isn't pulled when the speed she has would have her out of the
+  line by then, and she slows for it (else it's out and back round a corner with never a
+  shot; the user's); once pulled, her legs wait for the shot if they'd take her out of the
+  line; the chaingun, two bullets a press, lets go and waits out its burst. Between shots her
+  legs are her own. +0.0302 ± 0.0096 (88 / 365 / 282; exits 327 -> 369; 0.430): for the same
+  rounds, 6% more damage; shots with no pellet on anything 18.8% -> 14.8% (the game's own
+  count, in the engine patch: the user's "count pellets that hit a non enemy").
+- **The trigger let go between shots at what's far** (the user's "advanced trigger
+  control"): a bullet's dead straight unless the trigger's been held since the last, so the
+  pistol and the chaingun are tapped when holding would land less of its bullets than the
+  slower cycle costs (the pistol's 19 tics for 14, the chaingun's 10 for 8: an imp from
+  about 440 and 380 off). The trigger's let go only for the tic the gun asks, so the gap is
+  the shortest the game allows (measured: 19, and 4 + 6). +0.0090 ± 0.0082 (252 / 238 /
+  243; UV +0.020); 0.439; shots wholly missed 14.8% -> 10.7%, more damage for fewer rounds.
+  Not by her ammo yet (tapping nearer in when short).
+- **A step to where the shot's clear** (seen and no shot: the nearest safe spot round her
+  with a line, before backing off as from a ledge's lip; MAP12's stair, a shotgun guy past a
+  wall's end, two minutes out of the doorway and back): -0.0052 ± 0.0088. Kept: it's what
+  the stuck was.
+- **Lost a moment by her eyes, not her ears** (a step heard dated a monster as just seen:
+  an arachnotron walking about out of sight, "not lost" 9 tics and "lost" 9, her legs to and
+  fro as long as it walked; C2 and A4 together): +0.0046 ± 0.0024 (1010 / 28 / 19). Kept.
+- **A key's dead end counted with the key in hand, and no dead end with a way out of the
+  level from it** (MAP02 known beforehand: its blue key refused 23 times as "a drop into
+  somewhere with no way back", the door it opens being the way on; 6 of 16 runs stood out
+  the hour).
+- The three without the shot's line: -0.0120 ± 0.0094 against 0.412, not accounted for by
+  any one of them (the step -0.005, the eyes +0.005).
+- **The mesh, a subsector cut by its lines and not by its segs' ends** (the user's, from the
+  watcher: "she can definitely get out. the passage on the bottom is open"). Where the node
+  builder split a line the new end is rounded to a whole unit; a seg 6 units long on a wall
+  sloping 1 in 20, carried out along a long thin subsector, cut a wedge of MAP24's pit away
+  (440 long, 56 wide at its end), the corner beyond it a room with no way out. With **a
+  needed pickup that would cut her off waiting while another needed one wouldn't**, and **a
+  barrel in the way with nothing to shoot it with failing at once** (it was 20 s stood before
+  it): -0.0009 ± 0.0066 (497 / 154 / 139; exits 377 -> 374); 0.438; level-skills never
+  beaten 65 -> 57 (first exits on MAP11, E3M4, MAP27, MAP19), E3M9 6 of 16 -> 2, E3M3 15 ->
+  12 (not traced; E3M9 is a level of much chance, the user's). Kept.
 - **A3** (the wait at a lift), **A5** (the edge of her view), **B2, B3**: not done yet.
 
 ## A level she knows, and lives (the evaluation asked for 2026-11-10)
@@ -379,7 +421,11 @@ run knowing the map and where every monster starts), blind / 8 lives and known /
 | | blind / 1 | known / 1 | blind / 8 | known / 8 |
 |---|---|---|---|---|
 | at the first measuring | 0.399 | 0.328 | 0.534 | 0.503 |
-| now | 0.412 | 0.381 | to be run again | to be run again |
+| at 5e6cf6a | 0.412 | 0.381 | 0.555 | 0.553 |
+
+Out by life at 5e6cf6a, blind / 8: 0.316, 0.383, 0.421, 0.443, 0.458, 0.472, 0.483, 0.489
+(known: 0.288, 0.374, 0.417, 0.450, 0.460, 0.475, 0.481, 0.492; sets `cat4-blind8`,
+`cat4-known8`).
 
 Out by life, blind / 8, at the first measuring: 0.303, 0.366, 0.394, 0.413, 0.437, 0.449,
 0.459, 0.469 (known: 0.244, 0.313, 0.358, 0.379, 0.400, 0.418, 0.429, 0.442).
@@ -395,3 +441,23 @@ walls a boss's death lowers are now things learned). Open: runs stuck only when 
 (MAP02, E1M5, MAP12); "outmatched: keeping clear" walked on along the route; sneaking past
 sleepers she knows of. `EVIL_KNOWN_ONLY=map|monsters` knows only the one;
 `EVIL_DEBUG_SCOUT=1` keeps the pass's log.
+
+The pass itself falls short: on HMP it saw an exit and nine tenths of the sectors on 40 of 68
+levels (four of the rest are boss levels with no exit line), so "known" was partly known
+(MAP12 128 of 774 lines, MAP24 250 of 1109). Unable to be hurt, each is somewhere she's stuck
+without dying: MAP12's two were the step for a shot and the lost-by-ear above (770 of 774
+after). Guns and ammo topped up through the pass: no better (39), taken out. The run's own
+patience (300 s with nothing new, an hour; it was 120 s and 1500 s): 47. Still short: MAP06,
+08, 13, 14, 15, 19, 21, 22, 23, 24, 28, 29, E1M7, E3M9, E4M2, E4M7, E4M9 (MAP23 and MAP24:
+"nothing else to do: for the exit" over and over, not traced yet).
+
+Traced since (the 17): the fight didn't know she couldn't be hurt (outmatched, keeping clear,
+off for an invulnerability across the level: MAP13's first street for 300 s): the pass tells
+it, as an invulnerability does (MAP06 386 -> 1007 lines, MAP14 781 -> 1629, MAP15 1357 ->
+1625, MAP28 453 -> 736). The mesh (above): MAP24 249 -> 1070, MAP19 694 -> 1236, E4M2 411 ->
+656, MAP13 551 -> 774. MAP23: her rounds gone on lost souls, a barrel before the switch: not
+able to be hurt, she punches it (the user's); 115 -> 168, then a chaingunner seen and not to
+be shot, closed in on and lost by turns, the route never getting its turn (open). Still
+short: MAP23, MAP29 (789 of 1152), MAP13, MAP08 (581 of 649). `evil-boom watch ... --known`
+shows the pass, tic for tic as a run's; `EVIL_DEBUG_REACH=<tic>` logs what she can get to
+then, its polygons and the portals out of it.
