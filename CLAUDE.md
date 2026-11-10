@@ -92,22 +92,32 @@ How things stand this tic (outmatched, what's against her, short of ammo, surrou
 `Combat::now` (`combat/assess.rs`), worked out once as she looks: a rule reads it, it doesn't work
 its own answer out.
 
-## Where things stand (2026-11-09)
+## Where things stand (2026-11-10)
 
-Last bot changes: the level campaign (2026-11-09): a 10-minute pass (rounds 1-14) and a
-20-minute pass (rounds A-N) of worktree agents over every pistol-start level failing on UV, each
-round merged, regression-checked and committed (details per round in DECISIONS.md). Seed-0
-single-level exits, campaign start -> now: ITYTD 52 -> 55, HNTR 45 -> 49, HMP 21 -> 29, UV 14 -> 13
-of 68. Then the score replaced the regression set, and a stuck round (8 agents on the most-stalled
-levels) took stalls from 69 to 45 a measurement.
+The restructuring (seven steps: typed decisions, `Tuning`, one assessment a tic, one of each
+skill, the arbiter, the advisor, the score's fixed seeds) is done: DECISIONS.md. Then realism
+(the user's: "it's time for realism"; with a limit: "our goal is good streaming content", a
+little cheating allowed where it plays better): `docs/REALISM.md` has the survey, the table of
+every change's score, what the user saw watching twelve runs, and the work list from it.
 
-Score (all 68 levels, HMP+UV, 8 seeds): 0.437 (HMP 0.54, UV 0.33; exits 34%, kills 50%; 18 of 136
-level-skills beaten every run, 60 never; 45 stalled runs). A MAP22 HMP run thought 679 s real for
-758 game s: the planner, to trace. Paused before the 40-minute pass (the
-user's); the larger changes waiting first: the route's speed cut kept under the fight's aim
-(`Motion::go`, crawling backwards over lava), ammo running out early on UV, rockets held at packed
-crowds, the MAP30 brain (the user: she may know of it), closed door sectors taken as passable
-(E4M6).
+How changes are measured now: `score --like out/score/base.tsv` (the same 1088 runs) and
+`score-report base new` run for run; each run's counts beside it (FILE.stats.jsonl: what hurt
+her and what she knew of it, turns, alerts); `out/score/screen.py` and `out/score/quarter.tsv`
+(two seeds a level-skill, 4.5 min) for screening tuning files. A change that moves most runs
+when its rule should touch few has a timing shift in it.
+
+Score 0.400 (it was 0.445 before realism; 0.370 at its lowest, with monsters seen only in her
+110-degree view). She senses by sight (in view, a second after, half a second of instinct), by
+the game's own sounds (the engine patch reports them: a death by its cry, an attack, a missile
+fired, a monster's steps), by a hit's side and by bumping into things, each a way to turn and
+look. What the measuring found: she's hurt more slowly than she was (the fight keeps off ground
+she's never been on) and dies as often, later: what's short now is what she kills with the
+health and ammo she has (work list D: what to fight and what to take), not what she knows.
+
+Done from the work list: A1 (footsteps), C1 (instinct), B1 (known ground), D5 (armor; a
+needed pickup before a far keyed door). Open: A2-A5, B2-B4 (the fall back is built, off), C2
+(tracking a walker by its steps), D1-D4, D6, D7; the survey's map-side items (M2-M6) and live
+heights (O6); the three loops of DECISIONS.md's step 5; the advisor to be grown.
 
 ## The Linux port (done 2026-11-08)
 
