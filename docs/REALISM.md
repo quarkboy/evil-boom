@@ -258,3 +258,6 @@ time. To act on once the watching's done, not before.
 - **E3M2 UV, seed 82960982** (dies at 151 s). Did well till she set off a trap; then, rather
   than run back to where it was fairly safe, she ran forwards, opening up still more monsters,
   and that was that.
+- **E1M5 HMP, seed 595929723** (died at 185 s; with the hit-from-the-side fix she gets out).
+  Fine now. Some needless damage on the nukage in the middle: her movement interrupted by a
+  noise, it seemed.
