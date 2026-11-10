@@ -1055,7 +1055,8 @@ impl Combat {
     /// in a life before (`obs`: the game's own, the first of the level).
     pub fn know_monsters(&mut self, obs: &Observation) {
         for t in obs.things.iter().flatten().filter(|t| monster(t.name).is_some()) {
-            self.known.entry(t.id).or_insert(Seen {
+            // (one she's met before too: where it stands, not where she first saw it)
+            self.known.insert(t.id, Seen {
                 id: t.id,
                 name: t.name,
                 x: t.x,
@@ -1073,6 +1074,12 @@ impl Combat {
                 foreknown: true,
             });
         }
+    }
+
+    /// The counts kept for measuring a run, from nothing (what went before isn't the run's).
+    pub fn forget_counts(&mut self) {
+        self.tally.clear();
+        (self.kills, self.spent, self.dealt) = (0, 0.0, 0.0);
     }
 
     /// How many monsters she knows of.

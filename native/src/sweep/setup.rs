@@ -71,7 +71,7 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Opt
         e.goto(&map_name)?;
     }
     if !o.mortal {
-        e.set_god();
+        e.set_god(true);
     }
     let knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
     let mut agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives, Tuning::from(o.tuning.as_deref())?);

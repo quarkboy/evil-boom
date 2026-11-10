@@ -340,15 +340,21 @@ pub fn run_map_full(wad: &str, map_name: &str, o: &RunOptions) -> Result<MapRun,
     run_map_in(wad, map_name, o, None)
 }
 
-/// The look round an empty level that knowing it beforehand stands for: the level with no
-/// monsters in it, played till she's out, or has had `SCOUT_SECONDS` of it, or `SCOUT_STALL`
-/// goes by with nothing new mapped or walked into; dying of a floor or a crusher, again. Then
-/// the level itself from the start, monsters in, with what she learned and where each of them
-/// stands. Nothing of the look round is counted or logged as part of the run.
-fn scout(e: &mut Engine, agent: &mut Agent) -> i64 {
+/// The time through it before that knowing a level beforehand stands for: the level as it is,
+/// monsters and all, nothing able to hurt her, played till she's out, or has had
+/// `SCOUT_SECONDS` of it, or `SCOUT_STALL` goes by with nothing new mapped, walked into or
+/// killed. Then the level itself from the start, mortal if the run is, with what she learned
+/// and where each monster stands. Nothing of the time before is counted or logged as part of
+/// the run.
+/// (Not a look round the level with no monsters in it, as it was at first: that's another
+/// level. What a monster's death opens never opens: E1M8's star, shut till the barons die,
+/// was a drop into somewhere with no way back and nothing to try, and the level's guns with
+/// it; all 8 runs stood at the start.)
+fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     const SCOUT_SECONDS: f64 = 1500.0;
     const SCOUT_STALL: i64 = 120 * 35;
-    e.set_monsters(false);
+    e.set_god(true);
+    agent.x_mut().knowledge.immune = true;
     e.restart(true);
     agent.start_over();
     let start = e.tic;
@@ -373,7 +379,7 @@ fn scout(e: &mut Engine, agent: &mut Agent) -> i64 {
         e.take_hits();
         c = Some(ctl);
         let k = &agent.x().knowledge;
-        let known = k.mapped.len() + k.visited.len() + k.learned.len();
+        let known = k.mapped.len() + k.visited.len() + k.learned.len() + e.tally()[1].0.max(0) as usize;
         if known > best {
             (best, best_tic) = (known, e.tic);
         } else if e.tic - best_tic > SCOUT_STALL {
@@ -382,15 +388,17 @@ fn scout(e: &mut Engine, agent: &mut Agent) -> i64 {
     }
     let x = agent.x_mut();
     x.exit_last = held;
-    let summary = format!("--- the level looked round beforehand (no monsters in it): {}", x.knowledge.summary());
+    x.knowledge.immune = false;
+    let summary = format!("--- the level played through beforehand (nothing able to hurt her): {}", x.knowledge.summary());
     x.log.truncate(log_from);
     x.log.push(summary);
     // (the clock goes on: what she knows is dated by it)
-    e.set_monsters(true);
+    e.set_god(!mortal);
     e.restart(true);
     agent.start_over();
     let first = e.observe();
     if let Some(p) = agent.player_mut() {
+        p.combat_mut().forget_counts();
         p.know_monsters(&first);
         let n = p.combat().known_count();
         p.explorer.log.push(format!("--- and its monsters known: {n} of them, where they stand"));
@@ -405,7 +413,7 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     // (the level looked round first: the run's own time is from after that)
     let mut tic0 = 0;
     if o.known {
-        tic0 = scout(&mut e, &mut agent);
+        tic0 = scout(&mut e, &mut agent, o.mortal);
         (c, obs, deaths) = (None, None, 0);
     }
     let t0 = Instant::now();

@@ -1517,6 +1517,15 @@ impl Fight {
     /// only the pistol or next to no ammo, something to fight with she hasn't turned aside for
     /// yet (MAP09's hot start, the shotgun across the room).
     fn errand(&self, x: &Explorer, obs: &Observation) -> Option<(String, Point)> {
+        // (only what's near: a level known beforehand, the chaingun 1700 off the first thing
+        // she goes for, walked for through a yard of imps and demons shooting on the way, dead
+        // in 9 seconds, E2M3; MAP04's super shotgun four doors off, into the middle of the
+        // shotgun guys she stands and fights from the start when she doesn't know of it)
+        let reach = self.tune.errands.press_reach;
+        self.errand_any(x, obs).filter(|(_, at)| x.press_on || dist(*at, obs.pos()) < reach)
+    }
+
+    fn errand_any(&self, x: &Explorer, obs: &Observation) -> Option<(String, Point)> {
         // (an order to press on with, mid-fight: the objective in hand is the errand)
         if let Some(cur) = x.current.as_ref().filter(|_| x.press_on) {
             return Some((cur.label.clone(), cur.goal));

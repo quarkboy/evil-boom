@@ -217,7 +217,7 @@ fn follow(wad: &str, map: &str) -> Result<(), String> {
     }
     let mut e = Engine::new(&iwad, map, &Options { seed: Some(0), ..Options::default() })?;
     e.start();
-    e.set_god();
+    e.set_god(true);
     let mut f = RouteFollower::new(view, plan.steps, Default::default(), None, true, e.tic);
     while !e.finished() && !f.failed && !f.done && e.tic < 600 * 35 {
         let obs = e.observe();

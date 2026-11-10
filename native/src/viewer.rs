@@ -402,7 +402,7 @@ fn first_watch(wad: &str, map_name: &str, o: &WatchOptions, sound: bool) -> Resu
     engine.carry.clone_from(&o.carry);
     engine.start();
     if !o.mortal {
-        engine.set_god();
+        engine.set_god(true);
     }
     let watch = level(&w, m, nav, engine, o)?;
     Ok((w, watch))

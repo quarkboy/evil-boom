@@ -219,9 +219,9 @@ impl Engine {
         self.game.grab_sound((rate as usize).div_ceil(crate::motor::TICRATE as usize))
     }
 
-    pub fn set_god(&mut self) {
-        self.god = true;
-        self.game.god(true);
+    pub fn set_god(&mut self, on: bool) {
+        self.god = on;
+        self.game.god(on);
     }
 
     /// The level's tally so far: items, kills, secrets, each (got, of).

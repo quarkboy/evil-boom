@@ -162,6 +162,9 @@ pub struct Knowledge {
     /// she gets hurt (no god mode): a floor's harm is learned from her health, else from
     /// standing on it
     pub mortal: bool,
+    /// nothing can hurt her for now (a time through the level beforehand): a floor is felt as
+    /// it would have hurt, not as harmless for her having stood on it unhurt
+    pub immune: bool,
     /// she can tell a switch or a door only by its look; else every line with an action is
     /// known on sight (peeking at the map)
     pub perceive: bool,
@@ -319,6 +322,7 @@ impl Knowledge {
             nav,
             width: VIEW_WIDTH,
             mortal,
+            immune: false,
             perceive,
             mapped: BTreeSet::new(),
             sectors: BTreeSet::new(),

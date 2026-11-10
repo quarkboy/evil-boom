@@ -575,6 +575,9 @@ impl Default for Guns {
 pub struct Errands {
     /// items further than this (as the crow flies) only when they're needed badly
     pub item_range: f64,
+    /// what she's on her way to fight with is pressed on to through a fight (shooting on the
+    /// way) only this near it (as the crow flies); further, the fight's fought first
+    pub press_reach: f64,
     /// the fight or a retreat having taken her this far from where the route last had her legs,
     /// what she was going for is thought again (0: never): something else may be the nearer now
     pub rethink_moved: f64,
@@ -619,6 +622,7 @@ impl Default for Errands {
     fn default() -> Self {
         Errands {
             item_range: 1536.0,
+            press_reach: 768.0,
             rethink_moved: 256.0,
             floor_cost: 20.0,
             needed: 0.8,

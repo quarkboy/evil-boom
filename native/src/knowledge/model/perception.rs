@@ -209,7 +209,7 @@ impl Knowledge {
             self.standing = None;
             return;
         };
-        if !self.mortal {
+        if !self.mortal || self.immune {
             if !self.felt.contains_key(&s) {
                 self.learn_floor(s, self.nav.damage[s] != 0, obs.tic);
             }
