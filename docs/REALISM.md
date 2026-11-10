@@ -208,3 +208,7 @@ time. To act on once the watching's done, not before.
   it makes noise). Dangerous in itself. The user's idea: a little **instinct**: she goes on
   knowing where an enemy is, as it is, till it's been truly out of sight for about half a second
   (17 tics or so). "It's cheating a little bit but our goal is good streaming content."
+- **E1M1 UV, seed 1861030831** (dies at 50 s). Ran into a room and let herself be flanked on
+  two sides by two shotgun guys. She shouldn't have gone forward to where she was more exposed:
+  she should have fought from the corridor behind the door, which she knew was safe. And she
+  made it worse by running on into ground she hadn't explored, waking more shotgun guys.
