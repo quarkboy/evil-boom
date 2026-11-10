@@ -290,6 +290,8 @@ pub struct Explorer {
     /// (directed) the last objective's end, till it's taken
     pub ended: Option<Ended>,
     /// why the objective in hand ended, as `ends` or `drop_objective` had it
+    /// the tic her senses last took in (`sense`)
+    sensed: Option<i64>,
     end_why: Option<(bool, String)>,
     /// ...and what kind of ending it was
     end_kind: EndKind,
@@ -475,6 +477,7 @@ impl Explorer {
             follower: None,
             directed: false,
             ended: None,
+            sensed: None,
             end_why: None,
             end_kind: EndKind::Plain,
             log: Vec::new(),
@@ -554,6 +557,7 @@ impl Explorer {
             self.log.push(format!("--- that was a trap ({} polys): not going back in", t.len()));
             self.knowledge.note(Note::Trap(t));
         }
+        self.sensed = None;
         self.knowledge.restart();
         self.log.push(format!("--- died: life {}", self.knowledge.lives));
         self.current = None;
@@ -587,8 +591,18 @@ impl Explorer {
 
     /// Something else has the controls this tic (a fight): take in what's seen, and carry on
     /// from here afterwards.
+    /// Her eyes and ears on the game as it is this tic (once a tic: `hold` and `act` do it
+    /// themselves unless it's been done). The player does it first, with the game's own
+    /// observation, before making what she perceives of it for everything that decides.
+    pub fn sense(&mut self, obs: &Observation, last: Option<&Controls>) {
+        if self.sensed != Some(obs.tic) {
+            self.sensed = Some(obs.tic);
+            self.knowledge.update(obs, last);
+        }
+    }
+
     pub fn hold(&mut self, obs: &Observation, last: Option<&Controls>) {
-        self.knowledge.update(obs, last);
+        self.sense(obs, last);
         if self.held_since.is_none() {
             self.held_since = Some(obs.tic);
         }
@@ -601,7 +615,7 @@ impl Explorer {
                 f.resume(obs.tic);
             }
         }
-        self.knowledge.update(obs, last);
+        self.sense(obs, last);
         if let Some(s) = self.nav.poly_at(obs.pos()).map(|p| self.nav.sector_of_poly(p)) {
             if self.nav.damage[s] == 0 {
                 self.waded = None;

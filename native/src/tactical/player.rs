@@ -264,8 +264,8 @@ impl Player {
         t.category != "Monster" && t.category != "Projectile" && monster(t.name).is_none() && super::bestiary::missile(t.name).is_none()
     }
 
-    /// The things lying about that have come into her view: on a floor in view this tic (as her
-    /// eyes had it the tic before: the explorer's, `Knowledge::seen_tic`). Once seen it's known
+    /// The things lying about that have come into her view: on a floor in view this tic (her
+    /// eyes': the explorer's, `Knowledge::seen_tic`). Once seen it's known
     /// to be there till she sees it isn't. What a monster drops dying round a corner, she finds
     /// when she looks.
     fn notice_things(&mut self, obs: &Observation) {
@@ -274,7 +274,7 @@ impl Player {
             if self.things_seen.contains(&t.id) {
                 continue;
             }
-            let in_view = nav.poly_at((t.x, t.y)).is_some_and(|p| k.seen_tic.get(&nav.sector_of_poly(p)).is_some_and(|&tic| obs.tic - tic <= 1));
+            let in_view = nav.poly_at((t.x, t.y)).is_some_and(|p| k.seen_tic.get(&nav.sector_of_poly(p)).is_some_and(|&tic| tic == obs.tic));
             if in_view {
                 self.things_seen.insert(t.id);
             }
@@ -450,6 +450,7 @@ impl Player {
         self.fight.present = obs.things.iter().flatten().map(|t| t.id).collect();
         // (her senses take the game as it is; everything after goes by what they made of it)
         self.fight.combat.observe(obs);
+        self.explorer.sense(obs, last);
         self.notice_things(obs);
         let seen = self.percept(obs);
         let obs = &seen;
