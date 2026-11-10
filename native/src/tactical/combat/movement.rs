@@ -251,13 +251,13 @@ impl Combat {
         self.nav.poly_at(obs.pos()).is_some_and(|p| self.hurts(obs, self.nav.sector_of_poly(p)))
     }
 
-    /// Does sector s's floor hurt, or is it about to: by the map; as she knows it (seen turn to
-    /// something that hurts since: `changed_floors`); or going down now to where it will (a
+    /// Does sector s's floor hurt, or is it about to: as she takes it (`hazards`: felt, else by
+    /// its look, or seen turn to something that hurts; not under a suit); or going down now to
+    /// where it will (a
     /// walkway into the blood, E3M1's: backed off from imps on the far bank onto a stone
     /// just going down, not much of a step yet, in the blood with it a moment later).
     pub(super) fn hurts(&self, obs: &Observation, s: usize) -> bool {
-        self.nav.damage[s] != 0
-            || self.changed_floors.contains(&s)
+        self.hazards.get(s).copied().unwrap_or(false)
             || (self.sinks_into_harm.contains(&s) && obs.height(s).is_some_and(|h| h.floor < self.nav.movers.initial[s].floor - 0.5))
     }
 

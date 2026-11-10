@@ -264,8 +264,25 @@ impl Knowledge {
 
     /// A floor that looks like it'd hurt (its flat is a liquid).
     pub fn looks_damaging(&self, s: usize) -> bool {
-        let tex = self.nav.map.sectors[s].floor_tex.to_uppercase();
-        HAZARD_FLATS.iter().any(|h| tex.starts_with(h))
+        let looks = self.looks.get_or_init(|| {
+            self.nav
+                .map
+                .sectors
+                .iter()
+                .map(|sec| {
+                    let tex = sec.floor_tex.to_uppercase();
+                    HAZARD_FLATS.iter().any(|h| tex.starts_with(h))
+                })
+                .collect()
+        });
+        looks[s]
+    }
+
+    /// The floors that would hurt her now, as she takes them (`damaging`), by sector: none under
+    /// a radiation suit. For the fight's moves: where it doesn't back off to or dodge onto.
+    pub fn hazards(&self, tic: i64) -> Vec<bool> {
+        let suited = self.protected(tic);
+        (0..self.nav.map.sectors.len()).map(|s| !suited && self.damaging(s)).collect()
     }
 
     /// Does she take sector s's floor to hurt: as found out by standing on it, else by its look.

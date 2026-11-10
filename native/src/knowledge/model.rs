@@ -217,6 +217,8 @@ pub struct Knowledge {
     /// sector -> what a hit from its floor does now (0: it doesn't hurt), for floors seen moved
     /// by a line that changes their type (this life)
     pub changed_floor: BTreeMap<usize, i32>,
+    /// which floors look like they'd hurt (their flats: worked out once)
+    looks: std::cell::OnceCell<Vec<bool>>,
     /// a radiation suit on till this tic
     pub suit_until: Option<i64>,
     /// tries at the level so far
@@ -342,6 +344,7 @@ impl Knowledge {
             doubts: BTreeMap::new(),
             rechecked: BTreeSet::new(),
             changed_floor: BTreeMap::new(),
+            looks: std::cell::OnceCell::new(),
             suit_until: None,
             lives: 1,
             events: Vec::new(),

@@ -24,8 +24,12 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   life. Risk rules must hold on any life.
 - **Exploration paradigm:** she plans only from what she has seen (the automap rule), learns
   effects by using/seeing them. Keep the omniscient planner underneath; knowledge filters it.
-- **Combat: survivable first, realistic later.** Escape routes, retreats, unsafe zones, mid-fight
-  pickups now; awareness limited to sight/sound later. Don't add new omniscient shortcuts casually.
+- **Combat: realistic now** (the user's, 2026-11-09; it was "survivable first, realistic later").
+  The fight goes by what she has seen, heard and learned, as the exploring does, not by the
+  map's truth: an omniscient shortcut met in the fight is replaced with her knowledge, even at
+  some cost in score (measure it and say what it cost). No new omniscient shortcuts. What's left to make
+  realistic, and the order: `docs/REALISM.md` (after the restructuring; one at a time, each
+  scored; a very large drop: look for a bug in the change first).
 - **Barrels:** any barrel she's seen is cleared (no monster in sight), from out of every blast of
   its chain; shotgun within ~320 with 12+ shells, else single pistol taps (first shot is
   accurate). Walls/switches shot with pistol taps.

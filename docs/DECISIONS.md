@@ -2211,3 +2211,20 @@ nothing changed in play (both parity sets line for line the same after each):
   outmatched; 15 s: left standing about). The assessment carries the odds against what's in
   sight. `sniper` and `takes_on` keep their own lines (one monster's kill time against a few
   seconds, and against how long she'd last against it alone).
+
+## Realism: the fight's hurting floors by what she knows; the survey (the user, 2026-11-09)
+
+The fourth merge of step 4 couldn't be made without changing play: the fight took a floor to
+hurt by the map's damage values (and a floor seen changed, and one going down into harm), the
+rest of her by what she knows (`Knowledge::damaging`: felt, else by its look). Asked, the user
+made the call: it's time for realism (CLAUDE.md's rule is now "Combat: realistic now").
+
+- The fight's `hurts` goes by `Knowledge::hazards` (the player hands it over each tic): what she
+  takes to hurt, none of it under a radiation suit (the map's values knew nothing of suits: she
+  kept off nukage in a fight with one on). A floor going down into harm stays (her own eyes,
+  though where it ends is the map's: REALISM.md's M4).
+- Score: 0.448 -> 0.445 (HMP 0.537 -> 0.535, UV 0.358 -> 0.355), one measurement each, inside
+  the noise (0.008 a set). 6 of the 32 parity runs play differently.
+- `docs/REALISM.md`: the survey of every other place she goes by the level's truth (eight by
+  the observation, six by the map), what each would be instead, and the order. The user's: after
+  the restructuring, one at a time, each scored; a very large drop means a bug in the change.

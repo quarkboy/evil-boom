@@ -155,9 +155,9 @@ pub struct Combat {
     /// where the route's taking her mid-fight (an errand: health, a gun, ammo), for dodging
     /// towards (the user's: on to it while dodging, not stuck dodging where she stands)
     pub toward: Option<Point>,
-    /// floors she knows have turned to something that hurts since the map began (kept from what
-    /// she knows by the player)
-    pub changed_floors: BTreeSet<usize>,
+    /// the floors that would hurt her now, as she takes them, by sector (what she knows: the
+    /// player's, each tic; `Knowledge::hazards`)
+    pub hazards: Vec<bool>,
     /// floors a walked-over line lowers into something that hurts (going down: as good as hurting)
     sinks_into_harm: BTreeSet<usize>,
     /// sectors only doors move: a door closing on her goes back up, or rests on her, and does
@@ -288,7 +288,7 @@ impl Combat {
             dodge_way: None,
             dodge_clear: false,
             toward: None,
-            changed_floors: BTreeSet::new(),
+            hazards: Vec::new(),
             sinks_into_harm,
             last_pos: None,
             velocity: (0.0, 0.0),

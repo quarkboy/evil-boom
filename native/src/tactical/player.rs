@@ -341,7 +341,7 @@ impl Player {
         self.fight.combat.toward = if busy { toward } else { back.or(toward) };
         self.fight.combat.routed = self.explorer.follower.as_ref().is_some_and(|f| !f.done && !f.failed);
         // (what she knows of floors gone to something that hurts, for where the fight takes her)
-        self.fight.combat.changed_floors = self.explorer.knowledge.changed_floor.iter().filter(|(_, &h)| h != 0).map(|(&s, _)| s).collect();
+        self.fight.combat.hazards = self.explorer.knowledge.hazards(obs.tic);
         // (and the crushers she knows of, for where they could have her if they start again)
         self.fight.combat.crushers = self.explorer.knowledge.crusher_sectors();
         let d = self.fight.combat.decide(obs, busy, &errand);
