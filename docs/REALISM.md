@@ -108,6 +108,7 @@ before any of them: 0.445.
 | Near taken out for missiles (noticed only in her view) | 0.431 | +0.0019 ± 0.0084 | 345 / 237 / 241 | E4M3 HMP -0.49, E1M5 UV -0.44, MAP11 HMP +0.25 |
 | Near taken out for monsters (seen only in her view) | 0.375 | -0.0566 ± 0.0104 | 50 / 292 / 414 | very large: traced, see below |
 | ...with the looking's two faults fixed | 0.382 | -0.0497 ± 0.0106 against before near came out | 32 / 299 / 411 | E1M7 UV -0.44, E3M2 HMP -0.43, E2M2 UV -0.38 |
+| Memory: monsters seen lately kept in mind, counted 1.5 times | 0.370 | -0.0112 ± 0.0099 (-0.0609 ± 0.0102 against before near came out) | 27 / 374 / 377 | E2M8 HMP -0.62, E3M6 HMP -0.51, E1M1 UV -0.42 |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's
@@ -159,3 +160,13 @@ and turned from was gone from the threat, from outmatched and surrounded, from t
 steering keeps clear of. Next: monsters seen lately kept in mind where she last saw them (the
 user's: and counted for more than one in sight; one you know is round you and can't place is
 the bigger threat).
+
+Memory didn't bring it back: -0.011 ± 0.010 on its own (about nothing), -0.061 in all against
+before near came out. So the guess that near's cost was her memory isn't borne out, as built.
+E1M1 UV (-0.42) traced: not memory. A shotgun guy 1600 off through a gap, in her line of sight
+on one tic and out of it the next as her legs moved her a unit either way: "shooting on the
+way" (the route's legs) and "lost sight: keeping at it" (the fight's) by turns for a thousand
+tics, 44 rounds spent for 5 damage, then out of ammo for the rest of the level. One of the
+loops of DECISIONS.md's step 5 (a decision undoing its own condition), there before; with
+nearly every run played differently now (27 of 1088 the same), which runs meet it is chance.
+What near's 0.05 is made of isn't known yet.
