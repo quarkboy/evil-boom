@@ -161,6 +161,26 @@ impl Session {
         s
     }
 
+    /// A line from the streamer (the stream console's), told her as it is: not silent, it's for her
+    /// to hear.
+    pub fn say(&self, text: &str) {
+        self.link.context(&format!("The streamer: {text}"), false);
+    }
+
+    /// An action of hers given by the streamer (the stream console's, for when she's stuck):
+    /// checked and carried out as hers is, the answer back to the streamer. An order (not a look:
+    /// a list, an inspection, her status) she's told of, quietly, with what came of it: her orders
+    /// may have changed under her.
+    pub fn streamer_action(&mut self, agent: &mut Agent, obs: &Observation, name: &str, data: Option<&str>) -> (bool, String) {
+        let (ok, msg) = self.action(agent, obs, name, data);
+        if !matches!(name, "doom_list" | "doom_inspect" | "doom_status") {
+            let first = msg.lines().next().unwrap_or("");
+            self.link.context(&format!("The streamer did {name} {}: {}{first}", data.unwrap_or(""), if ok { "" } else { "failed: " }), true);
+            self.idle_since = obs.tic;
+        }
+        (ok, msg)
+    }
+
     /// An action checked, carried out (an order queued), answered: (success, message).
     fn action(&mut self, agent: &mut Agent, obs: &Observation, name: &str, data: Option<&str>) -> (bool, String) {
         let args: Value = match data.map(serde_json::from_str::<Value>) {

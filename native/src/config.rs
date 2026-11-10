@@ -13,6 +13,11 @@ const IWADS: [(&str, &str); 4] = [
     ("plutonia", "base/plutonia/PLUTONIA.WAD"),
 ];
 
+/// The IWADs known by a short name ("doom", "doom2", ...).
+pub fn iwad_names() -> impl Iterator<Item = &'static str> {
+    IWADS.iter().map(|(n, _)| *n)
+}
+
 pub fn doom_dir() -> PathBuf {
     std::env::var_os("EVILDOOM_DOOM_DIR").map_or_else(default_doom_dir, PathBuf::from)
 }

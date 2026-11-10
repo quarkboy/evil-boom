@@ -36,7 +36,7 @@ const QUIT_WAIT: Duration = Duration::from_secs(3);
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// as `watch` takes it: "doom2", "doom", or a path
+    /// an IWAD by its short name: "doom", "doom2", "tnt", "plutonia" (never a path)
     pub wad: String,
     pub map: String,
     /// 1-5 (3 Hurt Me Plenty, 4 Ultra-Violence); 0: no monsters
@@ -63,8 +63,9 @@ impl Default for Settings {
 
 impl Settings {
     fn check(&self) -> Result<(), String> {
-        if self.wad.trim().is_empty() {
-            return Err("wad: doom, doom2 or a path".into());
+        if !crate::config::iwad_names().any(|n| n == self.wad) {
+            // (a name, never a path: the page can't reach for files on the PC)
+            return Err(format!("wad: one of {}", crate::config::iwad_names().collect::<Vec<_>>().join(", ")));
         }
         crate::engine::episode_map(&self.map)?;
         if !(0..=5).contains(&self.skill) {
@@ -506,6 +507,8 @@ mod tests {
         assert!(Settings::default().check().is_ok());
         assert!(Settings { map: "MAP99X".into(), ..Settings::default() }.check().is_err());
         assert!(Settings { skill: 6, ..Settings::default() }.check().is_err());
+        assert!(Settings { wad: "/etc/passwd".into(), ..Settings::default() }.check().is_err());
+        assert!(Settings { wad: "doom".into(), map: "E1M1".into(), ..Settings::default() }.check().is_ok());
         assert!(Settings { mode: "chaos".into(), ..Settings::default() }.check().is_err());
         assert!(Settings { mode: "neuro".into(), neuro_url: "http://x".into(), ..Settings::default() }.check().is_err());
     }

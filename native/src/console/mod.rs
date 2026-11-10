@@ -32,6 +32,19 @@ pub enum Command {
         #[serde(default)]
         carry: bool,
     },
+    /// damage does nothing to her (rehearsals), or does again
+    God { on: bool },
+    /// lives left from now (a death with none left ends the game)
+    Lives { n: i32 },
+    /// a line from the streamer to Evil (Neuro's context; directed by Neuro only)
+    Say { text: String },
+    /// an action as if from Evil (`doom_go`, ...; `data` its JSON, as Neuro sends it); directed by
+    /// Neuro only
+    Order {
+        action: String,
+        #[serde(default)]
+        data: Option<String>,
+    },
     /// close the game cleanly
     Quit,
 }
@@ -79,6 +92,8 @@ pub struct GameState {
     pub paused: bool,
     pub speed: f64,
     pub muted: bool,
+    /// damage does nothing to her
+    pub god: bool,
     /// who directs her: "bot" (on her own), "orders file", "neuro"
     pub mode: String,
     /// what she's doing, in a few words

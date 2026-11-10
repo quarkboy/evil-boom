@@ -7,6 +7,9 @@ use crate::console::game::Link;
 use crate::wad::Wad;
 use crate::console::{Command, FromGame, GameState, NeuroState};
 
+/// a streamer's line to Evil: at most this long (her context is precious)
+const SAY_MAX: usize = 300;
+
 /// The link and what's been sent over it.
 pub(super) struct Console {
     link: Link,
@@ -99,6 +102,37 @@ impl Watch {
                     None => self.agent.x_mut().log.push("console: not directed by Neuro: nothing to reconnect".into()),
                 },
                 Command::GotoMap { map, carry } => frame = Frame::Goto { map, carry },
+                Command::God { on } => {
+                    self.engine.set_god(on);
+                    self.agent.x_mut().log.push(format!("console: god mode {}", if on { "on" } else { "off" }));
+                }
+                Command::Lives { n } => {
+                    self.lives_left = n.clamp(0, 99);
+                    self.agent.x_mut().log.push(format!("console: {} lives left", self.lives_left));
+                }
+                Command::Say { text } => {
+                    let text: String = text.trim().chars().take(SAY_MAX).collect();
+                    let line = match self.neuro.as_ref() {
+                        Some(n) if !text.is_empty() => {
+                            n.say(&text);
+                            format!("streamer to Evil: {text}")
+                        }
+                        Some(_) => "console: nothing to say".into(),
+                        None => "console: not directed by Neuro: no one to tell".into(),
+                    };
+                    self.agent.x_mut().log.push(line);
+                }
+                Command::Order { action, data } => {
+                    let lines = match (self.neuro.as_mut(), self.obs.as_ref()) {
+                        (Some(n), Some(obs)) => {
+                            let (ok, msg) = n.streamer_action(&mut self.agent, obs, &action, data.as_deref());
+                            vec![format!(">> (streamer) {action} {}", data.as_deref().unwrap_or("")), format!("<< {}{}", if ok { "" } else { "FAILED: " }, msg.lines().next().unwrap_or(""))]
+                        }
+                        (None, _) => vec!["console: not directed by Neuro: no orders to give".into()],
+                        (_, None) => vec!["console: the game hasn't started yet".into()],
+                    };
+                    self.agent.x_mut().log.extend(lines);
+                }
                 Command::Quit => frame = Frame::Quit,
             }
         }
@@ -147,6 +181,7 @@ impl Watch {
             speed: self.speed,
             // (no sound at all, as a headless or --mute game has, is muted too)
             muted: self.muted || !self.sound,
+            god: self.engine.god(),
             ..GameState::default()
         };
         if let Some(o) = &self.obs {

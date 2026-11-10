@@ -88,9 +88,11 @@ WAD, map); after that:
    crash's last words). Tested by hand through the API: each command, a stop, a `kill -9` of the
    game (shown as `signal: 9`), a restart, a refused token, refused settings and commands.
    Not yet: the headless watch (the console drives the windowed one, which OBS captures).
-2. **Operator controls**: another level of the same WAD (built, 2026-11-10); lives, god mode for rehearsals, a line to
-   Evil, an order as hers; the traffic between the game and Neuro on its own panel; the GPT
-   stand-in's settings and log.
+2. **Operator controls** (built, 2026-11-10): another level of the same WAD; lives and god mode
+   live; a line to Evil (context, not silent, "The streamer: ..."); an order as hers (through her
+   own checks; she's told quietly of an order, not of a look); the traffic with Neuro is the
+   log's "Evil and Neuro" filter; the WAD only by its short name (never a path). Left: the GPT
+   stand-in's settings and its log on the page.
 3. **Robustness**: a crashed game restarted on its own (with a limit on crash loops); a hung one
    (no state for some seconds) killed and restarted; a log a session in `out/console/`; the
    supervisor's own restart picking the game up where it can.

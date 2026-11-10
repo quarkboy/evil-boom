@@ -78,14 +78,36 @@ input[type=checkbox] { width: auto; }
       <button id="l-next">Next level</button>
       <span class="check"><input type="checkbox" id="l-carry"><label for="l-carry" class="check">carry what she has</label></span>
     </div>
+    <div class="row">
+      <button id="c-god">God mode</button>
+      <input id="c-lives" type="number" min="0" max="99" style="width:5em" title="lives left">
+      <button id="c-livesset">Set lives</button>
+    </div>
     <div class="msg" id="msg"></div>
     <dl id="state"></dl>
   </section>
 
   <section>
+    <h2>Evil <span class="dim" style="text-transform:none;letter-spacing:0">(directed by Neuro or the GPT stand-in)</span></h2>
+    <div class="row">
+      <input id="e-say" maxlength="300" placeholder="a line to her, sent as context">
+      <button id="e-saysend">Tell her</button>
+    </div>
+    <div class="row">
+      <select id="e-action" style="width:auto">
+        <option>doom_go</option><option>doom_explore</option><option>doom_press</option><option>doom_exit</option><option>doom_stop</option>
+        <option>doom_list</option><option>doom_inspect</option><option>doom_status</option><option>doom_name</option>
+      </select>
+      <input id="e-data" placeholder='{"ref": "door-3"}' style="flex:1;min-width:10em">
+      <button id="e-order">Order as hers</button>
+    </div>
+    <p class="dim" style="margin:0;font-size:12px">An order goes through her own checks; she's told it was the streamer's. Answers in the log.</p>
+  </section>
+
+  <section>
     <h2>Settings <span class="dim" style="text-transform:none;letter-spacing:0">(used when the game starts)</span></h2>
     <form class="form" id="settings" onsubmit="return false">
-      <label>WAD <select name="wad"><option value="doom2">Doom II</option><option value="doom">Doom</option></select></label>
+      <label>WAD <select name="wad"><option value="doom2">Doom II</option><option value="doom">Doom</option><option value="tnt">TNT: Evilution</option><option value="plutonia">The Plutonia Experiment</option></select></label>
       <label>Map <input name="map" placeholder="MAP01 / E1M1"></label>
       <label>Skill <select name="skill">
         <option value="0">No monsters</option><option value="1">I'm too young to die</option><option value="2">Hey, not too rough</option>
@@ -153,7 +175,11 @@ function render(p) {
   else badge($("b-neuro"), "neuro -", "");
   $("g-start").disabled = g.running;
   $("g-stop").disabled = !g.running;
-  for (const id of ["c-pause", "c-restart", "c-mute"]) $(id).disabled = !p.connected;
+  for (const id of ["c-pause", "c-restart", "c-mute", "c-god", "c-lives", "c-livesset"]) $(id).disabled = !p.connected;
+  for (const id of ["e-say", "e-saysend", "e-action", "e-data", "e-order"]) $(id).disabled = !(p.connected && n);
+  $("c-god").textContent = st && st.god ? "God mode: on" : "God mode";
+  $("c-god").classList.toggle("on", !!(st && st.god));
+  if (st && document.activeElement !== $("c-lives")) $("c-lives").value = st.lives_left;
   $("c-neuro").disabled = !(p.connected && n);
   $("c-pause").textContent = st && st.paused ? "Resume" : "Pause";
   $("c-pause").classList.toggle("on", !!(st && st.paused));
@@ -175,7 +201,7 @@ function render(p) {
     rows.push(["Map", st.map + " · " + fate], ["Time", fmtTime(st.seconds)],
       ["Health", st.health + "  armor " + st.armor], ["Ammo", "bul " + st.ammo[0] + " · sh " + st.ammo[1] + " · rkt " + st.ammo[2] + " · cell " + st.ammo[3]],
       ["Keys", st.keys.length ? st.keys.join(", ") : "-"], ["Tally", "K " + t(st.kills) + " · I " + t(st.items) + " · S " + t(st.secrets)],
-      ["Lives left", String(st.lives_left)], ["Directed", st.mode], ["Doing", st.doing || "-"]);
+      ["Lives left", String(st.lives_left) + (st.god ? " · god mode" : "")], ["Directed", st.mode], ["Doing", st.doing || "-"]);
     if (n) rows.push(["Neuro", n.url]);
   }
   if (g.running && p.uptime != null) rows.push(["Up", fmtTime(p.uptime)]);
@@ -252,6 +278,18 @@ $("c-pause").onclick = () => cmd({ cmd: last && last.state && last.state.paused 
 $("c-mute").onclick = () => cmd({ cmd: "mute", on: !(last && last.state && last.state.muted) });
 $("c-restart").onclick = () => confirm("Restart the level from its start?") && cmd({ cmd: "restart_level" });
 $("c-neuro").onclick = () => cmd({ cmd: "neuro_reconnect" });
+$("c-god").onclick = () => cmd({ cmd: "god", on: !(last && last.state && last.state.god) });
+$("c-livesset").onclick = () => cmd({ cmd: "lives", n: Number($("c-lives").value) });
+$("e-saysend").onclick = async () => {
+  const text = $("e-say").value.trim();
+  if (text && await cmd({ cmd: "say", text })) $("e-say").value = "";
+};
+$("e-say").addEventListener("keydown", (e) => { if (e.key === "Enter") $("e-saysend").click(); });
+$("e-order").onclick = () => {
+  const data = $("e-data").value.trim();
+  if (data) { try { JSON.parse(data); } catch (e) { say("The data isn't JSON: " + e.message); return; } }
+  cmd({ cmd: "order", action: $("e-action").value, data: data || null });
+};
 function gotoMap(map) {
   if (!map || !confirm("Go to " + map + (($("l-carry").checked) ? ", carrying what she has?" : " from a pistol start?"))) return;
   mapPicked = false;
