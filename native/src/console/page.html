@@ -72,6 +72,12 @@ input[type=checkbox] { width: auto; }
       <button id="c-neuro">Reconnect Neuro</button>
     </div>
     <div class="row" id="speeds"></div>
+    <div class="row">
+      <select id="l-map" style="width:auto;min-width:7em"></select>
+      <button id="l-go">Go to level</button>
+      <button id="l-next">Next level</button>
+      <span class="check"><input type="checkbox" id="l-carry"><label for="l-carry" class="check">carry what she has</label></span>
+    </div>
     <div class="msg" id="msg"></div>
     <dl id="state"></dl>
   </section>
@@ -117,7 +123,7 @@ input[type=checkbox] { width: auto; }
 const $ = (id) => document.getElementById(id);
 let token = new URLSearchParams(location.search).get("t") || "";
 try { if (token) localStorage.setItem("evil-console-token", token); else token = localStorage.getItem("evil-console-token") || ""; } catch (e) { /* (storage off: the URL's token only) */ }
-let seq = 0, last = null, follow = true, formDirty = false, failures = 0;
+let seq = 0, last = null, follow = true, formDirty = false, failures = 0, mapsShown = "", mapPicked = false;
 const LOG_MAX = 4000;
 
 async function api(path, body) {
@@ -153,6 +159,14 @@ function render(p) {
   $("c-pause").classList.toggle("on", !!(st && st.paused));
   $("c-mute").textContent = st && st.muted ? "Unmute" : "Mute";
   $("c-mute").classList.toggle("on", !!(st && st.muted));
+  const maps = (p.connected && p.hello && p.hello.maps) || [];
+  if (maps.join() !== mapsShown) {
+    mapsShown = maps.join();
+    $("l-map").replaceChildren(...maps.map((m) => { const o = document.createElement("option"); o.value = o.textContent = m; return o; }));
+    mapPicked = false;
+  }
+  if (st && !mapPicked && maps.includes(st.map)) $("l-map").value = st.map;
+  for (const id of ["l-map", "l-go", "l-next", "l-carry"]) $(id).disabled = !p.connected || !maps.length;
   for (const b of $("speeds").children) { b.disabled = !p.connected; b.classList.toggle("on", !!st && Math.abs(st.speed - Number(b.dataset.x)) < 1e-9); }
   const rows = [];
   if (st) {
@@ -238,6 +252,19 @@ $("c-pause").onclick = () => cmd({ cmd: last && last.state && last.state.paused 
 $("c-mute").onclick = () => cmd({ cmd: "mute", on: !(last && last.state && last.state.muted) });
 $("c-restart").onclick = () => confirm("Restart the level from its start?") && cmd({ cmd: "restart_level" });
 $("c-neuro").onclick = () => cmd({ cmd: "neuro_reconnect" });
+function gotoMap(map) {
+  if (!map || !confirm("Go to " + map + (($("l-carry").checked) ? ", carrying what she has?" : " from a pistol start?"))) return;
+  mapPicked = false;
+  cmd({ cmd: "goto_map", map, carry: $("l-carry").checked });
+}
+$("l-map").onchange = () => { mapPicked = true; };
+$("l-go").onclick = () => gotoMap($("l-map").value);
+$("l-next").onclick = () => {
+  const maps = (last && last.hello && last.hello.maps) || [], cur = last && last.state && last.state.map;
+  const i = maps.indexOf(cur);
+  if (i < 0 || i + 1 >= maps.length) { say("No level after " + (cur || "this one") + " in the WAD."); return; }
+  gotoMap(maps[i + 1]);
+};
 for (const x of [0.5, 1, 2, 4, 8]) {
   const b = document.createElement("button"); b.textContent = "x" + x; b.dataset.x = x;
   b.onclick = () => cmd({ cmd: "speed", x }); $("speeds").append(b);

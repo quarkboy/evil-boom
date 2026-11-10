@@ -388,13 +388,13 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     let (w, mut watch) = first_watch(wad, map_name, o, sound)?;
     (watch.sound, watch.sound_on) = (sound, sound);
     if let Some(addr) = &o.control {
-        watch.console = Some(console::Console::connect(addr, wad, map_name)?);
+        watch.console = Some(console::Console::connect(addr, wad, map_name, &w)?);
     }
     if o.headless {
         return headless(watch, &w, o);
     }
     let title = format!("evil-doom explorer: {}", watch.map_name);
-    show(watch, &title, o.episode.then_some((&w, o)))
+    show(watch, &title, Some((&w, o)))
 }
 
 /// The WAD and the watcher for the first level.
@@ -702,21 +702,40 @@ fn level(w: &Wad, m: Arc<MapData>, nav: Rc<Navigator>, engine: Engine, o: &Watch
 fn next_level(watch: Watch, w: &Wad, o: &WatchOptions) -> Result<Option<Watch>, String> {
     let secret = watch.engine.secret_exit();
     let Some(next) = crate::sweep::next_map(&watch.map_name, secret) else { return Ok(None) };
-    let (speed, show_all, follow) = (watch.speed, watch.show_all, watch.follow);
-    let (sound, muted, sound_on) = (watch.sound, watch.muted, watch.sound_on);
-    let console = watch.console;
-    let mut engine = watch.engine;
-    engine.carry = Some(engine.loadout());
-    let m = Arc::new(load_map(w, &next, &[])?);
+    let loaded = load_level(w, &next, o)?;
+    let carry = watch.engine.loadout();
+    enter_level(watch, w, o, &next, loaded, Some(carry)).map(Some)
+}
+
+/// A level's map and its analysis, made ready (what can fail, before anything's changed).
+fn load_level(w: &Wad, name: &str, o: &WatchOptions) -> Result<(Arc<MapData>, Rc<Navigator>), String> {
+    crate::engine::episode_map(name)?;
+    let m = Arc::new(load_map(w, name, &[])?);
     let skill = if o.fight > 0 { o.fight } else { 3 };
     let mut nav = Navigator::new(Arc::clone(&m), skill)?;
     nav.keep_verified();
-    engine.goto(&next)?;
-    let mut watch = level(w, m, Rc::new(nav), engine, o)?;
+    Ok((m, Rc::new(nav)))
+}
+
+/// The engine on to the level `load_level` made ready, she in it afresh with `carry` (none: as
+/// the run was started, a pistol start unless --carry); the window's settings and the console
+/// kept.
+fn enter_level(watch: Watch, w: &Wad, o: &WatchOptions, name: &str, (m, nav): (Arc<MapData>, Rc<Navigator>), carry: Option<crate::dsda::Loadout>) -> Result<Watch, String> {
+    let (speed, show_all, follow) = (watch.speed, watch.show_all, watch.follow);
+    let (sound, muted, sound_on) = (watch.sound, watch.muted, watch.sound_on);
+    let (paused, mut console) = (watch.paused, watch.console);
+    let mut engine = watch.engine;
+    engine.carry = carry.or_else(|| o.carry.clone());
+    engine.goto(name)?;
+    let mut watch = level(w, m, nav, engine, o)?;
     (watch.speed, watch.show_all, watch.follow) = (speed, show_all, follow);
     (watch.sound, watch.muted, watch.sound_on) = (sound, muted, sound_on);
+    watch.paused = paused;
+    if let Some(c) = console.as_mut() {
+        c.new_level();
+    }
     watch.console = console;
-    Ok(Some(watch))
+    Ok(watch)
 }
 
 /// A fight set up already (an arena: the engine with its monsters spawned and her loadout given,
@@ -731,7 +750,7 @@ pub fn watch_prepared(p: crate::arena::Prepared, map_name: &str, speed: f64, sou
 
 /// The window, till it's shut or Esc: space pauses, N (or the right arrow) steps a tic while
 /// paused, +/- the speed, A the whole map, F follow, the wheel zooms.
-fn show(mut watch: Watch, title: &str, episode: Option<(&Wad, &WatchOptions)>) -> Result<(), String> {
+fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> Result<(), String> {
     let mut window = Window::new(title, W, H, WindowOptions { resize: true, scale: Scale::FitScreen, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() }).map_err(|e| e.to_string())?;
     window.set_target_fps(60);
     let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H), text_scale: 1.0 };
@@ -752,8 +771,13 @@ fn show(mut watch: Watch, title: &str, episode: Option<(&Wad, &WatchOptions)>) -
                 _ => {}
             }
         }
-        if !watch.console_frame() {
-            return Ok(()); // (the console's asked the game to close)
+        match watch.console_frame() {
+            console::Frame::Go => {}
+            console::Frame::Quit => return Ok(()), // (the console's asked the game to close)
+            console::Frame::Goto { map, carry } => {
+                watch = console::goto(watch, game, &map, carry)?;
+                window.set_title(&format!("evil-doom explorer: {}", watch.map_name));
+            }
         }
         // (the sound only at the game's own speed: faster or slower it'd pile up or lag)
         let sound = watch.sound && !watch.muted && !watch.paused && (watch.speed - 1.0).abs() < 1e-9;
@@ -785,7 +809,7 @@ fn show(mut watch: Watch, title: &str, episode: Option<(&Wad, &WatchOptions)>) -
             watch.tic();
             owed -= 1.0;
         }
-        if let Some((w, o)) = episode.filter(|_| watch.engine.exited()) {
+        if let Some((w, o)) = game.filter(|(_, o)| o.episode && watch.engine.exited()) {
             // (out: on to the next level, what she got out with carried)
             let name = watch.map_name.clone();
             let carried = watch.engine.loadout();

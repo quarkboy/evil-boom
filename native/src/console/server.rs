@@ -265,7 +265,7 @@ fn read_game(stream: TcpStream, hub: &Hub) {
         let Ok(m) = serde_json::from_str::<FromGame>(&line) else { continue };
         let mut s = lock(hub);
         match m {
-            FromGame::Hello { protocol, pid, commit, wad, map } => {
+            FromGame::Hello { protocol, pid, commit, wad, map, maps } => {
                 if s.game.pid != Some(pid) {
                     s.push(format!("[console] a game not started here tried to connect (pid {pid}): refused"));
                     return;
@@ -274,7 +274,7 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                     s.push(format!("[console] the game speaks protocol {protocol}, this console {PROTOCOL}: rebuild one of them"));
                 }
                 s.push(format!("[console] game connected: {wad} {map}, build {commit}"));
-                s.hello = Some(json!({ "pid": pid, "commit": commit, "wad": wad, "map": map }));
+                s.hello = Some(json!({ "pid": pid, "commit": commit, "wad": wad, "map": map, "maps": maps }));
                 s.to_game = writer.take();
                 ours = true;
                 if s.game.start_muted {

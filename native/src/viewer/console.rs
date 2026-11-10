@@ -2,8 +2,9 @@
 //! console's commands applied at the top of a frame, as the window's own keys are; the game's
 //! state, log and events sent back. A child of the viewer for `Watch`'s insides.
 
-use super::Watch;
+use super::{enter_level, load_level, Watch, WatchOptions};
 use crate::console::game::Link;
+use crate::wad::Wad;
 use crate::console::{Command, FromGame, GameState, NeuroState};
 
 /// The link and what's been sent over it.
@@ -16,18 +17,68 @@ pub(super) struct Console {
 }
 
 impl Console {
-    pub(super) fn connect(addr: &str, wad: &str, map: &str) -> Result<Console, String> {
-        Ok(Console { link: Link::connect(addr, wad, map)?, shown: 0, told: (String::new(), false, false) })
+    pub(super) fn connect(addr: &str, wad: &str, map: &str, w: &Wad) -> Result<Console, String> {
+        Ok(Console { link: Link::connect(addr, wad, map, maps(w))?, shown: 0, told: (String::new(), false, false) })
+    }
+
+    /// A new level: her log starts again (a new agent's).
+    pub(super) fn new_level(&mut self) {
+        self.shown = 0;
+    }
+}
+
+/// What the window's loop is to do after the console's commands.
+pub(super) enum Frame {
+    Go,
+    Quit,
+    /// another level of the WAD (`carry`: what she has, else as the run started)
+    Goto { map: String, carry: bool },
+}
+
+/// The WAD's levels, in its order (E1M1 ..., MAP01 ...).
+fn maps(w: &Wad) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for l in &w.lumps {
+        let n = l.name.to_uppercase();
+        let shaped = (n.len() == 4 && n.starts_with('E') && n.as_bytes()[2] == b'M') || (n.len() == 5 && n.starts_with("MAP"));
+        if shaped && crate::engine::episode_map(&n).is_ok() && !out.contains(&n) {
+            out.push(n);
+        }
+    }
+    out
+}
+
+/// The console's other level, in the same game process: the map made ready first, so one that
+/// can't be (no such level in the WAD) leaves her playing on where she is, told why.
+pub(super) fn goto(mut watch: Watch, game: Option<(&Wad, &WatchOptions)>, map: &str, carry: bool) -> Result<Watch, String> {
+    let map = map.trim().to_uppercase();
+    let Some((w, o)) = game else {
+        watch.agent.x_mut().log.push("console: no other level here".into());
+        return Ok(watch);
+    };
+    match load_level(w, &map, o) {
+        Ok(loaded) => {
+            let carried = carry.then(|| watch.engine.loadout());
+            let mut next = enter_level(watch, w, o, &map, loaded, carried)?;
+            next.agent.x_mut().log.push(format!("console: on to {map}{}", if carry { ", what she had carried" } else { "" }));
+            Ok(next)
+        }
+        Err(e) => {
+            watch.agent.x_mut().log.push(format!("console: not to {map}: {e}"));
+            Ok(watch)
+        }
     }
 }
 
 impl Watch {
-    /// The console's commands carried out; what's new sent to it. False: it asked the game to
-    /// quit.
-    pub(super) fn console_frame(&mut self) -> bool {
-        let Some(mut c) = self.console.take() else { return true };
-        let mut go_on = true;
-        for cmd in c.link.commands() {
+    /// The console's commands carried out; what's new sent to it; what the loop's to do.
+    pub(super) fn console_frame(&mut self) -> Frame {
+        let Some(mut c) = self.console.take() else { return Frame::Go };
+        let mut frame = Frame::Go;
+        // (till one that ends the frame: another level or quitting; what's after it waits for the
+        // next frame, the level it's for then the one there)
+        while matches!(frame, Frame::Go) {
+            let Some(cmd) = c.link.command() else { break };
             match cmd {
                 Command::Pause => self.paused = true,
                 Command::Resume => self.paused = false,
@@ -47,7 +98,8 @@ impl Watch {
                     }
                     None => self.agent.x_mut().log.push("console: not directed by Neuro: nothing to reconnect".into()),
                 },
-                Command::Quit => go_on = false,
+                Command::GotoMap { map, carry } => frame = Frame::Goto { map, carry },
+                Command::Quit => frame = Frame::Quit,
             }
         }
         if let Some(why) = c.link.lost() {
@@ -77,7 +129,7 @@ impl Watch {
             c.link.send(FromGame::State(self.console_state()));
         }
         self.console = Some(c);
-        go_on
+        frame
     }
 
     fn console_state(&self) -> GameState {

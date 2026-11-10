@@ -9,7 +9,7 @@ pub mod server;
 use serde::{Deserialize, Serialize};
 
 /// The protocol's version, in the game's hello: a supervisor and a game built apart may not agree.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 
 /// What the console asks of the running game, applied by it at the top of a frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -25,6 +25,13 @@ pub enum Command {
     RestartLevel,
     /// the link to Neuro dropped and made again (her orders and names kept)
     NeuroReconnect,
+    /// another level of the WAD, in the same game process; `carry`: what she has (else as the
+    /// game was started: a pistol start)
+    GotoMap {
+        map: String,
+        #[serde(default)]
+        carry: bool,
+    },
     /// close the game cleanly
     Quit,
 }
@@ -34,7 +41,16 @@ pub enum Command {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FromGame {
     /// first, once: who it is
-    Hello { protocol: u32, pid: u32, commit: String, wad: String, map: String },
+    Hello {
+        protocol: u32,
+        pid: u32,
+        commit: String,
+        wad: String,
+        map: String,
+        /// the WAD's levels, in its order
+        #[serde(default)]
+        maps: Vec<String>,
+    },
     /// how things stand, a few times a second
     State(GameState),
     /// the log's new lines
@@ -88,6 +104,7 @@ mod tests {
         assert_eq!(serde_json::from_str::<Command>(r#"{"cmd":"restart_level"}"#).ok(), Some(Command::RestartLevel));
         assert!(serde_json::from_str::<Command>(r#"{"cmd":"explode"}"#).is_err());
         assert!(serde_json::from_str::<Command>("not json").is_err());
+        assert_eq!(serde_json::from_str::<Command>(r#"{"cmd":"goto_map","map":"MAP07"}"#).ok(), Some(Command::GotoMap { map: "MAP07".into(), carry: false }));
         let back = serde_json::to_string(&Command::Mute { on: true }).unwrap_or_default();
         assert_eq!(back, r#"{"cmd":"mute","on":true}"#);
     }

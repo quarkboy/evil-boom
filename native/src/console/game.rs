@@ -23,7 +23,7 @@ pub struct Link {
 
 impl Link {
     /// Connect to the supervisor at `addr` (host:port) and say who this is.
-    pub fn connect(addr: &str, wad: &str, map: &str) -> Result<Link, String> {
+    pub fn connect(addr: &str, wad: &str, map: &str, maps: Vec<String>) -> Result<Link, String> {
         let stream = TcpStream::connect(addr).map_err(|e| format!("the console at {addr}: {e}"))?;
         stream.set_nodelay(true).ok();
         let reader = stream.try_clone().map_err(|e| e.to_string())?;
@@ -34,7 +34,7 @@ impl Link {
         thread::spawn(move || write_all(stream, &out_rx, &lost_w));
         thread::spawn(move || read_all(reader, &cmd_tx, &lost_tx));
         let link = Link { out, commands, lost, last_state: None };
-        link.send(FromGame::Hello { protocol: PROTOCOL, pid: std::process::id(), commit: crate::config::COMMIT.to_string(), wad: wad.to_string(), map: map.to_uppercase() });
+        link.send(FromGame::Hello { protocol: PROTOCOL, pid: std::process::id(), commit: crate::config::COMMIT.to_string(), wad: wad.to_string(), map: map.to_uppercase(), maps });
         Ok(link)
     }
 
@@ -42,9 +42,9 @@ impl Link {
         let _ = self.out.send(m);
     }
 
-    /// The commands come in since the last call.
-    pub fn commands(&self) -> Vec<Command> {
-        self.commands.try_iter().collect()
+    /// The next command come in, if there's one.
+    pub fn command(&self) -> Option<Command> {
+        self.commands.try_recv().ok()
     }
 
     /// Why the link's gone, the once it goes.
