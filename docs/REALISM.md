@@ -103,6 +103,7 @@ before any of them: 0.445.
 | O5 whom a monster's after by which way it's turned | 0.436 | -0.0028 ± 0.0071 | 459 / 198 / 201 | E3M5 UV +0.28, MAP18 HMP -0.22, MAP25 HMP +0.21 |
 | The engine reporting its sounds (nothing reading them) | 0.436 | +0.0000 | 1088 / 0 / 0 | none: the patch changes nothing in the game |
 | Hearing 1: a death by its cry, firing by an attack heard (the game's sounds) | 0.432 | -0.0049 ± 0.007 | see the commit | E3M4 HMP +0.24, E4M8 HMP -0.22, MAP10 HMP +0.22 |
+| Hearing 2: turning to look at a sound, a hit, a bump (the shortcuts still in) | 0.426 | -0.0051 ± 0.0096 | 161 runs the same to the tic, 288 better, 288 worse | E2M8 UV +0.50, E1M5 UV -0.34, E2M1 UV -0.31 |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's

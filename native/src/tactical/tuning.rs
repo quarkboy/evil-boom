@@ -68,8 +68,6 @@ pub struct Senses {
     pub fov: f64,
     /// ...and any this near, in any direction (heard)
     pub near: f64,
-    /// being hurt: everything in line of sight is noticed for this long
-    pub hurt_tics: i64,
     /// A recently seen monster can still be noticed outside the usual field of view.
     pub recent_sight_tics: i64,
     /// Movement from the first sighting that counts as waking up (units, units/tic, degrees).
@@ -120,7 +118,6 @@ impl Default for Senses {
         Senses {
             fov: 55.0,
             near: 384.0,
-            hurt_tics: 2 * 35,
             recent_sight_tics: 35,
             wake_distance: 16.0,
             wake_speed: 0.5,

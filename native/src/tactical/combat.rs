@@ -169,7 +169,6 @@ pub struct Combat {
     pub kills: i32,
     pub log: Vec<String>,
     health: Option<f64>,
-    hurt_tic: i64,
     switch_tic: i64,
     strafe: f64,
     strafe_until: i64,
@@ -322,7 +321,6 @@ impl Combat {
             kills: 0,
             log: Vec::new(),
             health: None,
-            hurt_tic: -1_000_000_000,
             switch_tic: -1_000_000_000,
             strafe: 1.0,
             strafe_until: 0,
@@ -399,7 +397,6 @@ impl Combat {
         self.invulnerable_until = i64::MIN / 2;
         self.target = None;
         self.health = None;
-        self.hurt_tic = -1_000_000_000;
         self.mode.clear();
         self.dodging.clear();
         self.homing_since.clear();
@@ -495,7 +492,6 @@ impl Combat {
         }
         if let Some(h) = obs.health {
             if let Some(before) = self.health.filter(|&before| h < before) {
-                self.hurt_tic = obs.tic;
                 self.damage.push((obs.tic, before - h));
                 // (what by: what's gone off by her, what's up against her)
                 let by: Vec<String> = obs
@@ -530,7 +526,6 @@ impl Combat {
         self.hear(obs);
         self.refresh_tic_cache(obs);
         let me = Body { x: obs.x, y: obs.y, z: self.z(obs), height: PLAYER_HEIGHT };
-        let hurt = obs.tic - self.hurt_tic < self.tune.senses.hurt_tics;
         self.visible.clear();
         for t in self.truth.values() {
             let d = dist((t.x, t.y), pos);
@@ -538,7 +533,7 @@ impl Combat {
                 continue;
             }
             let recent = self.known.get(&t.id).is_some_and(|s| obs.tic - s.tic < self.tune.senses.recent_sight_tics);
-            if !(hurt || recent || d < self.tune.senses.near || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov) {
+            if !(recent || d < self.tune.senses.near || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov) {
                 continue;
             }
             let target = Body { x: t.x, y: t.y, z: t.z, height: mon(t.name).height };
@@ -626,7 +621,7 @@ impl Combat {
             let d = dist((t.x, t.y), pos);
             let noticed = t.owner == 0
                 || (d < self.tune.engage.range
-                    && (hurt || d < self.tune.senses.near || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov)
+                    && (d < self.tune.senses.near || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov)
                     && self.los.clear(me, Body { x: t.x, y: t.y, z: t.z, height: MISSILE_HEIGHT }, &self.heights_now));
             if noticed {
                 self.missiles_seen.insert(id);
