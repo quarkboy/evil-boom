@@ -27,6 +27,9 @@
 //!   evil-boom neuro-gpt [--port N] [--config FILE]   a language model as Evil (config/neuro-gpt.json, and
 //!                                               config/neuro-gpt.local.json for the key): log in
 //!                                               out/neuro/gpt.log
+//!   evil-boom console [--bind HOST:PORT]             the stream console (docs/CONSOLE_PLAN.md): a web
+//!                                               page (0.0.0.0:7878, its token printed) to start,
+//!                                               stop and steer the game, started as a `watch` child
 //!   evil-boom follow <wad> <map>                     plan the level, follow the plan (seed 0)
 //!   evil-boom drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
 //!   evil-boom sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things,
@@ -539,6 +542,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
         neuro: None,
         gpt: None,
         capture_sound: false,
+        control: None,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -562,6 +566,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
                 w.gpt = Some(named.map_or_else(|| evildoom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from));
             }
             "--directed" => w.directed = Some(std::path::PathBuf::from(it.next().ok_or("--directed FILE (orders, a line each, read as they're added)")?)),
+            "--control" => w.control = Some(it.next().cloned().ok_or("--control HOST:PORT (the stream console's, which starts the game with it)")?),
             _ => names.push(a.clone()),
         }
     }
@@ -752,6 +757,10 @@ fn main() -> ExitCode {
             let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);
             let config = args.iter().position(|a| a == "--config").and_then(|i| args.get(i + 1)).map_or_else(|| evildoom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from);
             evildoom::neuro::gpt::serve(port, &config)
+        }
+        Some("console") => {
+            let bind = args.iter().position(|a| a == "--bind").and_then(|i| args.get(i + 1)).map_or("0.0.0.0:7878", String::as_str);
+            evildoom::console::server::serve(bind)
         }
         Some("neuro-mock") => {
             let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);

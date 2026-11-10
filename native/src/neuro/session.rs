@@ -19,6 +19,11 @@ const LIST_MAX: usize = 15;
 
 pub struct Session {
     link: Link,
+    /// Neuro's address, for connecting again
+    url: String,
+    /// connected now, and who to (the startup's acknowledgement)
+    connected: bool,
+    who: String,
     pub director: Director,
     /// a force out, not yet answered by an action
     forced: bool,
@@ -53,7 +58,7 @@ Ids come from doom_list; your names work as ids. \"NE 400\": north-east, 400 uni
 
 impl Session {
     pub fn new(url: &str) -> Session {
-        Session { link: Link::start(url, actions()), director: Director::new(), forced: false, idle_since: 0, told_status: (i64::MIN / 2, String::new()), shown: 0, briefed: false }
+        Session { link: Link::start(url, actions()), url: url.to_string(), connected: false, who: String::new(), director: Director::new(), forced: false, idle_since: 0, told_status: (i64::MIN / 2, String::new()), shown: 0, briefed: false }
     }
 
     /// A tic: what's come in handled; what's happened told; a decision forced if she's waited.
@@ -64,6 +69,7 @@ impl Session {
             match i {
                 Incoming::Connected => {
                     log.push("neuro: connected".into());
+                    self.connected = true;
                     self.forced = false;
                     self.idle_since = obs.tic;
                     if !self.briefed {
@@ -75,8 +81,12 @@ impl Session {
                     self.link.context(&status, true);
                     self.told_status = (obs.tic, status);
                 }
-                Incoming::Hello { character, display } => log.push(format!("neuro: playing with {display} ({character})")),
+                Incoming::Hello { character, display } => {
+                    log.push(format!("neuro: playing with {display} ({character})"));
+                    self.who = format!("{display} ({character})");
+                }
                 Incoming::Lost(why) => {
+                    self.connected = false;
                     if self.briefed {
                         log.push(format!("neuro: connection lost ({why}); trying again"));
                     }
@@ -117,6 +127,19 @@ impl Session {
             log.push("neuro: waiting on her: decision forced".into());
         }
         log
+    }
+
+    /// The link dropped and made again (the stream console's): what she's been told, her orders
+    /// and names kept; the old link's thread ends as it finds its channels gone.
+    pub fn reconnect(&mut self) {
+        self.link = Link::start(&self.url, actions());
+        self.connected = false;
+        self.forced = false;
+    }
+
+    /// (Neuro's address, connected, who's playing)
+    pub fn link_state(&self) -> (&str, bool, &str) {
+        (&self.url, self.connected, &self.who)
     }
 
     /// Her state and options, for a forced decision (Markdown, no top-level heading).

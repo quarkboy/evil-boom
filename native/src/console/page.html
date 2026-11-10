@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evil DOOM console</title>
+<style>
+:root {
+  --bg: #121216; --panel: #1c1c23; --line: #2e2e38; --text: #e6e6ea; --dim: #8b8b96;
+  --accent: #e04848; --ok: #4fbf72; --warn: #e0a83a; --bad: #e05252; --evil: #c58cf0; --info: #6fa8e8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+header h1 { font-size: 16px; margin: 0; letter-spacing: .02em; }
+header h1 b { color: var(--accent); }
+.badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; background: var(--line); color: var(--dim); }
+.badge.ok { background: #1f3b29; color: var(--ok); } .badge.warn { background: #3d3119; color: var(--warn); } .badge.bad { background: #432020; color: var(--bad); }
+main { display: grid; gap: 12px; padding: 12px 16px 24px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 980px) { main { grid-template-columns: 360px minmax(0, 1fr); } #logcard { grid-column: 2; grid-row: 1 / span 3; } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 10px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+button { background: #2a2a34; color: var(--text); border: 1px solid #3a3a46; border-radius: 6px; padding: 7px 12px; font: inherit; cursor: pointer; }
+button:hover:not(:disabled) { border-color: #5a5a6a; }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: #5a1f1f; border-color: #7a2a2a; }
+button.on { background: #24384f; border-color: #36597c; }
+dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 12px; margin: 0; }
+dt { color: var(--dim); } dd { margin: 0; overflow-wrap: anywhere; }
+.big { font-size: 20px; font-weight: 600; }
+label { display: grid; gap: 3px; font-size: 12px; color: var(--dim); }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.form .wide { grid-column: 1 / -1; }
+.check { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
+input, select { background: #15151b; color: var(--text); border: 1px solid #3a3a46; border-radius: 5px; padding: 6px 8px; font: inherit; width: 100%; }
+input[type=checkbox] { width: auto; }
+#log { height: 60vh; overflow-y: auto; background: #0e0e12; border-radius: 6px; padding: 6px 8px; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (min-width: 980px) { #log { height: calc(100vh - 170px); } }
+#log .evil { color: var(--evil); } #log .console { color: var(--info); } #log .err { color: var(--bad); } #log .event { color: var(--warn); } #log .out { color: var(--dim); }
+.msg { min-height: 1.4em; font-size: 13px; color: var(--warn); }
+.dim { color: var(--dim); }
+#tokenbox { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1><b>Evil</b> DOOM console</h1>
+  <span id="b-console" class="badge">console ?</span>
+  <span id="b-game" class="badge">game ?</span>
+  <span id="b-neuro" class="badge">neuro -</span>
+</header>
+<main>
+  <section id="tokenbox">
+    <h2>Token</h2>
+    <p class="dim">The console printed its address with a token (<code>?t=...</code>) when it started. Paste the token here.</p>
+    <div class="row"><input id="tokenin" placeholder="token"><button id="tokenset">Use</button></div>
+  </section>
+
+  <section>
+    <h2>Game</h2>
+    <div class="row">
+      <button class="primary" id="g-start">Start</button>
+      <button id="g-stop">Stop</button>
+      <button id="g-restart">Restart game</button>
+    </div>
+    <div class="row">
+      <button id="c-pause">Pause</button>
+      <button id="c-restart">Restart level</button>
+      <button id="c-mute">Mute</button>
+      <button id="c-neuro">Reconnect Neuro</button>
+    </div>
+    <div class="row" id="speeds"></div>
+    <div class="msg" id="msg"></div>
+    <dl id="state"></dl>
+  </section>
+
+  <section>
+    <h2>Settings <span class="dim" style="text-transform:none;letter-spacing:0">(used when the game starts)</span></h2>
+    <form class="form" id="settings" onsubmit="return false">
+      <label>WAD <select name="wad"><option value="doom2">Doom II</option><option value="doom">Doom</option></select></label>
+      <label>Map <input name="map" placeholder="MAP01 / E1M1"></label>
+      <label>Skill <select name="skill">
+        <option value="0">No monsters</option><option value="1">I'm too young to die</option><option value="2">Hey, not too rough</option>
+        <option value="3">Hurt me plenty</option><option value="4">Ultra-Violence</option><option value="5">Nightmare!</option></select></label>
+      <label>Lives <input name="lives" type="number" min="1" max="99"></label>
+      <label>Seed <input name="seed" placeholder="random"></label>
+      <label>Directed by <select name="mode"><option value="bot">the bot alone</option><option value="neuro">Neuro</option><option value="gpt">the GPT stand-in</option></select></label>
+      <label class="wide">Neuro URL <input name="neuro_url" placeholder="ws://127.0.0.1:8000"></label>
+      <span class="check"><input type="checkbox" name="mortal" id="s-mortal"><label for="s-mortal" class="check">Mortal</label></span>
+      <span class="check"><input type="checkbox" name="episode" id="s-episode"><label for="s-episode" class="check">Whole episode</label></span>
+      <span class="check"><input type="checkbox" name="muted" id="s-muted"><label for="s-muted" class="check">Start muted</label></span>
+      <div class="row wide">
+        <button id="s-save">Save</button>
+        <button class="primary" id="s-apply">Save and restart game</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="logcard">
+    <h2>Log</h2>
+    <div class="row">
+      <select id="logfilter" style="width:auto">
+        <option value="all">Everything</option>
+        <option value="evil">Evil and Neuro</option>
+        <option value="console">Console, events, errors</option>
+      </select>
+      <button id="logfollow" class="on">Follow</button>
+      <button id="logclear">Clear</button>
+    </div>
+    <div id="log"></div>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let token = new URLSearchParams(location.search).get("t") || "";
+try { if (token) localStorage.setItem("evil-console-token", token); else token = localStorage.getItem("evil-console-token") || ""; } catch (e) { /* (storage off: the URL's token only) */ }
+let seq = 0, last = null, follow = true, formDirty = false, failures = 0;
+const LOG_MAX = 4000;
+
+async function api(path, body) {
+  const sep = path.includes("?") ? "&" : "?";
+  const r = await fetch(path + sep + "t=" + encodeURIComponent(token), body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({ error: "bad answer (" + r.status + ")" }));
+  if (r.status === 401) { $("tokenbox").style.display = "block"; }
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function say(text) { $("msg").textContent = text || ""; }
+async function act(path, body, okText) {
+  try { const j = await api(path, body === undefined ? {} : body); say(okText || ""); return j; }
+  catch (e) { say(e.message); return null; }
+}
+const cmd = (c) => act("/api/cmd", c);
+
+function badge(el, text, cls) { el.textContent = text; el.className = "badge " + (cls || ""); }
+
+function render(p) {
+  last = p;
+  const g = p.game, st = p.state;
+  badge($("b-console"), "console ok", "ok");
+  badge($("b-game"), g.running ? (p.connected ? "game running" : "game starting") : "game stopped", g.running ? (p.connected ? "ok" : "warn") : "");
+  const n = st && st.neuro;
+  if (n) badge($("b-neuro"), n.connected ? "neuro: " + (n.who || "connected") : "neuro: not connected", n.connected ? "ok" : "bad");
+  else badge($("b-neuro"), "neuro -", "");
+  $("g-start").disabled = g.running;
+  $("g-stop").disabled = !g.running;
+  for (const id of ["c-pause", "c-restart", "c-mute"]) $(id).disabled = !p.connected;
+  $("c-neuro").disabled = !(p.connected && n);
+  $("c-pause").textContent = st && st.paused ? "Resume" : "Pause";
+  $("c-pause").classList.toggle("on", !!(st && st.paused));
+  $("c-mute").textContent = st && st.muted ? "Unmute" : "Mute";
+  $("c-mute").classList.toggle("on", !!(st && st.muted));
+  for (const b of $("speeds").children) { b.disabled = !p.connected; b.classList.toggle("on", !!st && Math.abs(st.speed - Number(b.dataset.x)) < 1e-9); }
+  const rows = [];
+  if (st) {
+    const t = (a) => a[0] + "/" + a[1];
+    const fate = st.exited ? "exited" : st.dead ? "dead" : st.paused ? "paused" : "playing";
+    rows.push(["Map", st.map + " · " + fate], ["Time", fmtTime(st.seconds)],
+      ["Health", st.health + "  armor " + st.armor], ["Ammo", "bul " + st.ammo[0] + " · sh " + st.ammo[1] + " · rkt " + st.ammo[2] + " · cell " + st.ammo[3]],
+      ["Keys", st.keys.length ? st.keys.join(", ") : "-"], ["Tally", "K " + t(st.kills) + " · I " + t(st.items) + " · S " + t(st.secrets)],
+      ["Lives left", String(st.lives_left)], ["Directed", st.mode], ["Doing", st.doing || "-"]);
+    if (n) rows.push(["Neuro", n.url]);
+  }
+  if (g.running && p.uptime != null) rows.push(["Up", fmtTime(p.uptime)]);
+  if (g.pid) rows.push(["PID", String(g.pid)]);
+  if (p.hello) rows.push(["Build", p.hello.commit]);
+  if (g.last_exit) rows.push(["Last end", g.last_exit]);
+  const dl = $("state"); dl.replaceChildren();
+  for (const [k, v] of rows) { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = v; dl.append(dt, dd); }
+  if (!formDirty) fillForm(p.settings);
+  addLog(p.log);
+}
+function fmtTime(s) { s = Math.floor(s); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+
+function kind(line) {
+  if (line.startsWith("[console]")) return "console";
+  if (line.startsWith("[event]")) return "event";
+  if (line.startsWith("[err]")) return "err";
+  if (line.startsWith("[out]")) return "out";
+  if (/^(>>|<<|neuro: |evil says: )/.test(line)) return "evil";
+  return "";
+}
+function shown(k) {
+  const f = $("logfilter").value;
+  return f === "all" || (f === "evil" && k === "evil") || (f === "console" && (k === "console" || k === "event" || k === "err"));
+}
+function addLog(lines) {
+  if (!lines || !lines.length) return;
+  const box = $("log");
+  for (const [n, line] of lines) {
+    const k = kind(line), div = document.createElement("div");
+    div.textContent = line; div.className = k; div.dataset.k = k;
+    if (!shown(k)) div.hidden = true;
+    box.append(div); seq = n;
+  }
+  while (box.childElementCount > LOG_MAX) box.firstElementChild.remove();
+  if (follow) box.scrollTop = box.scrollHeight;
+}
+
+function fillForm(s) {
+  const f = $("settings");
+  for (const el of f.elements) {
+    if (!el.name || !(el.name in s)) continue;
+    if (el.type === "checkbox") el.checked = !!s[el.name];
+    else el.value = s[el.name] == null ? "" : String(s[el.name]);
+  }
+}
+function readForm() {
+  const f = $("settings"), s = {};
+  for (const el of f.elements) {
+    if (!el.name) continue;
+    if (el.type === "checkbox") s[el.name] = el.checked;
+    else if (el.name === "skill" || el.name === "lives") s[el.name] = Number(el.value);
+    else if (el.name === "seed") s.seed = el.value.trim() === "" ? null : Number(el.value);
+    else s[el.name] = el.value.trim();
+  }
+  return s;
+}
+
+async function poll() {
+  try {
+    render(await api("/api/poll?since=" + seq));
+    failures = 0;
+  } catch (e) {
+    failures++;
+    badge($("b-console"), failures > 2 ? "console unreachable" : "console ?", failures > 2 ? "bad" : "warn");
+  }
+  setTimeout(poll, 400);
+}
+
+$("g-start").onclick = () => act("/api/game/start", {}, "Starting...");
+$("g-stop").onclick = () => confirm("Stop the game?") && act("/api/game/stop", {}, "Stopping...");
+$("g-restart").onclick = () => confirm("Restart the game process?") && act("/api/game/restart", {}, "Restarting...");
+$("c-pause").onclick = () => cmd({ cmd: last && last.state && last.state.paused ? "resume" : "pause" });
+$("c-mute").onclick = () => cmd({ cmd: "mute", on: !(last && last.state && last.state.muted) });
+$("c-restart").onclick = () => confirm("Restart the level from its start?") && cmd({ cmd: "restart_level" });
+$("c-neuro").onclick = () => cmd({ cmd: "neuro_reconnect" });
+for (const x of [0.5, 1, 2, 4, 8]) {
+  const b = document.createElement("button"); b.textContent = "x" + x; b.dataset.x = x;
+  b.onclick = () => cmd({ cmd: "speed", x }); $("speeds").append(b);
+}
+$("settings").addEventListener("input", () => { formDirty = true; });
+async function save() { const j = await act("/api/settings", readForm(), "Saved."); if (j) formDirty = false; return j; }
+$("s-save").onclick = async () => { const j = await save(); if (j && j.restart_needed) say("Saved: restart the game to use them."); };
+$("s-apply").onclick = async () => { if (await save()) act(last && last.game.running ? "/api/game/restart" : "/api/game/start", {}, "Saved; (re)starting..."); };
+$("logfilter").onchange = () => { for (const d of $("log").children) d.hidden = !shown(d.dataset.k); $("log").scrollTop = $("log").scrollHeight; };
+$("logfollow").onclick = () => { follow = !follow; $("logfollow").classList.toggle("on", follow); };
+$("logclear").onclick = () => $("log").replaceChildren();
+$("tokenset").onclick = () => {
+  token = $("tokenin").value.trim();
+  try { localStorage.setItem("evil-console-token", token); } catch (e) { /* (not kept) */ }
+  $("tokenbox").style.display = "none"; seq = 0; $("log").replaceChildren();
+};
+poll();
+</script>
+</body>
+</html>

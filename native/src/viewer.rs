@@ -31,6 +31,8 @@ use crate::motor::{Controls, Observation, TICRATE};
 use crate::navigator::Navigator;
 use crate::specials::Lock;
 use crate::things::{pickup, PickupKind};
+
+mod console;
 use crate::wad::{load_map, Wad};
 
 const W: usize = 1600;
@@ -265,6 +267,8 @@ pub struct WatchOptions {
     pub gpt: Option<std::path::PathBuf>,
     /// the game's sound taken a tic at a time, not played (a recording at x1)
     pub capture_sound: bool,
+    /// run under the stream console (`evil-boom console`): its address, connected back to
+    pub control: Option<String>,
 }
 
 /// A watched game's orders, from a file added to as it plays.
@@ -340,6 +344,8 @@ struct Hold {
 }
 
 struct Watch {
+    /// the stream console's link (--control)
+    console: Option<console::Console>,
     hold: Option<Hold>,
     /// directed play's orders, if it's directed
     feed: Option<Feed>,
@@ -381,6 +387,9 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     let sound = o.sound && !o.headless;
     let (w, mut watch) = first_watch(wad, map_name, o, sound)?;
     (watch.sound, watch.sound_on) = (sound, sound);
+    if let Some(addr) = &o.control {
+        watch.console = Some(console::Console::connect(addr, wad, map_name)?);
+    }
     if o.headless {
         return headless(watch, &w, o);
     }
@@ -695,6 +704,7 @@ fn next_level(watch: Watch, w: &Wad, o: &WatchOptions) -> Result<Option<Watch>, 
     let Some(next) = crate::sweep::next_map(&watch.map_name, secret) else { return Ok(None) };
     let (speed, show_all, follow) = (watch.speed, watch.show_all, watch.follow);
     let (sound, muted, sound_on) = (watch.sound, watch.muted, watch.sound_on);
+    let console = watch.console;
     let mut engine = watch.engine;
     engine.carry = Some(engine.loadout());
     let m = Arc::new(load_map(w, &next, &[])?);
@@ -705,6 +715,7 @@ fn next_level(watch: Watch, w: &Wad, o: &WatchOptions) -> Result<Option<Watch>, 
     let mut watch = level(w, m, Rc::new(nav), engine, o)?;
     (watch.speed, watch.show_all, watch.follow) = (speed, show_all, follow);
     (watch.sound, watch.muted, watch.sound_on) = (sound, muted, sound_on);
+    watch.console = console;
     Ok(Some(watch))
 }
 
@@ -740,6 +751,9 @@ fn show(mut watch: Watch, title: &str, episode: Option<(&Wad, &WatchOptions)>) -
                 K::M => watch.muted = !watch.muted,
                 _ => {}
             }
+        }
+        if !watch.console_frame() {
+            return Ok(()); // (the console's asked the game to close)
         }
         // (the sound only at the game's own speed: faster or slower it'd pile up or lag)
         let sound = watch.sound && !watch.muted && !watch.paused && (watch.speed - 1.0).abs() < 1e-9;
@@ -838,6 +852,7 @@ impl Watch {
         let ys = m.vertexes.iter().map(|v| v.y);
         let bounds = (xs.clone().fold(f64::INFINITY, f64::min), ys.clone().fold(f64::INFINITY, f64::min), xs.fold(f64::NEG_INFINITY, f64::max), ys.fold(f64::NEG_INFINITY, f64::max));
         Watch {
+            console: None,
             hold: None,
             feed: None,
             neuro: None,

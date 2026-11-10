@@ -32,6 +32,8 @@ sha2 = "0.10"
 minifb = { version = "0.28", optional = true, default-features = false, features = ["x11"] }
 font8x8 = { version = "0.3", optional = true }
 png = { version = "0.17", optional = true }
+# (the stream console's web page and API, evil-boom console: plain HTTP, small and threaded)
+tiny_http = { version = "0.12", default-features = false }
 
 # (no LTO, 16 codegen units, incremental: a change rebuilds in ~12s, not ~110s; the bot runs
 # under 1% slower, measured on MAP17 and a 4-map sweep)

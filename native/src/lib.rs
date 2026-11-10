@@ -17,6 +17,7 @@
 pub mod advisor;
 pub mod arena;
 pub mod config;
+pub mod console;
 pub mod crush;
 pub mod decisions;
 pub mod control;
