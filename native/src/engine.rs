@@ -4,7 +4,7 @@
 
 use crate::config;
 use crate::dsda::{self, Dsda, Mobj, TicCmd};
-use crate::motor::{Controls, Observation, Thing};
+use crate::motor::{Controls, Observation, Sound, Thing};
 use crate::nav::Heights;
 use crate::specials::{Key, Keys};
 use crate::tactical::bestiary::category;
@@ -273,6 +273,20 @@ impl Engine {
             let text: Vec<u8> = p.message.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
             String::from_utf8_lossy(&text).into_owned()
         });
+        let names = self.game.sfx_names();
+        let sounds: Vec<Sound> = self
+            .game
+            .sounds()
+            .into_iter()
+            .map(|[_tic, sfx, id, kind, own, volume, separation, x, y]| Sound {
+                name: usize::try_from(sfx).ok().and_then(|i| names.get(i)).copied().unwrap_or(""),
+                own: own != 0,
+                volume,
+                separation,
+                from: (kind >= 0).then(|| (id, dsda::type_name(kind).unwrap_or(""))),
+                at: (f64::from(x), f64::from(y)),
+            })
+            .collect();
         let keys: Keys = Key::ENGINE_ORDER.iter().zip(p.cards).filter(|(_, held)| *held != 0).map(|(k, _)| *k).collect();
         let [clip, shell, cell, rocket] = p.ammo;
         let weapons: Vec<i32> =
@@ -302,6 +316,7 @@ impl Engine {
             allmap: Some(p.allmap != 0),
             backpack: Some(p.backpack != 0),
             message,
+            sounds,
         }
     }
 

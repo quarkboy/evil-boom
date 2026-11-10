@@ -47,6 +47,24 @@ const CORNER_SPAN: f64 = 48.0;
 /// how close to a waypoint before steering on past it
 const CORNER_CUT: f64 = 6.0;
 
+/// A sound the game started this tic, as she hears it: Doom's rule (within 1200 units, walls or
+/// none; louder the nearer; its side by which ear, never front or back).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Sound {
+    /// the sound's name in the game ("pistol", "firsht", "podth1", "dorcls", ...)
+    pub name: &'static str,
+    /// hers: her own gun, her own grunt, a pickup
+    pub own: bool,
+    /// 1-127: 127 within 160 units, falling to nothing at 1200
+    pub volume: i32,
+    /// 0-255, 128 the middle: less to her left, more to her right
+    pub separation: i32,
+    /// what made it, if a thing did (its id and class name), and where it came from: the game's
+    /// own, for the log and for checking; not something heard
+    pub from: Option<(i32, &'static str)>,
+    pub at: Point,
+}
+
 /// Something in the level as it is now: a monster, a missile in flight, an item.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Thing {
@@ -119,6 +137,8 @@ pub struct Observation {
     pub backpack: Option<bool>,
     /// what the game just told her
     pub message: Option<String>,
+    /// the sounds started since she last looked
+    pub sounds: Vec<Sound>,
 }
 
 impl Observation {

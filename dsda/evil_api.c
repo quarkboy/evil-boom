@@ -158,6 +158,42 @@ EVIL_API void evil_new_game(int skill, int episode, int map, int no_monsters)
   G_DeferedInitNew(skill - 1, episode, map);
 }
 
+/* The sounds the game's started since the last call, as she'd hear them (up to max; the oldest
+ * of a long run of them lost): nine numbers each, as evil_sound_t has them (tic, sfx, origin id,
+ * origin type, own, volume, separation, x, y). Returns how many. */
+static int evil_sounds_read;
+
+EVIL_API int evil_sounds_since(int *out, int max)
+{
+  int n = 0;
+  if (evil_sound_count - evil_sounds_read > EVIL_SOUNDS)
+    evil_sounds_read = evil_sound_count - EVIL_SOUNDS;
+  if (evil_sounds_read > evil_sound_count)
+    evil_sounds_read = evil_sound_count;
+  while (evil_sounds_read < evil_sound_count && n < max)
+  {
+    evil_sound_t *e = &evil_sounds[evil_sounds_read % EVIL_SOUNDS];
+    int *o = out + 9 * n;
+    o[0] = e->tic; o[1] = e->sfx; o[2] = e->origin_id; o[3] = e->origin_type; o[4] = e->own;
+    o[5] = e->volume; o[6] = e->separation; o[7] = e->x; o[8] = e->y;
+    evil_sounds_read++;
+    n++;
+  }
+  return n;
+}
+
+/* A sound's name by its number ("pistol", "firsht", "podth1", ...), into out (max bytes, ended
+ * with a 0). Returns 0 past the last sound. */
+EVIL_API int evil_sfx_name(int sfx, char *out, int max)
+{
+  const char *name;
+  if (sfx < 1 || sfx >= num_sfx || max < 1)
+    return 0;
+  name = S_sfx[sfx].name ? S_sfx[sfx].name : "";
+  snprintf(out, max, "%s", name);
+  return 1;
+}
+
 /* The random numbers: from the clock, as the game has them (fixed 0: a real run), or from
  * `value` (fixed 1: the same run every time, given the same commands; for testing: a barrel
  * took a different number of shots each run, and all after went its own way). From the next

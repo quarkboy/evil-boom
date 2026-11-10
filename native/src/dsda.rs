@@ -133,6 +133,8 @@ type GiveFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int, c_int, c_int, c_i
 type ClearFn = unsafe extern "C" fn() -> c_int;
 type ResetIdsFn = unsafe extern "C" fn();
 type HitsFn = unsafe extern "C" fn(*mut c_int, c_int) -> c_int;
+type SoundsFn = unsafe extern "C" fn(*mut c_int, c_int) -> c_int;
+type SfxNameFn = unsafe extern "C" fn(c_int, *mut c_char, c_int) -> c_int;
 type GrabSoundFn = unsafe extern "C" fn(*mut i16, c_int) -> c_int;
 type SoundRateFn = unsafe extern "C" fn() -> c_int;
 
@@ -160,6 +162,8 @@ pub struct Dsda {
     clear_fn: Option<ClearFn>,
     reset_ids_fn: Option<ResetIdsFn>,
     hits_fn: Option<HitsFn>,
+    sounds_fn: Option<SoundsFn>,
+    sfx_name_fn: Option<SfxNameFn>,
     grab_sound_fn: Option<GrabSoundFn>,
     sound_rate_fn: Option<SoundRateFn>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
@@ -211,6 +215,9 @@ impl Dsda {
         let reset_ids_fn = sym(b"evil_reset_ids").ok().map(|p| unsafe { std::mem::transmute::<*const (), ResetIdsFn>(p) });
         // SAFETY: as above, evil_hits_since's signature; optional.
         let hits_fn = sym(b"evil_hits_since").ok().map(|p| unsafe { std::mem::transmute::<*const (), HitsFn>(p) });
+        // SAFETY: as above, evil_sounds_since's and evil_sfx_name's signatures; optional.
+        let sounds_fn = sym(b"evil_sounds_since").ok().map(|p| unsafe { std::mem::transmute::<*const (), SoundsFn>(p) });
+        let sfx_name_fn = sym(b"evil_sfx_name").ok().map(|p| unsafe { std::mem::transmute::<*const (), SfxNameFn>(p) });
         // SAFETY: as above, evil_grab_sound's signature; optional.
         let grab_sound_fn = sym(b"evil_grab_sound").ok().map(|p| unsafe { std::mem::transmute::<*const (), GrabSoundFn>(p) });
         // SAFETY: as above, evil_sound_rate's signature; optional.
@@ -239,6 +246,8 @@ impl Dsda {
             clear_fn,
             reset_ids_fn,
             hits_fn,
+            sounds_fn,
+            sfx_name_fn,
             grab_sound_fn,
             sound_rate_fn,
             _argv: argv,
@@ -303,6 +312,37 @@ impl Dsda {
         // SAFETY: no arguments; see `load`.
         unsafe { f() };
         true
+    }
+
+    /// The sounds the game's started since the last call, as she'd hear them (none in a library
+    /// without the call): nine numbers each, as the engine's `evil_sound_t` has them.
+    pub fn sounds(&self) -> Vec<[i32; 9]> {
+        let Some(f) = self.sounds_fn else { return Vec::new() };
+        const MAX: usize = 256;
+        let mut raw = [0 as c_int; 9 * MAX];
+        // SAFETY: room for MAX sounds of nine ints each, as the call is told; see `load`.
+        let n = unsafe { f(raw.as_mut_ptr(), MAX as c_int) }.clamp(0, MAX as c_int) as usize;
+        raw.as_chunks::<9>().0.iter().take(n).copied().collect()
+    }
+
+    /// The game's sounds' names, by number (the first is none's, empty): asked of the game once
+    /// a process, kept for good.
+    pub fn sfx_names(&self) -> &'static [&'static str] {
+        static NAMES: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            let mut names: Vec<&'static str> = vec![""];
+            let Some(f) = self.sfx_name_fn else { return names };
+            loop {
+                let mut buf = [0 as c_char; 32];
+                // SAFETY: a buffer of 32 bytes, as the call is told; it ends what it writes with a 0.
+                if unsafe { f(names.len() as c_int, buf.as_mut_ptr(), 32) } == 0 {
+                    break;
+                }
+                let text: Vec<u8> = buf.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
+                names.push(Box::leak(String::from_utf8_lossy(&text).into_owned().into_boxed_str()));
+            }
+            names
+        })
     }
 
     /// The hits on her since the last call (none in a library without the call).
