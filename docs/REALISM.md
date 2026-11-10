@@ -97,6 +97,7 @@ before any of them: 0.445.
 | M1 the fight's hurting floors by what she knows | 0.445 | (not paired: 0.448 before, seeds of its own) | | |
 | O7 only the barrels she's seen | 0.451 | +0.0057 ± 0.0044 | 837 / 66 / 42 | E1M8 UV -0.28, E1M4 UV -0.22, E1M5 UV +0.20 |
 | O8 only the things lying about that she's seen | 0.448 | -0.0034 ± 0.0048 | 807 / 96 / 99 | E2M7 HMP -0.34, MAP06 HMP +0.21, E3M2 UV -0.20 |
+| O1 only the missiles she's noticed | 0.435 | -0.0130 ± 0.0085 | 259 / 243 / 269 | E4M5 UV -0.37, E3M5 UV -0.34, MAP14 HMP -0.27, E3M9 HMP +0.25 |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's
@@ -107,3 +108,9 @@ of view. Her eyes now take the tic in first (`Explorer::sense`, on the game as i
 traced MAP03 run is line for line as it was before the change. The lesson for the rest: a
 change that moves most runs when its rule should touch few has a timing shift in it; look at
 the count of runs the same before the score.
+
+O1 changed 829 runs, which looked like O8's timing shift again; it isn't. Traced on E4M5 UV
+(an exit before, a death now): the first difference is at tic 118, a cacodemon's ball "due in 34
+tics, 10 off" dodged before, from a cacodemon she had never seen and with no line of sight to the
+ball; now it isn't noticed. Missiles from what she can't see are common, so the rule touches
+most fights: this cost is the rule's own.
