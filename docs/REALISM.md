@@ -170,3 +170,30 @@ tics, 44 rounds spent for 5 damage, then out of ammo for the rest of the level. 
 loops of DECISIONS.md's step 5 (a decision undoing its own condition), there before; with
 nearly every run played differently now (27 of 1088 the same), which runs meet it is chance.
 What near's 0.05 is made of isn't known yet.
+
+## What near's 0.05 is made of (measured, 2026-11-09)
+
+Two sets on the same build and seeds, each run counting what hurt her and what she knew of it
+(`STATS`, `score`'s FILE.stats.jsonl): as she is, and with `senses.see_near` set back to 384.
+Score 0.370 against 0.421 (-0.0505 ± 0.0099); exits 290 against 346 of 1088.
+
+Health lost a run, by what she knew of what hit her:
+
+| | near on | now |
+|---|---|---|
+| in view | 101.6 | 83.0 |
+| not in view, within 384, to a side (by the face) | 0.3 | 31.3 |
+| not in view, anything else | 7.6 | 8.3 |
+| the floor, barrels, her own, crushers | 29.4 | 26.2 |
+| all | 139.0 | 148.8 |
+
+The whole of it is one line: close attackers out of her view, 31 health a run that was none.
+Of the 31: 17 from monsters she'd never seen, 8.5 from ones seen but out of mind, 6 from ones
+remembered; bullets 12.8, claws 10.3, missiles 8.2; the same on both skills. She's alerted by a
+hit from the side 2.1 times a run. Nothing else moved much: ammo and damage dealt fall with the
+shorter runs.
+
+So: monsters come up beside and behind her that she never looks at. A player looks about, and
+hears one that's close: a wandering monster's noise was left out of what turns her (there's
+always one somewhere), but a loud one is a close one. `senses.heed_active_volume` and
+`senses.heed_volume` are the loudness a sound needs to turn her, to be tried by tuning file.

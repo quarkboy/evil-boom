@@ -116,6 +116,12 @@ pub struct Senses {
     /// one she knows is about and can't see counts this many times its threat (the user's: one
     /// you know is round you and don't know where is the bigger threat)
     pub unseen_threat: f64,
+    /// a shot fired, a cry on seeing her or an attack is looked round for if it's this loud or
+    /// louder (1-127: 127 within 160 units, 100 at about 380, 64 at about 680, 1 at 1200)
+    pub heed_volume: i32,
+    /// ...and a monster's wandering noise, this loud or louder (128: never; there's always one
+    /// somewhere, but one this loud is close)
+    pub heed_active_volume: i32,
     /// something heard, a hit or a bump is looked round for this long at most (tics)
     pub alert_tics: i64,
     /// turned to within this many degrees of it, she's looked
@@ -148,6 +154,8 @@ impl Default for Senses {
             cry_due: 35,
             memory_tics: 10 * 35,
             unseen_threat: 1.5,
+            heed_volume: 1,
+            heed_active_volume: 128,
             alert_tics: 70,
             looked: 10.0,
         }

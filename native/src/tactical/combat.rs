@@ -772,7 +772,13 @@ impl Combat {
     /// looking there). Not a wandering monster's noise: there's always one.
     fn heed(&mut self, obs: &Observation) {
         let fov = self.tune.senses.fov;
-        for s in obs.sounds.iter().filter(|s| !s.own && matches!(s.what, Heard::Launch | Heard::Sight | Heard::Attack)) {
+        let (heed, heed_active) = (self.tune.senses.heed_volume, self.tune.senses.heed_active_volume);
+        let loud = |s: &crate::motor::Sound| match s.what {
+            Heard::Launch | Heard::Sight | Heard::Attack => s.volume >= heed,
+            Heard::Active => s.volume >= heed_active,
+            _ => false,
+        };
+        for s in obs.sounds.iter().filter(|s| !s.own && loud(s)) {
             let seen = if s.what == Heard::Launch {
                 obs.things.iter().flatten().any(|t| self.missiles_seen.contains(&t.id) && s.kinds.contains(&t.name))
             } else {
@@ -788,6 +794,7 @@ impl Combat {
             let what = match s.what {
                 Heard::Launch => "a shot fired",
                 Heard::Sight => "something's seen her",
+                Heard::Active => "something close",
                 _ => "an attack",
             };
             self.alerted(obs, ways, false, &format!("heard {what}"));
