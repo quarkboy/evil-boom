@@ -1,6 +1,6 @@
 //! Suspecting walls and choosing the next objective when ordinary exploration stalls.
 
-use super::{route_length, Explorer, Hooks, Kind, Objective, Spots, Suspecting, GIVE_UP_TICS, JUMP_MISSES, STUCK_TIMES, WHILE_OPEN};
+use super::{route_length, EndKind, Explorer, Hooks, Kind, Objective, Spots, Suspecting, GIVE_UP_TICS, JUMP_MISSES, STUCK_TIMES, WHILE_OPEN};
 use crate::geom::{dist, Point};
 use crate::knowledge::model::{Behind, Note, Wall, SUSPICION_MIN, THOROUGHNESS};
 use crate::motor::follower::RouteFollower;
@@ -397,7 +397,7 @@ impl Explorer {
                             break; // (nothing further down the list comes first anyway)
                         }
                     }
-                    _ => self.drop_objective(&obj, obs, "no route"),
+                    _ => self.drop_no_route(&obj, obs),
                 }
             }
             if routed.is_empty() {
@@ -419,6 +419,7 @@ impl Explorer {
     pub(super) fn start(&mut self, obs: &Observation, obj: Objective, steps: Vec<Step>) {
         self.since = obs.tic;
         self.end_why = None;
+        self.end_kind = EndKind::Plain;
         // (time to do it: walking the route, and some)
         self.allowed = GIVE_UP_TICS.max((route_length(&steps) / ROUTE_SPEED) as i64 + ROUTE_SLACK);
         self.exits_seen = self.knowledge.exits().len();

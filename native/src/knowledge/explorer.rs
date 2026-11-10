@@ -267,6 +267,16 @@ pub struct Ended {
     /// done (got there, did it, or it came to nothing to do: seen on the way)
     pub ok: bool,
     pub why: String,
+    /// a switch or door pressed with nothing seen to go off (pressed all the same)
+    pub pressed: bool,
+}
+
+/// What an objective's ending means for what's next, besides its words for the log.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EndKind {
+    Plain,
+    /// pressed, and nothing seen to go off
+    PressedNothing,
 }
 
 pub struct Explorer {
@@ -281,6 +291,8 @@ pub struct Explorer {
     pub ended: Option<Ended>,
     /// why the objective in hand ended, as `ends` or `drop_objective` had it
     end_why: Option<(bool, String)>,
+    /// ...and what kind of ending it was
+    end_kind: EndKind,
     pub log: Vec<String>,
     /// what she decided and on what, if a run's asked for it (`crate::decisions`)
     pub journal: crate::decisions::Journal,
@@ -464,6 +476,7 @@ impl Explorer {
             directed: false,
             ended: None,
             end_why: None,
+            end_kind: EndKind::Plain,
             log: Vec::new(),
             journal: crate::decisions::Journal::default(),
             stats: RouteStats::default(),
@@ -674,6 +687,7 @@ impl Explorer {
             self.follower = None;
             return;
         };
+        let pressed = self.end_why.is_some() && self.end_kind == EndKind::PressedNothing;
         let (ok, why) = match (&self.follower, self.end_why.take()) {
             (_, Some(e)) => e,
             // (got there and done with it: arrived() lets the route go)
@@ -689,7 +703,7 @@ impl Explorer {
             }
         };
         self.log.push(format!("tic {}: '{}' over: {}", obs.tic, obj.label, why));
-        self.ended = Some(Ended { label: obj.label, ok, why });
+        self.ended = Some(Ended { label: obj.label, ok, why, pressed });
         self.follower = None;
     }
 }

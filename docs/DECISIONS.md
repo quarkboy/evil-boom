@@ -2228,3 +2228,41 @@ made the call: it's time for realism (CLAUDE.md's rule is now "Combat: realistic
 - `docs/REALISM.md`: the survey of every other place she goes by the level's truth (eight by
   the observation, six by the map), what each would be instead, and the order. The user's: after
   the restructuring, one at a time, each scored; a very large drop means a bug in the change.
+
+## Restructuring, step 5: the arbiter (2026-11-09)
+
+Who walks her (the fight's move, a retreat's route, the explorer's route) was decided in three
+places: a `takeover` flag worked out inside the fight's `decide`, overwritten by the player for a
+dodge mid-retreat, and read again inside the fight's `controls`.
+
+- `tactical/arbiter.rs`: `arbitrate` gives `Legs::{Fight, Retreat, Route}` from what the fight's
+  decision wants (`Decision::wants_legs`), whether a retreat's under way, and whether a dodge
+  has a clear way; `controls` is told. Today's order exactly, written down for the first time:
+  a dodge mid-retreat only with a clear way; any other move of the fight's that wants the legs,
+  retreat or not (the retreat's way then only where the fight's steering leans); a retreat; the
+  route. The second line wasn't known as a rule before it was written: a retreat to cover with
+  something in sight is mostly the fight's legs.
+- The outcomes the explorer and the follower passed about as words are typed: a drop for want
+  of a route (`drop_no_route`), a follower's failure by being stuck (`failed_stuck`), a press
+  with nothing seen to go off (`Ended::pressed`).
+- The journal notes each change of legs. Both parity sets line for line the same.
+
+What the journal shows now it can (eight UV runs, seed 7): the legs change hands 1379 times in
+1460 s of play, half of the holds 10 tics or less. Three loops found, each a decision undoing
+its own condition, none fixed here (each is a traced fix of its own, to be scored):
+
+- **Standing and walking on** (E1M3, one imp, threat 3): "standing and fighting" and "shooting on
+  the way" by turns every 1-7 tics for seconds. Standing isn't by threat there (3 against 6), so
+  by the imp blocking her way or a duel: a condition that goes by the route's way, which stops
+  being walked the tic the fight has the legs.
+- **Closing in and going on** (MAP12, an arachnotron out of reach): `outmatched` on and off
+  every 2-4 tics. Outmatched counts what's within 1200; closing in brings it inside, outmatched
+  hands the legs to the route, which walks her back out.
+- **Out of ammo** (E2M2): "out of ammo: getting past" (the route's legs) and the fight's legs
+  with nothing in sight, every 2 tics for seconds: the monsters in sight one tic and not the
+  next as the route and the fight turn her by turns; unarmed, the fight still "keeps at" what
+  it's lost sight of.
+
+A hold on the legs at the arbiter (no change of hands inside some reaction time) would slow all
+three without curing any; considered and not done, as a guess. Each loop's condition is to be
+traced and given its own slack.

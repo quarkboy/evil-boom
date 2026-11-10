@@ -229,6 +229,8 @@ pub struct RouteFollower {
     step_i: i64,
     pub done: bool,
     pub failed: bool,
+    /// ...stuck (a step given up on for not getting anywhere), as against any other failure
+    pub failed_stuck: bool,
     pub replans: i32,
     /// once-only stair switches used (for replans)
     pub fired: BTreeSet<usize>,
@@ -366,6 +368,7 @@ impl RouteFollower {
             step_i: -1,
             done: false,
             failed: false,
+            failed_stuck: false,
             replans: 0,
             fired: BTreeSet::new(),
             mortal: false,
@@ -855,7 +858,9 @@ impl RouteFollower {
     fn fail(&mut self, obs: &Observation, why: &str) -> Controls {
         self.failed = true;
         let label = self.step().label.clone();
-        self.log.add(obs.tic, format!("FAILED at ({:.0}, {:.0}): {why} (step {}: {label})", obs.x, obs.y, self.step_i + 1));
+        let line = format!("FAILED at ({:.0}, {:.0}): {why} (step {}: {label})", obs.x, obs.y, self.step_i + 1);
+        self.failed_stuck = line.contains("stuck");
+        self.log.add(obs.tic, line);
         Controls::default()
     }
 

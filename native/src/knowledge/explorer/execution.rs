@@ -1,6 +1,6 @@
 //! Following objectives, looking around, and recording arrival or failure.
 
-use super::{turn_to, Explorer, Hooks, Kind, Objective, ARRIVE_SLACK, JUMP_MISSES, LOOK_TICS, STUCK_TIMES};
+use super::{turn_to, EndKind, Explorer, Hooks, Kind, Objective, ARRIVE_SLACK, JUMP_MISSES, LOOK_TICS, STUCK_TIMES};
 use crate::geom::dist;
 use crate::knowledge::model::{Heard, How, Note};
 use crate::motor::follower::RouteFollower;
@@ -129,6 +129,7 @@ impl Explorer {
         let pressed_now = |li: i64| usize::try_from(li).is_ok_and(|li| k.fired.iter().any(|f| k.tried_key(f.line) == k.tried_key(li) && f.tic >= self.since));
         if matches!(obj.kind, Kind::Switch | Kind::Door) && !obj.trigger.as_ref().is_some_and(|t| pressed_now(t.line)) {
             self.drop_objective(&obj, obs, "pressed, but nothing went off");
+            self.end_kind = EndKind::PressedNothing;
         } else if matches!(obj.kind, Kind::Frontier | Kind::Switch | Kind::Recheck | Kind::Noise | Kind::Room) && !self.seen_to(&obj) {
             let until = *self.look_until.get_or_insert(obs.tic + LOOK_TICS);
             if obs.tic < until {
@@ -297,7 +298,7 @@ impl Explorer {
                 let why = self.follower.as_ref().and_then(|f| f.log.events.iter().rev().find(|e| e.contains("FAILED")).cloned()).unwrap_or_default();
                 let why = why.split_once("] ").map_or(why.as_str(), |(_, r)| r).to_string();
                 self.drop_objective(&obj, obs, &format!("failed: {why}"));
-                if why.contains("stuck") {
+                if self.follower.as_ref().is_some_and(|f| f.failed_stuck) {
                     self.note_stuck(obs);
                     // (stuck at one spot whatever she sets out for: wedged, a trap she couldn't
                     // know of, as stranded as with nothing to do; MAP18's block, risen under the
@@ -376,6 +377,7 @@ impl Explorer {
     /// (an objective given up mid-way, for whoever's tracing: why)
     pub(super) fn ends(&mut self, obs: &Observation, why: &str) -> bool {
         self.end_why = Some((true, why.to_string()));
+        self.end_kind = EndKind::Plain;
         if self.debug_tics.is_some_and(|(a, b)| (a..=b).contains(&obs.tic)) {
             self.log.push(format!("  (objective ends at tic {}: {why})", obs.tic));
         }
@@ -390,15 +392,20 @@ impl Explorer {
         }
     }
 
+    /// Dropped for want of a route this think: noted (`refused_now`: what the dead-end pass may
+    /// take up again), then dropped as any other.
+    pub(super) fn drop_no_route(&mut self, obj: &Objective, obs: &Observation) {
+        if self.refused_now.0 != obs.tic {
+            self.refused_now = (obs.tic, BTreeSet::new());
+        }
+        self.refused_now.1.insert(obj.ident());
+        self.drop_objective(obj, obs, "no route");
+    }
+
     pub(super) fn drop_objective(&mut self, obj: &Objective, obs: &Observation, why: &str) {
         self.end_why = Some((false, why.to_string()));
+        self.end_kind = EndKind::Plain;
         let id = obj.ident();
-        if why == "no route" {
-            if self.refused_now.0 != obs.tic {
-                self.refused_now = (obs.tic, BTreeSet::new());
-            }
-            self.refused_now.1.insert(id.clone());
-        }
         self.dropped.insert(id.clone(), obs.tic);
         *self.drop_count.entry(id).or_insert(0) += 1;
         if let Some(w) = obj.wall {

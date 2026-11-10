@@ -674,11 +674,11 @@ impl Director {
             }
             Some(Doing::Off) => {}
             Some(Doing::Once(id, what)) => {
-                let (ok, why) = ended.map_or((false, "stopped".to_string()), |e| (e.ok, e.why));
+                let (ok, why, pressed_nothing) = ended.map_or((false, "stopped".to_string(), false), |e| (e.ok, e.why, e.pressed));
                 // (a switch pressed: what it did told when she's seen it, or after a while)
                 // (pressed and nothing seen to change is pressed all the same: what it moved may be
                 // out of sight, MAP07's platform across the arena; not "couldn't")
-                let pressed = ok || why.starts_with("pressed");
+                let pressed = ok || pressed_nothing;
                 match id.strip_prefix("switch-l").and_then(|l| l.parse::<usize>().ok()).filter(|_| pressed) {
                     Some(l) => self.pressed = Some((l, id.clone(), obs.tic + PRESS_WATCH)),
                     None => self.report(obs, ok, if ok { format!("Done: {what}.") } else { format!("Couldn't: {what} ({why}).") }),
