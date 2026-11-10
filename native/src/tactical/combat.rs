@@ -610,8 +610,9 @@ impl Combat {
                 self.log.push(format!("tic {}: {} {id} isn't where she last saw it", obs.tic, s.name));
             }
         }
-        // (missiles: noticed as monsters are, in her view or near, nothing in the way; then
-        // followed while they fly. Her own she knows of)
+        // (missiles: noticed in her view, nothing in the way, then followed while they fly: a
+        // missile in flight makes no sound, only its launch, which turns her to look. Her own
+        // she knows of)
         let flying: BTreeMap<i32, &Thing> = obs.things.iter().flatten().filter(|t| missile(t.name).is_some() && monster(t.name).is_none()).map(|t| (t.id, t)).collect();
         self.missiles_seen.retain(|i| flying.contains_key(i));
         for (&id, t) in &flying {
@@ -621,7 +622,7 @@ impl Combat {
             let d = dist((t.x, t.y), pos);
             let noticed = t.owner == 0
                 || (d < self.tune.engage.range
-                    && (d < self.tune.senses.near || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov)
+                    && norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov
                     && self.los.clear(me, Body { x: t.x, y: t.y, z: t.z, height: MISSILE_HEIGHT }, &self.heights_now));
             if noticed {
                 self.missiles_seen.insert(id);
