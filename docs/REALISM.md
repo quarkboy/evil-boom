@@ -115,6 +115,7 @@ before any of them: 0.445.
 | One hand turns her: no faster than 18 degrees a tic, its rate changed by at most 10 a tic (the user's: a jitter tracking an enemy near cover) | 0.399 | +0.0164 ± 0.0101 | 19 / 381 / 347 | jitters 0.29 a game minute to 0.16; at 6 a tic: 0.08, score -0.0105 ± 0.0101 |
 | Instinct: a monster known where it is for half a second after something comes between (the user's allowance; work list C1) | 0.398 | -0.0019 ± 0.0100 | 27 / 332 / 368 | nothing either way; a full second: +0.0021 ± 0.0100. Kept at half a second |
 | The fight's movement keeps off ground she's never been on (work list B1; the user's watching of E3M3) | 0.397 | -0.0012 ± 0.0100 | 18 / 357 / 365 | health lost to close attackers out of view 5.37 a game minute to 3.51, all health lost 27.4 to 23.8; she dies as often (724 to 723) but later (179 s to 221 s) |
+| Armor valued by what it adds to how much she can take, by the game's replacement rule (the user's; work list D5) | 0.396 | -0.0006 ± 0.0018 | 1032 / 10 / 13 | 56 runs touched: the valuation wasn't what kept her from MAP02's megaarmor (see the next line) |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's

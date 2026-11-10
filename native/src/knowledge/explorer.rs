@@ -124,6 +124,9 @@ pub struct Objective {
     pub round: bool,
     /// nothing safer left: one-way drops, nukage are all right
     pub risky: bool,
+    /// something she needs badly: with the doors a key opens, not after them (a megaarmor in
+    /// the room the key was in isn't left for a door across the level)
+    pub needed: bool,
     /// teleporter: all the lines of its pad (one objective)
     pub pad: BTreeSet<usize>,
     /// item, hunt: the thing's id (the engine's)
@@ -152,6 +155,7 @@ impl Objective {
             look_at: None,
             wall: None,
             risky: false,
+            needed: false,
             pad: BTreeSet::new(),
             thing: None,
             urgent: false,
@@ -182,7 +186,7 @@ impl Objective {
         if matches!(self.kind, Kind::Door | Kind::Switch) && self.trigger.as_ref().is_some_and(|t| t.info.lock != Lock::None) {
             return 1;
         }
-        if self.urgent {
+        if self.urgent || self.needed {
             return 1;
         }
         2

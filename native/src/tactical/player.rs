@@ -1613,6 +1613,7 @@ impl Fight {
             let mut o = Objective::new(Kind::Item, goal, format!("pick up {}{why}", t.name));
             o.thing = Some(t.id);
             o.urgent = !why.is_empty();
+            o.needed = need >= self.tune.errands.needed;
             o.worth = if why.is_empty() { None } else { worth };
             out.push(o);
         }

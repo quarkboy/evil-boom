@@ -557,6 +557,9 @@ impl Default for Guns {
 pub struct Errands {
     /// items further than this (as the crow flies) only when they're needed badly
     pub item_range: f64,
+    /// a pickup needed this much (0-1) is taken with the doors a key opens, the nearer first,
+    /// not left till after them
+    pub needed: f64,
     /// a health pickup the route's going for this near is gone on to mid-fight
     pub heal_near: f64,
     /// a monster's last known spot: hunted from the reachable poly nearest it, this near
@@ -592,6 +595,7 @@ impl Default for Errands {
     fn default() -> Self {
         Errands {
             item_range: 1536.0,
+            needed: 0.8,
             heal_near: 512.0,
             hunt_near: 512.0,
             hurt: 50.0,
