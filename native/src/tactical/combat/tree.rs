@@ -467,7 +467,9 @@ impl Combat {
                 return Some(d);
             }
         }
-        // (nothing to fight that she can see: round to what she heard, was hit from, or bumped)
+        // (nothing to fight that she can see: round to what she heard, was hit from, or bumped;
+        // or a look about as she walks)
+        self.glance(obs);
         if let Some(way) = self.look(obs, false) {
             return Some(Decision { kind: Move::Looking, yields: true, pressed: false, aim: Some(way), fire: false, weapon: 0, moving: None, why: "looking round".into() });
         }

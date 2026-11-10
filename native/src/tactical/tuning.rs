@@ -122,6 +122,10 @@ pub struct Senses {
     /// ...and a monster's wandering noise, this loud or louder (128: never; there's always one
     /// somewhere, but one this loud is close)
     pub heed_active_volume: i32,
+    /// walking a route with nothing to shoot, a look to either side this often (tics; 0: never)
+    pub glance_every: i64,
+    /// ...this far round (degrees)
+    pub glance_angle: f64,
     /// something heard, a hit or a bump is looked round for this long at most (tics)
     pub alert_tics: i64,
     /// turned to within this many degrees of it, she's looked
@@ -154,6 +158,8 @@ impl Default for Senses {
             cry_due: 35,
             memory_tics: 10 * 35,
             unseen_threat: 1.5,
+            glance_every: 0,
+            glance_angle: 90.0,
             heed_volume: 1,
             heed_active_volume: 128,
             alert_tics: 70,

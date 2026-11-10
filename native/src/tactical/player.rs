@@ -438,6 +438,11 @@ impl Player {
         self.fight.completion = Some(Completionist::new(&mut self.explorer, restarts));
     }
 
+    /// For measuring a run: who had her legs last tic.
+    pub fn legs(&self) -> Legs {
+        self.legs
+    }
+
     /// For measuring a run: the fight's counts.
     pub fn combat_mut(&mut self) -> &mut Combat {
         &mut self.fight.combat

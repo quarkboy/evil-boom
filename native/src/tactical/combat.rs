@@ -157,6 +157,8 @@ pub struct Combat {
     cries_due: Vec<(i64, &'static str)>,
     /// something to turn and look at: a sound from out of her view, a hit, a bump
     alert: Option<Alert>,
+    /// when she last looked about as she walked (`senses.glance_every`)
+    glanced: i64,
     /// counts for measuring a run (`STATS`): nothing decides by them
     pub tally: BTreeMap<String, f64>,
     /// attacks heard lately: (when, the kinds that sound like it)
@@ -316,6 +318,7 @@ impl Combat {
             cries_due: Vec::new(),
             attacks_heard: Vec::new(),
             alert: None,
+            glanced: 0,
             tally: BTreeMap::new(),
             visible: Vec::new(),
             barrels_seen: Vec::new(),
@@ -810,6 +813,32 @@ impl Combat {
             if !known {
                 self.alerted(obs, vec![way, obs.angle + 180.0], true, "hit from the side");
             }
+        }
+    }
+
+    /// Walking a route with nothing to shoot and nothing to look at: a look to either side every
+    /// so often (the user's: what comes up beside her as she travels is seen before it's on her).
+    pub(super) fn glance(&mut self, obs: &Observation) {
+        let every = self.tune.senses.glance_every;
+        if every <= 0 || !self.routed || self.alert.is_some() || obs.tic - self.glanced < every {
+            return;
+        }
+        self.glanced = obs.tic;
+        let by = self.tune.senses.glance_angle;
+        self.count("glances", 1.0);
+        self.alert = Some(Alert { until: obs.tic + self.tune.senses.alert_tics, ways: vec![obs.angle + by, obs.angle - by], hit: false, in_sight: self.visible.iter().map(|t| t.id).collect() });
+    }
+
+    /// For measuring a run: was she going towards the monster with that id, away from it, or
+    /// about still, by her own speed along the line to it.
+    pub fn measure_approach(&self, pos: Point, id: i32) -> &'static str {
+        let Some(t) = self.truth.get(&id) else { return "gone" };
+        let d = dist((t.x, t.y), pos).max(1.0);
+        let along = (self.velocity.0 * (t.x - pos.0) + self.velocity.1 * (t.y - pos.1)) / d;
+        match along {
+            a if a > 2.0 => "going towards it",
+            a if a < -2.0 => "going away from it",
+            _ => "about still",
         }
     }
 
