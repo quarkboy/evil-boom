@@ -96,3 +96,4 @@ before any of them: 0.445.
 |---|---|---|---|---|
 | M1 the fight's hurting floors by what she knows | 0.445 | (not paired: 0.448 before, seeds of its own) | | |
 | O7 only the barrels she's seen | 0.451 | +0.0057 ± 0.0044 | 837 / 66 / 42 | E1M8 UV -0.28, E1M4 UV -0.22, E1M5 UV +0.20 |
+| O8 only the things lying about that she's seen | 0.435 | -0.0157 ± 0.0077 | 424 / 186 / 253 | MAP03 UV -0.43, MAP03 HMP -0.40, E3M9 HMP +0.31, E3M4 HMP -0.24 |
