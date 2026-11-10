@@ -255,3 +255,6 @@ time. To act on once the watching's done, not before.
   are free) and before a monster she's lost sight of.
 - **MAP02 HMP, seed 756527427** (dies at 126 s). There was a megaarmor she saw and didn't pick
   up: she went into a teleporter instead. It would have helped a lot.
+- **E3M2 UV, seed 82960982** (dies at 151 s). Did well till she set off a trap; then, rather
+  than run back to where it was fairly safe, she ran forwards, opening up still more monsters,
+  and that was that.
