@@ -226,6 +226,10 @@ pub struct Engage {
     pub melee_stall: i64,
     /// how far past touching a monster still stands in her way
     pub errand_contact: f64,
+    /// with something to shoot from where she is, and her route about to take her onto ground
+    /// she's never been on: she stands and fights it from here (the user's: fight from the
+    /// corridor she knows, not out in the room)
+    pub hold_known: bool,
     /// something that shoots back from anywhere: shot at past a gun's reach while this much lands
     pub far_hits: f64,
 }
@@ -249,6 +253,7 @@ impl Default for Engage {
             melee_gain: 32.0,
             melee_stall: 3 * 35,
             errand_contact: 16.0,
+            hold_known: false,
             far_hits: 0.2,
         }
     }
@@ -356,6 +361,10 @@ pub struct Steer {
     pub w_barrel: f64,
     /// towards an errand (health, a gun, ammo)
     pub w_toward: f64,
+    /// a way that takes her onto ground she's never been on, in a fight (0: not counted): the
+    /// user's, from watching: she dodges and backs off into rooms she's never been in and wakes
+    /// what's in them; where she's been is safe
+    pub w_new_ground: f64,
     /// a way she isn't looking along and hasn't looked along for `unlooked_tics`: she doesn't
     /// know what's there (0: not counted)
     pub w_unlooked: f64,
@@ -389,6 +398,7 @@ impl Default for Steer {
             w_off_floor: 10.0,
             w_barrel: 4.0,
             w_toward: 1.5,
+            w_new_ground: 0.0,
             w_unlooked: 0.0,
             unlooked_tics: 70,
             w_out_of_view: 0.0,
@@ -664,6 +674,10 @@ pub struct Retreat {
     pub open_look: f64,
     /// ...or they're spread round her this far (degrees)
     pub sides: f64,
+    /// this many monsters first seen within `trap_tics` of each other: a trap sprung, or a room
+    /// walked in on: back out the way she came (0: never)
+    pub trap_count: usize,
+    pub trap_tics: i64,
     /// backing out: to somewhere on the way she came at least this far back...
     pub back_min: f64,
     /// ...that none of them see, or this far from them all; at most this long
@@ -706,6 +720,8 @@ impl Default for Retreat {
             tight: 0.45,
             open_look: 256.0,
             sides: 120.0,
+            trap_count: 0,
+            trap_tics: 35,
             back_min: 128.0,
             back_clear: 768.0,
             back_tics: 6 * 35,

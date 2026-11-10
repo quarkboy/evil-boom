@@ -165,6 +165,8 @@ pub struct Combat {
     glanced: i64,
     /// when she last looked round for one she remembers (`senses.check_every`)
     checked: i64,
+    /// the ground she's been on, by the mesh's polys: where she knows is safe
+    been: Vec<bool>,
     /// when each way round her (the steering's sixteen) was last in her view
     pub(super) looked: [i64; 16],
     /// the fight's move last tic, for measuring
@@ -330,6 +332,7 @@ impl Combat {
             alert: None,
             glanced: 0,
             checked: 0,
+            been: Vec::new(),
             looked: [i64::MIN / 2; 16],
             last_move: None,
             tally: BTreeMap::new(),
@@ -686,6 +689,13 @@ impl Combat {
         self.heed(obs);
         self.watch_infighting(obs);
         self.now = self.assess(obs);
+        // (the ground she's on: been on, from now)
+        if self.been.is_empty() {
+            self.been = vec![false; self.nav.mesh.polys.len()];
+        }
+        if let Some(p) = self.nav.poly_at(pos) {
+            self.been[p] = true;
+        }
         // (the ways round her that are in her view this tic)
         for (i, at) in self.looked.iter_mut().enumerate() {
             if norm(22.5 * i as f64 - obs.angle).abs() < self.tune.senses.fov {
@@ -929,6 +939,25 @@ impl Combat {
             .filter_map(|s| self.last_seen.get(&s.id).map(|t| (self.reckoned(s, obs.tic), t)))
             .map(|(at, t)| Thing { x: at.0, y: at.1, vx: 0.0, vy: 0.0, vz: 0.0, attack: -1, ..t.clone() })
             .collect()
+    }
+
+    /// Is p off the ground she's been on (a poly of the mesh she's never stood in, or none)?
+    pub(super) fn off_known(&self, p: Point) -> bool {
+        self.nav.poly_at(p).is_none_or(|q| !self.been.get(q).copied().unwrap_or(false))
+    }
+
+    /// Is the route about to take her onto ground she's never been on (the way it walked her
+    /// last tic, a few steps on)?
+    pub(super) fn route_into_new(&self, obs: &Observation) -> bool {
+        self.route_way.is_some_and(|w| {
+            let (pos, w) = (obs.pos(), w.to_radians());
+            [48.0, 96.0].into_iter().any(|far| self.off_known((pos.0 + w.cos() * far, pos.1 + w.sin() * far)))
+        })
+    }
+
+    /// How many monsters she first saw within the last `tics`.
+    pub fn newly_seen(&self, tic: i64, tics: i64) -> usize {
+        self.known.values().filter(|s| tic - s.first <= tics && !self.dead.contains(&s.id)).count()
     }
 
     /// For measuring a run: add `by` to the count called `key`.

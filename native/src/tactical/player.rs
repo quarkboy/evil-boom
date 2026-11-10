@@ -800,6 +800,11 @@ impl Player {
     /// them on more than one side). Why, if so (MAP29's ambushes in tight spaces: out, or kill
     /// fast, the user's).
     fn ambushed(&mut self, obs: &Observation) -> Option<String> {
+        // (a trap sprung, or a room walked in on: several of them seen all at once)
+        let (count, tics) = (self.fight.tune.retreat.trap_count, self.fight.tune.retreat.trap_tics);
+        if count > 0 && self.fight.combat.newly_seen(obs.tic, tics) >= count && !self.fight.combat.now.about.is_empty() {
+            return Some(format!("a trap: {} of them all at once", self.fight.combat.newly_seen(obs.tic, tics)));
+        }
         let them = self.fight.combat.now.shooters.clone();
         if them.is_empty() {
             return None;

@@ -309,6 +309,10 @@ impl Combat {
             if let Some(k) = self.steer_way {
                 s += self.tune.steer.w_keep * (d.0 * k.0 + d.1 * k.1);
             }
+            // (onto ground she's never been on: what's there she doesn't know, and wakes)
+            if self.tune.steer.w_new_ground > 0.0 && (self.off_known(step) || self.off_known(ahead)) {
+                s -= self.tune.steer.w_new_ground;
+            }
             // (a way she hasn't looked along lately: what's there she doesn't know)
             if self.tune.steer.w_unlooked > 0.0 && obs.tic - self.looked[i] > self.tune.steer.unlooked_tics {
                 s -= self.tune.steer.w_unlooked;

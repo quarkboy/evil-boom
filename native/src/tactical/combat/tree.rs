@@ -398,7 +398,10 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         return None;
     }
     let duel = s.target.as_ref().is_some_and(|t| fought(c, obs, t));
-    if !(c.now.threat >= c.tune.engage.stand_threat || c.now.health < c.tune.engage.low_health || duel || c.blocking(obs, s.target.as_ref())) {
+    // (her route about to take her onto ground she's never been on, with something to shoot
+    // from here: from here, then)
+    let hold = c.tune.engage.hold_known && c.route_into_new(obs) && s.target.as_ref().is_some_and(|t| c.reachable(obs, t));
+    if !(c.now.threat >= c.tune.engage.stand_threat || c.now.health < c.tune.engage.low_health || duel || hold || c.blocking(obs, s.target.as_ref())) {
         return None;
     }
     let mut kind = Move::Standing;

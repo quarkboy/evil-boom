@@ -130,6 +130,12 @@ impl Combat {
             if let Some(dw) = self.dodge_way {
                 s += 6.0 * (way.0 * dw.0 + way.1 * dw.1);
             }
+            // (as clear, a way that stays on ground she's been on: sideways where she is, not back
+            // through a door into a room she's never been in; the steering's weight, in the
+            // dodge's units)
+            if s >= 0.0 && self.tune.steer.w_new_ground > 0.0 && self.off_known(ahead) {
+                s -= 6.0 * self.tune.steer.w_new_ground;
+            }
             // (and, as clear, the way she's going: health, a gun, ammo across the room; dodging
             // where she stood, a rocket after a rocket, she never got there)
             if let Some(to) = self.toward.filter(|&to| s >= 0.0 && dist(to, pos) > 1.0) {
@@ -166,11 +172,21 @@ impl Combat {
     /// Back off from `what`: straight away if the floor's safe that way, else as near that as is.
     pub(super) fn away_from(&mut self, obs: &Observation, what: Point) -> Option<Point> {
         let away = (obs.y - what.1).atan2(obs.x - what.0);
-        for off in [0.0f64, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0] {
-            let a = away + off.to_radians();
-            let d = (a.cos(), a.sin());
-            if self.safe(obs, d, 64.0) {
-                return Some(d);
+        let pos = obs.pos();
+        // (first a way that stays on ground she's been on, if that's counted; then any)
+        for known_only in [self.tune.steer.w_new_ground > 0.0, false] {
+            for off in [0.0f64, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0] {
+                let a = away + off.to_radians();
+                let d = (a.cos(), a.sin());
+                if known_only && self.off_known((pos.0 + d.0 * 96.0, pos.1 + d.1 * 96.0)) {
+                    continue;
+                }
+                if self.safe(obs, d, 64.0) {
+                    return Some(d);
+                }
+            }
+            if !known_only {
+                break;
             }
         }
         None
