@@ -81,6 +81,9 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Opt
             p.keep_journal();
         }
     }
+    if let (Some(path), Some(p)) = (&o.advisor, agent.player_mut()) {
+        p.advise(crate::advisor::Advisor::new(crate::advisor::Config::load(path)?, false)?);
+    }
     if let (Some(names), Some(p)) = (&o.bar, agent.player_mut()) {
         p.bar(names)?;
     }

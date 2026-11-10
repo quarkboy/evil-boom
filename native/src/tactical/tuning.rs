@@ -38,6 +38,22 @@ impl Tuning {
         Ok(std::rc::Rc::new(path.map_or_else(|| Ok(Tuning::default()), Tuning::load)?))
     }
 
+    /// These numbers with some others over them (`over`: any groups and fields, as a file has
+    /// them): a stance's.
+    pub fn with(&self, over: &serde_json::Value) -> Result<Tuning, String> {
+        let mut all = serde_json::to_value(self).map_err(|e| e.to_string())?;
+        for (group, fields) in over.as_object().into_iter().flatten() {
+            let into = all.get_mut(group).and_then(serde_json::Value::as_object_mut).ok_or_else(|| format!("no tuning group called {group}"))?;
+            for (field, value) in fields.as_object().into_iter().flatten() {
+                if !into.contains_key(field) {
+                    return Err(format!("no tuning field called {group}.{field}"));
+                }
+                into.insert(field.clone(), value.clone());
+            }
+        }
+        serde_json::from_value(all).map_err(|e| e.to_string())
+    }
+
     /// As a file would give it (the defaults: a file to start from).
     pub fn json(&self) -> String {
         serde_json::to_string_pretty(self).unwrap_or_default()
@@ -660,6 +676,15 @@ mod tests {
     fn the_defaults_come_back_from_their_own_file() {
         let d = Tuning::default();
         assert_eq!(serde_json::from_str::<Tuning>(&d.json()).unwrap(), d);
+    }
+
+    #[test]
+    fn numbers_put_over_others() {
+        let d = Tuning::default();
+        let t = d.with(&serde_json::json!({"retreat": {"health": 55.0}})).unwrap();
+        assert_eq!(t.retreat.health, 55.0);
+        assert_eq!(t.engage, d.engage);
+        assert!(d.with(&serde_json::json!({"retreat": {"helth": 55.0}})).is_err());
     }
 
     #[test]

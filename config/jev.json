@@ -1,0 +1,25 @@
+{
+  "backend": "systemone",
+  "base_url": "https://api.typesafe.ai/v1/systemone",
+  "model": "jev-latest",
+  "api_key_env": "JEV_API_KEY",
+  "latency_tics": 7,
+  "target_every": 35,
+  "stance_every": 105,
+  "hold_tics": 105,
+  "min_share": 0.5,
+  "stances": {
+    "bold": {
+      "says": "press the fight: stand and shoot, close in, spend ammo",
+      "tuning": { "engage": { "stand_threat": 3.0, "low_health": 25.0 }, "retreat": { "health": 30.0 }, "guns": { "outmatched": 45.0 } }
+    },
+    "steady": {
+      "says": "fight as usual",
+      "tuning": {}
+    },
+    "careful": {
+      "says": "keep her alive: more distance, cover sooner, leave what would take long",
+      "tuning": { "engage": { "stand_threat": 9.0, "low_health": 50.0 }, "retreat": { "health": 55.0 }, "guns": { "outmatched": 20.0 } }
+    }
+  }
+}

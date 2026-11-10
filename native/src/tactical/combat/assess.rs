@@ -105,6 +105,28 @@ impl Assessment {
         })
     }
 
+    /// How things stand in words, for a decision model (short: its time goes by the words).
+    /// What's against her is named as the questions name it (`m` and its id).
+    pub fn words(&self, armor: f64) -> String {
+        let mut them: Vec<&Thing> = self.against_her.iter().collect();
+        them.sort_by(|a, b| dist((a.x, a.y), self.pos).total_cmp(&dist((b.x, b.y), self.pos)));
+        let mut out = format!("Health {:.0}, armor {armor:.0}. Her best gun does {:.0} damage a second; {}.", self.health, self.firepower.max(0.0), if self.short_of_ammo { "nearly out of ammo" } else { "ammo enough" });
+        if self.damage_rate > 0.0 {
+            out += &format!(" Losing {:.0} health a second.", self.damage_rate);
+        }
+        if self.outmatched {
+            out += " What's in sight is more than she can kill as she is.";
+        }
+        if self.surrounded {
+            out += " They're round her on several sides.";
+        }
+        out += "\nAgainst her:";
+        for t in them {
+            out += &format!(" m{} {}, {:.0} away{};", t.id, t.name, dist((t.x, t.y), self.pos), if t.attack >= 0 { ", attacking" } else { "" });
+        }
+        out
+    }
+
     /// A level started again: nothing in sight any more (the rest stands till she next looks).
     pub(super) fn nothing_in_sight(&mut self) {
         self.against_her.clear();

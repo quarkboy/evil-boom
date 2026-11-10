@@ -80,6 +80,8 @@ pub struct RunOptions {
     pub decisions: bool,
     /// moves and retreats she isn't to make, by name (`Player::bar`)
     pub bar: Option<String>,
+    /// a decision model asked as she plays: its settings file (`crate::advisor`)
+    pub advisor: Option<std::path::PathBuf>,
 }
 
 impl Default for RunOptions {
@@ -104,6 +106,7 @@ impl Default for RunOptions {
             tuning: None,
             decisions: false,
             bar: None,
+            advisor: None,
         }
     }
 }

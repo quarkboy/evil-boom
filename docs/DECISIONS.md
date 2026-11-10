@@ -2266,3 +2266,53 @@ its own condition, none fixed here (each is a traced fix of its own, to be score
 A hold on the legs at the arbiter (no change of hands inside some reaction time) would slow all
 three without curing any; considered and not done, as a guess. Each loop's condition is to be
 traced and given its own slack.
+
+## Restructuring, step 7: the same runs, compared run for run (2026-11-09)
+
+Two score sets on seeds of their own differ by about 0.008 with nothing changed, so a change
+had to move the score 0.02 to be seen, and a smaller one needed several sets.
+
+- `score --like FILE` plays the very runs of an earlier set: its levels, skills and seeds.
+  `--tuning FILE` and `--bar NAMES` are passed to every run (a tuning or a barred move scored).
+- `score-report A B`, the two being the same runs, adds the comparison run for run: the mean
+  difference and its standard error, how many runs are the same to the tic, how many better and
+  worse, by skill, and the levels that moved most.
+- Checked: the 1088 runs of the last measurement played again on the build ten commits on (all
+  of them meant to change nothing) came out the same to the tic, every one: +0.0000. So runs
+  are the same on their seeds across a whole measurement, twelve at a time; the restructuring
+  since the floors change has altered nothing on any of the 68 levels; and a change's effect can
+  be read exactly, on the runs it touches. `out/score/base.tsv` is that set (0.445): the
+  baseline the realism changes are measured against.
+
+## Restructuring, step 6: the advisor, a decision model's say (2026-11-09)
+
+The seam for a classifier of the System One kind (hosted Jev; tev1 behind llama.cpp's server
+speaks the same), with two questions through it to prove it end to end. Not the advisor it's to
+grow into (the user's: it's to be expanded a lot).
+
+- `advisor.rs`: a `Question` (how things stand in words, the instructions, the choices each
+  with what it means) goes to a backend on its own thread; its `Answer` (the choice with the
+  most belief, if `min_share` or more) is due `latency_tics` after the asking, however fast the
+  run goes: flat out, the run waits for the reply and holds it till its tic, so it plays as a
+  watched game would with a model that slow, and repeats when the model says the same. Under
+  `min_share`, or an error, or no reply: nothing, the rules'.
+- Asked now (`Player::consult`): **which target**, with two or more against her, at most every
+  `target_every` tics, the answer forced as her target (`Combat::forced_target`) for
+  `hold_tics`; **what stance**, in a fight, every `stance_every`, the stance's numbers put over
+  her tuning for `hold_tics` (`Tuning::with`). The stances are in the settings file, names and
+  numbers both: three to start with (bold, steady, careful), their numbers a first guess, never
+  tuned.
+- The state is `Assessment::words`: her health and armor, her firepower, ammo, the rate she's
+  losing health, outmatched and surrounded, and what's against her by kind and distance (not
+  its health: she doesn't know it). It's to hold only what she knows: REALISM.md comes first.
+- Settings: `config/jev.json` (committed), overlaid by `config/jev.local.json` (the key; not
+  committed). `--advisor FILE` on a run; off without it. Backend "first" answers the first
+  choice at once, for trying the plumbing with no model.
+- Tried: E1M3 UV seed 2 with Jev: 132 answers taken in 440 s of game (99 targets, 21 bold, 12
+  careful), 37 s real for a run that takes 4 without (each question some 180 ms); she got out,
+  as she does without. That's one run: it says the thing works, nothing about whether it helps.
+  Both parity sets are line for line the same with it off.
+- Next for it, in order of what I'd do: every open question in one request (Jev answers several
+  for the price of one); the fight's move, a retreat and the next objective as questions (the
+  journal has their options already); the journal with how each run ended, as data to train
+  tev1 on. Not the tic-by-tic things (a dodge, the aim): at 180 ms those stay the rules'.

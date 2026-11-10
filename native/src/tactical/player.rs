@@ -10,6 +10,7 @@ use super::bestiary::{ammo_item, armor_item, first_shot, health_item, monster, w
 use super::arbiter::{self, Legs};
 use super::combat::{eye, eye_of, segment_point_distance, spread, Combat, Move, Seen};
 use super::tuning::Tuning;
+use crate::advisor::{Advisor, Question};
 use crate::decisions::Record;
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
@@ -204,6 +205,16 @@ pub struct Player {
     plight: Plight,
     /// who had her legs last tic (the journal notes a change)
     legs: Legs,
+    /// a decision model's say, if a run's asked for one (`crate::advisor`)
+    advisor: Option<Advisor>,
+    /// the tuning she plays by with no stance over it
+    base_tune: Rc<Tuning>,
+    /// the stance she's in by the advisor's word ("" none), and till when
+    stance: (String, i64),
+    /// the advisor's target holds till then
+    target_until: i64,
+    /// when a target and a stance were last asked
+    asked: (i64, i64),
     /// retreats she isn't to make (`bar`)
     barred_retreats: Vec<RetreatKind>,
     /// places she's stood lately with nothing shooting at her and nothing hurting her, oldest
@@ -220,7 +231,7 @@ impl Player {
     pub fn new(nav: Rc<Navigator>, knowledge: Knowledge, tune: Rc<Tuning>) -> Player {
         Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
-            fight: Fight { combat: Combat::new(nav, Rc::clone(&tune)), tune, pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false, gun_out_of_reach: false, toward_gun: BTreeSet::new() },
+            fight: Fight { combat: Combat::new(nav, Rc::clone(&tune)), tune: Rc::clone(&tune), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false, gun_out_of_reach: false, toward_gun: BTreeSet::new() },
             retreat: None,
             bait_tic: -1_000_000_000,
             retreat_tic: -1_000_000_000,
@@ -230,6 +241,11 @@ impl Player {
             last_pos: (0.0, 0.0),
             plight: Plight::default(),
             legs: Legs::Route,
+            advisor: None,
+            base_tune: Rc::clone(&tune),
+            stance: (String::new(), 0),
+            target_until: 0,
+            asked: (i64::MIN / 2, i64::MIN / 2),
             barred_retreats: Vec::new(),
             trail: Vec::new(),
             exposure: None,
@@ -239,8 +255,72 @@ impl Player {
 
     /// Every item that counts as well (the exit held back till nothing's left: --complete);
     /// `restarts` levels again she may ask for, for ones out of reach.
+    /// A decision model to ask (see `crate::advisor`).
+    pub fn advise(&mut self, advisor: Advisor) {
+        self.advisor = Some(advisor);
+    }
+
+    /// The advisor's answers that are due, taken; then what there is to ask it, asked. An
+    /// answer holds a while (`hold_tics`) and lapses: the rules', and the tuning she came with.
+    fn consult(&mut self, obs: &Observation) {
+        let Some(advisor) = self.advisor.as_mut() else { return };
+        let (hold, every) = (advisor.config.hold_tics, (advisor.config.target_every, advisor.config.stance_every));
+        let mut said: Vec<String> = std::mem::take(&mut advisor.errors);
+        for a in advisor.due(obs.tic) {
+            match a.point {
+                "target" => {
+                    let Some(id) = a.choice.strip_prefix('m').and_then(|n| n.parse::<i32>().ok()) else { continue };
+                    self.fight.combat.forced_target = Some(id);
+                    self.target_until = obs.tic + hold;
+                }
+                "stance" => {
+                    let Some(stance) = advisor.config.stances.iter().find(|s| s.name == a.choice) else { continue };
+                    match self.base_tune.with(&stance.tuning) {
+                        Ok(t) => {
+                            let t = Rc::new(t);
+                            self.fight.combat.tune = Rc::clone(&t);
+                            self.fight.tune = t;
+                            self.stance = (stance.name.clone(), obs.tic + hold);
+                        }
+                        Err(e) => {
+                            said.push(format!("the {} stance: {e}", stance.name));
+                            continue;
+                        }
+                    }
+                }
+                _ => continue,
+            }
+            said.push(format!("advised (asked at tic {}): {} {}, {:.0}% sure", a.asked, a.point, a.choice, a.share * 100.0));
+            self.explorer.journal.note(|| Record { detail: format!("{:.2}", a.share), ..Record::new(obs.tic, "advised", format!("{} {}", a.point, a.choice)) });
+        }
+        if obs.tic >= self.target_until {
+            self.fight.combat.forced_target = None;
+        }
+        if !self.stance.0.is_empty() && obs.tic >= self.stance.1 {
+            self.stance.0.clear();
+            self.fight.combat.tune = Rc::clone(&self.base_tune);
+            self.fight.tune = Rc::clone(&self.base_tune);
+        }
+        let now = &self.fight.combat.now;
+        let state = || now.words(obs.armor.unwrap_or(0.0));
+        if now.against_her.len() >= 2 && obs.tic - self.asked.0 >= every.0 && !advisor.waiting("target") {
+            self.asked.0 = obs.tic;
+            let options = now.against_her.iter().map(|t| (format!("m{}", t.id), format!("the {} {:.0} away", t.name, dist((t.x, t.y), now.pos)))).collect();
+            advisor.ask(Question { point: "target", tic: obs.tic, state: state(), instructions: "Which should she shoot first?".into(), options });
+        }
+        if !now.against_her.is_empty() && obs.tic - self.asked.1 >= every.1 && !advisor.waiting("stance") {
+            self.asked.1 = obs.tic;
+            let options = advisor.config.stances.iter().map(|s| (s.name.clone(), s.says.clone())).collect();
+            advisor.ask(Question { point: "stance", tic: obs.tic, state: state(), instructions: "How should she fight this?".into(), options });
+        }
+        for line in said {
+            self.explorer.log.push(format!("  [fight] tic {}: {line}", obs.tic));
+        }
+    }
+
     /// Other numbers to judge by, from now on (a decision model's choice of stance).
     pub fn set_tuning(&mut self, tune: Rc<Tuning>) {
+        self.base_tune = Rc::clone(&tune);
         self.fight.combat.tune = Rc::clone(&tune);
         self.fight.tune = tune;
     }
@@ -328,6 +408,7 @@ impl Player {
         self.last_pos = obs.pos();
         self.fight.present = obs.things.iter().flatten().map(|t| t.id).collect();
         self.fight.combat.observe(obs);
+        self.consult(obs);
         self.plight = self.plight_now(obs);
         self.keep_trail(obs);
         for line in std::mem::take(&mut self.fight.combat.log) {
