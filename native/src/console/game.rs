@@ -42,6 +42,11 @@ impl Link {
         let _ = self.out.send(m);
     }
 
+    /// Another way in for what's to be sent (a thread of the game's own: the pictures').
+    pub fn sender(&self) -> Sender<FromGame> {
+        self.out.clone()
+    }
+
     /// The next command come in, if there's one.
     pub fn command(&self) -> Option<Command> {
         self.commands.try_recv().ok()

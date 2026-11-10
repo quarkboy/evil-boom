@@ -108,30 +108,43 @@ WAD, map); after that:
    `out/console/<commit>-<time>.log`. Tested: kill -9 at MAP05 (back at MAP05, a new pid); three
    in a row (the third left); SIGSTOP (killed as hung after 45 s, restarted). Left: the console's
    own restart finding a game still running (today a restarted console starts a new one).
-4. **Doom's own screens** (the presentation; the user's: "we might need to port more of the
-   engine, like the normal menu screen"). Today the patch draws only the level (`evil_draw`
-   returns nothing unless `GS_LEVEL`), shuts the menu every tic, has the melt off, and on an
-   exit jumps straight to the next map (`Engine::goto` with the loadout carried). In order:
-   - a. `evil_draw` for every game state: the tally (`WI_Drawer`), the finale (`F_Drawer`), the
-     title pages (`D_PageDrawer`), the menu over any of them (`M_Drawer`).
-   - b. The tally and finale run as the game runs them: after an exit she keeps ticking with no
-     commands (a press of use to hurry it after a while, as a player does) till the game moves on
-     itself (`G_WorldDone`), which also carries her loadout.
-   - c. Death shown as the game shows it: the view down, held a moment, then the restart.
-   - d. The title and demo loop (`D_StartTitle`, `D_AdvanceDemo`) when no game's on: the game
-     process starts in it and returns to it.
-   - e. The menu driven on screen: key events made up for `M_Responder` (`evil_menu_key`), so a
-     new game from the console walks the real menu (new game, episode, skill) at a human pace and
-     the menu itself starts it. Later Evil could choose the skill herself (a Neuro lifecycle
-     action, as NEURO_INTEGRATION_PLAN.md's `doom_start` has it).
-   - f. The melt, driven a tic at a time by us rather than by the clock (why it was turned off:
-     on the clock, some of her commands went nowhere while it ran, a different number each time).
-   All of it behind a presentation flag the console's game sets: the bot's runs, sweeps and the
-   score keep today's path. Risk to check before relying on it: the demo loop plays the game and
-   uses the play RNG, so a level started after it must play as one started fresh (a parity check
-   on fixed seeds, `run-map` against `watch --headless`).
-   Also: a game-only window for OBS (the watcher draws the game, the map and the log side by
-   side; `record --view game` already has the game alone), switchable from the console.
+4. **Doom's own screens** (built, 2026-11-10; the user's: "we might need to port more of the
+   engine, like the normal menu screen", then "skip the demo loop: stay on the title card").
+   `watch --present` (`--title`: held at the title card till the console's Begin); the console's
+   settings "Doom's own screens" and "Wait at the title card" (both on). The engine patch
+   (`evil_present`, `evil_title`, `evil_menu`, `evil_wipe_tic`, `evil_screen`, `evil_exit`) draws
+   every game state as D_Display does (the tally, the finale, the title page, the menu over them,
+   the HUD's messages), keeps the menu up, holds the move on to the next level for the caller,
+   and runs the melt a tic at a time with the game held, as Doom holds it (its random numbers
+   kept from the play's). `viewer/present.rs` says when, a tic at a time:
+   - the title card, held (no demos); Begin walks the menu as a player does (New Game, the
+     episode for Doom, the skill a move at a time, each with the menu's sound) and the level's
+     started as any is; a level that's not an episode's first: from the title straight in;
+   - the tally and the finales run as the game runs them: she presses use 2.5 s after the tally's
+     counted, 6 s after a Doom II text is all shown (Doom's go on by themselves); then the next
+     level, started as an episode's is; the episode's end (Doom's end picture, Doom II's cast)
+     stays on, "the end";
+   - a death watched 3 s (the view sinking), then the level again with a life spent, or, with none
+     left, the title card ("over");
+   - "Exit level" / "Secret exit" on the page: out by the game's own exit (the tally and all).
+   - DSDA's speedrunning clock on the tally ("Precise Intermission Time") off while presenting.
+   Seen (pictures from the page's View): the title card, the skill menu with the skull on the
+   chosen skill, the melt into the level, MAP01's tally and "Entering Underhalls", MAP06's tally
+   and its text then MAP07, E1M8's tally and the episode's text, MAP30's text and the cast, a
+   death melting into the title card, a death and the level again with a life spent.
+   Presented games aren't the same games as unpresented ones on a fixed seed (a new game seeds
+   its dice with the game's tic count, `rngseed += I_GetRandomTimeSeed() + gametic`, and the title
+   card and the menu add tics), but they're the same as each other (seed 3, three times: the
+   same death at tic 6290). The user's: fine, streams play random seeds. Unpresented play is
+   unchanged by the patch: one binary on the old engine and the new, three levels, the same
+   results to the second.
+   Not done: a game-only window for OBS (the console's View shows the game; the watcher's window
+   still draws the game, the map and the log side by side).
+   **The console's View** (the user's: "the minimap view with current objectives, like the
+   watcher"): the game sends the watcher's own drawing twice a second, the right side of its
+   window (the map as she knows it, her route, the objectives, the panel under it) and the
+   game's frame (an indexed PNG of the engine's frame, ~70 KB), made into PNGs on a thread of
+   their own; the page shows either or both, fetching a picture only when it's shown and new.
 5. **Across the web** (below): the hardening left to do.
 6. **Later**: an overlay page for OBS (her state, what Evil last said); Neuro's lifecycle actions
    (start, restart, next level) allowed or not from the console; a session's settings saved as

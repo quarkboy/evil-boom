@@ -72,10 +72,10 @@ index 1fec088..bea19e8 100644
  }
  
 diff --git a/prboom2/src/d_main.c b/prboom2/src/d_main.c
-index 4e6abe4..88ce834 100644
+index 4e6abe4..82ddb3e 100644
 --- a/prboom2/src/d_main.c
 +++ b/prboom2/src/d_main.c
-@@ -2297,6 +2297,12 @@ static void D_DoomMainSetup(void)
+@@ -2297,9 +2297,21 @@ static void D_DoomMainSetup(void)
  // D_DoomMain
  //
  
@@ -88,6 +88,15 @@ index 4e6abe4..88ce834 100644
  void D_DoomMain(void)
  {
    D_DoomMainSetup(); // CPhipps - setup out of main execution stack
+ 
+   D_DoomLoop ();  // never returns
+ }
++
++/* Evil: the title pages drawn (D_PageDrawer, static here) for evil_draw */
++void D_EvilPageDrawer(void)
++{
++  D_PageDrawer();
++}
 diff --git a/prboom2/src/dsda/messenger.c b/prboom2/src/dsda/messenger.c
 index bbdfdb6..9721b2e 100644
 --- a/prboom2/src/dsda/messenger.c
@@ -354,3 +363,17 @@ index 633f674..87d4574 100644
  void S_LoopSound(void *origin, int sfx_id, int timeout);
  
  void S_StartSectorSound(sector_t *sector, int sfx_id);
+diff --git a/prboom2/src/wi_stuff.c b/prboom2/src/wi_stuff.c
+index 2cc1c97..ff1bde2 100644
+--- a/prboom2/src/wi_stuff.c
++++ b/prboom2/src/wi_stuff.c
+@@ -2213,3 +2213,9 @@ void WI_Start(wbstartstruct_t* wbstartstruct)
+   else
+     WI_initStats();
+ }
++
++/* Evil: the tally's counted and waits for a press (what a player sees before pressing on) */
++int WI_EvilWaiting(void)
++{
++  return !netgame && state == StatCount && sp_state == 10;
++}

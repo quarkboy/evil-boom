@@ -55,6 +55,15 @@ pub enum Command {
         #[serde(default)]
         data: Option<String>,
     },
+    /// the level left by its exit (`secret`: the secret one), as a switch leaves it: the tally,
+    /// the finale, the next level (with Doom's own screens and the episode on)
+    ExitLevel {
+        #[serde(default)]
+        secret: bool,
+    },
+    /// from the title card through the menu to the run's first level (Doom's own screens on);
+    /// from anything else, the run again from the title card
+    Begin,
     /// close the game cleanly
     Quit,
 }
@@ -80,6 +89,44 @@ pub enum FromGame {
     Log { lines: Vec<String> },
     /// something that happened: "died", "exited", "level MAP02", ...
     Event { what: String },
+    /// a picture of part of the watcher's window, a PNG (base64): "map" (the map as she knows it,
+    /// her route and objectives, the panel under it), "game" (the game's own view)
+    View { name: String, png: String },
+}
+
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Bytes as base64 (standard alphabet, padded): a picture in a JSON line.
+pub fn base64(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], chunk.get(1).copied().unwrap_or(0), chunk.get(2).copied().unwrap_or(0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(char::from(B64[(n >> (18 - 6 * i)) as usize & 63]));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+/// Base64 back to bytes; None if it isn't.
+pub fn unbase64(text: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    let (mut acc, mut bits) = (0u32, 0);
+    for c in text.bytes().filter(|&c| c != b'=') {
+        let v = B64.iter().position(|&x| x == c)? as u32;
+        acc = (acc << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Some(out)
 }
 
 /// The game as the console shows it (what the streamer needs, not what the bot knows).
@@ -106,6 +153,8 @@ pub struct GameState {
     pub god: bool,
     /// sfx, music (0-15), master (0-100); none from an engine without the control
     pub volume: Option<[i32; 3]>,
+    /// what's on the screen: "title", "menu", "level", "dead", "between levels", "over", ...
+    pub screen: String,
     /// who directs her: "bot" (on her own), "orders file", "neuro"
     pub mode: String,
     /// what she's doing, in a few words
@@ -134,6 +183,18 @@ mod tests {
         assert_eq!(serde_json::from_str::<Command>(r#"{"cmd":"goto_map","map":"MAP07"}"#).ok(), Some(Command::GotoMap { map: "MAP07".into(), carry: false }));
         let back = serde_json::to_string(&Command::Mute { on: true }).unwrap_or_default();
         assert_eq!(back, r#"{"cmd":"mute","on":true}"#);
+    }
+
+    #[test]
+    fn base64_both_ways() {
+        assert_eq!(base64(b"Man"), "TWFu");
+        assert_eq!(base64(b"Ma"), "TWE=");
+        assert_eq!(base64(b"M"), "TQ==");
+        for n in 0..40u8 {
+            let bytes: Vec<u8> = (0..n).map(|i| i.wrapping_mul(37)).collect();
+            assert_eq!(unbase64(&base64(&bytes)).as_deref(), Some(&bytes[..]));
+        }
+        assert_eq!(unbase64("T!=="), None);
     }
 
     #[test]

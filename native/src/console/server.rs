@@ -7,7 +7,7 @@
 //! settings, in config/console.local.json (not committed). The page polls (`/api/poll`) a few
 //! times a second: one or two pages, on a LAN, need nothing cleverer.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{IpAddr, TcpListener, TcpStream, UdpSocket};
 use std::path::PathBuf;
@@ -71,11 +71,15 @@ pub struct Settings {
     pub master_volume: Option<i32>,
     /// a game that crashes (or hangs) started again, at the level she was on
     pub auto_restart: bool,
+    /// Doom's own screens: the title card, the menu, the melt, the tally, the finales
+    pub present: bool,
+    /// with them: the game waits at the title card till it's begun from the page
+    pub title_wait: bool,
 }
 
 impl Default for Settings {
     fn default() -> Settings {
-        Settings { wad: "doom2".into(), map: "MAP01".into(), skill: 3, mortal: true, lives: 1, seed: None, episode: true, mode: "bot".into(), neuro_url: "ws://127.0.0.1:8000".into(), muted: false, sfx_volume: None, music_volume: None, master_volume: None, auto_restart: true }
+        Settings { wad: "doom2".into(), map: "MAP01".into(), skill: 3, mortal: true, lives: 1, seed: None, episode: true, mode: "bot".into(), neuro_url: "ws://127.0.0.1:8000".into(), muted: false, sfx_volume: None, music_volume: None, master_volume: None, auto_restart: true, present: true, title_wait: true }
     }
 }
 
@@ -114,6 +118,9 @@ impl Settings {
         a.extend(["--seed".into(), self.seed.map_or_else(|| "random".into(), |s| s.to_string())]);
         if self.episode {
             a.push("--episode".into());
+        }
+        if self.present {
+            a.push(if self.title_wait { "--title" } else { "--present" }.into());
         }
         match self.mode.as_str() {
             "neuro" => a.extend(["--neuro".into(), self.neuro_url.clone()]),
@@ -169,6 +176,10 @@ struct Shared {
     saved_path: PathBuf,
     /// where the game connects back to (127.0.0.1, a port of the system's choosing)
     control_addr: String,
+    /// the program the game's started from: this one's path as it was when the console started
+    /// (asked later, a rebuilt binary's path reads "(deleted)" on Linux; this way a game started
+    /// after a rebuild is the new build)
+    exe: PathBuf,
     game: GameProc,
     child: Option<Child>,
     /// the link to the running game, once it's said hello
@@ -183,6 +194,9 @@ struct Shared {
     crashes: VecDeque<Instant>,
     /// the session's log, everything the page shows (out/console/)
     file: Option<std::fs::File>,
+    /// the game's latest pictures (PNG) by name ("map", "game"), each with its number (the page
+    /// fetches one when it's changed)
+    views: BTreeMap<String, (u64, Vec<u8>)>,
     began: Instant,
 }
 
@@ -241,6 +255,7 @@ pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
         neuro_urls: saved.neuro_urls,
         saved_path,
         control_addr,
+        exe: std::env::current_exe().map_err(|e| e.to_string())?,
         game: GameProc::default(),
         child: None,
         to_game: None,
@@ -251,6 +266,7 @@ pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
         heard: None,
         crashes: VecDeque::new(),
         file: session_log(),
+        views: BTreeMap::new(),
         began: Instant::now(),
     }));
     lock(&hub).save()?;
@@ -355,6 +371,12 @@ fn read_game(stream: TcpStream, hub: &Hub) {
             }
             FromGame::Log { lines } => lines.into_iter().for_each(|l| s.push(l)),
             FromGame::Event { what } => s.push(format!("[event] {what}")),
+            FromGame::View { name, png } => {
+                if let Some(bytes) = super::unbase64(&png) {
+                    let n = s.views.get(&name).map_or(1, |v| v.0 + 1);
+                    s.views.insert(name, (n, bytes));
+                }
+            }
         }
     }
     if ours {
@@ -451,7 +473,7 @@ fn start_at(hub: &Hub, map: Option<String>) -> Result<(), String> {
     }
     settings.check()?;
     let args = settings.args(&s.control_addr);
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe = s.exe.clone();
     let mut child = Process::new(&exe).args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("{}: {e}", exe.display()))?;
     for (out, tag) in [(child.stdout.take().map(|o| Box::new(o) as Box<dyn Read + Send>), "out"), (child.stderr.take().map(|o| Box::new(o) as Box<dyn Read + Send>), "err")] {
         if let Some(out) = out {
@@ -469,6 +491,7 @@ fn start_at(hub: &Hub, map: Option<String>) -> Result<(), String> {
     s.child = Some(child);
     s.hello = None;
     s.state = None;
+    s.views.clear();
     Ok(())
 }
 
@@ -549,6 +572,14 @@ fn handle(hub: &Hub, mut req: Request) {
         let what = path.trim_start_matches("/api/");
         lock(hub).push(format!("[console] {who}: {what} {}", body.chars().take(300).collect::<String>()));
     }
+    if let Some(name) = path.strip_prefix("/api/view/").and_then(|n| n.strip_suffix(".png")).filter(|_| method == Method::Get) {
+        let png = lock(hub).views.get(name).map(|v| v.1.clone());
+        let _ = match png {
+            Some(bytes) => req.respond(with_header(with_header(Response::from_data(bytes), "Content-Type", "image/png"), "Cache-Control", "no-store")),
+            None => req.respond(json_response(404, &json!({ "error": "no such picture yet" }))),
+        };
+        return;
+    }
     let (code, answer) = match (method, path) {
         (Method::Get, "/api/poll") => (200, poll(hub, param("since").and_then(|v| v.parse().ok()).unwrap_or(0))),
         (Method::Post, "/api/game/start") => done(start(hub)),
@@ -622,6 +653,7 @@ fn poll(hub: &Hub, since: u64) -> Value {
     json!({
         "settings": s.settings,
         "neuro_urls": s.neuro_urls,
+        "views": s.views.iter().map(|(k, v)| (k.clone(), v.0)).collect::<BTreeMap<String, u64>>(),
         "game": s.game,
         "uptime": s.game.started.map(|t| t.elapsed().as_secs()),
         "connected": s.to_game.is_some(),
@@ -676,7 +708,7 @@ mod tests {
     fn settings_make_watch_args() {
         let a = (Settings { skill: 4, seed: Some(7), mode: "neuro".into(), ..Settings::default() }).args("127.0.0.1:1");
         let line = a.join(" ");
-        assert!(line.starts_with("watch doom2 MAP01 --fight 4 --mortal --lives 1 --seed 7 --episode --neuro ws://127.0.0.1:8000"), "{line}");
+        assert!(line.starts_with("watch doom2 MAP01 --fight 4 --mortal --lives 1 --seed 7 --episode --title --neuro ws://127.0.0.1:8000"), "{line}");
         assert!(line.ends_with("--control 127.0.0.1:1"), "{line}");
         let none = (Settings { skill: 0, mortal: false, muted: true, ..Settings::default() }).args("127.0.0.1:1").join(" ");
         assert!(!none.contains("--fight") && !none.contains("--mortal") && none.contains("--seed random"), "{none}");

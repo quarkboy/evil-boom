@@ -50,7 +50,9 @@
 //!       +/- speed, A the whole map, F follow, M mute, L Evil's log, T text size, wheel zoom, Esc quit; the sound off while
 //!       paused or not at x1). --directed FILE: directed play, orders read from FILE as lines are
 //!       added to it (list, name, order: see control::script), what comes back in the log and in
-//!       FILE.out. --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
+//!       FILE.out. --present: Doom's own screens (the title card, the menu walked to the game, the
+//!       melt, the tally, the finales, death as the game shows it); --title: those, held at the
+//!       title card till the console begins it. --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
 //!       or evil-boom neuro-mock). --gpt [CONFIG]: directed by the GPT stand-in, run in this
 //!       program (config/neuro-gpt.json unless named; its log out/neuro/gpt.log)
 //!
@@ -544,6 +546,8 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
         gpt: None,
         capture_sound: false,
         control: None,
+        present: false,
+        title_wait: false,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -567,6 +571,11 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
                 w.gpt = Some(named.map_or_else(|| evildoom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from));
             }
             "--directed" => w.directed = Some(std::path::PathBuf::from(it.next().ok_or("--directed FILE (orders, a line each, read as they're added)")?)),
+            "--present" => w.present = true,
+            "--title" => {
+                w.present = true;
+                w.title_wait = true;
+            }
             "--control" => w.control = Some(it.next().cloned().ok_or("--control HOST:PORT (the stream console's, which starts the game with it)")?),
             _ => names.push(a.clone()),
         }

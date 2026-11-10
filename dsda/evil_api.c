@@ -45,6 +45,13 @@
 #include "dsda/configuration.h"
 #include "s_sound.h"
 #include "i_sound.h"
+#include "f_finale.h"
+#include "f_wipe.h"
+#include "wi_stuff.h"
+#include "hu_stuff.h"
+#include "dsda/global.h"
+#include "sounds.h"
+#include <limits.h>
 
 #ifdef _WIN32
 #define EVIL_API __declspec(dllexport)
@@ -106,6 +113,31 @@ typedef struct {
 
 static int exited, secret_exit;
 
+/* Presentation (the stream console's, evil_present): Doom's own screens drawn and run as the
+ * game runs them, the title card, the tally, the finale, the menu and the melt between them.
+ * Off, everything is as it was: only the level drawn, the menu shut every tic, no melt. */
+static int evil_presenting;
+/* a melt under way (stepped by evil_wipe_tic, the game held meanwhile, as Doom holds it) */
+static int evil_wipe_on;
+/* the game's move on to the next level held (gameaction ga_worlddone, after the tally or a
+ * finale): the caller starts the next level as it starts any, so it plays as it would */
+static int evil_held;
+/* a frame's been drawn: there's something to melt from */
+static int evil_drawn_once;
+
+static void evil_render(void);
+static int evil_wipe_begin(void);
+static void evil_wipe_step(int ticks);
+void D_EvilPageDrawer(void);  /* (d_main.c, patched) */
+int WI_EvilWaiting(void);     /* (wi_stuff.c, patched) */
+extern gamestate_t wipegamestate;
+extern menu_t *currentMenu;   /* (m_menu.c) */
+extern short itemOn;
+extern menu_t SkillDef;
+extern finalestage_t finalestage;  /* (f_finale.c) */
+extern int finalecount;
+extern const char *finaletext;
+
 static double fx(fixed_t v) { return v / 65536.0; }
 static double degrees(angle_t a) { return a * (360.0 / 4294967296.0); }
 
@@ -160,7 +192,116 @@ EVIL_API void evil_new_game(int skill, int episode, int map, int no_monsters)
     rngseed = 0;  /* (the game adds the seed to what it had: from nothing, the same each time) */
   evil_message = NULL;
   evil_message_tic = -1;
+  evil_held = 0;
   G_DeferedInitNew(skill - 1, episode, map);
+}
+
+/* Presentation on or off (the stream console's game): see evil_presenting. With it on, a
+ * melt holds the game: the caller steps it (evil_wipe_tic) instead of the game while
+ * evil_screen says one's under way. */
+EVIL_API void evil_present(int on)
+{
+  evil_presenting = on != 0;
+  dsda_UpdateIntConfig(dsda_config_render_wipescreen, evil_presenting, false);
+  /* (Doom's tally as Doom has it: not DSDA's speedrunning clock in its corner) */
+  if (evil_presenting)
+    dsda_UpdateIntConfig(dsda_config_show_level_splits, 0, false);
+  if (!evil_presenting)
+  {
+    evil_wipe_on = 0;
+    evil_held = 0;
+    menuactive = false;
+  }
+}
+
+/* The title card, held there (no demos after it: the user's), with its music. What's on
+ * before it (a level) is left as it is underneath; a new game starts from it. */
+EVIL_API void evil_title(void)
+{
+  if (menuactive)
+    M_ClearMenus();
+  gameaction = ga_nothing;
+  players[consoleplayer].playerstate = PST_LIVE;
+  dsda_ResetPauseMode();
+  advancedemo = false;
+  gamestate = GS_DEMOSCREEN;
+  D_SetPage("TITLEPIC", INT_MAX / 2, gamemode == commercial ? mus_dm2ttl : mus_intro);
+  exited = secret_exit = 0;
+  evil_held = 0;
+}
+
+/* The level left by its exit (`secret`: the secret one), as a switch or a line leaves it: the
+ * tally and what follows as the game has them (the stream console's: a level skipped). Only in
+ * a level not already left. */
+EVIL_API void evil_exit(int secret)
+{
+  if (gamestate != GS_LEVEL || exited || gameaction != ga_nothing)
+    return;
+  if (secret)
+    G_SecretExitLevel(0);
+  else
+    G_ExitLevel(0);
+}
+
+/* A tic of the melt, the game held (as Doom holds it); one begun if it's due. */
+EVIL_API void evil_wipe_tic(void)
+{
+  if (evil_wipe_begin())
+    evil_wipe_step(1);
+}
+
+/* The menu driven as a player drives it, for the stream to see: 0 open it (the main menu),
+ * 1 the skull on item `arg`, 2 choose the item it's on, 3 shut it; each with the menu's own
+ * sound. Choosing on the skill menu only clicks: the caller starts the game (evil_new_game), as
+ * it starts any game, so it plays as one started any other way. */
+EVIL_API void evil_menu(int action, int arg)
+{
+  menuitem_t *item;
+  switch (action)
+  {
+    case 0:
+      M_StartControlPanel();
+      S_StartOptionalSound(g_sfx_mnuopn, g_sfx_swtchn, true);
+      break;
+    case 1:
+      if (menuactive && currentMenu && arg >= 0 && arg < currentMenu->numitems)
+      {
+        itemOn = arg;
+        S_StartOptionalSound(g_sfx_mnumov, g_sfx_menu, true);
+      }
+      break;
+    case 2:
+      if (!menuactive || !currentMenu)
+        break;
+      item = &currentMenu->menuitems[itemOn];
+      if (currentMenu != &SkillDef && item->routine && item->status)
+      {
+        currentMenu->lastOn = itemOn;
+        item->routine(itemOn);
+      }
+      S_StartOptionalSound(g_sfx_mnuact, g_sfx_pistol, true);
+      break;
+    default:
+      M_ClearMenus();
+      break;
+  }
+}
+
+/* The screen as it stands: out[0] the game state (0 a level, 1 the tally, 2 a finale, 3 the
+ * title), out[1] a melt under way or due, out[2] the menu up, out[3] the move on to the next
+ * level held (the caller's to start), out[4] the screen waits for a press (the tally counted;
+ * Doom II's finale text all shown: a press finishes it, a second goes on; Doom's goes on by
+ * itself), out[5] the menu's current item. */
+EVIL_API void evil_screen(int *out)
+{
+  out[0] = gamestate;
+  out[1] = evil_wipe_on || (evil_presenting && evil_drawn_once && gamestate != wipegamestate);
+  out[2] = menuactive != 0;
+  out[3] = evil_held;
+  out[4] = (gamestate == GS_INTERMISSION && WI_EvilWaiting()) ||
+           (gamestate == GS_FINALE && gamemode == commercial && finalestage == FINALE_STAGE_TEXT &&
+            finaletext && finalecount > (int)strlen(finaletext) * 3 /* (TEXTSPEED) */);
+  out[5] = itemOn;
 }
 
 /* The sounds the game's started since the last call, as she'd hear them (up to max; the oldest
@@ -303,7 +444,8 @@ EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
   /* (no I_StartTic: her commands are set here, not read from a keyboard; and the window's
    * events, drawing for a watcher, paused the game when it wasn't in focus) */
   dsda_ResetPauseMode();
-  menuactive = false;
+  if (!evil_presenting)
+    menuactive = false;
   /* (the slot the game reads this tic, and no other: drawing a frame calls NetUpdate partway
    * through, which builds commands for the clock's tics and moves maketic on, and a command
    * written to maketic's slot then went nowhere: a tic of hers lost now and then) */
@@ -327,8 +469,12 @@ EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
       players[consoleplayer].weaponowned[wp_chainsaw] && !players[consoleplayer].powers[pw_strength])
     buttons = (buttons & ~BT_WEAPONMASK) | (wp_chainsaw << BT_WEAPONSHIFT);
   cmd->buttons = (byte)buttons;
+  /* (presenting: the move on to the next level held for the caller, the screen as it is) */
+  if (evil_presenting && gameaction == ga_worlddone)
+    evil_held = 1;
   M_Ticker();
-  G_Ticker();
+  if (!evil_held)
+    G_Ticker();
   if (gameaction == ga_completed || gameaction == ga_victory || gamestate == GS_INTERMISSION)
   {
     if (!exited)
@@ -405,26 +551,96 @@ EVIL_API int evil_sound_rate(void)
 extern dboolean setsizeneeded;
 void R_ExecuteSetViewSize(void);
 
+/* The screen as it is into screens[0], as D_Display draws it (no melt): a level's view and
+ * status bar (presenting, its messages too), or the tally, the finale, the title card; the menu
+ * over any of them while it's up (presenting). Not presenting, a level's only. */
+static void evil_render(void)
+{
+  if (setsizeneeded)
+    R_ExecuteSetViewSize();  /* (the view's size and buffers: D_Display does this first) */
+  if (gamestate == GS_LEVEL)
+  {
+    R_InterpolateView(&players[displayplayer], FRACUNIT);
+    R_RenderPlayerView(&players[displayplayer]);
+    R_RestoreInterpolations();
+    ST_Drawer(true);
+    if (evil_presenting)
+      HU_Drawer();
+  }
+  else
+  {
+    V_BeginUIDraw();
+    if (gamestate == GS_INTERMISSION)
+      WI_Drawer();
+    else if (gamestate == GS_FINALE)
+      F_Drawer();
+    else if (gamestate == GS_DEMOSCREEN)
+      D_EvilPageDrawer();
+    V_EndUIDraw();
+  }
+  if (evil_presenting && menuactive)
+  {
+    V_BeginMenuDraw();
+    if (M_MenuIsShaded())
+      M_ShadedScreen(0);
+    V_EndMenuDraw();
+    M_Drawer();
+  }
+}
+
+/* A step of the melt. The play's random numbers kept as they were: the melt takes some (its
+ * columns' starts), and at a level's start they'd change how it plays. */
+static void evil_wipe_step(int ticks)
+{
+  rng_t kept = rng;
+  if (wipe_ScreenWipe(ticks))
+    evil_wipe_on = 0;
+  rng = kept;
+}
+
+/* The melt begun if the screen's changed since the last frame drawn (a level begun or begun
+ * again, the tally, a finale, the title), as D_Display begins it: the last frame melting into
+ * the new one. Whether one's under way. */
+static int evil_wipe_begin(void)
+{
+  if (!evil_presenting || nodrawers || evil_wipe_on)
+    return evil_wipe_on;
+  if (gamestate == wipegamestate)
+    return 0;
+  if (!evil_drawn_once || !screens[0].data)
+  {
+    wipegamestate = gamestate;  /* (nothing drawn yet to melt from) */
+    return 0;
+  }
+  wipe_StartScreen();  /* (screens[0]: the last frame drawn) */
+  evil_render();
+  wipe_EndScreen();    /* (and screens[0] back to the last frame, till the first step) */
+  wipegamestate = gamestate;
+  evil_wipe_on = 1;
+  return 1;
+}
+
 EVIL_API int evil_draw(unsigned char *out, int max)
 {
   int y, w, h;
   if (nodrawers)
     return 0;
-  if (gamestate != GS_LEVEL)
-    return 0;
-  /* (the view and the status bar, the tic as it is: no menus, wipes or presenting) */
-  if (setsizeneeded)
-    R_ExecuteSetViewSize();  /* (the view's size and buffers: D_Display does this first) */
-  R_InterpolateView(&players[displayplayer], FRACUNIT);
-  R_RenderPlayerView(&players[displayplayer]);
-  R_RestoreInterpolations();
-  ST_Drawer(true);
+  if (!evil_presenting)
+  {
+    /* (the view and the status bar, the tic as it is: no menus, wipes or other screens) */
+    if (gamestate != GS_LEVEL)
+      return 0;
+    evil_render();
+  }
+  else if (!evil_wipe_begin())
+    evil_render();
   w = screens[0].width;
   h = screens[0].height;
   if (!screens[0].data || w * h > max)
     return 0;
   for (y = 0; y < h; y++)
     memcpy(out + y * w, screens[0].data + y * screens[0].pitch, w);
+  evil_drawn_once = 1;
   return (w << 16) | h;
 }
 

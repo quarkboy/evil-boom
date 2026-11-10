@@ -33,6 +33,7 @@ use crate::specials::Lock;
 use crate::things::{pickup, PickupKind};
 
 mod console;
+mod present;
 use crate::wad::{load_map, Wad};
 
 const W: usize = 1600;
@@ -269,6 +270,11 @@ pub struct WatchOptions {
     pub capture_sound: bool,
     /// run under the stream console (`evil-boom console`): its address, connected back to
     pub control: Option<String>,
+    /// Doom's own screens (the stream's): the title card, the menu, the melt, the tally, the
+    /// finales, death as the game shows it (see viewer::present)
+    pub present: bool,
+    /// with them: held at the title card till the console begins the game
+    pub title_wait: bool,
 }
 
 /// A watched game's orders, from a file added to as it plays.
@@ -346,6 +352,8 @@ struct Hold {
 struct Watch {
     /// the stream console's link (--control)
     console: Option<console::Console>,
+    /// Doom's own screens (--present)
+    present: Option<present::Present>,
     hold: Option<Hold>,
     /// directed play's orders, if it's directed
     feed: Option<Feed>,
@@ -389,6 +397,12 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     (watch.sound, watch.sound_on) = (sound, sound);
     if let Some(addr) = &o.control {
         watch.console = Some(console::Console::connect(addr, wad, map_name, &w)?);
+    }
+    if o.present && !o.headless {
+        watch.present = present::Present::start(&watch, o, o.title_wait);
+        if watch.present.is_none() {
+            watch.agent.x_mut().log.push("present: this engine hasn't Doom's own screens (rebuild it: tools/build-engine.sh)".into());
+        }
     }
     if o.headless {
         return headless(watch, &w, o);
@@ -723,7 +737,7 @@ fn load_level(w: &Wad, name: &str, o: &WatchOptions) -> Result<(Arc<MapData>, Rc
 fn enter_level(watch: Watch, w: &Wad, o: &WatchOptions, name: &str, (m, nav): (Arc<MapData>, Rc<Navigator>), carry: Option<crate::dsda::Loadout>) -> Result<Watch, String> {
     let (speed, show_all, follow) = (watch.speed, watch.show_all, watch.follow);
     let (sound, muted, sound_on) = (watch.sound, watch.muted, watch.sound_on);
-    let (paused, mut console) = (watch.paused, watch.console);
+    let (paused, mut console, present) = (watch.paused, watch.console, watch.present);
     let mut engine = watch.engine;
     engine.carry = carry.or_else(|| o.carry.clone());
     engine.goto(name)?;
@@ -735,6 +749,7 @@ fn enter_level(watch: Watch, w: &Wad, o: &WatchOptions, name: &str, (m, nav): (A
         c.new_level();
     }
     watch.console = console;
+    watch.present = present;
     Ok(watch)
 }
 
@@ -794,6 +809,24 @@ fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> R
         owed += (now - last).as_secs_f64() * TICRATE * watch.speed;
         last = now;
         owed = f64::min(owed, 8.0); // (don't race to catch up after a slow plan)
+        if watch.present.is_some() {
+            // (Doom's own screens: the tics as they have them, the levels, deaths and the
+            // episode's going on with them; see present)
+            let was = watch.map_name.clone();
+            watch = present::run(watch, game, &mut owed)?;
+            if watch.map_name != was {
+                window.set_title(&format!("evil-doom explorer: {}", watch.map_name));
+            }
+            if watch.paused {
+                owed = 0.0;
+            }
+            watch.draw(&mut canvas);
+            if let Some(c) = watch.console.as_mut() {
+                c.views(&canvas.px, watch.frame.as_ref(), &watch.palette);
+            }
+            window.update_with_buffer(&canvas.px, W, H).map_err(|e| e.to_string())?;
+            continue;
+        }
         let wanted = watch.agent.x().restart_wanted;
         if wanted && watch.lives_left <= 0 {
             watch.agent.x_mut().restart_wanted = false; // (out with what she has)
@@ -826,6 +859,9 @@ fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> R
             owed = 0.0;
         }
         watch.draw(&mut canvas);
+        if let Some(c) = watch.console.as_mut() {
+            c.views(&canvas.px, watch.frame.as_ref(), &watch.palette);
+        }
         window.update_with_buffer(&canvas.px, W, H).map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -877,6 +913,7 @@ impl Watch {
         let bounds = (xs.clone().fold(f64::INFINITY, f64::min), ys.clone().fold(f64::INFINITY, f64::min), xs.fold(f64::NEG_INFINITY, f64::max), ys.fold(f64::NEG_INFINITY, f64::max));
         Watch {
             console: None,
+            present: None,
             hold: None,
             feed: None,
             neuro: None,
@@ -1006,7 +1043,7 @@ impl Watch {
                 }
             }
         }
-        if self.engine.finished() {
+        if self.engine.finished() && self.present.is_none() {
             c.text(if self.engine.exited() { "EXITED" } else { "GAME OVER" }, (GAME.0 + 20, GAME.1 + 20), (255, 255, 0), 3);
         }
         if self.paused {

@@ -18,7 +18,11 @@ header h1 b { color: var(--accent); }
 .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; background: var(--line); color: var(--dim); }
 .badge.ok { background: #1f3b29; color: var(--ok); } .badge.warn { background: #3d3119; color: var(--warn); } .badge.bad { background: #432020; color: var(--bad); }
 main { display: grid; gap: 12px; padding: 12px 16px 24px; grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 980px) { main { grid-template-columns: 360px minmax(0, 1fr); } #logcard { grid-column: 2; grid-row: 1 / span 3; } }
+@media (min-width: 980px) { main { grid-template-columns: 360px minmax(0, 1fr); } #viewcard { grid-column: 2; grid-row: 1 / span 2; } #logcard { grid-column: 2; grid-row: 3 / span 4; } }
+.views { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+.views figure { margin: 0; flex: 1 1 320px; min-width: 0; }
+.views img { width: 100%; height: auto; display: block; background: #000; border-radius: 4px; image-rendering: auto; }
+.views figcaption { font-size: 11px; color: var(--dim); margin-top: 2px; }
 section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
 section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 10px; }
 .row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
@@ -39,8 +43,8 @@ input[type=checkbox] { width: auto; }
 input[type=range] { padding: 0; accent-color: var(--accent); }
 .vol { display: grid; grid-template-columns: 4.5em minmax(0, 1fr) 2.5em; align-items: center; gap: 8px; margin-bottom: 6px; }
 .vol output { text-align: right; font-variant-numeric: tabular-nums; }
-#log { height: 60vh; overflow-y: auto; background: #0e0e12; border-radius: 6px; padding: 6px 8px; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-@media (min-width: 980px) { #log { height: calc(100vh - 170px); } }
+#log { height: 45vh; overflow-y: auto; background: #0e0e12; border-radius: 6px; padding: 6px 8px; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (min-width: 980px) { #log { height: 40vh; } }
 #log .evil { color: var(--evil); } #log .console { color: var(--info); } #log .err { color: var(--bad); } #log .event { color: var(--warn); } #log .out { color: var(--dim); }
 .msg { min-height: 1.4em; font-size: 13px; color: var(--warn); }
 .dim { color: var(--dim); }
@@ -67,12 +71,15 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <button class="primary" id="g-start">Start</button>
       <button id="g-stop">Stop</button>
       <button id="g-restart">Restart game</button>
+      <button class="primary" id="g-begin" title="From the title card through the menu to the first level">Begin</button>
     </div>
     <div class="row">
       <button id="c-pause">Pause</button>
       <button id="c-restart">Restart level</button>
       <button id="c-mute">Mute</button>
       <button id="c-neuro">Reconnect Neuro</button>
+      <button id="c-exit" title="Out by the level's exit: the tally, then on">Exit level</button>
+      <button id="c-secret" title="Out by the secret exit">Secret exit</button>
     </div>
     <div class="row" id="speeds"></div>
     <div class="row">
@@ -131,11 +138,25 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <span class="check"><input type="checkbox" name="episode" id="s-episode"><label for="s-episode" class="check">Whole episode</label></span>
       <span class="check"><input type="checkbox" name="muted" id="s-muted"><label for="s-muted" class="check">Start muted</label></span>
       <span class="check"><input type="checkbox" name="auto_restart" id="s-auto"><label for="s-auto" class="check">Restart it if it crashes</label></span>
+      <span class="check"><input type="checkbox" name="present" id="s-present"><label for="s-present" class="check">Doom's own screens</label></span>
+      <span class="check"><input type="checkbox" name="title_wait" id="s-title"><label for="s-title" class="check">Wait at the title card</label></span>
       <div class="row wide">
         <button id="s-save">Save</button>
         <button class="primary" id="s-apply">Save and restart game</button>
       </div>
     </form>
+  </section>
+
+  <section id="viewcard">
+    <h2>View <span class="dim" style="text-transform:none;letter-spacing:0">(twice a second; the watcher's own drawing)</span></h2>
+    <div class="row">
+      <button id="vw-map" class="on">Map</button>
+      <button id="vw-game">Game</button>
+    </div>
+    <div class="views">
+      <figure id="fig-map"><img id="img-map" alt="the map as she knows it, her route and objectives"><figcaption>Map as she knows it, route, objectives</figcaption></figure>
+      <figure id="fig-game" hidden><img id="img-game" alt="the game's view"><figcaption>Game</figcaption></figure>
+    </div>
   </section>
 
   <section id="logcard">
@@ -188,7 +209,10 @@ function render(p) {
   else badge($("b-neuro"), "neuro -", "");
   $("g-start").disabled = g.running;
   $("g-stop").disabled = !g.running;
+  $("g-begin").disabled = !p.connected || !st || !/^(title|over|between|dead|level)/.test(st.screen || "") || st.screen === "title (starting)";
+  $("g-begin").classList.toggle("on", !!st && st.screen === "title");
   for (const id of ["c-pause", "c-restart", "c-mute", "c-god", "c-lives", "c-livesset"]) $(id).disabled = !p.connected;
+  for (const id of ["c-exit", "c-secret"]) $(id).disabled = !p.connected || !st || st.screen !== "level" || st.exited || st.dead;
   for (const id of ["e-say", "e-saysend", "e-action", "e-data", "e-order"]) $(id).disabled = !(p.connected && n);
   $("c-god").textContent = st && st.god ? "God mode: on" : "God mode";
   $("c-god").classList.toggle("on", !!(st && st.god));
@@ -211,7 +235,7 @@ function render(p) {
   if (st) {
     const t = (a) => a[0] + "/" + a[1];
     const fate = st.exited ? "exited" : st.dead ? "dead" : st.paused ? "paused" : "playing";
-    rows.push(["Map", st.map + " · " + fate], ["Time", fmtTime(st.seconds)],
+    rows.push(["Screen", st.screen || "-"], ["Map", st.map + " · " + fate], ["Time", fmtTime(st.seconds)],
       ["Health", st.health + "  armor " + st.armor], ["Ammo", "bul " + st.ammo[0] + " · sh " + st.ammo[1] + " · rkt " + st.ammo[2] + " · cell " + st.ammo[3]],
       ["Keys", st.keys.length ? st.keys.join(", ") : "-"], ["Tally", "K " + t(st.kills) + " · I " + t(st.items) + " · S " + t(st.secrets)],
       ["Lives left", String(st.lives_left) + (st.god ? " · god mode" : "")], ["Directed", st.mode], ["Doing", st.doing || "-"]);
@@ -240,7 +264,29 @@ function render(p) {
     $("settings").elements.neuro_url.replaceChildren(...(p.neuro_urls || []).map((u) => { const o = document.createElement("option"); o.value = o.textContent = u; return o; }));
   }
   if (!formDirty) fillForm(p.settings);
+  for (const name of ["map", "game"]) showView(name, (p.views || {})[name]);
   addLog(p.log);
+}
+const viewOn = { map: true, game: false }, viewShown = {}, viewLoading = {};
+try { Object.assign(viewOn, JSON.parse(localStorage.getItem("evil-console-views") || "{}")); } catch (e) { /* (the default) */ }
+function showView(name, n) {
+  $("fig-" + name).hidden = !viewOn[name];
+  $("vw-" + name).classList.toggle("on", viewOn[name]);
+  // (a picture fetched only when it's shown, it's changed, and the last one's in)
+  if (!viewOn[name] || !n || n === viewShown[name] || viewLoading[name]) return;
+  viewLoading[name] = true;
+  const img = $("img-" + name);
+  img.onload = img.onerror = () => { viewLoading[name] = false; };
+  img.src = "api/view/" + name + ".png?t=" + encodeURIComponent(token) + "&n=" + n;
+  viewShown[name] = n;
+}
+for (const name of ["map", "game"]) {
+  $("vw-" + name).onclick = () => {
+    viewOn[name] = !viewOn[name];
+    try { localStorage.setItem("evil-console-views", JSON.stringify(viewOn)); } catch (e) { /* (not kept) */ }
+    viewShown[name] = 0;
+    if (last) showView(name, (last.views || {})[name]);
+  };
 }
 function fmtTime(s) { s = Math.floor(s); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
 
@@ -303,11 +349,17 @@ async function poll() {
 
 $("g-start").onclick = () => act("api/game/start", {}, "Starting...");
 $("g-stop").onclick = () => confirm("Stop the game?") && act("api/game/stop", {}, "Stopping...");
+$("g-begin").onclick = () => {
+  const s = last && last.state && last.state.screen;
+  if (s === "title" || confirm("Start the run again from the title card?")) cmd({ cmd: "begin" });
+};
 $("g-restart").onclick = () => confirm("Restart the game process?") && act("api/game/restart", {}, "Restarting...");
 $("c-pause").onclick = () => cmd({ cmd: last && last.state && last.state.paused ? "resume" : "pause" });
 $("c-mute").onclick = () => cmd({ cmd: "mute", on: !(last && last.state && last.state.muted) });
 $("c-restart").onclick = () => confirm("Restart the level from its start?") && cmd({ cmd: "restart_level" });
 $("c-neuro").onclick = () => cmd({ cmd: "neuro_reconnect" });
+$("c-exit").onclick = () => confirm("Leave the level by its exit?") && cmd({ cmd: "exit_level" });
+$("c-secret").onclick = () => confirm("Leave the level by the secret exit?") && cmd({ cmd: "exit_level", secret: true });
 $("c-god").onclick = () => cmd({ cmd: "god", on: !(last && last.state && last.state.god) });
 $("c-livesset").onclick = () => cmd({ cmd: "lives", n: Number($("c-lives").value) });
 $("e-saysend").onclick = async () => {

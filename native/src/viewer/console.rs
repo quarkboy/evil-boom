@@ -2,7 +2,10 @@
 //! console's commands applied at the top of a frame, as the window's own keys are; the game's
 //! state, log and events sent back. A child of the viewer for `Watch`'s insides.
 
-use super::{enter_level, load_level, Watch, WatchOptions};
+use std::sync::mpsc::{channel, Sender};
+use std::time::{Duration, Instant};
+
+use super::{enter_level, load_level, Rect, Watch, WatchOptions, GAME, H, MAP, W};
 use crate::console::game::Link;
 use crate::wad::Wad;
 use crate::console::{Command, FromGame, GameState, NeuroState};
@@ -10,9 +13,23 @@ use crate::console::{Command, FromGame, GameState, NeuroState};
 /// a streamer's line to Evil: at most this long (her context is precious)
 const SAY_MAX: usize = 300;
 
+/// the window's pictures sent this often
+const VIEW_EVERY: Duration = Duration::from_millis(500);
+
+/// A picture to send, by name.
+enum Picture {
+    /// pixels as RGB
+    Rgb(&'static str, usize, usize, Vec<u8>),
+    /// the game's own frame: palette indices, and the palette (RGB, 256 of them)
+    Indexed(&'static str, usize, usize, Vec<u8>, Vec<u8>),
+}
+
 /// The link and what's been sent over it.
 pub(super) struct Console {
     link: Link,
+    /// to the thread that makes the pictures PNGs (not the window's: it'd stall a frame)
+    pictures: Sender<Picture>,
+    last_view: Option<Instant>,
     /// her log's lines sent so far
     shown: usize,
     /// (map, dead, exited) as last told: what's changed is an event
@@ -21,7 +38,42 @@ pub(super) struct Console {
 
 impl Console {
     pub(super) fn connect(addr: &str, wad: &str, map: &str, w: &Wad) -> Result<Console, String> {
-        Ok(Console { link: Link::connect(addr, wad, map, maps(w))?, shown: 0, told: (String::new(), false, false) })
+        let link = Link::connect(addr, wad, map, maps(w))?;
+        let (pictures, todo) = channel::<Picture>();
+        let out = link.sender();
+        std::thread::spawn(move || {
+            for picture in todo {
+                let (name, png) = match picture {
+                    Picture::Rgb(name, w, h, rgb) => (name, png(w, h, &rgb, None)),
+                    Picture::Indexed(name, w, h, px, palette) => (name, png(w, h, &px, Some(&palette))),
+                };
+                if let Some(png) = png {
+                    if out.send(FromGame::View { name: name.to_string(), png: crate::console::base64(&png) }).is_err() {
+                        return;
+                    }
+                }
+            }
+        });
+        Ok(Console { link, pictures, last_view: None, shown: 0, told: (String::new(), false, false) })
+    }
+
+    /// The window as drawn (`px`, the whole of it) and the game's frame (palette indices, and
+    /// the palette): the map side and the game's view sent, every so often. The game's own frame
+    /// as it is (a few times smaller as a PNG than the window's scaled copy of it).
+    pub(super) fn views(&mut self, px: &[u32], frame: Option<&(usize, usize, Vec<u8>)>, palette: &[u32]) {
+        let now = Instant::now();
+        if self.last_view.is_some_and(|t| now - t < VIEW_EVERY) {
+            return;
+        }
+        self.last_view = Some(now);
+        // (the map as she knows it and the panel under it: the window's right side)
+        let right: Rect = (MAP.0, 0, W - MAP.0, H);
+        let _ = self.pictures.send(Picture::Rgb("map", right.2, right.3, crop(px, right)));
+        let game = match frame {
+            Some((w, h, f)) => Picture::Indexed("game", *w, *h, f.clone(), palette.iter().take(256).flat_map(|&p| [(p >> 16) as u8, (p >> 8) as u8, p as u8]).collect()),
+            None => Picture::Rgb("game", GAME.2, GAME.3, crop(px, GAME)),
+        };
+        let _ = self.pictures.send(game);
     }
 
     /// A new level: her log starts again (a new agent's).
@@ -36,6 +88,38 @@ pub(super) enum Frame {
     Quit,
     /// another level of the WAD (`carry`: what she has, else as the run started)
     Goto { map: String, carry: bool },
+}
+
+/// A part of the window, as RGB.
+fn crop(px: &[u32], (x0, y0, w, h): Rect) -> Vec<u8> {
+    let mut out = Vec::with_capacity(w * h * 3);
+    for y in y0..y0 + h {
+        for &p in &px[y * W + x0..y * W + x0 + w] {
+            out.extend([(p >> 16) as u8, (p >> 8) as u8, p as u8]);
+        }
+    }
+    out
+}
+
+/// Pixels as a PNG: RGB, or palette indices with their `palette` (fast to make: they're sent
+/// twice a second).
+fn png(w: usize, h: usize, px: &[u8], palette: Option<&[u8]>) -> Option<Vec<u8>> {
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, u32::try_from(w).ok()?, u32::try_from(h).ok()?);
+        match palette {
+            Some(p) => {
+                enc.set_color(png::ColorType::Indexed);
+                enc.set_palette(p.to_vec());
+            }
+            None => enc.set_color(png::ColorType::Rgb),
+        }
+        enc.set_depth(png::BitDepth::Eight);
+        enc.set_compression(png::Compression::Fast);
+        let mut writer = enc.write_header().ok()?;
+        writer.write_image_data(px).ok()?;
+    }
+    Some(out)
 }
 
 /// The WAD's levels, in its order (E1M1 ..., MAP01 ...).
@@ -63,6 +147,10 @@ pub(super) fn goto(mut watch: Watch, game: Option<(&Wad, &WatchOptions)>, map: &
         Ok(loaded) => {
             let carried = carry.then(|| watch.engine.loadout());
             let mut next = enter_level(watch, w, o, &map, loaded, carried)?;
+            if let Some(p) = next.present.as_mut() {
+                // (the console's level, played now whatever was on)
+                p.stage = super::present::Stage::Level;
+            }
             next.agent.x_mut().log.push(format!("console: on to {map}{}", if carry { ", what she had carried" } else { "" }));
             Ok(next)
         }
@@ -134,6 +222,18 @@ impl Watch {
                     };
                     self.agent.x_mut().log.extend(lines);
                 }
+                Command::ExitLevel { secret } => {
+                    let line = if self.engine.exit_level(secret) { format!("console: out by the {}exit", if secret { "secret " } else { "" }) } else { "console: this engine can't leave a level by itself".into() };
+                    self.agent.x_mut().log.push(line);
+                }
+                Command::Begin => match self.present.take() {
+                    Some(mut p) => {
+                        p.begin(self);
+                        self.present = Some(p);
+                        self.agent.x_mut().log.push("console: begun from the title card".into());
+                    }
+                    None => self.agent.x_mut().log.push("console: Doom's own screens are off: nothing to begin".into()),
+                },
                 Command::Quit => frame = Frame::Quit,
             }
         }
@@ -183,6 +283,12 @@ impl Watch {
             // (no sound at all, as a headless or --mute game has, is muted too)
             muted: self.muted || !self.sound,
             god: self.engine.god(),
+            screen: match &self.present {
+                Some(p) => p.label(self.engine.screen().is_some_and(|s| s.menu)).to_string(),
+                None if self.engine.exited() => "exited".into(),
+                None if self.engine.dead() => "dead".into(),
+                None => "level".into(),
+            },
             volume: self.engine.volume(),
             ..GameState::default()
         };

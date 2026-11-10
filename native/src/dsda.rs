@@ -140,6 +140,26 @@ type GrabSoundFn = unsafe extern "C" fn(*mut i16, c_int) -> c_int;
 type SoundRateFn = unsafe extern "C" fn() -> c_int;
 type VolumeFn = unsafe extern "C" fn(c_int, c_int, c_int);
 type GetVolumeFn = unsafe extern "C" fn(*mut c_int);
+type PresentFn = unsafe extern "C" fn(c_int);
+type PlainFn = unsafe extern "C" fn();
+type MenuFn = unsafe extern "C" fn(c_int, c_int);
+type ScreenFn = unsafe extern "C" fn(*mut c_int);
+
+/// The screen as the game has it (evil_screen): Doom's own screens, the stream's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Screen {
+    /// 0 a level, 1 the tally, 2 a finale, 3 the title
+    pub state: i32,
+    /// a melt under way or due (the game held: evil_wipe_tic, not a tic)
+    pub wiping: bool,
+    pub menu: bool,
+    /// the move on to the next level held, for the caller to start it
+    pub held: bool,
+    /// waiting for a press (the tally counted; Doom II's finale text all shown)
+    pub waiting: bool,
+    /// the menu's current item
+    pub item: i32,
+}
 
 static LOADED: AtomicBool = AtomicBool::new(false);
 
@@ -172,6 +192,12 @@ pub struct Dsda {
     sound_rate_fn: Option<SoundRateFn>,
     volume_fn: Option<VolumeFn>,
     get_volume_fn: Option<GetVolumeFn>,
+    present_fn: Option<PresentFn>,
+    title_fn: Option<PlainFn>,
+    wipe_tic_fn: Option<PlainFn>,
+    menu_fn: Option<MenuFn>,
+    screen_fn: Option<ScreenFn>,
+    exit_fn: Option<PresentFn>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
     _argv: Vec<CString>,
     _argv_ptrs: Vec<*mut c_char>,
@@ -232,6 +258,15 @@ impl Dsda {
         // SAFETY: as above, evil_volume's and evil_get_volume's signatures; optional.
         let volume_fn = sym(b"evil_volume").ok().map(|p| unsafe { std::mem::transmute::<*const (), VolumeFn>(p) });
         let get_volume_fn = sym(b"evil_get_volume").ok().map(|p| unsafe { std::mem::transmute::<*const (), GetVolumeFn>(p) });
+        // SAFETY: as above, the presentation's calls' signatures (evil_present, evil_title,
+        // evil_wipe_tic, evil_menu, evil_screen); optional.
+        let present_fn = sym(b"evil_present").ok().map(|p| unsafe { std::mem::transmute::<*const (), PresentFn>(p) });
+        let title_fn = sym(b"evil_title").ok().map(|p| unsafe { std::mem::transmute::<*const (), PlainFn>(p) });
+        let wipe_tic_fn = sym(b"evil_wipe_tic").ok().map(|p| unsafe { std::mem::transmute::<*const (), PlainFn>(p) });
+        let menu_fn = sym(b"evil_menu").ok().map(|p| unsafe { std::mem::transmute::<*const (), MenuFn>(p) });
+        let screen_fn = sym(b"evil_screen").ok().map(|p| unsafe { std::mem::transmute::<*const (), ScreenFn>(p) });
+        // SAFETY: as above, evil_exit(int); optional.
+        let exit_fn = sym(b"evil_exit").ok().map(|p| unsafe { std::mem::transmute::<*const (), PresentFn>(p) });
         let argv: Vec<CString> =
             std::iter::once("evil".to_string()).chain(args.iter().cloned()).map(CString::new).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
         let mut argv_ptrs: Vec<*mut c_char> = argv.iter().map(|a| a.as_ptr().cast_mut()).collect();
@@ -263,6 +298,12 @@ impl Dsda {
             sound_rate_fn,
             volume_fn,
             get_volume_fn,
+            present_fn,
+            title_fn,
+            wipe_tic_fn,
+            menu_fn,
+            screen_fn,
+            exit_fn,
             _argv: argv,
             _argv_ptrs: argv_ptrs,
             _lib: lib,
@@ -310,6 +351,57 @@ impl Dsda {
         // SAFETY: room for the three it writes; see `load`.
         unsafe { f(out.as_mut_ptr()) };
         Some(out)
+    }
+
+    /// Doom's own screens on or off (the presentation: see evil_api.c). False: the library
+    /// hasn't them.
+    pub fn present(&self, on: bool) -> bool {
+        let Some(f) = self.present_fn else { return false };
+        // SAFETY: a plain value into the game; see `load`.
+        unsafe { f(c_int::from(on)) };
+        true
+    }
+
+    /// The title card, held.
+    pub fn title(&self) {
+        if let Some(f) = self.title_fn {
+            // SAFETY: no arguments; see `load`.
+            unsafe { f() };
+        }
+    }
+
+    /// A tic of the melt, the game held.
+    pub fn wipe_tic(&self) {
+        if let Some(f) = self.wipe_tic_fn {
+            // SAFETY: no arguments; see `load`.
+            unsafe { f() };
+        }
+    }
+
+    /// The menu driven: 0 open, 1 the skull to item `arg`, 2 choose, 3 shut.
+    pub fn menu(&self, action: i32, arg: i32) {
+        if let Some(f) = self.menu_fn {
+            // SAFETY: plain values into the game; see `load`.
+            unsafe { f(action, arg) };
+        }
+    }
+
+    /// The level left by its exit (`secret`: the secret one), as a switch leaves it. False: the
+    /// library hasn't the call.
+    pub fn exit(&self, secret: bool) -> bool {
+        let Some(f) = self.exit_fn else { return false };
+        // SAFETY: a plain value into the game; see `load`.
+        unsafe { f(c_int::from(secret)) };
+        true
+    }
+
+    /// The screen as it stands; None without the call.
+    pub fn screen(&self) -> Option<Screen> {
+        let f = self.screen_fn?;
+        let mut o = [0 as c_int; 6];
+        // SAFETY: room for the six it writes; see `load`.
+        unsafe { f(o.as_mut_ptr()) };
+        Some(Screen { state: o[0], wiping: o[1] != 0, menu: o[2] != 0, held: o[3] != 0, waiting: o[4] != 0, item: o[5] })
     }
 
     /// The loudness set (None: that one left as it is); no effect without the call.

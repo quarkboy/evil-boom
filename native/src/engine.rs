@@ -212,6 +212,38 @@ impl Engine {
         self.game.sound(on);
     }
 
+    /// Doom's own screens drawn and run as the game runs them (the stream's); false: an engine
+    /// without them.
+    pub fn present(&self, on: bool) -> bool {
+        self.game.present(on)
+    }
+
+    /// The title card, held there.
+    pub fn title(&self) {
+        self.game.title();
+    }
+
+    /// A tic of the melt between screens, the game held meanwhile (not a game tic).
+    pub fn wipe_tic(&self) {
+        self.game.wipe_tic();
+    }
+
+    /// The menu driven as a player drives it: 0 open, 1 the skull to item `arg`, 2 choose, 3 shut.
+    pub fn menu(&self, action: i32, arg: i32) {
+        self.game.menu(action, arg);
+    }
+
+    /// The level left by its exit (`secret`: the secret one), as a switch leaves it: the tally and
+    /// what follows as the game has them. False: an engine without it.
+    pub fn exit_level(&self, secret: bool) -> bool {
+        self.game.exit(secret)
+    }
+
+    /// The screen as it stands (Doom's own screens); None from an engine without them.
+    pub fn screen(&self) -> Option<crate::dsda::Screen> {
+        self.game.screen()
+    }
+
     /// The loudness: sfx, music (0-15, the game's own settings), master (0-100). None from an
     /// engine built without it.
     pub fn volume(&self) -> Option<[i32; 3]> {
