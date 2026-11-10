@@ -102,6 +102,7 @@ impl Watch {
                     None => self.agent.x_mut().log.push("console: not directed by Neuro: nothing to reconnect".into()),
                 },
                 Command::GotoMap { map, carry } => frame = Frame::Goto { map, carry },
+                Command::Volume { sfx, music, master } => self.engine.set_volume(sfx, music, master),
                 Command::God { on } => {
                     self.engine.set_god(on);
                     self.agent.x_mut().log.push(format!("console: god mode {}", if on { "on" } else { "off" }));
@@ -182,6 +183,7 @@ impl Watch {
             // (no sound at all, as a headless or --mute game has, is muted too)
             muted: self.muted || !self.sound,
             god: self.engine.god(),
+            volume: self.engine.volume(),
             ..GameState::default()
         };
         if let Some(o) = &self.obs {

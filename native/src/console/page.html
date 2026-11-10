@@ -36,6 +36,9 @@ label { display: grid; gap: 3px; font-size: 12px; color: var(--dim); }
 .check { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
 input, select { background: #15151b; color: var(--text); border: 1px solid #3a3a46; border-radius: 5px; padding: 6px 8px; font: inherit; width: 100%; }
 input[type=checkbox] { width: auto; }
+input[type=range] { padding: 0; accent-color: var(--accent); }
+.vol { display: grid; grid-template-columns: 4.5em minmax(0, 1fr) 2.5em; align-items: center; gap: 8px; margin-bottom: 6px; }
+.vol output { text-align: right; font-variant-numeric: tabular-nums; }
 #log { height: 60vh; overflow-y: auto; background: #0e0e12; border-radius: 6px; padding: 6px 8px; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (min-width: 980px) { #log { height: calc(100vh - 170px); } }
 #log .evil { color: var(--evil); } #log .console { color: var(--info); } #log .err { color: var(--bad); } #log .event { color: var(--warn); } #log .out { color: var(--dim); }
@@ -85,6 +88,14 @@ input[type=checkbox] { width: auto; }
     </div>
     <div class="msg" id="msg"></div>
     <dl id="state"></dl>
+  </section>
+
+  <section>
+    <h2>Sound <span class="dim" style="text-transform:none;letter-spacing:0">(the game's own volumes; kept for the next game)</span></h2>
+    <div class="vol"><label for="v-master">Master</label><input type="range" id="v-master" min="0" max="100" data-k="master"><output id="v-master-n"></output></div>
+    <div class="vol"><label for="v-sfx">SFX</label><input type="range" id="v-sfx" min="0" max="15" data-k="sfx"><output id="v-sfx-n"></output></div>
+    <div class="vol"><label for="v-music">Music</label><input type="range" id="v-music" min="0" max="15" data-k="music"><output id="v-music-n"></output></div>
+    <p class="dim" id="v-note" style="margin:0;font-size:12px"></p>
   </section>
 
   <section>
@@ -145,6 +156,7 @@ input[type=checkbox] { width: auto; }
 const $ = (id) => document.getElementById(id);
 let token = new URLSearchParams(location.search).get("t") || "";
 try { if (token) localStorage.setItem("evil-console-token", token); else token = localStorage.getItem("evil-console-token") || ""; } catch (e) { /* (storage off: the URL's token only) */ }
+let volSentAt = 0, volTimer = null, volPending = {};
 let seq = 0, last = null, follow = true, formDirty = false, failures = 0, mapsShown = "", mapPicked = false;
 const LOG_MAX = 4000;
 
@@ -210,6 +222,17 @@ function render(p) {
   if (g.last_exit) rows.push(["Last end", g.last_exit]);
   const dl = $("state"); dl.replaceChildren();
   for (const [k, v] of rows) { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.textContent = v; dl.append(dt, dd); }
+  // (the game's own while it's connected; else the kept ones, which the next game gets)
+  const live = p.connected && st, vol = live && st.volume;
+  const sv = p.settings;
+  const shownVol = vol ? { sfx: vol[0], music: vol[1], master: vol[2] } : { sfx: sv.sfx_volume, music: sv.music_volume, master: sv.master_volume };
+  for (const k of ["master", "sfx", "music"]) {
+    const el = $("v-" + k);
+    el.disabled = !!live && !vol;
+    if (document.activeElement !== el && Date.now() - volSentAt > 1500 && shownVol[k] != null) el.value = shownVol[k];
+    $("v-" + k + "-n").textContent = el.value;
+  }
+  $("v-note").textContent = live && !vol ? "This game's engine has no volume control (rebuild it: tools/build-engine.sh)." : (!p.connected ? "No game running: the levels are kept for the next one." : "");
   if (!formDirty) fillForm(p.settings);
   addLog(p.log);
 }
@@ -249,7 +272,8 @@ function fillForm(s) {
   }
 }
 function readForm() {
-  const f = $("settings"), s = {};
+  // (from the settings as they are: the form hasn't all of them, the volumes for one)
+  const f = $("settings"), s = Object.assign({}, last ? last.settings : {});
   for (const el of f.elements) {
     if (!el.name) continue;
     if (el.type === "checkbox") s[el.name] = el.checked;
@@ -303,6 +327,15 @@ $("l-next").onclick = () => {
   if (i < 0 || i + 1 >= maps.length) { say("No level after " + (cur || "this one") + " in the WAD."); return; }
   gotoMap(maps[i + 1]);
 };
+for (const k of ["master", "sfx", "music"]) {
+  $("v-" + k).addEventListener("input", (e) => {
+    $("v-" + k + "-n").textContent = e.target.value;
+    volPending[k] = Number(e.target.value);
+    volSentAt = Date.now();
+    // (a slider sends many: at most one every 150 ms, the last value always)
+    if (!volTimer) volTimer = setTimeout(() => { const v = volPending; volPending = {}; volTimer = null; cmd(Object.assign({ cmd: "volume" }, v)); }, 150);
+  });
+}
 for (const x of [0.5, 1, 2, 4, 8]) {
   const b = document.createElement("button"); b.textContent = "x" + x; b.dataset.x = x;
   b.onclick = () => cmd({ cmd: "speed", x }); $("speeds").append(b);

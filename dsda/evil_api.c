@@ -355,6 +355,29 @@ EVIL_API void evil_sound(int on)
     S_Stop();
 }
 
+/* The sound's loudness, as the stream console sets it: sfx and music as the game's own settings
+ * have them (0-15, its Sound menu's), master over the whole mix (0-100); -1 leaves one as it is.
+ * Not saved to the game's config file. */
+extern int evil_master_volume;
+
+EVIL_API void evil_volume(int sfx, int music, int master)
+{
+  if (sfx >= 0)
+    dsda_UpdateIntConfig(dsda_config_sfx_volume, sfx > 15 ? 15 : sfx, false);
+  if (music >= 0)
+    dsda_UpdateIntConfig(dsda_config_music_volume, music > 15 ? 15 : music, false);
+  if (master >= 0)
+    evil_master_volume = master > 100 ? 100 : master;
+}
+
+/* The loudness now: out[0] sfx, out[1] music (0-15), out[2] master (0-100). */
+EVIL_API void evil_get_volume(int *out)
+{
+  out[0] = dsda_IntConfig(dsda_config_sfx_volume);
+  out[1] = dsda_IntConfig(dsda_config_music_volume);
+  out[2] = evil_master_volume;
+}
+
 /* The game's sound for the next `samples` sample frames (16-bit stereo, interleaved: out holds
  * 2 * samples), mixed now, as DSDA's video dump takes it a frame at a time; only with
  * -evilsoundcap. Returns the sample rate, or 0 if there's none to take. A recording's: a tic's

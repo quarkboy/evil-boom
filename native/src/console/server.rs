@@ -53,11 +53,16 @@ pub struct Settings {
     pub neuro_url: String,
     /// the game's sound muted at the start (and unmutable from the page: the sound's still there)
     pub muted: bool,
+    /// the loudness each game's given as it starts: sfx, music (0-15), master (0-100); none: as
+    /// the game's own settings have it. Changed from the page as it plays.
+    pub sfx_volume: Option<i32>,
+    pub music_volume: Option<i32>,
+    pub master_volume: Option<i32>,
 }
 
 impl Default for Settings {
     fn default() -> Settings {
-        Settings { wad: "doom2".into(), map: "MAP01".into(), skill: 3, mortal: true, lives: 1, seed: None, episode: true, mode: "bot".into(), neuro_url: "ws://127.0.0.1:8000".into(), muted: false }
+        Settings { wad: "doom2".into(), map: "MAP01".into(), skill: 3, mortal: true, lives: 1, seed: None, episode: true, mode: "bot".into(), neuro_url: "ws://127.0.0.1:8000".into(), muted: false, sfx_volume: None, music_volume: None, master_volume: None }
     }
 }
 
@@ -281,6 +286,10 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 if s.game.start_muted {
                     let _ = s.send(&Command::Mute { on: true });
                 }
+                let (sfx, music, master) = (s.settings.sfx_volume, s.settings.music_volume, s.settings.master_volume);
+                if sfx.is_some() || music.is_some() || master.is_some() {
+                    let _ = s.send(&Command::Volume { sfx, music, master });
+                }
             }
             _ if !ours => return,
             FromGame::State(st) => s.state = Some(st),
@@ -428,8 +437,19 @@ fn handle(hub: &Hub, mut req: Request) {
         (Method::Post, "/api/cmd") => match serde_json::from_str::<Command>(&body) {
             Ok(c) => {
                 let mut s = lock(hub);
-                s.push(format!("[console] -> {body}"));
-                done(s.send(&c))
+                if let Command::Volume { sfx, music, master } = c {
+                    // (kept for the next game as well; not logged, a slider sends many)
+                    let st = &mut s.settings;
+                    st.sfx_volume = sfx.map(|v| v.clamp(0, 15)).or(st.sfx_volume);
+                    st.music_volume = music.map(|v| v.clamp(0, 15)).or(st.music_volume);
+                    st.master_volume = master.map(|v| v.clamp(0, 100)).or(st.master_volume);
+                    let saved = s.save();
+                    let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
+                    done(saved.and(sent))
+                } else {
+                    s.push(format!("[console] -> {body}"));
+                    done(s.send(&c))
+                }
             }
             Err(e) => (400, json!({ "error": format!("not a command: {e}") })),
         },

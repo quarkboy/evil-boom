@@ -32,6 +32,16 @@ pub enum Command {
         #[serde(default)]
         carry: bool,
     },
+    /// the sound's loudness: the game's own sfx and music volumes (0-15) and a master over the
+    /// mix (0-100); one left out is left as it is
+    Volume {
+        #[serde(default)]
+        sfx: Option<i32>,
+        #[serde(default)]
+        music: Option<i32>,
+        #[serde(default)]
+        master: Option<i32>,
+    },
     /// damage does nothing to her (rehearsals), or does again
     God { on: bool },
     /// lives left from now (a death with none left ends the game)
@@ -94,6 +104,8 @@ pub struct GameState {
     pub muted: bool,
     /// damage does nothing to her
     pub god: bool,
+    /// sfx, music (0-15), master (0-100); none from an engine without the control
+    pub volume: Option<[i32; 3]>,
     /// who directs her: "bot" (on her own), "orders file", "neuro"
     pub mode: String,
     /// what she's doing, in a few words

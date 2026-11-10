@@ -91,7 +91,12 @@ WAD, map); after that:
 2. **Operator controls** (built, 2026-11-10): another level of the same WAD; lives and god mode
    live; a line to Evil (context, not silent, "The streamer: ..."); an order as hers (through her
    own checks; she's told quietly of an order, not of a look); the traffic with Neuro is the
-   log's "Evil and Neuro" filter; the WAD only by its short name (never a path). Left: the GPT
+   log's "Evil and Neuro" filter; the WAD only by its short name (never a path). Sound (the
+   user's): master, SFX and music, each a remote control. SFX and music are DSDA's own settings
+   (0-15, its Sound menu's, not saved to its config file); DSDA has no master, so the engine
+   patch adds one, a gain on the final mix in its audio callback (music and SFX are in it by
+   then), 0-100. The levels are kept in the console's settings and given to each game as it
+   connects. Left: the GPT
    stand-in's settings and its log on the page.
 3. **Robustness**: a crashed game restarted on its own (with a limit on crash loops); a hung one
    (no state for some seconds) killed and restarted; a log a session in `out/console/`; the
@@ -152,6 +157,13 @@ The bot's work goes on on `main` in `viewer.rs`, `main.rs` and the fight's files
 code is in its own module (`native/src/console/`); the hooks elsewhere are kept small (a field and
 a call in the watcher's loop, an option in `watch`'s parsing, a reconnect in the Neuro session).
 Rebased on `main` as it moves; merged when a stage is tested.
+
+The engine is changed on this branch too (`evil_volume`, `evil_get_volume`, the master's gain in
+`i_sound.c`), so the worktree has its own copy of `third_party/` (not the main checkout's, which
+the other session's sweeps load), built by `tools/build-engine.sh` there. On merging, the engine
+on `main` is rebuilt the same way, with no sweep running. The Rust side takes the new calls as
+optional: with an engine built before them, the binary runs and the page says there's no volume
+control.
 
 ## Testing
 

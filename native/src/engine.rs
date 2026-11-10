@@ -212,6 +212,17 @@ impl Engine {
         self.game.sound(on);
     }
 
+    /// The loudness: sfx, music (0-15, the game's own settings), master (0-100). None from an
+    /// engine built without it.
+    pub fn volume(&self) -> Option<[i32; 3]> {
+        self.game.volume()
+    }
+
+    /// The loudness set (None: that one left as it is).
+    pub fn set_volume(&self, sfx: Option<i32>, music: Option<i32>, master: Option<i32>) {
+        self.game.set_volume(sfx, music, master);
+    }
+
     /// A tic's worth of the game's sound (with `capture`): 16-bit stereo, interleaved, and its
     /// sample rate. None without capture.
     pub fn grab_tic_sound(&self) -> Option<(u32, Vec<i16>)> {

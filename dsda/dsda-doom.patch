@@ -23,6 +23,35 @@ index cb9a3d7..68c9952 100644
 +# (the .dll is a runtime output, the .so a library one: both beside dsda-doom.wad)
 +set_target_properties(dsda-evil PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${DSDA_OUTPUT_PATH} LIBRARY_OUTPUT_DIRECTORY ${DSDA_OUTPUT_PATH} C_STANDARD 99)
 +add_dependencies(dsda-evil dsda-doom-wad)
+diff --git a/prboom2/src/SDL/i_sound.c b/prboom2/src/SDL/i_sound.c
+index 28a9cdc..47980cc 100644
+--- a/prboom2/src/SDL/i_sound.c
++++ b/prboom2/src/SDL/i_sound.c
+@@ -701,6 +701,10 @@ dboolean I_AnySoundStillPlaying(void)
+ 
+ static void UpdateMusic (void *buff, unsigned nsamp);
+ 
++/* Evil: the whole mix's loudness, 0-100 (evil_volume: the stream console's master, over the
++ * game's own sfx and music volumes) */
++int evil_master_volume = 100;
++
+ static void I_UpdateSound(void *unused, Uint8 *stream, int len)
+ {
+   // Mix current sound data.
+@@ -821,6 +825,13 @@ static void I_UpdateSound(void *unused, Uint8 *stream, int len)
+       }
+     }
+ 
++    /* (Evil: the master over music and sfx together, both in dl/dr by now) */
++    if (evil_master_volume != 100)
++    {
++      dl = dl * evil_master_volume / 100;
++      dr = dr * evil_master_volume / 100;
++    }
++
+     // Clamp to range. Left hardware channel.
+     // Has been char instead of short.
+     // if (dl > 127) *leftout = 127;
 diff --git a/prboom2/src/SDL/i_system.c b/prboom2/src/SDL/i_system.c
 index 1fec088..bea19e8 100644
 --- a/prboom2/src/SDL/i_system.c
