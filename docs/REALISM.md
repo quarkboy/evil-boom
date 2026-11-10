@@ -232,3 +232,9 @@ time. To act on once the watching's done, not before.
   there are switches nearer that might be easier, but the objective isn't changed from the one
   she first chose. So the mancubi get killed, which lets all the arachnotrons out, with her
   still on the super shotgun: no megasphere, rocket launcher, plasma rifle or chaingun.
+- **E3M6 HMP, seed 1858596759** (dies at 104 s). Just unfortunate. A trap with an
+  invulnerability sphere you all but land on: she jumped over it, the monsters swarmed her, and
+  she died before getting to it.
+- **Seen across the runs, on how she fights** (the user's, with E3M6): breaking line of sight
+  behind a doorway, stepping left and right, she goes very far to each side, much further than
+  it takes. Tighten it to only as far as needed: again so as not to wake more enemies.
