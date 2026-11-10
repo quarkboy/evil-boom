@@ -320,3 +320,11 @@ is its own change, scored against the build before on the same runs.
 5. Armor in reach before a one-way step (MAP02's megaarmor left for a teleporter: to trace).
 6. The rocket launcher left a long while (E2M8: to trace).
 7. Small pickups across a floor that hurts, and fighting on one (E1M5).
+
+## The work list, worked through (the user away, 2026-11-10)
+
+Each line: the change, its score run for run against the build before on the same 1088 runs
+(mean difference ± its standard error; runs the same / better / worse), and the score after.
+
+- **D3** an invulnerability gone for when the crowd's too much together: -0.0005 ± 0.0028
+  (1001 / 44 / 29); 0.399. Kept: nothing either way, the rule the sounder.

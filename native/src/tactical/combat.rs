@@ -165,6 +165,9 @@ pub struct Combat {
     glanced: i64,
     /// when she last looked round for one she remembers (`senses.check_every`)
     checked: i64,
+    /// monsters that only claw or charge, in her sight: since when, how far off then, and where
+    /// she stood (for whether one can get at her: `cant_reach`)
+    reach_watch: BTreeMap<i32, (i64, f64, Point)>,
     /// the ground she's been on, by the mesh's polys: where she knows is safe
     been: Vec<bool>,
     /// when each way round her (the steering's sixteen) was last in her view
@@ -332,6 +335,7 @@ impl Combat {
             alert: None,
             glanced: 0,
             checked: 0,
+            reach_watch: BTreeMap::new(),
             been: Vec::new(),
             looked: [i64::MIN / 2; 16],
             last_move: None,
@@ -689,6 +693,18 @@ impl Combat {
         self.heed(obs);
         self.watch_infighting(obs);
         self.now = self.assess(obs);
+        // (what only claws or charges, awake and in her sight: watched for whether it gets any
+        // nearer while she stays put; begun again when she moves off)
+        let watched: Vec<(i32, f64)> = self
+            .visible
+            .iter()
+            .filter(|t| matches!(mon(t.name).attack, Attack::Melee | Attack::Charge) && self.known.get(&t.id).is_some_and(|k| k.awake))
+            .map(|t| (t.id, dist((t.x, t.y), pos)))
+            .collect();
+        self.reach_watch.retain(|id, w| watched.iter().any(|(i, _)| i == id) && dist(w.2, pos) < 128.0);
+        for (id, d) in watched {
+            self.reach_watch.entry(id).or_insert((obs.tic, d, pos));
+        }
         // (the ground she's on: been on, from now)
         if self.been.is_empty() {
             self.been = vec![false; self.nav.mesh.polys.len()];
@@ -753,6 +769,30 @@ impl Combat {
         for s in &obs.sounds {
             match s.what {
                 Heard::Attack => self.attacks_heard.push((obs.tic, s.kinds)),
+                // (a monster's own steps: the few that make any are heard all the while they
+                // walk, a step at a time, and say about where it is: as far off as the step is
+                // loud, on the side it came from. The one she knows of, of that kind, out of her
+                // sight, is put there: of the two places the sound could be (in front and
+                // behind sound the same), the one nearer where she had it. The user's: "they
+                // should have a much better sense of where they are")
+                Heard::Walking if !s.own && self.tune.senses.track_steps => {
+                    let far = if s.volume >= 127 { 160.0 } else { 1200.0 - f64::from(s.volume) * 1040.0 / 127.0 };
+                    let off = ((128.0 - f64::from(s.separation)) / 96.0).clamp(-1.0, 1.0).asin().to_degrees();
+                    let at = |way: f64| (pos.0 + far * way.to_radians().cos(), pos.1 + far * way.to_radians().sin());
+                    let places = [at(obs.angle + off), at(obs.angle + 180.0 - off)];
+                    let whose = self
+                        .known
+                        .values()
+                        .filter(|k| s.kinds.contains(&k.name) && !self.dead.contains(&k.id) && !self.visible.iter().any(|t| t.id == k.id))
+                        .flat_map(|k| places.iter().map(move |&p| (dist(p, k.pos()), k.id, p)))
+                        .min_by(|a, b| a.0.total_cmp(&b.0));
+                    if let Some((_, id, p)) = whose {
+                        if let Some(k) = self.known.get_mut(&id) {
+                            (k.x, k.y, k.tic, k.lost, k.awake, k.going) = (p.0, p.1, obs.tic, false, true, (0.0, 0.0));
+                        }
+                        *self.tally.entry("steps heard".to_string()).or_insert(0.0) += 1.0;
+                    }
+                }
                 Heard::Death => {
                     if let Some(i) = self.cries_due.iter().position(|(_, kind)| s.kinds.contains(kind)) {
                         self.cries_due.remove(i);
@@ -939,6 +979,14 @@ impl Combat {
             .filter_map(|s| self.last_seen.get(&s.id).map(|t| (self.reckoned(s, obs.tic), t)))
             .map(|(at, t)| Thing { x: at.0, y: at.1, vx: 0.0, vy: 0.0, vz: 0.0, attack: -1, ..t.clone() })
             .collect()
+    }
+
+    /// A monster that only claws or charges, in her sight a while with her staying where she is,
+    /// and no nearer for it: it can't get at her (bars she sees through, a gap, a ledge). Not
+    /// something to spend shots on while anything else is about. MAP11, the user watching: lost
+    /// souls behind bars shot at while a cacodemon and a chaingunner came up on her.
+    pub(super) fn cant_reach(&self, obs: &Observation, t: &Thing) -> bool {
+        self.reach_watch.get(&t.id).is_some_and(|&(since, far, _)| obs.tic - since > self.tune.engage.cant_reach_tics && dist((t.x, t.y), obs.pos()) > far - 64.0 && dist((t.x, t.y), obs.pos()) > self.tune.engage.close)
     }
 
     /// Is p off the ground she's been on (a poly of the mesh she's never stood in, or none)?

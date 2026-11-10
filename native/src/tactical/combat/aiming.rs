@@ -81,6 +81,7 @@ impl Combat {
             // elemental the target, 16 s of pistol, kept clear of while shotgun guys shot her dead)
             let long = f64::from(info.health) / self.firepower_on(obs, Some(&info)).max(1.0);
             let first = if long > self.tune.aim.kill_first && hitscanners.iter().any(|&h| h != t.id) { 1.0 } else { priority(t.name, d) };
+            let first = if self.cant_reach(obs, &t) { first * self.tune.engage.cant_reach_first } else { first };
             let mut s = (info.threat + 1.0) * first / (d + 192.0) * if Some(t.id) == self.target { 1.6 } else { 1.0 };
             let off = norm(heading(pos, (t.x, t.y)) - obs.angle).abs();
             s *= 1.0 - off.min(150.0) / 300.0; // (rather what's in front than what's behind)

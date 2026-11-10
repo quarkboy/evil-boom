@@ -140,6 +140,9 @@ pub struct Senses {
     pub glance_every: i64,
     /// ...this far round (degrees)
     pub glance_angle: f64,
+    /// a monster heard walking (the few that make steps: a cyberdemon, a spider mastermind, an
+    /// arachnotron) is kept track of by its steps while it's out of her sight
+    pub track_steps: bool,
     /// something heard, a hit or a bump is looked round for this long at most (tics)
     pub alert_tics: i64,
     /// turned to within this many degrees of it, she's looked
@@ -180,6 +183,7 @@ impl Default for Senses {
             glance_angle: 90.0,
             heed_volume: 1,
             heed_active_volume: 128,
+            track_steps: true,
             alert_tics: 70,
             looked: 10.0,
         }
@@ -224,6 +228,11 @@ pub struct Engage {
     pub melee_gain: f64,
     /// ...in this long (tics): it's out of her reach, given up a while
     pub melee_stall: i64,
+    /// a monster that only claws or charges, in sight of her this long (tics) with her staying
+    /// where she is and it getting no nearer, can't get at her (behind bars, across a gap)...
+    pub cant_reach_tics: i64,
+    /// ...and counts this much as a target while it can't (others first)
+    pub cant_reach_first: f64,
     /// how far past touching a monster still stands in her way
     pub errand_contact: f64,
     /// with something to shoot from where she is, and her route about to take her onto ground
@@ -252,6 +261,8 @@ impl Default for Engage {
             melee_slack: 12.0,
             melee_gain: 32.0,
             melee_stall: 3 * 35,
+            cant_reach_tics: 140,
+            cant_reach_first: 0.2,
             errand_contact: 16.0,
             hold_known: false,
             far_hits: 0.2,
@@ -557,6 +568,12 @@ impl Default for Guns {
 pub struct Errands {
     /// items further than this (as the crow flies) only when they're needed badly
     pub item_range: f64,
+    /// the fight or a retreat having taken her this far from where the route last had her legs,
+    /// what she was going for is thought again (0: never): something else may be the nearer now
+    pub rethink_moved: f64,
+    /// a pickup lying on a floor that hurts costs this much health to fetch, about (a hit or
+    /// two going in and out): weighed against what it's worth, like the fire she'd take
+    pub floor_cost: f64,
     /// a pickup needed this much (0-1) is taken with the doors a key opens, the nearer first,
     /// not left till after them
     pub needed: f64,
@@ -595,6 +612,8 @@ impl Default for Errands {
     fn default() -> Self {
         Errands {
             item_range: 1536.0,
+            rethink_moved: 256.0,
+            floor_cost: 20.0,
             needed: 0.8,
             heal_near: 512.0,
             hunt_near: 512.0,

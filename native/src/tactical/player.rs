@@ -209,6 +209,8 @@ pub struct Player {
     plight: Plight,
     /// who had her legs last tic (the journal notes a change)
     legs: Legs,
+    /// where she was when the route last had her legs, while it hasn't
+    left_route_at: Option<Point>,
     /// tics she's been pushing and not moving
     pushing_still: i64,
     /// the monsters she's fallen back from already (`fall_back`): not again for the same ones
@@ -254,6 +256,7 @@ impl Player {
             last_pos: (0.0, 0.0),
             plight: Plight::default(),
             legs: Legs::Route,
+            left_route_at: None,
             pushing_still: 0,
             fallen_for: BTreeSet::new(),
             wait_until: 0,
@@ -551,6 +554,19 @@ impl Player {
         let d = self.fight.combat.decide(obs, busy, &errand);
         let retreating = !busy && self.retreating(obs);
         let legs = arbiter::arbitrate(d.as_ref(), busy, retreating, self.fight.combat.dodge_clear());
+        // (moved a long way by the fight or a retreat: what she was going for thought again, as
+        // the route takes her legs back. MAP07, the user watching: dodged away from the switch
+        // she was going for, others nearer by then, the first never changed)
+        if legs == Legs::Route {
+            let moved = self.left_route_at.take().map_or(0.0, |at| dist(at, obs.pos()));
+            let far = self.fight.tune.errands.rethink_moved;
+            if far > 0.0 && moved > far {
+                self.fight.rethink = true;
+                self.fight.combat.count("objectives thought again", 1.0);
+            }
+        } else if self.left_route_at.is_none() {
+            self.left_route_at = Some(obs.pos());
+        }
         if legs != self.legs {
             self.legs = legs;
             self.fight.combat.count("changes of legs", 1.0);
@@ -1667,14 +1683,18 @@ impl Fight {
             .into_iter()
             .filter(|s| s.awake && monster(s.name).is_some_and(|m| m.attack != Attack::None) && segment_point_distance(pos, obj.goal, s.pos()) < self.tune.errands.exposed_near)
             .collect();
+        // (lying on a floor that hurts: a hit or two to fetch it. E1M5, the user watching: back
+        // and forth across the nukage for clips, each trip more health than the clip's worth)
+        let on_harm = self.combat.sector_at(obj.goal).is_some_and(|s| self.combat.hazards.get(s).copied().unwrap_or(false));
+        let floor = if on_harm { self.tune.errands.floor_cost } else { 0.0 };
         if threats.is_empty() {
-            return false;
+            return floor > worth;
         }
         let supplies = ammo_item(t.name).is_some() || weapon_item(t.name).is_some();
         if !self.combat.armed(obs) && !supplies {
             return true;
         }
-        let cost: f64 = threats.iter().map(|s| monster(s.name).map_or(0.0, |m| m.threat) * self.tune.errands.hits * exposed).sum();
+        let cost: f64 = floor + threats.iter().map(|s| monster(s.name).map_or(0.0, |m| m.threat) * self.tune.errands.hits * exposed).sum::<f64>();
         cost > worth && cost > self.tune.errands.cost_floor
     }
 }
