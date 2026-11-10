@@ -519,6 +519,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
         speed: 1.0,
         show_all: false,
         mortal: o.mortal,
+        practice: o.known,
         lives: o.lives,
         fight: o.fight,
         peek: o.peek,

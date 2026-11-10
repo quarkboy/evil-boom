@@ -355,6 +355,11 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     const SCOUT_STALL: i64 = 300 * 35;
     e.set_god(true);
     agent.x_mut().knowledge.immune = true;
+    // (and the fight knows it: outmatched and keeping clear of what can't hurt her, off for an
+    // invulnerability across the level, MAP13's pass stood about its first street for 300 s)
+    if let Some(p) = agent.player_mut() {
+        p.combat_mut().immune = true;
+    }
     e.restart(true);
     agent.start_over();
     let start = e.tic;
@@ -405,6 +410,9 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
         x.log.truncate(log_from);
     }
     x.log.push(summary);
+    if let Some(p) = agent.player_mut() {
+        p.combat_mut().immune = false;
+    }
     // (the clock goes on: what she knows is dated by it)
     e.set_god(!mortal);
     e.restart(true);

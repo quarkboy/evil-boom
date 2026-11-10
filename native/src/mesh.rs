@@ -260,7 +260,14 @@ impl Mesh {
             let segs = m.segs.get(ss.first_seg..ss.first_seg + ss.seg_count).ok_or(MeshError::BadSubsector(i))?;
             let mut poly = by_subsector.remove(&i).unwrap_or_default();
             for seg in segs {
-                let (a, b) = (m.vertexes[seg.v1], m.vertexes[seg.v2]);
+                // (by the line the seg's a piece of, not by the seg's own ends: where the node
+                // builder split a line, the new end is rounded to a whole unit, and a short seg
+                // between two such runs a good way off its line's heading; carried out along a
+                // long thin subsector, that cut it away. MAP24: a seg 6 units long on a wall
+                // sloping 1 in 20, a wedge of the nukage pit 440 long and 56 wide at its end gone
+                // from the mesh, the corner of the pit beyond it a room with no way out)
+                let line = &m.linedefs[seg.linedef];
+                let (a, b) = if seg.direction != 0 { (m.vertexes[line.v2], m.vertexes[line.v1]) } else { (m.vertexes[line.v1], m.vertexes[line.v2]) };
                 if poly.len() >= 3 {
                     poly = clip(&poly, a.point(), (b.x - a.x, b.y - a.y), true);
                 }

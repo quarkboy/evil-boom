@@ -266,6 +266,8 @@ pub struct Combat {
     no_duck_tic: i64,
     /// invulnerable till this tic (from the pickup's message: 30 s, as a player knows it)
     invulnerable_until: i64,
+    /// nothing can hurt her (the pass before a level known beforehand): as invulnerable, all of it
+    pub immune: bool,
     /// where each monster in sight has been lately: (tic, x, y), oldest first
     tracks: BTreeMap<i32, std::collections::VecDeque<(i64, f64, f64)>>,
     /// the trigger was down last tic
@@ -402,6 +404,7 @@ impl Combat {
             no_duck_tic: i64::MIN / 2,
             tracks: BTreeMap::new(),
             invulnerable_until: i64::MIN / 2,
+            immune: false,
             trigger_held: false,
             shot_out: None,
             line_held: None,
@@ -1759,7 +1762,7 @@ impl Combat {
     /// Invulnerable, with time enough left to make something of it (the last seconds counted out:
     /// not caught in the open as it wears off)?
     pub fn invulnerable(&self, tic: i64) -> bool {
-        tic < self.invulnerable_until - self.tune.senses.invulnerable_spare
+        self.immune || tic < self.invulnerable_until - self.tune.senses.invulnerable_spare
     }
 
     /// Her own BFG ball in the air: its spray comes from where she is when it lands, along the

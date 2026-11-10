@@ -226,6 +226,9 @@ pub struct WatchOptions {
     pub speed: f64,
     pub show_all: bool,
     pub mortal: bool,
+    /// the pass before a level known beforehand (`--known`), watched: the level as it is,
+    /// nothing able to hurt her, everything first and then out. Not the run after it.
+    pub practice: bool,
     pub lives: i32,
     pub fight: i32,
     pub peek: bool,
@@ -401,8 +404,12 @@ fn first_watch(wad: &str, map_name: &str, o: &WatchOptions, sound: bool) -> Resu
     let mut engine = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn: true, sound, capture: o.capture_sound, seed: o.seed })?;
     engine.carry.clone_from(&o.carry);
     engine.start();
-    if !o.mortal {
+    if !o.mortal || o.practice {
         engine.set_god(true);
+    }
+    if o.practice {
+        // (the level begun again, as the pass begins it: the same run, by its random numbers)
+        engine.restart(true);
     }
     let watch = level(&w, m, nav, engine, o)?;
     Ok((w, watch))
@@ -675,6 +682,15 @@ fn level(w: &Wad, m: Arc<MapData>, nav: Rc<Navigator>, engine: Engine, o: &Watch
     if o.secrets {
         agent.x_mut().exit_last = true;
         agent.x_mut().secrets_mode = true;
+    }
+    if o.practice {
+        // (as `sweep::scout` sets her up)
+        agent.x_mut().knowledge.immune = true;
+        agent.x_mut().exit_last = true;
+        if let Some(p) = agent.player_mut() {
+            p.combat_mut().immune = true;
+        }
+        agent.start_over();
     }
     if o.directed.is_some() || o.neuro.is_some() {
         crate::control::directed::Director::take_over(&mut agent);

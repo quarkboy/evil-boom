@@ -399,6 +399,16 @@ Each line: the change, its score run for run against the build before on the sam
   the hour).
 - The three without the shot's line: -0.0120 ± 0.0094 against 0.412, not accounted for by
   any one of them (the step -0.005, the eyes +0.005).
+- **The mesh, a subsector cut by its lines and not by its segs' ends** (the user's, from the
+  watcher: "she can definitely get out. the passage on the bottom is open"). Where the node
+  builder split a line the new end is rounded to a whole unit; a seg 6 units long on a wall
+  sloping 1 in 20, carried out along a long thin subsector, cut a wedge of MAP24's pit away
+  (440 long, 56 wide at its end), the corner beyond it a room with no way out. With **a
+  needed pickup that would cut her off waiting while another needed one wouldn't**, and **a
+  barrel in the way with nothing to shoot it with failing at once** (it was 20 s stood before
+  it): -0.0009 ± 0.0066 (497 / 154 / 139; exits 377 -> 374); 0.438; level-skills never
+  beaten 65 -> 57 (first exits on MAP11, E3M4, MAP27, MAP19), E3M9 6 of 16 -> 2, E3M3 15 ->
+  12 (not traced; E3M9 is a level of much chance, the user's). Kept.
 - **A3** (the wait at a lift), **A5** (the edge of her view), **B2, B3**: not done yet.
 
 ## A level she knows, and lives (the evaluation asked for 2026-11-10)
@@ -440,3 +450,14 @@ after). Guns and ammo topped up through the pass: no better (39), taken out. The
 patience (300 s with nothing new, an hour; it was 120 s and 1500 s): 47. Still short: MAP06,
 08, 13, 14, 15, 19, 21, 22, 23, 24, 28, 29, E1M7, E3M9, E4M2, E4M7, E4M9 (MAP23 and MAP24:
 "nothing else to do: for the exit" over and over, not traced yet).
+
+Traced since (the 17): the fight didn't know she couldn't be hurt (outmatched, keeping clear,
+off for an invulnerability across the level: MAP13's first street for 300 s): the pass tells
+it, as an invulnerability does (MAP06 386 -> 1007 lines, MAP14 781 -> 1629, MAP15 1357 ->
+1625, MAP28 453 -> 736). The mesh (above): MAP24 249 -> 1070, MAP19 694 -> 1236, E4M2 411 ->
+656, MAP13 551 -> 774. MAP23: her rounds gone on lost souls, a barrel before the switch: not
+able to be hurt, she punches it (the user's); 115 -> 168, then a chaingunner seen and not to
+be shot, closed in on and lost by turns, the route never getting its turn (open). Still
+short: MAP23, MAP29 (789 of 1152), MAP13, MAP08 (581 of 649). `evil-boom watch ... --known`
+shows the pass, tic for tic as a run's; `EVIL_DEBUG_REACH=<tic>` logs what she can get to
+then, its polygons and the portals out of it.
