@@ -271,3 +271,44 @@ time. To act on once the watching's done, not before.
   constant, heard all the time. Worth having in the logic for any enemy with a walking sound
   like that (see the engine): she should have a much better sense of where it is, and hunt it
   more proactively than she does.
+
+## The work list from the watching (2026-11-10)
+
+Twelve runs watched by the user; their verdicts above. Grouped, in the order to do them. Each
+is its own change, scored against the build before on the same runs.
+
+**A. Things that are broken** (concrete, cheap)
+1. A monster's walking sounds (the cyberdemon's hoof and metal, the spider's metal, the
+   arachnotron's steps: played by the chase itself) are taken for attacks: she turns to them as
+   to an attack and takes the monster to be firing.
+2. An objective isn't thought again after the fight has moved her (MAP07's switch with nearer
+   ones by her; E2M8's wall in the cyberdemon's room).
+3. Waiting for a lift that has no reason to come back (E1M6: 20 s at one she'd sent off).
+4. A monster on the edge of a line of sight, in and out of it each tic: her legs passed to and
+   fro, a pistol fired at 1600 units (E1M1: 44 rounds for 5 damage).
+5. Whether "in view" is too strict at the edge (E2M3's demon, "mostly in view", counted unseen).
+
+**B. Where she fights** (four of the twelve: E1M1, MAP11, E3M3, E3M2)
+1. The fight's own movement keeps to ground she's been on or seen: a dodge sideways, not back
+   through a door into rooms she's never been in.
+2. When it turns against her (a trap sprung, flanked, outmatched): back the way she came, to
+   ground she knows, and make them come to her through the door.
+3. In the open with enemies round her: to a wall at her back, a side room.
+4. Stepping out of sight at a doorway: only as far as it takes.
+
+**C. What she knows**
+1. Instinct (the user's allowance): an enemy is known where it is till it's been truly out of
+   sight about half a second.
+2. A monster heard walking is kept track of by its steps (side and loudness each step), and
+   hunted on her terms.
+
+**D. What to fight and what to take**
+1. Not shooting what can't get at her (lost souls behind bars) with real threats coming up.
+2. Outmatched with nothing but a pistol against a baron: the run past, not the fight (to trace:
+   was she judged outmatched?).
+3. An invulnerability sphere when the crowd as a whole is too much, not only when one monster
+   is.
+4. No blur sphere with missile-throwers about (it spoils their aim, and so her dodging).
+5. Armor in reach before a one-way step (MAP02's megaarmor left for a teleporter: to trace).
+6. The rocket launcher left a long while (E2M8: to trace).
+7. Small pickups across a floor that hurts, and fighting on one (E1M5).
