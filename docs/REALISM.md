@@ -239,3 +239,7 @@ time. To act on once the watching's done, not before.
 - **Seen across the runs, on how she fights** (the user's, with E3M6): breaking line of sight
   behind a doorway, stepping left and right, she goes very far to each side, much further than
   it takes. Tighten it to only as far as needed: again so as not to wake more enemies.
+- **E1M6 UV, seed 499438419** (dies at 124 s). Strange: it looks as if something goes wrong.
+  At about 90 s she waits in front of a lift, trying to pick up a medikit and failing; then,
+  giving up, she backs into a shotgun guy and never turns round, even hit point blank several
+  times. The user's: deserves a careful trace.
