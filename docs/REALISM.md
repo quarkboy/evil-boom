@@ -112,6 +112,7 @@ before any of them: 0.445.
 | A hit from the side turned to with missiles in the air and before a monster lost from sight (the user's watching of E1M6) | 0.390 | +0.0201 ± 0.0066 | 558 / 192 / 130 | exits 290 to 318; health lost to close attackers out of view 31.3 a run to 28.1 |
 | No stopping to look at a noise on a floor that hurts (the user's watching of E1M5) | 0.386 | -0.0037 ± 0.0021 | 1006 / 16 / 23 | 82 runs touched; kept as the sounder rule, though it scores a shade under |
 | A monster's footsteps not taken for attacks (work list A1) | 0.383 | -0.0032 ± 0.0028 | 935 / 35 / 48 | a correction; nothing's done with a footstep yet |
+| One hand turns her: no faster than 18 degrees a tic, its rate changed by at most 10 a tic (the user's: a jitter tracking an enemy near cover) | 0.399 | +0.0164 ± 0.0101 | 19 / 381 / 347 | jitters 0.29 a game minute to 0.16; at 6 a tic: 0.08, score -0.0105 ± 0.0101 |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's

@@ -478,7 +478,29 @@ impl Player {
         self.trail.clear();
     }
 
+    /// What she does this tic: whoever decides it (`decide`), and then her hand: one hand turns
+    /// her, whoever's asking, no faster than a hand turns and with no jerk from one tic to the
+    /// next (the fight's aim, a route's turn and a look each had a limit of its own, and the
+    /// three taking turns made a jitter none of them made alone). She walks the way that was
+    /// meant, whatever she ends up facing.
     pub fn act(&mut self, obs: &Observation, last: Option<&Controls>) -> Controls {
+        let mut c = self.decide(obs, last);
+        let (most, accel) = (self.fight.tune.aim.hand_turn, self.fight.tune.aim.hand_accel);
+        if accel > 0.0 {
+            let was = last.map_or(0.0, |l| l.turn);
+            let turn = c.turn.clamp(-most, most).clamp(was - accel, was + accel);
+            // (the legs' way in the world kept: forward and strafe are by where she faces
+            // after the turn, which is now another way)
+            let by = (c.turn - turn).to_radians();
+            let (f, s) = (c.forward, c.strafe);
+            c.forward = f * by.cos() - s * by.sin();
+            c.strafe = f * by.sin() + s * by.cos();
+            c.turn = turn;
+        }
+        c
+    }
+
+    fn decide(&mut self, obs: &Observation, last: Option<&Controls>) -> Controls {
         self.file_decisions();
         self.last_pos = obs.pos();
         self.fight.present = obs.things.iter().flatten().map(|t| t.id).collect();

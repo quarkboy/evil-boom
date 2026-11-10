@@ -446,6 +446,12 @@ pub struct Aim {
     /// degrees a tic, turning to aim
     pub aim_turn: f64,
     pub turn_accel: f64,
+    /// her hand, whoever's turning her (the fight's aim, a route, a look): no faster than this
+    /// a tic (degrees)...
+    pub hand_turn: f64,
+    /// ...and its rate changed by no more than this from one tic to the next (0: no limit): no
+    /// turn one way and back the next tic (the user's: a jitter no hand makes)
+    pub hand_accel: f64,
     /// a biter seen this lately near her rules out rockets
     pub rocket_wary: i64,
     /// a weapon switch asked for: give it this long before asking again
@@ -466,6 +472,8 @@ impl Default for Aim {
         Aim {
             aim_turn: 18.0,
             turn_accel: 5.0,
+            hand_turn: 18.0,
+            hand_accel: 10.0,
             rocket_wary: 3 * 35,
             switch_wait: 40,
             leave_to_boss: 384.0,
