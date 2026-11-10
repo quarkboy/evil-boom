@@ -255,6 +255,17 @@ impl Player {
 
     /// Every item that counts as well (the exit held back till nothing's left: --complete);
     /// `restarts` levels again she may ask for, for ones out of reach.
+    /// The game as she perceives it: the observation with what she couldn't know taken out
+    /// (docs/REALISM.md). What decides anything is given this, not the game's own. So far: only
+    /// the barrels she's seen (where they are now: pushed about, they're the ones she saw).
+    fn percept(&self, obs: &Observation) -> Observation {
+        let mut seen = obs.clone();
+        let barrels = &self.fight.combat.barrels_seen;
+        seen.barrels = obs.barrels.as_ref().map(|_| barrels.clone());
+        seen.barrels_lit.retain(|&l| barrels.iter().any(|&b| dist(b, l) < 1.0));
+        seen
+    }
+
     /// A decision model to ask (see `crate::advisor`).
     pub fn advise(&mut self, advisor: Advisor) {
         self.advisor = Some(advisor);
@@ -407,7 +418,10 @@ impl Player {
         self.file_decisions();
         self.last_pos = obs.pos();
         self.fight.present = obs.things.iter().flatten().map(|t| t.id).collect();
+        // (her senses take the game as it is; everything after goes by what they made of it)
         self.fight.combat.observe(obs);
+        let seen = self.percept(obs);
+        let obs = &seen;
         self.consult(obs);
         self.plight = self.plight_now(obs);
         self.keep_trail(obs);
