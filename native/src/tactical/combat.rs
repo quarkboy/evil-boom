@@ -15,12 +15,14 @@ mod arsenal;
 mod assess;
 mod movement;
 mod moves;
+mod sight;
 mod steering;
 mod style;
 mod tree;
 
 pub use assess::Assessment;
 pub use moves::Move;
+pub use sight::{eye, eye_of};
 use moves::HeldFire;
 use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
@@ -935,13 +937,12 @@ impl Combat {
     /// Could a hitscan shooter she knows of, awake, from where she last saw it, see her at p? (Its
     /// bullets reach whatever it sees, however far.)
     pub fn shot_from(&mut self, obs: &Observation, s: &Seen, p: Point) -> bool {
-        let m = mon(s.name);
         if !s.awake || !self.sniper(obs, s.name) {
             return false;
         }
         let floor = self.floor_at(obs, p);
         let heights = self.heights(obs).to_vec();
-        self.los.clear(Body { x: s.x, y: s.y, z: s.z, height: m.height }, Body { x: p.0, y: p.1, z: floor, height: PLAYER_HEIGHT }, &heights)
+        self.sees(eye_of(s), p, floor, &heights)
     }
 
     /// Invulnerable, with time enough left to make something of it (the last seconds counted out:

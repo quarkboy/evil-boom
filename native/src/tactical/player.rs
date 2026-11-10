@@ -7,14 +7,13 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::bestiary::{ammo_item, armor_item, first_shot, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
-use super::combat::{segment_point_distance, spread, Combat, Move, Seen};
+use super::combat::{eye, eye_of, segment_point_distance, spread, Combat, Move, Seen};
 use super::tuning::Tuning;
 use crate::decisions::Record;
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
 use crate::knowledge::explorer::{Explorer, Hooks, Kind, Objective};
 use crate::knowledge::model::Knowledge;
-use crate::los::Body;
 use crate::motor::follower::RouteFollower;
 use crate::motor::{Controls, Observation, Thing};
 use crate::navigator::{Navigator, States, PLAYER_HEIGHT, PLAYER_RADIUS};
@@ -642,11 +641,8 @@ impl Player {
             self.trail.iter().rev().copied().filter(|&p| dist(p, pos) > self.fight.tune.retreat.back_min && nav.poly_at(p).is_none_or(|pi| !k.damaging(nav.sector_of_poly(pi)))).collect();
         for p in trail {
             let Some(pi) = nav.poly_at(p) else { continue };
-            let body = Body { x: p.0, y: p.1, z: heights[nav.sector_of_poly(pi)].0, height: PLAYER_HEIGHT };
-            let seen = them.iter().any(|t| {
-                let eye = Body { x: t.x, y: t.y, z: t.z, height: monster(t.name).map_or(56.0, |m| m.height) };
-                self.fight.combat.los.clear(eye, body, &heights)
-            });
+            let z = heights[nav.sector_of_poly(pi)].0;
+            let seen = them.iter().any(|t| self.fight.combat.sees(eye(t), p, z, &heights));
             let clear = them.iter().all(|t| dist((t.x, t.y), p) > self.fight.tune.retreat.back_clear);
             if !seen || clear {
                 if let Some(f) = self.go_to(obs, pi, &them, "back out") {
@@ -840,16 +836,12 @@ impl Player {
     fn seen_from(&mut self, obs: &Observation, spots: &[(f64, usize)], them: &[Thing], weigh: bool) -> Vec<f64> {
         let nav = Rc::clone(&self.explorer.nav);
         let heights = self.fight.combat.heights(obs).to_vec();
-        let bodies: Vec<Body> = spots.iter().map(|&(_, pi)| {
-            let c = nav.poly_center(pi);
-            Body { x: c.0, y: c.1, z: heights[nav.sector_of_poly(pi)].0, height: PLAYER_HEIGHT }
-        }).collect();
+        let places: Vec<(Point, f64)> = spots.iter().map(|&(_, pi)| (nav.poly_center(pi), heights[nav.sector_of_poly(pi)].0)).collect();
         let mut seen = vec![0.0; spots.len()];
         for t in them {
             let Some(m) = monster(t.name) else { continue };
-            let eye = Body { x: t.x, y: t.y, z: t.z, height: m.height };
-            for (i, b) in bodies.iter().enumerate() {
-                if self.fight.combat.los.clear(eye, *b, &heights) {
+            for (i, &(p, z)) in places.iter().enumerate() {
+                if self.fight.combat.sees(eye(t), p, z, &heights) {
                     seen[i] += if weigh { m.threat } else { 1.0 };
                 }
             }
@@ -962,7 +954,7 @@ impl Player {
         }
         let nav = Rc::clone(&self.explorer.nav);
         let heights = self.fight.combat.heights(obs).to_vec();
-        let los = &self.fight.combat.los;
+        let combat = &self.fight.combat;
         let exposure: Vec<f64> = (0..nav.mesh.polys.len())
             .map(|pi| {
                 if nav.mesh.polys[pi].is_none() {
@@ -971,10 +963,7 @@ impl Player {
                 let c = nav.poly_center(pi);
                 let z = heights.get(nav.sector_of_poly(pi)).map_or(0.0, |h| h.0);
                 let seen = them.iter().any(|s| {
-                    dist(c, s.pos()) < self.fight.tune.retreat.exposure_range && {
-                        let eye = Body { x: s.x, y: s.y, z: s.z, height: monster(s.name).map_or(56.0, |m| m.height) };
-                        los.clear(eye, Body { x: c.0, y: c.1, z, height: PLAYER_HEIGHT }, &heights)
-                    }
+                    dist(c, s.pos()) < self.fight.tune.retreat.exposure_range && combat.sees(eye_of(s), c, z, &heights)
                 });
                 if seen { self.fight.tune.retreat.exposed } else { 1.0 }
             })
@@ -1019,13 +1008,8 @@ impl Player {
             })
             .collect();
         grid.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let los = &self.fight.combat.los;
-        let seen = |p: Point, z: f64| {
-            shooters.iter().any(|t| {
-                let eye = Body { x: t.x, y: t.y, z: t.z, height: monster(t.name).map_or(56.0, |m| m.height) };
-                los.clear(eye, Body { x: p.0, y: p.1, z, height: PLAYER_HEIGHT }, &heights)
-            })
-        };
+        let combat = &self.fight.combat;
+        let seen = |p: Point, z: f64| shooters.iter().any(|t| combat.sees(eye(t), p, z, &heights));
         let from_them = |p: Point| shooters.iter().map(|t| dist(p, (t.x, t.y))).fold(f64::INFINITY, f64::min);
         let mut posts: Vec<(f64, Point)> = Vec::new();
         for &(d, p, z) in grid.iter().take(POST_LOOKS) {
