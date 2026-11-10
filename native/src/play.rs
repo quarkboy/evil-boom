@@ -76,6 +76,14 @@ impl Agent {
         }
     }
 
+    /// The level begun again with no death to note.
+    pub fn start_over(&mut self) {
+        match self {
+            Agent::Plain(x) | Agent::Expert(x, _) => x.restart(),
+            Agent::Fight(p) => p.start_over(),
+        }
+    }
+
     pub fn restart(&mut self) {
         match self {
             Agent::Plain(x) | Agent::Expert(x, _) => x.restart(),

@@ -37,6 +37,9 @@ pub struct Row {
     pub items: (u32, u32),
     pub lines: (u32, u32),
     pub sectors: (u32, u32),
+    /// times she died before the run ended (a run of several lives: out with this many deaths
+    /// is out on the next life)
+    pub deaths: u32,
 }
 
 impl Row {
@@ -63,12 +66,12 @@ impl Row {
         }
     }
 
-    const HEADER: &'static str = "wad\tmap\tskill\tseed\toutcome\tseconds\tkills\tkills_total\titems\titems_total\tlines\tlines_total\tsectors\tsectors_total";
+    const HEADER: &'static str = "wad\tmap\tskill\tseed\toutcome\tseconds\tkills\tkills_total\titems\titems_total\tlines\tlines_total\tsectors\tsectors_total\tdeaths";
 
     fn tsv(&self) -> String {
         format!(
-            "{}\t{}\t{}\t{}\t{}\t{:.0}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.wad, self.map, self.skill, self.seed, self.outcome, self.seconds, self.kills.0, self.kills.1, self.items.0, self.items.1, self.lines.0, self.lines.1, self.sectors.0, self.sectors.1
+            "{}\t{}\t{}\t{}\t{}\t{:.0}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.wad, self.map, self.skill, self.seed, self.outcome, self.seconds, self.kills.0, self.kills.1, self.items.0, self.items.1, self.lines.0, self.lines.1, self.sectors.0, self.sectors.1, self.deaths
         )
     }
 
@@ -86,6 +89,7 @@ impl Row {
             items: (n(8)?, n(9)?),
             lines: (n(10)?, n(11)?),
             sectors: (n(12)?, n(13)?),
+            deaths: n(14).unwrap_or(0),
         })
     }
 
@@ -110,6 +114,7 @@ impl Row {
             items: words.iter().position(|w| *w == "items").and_then(|i| words.get(i + 1)).and_then(|w| pair(w)).unwrap_or((0, 0)),
             lines: before("lines"),
             sectors: before("sectors"),
+            deaths: words.iter().position(|w| *w == "deaths").and_then(|i| i.checked_sub(1)).and_then(|i| words[i].parse().ok()).unwrap_or(0),
         }
     }
 }
@@ -130,6 +135,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let (mut skills, mut seeds, mut jobs, mut out) = (vec![3u32, 4], 8u32, 12usize, None::<String>);
     let mut window = true;
     let (mut like, mut passed) = (None::<String>, Vec::<String>::new());
+    let mut lives = 1u32;
     let mut groups: Vec<(String, Vec<String>)> = Vec::new();
     let mut i = 0;
     while i < args.len() {
@@ -154,6 +160,17 @@ pub fn run(args: &[String]) -> Result<(), String> {
             "--like" => {
                 like = Some(v.ok_or("--like FILE")?.clone());
                 i += 2;
+            }
+            "--lives" => {
+                let n: u32 = v.and_then(|v| v.parse().ok()).ok_or("--lives N")?;
+                // (several lives: the hour a run has is for one; so many hours, up to four)
+                passed.extend(["--lives".to_string(), n.to_string(), "--max-seconds".to_string(), (3600 * n.clamp(1, 4)).to_string()]);
+                lives = n;
+                i += 2;
+            }
+            "--known" => {
+                passed.push("--known".into());
+                i += 1;
             }
             flag @ ("--tuning" | "--bar") => {
                 passed.push(flag.to_string());
@@ -230,7 +247,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
         while running.len() < jobs.max(1) {
             let Some(job) = todo.pop_front() else { break };
             let child = Command::new(&me)
-                .args(["run-map", &job.0, &job.1, "--fight", &job.2.to_string(), "--mortal", "--lives", "1", "--seed", &job.3.to_string(), "--stall-out"])
+                .args(["run-map", &job.0, &job.1, "--fight", &job.2.to_string(), "--mortal", "--seed", &job.3.to_string(), "--stall-out"])
+                .args(if lives == 1 { &["--lives", "1"][..] } else { &[] })
                 .args(&passed)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
@@ -379,7 +397,31 @@ pub fn report(sets: &[Vec<Row>]) -> String {
         }
         out += "\n";
     }
+    out += &by_life(sets);
     out += &paired(sets);
+    out
+}
+
+/// Runs of several lives: the share of them out by each life (out with d deaths is out on life
+/// d + 1), a set a line: how fast she learns a level.
+fn by_life(sets: &[Vec<Row>]) -> String {
+    let most = sets.iter().flatten().map(|r| r.deaths).max().unwrap_or(0);
+    if most == 0 {
+        return String::new();
+    }
+    let mut out = String::from("\nout by life (the share of runs out on that life or before):\n");
+    for (i, rows) in sets.iter().enumerate() {
+        let mut skills: Vec<u32> = rows.iter().map(|r| r.skill).collect();
+        skills.sort_unstable();
+        skills.dedup();
+        for skill in skills.iter().map(|&s| Some(s)).chain([None]) {
+            let of: Vec<&Row> = rows.iter().filter(|r| skill.is_none_or(|s| r.skill == s)).collect();
+            let n = of.len().max(1) as f64;
+            let shares: Vec<String> = (1..=most + 1).map(|life| format!("{life}: {:.3}", of.iter().filter(|r| r.exited() && r.deaths < life).count() as f64 / n)).collect();
+            let name = skill.map_or_else(|| "all    ".to_string(), |s| format!("skill {s}"));
+            out += &format!("  set {} {name}: {}\n", i + 1, shares.join("  "));
+        }
+    }
     out
 }
 

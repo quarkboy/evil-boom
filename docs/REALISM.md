@@ -328,3 +328,16 @@ Each line: the change, its score run for run against the build before on the sam
 
 - **D3** an invulnerability gone for when the crowd's too much together: -0.0005 ± 0.0028
   (1001 / 44 / 29); 0.399. Kept: nothing either way, the rule the sounder.
+- **D7** a pickup on a floor that hurts costs health to fetch: +0.0001 ± 0.0029 (957 / 37 /
+  34). Kept.
+- **D1** what only claws or charges and can't get at her isn't shot first: -0.0036 ± 0.0029
+  (969 / 40 / 47; HMP -0.010, UV +0.003). Kept, on the watching (MAP11's lost souls behind
+  bars); a shade under, to look at if it shows again.
+- **A2** her objective thought again when the fight's taken her 256 or more from where the
+  route had her: -0.0007 ± 0.0087 (124 / 278 / 324; HMP -0.021, UV +0.020). Kept (the user's:
+  "especially the case when an objective becomes significantly farther away").
+- The three together: -0.0038 ± 0.0087; 0.395.
+- **D2** (a baron fought with a pistol), **D6** (the rocket launcher left a long while): not
+  reproduced: the runs they were seen in play differently now, and nothing in the rules was
+  found to change without one to trace. **D4** (the blur sphere): she never goes for one; she
+  can still walk over one, which is the route planner's to avoid.

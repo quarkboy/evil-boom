@@ -176,6 +176,10 @@ impl Engine {
     /// The level from the start again (`keep_time`: the tic count carries on).
     pub fn restart(&mut self, keep_time: bool) {
         let tic = self.tic;
+        // (things numbered afresh, as the level's first start numbered them: a monster is the
+        // same one, by its number, each time the level's begun again; what she remembers of it
+        // from a life before is of it)
+        self.game.reset_ids();
         self.new_game();
         self.tic = if keep_time { tic + WARMUP_TICS } else { WARMUP_TICS };
     }
@@ -194,6 +198,12 @@ impl Engine {
         if self.god {
             self.game.god(true);
         }
+    }
+
+    /// Monsters in the level or not, from the next start of it (a look round an empty level
+    /// first, then the level itself).
+    pub fn set_monsters(&mut self, on: bool) {
+        self.nomonsters = !on;
     }
 
     /// Damage does nothing to her (kept across restarts).

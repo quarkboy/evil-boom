@@ -475,6 +475,21 @@ impl Player {
         self.explorer.ranked(obs, risky, &mut self.fight)
     }
 
+    /// The level begun again with no death to note (a look round it first, then the level).
+    pub fn start_over(&mut self) {
+        self.explorer.restart();
+        self.fight.combat.restart();
+        self.retreat = None;
+        self.fight.combat.hold_fire = false;
+        self.trail.clear();
+        self.fallen_for.clear();
+    }
+
+    /// The level known beforehand: its monsters, where they stand at the start.
+    pub fn know_monsters(&mut self, obs: &Observation) {
+        self.fight.combat.know_monsters(obs);
+    }
+
     pub fn restart(&mut self) {
         // (dead with something on: noted, so as not to walk into it again the same way; MAP29's
         // green armor down in the nukage under fire, five lives running. A level again asked for
@@ -489,6 +504,7 @@ impl Player {
         self.retreat = None;
         self.fight.combat.hold_fire = false;
         self.trail.clear();
+        self.fallen_for.clear();
     }
 
     /// What she does this tic: whoever decides it (`decide`), and then her hand: one hand turns

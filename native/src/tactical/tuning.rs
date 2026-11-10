@@ -140,6 +140,9 @@ pub struct Senses {
     pub glance_every: i64,
     /// ...this far round (degrees)
     pub glance_angle: f64,
+    /// a monster she knows of from before this life (a life before, the level known), not seen
+    /// yet in this one, counts in her odds when it's this near where she stands
+    pub expect_range: f64,
     /// a monster heard walking (the few that make steps: a cyberdemon, a spider mastermind, an
     /// arachnotron) is kept track of by its steps while it's out of her sight
     pub track_steps: bool,
@@ -183,6 +186,7 @@ impl Default for Senses {
             glance_angle: 90.0,
             heed_volume: 1,
             heed_active_volume: 128,
+            expect_range: 512.0,
             track_steps: true,
             alert_tics: 70,
             looked: 10.0,

@@ -102,7 +102,10 @@ impl Combat {
     /// and two rockets: closed in on): `now.odds`, and `now.outmatched` by it.
     pub(super) fn odds_in_sight(&self, obs: &Observation) -> Odds {
         let remembered = self.remembered(obs);
-        let near: Vec<&'static str> = self.visible.iter().chain(&remembered).filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0 || self.sniper(obs, t.name)).map(|t| t.name).collect();
+        let mut near: Vec<&'static str> = self.visible.iter().chain(&remembered).filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0 || self.sniper(obs, t.name)).map(|t| t.name).collect();
+        // (and what she knows from before is standing close by, not yet seen this time: what
+        // she's about to walk in on)
+        near.extend(self.expected(obs.pos(), self.tune.senses.expect_range).iter().map(|s| s.name));
         self.odds(obs, &near)
     }
 

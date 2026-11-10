@@ -82,6 +82,10 @@ pub struct RunOptions {
     pub bar: Option<String>,
     /// a decision model asked as she plays: its settings file (`crate::advisor`)
     pub advisor: Option<std::path::PathBuf>,
+    /// the level known beforehand, as by someone who's played it: she looks round it first with
+    /// no monsters in it (what she learns of the map, its doors and switches, where things
+    /// lie), then plays it knowing that and where every monster stands at the start
+    pub known: bool,
 }
 
 impl Default for RunOptions {
@@ -107,6 +111,7 @@ impl Default for RunOptions {
             decisions: false,
             bar: None,
             advisor: None,
+            known: false,
         }
     }
 }
@@ -335,10 +340,74 @@ pub fn run_map_full(wad: &str, map_name: &str, o: &RunOptions) -> Result<MapRun,
     run_map_in(wad, map_name, o, None)
 }
 
+/// The look round an empty level that knowing it beforehand stands for: the level with no
+/// monsters in it, played till she's out, or has had `SCOUT_SECONDS` of it, or `SCOUT_STALL`
+/// goes by with nothing new mapped or walked into; dying of a floor or a crusher, again. Then
+/// the level itself from the start, monsters in, with what she learned and where each of them
+/// stands. Nothing of the look round is counted or logged as part of the run.
+fn scout(e: &mut Engine, agent: &mut Agent) -> i64 {
+    const SCOUT_SECONDS: f64 = 1500.0;
+    const SCOUT_STALL: i64 = 120 * 35;
+    e.set_monsters(false);
+    e.restart(true);
+    agent.start_over();
+    let start = e.tic;
+    let log_from = agent.x().log.len();
+    let held = std::mem::replace(&mut agent.x_mut().exit_last, true); // (everything first, then out)
+    let mut c: Option<crate::motor::Controls> = None;
+    let (mut best, mut best_tic, mut lives) = (0usize, e.tic, 0);
+    while ((e.tic - start) as f64) < SCOUT_SECONDS * TICRATE && !e.exited() {
+        if e.finished() && e.dead() {
+            lives += 1;
+            if lives > 4 {
+                break;
+            }
+            e.restart(true);
+            agent.start_over();
+            c = None;
+            continue;
+        }
+        let ob = e.observe();
+        let ctl = agent.act(&ob, c.as_ref());
+        e.step(&ctl);
+        e.take_hits();
+        c = Some(ctl);
+        let k = &agent.x().knowledge;
+        let known = k.mapped.len() + k.visited.len() + k.learned.len();
+        if known > best {
+            (best, best_tic) = (known, e.tic);
+        } else if e.tic - best_tic > SCOUT_STALL {
+            break;
+        }
+    }
+    let x = agent.x_mut();
+    x.exit_last = held;
+    let summary = format!("--- the level looked round beforehand (no monsters in it): {}", x.knowledge.summary());
+    x.log.truncate(log_from);
+    x.log.push(summary);
+    // (the clock goes on: what she knows is dated by it)
+    e.set_monsters(true);
+    e.restart(true);
+    agent.start_over();
+    let first = e.observe();
+    if let Some(p) = agent.player_mut() {
+        p.know_monsters(&first);
+        let n = p.combat().known_count();
+        p.explorer.log.push(format!("--- and its monsters known: {n} of them, where they stand"));
+    }
+    e.tic
+}
+
 /// A map played in the game already going if there is one (see `setup`).
 pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engine>) -> Result<MapRun, String> {
     let Setup { iwad, w, m, map_name, skill, nav, mut e, mut agent, mut deaths, mut c, mut obs, mut rec, secrets_short } =
         setup(wad, map_name, o, o.snapshot.is_some(), engine)?;
+    // (the level looked round first: the run's own time is from after that)
+    let mut tic0 = 0;
+    if o.known {
+        tic0 = scout(&mut e, &mut agent);
+        (c, obs, deaths) = (None, None, 0);
+    }
     let t0 = Instant::now();
     let mut idle_since: Option<i64> = None;
     let (mut t_engine, mut t_observe, mut t_think) = (0.0, 0.0, 0.0);
@@ -368,7 +437,7 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     let mut damage: BTreeMap<String, (i32, i32, Vec<i64>)> = BTreeMap::new();
     let mut last_hit: Option<String> = None;
     let (mut turn_flips, mut last_jitter): (Vec<i64>, i64) = (Vec::new(), i64::MIN / 2);
-    while (e.tic as f64) < until * TICRATE {
+    while ((e.tic - tic0) as f64) < until * TICRATE {
         if o.expert || o.secrets || o.stall_out {
             let now = progress(&e, agent.x());
             if now.iter().zip(&best).any(|(n, b)| n > b) {
@@ -569,7 +638,7 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
         c = Some(ctl);
         obs = Some(ob);
     }
-    let (exited, died, game_s) = (e.exited(), e.finished() && e.dead(), e.tic as f64 / TICRATE);
+    let (exited, died, game_s) = (e.exited(), e.finished() && e.dead(), (e.tic - tic0) as f64 / TICRATE);
     if o.decisions {
         if let Some(p) = agent.player_mut() {
             p.file_decisions();

@@ -38,6 +38,7 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--complete" => o.complete = true,
             "--stall-out" => o.stall_out = true,
             "--decisions" => o.decisions = true,
+            "--known" => o.known = true,
             "--bar" => o.bar = Some(value("--bar")?),
             "--advisor" => o.advisor = Some(std::path::PathBuf::from(value("--advisor")?)),
             "--tuning" => o.tuning = Some(std::path::PathBuf::from(value("--tuning")?)),
@@ -102,6 +103,9 @@ pub(crate) fn option_args(o: &RunOptions) -> Vec<String> {
     }
     if o.decisions {
         out.push("--decisions".into());
+    }
+    if o.known {
+        out.push("--known".into());
     }
     if let Some(b) = &o.bar {
         out.push("--bar".into());

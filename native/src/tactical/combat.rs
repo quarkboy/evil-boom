@@ -95,6 +95,9 @@ pub struct Seen {
     pub going: Point,
     /// when she last had it in her sight with nothing between (`tic` goes on through instinct)
     pub sighted: i64,
+    /// known of from before this life (a life before, or the level known beforehand) and not
+    /// seen yet in this one: where it was first seen, taken to be standing there still
+    pub foreknown: bool,
 }
 
 impl Seen {
@@ -411,6 +414,14 @@ impl Combat {
         self.truth.clear();
         self.dead.clear();
         self.last_seen.clear();
+        // (the level begun again: every monster she's seen is back where she first saw it, for
+        // all she knows, standing as it stood; she knows of it before it knows of her)
+        for s in self.known.values_mut() {
+            (s.x, s.y, s.awake, s.lost, s.going, s.foreknown) = (s.x0, s.y0, false, false, (0.0, 0.0), true);
+            (s.tic, s.sighted) = (i64::MIN / 2, i64::MIN / 2);
+        }
+        self.reach_watch.clear();
+        self.patience = Patience::default();
         self.missiles_seen.clear();
         self.seen_hurt.clear();
         self.cries_due.clear();
@@ -575,13 +586,14 @@ impl Combat {
             }
             let seen = self.known.entry(t.id).or_insert_with(|| {
                 self.log.push(format!("tic {}: saw {} {} at ({:.0}, {:.0})", obs.tic, t.name, t.id, t.x, t.y));
-                Seen { id: t.id, name: t.name, x: t.x, y: t.y, z: t.z, tic: obs.tic, first: obs.tic, x0: t.x, y0: t.y, angle0: t.angle, awake: false, lost: false, going: (0.0, 0.0), sighted: obs.tic }
+                Seen { id: t.id, name: t.name, x: t.x, y: t.y, z: t.z, tic: obs.tic, first: obs.tic, x0: t.x, y0: t.y, angle0: t.angle, awake: false, lost: false, going: (0.0, 0.0), sighted: obs.tic, foreknown: false }
             });
             seen.x = t.x;
             seen.y = t.y;
             seen.z = t.z;
             seen.tic = obs.tic;
             seen.lost = false;
+            seen.foreknown = false;
             if sees {
                 seen.sighted = obs.tic;
             }
@@ -1037,6 +1049,41 @@ impl Combat {
             None => "gone",
         };
         (knew, far)
+    }
+
+    /// The level known beforehand: every monster in it where it stands at the start, as if seen
+    /// in a life before (`obs`: the game's own, the first of the level).
+    pub fn know_monsters(&mut self, obs: &Observation) {
+        for t in obs.things.iter().flatten().filter(|t| monster(t.name).is_some()) {
+            self.known.entry(t.id).or_insert(Seen {
+                id: t.id,
+                name: t.name,
+                x: t.x,
+                y: t.y,
+                z: t.z,
+                tic: i64::MIN / 2,
+                first: i64::MIN / 2,
+                x0: t.x,
+                y0: t.y,
+                angle0: t.angle,
+                awake: false,
+                lost: false,
+                going: (0.0, 0.0),
+                sighted: i64::MIN / 2,
+                foreknown: true,
+            });
+        }
+    }
+
+    /// How many monsters she knows of.
+    pub fn known_count(&self) -> usize {
+        self.known.len()
+    }
+
+    /// The monsters she knows of from before this life and hasn't seen in it yet, within `range`
+    /// of her: what she expects there.
+    pub fn expected(&self, pos: Point, range: f64) -> Vec<&Seen> {
+        self.known.values().filter(|s| s.foreknown && !s.lost && !self.dead.contains(&s.id) && dist(s.pos(), pos) < range).collect()
     }
 
     /// Is that monster dead, as far as she knows (seen or heard to die)?
