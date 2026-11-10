@@ -380,15 +380,22 @@ fn handle(hub: &Hub, mut req: Request) {
     let (path, query) = url.split_once('?').unwrap_or((url.as_str(), ""));
     let param = |k: &str| query.split('&').filter_map(|kv| kv.split_once('=')).find(|(n, _)| *n == k).map(|(_, v)| v.to_string());
     let method = req.method().clone();
-    if method == Method::Get && (path == "/" || path == "/index.html") {
-        // (the page is the same for anyone: nothing in it is secret, the API is)
-        let _ = req.respond(with_header(Response::from_string(PAGE), "Content-Type", "text/html; charset=utf-8"));
+    // (behind someone's proxy or tunnel it may be under a path of theirs, /doom/: what's from
+    // /api/ on is the call, and the page asks by paths relative to itself)
+    let Some(path) = path.find("/api/").map(|i| &path[i..]) else {
+        let file = path.rsplit('/').next().is_some_and(|last| last.contains('.') && last != "index.html");
+        let _ = req.respond(if method != Method::Get || file {
+            Response::from_string("not found").with_status_code(404)
+        } else if path.ends_with('/') || path.ends_with("/index.html") {
+            // (the page is the same for anyone: nothing in it is secret, the API is)
+            with_header(Response::from_string(PAGE), "Content-Type", "text/html; charset=utf-8")
+        } else {
+            // (/doom to /doom/, so the page's relative calls go under it)
+            let to = if query.is_empty() { format!("{path}/") } else { format!("{path}/?{query}") };
+            with_header(Response::from_string("").with_status_code(308), "Location", &to)
+        });
         return;
-    }
-    if !path.starts_with("/api/") {
-        let _ = req.respond(Response::from_string("not found").with_status_code(404));
-        return;
-    }
+    };
     let token = lock(hub).token.clone();
     if !param("t").is_some_and(|t| same(&t, &token)) {
         let _ = req.respond(json_response(401, &json!({ "error": "the console's token is needed (?t=, as printed when it started)" })));

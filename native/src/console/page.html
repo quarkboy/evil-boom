@@ -133,7 +133,7 @@ async function act(path, body, okText) {
   try { const j = await api(path, body === undefined ? {} : body); say(okText || ""); return j; }
   catch (e) { say(e.message); return null; }
 }
-const cmd = (c) => act("/api/cmd", c);
+const cmd = (c) => act("api/cmd", c);
 
 function badge(el, text, cls) { el.textContent = text; el.className = "badge " + (cls || ""); }
 
@@ -222,7 +222,7 @@ function readForm() {
 
 async function poll() {
   try {
-    render(await api("/api/poll?since=" + seq));
+    render(await api("api/poll?since=" + seq));
     failures = 0;
   } catch (e) {
     failures++;
@@ -231,9 +231,9 @@ async function poll() {
   setTimeout(poll, 400);
 }
 
-$("g-start").onclick = () => act("/api/game/start", {}, "Starting...");
-$("g-stop").onclick = () => confirm("Stop the game?") && act("/api/game/stop", {}, "Stopping...");
-$("g-restart").onclick = () => confirm("Restart the game process?") && act("/api/game/restart", {}, "Restarting...");
+$("g-start").onclick = () => act("api/game/start", {}, "Starting...");
+$("g-stop").onclick = () => confirm("Stop the game?") && act("api/game/stop", {}, "Stopping...");
+$("g-restart").onclick = () => confirm("Restart the game process?") && act("api/game/restart", {}, "Restarting...");
 $("c-pause").onclick = () => cmd({ cmd: last && last.state && last.state.paused ? "resume" : "pause" });
 $("c-mute").onclick = () => cmd({ cmd: "mute", on: !(last && last.state && last.state.muted) });
 $("c-restart").onclick = () => confirm("Restart the level from its start?") && cmd({ cmd: "restart_level" });
@@ -243,9 +243,9 @@ for (const x of [0.5, 1, 2, 4, 8]) {
   b.onclick = () => cmd({ cmd: "speed", x }); $("speeds").append(b);
 }
 $("settings").addEventListener("input", () => { formDirty = true; });
-async function save() { const j = await act("/api/settings", readForm(), "Saved."); if (j) formDirty = false; return j; }
+async function save() { const j = await act("api/settings", readForm(), "Saved."); if (j) formDirty = false; return j; }
 $("s-save").onclick = async () => { const j = await save(); if (j && j.restart_needed) say("Saved: restart the game to use them."); };
-$("s-apply").onclick = async () => { if (await save()) act(last && last.game.running ? "/api/game/restart" : "/api/game/start", {}, "Saved; (re)starting..."); };
+$("s-apply").onclick = async () => { if (await save()) act(last && last.game.running ? "api/game/restart" : "api/game/start", {}, "Saved; (re)starting..."); };
 $("logfilter").onchange = () => { for (const d of $("log").children) d.hidden = !shown(d.dataset.k); $("log").scrollTop = $("log").scrollHeight; };
 $("logfollow").onclick = () => { follow = !follow; $("logfollow").classList.toggle("on", follow); };
 $("logclear").onclick = () => $("log").replaceChildren();

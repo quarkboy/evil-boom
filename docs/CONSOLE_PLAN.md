@@ -17,7 +17,7 @@ view never reaches anything model-facing.
 | The page | plain HTML/CSS/JS, one file baked into the binary (`include_str!`), no build step | The browser side can't be Rust without a WASM toolchain; everything with logic stays in Rust |
 | Where it runs | a **supervisor process**, `evil-boom console`, which starts the game as a child | DSDA is one game a process: a WAD change (Doom to Doom II) or an engine crash needs a new process, and the console stays up through both |
 | Who reaches it | the LAN too, with a token | the streamer's phone or second PC |
-| Across the web | proposed: a Cloudflare Tunnel with Cloudflare Access in front (section below), not a Worker or Pages copy of the console | a trusted assistant running the stream remotely (the user's, 2026-11-10) |
+| Across the web | nothing in the repo: added to the tunnels Vedal already has for his other consoles; the console made to sit behind one (section below) | a trusted assistant running the stream remotely (the user's, 2026-11-10) |
 | Doom's own screens | all of them: tally and finale, title and demo loop, the menu driven on screen, the melt | the show should look like Doom, not a bot harness |
 
 ## Shape
@@ -54,7 +54,7 @@ browser(s) --HTTP, polled, token--> evil-boom console          (supervisor)
   page's URL, which the page passes on), **from 127.0.0.1 too**: without it, any web page open in
   the streamer's own browser could post to the console. The token's made once and kept in
   `config/console.local.json` (git-ignored), and the URLs with it printed at start. Plain HTTP:
-  fine on a home LAN; never port-forwarded (across the web: the tunnel below). Under WSL2 the LAN
+  fine on a home LAN; never port-forwarded (across the web: behind a tunnel, below). Under WSL2 the LAN
   reaches it only with mirrored networking or a port proxy on Windows.
 - **Muting**: the game starts with its sound and, if the settings say so, muted by a command once
   it's connected (not `--mute`, which takes the sound away for the whole run).
@@ -118,40 +118,31 @@ WAD, map); after that:
    on fixed seeds, `run-map` against `watch --headless`).
    Also: a game-only window for OBS (the watcher draws the game, the map and the log side by
    side; `record --view game` already has the game alone), switchable from the console.
-5. **Across the web** (below).
+5. **Across the web** (below): the hardening left to do.
 6. **Later**: an overlay page for OBS (her state, what Evil last said); Neuro's lifecycle actions
    (start, restart, next level) allowed or not from the console; a session's settings saved as
    named presets.
 
 ## Across the web: a trusted assistant running the stream remotely
 
-The user asked (2026-11-10) for the console to be reachable from anywhere, through Cloudflare.
-The console has to reach the game on the streamer's PC, so something on the PC has to dial out.
-Two ways:
+The user asked (2026-11-10) for the console to be reachable from anywhere. Settled the same day:
+nothing for it in the repo. Vedal already has tunnels for his other consoles; this one is added
+to them. What the console does to sit behind someone else's tunnel or proxy:
 
-| | Cloudflare Tunnel + Access (proposed) | A Worker (and Pages) relay |
-|---|---|---|
-| How | `cloudflared` on the PC dials out to Cloudflare and serves `localhost:7878` at `https://console.<domain>`; Access puts a login in front | the page on Pages; the console dials a WebSocket out to a Worker (a Durable Object), which relays the page's calls down it |
-| Our code | none for the page or API; the hardening below | a second codebase (JS/TS, or Rust as WASM) and the relay protocol |
-| Who gets in | Access: named people, by a one-time email code or Google; free for a few users; our token as a second lock | auth of our own to write |
-| When the PC's off | nothing to see | the page is up, saying so |
-| Setup by the user | a domain on Cloudflare, `cloudflared` installed, a tunnel and an Access policy (one time) | a Workers deploy, and the same domain |
+- It serves at a hostname's root or under a path of theirs (`https://.../doom/`): the page
+  calls the API by paths relative to itself, the server takes what's from `/api/` on as the
+  call, and `/doom` is redirected to `/doom/`.
+- `--bind 127.0.0.1:PORT` when the tunnel's on the same machine: the tunnel is the one way in.
+- The token still needed on every call, whatever login the tunnel has in front.
 
-The tunnel serves what's already built, and a login maintained by Cloudflare beats one of ours.
-The relay pays off only if the console has to live in the cloud (up while the PC's off, several
-streams in one place). Neither is needed for the LAN.
+Still to do for being reached from outside (on the LAN too, mostly):
 
-What exposure across the web needs in our code (on the LAN too, mostly):
-
-- In tunnel mode, bind 127.0.0.1 only: `cloudflared` is the one way in, and the LAN sees nothing.
 - No setting that reaches past the game: `wad` one of the known IWADs (not any path on the PC);
   the Neuro URL one of a list in the local config (otherwise the page could point the PC's
   WebSocket at any host on its network).
-- The Access login's identity checked (its signed `Cf-Access-Jwt-Assertion` header) and each
-  command logged with who sent it (`Cf-Access-Authenticated-User-Email`).
-- Wrong tokens slowed down (a delay that grows), the token changeable from the command line.
-- Maybe `evil-boom console --tunnel NAME`: `cloudflared tunnel run NAME` started beside it as a
-  child, one command for the streamer.
+- Each command logged with who sent it, when the tunnel's login says (Cloudflare Access's
+  `Cf-Access-Authenticated-User-Email`, for one).
+- Wrong tokens slowed down (a delay that grows); the token changeable from the command line.
 
 ## Keeping the branch mergeable
 
