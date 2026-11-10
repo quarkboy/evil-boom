@@ -366,7 +366,20 @@ impl Explorer {
                     self.log.push(format!("  (not compared) '{}' at ({:.0}, {:.0}), priority {}", o.label, o.goal.0, o.goal.1, o.priority()));
                 }
             }
-            let options: Vec<Objective> = ranked.into_iter().take(COMPARED).collect();
+            // (the exit first of all, but for something she needs that's nearer by the way than
+            // it is: those compared with it too, by their ways. A level she knows the whole of
+            // is the exit from its first tic, a pistol's walk through everything in it: E2M5,
+            // looked round beforehand, out of ammo and dead two doors on, where she got through
+            // it blind on what the exploring picked up)
+            let exit_first = ranked.first().is_some_and(|o| o.kind == Kind::Exit);
+            let before_exit = |o: &Objective| o.kind == Kind::Item && (o.needed || o.urgent);
+            let mut ranked = ranked.into_iter();
+            let mut options: Vec<Objective> = ranked.by_ref().take(COMPARED).collect();
+            if exit_first {
+                options.retain(|o| o.kind == Kind::Exit || before_exit(o));
+                let more = COMPARED + 1 - options.len().min(COMPARED);
+                options.extend(ranked.filter(before_exit).take(more));
+            }
             if options.is_empty() {
                 return false;
             }
@@ -393,7 +406,7 @@ impl Explorer {
                         let prio = obj.priority();
                         let weighed = hooks.weigh(obs, &obj);
                         routed.push((length * obj.kind.weight() * tries * weighed, obj, steps));
-                        if prio < 2 {
+                        if prio < 2 && !exit_first {
                             break; // (nothing further down the list comes first anyway)
                         }
                     }
@@ -404,6 +417,12 @@ impl Explorer {
                 continue;
             }
             routed.sort_by(|a, b| (a.1.priority(), a.0).partial_cmp(&(b.1.priority(), b.0)).unwrap_or(std::cmp::Ordering::Equal));
+            if routed[0].1.kind == Kind::Exit {
+                let out = routed[0].0;
+                if let Some(i) = (1..routed.len()).filter(|&i| before_exit(&routed[i].1) && routed[i].0 < out).min_by(|&a, &b| routed[a].0.total_cmp(&routed[b].0)) {
+                    routed.swap(0, i);
+                }
+            }
             self.journal.note(|| crate::decisions::Record {
                 options: routed.iter().map(|(weighed, o, _)| (o.label.clone(), *weighed)).collect(),
                 ..crate::decisions::Record::new(obs.tic, "objective", routed[0].1.label.clone())

@@ -1051,6 +1051,11 @@ impl Explorer {
         let travel = self.travel(obs);
         let mut weighed: Vec<(f64, Objective)> = options.into_iter().map(|o| (travel(o.goal) * o.kind.weight() * hooks.weigh(obs, &o), o)).collect();
         weighed.sort_by(|a, b| (a.1.priority(), a.0).partial_cmp(&(b.1.priority(), b.0)).unwrap_or(std::cmp::Ordering::Equal));
+        if self.debug_tics.is_some_and(|(a, b)| (a..=b).contains(&obs.tic)) {
+            for (d, o) in &weighed {
+                self.log.push(format!("  (ranked) '{}' weighed {d:.0}, priority {}, needed {}, urgent {}", o.label, o.priority(), o.needed, o.urgent));
+            }
+        }
         weighed.into_iter().map(|(_, o)| o).collect()
     }
 }

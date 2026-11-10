@@ -437,6 +437,7 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     let mut damage: BTreeMap<String, (i32, i32, Vec<i64>)> = BTreeMap::new();
     let mut last_hit: Option<String> = None;
     let (mut turn_flips, mut last_jitter): (Vec<i64>, i64) = (Vec::new(), i64::MIN / 2);
+    let (mut side_from, mut side_run): (Option<crate::geom::Point>, f64) = (None, 0.0);
     while ((e.tic - tic0) as f64) < until * TICRATE {
         if o.expert || o.secrets || o.stall_out {
             let now = progress(&e, agent.x());
@@ -562,6 +563,37 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
                     last_jitter = ob.tic;
                     p.combat_mut().count("jitters", 1.0);
                     p.explorer.log.push(format!("tic {}: (measuring) jitter: her turn back and forth four times in a third of a second, the last {was:.0} then {now:.0} degrees", ob.tic));
+                }
+            }
+            // (and her steps to the side in a fight, across the line to her target: each run one
+            // way, how far it went before she stopped or came back)
+            let pos = ob.pos();
+            let target = p.combat().target.and_then(|id| p.combat().visible.iter().find(|t| t.id == id)).map(|t| (t.x, t.y));
+            let across = match (legs, target, side_from) {
+                (crate::tactical::arbiter::Legs::Fight, Some(t), Some(from)) if crate::geom::dist(t, pos) > 1.0 => {
+                    let (dx, dy) = (t.0 - pos.0, t.1 - pos.1);
+                    Some(((pos.0 - from.0) * dy - (pos.1 - from.1) * dx) / dx.hypot(dy))
+                }
+                _ => None,
+            };
+            side_from = Some(pos);
+            match across {
+                Some(a) if a.abs() <= 0.5 => {}
+                Some(a) if side_run == 0.0 || a * side_run > 0.0 => side_run += a,
+                _ => {
+                    let far = side_run.abs();
+                    if far >= 16.0 {
+                        let doing = p.combat().last_move.map_or("no move".to_string(), |m| format!("{m:?}"));
+                        p.combat_mut().count("side runs", 1.0);
+                        p.combat_mut().count("side runs, units", far);
+                        for over in [96.0, 192.0] {
+                            if far > over {
+                                p.combat_mut().count(&format!("side runs over {over:.0}"), 1.0);
+                                p.combat_mut().count(&format!("side runs over {over:.0}, the move: {doing}"), 1.0);
+                            }
+                        }
+                    }
+                    side_run = across.unwrap_or(0.0);
                 }
             }
             if now.abs() > 18.5 {

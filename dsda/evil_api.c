@@ -149,7 +149,12 @@ EVIL_API int evil_init(int argc, char **argv)
  * monsters or none. Takes effect on the next tic. */
 EVIL_API void evil_new_game(int skill, int episode, int map, int no_monsters)
 {
-  nomonsters = clnomonsters = no_monsters != 0;  /* (a new game resets the first from the second) */
+  /* (a new game sets the first from the second, then, as the skill's modifiers are worked out,
+   * from the setting, or from the command line's flag while a demo's on: all four, or the level
+   * starts as the game was started) */
+  nomonsters = clnomonsters = no_monsters != 0;
+  dsda_UpdateFlag(dsda_arg_nomonsters, no_monsters != 0);
+  dsda_UpdateIntConfig(dsda_config_no_monsters, no_monsters != 0, false);
   exited = secret_exit = 0;
   if (evil_fixed_seed)
     rngseed = 0;  /* (the game adds the seed to what it had: from nothing, the same each time) */

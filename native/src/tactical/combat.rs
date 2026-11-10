@@ -1367,7 +1367,10 @@ impl Combat {
         let s = self
             .remaining()
             .into_iter()
-            .filter(|s| s.awake && obs.tic - s.tic < self.tune.engage.lost_tics && mon(s.name).attack != Attack::None && dist(s.pos(), pos) < self.tune.engage.range)
+            // (gone a moment, not a tic: one on the edge of a line of sight, in it and out of it
+            // tic about as she moves a unit, had her legs passed to and fro between this and the
+            // route for a thousand tics; E1M1 UV, a shotgun guy 1600 off through a gap)
+            .filter(|s| s.awake && obs.tic - s.tic >= self.tune.engage.lost_after && obs.tic - s.tic < self.tune.engage.lost_tics && mon(s.name).attack != Attack::None && dist(s.pos(), pos) < self.tune.engage.range)
             .filter(|s| !self.patience.given_up(s.id, obs.tic))
             // (not after one she can't take on: out of its sight's where she wants to be; E3M8,
             // the spider mastermind gone behind something, walked after with a pistol)

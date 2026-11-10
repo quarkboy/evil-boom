@@ -204,6 +204,8 @@ pub struct Engage {
     pub given_up_tics: i64,
     /// an awake monster out of sight this long is still fought (where it was)
     pub lost_tics: i64,
+    /// ...once it's been out of sight this long (tics: a moment, not one tic)
+    pub lost_after: i64,
     /// outmatched by an awake monster this near: keeping clear of it, not getting past
     pub keep_clear: f64,
     /// no shooting at anything further
@@ -253,6 +255,7 @@ impl Default for Engage {
             close_give_up: 20 * 35,
             given_up_tics: 30 * 35,
             lost_tics: 3 * 35,
+            lost_after: 9,
             keep_clear: 1024.0,
             range: 2048.0,
             close: 160.0,

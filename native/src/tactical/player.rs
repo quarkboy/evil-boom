@@ -218,8 +218,8 @@ pub struct Player {
     /// fallen back, waiting for them to come to her till this tic
     wait_until: i64,
     /// the things lying about that she's seen (items, and whatever else isn't a monster or a
-    /// missile), by id: seen when the floor they're on was in her view with them on it
-    things_seen: BTreeSet<i32>,
+    /// missile), by what and where (`what_where`): seen when the floor they're on was in her view with them on it
+    things_seen: BTreeSet<(&'static str, i32, i32)>,
     /// a decision model's say, if a run's asked for one (`crate::advisor`)
     advisor: Option<Advisor>,
     /// the tuning she plays by with no stance over it
@@ -280,6 +280,13 @@ impl Player {
         t.category != "Monster" && t.category != "Projectile" && monster(t.name).is_none() && super::bestiary::missile(t.name).is_none()
     }
 
+    /// A thing lying about as she remembers it: what it is and where. Not the game's number for
+    /// it: the level begun again numbers what's dropped and fired afresh, and a level looked
+    /// round with no monsters in it numbers everything otherwise.
+    fn what_where(t: &Thing) -> (&'static str, i32, i32) {
+        (t.name, t.x.round() as i32, t.y.round() as i32)
+    }
+
     /// The things lying about that have come into her view: on a floor in view this tic (her
     /// eyes': the explorer's, `Knowledge::seen_tic`). Once seen it's known
     /// to be there till she sees it isn't. What a monster drops dying round a corner, she finds
@@ -287,12 +294,12 @@ impl Player {
     fn notice_things(&mut self, obs: &Observation) {
         let (k, nav) = (&self.explorer.knowledge, &self.explorer.nav);
         for t in obs.things.iter().flatten().filter(|t| Self::lies_about(t)) {
-            if self.things_seen.contains(&t.id) {
+            if self.things_seen.contains(&Self::what_where(t)) {
                 continue;
             }
             let in_view = nav.poly_at((t.x, t.y)).is_some_and(|p| k.seen_tic.get(&nav.sector_of_poly(p)).is_some_and(|&tic| tic == obs.tic));
             if in_view {
-                self.things_seen.insert(t.id);
+                self.things_seen.insert(Self::what_where(t));
             }
         }
     }
@@ -323,7 +330,7 @@ impl Player {
                 } else if super::bestiary::missile(t.name).is_some() {
                     c.missiles_seen.contains(&t.id)
                 } else {
-                    !Self::lies_about(t) || self.things_seen.contains(&t.id)
+                    !Self::lies_about(t) || self.things_seen.contains(&Self::what_where(t))
                 }
             });
         }
