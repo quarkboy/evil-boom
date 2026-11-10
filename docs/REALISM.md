@@ -218,4 +218,5 @@ time. To act on once the watching's done, not before.
   of the wide open exposed place with enemies all round, and fight her way into one of the side
   rooms, where she at least has a wall at her back.
 - **E2M3 UV, seed 574408264** (dies at 55 s). She chose to fight a baron with a pistol rather
-  than try the risky but necessary run past it.
+  than try the risky but necessary run past it. A demon helped trap her too, but it was mostly in
+  view (the user's, pretty sure).
