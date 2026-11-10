@@ -91,6 +91,8 @@ pub struct Seen {
     /// not where she last saw it, when she looked there again: she doesn't know where it is
     /// (till she sees it again)
     pub lost: bool,
+    /// how it was moving when she last saw it (a tic)
+    pub going: Point,
 }
 
 impl Seen {
@@ -562,7 +564,7 @@ impl Combat {
             }
             let seen = self.known.entry(t.id).or_insert_with(|| {
                 self.log.push(format!("tic {}: saw {} {} at ({:.0}, {:.0})", obs.tic, t.name, t.id, t.x, t.y));
-                Seen { id: t.id, name: t.name, x: t.x, y: t.y, z: t.z, tic: obs.tic, first: obs.tic, x0: t.x, y0: t.y, angle0: t.angle, awake: false, lost: false }
+                Seen { id: t.id, name: t.name, x: t.x, y: t.y, z: t.z, tic: obs.tic, first: obs.tic, x0: t.x, y0: t.y, angle0: t.angle, awake: false, lost: false, going: (0.0, 0.0) }
             });
             seen.x = t.x;
             seen.y = t.y;
@@ -610,6 +612,12 @@ impl Combat {
         }
         for t in &self.visible {
             self.last_seen.insert(t.id, t.clone());
+        }
+        let going: Vec<(i32, Point)> = self.visible.iter().map(|t| (t.id, self.moving(t))).collect();
+        for (id, v) in going {
+            if let Some(s) = self.known.get_mut(&id) {
+                s.going = v;
+            }
         }
         // (one not where she last saw it, the place in her sight again and a while gone by: she
         // doesn't know where it is)
@@ -896,6 +904,13 @@ impl Combat {
         (a.hit || !hit_only).then(|| a.ways[0])
     }
 
+    /// Where a monster out of her sight is, as she'd reckon it: where she last saw it, and on
+    /// the way it was going for as long as `senses.reckon_tics` allows.
+    pub(super) fn reckoned(&self, s: &Seen, tic: i64) -> Point {
+        let dt = (tic - s.tic).clamp(0, self.tune.senses.reckon_tics) as f64;
+        (s.x + s.going.0 * dt, s.y + s.going.1 * dt)
+    }
+
     /// The monsters she can't see now but has in mind: seen awake within `senses.memory_tics`,
     /// not known dead, not found gone from where she left them; each as she last saw it, where
     /// she last saw it, doing nothing she knows of.
@@ -904,8 +919,8 @@ impl Combat {
             .values()
             .filter(|s| s.awake && !s.lost && !self.dead.contains(&s.id) && obs.tic - s.tic <= self.tune.senses.memory_tics && mon(s.name).attack != Attack::None)
             .filter(|s| !self.visible.iter().any(|t| t.id == s.id))
-            .filter_map(|s| self.last_seen.get(&s.id))
-            .map(|t| Thing { vx: 0.0, vy: 0.0, vz: 0.0, attack: -1, ..t.clone() })
+            .filter_map(|s| self.last_seen.get(&s.id).map(|t| (self.reckoned(s, obs.tic), t)))
+            .map(|(at, t)| Thing { x: at.0, y: at.1, vx: 0.0, vy: 0.0, vz: 0.0, attack: -1, ..t.clone() })
             .collect()
     }
 
@@ -1037,7 +1052,9 @@ impl Combat {
             if let Some((aim, _)) = self.rocket_held(obs) {
                 return Some(Decision { kind: Move::RocketHeld, yields: true, pressed: false, aim: Some(aim), fire: false, weapon: 0, moving: None, why: "holding a rocket's way till it's out".into() });
             }
-            return self.no_target(obs, busy, errand);
+            let d = self.no_target(obs, busy, errand);
+            self.last_move = d.as_ref().map(|d| d.kind);
+            return d;
         }
         let (s, fire, weapon) = self.size_up(obs, busy, errand, missiles, target);
         let mut act = tree::engage(self, obs, &s);
@@ -1217,7 +1234,8 @@ impl Combat {
             .filter(|s| !self.too_much(obs, &[s.name], self.tune.guns.outmatched))
             .max_by(|a, b| mon(a.name).threat.total_cmp(&mon(b.name).threat))?;
         let mut ghost = self.last_seen.get(&s.id)?.clone();
-        (ghost.x, ghost.y, ghost.z, ghost.vx, ghost.vy) = (s.x, s.y, s.z, 0.0, 0.0);
+        let at = self.reckoned(&s, obs.tic);
+        (ghost.x, ghost.y, ghost.z, ghost.vx, ghost.vy) = (at.0, at.1, s.z, 0.0, 0.0);
         let gun = self.preferred_gun(obs, &ghost);
         let moving = self.steer(obs, Some(&ghost), &gun);
         let why = format!("lost sight of {}: keeping at it", s.name);
@@ -1225,7 +1243,7 @@ impl Combat {
             self.log.push(format!("tic {}: {why}", obs.tic));
             self.mode = why.clone();
         }
-        Some(Decision { kind: Move::LostSight, yields: false, pressed: false, aim: Some(heading(pos, s.pos())), fire: false, weapon: 0, moving, why })
+        Some(Decision { kind: Move::LostSight, yields: false, pressed: false, aim: Some(heading(pos, at)), fire: false, weapon: 0, moving, why })
     }
 
     /// The route's controls this tic (the way it walks her, for what's in her way).
