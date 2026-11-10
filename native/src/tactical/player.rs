@@ -290,6 +290,12 @@ impl Player {
         let mut seen = obs.clone();
         if let Some(things) = &mut seen.things {
             let c = &self.fight.combat;
+            // (a monster in her sight as her senses have it: its health her reckoning)
+            for t in things.iter_mut() {
+                if let Some(v) = c.visible.iter().find(|v| v.id == t.id) {
+                    *t = v.clone();
+                }
+            }
             things.retain(|t| {
                 if monster(t.name).is_some() {
                     c.visible.iter().any(|v| v.id == t.id)

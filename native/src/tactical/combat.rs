@@ -236,6 +236,9 @@ pub struct Combat {
     /// it was her target, at what such a shot does landing at that range (never its health)
     put_in: BTreeMap<i32, f64>,
     health_was: BTreeMap<i32, i32>,
+    /// what she's seen each monster lose (hits landing in her sight, hers or another's), by id:
+    /// its health as she reckons it is its kind's less this
+    seen_hurt: BTreeMap<i32, i32>,
     /// each sector's ceiling last tic, and when it was last seen coming down
     ceilings: Vec<f64>,
     /// each sector's floor last tic, and when it was last seen coming up
@@ -344,6 +347,7 @@ impl Combat {
             ammo_was: Vec::new(),
             put_in: BTreeMap::new(),
             health_was: BTreeMap::new(),
+            seen_hurt: BTreeMap::new(),
             ceilings: Vec::new(),
             floors: Vec::new(),
             floor_up: Vec::new(),
@@ -364,6 +368,7 @@ impl Combat {
         self.dead.clear();
         self.last_seen.clear();
         self.missiles_seen.clear();
+        self.seen_hurt.clear();
         self.visible.clear();
         self.now.nothing_in_sight();
         self.tracks.clear();
@@ -424,6 +429,10 @@ impl Combat {
         let mut now: BTreeMap<i32, i32> = BTreeMap::new();
         for t in obs.things.iter().flatten().filter(|t| monster(t.name).is_some()) {
             if let Some(&h) = self.health_was.get(&t.id) {
+                // (seen: in her sight the tic before, the hit landing in front of her)
+                if t.health < h && self.visible.iter().any(|v| v.id == t.id) {
+                    *self.seen_hurt.entry(t.id).or_insert(0) += h - t.health.max(0);
+                }
                 if t.health < h {
                     self.dealt += f64::from(h - t.health.max(0));
                 }
@@ -522,7 +531,9 @@ impl Combat {
             seen.z = t.z;
             seen.tic = obs.tic;
             seen.lost = false;
-            self.dead.remove(&t.id); // (raised again: an arch-vile's work)
+            if self.dead.remove(&t.id) {
+                self.seen_hurt.remove(&t.id); // (raised again, whole: an arch-vile's work)
+            }
             seen.awake = seen.awake
                 || dist(seen.pos(), (seen.x0, seen.y0)) > self.tune.senses.wake_distance
                 || t.vx.hypot(t.vy) > self.tune.senses.wake_speed
@@ -536,6 +547,14 @@ impl Combat {
                 track.pop_front();
             }
             self.visible.push(t.clone());
+        }
+        // (each as she can know it: its health her reckoning, its kind's less what she's seen
+        // it lose, never the game's own number)
+        for t in &mut self.visible {
+            // (one going down she sees going down)
+            if t.health > 0 {
+                t.health = (mon(t.name).health - self.seen_hurt.get(&t.id).copied().unwrap_or(0)).max(1);
+            }
         }
         for t in &self.visible {
             self.last_seen.insert(t.id, t.clone());
