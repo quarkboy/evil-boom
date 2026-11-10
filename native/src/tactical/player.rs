@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use super::bestiary::{ammo_item, armor_item, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
+use super::bestiary::{ammo_item, armor_item, carries, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
 use super::arbiter::{self, Legs};
 use super::combat::{eye, eye_of, segment_point_distance, spread, Combat, Move, Seen};
 use super::tuning::Tuning;
@@ -484,6 +484,7 @@ impl Player {
 
     /// The level begun again with no death to note (a look round it first, then the level).
     pub fn start_over(&mut self) {
+        self.forget_dropped();
         self.explorer.restart();
         self.fight.combat.restart();
         self.retreat = None;
@@ -506,12 +507,20 @@ impl Player {
             self.explorer.log.push(format!("  [fight] died at ({:.0}, {:.0}) going for: {} ({})", d.at.0, d.at.1, d.label, d.why.label()));
             self.fight.deaths.push(d);
         }
+        self.forget_dropped();
         self.explorer.restart();
         self.fight.combat.restart();
         self.retreat = None;
         self.fight.combat.hold_fire = false;
         self.trail.clear();
         self.fallen_for.clear();
+    }
+
+    /// The level begun again: of the things she remembers lying about, only what lies there at
+    /// its start (what the map puts there). What a monster dropped dying isn't there now.
+    fn forget_dropped(&mut self) {
+        let map = &self.explorer.nav.map;
+        self.things_seen.retain(|&(_, x, y)| map.things.iter().any(|t| t.x.round() as i32 == x && t.y.round() as i32 == y));
     }
 
     /// What she does this tic: whoever decides it (`decide`), and then her hand: one hand turns
@@ -1509,7 +1518,9 @@ impl Fight {
     fn gun_worth(&self, obs: &Observation, name: &str) -> f64 {
         let w = Self::gun(obs, name);
         let now = self.combat.now.firepower;
-        let hp: f64 = self.combat.remaining().iter().map(|s| mhealth(s.name)).sum();
+        // (what she's met this life: with a level known beforehand that'd be everything in it,
+        // and every gun in it worth any walk: MAP13's BFG 4400 off the first thing she did)
+        let hp: f64 = self.combat.remaining().iter().filter(|s| !s.foreknown).map(|s| mhealth(s.name)).sum();
         self.tune.errands.gun_worth + (hp / now - hp / w.dps().max(now)).max(0.0)
     }
 
@@ -1521,8 +1532,18 @@ impl Fight {
         // she goes for, walked for through a yard of imps and demons shooting on the way, dead
         // in 9 seconds, E2M3; MAP04's super shotgun four doors off, into the middle of the
         // shotgun guys she stands and fights from the start when she doesn't know of it)
+        // (near by the way there, where it's what her route's for: E3M3's shotgun, 640 off and
+        // 1570 by the way round to the switch that lowers it, gone for through thirteen at
+        // once with the pistol, dead in 37 seconds)
         let reach = self.tune.errands.press_reach;
-        self.errand_any(x, obs).filter(|(_, at)| x.press_on || dist(*at, obs.pos()) < reach)
+        let far = |at: Point| {
+            let straight = dist(at, obs.pos());
+            match (&x.current, &x.follower) {
+                (Some(c), Some(f)) if dist(c.goal, at) < 1.0 => straight.max(f.way_left(obs.pos())),
+                _ => straight,
+            }
+        };
+        self.errand_any(x, obs).filter(|(_, at)| x.press_on || far(*at) < reach)
     }
 
     fn errand_any(&self, x: &Explorer, obs: &Observation) -> Option<(String, Point)> {
@@ -1601,12 +1622,38 @@ impl Fight {
         // map)
         let short = self.combat.now.short_of_ammo;
         let mut out = Vec::new();
+        // (a better gun than she has that something she knows of carries: killing it is the gun,
+        // and nearer than one lying about, the one to go for. The user's: with a pistol, a
+        // shotgun guy by the start, and the level's shotgun 1900 off the first thing she did)
+        let mut carried: Vec<(&'static str, Seen)> = Vec::new();
+        for s in self.combat.remaining() {
+            let Some(gun) = carries(s.name).filter(|g| weapon_item(g).is_some() && self.better_gun(obs, g)) else { continue };
+            if !x.nav.poly_at(s.pos()).is_some_and(|p| known.contains(&p) && reach.contains(&p)) {
+                continue;
+            }
+            match carried.iter_mut().find(|(g, _)| *g == gun) {
+                Some((_, nearest)) if dist(nearest.pos(), pos) <= dist(s.pos(), pos) => {}
+                Some((_, nearest)) => *nearest = s,
+                None => carried.push((gun, s)),
+            }
+        }
+        self.combat.wanted_dead = carried.iter().map(|(_, s)| s.id).collect();
+        for (gun, s) in &carried {
+            let mut o = Objective::new(Kind::Hunt, x.stand_spot_for(s.pos(), reach), format!("hunt {} {} (for its {gun})", s.name, s.id));
+            o.thing = Some(s.id);
+            // (as a better gun lying about is: first, and for all that's by it)
+            o.needed = true;
+            o.urgent = true;
+            out.push(o);
+        }
         for t in obs.things.iter().flatten() {
             let Some(p) = x.nav.poly_at((t.x, t.y)) else { continue };
             if !known.contains(&p) || !reach.contains(&p) {
                 continue;
             }
             let d = dist((t.x, t.y), pos);
+            // (the same gun carried by something nearer: this one in its turn)
+            let carried_nearer = carried.iter().any(|(gun, s)| *gun == t.name && dist(s.pos(), pos) < d);
             // how much it's needed (0: not at all, 1: badly)
             let mut need = 0.0;
             let invulnerability = t.name == "InvulnerabilitySphere" && self.needs_invulnerability(obs) && self.clear_way_to(obs, (t.x, t.y));
@@ -1648,6 +1695,7 @@ impl Fight {
                 // with it: not worth dropping everything for. MAP20, a rocket launcher by the
                 // cyberdemon, no ammo left, gone for again and again under its rockets for the
                 // two it holds)
+            } else if carried_nearer {
             } else if weapon_item(t.name).is_some() && need > 0.0 && self.better_gun(obs, t.name) {
                 why = " (a better gun)";
             } else if short && (weapon_item(t.name).is_some() || ammo_item(t.name).is_some()) {
@@ -1665,7 +1713,7 @@ impl Fight {
             let mut o = Objective::new(Kind::Item, goal, format!("pick up {}{why}", t.name));
             o.thing = Some(t.id);
             o.urgent = !why.is_empty();
-            o.needed = need >= self.tune.errands.needed;
+            o.needed = need >= self.tune.errands.needed && !carried_nearer;
             o.worth = if why.is_empty() { None } else { worth };
             out.push(o);
         }

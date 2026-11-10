@@ -70,6 +70,17 @@ pub fn claw_max(name: &str) -> f64 {
     }
 }
 
+/// What a monster leaves where it dies (info.c's `droppeditem`: the zombies and the SS drop
+/// what they carry, nothing else drops anything).
+pub fn carries(name: &str) -> Option<&'static str> {
+    match name {
+        "Zombieman" | "WolfensteinSS" => Some("Clip"),
+        "ShotgunGuy" => Some("Shotgun"),
+        "ChaingunGuy" => Some("Chaingun"),
+        _ => None,
+    }
+}
+
 /// A hitscan shooter's wind-up: the tics from the first frame of its attack (turning to face
 /// her, as she'd see it) to its first shot (info.c: the spider mastermind's 20 tics of
 /// `A_FaceTarget`, then a burst every 4 for as long as it sees her; the zombies' 10).

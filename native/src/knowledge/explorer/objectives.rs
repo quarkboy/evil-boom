@@ -6,7 +6,7 @@ use crate::knowledge::model::Heard;
 use crate::motor::Observation;
 use crate::movers::cycles_back;
 use crate::nav::can_cross;
-use crate::navigator::{add_height, TeleEdge, TriggerLine, MAX_STEP, PLAYER_HEIGHT};
+use crate::navigator::{add_height, TeleEdge, TriggerLine, EXIT_FLOOR, MAX_STEP, PLAYER_HEIGHT};
 use crate::specials::{classify_line, Category, Key, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -168,6 +168,14 @@ impl Explorer {
                 if let Some(t) = by_line.get(&li).filter(|t| !t.activators.is_disjoint(&reach) && t.info.lock.satisfied(keys)) {
                     let mut o = Objective::new(Kind::Exit, nav.activation_point(t, pos, &reach), format!("exit (line {li})"));
                     o.trigger = Some((*t).clone());
+                    out.push(o);
+                }
+            }
+            // (a floor she's had end the level under her: stood on again)
+            for &sec in &k.exit_floors {
+                if let Some(t) = nav.triggers.iter().find(|t| t.line == EXIT_FLOOR - sec as i64 && !t.activators.is_disjoint(&reach)) {
+                    let mut o = Objective::new(Kind::Exit, nav.activation_point(t, pos, &reach), format!("exit (the floor of sector {sec})"));
+                    o.trigger = Some(t.clone());
                     out.push(o);
                 }
             }

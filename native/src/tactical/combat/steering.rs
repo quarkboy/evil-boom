@@ -243,6 +243,14 @@ impl Combat {
         // hit, kept her by it till it hit)
         let health = self.now.health;
         let errand_way = self.toward.filter(|&to| dist(to, pos) > 1.0 && !them.iter().any(|m| claw_max(m.name) >= health && dist(to, (m.x, m.y)) < CLAW_REACH));
+        // (where she took this target on: her steps to the side kept about there. Afresh for
+        // another target, or after a second of anything else)
+        let from = target.filter(|_| shooting && self.tune.steer.side_span > 0.0).map(|t| {
+            let from = self.steer_from.filter(|&(id, _, tic)| id == t.id && obs.tic - tic <= 35).map_or(pos, |f| f.1);
+            self.steer_from = Some((t.id, from, obs.tic));
+            let far = dist((t.x, t.y), from).max(1.0);
+            (from, ((t.x - from.0) / far, (t.y - from.1) / far))
+        });
         let mut best: Option<(f64, Point)> = None;
         for i in 0..WAYS {
             let a = 2.0 * std::f64::consts::PI * i as f64 / WAYS as f64;
@@ -308,6 +316,14 @@ impl Combat {
             }
             if let Some(k) = self.steer_way {
                 s += self.tune.steer.w_keep * (d.0 * k.0 + d.1 * k.1);
+            }
+            if let Some((from, to)) = from {
+                let aside = |p: Point| ((p.0 - from.0) * to.1 - (p.1 - from.1) * to.0).abs();
+                // (only a way that takes her further out: back in costs nothing)
+                let over = aside(step) - self.tune.steer.side_span;
+                if over > 0.0 && aside(step) > aside(pos) {
+                    s -= self.tune.steer.w_span * over / self.tune.steer.look;
+                }
             }
             // (onto ground she's never been on: what's there she doesn't know, and wakes)
             if self.tune.steer.w_new_ground > 0.0 && (self.off_known(step) || self.off_known(ahead)) {

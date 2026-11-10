@@ -362,6 +362,7 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     let held = std::mem::replace(&mut agent.x_mut().exit_last, true); // (everything first, then out)
     let mut c: Option<crate::motor::Controls> = None;
     let (mut best, mut best_tic, mut lives) = (0usize, e.tic, 0);
+    let mut on_ending = false;
     while ((e.tic - start) as f64) < SCOUT_SECONDS * TICRATE && !e.exited() {
         if e.finished() && e.dead() {
             lives += 1;
@@ -374,10 +375,19 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
             continue;
         }
         let ob = e.observe();
+        // (the game's ending floor ends the level by hurting her: there, she can be hurt)
+        let ending = ending_floor(agent, ob.pos());
+        if ending.is_some() != on_ending {
+            on_ending = ending.is_some();
+            e.set_god(!on_ending);
+        }
         let ctl = agent.act(&ob, c.as_ref());
         e.step(&ctl);
         e.take_hits();
         c = Some(ctl);
+        if let Some(sec) = ending.filter(|_| e.exited()) {
+            agent.x_mut().knowledge.exit_floors.insert(sec);
+        }
         let k = &agent.x().knowledge;
         let known = k.mapped.len() + k.visited.len() + k.learned.len() + e.tally()[1].0.max(0) as usize;
         if known > best {
@@ -389,8 +399,11 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     let x = agent.x_mut();
     x.exit_last = held;
     x.knowledge.immune = false;
+    x.left_alive();
     let summary = format!("--- the level played through beforehand (nothing able to hurt her): {}", x.knowledge.summary());
-    x.log.truncate(log_from);
+    if std::env::var_os("EVIL_DEBUG_SCOUT").is_none() {
+        x.log.truncate(log_from);
+    }
     x.log.push(summary);
     // (the clock goes on: what she knows is dated by it)
     e.set_god(!mortal);
@@ -406,6 +419,14 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     e.tic
 }
 
+/// The sector she's in, if its floor is the game's ending one (special 11: it hurts her down
+/// to a tenth of her health and that ends the level; E1M8's, behind the barons).
+fn ending_floor(agent: &Agent, at: crate::geom::Point) -> Option<usize> {
+    let nav = &agent.x().knowledge.nav;
+    let sec = nav.sector_of_poly(nav.poly_at(at)?);
+    (nav.map.sectors[sec].special == 11).then_some(sec)
+}
+
 /// A map played in the game already going if there is one (see `setup`).
 pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engine>) -> Result<MapRun, String> {
     let Setup { iwad, w, m, map_name, skill, nav, mut e, mut agent, mut deaths, mut c, mut obs, mut rec, secrets_short } =
@@ -413,8 +434,21 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     // (the level looked round first: the run's own time is from after that)
     let mut tic0 = 0;
     if o.known {
-        tic0 = scout(&mut e, &mut agent, o.mortal);
-        (c, obs, deaths) = (None, None, 0);
+        // (for measuring what each half of knowing a level is worth, EVIL_KNOWN_ONLY: "map",
+        // the level without its monsters; "monsters", them without the level)
+        let only = std::env::var("EVIL_KNOWN_ONLY").ok();
+        if only.as_deref() == Some("monsters") {
+            let first = e.observe();
+            if let Some(p) = agent.player_mut() {
+                p.know_monsters(&first);
+            }
+        } else {
+            tic0 = scout(&mut e, &mut agent, o.mortal);
+            (c, obs, deaths) = (None, None, 0);
+            if let Some(p) = agent.player_mut().filter(|_| only.as_deref() == Some("map")) {
+                p.combat_mut().forget_monsters();
+            }
+        }
     }
     let t0 = Instant::now();
     let mut idle_since: Option<i64> = None;

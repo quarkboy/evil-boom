@@ -12,6 +12,8 @@ use std::sync::Arc;
 
 /// objectives routed and compared by the way there, each pick
 const COMPARED: usize = 4;
+/// pickups nearer than a first-priority objective that are routed to see if they come first
+const ON_THE_WAY: usize = 4;
 
 /// a "close, wait 30s, open" door's wait, and a little (tics)
 const REOPEN_TICS: i64 = 32 * 35;
@@ -373,12 +375,17 @@ impl Explorer {
             // it blind on what the exploring picked up)
             let exit_first = ranked.first().is_some_and(|o| o.kind == Kind::Exit);
             let before_exit = |o: &Objective| o.kind == Kind::Item && (o.needed || o.urgent);
-            let mut ranked = ranked.into_iter();
-            let mut options: Vec<Objective> = ranked.by_ref().take(COMPARED).collect();
+            let mut rest = ranked;
+            let mut options: Vec<Objective> = rest.drain(..COMPARED.min(rest.len())).collect();
             if exit_first {
-                options.retain(|o| o.kind == Kind::Exit || before_exit(o));
+                let (keep, put_back): (Vec<Objective>, Vec<Objective>) = options.into_iter().partition(|o| o.kind == Kind::Exit || before_exit(o));
+                options = keep;
+                rest.splice(0..0, put_back);
                 let more = COMPARED + 1 - options.len().min(COMPARED);
-                options.extend(ranked.filter(before_exit).take(more));
+                for _ in 0..more {
+                    let Some(i) = rest.iter().position(before_exit) else { break };
+                    options.push(rest.remove(i));
+                }
             }
             if options.is_empty() {
                 return false;
@@ -398,6 +405,7 @@ impl Explorer {
                         if let Some(w) = obj.worth.filter(|&w| length > w) {
                             self.log.push(format!("tic {}: '{}' not worth {length:.0} to get to (at most {w:.0}): in its turn", obs.tic, obj.label));
                             obj.urgent = false;
+                            obj.needed = false;
                             obj.worth = None;
                             obj.label = obj.label.trim_end_matches(WHILE_OPEN).trim_end_matches(" right away").to_string();
                         }
@@ -417,9 +425,24 @@ impl Explorer {
                 continue;
             }
             routed.sort_by(|a, b| (a.1.priority(), a.0).partial_cmp(&(b.1.priority(), b.0)).unwrap_or(std::cmp::Ordering::Equal));
-            if routed[0].1.kind == Kind::Exit {
-                let out = routed[0].0;
-                if let Some(i) = (1..routed.len()).filter(|&i| before_exit(&routed[i].1) && routed[i].0 < out).min_by(|&a, &b| routed[a].0.total_cmp(&routed[b].0)) {
+            // (and on the way to anything that comes first for what it is (the exit, a gun, a
+            // keyed door), what she'd pick up that's nearer by the way than it: had first. Blind,
+            // she has what lies about by the time she knows of anything far; knowing the level,
+            // E3M3's shotgun 1900 off was the first thing she did, the clips by the start left,
+            // dead in 37 seconds with the pistol empty. Not before something urgent)
+            if routed[0].1.priority() < 2 && !routed[0].1.urgent {
+                let far = routed[0].0;
+                let pos = obs.pos();
+                let mut near: Vec<usize> = (0..rest.len()).filter(|&i| rest[i].kind == Kind::Item && dist(rest[i].goal, pos) < far).collect();
+                near.sort_by(|&a, &b| dist(rest[a].goal, pos).total_cmp(&dist(rest[b].goal, pos)));
+                for i in near.into_iter().take(ON_THE_WAY) {
+                    let obj = rest[i].clone();
+                    if let Some(steps) = self.route_to(&obj, obs).filter(|st| !st.is_empty()) {
+                        let weighed = route_length(&steps) * obj.kind.weight() * hooks.weigh(obs, &obj);
+                        routed.push((weighed, obj, steps));
+                    }
+                }
+                if let Some(i) = (1..routed.len()).filter(|&i| routed[i].1.kind == Kind::Item && routed[i].0 < far).min_by(|&a, &b| routed[a].0.total_cmp(&routed[b].0)) {
                     routed.swap(0, i);
                 }
             }

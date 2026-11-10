@@ -3,7 +3,7 @@
 use super::{needs_key, Fired, How, Knowledge, BUSY_TICS, SHOT_RANGE, SURE_TICS, TAKE_TICS};
 use crate::motor::{Controls, Observation};
 use crate::nav::Heights;
-use crate::navigator::{States, TriggerLine, SHOT_HEIGHT};
+use crate::navigator::{States, TriggerLine, EXIT_FLOOR, SHOT_HEIGHT};
 use crate::specials::{Category, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -46,6 +46,15 @@ impl Knowledge {
                     self.events.push(format!("tic {tic}: learned line {} ({}) moves sector {s}", f.line, t.info.description));
                 }
                 return;
+            }
+        }
+        // (nothing she set off moves it this way: what the last of a kind dying moves, if this
+        // is that. E1M8's walls down round the barons' yard: a level she's been through, all of
+        // it seen, the way on from the yard not known for one without this)
+        for ti in 0..self.nav.triggers.len() {
+            let t = self.trigger(ti).clone();
+            if t.line < 0 && t.line > EXIT_FLOOR && t.effect(s).is_some() && self.heads_for(&t, s, was, now) && self.learned.entry(ti).or_default().insert(s) {
+                self.events.push(format!("tic {tic}: learned that to {} moves sector {s}", t.info.description));
             }
         }
     }

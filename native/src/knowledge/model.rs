@@ -165,6 +165,9 @@ pub struct Knowledge {
     /// nothing can hurt her for now (a time through the level beforehand): a floor is felt as
     /// it would have hurt, not as harmless for her having stood on it unhurt
     pub immune: bool,
+    /// sectors whose floor she's had end the level under her (the game's ending floor: it
+    /// hurts her down to a tenth of her health, and that's the level over): an exit she knows
+    pub exit_floors: BTreeSet<usize>,
     /// she can tell a switch or a door only by its look; else every line with an action is
     /// known on sight (peeking at the map)
     pub perceive: bool,
@@ -323,6 +326,7 @@ impl Knowledge {
             width: VIEW_WIDTH,
             mortal,
             immune: false,
+            exit_floors: BTreeSet::new(),
             perceive,
             mapped: BTreeSet::new(),
             sectors: BTreeSet::new(),
@@ -712,7 +716,13 @@ impl Knowledge {
         }
         let mut out = Vec::new();
         for t in &self.nav.triggers {
-            let Some(li) = t.linedef() else { continue };
+            let Some(li) = t.linedef() else {
+                // (what the last of a kind dying moves, seen to)
+                if let Some(l) = self.learned.get(&t.id).filter(|l| !l.is_empty()) {
+                    out.push((t.clone(), l.clone()));
+                }
+                continue;
+            };
             if let Some(l) = self.learned.get(&t.id).filter(|l| !l.is_empty()) {
                 out.push((t.clone(), l.clone()));
             } else if self.mapped.contains(&li) {

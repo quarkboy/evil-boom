@@ -341,3 +341,57 @@ Each line: the change, its score run for run against the build before on the sam
   reproduced: the runs they were seen in play differently now, and nothing in the rules was
   found to change without one to trace. **D4** (the blur sphere): she never goes for one; she
   can still walk over one, which is the route planner's to avoid.
+- **C2** a walker tracked by its steps (`senses.track_steps`): +0.0022 ± 0.0030 (958 / 42 /
+  31); 0.398. Kept.
+- **A4** a monster out of sight under 9 tics isn't fought as lost (`engage.lost_after`;
+  E1M1's flicker at a window, a level's ammo into the spot it left): +0.0112 ± 0.0083 (185 /
+  286 / 259; exits 328 -> 344); 0.409. Kept.
+- **What she needs before a farther exit** (from the known-level work, below): something
+  needed or urgent (a new gun, ammo when out, health when hurt, armor) whose way is shorter
+  than the exit's is had first. Blind: +0.0005 ± 0.0005 (1068 of 1088 the same).
+- **An errand pressed on to through a fight only when near** (`errands.press_reach` 768; from
+  the known-level work): blind -0.0063 ± 0.0056 (519 / 183 / 186); 0.403. Kept for what it
+  does to a level she knows; on a blind one it's nothing either way.
+- **B4** side-steps kept near where she took the target on (`steer.side_span` 128, a step
+  farther out than that costs `steer.w_span`), an errand's reach judged by the way to it and
+  not the straight line, and what a boss level teaches (below): +0.0130 ± 0.0085 (exits 334
+  -> 347, unseen damage a minute 3.31 -> 2.99); 0.416. Kept. Spans of 64 and 96 scored less.
+- **A gun a monster carries** (game knowledge, as a player has it: a shotgun guy drops a
+  shotgun, a chaingunner a chaingun): the nearest such monster she knows of is hunted for a
+  gun she hasn't got, and a placed gun of the same kind farther off isn't gone for first.
+  With **a pickup on the way** (up to four nearest items whose way is shorter than the
+  winning objective's are had first) and **a gun's worth by the monsters met this life**
+  (it was every monster known, which on a known level is all of them; a gun not worth its
+  way is no longer "needed"): blind -0.0035 ± 0.0059 (651 / 110 / 128), 0.412; known
+  +0.0292 ± 0.0099, 0.352 -> 0.381. Kept. `errands.gun_worth` 3 s for 10: nothing either
+  way (known -0.003, blind -0.001); left at 10.
+- What a monster drops is forgotten between lives (only what the map placed is remembered
+  by where it is).
+- **A3** (the wait at a lift), **A5** (the edge of her view), **B2, B3**: not done yet.
+
+## A level she knows, and lives (the evaluation asked for 2026-11-10)
+
+Four categories, the same 1088 runs each: blind / 1 life (the score), known / 1 (`score
+--known`: a pass through the real level beforehand with nothing able to hurt her, then the
+run knowing the map and where every monster starts), blind / 8 lives and known / 8 (`--lives
+8`; what a life learned is kept).
+
+| | blind / 1 | known / 1 | blind / 8 | known / 8 |
+|---|---|---|---|---|
+| at the first measuring | 0.399 | 0.328 | 0.534 | 0.503 |
+| now | 0.412 | 0.381 | to be run again | to be run again |
+
+Out by life, blind / 8, at the first measuring: 0.303, 0.366, 0.394, 0.413, 0.437, 0.449,
+0.459, 0.469 (known: 0.244, 0.313, 0.358, 0.379, 0.400, 0.418, 0.429, 0.442).
+
+Knowing the level is still worth less than not knowing it. What was traced: she dies sooner
+(a median 67 s for 132 s), going gun to gun across the level straight off (a BFG 4300 units
+away as the first thing done). On the eight worst levels, four seeds: the map alone known 15
+exits, the monsters alone 24, neither 26, both 10-12: it's the map that hurts, by the
+straight lines it lets her take. Fixed since: an errand's reach by its way; a gun's worth by
+what she's met; the carried gun; E1M8 (the pass couldn't end on a floor that ends the level
+by hurting her, took its end for a trap and refused everything; the ending floor and the
+walls a boss's death lowers are now things learned). Open: runs stuck only when known
+(MAP02, E1M5, MAP12); "outmatched: keeping clear" walked on along the route; sneaking past
+sleepers she knows of. `EVIL_KNOWN_ONLY=map|monsters` knows only the one;
+`EVIL_DEBUG_SCOUT=1` keeps the pass's log.

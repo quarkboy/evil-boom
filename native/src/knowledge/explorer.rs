@@ -556,6 +556,12 @@ impl Explorer {
 
     /// Died: the level from the start again, keeping what's known of it. Stuck with nothing at
     /// all to do before it: that place is a trap, kept in mind.
+    /// She came out of where she was alive (a time through the level beforehand, ended): what
+    /// dying there would have taught isn't learned.
+    pub fn left_alive(&mut self) {
+        self.trapped = None;
+    }
+
     pub fn restart(&mut self) {
         if let Some(t) = self.trapped.take() {
             self.log.push(format!("--- that was a trap ({} polys): not going back in", t.len()));

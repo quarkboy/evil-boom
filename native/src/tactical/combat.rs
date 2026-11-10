@@ -203,6 +203,9 @@ pub struct Combat {
     rocket_blocked: Option<(i32, i64)>,
     /// (baiting: the monsters in the way are the point)
     pub hold_fire: bool,
+    /// monsters she's after for the gun they carry (as of the last list of things to do): shot
+    /// whatever the shot would wake
+    pub wanted_dead: BTreeSet<i32>,
     /// monster -> tics it's looked to be after another
     infight: BTreeMap<i32, i32>,
     heights_tic: Option<i64>,
@@ -243,6 +246,8 @@ pub struct Combat {
     barrel_rest_until: i64,
     /// the way fighting moved her last
     steer_way: Option<Point>,
+    /// where she took on the target she's stepping about (it, there, the last tic of it)
+    steer_from: Option<(i32, Point, i64)>,
     steer_tic: i64,
     steer_still: i64,
     /// a way she got nowhere pushing, and till when it's left be
@@ -377,6 +382,8 @@ impl Combat {
             barrel_since: 0,
             barrel_rest_until: -1_000_000_000,
             steer_way: None,
+            steer_from: None,
+            wanted_dead: BTreeSet::new(),
             steer_tic: -1,
             steer_still: 0,
             steer_stuck: None,
@@ -414,6 +421,8 @@ impl Combat {
         self.truth.clear();
         self.dead.clear();
         self.last_seen.clear();
+        // (what she had when she died isn't rounds spent in the life after)
+        self.ammo_was.clear();
         // (the level begun again: every monster she's seen is back where she first saw it, for
         // all she knows, standing as it stood; she knows of it before it knows of her)
         for s in self.known.values_mut() {
@@ -441,6 +450,7 @@ impl Combat {
         self.last_pos = None;
         self.velocity = (0.0, 0.0);
         self.route_way = None;
+        self.steer_from = None;
     }
 
     // --- what's about -----------------------------------------------------------------------
@@ -1076,6 +1086,11 @@ impl Combat {
         }
     }
 
+    /// Every monster she knows of, forgotten (for measuring what knowing them is worth).
+    pub fn forget_monsters(&mut self) {
+        self.known.clear();
+    }
+
     /// The counts kept for measuring a run, from nothing (what went before isn't the run's).
     pub fn forget_counts(&mut self) {
         self.tally.clear();
@@ -1140,7 +1155,7 @@ impl Combat {
     /// about too that she'd be outmatched once they're awake: what it'd wake (else "").
     fn would_wake(&mut self, obs: &Observation, t: &Thing) -> String {
         let Some(s) = self.known.get(&t.id) else { return String::new() };
-        if s.awake {
+        if s.awake || self.wanted_dead.contains(&t.id) {
             return String::new(); // (the fist too wakes what hears it: P_FireWeapon's noise alert, no weapon WPF_SILENT)
         }
         if self.now.about.iter().any(|o| self.known.get(&o.id).is_some_and(|k| k.awake)) {

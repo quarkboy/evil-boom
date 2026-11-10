@@ -540,6 +540,13 @@ impl RouteFollower {
         out
     }
 
+    /// How far the rest of the route is from `pos`, along it.
+    pub fn way_left(&self, pos: Point) -> f64 {
+        let length = |pts: &[Option<Point>]| pts.windows(2).filter_map(|w| Some(dist(w[0]?, w[1]?))).sum::<f64>();
+        let later = usize::try_from(self.step_i + 1).ok().and_then(|i| self.steps.get(i..)).unwrap_or_default();
+        length(&self.planned_path(Some(pos))) + later.iter().filter_map(|st| st.path.as_ref()).map(|p| length(&p.waypoints)).sum::<f64>()
+    }
+
     // --- step and segment bookkeeping ---------------------------------------------------------
 
     fn next_step(&mut self, tic: i64) {

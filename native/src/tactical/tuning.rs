@@ -390,6 +390,11 @@ pub struct Steer {
     /// what she knows is about and would have out of her view from there, facing her target
     /// (by threat; 0: not counted): the user's, keep as many in sight as she can
     pub w_out_of_view: f64,
+    /// her steps to the side of a target that shoots keep within this far either side of where
+    /// she took it on (0: as far as there's room), a step beyond it counting this much against
+    /// a way for every `look` of it: the user's, only as far as needed, further wakes more
+    pub side_span: f64,
+    pub w_span: f64,
     /// with anything shooting in sight, kept this far from a barrel's middle (its blast and a margin)
     pub barrel_keep: f64,
     /// tics before a shotgun's ready that she comes back out for the shot
@@ -420,6 +425,8 @@ impl Default for Steer {
             w_unlooked: 0.0,
             unlooked_tics: 70,
             w_out_of_view: 0.0,
+            side_span: 128.0,
+            w_span: 4.0,
             barrel_keep: 192.0,
             reload_back: 12.0,
             stuck_tics: 6,

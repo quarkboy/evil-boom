@@ -663,7 +663,18 @@ impl RouteFollower {
             return self.carry_on(obs);
         }
         if step.action == Action::Kill {
-            self.log.add(obs.tic, "skipping boss kill (no monsters in this run)");
+            // (with monsters about: here till what their deaths move has moved, the killing
+            // the fight's)
+            let moved = step.trigger.as_ref().is_some_and(|t| {
+                t.effects.iter().all(|(s, hs)| obs.height(*s).is_some_and(|l| hs.iter().any(|h| (l.floor - h.floor).abs() < 1.0 && (l.ceiling - h.ceiling).abs() < 1.0)))
+            });
+            let monsters = obs.things.iter().flatten().any(|t| t.category == "Monster" && t.health > 0);
+            if monsters && !moved {
+                self.step_tic = obs.tic;
+                self.progress_tic = obs.tic;
+                return self.motion.hold(obs, (0.0, 0.0), self.look);
+            }
+            self.log.add(obs.tic, if moved { "what the kills move has moved" } else { "skipping boss kill (no monsters in this run)" });
             self.next_step(obs.tic);
             return Controls::default();
         }
