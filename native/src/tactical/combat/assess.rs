@@ -10,6 +10,7 @@
 //! doesn't have yet ("with that gun in hand, could she?") is asked of the arsenal with the
 //! observation it supposes, not of this.
 
+use super::arsenal::Odds;
 use super::{mon, spread, Combat};
 use crate::geom::{dist, Point};
 use crate::motor::{Observation, Thing};
@@ -37,7 +38,10 @@ pub struct Assessment {
     pub guns_armed: bool,
     /// next to nothing left to shoot with
     pub short_of_ammo: bool,
-    /// killing what's in sight would take too long, or more than she has
+    /// her odds against what's in sight
+    pub odds: Odds,
+    /// those odds too long: more than `guns.outmatched` seconds of killing, more than she'd
+    /// last, or more than her ammo
     pub outmatched: bool,
     /// several near her, round her rather than all one side
     pub surrounded: bool,
@@ -63,6 +67,7 @@ impl Default for Assessment {
             firepower: 0.0,
             guns_armed: false,
             short_of_ammo: false,
+            odds: Odds { unhurt: false, kill_secs: 0.0, last_secs: f64::INFINITY, fists: false, ammo_short: false },
             outmatched: false,
             surrounded: false,
             vile: false,
@@ -86,6 +91,9 @@ impl Assessment {
             "firepower": finite(self.firepower),
             "guns_armed": self.guns_armed,
             "short_of_ammo": self.short_of_ammo,
+            "kill_secs": finite(self.odds.kill_secs),
+            "last_secs": finite(self.odds.last_secs),
+            "ammo_short": self.odds.ammo_short,
             "outmatched": self.outmatched,
             "surrounded": self.surrounded,
             "vile": self.vile,
@@ -119,6 +127,7 @@ impl Combat {
         let firepower = self.firepower(obs);
         let damage_rate = self.damage_rate(obs.tic);
         let health = obs.health.unwrap_or(100.0);
+        let odds = self.odds_in_sight(obs);
         Assessment {
             tic: obs.tic,
             pos,
@@ -130,7 +139,8 @@ impl Combat {
             firepower,
             guns_armed: self.guns_armed(obs),
             short_of_ammo: self.short_of_ammo(obs),
-            outmatched: self.outmatched(obs),
+            odds,
+            outmatched: odds.too_much(self.tune.guns.outmatched),
             surrounded: self.surrounded(pos, &against_her),
             vile: against_her.iter().any(|t| t.name == "Archvile" && f64::from(mon(t.name).health) / firepower > self.tune.retreat.vile_kill),
             damage_rate,

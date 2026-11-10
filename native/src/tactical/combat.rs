@@ -21,6 +21,7 @@ mod steering;
 mod style;
 mod tree;
 
+pub use arsenal::Odds;
 pub use assess::Assessment;
 pub use moves::Move;
 pub use sight::{eye, eye_of};

@@ -32,6 +32,38 @@ fn ammo_cost(slot: i32) -> (f64, f64) {
     }
 }
 
+/// Her odds against some monsters, with what she has: the numbers every "is this too much for
+/// her" comes down to. What's too much is the asker's line (`too_much`): 30 s of killing is
+/// outmatched in a fight; 15 s is enough to leave something standing about alone.
+#[derive(Clone, Copy, Debug)]
+pub struct Odds {
+    /// nothing can hurt her (invulnerable): whatever it is, now's the time
+    pub unhurt: bool,
+    /// seconds to kill them all, with her best gun that has ammo
+    pub kill_secs: f64,
+    /// seconds she'd last toe to toe, as she is: her health and her armor against what they'd
+    /// do to her a second (a lot: they'd do nothing). The user's: what she has weighed, not
+    /// only the guns; E3M8, the spider mastermind as much to be kept clear of with the plasma
+    /// rifle and the blue armor as with a pistol at 100 health.
+    pub last_secs: f64,
+    /// berserk, and all of them things she'd punch: the fist will do, ammo or none
+    pub fists: bool,
+    /// all her ammo wouldn't kill them
+    pub ammo_short: bool,
+}
+
+impl Odds {
+    /// Longer than `secs` to kill, or longer than she'd last at it, or more than her ammo's
+    /// worth (a room of barons with the pistol: MAP08 at pistol start; a cyberdemon, ten
+    /// rockets)?
+    pub fn too_much(&self, secs: f64) -> bool {
+        if self.unhurt {
+            return false;
+        }
+        self.kill_secs > secs || (!self.fists && (self.kill_secs > self.last_secs || self.ammo_short))
+    }
+}
+
 impl Combat {
     pub(super) fn held(obs: &Observation) -> Vec<i32> {
         obs.weapons.clone().unwrap_or_else(|| vec![1, 2])
@@ -65,13 +97,12 @@ impl Combat {
         m.map_or(w.dps(), |m| w.dps() * w.damage_on(m) / w.damage.max(1.0))
     }
 
-    /// Would killing what's in sight take too long with what she has (a room of barons with the
-    /// pistol: MAP08 at pistol start), or more ammo than she has (a cyberdemon, ten rockets)?
-    pub(super) fn outmatched(&self, obs: &Observation) -> bool {
-        // (a hitscan shooter however far: its bullets get there. E3M8 from a pistol start, the
-        // spider mastermind 1298 off with a pistol and two rockets: closed in on)
+    /// Her odds against what's in sight (what's near, and a hitscan shooter however far: its
+    /// bullets get there. E3M8 from a pistol start, the spider mastermind 1298 off with a pistol
+    /// and two rockets: closed in on): `now.odds`, and `now.outmatched` by it.
+    pub(super) fn odds_in_sight(&self, obs: &Observation) -> Odds {
         let near: Vec<&'static str> = self.visible.iter().filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0 || self.sniper(obs, t.name)).map(|t| t.name).collect();
-        self.too_much(obs, &near, self.tune.guns.outmatched)
+        self.odds(obs, &near)
     }
 
     /// A hitscan shooter she couldn't see off in a few seconds with what she has: one that's
@@ -102,28 +133,27 @@ impl Combat {
         self.sniper(obs, name) && f64::from(m.health) / self.firepower(obs).max(1.0) <= Self::lasts(obs) / m.threat.max(1.0)
     }
 
-    /// Would these take her longer than `secs` to kill, or more than her ammo's worth?
-    pub fn too_much(&self, obs: &Observation, names: &[&str], secs: f64) -> bool {
-        if self.invulnerable(obs.tic) {
-            return false; // (nothing can hurt her: whatever it is, now's the time)
-        }
+    /// Her odds against these, with what she has (`obs`: as she is, or as she'd be with
+    /// something picked up).
+    pub fn odds(&self, obs: &Observation, names: &[&str]) -> Odds {
         let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
         // (berserk, against nothing but what she'd punch: the fist, ammo or none)
-        if Self::fists_for(obs, names) {
-            return hp / self.firepower(obs).max(weapon_in(1, obs).dps()) > secs;
-        }
-        if hp / self.firepower(obs) > secs {
-            return true;
-        }
-        // (or longer than she'd last at it, toe to toe, as she is: her health and her armor
-        // against what they'd do to her a second. The user's: what she has weighed, not only
-        // the guns; E3M8, the spider mastermind as much to be kept clear of with the plasma
-        // rifle and the blue armor as with a pistol at 100 health)
+        let fists = Self::fists_for(obs, names);
+        let firepower = if fists { self.firepower(obs).max(weapon_in(1, obs).dps()) } else { self.firepower(obs) };
         let rate: f64 = names.iter().map(|n| mon(n).threat).sum();
-        if rate > 0.0 && hp / self.firepower(obs) > Self::lasts(obs) / rate {
-            return true;
+        Odds {
+            unhurt: self.invulnerable(obs.tic),
+            kill_secs: hp / firepower,
+            last_secs: if rate > 0.0 { Self::lasts(obs) / rate } else { f64::INFINITY },
+            fists,
+            ammo_short: !fists && self.ammo_short_for(obs, names),
         }
-        self.ammo_short_for(obs, names)
+    }
+
+    /// Would these take her longer than `secs` to kill, longer than she'd last, or more than her
+    /// ammo's worth?
+    pub fn too_much(&self, obs: &Observation, names: &[&str], secs: f64) -> bool {
+        self.odds(obs, names).too_much(secs)
     }
 
     /// Would all her ammo, with the best gun she has for each kind, fall short of killing these
