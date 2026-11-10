@@ -404,6 +404,10 @@ impl Explorer {
                 continue;
             }
             routed.sort_by(|a, b| (a.1.priority(), a.0).partial_cmp(&(b.1.priority(), b.0)).unwrap_or(std::cmp::Ordering::Equal));
+            self.journal.note(|| crate::decisions::Record {
+                options: routed.iter().map(|(weighed, o, _)| (o.label.clone(), *weighed)).collect(),
+                ..crate::decisions::Record::new(obs.tic, "objective", routed[0].1.label.clone())
+            });
             let (_, obj, steps) = routed.swap_remove(0);
             self.start(obs, obj, steps);
             return true;

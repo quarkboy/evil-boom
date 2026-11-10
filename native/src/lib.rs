@@ -17,6 +17,7 @@
 pub mod arena;
 pub mod config;
 pub mod crush;
+pub mod decisions;
 pub mod control;
 mod det;
 pub mod drive;

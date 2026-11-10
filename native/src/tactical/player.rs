@@ -9,6 +9,7 @@ use std::rc::Rc;
 use super::bestiary::{ammo_item, armor_item, first_shot, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
 use super::combat::{segment_point_distance, spread, Combat, Move, Seen};
 use super::tuning::Tuning;
+use crate::decisions::Record;
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
 use crate::knowledge::explorer::{Explorer, Hooks, Kind, Objective};
@@ -147,7 +148,7 @@ impl Plight {
 /// Why she's falling back: each kind starts on its own rule (`Player::start_retreat`, in that
 /// order) and ends on its own (`Player::retreat_over`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum RetreatKind {
+pub enum RetreatKind {
     /// hurt, with something that shoots in sight (or an arch-vile): out of their sight
     Cover,
     /// nothing to shoot with and something after her: to ammo, or away
@@ -164,6 +165,8 @@ enum RetreatKind {
 }
 
 impl RetreatKind {
+    const ALL: [RetreatKind; 6] = [RetreatKind::Cover, RetreatKind::ForAmmo, RetreatKind::Back, RetreatKind::Out, RetreatKind::Bait, RetreatKind::Post];
+
     fn name(self) -> &'static str {
         match self {
             RetreatKind::Cover => "cover",
@@ -199,6 +202,8 @@ pub struct Player {
     last_pos: Point,
     /// and what things were like for her
     plight: Plight,
+    /// retreats she isn't to make (`bar`)
+    barred_retreats: Vec<RetreatKind>,
     /// places she's stood lately with nothing shooting at her and nothing hurting her, oldest
     /// first: the way back out of an ambush
     trail: Vec<Point>,
@@ -222,6 +227,7 @@ impl Player {
             shooters_tic: -1_000_000_000,
             last_pos: (0.0, 0.0),
             plight: Plight::default(),
+            barred_retreats: Vec::new(),
             trail: Vec::new(),
             exposure: None,
             edge_log: i64::MIN / 2,
@@ -234,6 +240,50 @@ impl Player {
     pub fn set_tuning(&mut self, tune: Rc<Tuning>) {
         self.fight.combat.tune = Rc::clone(&tune);
         self.fight.tune = tune;
+    }
+
+    /// Decisions she isn't to make (a choice forced: an experiment's, a decision model's): the
+    /// fight's moves and the retreats named, by their names (`Move`'s and `RetreatKind`'s, as
+    /// the journal gives them), commas between.
+    pub fn bar(&mut self, names: &str) -> Result<(), String> {
+        for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+            if let Some(m) = Move::named(name) {
+                self.fight.combat.barred.push(m);
+            } else if let Some(k) = RetreatKind::ALL.into_iter().find(|k| format!("{k:?}") == name) {
+                self.barred_retreats.push(k);
+            } else {
+                let moves: Vec<String> = Move::ALL.iter().map(|m| format!("{m:?}")).collect();
+                let retreats: Vec<String> = RetreatKind::ALL.iter().map(|k| format!("{k:?}")).collect();
+                return Err(format!("--bar: no move or retreat called {name}; moves: {}; retreats: {}", moves.join(", "), retreats.join(", ")));
+            }
+        }
+        Ok(())
+    }
+
+    /// Her target from now on, while it's in sight and after her, whatever the rule would pick
+    /// (None: the rule's again).
+    pub fn force_target(&mut self, id: Option<i32>) {
+        self.fight.combat.forced_target = id;
+    }
+
+    /// Keep the journal of decisions (`crate::decisions`).
+    pub fn keep_journal(&mut self) {
+        self.explorer.journal.on = true;
+        self.fight.combat.journal.on = true;
+    }
+
+    /// The fight's decisions into the journal, and how things stood put to every record that
+    /// hasn't it yet: called before she next looks (the assessment still that tic's), and at
+    /// the end.
+    pub fn file_decisions(&mut self) {
+        if !self.explorer.journal.on {
+            return;
+        }
+        self.explorer.journal.records.append(&mut self.fight.combat.journal.records);
+        let state = self.fight.combat.now.summary();
+        for r in self.explorer.journal.records.iter_mut().filter(|r| r.state.is_none()) {
+            r.state = Some(state.clone());
+        }
     }
 
     pub fn complete(&mut self, restarts: i32) {
@@ -271,6 +321,7 @@ impl Player {
     }
 
     pub fn act(&mut self, obs: &Observation, last: Option<&Controls>) -> Controls {
+        self.file_decisions();
         self.last_pos = obs.pos();
         self.fight.present = obs.things.iter().flatten().map(|t| t.id).collect();
         self.fight.combat.observe(obs);
@@ -514,6 +565,12 @@ impl Player {
             return None;
         };
         self.tried_cover = kind == RetreatKind::Cover;
+        if self.barred_retreats.contains(&kind) {
+            return None;
+        }
+        if route.is_some() {
+            self.explorer.journal.note(|| Record::new(obs.tic, "retreat", format!("{kind:?}")));
+        }
         route.map(|route| Retreat { kind, route })
     }
 

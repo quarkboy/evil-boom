@@ -25,6 +25,7 @@ use moves::HeldFire;
 use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
 use super::tuning::{Dodge, Tuning};
+use crate::decisions::{Journal, Record};
 use crate::geom::{dist, Point};
 use crate::specials::Category;
 use crate::los::{Body, LineOfSight};
@@ -96,6 +97,13 @@ pub struct Combat {
     pub(super) tune: Rc<Tuning>,
     /// how things stand this tic (see `assess.rs`): worked out once, as she looks
     pub now: Assessment,
+    /// what the fight decided, for the journal (the player's takes them)
+    pub journal: Journal,
+    /// her target, whatever the rule would pick, while it's in sight and after her (a choice
+    /// forced: an experiment's, a decision model's)
+    pub forced_target: Option<i32>,
+    /// moves the tree isn't to make: a node giving one is passed over (forced likewise)
+    pub barred: Vec<Move>,
     pub los: LineOfSight,
     hearing: Hearing,
     /// every monster seen, by id
@@ -249,6 +257,9 @@ impl Combat {
         Combat {
             tune,
             now: Assessment::default(),
+            journal: Journal::default(),
+            forced_target: None,
+            barred: Vec::new(),
             doors,
             lifts,
             los: LineOfSight::new(&nav.map),
@@ -652,6 +663,7 @@ impl Combat {
         if why != self.mode {
             let t = s.target.as_ref().map_or(String::new(), |t| format!(" (target {} {}, {:.0} threat; health {:.0})", t.name, t.id, self.now.threat, self.now.health));
             self.log.push(format!("tic {}: {why}{t}", obs.tic));
+            self.journal.note(|| Record { detail: why.clone(), ..Record::new(obs.tic, "move", format!("{kind:?}")) });
             self.mode = why.clone();
         }
         Some(Decision { kind, takeover, aim, fire, weapon, moving: act.moving, why })

@@ -67,6 +67,42 @@ pub enum Move {
 }
 
 impl Move {
+    pub const ALL: [Move; 28] = [
+        Move::OutOfVileSight,
+        Move::Ducking,
+        Move::Ducked,
+        Move::Dodging,
+        Move::ShakingOff,
+        Move::BfgHold,
+        Move::OffCrusher,
+        Move::OffLitBarrel,
+        Move::OffBarrel,
+        Move::MeleeClosing,
+        Move::MeleeAt,
+        Move::BackingOff,
+        Move::Sneaking,
+        Move::ToErrand,
+        Move::Unarmed,
+        Move::ClosingOutOfReach,
+        Move::OutOfReach,
+        Move::SteppingForShot,
+        Move::KeepingClear,
+        Move::HidingFromOutmatcher,
+        Move::GettingPast,
+        Move::KeepingOff,
+        Move::Standing,
+        Move::ClosingIn,
+        Move::ShootingOnTheWay,
+        Move::LostSight,
+        Move::RocketHeld,
+        Move::RocketTurnedOff,
+    ];
+
+    /// The move of that name (as `{:?}` gives it).
+    pub fn named(name: &str) -> Option<Move> {
+        Move::ALL.into_iter().find(|m| format!("{m:?}") == name)
+    }
+
     /// The route keeps her legs through it (unless a missile's coming or an arch-vile's fire).
     pub fn route_goes_on(self) -> bool {
         matches!(self, Move::ShootingOnTheWay | Move::ToErrand | Move::GettingPast | Move::OutOfVileSight | Move::OutOfReach | Move::Unarmed | Move::Sneaking)

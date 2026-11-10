@@ -76,6 +76,10 @@ pub struct RunOptions {
     /// the numbers she judges by, changed from their defaults by this file (see
     /// `tactical::tuning`)
     pub tuning: Option<std::path::PathBuf>,
+    /// the journal of her decisions kept, and written beside the log (`crate::decisions`)
+    pub decisions: bool,
+    /// moves and retreats she isn't to make, by name (`Player::bar`)
+    pub bar: Option<String>,
 }
 
 impl Default for RunOptions {
@@ -98,6 +102,8 @@ impl Default for RunOptions {
             things: false,
             stall_out: false,
             tuning: None,
+            decisions: false,
+            bar: None,
         }
     }
 }
@@ -498,6 +504,12 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
         obs = Some(ob);
     }
     let (exited, died, game_s) = (e.exited(), e.finished() && e.dead(), e.tic as f64 / TICRATE);
+    if o.decisions {
+        if let Some(p) = agent.player_mut() {
+            p.file_decisions();
+        }
+        agent.x_mut().journal.records.sort_by_key(|r| r.tic);
+    }
     let x = agent.x();
     let k = &x.knowledge;
     let mut lines: Vec<String> = x.log.clone();
@@ -572,6 +584,9 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     let stem = iwad.file_stem().map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase());
     // (and kept, by the commit, the time and the seed: not written over by the next run)
     let _ = crate::config::write_log(&dir.join(format!("{stem}_{map_name}.txt")), &o.seed.map_or_else(|| "random".to_string(), |s| format!("s{s}")), &(lines.join("\n") + "\n"));
+    if o.decisions {
+        let _ = std::fs::write(dir.join(format!("{stem}_{map_name}.decisions.jsonl")), agent.x().journal.lines());
+    }
     {
         let k = &agent.x().knowledge;
         rec.entries.extend(k.journal[journal_n.min(k.journal.len())..].iter().map(|(t, nt)| Entry::Note(*t, nt.clone())));

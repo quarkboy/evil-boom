@@ -282,6 +282,8 @@ pub struct Explorer {
     /// why the objective in hand ended, as `ends` or `drop_objective` had it
     end_why: Option<(bool, String)>,
     pub log: Vec<String>,
+    /// what she decided and on what, if a run's asked for it (`crate::decisions`)
+    pub journal: crate::decisions::Journal,
     /// the routes planned so far, and the time they took (the live status: `EVIL_STATUS`)
     pub stats: RouteStats,
     /// the goals the planner found no way to, and the plan signature then
@@ -463,6 +465,7 @@ impl Explorer {
             ended: None,
             end_why: None,
             log: Vec::new(),
+            journal: crate::decisions::Journal::default(),
             stats: RouteStats::default(),
             no_route: BTreeMap::new(),
             refused_now: (i64::MIN, BTreeSet::new()),

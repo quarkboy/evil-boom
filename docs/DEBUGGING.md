@@ -55,6 +55,19 @@ Damage sources (from the engine's own damage call, dsda `P_DamageMobj`, patched)
 
 The tics in the summary are where to look in the log: `grep -n "tic 1583" ...`.
 
+## The decisions: out/explore/\<IWAD\>_\<MAP\>.decisions.jsonl
+
+`--decisions` on a run keeps a journal beside the log, a line of JSON a decision: `point`
+("target", "move", "retreat", "objective"), `chosen`, the `options` weighed with their scores
+where the rule compares any (a target's: higher better; an objective's weighed way there:
+shorter better), and `state`, the fight's assessment that tic (health, threat, outmatched, what's
+against her by name, distance and health). A "move" is logged when the fight's move changes, a
+"target" when it does. The log is the same with it on.
+
+To see what a decision is worth, take it away: `--bar Standing,Cover` (any `Move`s and retreat
+kinds, by the names the journal gives; a wrong name lists them) plays the run with those passed
+over. `Player::force_target` does the same for a target, from code.
+
 ## Seeing the spot
 
 - `--snapshot S` stops after S game seconds and draws the viewer to `out/watch.png` (the game

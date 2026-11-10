@@ -106,7 +106,7 @@ const FIGHT: [Node; 13] = [
 
 /// What she does, a target or a missile about: the first node that applies.
 pub(super) fn engage(c: &mut Combat, obs: &Observation, s: &Situation) -> Act {
-    SURVIVE.iter().chain(&BUSY).chain(&MELEE).chain(&FIGHT).find_map(|node| node(c, obs, s)).unwrap_or_else(|| Act::new(Move::ShootingOnTheWay, None, "shooting on the way".into()))
+    SURVIVE.iter().chain(&BUSY).chain(&MELEE).chain(&FIGHT).find_map(|node| node(c, obs, s).filter(|a| !c.barred.contains(&a.kind))).unwrap_or_else(|| Act::new(Move::ShootingOnTheWay, None, "shooting on the way".into()))
 }
 
 // --- survive -----------------------------------------------------------------------------------

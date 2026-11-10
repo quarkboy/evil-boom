@@ -2,6 +2,7 @@
 //! `arsenal`).
 
 use super::moves::HeldFire;
+use crate::decisions::Record;
 use super::style::Style;
 use super::{mon, segment_point_distance, Combat};
 use crate::motor::follower::blast_gap;
@@ -71,6 +72,7 @@ impl Combat {
         let mut best: Option<(f64, Thing)> = None;
         let against = self.now.against_her.clone();
         let hitscanners: Vec<i32> = against.iter().filter(|t| mon(t.name).attack == Attack::Hitscan).map(|t| t.id).collect();
+        let mut weighed: Vec<(String, f64)> = Vec::new();
         for t in against {
             let info = mon(t.name);
             let d = dist((t.x, t.y), pos);
@@ -84,6 +86,9 @@ impl Combat {
             s *= 1.0 - off.min(150.0) / 300.0; // (rather what's in front than what's behind)
             if !self.can_hit(obs, &t, None) {
                 s *= 0.3; // (rather what a shot gets to)
+            }
+            if self.journal.on {
+                weighed.push((format!("{} {}", t.name, t.id), s));
             }
             if best.as_ref().is_none_or(|(bs, _)| s > *bs) {
                 best = Some((s, t));
@@ -111,7 +116,16 @@ impl Combat {
                 best = Some((0.0, m));
             }
         }
-        self.target = best.as_ref().map(|(_, t)| t.id);
+        if let Some(t) = self.forced_target.and_then(|id| self.now.against_her.iter().find(|t| t.id == id)) {
+            best = Some((f64::INFINITY, t.clone()));
+        }
+        let target = best.as_ref().map(|(_, t)| t.id);
+        if target != self.target {
+            if let Some((_, t)) = &best {
+                self.journal.note(|| Record { options: weighed, ..Record::new(obs.tic, "target", format!("{} {}", t.name, t.id)) });
+            }
+        }
+        self.target = target;
         best.map(|(_, t)| t)
     }
 

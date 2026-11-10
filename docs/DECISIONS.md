@@ -2163,3 +2163,26 @@ one place, what a decision had been made on.
 Nothing changes: the parity set (32 runs) and a second set (12 more maps, HMP and UV on other
 seeds, three lives for the start-again path: 24 runs, 28 deaths) are line for line the same as
 the build before.
+
+## Restructuring: a journal of decisions, and choices forced (2026-11-09)
+
+Before a decision model is attached: a record of what the rules decide and on what, and a way to
+make her decide otherwise.
+
+- `decisions.rs`: with `--decisions`, a line of JSON a decision beside the run's log
+  (`out/explore/<IWAD>_<MAP>.decisions.jsonl`): the target (when it changes; every candidate and
+  its score), the fight's move (when it changes; its `Move` and label), a retreat begun (its
+  kind), an objective taken up (every one routed, with its weighed way). Each with `state`, the
+  tic's assessment (`Assessment::summary`). The four are the four questions planned for a model
+  (which target, what stance, whether to back off, what next); the records are what it'd be
+  shown, and what the rules answered.
+- Forced: `--bar NAMES` passes over the named moves (a node giving one is skipped, the next
+  tried) and retreat kinds; `Player::force_target(id)` makes a monster in sight her target
+  whatever the scores. The stance is `Player::set_tuning` (step 2); objectives can be ordered
+  already (`control/directed.rs`).
+- Seen in the first journal read (MAP06 UV, one run): 1509 changes of move in 385 s, most of
+  them between out of reach, hiding from what outmatches her, closing in and stepping for a
+  shot. The tree is asked afresh every tic and nothing holds a move once made: for step 5.
+
+Nothing changes with neither asked for: the parity set is line for line the same, and a run's
+log is the same with the journal on.

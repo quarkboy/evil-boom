@@ -73,6 +73,30 @@ impl Default for Assessment {
 }
 
 impl Assessment {
+    /// For a decision's record (and a decision model's eyes): the numbers, and what's against
+    /// her by name, distance and health, nearest first.
+    pub fn summary(&self) -> serde_json::Value {
+        let mut them: Vec<&Thing> = self.against_her.iter().collect();
+        them.sort_by(|a, b| dist((a.x, a.y), self.pos).total_cmp(&dist((b.x, b.y), self.pos)));
+        let finite = |x: f64| if x.is_finite() { serde_json::json!((x * 10.0).round() / 10.0) } else { serde_json::Value::Null };
+        serde_json::json!({
+            "health": self.health,
+            "invulnerable": self.invulnerable,
+            "threat": self.threat,
+            "firepower": finite(self.firepower),
+            "guns_armed": self.guns_armed,
+            "short_of_ammo": self.short_of_ammo,
+            "outmatched": self.outmatched,
+            "surrounded": self.surrounded,
+            "vile": self.vile,
+            "damage_rate": finite(self.damage_rate),
+            "time_to_death": finite(self.time_to_death),
+            "shooters": self.shooters.len(),
+            "engaged": self.engaged.len(),
+            "against_her": them.iter().map(|t| serde_json::json!({"id": t.id, "name": t.name, "away": dist((t.x, t.y), self.pos).round(), "health": t.health})).collect::<Vec<_>>(),
+        })
+    }
+
     /// A level started again: nothing in sight any more (the rest stands till she next looks).
     pub(super) fn nothing_in_sight(&mut self) {
         self.against_her.clear();
