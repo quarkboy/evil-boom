@@ -252,3 +252,5 @@ time. To act on once the watching's done, not before.
   the imp gone from sight "lost sight: keeping at it" came before the look (so not then
   either). Fixed: a hit's turned to with missiles in the air (a dodge is her legs', her eyes
   are free) and before a monster she's lost sight of.
+- **MAP02 HMP, seed 756527427** (dies at 126 s). There was a megaarmor she saw and didn't pick
+  up: she went into a teleporter instead. It would have helped a lot.
