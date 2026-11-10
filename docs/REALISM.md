@@ -197,3 +197,14 @@ So: monsters come up beside and behind her that she never looks at. A player loo
 hears one that's close: a wandering monster's noise was left out of what turns her (there's
 always one somewhere), but a loud one is a close one. `senses.heed_active_volume` and
 `senses.heed_volume` are the loudness a sound needs to turn her, to be tried by tuning file.
+
+## Watched runs: the user's verdicts (2026-11-10)
+
+The user watching the runs that die from close attackers out of view (the list above), one at a
+time. To act on once the watching's done, not before.
+
+- **MAP04 HMP, seed 180954446** (dies at 48 s). The first corridor: a room full of shotgun guys
+  behind a "window" that goes up and down, so they come in and out of sight over and over (and
+  it makes noise). Dangerous in itself. The user's idea: a little **instinct**: she goes on
+  knowing where an enemy is, as it is, till it's been truly out of sight for about half a second
+  (17 tics or so). "It's cheating a little bit but our goal is good streaming content."
