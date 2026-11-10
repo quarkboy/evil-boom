@@ -126,7 +126,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <label>Lives <input name="lives" type="number" min="1" max="99"></label>
       <label>Seed <input name="seed" placeholder="random"></label>
       <label>Directed by <select name="mode"><option value="bot">the bot alone</option><option value="neuro">Neuro</option><option value="gpt">the GPT stand-in</option></select></label>
-      <label class="wide">Neuro URL <input name="neuro_url" placeholder="ws://127.0.0.1:8000"></label>
+      <label class="wide">Neuro URL <select name="neuro_url"></select></label>
       <span class="check"><input type="checkbox" name="mortal" id="s-mortal"><label for="s-mortal" class="check">Mortal</label></span>
       <span class="check"><input type="checkbox" name="episode" id="s-episode"><label for="s-episode" class="check">Whole episode</label></span>
       <span class="check"><input type="checkbox" name="muted" id="s-muted"><label for="s-muted" class="check">Start muted</label></span>
@@ -157,7 +157,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
 const $ = (id) => document.getElementById(id);
 let token = new URLSearchParams(location.search).get("t") || "";
 try { if (token) localStorage.setItem("evil-console-token", token); else token = localStorage.getItem("evil-console-token") || ""; } catch (e) { /* (storage off: the URL's token only) */ }
-let volSentAt = 0, volTimer = null, volPending = {};
+let urlsShown = null, volSentAt = 0, volTimer = null, volPending = {};
 let seq = 0, last = null, follow = true, formDirty = false, failures = 0, mapsShown = "", mapPicked = false;
 const LOG_MAX = 4000;
 
@@ -234,6 +234,11 @@ function render(p) {
     $("v-" + k + "-n").textContent = el.value;
   }
   $("v-note").textContent = live && !vol ? "This game's engine has no volume control (rebuild it: tools/build-engine.sh)." : (!p.connected ? "No game running: the levels are kept for the next one." : "");
+  const urls = (p.neuro_urls || []).join("\n");
+  if (urls !== urlsShown) {
+    urlsShown = urls;
+    $("settings").elements.neuro_url.replaceChildren(...(p.neuro_urls || []).map((u) => { const o = document.createElement("option"); o.value = o.textContent = u; return o; }));
+  }
   if (!formDirty) fillForm(p.settings);
   addLog(p.log);
 }

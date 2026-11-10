@@ -149,14 +149,23 @@ to them. What the console does to sit behind someone else's tunnel or proxy:
 - `--bind 127.0.0.1:PORT` when the tunnel's on the same machine: the tunnel is the one way in.
 - The token still needed on every call, whatever login the tunnel has in front.
 
-Still to do for being reached from outside (on the LAN too, mostly):
+Done for being reached from outside (2026-11-10):
 
-- No setting that reaches past the game: `wad` one of the known IWADs (not any path on the PC);
-  the Neuro URL one of a list in the local config (otherwise the page could point the PC's
-  WebSocket at any host on its network).
-- Each command logged with who sent it, when the tunnel's login says (Cloudflare Access's
-  `Cf-Access-Authenticated-User-Email`, for one).
-- Wrong tokens slowed down (a delay that grows); the token changeable from the command line.
+- The WAD only by its short name (never a path on the PC).
+- The Neuro URL only one of `neuro_urls` in `config/console.local.json` (default
+  `ws://127.0.0.1:8000`), edited in the file on the PC, never from the page: otherwise the page
+  could point the PC's WebSocket at any host on its network.
+- Each action in the log with who sent it: `Cf-Access-Authenticated-User-Email` when a tunnel's
+  login gives it, else the caller's address (the volume not logged: a slider sends many). The
+  name is to be trusted only when the console's bound to 127.0.0.1 behind the tunnel: on the LAN
+  anyone could send the header. Checking Access's signed `Cf-Access-Jwt-Assertion` would make it
+  trustworthy anywhere: later, if wanted.
+- `evil-boom console --new-token`: a new token, the old one refused.
+- A `console.local.json` that can't be read stops the console with the reason rather than being
+  written over (it's the streamer's settings and token).
+
+Not done: slowing down wrong tokens. A 128-bit token can't be guessed by trying, and behind a
+tunnel every caller is 127.0.0.1, so a lockout would lock everyone out.
 
 ## Keeping the branch mergeable
 

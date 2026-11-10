@@ -27,9 +27,10 @@
 //!   evil-boom neuro-gpt [--port N] [--config FILE]   a language model as Evil (config/neuro-gpt.json, and
 //!                                               config/neuro-gpt.local.json for the key): log in
 //!                                               out/neuro/gpt.log
-//!   evil-boom console [--bind HOST:PORT]             the stream console (docs/CONSOLE_PLAN.md): a web
-//!                                               page (0.0.0.0:7878, its token printed) to start,
-//!                                               stop and steer the game, started as a `watch` child
+//!   evil-boom console [--bind HOST:PORT] [--new-token]   the stream console (docs/CONSOLE_PLAN.md): a
+//!                                               web page (0.0.0.0:7878, its token printed) to start,
+//!                                               stop and steer the game, started as a `watch` child;
+//!                                               --new-token: the old one stops working
 //!   evil-boom follow <wad> <map>                     plan the level, follow the plan (seed 0)
 //!   evil-boom drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
 //!   evil-boom sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things,
@@ -760,7 +761,7 @@ fn main() -> ExitCode {
         }
         Some("console") => {
             let bind = args.iter().position(|a| a == "--bind").and_then(|i| args.get(i + 1)).map_or("0.0.0.0:7878", String::as_str);
-            evildoom::console::server::serve(bind)
+            evildoom::console::server::serve(bind, args.iter().any(|a| a == "--new-token"))
         }
         Some("neuro-mock") => {
             let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);

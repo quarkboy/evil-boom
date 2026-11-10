@@ -126,11 +126,20 @@ impl Settings {
 }
 
 /// What's kept between runs of the console (config/console.local.json).
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(default)]
 struct Saved {
     token: String,
     settings: Settings,
+    /// the Neuro addresses the page may choose among: edited in the file only, on the PC (from the
+    /// page, any address would let whoever has it point the PC's connection at any host)
+    neuro_urls: Vec<String>,
+}
+
+impl Default for Saved {
+    fn default() -> Saved {
+        Saved { token: String::new(), settings: Settings::default(), neuro_urls: vec!["ws://127.0.0.1:8000".into()] }
+    }
 }
 
 /// The game process as the page sees it.
@@ -156,6 +165,7 @@ struct GameProc {
 struct Shared {
     settings: Settings,
     token: String,
+    neuro_urls: Vec<String>,
     saved_path: PathBuf,
     /// where the game connects back to (127.0.0.1, a port of the system's choosing)
     control_addr: String,
@@ -189,7 +199,7 @@ impl Shared {
     }
 
     fn save(&self) -> Result<(), String> {
-        let saved = Saved { token: self.token.clone(), settings: self.settings.clone() };
+        let saved = Saved { token: self.token.clone(), settings: self.settings.clone(), neuro_urls: self.neuro_urls.clone() };
         let text = serde_json::to_string_pretty(&saved).map_err(|e| e.to_string())?;
         if let Some(dir) = self.saved_path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -211,11 +221,16 @@ fn lock(hub: &Hub) -> MutexGuard<'_, Shared> {
     hub.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Serve the console on `bind` (host:port) till the program's stopped.
-pub fn serve(bind: &str) -> Result<(), String> {
+/// Serve the console on `bind` (host:port) till the program's stopped; `new_token`: the old token
+/// no longer works (one that's got out).
+pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
     let saved_path = crate::config::root().join("config").join("console.local.json");
-    let saved: Saved = std::fs::read_to_string(&saved_path).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
-    let token = if saved.token.len() >= 16 { saved.token } else { new_token() };
+    let saved: Saved = match std::fs::read_to_string(&saved_path) {
+        // (a file that's there but can't be read isn't written over: it's the streamer's)
+        Ok(t) => serde_json::from_str(&t).map_err(|e| format!("{}: {e}", saved_path.display()))?,
+        Err(_) => Saved::default(),
+    };
+    let token = if saved.token.len() >= 16 && !new_token_wanted { saved.token } else { new_token() };
     let control = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("the game's link: {e}"))?;
     let control_addr = control.local_addr().map_err(|e| e.to_string())?.to_string();
     let server = Server::http(bind).map_err(|e| format!("{bind}: {e}"))?;
@@ -223,6 +238,7 @@ pub fn serve(bind: &str) -> Result<(), String> {
     let hub: Hub = Arc::new(Mutex::new(Shared {
         settings: saved.settings,
         token: token.clone(),
+        neuro_urls: saved.neuro_urls,
         saved_path,
         control_addr,
         game: GameProc::default(),
@@ -515,10 +531,23 @@ fn handle(hub: &Hub, mut req: Request) {
         let _ = req.respond(json_response(401, &json!({ "error": "the console's token is needed (?t=, as printed when it started)" })));
         return;
     }
+    // (who's asking, for the log: the login a tunnel in front vouches for, else where it's from)
+    let who = req
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv("Cf-Access-Authenticated-User-Email"))
+        .map(|h| h.value.as_str().to_string())
+        .or_else(|| req.remote_addr().map(|a| a.ip().to_string()))
+        .unwrap_or_else(|| "?".into());
     let mut body = String::new();
     if method == Method::Post && req.as_reader().take(BODY_MAX).read_to_string(&mut body).is_err() {
         let _ = req.respond(json_response(400, &json!({ "error": "the body wasn't text" })));
         return;
+    }
+    if method == Method::Post && !body.starts_with(r#"{"cmd":"volume""#) {
+        // (what each did, and who; not the volume, a slider sends many)
+        let what = path.trim_start_matches("/api/");
+        lock(hub).push(format!("[console] {who}: {what} {}", body.chars().take(300).collect::<String>()));
     }
     let (code, answer) = match (method, path) {
         (Method::Get, "/api/poll") => (200, poll(hub, param("since").and_then(|v| v.parse().ok()).unwrap_or(0))),
@@ -551,14 +580,19 @@ fn handle(hub: &Hub, mut req: Request) {
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))
                 } else {
-                    s.push(format!("[console] -> {body}"));
                     done(s.send(&c))
                 }
             }
             Err(e) => (400, json!({ "error": format!("not a command: {e}") })),
         },
         (Method::Post, "/api/settings") => match serde_json::from_str::<Settings>(&body) {
-            Ok(new) => match new.check() {
+            Ok(new) => match new.check().and_then(|()| {
+                let urls = lock(hub).neuro_urls.clone();
+                if new.mode == "neuro" && !urls.contains(&new.neuro_url) {
+                    return Err(format!("neuro_url: one of {} (the console's list: neuro_urls in config/console.local.json)", urls.join(", ")));
+                }
+                Ok(())
+            }) {
                 Ok(()) => {
                     let mut s = lock(hub);
                     let changed = s.settings != new;
@@ -587,6 +621,7 @@ fn poll(hub: &Hub, since: u64) -> Value {
     let seq = log.last().map_or(s.seq, |(n, _)| *n);
     json!({
         "settings": s.settings,
+        "neuro_urls": s.neuro_urls,
         "game": s.game,
         "uptime": s.game.started.map(|t| t.elapsed().as_secs()),
         "connected": s.to_game.is_some(),
