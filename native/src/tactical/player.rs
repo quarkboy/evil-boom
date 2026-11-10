@@ -1364,9 +1364,13 @@ impl Fight {
         self.clear_way_to(obs, p) && !self.combat.ammo_short_for_each(obs, &by)
     }
 
-    /// Something about she can't take on (awake, known): invulnerability's for that.
+    /// Something about she can't take on (awake, known), or what's about her too much together
+    /// (outmatched, or round her on several sides): invulnerability's for that.
     fn needs_invulnerability(&self, obs: &Observation) -> bool {
-        self.combat.remaining().iter().any(|s| s.awake && self.combat.too_much(obs, &[s.name], self.tune.engage.leave_be))
+        // (one of them too much for her, or all that's about her together: a ring of imps and
+        // zombiemen is each nothing and together what the sphere's for; E3M6's trap, the user
+        // watching: weak ones spawned all round her, the sphere beside her never gone back for)
+        self.combat.now.outmatched || self.combat.now.surrounded || self.combat.remaining().iter().any(|s| s.awake && self.combat.too_much(obs, &[s.name], self.tune.engage.leave_be))
     }
 
     /// Barrels she's seen, near, with nothing in sight and the ammo for it: each to be shot from out
