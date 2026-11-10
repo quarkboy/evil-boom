@@ -240,6 +240,7 @@ fn run_one(args: &[String]) -> Result<(), String> {
         println!("CARRY {}{}", cli::carry_arg(l), if r.secret { " SECRET" } else { "" });
     }
     println!("DAMAGE {}", r.damage);
+    println!("STATS {}", r.stats);
     println!("RESULT {} {}", r.outcome, r.detail);
     Ok(())
 }

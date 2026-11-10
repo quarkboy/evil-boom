@@ -300,6 +300,9 @@ pub struct MapRun {
     pub secret: bool,
     /// what hurt her, most first (see `damage_summary`)
     pub damage: String,
+    /// counts for measuring the run, as JSON (the fight's: what hurt her and what she knew of
+    /// it, what she spent and dealt, what alerted her)
+    pub stats: String,
     /// the game, for an episode's next level in the same process
     pub engine: Option<Engine>,
 }
@@ -489,6 +492,33 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
             let from = h.from();
             let armor = if h.armor > 0 { format!(" (and {} armor)", h.armor) } else { String::new() };
             agent.x_mut().log.push(format!("tic {}: hit for {}{armor} by {from}", e.tic, h.health));
+            // (for measuring: what hit her, how, and what she knew of it)
+            if let Some(p) = agent.player_mut() {
+                let how = match (h.cause, h.own, h.inflictor, h.source) {
+                    (crate::dsda::HitCause::Floor, ..) => "floor",
+                    (crate::dsda::HitCause::Crusher, ..) => "crusher",
+                    (crate::dsda::HitCause::Other, ..) => "other",
+                    (_, true, ..) => "her own",
+                    (_, _, Some(i), _) if crate::dsda::type_name(i) == Some("ExplosiveBarrel") => "barrel",
+                    (_, _, Some(i), Some(s)) if i != s => "missile",
+                    (_, _, _, Some(s)) if crate::dsda::type_name(s).and_then(crate::tactical::bestiary::monster).is_some_and(|m| m.attack == crate::tactical::bestiary::Attack::Hitscan) => "bullet",
+                    _ => "claw",
+                };
+                let key = match h.source_id.filter(|_| matches!(how, "missile" | "bullet" | "claw")) {
+                    Some(id) => {
+                        let (knew, far) = p.combat().measure((ob.x, ob.y), id);
+                        let side = match h.side {
+                            Some(0) => "ahead",
+                            Some(_) => "to a side",
+                            None => "nowhere",
+                        };
+                        format!("hurt by a {how}, its source {knew}, {far}, {side}")
+                    }
+                    None => format!("hurt by: {how}"),
+                };
+                p.combat_mut().count(&key, f64::from(h.health));
+                p.combat_mut().count("health lost", f64::from(h.health));
+            }
             let d = damage.entry(from.clone()).or_default();
             (d.0, d.1) = (d.0 + h.health, d.1 + h.armor);
             d.2.push(e.tic);
@@ -579,6 +609,7 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     }
     // (the kills always: the score's partial credit for a run that doesn't get out)
     detail = format!("kills {}/{}, {detail}", tally[1].0, tally[1].1);
+    let stats = agent.player().map_or_else(|| "{}".to_string(), |p| serde_json::to_string(&p.combat().tally).unwrap_or_default());
     let hurt = damage_summary(&damage);
     lines.push(format!("damage taken: {}", if hurt.is_empty() { "none" } else { &hurt }));
     lines.push(format!("RESULT {outcome} {detail}"));
@@ -600,9 +631,9 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     let secret = exited && e.secret_exit();
     if o.snapshot.is_some() {
         snapshot(&w, m, &map_name, e, agent, o.focus)?;
-        return Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, engine: None });
+        return Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, stats, engine: None });
     }
-    Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, engine: Some(e) })
+    Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, stats, engine: Some(e) })
 }
 
 #[cfg(feature = "viewer")]

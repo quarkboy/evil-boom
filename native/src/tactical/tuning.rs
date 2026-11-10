@@ -68,6 +68,9 @@ pub struct Senses {
     pub fov: f64,
     /// a barrel this near is noticed whichever way she faces
     pub near: f64,
+    /// a monster this near is seen whichever way she faces: 0, none is (a monster behind her
+    /// she can't see; it was 384, and can be set back to measure what that was worth)
+    pub see_near: f64,
     /// A recently seen monster can still be noticed outside the usual field of view.
     pub recent_sight_tics: i64,
     /// Movement from the first sighting that counts as waking up (units, units/tic, degrees).
@@ -124,6 +127,7 @@ impl Default for Senses {
         Senses {
             fov: 55.0,
             near: 384.0,
+            see_near: 0.0,
             recent_sight_tics: 35,
             wake_distance: 16.0,
             wake_speed: 0.5,

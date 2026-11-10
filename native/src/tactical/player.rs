@@ -438,6 +438,11 @@ impl Player {
         self.fight.completion = Some(Completionist::new(&mut self.explorer, restarts));
     }
 
+    /// For measuring a run: the fight's counts.
+    pub fn combat_mut(&mut self) -> &mut Combat {
+        &mut self.fight.combat
+    }
+
     pub fn combat(&self) -> &Combat {
         &self.fight.combat
     }
@@ -511,6 +516,7 @@ impl Player {
         let legs = arbiter::arbitrate(d.as_ref(), busy, retreating, self.fight.combat.dodge_clear());
         if legs != self.legs {
             self.legs = legs;
+            self.fight.combat.count("changes of legs", 1.0);
             self.explorer.journal.note(|| Record::new(obs.tic, "legs", format!("{legs:?}")));
         }
         if retreating {
@@ -732,6 +738,7 @@ impl Player {
         }
         if route.is_some() {
             self.explorer.journal.note(|| Record::new(obs.tic, "retreat", format!("{kind:?}")));
+            self.fight.combat.count(&format!("retreat: {kind:?}"), 1.0);
         }
         route.map(|route| Retreat { kind, route })
     }

@@ -363,15 +363,16 @@ impl Dsda {
     pub fn hits(&self) -> Vec<Hit> {
         let Some(f) = self.hits_fn else { return Vec::new() };
         const MAX: usize = 64;
-        let mut raw = [0 as c_int; 7 * MAX];
-        // SAFETY: room for MAX hits of seven ints each, as the call is told; see `load`.
+        let mut raw = [0 as c_int; 8 * MAX];
+        // SAFETY: room for MAX hits of eight ints each, as the call is told; see `load`.
         let n = unsafe { f(raw.as_mut_ptr(), MAX as c_int) }.clamp(0, MAX as c_int) as usize;
-        raw.as_chunks::<7>()
+        raw.as_chunks::<8>()
             .0
             .iter()
             .take(n)
-            .map(|&[health, armor, inflictor, source, own, cause, side]| Hit {
+            .map(|&[health, armor, inflictor, source, own, cause, side, source_id]| Hit {
                 side: (side != 2).then_some(side),
+                source_id: (source_id > 0).then_some(source_id),
                 health,
                 armor,
                 inflictor: (inflictor >= 0).then_some(inflictor),
@@ -540,6 +541,9 @@ pub struct Hit {
     /// where the status bar's face looks for it: -1 her left, 0 straight at it (within 45
     /// degrees of her facing), 1 her right (behind is one side or the other); None: no one's
     pub side: Option<i32>,
+    /// whose it was, by its id: for measuring a run (was what hit her something she knew
+    /// of?), never hers to know
+    pub source_id: Option<i32>,
 }
 
 impl Hit {

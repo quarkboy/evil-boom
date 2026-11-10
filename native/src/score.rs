@@ -218,6 +218,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     }
     let mut file = std::fs::File::create(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     writeln!(file, "{}", Row::HEADER).map_err(|e| e.to_string())?;
+    let mut stats = std::fs::File::create(path.with_extension("stats.jsonl")).map_err(|e| e.to_string())?;
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     // (the progress window, its own process: a failure to open one costs the score nothing)
     if window && cfg!(feature = "viewer") {
@@ -242,7 +243,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
             continue;
         };
         let ((w, m, skill, seed), mut child) = running.swap_remove(i);
-        let line = child.stdout.take().map(BufReader::new).and_then(|r| r.lines().map_while(Result::ok).find(|l| l.starts_with("RESULT "))).unwrap_or_else(|| "RESULT ERROR".into());
+        let lines: Vec<String> = child.stdout.take().map(BufReader::new).map(|r| r.lines().map_while(Result::ok).collect()).unwrap_or_default();
+        let line = lines.iter().find(|l| l.starts_with("RESULT ")).cloned().unwrap_or_else(|| "RESULT ERROR".into());
+        // (the run's counts, a line of JSON a run beside the TSV: FILE.stats.jsonl)
+        if let Some(st) = lines.iter().find_map(|l| l.strip_prefix("STATS ")) {
+            let _ = writeln!(stats, "{{\"wad\":\"{w}\",\"map\":\"{m}\",\"skill\":{skill},\"seed\":{seed},\"stats\":{st}}}");
+        }
         let row = Row::from_result(&w, &m, skill, seed, line.trim_start_matches("RESULT "));
         writeln!(file, "{}", row.tsv()).map_err(|e| e.to_string())?;
         println!("[{:4}/{total}] {w} {m} skill {skill} seed {seed}: {} {:.0}s", rows.len() + 1, row.outcome, row.seconds);

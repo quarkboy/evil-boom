@@ -157,6 +157,8 @@ pub struct Combat {
     cries_due: Vec<(i64, &'static str)>,
     /// something to turn and look at: a sound from out of her view, a hit, a bump
     alert: Option<Alert>,
+    /// counts for measuring a run (`STATS`): nothing decides by them
+    pub tally: BTreeMap<String, f64>,
     /// attacks heard lately: (when, the kinds that sound like it)
     attacks_heard: Vec<(i64, &'static [&'static str])>,
     /// monsters she can see now
@@ -314,6 +316,7 @@ impl Combat {
             cries_due: Vec::new(),
             attacks_heard: Vec::new(),
             alert: None,
+            tally: BTreeMap::new(),
             visible: Vec::new(),
             barrels_seen: Vec::new(),
             routed: false,
@@ -428,6 +431,7 @@ impl Combat {
             if let Some(&(_, before)) = self.ammo_was.iter().find(|(x, _)| *x == s) {
                 if n < before {
                     self.spent += f64::from(before - n);
+                    *self.tally.entry("rounds spent".to_string()).or_insert(0.0) += f64::from(before - n);
                 }
             }
         }
@@ -455,6 +459,7 @@ impl Combat {
                 }
                 if t.health < h {
                     self.dealt += f64::from(h - t.health.max(0));
+                    *self.tally.entry("damage dealt".to_string()).or_insert(0.0) += f64::from(h - t.health.max(0));
                 }
             }
             now.insert(t.id, t.health);
@@ -519,6 +524,7 @@ impl Combat {
                 self.dead.insert(*i);
                 self.kills += 1;
                 self.cries_due.push((obs.tic, s.name));
+                *self.tally.entry("deaths seen".to_string()).or_insert(0.0) += 1.0;
                 self.log.push(format!("tic {}: {} {i} dead", obs.tic, s.name));
             }
         }
@@ -535,7 +541,7 @@ impl Combat {
             let recent = self.known.get(&t.id).is_some_and(|s| obs.tic - s.tic < self.tune.senses.recent_sight_tics);
             // (in her view; or seen a moment ago, the corner of her eye. Not for being near: one
             // behind her that makes no sound she doesn't know of, till it does, or she backs into it)
-            if !(recent || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov) {
+            if !(recent || d < self.tune.senses.see_near || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov) {
                 continue;
             }
             let target = Body { x: t.x, y: t.y, z: t.z, height: mon(t.name).height };
@@ -610,6 +616,7 @@ impl Combat {
             if let Some(s) = self.known.get_mut(&id) {
                 s.lost = true;
                 self.log.push(format!("tic {}: {} {id} isn't where she last saw it", obs.tic, s.name));
+                *self.tally.entry("lost".to_string()).or_insert(0.0) += 1.0;
             }
         }
         // (missiles: noticed in her view, nothing in the way, then followed while they fly: a
@@ -652,6 +659,14 @@ impl Combat {
         self.heed(obs);
         self.watch_infighting(obs);
         self.now = self.assess(obs);
+        let what = if !self.now.against_her.is_empty() {
+            "tics with something in view"
+        } else if !self.now.remembered.is_empty() {
+            "tics with only remembered"
+        } else {
+            "tics with nothing about"
+        };
+        self.count(what, 1.0);
     }
 
     /// Which monsters in sight are after each other, not her: facing another, not her, and
@@ -722,6 +737,7 @@ impl Combat {
                         self.dead.insert(id);
                         self.kills += 1;
                         self.log.push(format!("tic {}: {name} {id} dead (heard)", obs.tic));
+                        self.count("deaths heard", 1.0);
                     }
                 }
                 _ => {}
@@ -744,6 +760,7 @@ impl Combat {
             _ => "to her right",
         };
         self.log.push(format!("tic {}: {why}: looking {}", obs.tic, side(ways[0])));
+        self.count(&format!("alert: {why}"), 1.0);
         self.journal.note(|| Record { detail: why.to_string(), ..Record::new(obs.tic, "alert", side(ways[0]).to_string()) });
         self.alert = Some(Alert { until: obs.tic + self.tune.senses.alert_tics, ways, hit, in_sight: self.visible.iter().map(|t| t.id).collect() });
     }
@@ -825,6 +842,32 @@ impl Combat {
             .filter_map(|s| self.last_seen.get(&s.id))
             .map(|t| Thing { vx: 0.0, vy: 0.0, vz: 0.0, attack: -1, ..t.clone() })
             .collect()
+    }
+
+    /// For measuring a run: add `by` to the count called `key`.
+    pub fn count(&mut self, key: &str, by: f64) {
+        *self.tally.entry(key.to_string()).or_insert(0.0) += by;
+    }
+
+    /// For measuring a run, never for deciding: what she knew of the monster with that id when
+    /// it hit her ("in view", "remembered", "known" of but out of mind, "unknown"), and how far
+    /// off it was (near: within 384, what the old rule showed her whichever way she faced).
+    pub fn measure(&self, pos: Point, id: i32) -> (&'static str, &'static str) {
+        let knew = if self.visible.iter().any(|t| t.id == id) {
+            "in view"
+        } else if self.now.remembered.iter().any(|t| t.id == id) {
+            "remembered"
+        } else if self.known.contains_key(&id) {
+            "known"
+        } else {
+            "unknown"
+        };
+        let far = match self.truth.get(&id) {
+            Some(t) if dist((t.x, t.y), pos) < 384.0 => "near",
+            Some(_) => "far",
+            None => "gone",
+        };
+        (knew, far)
     }
 
     /// Is that monster dead, as far as she knows (seen or heard to die)?
