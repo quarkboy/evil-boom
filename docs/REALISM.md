@@ -261,3 +261,13 @@ time. To act on once the watching's done, not before.
 - **E1M5 HMP, seed 595929723** (died at 185 s; with the hit-from-the-side fix she gets out).
   Fine now. Some needless damage on the nukage in the middle: her movement interrupted by a
   noise, it seemed.
+- **E2M8 HMP, seed 1243369520** (dies at 191 s). "A comedy of errors." She fails to pick up the
+  rocket launcher for a long while, and by the time she has it she's no bullets left for the
+  lost souls. Then she fixes on looking at a wall in one of the rooms with rockets, with the
+  cyberdemon stuck in that same room; the objective's never changed (as with MAP07's switch),
+  so she ends up squeezing into the room with it, "and that goes about as well as you'd
+  expect".
+- **The user's, on monsters heard walking**: the cyberdemon's steps are a sound of their own,
+  constant, heard all the time. Worth having in the logic for any enemy with a walking sound
+  like that (see the engine): she should have a much better sense of where it is, and hunt it
+  more proactively than she does.
