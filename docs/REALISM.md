@@ -234,7 +234,8 @@ time. To act on once the watching's done, not before.
   still on the super shotgun: no megasphere, rocket launcher, plasma rifle or chaingun.
 - **E3M6 HMP, seed 1858596759** (dies at 104 s). Just unfortunate. A trap with an
   invulnerability sphere you all but land on: she jumped over it, the monsters swarmed her, and
-  she died before getting to it.
+  she died before getting to it. The monsters were all low-level ones, just spawned all round
+  her.
 - **Seen across the runs, on how she fights** (the user's, with E3M6): breaking line of sight
   behind a doorway, stepping left and right, she goes very far to each side, much further than
   it takes. Tighten it to only as far as needed: again so as not to wake more enemies.
