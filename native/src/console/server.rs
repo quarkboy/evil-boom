@@ -31,6 +31,17 @@ const POLL_LINES: usize = 500;
 const BODY_MAX: u64 = 64 * 1024;
 /// a game asked to quit given this long before it's killed
 const QUIT_WAIT: Duration = Duration::from_secs(3);
+/// a connected game silent this long is taken for hung and killed (generous: a level change
+/// works out the new level's analysis in the game's own loop, seconds on a big map)
+const HANG: Duration = Duration::from_secs(45);
+/// a game not connected this long after it was started: hung too (the first level's analysis,
+/// and DSDA's start, come first)
+const HELLO_WAIT: Duration = Duration::from_secs(90);
+/// a crashed game is started again after this long...
+const RESTART_DELAY: Duration = Duration::from_secs(2);
+/// ...unless it's crashed this many times in this long: then it's left for the streamer
+const CRASH_LIMIT: usize = 3;
+const CRASH_WINDOW: Duration = Duration::from_secs(120);
 
 /// How the game's started: what changing needs a new game process.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -58,11 +69,13 @@ pub struct Settings {
     pub sfx_volume: Option<i32>,
     pub music_volume: Option<i32>,
     pub master_volume: Option<i32>,
+    /// a game that crashes (or hangs) started again, at the level she was on
+    pub auto_restart: bool,
 }
 
 impl Default for Settings {
     fn default() -> Settings {
-        Settings { wad: "doom2".into(), map: "MAP01".into(), skill: 3, mortal: true, lives: 1, seed: None, episode: true, mode: "bot".into(), neuro_url: "ws://127.0.0.1:8000".into(), muted: false, sfx_volume: None, music_volume: None, master_volume: None }
+        Settings { wad: "doom2".into(), map: "MAP01".into(), skill: 3, mortal: true, lives: 1, seed: None, episode: true, mode: "bot".into(), neuro_url: "ws://127.0.0.1:8000".into(), muted: false, sfx_volume: None, music_volume: None, master_volume: None, auto_restart: true }
     }
 }
 
@@ -135,6 +148,9 @@ struct GameProc {
     /// to be muted as soon as it's connected
     #[serde(skip)]
     start_muted: bool,
+    /// killed for hanging (once)
+    #[serde(skip)]
+    hung: bool,
 }
 
 struct Shared {
@@ -151,10 +167,20 @@ struct Shared {
     state: Option<GameState>,
     log: VecDeque<(u64, String)>,
     seq: u64,
+    /// the game's last word (hello or state): silence too long is a hang
+    heard: Option<Instant>,
+    /// when the game last crashed, the last few
+    crashes: VecDeque<Instant>,
+    /// the session's log, everything the page shows (out/console/)
+    file: Option<std::fs::File>,
+    began: Instant,
 }
 
 impl Shared {
     fn push(&mut self, line: String) {
+        if let Some(f) = self.file.as_mut() {
+            let _ = writeln!(f, "[{:8.1}s] {line}", self.began.elapsed().as_secs_f64());
+        }
         self.seq += 1;
         self.log.push_back((self.seq, line));
         while self.log.len() > LOG_KEEP {
@@ -206,6 +232,10 @@ pub fn serve(bind: &str) -> Result<(), String> {
         state: None,
         log: VecDeque::new(),
         seq: 0,
+        heard: None,
+        crashes: VecDeque::new(),
+        file: session_log(),
+        began: Instant::now(),
     }));
     lock(&hub).save()?;
     {
@@ -228,6 +258,16 @@ pub fn serve(bind: &str) -> Result<(), String> {
         handle(&hub, req);
     }
     Ok(())
+}
+
+/// The session's log file, out/console/<commit>-<time>.log (none if it can't be made: the page
+/// has it all the same).
+fn session_log() -> Option<std::fs::File> {
+    let dir = crate::config::out_dir().join("console");
+    std::fs::create_dir_all(&dir).ok()?;
+    let path = dir.join(format!("{}.log", crate::config::run_stamp()));
+    println!("  log: {}", path.display());
+    std::fs::File::create(path).ok()
 }
 
 /// A token: 128 bits from the standard library's randomly keyed hasher (keys from the system's
@@ -281,6 +321,7 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 }
                 s.push(format!("[console] game connected: {wad} {map}, build {commit}"));
                 s.hello = Some(json!({ "pid": pid, "commit": commit, "wad": wad, "map": map, "maps": maps }));
+                s.heard = Some(Instant::now());
                 s.to_game = writer.take();
                 ours = true;
                 if s.game.start_muted {
@@ -292,7 +333,10 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 }
             }
             _ if !ours => return,
-            FromGame::State(st) => s.state = Some(st),
+            FromGame::State(st) => {
+                s.state = Some(st);
+                s.heard = Some(Instant::now());
+            }
             FromGame::Log { lines } => lines.into_iter().for_each(|l| s.push(l)),
             FromGame::Event { what } => s.push(format!("[event] {what}")),
         }
@@ -304,34 +348,93 @@ fn read_game(stream: TcpStream, hub: &Hub) {
     }
 }
 
-/// The child's life: its ending noticed (and told, with how it ended).
+/// The child's life: its ending noticed and told; a crash restarted (unless it keeps crashing);
+/// a hang killed (and so restarted).
 fn watch_child(hub: &Hub) {
     loop {
         thread::sleep(Duration::from_millis(200));
         let mut s = lock(hub);
+        // (Some((how, crashed)): it's ended; a crash is any end not asked for and not clean)
         let ended = match s.child.as_mut().map(Child::try_wait) {
-            Some(Ok(Some(status))) => Some(status.to_string()),
-            Some(Err(e)) => Some(e.to_string()),
+            Some(Ok(Some(status))) => Some((status.to_string(), !status.success())),
+            Some(Err(e)) => Some((e.to_string(), true)),
             _ => None,
         };
-        if let Some(how) = ended {
-            let how = if s.game.stopping { "stopped".to_string() } else { how };
-            s.push(format!("[console] the game ended: {how}"));
-            s.child = None;
-            s.to_game = None;
-            s.game = GameProc { last_exit: Some(how), ..GameProc::default() };
+        let Some((how, crashed)) = ended else {
+            check_hang(&mut s);
+            continue;
+        };
+        let crashed = crashed && !s.game.stopping;
+        let how = if s.game.stopping { "stopped".to_string() } else if s.game.hung { format!("{how} (hung)") } else { how };
+        s.push(format!("[console] the game ended: {how}"));
+        // (where she was, to go on from: the same WAD's level, as the game last told it)
+        let same_wad = s.hello.as_ref().and_then(|h| h.get("wad")).and_then(Value::as_str) == Some(s.settings.wad.as_str());
+        let at = s.state.as_ref().filter(|_| same_wad).map(|st| st.map.clone());
+        s.child = None;
+        s.to_game = None;
+        s.game = GameProc { last_exit: Some(how), ..GameProc::default() };
+        if crashed && s.settings.auto_restart {
+            let now = Instant::now();
+            s.crashes.retain(|t| now.duration_since(*t) < CRASH_WINDOW);
+            s.crashes.push_back(now);
+            if s.crashes.len() >= CRASH_LIMIT {
+                let n = s.crashes.len();
+                s.push(format!("[console] {n} crashes in {}s: not started again (start it from the page)", CRASH_WINDOW.as_secs()));
+                s.crashes.clear();
+            } else {
+                s.push(format!("[console] starting it again in {}s{}", RESTART_DELAY.as_secs(), at.as_ref().map_or(String::new(), |m| format!(", at {m}"))));
+                let hub = Arc::clone(hub);
+                thread::spawn(move || {
+                    thread::sleep(RESTART_DELAY);
+                    if lock(&hub).child.is_none() {
+                        if let Err(e) = start_at(&hub, at) {
+                            lock(&hub).push(format!("[console] not started again: {e}"));
+                        }
+                    }
+                });
+            }
+        }
+    }
+}
+
+/// A game that's gone silent killed (its end then a crash's, restarted as one is).
+fn check_hang(s: &mut Shared) {
+    if s.child.is_none() || s.game.stopping || s.game.hung {
+        return;
+    }
+    let silent = match (s.to_game.is_some(), s.heard, s.game.started) {
+        (true, Some(t), _) => t.elapsed() > HANG,
+        (false, _, Some(t)) => t.elapsed() > HELLO_WAIT,
+        _ => false,
+    };
+    if silent {
+        let waited = if s.to_game.is_some() { HANG } else { HELLO_WAIT };
+        s.push(format!("[console] no word from the game in {}s: killed as hung", waited.as_secs()));
+        s.game.hung = true;
+        if let Some(c) = s.child.as_mut() {
+            let _ = c.kill();
         }
     }
 }
 
 /// Start the game with the settings as they are now.
 fn start(hub: &Hub) -> Result<(), String> {
+    start_at(hub, None)
+}
+
+/// Start the game with the settings as they are now, at `map` if one's given (going on after a
+/// crash) rather than the settings' own.
+fn start_at(hub: &Hub, map: Option<String>) -> Result<(), String> {
     let mut s = lock(hub);
     if s.child.is_some() {
         return Err("the game's running".into());
     }
-    s.settings.check()?;
-    let args = s.settings.args(&s.control_addr);
+    let mut settings = s.settings.clone();
+    if let Some(m) = map {
+        settings.map = m;
+    }
+    settings.check()?;
+    let args = settings.args(&s.control_addr);
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut child = Process::new(&exe).args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("{}: {e}", exe.display()))?;
     for (out, tag) in [(child.stdout.take().map(|o| Box::new(o) as Box<dyn Read + Send>), "out"), (child.stderr.take().map(|o| Box::new(o) as Box<dyn Read + Send>), "err")] {
@@ -345,7 +448,8 @@ fn start(hub: &Hub) -> Result<(), String> {
         }
     }
     s.push(format!("[console] started: evil-boom {}", args.join(" ")));
-    s.game = GameProc { running: true, pid: Some(child.id()), last_exit: s.game.last_exit.take(), stopping: false, started: Some(Instant::now()), start_muted: s.settings.muted };
+    s.game = GameProc { running: true, pid: Some(child.id()), last_exit: s.game.last_exit.take(), stopping: false, started: Some(Instant::now()), start_muted: s.settings.muted, hung: false };
+    s.heard = None;
     s.child = Some(child);
     s.hello = None;
     s.state = None;

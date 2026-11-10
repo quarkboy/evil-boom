@@ -98,9 +98,16 @@ WAD, map); after that:
    then), 0-100. The levels are kept in the console's settings and given to each game as it
    connects. Left: the GPT
    stand-in's settings and its log on the page.
-3. **Robustness**: a crashed game restarted on its own (with a limit on crash loops); a hung one
-   (no state for some seconds) killed and restarted; a log a session in `out/console/`; the
-   supervisor's own restart picking the game up where it can.
+3. **Robustness** (built, 2026-11-10): a game that ends neither asked to nor cleanly (a signal, a
+   non-zero code) is started again after 2 s, at the level she was on (a pistol start, the same
+   WAD's); three crashes in two minutes and it's left for the streamer, said so. A clean end (the
+   episode over, the window closed) isn't restarted. A connected game silent 45 s, or one not
+   connected 90 s after it started, is killed as hung, and so restarted (45 s: a level change
+   works out the level's analysis in the game's loop; not yet measured on the biggest maps). The
+   page's settings have "Restart it if it crashes" (on). Everything the page shows also goes to
+   `out/console/<commit>-<time>.log`. Tested: kill -9 at MAP05 (back at MAP05, a new pid); three
+   in a row (the third left); SIGSTOP (killed as hung after 45 s, restarted). Left: the console's
+   own restart finding a game still running (today a restarted console starts a new one).
 4. **Doom's own screens** (the presentation; the user's: "we might need to port more of the
    engine, like the normal menu screen"). Today the patch draws only the level (`evil_draw`
    returns nothing unless `GS_LEVEL`), shuts the menu every tic, has the melt off, and on an
