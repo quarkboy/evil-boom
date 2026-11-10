@@ -239,6 +239,11 @@ impl Engine {
         self.game.exit(secret)
     }
 
+    /// The level's title as the automap has it ("level 7: dead simple", "E1M1: Hangar").
+    pub fn level_title(&self) -> Option<String> {
+        self.game.level_title()
+    }
+
     /// The screen as it stands (Doom's own screens); None from an engine without them.
     pub fn screen(&self) -> Option<crate::dsda::Screen> {
         self.game.screen()

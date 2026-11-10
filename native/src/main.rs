@@ -52,7 +52,9 @@
 //!       added to it (list, name, order: see control::script), what comes back in the log and in
 //!       FILE.out. --present: Doom's own screens (the title card, the menu walked to the game, the
 //!       melt, the tally, the finales, death as the game shows it); --title: those, held at the
-//!       title card till the console begins it. --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
+//!       title card till the console begins it. --stream [right|left]: the window for the stream,
+//!       16:9, the game on one side, a column for the viewers on the other (right unless told).
+//!       --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
 //!       or evil-boom neuro-mock). --gpt [CONFIG]: directed by the GPT stand-in, run in this
 //!       program (config/neuro-gpt.json unless named; its log out/neuro/gpt.log)
 //!
@@ -548,6 +550,7 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
         control: None,
         present: false,
         title_wait: false,
+        stream: None,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -571,6 +574,14 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
                 w.gpt = Some(named.map_or_else(|| evildoom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from));
             }
             "--directed" => w.directed = Some(std::path::PathBuf::from(it.next().ok_or("--directed FILE (orders, a line each, read as they're added)")?)),
+            "--stream" => {
+                // (the column's side, if one's named: right unless told)
+                let named = it.as_slice().first().and_then(|a| evildoom::viewer::StreamSide::parse(a));
+                if named.is_some() {
+                    it.next();
+                }
+                w.stream = Some(named.unwrap_or(evildoom::viewer::StreamSide::Right));
+            }
             "--present" => w.present = true,
             "--title" => {
                 w.present = true;

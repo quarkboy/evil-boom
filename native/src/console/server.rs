@@ -75,11 +75,16 @@ pub struct Settings {
     pub present: bool,
     /// with them: the game waits at the title card till it's begun from the page
     pub title_wait: bool,
+    /// the game's window: "stream" (16:9, the game and a column for the viewers) or "watcher"
+    /// (the game, the map and her log, for watching her work)
+    pub layout: String,
+    /// the stream window's column: "right" or "left"
+    pub panel_side: String,
 }
 
 impl Default for Settings {
     fn default() -> Settings {
-        Settings { wad: "doom2".into(), map: "MAP01".into(), skill: 3, mortal: true, lives: 1, seed: None, episode: true, mode: "bot".into(), neuro_url: "ws://127.0.0.1:8000".into(), muted: false, sfx_volume: None, music_volume: None, master_volume: None, auto_restart: true, present: true, title_wait: true }
+        Settings { wad: "doom2".into(), map: "MAP01".into(), skill: 3, mortal: true, lives: 1, seed: None, episode: true, mode: "bot".into(), neuro_url: "ws://127.0.0.1:8000".into(), muted: false, sfx_volume: None, music_volume: None, master_volume: None, auto_restart: true, present: true, title_wait: true, layout: "stream".into(), panel_side: "right".into() }
     }
 }
 
@@ -95,6 +100,9 @@ impl Settings {
         }
         if !(1..=99).contains(&self.lives) {
             return Err("lives: 1-99".into());
+        }
+        if !["stream", "watcher"].contains(&self.layout.as_str()) || !["right", "left"].contains(&self.panel_side.as_str()) {
+            return Err("layout: stream or watcher; panel_side: right or left".into());
         }
         if !["bot", "neuro", "gpt"].contains(&self.mode.as_str()) {
             return Err("mode: bot, neuro or gpt".into());
@@ -121,6 +129,9 @@ impl Settings {
         }
         if self.present {
             a.push(if self.title_wait { "--title" } else { "--present" }.into());
+        }
+        if self.layout == "stream" {
+            a.extend(["--stream".into(), self.panel_side.clone()]);
         }
         match self.mode.as_str() {
             "neuro" => a.extend(["--neuro".into(), self.neuro_url.clone()]),
@@ -626,7 +637,11 @@ fn handle(hub: &Hub, mut req: Request) {
             }) {
                 Ok(()) => {
                     let mut s = lock(hub);
-                    let changed = s.settings != new;
+                    // (the column's side moves now; the rest is for the next game)
+                    if s.settings.panel_side != new.panel_side && s.to_game.is_some() {
+                        let _ = s.send(&Command::Panel { side: new.panel_side.clone() });
+                    }
+                    let changed = Settings { panel_side: new.panel_side.clone(), ..s.settings.clone() } != new;
                     s.settings = new;
                     let running = s.child.is_some();
                     match s.save() {
@@ -708,7 +723,7 @@ mod tests {
     fn settings_make_watch_args() {
         let a = (Settings { skill: 4, seed: Some(7), mode: "neuro".into(), ..Settings::default() }).args("127.0.0.1:1");
         let line = a.join(" ");
-        assert!(line.starts_with("watch doom2 MAP01 --fight 4 --mortal --lives 1 --seed 7 --episode --title --neuro ws://127.0.0.1:8000"), "{line}");
+        assert!(line.starts_with("watch doom2 MAP01 --fight 4 --mortal --lives 1 --seed 7 --episode --title --stream right --neuro ws://127.0.0.1:8000"), "{line}");
         assert!(line.ends_with("--control 127.0.0.1:1"), "{line}");
         let none = (Settings { skill: 0, mortal: false, muted: true, ..Settings::default() }).args("127.0.0.1:1").join(" ");
         assert!(!none.contains("--fight") && !none.contains("--mortal") && none.contains("--seed random"), "{none}");

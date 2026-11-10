@@ -132,6 +132,8 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
         <option value="3">Hurt me plenty</option><option value="4">Ultra-Violence</option><option value="5">Nightmare!</option></select></label>
       <label>Lives <input name="lives" type="number" min="1" max="99"></label>
       <label>Seed <input name="seed" placeholder="random"></label>
+      <label>Window <select name="layout"><option value="stream">for the stream (16:9)</option><option value="watcher">the watcher (map and log)</option></select></label>
+      <label>Column <select name="panel_side"><option value="right">on the right</option><option value="left">on the left</option></select></label>
       <label>Directed by <select name="mode"><option value="bot">the bot alone</option><option value="neuro">Neuro</option><option value="gpt">the GPT stand-in</option></select></label>
       <label class="wide">Neuro URL <select name="neuro_url"></select></label>
       <span class="check"><input type="checkbox" name="mortal" id="s-mortal"><label for="s-mortal" class="check">Mortal</label></span>
@@ -152,10 +154,12 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <div class="row">
       <button id="vw-map" class="on">Map</button>
       <button id="vw-game">Game</button>
+      <button id="vw-stream">Stream</button>
     </div>
     <div class="views">
       <figure id="fig-map"><img id="img-map" alt="the map as she knows it, her route and objectives"><figcaption>Map as she knows it, route, objectives</figcaption></figure>
       <figure id="fig-game" hidden><img id="img-game" alt="the game's view"><figcaption>Game</figcaption></figure>
+      <figure id="fig-stream" hidden style="flex-basis:100%"><img id="img-stream" alt="the stream's window, as OBS captures it"><figcaption>The stream's window (half size)</figcaption></figure>
     </div>
   </section>
 
@@ -264,10 +268,10 @@ function render(p) {
     $("settings").elements.neuro_url.replaceChildren(...(p.neuro_urls || []).map((u) => { const o = document.createElement("option"); o.value = o.textContent = u; return o; }));
   }
   if (!formDirty) fillForm(p.settings);
-  for (const name of ["map", "game"]) showView(name, (p.views || {})[name]);
+  for (const name of ["map", "game", "stream"]) showView(name, (p.views || {})[name]);
   addLog(p.log);
 }
-const viewOn = { map: true, game: false }, viewShown = {}, viewLoading = {};
+const viewOn = { map: true, game: false, stream: false }, viewShown = {}, viewLoading = {};
 try { Object.assign(viewOn, JSON.parse(localStorage.getItem("evil-console-views") || "{}")); } catch (e) { /* (the default) */ }
 function showView(name, n) {
   $("fig-" + name).hidden = !viewOn[name];
@@ -280,7 +284,7 @@ function showView(name, n) {
   img.src = "api/view/" + name + ".png?t=" + encodeURIComponent(token) + "&n=" + n;
   viewShown[name] = n;
 }
-for (const name of ["map", "game"]) {
+for (const name of ["map", "game", "stream"]) {
   $("vw-" + name).onclick = () => {
     viewOn[name] = !viewOn[name];
     try { localStorage.setItem("evil-console-views", JSON.stringify(viewOn)); } catch (e) { /* (not kept) */ }

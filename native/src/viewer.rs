@@ -34,6 +34,9 @@ use crate::things::{pickup, PickupKind};
 
 mod console;
 mod present;
+mod stream;
+
+pub use stream::Side as StreamSide;
 use crate::wad::{load_map, Wad};
 
 const W: usize = 1600;
@@ -116,9 +119,26 @@ fn key_colour(name: &str) -> Rgb {
 /// A canvas of W x H pixels (0RGB) with a clip rectangle.
 struct Canvas {
     px: Vec<u32>,
+    /// its width in pixels (the watcher's W; the stream's layout its own)
+    width: usize,
     clip: Rect,
     /// all text this much bigger (T cycles TEXT_SIZES; the user's: it was small)
     text_scale: f64,
+}
+
+/// Where a map's drawn: its box on the canvas, the map's point at the box's middle, and pixels
+/// a map unit.
+#[derive(Clone, Copy, Debug)]
+struct MapView {
+    r: Rect,
+    centre: Point,
+    scale: f64,
+}
+
+impl MapView {
+    fn at(&self, p: Point) -> Point {
+        (self.r.0 as f64 + self.r.2 as f64 / 2.0 + (p.0 - self.centre.0) * self.scale, self.r.1 as f64 + self.r.3 as f64 / 2.0 - (p.1 - self.centre.1) * self.scale)
+    }
 }
 
 /// the text sizes T cycles through
@@ -130,7 +150,7 @@ impl Canvas {
         if x < cx as i64 || y < cy as i64 || x >= (cx + cw) as i64 || y >= (cy + ch) as i64 {
             return;
         }
-        self.px[y as usize * W + x as usize] = (u32::from(c.0) << 16) | (u32::from(c.1) << 8) | u32::from(c.2);
+        self.px[y as usize * self.width + x as usize] = (u32::from(c.0) << 16) | (u32::from(c.1) << 8) | u32::from(c.2);
     }
 
     fn fill(&mut self, r: Rect, c: Rgb) {
@@ -275,6 +295,9 @@ pub struct WatchOptions {
     pub present: bool,
     /// with them: held at the title card till the console begins the game
     pub title_wait: bool,
+    /// the window for the stream: 16:9, the game on one side and a column for the viewers on
+    /// the other, the column's side this (see viewer::stream)
+    pub stream: Option<StreamSide>,
 }
 
 /// A watched game's orders, from a file added to as it plays.
@@ -354,6 +377,8 @@ struct Watch {
     console: Option<console::Console>,
     /// Doom's own screens (--present)
     present: Option<present::Present>,
+    /// the stream's window (--stream)
+    stream: Option<stream::Stream>,
     hold: Option<Hold>,
     /// directed play's orders, if it's directed
     feed: Option<Feed>,
@@ -397,6 +422,9 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     (watch.sound, watch.sound_on) = (sound, sound);
     if let Some(addr) = &o.control {
         watch.console = Some(console::Console::connect(addr, wad, map_name, &w)?);
+    }
+    if let Some(side) = o.stream {
+        watch.stream = Some(stream::Stream::new(side, o.fight));
     }
     if o.present && !o.headless {
         watch.present = present::Present::start(&watch, o, o.title_wait);
@@ -521,7 +549,7 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
     let mut pipe = ff.stdin.take().ok_or("no pipe to ffmpeg")?;
     println!("recording {} at {ow}x{oh} (the view {fw}x{fh})", r.out.display());
     let mut began = Instant::now();
-    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H), text_scale: 1.0 };
+    let mut canvas = Canvas { px: vec![0; W * H], width: W, clip: (0, 0, W, H), text_scale: 1.0 };
     if r.view == RecordView::Hud {
         // (the corner map round her, near enough to read)
         (watch.follow, watch.zoom) = (true, HUD_ZOOM);
@@ -737,7 +765,7 @@ fn load_level(w: &Wad, name: &str, o: &WatchOptions) -> Result<(Arc<MapData>, Rc
 fn enter_level(watch: Watch, w: &Wad, o: &WatchOptions, name: &str, (m, nav): (Arc<MapData>, Rc<Navigator>), carry: Option<crate::dsda::Loadout>) -> Result<Watch, String> {
     let (speed, show_all, follow) = (watch.speed, watch.show_all, watch.follow);
     let (sound, muted, sound_on) = (watch.sound, watch.muted, watch.sound_on);
-    let (paused, mut console, present) = (watch.paused, watch.console, watch.present);
+    let (paused, mut console, present, stream) = (watch.paused, watch.console, watch.present, watch.stream);
     let mut engine = watch.engine;
     engine.carry = carry.or_else(|| o.carry.clone());
     engine.goto(name)?;
@@ -750,6 +778,7 @@ fn enter_level(watch: Watch, w: &Wad, o: &WatchOptions, name: &str, (m, nav): (A
     }
     watch.console = console;
     watch.present = present;
+    watch.stream = stream;
     Ok(watch)
 }
 
@@ -766,9 +795,12 @@ pub fn watch_prepared(p: crate::arena::Prepared, map_name: &str, speed: f64, sou
 /// The window, till it's shut or Esc: space pauses, N (or the right arrow) steps a tic while
 /// paused, +/- the speed, A the whole map, F follow, the wheel zooms.
 fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> Result<(), String> {
-    let mut window = Window::new(title, W, H, WindowOptions { resize: true, scale: Scale::FitScreen, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() }).map_err(|e| e.to_string())?;
+    // (the stream's window its own size, and a plain title to find it by in OBS)
+    let (ww, wh, title) = if watch.stream.is_some() { (stream::SW, stream::SH, "Evil DOOM") } else { (W, H, title) };
+    let mut window = Window::new(title, ww, wh, WindowOptions { resize: true, scale: Scale::FitScreen, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() }).map_err(|e| e.to_string())?;
     window.set_target_fps(60);
-    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H), text_scale: 1.0 };
+    let mut canvas = Canvas { px: vec![0; ww * wh], width: ww, clip: (0, 0, ww, wh), text_scale: 1.0 };
+    let mut aside: Option<Canvas> = None;
     let mut last = Instant::now();
     let mut owed = 0.0;
     while window.is_open() && !window.is_key_down(K::Escape) {
@@ -820,11 +852,8 @@ fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> R
             if watch.paused {
                 owed = 0.0;
             }
-            watch.draw(&mut canvas);
-            if let Some(c) = watch.console.as_mut() {
-                c.views(&canvas.px, watch.frame.as_ref(), &watch.palette);
-            }
-            window.update_with_buffer(&canvas.px, W, H).map_err(|e| e.to_string())?;
+            paint(&mut watch, &mut canvas, &mut aside);
+            window.update_with_buffer(&canvas.px, ww, wh).map_err(|e| e.to_string())?;
             continue;
         }
         let wanted = watch.agent.x().restart_wanted;
@@ -858,13 +887,34 @@ fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> R
         if watch.paused {
             owed = 0.0;
         }
-        watch.draw(&mut canvas);
+        paint(&mut watch, &mut canvas, &mut aside);
+        window.update_with_buffer(&canvas.px, ww, wh).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// The window's picture this frame, the stream's layout or the watcher's; and the console's
+/// pictures, which are the watcher's own drawing (in the stream's layout, drawn aside for them,
+/// only when they're due).
+fn paint(watch: &mut Watch, canvas: &mut Canvas, aside: &mut Option<Canvas>) {
+    if watch.stream.is_some() {
+        watch.draw_stream(canvas);
+        if watch.console.as_ref().is_some_and(console::Console::views_due) {
+            if let Some(c) = watch.console.as_mut() {
+                c.stream_view(&canvas.px, canvas.width, canvas.px.len() / canvas.width);
+            }
+            let a = aside.get_or_insert_with(|| Canvas { px: vec![0; W * H], width: W, clip: (0, 0, W, H), text_scale: 1.0 });
+            watch.draw(a);
+            if let Some(c) = watch.console.as_mut() {
+                c.views(&a.px, watch.frame.as_ref(), &watch.palette);
+            }
+        }
+    } else {
+        watch.draw(canvas);
         if let Some(c) = watch.console.as_mut() {
             c.views(&canvas.px, watch.frame.as_ref(), &watch.palette);
         }
-        window.update_with_buffer(&canvas.px, W, H).map_err(|e| e.to_string())?;
     }
-    Ok(())
 }
 
 /// The window as it is now (the game's frame, the map, the panels) into out/watch.png, for a run
@@ -881,7 +931,7 @@ pub fn snapshot_to(path: &Path, w: &Wad, m: Arc<MapData>, map_name: &str, engine
     watch.options = watch.agent.objectives(&obs);
     watch.options_tic = obs.tic;
     watch.obs = Some(obs);
-    let mut canvas = Canvas { px: vec![0; W * H], clip: (0, 0, W, H), text_scale: 1.0 };
+    let mut canvas = Canvas { px: vec![0; W * H], width: W, clip: (0, 0, W, H), text_scale: 1.0 };
     watch.draw(&mut canvas);
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
@@ -914,6 +964,7 @@ impl Watch {
         Watch {
             console: None,
             present: None,
+            stream: None,
             hold: None,
             feed: None,
             neuro: None,
@@ -947,6 +998,9 @@ impl Watch {
 
     fn tic(&mut self) {
         let obs = self.engine.observe();
+        if let (Some(st), Some(m)) = (self.stream.as_mut(), obs.message.as_deref()) {
+            st.message(m, obs.tic);
+        }
         // (a secret found told her, as a run tells her: watched, it plays as it did)
         let found = self.engine.tally()[2].0;
         if found > self.secrets_seen {
@@ -1002,17 +1056,19 @@ impl Watch {
         self.obs = Some(obs);
     }
 
-    fn to_screen(&self, p: Point) -> Point {
+    /// The watcher's map: its box, the level fitted to it (zoomed), centred on her (follow), on
+    /// a point asked for, or on the level.
+    fn map_view(&self) -> MapView {
         let (x0, y0, x1, y1) = self.bounds;
         let pad = 12.0;
         let (mw, mh) = (MAP.2 as f64, MAP.3 as f64);
         let scale = ((mw - 2.0 * pad) / (x1 - x0).max(1.0)).min((mh - 2.0 * pad) / (y1 - y0).max(1.0)) * self.zoom;
-        let (cx, cy) = match (&self.obs, self.follow, self.center) {
+        let centre = match (&self.obs, self.follow, self.center) {
             (Some(o), true, _) => (o.x, o.y),
             (_, _, Some(c)) => c,
             _ => ((x0 + x1) / 2.0, (y0 + y1) / 2.0),
         };
-        (MAP.0 as f64 + mw / 2.0 + (p.0 - cx) * scale, MAP.1 as f64 + mh / 2.0 - (p.1 - cy) * scale)
+        MapView { r: MAP, centre, scale }
     }
 
     fn draw(&self, c: &mut Canvas) {
@@ -1240,8 +1296,15 @@ impl Watch {
     }
 
     fn draw_map(&self, c: &mut Canvas) {
-        c.fill(MAP, (8, 8, 10));
-        c.clip = MAP;
+        self.draw_map_in(c, self.map_view(), true);
+    }
+
+    /// The map as she knows it in `v`'s box: lines, what they are, things, sounds, objectives,
+    /// the route, her; `labelled`: its title in the corner.
+    fn draw_map_in(&self, c: &mut Canvas, v: MapView, labelled: bool) {
+        c.fill(v.r, (8, 8, 10));
+        let clip = c.clip;
+        c.clip = v.r;
         let m = &self.m;
         let x = self.agent.x();
         let k = &x.knowledge;
@@ -1265,7 +1328,7 @@ impl Watch {
                     _ => (70, 70, 70),
                 }
             };
-            c.line(self.to_screen(a), self.to_screen(b), colour, 1);
+            c.line(v.at(a), v.at(b), colour, 1);
         }
         // what lines are, as far as she can tell
         let fired: std::collections::BTreeSet<usize> = k.fired.iter().map(|f| f.line).collect();
@@ -1275,12 +1338,12 @@ impl Watch {
         marks.extend(k.teleporters().into_iter().map(|li| (li, (255, 255, 255))));
         for (li, colour) in marks {
             let (a, b) = m.line_seg(li);
-            c.line(self.to_screen(a), self.to_screen(b), colour, 3);
+            c.line(v.at(a), v.at(b), colour, 3);
         }
         // things she knows about
         for th in k.known_things() {
             let Some((name, kind)) = pickup(th.kind) else { continue };
-            let p = self.to_screen((th.x, th.y));
+            let p = v.at((th.x, th.y));
             if kind == PickupKind::Key {
                 c.circle(p, 6.0, key_colour(name), None);
                 c.circle(p, 6.0, (255, 255, 255), Some(1.0));
@@ -1298,11 +1361,11 @@ impl Watch {
             let fade = 1.0 - age as f64 / (3.0 * TICRATE);
             let n = kind_colour(Kind::Noise);
             let col = ((f64::from(n.0) * fade) as u8, (f64::from(n.1) * fade) as u8, (f64::from(n.2) * fade) as u8);
-            c.circle(self.to_screen(h.origin), 6.0 + (age / 4) as f64, col, Some(2.0));
+            c.circle(v.at(h.origin), 6.0 + (age / 4) as f64, col, Some(2.0));
         }
         // objectives open to her, the current one, the route
         for o in &self.options {
-            let p = self.to_screen(o.goal);
+            let p = v.at(o.goal);
             let col = kind_colour(o.kind);
             c.line((p.0 - 4.0, p.1 - 4.0), (p.0 + 4.0, p.1 + 4.0), col, 1);
             c.line((p.0 - 4.0, p.1 + 4.0), (p.0 + 4.0, p.1 - 4.0), col, 1);
@@ -1315,7 +1378,7 @@ impl Watch {
                     Some(q) => run.push(q),
                     None => {
                         for w in run.windows(2) {
-                            c.line(self.to_screen(w[0]), self.to_screen(w[1]), (60, 255, 60), 2);
+                            c.line(v.at(w[0]), v.at(w[1]), (60, 255, 60), 2);
                         }
                         run.clear();
                     }
@@ -1323,17 +1386,19 @@ impl Watch {
             }
         }
         if let Some(cur) = &x.current {
-            c.circle(self.to_screen(cur.goal), 8.0, kind_colour(cur.kind), Some(2.0));
+            c.circle(v.at(cur.goal), 8.0, kind_colour(cur.kind), Some(2.0));
         }
         if let Some(obs) = &self.obs {
-            let p = self.to_screen(obs.pos());
+            let p = v.at(obs.pos());
             let a = obs.angle.to_radians();
             let at = |r: f64, off: f64| (p.0 + r * (a + off).cos(), p.1 - r * (a + off).sin());
             c.triangle([at(10.0, 0.0), at(6.0, 2.5), at(6.0, -2.5)], (255, 255, 255));
         }
-        c.clip = (0, 0, W, H);
-        let label = format!("map as known{}{}", if self.show_all { "  (+ unknown, faint)" } else { "" }, if self.follow { "  [follow]" } else { "" });
-        c.text(&label, (MAP.0 + 8, MAP.1 + 4), DIM, 1);
+        c.clip = clip;
+        if labelled {
+            let label = format!("map as known{}{}", if self.show_all { "  (+ unknown, faint)" } else { "" }, if self.follow { "  [follow]" } else { "" });
+            c.text(&label, (v.r.0 + 8, v.r.1 + 4), DIM, 1);
+        }
     }
 
     fn draw_panel(&self, c: &mut Canvas) {

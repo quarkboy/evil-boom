@@ -138,8 +138,24 @@ WAD, map); after that:
    same death at tic 6290). The user's: fine, streams play random seeds. Unpresented play is
    unchanged by the patch: one binary on the old engine and the new, three levels, the same
    results to the second.
-   Not done: a game-only window for OBS (the console's View shows the game; the watcher's window
-   still draws the game, the map and the log side by side).
+   **The window for the stream** (built, 2026-11-10; the user's: "a new mode for the watcher
+   window for streaming itself ... the game isn't natively 16:9, so there is room on the sides
+   ... figure out something interesting to add in there"): `watch --stream [right|left]`, the
+   console's settings "Window: for the stream" (the default) and "Column: right/left" (moved live
+   when saved). 1920x1080, titled "Evil DOOM" for OBS: the game's frame at 4:3 (1440x1080, its
+   pixels scaled as they are) and a 480 column for the viewers (`viewer/stream.rs`): the map and
+   the level's name (the automap's title: `evil_level_title`), skill and level time; a map of what
+   she's seen following her (the watcher's own map drawing, now drawn into any box:
+   `MapView`/`draw_map_in`), her route and objectives; NOW, what she's doing in the viewers'
+   words (fighting what, by the names players know; else her order when Evil directs her, else
+   "exploring", "searching for secrets", "picking up the clip", ...); what Evil said lately; the
+   tally as bars; the run (levels done, deaths, game time); what's happened lately (the game's
+   messages, levels done, deaths, secrets, Evil's orders; repeats counted, not repeated).
+   Nothing the game's own status bar shows (health, ammo, keys). The console's View has
+   "Stream": the window at half size, as OBS gets it. Seen: both sides, MAP01 and MAP02 on UV
+   mid-fight ("Fighting a Shotgun Guy" with him on screen).
+   On a 1080-line monitor the window's scaled down to fit, and OBS captures it at that size
+   (scaled up again in OBS); a monitor with more lines, or a smaller stream size, if that shows.
    **The console's View** (the user's: "the minimap view with current objectives, like the
    watcher"): the game sends the watcher's own drawing twice a second, the right side of its
    window (the map as she knows it, her route, the objectives, the panel under it) and the

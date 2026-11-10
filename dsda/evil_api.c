@@ -50,6 +50,8 @@
 #include "wi_stuff.h"
 #include "hu_stuff.h"
 #include "dsda/global.h"
+#include "dsda/mapinfo.h"
+#include "dsda/utility.h"
 #include "sounds.h"
 #include <limits.h>
 
@@ -241,6 +243,24 @@ EVIL_API void evil_exit(int secret)
     G_SecretExitLevel(0);
   else
     G_ExitLevel(0);
+}
+
+/* The level's title as the automap has it ("level 7: dead simple", "E1M1: Hangar"), into out
+ * (max bytes, ended); its length. Empty outside a level. */
+EVIL_API int evil_level_title(char *out, int max)
+{
+  dsda_string_t title;
+  if (max <= 0)
+    return 0;
+  out[0] = 0;
+  dsda_HUTitle(&title);
+  if (title.string)
+  {
+    strncpy(out, title.string, (size_t)max - 1);
+    out[max - 1] = 0;
+  }
+  dsda_FreeString(&title);
+  return (int)strlen(out);
 }
 
 /* A tic of the melt, the game held (as Doom holds it); one begun if it's due. */

@@ -61,6 +61,8 @@ pub enum Command {
         #[serde(default)]
         secret: bool,
     },
+    /// the stream window's column to this side ("left", "right")
+    Panel { side: String },
     /// from the title card through the menu to the run's first level (Doom's own screens on);
     /// from anything else, the run again from the title card
     Begin,

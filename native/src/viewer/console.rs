@@ -57,15 +57,35 @@ impl Console {
         Ok(Console { link, pictures, last_view: None, shown: 0, told: (String::new(), false, false) })
     }
 
+    /// The stream's window as drawn (`px`, `w` by `h`), at half its size: what OBS shows.
+    pub(super) fn stream_view(&mut self, px: &[u32], w: usize, h: usize) {
+        let (hw, hh) = (w / 2, h / 2);
+        let mut rgb = Vec::with_capacity(hw * hh * 3);
+        for y in 0..hh {
+            for x in 0..hw {
+                let at = [(2 * y) * w + 2 * x, (2 * y) * w + 2 * x + 1, (2 * y + 1) * w + 2 * x, (2 * y + 1) * w + 2 * x + 1];
+                for shift in [16, 8, 0] {
+                    let sum: u32 = at.iter().map(|&i| (px[i] >> shift) & 0xff).sum();
+                    rgb.push((sum / 4) as u8);
+                }
+            }
+        }
+        let _ = self.pictures.send(Picture::Rgb("stream", hw, hh, rgb));
+    }
+
+    /// The pictures are due again.
+    pub(super) fn views_due(&self) -> bool {
+        self.last_view.is_none_or(|t| t.elapsed() >= VIEW_EVERY)
+    }
+
     /// The window as drawn (`px`, the whole of it) and the game's frame (palette indices, and
     /// the palette): the map side and the game's view sent, every so often. The game's own frame
     /// as it is (a few times smaller as a PNG than the window's scaled copy of it).
     pub(super) fn views(&mut self, px: &[u32], frame: Option<&(usize, usize, Vec<u8>)>, palette: &[u32]) {
-        let now = Instant::now();
-        if self.last_view.is_some_and(|t| now - t < VIEW_EVERY) {
+        if !self.views_due() {
             return;
         }
-        self.last_view = Some(now);
+        self.last_view = Some(Instant::now());
         // (the map as she knows it and the panel under it: the window's right side)
         let right: Rect = (MAP.0, 0, W - MAP.0, H);
         let _ = self.pictures.send(Picture::Rgb("map", right.2, right.3, crop(px, right)));
@@ -226,6 +246,11 @@ impl Watch {
                     let line = if self.engine.exit_level(secret) { format!("console: out by the {}exit", if secret { "secret " } else { "" }) } else { "console: this engine can't leave a level by itself".into() };
                     self.agent.x_mut().log.push(line);
                 }
+                Command::Panel { side } => match (self.stream.as_mut(), super::StreamSide::parse(&side)) {
+                    (Some(st), Some(s)) => st.side = s,
+                    (None, _) => self.agent.x_mut().log.push("console: not the stream's window: no column to move".into()),
+                    (_, None) => self.agent.x_mut().log.push(format!("console: no side \"{side}\" (left, right)")),
+                },
                 Command::Begin => match self.present.take() {
                     Some(mut p) => {
                         p.begin(self);

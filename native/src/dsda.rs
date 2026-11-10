@@ -144,6 +144,7 @@ type PresentFn = unsafe extern "C" fn(c_int);
 type PlainFn = unsafe extern "C" fn();
 type MenuFn = unsafe extern "C" fn(c_int, c_int);
 type ScreenFn = unsafe extern "C" fn(*mut c_int);
+type TitleFn = unsafe extern "C" fn(*mut c_char, c_int) -> c_int;
 
 /// The screen as the game has it (evil_screen): Doom's own screens, the stream's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -198,6 +199,7 @@ pub struct Dsda {
     menu_fn: Option<MenuFn>,
     screen_fn: Option<ScreenFn>,
     exit_fn: Option<PresentFn>,
+    level_title_fn: Option<TitleFn>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
     _argv: Vec<CString>,
     _argv_ptrs: Vec<*mut c_char>,
@@ -267,6 +269,8 @@ impl Dsda {
         let screen_fn = sym(b"evil_screen").ok().map(|p| unsafe { std::mem::transmute::<*const (), ScreenFn>(p) });
         // SAFETY: as above, evil_exit(int); optional.
         let exit_fn = sym(b"evil_exit").ok().map(|p| unsafe { std::mem::transmute::<*const (), PresentFn>(p) });
+        // SAFETY: as above, evil_level_title(char*, int); optional.
+        let level_title_fn = sym(b"evil_level_title").ok().map(|p| unsafe { std::mem::transmute::<*const (), TitleFn>(p) });
         let argv: Vec<CString> =
             std::iter::once("evil".to_string()).chain(args.iter().cloned()).map(CString::new).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
         let mut argv_ptrs: Vec<*mut c_char> = argv.iter().map(|a| a.as_ptr().cast_mut()).collect();
@@ -304,6 +308,7 @@ impl Dsda {
             menu_fn,
             screen_fn,
             exit_fn,
+            level_title_fn,
             _argv: argv,
             _argv_ptrs: argv_ptrs,
             _lib: lib,
@@ -393,6 +398,17 @@ impl Dsda {
         // SAFETY: a plain value into the game; see `load`.
         unsafe { f(c_int::from(secret)) };
         true
+    }
+
+    /// The level's title as the automap has it ("level 7: dead simple"); None without the call
+    /// or outside a level.
+    pub fn level_title(&self) -> Option<String> {
+        let f = self.level_title_fn?;
+        let mut buf = vec![0 as c_char; 128];
+        // SAFETY: the buffer's size given; it writes at most that, ended; see `load`.
+        let n = unsafe { f(buf.as_mut_ptr(), buf.len() as c_int) };
+        let bytes: Vec<u8> = buf.iter().take(usize::try_from(n).ok()?).map(|&c| c as u8).collect();
+        Some(String::from_utf8_lossy(&bytes).into_owned()).filter(|t| !t.is_empty())
     }
 
     /// The screen as it stands; None without the call.
