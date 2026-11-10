@@ -163,6 +163,9 @@ pub struct Observation {
     pub message: Option<String>,
     /// the sounds started since she last looked
     pub sounds: Vec<Sound>,
+    /// each hit on her since she last looked that something dealt: which way the status bar's
+    /// face looked for it (-1 her left, 0 straight at it, 1 her right; behind is a side)
+    pub hit_sides: Vec<i32>,
 }
 
 impl Observation {

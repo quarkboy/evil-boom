@@ -223,7 +223,8 @@ EVIL_API void evil_reset_ids(void)
 }
 
 /* The hits on her since the last call (up to max; the oldest of a long run of them lost):
- * six numbers each, as evil_hit_t has them (health, armor, inflictor, source, self, cause).
+ * seven numbers each, as evil_hit_t has them (health, armor, inflictor, source, self, cause,
+ * side).
  * Returns how many. */
 static int evil_hits_read;
 
@@ -237,9 +238,9 @@ EVIL_API int evil_hits_since(int *out, int max)
   while (evil_hits_read < evil_hit_count && n < max)
   {
     evil_hit_t *h = &evil_hits[evil_hits_read % EVIL_HITS];
-    int *o = out + 6 * n;
+    int *o = out + 7 * n;
     o[0] = h->health; o[1] = h->armor; o[2] = h->inflictor; o[3] = h->source;
-    o[4] = h->self; o[5] = h->cause;
+    o[4] = h->self; o[5] = h->cause; o[6] = h->side;
     evil_hits_read++;
     n++;
   }

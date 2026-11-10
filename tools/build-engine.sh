@@ -8,6 +8,10 @@
 #
 #   tools/build-engine.sh            fetch if missing, patch if not yet, configure, build
 #   tools/build-engine.sh --clean    the same from a fresh checkout and build folder
+#
+# After changing the engine's source in third_party: write the patch again first
+# (cd third_party/dsda-doom && git diff --abbrev=7 > ../../dsda/dsda-doom.patch), or this
+# takes the tree for unpatched, fails to apply the old patch over it and builds nothing.
 set -euo pipefail
 
 COMMIT=eb8eb98

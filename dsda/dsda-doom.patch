@@ -81,10 +81,10 @@ index bbdfdb6..9721b2e 100644
      dsda_QueueMessage(str, message_normal);
  }
 diff --git a/prboom2/src/p_inter.c b/prboom2/src/p_inter.c
-index c941fd6..9aaca67 100644
+index c941fd6..4e03f35 100644
 --- a/prboom2/src/p_inter.c
 +++ b/prboom2/src/p_inter.c
-@@ -1226,7 +1226,41 @@ static dboolean P_InfightingImmune(mobj_t *target, mobj_t *source)
+@@ -1226,7 +1226,61 @@ static dboolean P_InfightingImmune(mobj_t *target, mobj_t *source)
  
  static dboolean P_MorphMonster(mobj_t * actor);
  
@@ -118,6 +118,26 @@ index c941fd6..9aaca67 100644
 +             : target->ceilingz - target->floorz < target->height ? 1
 +             : damage >= 10000 ? 3
 +             : 2;
++    // (as ST_updateFaceWidget turns the face: straight within 45 degrees of her facing, else
++    // to the side it's on; behind is one side or the other)
++    h->side = 2;
++    if (source && source != target)
++    {
++      angle_t badguy = R_PointToAngle2(target->x, target->y, source->x, source->y);
++      angle_t diff;
++      int right;
++      if (badguy > target->angle)
++      {
++        diff = badguy - target->angle;
++        right = diff > ANG180;
++      }
++      else
++      {
++        diff = target->angle - badguy;
++        right = diff <= ANG180;
++      }
++      h->side = diff < ANG45 ? 0 : right ? 1 : -1;
++    }
 +    evil_hit_count++;
 +  }
 +}
@@ -127,10 +147,10 @@ index c941fd6..9aaca67 100644
    player_t *player;
    dboolean justhit = false;          /* killough 11/98 */
 diff --git a/prboom2/src/p_inter.h b/prboom2/src/p_inter.h
-index 3ec7d91..b728628 100644
+index 3ec7d91..74073d9 100644
 --- a/prboom2/src/p_inter.h
 +++ b/prboom2/src/p_inter.h
-@@ -48,6 +48,18 @@
+@@ -48,6 +48,19 @@
  dboolean P_GivePower(player_t *, int);
  void P_TouchSpecialThing(mobj_t *special, mobj_t *toucher);
  void P_DamageMobj(mobj_t *target,mobj_t *inflictor,mobj_t *source,int damage);
@@ -142,6 +162,7 @@ index 3ec7d91..b728628 100644
 +  int inflictor, source; // thing types (-1: none): what hit her, whose it was
 +  int self;              // her own (a rocket of hers, a barrel she set off)
 +  int cause;             // 0 a thing, 1 a crusher, 2 the floor, 3 something else
++  int side;              // where the status bar's face looks for it: -1 left, 0 straight at it, 1 right; 2: nowhere (no one's)
 +} evil_hit_t;
 +#define EVIL_HITS 64
 +extern evil_hit_t evil_hits[EVIL_HITS];

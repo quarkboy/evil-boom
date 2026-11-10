@@ -79,6 +79,8 @@ pub struct Engine {
     pub carry: Option<crate::dsda::Loadout>,
     /// the hits on her since they were last taken (`take_hits`)
     hits: Vec<crate::dsda::Hit>,
+    /// which way the face looked for each hit since she last looked (`Observation::hit_sides`)
+    hit_sides: Vec<i32>,
 }
 
 impl Engine {
@@ -142,6 +144,7 @@ impl Engine {
             mobjs: Vec::new(),
             carry: None,
             hits: Vec::new(),
+            hit_sides: Vec::new(),
         })
     }
 
@@ -331,6 +334,7 @@ impl Engine {
             backpack: Some(p.backpack != 0),
             message,
             sounds,
+            hit_sides: std::mem::take(&mut self.hit_sides),
         }
     }
 
@@ -346,6 +350,7 @@ impl Engine {
         });
         self.tic += 1;
         let hits = self.game.hits();
+        self.hit_sides.extend(hits.iter().filter(|h| !h.own).filter_map(|h| h.side));
         self.hits.extend(hits);
     }
 
