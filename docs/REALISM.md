@@ -217,3 +217,5 @@ time. To act on once the watching's done, not before.
   A level with a very tricky start ("it's right there in the name"): the best play is to get out
   of the wide open exposed place with enemies all round, and fight her way into one of the side
   rooms, where she at least has a wall at her back.
+- **E2M3 UV, seed 574408264** (dies at 55 s). She chose to fight a baron with a pistol rather
+  than try the risky but necessary run past it.
