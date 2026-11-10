@@ -205,6 +205,8 @@ pub struct Player {
     plight: Plight,
     /// who had her legs last tic (the journal notes a change)
     legs: Legs,
+    /// tics she's been pushing and not moving
+    pushing_still: i64,
     /// the things lying about that she's seen (items, and whatever else isn't a monster or a
     /// missile), by id: seen when the floor they're on was in her view with them on it
     things_seen: BTreeSet<i32>,
@@ -244,6 +246,7 @@ impl Player {
             last_pos: (0.0, 0.0),
             plight: Plight::default(),
             legs: Legs::Route,
+            pushing_still: 0,
             things_seen: BTreeSet::new(),
             advisor: None,
             base_tune: Rc::clone(&tune),
@@ -471,6 +474,13 @@ impl Player {
         self.fight.present = obs.things.iter().flatten().map(|t| t.id).collect();
         // (her senses take the game as it is; everything after goes by what they made of it)
         self.fight.combat.observe(obs);
+        // (pushing and not moving, where the map has room: a bump, something to look at)
+        let pushed = last.filter(|c| c.forward.hypot(c.strafe) > 10.0);
+        let still = obs.velocity.is_some_and(|v| v.0.hypot(v.1) < 1.0);
+        self.pushing_still = if pushed.is_some() && still { self.pushing_still + 1 } else { 0 };
+        if let Some(c) = pushed.filter(|_| self.pushing_still == self.fight.tune.steer.stuck_tics) {
+            self.fight.combat.bumped(obs, obs.angle + (-c.strafe).atan2(c.forward).to_degrees());
+        }
         self.explorer.sense(obs, last);
         self.notice_things(obs);
         let seen = self.percept(obs);

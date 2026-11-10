@@ -64,10 +64,12 @@ pub enum Move {
     RocketHeld,
     /// a rocket about to leave into something near: turned off it
     RocketTurnedOff,
+    /// turning to look at what she heard, was hit from, or bumped into
+    Looking,
 }
 
 impl Move {
-    pub const ALL: [Move; 28] = [
+    pub const ALL: [Move; 29] = [
         Move::OutOfVileSight,
         Move::Ducking,
         Move::Ducked,
@@ -96,6 +98,7 @@ impl Move {
         Move::LostSight,
         Move::RocketHeld,
         Move::RocketTurnedOff,
+        Move::Looking,
     ];
 
     /// The move of that name (as `{:?}` gives it).
@@ -105,7 +108,7 @@ impl Move {
 
     /// The route keeps her legs through it (unless a missile's coming or an arch-vile's fire).
     pub fn route_goes_on(self) -> bool {
-        matches!(self, Move::ShootingOnTheWay | Move::ToErrand | Move::GettingPast | Move::OutOfVileSight | Move::OutOfReach | Move::Unarmed | Move::Sneaking | Move::RocketHeld)
+        matches!(self, Move::ShootingOnTheWay | Move::ToErrand | Move::GettingPast | Move::OutOfVileSight | Move::OutOfReach | Move::Unarmed | Move::Sneaking | Move::RocketHeld | Move::Looking)
     }
 
     /// Out of the way of something: where it takes her isn't second-guessed at a ledge's edge.

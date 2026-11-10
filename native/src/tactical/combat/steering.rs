@@ -329,6 +329,7 @@ impl Combat {
             if self.steer_still > self.tune.steer.stuck_tics {
                 self.steer_stuck = Some((k, obs.tic + self.tune.steer.stuck_tics * 4));
                 self.steer_still = 0;
+                self.bumped(obs, k.1.atan2(k.0).to_degrees());
             }
         }
         self.steer_tic = obs.tic;

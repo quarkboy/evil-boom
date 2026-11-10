@@ -109,6 +109,10 @@ pub struct Senses {
     pub heard_firing: i64,
     /// a death seen is followed by its cry within this (tics): that cry isn't another's
     pub cry_due: i64,
+    /// something heard, a hit or a bump is looked round for this long at most (tics)
+    pub alert_tics: i64,
+    /// turned to within this many degrees of it, she's looked
+    pub looked: f64,
 }
 
 impl Default for Senses {
@@ -135,6 +139,8 @@ impl Default for Senses {
             heard_side: 40.0,
             heard_firing: 12,
             cry_due: 35,
+            alert_tics: 70,
+            looked: 10.0,
         }
     }
 }

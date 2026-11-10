@@ -467,6 +467,10 @@ impl Combat {
                 return Some(d);
             }
         }
+        // (nothing to fight that she can see: round to what she heard, was hit from, or bumped)
+        if let Some(way) = self.look(obs, false) {
+            return Some(Decision { kind: Move::Looking, yields: true, pressed: false, aim: Some(way), fire: false, weapon: 0, moving: None, why: "looking round".into() });
+        }
         if !self.mode.is_empty() {
             self.log.push(format!("tic {}: fight over ({} kills; {:.0} rounds spent, {:.0} damage done)", obs.tic, self.kills, self.spent, self.dealt));
             (self.spent, self.dealt) = (0.0, 0.0);

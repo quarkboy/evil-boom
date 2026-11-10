@@ -57,6 +57,19 @@ fn mon(name: &str) -> super::bestiary::Monster {
     monster(name).unwrap_or(super::bestiary::Monster { radius: 20.0, height: 56.0, health: 100, attack: Attack::None, melee: false, threat: 0.0, boss: false })
 }
 
+/// Something to turn and look at: all a sound, a hit or a bump tells her is a way to look.
+#[derive(Clone, Debug)]
+struct Alert {
+    /// given up on after this
+    until: i64,
+    /// the ways to look (world degrees), the likeliest first: a sound's side is front or back
+    ways: Vec<f64>,
+    /// a hit: looked at even with something else to shoot
+    hit: bool,
+    /// what was in sight when it came: anything new is what it was
+    in_sight: BTreeSet<i32>,
+}
+
 /// A monster she knows of.
 #[derive(Clone, Debug)]
 pub struct Seen {
@@ -142,6 +155,8 @@ pub struct Combat {
     pub missiles_seen: BTreeSet<i32>,
     /// deaths she's seen whose cries are still to come: (when, the kind)
     cries_due: Vec<(i64, &'static str)>,
+    /// something to turn and look at: a sound from out of her view, a hit, a bump
+    alert: Option<Alert>,
     /// attacks heard lately: (when, the kinds that sound like it)
     attacks_heard: Vec<(i64, &'static [&'static str])>,
     /// monsters she can see now
@@ -299,6 +314,7 @@ impl Combat {
             missiles_seen: BTreeSet::new(),
             cries_due: Vec::new(),
             attacks_heard: Vec::new(),
+            alert: None,
             visible: Vec::new(),
             barrels_seen: Vec::new(),
             routed: false,
@@ -375,6 +391,7 @@ impl Combat {
         self.seen_hurt.clear();
         self.cries_due.clear();
         self.attacks_heard.clear();
+        self.alert = None;
         self.visible.clear();
         self.now.nothing_in_sight();
         self.tracks.clear();
@@ -634,6 +651,7 @@ impl Combat {
                 self.barrels_seen.push(b);
             }
         }
+        self.heed(obs);
         self.watch_infighting(obs);
         self.now = self.assess(obs);
     }
@@ -711,6 +729,86 @@ impl Combat {
                 _ => {}
             }
         }
+    }
+
+    /// Something to look at, `ways` round (world degrees, the likeliest first).
+    fn alerted(&mut self, obs: &Observation, ways: Vec<f64>, hit: bool, why: &str) {
+        if ways.is_empty() || self.alert.as_ref().is_some_and(|a| a.hit && !hit) {
+            return;
+        }
+        let side = |w: f64| match norm(w - obs.angle) {
+            d if d.abs() > 135.0 => "behind her",
+            d if d > 0.0 => "to her left",
+            _ => "to her right",
+        };
+        self.log.push(format!("tic {}: {why}: looking {}", obs.tic, side(ways[0])));
+        self.journal.note(|| Record { detail: why.to_string(), ..Record::new(obs.tic, "alert", side(ways[0]).to_string()) });
+        self.alert = Some(Alert { until: obs.tic + self.tune.senses.alert_tics, ways, hit, in_sight: self.visible.iter().map(|t| t.id).collect() });
+    }
+
+    /// What tells her to look round, this tic. A sound from nothing she can see (a missile
+    /// fired, a monster's cry on seeing her, an attack): its side by the balance between her
+    /// ears, which is the same for in front and behind, so in front only if that's out of her
+    /// view. A hit: the way the status bar's face looked, to one side (straight at it, she's
+    /// looking there). Not a wandering monster's noise: there's always one.
+    fn heed(&mut self, obs: &Observation) {
+        let fov = self.tune.senses.fov;
+        for s in obs.sounds.iter().filter(|s| !s.own && matches!(s.what, Heard::Launch | Heard::Sight | Heard::Attack)) {
+            let seen = if s.what == Heard::Launch {
+                obs.things.iter().flatten().any(|t| self.missiles_seen.contains(&t.id) && s.kinds.contains(&t.name))
+            } else {
+                self.visible.iter().any(|t| s.kinds.contains(&t.name))
+            };
+            if seen {
+                continue;
+            }
+            // (the balance: 128 less 96 times the sine of its bearing, left of her counted up)
+            let off = ((128.0 - f64::from(s.separation)) / 96.0).clamp(-1.0, 1.0).asin().to_degrees();
+            let (front, back) = (obs.angle + off, obs.angle + 180.0 - off);
+            let ways = if off.abs() < fov { vec![back] } else { vec![front, back] };
+            let what = match s.what {
+                Heard::Launch => "a shot fired",
+                Heard::Sight => "something's seen her",
+                _ => "an attack",
+            };
+            self.alerted(obs, ways, false, &format!("heard {what}"));
+        }
+        for &side in obs.hit_sides.iter().filter(|&&side| side != 0) {
+            // (her right is the lesser angle)
+            let way = obs.angle - 90.0 * f64::from(side);
+            let known = self.visible.iter().any(|t| {
+                let rel = norm(heading(obs.pos(), (t.x, t.y)) - obs.angle);
+                rel.abs() > 45.0 && (rel < 0.0) == (side > 0)
+            });
+            if !known {
+                self.alerted(obs, vec![way], true, "hit from the side");
+            }
+        }
+    }
+
+    /// Stopped while pushing `way` (world degrees) where the map has room: something's there.
+    pub fn bumped(&mut self, obs: &Observation, way: f64) {
+        let d = (way.to_radians().cos(), way.to_radians().sin());
+        let reach = 3.0 * PLAYER_RADIUS;
+        if norm(way - obs.angle).abs() > self.tune.senses.fov && self.clear_run(obs, d, reach) >= reach - 1.0 {
+            self.alerted(obs, vec![way], false, "stopped against something");
+        }
+    }
+
+    /// The way to turn and look, if there's something to look at (`hit_only`: only for a hit:
+    /// she has something to shoot). Looked each way, or something new in sight, or time up:
+    /// over.
+    fn look(&mut self, obs: &Observation, hit_only: bool) -> Option<f64> {
+        let looked = self.tune.senses.looked;
+        let a = self.alert.as_mut()?;
+        while a.ways.first().is_some_and(|&w| norm(w - obs.angle).abs() < looked) {
+            a.ways.remove(0);
+        }
+        if obs.tic >= a.until || a.ways.is_empty() || self.visible.iter().any(|t| !a.in_sight.contains(&t.id)) {
+            self.alert = None;
+            return None;
+        }
+        (a.hit || !hit_only).then(|| a.ways[0])
     }
 
     /// Is that monster dead, as far as she knows (seen or heard to die)?
@@ -828,6 +926,13 @@ impl Combat {
                     act.kind = Move::RocketTurnedOff;
                     act.why = "turned off a rocket's way out into something near".into();
                 }
+            }
+        }
+        // (hit from where she isn't looking: round to it, whatever she was shooting)
+        if s.vile.is_none() && s.missiles.is_empty() {
+            if let Some(way) = self.look(obs, true) {
+                act.aim = Some(way);
+                act.hold_fire = true;
             }
         }
         let aim = act.aim.or(s.aim);
