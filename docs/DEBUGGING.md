@@ -80,6 +80,15 @@ over. `Player::force_target` does the same for a target, from code.
   floor", "what's at that corner", and so on. Line specials are Doom's numbers (37 = W1 floor
   lower to lowest neighbour and change type; 16 = sector special: 20% damage).
 - `evil-boom dump-nav <wad> <map>`: the level's analysis.
+- `EVIL_DEBUG_SHOT=1`: in the fight's log, where she and the target are (and their sectors)
+  when fire's held for no shot, every bullet or shell out with the gap since the last, and
+  each one that left with nothing on her line (what was in sight, how far off her aim).
+- `EVIL_DEBUG_SCOUT=1` (with `--known`): keeps the log of the pass beforehand.
+  `EVIL_KNOWN_ONLY=map|monsters`: only that much known.
+- What her shots hit is in every run's STATS, by the game's own count (the engine patch):
+  `shots, by the game's count`, `shots with no pellet on anything`, `pellets fired`, on a
+  monster, on a barrel, after the kill in the same shot, on nothing, and fired with the
+  trigger held.
 
 ## Going back over a run
 

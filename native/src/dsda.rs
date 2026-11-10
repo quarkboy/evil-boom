@@ -129,6 +129,7 @@ type PlayerFn = unsafe extern "C" fn(*mut PlayerState);
 type PowerFn = unsafe extern "C" fn(c_int, c_int);
 type SoundFn = unsafe extern "C" fn(c_int);
 type SpawnFn = unsafe extern "C" fn(c_int, f64, f64, f64, c_int) -> c_int;
+type PelletsFn = unsafe extern "C" fn(*mut c_int);
 type GiveFn = unsafe extern "C" fn(c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int, c_int);
 type ClearFn = unsafe extern "C" fn() -> c_int;
 type ResetIdsFn = unsafe extern "C" fn();
@@ -163,6 +164,7 @@ pub struct Dsda {
     clear_fn: Option<ClearFn>,
     reset_ids_fn: Option<ResetIdsFn>,
     hits_fn: Option<HitsFn>,
+    pellets_fn: Option<PelletsFn>,
     sounds_fn: Option<SoundsFn>,
     sfx_name_fn: Option<SfxNameFn>,
     mobj_sounds_fn: Option<MobjSoundsFn>,
@@ -217,6 +219,8 @@ impl Dsda {
         let reset_ids_fn = sym(b"evil_reset_ids").ok().map(|p| unsafe { std::mem::transmute::<*const (), ResetIdsFn>(p) });
         // SAFETY: as above, evil_hits_since's signature; optional.
         let hits_fn = sym(b"evil_hits_since").ok().map(|p| unsafe { std::mem::transmute::<*const (), HitsFn>(p) });
+        // SAFETY: as above, evil_pellets_so_far(int*); optional.
+        let pellets_fn = sym(b"evil_pellets_so_far").ok().map(|p| unsafe { std::mem::transmute::<*const (), PelletsFn>(p) });
         // SAFETY: as above, evil_sounds_since's and evil_sfx_name's signatures; optional.
         let sounds_fn = sym(b"evil_sounds_since").ok().map(|p| unsafe { std::mem::transmute::<*const (), SoundsFn>(p) });
         let mobj_sounds_fn = sym(b"evil_mobj_sounds").ok().map(|p| unsafe { std::mem::transmute::<*const (), MobjSoundsFn>(p) });
@@ -249,6 +253,7 @@ impl Dsda {
             clear_fn,
             reset_ids_fn,
             hits_fn,
+            pellets_fn,
             sounds_fn,
             sfx_name_fn,
             mobj_sounds_fn,
@@ -360,6 +365,19 @@ impl Dsda {
     }
 
     /// The hits on her since the last call (none in a library without the call).
+    /// Her bullets and pellets so far, by the game's own count: fired, those that hit a thing
+    /// that can be shot, those of them a barrel, those that hit nothing after one of the same
+    /// tic had killed; and her shots (a tic's pellets), and those of them with no pellet on a
+    /// thing; and the pellets fired with the trigger held since the shot before. For
+    /// measuring; None in an older library.
+    pub fn pellets(&self) -> Option<[i32; 7]> {
+        let f = self.pellets_fn?;
+        let mut raw = [0 as c_int; 7];
+        // SAFETY: room for the seven ints it writes; see `load`.
+        unsafe { f(raw.as_mut_ptr()) };
+        Some(raw)
+    }
+
     pub fn hits(&self) -> Vec<Hit> {
         let Some(f) = self.hits_fn else { return Vec::new() };
         const MAX: usize = 64;

@@ -172,6 +172,87 @@ index 3ec7d91..bc28c91 100644
  void P_HealMobj(mobj_t *mo, int num);
  int P_PlayerHealthIncrease(int value);
  
+diff --git a/prboom2/src/p_map.c b/prboom2/src/p_map.c
+index 2b511c4..2429504 100644
+--- a/prboom2/src/p_map.c
++++ b/prboom2/src/p_map.c
+@@ -2196,6 +2196,20 @@ fixed_t   shootz;
+ int       la_damage;
+ fixed_t   attackrange;
+ 
++// Evil (evil-doom): the player's bullets and pellets (a trace of MISSILERANGE with damage, one
++// a pellet), counted: all of them, those that hit a thing that can be shot, those of them a
++// barrel, and those that hit nothing in a tic one of them had killed in (the rest of a shell
++// through where its target stood: not shots into a wall). For measuring what her shots hit;
++// not hers to know.
++// And by the shot (the pellets of one tic): shots, and those of them no pellet of hit a thing.
++// And the bullets and pellets fired with the trigger held since the shot before (spread on a
++// bullet).
++int evil_pellets[7];
++static int evil_pellet_hit;
++static int evil_kill_tic = -1;
++static int evil_shot_tic = -1;
++static int evil_shot_hit;
++
+ static fixed_t   aimslope;
+ 
+ // slopes to top and bottom of target
+@@ -2475,6 +2489,8 @@ dboolean PTR_ShootTraverse (intercept_t* in)
+   // hit thing
+   // position a bit closer
+ 
++  evil_pellet_hit = th->type == MT_BARREL ? 2 : 1;  // Evil (evil-doom)
++
+   frac = in->frac - FixedDiv (10*FRACUNIT,attackrange);
+ 
+   x = trace.x + FixedMul (trace.dx, frac);
+@@ -2525,6 +2541,8 @@ dboolean PTR_ShootTraverse (intercept_t* in)
+     {
+       P_DamageMobj(th, shootthing, shootthing, la_damage);
+     }
++    if (th->health <= 0)
++      evil_kill_tic = gametic;  // Evil (evil-doom)
+   }
+ 
+   // don't go any farther
+@@ -2598,7 +2616,36 @@ void P_LineAttack(mobj_t* t1, angle_t angle, fixed_t distance, fixed_t slope,
+   attackrange = distance;
+   aimslope = slope;
+ 
+-  if (P_PathTraverse(t1->x,t1->y,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_ShootTraverse))
++  evil_pellet_hit = 0;  // Evil (evil-doom)
++  {
++    dboolean evil_missed = P_PathTraverse(t1->x,t1->y,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_ShootTraverse);
++    if (t1->player && damage && distance == MISSILERANGE)
++    {
++      evil_pellets[0]++;
++      if (t1->player->refire)
++        evil_pellets[6]++;
++      if (evil_shot_tic != gametic)
++      {
++        evil_shot_tic = gametic;
++        evil_shot_hit = 0;
++        evil_pellets[4]++;
++        evil_pellets[5]++;
++      }
++      if (evil_pellet_hit && !evil_shot_hit)
++      {
++        evil_shot_hit = 1;
++        evil_pellets[5]--;
++      }
++      if (evil_pellet_hit)
++        evil_pellets[1]++;
++      if (evil_pellet_hit == 2)
++        evil_pellets[2]++;
++      if (!evil_pellet_hit && evil_kill_tic == gametic)
++        evil_pellets[3]++;
++    }
++    if (!evil_missed)
++      return;
++  }
+   {
+     if (hexen)
+     {
 diff --git a/prboom2/src/p_mobj.c b/prboom2/src/p_mobj.c
 index 9c2a92c..bca1d02 100644
 --- a/prboom2/src/p_mobj.c

@@ -252,6 +252,19 @@ EVIL_API int evil_hits_since(int *out, int max)
   return n;
 }
 
+extern int evil_pellets[7];  /* (p_map.c, patched) */
+
+/* Her bullets and pellets so far: fired, those that hit a thing that can be shot, those of
+ * them a barrel, those that hit nothing after one of the same tic had killed; and her shots
+ * (a tic's pellets), and those of them with no pellet on a thing; and the pellets fired with
+ * the trigger held since the shot before (seven numbers). */
+EVIL_API void evil_pellets_so_far(int *out)
+{
+  int i;
+  for (i = 0; i < 7; i++)
+    out[i] = evil_pellets[i];
+}
+
 EVIL_API void evil_seed(int fixed, unsigned long value)
 {
   evil_fixed_seed = fixed != 0;
