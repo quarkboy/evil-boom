@@ -9,7 +9,10 @@
 //!   evil-boom score [doom|doom2 [maps...]]... [--skills 3,4] [--seeds K] [--jobs N] [--out FILE]
 //!       the bot's score: every level, pistol start, one life, K random seeds a skill (HMP and
 //!       UV, 8); a row a run (out/score/), then the report (see score.rs)
-//!   evil-boom score-report FILE...                   the report of score TSVs (more: how far apart)
+//!       --like FILE: the very runs of an earlier set (its levels, skills and seeds); --tuning FILE
+//!       and --bar NAMES go to every run
+//!   evil-boom score-report FILE...                   the report of score TSVs (more: how far apart;
+//!                                               two of the same runs: run for run)
 //!   evil-boom score-watch FILE [--total N]           a score's progress in a small window (`score`
 //!                                               opens one unless --no-window)
 //!   evil-boom tuning                                 the numbers she judges a fight by, as JSON: a file

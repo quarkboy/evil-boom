@@ -61,6 +61,13 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   builds: 0.428-0.448), so one set against another needs 0.02-0.025 to be real; for smaller
   effects, two sets a build; a single level's points move about +-0.07 by seed alone. Judge a change by it; commit
   messages give the before/after score.
+- **Comparing two builds: the same runs** (2026-11-09). `evil-boom score --like out/score/base.tsv
+  --out out/score/NAME.tsv` plays the very runs of the baseline (its 1088 levels, skills and
+  seeds); `score-report out/score/base.tsv out/score/NAME.tsv` then compares run for run. A run
+  is the same every time on its seed (all 1088 came out the same to the tic on a second go), so
+  a change that touches nothing scores exactly 0.0000 different, and one that touches a few runs
+  shows only those: use this for every change now, not sets on seeds of their own. After a change
+  that's kept, its set is the next baseline (copy it to `out/score/base.tsv`).
 - **Arenas aren't part of the score** (the user's: too artificial). Use them while developing a
   fight idea, not to judge it.
 - **No other full sweeps without asking.** Up to 8 chosen levels (or seeds) per test is fine.

@@ -8,7 +8,14 @@
 //! beaten is reported beside it: its runs' spread (the variance of their points), and the levels
 //! beaten every time.
 //!
+//! Comparing two builds or two tunings: `--like FILE` plays the very runs of an earlier set (its
+//! levels, skills and seeds). A run is the same every time on the same seed, so runs a change
+//! doesn't touch come out the same and only the ones it does touch differ: the report of two
+//! such sets gives the difference run for run, far finer than two sets on seeds of their own
+//! (whose noise is about 0.008). `--tuning FILE` and `--bar NAMES` are passed to every run.
+//!
 //!   evil-boom score [doom|doom2 [maps...]]... [--skills 3,4] [--seeds K] [--jobs N] [--out FILE]
+//!                   [--like FILE] [--tuning FILE] [--bar NAMES]
 //!   evil-boom score-report FILE...    the report of one or more score TSVs (more: how far apart)
 //!   evil-boom score-watch FILE [--total N]   a small window showing a score's progress as its
 //!                                     TSV fills (`score` opens one itself unless --no-window)
@@ -122,6 +129,7 @@ fn random_seed(count: u64) -> u32 {
 pub fn run(args: &[String]) -> Result<(), String> {
     let (mut skills, mut seeds, mut jobs, mut out) = (vec![3u32, 4], 8u32, 12usize, None::<String>);
     let mut window = true;
+    let (mut like, mut passed) = (None::<String>, Vec::<String>::new());
     let mut groups: Vec<(String, Vec<String>)> = Vec::new();
     let mut i = 0;
     while i < args.len() {
@@ -143,6 +151,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 out = Some(v.ok_or("--out FILE")?.clone());
                 i += 2;
             }
+            "--like" => {
+                like = Some(v.ok_or("--like FILE")?.clone());
+                i += 2;
+            }
+            flag @ ("--tuning" | "--bar") => {
+                passed.push(flag.to_string());
+                passed.push(v.ok_or_else(|| format!("{flag}: a value"))?.clone());
+                i += 2;
+            }
             "--no-window" => {
                 window = false;
                 i += 1;
@@ -160,7 +177,18 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    if groups.is_empty() {
+    // (the very runs of an earlier set: its levels, skills and seeds, in its order)
+    let like: Option<Vec<Row>> = match like {
+        Some(p) => {
+            if !groups.is_empty() {
+                return Err("--like FILE plays that set's levels: name none".into());
+            }
+            let text = std::fs::read_to_string(&p).map_err(|e| format!("{p}: {e}"))?;
+            Some(text.lines().skip(1).filter_map(Row::from_tsv).collect())
+        }
+        None => None,
+    };
+    if groups.is_empty() && like.is_none() {
         groups = vec![("doom".into(), Vec::new()), ("doom2".into(), Vec::new())];
     }
     let mut levels: Vec<(String, String)> = Vec::new();
@@ -179,6 +207,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 todo.push_back((w.clone(), m.clone(), skill, random_seed(count)));
             }
         }
+    }
+    if let Some(rows) = like {
+        todo = rows.into_iter().map(|r| (r.wad, r.map, r.skill, r.seed)).collect();
     }
     let total = todo.len();
     let path = out.map_or_else(|| crate::config::out_dir().join("score").join(format!("score.{}.tsv", crate::config::run_stamp())), std::path::PathBuf::from);
@@ -199,6 +230,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             let Some(job) = todo.pop_front() else { break };
             let child = Command::new(&me)
                 .args(["run-map", &job.0, &job.1, "--fight", &job.2.to_string(), "--mortal", "--lives", "1", "--seed", &job.3.to_string(), "--stall-out"])
+                .args(&passed)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
@@ -341,6 +373,54 @@ pub fn report(sets: &[Vec<Row>]) -> String {
         }
         out += "\n";
     }
+    out += &paired(sets);
+    out
+}
+
+/// Two sets of the same runs (level, skill and seed: `--like`), run for run: the second's score
+/// less the first's, with its standard error (the runs' differences, most of them nothing), and
+/// the levels that moved most.
+fn paired(sets: &[Vec<Row>]) -> String {
+    let [a, b] = sets else { return String::new() };
+    let key = |r: &Row| (r.wad.clone(), r.map.clone(), r.skill, r.seed);
+    let first: BTreeMap<_, &Row> = a.iter().map(|r| (key(r), r)).collect();
+    let pairs: Vec<(&Row, &Row)> = b.iter().filter_map(|r| first.get(&key(r)).map(|&x| (x, r))).collect();
+    if pairs.len() < a.len().min(b.len()) / 2 || pairs.is_empty() {
+        return String::new(); // (seeds of their own: nothing to pair)
+    }
+    let mut out = String::new();
+    let n = pairs.len() as f64;
+    let diffs: Vec<f64> = pairs.iter().map(|(x, y)| y.points() - x.points()).collect();
+    let mean = diffs.iter().sum::<f64>() / n;
+    let se = (diffs.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1.0).max(1.0) / n).sqrt();
+    let same = pairs.iter().filter(|(x, y)| x.outcome == y.outcome && x.seconds == y.seconds && x.kills == y.kills).count();
+    let (better, worse) = (diffs.iter().filter(|&&d| d > 1e-9).count(), diffs.iter().filter(|&&d| d < -1e-9).count());
+    out += &format!(
+        "\nrun for run ({} runs on the same seeds): set 2 less set 1 {mean:+.4}, standard error {se:.4}; {same} runs the same to the tic, {better} better, {worse} worse\n",
+        pairs.len()
+    );
+    for skill in {
+        let mut s: Vec<u32> = pairs.iter().map(|(x, _)| x.skill).collect();
+        s.sort_unstable();
+        s.dedup();
+        s
+    } {
+        let d: Vec<f64> = pairs.iter().filter(|(x, _)| x.skill == skill).map(|(x, y)| y.points() - x.points()).collect();
+        out += &format!("  skill {skill}: {:+.4}\n", d.iter().sum::<f64>() / d.len().max(1) as f64);
+    }
+    let mut by: BTreeMap<Key, (f64, u32)> = BTreeMap::new();
+    for (x, y) in &pairs {
+        let e = by.entry((x.wad.clone(), x.map.clone(), x.skill)).or_default();
+        e.0 += y.points() - x.points();
+        e.1 += 1;
+    }
+    let mut moved: Vec<(f64, &Key)> = by.iter().map(|(k, &(d, c))| (d / f64::from(c.max(1)), k)).filter(|(d, _)| d.abs() > 1e-9).collect();
+    moved.sort_by(|p, q| q.0.abs().total_cmp(&p.0.abs()));
+    out += "  moved most:";
+    for (d, k) in moved.iter().take(12) {
+        out += &format!(" {} {}/{} {d:+.2};", k.0, k.1, k.2);
+    }
+    out += "\n";
     out
 }
 
