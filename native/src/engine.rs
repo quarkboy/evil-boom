@@ -288,9 +288,9 @@ impl Engine {
             .game
             .sounds()
             .into_iter()
-            .map(|[_tic, sfx, id, kind, own, volume, separation, x, y]| {
+            .map(|[_tic, sfx, id, kind, own, volume, separation, x, y, chasing]| {
                 let name = usize::try_from(sfx).ok().and_then(|i| names.get(i)).copied().unwrap_or("");
-                let (what, kinds) = self.sound_book().classify(name, (kind >= 0).then_some(kind));
+                let (what, kinds) = self.sound_book().classify(name, (kind >= 0).then_some(kind), chasing != 0);
                 (name, what, kinds, id, kind, own, volume, separation, x, y)
             })
             .map(|(name, what, kinds, id, kind, own, volume, separation, x, y)| Sound {
@@ -429,7 +429,7 @@ impl SoundBook {
 
     /// What a sound is and the kinds that make it, by its name and the type of thing it came
     /// from (None: no thing: a boss's cry, heard everywhere, or a door, a switch, her own).
-    fn classify(&self, name: &str, from: Option<i32>) -> (Heard, &'static [&'static str]) {
+    fn classify(&self, name: &str, from: Option<i32>, chasing: bool) -> (Heard, &'static [&'static str]) {
         let f = family(name);
         let made = |role: usize| self.makers.get(&(f, role)).copied();
         let Some(kind) = from else {
@@ -454,6 +454,8 @@ impl SoundBook {
             // (a monster's sound that's none of its five: what its attack plays itself, a
             // zombieman's pistol, a chaingunner's burst. The kind is the game's word for what
             // made it: a shotgun's blast is a sergeant's, a chaingunner's or a spider's by ear)
+            // (...unless it's made as it walks: a cyberdemon's hoof, a spider's legs)
+            None if crate::tactical::bestiary::monster(thing).is_some() && chasing => (Heard::Walking, self.alone.get(thing).copied().unwrap_or(&[])),
             None if crate::tactical::bestiary::monster(thing).is_some() => (Heard::Attack, self.alone.get(thing).copied().unwrap_or(&[])),
             None => (Heard::Other, &[]),
         }

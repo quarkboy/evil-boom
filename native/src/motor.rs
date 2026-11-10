@@ -58,6 +58,9 @@ pub enum Heard {
     Death,
     /// a monster about, awake
     Active,
+    /// a monster's own steps, for the few that make any (a cyberdemon's hoof and metal, a
+    /// spider mastermind's legs, an arachnotron's): one a step, as it walks
+    Walking,
     /// a missile fired
     Launch,
     /// a missile going off

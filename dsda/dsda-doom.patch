@@ -207,10 +207,10 @@ index 65eb56a..8e8be54 100644
      int damage;                 // For missiles
      uint64_t flags2;           // Heretic & MBF21 flags
 diff --git a/prboom2/src/s_sound.c b/prboom2/src/s_sound.c
-index a12136e..1a95afd 100644
+index a12136e..2351f71 100644
 --- a/prboom2/src/s_sound.c
 +++ b/prboom2/src/s_sound.c
-@@ -320,6 +320,60 @@ void S_ResetAdjustments(void) {
+@@ -320,6 +320,76 @@ void S_ResetAdjustments(void) {
    adjust_volume = 0;
  }
  
@@ -251,10 +251,26 @@ index a12136e..1a95afd 100644
 +  e->tic = gametic;
 +  e->sfx = sfx_id;
 +  e->own = own;
++  e->chasing = 0;
 +  if (origin && origin->thinker.function == P_MobjThinker)
 +  {
 +    e->origin_id = origin->evil_id;
 +    e->origin_type = (int)origin->type;
++    // (is the state it's in one of its chase's: the loop from its see state)
++    if (origin->info && origin->info->seestate)
++    {
++      const state_t *first = &states[origin->info->seestate], *st = first;
++      int n = 0;
++      do
++      {
++        if (st == origin->state)
++        {
++          e->chasing = 1;
++          break;
++        }
++        st = &states[st->nextstate];
++      } while (++n < 64 && st != first);
++    }
 +  }
 +  else
 +  {
@@ -271,7 +287,7 @@ index a12136e..1a95afd 100644
  void S_StartSoundAtVolume(void *origin_p, int sfx_id, int volume, dboolean important, int loop_timeout)
  {
    int cnum;
-@@ -333,6 +387,8 @@ void S_StartSoundAtVolume(void *origin_p, int sfx_id, int volume, dboolean impor
+@@ -333,6 +403,8 @@ void S_StartSoundAtVolume(void *origin_p, int sfx_id, int volume, dboolean impor
    origin = (mobj_t *) origin_p;
    listener = GetSoundListener();
  
@@ -281,10 +297,10 @@ index a12136e..1a95afd 100644
    if (nosfxparm)
      return;
 diff --git a/prboom2/src/s_sound.h b/prboom2/src/s_sound.h
-index 633f674..e1c8823 100644
+index 633f674..87d4574 100644
 --- a/prboom2/src/s_sound.h
 +++ b/prboom2/src/s_sound.h
-@@ -62,6 +62,23 @@ void S_Start(void);
+@@ -62,6 +62,24 @@ void S_Start(void);
  //  using <sound_id> from sounds.h
  //
  void S_StartSound(void *origin, int sound_id);
@@ -298,6 +314,7 @@ index 633f674..e1c8823 100644
 +  int origin_id;   // the thing it comes from (its evil_id); 0: not a thing (a sector, a line, none)
 +  int origin_type; // that thing's type (mobjtype_t); -1: not a thing
 +  int own;         // the listener's own (no origin, or the listener itself)
++  int chasing;     // from a thing in its chase (walking) states: a footstep, not an attack
 +  int volume;      // 0-127 by its distance (127 within 160, falling to nothing at 1200)
 +  int separation;  // 0-255, 128 the middle: which side it's on (never front or back)
 +  int x, y;        // where it comes from (map units): the game's, not something heard

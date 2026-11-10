@@ -319,14 +319,14 @@ impl Dsda {
     }
 
     /// The sounds the game's started since the last call, as she'd hear them (none in a library
-    /// without the call): nine numbers each, as the engine's `evil_sound_t` has them.
-    pub fn sounds(&self) -> Vec<[i32; 9]> {
+    /// without the call): ten numbers each, as the engine's `evil_sound_t` has them.
+    pub fn sounds(&self) -> Vec<[i32; 10]> {
         let Some(f) = self.sounds_fn else { return Vec::new() };
         const MAX: usize = 256;
-        let mut raw = [0 as c_int; 9 * MAX];
-        // SAFETY: room for MAX sounds of nine ints each, as the call is told; see `load`.
+        let mut raw = [0 as c_int; 10 * MAX];
+        // SAFETY: room for MAX sounds of ten ints each, as the call is told; see `load`.
         let n = unsafe { f(raw.as_mut_ptr(), MAX as c_int) }.clamp(0, MAX as c_int) as usize;
-        raw.as_chunks::<9>().0.iter().take(n).copied().collect()
+        raw.as_chunks::<10>().0.iter().take(n).copied().collect()
     }
 
     /// The sounds a kind of thing makes, by number (0: none): seeing her (a missile: fired),
