@@ -47,6 +47,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_explore", "description": "Explore an area or a direction (N, NE, ...); paused while she's fighting. secrets: also search its walls, 1 the likeliest few, 2 most, 3 every suspicious one (slow).", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "integer", "enum": [0, 1, 2, 3] }, "then": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_name", "description": format!("Name something (up to {NAME_MAX} characters); the name then works as its id."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
+        json!({ "name": "doom_fight", "description": "Her fight, for a while (10 s unless seconds; then her own rules again). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. hold_fire / fire. bold / careful / steady: how she fights. auto: all hers again.", "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "hold_fire", "fire", "bold", "careful", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
         json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, current order, what she's fighting." }),
     ]
@@ -371,6 +372,20 @@ impl Session {
                 } else {
                     self.director.order(Order::Exit);
                     (true, "Going to the exit.".into())
+                }
+            }
+            "doom_fight" => {
+                let Some(what) = arg("do") else {
+                    return (
+                        false,
+                        "do: target, weapon, hold_fire, fire, bold, careful, steady or auto."
+                            .into(),
+                    );
+                };
+                let seconds = args.get("seconds").and_then(Value::as_f64);
+                match self.director.fight(agent, obs, what, arg("ref"), seconds) {
+                    Ok(said) => (true, said),
+                    Err(why) => (false, why),
                 }
             }
             "doom_stop" => {
