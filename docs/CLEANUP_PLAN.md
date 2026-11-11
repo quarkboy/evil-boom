@@ -237,7 +237,7 @@ follower and the explorer's tiers are the two I'd do most carefully.
 | 3 | five kinds of objective have a function each | ae51a13 |
 | 3 | names, first pass (fight and explorer): a flag says what it means (`baiting`, `urgent`, `route_keeps_legs`, `exit_held_back`, `harm_allowed`, ...); `tools/rename.py` does a rename by the compiler's errors | f50c90f |
 | 3 | the fight's state by what it's for: 44 of `Combat`'s 97 fields are seven parts of it (`combat/state.rs`: movers, trigger, dodge, steer, cover, off_barrels, senses) | 5bb0266 |
-| 3 | sifting the list of things to do is its own module (`explorer/cut_off.rs`): the way back from a place a type (`WayBack`), what a list is sifted by another (`Sift`), out of 300 lines of closures in `list_objectives` (467 lines to 190) | this commit |
+| 3 | sifting the list of things to do is its own module (`explorer/cut_off.rs`): the way back from a place a type (`WayBack`), what a list is sifted by another (`Sift`), out of 300 lines of closures in `list_objectives` (467 lines to 190) | 91e2aca |
 
 Still to do of step 1: the follower (about 110 comments naming a level) and the navigation,
 planning and jump code (about 90), after stock is taken.
