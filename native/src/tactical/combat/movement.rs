@@ -26,16 +26,15 @@ impl Combat {
         for t in obs.things.iter().flatten() {
             let Some(m) = missile(t.name) else { continue };
             if t.owner == 0 || t.vx.hypot(t.vy) < 1.0 {
-                // (hers: her own plasma and rockets, dodged before, the fight given up; or gone
-                // off already, standing in its blast frames, met as she runs at it)
+                // Not her own: her plasma and rockets; nor one gone off already, standing in its blast
+                // frames.
                 continue;
             }
             if t.name == "LostSoul" && t.vx.hypot(t.vy) < 8.0 {
                 continue;
             }
-            // (relative to her, as she's going, and were she to stop: aimed at where she was, it
-            // hits if she turns back into it, as a route does, round a corner: Cyberdemon's
-            // rockets met head on, 3 tics off)
+            // Relative to her as she's going, and as if she stopped: one aimed at where she was still
+            // hits if she turns back into it, as a route does round a corner.
             let Some((when, miss)) = [vel, (0.0, 0.0)]
                 .into_iter()
                 .filter_map(|v| {
@@ -81,7 +80,7 @@ impl Combat {
         {
             self.homing_since.entry(t.id).or_insert(obs.tic);
         }
-        // (one that's gone by and come round again is still the one: kept while it flies)
+        // One that has gone by and come round again is still the same one: kept while it flies.
         let flying: BTreeSet<i32> = obs.things.iter().flatten().map(|t| t.id).collect();
         self.homing_since.retain(|i, _| flying.contains(i));
         if self
@@ -139,21 +138,19 @@ impl Combat {
                 })
                 .collect();
             let mut s = misses.iter().map(|m| m.0).fold(f64::INFINITY, f64::min);
-            // (clear of the missile itself, its blast or not)
+            // Clear of the missile itself, its blast or not.
             let hit = misses.iter().map(|m| m.1).fold(f64::INFINITY, f64::min);
             s = s.min(48.0); // (clear is clear: then the rest decides)
-                             // (among those, where there's room after: dodged along a wall into a corner, the next
-                             // rocket had her)
+                             // Among those, where there's room after: a dodge along a wall into a corner leaves no way
+                             // out of the next one.
             let ahead = (
                 pos.0 + way.0 * room.min(160.0),
                 pos.1 + way.1 * room.min(160.0),
             );
             if s >= 0.0 {
                 s += 24.0 * self.openness(obs, ahead, 192.0);
-                // (across its way, not along it: a step aside clears its line for good; backing
-                // straight off only puts it off, the faster she is the further, and it follows
-                // her down the room. The user's: backing off along a fireball's path, far back,
-                // when a strafe would do)
+                // Across its way, not along it: a step aside clears its line for good. Backing straight off
+                // only puts it off, and it follows her down the room.
                 let along = missiles
                     .iter()
                     .filter_map(|t| {
@@ -166,19 +163,19 @@ impl Combat {
             if let Some(dw) = self.dodge_way {
                 s += 6.0 * (way.0 * dw.0 + way.1 * dw.1);
             }
-            // (as clear, a way that stays on ground she's been on: sideways where she is, not back
-            // through a door into a room she's never been in; the steering's weight, in the
-            // dodge's units)
+            // As clear, a way that stays on ground she's been on: sideways where she is, not back
+            // through a door into a room she's never been in. This is the steering's weight for new
+            // ground, in the dodge's units.
             if s >= 0.0 && self.tune.steer.w_new_ground > 0.0 && self.off_known(ahead) {
                 s -= 6.0 * self.tune.steer.w_new_ground;
             }
-            // (and, as clear, the way she's going: health, a gun, ammo across the room; dodging
-            // where she stood, a rocket after a rocket, she never got there)
+            // And, as clear, the way she's going (health, a gun, ammo across the room): dodging where
+            // she stands, missile after missile, she never gets there.
             if let Some(to) = self.toward.filter(|&to| s >= 0.0 && dist(to, pos) > 1.0) {
                 let d = dist(to, pos);
                 s += self.tune.dodge.toward * (way.0 * (to.0 - pos.0) + way.1 * (to.1 - pos.1)) / d;
             }
-            // (and a way she'd rather go, as clear: round a corner from a homing one)
+            // And, as clear, a way she'd rather go: round a corner from a homing one.
             if let Some(p) = prefer.filter(|_| s >= 0.0) {
                 s += 2.0 * self.tune.dodge.toward * (way.0 * p.0 + way.1 * p.1);
             }
@@ -213,9 +210,8 @@ impl Combat {
         })
     }
 
-    /// Did the last dodge find a way clear of every missile coming? Of a rocket's hit, that is,
-    /// its blast or not: a hit is its blast and up to 160 more (MAP20: in a corridor narrower
-    /// than any blast, dodging given up for the retreat's legs, stood in the rocket's line)
+    /// Did the last dodge find a way clear of every missile coming? Clear of a missile's own hit,
+    /// that is, whatever its blast: the hit is the blast and a good deal more.
     pub fn dodge_clear(&self) -> bool {
         self.dodge_clear
     }
@@ -224,7 +220,7 @@ impl Combat {
     pub(super) fn away_from(&mut self, obs: &Observation, what: Point) -> Option<Point> {
         let away = (obs.y - what.1).atan2(obs.x - what.0);
         let pos = obs.pos();
-        // (first a way that stays on ground she's been on, if that's counted; then any)
+        // First a way that stays on ground she's been on, if that's counted; then any.
         for known_only in [self.tune.steer.w_new_ground > 0.0, false] {
             for off in [0.0f64, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0] {
                 let a = away + off.to_radians();
@@ -279,10 +275,8 @@ impl Combat {
     ) -> Option<Point> {
         let a = (t.y - obs.y).atan2(t.x - obs.x);
         let ahead = (a.cos(), a.sin());
-        // (and, straight on not clear, a little to either side of it: a side of her caught on a
-        // doorway's jamb, straight on is no way, a few degrees off slides her past it; MAP14,
-        // knocked back off a chaingunner in a doorway by its bullets, a unit off line with the
-        // jamb, stood still out of the fist's reach to death)
+        // Straight on not clear, a little to either side of it: with a side of her caught on a
+        // doorway's jamb, straight on is no way, and a few degrees off slides her past it.
         let mut ways = vec![ahead];
         ways.extend(
             self.tune
@@ -325,8 +319,7 @@ impl Combat {
     /// How far she could go that way (up to `length`): floor all the way, no step up or drop she
     /// couldn't come back from, room to stand, nothing that hurts.
     pub(super) fn clear_run(&self, obs: &Observation, d: Point, length: f64) -> f64 {
-        // (her middle and both sides: MAP07, the middle clear past a block's corner, the side
-        // caught on it, pushing that way for ever)
+        // Her middle and both sides: the middle can be clear past a corner that catches a side.
         let side = (-d.1 * PLAYER_RADIUS, d.0 * PLAYER_RADIUS);
         [(0.0, 0.0), side, (-side.0, -side.1)]
             .into_iter()
@@ -334,19 +327,17 @@ impl Combat {
             .fold(length, f64::min)
     }
 
-    /// Is she standing on a floor that hurts? Then that's no reason not to go a way (every way
-    /// is over it; E1M5: stood still in the nukage, fighting, to death, 257 bullets left).
+    /// Is she standing on a floor that hurts? Then that is no reason not to go a way: every way
+    /// is over it, and standing still on it is the worst of them.
     pub(super) fn on_hurting_floor(&self, obs: &Observation) -> bool {
         self.nav
             .poly_at(obs.pos())
             .is_some_and(|p| self.hurts(obs, self.nav.sector_of_poly(p)))
     }
 
-    /// Does sector s's floor hurt, or is it about to: as she takes it (`hazards`: felt, else by
-    /// its look, or seen turn to something that hurts; not under a suit); or going down now to
-    /// where it will (a
-    /// walkway into the blood, E3M1's: backed off from imps on the far bank onto a stone
-    /// just going down, not much of a step yet, in the blood with it a moment later).
+    /// Does sector s's floor hurt, or is it about to? As she takes it (`hazards`: felt, else by
+    /// its look, or seen to turn into something that hurts; not under a suit), or going down now
+    /// to where it will (a walkway sinking into what's under it).
     pub(super) fn hurts(&self, obs: &Observation, s: usize) -> bool {
         self.hazards.get(s).copied().unwrap_or(false)
             || (self.sinks_into_harm.contains(&s)
@@ -355,7 +346,6 @@ impl Combat {
                     .is_some_and(|h| h.floor < self.nav.movers.initial[s].floor - 0.5))
     }
 
-    /// Is she under a crusher at work?
     /// A crusher sector the fight's moves keep out of: on its way down, at work at all, or one
     /// she knows stopped too low to get out from under if it starts again.
     pub(super) fn no_go_crusher(&self, obs: &Observation, s: usize) -> bool {
@@ -376,9 +366,8 @@ impl Combat {
             .any(|q| self.no_go_crusher(obs, self.nav.sector_of_poly(q)))
     }
 
-    /// Is any of her under a crusher at work? A crusher crushes whatever's even partly under it,
-    /// and her middle out from under it isn't all of her (E3M5: her middle just out of a crusher's
-    /// alcove, 14 units of her still under it, the fight let go, the route walked her back in).
+    /// Is any of her under a crusher at work? A crusher crushes whatever is even partly under it,
+    /// and her middle being out from under it isn't all of her.
     pub(super) fn under_crusher(&self, obs: &Observation) -> bool {
         let r = PLAYER_RADIUS + 2.0;
         [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
@@ -387,12 +376,11 @@ impl Combat {
             .any(|p| self.crushing(obs, self.nav.sector_of_poly(p)))
     }
 
-    /// The shortest straight way out from under a crusher at work (with no route to take her): of
-    /// sixteen headings, the one that gets all of her to a floor with no crusher at work over it
-    /// soonest, walking (no step up or drop she couldn't come back from, nothing that hurts, room
-    /// for her box all the way). All of her: her box's corners, not her middle a radius on along
-    /// the heading, which along the crusher's edge never gets her out (E2M4: east along a crusher
-    /// room's side, 4 of her under it, into a pillar's corner, held there 11 strokes).
+    /// The shortest straight way out from under a crusher at work, when there's no route to take
+    /// her: of sixteen headings, the one that gets all of her to a floor with no crusher at work
+    /// over it soonest, walking (no step up or drop she couldn't come back from, nothing that
+    /// hurts, room for her box all the way). All of her means her box's corners, not her middle
+    /// a radius on along the heading: along a crusher's edge that test never gets her out.
     pub(super) fn way_out_of_crusher(&self, obs: &Observation) -> Option<Point> {
         let nav = &self.nav;
         let pos = obs.pos();
@@ -415,7 +403,7 @@ impl Combat {
                     {
                         return None;
                     }
-                    // (a corner of her in the solid: a wall or a pillar's corner in the way)
+                    // A corner of her in the solid: a wall or a pillar's corner in the way.
                     let r = PLAYER_RADIUS - 1.0;
                     if [(-r, -r), (r, -r), (r, r), (-r, r)]
                         .iter()
@@ -506,10 +494,9 @@ impl Combat {
         })
     }
 
-    /// A monster near and ahead the way the route walks her: walking on would walk into it. (Not
-    /// the way she faces: she faces what she aims at, so judged by facing anything near she was
-    /// shooting at was in her way; E2M3, UV, cacodemons she couldn't kill kept clear of with the
-    /// ammo kept every other tic, shot at the tics between, the pistol emptied on them.)
+    /// A monster near and ahead the way the route walks her: walking on would walk into it. By
+    /// the route's way, not her facing: she faces what she aims at, so by facing anything near
+    /// that she was shooting at would count as in her way.
     pub(super) fn in_her_way(&self, obs: &Observation, t: &Thing) -> bool {
         self.route_way.is_some_and(|way| {
             dist((t.x, t.y), obs.pos()) < 320.0
@@ -518,9 +505,8 @@ impl Combat {
     }
 
     /// Is it all right to go `length` that way: floor all the way, no drop or step up she
-    /// couldn't come back from, nothing that hurts, room to stand? And where her speed would
-    /// carry her, pushing that way a moment and then letting go (E1M3: strafing by the start,
-    /// slid into the nukage)?
+    /// couldn't come back from, nothing that hurts, room to stand? And likewise where her speed
+    /// would carry her, pushing that way a moment and then letting go?
     pub(super) fn safe(&self, obs: &Observation, d: Point, length: f64) -> bool {
         let nav = &self.nav;
         let Some(here) = nav.poly_at(obs.pos()) else {
@@ -533,10 +519,9 @@ impl Combat {
                     ceiling: 0.0,
                 })
         };
-        // (where she stands, not the floor under her middle: on a ledge's lip, her middle over the
-        // drop, the game keeps her up at the highest floor her box is on; judged from the floor
-        // below, the drop wasn't one. MAP06, walked off a crate top 552 down, then along the lip
-        // of a nukage channel she couldn't climb out of, closing in on an imp)
+        // From where she stands, not the floor under her middle: on a ledge's lip with her middle
+        // over the drop, the game keeps her up at the highest floor her box is on. Judged from the
+        // floor below, the drop would not look like one.
         let floor0 = obs
             .z
             .map_or(floor_of(here).floor, |z| z.max(floor_of(here).floor));
@@ -546,11 +531,9 @@ impl Combat {
         self.slide_ok(obs, floor0, Some(d))
     }
 
-    /// Would letting go of the controls now leave her where she stands, or near it: does the
+    /// Would letting go of the controls now leave her where she stands, or near it? Or does the
     /// speed she has carry her over a drop she couldn't come back from, or onto a floor that
-    /// hurts? (MAP19: landed from a run-jump on a strip 16 wide over a pit, the fight took the
-    /// controls with nowhere it wanted her to go, and the jump's speed carried her off the lip
-    /// into the pit, no way out of it.)
+    /// hurts (landed from a jump on a narrow strip, say, with the fight wanting her nowhere)?
     pub(super) fn coasting_off(&self, obs: &Observation) -> bool {
         let nav = &self.nav;
         let Some(here) = nav.poly_at(obs.pos()) else {
@@ -562,11 +545,10 @@ impl Combat {
         !self.slide_ok(obs, obs.z.map_or(floor, |z| z.max(floor)), None)
     }
 
-    /// The slide from where she is, pushing `push` the first `PUSH_TICS` (None: not at all), from
-    /// standing at `floor0`: a wall or a step up stops her, which is all right; a drop, a
-    /// hurting floor or a teleporter's front isn't (her middle over it from that side and she's
-    /// somewhere else: E2M7, backing off from a demon over the pad before a rocket launcher, out
-    /// in a closet with two more, out of ammo, its one way out behind them).
+    /// The slide from where she is, pushing `push` for the first `PUSH_TICS` (`None`: not at
+    /// all), from standing at `floor0`. A wall or a step up stops her, which is all right; a
+    /// drop, a hurting floor or a teleporter's front isn't (her middle over the pad from that
+    /// side and she is somewhere else).
     fn slide_ok(&self, obs: &Observation, floor0: f64, push: Option<Point>) -> bool {
         let nav = &self.nav;
         let floor_of = |p: usize| {
@@ -583,8 +565,8 @@ impl Combat {
             .filter(|l| TELEPORTERS_FOR_PLAYERS.contains(&l.special))
             .map(|l| nav.map.line_seg(l.index))
             .collect();
-        // (crossing (a, b) from its front, the right of a->b, as the game's P_CrossSpecialLine
-        // and EV_Teleport take it)
+        // Crossing (a, b) from its front, the right of a->b, as the game's P_CrossSpecialLine and
+        // EV_Teleport take it.
         let side = |(a, b): (Point, Point), p: Point| {
             (b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0)
         };

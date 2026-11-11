@@ -65,15 +65,14 @@ impl Combat {
         for i in 0..WAYS {
             let a = 2.0 * std::f64::consts::PI * i as f64 / WAYS as f64;
             let d = (a.cos(), a.sin());
-            // (her middle stops her radius short of what ends the run)
+            // Her middle stops her radius short of what ends the run.
             let room = self.clear_run(obs, d, reach + PLAYER_RADIUS) - PLAYER_RADIUS;
             let mut far = 16.0;
             while far <= room && best.is_none_or(|(bf, _)| far < bf) {
                 let p = (pos.0 + d.0 * far, pos.1 + d.1 * far);
                 let hidden = |c: &Self, q: Point| !c.sees(eye, q, z, &c.heights_now);
                 if self.fits(obs, p) && hidden(self, p) {
-                    // (well into its shadow, not on the edge of it: stopped just past a
-                    // pillar's corner, it still saw her)
+                    // Well into its shadow, not on the edge of it: just past a corner it still sees her.
                     let deep = far + self.tune.hide.shadow;
                     if deep <= room && hidden(self, (pos.0 + d.0 * deep, pos.1 + d.1 * deep)) {
                         best = Some((
@@ -108,17 +107,15 @@ impl Combat {
         Some((h.cos(), h.sin()))
     }
 
-    /// Two bosses awake and about her, of two kinds, one with a gun (a spider mastermind and a
-    /// cyberdemon): its bullets hit whatever's between it and her, and what's hit turns on what
-    /// hit it. Some((the one with the gun, the other, where to)): where to, None with the two at
-    /// each other already (neither turned to her); else Some(the way) to the nearest place in a
-    /// line with the two, one of them between her and the other, in the far one's sight but for
-    /// it (Some(None): there).
-    /// None: no two such, or no such place.
-    /// (MAP20 on the easiest skill, 16 runs of 16 dead in a minute at the start's porch: both
-    /// let loose on her, kept clear of in their sight, the rockets' blasts off the walls by her;
-    /// the two at 3500 of 4000 and 2800 of 3000 at her death, never set on each other. The
-    /// user's: the level's made for it.)
+    /// Two bosses awake and about her, of two kinds, one of them with a gun. A hitscanner's
+    /// bullets hit whatever stands between it and her, a missile likewise, and what's hit turns
+    /// on what hit it: so she lines the two up.
+    ///
+    /// Returns (the one with the gun, the other, where to). Where to is `None` when the two are
+    /// at each other already (neither is turned to her); otherwise `Some(way)` to the nearest
+    /// place in a line with the two, one of them between her and the other and nothing else
+    /// between her and the far one, or `Some(None)` when she is there. The whole is `None` when
+    /// there are no two such monsters or no such place.
     pub(super) fn set_on(
         &mut self,
         obs: &Observation,
@@ -134,8 +131,8 @@ impl Combat {
         }
         self.refresh_tic_cache(obs);
         let z = self.z(obs);
-        // (in a line with the two, past either: past the other, the gun's bullets at her hit
-        // it; past the gun, what the other throws at her hits that)
+        // In a line with the two, past either: past the other, the gun's bullets at her hit it;
+        // past the gun, what the other throws at her hits that.
         let apart = dist((gun.x, gun.y), (other.x, other.y)).max(1.0);
         let u = ((other.x - gun.x) / apart, (other.y - gun.y) / apart);
         let thrower = matches!(

@@ -209,11 +209,11 @@ pub struct Combat {
     rate: f64,
     mode: String,
     held_fire: Option<HeldFire>,
-    /// the monster a rocket's way at was last blocked close by (whatever's up), and when: not the
-    /// launcher for it for a while after (the user's: a safer weapon, rather than a rocket held;
-    /// a while, not each tic it's clear: E2M8, the cyberdemon, 24 switches back and forth)
+    /// the monster a rocket's way at was last blocked close by (whatever's up), and when: the
+    /// launcher isn't chosen for it for a while after. A while, not each tic it's clear, or she
+    /// would switch guns back and forth as the lane opens and shuts.
     rocket_blocked: Option<(i32, i64)>,
-    /// (baiting: the monsters in the way are the point)
+    /// baiting: the monsters in the way are the point
     pub hold_fire: bool,
     /// monsters she's after for the gun they carry (as of the last list of things to do): shot
     /// whatever the shot would wake
@@ -233,7 +233,7 @@ pub struct Combat {
     /// does that way take her out of every missile's way (its hit; a blast may still reach her)?
     dodge_clear: bool,
     /// where the route's taking her mid-fight (an errand: health, a gun, ammo), for dodging
-    /// towards (the user's: on to it while dodging, not stuck dodging where she stands)
+    /// towards: on to it while dodging, not dodging where she stands
     pub toward: Option<Point>,
     /// the floors that would hurt her now, as she takes them, by sector (what she knows: the
     /// player's, each tic; `Knowledge::hazards`)
@@ -292,8 +292,8 @@ pub struct Combat {
     burst_from: i64,
     /// health lost lately: (tic, how much)
     damage: Vec<(i64, f64)>,
-    /// (the log's: rounds spent this fight, and the health monsters lost, as the engine has it;
-    /// nothing's decided by them)
+    /// for the log: rounds spent this fight, and the health monsters lost as the engine has it.
+    /// Nothing is decided by them.
     spent: f64,
     dealt: f64,
     ammo_was: Vec<(i32, i32)>,
@@ -458,10 +458,10 @@ impl Combat {
         self.truth.clear();
         self.dead.clear();
         self.last_seen.clear();
-        // (what she had when she died isn't rounds spent in the life after)
+        // What she had when she died isn't rounds spent in the life after.
         self.ammo_was.clear();
-        // (the level begun again: every monster she's seen is back where she first saw it, for
-        // all she knows, standing as it stood; she knows of it before it knows of her)
+        // The level begun again: every monster she's seen is back where she first saw it, for all
+        // she knows, standing as it stood. She knows of it before it knows of her.
         for s in self.known.values_mut() {
             (s.x, s.y, s.awake, s.lost, s.going, s.foreknown) =
                 (s.x0, s.y0, false, false, (0.0, 0.0), true);
@@ -508,7 +508,7 @@ impl Combat {
             self.velocity = (pos.0 - l.0, pos.1 - l.1);
         }
         self.last_pos = Some(pos);
-        // (for the log: rounds gone, health monsters lost; pools shared by two guns counted once)
+        // For the log: rounds gone, health monsters lost. Pools shared by two guns are counted once.
         let ammo: Vec<(i32, i32)> = obs.ammo.clone().unwrap_or_default();
         for &(s, n) in &ammo {
             if matches!(s, 4 | 7) {
@@ -519,10 +519,10 @@ impl Combat {
                     self.spent += f64::from(before - n);
                     *self.tally.entry("rounds spent".to_string()).or_insert(0.0) +=
                         f64::from(before - n);
-                    // (a bullet or shell gone with nothing it could hit on her line: into a wall,
-                    // the corner she'd stepped back behind since the trigger. The user's, watching)
+                    // A bullet or shell gone with nothing it could hit on her line: into a wall, or the corner
+                    // she'd stepped back behind since the trigger.
                     if matches!(s, 2 | 3) {
-                        // (the chaingun's second bullet, 4 tics on, is of the same press)
+                        // The chaingun's second bullet, 4 tics on, is of the same press.
                         let second = obs.weapon == Some(4)
                             && self
                                 .shot_out
@@ -594,7 +594,7 @@ impl Combat {
                 }
             }
         }
-        // (what's gone from the gun up, put into her target, as she'd reckon it)
+        // What's gone from the gun up, put into her target, as she'd reckon it.
         if let (Some(slot), Some(id)) = (obs.weapon, self.target) {
             let was = self
                 .ammo_was
@@ -629,7 +629,7 @@ impl Combat {
             .filter(|t| monster(t.name).is_some())
         {
             if let Some(&h) = self.health_was.get(&t.id) {
-                // (seen: in her sight the tic before, the hit landing in front of her)
+                // Seen: in her sight the tic before, the hit landing in front of her.
                 if t.health < h && self.visible.iter().any(|v| v.id == t.id) {
                     *self.seen_hurt.entry(t.id).or_insert(0) += h - t.health.max(0);
                 }
@@ -642,12 +642,12 @@ impl Combat {
             }
             now.insert(t.id, t.health);
         }
-        // (one killed is gone from the list: hurt, that)
+        // One killed is gone from the list, and that counts as hurt.
         hurt_any |= self
             .health_was
             .keys()
             .any(|id| !now.contains_key(id) && self.visible.iter().any(|v| v.id == *id));
-        // (a bullet or a shell gone this tic, a monster in sight, and nothing hurt by it)
+        // A bullet or a shell gone this tic, a monster in sight, and nothing hurt by it.
         if self.shot_out.is_some_and(|(_, t)| t == obs.tic) && !self.visible.is_empty() && !hurt_any
         {
             *self
@@ -699,7 +699,7 @@ impl Combat {
                 ))
                 .or_insert(0.0) += 1.0;
         }
-        // (gone: killed, what it had left the last of it)
+        // Gone: killed, and what it had left was the last of it.
         self.dealt += self
             .health_was
             .iter()
@@ -707,7 +707,7 @@ impl Combat {
             .map(|(_, &h)| f64::from(h.max(0)))
             .sum::<f64>();
         self.health_was = now;
-        // (ceilings coming down: crushers, where a fight's moves don't go)
+        // Ceilings coming down: crushers, where a fight's moves don't go.
         if self.ceilings.len() != obs.heights.len() {
             self.ceilings = obs.heights.iter().map(|h| h.ceiling).collect();
             self.ceiling_down = vec![i64::MIN / 2; obs.heights.len()];
@@ -739,7 +739,7 @@ impl Combat {
         if let Some(h) = obs.health {
             if let Some(before) = self.health.filter(|&before| h < before) {
                 self.damage.push((obs.tic, before - h));
-                // (what by: what's gone off by her, what's up against her)
+                // What by: what has gone off by her, what's up against her.
                 let by: Vec<String> = obs
                     .things
                     .iter()
@@ -770,9 +770,9 @@ impl Combat {
             .filter(|t| monster(t.name).is_some())
             .map(|t| (t.id, t.clone()))
             .collect();
-        // (gone: dead. Hers to know if she saw it go; else by its cry, if she hears it and can
-        // tell whose it was (`hear`); else it's still about, for all she knows, where she last
-        // saw it)
+        // Gone: dead. It is hers to know if she saw it go; else by its cry, if she hears it and can
+        // tell whose it was (`hear`); else it's still about, for all she knows, where she last saw
+        // it.
         let was_visible: BTreeSet<i32> = self.visible.iter().map(|t| t.id).collect();
         for i in self.truth.keys() {
             if monsters.contains_key(i) || self.dead.contains(i) || !was_visible.contains(i) {
@@ -806,8 +806,8 @@ impl Combat {
                 .known
                 .get(&t.id)
                 .is_some_and(|s| obs.tic - s.tic < self.tune.senses.recent_sight_tics);
-            // (in her view; or seen a moment ago, the corner of her eye. Not for being near: one
-            // behind her that makes no sound she doesn't know of, till it does, or she backs into it)
+            // In her view, or seen a moment ago in the corner of her eye. Not for being near: one behind
+            // her that makes no sound she doesn't know of, till it does or she backs into it.
             if !(recent
                 || d < self.tune.senses.see_near
                 || norm(heading(pos, (t.x, t.y)) - obs.angle).abs() < self.tune.senses.fov)
@@ -820,7 +820,7 @@ impl Combat {
                 z: t.z,
                 height: mon(t.name).height,
             };
-            // (nothing between them; or, by instinct, something come between only a moment ago)
+            // Nothing between them; or, by instinct, something come between only a moment ago.
             let sees = self.los.clear(me, target, &self.heights_now);
             if !sees
                 && !self
@@ -885,10 +885,10 @@ impl Combat {
             }
             self.visible.push(t.clone());
         }
-        // (each as she can know it: its health her reckoning, its kind's less what she's seen
-        // it lose, never the game's own number)
-        // (and whom it's after what she can see of it: her, unless it's turned to another
-        // monster in sight and not to her; never the game's own word for its target)
+        // Each as she can know it. Its health is her reckoning (its kind's less what she's seen it
+        // lose), never the game's own number. Whom it's after is what she can see of it: her, unless
+        // it's turned to another monster in sight and not to her; never the game's own word for its
+        // target.
         let facing = self.tune.senses.facing;
         let after_her: Vec<bool> = self
             .visible
@@ -906,7 +906,7 @@ impl Combat {
             t.after_her = after;
         }
         for t in &mut self.visible {
-            // (one going down she sees going down)
+            // One going down she sees going down.
             if t.health > 0 {
                 t.health =
                     (mon(t.name).health - self.seen_hurt.get(&t.id).copied().unwrap_or(0)).max(1);
@@ -925,8 +925,8 @@ impl Combat {
                 s.going = v;
             }
         }
-        // (one not where she last saw it, the place in her sight again and a while gone by: she
-        // doesn't know where it is)
+        // One not where she last saw it, with the place in her sight again and a while gone by: she
+        // doesn't know where it is.
         let in_sight: BTreeSet<i32> = self.visible.iter().map(|t| t.id).collect();
         let looked: Vec<i32> = self
             .known
@@ -955,9 +955,9 @@ impl Combat {
                 *self.tally.entry("lost".to_string()).or_insert(0.0) += 1.0;
             }
         }
-        // (missiles: noticed in her view, nothing in the way, then followed while they fly: a
-        // missile in flight makes no sound, only its launch, which turns her to look. Her own
-        // she knows of)
+        // Missiles: noticed in her view with nothing in the way, then followed while they fly. A
+        // missile in flight makes no sound, only its launch, which turns her to look. Her own she
+        // knows of.
         let flying: BTreeMap<i32, &Thing> = obs
             .things
             .iter()
@@ -988,10 +988,10 @@ impl Combat {
                 self.missiles_seen.insert(id);
             }
         }
-        // (barrels as monsters are seen: in her view (or near), nothing in the way; kept while
-        // they're there)
+        // Barrels are seen as monsters are: in her view (or near), nothing in the way; kept while
+        // they're there.
         let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
-        // (the same barrel pushed by shots is still the one she saw)
+        // The same barrel pushed by shots is still the one she saw.
         self.barrels_seen = self
             .barrels_seen
             .iter()
@@ -1029,8 +1029,8 @@ impl Combat {
         self.heed(obs);
         self.watch_infighting(obs);
         self.now = self.assess(obs);
-        // (what only claws or charges, awake and in her sight: watched for whether it gets any
-        // nearer while she stays put; begun again when she moves off)
+        // What only claws or charges, awake and in her sight, is watched for whether it gets any
+        // nearer while she stays put; the watch begins again when she moves off.
         let watched: Vec<(i32, f64)> = self
             .visible
             .iter()
@@ -1045,14 +1045,14 @@ impl Combat {
         for (id, d) in watched {
             self.reach_watch.entry(id).or_insert((obs.tic, d, pos));
         }
-        // (the ground she's on: been on, from now)
+        // The ground she's on counts as been on, from now.
         if self.been.is_empty() {
             self.been = vec![false; self.nav.mesh.polys.len()];
         }
         if let Some(p) = self.nav.poly_at(pos) {
             self.been[p] = true;
         }
-        // (the ways round her that are in her view this tic)
+        // The ways round her that are in her view this tic.
         for (i, at) in self.looked.iter_mut().enumerate() {
             if norm(22.5 * i as f64 - obs.angle).abs() < self.tune.senses.fov {
                 *at = obs.tic;
@@ -1075,9 +1075,9 @@ impl Combat {
         let mut now: BTreeMap<i32, i32> = BTreeMap::new();
         for t in &self.visible {
             let awake = self.known.get(&t.id).is_some_and(|s| s.awake);
-            // (awake and after something, not her: which way it runs and shoots shows it)
+            // Awake and after something, not her: which way it runs and shoots shows it.
             if !awake || t.after_her || !(t.vx.hypot(t.vy) > 0.5 || t.attack >= 0) {
-                continue; // (standing about where it was put isn't fighting: MAP09's zombies)
+                continue; // standing about where it was put isn't fighting
             }
             let n = self.infight.get(&t.id).copied().unwrap_or(0) + 1;
             now.insert(t.id, n);
@@ -1118,12 +1118,11 @@ impl Combat {
         for s in &obs.sounds {
             match s.what {
                 Heard::Attack => self.attacks_heard.push((obs.tic, s.kinds)),
-                // (a monster's own steps: the few that make any are heard all the while they
-                // walk, a step at a time, and say about where it is: as far off as the step is
-                // loud, on the side it came from. The one she knows of, of that kind, out of her
-                // sight, is put there: of the two places the sound could be (in front and
-                // behind sound the same), the one nearer where she had it. The user's: "they
-                // should have a much better sense of where they are")
+                // A monster's own steps. The few kinds that make any are heard all the while they walk, a
+                // step at a time, and say about where it is: as far off as the step is loud, on the side it
+                // came from. The one she knows of, of that kind, out of her sight, is put there: of the two
+                // places the sound could be (in front and behind sound the same), the one nearer where she
+                // had it.
                 Heard::Walking if !s.own && self.tune.senses.track_steps => {
                     let far = if s.volume >= 127 {
                         160.0
@@ -1168,8 +1167,8 @@ impl Combat {
                         self.cries_due.remove(i);
                         continue;
                     }
-                    // (how far off by how loud: full within 160, nothing at 1200; a boss's cry
-                    // is as loud anywhere, and says nothing of where)
+                    // How far off by how loud: full within 160, nothing at 1200. A boss's cry is as loud
+                    // anywhere and says nothing of where.
                     let far = if s.volume >= 127 {
                         160.0
                     } else {
@@ -1218,10 +1217,9 @@ impl Combat {
 
     /// Something to look at, `ways` round (world degrees, the likeliest first).
     fn alerted(&mut self, obs: &Observation, ways: Vec<f64>, hit: bool, why: &str) {
-        // (one thing at a time: what she's looking round for is looked round for before the
-        // next, its ways reckoned from where she faced when it came; a second cry mid-turn,
-        // reckoned from mid-turn, had her turning to and fro and never round. Only a hit takes
-        // her from a sound)
+        // One thing at a time. What she's looking round for is looked round for before the next,
+        // its ways reckoned from where she faced when it came: a second sound reckoned from mid-turn
+        // would have her turning to and fro and never round. Only a hit takes her from a sound.
         if ways.is_empty() || self.alert.as_ref().is_some_and(|a| a.hit || !hit) {
             return;
         }
@@ -1273,7 +1271,7 @@ impl Combat {
             if seen {
                 continue;
             }
-            // (the balance: 128 less 96 times the sine of its bearing, left of her counted up)
+            // The balance: 128 less 96 times the sine of its bearing, left of her counted up.
             let off = ((128.0 - f64::from(s.separation)) / 96.0)
                 .clamp(-1.0, 1.0)
                 .asin()
@@ -1293,8 +1291,8 @@ impl Combat {
             self.alerted(obs, ways, false, &format!("heard {what}"));
         }
         for &side in obs.hit_sides.iter().filter(|&&side| side != 0) {
-            // (her right is the lesser angle. The face's side is anywhere from 45 degrees off
-            // to right behind: to that side first, then on round behind)
+            // Her right is the lesser angle. The face's side is anywhere from 45 degrees off to right
+            // behind: to that side first, then on round behind.
             let way = obs.angle - 90.0 * f64::from(side);
             let known = self.visible.iter().any(|t| {
                 let rel = norm(heading(obs.pos(), (t.x, t.y)) - obs.angle);
@@ -1307,7 +1305,7 @@ impl Combat {
     }
 
     /// Walking a route with nothing to shoot and nothing to look at: a look to either side every
-    /// so often (the user's: what comes up beside her as she travels is seen before it's on her).
+    /// so often, so that what comes up beside her as she travels is seen before it's on her.
     pub(super) fn glance(&mut self, obs: &Observation) {
         let every = self.tune.senses.glance_every;
         if every <= 0 || !self.routed || self.alert.is_some() || obs.tic - self.glanced < every {
@@ -1441,8 +1439,7 @@ impl Combat {
 
     /// A monster that only claws or charges, in her sight a while with her staying where she is,
     /// and no nearer for it: it can't get at her (bars she sees through, a gap, a ledge). Not
-    /// something to spend shots on while anything else is about. MAP11, the user watching: lost
-    /// souls behind bars shot at while a cacodemon and a chaingunner came up on her.
+    /// something to spend shots on while anything else is about.
     pub(super) fn cant_reach(&self, obs: &Observation, t: &Thing) -> bool {
         self.reach_watch.get(&t.id).is_some_and(|&(since, far, _)| {
             obs.tic - since > self.tune.engage.cant_reach_tics
@@ -1496,7 +1493,7 @@ impl Combat {
 
     /// For measuring a run, never for deciding: what she knew of the monster with that id when
     /// it hit her ("in view", "remembered", "known" of but out of mind, "unknown"), and how far
-    /// off it was (near: within 384, what the old rule showed her whichever way she faced).
+    /// off it was (near: within 384).
     pub fn measure(&self, pos: Point, id: i32) -> (&'static str, &'static str) {
         let knew = if self.visible.iter().any(|t| t.id == id) {
             "in view"
@@ -1524,7 +1521,7 @@ impl Combat {
             .flatten()
             .filter(|t| monster(t.name).is_some())
         {
-            // (one she's met before too: where it stands, not where she first saw it)
+            // One she's met before too: where it stands, not where she first saw it.
             self.known.insert(
                 t.id,
                 Seen {
@@ -1603,10 +1600,10 @@ impl Combat {
     }
 
     /// The monsters she's in a fight with: in sight, awake, after her, and able to hurt her from
-    /// where they are (one with a gun or missiles within ENGAGED_RANGED of her, a lost soul
-    /// within ENGAGED_CHARGE, a clawing one within ENGAGED_MELEE). Not a zombieman across the
-    /// map, nor a demon over a pit: what pauses her exploring (the user's: "in a fight" isn't
-    /// anything awake in sight).
+    /// where they are (one with a gun or missiles within `engaged_ranged` of her, a lost soul
+    /// within `engaged_charge`, a clawing one within `engaged_melee`). This is what pauses her
+    /// exploring: not anything awake in sight, such as a zombieman across the map or a demon
+    /// over a pit.
     pub fn engaged(&self, obs: &Observation) -> Vec<Thing> {
         let pos = obs.pos();
         self.seen_against_her()
@@ -1680,11 +1677,10 @@ impl Combat {
     // --- deciding ---------------------------------------------------------------------------
 
     /// A rocket on its way out (8 tics after the trigger, the way she faces then): the way to
-    /// face till it's out, and whether that's turning off a way it'd go off near her (the last
-    /// resort, the trigger pressed and no calling it back; the user's). Else held the way it was
-    /// judged safe: MAP32 UV, the trigger pressed at an SS, a new target the tic after, swung 86
-    /// degrees through the launch, the rocket out mid-turn into the wall beside her, dead at 31.
-    /// Tracking within 10 degrees instead did worse over the regression set: E3 8.2 -> 7.2.
+    /// face till it's out, and whether that is turning off a way it would go off near her (the
+    /// last resort: the trigger is pressed and can't be called back). Otherwise her facing is
+    /// held the way it was judged safe, whatever new target comes up: a swing through the launch
+    /// sends the rocket out mid-turn.
     fn rocket_held(&mut self, obs: &Observation) -> Option<(f64, bool)> {
         if !self
             .last_shot
@@ -1702,7 +1698,7 @@ impl Combat {
     /// something that wants the controls (a run-up, a jump). `errand`: the route's going for
     /// something to fight with: the fight only aims and shoots on the way.
     pub fn decide(&mut self, obs: &Observation, busy: bool, errand: &str) -> Option<Decision> {
-        // (invulnerable: nothing to dodge, a missile does nothing)
+        // Invulnerable: nothing to dodge, a missile does nothing.
         let missiles = if self.now.invulnerable {
             Vec::new()
         } else {
@@ -1711,9 +1707,8 @@ impl Combat {
         let target = self.pick_target(obs);
         self.last_move = None;
         if target.is_none() && missiles.is_empty() {
-            // (the fight over with a rocket still to go out: the way held all the same, the route's
-            // turn after; E3M9, the last rocket pressed at a baron as it died, the route turned her
-            // for the door through the launch, out into the wall by her, dead at 53)
+            // The fight over with a rocket still to go out: the way is held all the same, and the
+            // route's turn comes after.
             if let Some((aim, _)) = self.rocket_held(obs) {
                 return Some(Decision {
                     kind: Move::RocketHeld,
@@ -1726,7 +1721,7 @@ impl Combat {
                     why: "holding a rocket's way till it's out".into(),
                 });
             }
-            // (a barred move isn't made here either: `barred`)
+            // A barred move isn't made here either (`barred`).
             let d = self
                 .no_target(obs, busy, errand)
                 .filter(|d| !self.barred.contains(&d.kind));
@@ -1735,9 +1730,8 @@ impl Combat {
         }
         let (s, fire, weapon) = self.size_up(obs, busy, errand, missiles, target);
         let mut act = tree::engage(self, obs, &s);
-        // (a rocket on its way out, 8 tics after the trigger, the way she faces then: if that way
-        // it'd go off near her, turned to the nearest way it won't, the last resort, the trigger
-        // pressed and no calling it back; the user's)
+        // A rocket on its way out, 8 tics after the trigger, the way she faces then: if that way it
+        // would go off near her, she turns to the nearest way it won't.
         if s.vile.is_none() {
             if let Some((aim, out)) = self.rocket_held(obs) {
                 act.aim = Some(aim);
@@ -1747,10 +1741,8 @@ impl Combat {
                 }
             }
         }
-        // (hit from where she isn't looking: round to it, whatever she was shooting, and with
-        // missiles in the air too: a dodge is her legs', her eyes are free. E1M6 UV: imps'
-        // fireballs coming, a shotgun guy 43 units off at her side firing into her three times,
-        // never turned to)
+        // Hit from where she isn't looking: round to it, whatever she was shooting, and with
+        // missiles in the air too. A dodge is her legs'; her eyes are free.
         if s.vile.is_none() {
             if let Some(way) = self.look(obs, true) {
                 act.aim = Some(way);
@@ -1812,7 +1804,7 @@ impl Combat {
             (aim, fire, weapon) = (Some(a), f, w);
             if let Some(shot) = self.barrel_shot(obs) {
                 if matches!(obs.weapon, Some(2..=4)) {
-                    // (MAP23: the barrels round the mancubus do what the pistol can't)
+                    // The barrels round a monster do what her gun can't.
                     let a = heading(pos, shot);
                     let d = dist(shot, pos);
                     aim = Some(a);
@@ -1832,7 +1824,7 @@ impl Combat {
             .iter()
             .filter(|t| {
                 let m = mon(t.name);
-                // (not one that can't get at her: nothing to back off from)
+                // Not one that can't get at her: nothing to back off from.
                 (matches!(m.attack, Attack::Melee | Attack::Charge | Attack::Fire) || m.melee)
                     && dist((t.x, t.y), pos) < self.tune.engage.close + m.radius
                     && !self.cant_reach(obs, t)
@@ -1851,23 +1843,22 @@ impl Combat {
             }
         });
         let mut barrel_away = None;
-        // (with something shooting in sight, or her shooting at something: a shot, hers or theirs,
-        // sets a barrel off; E1M8's demons, biters only, fought among the barrels)
+        // With something shooting in sight, or her shooting at something: a shot, hers or theirs,
+        // sets a barrel off.
         if first_missile.is_none() && !busy && (shooting || target.is_some()) {
             if let Some(b) = barrel.filter(|&b| dist(b, pos) < self.tune.barrels.keep_clear + 64.0)
             {
                 barrel_away = self.away_from_barrels(obs, b);
             }
         }
-        // (invulnerable: nothing to hide from; her BFG ball in the air: in their sight till it
-        // lands, its spray from where she is)
+        // Invulnerable: nothing to hide from. Her BFG ball in the air: she stays in their sight
+        // till it lands, since its spray comes from where she is.
         let unhurt = self.now.invulnerable;
         if unhurt {
             barrel_away = None;
         }
-        // (a barrel going off by her, whoever set it off: away from it before a missile's dodge,
-        // its blast the worse; E1M6's, set off by another's blast and pushed her way, met
-        // dodging an imp's fireball)
+        // A barrel going off by her, whoever set it off: away from it before a missile's dodge. Its
+        // blast is the worse of the two.
         let barrel_lit = if busy || unhurt {
             None
         } else {
@@ -1904,9 +1895,9 @@ impl Combat {
         self.patience.given_up(id, obs.tic)
     }
 
-    /// Out of her fist's reach: given up on, or still on the floor it stood on when closing in on
-    /// it got her no nearer, and she's not (a ledge above her stays one, walked along or not;
-    /// MAP14 HMP, the same chaingunner walked at again once the give-up ran out, to death).
+    /// Out of her fist's reach: given up on, or still on the floor it stood on when closing in
+    /// on it got her no nearer, while she isn't on that floor (a ledge above her stays one,
+    /// whether she walks along under it or not).
     pub(super) fn out_of_fist_reach(&self, obs: &Observation, t: &Thing) -> bool {
         self.given_up_on(obs, t.id)
             || self.fist_stalled.get(&t.id).is_some_and(|&s| {
@@ -1929,9 +1920,8 @@ impl Combat {
         ));
     }
 
-    /// Closing in on t, out of reach: still worth it? Not once she's been at it this long without
-    /// getting it in reach (E1M9's imps across the gap, 800 off, closed in on and lost sight of
-    /// for an hour): then it's left a while.
+    /// Closing in on t, out of reach: still worth it? Not once she has been at it this long
+    /// without getting it in reach: then it's left a while.
     fn still_closing(&mut self, obs: &Observation, id: i32) -> bool {
         if self.given_up_on(obs, id) {
             return false;
@@ -1950,12 +1940,10 @@ impl Combat {
         true
     }
 
-    /// Standing to fight t, no shot at it from here: given up on a while once she's had none for
-    /// CLOSE_GIVE_UP (a shot at it sets the clock back; so does a fight with it broken off that
-    /// long). Standing gets her no shot: the route goes on, shooting on the way when one comes.
-    /// (Pistol start, ITYTD-HNTR: on an island in a nukage pit, two zombiemen on ledges round it,
-    /// too steep from her, never hitting her either; stood at for the hour, by turns, coming and
-    /// going from sight, her route held and every step on given up as taking too long)
+    /// Standing to fight t with no shot at it from here: given up on a while once she has had
+    /// none for `engage.close_give_up` (a shot at it sets the clock back; so does a fight with
+    /// it broken off that long). Standing gets her no shot, so the route goes on, shooting on
+    /// the way when one comes.
     pub(super) fn no_shot_long(&mut self, obs: &Observation, t: &Thing) -> bool {
         if self.given_up_on(obs, t.id) {
             return true;
@@ -1975,15 +1963,13 @@ impl Combat {
         false
     }
 
-    /// An awake monster that was after her gone out of sight a moment ago (behind a pillar,
-    /// round a corner): she keeps fighting it, aimed where it was, keeping her distance, rather
-    /// than going about her business (MAP32: walked up to a cyberdemon behind a pillar).
-    /// Not on a floor that hurts (or will, a suit's time running out): the route's way off is
-    /// the way to take, not after a ghost (E4M2 HNTR: in a lava hall under a suit, a demon with no
-    /// shot at it (too steep) seen and lost by turns, kept at 1500 tics till the suit was out;
-    /// E4M3 HMP, a cacodemon in and out of sight over the lava, held there 100 to 0).
+    /// An awake monster that was after her and went out of sight a moment ago (behind a pillar,
+    /// round a corner): she keeps fighting it, aimed where it was and keeping her distance,
+    /// rather than going about her business and walking up to it. Not on a floor that hurts (or
+    /// one that will, a suit's time running out): the route's way off is the way to take then,
+    /// not after a ghost.
     fn lost_sight(&mut self, obs: &Observation) -> Option<Decision> {
-        // (nor when nothing can hurt her: one gone from sight is nothing to keep at)
+        // Nor when nothing can hurt her: one gone from sight is nothing to keep at.
         if self.on_hurting_floor(obs) || self.immune {
             return None;
         }
@@ -1991,13 +1977,11 @@ impl Combat {
         let s = self
             .remaining()
             .into_iter()
-            // (gone a moment, not a tic: one on the edge of a line of sight, in it and out of it
-            // tic about as she moves a unit, had her legs passed to and fro between this and the
-            // route for a thousand tics; E1M1 UV, a shotgun guy 1600 off through a gap)
-            // (a moment by her eyes, not her ears: a step heard says where it is, and dates it,
-            // but it isn't sight of it. MAP12, an arachnotron walking about out of sight, every
-            // step of it a fresh "just lost": not lost for 9 tics, lost for 9, her legs held
-            // to and fro for as long as it walked, the route's every step taking too long)
+            // Gone a moment, not a tic: one on the edge of a line of sight is in it and out of it tic
+            // about as she moves a unit, and would pass her legs to and fro between this and the route.
+            // A moment by her eyes, not her ears: a step heard says where it is and dates it, but isn't
+            // sight of it, and every step of one walking about out of sight would be a fresh "just
+            // lost".
             .filter(|s| {
                 let eyes = obs.tic
                     - s.tic
@@ -2009,8 +1993,7 @@ impl Combat {
                     && dist(s.pos(), pos) < self.tune.engage.range
             })
             .filter(|s| !self.patience.given_up(s.id, obs.tic))
-            // (not after one she can't take on: out of its sight's where she wants to be; E3M8,
-            // the spider mastermind gone behind something, walked after with a pistol)
+            // Not after one she can't take on: out of its sight is where she wants to be.
             .filter(|s| !self.too_much(obs, &[s.name], self.tune.guns.outmatched))
             .max_by(|a, b| mon(a.name).threat.total_cmp(&mon(b.name).threat))?;
         let mut ghost = self.last_seen.get(&s.id)?.clone();
@@ -2067,13 +2050,12 @@ impl Combat {
                     weapon: b.weapon,
                     ..Controls::default()
                 };
-                // (nothing to shoot with: aiming fires nothing, and the route's turn is what
-                // faces a shut door on her way to press it; MAP31, HMP, out of ammo and off for
-                // more, turned to the SS shooting her, 450 tics at a door she never pressed)
+                // Nothing to shoot with: aiming fires nothing, and the route's turn is what faces a shut
+                // door on her way to press it.
                 if d.aim.is_none() || !self.armed(obs) || d.kind.route_faces() {
                     c.turn = b.turn;
                 } else {
-                    // (the route's way in the world, whichever way she's turned to aim)
+                    // The route's way in the world, whichever way she's turned to aim.
                     let way = obs.angle - b.turn + (-b.strafe).atan2(b.forward).to_degrees();
                     let rel = norm(way - (obs.angle - turn)).to_radians();
                     let mag = b.forward.hypot(b.strafe);
@@ -2093,15 +2075,15 @@ impl Combat {
                     c.forward = 50.0 * rel.cos();
                     c.strafe = -50.0 * rel.sin();
                 } else if self.coasting_off(obs) {
-                    // (nowhere the fight wants her: not where the speed she has would take her)
+                    // Nowhere the fight wants her: not where the speed she has would take her either.
                     (c.forward, c.strafe) = crate::motor::brake(obs, facing);
                 }
                 c
             }
         };
         c.attack = d.fire || base.is_some_and(|b| b.attack && !legs);
-        // (the rocket launcher and the BFG don't fire again with the trigger held: let go a tic
-        // after each press, the game's way to fire the next; held, only the first went)
+        // The rocket launcher and the BFG don't fire again with the trigger held: it is let go a tic
+        // after each press, which is the game's way to fire the next.
         if matches!(obs.weapon, Some(5 | 7)) && self.trigger_held {
             c.attack = false;
         }
@@ -2110,9 +2092,8 @@ impl Combat {
             self.tap(obs, &mut c);
         }
         self.trigger_held = c.attack;
-        // (a shot begun, that is: the trigger pulled on a gun with nothing in it begins none.
-        // MAP23's pass: the BFG up with fewer than its 40 cells, the trigger pulled, "holding
-        // still for the BFG's spray" 300 s, each pull the charge begun again)
+        // A shot begun, that is: the trigger pulled on a gun with too little in it begins none, and
+        // must not be taken for one.
         if let Some(s) = obs
             .weapon
             .filter(|&s| c.attack && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot)
@@ -2134,16 +2115,14 @@ impl Combat {
     /// A bullet or a shell goes from where she is when it leaves the gun, a few tics after the
     /// trigger (the pistol's 4, the shotguns' 3: the frames before A_FirePistol, A_FireShotgun),
     /// not from where she pressed it. So the trigger isn't pulled when the speed she has would
-    /// have her, by then, where there's no line to what she's shooting at (her speed, not her
-    /// legs: she can't stop in three tics, and not at all in the air, coming down a stair; the
-    /// user's). And once it's pulled, her legs are held those tics if where they're taking her
-    /// has no line and where she stands has. (The user's, watching: "often the movement back to
-    /// cover is too quick and the shots hit the wall instead of the enemy", "with the shotgun
-    /// even".) Between shots her legs are her own: the rest of the gun's cycle is the time to
-    /// get behind something. Not when the move's one that can't wait (a missile coming, an
-    /// arch-vile's fire).
+    /// have her, by then, where there's no line to what she's shooting at. Her speed, not her
+    /// legs: she can't stop in three tics, and not at all in the air coming down a stair. Once
+    /// it's pulled, her legs are held those tics if where they're taking her has no line and
+    /// where she stands has. Between shots her legs are her own: the rest of the gun's cycle is
+    /// the time to get behind something. None of this applies when the move is one that can't
+    /// wait (a missile coming, an arch-vile's fire).
     fn keep_line(&mut self, obs: &Observation, d: &Decision, c: &mut Controls, legs: bool) {
-        /// (longer than this with no shot out: the gun's not coming up to fire; a switch, say)
+        /// longer than this with no shot out, the gun isn't coming up to fire (a switch, say)
         const GIVEN_UP: i64 = 12;
         let Some(held) = obs.weapon.filter(|w| matches!(w, 2..=4) && !d.pressed) else {
             self.line_held = None;
@@ -2163,7 +2142,7 @@ impl Combat {
             || self
                 .last_shot
                 .is_some_and(|(s, t)| s == held && obs.tic - t < delay);
-        // (the trigger held, the next leaves a cycle after the last)
+        // The trigger held, the next shot leaves a cycle after the last.
         let again = weapon_in(held, obs).cycle as i64 - delay;
         let due = pressed && since >= again - 1;
         let target = self
@@ -2180,7 +2159,7 @@ impl Combat {
             self.line_held = None;
             return;
         }
-        // (the trigger not pulled yet, or held and the gun asking whether to fire again)
+        // The trigger not pulled yet, or held and the gun asking whether to fire again.
         let coast = (
             pos.0 + self.velocity.0 * reach,
             pos.1 + self.velocity.1 * reach,
@@ -2195,8 +2174,8 @@ impl Combat {
                 .tally
                 .entry("triggers not pulled: no line where she'd be by the shot".to_string())
                 .or_insert(0.0) += 1.0;
-            // (and she slows for it: a line to it and a mind to shoot, she stays in the line
-            // till she can. Else it's out and back round a corner with never a shot; the user's)
+            // And she slows for it: with a line to it and a mind to shoot, she stays in the line till
+            // she can. Otherwise she is out and back round a corner with never a shot.
             if legs {
                 (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
                 *self
@@ -2232,20 +2211,19 @@ impl Combat {
             .or_insert(0.0) += 1.0;
     }
 
-    /// The trigger let go between shots at something far off (the user's "advanced trigger
-    /// control"). A bullet goes dead straight unless the trigger's been held since the shot
-    /// before (P_GunShot's `accurate`: the player's `refire` is 0), and held it's up to 5.6
-    /// degrees off either way, most near the middle ((P_Random - P_Random) << 18). The gun asks
-    /// once a cycle whether the trigger's still down (A_ReFire: the pistol 10 tics after its
-    /// shot, the chaingun 8 after the first of its two): let go for that tic, it comes back to
-    /// ready and the next press is a first shot again, the pistol's a cycle of 19 for 14, the
-    /// chaingun's 10 for 8. So she taps when holding would land less than that share of its
-    /// bullets on a target as wide as this one is from here: the same damage or more a second,
-    /// and every bullet of it on the target.
+    /// The trigger let go between shots at something far off. A bullet goes dead straight
+    /// unless the trigger has been held since the shot before (P_GunShot's `accurate`: the
+    /// player's `refire` is 0); held, it's up to 5.6 degrees off either way, most near the
+    /// middle ((P_Random - P_Random) << 18). The gun asks once a cycle whether the trigger is
+    /// still down (A_ReFire: the pistol 10 tics after its shot, the chaingun 8 after the first
+    /// of its two). Let go for that tic, it comes back to ready and the next press is a first
+    /// shot again: the pistol's cycle is then 19 tics for 14, the chaingun's 10 for 8. So she
+    /// taps when holding would land less than that share of its bullets on a target as wide as
+    /// this one is from here: the same damage a second or more, and every bullet on the target.
     fn tap(&mut self, obs: &Observation, c: &mut Controls) {
-        /// (the most a held shot goes off, degrees)
+        /// the most a held shot goes off, degrees
         const SPREAD: f64 = 5.6;
-        // (tics from the press's first bullet to the gun's asking; a held cycle over a tapped one)
+        // Tics from the press's first bullet to the gun's asking; a held cycle over a tapped one.
         let (asks, worth) = match obs.weapon {
             Some(2) => (10, 14.0 / 19.0),
             Some(4) => (8, 8.0 / 10.0),
@@ -2271,8 +2249,8 @@ impl Combat {
         if lands >= worth {
             return;
         }
-        // (she sees the bullet gone a tic after the gun's let it go, and what she does now is
-        // the game's next tic)
+        // She sees the bullet gone a tic after the gun has let it go, and what she does now is the
+        // game's next tic.
         let since = obs.tic - self.burst_from;
         if (asks - 2..=asks).contains(&since) {
             c.attack = false;
@@ -2283,17 +2261,17 @@ impl Combat {
         }
     }
 
-    /// The chaingun's way of the same: it fires as long as the trigger's down, two bullets a
-    /// press, the second 4 tics after the first whether she's let go or not (A_FireCGun, twice).
-    /// A burst at a time, then: where her speed would have her out of the line by its end, the
-    /// trigger's not pulled and she slows for it; pulled, her legs wait the burst out if they'd
-    /// take her out of the line, and no second burst is begun; then they're her own a while,
-    /// the trigger let go where they take her out of the line. (Without the while: stood with a
-    /// line, her legs wanting away and held for the shot, the shot held for her legs, 234 s of
-    /// MAP23's pass with never a move or a bullet.)
+    /// The chaingun's way of the same. It fires as long as the trigger is down, two bullets a
+    /// press, the second 4 tics after the first whether she has let go or not (A_FireCGun,
+    /// twice). So she fires a burst at a time. Where her speed would have her out of the line by
+    /// the burst's end, the trigger isn't pulled and she slows for it. Once pulled, her legs
+    /// wait the burst out if they'd take her out of the line, and no second burst is begun.
+    /// After that they're her own for a while (`REST`), with the trigger let go where they take
+    /// her out of the line: without that rest the legs wait for the shot and the shot for the
+    /// legs, and she does neither.
     fn keep_burst(&mut self, obs: &Observation, c: &mut Controls, legs: bool) {
         const BURST: i64 = 5;
-        /// (her legs' own, after a burst they waited for: tics)
+        /// her legs are her own this long after a burst they waited for (tics)
         const REST: i64 = 12;
         let burst = self
             .last_shot
@@ -2340,7 +2318,7 @@ impl Combat {
             return;
         }
         if burst {
-            // (the burst begun: no other after it, her legs waiting it out)
+            // The burst is begun: no other after it, her legs waiting it out.
             c.attack = false;
             if legs {
                 (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
@@ -2380,14 +2358,9 @@ impl Combat {
         self.damage.last().copied()
     }
 
-    /// Is sector s a crusher at work: its ceiling coming down lately, and low (E2M2: backed off
-    /// under one fighting a demon, crushed)? Or its floor coming up lately, with little more
-    /// than her height left under the ceiling (E2M4's secret: a floor raised to crush, walked
-    /// onto over its W1 line, stood on with nothing left to do till it had her; a lift ends
-    /// level with a floor beside it, room enough over it).
-    /// A crusher at work in sector s: its ceiling come down lower than she stands within the last
-    /// ACTIVE_CRUSHER tics, at the top of its stroke now or not. Where the fight's moves don't go
-    /// (the user's: active crushers no-go), not just while it's on its way down.
+    /// A crusher at work in sector s: its ceiling has come down lower than she stands within
+    /// the last `senses.active_crusher` tics, whether or not it's at the top of its stroke now.
+    /// The fight's moves don't go there at all, not just while it's on its way down.
     pub fn crusher_active(&self, obs: &Observation, s: usize) -> bool {
         !self.doors.contains(&s)
             && self
@@ -2396,12 +2369,10 @@ impl Combat {
                 .is_some_and(|&t| obs.tic - t < self.tune.senses.active_crusher)
     }
 
-    /// Is sector s a crusher she knows of, stopped (or not) too low to get out from under if it
-    /// starts again: less room over her head, in tics, than getting out of it takes at the worst,
-    /// and its stroke more than she'd take on (one that holds her: always; a fast one: more than a
-    /// tenth of her health, the user's). E2M4's slow one: stopped 9 over her head, run into
-    /// chasing an imp, its own start line its edge, set off; 9 tics, going the wrong way at full
-    /// speed, pinned, crushed.
+    /// Is sector s a crusher she knows of that is too low, stopped or not, to get out from under
+    /// if it starts again? That is: less room over her head, in tics, than getting out of it
+    /// takes at the worst, and a stroke that costs more than she'd take on (one that holds her:
+    /// always; a fast one: more than a tenth of her health).
     pub fn crusher_trap(&self, obs: &Observation, s: usize) -> bool {
         let (Some(&kind), Some(&out), Some(h)) = (
             self.crushers.get(&s),
@@ -2419,6 +2390,9 @@ impl Combat {
         )
     }
 
+    /// Is sector s crushing now? Its ceiling coming down lately and low; or its floor coming up
+    /// lately with little more than her height left under the ceiling (a floor raised to
+    /// crush; a lift ends level with a floor beside it, with room enough over it).
     pub fn crushing(&self, obs: &Observation, s: usize) -> bool {
         let gap = obs
             .heights
@@ -2478,10 +2452,9 @@ impl Combat {
                 .any(|t| t.name == "BFGBall" && t.owner == 0)
     }
 
-    /// How t's moving, a tic: its momentum, or walking (a monster walks by steps, not momentum:
-    /// its momentum's nothing as it goes), how far it's gone over the last few tics. For leading a
-    /// rocket or a plasma ball: E3M8, 90 rockets at the spider mastermind walking 4 a tic, 1000
-    /// off, aimed where it was, 200 damage done.
+    /// How t is moving, a tic: its momentum, or, walking (a monster walks by steps and has no
+    /// momentum as it goes), how far it has gone over the last few tics. For leading a rocket
+    /// or a plasma ball at something walking.
     pub fn moving(&self, t: &Thing) -> Point {
         if t.vx.hypot(t.vy) > 0.5 {
             return (t.vx, t.vy);
@@ -2545,9 +2518,9 @@ fn hit_clearance(tune: &Dodge, m: &Missile) -> f64 {
     PLAYER_RADIUS + m.radius + tune.margin
 }
 
-/// How near t comes to her as it goes by, if she runs `way` from now (stopped once she's gone
-/// `room`: a wall that way; a rocket by a wall she'd have run into met her there). A rocket's
-/// counted from its middle: its blast (the clearance) does the rest.
+/// How near t comes to her as it goes by, if she runs `way` from now. She is taken to stop
+/// once she has gone `room` (a wall that way). A rocket is counted from its middle: its
+/// blast, the clearance, does the rest.
 fn miss_by(tune: &Dodge, pos: Point, vel: Point, way: Point, room: f64, t: &Thing) -> f64 {
     let (mut x, mut y) = pos;
     let (mut vx, mut vy) = vel;

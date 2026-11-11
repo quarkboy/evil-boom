@@ -72,15 +72,11 @@ impl Combat {
         let mut best: Option<(f64, Thing)> = None;
         let mut against = self.now.against_her.clone();
         if self.immune {
-            // (nothing able to hurt her: only what's near enough to be in her way is the
-            // fight's; the rest is the route's to walk past, or to go to if it's to be killed.
-            // MAP29's pass: a revenant on a ledge 1400-2000 off, closed in on and lost by turns
-            // for the last 300 s of it; taken on only while a shot got to it, in and out of
-            // that by the tic, her legs and her aim the fight's every other one)
+            // Nothing able to hurt her: only what's near enough to be in her way is the fight's. The
+            // rest is the route's to walk past, or to go to if it's to be killed.
             const NEAR: f64 = 320.0;
-            /// (the one she's on kept to a little farther: at the very edge of near it was
-            /// hers and not by the tic, MAP15's pass, a chaingunner stepped for a shot at and
-            /// dropped 279 times in 40 s)
+            /// The one she's on is kept to a little farther than a new one is taken on at: at the
+            /// very edge of "near" it would be hers and not hers by the tic.
             const KEPT: f64 = 448.0;
             let on = self.target;
             against.retain(|t| dist((t.x, t.y), pos) < if Some(t.id) == on { KEPT } else { NEAR });
@@ -94,9 +90,8 @@ impl Combat {
         for t in against {
             let info = mon(t.name);
             let d = dist((t.x, t.y), pos);
-            // (one she'd be long at, with another that's hitscan about, isn't put first: the time
-            // it'd take is the hitscanner's to shoot her in. MAP11 UV from a pistol start: a pain
-            // elemental the target, 16 s of pistol, kept clear of while shotgun guys shot her dead)
+            // One she'd be long at, with another about that's hitscan, isn't put first: the time it
+            // would take is the hitscanner's to shoot her in.
             let long = f64::from(info.health) / self.firepower_on(obs, Some(&info)).max(1.0);
             let first = if long > self.tune.aim.kill_first && hitscanners.iter().any(|&h| h != t.id)
             {
@@ -123,9 +118,9 @@ impl Combat {
                 best = Some((s, t));
             }
         }
-        // (the BFG up: the one whose line puts the most in its spray, forty lines from her a
-        // quarter turn wide along the ball's way, 1024 out; the ball goes to the first on her
-        // line, the spray the way it went)
+        // The BFG up: the one whose line puts the most in its spray (forty lines from her, a quarter
+        // turn wide along the ball's way, 1024 out). The ball goes to the first on her line, the
+        // spray the way it went.
         if obs.weapon == Some(7) {
             let me = obs.pos();
             let in_cone = |c: &Self, m: &Thing| {
@@ -139,8 +134,7 @@ impl Combat {
                     .map(|o| mon(o.name).threat.max(0.5))
                     .sum::<f64>()
             };
-            // (of those she has a shot at, in the spray's reach: not one she can't hit, stood at
-            // for an hour, E3M4)
+            // Of those she has a shot at, in the spray's reach: not one she can't hit.
             let shots: Vec<Thing> = self
                 .visible
                 .clone()
@@ -187,9 +181,8 @@ impl Combat {
         if blocked {
             self.rocket_blocked = Some((t.id, obs.tic));
         }
-        // (fought up close, the weapon for it from the start, not whatever's best from here
-        // while she closes in: E3M4, at a demon 299 off with the rocket launcher up, the fist
-        // brought up 46 off)
+        // Fought up close, the weapon for it from the start, not whatever is best from here while
+        // she closes in.
         let preferred = self.preferred_gun(obs, t);
         let slot = if Style::of(&preferred, t) == Style::Melee {
             preferred.slot
@@ -207,7 +200,7 @@ impl Combat {
             ));
         }
         let w = weapon_in(if (1..=7).contains(&held) { held } else { 2 }, obs);
-        // lead a moving target with a missile weapon
+        // Lead a moving target with a missile weapon.
         let (mut ax, mut ay) = (t.x, t.y);
         if !w.hitscan && w.speed > 0.0 {
             let tof = d / w.speed;
@@ -232,10 +225,8 @@ impl Combat {
                 .iter()
                 .any(|b| b.id != t.id && mon(b.name).boss)
         {
-            // (a boss in sight: the others left to it, not near her; its fire lands on them and
-            // they turn on it, her ammo kept for it. The user's: infighting, E3M8 from a pistol
-            // start, 1400 of 3000-odd damage's worth of ammo spent on two cacodemons and a baron,
-            // out of ammo with the spider mastermind at 1000-2000)
+            // A boss in sight: the others are left to it unless they're near her. Its fire lands on
+            // them and they turn on it, and her ammo is kept for it.
             Some(HeldFire::LeftToBoss)
         } else if !self.can_hit(obs, t, None) {
             Some(HeldFire::NoShot)
@@ -281,14 +272,14 @@ impl Combat {
         self.shot_clear_from(obs, obs.pos(), at, z, h)
     }
 
-    /// A rocket's way to t clear its whole width (MAP32: one fired past a pillar's corner beside
-    /// her, the line from her eye clear, the rocket's side not: 86 off her).
+    /// A rocket's way to t clear over its whole width: the line from her eye can be clear past
+    /// a corner that the rocket's side would catch.
     fn rocket_lane_clear(&mut self, obs: &Observation, t: &Thing) -> bool {
         if self.now.invulnerable {
             return true;
         }
-        // (from where she is and from where she'll be when it comes out: the launcher lets
-        // it go 8 tics after the trigger, and she'd run up beside the pillar by then)
+        // From where she is and from where she'll be when it comes out: the launcher lets it go 8
+        // tics after the trigger, and she moves in that time.
         let now = obs.pos();
         let then = (
             now.0 + self.velocity.0 * ROCKET_DELAY,
@@ -296,17 +287,16 @@ impl Combat {
         );
         let centre = self.z(obs) + AIM_HEIGHT;
         let mid = t.z + mon(t.name).height / 2.0;
-        // (the way to it, and the way she faces: it goes where she faces, and she fires within a
-        // couple of degrees of it; the arena's crates, a corner clipped 3 units off the target's
-        // way, at full health, in her face)
-        // (only as far as its blast could come back to her: beyond, something in the way is a
-        // miss, no harm; checked all the way, she held fire at a cyberdemon till it had her)
-        // (and the way the game will send it: autoaim swings it to whatever's first on her way,
-        // or 5.6 degrees off it, and down or up at it: into a ledge's lip firing down into a pit,
-        // a railing it'd fly over level; the user's)
-        // (and further, running after it: she gains on its blast as it flies, at 20 a tic to her
-        // 16, so something 600 out is a blast 120 from her; MAP06, shooting on the way at an imp
-        // 1500 off, the route running her on after the rocket, twice, dead)
+        // The lane checked is:
+        // - the way to it and the way she faces: it goes where she faces, and she fires within a
+        //   couple of degrees of the target;
+        // - only as far as its blast could come back to her: beyond that, something in the way is
+        //   a miss and no harm;
+        // - the way the game will send it: autoaim swings it to whatever is first on her way, or
+        //   5.6 degrees off it, and down or up at it (into a ledge's lip firing down into a pit,
+        //   over a railing it would fly over level);
+        // - and further when she's running after it: she gains on its blast as it flies, at 20 a
+        //   tic to her 16.
         let after = {
             let d = dist((t.x, t.y), now).max(1.0);
             let gain = (self.velocity.0 * (t.x - now.0) + self.velocity.1 * (t.y - now.1)) / d;
@@ -371,8 +361,8 @@ impl Combat {
                 })
                 .collect();
             on.sort_by(|a, b| a.0.total_cmp(&b.0));
-            // (the first it sees any of, aimed at the middle of what it sees: over a railing, the
-            // part above it; the game's way, P_AimLineAttack)
+            // The first it sees any of, aimed at the middle of what it sees (over a railing, the part
+            // above it): the game's way, P_AimLineAttack.
             for (along, m) in on {
                 let (lo, hi) = (m.z, m.z + mon(m.name).height);
                 let seen: Vec<f64> = (0..)
@@ -407,12 +397,11 @@ impl Combat {
     }
 
     /// Would a rocket fired from `pos` the way `h` (degrees) get `len` with nothing in its box's
-    /// way, at its own height (its bottom at her feet + 32, its top + 40, climbing to `to_mid` if
-    /// aimed at something there): a step as high as its bottom stops it as a wall does (the
-    /// arena's 32-high steps, seen over, flown into), and the box reaches a corner its middle
-    /// passes (its radius on an axis, 1.4 times it on the diagonal, and some: a miss is better
-    /// than one in her face, the user's).
-    /// (`shape`: the projectile's radius, and what's kept clear beyond it each side)
+    /// way, at its own height (its bottom at her feet + 32, its top + 40, climbing to `to_mid`
+    /// if aimed at something there)? A step as high as its bottom stops it as a wall does, and
+    /// the box reaches a corner its middle passes (its radius on an axis, 1.4 times that on the
+    /// diagonal, and some more: a miss is better than one in her face).
+    /// `shape`: the projectile's radius, and what's kept clear beyond it each side.
     pub(super) fn rocket_flies(
         &mut self,
         obs: &Observation,
@@ -452,13 +441,13 @@ impl Combat {
         })
     }
 
-    /// Would a shot of a projectile weapon (`radius`: the rocket's 11, plasma's 13) fired at t from
-    /// `q`, facing it, go the way autoaim sends it and get to it, nothing in its box's way at its
-    /// height? (Plasma: not wasted on a ledge's lip below her, or the floor in front of something
-    /// up on a ledge; the user's.) Its middle only, not its box's sides: a side grazing a corner
-    /// costs a cell at most (it steps 25 at a time, the box checked where it lands, and may get
-    /// by), and holding fire for it held her out of a fight (MAP16's cover, a Spider Mastermind 700
-    /// off, the sides 14 off the line clipping the cover's edges: 6/8 lost, none before).
+    /// Would a shot of a projectile weapon (`radius`: the rocket's 11, plasma's 13) fired at t
+    /// from `q`, facing it, go the way autoaim sends it and get to it, with nothing in its way
+    /// at its height? This keeps plasma from being wasted on a ledge's lip below her or the
+    /// floor in front of something up on a ledge. Its middle only is checked, not its box's
+    /// sides: a side grazing a corner costs a cell at most (it steps 25 at a time, the box
+    /// checked where it lands, and may get by), and holding fire for that keeps her out of a
+    /// fight from cover.
     pub(super) fn projectile_reaches(
         &mut self,
         obs: &Observation,
@@ -478,12 +467,11 @@ impl Combat {
         )
     }
 
-    /// Plasma from here wouldn't get to t (autoaim tips it into a lip below or the floor in front of
-    /// it above): the nearest step, up to 96 on (towards it first, then 30 and 60 degrees off it
-    /// either side), she can take without dropping off anything (the fight's own `safe`: no drop she
-    /// couldn't come back up, nothing that hurts), from where it would; the way to it.
-    /// (Not for rockets: stepping for one put her by the crates' columns more than it helped,
-    /// own-rocket hits in the crate arena 26 -> 44.)
+    /// Plasma from here wouldn't get to t (autoaim tips it into a lip below, or the floor in
+    /// front of it above): the nearest step, up to 96 on (towards it first, then 30 and 60
+    /// degrees off it either side), that she can take without dropping off anything (the
+    /// fight's own `safe`) and from where it would; the way to it. Not for rockets: stepping
+    /// for one puts her nearer what it could burst on more often than it helps.
     pub(super) fn plasma_spot(&mut self, obs: &Observation, t: &Thing) -> Option<Point> {
         let pos = obs.pos();
         let to = heading(pos, (t.x, t.y));
@@ -504,13 +492,12 @@ impl Combat {
         None
     }
 
-    /// (a rocket on its way out, the way she faces now going into something near) The nearest
-    /// heading to her facing with a clear lane far enough out that its blast won't reach her:
-    /// the last resort once the trigger's pressed (the user's: it can't be called back; turned
-    /// away from what it'd hit).
+    /// A rocket is on its way out and the way she faces now goes into something near: the
+    /// nearest heading to her facing with a clear lane far enough out that its blast won't
+    /// reach her. The last resort once the trigger is pressed, since it can't be called back.
     pub(super) fn rocket_way_out(&mut self, obs: &Observation) -> Option<f64> {
         let pos = obs.pos();
-        // (each way as autoaim will take it from there)
+        // Each way as autoaim will take it from there.
         let margin = self.tune.aim.rocket_margin;
         let goes = |c: &mut Self, facing: f64| {
             let (h, seen, middle) = c.autoaim(obs, pos, facing);
@@ -566,10 +553,8 @@ impl Combat {
     /// Where to step for a shot at t she can see but can't hit: back from it when it's above
     /// her, towards it when it's below; None if neither way is safe.
     pub(super) fn shot_way(&mut self, obs: &Observation, t: &Thing) -> Option<Point> {
-        // (first, a step she can see would do it: the nearest spot round her the shot's clear
-        // from. A corner or a wall's end in the way isn't a lip to back off from: MAP12's stair,
-        // a shotgun guy two steps up past the wall beside her, backed off from out of the
-        // doorway, lost, come back for, two minutes of it)
+        // First, a step she can see would do it: the nearest spot round her that the shot is clear
+        // from. A corner or a wall's end in the way isn't a lip to back off from.
         const STEPS: [f64; 3] = [24.0, 48.0, 96.0];
         let pos = obs.pos();
         let h = mon(t.name).height;
@@ -582,7 +567,7 @@ impl Combat {
                 if !self.safe(obs, d, len) || !self.shot_clear_from(obs, spot, (t.x, t.y), t.z, h) {
                     continue;
                 }
-                // (of those as near, the one that keeps most off it)
+                // Of those as near, the one that keeps most off it.
                 let off = dist(spot, (t.x, t.y));
                 if found.is_none_or(|(o, _)| off > o) {
                     found = Some((off, d));
@@ -602,9 +587,8 @@ impl Combat {
         away
     }
 
-    /// A barrel she can see right by a monster, well clear of her, and the barrels it sets off in
-    /// turn too: shoot that (MAP23: one by the mancubus 320 off her, its chain through the
-    /// field of barrels she stood in, the blasts on her, dead in 5 s).
+    /// A barrel she can see right by a monster, well clear of her, with every barrel it sets
+    /// off in turn clear of her too: shoot that.
     pub(super) fn barrel_shot(&mut self, obs: &Observation) -> Option<Point> {
         let barrels: Vec<Point> = obs
             .barrels
@@ -647,12 +631,10 @@ impl Combat {
             .reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a })
     }
 
-    /// A barrel going off (hit: it blows 15 tics later) whose blast, or its chain's, reaches her:
-    /// of the chain's barrels whose blasts reach her, the one that goes off first (fewest blasts
-    /// from one going off; the chain burns a barrel a blast at a time), the nearest of those, to
-    /// get away from. Not the nearest barrel of all: MAP23's hall of barrels, the chain burning
-    /// down it towards her, away from the nearest one by the wall and back from the next, till it
-    /// got there, dead.
+    /// A barrel going off (hit, it blows 15 tics later) whose blast, or its chain's, reaches
+    /// her. Of the chain's barrels whose blasts reach her, the one that goes off first (fewest
+    /// blasts from one going off: the chain burns a barrel a blast at a time), and the nearest
+    /// of those: that is the one to get away from, not the nearest barrel of all.
     pub(super) fn lit_barrel_by(obs: &Observation) -> Option<Point> {
         let pos = obs.pos();
         let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
@@ -701,9 +683,8 @@ impl Combat {
     }
 
     /// Would every barrel a blast at `b` sets off, in turn (each within a blast of the one
-    /// before), go off clear of her? Not her distance from the one shot alone: E1M8's yard of
-    /// barrels, shot from among them, all of it round her (walls not counted: rather a shot
-    /// missed than a blast through a gap).
+    /// before), go off clear of her? Her distance from the one shot isn't enough. Walls aren't
+    /// counted: rather a shot missed than a blast through a gap.
     pub(super) fn chain_clear(obs: &Observation, b: Point) -> bool {
         let pos = obs.pos();
         let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
@@ -724,13 +705,12 @@ impl Combat {
         true
     }
 
-    /// A barrel on the line of a shot at t (up to t, within the gun's spread) whose chain would go
-    /// off by her: a bullet takes the first thing on its line (E1M8: demons fought among the
-    /// barrels, the pistol's shots at them into the barrels beside her).
+    /// A barrel on the line of a shot at t (up to t, within the gun's spread) whose chain would
+    /// go off by her: a bullet takes the first thing on its line.
     fn barrel_in_line(obs: &Observation, w: &crate::tactical::bestiary::Weapon, t: &Thing) -> bool {
         let pos = obs.pos();
         let d = dist((t.x, t.y), pos);
-        // (a bullet: anywhere in the spread at that distance; a missile: what its box touches)
+        // A bullet: anywhere in the spread at that distance. A missile: what its box touches.
         let width = |along: f64| {
             if w.hitscan {
                 BARREL_RADIUS + along * w.spread.max(1.0).to_radians().tan()
@@ -784,9 +764,7 @@ impl Combat {
     }
 
     /// Does going that way (a second's run) leave her further from every barrel near her, and
-    /// near no other there? (MAP23: a hall of barrels, every spot by some; away from the row
-    /// beside her was into the next, back and forth between them till the mancubus's fireballs
-    /// set them off, dead.)
+    /// near no other there? Away from one row can be into the next.
     fn clear_of_barrels(&self, obs: &Observation, d: Point) -> bool {
         let pos = obs.pos();
         let ahead = (pos.0 + d.0 * 96.0, pos.1 + d.1 * 96.0);
@@ -805,7 +783,7 @@ impl Combat {
         crate::tactical::bestiary::weapon(5).splash + 48.0
     }
 
-    /// Is a rocket at t sure not to blow up by her (E1M9's died at 88 health, nothing in sight)?
+    /// Is a rocket at t sure not to blow up by her?
     pub(super) fn rocket_safe(&self, obs: &Observation, t: &Thing) -> bool {
         if self.now.invulnerable {
             return true; // (her own blast can't hurt her either)
@@ -815,7 +793,7 @@ impl Combat {
         if dist((t.x, t.y), pos) < clear + mon(t.name).radius {
             return false;
         }
-        // (where they'll be when it gets there: a revenant closing in met it 71 off her)
+        // Where they'll be when it gets there: something closing in meets it nearer her.
         let me_then = (
             pos.0 + self.velocity.0 * ROCKET_DELAY,
             pos.1 + self.velocity.1 * ROCKET_DELAY,
@@ -832,15 +810,15 @@ impl Combat {
         if t.name == "PainElemental" && dist((t.x, t.y), pos) < self.tune.aim.pain_near {
             return false; // (the souls it spits out come between: E... dead at 90 health, one 28 off)
         }
-        // (each with how far it could come into the way while the rocket's near her: none for
-        // what's in sight, its blast's reach for a claw she's lost sight of)
+        // Each with how far it could come into the way while the rocket is near her: none for what's
+        // in sight, its blast's reach for a claw she has lost sight of.
         let mut others: Vec<(f64, f64, f64, f64)> = self
             .visible
             .iter()
             .filter(|o| o.id != t.id)
             .map(|o| (o.x, o.y, mon(o.name).radius, 0.0))
             .collect();
-        // (and anything close in front she'd see, seen yet or not: a soul just spat out)
+        // And anything close in front that she'd see, seen yet or not (a lost soul just spat out).
         others.extend(
             obs.things
                 .iter()
@@ -851,7 +829,7 @@ impl Combat {
                 .map(|o| (o.x, o.y, mon(o.name).radius, 0.0)),
         );
         others.extend(obs.barrels.iter().flatten().map(|b| (b.0, b.1, 10.0, 0.0)));
-        // (E1M9: dead at full health, a demon 83 away: it came round a corner into the way)
+        // Something can come round a corner into the way.
         others.extend(
             self.remaining()
                 .iter()
@@ -862,16 +840,14 @@ impl Combat {
                 })
                 .map(|m| (m.x, m.y, mon(m.name).radius, 128.0)),
         );
-        // (the leeway only for coming into the way: a rocket bursts on it only there, and one
-        // behind her can't get in front of it; E3M4 UV, demons all round, four rockets held
-        // for every demon 237-344 off till the fist was all she had)
+        // The leeway is only for coming into the way: a rocket bursts on it only there, and one
+        // behind her can't get in front of it.
         for (x, y, r, pad) in others {
             if dist((x, y), pos) < clear + r {
                 return false;
             }
-            // (in the way only where a burst on it reaches her: one in the lane further off
-            // takes the rocket itself; MAP08 HMP, twelve demons coming down a hall 950 off, no
-            // rocket for the pack in its own lane, the pistol out instead)
+            // In the way only where a burst on it reaches her: one in the lane further off takes the
+            // rocket itself, which is what it's for.
             let near_her = dist((x, y), pos) < clear + r + pad;
             if near_her
                 && segment_point_distance(pos, (t.x, t.y), (x, y)) < r + pad + 12.0

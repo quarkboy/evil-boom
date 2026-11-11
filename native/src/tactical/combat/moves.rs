@@ -133,8 +133,9 @@ impl Move {
         )
     }
 
-    /// The route has her eyes as well as her legs: she faces the way she runs, nothing aimed at.
-    /// (Turned to aim behind her, the route's legs go at a sixth of her pace: `Motion::go`.)
+    /// The route has her eyes as well as her legs: she faces the way she runs and aims at nothing.
+    /// (The route's legs slow to a sixth of her pace when she's turned to aim behind her:
+    /// `Motion::go`.)
     pub fn route_faces(self) -> bool {
         matches!(self, Move::ThroughBarrels)
     }
