@@ -368,10 +368,12 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     let mut c: Option<crate::motor::Controls> = None;
     let (mut best, mut best_tic, mut lives) = (0usize, e.tic, 0);
     let mut on_ending = false;
+    let mut ended = "its time up";
     while ((e.tic - start) as f64) < SCOUT_SECONDS * TICRATE && !e.exited() {
         if e.finished() && e.dead() {
             lives += 1;
             if lives > 4 {
+                ended = "dead five times on a floor that ends the level";
                 break;
             }
             e.restart(true);
@@ -398,14 +400,18 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
         if known > best {
             (best, best_tic) = (known, e.tic);
         } else if e.tic - best_tic > SCOUT_STALL {
+            ended = "nothing new in a long while";
             break;
         }
+    }
+    if e.exited() {
+        ended = "out by the exit";
     }
     let x = agent.x_mut();
     x.exit_last = held;
     x.knowledge.immune = false;
     x.left_alive();
-    let summary = format!("--- the level played through beforehand (nothing able to hurt her): {}", x.knowledge.summary());
+    let summary = format!("--- the level played through beforehand (nothing able to hurt her; {ended}, {:.0} s): {}", (e.tic - start) as f64 / TICRATE, x.knowledge.summary());
     if std::env::var_os("EVIL_DEBUG_SCOUT").is_none() {
         x.log.truncate(log_from);
     }

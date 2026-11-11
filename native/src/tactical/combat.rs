@@ -276,6 +276,8 @@ pub struct Combat {
     shot_out: Option<(i32, i64)>,
     /// since when her legs have been held for a shot on its way out
     line_held: Option<i64>,
+    /// her legs her own till then, after a chaingun's burst they waited out
+    burst_rest: i64,
     /// when the first bullet of the press she's in left the gun (the chaingun's second goes 4 on)
     burst_from: i64,
     /// health lost lately: (tic, how much)
@@ -408,6 +410,7 @@ impl Combat {
             trigger_held: false,
             shot_out: None,
             line_held: None,
+            burst_rest: i64::MIN / 2,
             burst_from: i64::MIN / 2,
             damage: Vec::new(),
             spent: 0.0,
@@ -1546,7 +1549,10 @@ impl Combat {
             self.tap(obs, &mut c);
         }
         self.trigger_held = c.attack;
-        if let Some(s) = obs.weapon.filter(|_| c.attack) {
+        // (a shot begun, that is: the trigger pulled on a gun with nothing in it begins none.
+        // MAP23's pass: the BFG up with fewer than its 40 cells, the trigger pulled, "holding
+        // still for the BFG's spray" 300 s, each pull the charge begun again)
+        if let Some(s) = obs.weapon.filter(|&s| c.attack && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot) {
             self.last_shot = Some((s, obs.tic));
             if s == 5 {
                 self.rocket_facing = Some(obs.angle);
@@ -1671,10 +1677,16 @@ impl Combat {
 
     /// The chaingun's way of the same: it fires as long as the trigger's down, two bullets a
     /// press, the second 4 tics after the first whether she's let go or not (A_FireCGun, twice).
-    /// Where her speed or her legs would have her out of the line by then, she lets go of the
-    /// trigger, and her legs wait for the burst she's started; then they're her own.
+    /// A burst at a time, then: where her speed would have her out of the line by its end, the
+    /// trigger's not pulled and she slows for it; pulled, her legs wait the burst out if they'd
+    /// take her out of the line, and no second burst is begun; then they're her own a while,
+    /// the trigger let go where they take her out of the line. (Without the while: stood with a
+    /// line, her legs wanting away and held for the shot, the shot held for her legs, 234 s of
+    /// MAP23's pass with never a move or a bullet.)
     fn keep_burst(&mut self, obs: &Observation, c: &mut Controls, legs: bool) {
         const BURST: i64 = 5;
+        /// (her legs' own, after a burst they waited for: tics)
+        const REST: i64 = 12;
         let burst = self.last_shot.is_some_and(|(s, t)| s == 4 && obs.tic - t < BURST);
         if !c.attack && !burst {
             return;
@@ -1687,22 +1699,38 @@ impl Combat {
         }
         let reach = BURST as f64;
         let coast = (pos.0 + self.velocity.0 * reach, pos.1 + self.velocity.1 * reach);
-        let mut out = !self.shot_clear_from(obs, coast, (t.x, t.y), t.z, h);
-        if !out && legs && c.forward.hypot(c.strafe) > 0.0 {
+        let out_coast = !self.shot_clear_from(obs, coast, (t.x, t.y), t.z, h);
+        let out_legs = legs && c.forward.hypot(c.strafe) > 0.0 && {
             const STRIDE: f64 = 10.0;
             let way = (obs.angle - c.turn + (-c.strafe).atan2(c.forward).to_degrees()).to_radians();
-            out = !self.shot_clear_from(obs, (pos.0 + way.cos() * STRIDE * reach, pos.1 + way.sin() * STRIDE * reach), (t.x, t.y), t.z, h);
-        }
-        if !out {
+            !self.shot_clear_from(obs, (pos.0 + way.cos() * STRIDE * reach, pos.1 + way.sin() * STRIDE * reach), (t.x, t.y), t.z, h)
+        };
+        if !out_coast && !out_legs {
             return;
         }
-        if c.attack {
+        if obs.tic < self.burst_rest {
+            c.attack = false;
+            return;
+        }
+        if burst {
+            // (the burst begun: no other after it, her legs waiting it out)
+            c.attack = false;
+            if legs {
+                (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
+                *self.tally.entry("tics her legs held for a shot on its way out".to_string()).or_insert(0.0) += 1.0;
+            }
+            if self.last_shot.is_some_and(|(_, t)| obs.tic - t == BURST - 1) {
+                self.burst_rest = obs.tic + 1 + REST;
+            }
+            return;
+        }
+        if out_coast {
             c.attack = false;
             *self.tally.entry("triggers not pulled: no line where she'd be by the shot".to_string()).or_insert(0.0) += 1.0;
         }
-        if burst && legs {
+        if legs {
             (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
-            *self.tally.entry("tics her legs held for a shot on its way out".to_string()).or_insert(0.0) += 1.0;
+            *self.tally.entry("tics she slowed to get a shot off".to_string()).or_insert(0.0) += 1.0;
         }
     }
 

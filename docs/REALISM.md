@@ -409,6 +409,15 @@ Each line: the change, its score run for run against the build before on the sam
   it): -0.0009 ± 0.0066 (497 / 154 / 139; exits 377 -> 374); 0.438; level-skills never
   beaten 65 -> 57 (first exits on MAP11, E3M4, MAP27, MAP19), E3M9 6 of 16 -> 2, E3M3 15 ->
   12 (not traced; E3M9 is a level of much chance, the user's). Kept.
+- **The chaingun's burst and her legs by turns; a trigger pulled on an empty gun begins no
+  shot** (both from MAP23's pass, each a stand of minutes with nothing in the log). The
+  first was the shot's line rule's own: a line to it, her legs wanting where there's none,
+  her legs held for the shot and the shot held for her legs. Now the trigger isn't pulled
+  where her speed would have her out of the line, her legs wait a burst out, no second is
+  begun, and they're her own 12 tics. The second: the BFG up with fewer than its 40 cells,
+  each pull the charge "begun", held still for its spray for good. +0.0006 ± 0.0061 (580 /
+  134 / 143; exits 374 -> 375); 0.439. Kept. The console's merge before it: all 1088 runs
+  the same to the tic.
 - **A3** (the wait at a lift), **A5** (the edge of her view), **B2, B3**: not done yet.
 
 ## A level she knows, and lives (the evaluation asked for 2026-11-10)
@@ -457,7 +466,8 @@ it, as an invulnerability does (MAP06 386 -> 1007 lines, MAP14 781 -> 1629, MAP1
 1625, MAP28 453 -> 736). The mesh (above): MAP24 249 -> 1070, MAP19 694 -> 1236, E4M2 411 ->
 656, MAP13 551 -> 774. MAP23: her rounds gone on lost souls, a barrel before the switch: not
 able to be hurt, she punches it (the user's); 115 -> 168, then a chaingunner seen and not to
-be shot, closed in on and lost by turns, the route never getting its turn (open). Still
-short: MAP23, MAP29 (789 of 1152), MAP13, MAP08 (581 of 649). `evil-boom watch ... --known`
+be shot, closed in on and lost by turns: the chaingun's deadlock and the empty BFG (above);
+with them 390 of 391, out by the exit. The pass's line in the log says why it ended. Still
+short: MAP29 (789 of 1152), MAP13, MAP08 (581 of 649). `evil-boom watch ... --known`
 shows the pass, tic for tic as a run's; `EVIL_DEBUG_REACH=<tic>` logs what she can get to
 then, its polygons and the portals out of it.
