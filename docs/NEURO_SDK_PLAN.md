@@ -431,6 +431,7 @@ reads is short.
 | # | Stage | Test (gate) |
 |---|---|---|
 | 0 | **Drive what exists by hand**: a level through `watch --headless --directed FILE` in real time, me as Evil, noting every moment I wanted to know or do something I couldn't | notes in this file (section 8); they reorder the stages below |
+| 1a | **First, from stage 0's notes**: the idle fallback (`idle` policy, announced); orders queue or say what they replaced, exploring goes on after an errand; short ids with a phrase; "seen, no way yet" as a state; an order's outcome says what came of it; a failure says what would work; lists ranked with a pick | E1M2 driven by hand again at the same pace: out in under 7 minutes, no order lost unsaid, idle under a fifth of the time |
 | 1 | `Situation`, typed `Event`, the grammar, the budgeter, the fight summary, `doom_look` | a recorded level's whole context reads well cold; under the word budget; GPT stand-in's choices no worse |
 | 2 | The journal always on; `doom_why`; the trigger's one reason | every "why" asked at 50 random moments of a run has a true, short answer |
 | 3 | `doom_mode` / `idle` fallback; `doom_goal` | a level finished with three goals and no orders; no stretch over 25 s with her idle and the bot still |
@@ -447,7 +448,54 @@ events a minute in and out of fights; and the score with the layer off, unchange
 
 ## 8. Notes from driving it by hand (stage 0)
 
-To be filled in as I play.
+**E1M2, HMP, pistol start, one life, 2026-11-11.** Me as Evil through `watch --headless
+--speed 1 --directed FILE`: an order appended to the file, the reports read back, each round
+trip of mine 5 to 30 s (about what she'd take, thinking and talking). **Out in 13:19 of game
+time, 23/41 kills, 8/42 items, 2/6 secrets, never under 94 health.** A score run's exit of
+this level takes about 4 minutes: most of the rest was her standing waiting on me. What I
+ran into, in the order it cost me:
+
+1. **She stood idle about half the time.** Every order done left her waiting till I'd read
+   it and thought. Nothing told me she was idle but the absence of news. The idle fallback
+   (section 3) and the force are the first thing to have; nothing else matters as much.
+2. **A second order silently threw away the first.** "go shotgun" then "go switch": she
+   pressed the switch and never took the shotgun; "go armor" during an explore dropped the
+   explore. Nothing said so. Orders want to queue (do this, then that) or to say "replaced
+   exploring area-24", and exploring wants to go on after an errand.
+3. **Nothing to choose by.** Six areas, each "N to explore"; three doors, each an id and a
+   bearing. I picked by guessing. And the counts misled: "area-34: 1 to explore", then
+   "Nothing to explore in area-34". A ranking and a pick (5.5) would have halved my turns.
+4. **"Exit found: exit-l873", then `list exits`: none, and `order exit`: "No exit known
+   yet", for a minute.** She'd seen it through an opening with no way to it yet. Seen but not
+   reachable has to be a state of its own, said the same everywhere ("exit seen E 460, no way
+   to it yet").
+5. **Failures didn't say what would work.** "No known way to the Chaingun yet; explore near
+   it": near it is which area? I never got it. "Nothing to explore in area-0" for an id that
+   didn't exist yet (it did later) should have been "no area-0".
+6. **Done said nothing of what came of it.** "Done: door-l527" (the red door): did it open,
+   what's behind it? "Pressed switch-l313: moves area-89": moves how, and is that a way on?
+   Then "Nothing to explore in area-89". The outcome she needs is "opened: a room N with 3
+   imps" or "raised the bridge to the exit".
+7. **I never knew where she was.** Status has no place in it; an area is "here" in the list
+   only while it has something left to explore. `doom_look` (4.1) is the fix.
+8. **The moments weren't told.** Two secrets found: nothing. 23 kills: nothing but
+   "Monsters: 1 Zombieman (W 58)" as each came into sight, a dozen of them, and "Exploring
+   paused while she's fighting" without saying what she was fighting or how it went. No fight
+   summary, no health lost. For the stream there was nothing to react to in the whole level
+   except "Got the shotgun" and "Got the red keycard".
+9. **Ids are a mouthful.** `door-l389`, `item-t212`, `switch-l313`: she'll read these aloud.
+   Short ones counted as she meets them (`door-3`), and a phrase with each ("the red door",
+   "the switch by the pillar"), cost nothing.
+10. **"Walls to search: 3/9/47"** means nothing unread; it's on every explore's end.
+11. **A new gun 186 away wasn't taken** till ordered (spare ammo and health are): a gun she
+    hasn't got should be a pickup she takes by herself, by default.
+12. **The fight never needed me** on this level and skill, so tactics (4.3) are untested by
+    this; a harder level is the next drive (MAP07 or E1M8 on UV).
+
+What this changes in the stages: the idle fallback and order queueing move to the front
+(with the grammar: ids, "seen, no way yet", outcomes); rankings and the pick come with them
+rather than later; the events for moments (secrets, kills, the fight summary) are stage 1 as
+planned. Tactics and class T questions stay where they are, behind a drive of a harder level.
 
 ## 9. For the user to decide
 
