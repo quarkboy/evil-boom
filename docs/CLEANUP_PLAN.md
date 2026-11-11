@@ -268,6 +268,13 @@ above stand; these are from reading the code since:
   the player for a retreat), and `aim_and_fire`'s own reasons (`HeldFire`); then `look`
   holds it too. Only the last is logged.
 
+- **Pistol taps at a barrel come slower than they need to** (the user's, watching;
+  2026-11-11). `shoot_barrel` waits `BARREL_TAP` tics between taps (`follower/barrels.rs`),
+  and only fires within 2 degrees of the barrel. To look at when it's fixed: how soon after
+  a shot the pistol's next one is still its accurate first shot (the engine's refire), and
+  whether the wait or the aim is what's holding the trigger. Scored on barrel levels,
+  several seeds.
+
 ## Numbers that look wrong (not to be changed in the cleanup)
 
 To be filled in as the survey goes.
