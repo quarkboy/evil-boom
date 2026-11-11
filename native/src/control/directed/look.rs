@@ -11,8 +11,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    compass, entries_of, explores, id_of, lock_name, weapon_name, Director, Entry, Places, Topic,
-    SMALL,
+    called, compass, entries_of, explores, id_of, lock_name, weapon_name, Director, Entry, Places,
+    Topic, SMALL,
 };
 use crate::geom::{dist, Point};
 use crate::knowledge::explorer::{Kind, Objective};
@@ -159,7 +159,7 @@ impl Director {
             &Entry {
                 id: p.id.clone(),
                 what: match thing {
-                    Some(t) => format!("{}, {}", t.name, p.why),
+                    Some(t) => format!("{}, {}", called(t.name), p.why),
                     None => p.why.clone(),
                 },
                 at: p.at,
@@ -369,7 +369,7 @@ impl Director {
                     format!(
                         " On monster-{} ({}) with the {}.",
                         t.id,
-                        t.name,
+                        called(t.name),
                         weapon_name(obs.weapon.unwrap_or(0), obs)
                     )
                 });
@@ -494,7 +494,8 @@ impl Director {
                 .take(LOOK_MAX)
                 .map(|(id, name, at, _, awake)| {
                     format!(
-                        "monster-{id} {name} ({}{})",
+                        "monster-{id} {} ({}{})",
+                        called(name),
                         way(*at),
                         if *awake { "" } else { ", asleep" }
                     )
@@ -533,7 +534,7 @@ impl Director {
                     if t.category == "Key" { "key" } else { "item" },
                     t.id
                 ),
-                what: t.name.to_string(),
+                what: called(t.name).to_string(),
                 at: (t.x, t.y),
             })
             .collect();

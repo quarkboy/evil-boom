@@ -11,6 +11,7 @@
 
 use std::collections::{BTreeMap, VecDeque};
 
+use super::names::{a, called, some, the};
 use super::places::{Area, Places, SMALL};
 use crate::geom::{dist, Point};
 use crate::knowledge::explorer::{Ident, Kind, Objective};
@@ -447,11 +448,7 @@ impl Director {
     /// of it stand.
     pub fn died(&mut self, tic: i64, lives_left: i32) {
         let by = self.fight.as_ref().map_or(String::new(), |f| {
-            let them: Vec<String> = f
-                .against
-                .iter()
-                .map(|(name, n)| format!("{n} {name}"))
-                .collect();
+            let them: Vec<String> = f.against.iter().map(|(name, n)| some(*n, name)).collect();
             if them.is_empty() {
                 String::new()
             } else {
@@ -513,7 +510,7 @@ impl Director {
                     .x()
                     .current
                     .as_ref()
-                    .map_or(String::new(), |o| format!(": {}", o.label))
+                    .map_or(String::new(), |o| format!(": {}", plain(o.kind, &o.label)))
             ),
             None if agent.x().current.is_some() => "busy".to_string(),
             None => "waiting".to_string(),
@@ -761,7 +758,7 @@ impl Director {
                 seen.push(self.describe(
                     &Entry {
                         id,
-                        what: t.name.to_string(),
+                        what: called(t.name).to_string(),
                         at: (t.x, t.y),
                     },
                     obs,
@@ -793,7 +790,7 @@ impl Director {
                 .map(|m| m.2)
                 .min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b)))
                 .unwrap_or(pos);
-            let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
+            let what: Vec<String> = counts.iter().map(|(n, c)| some(*c, n)).collect();
             let dangerous = new.iter().any(|m| {
                 crate::tactical::bestiary::monster(m.1).is_some_and(|i| i.boss || i.threat >= 6.0)
             });
@@ -855,7 +852,7 @@ impl Director {
                 now.push(self.describe(
                     &Entry {
                         id,
-                        what: t.name.to_string(),
+                        what: called(t.name).to_string(),
                         at: (t.x, t.y),
                     },
                     obs,
@@ -961,11 +958,7 @@ impl Director {
         {
             if let Some(f) = self.fight.take() {
                 let killed = self.tally.kills.0 - f.kills_at_start;
-                let them: Vec<String> = f
-                    .against
-                    .iter()
-                    .map(|(name, n)| format!("{n} {name}"))
-                    .collect();
+                let them: Vec<String> = f.against.iter().map(|(name, n)| some(*n, name)).collect();
                 let mut cost = Vec::new();
                 if f.health_lost >= 1.0 {
                     cost.push(format!("{:.0} health", f.health_lost));
@@ -1114,9 +1107,9 @@ impl Director {
                             t.id
                         ),
                         what: if crate::knowledge::completion::Completionist::counted(t.name, obs) {
-                            format!("{}{COUNTS}", t.name)
+                            format!("{}{COUNTS}", called(t.name))
                         } else {
-                            t.name.to_string()
+                            called(t.name).to_string()
                         },
                         at: (t.x, t.y),
                     })
@@ -1136,7 +1129,11 @@ impl Director {
                     };
                     Entry {
                         id: format!("monster-{id}"),
-                        what: format!("{name}, {seen}{}", if awake { "" } else { ", asleep" }),
+                        what: format!(
+                            "{}, {seen}{}",
+                            called(name),
+                            if awake { "" } else { ", asleep" }
+                        ),
                         at,
                     }
                 })
@@ -1249,7 +1246,7 @@ impl Director {
             .split_once("-t")
             .and_then(|(_, n)| n.parse::<i32>().ok())
             .and_then(|n| obs.things.iter().flatten().find(|t| t.id == n))
-            .map_or(String::new(), |t| format!(" ({})", t.name));
+            .map_or(String::new(), |t| format!(" ({})", called(t.name)));
         format!("{id}{name}{thing}")
     }
 
@@ -1532,7 +1529,7 @@ impl Director {
                     let Some((_, name, ..)) = known.iter().find(|m| m.0 == n) else {
                         return Err(format!("No {id} known (dead, or never seen)."));
                     };
-                    (Aim::One(n), format!("{id} ({name})"))
+                    (Aim::One(n), format!("{id} ({})", called(name)))
                 } else if let Some(kind) = monster_kind(r) {
                     if !known.iter().any(|m| m.1 == kind) {
                         return Err(format!("No {kind} known of right now."));
@@ -1973,7 +1970,7 @@ impl Director {
         {
             let x = agent.x();
             let Some(at) = x.touch_spot((t.x, t.y), &x.reach) else {
-                let (name, at) = (t.name, (t.x, t.y));
+                let (name, at) = (called(t.name), (t.x, t.y));
                 let toward = self.toward(agent, obs, at);
                 return Err(format!("No known way to the {name} yet.{toward}"));
             };
@@ -2411,7 +2408,16 @@ pub fn plain(kind: Kind, label: &str) -> String {
         Kind::Teleporter => "taking a teleporter".into(),
         Kind::Item => label.strip_prefix("pick up ").map_or_else(
             || "picking something up".into(),
-            |what| format!("picking up the {}", what.to_lowercase()),
+            |what| {
+                // (the thing by what she calls it; the explorer's reason after it kept)
+                let (thing, why) = what.split_once(' ').map_or((what, ""), |(t, w)| (t, w));
+                let why = if why.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {why}")
+                };
+                format!("picking up the {}{why}", called(thing))
+            },
         ),
         Kind::Hunt => "hunting".into(),
         Kind::Wall => "searching for secrets".into(),
@@ -2432,7 +2438,7 @@ fn fighting(against: &[crate::motor::Thing], obs: &Observation) -> Option<String
     for t in against {
         *counts.entry(t.name).or_insert(0) += 1;
     }
-    let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
+    let what: Vec<String> = counts.iter().map(|(n, c)| some(*c, n)).collect();
     Some(format!(
         "{} ({} {:.0})",
         what.join(", "),

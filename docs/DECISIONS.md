@@ -2481,3 +2481,12 @@ level). Gibbed is the game's own rule (`P_KillMobj`: health below minus the spaw
 for the kinds with an extreme death), read off the corpses by the game's runner and counted
 only for a death in her sight. The hits on her (the engine's, with their cause) reach the
 director the same way, as the tally does. Headless runs have none of it: parity the same.
+
+## Things by the names a player knows (the user, 2026-11-11)
+
+What she read had the class names the code keys on ("Fatso", "DoomImp", "ShellBox",
+"BlurSphere": ZDoom's, by way of `dsda::type_name`). `control/names.rs` is the one table from
+those to what they're called, one and several ("mancubus", "mancubi"; "box of shells"), used
+wherever a thing is named to her; the code's tables keep the class names. A test holds every
+monster and pickup the game has to a name. Her status by instinct read the explorer's label
+("try door (line 136)", "look into sector 21"): the plain phrase now, as the viewers get.

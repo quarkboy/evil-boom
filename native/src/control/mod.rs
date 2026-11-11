@@ -3,5 +3,6 @@
 //! directed play it chooses no objectives of its own (`Explorer::directed`).
 
 pub mod directed;
+pub mod names;
 pub mod places;
 pub mod script;

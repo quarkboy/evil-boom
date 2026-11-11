@@ -328,6 +328,11 @@ about). Both are served by five channels, each with a budget, in one grammar.
   action for 8 s: you carry on by instinct", "Dropped for the new action". (In the code and
   in this plan an "order" is still the thing an action queues: `Order`, `order go` in a
   script.)
+- **Names**: things go by what a Doom player calls them (`control/names.rs`): "mancubus",
+  "2 mancubi", "baron of Hell", "chaingunner", "box of shells", "megaarmor", "partial
+  invisibility"; never the class names the code keys on ("Fatso", "ShellBox", "BlurSphere").
+  What she's doing by instinct is in plain words too ("picking up the shotgun (a better
+  gun)"), not the explorer's label.
 - **Who's playing**: the startup's acknowledgement gives `characterId` (`neuro`, `evil`);
   `Session::character()` has it (`Character`), for telling one twin differently from the
   other. Nothing is tailored by it yet. The stand-ins (`neuro-mock`, `neuro-gpt`) acknowledge
@@ -385,13 +390,13 @@ Told **not silent** (worth a reaction), each with a cooldown so none floods:
 **Built of the kills and mishaps** (2026-11-11, `control/directed/kills.rs`; what happens
 together is one line, told when it's over):
 
-    The BaronOfHell is dead.                              (a boss, or 500 health and up)
-    2 killed at once: 2 Zombieman, all gibbed.             (deaths within 3 tics: one shot, one blast)
-    3 barrels went off in a chain (N 486): killed 1 DoomImp.
+    A baron of Hell is dead.                              (a boss, or 500 health and up)
+    2 killed at once: 2 zombiemen, all gibbed.             (deaths within 3 tics: one shot, one blast)
+    3 barrels went off in a chain (N 486): killed 1 imp.
     46 barrels went off in a chain (N 1579); it cost you 112 health.
     Your own blast caught you: -26 health.                 (silent under 20)
     Every monster on the level is dead (74/74).
-    Zombieman gibbed.                                      (one alone: silent)
+    Gibbed: 1 zombieman.                                   (one alone: silent)
 
 A death is one she knows of (seen, or heard and placed); gibbed (the game's rule: killed by
 more than its health again, for the five kinds with the frames) counts only for one in her

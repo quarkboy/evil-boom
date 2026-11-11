@@ -9,7 +9,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{compass, Director};
+use super::{a, called, compass, some, the, Director};
 use crate::dsda::HitCause;
 use crate::geom::{dist, Point};
 use crate::motor::{heading, Observation};
@@ -67,7 +67,7 @@ fn tally(dead: &[&(&'static str, Point, bool)]) -> String {
     for d in dead {
         *counts.entry(d.0).or_insert(0) += 1;
     }
-    let names: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
+    let names: Vec<String> = counts.iter().map(|(n, c)| some(*c, n)).collect();
     let gibbed = dead.iter().filter(|d| d.2).count();
     let gibs = match gibbed {
         0 => String::new(),
@@ -104,8 +104,9 @@ impl Director {
                 continue;
             }
             let gibbed = self.gibbed.contains(&id) && tic - sighted <= SEEN;
-            if monster(name).is_some_and(|m| m.boss || m.health >= HEAVY) {
-                self.event(obs, true, format!("The {name} is dead."));
+            if let Some(m) = monster(name).filter(|m| m.boss || m.health >= HEAVY) {
+                let who = if m.boss { the(name) } else { a(name) };
+                self.event(obs, true, format!("{who} is dead."));
             }
             join(&mut k);
             if let Some(b) = k.burst.as_mut() {
@@ -188,7 +189,9 @@ impl Director {
             }
             match rest.len() {
                 0 => {}
-                1 if rest[0].2 => self.event(obs, false, format!("{} gibbed.", rest[0].0)),
+                1 if rest[0].2 => {
+                    self.event(obs, false, format!("Gibbed: 1 {}.", called(rest[0].0)))
+                }
                 1 => {}
                 n => self.event(obs, true, format!("{n} killed at once: {}.", tally(&rest))),
             }
