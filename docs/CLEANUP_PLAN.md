@@ -275,6 +275,32 @@ above stand; these are from reading the code since:
   whether the wait or the aim is what's holding the trigger. Scored on barrel levels,
   several seeds.
 
+## The findings worked through (2026-11-11)
+
+Each scored on the same 1088 runs against the set before it; kept if not significantly worse.
+
+| Finding | What was done | Score (difference, standard error; runs touched) | Commit |
+|---|---|---|---|
+| Pistol taps at a barrel slow | a tap that lit nothing is followed by the next tap, not a run and a wait | -0.0039, 0.0033; 219 | 1f84e43 |
+| Tapping where no shot can land; the shotgun at a barrel behind a lip | the shot checked by the gun's own line, again at the trigger; the shotgun only with the whole barrel in its view | -0.0009, 0.0023; 87 | see log |
+| The no-shot clock ran for monsters she wasn't standing for | asked only once she'd stand | -0.0006, 0.0011; 16 | ea8a914 |
+| Her pace collapses with the fight's aim behind her | the route keeps its pace when her eyes are the fight's (`Motion::eyes_taken`) | (being scored) | |
+| Shots traced by where she faced before the turn | **checked, no bug**: `note_rounds_gone` reads the angle of the tic after the shot, which is the angle it left along (the game turns, then fires, in one tic); and it's a count, nothing decides by it | none | |
+| A dip in a floor that hurts reckoned a fraction of a hit | **checked, by design**: the fraction is the expected cost, used to weigh a way against others (`RISK_SHARE`); whether she'd live through it is judged by the hardest whole hit (`hardest_floor_hit`, the margin in `Refusal::ShortOfHealth`) | none | |
+
+Left, and why: these are structure, with no failure in hand to trace, so no rule to score.
+Each is a refactor to do under parity when its area is next worked on.
+
+- `size_up` changes state before any node decides; `observe` is half measurement.
+- Two ways to set monsters on each other (`RetreatKind::Bait`, `setting_on`).
+- The barrel chain worked out in six places; what `Observation::barrels` means by reader.
+- Stale beliefs about heights: wants one rule, and a failing run to write it from.
+- The arbiter's order and the three loops of DECISIONS.md's step 5.
+- Three loops over an episode (`episode`, `watch --episode`, `record`).
+- Three sources for the trigger: goes with the SDK layer (`docs/NEURO_SDK_PLAN.md`, section
+  6), where "why isn't she shooting" has to be one answer.
+- `shoot_barrel`, `check_blocked`, `crusher_ahead` still long.
+
 ## Numbers that look wrong (not to be changed in the cleanup)
 
 To be filled in as the survey goes.
