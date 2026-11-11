@@ -34,6 +34,7 @@ pub struct Session {
     forced: bool,
     /// when she last had nothing to do (or the last force or action)
     idle_since: i64,
+    /// when her status was last told, and its gist then (`Director::status_gist`)
     told_status: (i64, String),
     shown: usize,
     /// when the moments lately were told, for the budget
@@ -126,7 +127,7 @@ impl Session {
                     // (her context survives a reconnect: a short status, not everything again)
                     let status = self.director.status(agent, obs);
                     self.link.context(&status, true);
-                    self.told_status = (obs.tic, status);
+                    self.told_status = (obs.tic, self.director.status_gist(agent, obs));
                 }
                 Incoming::Hello { character, display } => {
                     log.push(format!("neuro: playing with {display} ({character})"));
@@ -156,10 +157,12 @@ impl Session {
         }
         self.director.tick(agent, obs);
         self.tell_news(obs.tic, &mut log);
-        let status = self.director.status(agent, obs);
-        if status != self.told_status.1 && obs.tic - self.told_status.0 >= STATUS_EVERY {
-            self.link.context(&status, true);
-            self.told_status = (obs.tic, status.clone());
+        // (her status again when what she'd act on has changed: not a shell spent, nor a
+        // monster's bearing)
+        let gist = self.director.status_gist(agent, obs);
+        if gist != self.told_status.1 && obs.tic - self.told_status.0 >= STATUS_EVERY {
+            self.link.context(&self.director.status(agent, obs), true);
+            self.told_status = (obs.tic, gist);
         }
         // (waiting on her: after a while, a decision forced; one at a time)
         if !self.director.idle(agent) {
@@ -197,12 +200,15 @@ impl Session {
             while self.loud.front().is_some_and(|&t| tic - t >= MINUTE) {
                 self.loud.pop_front();
             }
-            // (a moment over the budget told quietly; one that's urgent, always)
-            let notable = news.iter().any(|r| r.notable && r.urgent)
-                || (news.iter().any(|r| r.notable) && self.loud.len() < MOMENTS_A_MINUTE);
-            if notable {
+            // (a moment over the budget told quietly; one that's urgent, always, and not
+            // counted against it: answers to her actions don't crowd out what she should see)
+            let urgent = news.iter().any(|r| r.notable && r.urgent);
+            let moment = news.iter().any(|r| r.notable && !r.urgent);
+            let within = moment && self.loud.len() < MOMENTS_A_MINUTE;
+            if within {
                 self.loud.push_back(tic);
             }
+            let notable = urgent || within;
             log.extend(
                 text.iter()
                     .map(|t| format!("<< {}{t}", if notable { "(!) " } else { "" })),

@@ -557,7 +557,7 @@ impl Player {
     pub fn order_retreat(&mut self, obs: &Observation) -> Result<(), String> {
         let route = self
             .find_cover(obs)
-            .ok_or("nowhere out of their sight that she knows a way to")?;
+            .ok_or("nowhere out of their sight that you know a way to")?;
         self.retreat = Some(Retreat {
             kind: RetreatKind::Cover,
             route,

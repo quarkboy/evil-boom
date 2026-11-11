@@ -146,8 +146,9 @@ reads is in the second person, hers ("You found a secret"; "by instinct", "Sugge
 are told as moments (`control/directed/kills.rs`: a big monster dead, several at once and
 how many gibbed, barrel chains and what they took, her own blast, the last monster); and levels begun and done, big jumps and how they came down, a teleport
 into a crowd, out of ammo, crushers, monsters raised, with at most 6 moments a minute past
-the urgent ones (`moments.rs`). Stage 1 of the SDK plan is done but for `Situation` and typed
-events, left for stage 4 (questions). The plan's five questions are answered (its section 9):
+the urgent ones (`moments.rs`). Stage 1 of the SDK plan is done (its gate run: the GPT
+stand-in on MAP07, 56 words a minute told her); `Situation` and typed events moved to stage 4
+(questions). A directed explore pauses only while the fight has her legs. The plan's five questions are answered (its section 9):
 with no action she waits and looks round; deadlines 3 s / 8 s; restart unlocked by no
 progress; next level hers from the tally screen; cheats held off. And (changed) she starts the game:
 level, skill, one level or on through, from what the console offers (`control/game.rs`,

@@ -206,7 +206,8 @@ pub struct Combat {
     reach_watch: BTreeMap<i32, (i64, f64, Point)>,
     /// the ground she's been on, by the mesh's polys: where she knows is safe
     been: Vec<bool>,
-    /// the fight's move last tic, for measuring
+    /// the fight's move last tic: for measuring, and for directed play (an order paused while
+    /// the fight has her legs)
     pub last_move: Option<Move>,
     /// counts for measuring a run (`STATS`): nothing decides by them
     pub tally: BTreeMap<String, f64>,

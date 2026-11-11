@@ -43,6 +43,8 @@ const RESUME_CALM: i64 = 2 * 35;
 const PICKUP_RANGE: f64 = 256.0;
 /// the nearest pickups tried for a way there, waiting
 const PICKUP_TRIES: usize = 4;
+/// the same lock's message told again only after this long (tics)
+const LOCK_AGAIN: i64 = 10 * 35;
 /// an item listed that counts for the level's items tally (the rest are just pickups)
 const COUNTS: &str = " (tally)";
 /// ...to the best of this many places
@@ -347,6 +349,9 @@ pub struct Director {
     health_lately: VecDeque<(i64, f64)>,
     told_hurt: Option<i64>,
     told_secrets: Option<i32>,
+    /// the game's last word on a lock, and when (told again only after a while: she presses
+    /// a locked door more than once)
+    told_lock: Option<(String, i64)>,
     /// the level's tally (kills, items, secrets: got, of), as a source port shows it; set each tic
     /// by whoever runs the game (it's the engine's, not in what she observes)
     pub tally: Tally,
@@ -545,6 +550,22 @@ impl Director {
         format!("{}; {}; {doing}", kit(obs), self.tally.line())
     }
 
+    /// What in her status she'd act on, to tell whether it's changed: health and armor by tens,
+    /// her weapons and keys, what she's doing and whether she's fighting, the tally. (Not each
+    /// round spent, nor where what's fighting her has got to.)
+    pub fn status_gist(&self, agent: &Agent, obs: &Observation) -> String {
+        format!(
+            "{} {} {:?} {:?} {} {} {}",
+            (obs.health.unwrap_or(0.0) / 10.0).floor(),
+            (obs.armor.unwrap_or(0.0) / 10.0).floor(),
+            obs.weapons,
+            obs.keys.unwrap_or_default().iter().count(),
+            self.doing(agent),
+            engaged(agent, obs).is_empty(),
+            self.tally.line()
+        )
+    }
+
     /// Leaving now: what she'd leave behind, as a question to be sure (None: nothing left, the
     /// tally complete and nothing more known to do). An exit asks first, for now. (None too with
     /// no exit known: the order says so.)
@@ -605,6 +626,21 @@ impl Director {
                 self.alarm(obs, "You died.".into());
             }
             return;
+        }
+        // (a lock: what the game says it needs, as it says it)
+        if let Some(m) = obs
+            .message
+            .as_deref()
+            .filter(|m| crate::knowledge::model::needs_key(m))
+        {
+            let again = self
+                .told_lock
+                .as_ref()
+                .is_none_or(|(t, at)| t != m || obs.tic - at >= LOCK_AGAIN);
+            if again {
+                self.told_lock = Some((m.to_string(), obs.tic));
+                self.event(obs, true, format!("{}.", m.trim_end_matches('.')));
+            }
         }
         // (health falling past a mark, each told once till she's above it again)
         let mark = [10, 25, 50].into_iter().find(|&m| health < f64::from(m));
@@ -760,16 +796,18 @@ impl Director {
             let dangerous = new.iter().any(|m| {
                 crate::tactical::bestiary::monster(m.1).is_some_and(|i| i.boss || i.threat >= 6.0)
             });
-            self.event(
-                obs,
-                dangerous,
-                format!(
-                    "Monsters: {} ({} {:.0}).",
-                    what.join(", "),
-                    compass(heading(pos, nearest)),
-                    dist(pos, nearest)
-                ),
+            let text = format!(
+                "Monsters: {} ({} {:.0}).",
+                what.join(", "),
+                compass(heading(pos, nearest)),
+                dist(pos, nearest)
             );
+            // (a heavy one first seen is her life in danger: never kept quiet by the budget)
+            if dangerous {
+                self.alarm(obs, text);
+            } else {
+                self.event(obs, false, text);
+            }
         }
     }
 
@@ -1443,7 +1481,13 @@ impl Director {
     /// again after RESUME_CALM with nothing fighting her. True while paused. (A sweep of look-at
     /// spots under fire never ends, rushed or not.)
     fn explore_paused(&mut self, agent: &mut Agent, obs: &Observation) -> bool {
-        let fighting = !engaged(agent, obs).is_empty();
+        // (fighting: something is, and the fight has her legs; one whose move lets the route
+        // go on, something out of reach shooting at her, say, is gone on past, as on her own)
+        let goes_on = agent
+            .player()
+            .and_then(|p| p.combat().last_move)
+            .is_some_and(crate::tactical::combat::Move::route_goes_on);
+        let fighting = !engaged(agent, obs).is_empty() && !goes_on;
         if fighting {
             self.calm_since = None;
         } else if self.calm_since.is_none() {

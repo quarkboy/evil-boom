@@ -64,18 +64,18 @@ pub const LOOKS_INTERACTIVE: [&str; 11] = [
 pub const SUSPICION_MIN: f64 = 2.0;
 
 /// "the game says the line needs a key"
-fn needs_key(message: &str) -> bool {
+pub fn needs_key(message: &str) -> bool {
     let m = message.to_lowercase();
     let words: Vec<&str> = m
         .split(|c: char| !c.is_ascii_alphanumeric())
         .filter(|w| !w.is_empty())
         .collect();
-    let Some(i) = words.iter().position(|w| *w == "need") else {
-        return false;
-    };
-    words[i + 1..]
-        .iter()
-        .any(|w| matches!(*w, "key" | "keys" | "card" | "skull"))
+    let keyed = |w: &&str| matches!(*w, "key" | "keys" | "card" | "skull");
+    // ("You need a blue card to open this door"; Boom's "Any key will open this door")
+    match words.iter().position(|w| *w == "need") {
+        Some(i) => words[i + 1..].iter().any(keyed),
+        None => words.windows(2).any(|w| w == ["will", "open"]) && words.iter().any(keyed),
+    }
 }
 
 /// "floor raise N" and the like: each press adds on.
@@ -932,4 +932,26 @@ fn intersect(a: Point, b: Point, p: Point, q: Point) -> Option<f64> {
     let t = ((p.0 - a.0) * sy - (p.1 - a.1) * sx) / den;
     let u = ((p.0 - a.0) * ry - (p.1 - a.1) * rx) / den;
     ((0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u)).then_some(t)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::needs_key;
+
+    /// Every lock message the game has (doors and switches, keys, cards and skulls, Boom's
+    /// any and all) is one; a pickup's isn't.
+    #[test]
+    fn lock_messages() {
+        for m in [
+            "You need a blue card to open this door",
+            "You need a red key to activate this object",
+            "You need a yellow skull to open this door",
+            "Any key will open this door",
+            "You need all six keys to open this door",
+        ] {
+            assert!(needs_key(m), "{m}");
+        }
+        assert!(!needs_key("Picked up a blue keycard."));
+        assert!(!needs_key("You got the shotgun!"));
+    }
 }

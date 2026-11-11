@@ -2598,3 +2598,37 @@ the docs' titles; the environment variables `EVILBOOM_DOOM_DIR`, `EVILBOOM_ROOT`
 folder `~/.local/share/evilboom`, the old `evildoom` one used while there's no new one (the
 user's files aren't moved); the engine patch's comments. Left: the names of the Python code
 this once was, in the record and in two comments that cite it.
+
+## Stage 1 closed: its gate run, and what reading it cold found (2026-11-11)
+
+The gate: the GPT stand-in as Evil on MAP07 (Doom II, skill 2, pistol start, seed 3, 8
+minutes at x1, as the run before the SDK work), everything she was told read cold and counted
+by channel (`words.py`: messages, words, words a minute).
+
+Found, and fixed:
+- **An explore order paused for good.** It paused while anything was fighting her; a mancubus
+  out of reach kept shooting from 900, the fight's move was "out of reach: going on", and the
+  order never went on: six of the eight minutes with nothing told her worth acting on, eight
+  actions in all. Now it pauses only while the fight has her legs (its `Move` doesn't let the
+  route go on), as she plays on her own. With run 1's orders replayed (a loadout to live
+  through it): area-0 explored at 197 s.
+- **Her status was 72% of the words** (24 copies in 8 minutes, 113 words a minute): sent on
+  any change at all, each shell, the mancubus's bearing. Now when what she'd act on changes
+  (`status_gist`: health and armor by tens, weapons, keys, what she's doing, fighting or not,
+  the tally): 6 words a minute.
+- **The budget kept the wrong things quiet**: answers to her actions counted against it, then
+  her first sight of two mancubi went silent. Urgent lines no longer count, and a heavy
+  monster's first sighting is urgent.
+- **"10 of backpack"** in the look (several of a kind in one place now "10 backpacks"), and a
+  "she" left in a refused retreat.
+- **Locks**: the game's own message for a lock tried without its key ("You need a blue card to
+  open this door", the switch and skull ones, Boom's any and all) told her, once a try; one
+  check (`knowledge::model::needs_key`, now also Boom's "Any key will open this door") for the
+  director and the knowledge both.
+
+Numbers: before, 1262 words in 8 minutes (158 a minute, status 906 of them), 1 moment a
+minute, 8 actions; after, 451 (56 a minute, status 52), 1.2 moments a minute, 11 actions before
+she died to two mancubi at once (the fight's: MAP07 kills her playing alone too). The run
+before the SDK work: 42 actions, its choices the same kind (items, the switch, areas); the
+stand-in's choices aren't worse, the bot under them was what stalled. Parity: 24 runs the
+same.

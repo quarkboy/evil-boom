@@ -11,8 +11,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    called, compass, entries_of, explores, id_of, lock_name, weapon_name, Director, Entry, Places,
-    Topic, SMALL,
+    called, compass, entries_of, explores, id_of, lock_name, some, weapon_name, Director, Entry,
+    Places, Topic, SMALL,
 };
 use crate::geom::{dist, Point};
 use crate::knowledge::explorer::{Kind, Objective};
@@ -36,6 +36,8 @@ const IN_SIGHT: i64 = 35;
 const LATELY: i64 = 30 * 35;
 /// a key's objective is where she'd touch it from: the key itself is within this of it
 const KEY_NEAR: f64 = 64.0;
+/// things of a kind this near each other are in one place, for the look
+const SAME_PLACE: f64 = 64.0;
 /// how tall a pickup and a barrel are, for whether she sees one
 const PICKUP_HEIGHT: f64 = 16.0;
 const BARREL_HEIGHT: f64 = 42.0;
@@ -516,7 +518,7 @@ impl Director {
         }
 
         // Pickups in sight.
-        let mut items: Vec<Entry> = obs
+        let mut items: Vec<(Entry, &'static str)> = obs
             .things
             .iter()
             .flatten()
@@ -528,27 +530,52 @@ impl Director {
             })
             .filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)))
             .filter(|t| sees((t.x, t.y), Some(t.z), PICKUP_HEIGHT))
-            .map(|t| Entry {
-                id: format!(
-                    "{}-t{}",
-                    if t.category == "Key" { "key" } else { "item" },
-                    t.id
-                ),
-                what: called(t.name).to_string(),
-                at: (t.x, t.y),
+            .map(|t| {
+                let e = Entry {
+                    id: format!(
+                        "{}-t{}",
+                        if t.category == "Key" { "key" } else { "item" },
+                        t.id
+                    ),
+                    what: called(t.name).to_string(),
+                    at: (t.x, t.y),
+                };
+                (e, t.name)
             })
             .collect();
-        nearest(&mut items);
-        if !items.is_empty() {
-            let lines: Vec<String> = items
+        items.sort_by(|a, b| dist(pos, a.0.at).total_cmp(&dist(pos, b.0.at)));
+        // (several of a kind in one place, one entry: "item-t93: 5 backpacks (S 145)", by the
+        // first's id)
+        let mut grouped: Vec<(Entry, &str, usize)> = Vec::new();
+        for (e, name) in items {
+            match grouped
+                .iter_mut()
+                .find(|(g, _, _)| g.what == e.what && dist(g.at, e.at) <= SAME_PLACE)
+            {
+                Some((_, _, n)) => *n += 1,
+                None => grouped.push((e, name, 1)),
+            }
+        }
+        if !grouped.is_empty() {
+            let lines: Vec<String> = grouped
                 .iter()
                 .take(LOOK_MAX)
-                .map(|e| self.describe(e, obs))
+                .map(|(e, name, n)| {
+                    if *n == 1 {
+                        self.describe(e, obs)
+                    } else {
+                        let many = Entry {
+                            what: some(*n, name),
+                            ..e.clone()
+                        };
+                        self.describe(&many, obs)
+                    }
+                })
                 .collect();
             out.push(several(
                 "Items",
                 &lines,
-                items.len().saturating_sub(LOOK_MAX),
+                grouped.len().saturating_sub(LOOK_MAX),
             ));
         }
 
