@@ -54,7 +54,7 @@ pub struct Settings {
     pub skill: i32,
     /// damage hurts her (off: god mode, for rehearsing)
     pub mortal: bool,
-    pub lives: i32,
+
     /// a fixed seed (testing); none: a random one each start (real play)
     pub seed: Option<u32>,
     /// on through the episode, level after level (one life)
@@ -101,7 +101,6 @@ impl Default for Settings {
             map: "MAP01".into(),
             skill: 3,
             mortal: true,
-            lives: 1,
             seed: None,
             episode: true,
             mode: "bot".into(),
@@ -138,9 +137,6 @@ impl Settings {
         if !(0..=5).contains(&self.skill) {
             return Err("skill: 1-5, or 0 for no monsters".into());
         }
-        if !(1..=99).contains(&self.lives) {
-            return Err("lives: 1-99".into());
-        }
         if !["stream", "watcher"].contains(&self.layout.as_str())
             || !["right", "left"].contains(&self.panel_side.as_str())
         {
@@ -176,7 +172,8 @@ impl Settings {
         if self.mortal {
             a.push("--mortal".into());
         }
-        a.extend(["--lives".into(), self.lives.to_string()]);
+        // (lives are a test's: on stream, as the game itself, again and again till it's turned off)
+        a.extend(["--lives".into(), "unlimited".into()]);
         a.extend([
             "--seed".into(),
             self.seed.map_or_else(|| "random".into(), |s| s.to_string()),
@@ -1067,7 +1064,7 @@ mod tests {
         })
         .args("127.0.0.1:1");
         let line = a.join(" ");
-        assert!(line.starts_with("watch doom2 MAP01 --fight 4 --mortal --lives 1 --seed 7 --episode --title --stream right --neuro ws://127.0.0.1:8000"), "{line}");
+        assert!(line.starts_with("watch doom2 MAP01 --fight 4 --mortal --lives unlimited --seed 7 --episode --title --stream right --neuro ws://127.0.0.1:8000"), "{line}");
         assert!(line.ends_with("--control 127.0.0.1:1"), "{line}");
         let none = (Settings {
             skill: 0,

@@ -91,28 +91,24 @@ impl Director {
     }
 
     /// She's died (`hits`: those the game hasn't passed on yet, the last blow among them):
-    /// her death told, once, as it came; `again`, the level begins again (`lives_left` after
-    /// this one), her orders and her say in the fight the life before's.
-    pub fn died(&mut self, tic: i64, again: bool, lives_left: i32, hits: &[Hit]) {
+    /// her death told, once, as it came; `again`, the level begins again, her orders and her
+    /// say in the fight the life before's. (No lives in what she's told: on stream the game goes
+    /// on as the game itself does, again and again; lives are a test's.)
+    pub fn died(&mut self, tic: i64, again: bool, hits: &[Hit]) {
         self.remember_hits(tic, hits);
         if !self.told_dead {
             self.told_dead = true;
             let story = self.death_story();
-            let more = match (again, lives_left) {
-                (false, _) => String::new(),
-                (true, 0) => " Your last life: the level again from its start, with what you came in with.".to_string(),
-                (true, 1) => " 1 life left after this one: the level again from its start, with what you came in with.".to_string(),
-                (true, n) => format!(" {n} lives left after this one: the level again from its start, with what you came in with."),
+            let more = if again {
+                " The level again from its start, with what you came in with."
+            } else {
+                ""
             };
             self.reports.push(Report {
                 tic,
                 ok: false,
                 text: format!("{story}{more}"),
-                event: if again {
-                    Event::DiedLivesLeft
-                } else {
-                    Event::Died
-                },
+                event: if again { Event::DiedAgain } else { Event::Died },
             });
         }
         if again {

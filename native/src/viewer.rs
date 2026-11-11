@@ -326,11 +326,11 @@ pub struct WatchOptions {
 impl Watch {
     /// She's died: whoever directs her told, as it came (with the hits the game hasn't passed
     /// on yet, the last blow among them), and with `lives_left` after this one.
-    pub(super) fn tell_death(&mut self, again: bool, lives_left: i32) {
+    pub(super) fn tell_death(&mut self, again: bool) {
         let hits = std::mem::take(&mut self.hits);
         let tic = self.engine.tic;
         // (passed on at once: no tic of the level may come to pass it on)
-        self.tell_screens(|d| d.died(tic, again, lives_left, &hits));
+        self.tell_screens(|d| d.died(tic, again, &hits));
     }
 
     /// Off a level with a game hers to start (the title, a game over, the end of what she
@@ -932,7 +932,7 @@ pub fn record(
         }
         eprintln!();
         if watch.engine.dead() {
-            watch.tell_death(false, 0);
+            watch.tell_death(false);
         }
         let t = watch.engine.tally();
         let how = if watch.engine.exited() {
@@ -1035,16 +1035,19 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
             // told)
             if watch.engine.dead() {
                 watch.lives_left -= 1;
+                let left = if o.lives == i32::MAX {
+                    "no limit to the lives".to_string()
+                } else {
+                    format!("{} lives left", watch.lives_left)
+                };
                 let line = format!(
-                    "{}: died at {:.0}s, {} lives left",
+                    "{}: died at {:.0}s, {left}",
                     watch.map_name,
-                    (watch.engine.tic - start) as f64 / TICRATE,
-                    watch.lives_left
+                    (watch.engine.tic - start) as f64 / TICRATE
                 );
                 println!("{line}");
                 let _ = writeln!(log, "{line}");
-                let left = watch.lives_left;
-                watch.tell_death(true, left);
+                watch.tell_death(true);
                 watch.engine.restart(true);
                 watch.agent.restart();
                 watch.controls = None;
@@ -1071,7 +1074,7 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
         }
         // (dead for good: told, as any death is)
         if watch.engine.dead() {
-            watch.tell_death(false, 0);
+            watch.tell_death(false);
         }
         let t = watch.engine.tally();
         let how = if watch.engine.exited() {
@@ -1376,8 +1379,8 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
         }
         // (dead: told whoever directs her, once, as it came)
         if watch.engine.dead() {
-            let (again, left) = (watch.lives_left > 0, (watch.lives_left - 1).max(0));
-            watch.tell_death(again, left);
+            let again = watch.lives_left > 0;
+            watch.tell_death(again);
         }
         if (watch.engine.dead() || wanted) && watch.lives_left > 0 && !watch.paused {
             watch.agent.x_mut().restart_wanted = false;

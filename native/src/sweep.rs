@@ -40,6 +40,8 @@ pub struct RunOptions {
     /// tries at a map (dying starts it again, knowing what was learned), the game time cap
     /// counting them all (unlimited unless told: lives are for testing, not a resource)
     pub lives: i32,
+    /// `--lives` given (`unlimited` too): a watched episode's one life by default doesn't apply
+    pub lives_given: bool,
     /// every switch and door known on sight from the map data
     pub peek: bool,
     /// every secret there is found (going by the tally's count), then the exit
@@ -94,6 +96,7 @@ impl Default for RunOptions {
             max_seconds: 3600.0,
             mortal: false,
             lives: i32::MAX,
+            lives_given: false,
             peek: false,
             secrets: false,
             expert: false,

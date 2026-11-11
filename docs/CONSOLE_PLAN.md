@@ -233,3 +233,9 @@ game over. The streamer's Begin still starts the console's own game. Two more sw
 default: **Evil goes on to the next level** (playing on through, the tally screen waits for
 her `doom_game next`, 30 s at most) and **Evil may restart a level** (hers after 90 s with
 nothing new).
+
+## No lives (2026-11-11)
+
+The Lives setting and the Set-lives control are gone (the user's: lives were for benchmarking;
+on stream it's the original game, again and again till it's turned off). The console starts
+its game with `--lives unlimited`.

@@ -50,10 +50,6 @@ pub enum Command {
     God {
         on: bool,
     },
-    /// lives left from now (a death with none left ends the game)
-    Lives {
-        n: i32,
-    },
     /// a line from the streamer to Evil (Neuro's context; directed by Neuro only)
     Say {
         text: String,
@@ -167,7 +163,6 @@ pub struct GameState {
     pub kills: (i32, i32),
     pub items: (i32, i32),
     pub secrets: (i32, i32),
-    pub lives_left: i32,
     pub dead: bool,
     pub exited: bool,
     pub paused: bool,

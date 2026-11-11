@@ -15,7 +15,16 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
                 .ok_or_else(|| format!("{name} needs a value"))
         };
         match a.as_str() {
-            "--lives" => o.lives = value("--lives")?.parse().map_err(|_| "--lives: a number")?,
+            "--lives" => {
+                // (`unlimited`: as the game itself, again and again: the stream's)
+                let v = value("--lives")?;
+                o.lives = if v == "unlimited" {
+                    i32::MAX
+                } else {
+                    v.parse().map_err(|_| "--lives: a number, or unlimited")?
+                };
+                o.lives_given = true;
+            }
             "--snapshot" => {
                 o.snapshot = Some(
                     value("--snapshot")?

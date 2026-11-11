@@ -32,8 +32,8 @@ pub enum Event {
 
     // Her life.
     Died,
-    /// died with lives left: the level again
-    DiedLivesLeft,
+    /// died, and the level begins again
+    DiedAgain,
     HealthLow,
     HurtFast,
     Teleported,
@@ -168,7 +168,7 @@ impl Event {
             | E::Asked
             | E::Defaulted
             | E::Died
-            | E::DiedLivesLeft
+            | E::DiedAgain
             | E::HealthLow
             | E::HurtFast
             | E::Teleported

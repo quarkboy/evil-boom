@@ -288,13 +288,6 @@ impl Watch {
                         if on { "on" } else { "off" }
                     ));
                 }
-                Command::Lives { n } => {
-                    self.lives_left = n.clamp(0, 99);
-                    self.agent
-                        .x_mut()
-                        .log
-                        .push(format!("console: {} lives left", self.lives_left));
-                }
                 Command::Say { text } => {
                     let text: String = text.trim().chars().take(SAY_MAX).collect();
                     let line = match self.neuro.as_ref() {
@@ -448,7 +441,6 @@ impl Watch {
             items: t[0],
             kills: t[1],
             secrets: t[2],
-            lives_left: self.lives_left,
             dead: self.engine.dead(),
             exited: self.engine.exited(),
             paused: self.paused,

@@ -858,8 +858,8 @@ fn watch_options(
             _ => names.push(a.clone()),
         }
     }
-    if w.episode && o.lives == i32::MAX {
-        w.lives = 1; // (an episode watched as it's played: one life, unless `--lives N` says)
+    if w.episode && !o.lives_given {
+        w.lives = 1; // (an episode watched as it's played: one life, unless `--lives` says)
     }
     w.focus = o.focus;
     Ok((w, names, o))

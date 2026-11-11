@@ -2806,3 +2806,15 @@ backpack, and ammo only of a kind she had none of ("You picked up 4 shotgun shel
 where you had none."). On E1M1 from a pistol start: the green armor, the first shells, the
 megaarmor, each told; the clips and the rest, not. Berserk: the bot knows it heals (to 100, as
 Doom's `P_GiveBody` does: `health_item`, read by the fight's and the explorer's pickups).
+
+## No lives on stream (the user, 2026-11-11)
+
+Lives were for benchmarking; on stream the game is the original's: again and again till the
+streamer turns it off. So: nothing she's told speaks of lives (a death: "... The level again
+from its start, with what you came in with."; a test's game over: "Game over."); the console has
+no Lives setting, no Set-lives control and no lives on its page, and starts its game with
+`--lives unlimited` (new: `--lives` given at all, `unlimited` too, keeps a watched episode
+from its one-life default). `--lives N` stays for tests and the score.
+
+Checked: MAP07 at UV with `--lives unlimited`: four deaths, each told without a count, the game
+going on. Parity: 24 runs the same.

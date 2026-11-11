@@ -267,8 +267,8 @@ fn tic(
         Stage::Level => {
             if watch.engine.dead() {
                 p.stage = Stage::Dead { since: p.clock };
-                let (again, left) = (watch.lives_left > 0, (watch.lives_left - 1).max(0));
-                watch.tell_death(again, left);
+                let again = watch.lives_left > 0;
+                watch.tell_death(again);
                 idle(&mut watch, false);
             } else if watch.engine.exited() {
                 // (an episode's last level, played on through it or by itself: the game's

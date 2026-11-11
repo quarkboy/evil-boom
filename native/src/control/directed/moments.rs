@@ -79,13 +79,13 @@ impl Director {
         });
     }
 
-    /// The game over: no lives left.
+    /// The game over (a test's lives spent: on stream the game goes on).
     pub fn game_over(&mut self) {
         let tic = self.moments.last_tic;
         self.reports.push(super::Report {
             tic,
             ok: true,
-            text: "Game over: no lives left.".into(),
+            text: "Game over.".into(),
             event: super::Event::GameOver,
         });
     }
