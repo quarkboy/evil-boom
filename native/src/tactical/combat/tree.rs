@@ -630,11 +630,6 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if c.on_hurting_floor(obs) && !c.blocking(obs, s.target.as_ref()) {
         return None;
     }
-    // Not for one she's had no shot at for a long while (`no_shot_long`), in front of her or
-    // not: standing gets her no shot either way.
-    if s.target.as_ref().is_some_and(|t| c.no_shot_long(obs, t)) {
-        return None;
-    }
     // Nor for one that can't get at her and that she has no shot at: nothing comes of standing.
     if s.target
         .as_ref()
@@ -657,6 +652,13 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         || hold
         || c.blocking(obs, s.target.as_ref()))
     {
+        return None;
+    }
+    // Not for one she's had no shot at for a long while (`no_shot_long`), in front of her or
+    // not: standing gets her no shot either way. Asked only once she'd stand: the clock is of
+    // her standing for it with no shot, and one she was never held by isn't given up on by it
+    // (given up is read elsewhere: what's fought out of sight, what the fist goes for).
+    if s.target.as_ref().is_some_and(|t| c.no_shot_long(obs, t)) {
         return None;
     }
     let mut kind = Move::Standing;
