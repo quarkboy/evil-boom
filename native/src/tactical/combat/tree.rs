@@ -718,71 +718,29 @@ impl Combat {
             let gun = self.gun(obs);
             let moving = self.steer(obs, None, &gun);
             let why = "out from under a crusher".to_string();
-            if why != self.mode {
-                self.log.push(format!("tic {}: {why}", obs.tic));
-                self.mode = why.clone();
-            }
-            return Some(Decision {
-                kind: Move::OffCrusher,
-                yields: false,
-                pressed: false,
-                aim: None,
-                fire: false,
-                weapon: 0,
-                moving,
-                why,
-            });
+            self.announce(obs, &why);
+            return Some(Decision::without_shot(Move::OffCrusher, None, moving, why));
         }
         if !busy && errand.is_empty() {
             if let Some((name, way)) = self.vile_fire(obs) {
                 let why = format!("out of the {name}'s sight");
-                if why != self.mode {
-                    self.log.push(format!("tic {}: {why}", obs.tic));
-                    self.mode = why.clone();
-                }
+                self.announce(obs, &why);
                 let aim = self.vile_face().map(|v| heading(obs.pos(), v));
                 return Some(Decision {
-                    kind: Move::OutOfVileSight,
-                    yields: false,
                     pressed: true,
-                    aim,
-                    fire: false,
-                    weapon: 0,
-                    moving: way,
-                    why,
+                    ..Decision::without_shot(Move::OutOfVileSight, aim, way, why)
                 });
             }
             if let Some((_, way)) = self.duck(obs) {
                 // Out of its sight now: held there till its fire is broken off.
                 let why = "ducked: waiting out its fire".to_string();
-                if why != self.mode {
-                    self.log.push(format!("tic {}: {why}", obs.tic));
-                    self.mode = why.clone();
-                }
-                return Some(Decision {
-                    kind: Move::Ducked,
-                    yields: false,
-                    pressed: false,
-                    aim: None,
-                    fire: false,
-                    weapon: 0,
-                    moving: way,
-                    why,
-                });
+                self.announce(obs, &why);
+                return Some(Decision::without_shot(Move::Ducked, None, way, why));
             }
             // Hit from where she isn't looking: she turns to that before going after a monster
             // she has lost sight of.
             if let Some(way) = self.look(obs, true) {
-                return Some(Decision {
-                    kind: Move::Looking,
-                    yields: true,
-                    pressed: false,
-                    aim: Some(way),
-                    fire: false,
-                    weapon: 0,
-                    moving: None,
-                    why: "looking round".into(),
-                });
+                return Some(Decision::looking(way));
             }
             if let Some(d) = self.lost_sight(obs) {
                 return Some(d);
@@ -792,16 +750,7 @@ impl Combat {
         // bumped into, or takes a look about as she walks.
         self.glance(obs);
         if let Some(way) = self.look(obs, false) {
-            return Some(Decision {
-                kind: Move::Looking,
-                yields: true,
-                pressed: false,
-                aim: Some(way),
-                fire: false,
-                weapon: 0,
-                moving: None,
-                why: "looking round".into(),
-            });
+            return Some(Decision::looking(way));
         }
         if !self.mode.is_empty() {
             self.log.push(format!(

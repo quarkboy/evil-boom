@@ -137,6 +137,29 @@ pub struct Decision {
 }
 
 impl Decision {
+    /// A decision with nothing in her sights: no shot, no change of gun. The fight's legs
+    /// unless it's a look (`looking`).
+    fn without_shot(kind: Move, aim: Option<f64>, moving: Option<Point>, why: String) -> Decision {
+        Decision {
+            kind,
+            yields: false,
+            pressed: false,
+            aim,
+            fire: false,
+            weapon: 0,
+            moving,
+            why,
+        }
+    }
+
+    /// Turning to look `way`, the route keeping her legs.
+    fn looking(way: f64) -> Decision {
+        Decision {
+            yields: true,
+            ..Decision::without_shot(Move::Looking, Some(way), None, "looking round".into())
+        }
+    }
+
     /// Does this move want her legs (`busy`: in a jump or a timed crossing, the route's unless
     /// she's pressed)? Whether it gets them is the arbiter's (`tactical/arbiter.rs`).
     pub fn wants_legs(&self, busy: bool) -> bool {
@@ -1778,14 +1801,13 @@ impl Combat {
             // route's turn comes after.
             if let Some((aim, _)) = self.rocket_held(obs) {
                 return Some(Decision {
-                    kind: Move::RocketHeld,
                     yields: true,
-                    pressed: false,
-                    aim: Some(aim),
-                    fire: false,
-                    weapon: 0,
-                    moving: None,
-                    why: "holding a rocket's way till it's out".into(),
+                    ..Decision::without_shot(
+                        Move::RocketHeld,
+                        Some(aim),
+                        None,
+                        "holding a rocket's way till it's out".into(),
+                    )
                 });
             }
             // A barred move isn't made here either (`barred`).
@@ -1957,6 +1979,14 @@ impl Combat {
         (s, fire, weapon)
     }
 
+    /// What the fight is doing is logged when it changes (`mode`), not every tic.
+    pub(super) fn announce(&mut self, obs: &Observation, why: &str) {
+        if why != self.mode {
+            self.log.push(format!("tic {}: {why}", obs.tic));
+            self.mode = why.to_string();
+        }
+    }
+
     /// Has she given up on getting at id a while?
     pub(super) fn given_up_on(&self, obs: &Observation, id: i32) -> bool {
         self.patience.given_up(id, obs.tic)
@@ -2069,20 +2099,13 @@ impl Combat {
         let gun = self.preferred_gun(obs, &ghost);
         let moving = self.steer(obs, Some(&ghost), &gun);
         let why = format!("lost sight of {}: keeping at it", s.name);
-        if why != self.mode {
-            self.log.push(format!("tic {}: {why}", obs.tic));
-            self.mode = why.clone();
-        }
-        Some(Decision {
-            kind: Move::LostSight,
-            yields: false,
-            pressed: false,
-            aim: Some(heading(pos, at)),
-            fire: false,
-            weapon: 0,
+        self.announce(obs, &why);
+        Some(Decision::without_shot(
+            Move::LostSight,
+            Some(heading(pos, at)),
             moving,
             why,
-        })
+        ))
     }
 
     /// The route's controls this tic (the way it walks her, for what's in her way).
