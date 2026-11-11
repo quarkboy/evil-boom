@@ -167,8 +167,9 @@ fn plan_report(lp: &LevelPlan, x: &Explorer, real: &[Heights]) -> Vec<String> {
                         b.join(", ")
                     );
                 }
-                if !path.steps.is_empty() {
-                    line += &format!("; via {:?}", path.steps);
+                if !path.notes.is_empty() {
+                    let notes: Vec<String> = path.notes.iter().map(ToString::to_string).collect();
+                    line += &format!("; via {notes:?}");
                 }
                 out.push(line + ")");
             }

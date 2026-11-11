@@ -17,7 +17,7 @@ mod view;
 mod widths;
 
 pub use jumps::{JumpChecks, JUMP_DOUBT};
-pub use view::{Leg, Path, Plan, Restriction, Route, View};
+pub use view::{Leg, Path, PathNote, Plan, Restriction, Route, View};
 
 use crate::det::HashMap;
 use crate::geom::{dist, Cell, Point, Seg};

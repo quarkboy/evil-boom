@@ -155,8 +155,10 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                                     .map(|&q| format!("{q}/{}", s.nav.sector_of_poly(q)))
                                     .collect();
                                 println!("    polys (poly/sector): {}", polys.join(" "));
-                                if !p.steps.is_empty() {
-                                    println!("    {}", p.steps.join("; "));
+                                if !p.notes.is_empty() {
+                                    let notes: Vec<String> =
+                                        p.notes.iter().map(ToString::to_string).collect();
+                                    println!("    {}", notes.join("; "));
                                 }
                                 for j in &p.jumps {
                                     println!("    jump off ({:.0}, {:.0}) to ({:.0}, {:.0}), run-up ({:.0}, {:.0}), needs {:?}", j.takeoff.0, j.takeoff.1, j.dest.0, j.dest.1, j.runup.0, j.runup.1, j.requires.iter().map(|(s, h)| (*s, h.floor, h.ceiling)).collect::<Vec<_>>());

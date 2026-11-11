@@ -6,7 +6,7 @@ use crate::geom::{dist, segments_cross, Point};
 use crate::knowledge::RISK_SHARE;
 use crate::motor::Observation;
 use crate::nav::Heights;
-use crate::navigator::{add_height, Plan, Route, States, TriggerLine, View, MAX_STEP};
+use crate::navigator::{add_height, PathNote, Plan, Route, States, TriggerLine, View, MAX_STEP};
 use crate::specials::Key;
 use crate::walkthrough::{action_for, steps_from_legs, Action, Step};
 use std::collections::{BTreeMap, BTreeSet};
@@ -482,7 +482,7 @@ impl Explorer {
         if route.is_none() && crate::debug::on().no_route {
             let sec = |p: Point| nav.poly_at(p).map(|q| (q, nav.sector_of_poly(q)));
             let direct = view.find_path(start, obj.goal, &states, None);
-            self.log.push(format!("  no plan for '{}': from ({:.0}, {:.0}) {:?} to ({:.0}, {:.0}) {:?}; a path by itself: {:?}; believed heights there {:?}", obj.label, start.0, start.1, sec(start), obj.goal.0, obj.goal.1, sec(obj.goal), direct.map(|d| d.steps), sec(obj.goal).map(|(_, s)| states[s].clone())));
+            self.log.push(format!("  no plan for '{}': from ({:.0}, {:.0}) {:?} to ({:.0}, {:.0}) {:?}; a path by itself: {:?}; believed heights there {:?}", obj.label, start.0, start.1, sec(start), obj.goal.0, obj.goal.1, sec(obj.goal), direct.map(|d| d.notes.iter().map(ToString::to_string).collect::<Vec<_>>()), sec(obj.goal).map(|(_, s)| states[s].clone())));
         }
         let Some(route) = route else {
             // Only the planner's "none": not a way she won't take, which the risky twin may.
@@ -596,14 +596,12 @@ impl Explorer {
                 .filter(|s| Some(*s) != here && !k.changed_floor.get(s).is_some_and(|&h| h != 0))
                 .collect();
             for leg in &route.legs {
-                for n in &leg.path.steps {
-                    if !n.contains("one-way drop") {
+                for n in &leg.path.notes {
+                    let PathNote::Drop { sector: s, .. } = *n else {
                         continue;
-                    }
-                    if let Some(s) = n.rsplit(' ').next().and_then(|x| x.parse::<usize>().ok()) {
-                        if k.damaging(s) && !escaped.contains(&s) {
-                            return Some(Refusal::DropOntoHarm { sector: s });
-                        }
+                    };
+                    if k.damaging(s) && !escaped.contains(&s) {
+                        return Some(Refusal::DropOntoHarm { sector: s });
                     }
                 }
             }
@@ -821,10 +819,12 @@ impl Explorer {
     ) -> bool {
         // A teleporter is a way on of itself.
         if obj.kind == Kind::Teleporter
-            || !route
-                .legs
-                .iter()
-                .any(|leg| leg.path.steps.iter().any(|n| n.contains("one-way drop")))
+            || !route.legs.iter().any(|leg| {
+                leg.path
+                    .notes
+                    .iter()
+                    .any(|n| matches!(n, PathNote::Drop { .. }))
+            })
         {
             return false;
         }

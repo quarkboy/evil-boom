@@ -8,7 +8,7 @@ use crate::geom::{cells, closest_point, dist, segment_distance, Point};
 use crate::motor::{heading, Controls, Observation, Track, BRAKE, FULL_SPEED, TICRATE};
 use crate::nav::{can_cross, Heights};
 use crate::navigator::{
-    closest_on_portal, ITEM_RADIUS, MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT, PLAYER_RADIUS,
+    closest_on_portal, PathNote, ITEM_RADIUS, MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT, PLAYER_RADIUS,
     TELEPORTERS_FOR_PLAYERS,
 };
 use crate::specials::Trigger;
@@ -839,12 +839,14 @@ impl RouteFollower {
             return Drop::None;
         };
         // (the drops the plan means to take, this step's and the rest's)
-        let planned: BTreeSet<String> = self.steps[self.step_i as usize..]
+        let planned: BTreeSet<usize> = self.steps[self.step_i as usize..]
             .iter()
             .filter_map(|st| st.path.as_ref())
-            .flat_map(|p| p.steps.iter())
-            .filter(|n| n.contains("one-way drop"))
-            .filter_map(|n| n.split("into sector ").nth(1).map(str::to_string))
+            .flat_map(|p| p.notes.iter())
+            .filter_map(|n| match n {
+                PathNote::Drop { sector, .. } => Some(*sector),
+                _ => None,
+            })
             .collect();
         let upto = (self.poly_i + 4).min(path.polys.len().saturating_sub(1));
         for j in self.poly_i..upto {
@@ -880,7 +882,7 @@ impl RouteFollower {
                     b.ceiling.to_bits(),
                 ],
             );
-            if planned.contains(&ns.to_string())
+            if planned.contains(&ns)
                 || self.drops_ok.contains(&key)
                 || !can_cross(a, b)
                 || can_cross(b, a)
@@ -954,12 +956,14 @@ impl RouteFollower {
                 return Drop::Replanned;
             }
             // (the new way: none of the drops it takes that the plan didn't mean to)
-            let dropped: BTreeSet<String> = self.steps[self.step_i as usize..]
+            let dropped: BTreeSet<usize> = self.steps[self.step_i as usize..]
                 .iter()
                 .filter_map(|st| st.path.as_ref())
-                .flat_map(|p| p.steps.iter())
-                .filter(|n| n.contains("one-way drop"))
-                .filter_map(|n| n.split("into sector ").nth(1).map(str::to_string))
+                .flat_map(|p| p.notes.iter())
+                .filter_map(|n| match n {
+                    PathNote::Drop { sector, .. } => Some(*sector),
+                    _ => None,
+                })
                 .collect();
             if !dropped.is_subset(&planned) {
                 return Drop::GiveBack(format!(

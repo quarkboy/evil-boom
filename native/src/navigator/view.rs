@@ -181,6 +181,36 @@ fn states_of(w: &World) -> States {
     w.iter().map(|hs| (**hs).clone()).collect()
 }
 
+/// Something a path does on its way besides walking, in the order it does them.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PathNote {
+    /// a run-jump, from its takeoff to where it lands
+    RunJump { takeoff: Point, dest: Point },
+    /// through a teleporter, by this line
+    Teleport { line: usize },
+    /// through a door (this sector) it opens on the way
+    OpenDoor { sector: usize },
+    /// down a drop of more than a step, into this sector: no stepping back up
+    Drop { height: f64, sector: usize },
+}
+
+impl std::fmt::Display for PathNote {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PathNote::RunJump { takeoff, dest } => write!(
+                f,
+                "run-jump off ({:.0}, {:.0}) to ({:.0}, {:.0})",
+                takeoff.0, takeoff.1, dest.0, dest.1
+            ),
+            PathNote::Teleport { line } => write!(f, "teleport via line {line}"),
+            PathNote::OpenDoor { sector } => write!(f, "open door (sector {sector})"),
+            PathNote::Drop { height, sector } => {
+                write!(f, "one-way drop of {height} into sector {sector}")
+            }
+        }
+    }
+}
+
 /// A path: the polys, the points to walk through (None: a teleport), its cost, notes on the
 /// way (teleports, drops, doors), its jumps in order, and the spots the box may not fit.
 #[derive(Clone, Debug)]
@@ -188,7 +218,7 @@ pub struct Path {
     pub polys: Vec<usize>,
     pub waypoints: Vec<Option<Point>>,
     pub cost: f64,
-    pub steps: Vec<String>,
+    pub notes: Vec<PathNote>,
     pub jumps: Vec<Jump>,
     pub squeezes: usize,
 }
@@ -756,7 +786,7 @@ impl View {
             polys: f.polys.clone(),
             waypoints: f.waypoints.clone(),
             cost: f.cost,
-            steps: self.annotate(&chain, states, doors),
+            notes: self.annotate(&chain, states, doors),
             jumps,
             squeezes: f.squeezes,
         }
@@ -767,7 +797,7 @@ impl View {
         chain: &[(usize, Option<Step>)],
         states: &States,
         doors: Option<&Doors>,
-    ) -> Vec<String> {
+    ) -> Vec<PathNote> {
         let n = &self.nav;
         let mut notes = Vec::new();
         for i in 1..chain.len() {
@@ -776,13 +806,15 @@ impl View {
             match via {
                 Some(Step::Tele(TeleEdge::Jump(j))) => {
                     let j = &n.jumps[j];
-                    notes.push(format!(
-                        "run-jump off ({:.0}, {:.0}) to ({:.0}, {:.0})",
-                        j.takeoff.0, j.takeoff.1, j.dest.0, j.dest.1
-                    ));
+                    notes.push(PathNote::RunJump {
+                        takeoff: j.takeoff,
+                        dest: j.dest,
+                    });
                 }
                 Some(Step::Tele(TeleEdge::Teleport(t))) => {
-                    notes.push(format!("teleport via line {}", n.teleports[t].line))
+                    notes.push(PathNote::Teleport {
+                        line: n.teleports[t].line,
+                    });
                 }
                 Some(Step::Portal(pi)) => {
                     let (sa, sb) = (n.sector_of_poly(frm), n.sector_of_poly(poly));
@@ -792,7 +824,7 @@ impl View {
                     if doors.is_some_and(|d| d.contains_key(&sb))
                         && !n.passable(pi, frm, states, None, self.spent())
                     {
-                        notes.push(format!("open door (sector {sb})"));
+                        notes.push(PathNote::OpenDoor { sector: sb });
                     } else if !n.passable(pi, poly, states, doors, self.spent()) {
                         let low = |s: usize| {
                             states[s]
@@ -802,7 +834,10 @@ impl View {
                         };
                         let drop = low(sa) - low(sb);
                         if drop > MAX_STEP {
-                            notes.push(format!("one-way drop of {drop} into sector {sb}"));
+                            notes.push(PathNote::Drop {
+                                height: drop,
+                                sector: sb,
+                            });
                         }
                     }
                 }

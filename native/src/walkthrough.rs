@@ -90,7 +90,10 @@ impl Step {
             .as_ref()
             .and_then(|p| p.waypoints.iter().rev().find_map(|w| *w));
         let notes = match &self.path {
-            Some(p) if !p.steps.is_empty() => format!(" ({})", p.steps.join("; ")),
+            Some(p) if !p.notes.is_empty() => {
+                let notes: Vec<String> = p.notes.iter().map(ToString::to_string).collect();
+                format!(" ({})", notes.join("; "))
+            }
             _ => String::new(),
         };
         let mut out = vec![match goal {

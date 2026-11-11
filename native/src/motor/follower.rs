@@ -18,7 +18,7 @@ use super::{heading, norm, Controls, Motion, Observation, Track, FULL_SPEED, RUN
 use crate::geom::{dist, segments_cross, Point};
 use crate::mesh::inside;
 use crate::nav::{Doors, Heights};
-use crate::navigator::{Jump, Path, States, View, MAX_STEP, PLAYER_RADIUS};
+use crate::navigator::{Jump, Path, PathNote, States, View, MAX_STEP, PLAYER_RADIUS};
 use crate::specials::{Key, Keys};
 use crate::walkthrough::{plan_from, steps_from_legs, Action, Expect, Rest, Step};
 use std::collections::{BTreeMap, BTreeSet};
@@ -587,7 +587,11 @@ impl RouteFollower {
             .iter()
             .skip(from)
             .filter_map(|st| st.path.as_ref())
-            .any(|p| p.steps.iter().any(|n| n.contains("run-jump")))
+            .any(|p| {
+                p.notes
+                    .iter()
+                    .any(|n| matches!(n, PathNote::RunJump { .. }))
+            })
     }
 
     // --- what she's doing (for display) -----------------------------------------------------
@@ -753,7 +757,7 @@ impl RouteFollower {
             polys: Vec::new(),
             waypoints: Vec::new(),
             cost: 0.0,
-            steps: Vec::new(),
+            notes: Vec::new(),
             jumps: Vec::new(),
             squeezes: 0,
         });

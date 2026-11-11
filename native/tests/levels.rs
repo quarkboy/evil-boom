@@ -140,10 +140,11 @@ fn e1m1_needs_no_keys_and_starts_with_doors_closed() {
     let route = view
         .plan(start, &[goal], &Plan::default())
         .expect("a route");
-    assert!(route
-        .legs
+    assert!(route.legs.iter().any(|l| l
+        .path
+        .notes
         .iter()
-        .any(|l| l.path.steps.iter().any(|n| n.contains("open door"))));
+        .any(|n| matches!(n, evildoom::navigator::PathNote::OpenDoor { .. }))));
     assert_eq!(action_for(exit_t), Action::Use);
 }
 
