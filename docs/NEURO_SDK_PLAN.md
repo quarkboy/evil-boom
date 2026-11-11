@@ -220,6 +220,7 @@ One action, so the fight costs one description:
   | `barrels` | `clear`, `leave` | `Kind::Barrel` |
   | `infighting` | `use`, `ignore` | bait, setting on |
   | `ask` | `everything`, `irreversible`, `nothing` | confirmations |
+  | `hints` | `off`, `on_stall`, `always` | rankings' picks and unprompted suggestions (5.5) |
   | `idle` | `wait`, `auto_20`, `auto` | the mode |
 - **`doom_style text`** (later stage): free text to the classifier, which answers with
   `doom_policy` changes it made, in those words ("stance careful; save rockets"), or says it
@@ -364,6 +365,44 @@ is what makes this safe to promise).
 - **Budgets by quiet.** In a long quiet stretch the budget loosens to small things (a wait, a
   view: "a big room, lava below"), so there's always something; in a fight it tightens to
   threats, close calls and the summary.
+
+### 5.5 The bot's own opinion: rankings and suggestions
+
+The bot always has an answer of its own (rule 1): the explorer weighs every objective, the
+fight scores every target and gun. She should be able to lean on that without being led by
+it. Three strengths, set by policy `hints` (`off`, `on_stall`, `always`; default `on_stall`):
+
+- **Ranked, always.** Every list comes in the bot's own order, best first, not by distance
+  alone, and each line can carry its reason in a few words: "door-3 (N 210): untried, nearest",
+  "area-7: 12 to explore, the way the red door's switch probably is". This costs no extra
+  words and no extra message; an unranked list makes her guess (stage 0: I had six areas and
+  nothing to choose between them by).
+- **A pick, when she asks or is asked.** `doom_list`, `doom_look` and every forced decision
+  mark one line `(my pick)`, with why. A failed order says what would work instead ("No way
+  to the chaingun yet. Likeliest way: area-107, S 600.") rather than only that it failed.
+- **A nudge, when she's stalled.** Unprompted suggestions are tied to no progress, and
+  escalate, so a good run of her own choices is never talked over:
+
+  | No progress for | The bot |
+  |---|---|
+  | (never, while her orders are getting somewhere) | says nothing unasked |
+  | two orders failed in a row, or 30 s idle | "Suggestion: door-3, N 210 (untried)." Silent: for her to use or not |
+  | 60 s, or the same thing tried three times | the suggestion again, not silent, with what's been tried: "Tried switch-2 three times. The bars it opens are W, not here: try area-4." |
+  | 3 minutes with nothing new mapped, killed or picked up | a question (4.6): "Stuck? a) I take over till something new turns up (default, 20 s) b) show everything known c) keep going" |
+  | the idle policy's limit | takes over as the mode says, and says so |
+
+  "Progress" is the score's own stall measure (something newly mapped, set off, walked into,
+  killed, collected), so it means the same here as in testing.
+- **Never** a suggestion built on what she hasn't seen: the pick is the explorer's, which
+  plans only from what she knows. And when the bot's pick is a guess it says so ("no idea
+  what switch-9 does: only thing left untried").
+- In a fight the same, lighter: the status line's "fighting" part names the bot's target and
+  gun ("on the revenant with the SSG"), which is its ranking in a phrase; a tactic of hers
+  that the rules rate badly gets one honest line when it's given ("Rushing a baron with 9
+  shells: I'd keep clear."), then is done as ordered.
+
+For the stream this also gives her something to push against: taking the bot's pick, or
+pointedly not, is a bit either way.
 
 ## 6. What the code needs (the boundary)
 
