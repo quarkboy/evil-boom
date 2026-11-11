@@ -1,12 +1,13 @@
 //! Following objectives, looking around, and recording arrival or failure.
 
+use super::Why;
 use super::{
     turn_to, EndKind, Explorer, Hooks, Kind, Objective, ARRIVE_SLACK, JUMP_MISSES, LOOK_TICS,
     STUCK_TIMES,
 };
 use crate::geom::dist;
 use crate::knowledge::model::{Heard, How, Note};
-use crate::motor::follower::RouteFollower;
+use crate::motor::follower::{RouteFollower, Trouble};
 use crate::motor::{Controls, Observation};
 use std::collections::BTreeSet;
 
@@ -194,7 +195,7 @@ impl Explorer {
         if matches!(obj.kind, Kind::Switch | Kind::Door)
             && !obj.trigger.as_ref().is_some_and(|t| pressed_now(t.line))
         {
-            self.drop_objective(&obj, obs, "pressed, but nothing went off");
+            self.drop_objective(&obj, obs, Why::PressedNothing);
             self.end_kind = EndKind::PressedNothing;
         } else if matches!(
             obj.kind,
@@ -217,16 +218,16 @@ impl Explorer {
                 });
             }
             if obj.kind != Kind::Switch && !self.seen_to(&obj) {
-                self.drop_objective(&obj, obs, "nothing to see from there");
+                self.drop_objective(&obj, obs, Why::NothingToSee);
             }
         } else if obj.kind == Kind::Visit && !self.seen_to(&obj) {
-            self.drop_objective(&obj, obs, "got there but not in it");
+            self.drop_objective(&obj, obs, Why::NotInIt);
         } else if obj.kind == Kind::Teleporter
             && !obj.trigger.as_ref().is_some_and(|t| {
                 usize::try_from(t.line).is_ok_and(|li| self.knowledge.teleports.contains_key(&li))
             })
         {
-            self.drop_objective(&obj, obs, "didn't take me anywhere");
+            self.drop_objective(&obj, obs, Why::TeleportedNowhere);
         } else if obj.kind == Kind::Wall {
             // face it, press use, watch a moment (what it does, if anything, the knowledge sees)
             let wall = obj.wall.unwrap_or(0);
@@ -318,9 +319,9 @@ impl Explorer {
                 &obj,
                 obs,
                 if obj.kind == Kind::Hunt {
-                    "not there"
+                    Why::NotThere
                 } else {
-                    "couldn't pick it up"
+                    Why::CouldntPickUp
                 },
             );
         }
@@ -418,11 +419,11 @@ impl Explorer {
                 "tic {}: '{}' got on the way, then off a floor going down",
                 obs.tic, obj.label
             ));
-            return self.ends(obs, "gone");
+            return self.ends(obs, Why::Gone);
         }
         if done || failed {
             if failed {
-                let why = self
+                let line = self
                     .follower
                     .as_ref()
                     .and_then(|f| {
@@ -434,11 +435,16 @@ impl Explorer {
                             .cloned()
                     })
                     .unwrap_or_default();
-                let why = why
+                let line = line
                     .split_once("] ")
-                    .map_or(why.as_str(), |(_, r)| r)
+                    .map_or(line.as_str(), |(_, r)| r)
                     .to_string();
-                self.drop_objective(&obj, obs, &format!("failed: {why}"));
+                let trouble = self
+                    .follower
+                    .as_ref()
+                    .and_then(|f| f.trouble.clone())
+                    .unwrap_or(Trouble::Stuck);
+                self.drop_objective(&obj, obs, Why::Route(line, trouble));
                 if self.follower.as_ref().is_some_and(|f| f.failed_stuck) {
                     self.note_stuck(obs);
                     // Stuck at one spot whatever she sets out for: wedged, in a trap she couldn't know of, and
@@ -480,7 +486,7 @@ impl Explorer {
         if obj.kind == Kind::Frontier && !committed {
             let known = k.known_polys();
             if obj.reveals.iter().any(|&p| known.contains(&(p as usize))) {
-                return self.ends(obs, "seen it on the way");
+                return self.ends(obs, Why::SeenOnTheWay);
             }
         }
         if obj.kind == Kind::Room
@@ -491,14 +497,14 @@ impl Explorer {
             // The wall seen already and she's nearly there: on, not up to the spot to stop and look.
             // Only when nearly there: the way there shows more, and ending as soon as the wall is seen
             // misses it.
-            return self.ends(obs, "seen it on the way");
+            return self.ends(obs, Why::SeenOnTheWay);
         }
         if obj.kind == Kind::Teleporter
             && obj.trigger.as_ref().is_some_and(|t| {
                 usize::try_from(t.line).is_ok_and(|li| k.teleports.contains_key(&li))
             })
         {
-            return self.ends(obs, "been through");
+            return self.ends(obs, Why::BeenThrough);
         }
         // Given objectives aren't ended by her own wants (an exit seen, a noise, a gun spotted):
         // whoever gave it hears of those.
@@ -508,7 +514,7 @@ impl Explorer {
             && !self.exit_held_back
             && k.exits().len() > self.exits_seen
         {
-            return self.ends(obs, "an exit came into view");
+            return self.ends(obs, Why::ExitInView);
         }
         // Gone, but she's running off a floor going down: on till she's on one that stays put,
         // rather than standing on it as it sinks.
@@ -518,7 +524,7 @@ impl Explorer {
                 .as_ref()
                 .is_some_and(RouteFollower::running_off)
         {
-            return self.ends(obs, "gone");
+            return self.ends(obs, Why::Gone);
         }
         let heard: Vec<Heard> = k.heard[self.urgent_n.min(k.heard.len())..].to_vec();
         self.urgent_n = k.heard.len();
@@ -532,13 +538,13 @@ impl Explorer {
                 .iter()
                 .any(|h| self.urgent(h, obs.tic) && self.worth_a_look(h))
         {
-            return self.ends(obs, "something went off out of sight");
+            return self.ends(obs, Why::HeardSomething);
         }
         if !self.directed && !jumping && hooks.interrupt(self, obs, &obj) {
-            return self.ends(obs, "interrupted");
+            return self.ends(obs, Why::Interrupted);
         }
         if obs.tic - self.since > self.allowed {
-            self.drop_objective(&obj, obs, "took too long");
+            self.drop_objective(&obj, obs, Why::TookTooLong);
             let stuck = self.follower.as_ref().is_some_and(|f| {
                 f.log
                     .events
@@ -556,8 +562,7 @@ impl Explorer {
     }
 
     /// An objective given up mid-way, for whoever's tracing: why.
-    pub(super) fn ends(&mut self, obs: &Observation, why: &str) -> bool {
-        self.end_why = Some((true, why.to_string()));
+    pub(super) fn ends(&mut self, obs: &Observation, why: Why) -> bool {
         self.end_kind = EndKind::Plain;
         if self
             .debug_tics
@@ -566,6 +571,7 @@ impl Explorer {
             self.log
                 .push(format!("  (objective ends at tic {}: {why})", obs.tic));
         }
+        self.end_why = Some((true, why));
         true
     }
 
@@ -573,7 +579,7 @@ impl Explorer {
     pub fn give_up(&mut self, obs: &Observation, why: &str) {
         if let Some(obj) = self.current.take() {
             self.follower = None;
-            self.drop_objective(&obj, obs, why);
+            self.drop_objective(&obj, obs, Why::Fight(why.to_string()));
         }
     }
 
@@ -584,11 +590,10 @@ impl Explorer {
             self.refused_now = (obs.tic, BTreeSet::new());
         }
         self.refused_now.1.insert(obj.ident());
-        self.drop_objective(obj, obs, "no route");
+        self.drop_objective(obj, obs, Why::NoRoute);
     }
 
-    pub(super) fn drop_objective(&mut self, obj: &Objective, obs: &Observation, why: &str) {
-        self.end_why = Some((false, why.to_string()));
+    pub(super) fn drop_objective(&mut self, obj: &Objective, obs: &Observation, why: Why) {
         self.end_kind = EndKind::Plain;
         let id = obj.ident();
         self.dropped.insert(id.clone(), obs.tic);
@@ -598,5 +603,6 @@ impl Explorer {
         }
         self.log
             .push(format!("tic {}: dropped '{}' ({why})", obs.tic, obj.label));
+        self.end_why = Some((false, why));
     }
 }

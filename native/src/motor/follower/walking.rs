@@ -1,5 +1,6 @@
 //! Path tracking, landing caution, pickup approach and recovery from obstacles.
 
+use super::Trouble;
 use super::{
     last_point, roll_speed, stops, Drop, Phase, RouteFollower, Run, SegEnd, Segment,
     CROSS_REST_WAIT, PRESS_RANGE,
@@ -107,7 +108,7 @@ impl RouteFollower {
         (self.at.index, self.at.along, self.at.off) = track.project(pos, self.at.along, 64.0);
         if self.lost(obs) {
             if !self.replan(obs, "off course", false) {
-                return self.fail(obs, "off course and no way back");
+                return self.fail(obs, Trouble::OffCourse);
             }
             return self.walk(obs);
         }
@@ -115,7 +116,7 @@ impl RouteFollower {
         match self.unexpected_drop(obs) {
             Drop::None => {}
             Drop::Replanned => return self.walk(obs),
-            Drop::GiveBack(why) => return self.fail(obs, &why),
+            Drop::GiveBack(why) => return self.fail(obs, why),
         }
         self.creep_to_drop(obs);
         // (a crusher before a mover: what it's waited for differs, and where)
@@ -397,7 +398,7 @@ impl RouteFollower {
             // (with the heights as they are: the way the plan saw may be shut now, a timed door
             // closed, and the same path again is stuck again)
             if !self.replan(obs, "stuck", true) {
-                return self.fail(obs, "stuck");
+                return self.fail(obs, Trouble::Stuck);
             }
             return self.walk(obs);
         }
@@ -985,7 +986,7 @@ impl RouteFollower {
                 return if foreseen {
                     Drop::None
                 } else {
-                    Drop::GiveBack(format!("{why}, and no other way on"))
+                    Drop::GiveBack(Trouble::Drop(format!("{why}, and no other way on")))
                 };
             }
             if foreseen {
@@ -1002,9 +1003,9 @@ impl RouteFollower {
                 })
                 .collect();
             if !dropped.is_subset(&planned) {
-                return Drop::GiveBack(format!(
+                return Drop::GiveBack(Trouble::Drop(format!(
                     "{why}: the only way on drops where the plan didn't"
-                ));
+                )));
             }
             return Drop::Replanned;
         }

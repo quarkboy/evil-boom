@@ -7,6 +7,7 @@
 //! walls that might hide something.
 
 mod cut_off;
+mod ending;
 mod execution;
 mod objectives;
 mod positions;
@@ -23,6 +24,7 @@ use crate::motor::{Controls, Observation};
 use crate::navigator::{Navigator, States, TriggerLine, View};
 use crate::specials::{classify_line, Key, Lock};
 use crate::walkthrough::Step;
+pub use ending::Why;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
@@ -338,6 +340,8 @@ pub struct Ended {
     /// done (got there, did it, or it came to nothing to do: seen on the way)
     pub ok: bool,
     pub why: String,
+    /// the same plainly, for whoever's playing
+    pub plain: String,
     /// a switch or door pressed with nothing seen to go off (pressed all the same)
     pub pressed: bool,
 }
@@ -363,7 +367,7 @@ pub struct Explorer {
     /// why the objective in hand ended, as `ends` or `drop_objective` had it
     /// the tic her senses last took in (`sense`)
     sensed: Option<i64>,
-    end_why: Option<(bool, String)>,
+    end_why: Option<(bool, Why)>,
     /// ...and what kind of ending it was
     end_kind: EndKind,
     pub log: Vec<String>,
@@ -823,25 +827,30 @@ impl Explorer {
         };
         let pressed = self.end_why.is_some() && self.end_kind == EndKind::PressedNothing;
         let (ok, why) = match (&self.follower, self.end_why.take()) {
-            (_, Some(e)) => e,
+            (_, Some((ok, w))) => (ok, Some(w)),
             // Got there and done with it: arrived() lets the route go.
-            (None, None) => (true, "done".to_string()),
-            (Some(f), None) if f.done && !f.failed => (true, "done".to_string()),
+            (None, None) => (true, None),
+            (Some(f), None) if f.done && !f.failed => (true, None),
             _ => {
                 // Not over: a plan anew is wanted (a jump missed); the same again, if there's a way.
                 self.follower = None;
                 if self.take(obs, obj.clone()) {
                     return;
                 }
-                (false, "no way there now".to_string())
+                (false, Some(Why::NoWayNow))
             }
         };
+        let (why, plain) = why.map_or_else(
+            || ("done".to_string(), "done".to_string()),
+            |w| (w.to_string(), w.plain()),
+        );
         self.log
             .push(format!("tic {}: '{}' over: {}", obs.tic, obj.label, why));
         self.ended = Some(Ended {
             label: obj.label,
             ok,
             why,
+            plain,
             pressed,
         });
         self.follower = None;

@@ -1,5 +1,6 @@
 //! Using doors and switches, shooting lines, and observing their effects.
 
+use super::Trouble;
 use super::{tap_gun, Blocked, Phase, RouteFollower, CROSS_REST_WAIT, PRESS_RANGE, USE_EVERY};
 use crate::geom::{cells, closest_point, dist, segments_cross, Point};
 use crate::mesh::Portal;
@@ -488,10 +489,7 @@ impl RouteFollower {
             if waited > 33 * 35 {
                 self.reopening = false;
                 if !self.replan(obs, &format!("sector {sector} not reopening"), false) {
-                    return Some(self.fail(
-                        obs,
-                        &format!("waited too long for sector {sector} to reopen"),
-                    ));
+                    return Some(self.fail(obs, Trouble::NoReopen(sector)));
                 }
             }
             return Some(
@@ -543,10 +541,7 @@ impl RouteFollower {
                 .find(|j| j.src_polys.iter().any(|&p| nav.sector_of_poly(p) == sector));
             if let Some(jump) = off {
                 self.missed.push(jump);
-                return Some(self.fail(
-                    obs,
-                    &format!("sector {sector} not coming for the jump off it"),
-                ));
+                return Some(self.fail(obs, Trouble::LiftNotComing(sector)));
             }
         }
         if waited > 15 * 35 {
@@ -554,10 +549,10 @@ impl RouteFollower {
                 let cs = nav.sector_of_poly(cur);
                 return Some(self.fail(
                     obs,
-                    &format!(
-                        "waited too long for sector {sector}: live {} -> {}",
+                    Trouble::MoverSlow(
+                        sector,
                         fmt_live(Some(live[cs])),
-                        fmt_live(Some(live[sector]))
+                        fmt_live(Some(live[sector])),
                     ),
                 ));
             }
@@ -1247,7 +1242,7 @@ impl RouteFollower {
                 }
             }
         } else if obs.tic - self.progress_tic > 3 * 35 {
-            return self.fail(obs, &format!("could not face line {li}"));
+            return self.fail(obs, Trouble::CantFace(li));
         }
         controls
     }

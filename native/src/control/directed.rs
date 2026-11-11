@@ -1406,7 +1406,7 @@ impl Director {
             Some(Doing::Once(id, what)) => {
                 let (ok, why, pressed_nothing) = ended
                     .map_or((false, "stopped".to_string(), false), |e| {
-                        (e.ok, e.why, e.pressed)
+                        (e.ok, e.plain, e.pressed)
                     });
                 // (a switch pressed: what it did told when she's seen it, or after a while)
                 // (pressed and nothing seen to change is pressed all the same: what it moved may be
@@ -1424,7 +1424,7 @@ impl Director {
                         if ok {
                             format!("Done: {what}.")
                         } else {
-                            format!("Couldn't: {what} ({why}).")
+                            format!("Couldn't get to {what}: {why}.")
                         },
                     ),
                 }

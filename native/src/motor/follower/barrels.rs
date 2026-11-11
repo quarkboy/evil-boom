@@ -1,5 +1,6 @@
 //! Clearing barrels, choosing a firing position and escaping chain explosions.
 
+use super::Trouble;
 use super::{along, barrel_gun, barrel_now, blast_gap, tap_rounds, RouteFollower, BARREL_TAP};
 use crate::geom::{dist, segment_distance, Point};
 use crate::motor::{heading, norm, Controls, Observation, FULL_SPEED};
@@ -363,7 +364,7 @@ impl RouteFollower {
                 self.shot.post = None;
                 self.shot.way.clear();
                 self.shot.best = None;
-                return self.fail(obs, "a barrel in the way, and nothing to shoot it with");
+                return self.fail(obs, Trouble::BarrelNoGun);
             }
             /// (the fist's reach is 64 from her middle to its; a little inside it)
             const PUNCH_FROM: f64 = 56.0;
@@ -525,10 +526,7 @@ impl RouteFollower {
             }
             let Some(post) = self.shot.post else {
                 self.shot.target = None;
-                return self.fail(
-                    obs,
-                    "a barrel in the way, nowhere to shoot it from and run off out of the blasts",
-                );
+                return self.fail(obs, Trouble::BarrelNoPost);
             };
             if dist(pos, post) > 8.0 {
                 // (getting no nearer for a while: give it up)
@@ -540,10 +538,7 @@ impl RouteFollower {
                         self.shot.post = None;
                         self.shot.way.clear();
                         self.shot.best = None;
-                        return self.fail(
-                            obs,
-                            "a barrel in the way, and no getting to somewhere to shoot it from",
-                        );
+                        return self.fail(obs, Trouble::BarrelNoReach);
                     }
                     None => self.shot.best = Some((d, obs.tic)),
                     _ => {}

@@ -1,5 +1,6 @@
 //! Lining up, executing and judging jumps and runs over sinking floors.
 
+use super::Trouble;
 use super::{run_controls, RouteFollower, Run};
 use crate::geom::{
     closest_on_portal, closest_point, dist, funnel, oriented, Point, Seg, PLAYER_HEIGHT,
@@ -110,7 +111,7 @@ impl RouteFollower {
                 ) {
                     return self.motion.hold(obs, (0.0, 0.0), Some(face));
                 }
-                return self.fail(obs, "jump takeoff too low and no other way");
+                return self.fail(obs, Trouble::TakeoffLow);
             }
         }
         // as exactly as the check did it: on the spot, square on, standing still
@@ -191,10 +192,7 @@ impl RouteFollower {
             // (where she was going is forgotten: maybe gone down too, the way back to it surely;
             // the explorer chooses again from here, not back for an old goal on a floor that's
             // now in what hurts)
-            return self.fail(
-                obs,
-                "ran off a floor going down: what she was going for is for choosing again",
-            );
+            return self.fail(obs, Trouble::RanOffLowering);
         }
         let Some(run) = self.jump.run else {
             return self.walk(obs);
@@ -230,7 +228,7 @@ impl RouteFollower {
                     self.log
                         .add(obs.tic, "no heading off the sinking floor lands anywhere");
                     if !self.replan(obs, "sinking floor", true) {
-                        return self.fail(obs, "stranded on a sinking floor");
+                        return self.fail(obs, Trouble::Sinking);
                     }
                     return self.walk(obs);
                 }
@@ -578,7 +576,7 @@ impl RouteFollower {
         });
         if obs.tic - since > 8 && self.motion.speed() < 2.0 && body_ahead {
             self.jump.sprint = None;
-            return self.fail(obs, "run-jump blocked by a monster");
+            return self.fail(obs, Trouble::JumpBlocked);
         }
         // (short of the takeoff and well short of the speed the jump was checked with by here:
         // knocked, or held up by something in her run. It won't carry; stopped before the edge
@@ -594,7 +592,7 @@ impl RouteFollower {
                 self.jump.sprints_short += 1;
                 if self.jump.sprints_short >= SPRINTS_SHORT {
                     self.jump.sprints_short = 0;
-                    return self.fail(obs, "run-jump knocked short of its speed, time after time");
+                    return self.fail(obs, Trouble::JumpShort);
                 }
                 self.log.add(obs.tic, format!("too slow for the jump ({along:.1} a tic for {due:.1}, {:.0} short of the edge): lining up again", -flown));
                 self.jump.brake_until = obs.tic + 35;

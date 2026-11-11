@@ -2490,3 +2490,19 @@ those to what they're called, one and several ("mancubus", "mancubi"; "box of sh
 wherever a thing is named to her; the code's tables keep the class names. A test holds every
 monster and pickup the game has to a name. Her status by instinct read the explorer's label
 ("try door (line 136)", "look into sector 21"): the plain phrase now, as the viewers get.
+
+## Why a route failed, told plainly (the user, 2026-11-11)
+
+An action that couldn't be done told her the follower's log line: "failed: FAILED at (-151,
+428): unexpected drop into sector 108: the only way on drops where the plan didn't (step 1:
+pick up GreenArmor)". Coordinates, sectors and steps are the trace's, not hers.
+
+The follower's failures are a type now (`motor::follower::Trouble`, nineteen kinds) and the
+explorer's other ends too (`knowledge::explorer::Why`: seen on the way, gone, took too long,
+no route, the route's trouble, the fight's give-up...). Each prints exactly the old log text
+(`Display`: the logs, the sweeps' and every tool reading them unchanged; an E1M2 log compared
+byte for byte with the build before differs only in its timing line) and has a plain phrase
+with no numbers in it, which `Ended::plain` carries to the director: "Couldn't get to item-t212
+(green armor): the only way on is a drop you didn't mean to take." Considered: rewording the
+log line at the director by matching its text (a second copy of every message, broken by the
+first rewording of one).

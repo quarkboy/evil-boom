@@ -13,6 +13,7 @@ mod interactions;
 mod jumping;
 pub mod lanes;
 mod state;
+mod trouble;
 mod walking;
 
 use super::{heading, norm, Controls, Motion, Observation, Track, FULL_SPEED, RUN_TURN, TICRATE};
@@ -25,6 +26,7 @@ use crate::walkthrough::{plan_from, steps_from_legs, Action, Expect, Rest, Step}
 use state::{BarrelShot, Crushers, Jumping, LitChain, OnTrack, Unstick, Weave};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+pub use trouble::Trouble;
 
 /// The point `d` along the polyline `pts` (its end, past that).
 fn along(pts: &[Point], d: f64) -> Point {
@@ -198,7 +200,7 @@ enum Drop {
     /// another way on, without it
     Replanned,
     /// nothing but such drops: the objective's to be judged again
-    GiveBack(String),
+    GiveBack(Trouble),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -273,6 +275,8 @@ pub struct RouteFollower {
     pub failed: bool,
     /// ...stuck (a step given up on for not getting anywhere), as against any other failure
     pub failed_stuck: bool,
+    /// why it failed: for the log as it's always been, and plainly for whoever's playing
+    pub trouble: Option<Trouble>,
     pub replans: i32,
     /// once-only stair switches used (for replans)
     pub fired: BTreeSet<usize>,
@@ -383,6 +387,7 @@ impl RouteFollower {
             done: false,
             failed: false,
             failed_stuck: false,
+            trouble: None,
             replans: 0,
             fired: BTreeSet::new(),
             mortal: false,
@@ -971,7 +976,7 @@ impl RouteFollower {
         }
         self.last_pos = Some(pos);
         if obs.tic - self.step_tic > GIVE_UP_TICS {
-            return self.fail(obs, &format!("step {} taking too long", self.step_i + 1));
+            return self.fail(obs, Trouble::StepSlow(self.step_i as usize + 1));
         }
         self.check_watches(obs);
         if let Some(k) = obs.keys {
@@ -997,7 +1002,7 @@ impl RouteFollower {
         }
     }
 
-    fn fail(&mut self, obs: &Observation, why: &str) -> Controls {
+    fn fail(&mut self, obs: &Observation, why: Trouble) -> Controls {
         self.failed = true;
         let label = self.step().label.clone();
         let line = format!(
@@ -1008,6 +1013,7 @@ impl RouteFollower {
         );
         self.failed_stuck = line.contains("stuck");
         self.log.add(obs.tic, line);
+        self.trouble = Some(why);
         Controls::default()
     }
 

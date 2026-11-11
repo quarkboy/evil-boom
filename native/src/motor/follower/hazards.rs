@@ -1,5 +1,6 @@
 //! Waiting for crushers and escaping a ceiling that pins the player.
 
+use super::Trouble;
 use super::{run_controls, RouteFollower};
 use crate::geom::{dist, Point};
 use crate::mesh::Mesh;
@@ -600,10 +601,7 @@ impl RouteFollower {
                 self.crusher.wait = None;
                 return None;
             }
-            return Some(self.fail(
-                obs,
-                &format!("the crusher (sector {s}) has stopped too low to get under ({gap:.0} up)"),
-            ));
+            return Some(self.fail(obs, Trouble::CrusherLow(s, gap)));
         }
         self.progress_tic = obs.tic;
         self.step_tic = obs.tic;
@@ -711,7 +709,7 @@ impl RouteFollower {
         };
         let clear = (PLAYER_RADIUS * (nx.abs() + ny.abs()) + KICK_PAST - gap).max(0.0) + 1.0;
         if room < run_tics(-KICK_SPEED, clear) + CROSS_SLACK {
-            return Some(self.fail(obs, &format!("the crusher (sector {s}) has stopped too low to get through or set off from its edge")));
+            return Some(self.fail(obs, Trouble::CrusherStuck(s)));
         }
         let spot = (at.0 + sign * nx * KICK_PAST, at.1 + sign * ny * KICK_PAST);
         self.log.add(obs.tic, format!("setting off the crusher (sector {s}) from its edge (line {li}), to cross it when it comes up"));
@@ -729,10 +727,7 @@ impl RouteFollower {
         }
         if obs.tic - since > KICK_TICS {
             self.crusher.kick = None;
-            return Some(self.fail(
-                obs,
-                &format!("the crusher (sector {s}) didn't start from its edge"),
-            ));
+            return Some(self.fail(obs, Trouble::CrusherNoStart(s)));
         }
         self.progress_tic = obs.tic;
         self.step_tic = obs.tic;
