@@ -141,6 +141,13 @@ fire, a stance, each for a while). To direct a game by hand: `watch <wad> <map> 
 --speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
 `.out` twin (`me.txt` gives `me.out`).
 
+Episodes 1 and 2 (HMP) have been finished by directed play with the idle fallback (`idle 6`)
+and a dozen orders each; the notes are section 8 of the SDK plan. `watch --episode --lives N`
+keeps its lives; a headless directed game restarts a level on a death and says so. Jitter:
+measured as "quick darts" (STATS; `EVIL_DEBUG_DARTS`), two holds tried and left as tuning,
+off (`steer.about_tics`, `steer.dart_tics`): each cost about 0.02 for a fifth to a third fewer;
+standing still for a monster out of sight cost 0.028. The table is in CLEANUP_PLAN.md.
+
 ## The stream console (2026-11-10)
 
 `evil-boom console` (a web page for the streamer; the game its child, `watch --control`, Doom's

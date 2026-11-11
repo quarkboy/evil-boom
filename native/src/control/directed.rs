@@ -663,7 +663,14 @@ impl Director {
         // swung her round to see is hers to rush to, not news for an explore order's end that a
         // fight puts off)
         let (mut exits, mut switches, mut doors) = (Vec::new(), Vec::new(), Vec::new());
-        for e in self.objectives_of(agent, obs, &[Kind::Exit, Kind::Switch, Kind::Door]) {
+        // (on her own with the exits held back, they're looked for a second apart: each look
+        // is a listing with them in and one without)
+        let kinds: &[Kind] = if agent.x().exit_held_back && obs.tic % 35 != 0 {
+            &[Kind::Switch, Kind::Door]
+        } else {
+            &[Kind::Exit, Kind::Switch, Kind::Door]
+        };
+        for e in self.objectives_of(agent, obs, kinds) {
             if !self.told_exits.insert(e.id.clone()) {
                 continue;
             }
@@ -1984,8 +1991,17 @@ impl Director {
     /// The explorer's objectives of those kinds as entries: doors, switches, exits (what each
     /// is: only what the id doesn't say, a key it needs, a secret exit; not the explorer's label).
     fn objectives_of(&self, agent: &mut Agent, obs: &Observation, kinds: &[Kind]) -> Vec<Entry> {
-        self.open_objectives(agent, obs)
-            .into_iter()
+        // (the exits she knows are hers to hear of and to list while they're held back from
+        // the explorer: whether she may leave is one question, whether there's a way out another)
+        let held = kinds.contains(&Kind::Exit) && agent.x().exit_held_back;
+        if held {
+            agent.x_mut().hold_exits(false);
+        }
+        let open = self.open_objectives(agent, obs);
+        if held {
+            agent.x_mut().hold_exits(true);
+        }
+        open.into_iter()
             .filter(|o| kinds.contains(&o.kind))
             .map(|o| {
                 let info = o.trigger.as_ref().map(|t| &t.info);

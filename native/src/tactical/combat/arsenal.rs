@@ -443,7 +443,17 @@ impl Combat {
         if let Some(slot) = self.ordered_gun.filter(|s| held.contains(s)) {
             let w = weapon_in(slot, obs);
             let empty = w.ammo_per_shot > 0 && Self::ammo(obs, slot) < w.ammo_per_shot;
-            if !empty && !(slot == 5 && !self.rocket_safe(obs, t)) {
+            // (the launcher: nor with anything at all inside its blast of her, whatever she's
+            // aiming at: a rocket ordered for something across the room goes off on the demon
+            // in her face)
+            let me = obs.pos();
+            let crowded = slot == 5
+                && self
+                    .now
+                    .about
+                    .iter()
+                    .any(|m| dist((m.x, m.y), me) < Self::rocket_clear() + mon(m.name).radius);
+            if !empty && !crowded && !(slot == 5 && !self.rocket_safe(obs, t)) {
                 return slot;
             }
         }
