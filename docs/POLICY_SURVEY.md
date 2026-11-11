@@ -66,6 +66,30 @@ about, using them on anything else costs ten times (`guns.boss_save`).
 
 Stream: strong ("not wasting a rocket on you, imp"). Yes.
 
+### 3b. Guns: her choice of weapon, done properly (the user's, 2026-11-11)
+
+Now: `doom_fight weapon NAME` for 10 s (at most 60), used while it has a shot; otherwise the
+bot's pick that tic. Built with the gun settings, as one piece:
+
+- **The ordered launcher kept, not flipped away from.** When a rocket isn't safe she keeps the
+  launcher in hand and backs off to where it is (as the bot does with its own launcher),
+  switching away only with something right on her (in claw reach) or while she's taking hits;
+  and once switched away, the other gun kept a couple of seconds before going back. Now a
+  monster at the edge of the blast could flip her between guns, a second lost each time (seen
+  in the code, not yet in a game). Judged by tracing fights with the launcher ordered: the
+  score never orders guns.
+- **The plain shotgun hers to choose**, apart from the super shotgun: it's the better gun at
+  range (the SSG's pellets spread up and down: an imp on a ledge). Guns are chosen as a player
+  presses a number; in Doom II, 3 brings up the super shotgun, and 3 again with it up brings
+  the shotgun. So "shotgun" presses 3 till the shotgun's up, and the names stop being one slot.
+  (The bot's own choice never takes the plain shotgun once it has the SSG: whether it should,
+  at range, is a change to the bot to be scored on its own.)
+- **The fist hers only with a berserk pack taken this level**: without, it's no weapon worth
+  choosing (refused: "Not without a berserk pack this level"). The chainsaw is its own name.
+  (The game's own toggle on 1: the chainsaw first, the fist with berserk and the saw up.)
+- **A standing choice**, if wanted: `favour GUN` (used whenever it has a shot and is safe) and
+  `save` (above) as settings, so it isn't only for a moment.
+
 ### 4. `risk` (the plan's `hurt_floors` and `one_way`, merged): careful | **normal** | bold  (both kinds)
 
 How readily she takes a floor that hurts or a drop she can't come back from.
