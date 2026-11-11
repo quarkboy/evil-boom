@@ -19,6 +19,7 @@ use crate::motor::{heading, norm, Observation};
 use crate::play::Agent;
 
 mod ask;
+mod events;
 mod kills;
 mod look;
 mod moments;
@@ -26,6 +27,7 @@ mod restart;
 mod situation;
 
 pub use ask::{Question, ANSWER_WAIT};
+pub use events::{Event, Weight};
 pub use look::{Hints, Listing, Pick};
 pub use moments::{skill_name, Level};
 pub use situation::Situation;
@@ -115,12 +117,20 @@ pub struct Report {
     /// an order's outcome: done (false: couldn't)
     pub ok: bool,
     pub text: String,
-    /// worth a reaction (a boss sighted, a key, nearly dead), not just to know (Neuro's
-    /// `silent: false`)
-    pub notable: bool,
-    /// to be told whatever else has been (her life in danger, an answer to her action): never
-    /// made silent to keep the moments a minute down
-    pub urgent: bool,
+    /// what it is (and so how much it matters: `Event::weight`)
+    pub event: Event,
+}
+
+impl Report {
+    /// Worth a reaction, not just to know (Neuro's `silent: false`).
+    pub fn notable(&self) -> bool {
+        self.event.weight() != Weight::Quiet
+    }
+
+    /// To be told whatever else has been: never made silent to keep the moments a minute down.
+    pub fn urgent(&self) -> bool {
+        self.event.weight() == Weight::Urgent
+    }
 }
 
 /// An order being carried out.
@@ -520,8 +530,7 @@ impl Director {
             text: format!(
                 "You died{by}. {lives_left} lives left: the level again from its start, with what you came in with."
             ),
-            notable: true,
-            urgent: true,
+            event: Event::DiedLivesLeft,
         });
         self.new_life();
     }
@@ -672,7 +681,7 @@ impl Director {
         if health <= 0.0 {
             if !self.told_dead {
                 self.told_dead = true;
-                self.alarm(obs, "You died.".into());
+                self.tell(obs, Event::Died, "You died.".into());
             }
             return;
         }
@@ -688,14 +697,18 @@ impl Director {
                 .is_none_or(|(t, at)| t != m || obs.tic - at >= LOCK_AGAIN);
             if again {
                 self.told_lock = Some((m.to_string(), obs.tic));
-                self.event(obs, true, format!("{}.", m.trim_end_matches('.')));
+                self.tell(obs, Event::Lock, format!("{}.", m.trim_end_matches('.')));
             }
         }
         // (health falling past a mark, each told once till she's above it again)
         let mark = [10, 25, 50].into_iter().find(|&m| health < f64::from(m));
         if mark != self.health_mark {
             if mark.is_some_and(|m| self.health_mark.is_none_or(|h| m < h)) {
-                self.alarm(obs, format!("Your health is down to {health:.0}."));
+                self.tell(
+                    obs,
+                    Event::HealthLow,
+                    format!("Your health is down to {health:.0}."),
+                );
             }
             self.health_mark = mark;
         }
@@ -706,7 +719,7 @@ impl Director {
                 .filter(|k| self.had_keys.is_some_and(|h| !h.has(*k)))
                 .collect();
             for k in got {
-                self.event(obs, true, format!("You got the {}.", key_name(k)));
+                self.tell(obs, Event::Key, format!("You got the {}.", key_name(k)));
             }
             self.had_keys = Some(keys);
         }
@@ -717,7 +730,11 @@ impl Director {
                 .filter(|w| self.had_weapons.as_ref().is_some_and(|h| !h.contains(w)))
                 .collect();
             for w in got {
-                self.event(obs, true, format!("You got the {}.", weapon_name(w, obs)));
+                self.tell(
+                    obs,
+                    Event::Weapon,
+                    format!("You got the {}.", weapon_name(w, obs)),
+                );
             }
             self.had_weapons = Some(weapons.clone());
         }
@@ -749,9 +766,9 @@ impl Director {
             }
         }
         if !exits.is_empty() {
-            self.event(
+            self.tell(
                 obs,
-                true,
+                Event::ExitFound,
                 format!(
                     "Exit{} found: {}.",
                     if exits.len() == 1 { "" } else { "s" },
@@ -760,9 +777,9 @@ impl Director {
             );
         }
         if !switches.is_empty() {
-            self.event(
+            self.tell(
                 obs,
-                true,
+                Event::SwitchFound,
                 format!(
                     "Switch{} found: {}.",
                     if switches.len() == 1 { "" } else { "es" },
@@ -771,9 +788,9 @@ impl Director {
             );
         }
         if !doors.is_empty() {
-            self.event(
+            self.tell(
                 obs,
-                false,
+                Event::DoorFound,
                 format!(
                     "Door{} found: {}.",
                     if doors.len() == 1 { "" } else { "s" },
@@ -817,7 +834,11 @@ impl Director {
             }
         }
         if !seen.is_empty() {
-            self.event(obs, true, format!("Spotted: {}.", seen.join("; ")));
+            self.tell(
+                obs,
+                Event::Spotted,
+                format!("Spotted: {}.", seen.join("; ")),
+            );
         }
         self.newly_reachable(agent, obs);
         // (monsters seen for the first time, together: how many of each, the nearest; worth a
@@ -852,11 +873,7 @@ impl Director {
                 dist(pos, nearest)
             );
             // (a heavy one first seen is her life in danger: never kept quiet by the budget)
-            if dangerous {
-                self.alarm(obs, text);
-            } else {
-                self.event(obs, false, text);
-            }
+            self.tell(obs, Event::Sighting { dangerous }, text);
         }
     }
 
@@ -913,7 +930,11 @@ impl Director {
             }
         }
         if !now.is_empty() {
-            self.event(obs, notable, format!("Now reachable: {}.", now.join("; ")));
+            self.tell(
+                obs,
+                Event::Reachable { notable },
+                format!("Now reachable: {}.", now.join("; ")),
+            );
         }
     }
 
@@ -932,9 +953,9 @@ impl Director {
         let ammo = POOLS.map(|(slot, _)| pool(slot));
         let secrets = self.tally.secrets.0;
         if self.told_secrets.is_some_and(|n| secrets > n) {
-            self.event(
+            self.tell(
                 obs,
-                true,
+                Event::Secret,
                 format!("You found a secret ({secrets}/{}).", self.tally.secrets.1),
             );
         }
@@ -995,8 +1016,9 @@ impl Director {
         if top - health >= HURT_FAST && self.told_hurt.is_none_or(|t| obs.tic - t >= HURT_AGAIN) {
             self.told_hurt = Some(obs.tic);
             let by = fighting(&against, obs).map_or(String::new(), |w| format!(" to {w}"));
-            self.alarm(
+            self.tell(
                 obs,
+                Event::HurtFast,
                 format!(
                     "You're losing health fast: {:.0} in {} s{by}. Health {health:.0}.",
                     top - health,
@@ -1031,10 +1053,7 @@ impl Director {
                 if killed < 2 && f.health_lost < FIGHT_WORTH_HEALTH {
                     return;
                 }
-                self.event(
-                    obs,
-                    notable,
-                    format!(
+                self.tell(obs, Event::FightOver { notable }, format!(
                         "Fight over ({} s, against {}): {killed} killed; cost {}. Health {health:.0}.",
                         (obs.tic - f.since) / 35,
                         if them.is_empty() {
@@ -1047,30 +1066,23 @@ impl Director {
                         } else {
                             cost.join(", ")
                         }
-                    ),
-                );
+                    ),);
             }
         }
     }
 
-    fn event(&mut self, obs: &Observation, notable: bool, text: String) {
-        self.reports.push(Report {
-            tic: obs.tic,
-            ok: true,
-            text,
-            notable,
-            urgent: false,
-        });
+    /// News for her: what it is, in words.
+    fn tell(&mut self, obs: &Observation, event: Event, text: String) {
+        self.told_at(obs.tic, event, text);
     }
 
-    /// Something she's to hear of whatever else she's been told: her life in danger.
-    fn alarm(&mut self, obs: &Observation, text: String) {
+    /// News for her at a tic (off a level: the screens').
+    pub(super) fn told_at(&mut self, tic: i64, event: Event, text: String) {
         self.reports.push(Report {
-            tic: obs.tic,
+            tic,
             ok: true,
             text,
-            notable: true,
-            urgent: true,
+            event,
         });
     }
 
@@ -1370,6 +1382,7 @@ impl Director {
                 self.report(
                     obs,
                     true,
+                    Event::Outcome,
                     match effect {
                         Some(w) => format!("Pressed {what}: {w}."),
                         None => format!("Pressed {what}: no change seen."),
@@ -1421,14 +1434,10 @@ impl Director {
             // (not again once she's found nothing more to do by herself, till an order's come)
             if obs.tic - since >= limit && obs.health.unwrap_or(0.0) > 0.0 && !self.auto_spent {
                 self.go_instinct(agent);
-                self.report(
-                    obs,
-                    true,
-                    format!(
+                self.report(obs, true, Event::OnInstinct, format!(
                         "No action for {} s: you carry on by instinct (not leaving the level) till your next.",
                         limit / 35
-                    ),
-                );
+                    ),);
                 return;
             }
         }
@@ -1489,6 +1498,7 @@ impl Director {
                     None => self.report(
                         obs,
                         ok,
+                        Event::Outcome,
                         if ok {
                             format!("Done: {what}.")
                         } else {
@@ -1505,6 +1515,7 @@ impl Director {
                     self.report(
                         obs,
                         true,
+                        Event::Outcome,
                         format!("Explored {what}{}.{found}", searched(secrets)),
                     );
                 }
@@ -1521,6 +1532,7 @@ impl Director {
                     self.report(
                         obs,
                         true,
+                        Event::Outcome,
                         format!("Explored {}{}.{found}", compass(b), searched(secrets)),
                     );
                 }
@@ -1563,6 +1575,7 @@ impl Director {
                 self.report(
                     obs,
                     true,
+                    Event::Begun,
                     "Exploring paused while you're fighting; it goes on after.".into(),
                 );
             }
@@ -1746,7 +1759,11 @@ impl Director {
             c.ordered_hold_fire = self.tactics.hold_fire.is_some();
         }
         if !over.is_empty() {
-            self.event(obs, false, format!("Over: {}.", over.join("; ")));
+            self.tell(
+                obs,
+                Event::TacticsOver,
+                format!("Over: {}.", over.join("; ")),
+            );
         }
     }
 
@@ -1771,6 +1788,7 @@ impl Director {
             self.report(
                 obs,
                 false,
+                Event::Outcome,
                 match exits.first() {
                     Some(e) => format!(
                         "Nothing more to do here that you know of but search walls or leave ({}).",
@@ -1810,7 +1828,7 @@ impl Director {
                 .told_auto_tic
                 .is_none_or(|t| obs.tic - t >= AUTO_SAY_EVERY)
         {
-            self.event(obs, false, format!("By instinct: {phrase}."));
+            self.tell(obs, Event::Instinct, format!("By instinct: {phrase}."));
             self.told_auto = phrase;
             self.told_auto_tic = Some(obs.tic);
         }
@@ -1836,6 +1854,7 @@ impl Director {
         self.report(
             obs,
             true,
+            Event::OnInstinct,
             "On by instinct (not leaving the level) till your next action.".into(),
         );
     }
@@ -1863,23 +1882,35 @@ impl Director {
         match self.doing.take() {
             Some(Doing::Area(id, what, secrets)) if errand => {
                 self.resume = Some(Order::ExploreArea(id, secrets));
-                self.report(obs, true, format!("Exploring {what} goes on after this."));
+                self.report(
+                    obs,
+                    true,
+                    Event::Begun,
+                    format!("Exploring {what} goes on after this."),
+                );
             }
             Some(Doing::Way(b, secrets)) if errand => {
                 self.resume = Some(Order::ExploreWay(b, secrets));
                 self.report(
                     obs,
                     true,
+                    Event::Begun,
                     format!("Exploring {} goes on after this.", compass(b)),
                 );
             }
             Some(Doing::Once(_, what)) if !matches!(o, Order::Stop) => {
-                self.report(obs, false, format!("Dropped for the new action: {what}."));
+                self.report(
+                    obs,
+                    false,
+                    Event::Outcome,
+                    format!("Dropped for the new action: {what}."),
+                );
             }
             Some(Doing::Area(_, what, _)) if !matches!(o, Order::Stop) => {
                 self.report(
                     obs,
                     false,
+                    Event::Outcome,
                     format!("Dropped for the new action: exploring {what}."),
                 );
             }
@@ -1887,6 +1918,7 @@ impl Director {
                 self.report(
                     obs,
                     false,
+                    Event::Outcome,
                     format!("Dropped for the new action: exploring {}.", compass(b)),
                 );
             }
@@ -1902,14 +1934,14 @@ impl Director {
         self.taken.clear();
         self.told_paused = false;
         match o {
-            Order::Stop => self.report(obs, true, "Stopped.".into()),
+            Order::Stop => self.report(obs, true, Event::Outcome, "Stopped.".into()),
             Order::Exit => match self
                 .objectives_of(agent, obs, &[Kind::Exit])
                 .into_iter()
                 .next()
             {
                 Some(e) => self.go(agent, obs, &e.id, false),
-                None => self.report(obs, false, "No exit known yet.".into()),
+                None => self.report(obs, false, Event::Outcome, "No exit known yet.".into()),
             },
             Order::Go(r, risky) => {
                 let id = self.resolve(&r);
@@ -1918,7 +1950,7 @@ impl Director {
             Order::ExploreArea(r, secrets) => {
                 let id = self.resolve(&r);
                 let Some(a) = self.places(agent).by_id(&id).cloned() else {
-                    self.report(obs, false, format!("No area \"{r}\"."));
+                    self.report(obs, false, Event::Outcome, format!("No area \"{r}\"."));
                     return;
                 };
                 let what = self.tag(&a.id, obs);
@@ -1927,6 +1959,7 @@ impl Director {
                     self.report(
                         obs,
                         true,
+                        Event::Begun,
                         format!("Exploring {what}{}.", with_secrets(secrets)),
                     );
                     self.doing = Some(Doing::Area(id, what, secrets));
@@ -1936,6 +1969,7 @@ impl Director {
                     self.report(
                         obs,
                         true,
+                        Event::Outcome,
                         format!(
                             "Nothing to {} in {what}.{found}{instead}",
                             if secrets > 0 {
@@ -1956,6 +1990,7 @@ impl Director {
                     self.report(
                         obs,
                         true,
+                        Event::Begun,
                         format!("Exploring {}{}.", compass(b), with_secrets(secrets)),
                     );
                     self.doing = Some(Doing::Way(b, secrets));
@@ -1965,6 +2000,7 @@ impl Director {
                     self.report(
                         obs,
                         false,
+                        Event::Outcome,
                         format!(
                             "Nothing to {} {}.{found}{instead}",
                             if secrets > 0 {
@@ -2028,6 +2064,7 @@ impl Director {
             self.report(
                 obs,
                 false,
+                Event::Trapped,
                 format!(
                     "You're on a hurting floor, no known way off (health {:.0}).",
                     obs.health.unwrap_or(0.0)
@@ -2136,7 +2173,7 @@ impl Director {
         let mut obj = match self.objective_for(agent, obs, id) {
             Ok(o) => o,
             Err(why) => {
-                self.report(obs, false, why);
+                self.report(obs, false, Event::Outcome, why);
                 return;
             }
         };
@@ -2144,11 +2181,16 @@ impl Director {
         let what = self.tag(id, obs);
         let at = obj.goal;
         if agent.x_mut().take(obs, obj) {
-            self.report(obs, true, format!("Going to {what}."));
+            self.report(obs, true, Event::Begun, format!("Going to {what}."));
             self.doing = Some(Doing::Once(id.to_string(), what));
         } else {
             let toward = self.toward(agent, obs, at);
-            self.report(obs, false, format!("No way to {what}.{toward}"));
+            self.report(
+                obs,
+                false,
+                Event::Outcome,
+                format!("No way to {what}.{toward}"),
+            );
         }
     }
 
@@ -2315,15 +2357,13 @@ impl Director {
         false
     }
 
-    /// An order's news: started, done, couldn't (worth a reaction when it's done or couldn't be).
-    fn report(&mut self, obs: &Observation, ok: bool, text: String) {
-        let notable = !text.starts_with("Going") && !text.starts_with("Exploring");
+    /// An action's news: begun, done, couldn't (`ok`), as `event` has it.
+    fn report(&mut self, obs: &Observation, ok: bool, event: Event, text: String) {
         self.reports.push(Report {
             tic: obs.tic,
             ok,
             text,
-            notable,
-            urgent: notable,
+            event,
         });
     }
 }

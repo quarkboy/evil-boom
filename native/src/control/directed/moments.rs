@@ -1,6 +1,7 @@
 //! The rest of the moments: a level begun and done; a big jump ahead, and how it came down; a
 //! teleport into a crowd; out of ammo in a fight.
 
+use super::Event;
 use super::{compass, engaged, kit, some, Director};
 use crate::geom::{dist, Point};
 use crate::motor::follower::JumpNews;
@@ -64,8 +65,7 @@ impl Director {
             tic,
             ok: true,
             text: format!("On screen: \"{text}\""),
-            notable: true,
-            urgent: true,
+            event: super::Event::OnScreen,
         });
     }
 
@@ -75,8 +75,7 @@ impl Director {
             tic,
             ok: true,
             text: offer.to_string(),
-            notable: true,
-            urgent: true,
+            event: super::Event::GameOffer,
         });
     }
 
@@ -87,8 +86,7 @@ impl Director {
             tic,
             ok: true,
             text: "Game over: no lives left.".into(),
-            notable: true,
-            urgent: true,
+            event: super::Event::GameOver,
         });
     }
 }
@@ -133,9 +131,9 @@ impl Director {
             if title.is_some() || obs.tic - began >= TITLE_WAIT {
                 m.told_start = true;
                 let name = title.map_or(String::new(), |t| format!(": {}", title_of(&t)));
-                self.event(
+                self.tell(
                     obs,
-                    true,
+                    Event::LevelStart,
                     format!(
                         "{}{name}. Skill: {}. You come in with: {}.",
                         self.level.map,
@@ -180,14 +178,14 @@ impl Director {
                                 super::ask::About::Jump(key),
                             );
                         if !asked {
-                            self.event(obs, true, line);
+                            self.tell(obs, Event::JumpAhead, line);
                         }
                     }
                 }
                 JumpNews::Made(j) => {
                     self.jumped(&j.key());
                     if m.jumps_told.contains_key(&j.key()) {
-                        self.event(obs, true, "Made the jump.".into());
+                        self.tell(obs, Event::Landed, "Made the jump.".into());
                     }
                 }
                 JumpNews::Missed(j, sector) => {
@@ -200,15 +198,15 @@ impl Director {
                     // between: made, for anyone watching)
                     if places.area_of(want).id == area.id {
                         if m.jumps_told.contains_key(&j.key()) {
-                            self.event(obs, true, "Made the jump.".into());
+                            self.tell(obs, Event::Landed, "Made the jump.".into());
                         }
                         continue;
                     }
                     let hurts = if area.hurts { ", the floor hurts" } else { "" };
                     let what = self.tag(&area.id, obs);
-                    self.event(
+                    self.tell(
                         obs,
-                        true,
+                        Event::MissedJump,
                         format!("Missed the jump: came down in {what}{hurts}."),
                     );
                 }
@@ -229,7 +227,11 @@ impl Director {
                     *counts.entry(t.name).or_insert(0) += 1;
                 }
                 let them: Vec<String> = counts.iter().map(|(n, c)| some(*c, n)).collect();
-                self.alarm(obs, format!("Teleported right into {}!", them.join(", ")));
+                self.tell(
+                    obs,
+                    Event::Teleported,
+                    format!("Teleported right into {}!", them.join(", ")),
+                );
             } else if obs.tic - t > CROWD_WITHIN {
                 m.teleported = None;
             }
@@ -249,7 +251,11 @@ impl Director {
             } else {
                 "your fists"
             };
-            self.alarm(obs, format!("Out of ammo mid-fight: down to {what}."));
+            self.tell(
+                obs,
+                Event::OutOfAmmo,
+                format!("Out of ammo mid-fight: down to {what}."),
+            );
         }
         self.moments = m;
     }
@@ -325,8 +331,7 @@ impl Director {
             tic,
             ok: true,
             text,
-            notable: true,
-            urgent: true,
+            event: super::Event::LevelDone,
         });
     }
 }

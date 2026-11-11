@@ -228,8 +228,10 @@ impl Session {
             }
             // (a moment over the budget told quietly; one that's urgent, always, and not
             // counted against it: answers to her actions don't crowd out what she should see)
-            let urgent = news.iter().any(|r| r.notable && r.urgent);
-            let moment = news.iter().any(|r| r.notable && !r.urgent);
+            let urgent = news.iter().any(crate::control::directed::Report::urgent);
+            let moment = news
+                .iter()
+                .any(|r| r.event.weight() == crate::control::directed::Weight::Moment);
             let within = moment && self.loud.len() < MOMENTS_A_MINUTE;
             if within {
                 self.loud.push_back(tic);

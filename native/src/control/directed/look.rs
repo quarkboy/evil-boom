@@ -10,6 +10,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::Event;
 use super::{
     called, compass, entries_of, explores, id_of, lock_name, some, weapon_name, Director, Entry,
     Places, Topic, SMALL,
@@ -262,7 +263,7 @@ impl Director {
         self.nudged += 1;
         let loud = self.nudged == 2;
         if let Some(p) = self.pick_line(agent, obs) {
-            self.event(obs, loud, format!("Suggestion: {p}."));
+            self.tell(obs, Event::Suggestion { loud }, format!("Suggestion: {p}."));
         }
     }
 

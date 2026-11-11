@@ -9,6 +9,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use super::Event;
 use super::{a, called, compass, some, the, Director};
 use crate::dsda::HitCause;
 use crate::geom::{dist, Point};
@@ -119,9 +120,9 @@ impl Director {
                 *counts.entry(n).or_insert(0) += 1;
             }
             let them: Vec<String> = counts.iter().map(|(n, c)| some(*c, n)).collect();
-            self.event(
+            self.tell(
                 obs,
-                true,
+                Event::Raised,
                 format!("Raised from the dead: {}.", them.join(", ")),
             );
         }
@@ -133,7 +134,7 @@ impl Director {
             let gibbed = self.gibbed.contains(&id) && tic - sighted <= SEEN;
             if let Some(m) = monster(name).filter(|m| m.boss || m.health >= HEAVY) {
                 let who = if m.boss { the(name) } else { a(name) };
-                self.event(obs, true, format!("{who} is dead."));
+                self.tell(obs, Event::BigKill, format!("{who} is dead."));
             }
             join(&mut k);
             if let Some(b) = k.burst.as_mut() {
@@ -215,16 +216,22 @@ impl Director {
                 };
                 // (one barrel that took nothing with it is her clearing barrels: routine)
                 if b.barrels.len() >= 2 || !by_blast.is_empty() || b.hurt > 0 {
-                    self.event(obs, true, format!("{what}{killed}{hurt}."));
+                    self.tell(obs, Event::Barrels, format!("{what}{killed}{hurt}."));
                 }
             }
             match rest.len() {
                 0 => {}
-                1 if rest[0].2 => {
-                    self.event(obs, false, format!("Gibbed: 1 {}.", called(rest[0].0)))
-                }
+                1 if rest[0].2 => self.tell(
+                    obs,
+                    Event::Gibbed,
+                    format!("Gibbed: 1 {}.", called(rest[0].0)),
+                ),
                 1 => {}
-                n => self.event(obs, true, format!("{n} killed at once: {}.", tally(&rest))),
+                n => self.tell(
+                    obs,
+                    Event::MultiKill,
+                    format!("{n} killed at once: {}.", tally(&rest)),
+                ),
             }
         }
         if let Some((_, health)) = k.crushed.take_if(|o| tic - o.0 >= OWN_OVER) {
@@ -234,12 +241,14 @@ impl Director {
             } else {
                 format!("A crusher caught you: -{health} health.")
             };
-            self.alarm(obs, text);
+            self.tell(obs, Event::Crushed, text);
         }
         if let Some((_, health)) = k.own.take_if(|o| tic - o.0 >= OWN_OVER) {
-            self.event(
+            self.tell(
                 obs,
-                health >= OWN_NOTABLE,
+                Event::OwnBlast {
+                    big: health >= OWN_NOTABLE,
+                },
                 format!("Your own blast caught you: -{health} health."),
             );
         }
@@ -248,9 +257,9 @@ impl Director {
         let (dead, of) = self.tally.kills;
         if of > 0 && dead >= of && !k.told_all_dead {
             k.told_all_dead = true;
-            self.event(
+            self.tell(
                 obs,
-                true,
+                Event::AllDead,
                 format!("Every monster on the level is dead ({dead}/{of})."),
             );
         }

@@ -520,7 +520,7 @@ impl Feed {
             lines.push(format!(
                 "<< [{:.1}s] {}{}{}",
                 r.tic as f64 / 35.0,
-                if r.notable { "(!) " } else { "" },
+                if r.notable() { "(!) " } else { "" },
                 if r.ok { "" } else { "FAILED: " },
                 r.text
             ));

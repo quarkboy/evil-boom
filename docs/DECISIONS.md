@@ -2750,3 +2750,15 @@ minute, under the 3); the class D one answered in time and applied; none of the 
 each time, as it's meant to). Checked by script: answered at once switches (go bold, fall back,
 don't jump), after 3 s refused; a go order then the answer still switches. Parity: 24 runs the
 same.
+
+## What she's told, typed (the user, 2026-11-11)
+
+Every piece of news carries what it is (`control/directed/events.rs`, `Event`: her actions
+begun and done, questions, her life, what she finds, monsters, her moves, the bot, the game),
+and how much each kind matters is one table (`Event::weight`: quiet, a moment, urgent), not a
+flag chosen at each of the 70 places that tell her something. `Report` carries its event;
+`notable` and `urgent` come from it. The words stay where they're made (they need what only
+that place knows). Each kind's weight is what its telling had before: a directed MAP06 game's
+whole report file the same, line for line (111 lines), on the build before and after. What it
+opens: a budget that drops the least of the moments first, a stream panel or console that
+wants only some kinds.

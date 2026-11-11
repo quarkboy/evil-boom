@@ -3,6 +3,7 @@
 //! tried, a line mapped or set off, a place walked). What she came in with is what she has
 //! again, what she's learned of the level she keeps, and no life is spent.
 
+use super::Event;
 use super::{Director, Report};
 use crate::motor::Observation;
 use crate::play::Agent;
@@ -25,14 +26,10 @@ impl Director {
         }
         if self.restart_allowed && !self.told_restart && self.stalled_for(obs.tic) >= STALLED {
             self.told_restart = true;
-            self.event(
-                obs,
-                true,
-                format!(
+            self.tell(obs, Event::RestartOpen, format!(
                     "Nothing new for {} s: doom_game restart is yours (the level from its start, with what you came in with; what you know of it kept).",
                     STALLED / 35
-                ),
-            );
+                ),);
         }
     }
 
@@ -65,8 +62,7 @@ impl Director {
             tic,
             ok: true,
             text: "The level again from its start, with what you came in with.".into(),
-            notable: true,
-            urgent: true,
+            event: super::Event::Restarted,
         });
         self.new_life();
         self.progress = None;

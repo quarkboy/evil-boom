@@ -5,6 +5,7 @@
 //! overtaken by any action of hers, or closed by a death, a restart or a new level. An answer
 //! to a question that's closed is told it's too late and what came of it, never applied.
 
+use super::Event;
 use super::{Director, Doing, Order, Report};
 use crate::motor::Observation;
 use crate::play::Agent;
@@ -242,8 +243,7 @@ impl Director {
                 tic: obs.tic,
                 ok: true,
                 text: line.clone(),
-                notable: true,
-                urgent: true,
+                event: super::Event::Asked,
             });
         }
         Some(line)
@@ -317,8 +317,7 @@ impl Director {
                 tic: obs.tic,
                 ok: true,
                 text: format!("No answer to q{}: {}.", q.id, c.label),
-                notable: true,
-                urgent: true,
+                event: super::Event::Defaulted,
             });
             self.carry_out(agent, obs, c.then);
         }
@@ -451,11 +450,11 @@ impl Director {
                 let said = match self.fight(agent, obs, t, None, None) {
                     Ok(said) | Err(said) => said,
                 };
-                self.event(obs, true, said);
+                self.tell(obs, Event::Tactic, said);
             }
             Then::DontJump(j) => {
                 agent.x_mut().decline(obs, &j);
-                self.event(obs, true, "Not jumping.".into());
+                self.tell(obs, Event::NotJumping, "Not jumping.".into());
             }
             Then::Stay => {
                 if matches!(self.doing, Some(Doing::Auto)) {
