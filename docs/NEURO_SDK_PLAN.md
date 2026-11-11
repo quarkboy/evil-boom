@@ -408,8 +408,8 @@ To be filled in as I play.
    class T, 15 s for D) are guesses until measured with her.
 3. **Sixteen actions**: is that too much standing context for her? The cut, if so: fold
    `doom_look` into `doom_status`, and `doom_goal` into `doom_explore`.
+4. **`doom_style` free text**: wanted for the stream's sake ("play like a coward" is a bit),
+   or are the fixed settings enough to begin with?
 5. **Meta control**: which of restart, level, skill and cheats is hers by default, and which
    only when you switch it on? My proposal: restart and next hers always; level, skill and
    cheats behind the console's switches, off to begin with.
-4. **`doom_style` free text**: wanted for the stream's sake ("play like a coward" is a bit),
-   or are the fixed settings enough to begin with?
