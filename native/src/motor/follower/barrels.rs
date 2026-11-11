@@ -28,6 +28,9 @@ const BARREL_STALL: i64 = 2 * 35;
 /// (mortal) shot, no barrel gone this long: the chain's over
 const BARREL_SETTLE: i64 = 35;
 
+/// a shot leaves from this far up her: half her height and 8 (P_AimLineAttack's shootz)
+const GUN_HEIGHT: f64 = 36.0;
+
 /// a tap's shot has landed, or hasn't, this many tics after the trigger (it leaves the gun 3 or
 /// 4 tics after, and a barrel hit is seen lit the tic after that)
 const TAP_SEEN: i64 = 8;
@@ -422,37 +425,15 @@ impl RouteFollower {
                 });
                 // (and from where a shot would get to it, heights and all: a ledge, a step, a low
                 // ceiling between take the shot as surely as a wall, into the floor or a lip)
-                let heights: Vec<(f64, f64)> =
-                    obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
-                let floor_at = |p: Point| {
-                    nav.poly_at(p)
-                        .map(|i| obs.heights[nav.sector_of_poly(i)].floor)
-                };
-                let shot = |q: Point, b: Point| match (floor_at(q), floor_at(b)) {
-                    (Some(fq), Some(fb)) => nav.sight().clear(
-                        crate::los::Body {
-                            x: q.0,
-                            y: q.1,
-                            z: fq,
-                            height: crate::navigator::PLAYER_HEIGHT,
-                        },
-                        crate::los::Body {
-                            x: b.0,
-                            y: b.1,
-                            z: fb,
-                            height: BARREL_HEIGHT,
-                        },
-                        &heights,
-                    ),
-                    _ => false,
-                };
                 let mut seen: Vec<(Point, Point)> = cands
                     .into_iter()
                     .filter_map(|q| {
                         group
                             .iter()
                             .copied()
-                            .filter(|&b| !self.use_walled(q, b) && shot(q, b))
+                            .filter(|&b| {
+                                !self.use_walled(q, b) && self.shot_reaches(obs, q, b, false)
+                            })
                             .min_by(|a, b| dist(*a, q).total_cmp(&dist(*b, q)))
                             .map(|b| (q, b))
                     })
@@ -584,11 +565,39 @@ impl RouteFollower {
         let mut c = self.motion.hold(obs, (0.0, 0.0), Some(look));
         // (single taps, the trigger let go between: the first shot of a burst goes straight,
         // only held ones spread)
-        let gun = barrel_gun(obs, dist(pos, at));
+        // (the shotgun only with all of the barrel in the gun's view: its pellets spread up and
+        // down too, and at a barrel mostly behind a lip nearly all of a blast goes into the lip)
+        let gun = match barrel_gun(obs, dist(pos, at)) {
+            3 if !self.shot_reaches(obs, pos, at, true) => super::tap_gun(obs),
+            gun => gun,
+        };
         if obs.weapon != Some(gun) {
             c.weapon = gun;
         } else if norm(look - obs.angle).abs() < 2.0 && obs.tic - self.shot.last_shot >= BARREL_TAP
         {
+            if let Some(post) = self
+                .shot
+                .post
+                .filter(|_| self.mortal && !self.shot_reaches(obs, pos, at, false))
+            {
+                // (no shot from where she stands: a step short of the spot the shot was found
+                // from, right onto it; on it, the heights have changed since it was chosen (the
+                // floor she's on, or one between), and it's somewhere else to shoot from. Not
+                // the trigger pulled on a lip till the step's time is up)
+                if dist(pos, post) > 1.5 {
+                    return self
+                        .motion
+                        .hold(obs, (post.0 - pos.0, post.1 - pos.1), Some(look));
+                }
+                self.log.add(
+                    obs.tic,
+                    "no shot at the barrel from here now: somewhere else to shoot it from",
+                );
+                self.shot.post = None;
+                self.shot.way.clear();
+                self.shot.best = None;
+                return c;
+            }
             c.attack = true;
             self.shot.last_shot = obs.tic;
             self.shot.tapped = Some((obs.barrels.as_ref().map_or(0, Vec::len), obs.tic));
@@ -601,6 +610,47 @@ impl RouteFollower {
             }
         }
         c
+    }
+
+    /// Would a shot from `q` get to the barrel at `b`, the heights as they are: a ledge, a step,
+    /// a low ceiling between take the shot as surely as a wall. By the gun's own line: a shot
+    /// leaves from `GUN_HEIGHT` up her (P_AimLineAttack's shootz), lower than her eyes, and what
+    /// she can just see over a lip she can't always hit. `whole`: all of the barrel in the gun's
+    /// view, top to bottom (a gun that spreads wants that: aimed at a sliver, most of it goes
+    /// into the lip); else any of it (a bullet goes where it's aimed).
+    fn shot_reaches(&self, obs: &Observation, q: Point, b: Point, whole: bool) -> bool {
+        let nav = &self.view.nav;
+        let heights: Vec<(f64, f64)> = obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
+        let floor_at = |p: Point| {
+            nav.poly_at(p)
+                .map(|i| obs.heights[nav.sector_of_poly(i)].floor)
+        };
+        let (Some(fq), Some(fb)) = (floor_at(q), floor_at(b)) else {
+            return false;
+        };
+        let gun = crate::los::Body {
+            x: q.0,
+            y: q.1,
+            z: fq + GUN_HEIGHT,
+            height: 0.0,
+        };
+        let part = |z: f64, height: f64| {
+            nav.sight().clear(
+                gun,
+                crate::los::Body {
+                    x: b.0,
+                    y: b.1,
+                    z,
+                    height,
+                },
+                &heights,
+            )
+        };
+        if whole {
+            part(fb, 2.0) && part(fb + BARREL_HEIGHT - 2.0, 2.0)
+        } else {
+            part(fb, BARREL_HEIGHT)
+        }
     }
 
     /// The barrels shooting the one at `at` from `pos` sets off, in turn: a shot hits the first
