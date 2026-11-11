@@ -6,8 +6,10 @@ use crate::knowledge::model::Heard;
 use crate::motor::Observation;
 use crate::movers::cycles_back;
 use crate::nav::can_cross;
-use crate::navigator::{add_height, TeleEdge, TriggerLine, EXIT_FLOOR, MAX_STEP, PLAYER_HEIGHT};
-use crate::specials::{classify_line, Category, Key, Trigger};
+use crate::navigator::{
+    add_height, States, TeleEdge, TriggerLine, View, EXIT_FLOOR, MAX_STEP, PLAYER_HEIGHT,
+};
+use crate::specials::{classify_line, Category, Key, Keys, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -253,164 +255,11 @@ impl Explorer {
                     .collect::<Vec<_>>()
             })
             .collect();
-        if self.exits_open {
-            for li in k.exits() {
-                if let Some(t) = by_line
-                    .get(&li)
-                    .filter(|t| !t.activators.is_disjoint(&reach) && t.info.lock.satisfied(keys))
-                {
-                    let mut o = Objective::new(
-                        Kind::Exit,
-                        nav.activation_point(t, pos, &reach),
-                        format!("exit (line {li})"),
-                    );
-                    o.trigger = Some((*t).clone());
-                    out.push(o);
-                }
-            }
-            // A floor that has ended the level under her before: stood on again.
-            for &sec in &k.exit_floors {
-                if let Some(t) = nav.triggers.iter().find(|t| {
-                    t.line == EXIT_FLOOR - sec as i64 && !t.activators.is_disjoint(&reach)
-                }) {
-                    let mut o = Objective::new(
-                        Kind::Exit,
-                        nav.activation_point(t, pos, &reach),
-                        format!("exit (the floor of sector {sec})"),
-                    );
-                    o.trigger = Some(t.clone());
-                    out.push(o);
-                }
-            }
-        }
-        for th in k.known_things() {
-            let Some(kk) = Key::from_thing(th.kind).filter(|kk| !keys.has(*kk)) else {
-                continue;
-            };
-            let spots: Vec<Point> = view
-                .pickup_spots(th.x, th.y, &states)
-                .into_iter()
-                .filter(|(p, _)| reach.contains(p))
-                .map(|(_, pt)| pt)
-                .collect();
-            if let Some(pt) =
-                spots
-                    .into_iter()
-                    .reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a })
-            {
-                let mut o = Objective::new(Kind::Key, pt, format!("pick up {}", kk.name()));
-                o.key = Some(kk);
-                out.push(o);
-            }
-        }
-        // Out of rounds to tap a wall or a gun line with: the ammo she's seen, as a player tops up.
-        let rounds = |slot: i32| crate::motor::follower::tap_rounds(obs, slot);
-        if obs.ammo.is_some() && rounds(2).max(rounds(4)) < LOW_BULLETS && rounds(3) < LOW_SHELLS {
-            let known = k.known_polys();
-            for t in obs
-                .things
-                .iter()
-                .flatten()
-                .filter(|t| TAP_AMMO.contains(&t.name))
-            {
-                if !nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
-                    continue;
-                }
-                if let Some(spot) = self.touch_spot((t.x, t.y), &reach) {
-                    let mut o = Objective::new(
-                        Kind::Item,
-                        spot,
-                        format!("pick up {} (for the gun)", t.name),
-                    );
-                    o.thing = Some(t.id);
-                    out.push(o);
-                }
-            }
-        }
-        for li in k.interactables() {
-            let Some(t) = by_line
-                .get(&li)
-                .filter(|t| !t.activators.is_disjoint(&reach) && t.info.lock.satisfied(keys))
-            else {
-                continue;
-            };
-            let kind = if t.info.category.is_door() {
-                Kind::Door
-            } else {
-                Kind::Switch
-            };
-            let mut o = Objective::new(
-                kind,
-                nav.activation_point(t, pos, &reach),
-                format!(
-                    "try {} (line {li})",
-                    if kind == Kind::Door { "door" } else { "switch" }
-                ),
-            );
-            o.trigger = Some((*t).clone());
-            out.push(o);
-        }
-        // Repeatable switches pressed a while ago whose effect she never saw are worth another go
-        // once there's nothing else, each by what it works; and those whose effect she has put down
-        // to them on timing alone, unsure, are pressed again and watched, once a life.
-        let learned_lines: BTreeSet<i64> = k
-            .learned
-            .iter()
-            .filter(|(_, s)| !s.is_empty())
-            .map(|(&i, _)| nav.triggers[i].line)
-            .collect();
-        let mut last_by_key: BTreeMap<crate::knowledge::model::Mechanism, i64> = BTreeMap::new();
-        for f in &k.fired {
-            last_by_key.insert(k.tried_key(f.line), f.tic);
-        }
-        let mut last_press: Vec<(usize, i64)> = Vec::new();
-        for f in &k.fired {
-            let tic = last_by_key[&k.tried_key(f.line)];
-            match last_press.iter_mut().find(|(l, _)| *l == f.line) {
-                Some(e) => e.1 = tic,
-                None => last_press.push((f.line, tic)),
-            }
-        }
-        let doubted: BTreeSet<crate::knowledge::model::Mechanism> =
-            k.doubts.keys().map(|(m, _)| *m).collect();
-        let mut again = Vec::new();
-        for &(li, tic) in &last_press {
-            let Some(t) = by_line.get(&li) else { continue };
-            if !k.mapped.contains(&li) || !matches!(t.info.trigger, Trigger::SR | Trigger::GR) {
-                continue;
-            }
-            let unsure = doubted.contains(&k.tried_key(li))
-                && !k.rechecked.contains(&(k.tried_key(li), k.lives));
-            if learned_lines.contains(&(li as i64)) && !unsure {
-                continue;
-            }
-            if (obs.tic - tic < REPRESS_AFTER && !unsure)
-                || t.activators.is_disjoint(&reach)
-                || !t.info.lock.satisfied(keys)
-            {
-                continue;
-            }
-            // Not again knowing no more than when she last set out to press it: what was missed then
-            // would be missed again.
-            if !unsure
-                && self
-                    .pressed_knowing
-                    .get(&li)
-                    .is_some_and(|known| *known == k.known_summary())
-            {
-                continue;
-            }
-            let mut o = Objective::new(
-                Kind::Switch,
-                nav.activation_point(t, pos, &reach),
-                format!(
-                    "try switch again (line {li}{})",
-                    if unsure { ", unsure what it does" } else { "" }
-                ),
-            );
-            o.trigger = Some((*t).clone());
-            again.push(o);
-        }
+        out.extend(self.exits(&by_line, &reach, keys, pos));
+        out.extend(self.keys_seen(&view, &states, &reach, keys, pos));
+        out.extend(self.ammo_for_tapping(obs, &reach));
+        out.extend(self.untried(&by_line, &reach, keys, pos));
+        let again = self.pressed_again(obs, &by_line, &reach, keys, pos);
         if self.suspecting != Suspecting::No {
             let panic = self.suspecting == Suspecting::Panic;
             out.extend(self.walls(obs, &reach, panic));
@@ -758,6 +607,233 @@ impl Explorer {
         }
         let lr = hooks.last_resort(self, obs, &reach, pos);
         usable(self, hooks, lr)
+    }
+
+    /// The exits she can set off from where she can get to, with the keys she has: exit lines,
+    /// and floors that have ended the level under her before. None while the exit is held back
+    /// (`exits_open`).
+    fn exits(
+        &self,
+        by_line: &BTreeMap<usize, &TriggerLine>,
+        reach: &BTreeSet<usize>,
+        keys: Keys,
+        pos: Point,
+    ) -> Vec<Objective> {
+        let nav = &self.nav;
+        let k = &self.knowledge;
+        let mut out: Vec<Objective> = Vec::new();
+        if self.exits_open {
+            for li in k.exits() {
+                if let Some(t) = by_line
+                    .get(&li)
+                    .filter(|t| !t.activators.is_disjoint(reach) && t.info.lock.satisfied(keys))
+                {
+                    let mut o = Objective::new(
+                        Kind::Exit,
+                        nav.activation_point(t, pos, reach),
+                        format!("exit (line {li})"),
+                    );
+                    o.trigger = Some((*t).clone());
+                    out.push(o);
+                }
+            }
+            // A floor that has ended the level under her before: stood on again.
+            for &sec in &k.exit_floors {
+                if let Some(t) = nav
+                    .triggers
+                    .iter()
+                    .find(|t| t.line == EXIT_FLOOR - sec as i64 && !t.activators.is_disjoint(reach))
+                {
+                    let mut o = Objective::new(
+                        Kind::Exit,
+                        nav.activation_point(t, pos, reach),
+                        format!("exit (the floor of sector {sec})"),
+                    );
+                    o.trigger = Some(t.clone());
+                    out.push(o);
+                }
+            }
+        }
+        out
+    }
+
+    /// The keys she has seen and doesn't hold, each from the nearest spot she can get to that
+    /// touches it.
+    fn keys_seen(
+        &self,
+        view: &View,
+        states: &States,
+        reach: &BTreeSet<usize>,
+        keys: Keys,
+        pos: Point,
+    ) -> Vec<Objective> {
+        let k = &self.knowledge;
+        let mut out: Vec<Objective> = Vec::new();
+        for th in k.known_things() {
+            let Some(kk) = Key::from_thing(th.kind).filter(|kk| !keys.has(*kk)) else {
+                continue;
+            };
+            let spots: Vec<Point> = view
+                .pickup_spots(th.x, th.y, states)
+                .into_iter()
+                .filter(|(p, _)| reach.contains(p))
+                .map(|(_, pt)| pt)
+                .collect();
+            if let Some(pt) =
+                spots
+                    .into_iter()
+                    .reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a })
+            {
+                let mut o = Objective::new(Kind::Key, pt, format!("pick up {}", kk.name()));
+                o.key = Some(kk);
+                out.push(o);
+            }
+        }
+        out
+    }
+
+    /// Out of rounds to tap a wall or a gun line with: the ammo she has seen, as a player tops
+    /// up.
+    fn ammo_for_tapping(&self, obs: &Observation, reach: &BTreeSet<usize>) -> Vec<Objective> {
+        let nav = &self.nav;
+        let k = &self.knowledge;
+        let mut out: Vec<Objective> = Vec::new();
+        let rounds = |slot: i32| crate::motor::follower::tap_rounds(obs, slot);
+        if obs.ammo.is_some() && rounds(2).max(rounds(4)) < LOW_BULLETS && rounds(3) < LOW_SHELLS {
+            let known = k.known_polys();
+            for t in obs
+                .things
+                .iter()
+                .flatten()
+                .filter(|t| TAP_AMMO.contains(&t.name))
+            {
+                if !nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
+                    continue;
+                }
+                if let Some(spot) = self.touch_spot((t.x, t.y), reach) {
+                    let mut o = Objective::new(
+                        Kind::Item,
+                        spot,
+                        format!("pick up {} (for the gun)", t.name),
+                    );
+                    o.thing = Some(t.id);
+                    out.push(o);
+                }
+            }
+        }
+        out
+    }
+
+    /// The switches and doors she can tell are there and hasn't tried, that she can get to and
+    /// has the key for.
+    fn untried(
+        &self,
+        by_line: &BTreeMap<usize, &TriggerLine>,
+        reach: &BTreeSet<usize>,
+        keys: Keys,
+        pos: Point,
+    ) -> Vec<Objective> {
+        let nav = &self.nav;
+        let k = &self.knowledge;
+        let mut out: Vec<Objective> = Vec::new();
+        for li in k.interactables() {
+            let Some(t) = by_line
+                .get(&li)
+                .filter(|t| !t.activators.is_disjoint(reach) && t.info.lock.satisfied(keys))
+            else {
+                continue;
+            };
+            let kind = if t.info.category.is_door() {
+                Kind::Door
+            } else {
+                Kind::Switch
+            };
+            let mut o = Objective::new(
+                kind,
+                nav.activation_point(t, pos, reach),
+                format!(
+                    "try {} (line {li})",
+                    if kind == Kind::Door { "door" } else { "switch" }
+                ),
+            );
+            o.trigger = Some((*t).clone());
+            out.push(o);
+        }
+        out
+    }
+
+    /// Repeatable switches pressed a while ago whose effect she never saw are worth another go
+    /// once there's nothing else, each by what it works; and those whose effect she has put
+    /// down to them on timing alone, unsure, are pressed again and watched, once a life.
+    fn pressed_again(
+        &self,
+        obs: &Observation,
+        by_line: &BTreeMap<usize, &TriggerLine>,
+        reach: &BTreeSet<usize>,
+        keys: Keys,
+        pos: Point,
+    ) -> Vec<Objective> {
+        let nav = &self.nav;
+        let k = &self.knowledge;
+        let learned_lines: BTreeSet<i64> = k
+            .learned
+            .iter()
+            .filter(|(_, s)| !s.is_empty())
+            .map(|(&i, _)| nav.triggers[i].line)
+            .collect();
+        let mut last_by_key: BTreeMap<crate::knowledge::model::Mechanism, i64> = BTreeMap::new();
+        for f in &k.fired {
+            last_by_key.insert(k.tried_key(f.line), f.tic);
+        }
+        let mut last_press: Vec<(usize, i64)> = Vec::new();
+        for f in &k.fired {
+            let tic = last_by_key[&k.tried_key(f.line)];
+            match last_press.iter_mut().find(|(l, _)| *l == f.line) {
+                Some(e) => e.1 = tic,
+                None => last_press.push((f.line, tic)),
+            }
+        }
+        let doubted: BTreeSet<crate::knowledge::model::Mechanism> =
+            k.doubts.keys().map(|(m, _)| *m).collect();
+        let mut again = Vec::new();
+        for &(li, tic) in &last_press {
+            let Some(t) = by_line.get(&li) else { continue };
+            if !k.mapped.contains(&li) || !matches!(t.info.trigger, Trigger::SR | Trigger::GR) {
+                continue;
+            }
+            let unsure = doubted.contains(&k.tried_key(li))
+                && !k.rechecked.contains(&(k.tried_key(li), k.lives));
+            if learned_lines.contains(&(li as i64)) && !unsure {
+                continue;
+            }
+            if (obs.tic - tic < REPRESS_AFTER && !unsure)
+                || t.activators.is_disjoint(reach)
+                || !t.info.lock.satisfied(keys)
+            {
+                continue;
+            }
+            // Not again knowing no more than when she last set out to press it: what was missed then
+            // would be missed again.
+            if !unsure
+                && self
+                    .pressed_knowing
+                    .get(&li)
+                    .is_some_and(|known| *known == k.known_summary())
+            {
+                continue;
+            }
+            let mut o = Objective::new(
+                Kind::Switch,
+                nav.activation_point(t, pos, reach),
+                format!(
+                    "try switch again (line {li}{})",
+                    if unsure { ", unsure what it does" } else { "" }
+                ),
+            );
+            o.trigger = Some((*t).clone());
+            again.push(o);
+        }
+        again
     }
 
     /// Known polys she can get to next to polys she hasn't seen into: per sector those are in,
