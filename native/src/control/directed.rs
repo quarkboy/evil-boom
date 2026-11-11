@@ -18,11 +18,13 @@ use crate::knowledge::explorer::{Ident, Kind, Objective};
 use crate::motor::{heading, norm, Observation};
 use crate::play::Agent;
 
+mod ask;
 mod kills;
 mod look;
 mod moments;
 mod restart;
 
+pub use ask::{Question, ANSWER_WAIT};
 pub use look::{Hints, Listing, Pick};
 pub use moments::{skill_name, Level};
 
@@ -346,6 +348,10 @@ pub struct Director {
     /// (for the runner to do); progress lately, (what it was, since when), and her told it's hers
     pub restart_allowed: bool,
     pub restart_wanted: bool,
+    /// questions to her (`ask.rs`), and how long one waits for her answer before its default
+    /// (None: as long as it takes)
+    asking: ask::Asking,
+    pub answer_wait: Option<i64>,
     progress: Option<((usize, [usize; 6]), i64)>,
     told_restart: bool,
     /// the fight she's in, for its summary when it's over; and what she had last tic (what a
@@ -401,7 +407,10 @@ impl Tally {
 
 impl Director {
     pub fn new() -> Director {
-        Director::default()
+        Director {
+            answer_wait: Some(ask::ANSWER_WAIT),
+            ..Director::default()
+        }
     }
 
     /// Directed play on: the explorer chooses nothing of its own from now.
@@ -425,6 +434,7 @@ impl Director {
     /// An order, rushed or not; `then`: once the order in hand is done, not instead of it (an
     /// order given without it replaces the one in hand, which is said).
     pub fn order_with(&mut self, order: Order, rush: bool, then: bool) {
+        self.overtaken("your action");
         self.queue.push_back(Queued { order, rush, then });
     }
 
@@ -438,6 +448,7 @@ impl Director {
 
     /// A new map: names, orders, places and what's been told are the old map's.
     pub fn new_map(&mut self) {
+        self.overtaken("a new level");
         self.queue.clear();
         self.resume = None;
         self.tactics = Tactics::default();
@@ -495,6 +506,7 @@ impl Director {
     /// The level again from its start (a death, a restart): her orders and her say in the fight
     /// are the attempt before's; the fight, her health's marks and what's killed start afresh.
     fn new_life(&mut self) {
+        self.overtaken("the level begun again");
         self.queue.clear();
         self.resume = None;
         self.tactics = Tactics::default();
@@ -586,7 +598,8 @@ impl Director {
     /// tally complete and nothing more known to do). An exit asks first, for now. (None too with
     /// no exit known: the order says so.)
     pub fn exit_check(&mut self, agent: &mut Agent, obs: &Observation) -> Option<String> {
-        let open = self.open_objectives(agent, obs);
+        // (the exits too while they're held back from her instinct: leaving's asked either way)
+        let open = self.open_unheld(agent, obs);
         if !open.iter().any(|o| o.kind == Kind::Exit) {
             return None;
         }
@@ -625,10 +638,7 @@ impl Director {
         } else {
             format!("{}; ", left.join(", "))
         };
-        Some(format!(
-            "Still here: {known}{}. Leave anyway? Resend with sure: true.",
-            self.tally.line()
-        ))
+        Some(format!("Still here: {known}{}.", self.tally.line()))
     }
 
     /// What's new since last told: an exit, things of note seen, monsters, keys and weapons got,
@@ -1319,6 +1329,7 @@ impl Director {
         self.kills(agent, obs);
         self.more_moments(agent, obs);
         self.watch_progress(agent, obs);
+        self.questions(agent, obs);
         self.apply_tactics(agent, obs);
         agent.x_mut().spares = obs
             .things
@@ -1384,13 +1395,7 @@ impl Director {
         if let (Some(limit), Some(since)) = (self.idle_auto, self.idle_since) {
             // (not again once she's found nothing more to do by herself, till an order's come)
             if obs.tic - since >= limit && obs.health.unwrap_or(0.0) > 0.0 && !self.auto_spent {
-                self.idle_since = None;
-                self.doing = Some(Doing::Auto);
-                self.told_auto.clear();
-                let x = agent.x_mut();
-                x.directed = false;
-                x.hold_exits(true);
-                x.out_of_options = None;
+                self.go_instinct(agent);
                 self.report(
                     obs,
                     true,
@@ -1725,6 +1730,12 @@ impl Director {
             self.doing = None;
             self.auto_spent = true;
             let exits = self.objectives_of(agent, obs, &[Kind::Exit]);
+            let exit = exits.first().map(|e| self.describe(e, obs));
+            if let Some(e) = &exit {
+                if self.ask_done_here(obs, e.clone()) {
+                    return;
+                }
+            }
             self.report(
                 obs,
                 false,
@@ -1759,6 +1770,28 @@ impl Director {
             self.told_auto = phrase;
             self.told_auto_tic = Some(obs.tic);
         }
+    }
+
+    /// On by instinct from now: the explorer chooses (not leaving the level).
+    fn go_instinct(&mut self, agent: &mut Agent) {
+        self.idle_since = None;
+        self.doing = Some(Doing::Auto);
+        self.told_auto.clear();
+        let x = agent.x_mut();
+        x.directed = false;
+        x.hold_exits(true);
+        x.out_of_options = None;
+    }
+
+    /// On by instinct, as her answer had it: said.
+    pub(super) fn on_instinct(&mut self, agent: &mut Agent, obs: &Observation) {
+        self.auto_spent = false;
+        self.go_instinct(agent);
+        self.report(
+            obs,
+            true,
+            "On by instinct (not leaving the level) till your next action.".into(),
+        );
     }
 
     /// Back to her orders: the explorer chooses nothing of its own.

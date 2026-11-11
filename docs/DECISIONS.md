@@ -2654,3 +2654,40 @@ start).
 Checked: E1M1 headless, restart refused at once ("90 s to go"), told hers at 94.9 s, granted,
 back at the start; E1M1 in stream mode on through, at the tally "On the tally screen: doom_game
 next ...", next given, E1M2 begun. Parity: 24 runs the same.
+
+## Stage 4: questions from the bot (2026-11-11)
+
+`control/directed/ask.rs`. One shape for the bot's wanting her say (the plan's 4.6, class D,
+the kind that can wait): `[ask q3] <the question> a) ... b) ... (default, in 8 s). Answer with
+doom_answer.` At most one open, 3 a minute (past that the caller does as it did unasked); the
+default taken at the deadline (8 s, the user's latency; `doom_policy answers`, 0 waits) and
+said; Neuro forced a decision (`doom_answer` and the actions that would also settle it) 3 s in.
+Any action of hers closes it as overtaken, and so do a death, a restart, a new level. An answer
+to a closed question is told it's too late and what came of it, never applied.
+
+Asked now, where the bot asked her to "resend" before or didn't ask at all:
+- leaving with things left (`doom_exit`, a go to an exit, without `sure`): leave anyway, or
+  stay (the default: leaving can't be undone);
+- a go whose only way crosses a floor that hurts or drops where she can't get back: go anyway,
+  or don't (default);
+- on instinct, nothing left but walls to search with the exit known: leave, or stay (default);
+- nothing new for 3 minutes: on by instinct (the default when she isn't), restart (when it's
+  hers), keep on as she is.
+
+Found on the way: **leaving was never asked while she was on instinct.** The exit check looked
+at the explorer's options, from which the exits are held back on instinct, saw no exit, and
+let `order exit` take her out unasked. It looks past the hold now, as the lists do.
+
+The gate (scripted answers 2, 8 and 30 s late): E1M1 at x1, the exit question: answered at 2 s,
+applied ("q1: stay"); at 9 s and 30 s, the default taken at 8 s and the answer refused ("Too
+late: q2 is closed (no answer: stay)"); after another action, refused as overtaken. Through the
+mock Neuro: the question as `doom_exit`'s answer, forced 3 s in ("default, in 5 s"), answered,
+a second answer refused. The route question on E1M3 (a medikit past nukage), answered at once:
+gone for. The stuck question on E1M1 after 3 minutes waiting: its default, on by instinct.
+Not seen in a test: "nothing but walls" on instinct (a whole level's exploring first).
+
+Left: the instinct's other last resorts (strafing runs, stuck places, every wall, jumps
+missed, harm allowed) aren't asked: on instinct they're the bot's, and she can stop it any
+time. `Situation` and typed events weren't needed for these (a question closes on any action
+of hers instead of being checked against a snapshot); they're for class T (stage 6), where a
+question about a fight has to be judged against the fight as it stands.

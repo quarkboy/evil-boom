@@ -20,6 +20,8 @@ const LIST_MAX: usize = 15;
 /// silently (her context and her attention are what's being spent)
 const MOMENTS_A_MINUTE: usize = 6;
 const MINUTE: i64 = 60 * 35;
+/// a question unanswered this long (tics): a decision forced
+const ASK_FORCE: i64 = 3 * 35;
 
 pub struct Session {
     link: Link,
@@ -30,8 +32,9 @@ pub struct Session {
     who: String,
     character: Character,
     pub director: Director,
-    /// a force out, not yet answered by an action
+    /// a force out, not yet answered by an action; the question last forced
     forced: bool,
+    forced_question: Option<u32>,
     /// when she last had nothing to do (or the last force or action)
     idle_since: i64,
     /// when her status was last told, and its gist then (`Director::status_gist`)
@@ -79,8 +82,9 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_name", "description": format!("Name something (up to {NAME_MAX} characters); the name then works as its id."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": "Your fight, for a while (10 s unless seconds; then by reflex again). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / steady: how you fight. auto: all by reflex again.", "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
-        json!({ "name": "doom_policy", "description": "Standing settings. idle: seconds with no action before you carry on by instinct, not leaving (0: you wait). hints: suggestions of what to do next, off, on_stall or always.", "schema": s(json!({ "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
+        json!({ "name": "doom_policy", "description": "Standing settings. idle: seconds with no action before you carry on by instinct, not leaving (0: you wait). hints: suggestions of what to do next, off, on_stall or always. answers: seconds a question waits before its default (0: till you answer).", "schema": s(json!({ "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] }, "answers": { "type": "integer" } }), &[]) }),
         json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map, skill 1-5, play single or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer" }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
+        json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
         json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, what you're doing, what you're fighting." }),
     ]
@@ -101,6 +105,7 @@ impl Session {
             character: Character::Unknown,
             director: Director::new(),
             forced: false,
+            forced_question: None,
             idle_since: 0,
             told_status: (i64::MIN / 2, String::new()),
             shown: 0,
@@ -163,6 +168,26 @@ impl Session {
         if gist != self.told_status.1 && obs.tic - self.told_status.0 >= STATUS_EVERY {
             self.link.context(&self.director.status(agent, obs), true);
             self.told_status = (obs.tic, gist);
+        }
+        // (a question unanswered a few seconds: a decision forced, the question its state)
+        if let Some(q) = self.director.question() {
+            if self.forced_question != Some(q.id) && obs.tic - q.opened >= ASK_FORCE {
+                self.forced_question = Some(q.id);
+                self.forced = true;
+                self.link.force(
+                    &q.line(obs.tic),
+                    &format!("Answer q{}?", q.id),
+                    &[
+                        "doom_answer",
+                        "doom_go",
+                        "doom_explore",
+                        "doom_exit",
+                        "doom_stop",
+                    ],
+                    "high",
+                );
+                log.push(format!("neuro: q{} unanswered: decision forced", q.id));
+            }
         }
         // (waiting on her: after a while, a decision forced; one at a time)
         if !self.director.idle(agent) {
@@ -416,13 +441,17 @@ impl Session {
             "doom_look" => (true, self.director.look(agent, obs).join("\n")),
             "doom_policy" => {
                 let idle = args.get("idle").and_then(Value::as_f64);
+                let answers = args.get("answers").and_then(Value::as_f64);
                 let hints = match arg("hints").map(Hints::parse) {
                     Some(None) => return (false, "hints: off, on_stall or always.".into()),
                     Some(h) => h,
                     None => None,
                 };
-                if idle.is_none() && hints.is_none() {
-                    return (false, "Give idle or hints.".into());
+                if idle.is_none() && hints.is_none() && answers.is_none() {
+                    return (false, "Give idle, hints or answers.".into());
+                }
+                if let Some(secs) = answers {
+                    self.director.answer_wait = (secs > 0.0).then_some((secs * 35.0) as i64);
                 }
                 if let Some(secs) = idle {
                     self.director.idle_auto = (secs > 0.0).then_some((secs * 35.0) as i64);
@@ -434,9 +463,16 @@ impl Session {
                     Some(t) => format!("carry on by instinct after {} s with no action", t / 35),
                     None => "wait for the next action".to_string(),
                 };
+                let answers = match self.director.answer_wait {
+                    Some(t) => format!("questions wait {} s", t / 35),
+                    None => "questions wait for you".to_string(),
+                };
                 (
                     true,
-                    format!("You {idle}; hints {}.", self.director.hints.name()),
+                    format!(
+                        "You {idle}; hints {}; {answers}.",
+                        self.director.hints.name()
+                    ),
                 )
             }
             "doom_inspect" => {
@@ -454,17 +490,15 @@ impl Session {
                 };
                 let risky = args.get("risky").and_then(Value::as_bool).unwrap_or(false);
                 if self.director.resolve(r).starts_with("exit-") && !sure {
-                    if let Some(q) = self.director.exit_check(agent, obs) {
+                    if let Some(q) = self.director.ask_leave(agent, obs) {
                         return (true, q);
                     }
                 }
-                match self.director.check_go(agent, obs, r, risky) {
-                    Ok(_) => {
-                        self.director
-                            .order_with(Order::Go(r.to_string(), risky), rush, then);
-                        (true, "OK.".into())
-                    }
-                    // (not to be retried as it is: the reason says what would do)
+                // (a way that costs: asked; not to be retried as it is otherwise, the reason
+                // says what would do)
+                match self.director.ask_go(agent, obs, r, risky, rush, then) {
+                    Ok(None) => (true, "OK.".into()),
+                    Ok(Some(q)) => (true, q),
                     Err(why) => (false, why),
                 }
             }
@@ -526,7 +560,10 @@ impl Session {
                 if self.director.list(agent, obs, Topic::Exits).is_empty() {
                     // (not a failure to retry: nothing to do about it but explore)
                     (true, "No exit known yet.".into())
-                } else if let Some(q) = self.director.exit_check(agent, obs).filter(|_| !sure) {
+                } else if let Some(q) = (!sure)
+                    .then(|| self.director.ask_leave(agent, obs))
+                    .flatten()
+                {
                     // (a question, not a failure: Neuro would send it again as it was)
                     (true, q)
                 } else {
@@ -553,6 +590,15 @@ impl Session {
                 (true, "OK.".into())
             }
             "doom_status" => (true, self.director.status(agent, obs)),
+            "doom_answer" => {
+                let (Some(id), Some(choice)) = (arg("id"), arg("choice")) else {
+                    return (false, "Give id and choice.".into());
+                };
+                match self.director.answer(agent, obs, id, choice) {
+                    Ok(said) => (true, said),
+                    Err(why) => (false, why),
+                }
+            }
             "doom_game" => match crate::control::game::GameAct::of_json(&args) {
                 Ok(crate::control::game::GameAct::Restart) => {
                     match self.director.ask_restart(obs.tic) {

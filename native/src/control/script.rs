@@ -18,6 +18,11 @@
 //!   hints off|on_stall|always
 //!                       the bot's own pick: never; where asked and after a while with no order
 //!                       (as it starts); or as soon as she's waiting
+//!   answer ID CHOICE    a question's answer (answer q3 a)
+//!   answers SECONDS|wait
+//!                       how long a question waits before its default
+//!   game start|next|restart ...
+//!                       the game itself, when it's hers (see control::game)
 //!   status              her health, armor, weapons, ammo, keys, what she's doing
 //!   where               where she is, her health, what she's doing
 //!   log [N]             her log's last N lines (40), as the watcher shows it
@@ -60,6 +65,23 @@ pub fn command(
                 .map(|()| vec![format!("named {id} \"{}\"", w[2..].join(" "))])
         }
         Some("order") => {
+            // (a go that costs is asked first, as Evil's is)
+            if w.get(1) == Some(&"go") && !w.contains(&"risky") && !w.contains(&"sure") {
+                let r = w[2..]
+                    .iter()
+                    .filter(|x| !matches!(**x, "rush" | "then"))
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if !d.resolve(&r).starts_with("exit-") {
+                    let (rush, then) = (w.contains(&"rush"), w.contains(&"then"));
+                    return match d.ask_go(agent, obs, &r, false, rush, then) {
+                        Ok(None) => Ok(Vec::new()),
+                        Ok(Some(q)) => Ok(vec![q]),
+                        Err(why) => Ok(vec![format!("couldn't: {why}")]),
+                    };
+                }
+            }
             // (sure: leave the level even with something left, as Evil's sure; rush: press on
             // mid-fight, as Evil's rush; either last, in either order)
             let mut w: Vec<&str> = w.to_vec();
@@ -82,8 +104,8 @@ pub fn command(
                 _ => false,
             };
             if leaving && !sure {
-                if let Some(q) = d.exit_check(agent, obs) {
-                    return Ok(vec![format!("{q} (order ... sure)")]);
+                if let Some(q) = d.ask_leave(agent, obs) {
+                    return Ok(vec![q]);
                 }
             }
             let o = match w.get(1).copied() {
@@ -134,6 +156,26 @@ pub fn command(
             }])
         }
         Some("look") => Ok(d.look(agent, obs)),
+        Some("answer") => {
+            let id = w
+                .get(1)
+                .filter(|_| w.len() > 2)
+                .ok_or("answer ID CHOICE (answer q3 a)")?;
+            d.answer(agent, obs, id, &w[2..].join(" "))
+                .map(|said| vec![said])
+        }
+        Some("answers") => {
+            // (seconds a question waits before its default; `wait`: till answered)
+            d.answer_wait = w
+                .get(1)
+                .and_then(|v| v.parse::<f64>().ok())
+                .filter(|s| *s > 0.0)
+                .map(|s| (s * 35.0) as i64);
+            Ok(vec![match d.answer_wait {
+                Some(t) => format!("questions wait {} s for an answer", t / 35),
+                None => "questions wait for an answer".to_string(),
+            }])
+        }
         Some("hints") => {
             d.hints = w
                 .get(1)

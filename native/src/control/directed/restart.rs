@@ -36,7 +36,7 @@ impl Director {
         }
     }
 
-    fn stalled_for(&self, tic: i64) -> i64 {
+    pub(super) fn stalled_for(&self, tic: i64) -> i64 {
         self.progress.as_ref().map_or(0, |(_, since)| tic - since)
     }
 

@@ -153,7 +153,9 @@ with no action she waits and looks round; deadlines 3 s / 8 s; restart unlocked 
 progress; next level hers from the tally screen; cheats held off. And (changed) she starts the game:
 level, skill, one level or on through, from what the console offers (`control/game.rs`,
 `doom_game start`; offered at the title and when what she chose is over); `doom_game next` from
-the tally screen (30 s, else on by itself) and `doom_game restart` after 90 s with nothing new. To direct a game by hand: `watch <wad> <map> --headless
+the tally screen (30 s, else on by itself) and `doom_game restart` after 90 s with nothing new.
+Stage 4, the bot's questions (`control/directed/ask.rs`, `doom_answer`, 8 s then the default,
+forced at 3 s): leaving with things left, a costly way, nothing but walls left, stuck 3 min. To direct a game by hand: `watch <wad> <map> --headless
 --speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
 `.out` twin (`me.txt` gives `me.out`).
 
