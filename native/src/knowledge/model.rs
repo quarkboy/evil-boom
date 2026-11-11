@@ -209,6 +209,9 @@ pub struct Knowledge {
     /// walkway rose to 104, the door beside it shut; opened since, worked out afresh it seemed
     /// to have risen to 160, sealing the room)
     pub fired_effects: BTreeMap<(usize, i64), Effects>,
+    /// ...and where each sector it moves was when it went off, as she'd last seen it: where
+    /// what comes back by itself (a lift, a timed door) comes back to
+    pub fired_rest: BTreeMap<(usize, i64), Vec<(usize, Heights)>>,
     /// what the explorer put down here itself (not seen: done), with the tic: so a run played
     /// back from its inputs (replay) knows it too
     pub journal: Vec<(i64, Note)>,
@@ -348,6 +351,7 @@ impl Knowledge {
             in_the_way: BTreeSet::new(),
             journal: Vec::new(),
             fired_effects: BTreeMap::new(),
+            fired_rest: BTreeMap::new(),
             locked: BTreeSet::new(),
             doubts: BTreeMap::new(),
             rechecked: BTreeSet::new(),

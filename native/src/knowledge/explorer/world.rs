@@ -46,8 +46,14 @@ impl Explorer {
                 if !t.permanent() && timing.is_some_and(|tm| tm.hold.is_some()) && now > back {
                     // (back at rest, as far as she knows, whatever had it before: a door opened
                     // for good, then pressed open again, shuts after its wait: E2M4's door 48)
+                    // (at rest where it was when she set it off, not where the map began it: a
+                    // step of stairs she'd built, 64 up, with a lift's switch on its side; the
+                    // lift pressed and not looked at again, it was taken for the floor it was at
+                    // the level's start, the way across it planned, walked into its side and
+                    // "pressed" there by the minute. MAP21, every run on the easiest skill)
                     if cycles_back(t.info.special, &t.info.description) && k.seen_tic.get(&s).copied().unwrap_or(-1) < back {
-                        out[s] = vec![nav.movers.initial[s]];
+                        let rest = k.fired_rest.get(&(t.id, f.tic)).and_then(|r| r.iter().find(|(x, _)| *x == s)).map_or(nav.movers.initial[s], |r| r.1);
+                        out[s] = vec![rest];
                     }
                     continue;
                 }

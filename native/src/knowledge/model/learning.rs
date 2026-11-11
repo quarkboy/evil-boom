@@ -210,6 +210,7 @@ impl Knowledge {
         let ids: Vec<usize> = self.by_line.get(&li).cloned().unwrap_or_default();
         for ti in ids {
             let effects = self.nav.effects_now(self.trigger(ti), &now);
+            self.fired_rest.insert((ti, tic), effects.iter().filter_map(|(s, _)| now[*s].first().map(|&h| (*s, h))).collect());
             self.fired_effects.insert((ti, tic), effects);
         }
         self.events.push(format!("tic {tic}: {} line {li} ({})", how.name(), info.description));

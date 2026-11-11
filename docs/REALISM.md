@@ -467,6 +467,29 @@ Each line: the change, its score run for run against the build before on the sam
   skill 1 0.826 (427 of 544 out), skill 2 0.720 (357). Never out on skill 1 in 16: MAP21
   (all stalled), MAP20 and MAP23 (dead in 40 s), E4M6 and MAP29 (dead or stalled late), and
   the boss levels E3M8 and MAP30.
+- **A torch of another colour is a mark; a well-marked wall is tried as she passes** (the
+  user's: MAP32's secrets, "some of the torches next to the walls are different colors than
+  the others", and "the player is expected to find them before she encounters the
+  cyberdemon"). Of the torches she's seen, those not of the commonest colour mark the wall
+  each stands before (`marked`, 2 points: not from the survey the other signs' points are
+  from); a wall suspected 6 or more is tried when she's within 448 of where she'd press it
+  (a hall's width; it was 128). MAP32, the same 16 seeds on the easiest skill: 5 exits ->
+  16, the cyberdemon killed in 14; the baseline's seeds: HMP 1 of 8 -> 6, UV 3 -> 7.
+- **A gun's reach by how wide the target is, for the trigger** (the user's: "doesn't the SSG
+  reach at that distance, just not optimally?"). Past its reach a gun's still worth a shot
+  at what's wide enough that as much lands as on a man at its reach (the super shotgun's
+  spread up and down counted): an arachnotron from about 950 with it, a mancubus 800. For
+  the trigger only (how she stands to it goes by the plain reach), and not at what she's
+  outmatched by: MAP32's cyberdemon, plinked at from across the hall, brought on. MAP07, the
+  same 16 seeds: 11 exits -> 14, none stalled. (A dodge biased towards a shooter out of
+  reach was tried first and taken out: -0.0076 ± 0.0070, 393 exits -> 383.)
+- **What comes back by itself comes back to where it was** when she set it off, not where
+  the map began it (`fired_rest`): MAP21, a step of stairs built 64 up with a lift's switch
+  on its side, taken for flat floor once the lift had been pressed and not looked at again,
+  walked into and "pressed" there 1649 times. Every MAP21 run on the easiest skill stalls
+  still: imps out of reach, not traced.
+- The four together: +0.0062 ± 0.0085 (253 / 223 / 221; exits 393 -> 400; stalled 46 -> 42;
+  a run 6 s longer); 0.456. MAP32 4 of 16 -> 13, MAP31 12 -> 15, MAP10 2 -> 5, MAP06 0 -> 3.
 - **A3** (the wait at a lift), **A5** (the edge of her view), **B2, B3**: not done yet.
 
 ## A level she knows, and lives (the evaluation asked for 2026-11-10)

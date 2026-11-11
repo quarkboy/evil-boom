@@ -133,6 +133,9 @@ pub struct Weapon {
     pub cycle: f64,
     /// hitscan: pellets land up to this far off (degrees, most near the middle)
     pub spread: f64,
+    /// ...and up and down, where the gun spreads that way too (the super shotgun's: its
+    /// pellets' slope is off by up to (P_Random - P_Random) << 5, 7.1 degrees)
+    pub rise: f64,
     pub hitscan: bool,
     /// its missile's, if not hitscan
     pub speed: f64,
@@ -149,7 +152,7 @@ pub struct Weapon {
 
 impl Weapon {
     const fn new(slot: i32, ammo_per_shot: i32, damage: f64, cycle: f64) -> Weapon {
-        Weapon { slot, ammo_per_shot, damage, cycle, spread: 0.0, hitscan: true, speed: 0.0, splash: 0.0, reach: 2048.0, keep: (0.0, 2048.0), pellets: 1.0 }
+        Weapon { slot, ammo_per_shot, damage, cycle, spread: 0.0, rise: 0.0, hitscan: true, speed: 0.0, splash: 0.0, reach: 2048.0, keep: (0.0, 2048.0), pellets: 1.0 }
     }
 
     /// Damage a second, most of it hitting (what she can do with it, roughly).
@@ -171,6 +174,17 @@ impl Weapon {
         } else {
             self.damage
         }
+    }
+
+    /// The share of a shot that lands on something this wide and this tall this far off: across
+    /// (`hits`), and up and down where the gun spreads that way.
+    pub fn lands(&self, radius: f64, height: f64, d: f64) -> f64 {
+        let across = self.hits(radius, d);
+        if !self.hitscan || self.rise == 0.0 {
+            return across;
+        }
+        let a = (height / 2.0).atan2(d.max(1.0)).to_degrees();
+        across * if a >= self.rise { 1.0 } else { 1.0 - (1.0 - a / self.rise).powi(2) }
     }
 
     /// The share of a shot's damage that lands on something this wide this far off.
@@ -206,7 +220,7 @@ pub fn weapon(slot: i32) -> Weapon {
     }
 }
 
-pub const SUPER_SHOTGUN: Weapon = Weapon { spread: 11.2, reach: 480.0, keep: (96.0, 320.0), pellets: 20.0, ..Weapon::new(3, 2, 200.0, 57.0) };
+pub const SUPER_SHOTGUN: Weapon = Weapon { spread: 11.2, rise: 7.1, reach: 480.0, keep: (96.0, 320.0), pellets: 20.0, ..Weapon::new(3, 2, 200.0, 57.0) };
 
 /// The fist berserk: A_Punch's 2-20 times ten.
 pub const BERSERK_FIST: Weapon = Weapon { damage: 110.0, ..weapon_const(1) };

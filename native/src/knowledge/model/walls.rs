@@ -125,7 +125,20 @@ impl Knowledge {
         // it shut, then tried "as a wall" and pressed shut again, and she with it in the closet)
         let now = self.last.as_ref().map_or(0, |l| l.tic);
         let lately: BTreeSet<usize> = self.fired.iter().filter(|f| now - f.tic < PRESSED_LATELY).map(|f| f.line).collect();
-        WallContext { reach, reach_sectors, keys, known, signs, heights, lately, unreached_items, unreached_places }
+        // (the torches she's seen, by colour: those not of the commonest; none where no one
+        // colour's the commonest)
+        let torches: Vec<crate::map::Thing> = self.known_things().into_iter().filter(|t| TORCHES.contains(&t.kind)).collect();
+        let mut by_kind: BTreeMap<u16, usize> = BTreeMap::new();
+        for t in &torches {
+            *by_kind.entry(t.kind).or_insert(0) += 1;
+        }
+        let most = by_kind.values().copied().max().unwrap_or(0);
+        let marks: Vec<Point> = if by_kind.values().filter(|&&n| n == most).count() == 1 {
+            torches.iter().filter(|t| by_kind[&t.kind] < most).map(|t| (t.x, t.y)).collect()
+        } else {
+            Vec::new()
+        };
+        WallContext { reach, reach_sectors, keys, known, signs, marks, heights, lately, unreached_items, unreached_places }
     }
 
     /// One wall's signs, or why it's none to try (`suspicious`, the rubric).
@@ -232,6 +245,13 @@ impl Knowledge {
         let ahead = (mid.0 + nx * 48.0, mid.1 + ny * 48.0);
         if ctx.signs.iter().any(|&q| dist(q, ahead) < EXIT_SIGN_NEAR) {
             signs.exit_sign = 3.0;
+        }
+        // (a torch before it of another colour than most of the level's: a mapper's mark, as a
+        // player reads it. The user's: MAP32's secret doors, each with a blue torch by it
+        // where the rest are green, "some of the torches next to the walls are different
+        // colors than the others")
+        if ctx.marks.iter().any(|&q| dist(q, mid) < MARK_NEAR && (q.0 - mid.0) * nx + (q.1 - mid.1) * ny > 0.0) {
+            signs.marked = 2.0;
         }
         // (a blank on her map behind it, walled round by what she has mapped: room for
         // somewhere she's never seen, as a player reads the automap: E1M6's secret room
@@ -425,6 +445,11 @@ impl Knowledge {
 }
 
 /// What `wall_signs` weighs every wall against (`wall_context`).
+/// the torches' kinds (tall and short; blue, green, red), as the map numbers them
+const TORCHES: [u16; 6] = [44, 45, 46, 55, 56, 57];
+/// a torch this near a wall's middle, on its front side, is by it
+const MARK_NEAR: f64 = 96.0;
+
 struct WallContext<'a> {
     reach: &'a BTreeSet<usize>,
     reach_sectors: BTreeSet<usize>,
@@ -432,6 +457,8 @@ struct WallContext<'a> {
     known: BTreeSet<usize>,
     /// the middles of the exit signs she's seen
     signs: Vec<Point>,
+    /// the torches she's seen that aren't the colour most of them are (`marked`)
+    marks: Vec<Point>,
     heights: Vec<(f64, f64)>,
     lately: BTreeSet<usize>,
     unreached_items: &'a [Point],
@@ -470,6 +497,8 @@ pub struct Signs {
     pub short: f64,
     /// ...one panel between two alike
     pub panel: f64,
+    /// a torch before it of another colour than most
+    pub marked: f64,
 }
 
 /// A search for secrets asked for (Evil's explore with secrets 1-3): at each thoroughness, the
@@ -505,6 +534,8 @@ impl Signs {
             w(self.odd, 1.5, -1.0),
             w(self.short, 1.5, -0.5),
             w(self.panel, 2.5, -0.5),
+            // (not from the survey: put in after it, at the points it has in `score`)
+            w(self.marked, 2.0, 0.0),
         ]
         .iter()
         .sum()
@@ -512,12 +543,12 @@ impl Signs {
 
     /// The suspicion: the signs' points (added in the rubric's order).
     pub fn score(&self) -> f64 {
-        [self.target, self.not_wall, self.platform, self.item_behind, self.item_gap, self.place_behind, self.exit_sign, self.blank_behind, self.odd, self.short, self.panel].iter().sum()
+        [self.target, self.not_wall, self.platform, self.item_behind, self.item_gap, self.place_behind, self.exit_sign, self.blank_behind, self.odd, self.short, self.panel, self.marked].iter().sum()
     }
 
     /// Every sign's name, in the rubric's order.
-    pub fn named_all(&self) -> [&'static str; 11] {
-        ["target", "not_wall", "platform", "item_behind", "item_gap", "place_behind", "exit_sign", "blank_behind", "odd", "short", "panel"]
+    pub fn named_all(&self) -> [&'static str; 12] {
+        ["target", "not_wall", "platform", "item_behind", "item_gap", "place_behind", "exit_sign", "blank_behind", "odd", "short", "panel", "marked"]
     }
 
     /// The signs there, by name, as (name, points).
@@ -534,6 +565,7 @@ impl Signs {
             ("odd", self.odd),
             ("short", self.short),
             ("panel", self.panel),
+            ("marked", self.marked),
         ]
         .into_iter()
         .filter(|(_, v)| *v > 0.0)

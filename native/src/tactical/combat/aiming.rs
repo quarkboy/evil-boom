@@ -177,7 +177,7 @@ impl Combat {
         let info = mon(t.name);
         let tolerance = 1.5f64.max((info.radius * 0.7).atan2(d.max(1.0)).to_degrees());
         let on = norm(aim - obs.angle).abs() < tolerance;
-        let held_fire = if !self.in_reach(&w, t, d) {
+        let held_fire = if !self.worth_a_shot(&w, t, d) {
             Some(HeldFire::OutOfReach)
         } else if held == 5 && (!self.rocket_safe(obs, t) || blocked) {
             Some(HeldFire::RocketNotSafe)

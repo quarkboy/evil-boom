@@ -39,7 +39,9 @@ const EXIT_MARGIN: f64 = 64.0;
 /// there's nothing else to do)
 const NEAR_SUSPECT: f64 = 6.0;
 
-const NEAR_WALL: f64 = 128.0;
+/// (as she passes it, that is: a hall's width off, not only at her elbow. MAP32's marked
+/// doors down the sides of a hall 896 across, she down its middle; 128 it was)
+const NEAR_WALL: f64 = 448.0;
 
 /// a repeatable switch whose effect wasn't seen: another go after this
 const REPRESS_AFTER: i64 = 60 * 35;

@@ -382,7 +382,8 @@ impl RouteFollower {
         controls.use_ = use_;
         if use_ {
             self.last_use = obs.tic;
-            self.log.add(obs.tic, format!("pressing for sector {sector} after {:.1}s", waited as f64 / TICRATE));
+            let from = nav.sector_of_poly(cur);
+            self.log.add(obs.tic, format!("pressing for sector {sector} after {:.1}s (it's at {}, she's on sector {from} at {})", waited as f64 / TICRATE, fmt_live(Some(live[sector])), fmt_live(Some(live[from]))));
         }
         // nothing to press here: it may need a walk-over line crossing again (a blazing lift
         // that went back up), so replan from the live heights after a few seconds; at once if
