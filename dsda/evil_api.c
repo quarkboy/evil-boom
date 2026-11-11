@@ -31,6 +31,7 @@
 #include "p_mobj.h"
 #include "p_map.h"
 #include "p_inter.h"
+#include "p_pspr.h"
 #include "p_tick.h"
 #include "r_state.h"
 #include "i_system.h"
@@ -867,4 +868,15 @@ EVIL_API void evil_give(int weapons, int clip, int shell, int cell, int missile,
     p->mo->health = health;
   p->armorpoints[0] = armor;
   p->armortype = armortype;
+}
+
+/* The weapon in her hands (a weapontype_t she owns), brought up as at a level's start: what she
+ * had up coming out of the level before, an episode's next level begun with it. */
+EVIL_API void evil_ready(int weapon)
+{
+  player_t *p = &players[consoleplayer];
+  if (weapon < 0 || weapon >= NUMWEAPONS || !p->weaponowned[weapon])
+    return;
+  p->readyweapon = weapon;
+  P_SetupPsprites(p);
 }

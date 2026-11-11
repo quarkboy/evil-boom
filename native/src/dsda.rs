@@ -184,6 +184,7 @@ pub struct Dsda {
     /// (arenas; none in an older library)
     spawn_fn: Option<SpawnFn>,
     give_fn: Option<GiveFn>,
+    ready_fn: Option<unsafe extern "C" fn(c_int)>,
     clear_fn: Option<ClearFn>,
     reset_ids_fn: Option<ResetIdsFn>,
     hits_fn: Option<HitsFn>,
@@ -206,7 +207,11 @@ pub struct Dsda {
     _argv: Vec<CString>,
     _argv_ptrs: Vec<*mut c_char>,
     /// (last: the functions above point into it)
-    _lib: Library,
+    /// (never unloaded: the game's threads, SDL's sound one among them, go on calling into it
+    /// after the last of ours has done with it. Unloaded when a recorded episode ended, with
+    /// the video still being closed: the sound thread's next call was into nothing, a segfault,
+    /// the sound never put with the video)
+    _lib: std::mem::ManuallyDrop<Library>,
 }
 
 impl Dsda {
@@ -245,6 +250,8 @@ impl Dsda {
         // SAFETY: as above, evil_spawn's and evil_give's signatures; optional.
         let spawn_fn = sym(b"evil_spawn").ok().map(|p| unsafe { std::mem::transmute::<*const (), SpawnFn>(p) });
         let give_fn = sym(b"evil_give").ok().map(|p| unsafe { std::mem::transmute::<*const (), GiveFn>(p) });
+        // SAFETY: the symbol, if the library has it, is `void evil_ready(int)`.
+        let ready_fn = sym(b"evil_ready").ok().map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
         // SAFETY: as above, evil_clear_items's signature; optional.
         let clear_fn = sym(b"evil_clear_items").ok().map(|p| unsafe { std::mem::transmute::<*const (), ClearFn>(p) });
         // SAFETY: as above, evil_reset_ids's signature; optional.
@@ -296,6 +303,7 @@ impl Dsda {
             sound_fn,
             spawn_fn,
             give_fn,
+            ready_fn,
             clear_fn,
             reset_ids_fn,
             hits_fn,
@@ -316,7 +324,7 @@ impl Dsda {
             level_title_fn,
             _argv: argv,
             _argv_ptrs: argv_ptrs,
-            _lib: lib,
+            _lib: std::mem::ManuallyDrop::new(lib),
         })
     }
 
@@ -554,6 +562,12 @@ impl Dsda {
         let Some(f) = self.give_fn else { return false };
         // SAFETY: plain values into the game; see `load`.
         unsafe { f(l.weapons, l.clip, l.shell, l.cell, l.rocket, c_int::from(l.backpack), l.health, l.armor, l.armor_type) };
+        // (and the weapon she had up, if it's said and the library can: else the pistol the game
+        // starts her with, till she changes it herself)
+        if let (Some(ready), Some(w)) = (self.ready_fn, l.ready) {
+            // SAFETY: a plain value into the game; see `load`.
+            unsafe { ready(w) };
+        }
         true
     }
 
@@ -665,6 +679,9 @@ pub struct Loadout {
     pub health: i32,
     pub armor: i32,
     pub armor_type: i32,
+    /// the weapon in her hands (the game's numbering, as `weapons`' bits); None: as the game
+    /// starts her
+    pub ready: Option<i32>,
 }
 
 /// What hurt her, as the game has it.

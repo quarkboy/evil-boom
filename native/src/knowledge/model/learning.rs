@@ -22,7 +22,26 @@ impl Knowledge {
             let t = self.trigger(ti).clone();
             if t.effect(s).is_some() && self.learned.entry(ti).or_default().insert(s) {
                 self.events.push(format!("tic {tic}: took what she heard for line {} ({}) moving sector {s}", f.line, t.info.description));
+                self.whole_stair(ti, &t, tic);
             }
+        }
+    }
+
+    /// A step of a stair seen or heard to rise for a line: the rest of that stair she's seen
+    /// goes with it, as a player takes it (a stair builds as one thing, a step after a step).
+    /// (E2M1, stuck three episodes of sixteen: a switch built a stair round the corner, five
+    /// of its steps heard and one seen, two neither; those two taken for still on the floor,
+    /// 48 under the steps after them, the stair no way up for her, the level's last switch
+    /// at its top.)
+    fn whole_stair(&mut self, ti: usize, t: &TriggerLine, tic: i64) {
+        if t.info.category != Category::Stairs {
+            return;
+        }
+        let rest: Vec<usize> = t.effects.iter().map(|(s, _)| *s).filter(|s| self.sectors.contains(s)).collect();
+        let learned = self.learned.entry(ti).or_default();
+        let new: Vec<usize> = rest.into_iter().filter(|&s| learned.insert(s)).collect();
+        if !new.is_empty() {
+            self.events.push(format!("tic {tic}: the rest of the stair with it: sectors {new:?}"));
         }
     }
 
@@ -62,6 +81,7 @@ impl Knowledge {
                 }
                 if self.learned.entry(ti).or_default().insert(s) {
                     self.events.push(format!("tic {tic}: learned line {} ({}) moves sector {s}", f.line, t.info.description));
+                    self.whole_stair(ti, &t, tic);
                 }
                 return;
             }

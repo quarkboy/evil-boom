@@ -440,7 +440,18 @@ impl RouteFollower {
         // once, so still for a while is stopped (a crusher-stop line). The way's no way while it's
         // there; E2M4's, stopped low across the way, waited at for the hour)
         if still && !room && obs.tic - self.moved_at.get(&s).copied().unwrap_or(i64::MIN / 2) > CRUSH_STOPPED {
-            return Some(self.fail(obs, &format!("the crusher (sector {s}) has stopped too low to get under")));
+            // (stopped with her height under it, if no more: it does nothing while it's stopped,
+            // and the room to spare was for one coming down. Through, then; its start line
+            // crossed on the way out sets it going behind her. The user's: "you are supposed
+            // to eventually walk into the crusher". Lower than her height, there's no going in)
+            let gap = now.ceiling - now.floor;
+            if gap >= PLAYER_HEIGHT {
+                self.log.add(obs.tic, format!("the crusher (sector {s}) has stopped {gap:.0} up: through under it"));
+                self.crusher_cross = Some((s, obs.tic));
+                self.crusher_wait = None;
+                return None;
+            }
+            return Some(self.fail(obs, &format!("the crusher (sector {s}) has stopped too low to get under ({gap:.0} up)")));
         }
         self.progress_tic = obs.tic;
         self.step_tic = obs.tic;

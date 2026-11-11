@@ -61,7 +61,12 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
 /// cell, rocket, backpack (0/1), health, armor, armor type.
 pub(crate) fn parse_carry(v: &str) -> Result<evildoom::dsda::Loadout, String> {
     let n: Vec<i32> = v.split(',').map(|x| x.trim().parse().map_err(|_| format!("--carry: {v}"))).collect::<Result<_, _>>()?;
-    let [weapons, clip, shell, cell, rocket, backpack, health, armor, armor_type] = n.as_slice() else { return Err(format!("--carry: nine numbers, not {v}")) };
+    // (a tenth, if given: the weapon in her hands, the game's number for it)
+    let (n, ready) = match n.as_slice() {
+        [first @ .., r] if first.len() == 9 => (first.to_vec(), Some(*r).filter(|&r| r >= 0)),
+        _ => (n, None),
+    };
+    let [weapons, clip, shell, cell, rocket, backpack, health, armor, armor_type] = n.as_slice() else { return Err(format!("--carry: nine numbers (or ten), not {v}")) };
     Ok(evildoom::dsda::Loadout {
         weapons: *weapons,
         clip: *clip,
@@ -72,12 +77,14 @@ pub(crate) fn parse_carry(v: &str) -> Result<evildoom::dsda::Loadout, String> {
         health: *health,
         armor: *armor,
         armor_type: *armor_type,
+        ready,
     })
 }
 
 /// A loadout as `--carry` takes it.
 pub(crate) fn carry_arg(l: &evildoom::dsda::Loadout) -> String {
-    format!("{},{},{},{},{},{},{},{},{}", l.weapons, l.clip, l.shell, l.cell, l.rocket, i32::from(l.backpack), l.health, l.armor, l.armor_type)
+    let nine = format!("{},{},{},{},{},{},{},{},{}", l.weapons, l.clip, l.shell, l.cell, l.rocket, i32::from(l.backpack), l.health, l.armor, l.armor_type);
+    l.ready.map_or(nine.clone(), |r| format!("{nine},{r}"))
 }
 
 /// The options as they'd be given again (for the child processes).

@@ -14,7 +14,8 @@ How to find out why a run went wrong, from the evidence the runs leave, before c
   evil-boom run-map doom2 MAP08 --fight 2 --mortal --lives 1 --seed 1 --carry 287,200,50,0,20,1,100,100,1
   ```
 
-  `--carry` is nine numbers: `weapons,clip,shell,cell,rocket,backpack,health,armor,armortype`.
+  `--carry` is nine numbers: `weapons,clip,shell,cell,rocket,backpack,health,armor,armortype`
+  (a tenth, if given: the weapon in her hands, the game's number for it).
   `weapons` is a bitmask by weapon type: fist 1, pistol 2, shotgun 4, chaingun 8,
   rocket launcher 16, plasma 32, BFG 64, chainsaw 128, super shotgun 256 (so 287 = fist, pistol,
   shotgun, chaingun, launcher, SSG). Armortype is 1 (green) or 2 (blue).
@@ -94,6 +95,9 @@ over. `Player::force_target` does the same for a target, from code.
 - `EVIL_DEBUG_SET_ON=1`: two bosses about: where she, they and the spot to line them up from are.
 - `EVIL_DEBUG_BARRELS=1`: barrels going off: which, where she is, whose blast she's in; and
   (stderr) the ways out of a chain weighed.
+- `EVIL_DEBUG_NO_ROUTE=1`: why an objective the planner had a way to was refused all the same
+  (which refusal in `route_to`, and for her health's: the cost, the health, the margin).
+- `EVIL_DEBUG_CARRY=1` (stderr): the loadout a level's begun with and the weapon in her hands.
 - `EVIL_DEBUG_PACE=1` (stderr): every ten tics what limits the route's pace, the carrot, her
   speed; the fight's controls beside the route's; every line of any follower's log (a
   retreat's too, which the run's log doesn't show); the lanes planned between barrels.

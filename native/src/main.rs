@@ -5,7 +5,9 @@
 //!   evil-boom run-map <wad> <map> [run options]      one map; its log goes to out/explore
 //!   evil-boom episode <wad> <first map> [--seeds K] [run options]   an episode on one life from that
 //!                                               map, what she has carried level to level; K seeds
-//!                                               (8) side by side, --jobs at a time
+//!                                               (8) side by side, --jobs at a time. --lives N: N
+//!                                               lives for the episode; dead, the level again with
+//!                                               what she came into it with, what she's learned kept
 //!   evil-boom score [doom|doom2 [maps...]]... [--skills 3,4] [--seeds K] [--jobs N] [--out FILE]
 //!       the bot's score: every level, pistol start, one life, K random seeds a skill (HMP and
 //!       UV, 8); a row a run (out/score/), then the report (see score.rs)
@@ -271,7 +273,11 @@ fn episode(args: &[String]) -> Result<(), String> {
         }
     }
     let [wad, first] = names.as_slice() else { return Err("usage: evil-boom episode <wad> <first map> [--seeds K] [run options]".into()) };
-    o.lives = 1;
+    // (one life unless told: `--lives N`, see `episode_one`)
+    if o.lives == i32::MAX {
+        o.lives = 1;
+    }
+    let lives = o.lives;
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     let base = o.seed.unwrap_or(0);
     let todo = std::sync::Mutex::new((base..base + seeds).collect::<VecDeque<u32>>());
@@ -302,7 +308,7 @@ fn episode(args: &[String]) -> Result<(), String> {
     let mean = done.iter().map(|d| d.1 as f64).sum::<f64>() / done.len().max(1) as f64;
     let through = done.iter().filter(|d| d.2 == "the episode through").count();
     println!();
-    println!("{mean:.1} levels on one life on average; the episode through in {through}/{}", done.len());
+    println!("{mean:.1} levels on {} on average; the episode through in {through}/{}", if lives == 1 { "one life".to_string() } else { format!("{lives} lives") }, done.len());
     Ok(())
 }
 
@@ -338,13 +344,25 @@ fn episode_chain(me: &std::path::Path, wad: &str, first: &str, o: &evildoom::swe
 fn episode_one(args: &[String]) -> Result<(), String> {
     let (mut o, _, rest) = run_options(args)?;
     let [wad, first] = rest.as_slice() else { return Err("usage: evil-boom episode-one <wad> <first map> [run options]".into()) };
-    o.lives = 1;
+    // (`--lives N`: N lives for the whole episode. Dead with one left, the level again from its
+    // start with what she came into it with, as she got out of the one before (the user's: "the
+    // weapons/armor ammo etc she had when exiting is saved after death and retry of that
+    // level"), and what she's learned of the level kept (the user's: "I would like knowledge
+    // kept"): a level's run with the lives she has left, as `run-map --lives` plays one. Its
+    // time's cap is for all its lives together: thrice a level's, with lives to spend)
+    let mut left = if o.lives == i32::MAX { 1 } else { o.lives.max(1) };
+    if left > 1 {
+        o.max_seconds *= 3.0;
+    }
     let mut map = Some(first.to_uppercase());
     let mut engine = None;
     let mut levels = 0;
     while let Some(m) = map.take() {
+        o.lives = left;
         let r = evildoom::sweep::run_map_in(wad, &m, &o, engine.take())?;
-        let line = format!("{m}: {} {}", r.outcome, r.detail.chars().take(70).collect::<String>());
+        left -= r.deaths;
+        let lost = if r.deaths > 0 { format!(" | {} lives lost, {left} left", r.deaths) } else { String::new() };
+        let line = format!("{m}: {} {}{lost}", r.outcome, r.detail.chars().take(70).collect::<String>());
         let Some(l) = r.carry else {
             println!("LEVEL {line}");
             println!("DAMAGE {}", r.damage);

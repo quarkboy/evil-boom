@@ -2394,3 +2394,30 @@ by what she's seen it lose to anything, not only by what she's put in.
 
 Easiest skill, 16 seeds: MAP23 0.03 -> 0.45 points (3 exits), MAP20 0.07 -> 0.21 (1 exit).
 Score: 0.460 -> 0.459, run for run -0.0009 (standard error 0.0049), exits 408 -> 403.
+
+## Episodes on lives; Doom's second episode's stucks (the user, 2026-11-11)
+
+`episode --lives N`: N lives for the whole episode. Dead, the level's begun again with what
+she came into it with (weapons, ammo, armour, health, the weapon in her hands: the loadout
+has that now, `evil_ready` in the engine API brings it up) and what she'd learned of the level
+kept (the user's: "I would like knowledge kept"; what she saw before she died, not a level
+looked round beforehand). Episode 1 goes through on every skill; episode 2 stuck in 12 of 32:
+
+- **E2M4, a secret door at the back of a lava alcove**, the only way off a ledge. Its wall,
+  her best suspect there, was refused a few points short of the health margin, and walls with
+  less to go on across the lava tried first (a dip reckoned a fraction of a hit; it's none or
+  a whole one) till it was out of reach for good. Now: down to trying walls, a wall's weighed
+  with the margin of nothing else to do; a wall tried over any floor that hurts is left to the
+  risky pass, the best suspect first; and the last pass, the margin lifted, has the walls in it.
+- **E2M4, the crusher stopped low** by a stop line walked over further on, its start line its
+  own edge. Intended, the user's: left. But stopped with her height under it she walks
+  through (the user's: "you are supposed to eventually walk into the crusher"); the room to
+  spare she wanted was for one coming down.
+- **E2M1, a stair built round the corner**: five steps heard, one seen, two neither, taken for
+  still on the floor and the stair for no way up. Now a step of a stair learned for a line
+  takes the rest of that stair she's seen with it.
+
+Score, all of it: 0.459 -> 0.464, run for run +0.0049 (standard error 0.0033).
+
+The recorder: the game library is never unloaded (its sound thread went on calling into it
+after a recorded episode ended: a segfault, the sound never put with the video).

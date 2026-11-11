@@ -68,7 +68,7 @@ pub struct Outcome {
 }
 
 fn default_loadout() -> Loadout {
-    Loadout { weapons: 0b11, clip: 50, shell: 0, cell: 0, rocket: 0, backpack: false, health: 100, armor: 0, armor_type: 0 }
+    Loadout { weapons: 0b11, clip: 50, shell: 0, cell: 0, rocket: 0, backpack: false, health: 100, armor: 0, armor_type: 0, ready: None }
 }
 
 /// The scenarios in `text`.

@@ -310,6 +310,8 @@ pub struct MapRun {
     pub stats: String,
     /// the game, for an episode's next level in the same process
     pub engine: Option<Engine>,
+    /// lives lost in it (each the level begun again, what she'd learned of it kept)
+    pub deaths: i32,
 }
 
 /// The damage she took by where it came from, most first, with the tics of the hits (the
@@ -849,9 +851,9 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     let secret = exited && e.secret_exit();
     if o.snapshot.is_some() {
         snapshot(&w, m, &map_name, e, agent, o.focus)?;
-        return Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, stats, engine: None });
+        return Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, stats, engine: None, deaths });
     }
-    Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, stats, engine: Some(e) })
+    Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, stats, engine: Some(e), deaths })
 }
 
 #[cfg(feature = "viewer")]

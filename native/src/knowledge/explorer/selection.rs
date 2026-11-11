@@ -354,9 +354,18 @@ impl Explorer {
             self.dropped.retain(|id, &mut t| t != tic || !refused.contains(id));
             self.refused_now.1 = refused;
             self.harm_ok = true;
+            // (the walls too, every one round her: left out of this pass, one refused under the
+            // margin was never tried with it lifted. E2M4, 8 of 12 episodes ended there, an hour
+            // each: a ledge the only way off which is a secret door at the back of a lava
+            // alcove; the door's wall suspected, 47 of her 69 health reckoned for trying it, 22
+            // left against a margin of 25, refused; this pass had no walls in it)
+            if perceive {
+                self.suspecting = Suspecting::Panic;
+            }
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+            self.suspecting = Suspecting::No;
             if found {
-                self.log.push(format!("tic {}: nothing else to do: switches from a floor that hurts", obs.tic));
+                self.log.push(format!("tic {}: nothing else to do: switches and walls from a floor that hurts", obs.tic));
             }
             self.from_dead_end = found;
             if !found {

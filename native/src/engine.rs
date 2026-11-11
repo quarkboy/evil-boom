@@ -159,7 +159,7 @@ impl Engine {
         let p = self.game.player();
         let weapons = p.weaponowned.iter().enumerate().filter(|(_, &o)| o != 0).fold(0, |m, (i, _)| m | (1 << i));
         let [clip, shell, cell, rocket] = p.ammo;
-        crate::dsda::Loadout { weapons, clip, shell, cell, rocket, backpack: p.backpack != 0, health: p.health, armor: p.armor, armor_type: p.armortype }
+        crate::dsda::Loadout { weapons, clip, shell, cell, rocket, backpack: p.backpack != 0, health: p.health, armor: p.armor, armor_type: p.armortype , ready: Some(p.readyweapon) }
     }
 
     /// On to another map, started as a new process would start it (things numbered afresh), with
@@ -199,6 +199,9 @@ impl Engine {
         }
         if let Some(l) = &self.carry {
             self.game.give(l);
+            if std::env::var_os("EVIL_DEBUG_CARRY").is_some() {
+                eprintln!("carried in: {l:?}; in her hands now, the game's weapon {}", self.game.player().readyweapon);
+            }
         }
         if self.god {
             self.game.god(true);

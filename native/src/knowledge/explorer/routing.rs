@@ -352,6 +352,11 @@ impl Explorer {
             let without = self.view();
             route = without.plan(start, &[goal], &Plan { keys, states: Some(&states), key_items: &key_items, max_expansions: budget, max_seconds: PLAN_SECONDS, goal_triggers: &[], fired: &fired });
         }
+        if route.is_none() && std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+            let sec = |p: Point| nav.poly_at(p).map(|q| (q, nav.sector_of_poly(q)));
+            let direct = view.find_path(start, obj.goal, &states, None);
+            self.log.push(format!("  no plan for '{}': from ({:.0}, {:.0}) {:?} to ({:.0}, {:.0}) {:?}; a path by itself: {:?}; believed heights there {:?}", obj.label, start.0, start.1, sec(start), obj.goal.0, obj.goal.1, sec(obj.goal), direct.map(|d| d.steps), sec(obj.goal).map(|(_, s)| states[s].clone())));
+        }
         let Some(route) = route else {
             // (only the planner's none: not a way she won't take, which the risky twin may)
             self.no_route.insert(failed.0, (failed.1, obs.tic));
@@ -406,13 +411,19 @@ impl Explorer {
             let cost = self.expected_damage(&route.legs, obj, &states, obs);
             let health = obs.health.unwrap_or(100.0);
             let way_on = obj.trigger.is_some() || obj.kind == Kind::Frontier;
-            let margin = match (self.harm_ok, way_on) {
+            // (down to trying walls, a wall's weighed as with nothing else to do: there isn't.
+            // E2M4: a ledge whose way off is a secret door at the back of a lava alcove; at 69
+            // its wall, her best suspect, was refused, 22 left against 25, and walls with less
+            // to go on over cheaper lava tried instead, down to 41, when it was refused for good)
+            let walls = obj.kind == Kind::Wall && self.suspecting != super::Suspecting::No;
+            let margin = match (self.harm_ok || walls, way_on) {
                 (true, true) => 0.0,
                 (true, false) => self.hardest_floor_hit(&route.legs, obj, &states),
                 (false, _) => HEALTH_MARGIN,
             };
             if cost > RISK_SHARE * health && health - cost < margin {
                 self.short_of_health = Some(obs.tic);
+                if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 1: cost {cost:.0} (the way {:.0}) against health {health:.0}, armor {:?}, margin {margin:.0}, nothing else to do {}", obj.label, self.route_damage(&route.legs, &states, obs), obs.armor, self.harm_ok)); }
                 return None;
             }
         }
@@ -435,7 +446,8 @@ impl Explorer {
                     }
                     if let Some(s) = n.rsplit(' ').next().and_then(|x| x.parse::<usize>().ok()) {
                         if k.damaging(s) && !escaped.contains(&s) {
-                            return None;
+                            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 2", obj.label)); }
+                return None;
                         }
                     }
                 }
@@ -447,7 +459,14 @@ impl Explorer {
             // 3.2, walls tried in the lava till dead. Not for walls or looking: lifted for every
             // way, she fought and wandered in the lava, worse)
             let shut_in = self.on_hurting_floor(obs) && self.reach.iter().all(|&p| self.knowledge.damaging(nav.sector_of_poly(p)));
-            if damage > RISK_SHARE * obs.health.unwrap_or(100.0) && !(shut_in && obj.trigger.is_some()) {
+            // (a wall tried over any floor that hurts is the risky twin's: a dip is no hit or a
+            // whole one, and the walls with least to go on, a tenth of her health each as
+            // reckoned, came before the one she most suspected, which stood on the worst of it.
+            // E2M4 in an episode: 58 at the ledge, walls across the lava tried first, 41 by the
+            // time the secret door's own was weighed, 12 short; an hour there, 8 of 12 episodes)
+            let wall_over_harm = obj.kind == Kind::Wall && damage > 0.0;
+            if (damage > RISK_SHARE * obs.health.unwrap_or(100.0) || wall_over_harm) && !(shut_in && obj.trigger.is_some()) {
+                if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 3", obj.label)); }
                 return None;
             }
         }
@@ -457,13 +476,16 @@ impl Explorer {
         // looked into yet; the jump taken, a lost soul in its run, down in the trench, banks
         // of 72 all round, for good)
         if obj.kind != Kind::Exit && !obj.risky && route.legs.iter().any(|leg| leg.path.jumps.iter().any(|j| self.falls_for_good(j, &view, &route.states))) {
-            return None;
+            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 4", obj.label)); }
+                return None;
         }
         if obj.kind != Kind::Exit && self.dead_end(&route, obj, obs, &view) {
-            return None;
+            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 5", obj.label)); }
+                return None;
         }
         if obj.kind != Kind::Exit && !obj.risky && self.shuts_in(&route, obj, obs, &view) {
-            return None;
+            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 6", obj.label)); }
+                return None;
         }
         Some(steps_from_legs(&view, &route.legs, Some(last), Some(&states)))
     }
