@@ -81,7 +81,7 @@ pub const STRAFE_SIDE: f64 = 40.0;
 pub const STRAFE_FACING: f64 = 38.659_808_254_090_09;
 
 /// Bumped whenever the finder's results could change (it keys Python's jump cache).
-pub const FINDER_VERSION: u32 = 28;
+pub const FINDER_VERSION: u32 = 29;
 
 /// The map as the jump tools need it.
 pub struct JumpLab {

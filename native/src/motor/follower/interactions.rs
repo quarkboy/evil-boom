@@ -430,6 +430,17 @@ impl RouteFollower {
             if self.replan(obs, &why, true) {
                 return Some(self.motion.hold(obs, (0.0, 0.0), Some(look)));
             }
+            // (no other way from here, and it's for a run-jump off that floor: the jump's not to
+            // be had this way, as one fallen short of isn't; counted against it, and the step's
+            // over, for the explorer to choose again. MAP09's pass: a jump off a lift planned
+            // with the lift's line crossed two steps before, the lift long back up; waited
+            // under for 15 s, the way planned again as it was, ten minutes, the stairs to the
+            // same door never looked at)
+            let off: Option<crate::navigator::Jump> = self.segments[self.seg_i..].iter().filter_map(|seg| seg.jump.clone()).find(|j| j.src_polys.iter().any(|&p| nav.sector_of_poly(p) == sector));
+            if let Some(jump) = off {
+                self.missed.push(jump);
+                return Some(self.fail(obs, &format!("sector {sector} not coming for the jump off it")));
+            }
         }
         if waited > 15 * 35 {
             if !self.replan(obs, &format!("sector {sector} not opening"), false) {

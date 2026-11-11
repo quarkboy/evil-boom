@@ -1359,7 +1359,8 @@ impl Combat {
             .iter()
             .filter(|t| {
                 let m = mon(t.name);
-                (matches!(m.attack, Attack::Melee | Attack::Charge | Attack::Fire) || m.melee) && dist((t.x, t.y), pos) < self.tune.engage.close + m.radius
+                // (not one that can't get at her: nothing to back off from)
+                (matches!(m.attack, Attack::Melee | Attack::Charge | Attack::Fire) || m.melee) && dist((t.x, t.y), pos) < self.tune.engage.close + m.radius && !self.cant_reach(obs, t)
             })
             .cloned()
             .collect();

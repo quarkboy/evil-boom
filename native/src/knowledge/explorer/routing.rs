@@ -320,6 +320,38 @@ impl Explorer {
             goal = nav.activation_point(t, obs.pos(), &rest);
             route = plan(goal);
         }
+        // (a plan sets its switches and lines off in the shortest order to walk them in, and
+        // has what each does stay done. What a timed one does doesn't: a lift down a few
+        // seconds, a door open a few. One that'll have lapsed before the plan gets to what
+        // needs it is no plan: planned again without the jump that came too late; with no
+        // jump in it to leave out, it's no route. MAP09's pass: a jump off a lift through a
+        // door a switch opens for four seconds, the lift's ride after the switch; and the
+        // lift's line crossed, then the switch, then back to the lift, long up again; ten
+        // minutes of both, the stairs to the same door never taken)
+        if let Some(want) = std::env::var("EVIL_DEBUG_JUMPS_INTO").ok().and_then(|v| v.parse::<usize>().ok()) {
+            let banned = self.banned_jumps();
+            for (ji, j) in nav.jumps.iter().enumerate().filter(|(_, j)| nav.sector_of_poly(j.dest_poly) == want) {
+                let from: BTreeSet<usize> = j.src_polys.iter().map(|&p| nav.sector_of_poly(p)).collect();
+                let needs: Vec<String> = j.requires.iter().map(|(rs, rh)| format!("{rs} at ({}, {}): believed {}", rh.floor, rh.ceiling, states[*rs].iter().any(|h| h.key() == rh.key()))).collect();
+                eprintln!("JUMP {ji} from {from:?} off ({:.0}, {:.0}): banned {}, strafe {}, soft {}, sure {:.2}, through {}; needs {needs:?}", j.takeoff.0, j.takeoff.1, banned.contains(&ji), j.strafe, j.soft, j.sure, j.through);
+            }
+        }
+        const REPLANS: usize = 6;
+        for _ in 0..REPLANS {
+            let Some(late) = route.as_ref().and_then(|r| self.lapses(r, &view, &states)) else { break };
+            if late.is_empty() {
+                route = None;
+                break;
+            }
+            let learned = self.knowledge.learned.values().map(BTreeSet::len).sum::<usize>();
+            if self.lapsing_jumps.1 != learned {
+                self.lapsing_jumps = (BTreeSet::new(), learned);
+            }
+            self.log.push(format!("tic {}: '{}': a way with a jump too late for what's timed before it: another", obs.tic, obj.label));
+            self.lapsing_jumps.0.extend(late);
+            let without = self.view();
+            route = without.plan(start, &[goal], &Plan { keys, states: Some(&states), key_items: &key_items, max_expansions: budget, max_seconds: PLAN_SECONDS, goal_triggers: &[], fired: &fired });
+        }
         let Some(route) = route else {
             // (only the planner's none: not a way she won't take, which the risky twin may)
             self.no_route.insert(failed.0, (failed.1, obs.tic));
@@ -434,6 +466,92 @@ impl Explorer {
             return None;
         }
         Some(steps_from_legs(&view, &route.legs, Some(last), Some(&states)))
+    }
+
+    /// Does the route count on something timed that will have lapsed by the time it's needed?
+    /// The run-jumps (their keys) of the leg that needs it, to plan again without; none: a
+    /// way on foot that comes too late, no route. Else None.
+    /// A timed effect: what a line does that undoes itself (`hold`: a lift down and back, a
+    /// door open and shut). Needed: by a later leg that walks into its sector and has no way
+    /// with it lapsed, or by a jump that requires its height. When: the walk there at a run,
+    /// a jump's lining up, and the wait for a floor the jump takes off from that another of
+    /// the timed effects has away.
+    fn lapses(&self, route: &Route, view: &View, states: &States) -> Option<BTreeSet<String>> {
+        /// (units a tic, a run with its turns; tics to line a jump up; tics at a switch)
+        const PACE: f64 = 10.0;
+        const LINE_UP: f64 = 50.0;
+        const PRESS: f64 = 18.0;
+        let nav = &self.nav;
+        let legs = &route.legs;
+        // (how far along a leg's way till a poly that fits, by the polys' middles)
+        let along = |leg: &crate::navigator::Leg, fits: &dyn Fn(usize) -> bool| -> Option<f64> {
+            let mut far = 0.0;
+            let mut last: Option<Point> = None;
+            for &p in &leg.path.polys {
+                let c = nav.poly_center(p);
+                far += last.map_or(0.0, |l| dist(l, c));
+                last = Some(c);
+                if fits(p) {
+                    return Some(far);
+                }
+            }
+            None
+        };
+        let length = |leg: &crate::navigator::Leg| leg.path.polys.windows(2).map(|w| dist(nav.poly_center(w[0]), nav.poly_center(w[1]))).sum::<f64>();
+        let mut running = states.clone();
+        for i in 0..legs.len().saturating_sub(1) {
+            let Some(id) = legs[i].trigger else { continue };
+            let t = view.trigger(id).clone();
+            let after = nav.apply_trigger(&running, &t);
+            // (sector, the height it's at a while, tics from the trigger till it's left it)
+            let timed: Vec<(usize, Heights, f64)> = nav
+                .effects_now(&t, &running)
+                .iter()
+                .filter(|(s, hs)| !hs.is_empty() && !running[*s].iter().any(|h| h.key() == hs[0].key()))
+                .filter_map(|(s, hs)| {
+                    let tm = nav.movers.timing(t.info.special, &t.info.description, *s, hs[0]);
+                    tm.hold.filter(|_| t.line >= 0).map(|hold| (*s, hs[0], tm.travel + hold))
+                })
+                .collect();
+            if timed.is_empty() {
+                running = after;
+                continue;
+            }
+            let mut lapsed = after.clone();
+            for (s, _, _) in &timed {
+                lapsed[*s].clone_from(&running[*s]);
+            }
+            let mut elapsed = 0.0;
+            for (j, leg) in legs.iter().enumerate().skip(i + 1) {
+                let jumps = || leg.path.jumps.iter().map(crate::navigator::Jump::key).collect::<BTreeSet<String>>();
+                for (s, h, window) in &timed {
+                    // (a jump that needs it as it is meanwhile: its takeoff, lined up, and the
+                    // wait for a floor it leaves from that's away meanwhile too)
+                    for jump in leg.path.jumps.iter().filter(|jump| jump.requires.iter().any(|(rs, rh)| rs == s && rh.key() == h.key())) {
+                        let to = along(leg, &|p| jump.src_polys.contains(&p)).unwrap_or(0.0);
+                        let ride = jump.requires.iter().filter_map(|(rs, rh)| timed.iter().find(|(os, oh, _)| os == rs && oh.key() != rh.key()).map(|o| o.2)).fold(0.0, f64::max);
+                        if elapsed + to / PACE + LINE_UP + ride > *window {
+                            return Some(jumps());
+                        }
+                    }
+                    // (a walk into it a leg or more on: is there a way without it?)
+                    if j > i + 1 {
+                        if let Some(to) = along(leg, &|p| nav.sector_of_poly(p) == *s) {
+                            let (Some(&a), Some(&b)) = (leg.path.polys.first(), leg.path.polys.last()) else { continue };
+                            if elapsed + to / PACE > *window && view.find_path(nav.poly_center(a), nav.poly_center(b), &lapsed, None).is_none() {
+                                return Some(jumps());
+                            }
+                        }
+                    }
+                }
+                elapsed += length(leg) / PACE + leg.path.jumps.len() as f64 * LINE_UP + PRESS;
+                if let Some(next) = leg.trigger {
+                    lapsed = nav.apply_trigger(&lapsed, view.trigger(next));
+                }
+            }
+            running = after;
+        }
+        None
     }
 
     /// A run-jump that, fallen short of, leaves her somewhere she knows no way back from to

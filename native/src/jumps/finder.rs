@@ -311,7 +311,23 @@ impl JumpLab {
             if flight && high {
                 order.sort_by(|a, b| b.floor.total_cmp(&a.floor));
             }
-            let h = order.into_iter().find(|&h| ok(h))?;
+            // (what one line moves it moves together: a sector isn't given the height the
+            // line leaves it at beside another of the line's left where it began. MAP09: the
+            // run off the top of three steps a line builds, kept with the top step built and
+            // the one below it not: a jump the world never has the heights for, the stairs to
+            // a door never taken, the door jumped at from a lift ten minutes)
+            let moved = |effects: &[(usize, Vec<Heights>)], s: usize, h: Heights| -> Option<bool> {
+                let hs = &effects.iter().find(|(e, _)| *e == s)?.1;
+                let start = self.initial[s];
+                hs.iter().any(|x| (x.floor, x.ceiling) != start).then(|| (h.floor, h.ceiling) != start && hs.contains(&h))
+            };
+            let together = |h: Heights| {
+                self.permanent.iter().all(|effects| {
+                    let Some(mine) = moved(effects, sector, h) else { return true };
+                    chosen.0.iter().all(|&(other, oh)| moved(effects, other, oh).is_none_or(|theirs| theirs == mine))
+                })
+            };
+            let h = order.into_iter().find(|&h| ok(h) && together(h))?;
             chosen.0.push((sector, h));
             Some(h)
         };

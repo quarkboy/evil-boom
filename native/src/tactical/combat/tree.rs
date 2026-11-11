@@ -241,6 +241,12 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
 /// the route takes her past it, faster than it. Not past one whose claw can take all she has:
 /// E2M3, out of ammo at 35, the route to a shell went by a baron, 10-80 a hit.)
 fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    // (nothing able to hurt her, a sphere's or the pass's: nothing to back off from. MAP13's
+    // pass: a demon she'd no shot at backed off from and kept off from by turns, the route's
+    // steps taking too long, 300 s)
+    if c.now.invulnerable {
+        return None;
+    }
     let pos = s.pos;
     let armed = c.armed(obs);
     let nearest = s.close.iter().filter(|t| armed || c.now.health < c.tune.engage.low_health || claw_max(t.name) >= c.now.health).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
@@ -374,6 +380,10 @@ fn outmatched_get_past(c: &mut Combat, obs: &Observation, s: &Situation) -> Opti
 
 /// Too near for the gun she'd fight it with, or for them to miss.
 fn keeping_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    // (nor to keep off from)
+    if c.now.invulnerable {
+        return None;
+    }
     let pos = s.pos;
     let way = s.target.as_ref().filter(|t| mon(t.name).attack != Attack::None && dist((t.x, t.y), pos) < window(&c.preferred_gun(obs, t), t).0).and_then(|t| {
         let gun = c.preferred_gun(obs, t);
@@ -395,6 +405,12 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     // on a ledge over a pit, a shotgun guy below too steep to aim at, the route's drop into the
     // pit held 300 s, "standing and fighting")
     if s.target.as_ref().is_some_and(|t| c.no_shot_long(obs, t)) {
+        return None;
+    }
+    // (nor for one that can't get at her and that she's no shot at: nothing comes of standing.
+    // MAP19's pass: on a ledge 216 up, ten demons milling below it, too steep to shoot, stood
+    // over for 530 s, by turns with backing off from them, till the pass gave up)
+    if s.target.as_ref().is_some_and(|t| c.cant_reach(obs, t) && !c.can_hit(obs, t, None)) {
         return None;
     }
     let duel = s.target.as_ref().is_some_and(|t| fought(c, obs, t));

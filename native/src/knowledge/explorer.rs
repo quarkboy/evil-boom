@@ -396,6 +396,10 @@ pub struct Explorer {
     pub out_of_options: Option<i64>,
     /// what she knew when the places she got stuck last got another go
     pub stuck_retried: Option<String>,
+    /// run-jumps that came too late in a plan for something timed they need (a door a switch
+    /// opens a while, behind a lift's ride), left out of planning while she knows no more than
+    /// she did (what she'd learned then: the count)
+    pub lapsing_jumps: (BTreeSet<String>, usize),
     /// directed: the objective in hand pressed on with mid-fight, shooting and dodging on the
     /// way, not stopped for the fight (Evil's rush, the user's: MAP07's arena, a switch never got
     /// to for the mancubi chased)
@@ -542,6 +546,7 @@ impl Explorer {
             spares: BTreeSet::new(),
             out_of_options: None,
             stuck_retried: None,
+            lapsing_jumps: (BTreeSet::new(), 0),
             press_on: false,
             panic_tries: 0,
             strong_only: false,
@@ -595,6 +600,7 @@ impl Explorer {
         self.panic_tries = 0;
         self.retried = None;
         self.stuck_retried = None;
+        self.lapsing_jumps.0.clear();
     }
 
     /// Taking over a run played back to here (replay): what she's heard and set off so far is

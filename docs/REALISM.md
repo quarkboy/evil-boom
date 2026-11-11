@@ -431,6 +431,19 @@ Each line: the change, its score run for run against the build before on the sam
   crosses a line that moves its own floor is left out. +0.0071 ± 0.0045 (738 / 118 / 87;
   exits 375 -> 380; stalled 65 -> 54); 0.446. MAP05 8 of 16 -> 12, E3M3 10 -> 13, E4M8 5 ->
   7; E4M5 12 -> 7 (not traced: the jumps it no longer takes, likely). Kept.
+- **More of the passes' stucks** (MAP19, MAP15, MAP13, MAP09). Ordinary play's too: what
+  only claws and can't get at her, and that she's no shot at, isn't stood for or backed off
+  from (on a ledge 216 up, ten demons below, 530 s); nothing's backed off or kept off from
+  while nothing can hurt her (a sphere's time too); a jump off a lift that isn't coming is a
+  miss of the jump, the step over (it was waited under 15 s and planned again the same); a
+  plan that counts on something timed that'll have lapsed by the step that needs it is
+  planned again without the jump that came too late (`lapses`: nothing for it to catch once
+  the next was fixed); and **the jump finder gives what one line moves heights from the one
+  state** (it had a run off the top of three steps a line builds needing the top step built
+  and the one below not: the stairs to a door never usable, the door jumped at from a lift
+  for ten minutes; the user's "must be some issue with what it thinks a sector height is").
+  +0.0006 ± 0.0029 (1007 / 22 / 21; exits 380 -> 382; stalled 54 -> 52); 0.447. The finder's
+  part: 1083 of 1088 runs the same. Kept, for the passes.
 - **A3** (the wait at a lift), **A5** (the edge of her view), **B2, B3**: not done yet.
 
 ## A level she knows, and lives (the evaluation asked for 2026-11-10)
@@ -490,6 +503,9 @@ closed in on and lost by turns, her legs never the route's) and keeps at nothing
 sight; the exit's held back for everything safe but not for what's risky (MAP18: down into
 the nukage moat to look at a wall, no way out, the exit seen and never taken), and not for
 walls. Out by the exit on 57 of 68 (HMP, seed 5), then MAP06, E4M7, MAP08, MAP27, MAP28 with
-the jump and stuck rules; still not: MAP09, MAP13, MAP15, MAP19, and the boss levels E3M8
-and MAP30 (the boss not killed). Out knowing under four fifths of the map, for leaving
+the jump and stuck rules, then MAP19, MAP15, MAP13 (above); still not: MAP09 (536 of 640
+lines, from 364: up the stairs and on, then nothing left to do, not traced) and the boss
+levels E3M8 and MAP30 (the boss not killed). In the pass her target's kept to 448 once
+hers (at 320 it was hers and not by the tic). `EVIL_DEBUG_JUMPS_INTO=<sector>` prints the
+planner's jumps into a sector and whether she believes the heights each needs. Out knowing under four fifths of the map, for leaving
 before the risky parts: E3M6, MAP24, E1M3, MAP20, MAP31, E3M5.

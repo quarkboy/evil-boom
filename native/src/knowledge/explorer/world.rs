@@ -240,9 +240,16 @@ impl Explorer {
             .jumps
             .iter()
             .enumerate()
-            .filter(|(_, j)| missed.get(&j.key()).copied().unwrap_or(0) >= limit || (j.strafe && !self.strafe_ok))
+            .filter(|(_, j)| missed.get(&j.key()).copied().unwrap_or(0) >= limit || (j.strafe && !self.strafe_ok) || self.lapsing(&j.key()))
             .map(|(i, _)| i)
             .collect()
+    }
+
+    /// Is the jump one left out for coming too late for something timed (and she's learned
+    /// nothing since that might change it)?
+    fn lapsing(&self, key: &str) -> bool {
+        let (jumps, learned) = &self.lapsing_jumps;
+        *learned == self.knowledge.learned.values().map(BTreeSet::len).sum::<usize>() && jumps.contains(key)
     }
 
     pub(super) fn set_jumps(&mut self, difficult: bool) {

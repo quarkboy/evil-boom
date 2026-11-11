@@ -78,7 +78,12 @@ impl Combat {
             // for the last 300 s of it; taken on only while a shot got to it, in and out of
             // that by the tic, her legs and her aim the fight's every other one)
             const NEAR: f64 = 320.0;
-            against.retain(|t| dist((t.x, t.y), pos) < NEAR);
+            /// (the one she's on kept to a little farther: at the very edge of near it was
+            /// hers and not by the tic, MAP15's pass, a chaingunner stepped for a shot at and
+            /// dropped 279 times in 40 s)
+            const KEPT: f64 = 448.0;
+            let on = self.target;
+            against.retain(|t| dist((t.x, t.y), pos) < if Some(t.id) == on { KEPT } else { NEAR });
         }
         let hitscanners: Vec<i32> = against.iter().filter(|t| mon(t.name).attack == Attack::Hitscan).map(|t| t.id).collect();
         let mut weighed: Vec<(String, f64)> = Vec::new();
