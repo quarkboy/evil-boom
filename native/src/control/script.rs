@@ -13,11 +13,16 @@
 //!                       her say in the fight, each for a while (10 s, a stance 30)
 //!   idle SECONDS|wait   with no order that long she carries on by herself (not leaving the
 //!                       level); wait: she waits, as long as it takes
+//!   look                what's round her: the room, what it leads to, what's in sight and heard,
+//!                       the bot's pick
+//!   hints off|on_stall|always
+//!                       the bot's own pick: never; where asked and after a while with no order
+//!                       (as it starts); or as soon as she's waiting
 //!   status              her health, armor, weapons, ammo, keys, what she's doing
 //!   where               where she is, her health, what she's doing
 //!   log [N]             her log's last N lines (40), as the watcher shows it
 
-use super::directed::{bearing, Director, Order, Topic};
+use super::directed::{bearing, Director, Hints, Order, Topic};
 use crate::motor::Observation;
 use crate::play::Agent;
 
@@ -37,19 +42,16 @@ pub fn command(
                 .ok_or("list areas|doors|items|monsters|exits [all] [N]")?;
             let all = w.contains(&"all");
             let n = w.iter().skip(2).find_map(|v| v.parse().ok()).unwrap_or(20);
-            let (entries, hidden) = d.brief(agent, obs, topic, all);
-            let mut out = vec![format!("{} known", entries.len())];
-            out.extend(
-                entries
-                    .iter()
-                    .take(n)
-                    .map(|e| format!("  {}", d.describe(e, obs))),
-            );
-            if hidden > 0 {
+            let l = d.listing(agent, obs, topic, all, n);
+            let mut out = vec![format!("{} known", l.known)];
+            out.extend(l.lines.iter().map(|e| format!("  {e}")));
+            if l.hidden > 0 {
                 out.push(format!(
-                    "  and {hidden} explored areas (list areas all to see them)"
+                    "  and {} explored areas (list areas all to see them)",
+                    l.hidden
                 ));
             }
+            out.extend(l.pick.map(|p| format!("  my pick: {p}")));
             Ok(out)
         }
         Some("name") => {
@@ -131,6 +133,14 @@ pub fn command(
                 None => "with no order she waits".to_string(),
             }])
         }
+        Some("look") => Ok(d.look(agent, obs)),
+        Some("hints") => {
+            d.hints = w
+                .get(1)
+                .and_then(|h| Hints::parse(h))
+                .ok_or("hints off|on_stall|always")?;
+            Ok(vec![format!("hints {}", d.hints.name())])
+        }
         Some("status") => Ok(vec![d.status(agent, obs)]),
         Some("check") => {
             let risky = w.last() == Some(&"risky");
@@ -169,7 +179,7 @@ pub fn command(
                 .collect())
         }
         _ => Err(format!(
-            "unknown command \"{line}\": list, name, order, status, where, log"
+            "unknown command \"{line}\": list, look, name, order, check, fight, idle, hints, status, where, log"
         )),
     }
 }

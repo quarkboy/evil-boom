@@ -2421,3 +2421,33 @@ Score, all of it: 0.459 -> 0.464, run for run +0.0049 (standard error 0.0033).
 
 The recorder: the game library is never unloaded (its sound thread went on calling into it
 after a recorded episode ended: a segfault, the sound never put with the video).
+
+## Directed play: the bot's pick, lists in its order, `doom_look` (the user, 2026-11-11)
+
+The SDK plan's 5.5 and 4.1 (`docs/NEURO_SDK_PLAN.md`), in `control/directed/look.rs`.
+
+- **One opinion, the explorer's.** The pick is what she'd do next on her own: the first of
+  the explorer's ranked objectives she has a route to. Nothing new is weighed for it, so it
+  can't disagree with what the idle fallback then does, and it's built only on what she
+  knows. Considered and left: a ranking of its own for the commander (two opinions to keep in
+  step); the exit as a pick whenever it's reachable (the explorer's own first choice, but
+  then the pick says "leave" from the moment the exit's seen: leaving stays an order's, as
+  on her own, and the exit is the pick only with nothing else left she can get to).
+- **Under the id it's ordered by**: something to explore by its area (`doom_explore`), a key
+  by the key lying there, a door, switch, item by its own. A spare pickup isn't a pick (she
+  takes those by herself).
+- **Lists in that order too**, not by distance alone; what the explorer has no objective for
+  comes after, nearest first.
+- **Where it's said**: marked in `doom_list`, last in `doom_look` and a forced decision; a
+  failed order says what's untried nearest what it couldn't reach, or the pick; with no order
+  for 30 s it's suggested quietly, at 60 s to be heard. `hints` (`off`, `on_stall`, `always`)
+  sets how much; `doom_policy` carries it and `idle`.
+- **`doom_look`**: in sight is the engine-side line of sight from her eyes over floor she
+  knows, whichever way she faces: a look is her looking round, not her 110 degrees this tic.
+  The fight's line is the assessment's (`Combat::now`): safe, dangerous (engaged), deadly
+  (outmatched), with surrounded, short of ammo, an arch-vile; and the target and gun the
+  fight has chosen, in place of the explorer's pick.
+
+Checked: E1M2 with every suggestion taken as an order and nothing else: 68 of 70 carried
+out, out by the exit at 738 s, 41/41 kills. Parity: 24 runs the same (none of it is in a
+headless run).

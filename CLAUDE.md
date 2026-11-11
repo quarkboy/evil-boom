@@ -137,7 +137,9 @@ she's told; control of the game itself, cheats typed and never listed; notes fro
 levels by hand, which reorder its stages). Built of it so far, in `control/directed.rs`: a
 replaced order says so and an errand resumes exploring; `then`; the idle fallback (`idle N`);
 fights told (fast loss, a summary, secrets); `fight` / `doom_fight` (a gun, a target, hold
-fire, a stance, each for a while). To direct a game by hand: `watch <wad> <map> --headless
+fire, a stance, each for a while); the bot's pick and lists in its order, `look` / `doom_look`,
+`hints` and `idle` as `doom_policy` (`control/directed/look.rs`: the pick is the explorer's
+next objective under the id it's ordered by; E1M2 finishes on the picks alone). To direct a game by hand: `watch <wad> <map> --headless
 --speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
 `.out` twin (`me.txt` gives `me.out`).
 

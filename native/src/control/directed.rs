@@ -17,6 +17,10 @@ use crate::knowledge::explorer::{Ident, Kind, Objective};
 use crate::motor::{heading, norm, Observation};
 use crate::play::Agent;
 
+mod look;
+
+pub use look::{Hints, Listing, Pick};
+
 /// a name at most this long (refused, not cut: a name she didn't choose is one she won't use)
 pub const NAME_MAX: usize = 32;
 
@@ -314,6 +318,10 @@ pub struct Director {
     told_auto_tic: Option<i64>,
     /// on her own she found nothing more to do: not taken up again till an order's been given
     auto_spent: bool,
+    /// how much of its own opinion the bot offers; and how often it's suggested its pick this
+    /// wait for an order
+    pub hints: Hints,
+    nudged: u8,
     /// the fight she's in, for its summary when it's over; and what she had last tic (what a
     /// fight cost is the falls from tic to tic, so a medikit taken in the middle doesn't hide it)
     fight: Option<Fight>,
@@ -1004,12 +1012,17 @@ impl Director {
             .get_or_insert_with(|| Places::build(&agent.x().nav))
     }
 
-    /// A list of what she knows of, nearest first.
+    /// A list of what she knows of, in her own order: what the explorer would do first first
+    /// (an area by the best thing left to explore in it), the rest after, nearest first.
     pub fn list(&mut self, agent: &mut Agent, obs: &Observation, topic: Topic) -> Vec<Entry> {
         let pos = obs.pos();
+        let open = match topic {
+            Topic::Monsters => Vec::new(),
+            Topic::Exits => self.open_unheld(agent, obs),
+            _ => self.open_objectives(agent, obs),
+        };
         let mut out: Vec<Entry> = match topic {
             Topic::Areas => {
-                let open = self.open_objectives(agent, obs);
                 let walls = agent.x_mut().suspected_walls(obs, 3);
                 let known = agent.x().knowledge.known_polys();
                 let nav = std::rc::Rc::clone(&agent.x().nav);
@@ -1054,9 +1067,9 @@ impl Director {
                 self.done_areas = done;
                 entries
             }
-            Topic::Doors => self.objectives_of(agent, obs, &[Kind::Door]),
+            Topic::Doors => entries_of(&open, &[Kind::Door]),
             Topic::Switches => {
-                let mut out = self.objectives_of(agent, obs, &[Kind::Switch]);
+                let mut out = entries_of(&open, &[Kind::Switch]);
                 for e in &mut out {
                     let effect =
                         e.id.strip_prefix("switch-l")
@@ -1071,7 +1084,7 @@ impl Director {
                 }
                 out
             }
-            Topic::Exits => self.objectives_of(agent, obs, &[Kind::Exit]),
+            Topic::Exits => entries_of(&open, &[Kind::Exit]),
             Topic::Items => {
                 let known = agent.x().knowledge.known_polys();
                 let nav = &agent.x().nav;
@@ -1120,8 +1133,36 @@ impl Director {
                 })
                 .collect(),
         };
-        out.sort_by(|a, b| dist(pos, a.at).total_cmp(&dist(pos, b.at)));
+        let rank = self.ranks(agent, &open);
+        let place = |e: &Entry| rank.get(&e.id).copied().unwrap_or(usize::MAX);
+        out.sort_by(|a, b| {
+            place(a)
+                .cmp(&place(b))
+                .then(dist(pos, a.at).total_cmp(&dist(pos, b.at)))
+        });
         out
+    }
+
+    /// Where each thing listable stands in the explorer's order (`open`, best first): a door, a
+    /// switch, an item by its own objective; an area by the first thing to explore in it.
+    fn ranks(&mut self, agent: &Agent, open: &[Objective]) -> BTreeMap<String, usize> {
+        let mut rank = BTreeMap::new();
+        for (i, o) in open.iter().enumerate() {
+            rank.entry(id_of(o)).or_insert(i);
+            if explores(o) {
+                if let Some(area) = self.area_at(agent, o.goal) {
+                    rank.entry(area).or_insert(i);
+                }
+            }
+        }
+        rank
+    }
+
+    /// The area a spot is in, by id.
+    fn area_at(&mut self, agent: &Agent, p: Point) -> Option<String> {
+        let nav = std::rc::Rc::clone(&agent.x().nav);
+        let sector = nav.sector_of_poly(nav.poly_at(p)?);
+        Some(self.places(agent).area_of(sector).id.clone())
     }
 
     /// A list as she's shown it: areas with nothing more to explore left out (unless `all`), but
@@ -1296,6 +1337,7 @@ impl Director {
             && self.pressed.is_none();
         if !waiting {
             self.idle_since = None;
+            self.nudged = 0;
         } else if self.idle_since.is_none() {
             self.idle_since = Some(obs.tic);
         }
@@ -1319,6 +1361,9 @@ impl Director {
                 );
                 return;
             }
+        }
+        if let Some(since) = self.idle_since {
+            self.nudge(agent, obs, obs.tic - since);
         }
         if self.doing.is_none() || matches!(self.doing, Some(Doing::Off | Doing::Pickup)) {
             agent.x_mut().press_on = false; // (her own doing: no order's rush)
@@ -1687,6 +1732,7 @@ impl Director {
         // exploring goes on after it)
         let errand = matches!(o, Order::Go(..));
         self.auto_spent = false;
+        self.nudged = 0;
         if matches!(self.doing, Some(Doing::Auto)) {
             self.end_auto(agent);
         }
@@ -1762,11 +1808,12 @@ impl Director {
                     self.doing = Some(Doing::Area(id, what, secrets));
                 } else {
                     let found = self.found(agent, obs, fits);
+                    let instead = self.instead(agent, obs);
                     self.report(
                         obs,
                         true,
                         format!(
-                            "Nothing to {} in {what}.{found}",
+                            "Nothing to {} in {what}.{found}{instead}",
                             if secrets > 0 {
                                 "explore or search"
                             } else {
@@ -1790,11 +1837,12 @@ impl Director {
                     self.doing = Some(Doing::Way(b, secrets));
                 } else {
                     let found = self.found(agent, obs, fits);
+                    let instead = self.instead(agent, obs);
                     self.report(
                         obs,
                         false,
                         format!(
-                            "Nothing to {} {}.{found}",
+                            "Nothing to {} {}.{found}{instead}",
                             if secrets > 0 {
                                 "explore or search"
                             } else {
@@ -1915,9 +1963,11 @@ impl Director {
             .and_then(|n| obs.things.iter().flatten().find(|t| t.id == n))
         {
             let x = agent.x();
-            let at = x
-                .touch_spot((t.x, t.y), &x.reach)
-                .ok_or_else(|| format!("No known way to the {} yet; explore near it.", t.name))?;
+            let Some(at) = x.touch_spot((t.x, t.y), &x.reach) else {
+                let (name, at) = (t.name, (t.x, t.y));
+                let toward = self.toward(agent, obs, at);
+                return Err(format!("No known way to the {name} yet.{toward}"));
+            };
             let mut o = Objective::new(Kind::Item, at, format!("pick up {}", t.name));
             o.thing = Some(t.id);
             return Ok(o);
@@ -1953,7 +2003,8 @@ impl Director {
                 return Err(format!("The only known way to {what} crosses a hurting floor (or worse); resend with risky: true."));
             }
         }
-        Err(format!("No survivable way to {what} known."))
+        let toward = self.toward(agent, obs, obj.goal);
+        Err(format!("No survivable way to {what} known.{toward}"))
     }
 
     /// Go to (try, pick up) something by id.
@@ -1967,11 +2018,13 @@ impl Director {
         };
         obj.risky = risky;
         let what = self.tag(id, obs);
+        let at = obj.goal;
         if agent.x_mut().take(obs, obj) {
             self.report(obs, true, format!("Going to {what}."));
             self.doing = Some(Doing::Once(id.to_string(), what));
         } else {
-            self.report(obs, false, format!("No way to {what}."));
+            let toward = self.toward(agent, obs, at);
+            self.report(obs, false, format!("No way to {what}.{toward}"));
         }
     }
 
@@ -1991,9 +2044,19 @@ impl Director {
     /// The explorer's objectives of those kinds as entries: doors, switches, exits (what each
     /// is: only what the id doesn't say, a key it needs, a secret exit; not the explorer's label).
     fn objectives_of(&self, agent: &mut Agent, obs: &Observation, kinds: &[Kind]) -> Vec<Entry> {
-        // (the exits she knows are hers to hear of and to list while they're held back from
-        // the explorer: whether she may leave is one question, whether there's a way out another)
-        let held = kinds.contains(&Kind::Exit) && agent.x().exit_held_back;
+        let open = if kinds.contains(&Kind::Exit) {
+            self.open_unheld(agent, obs)
+        } else {
+            self.open_objectives(agent, obs)
+        };
+        entries_of(&open, kinds)
+    }
+
+    /// The explorer's open objectives, the exits among them even while they're held back from
+    /// it (the exits she knows are hers to hear of and to list then too: whether she may leave
+    /// is one question, whether there's a way out another).
+    fn open_unheld(&self, agent: &mut Agent, obs: &Observation) -> Vec<Objective> {
+        let held = agent.x().exit_held_back;
         if held {
             agent.x_mut().hold_exits(false);
         }
@@ -2001,24 +2064,7 @@ impl Director {
         if held {
             agent.x_mut().hold_exits(true);
         }
-        open.into_iter()
-            .filter(|o| kinds.contains(&o.kind))
-            .map(|o| {
-                let info = o.trigger.as_ref().map(|t| &t.info);
-                let what = match info {
-                    Some(i) if i.category == crate::specials::Category::SecretExit => {
-                        "secret exit".to_string()
-                    }
-                    Some(i) => lock_name(i.lock).map_or(String::new(), |k| format!("needs {k}")),
-                    None => String::new(),
-                };
-                Entry {
-                    id: id_of(&o),
-                    what,
-                    at: o.goal,
-                }
-            })
-            .collect()
+        open
     }
 
     /// What an exploring order leaves to her, as sentences for its end ("" if nothing): the
@@ -2155,6 +2201,28 @@ impl Director {
             notable,
         });
     }
+}
+
+/// The objectives of those kinds among `open`, as entries, in its order.
+fn entries_of(open: &[Objective], kinds: &[Kind]) -> Vec<Entry> {
+    open.iter()
+        .filter(|o| kinds.contains(&o.kind))
+        .map(|o| {
+            let info = o.trigger.as_ref().map(|t| &t.info);
+            let what = match info {
+                Some(i) if i.category == crate::specials::Category::SecretExit => {
+                    "secret exit".to_string()
+                }
+                Some(i) => lock_name(i.lock).map_or(String::new(), |k| format!("needs {k}")),
+                None => String::new(),
+            };
+            Entry {
+                id: id_of(o),
+                what,
+                at: o.goal,
+            }
+        })
+        .collect()
 }
 
 /// An objective as the order in hand remembers taking it: the explorer's ident, and the wall for

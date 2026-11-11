@@ -6,7 +6,7 @@
 use serde_json::{json, Value};
 
 use super::link::{Incoming, Link};
-use crate::control::directed::{bearing, Director, Order, Topic, NAME_MAX};
+use crate::control::directed::{bearing, Director, Hints, Order, Topic, NAME_MAX};
 use crate::motor::Observation;
 use crate::play::Agent;
 
@@ -40,7 +40,8 @@ pub fn actions() -> Vec<Value> {
     let s = |props: Value, required: &[&str]| json!({ "type": "object", "properties": props, "required": required });
     // (short: every word here is in Evil's context for the whole game)
     vec![
-        json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids. Areas: only unexplored, current and named ones unless all; a/b/c walls to search: at secrets 1/2/3.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
+        json!({ "name": "doom_look", "description": "What's round her: the room, what it leads to, monsters, items, doors and switches in sight, sounds, the bot's pick." }),
+        json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids, the bot's best first. Areas: only unexplored, current and named ones unless all; a/b/c walls to search: at secrets 1/2/3.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
         json!({ "name": "doom_press", "description": "Press a switch. Exploring never presses them. rush, then: as for doom_go.", "schema": s(json!({ "ref": { "type": "string" }, "rush": { "type": "boolean" }, "then": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_inspect", "description": "What something is and where.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
         json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left. rush: keep going mid-fight, shooting and dodging on the way. then: after the current order, not instead (exploring resumes after a go anyway).", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" }, "rush": { "type": "boolean" }, "then": { "type": "boolean" } }), &["ref"]) }),
@@ -48,6 +49,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_name", "description": format!("Name something (up to {NAME_MAX} characters); the name then works as its id."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": "Her fight, for a while (10 s unless seconds; then her own rules again). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / steady: how she fights. auto: all hers again.", "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
+        json!({ "name": "doom_policy", "description": "Standing settings. idle: seconds with no order before she carries on by herself, not leaving (0: she waits). hints: the bot's own pick, off, on_stall or always.", "schema": s(json!({ "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
         json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, current order, what she's fighting." }),
     ]
@@ -148,6 +150,7 @@ impl Session {
                     "doom_explore",
                     "doom_go",
                     "doom_exit",
+                    "doom_look",
                     "doom_list",
                     "doom_inspect",
                     "doom_name",
@@ -177,6 +180,7 @@ impl Session {
     /// Her state and options, for a forced decision (Markdown, no top-level heading).
     fn state(&mut self, agent: &mut Agent, obs: &Observation) -> String {
         let mut s = format!("## Status\n{}\n", self.director.status(agent, obs));
+        let mut marked = false;
         for (topic, title, n) in [
             (Topic::Areas, "Areas", 8),
             (Topic::Exits, "Exits", 3),
@@ -184,17 +188,22 @@ impl Session {
             (Topic::Switches, "Switches", 5),
             (Topic::Items, "Items", 6),
         ] {
-            let (list, hidden) = self.director.brief(agent, obs, topic, false);
-            if list.is_empty() && hidden == 0 {
+            let l = self.director.listing(agent, obs, topic, false, n);
+            if l.lines.is_empty() && l.hidden == 0 {
                 continue;
             }
             s.push_str(&format!("\n## {title}\n"));
-            for e in list.iter().take(n) {
-                s.push_str(&format!("- {}\n", self.director.describe(e, obs)));
+            for e in &l.lines {
+                s.push_str(&format!("- {e}\n"));
             }
-            if hidden > 0 {
-                s.push_str(&format!("- +{hidden} explored\n"));
+            if l.hidden > 0 {
+                s.push_str(&format!("- +{} explored\n", l.hidden));
             }
+            marked |= l.lines.iter().any(|e| e.contains("(my pick"));
+        }
+        // (the bot's pick, if no line above was it)
+        if let Some(p) = self.director.pick_line(agent, obs).filter(|_| !marked) {
+            s.push_str(&format!("\nMy pick: {p}.\n"));
         }
         s
     }
@@ -217,7 +226,10 @@ impl Session {
         data: Option<&str>,
     ) -> (bool, String) {
         let (ok, msg) = self.action(agent, obs, name, data);
-        if !matches!(name, "doom_list" | "doom_inspect" | "doom_status") {
+        if !matches!(
+            name,
+            "doom_list" | "doom_look" | "doom_inspect" | "doom_status"
+        ) {
             let first = msg.lines().next().unwrap_or("");
             self.link.context(
                 &format!(
@@ -263,21 +275,46 @@ impl Session {
                     );
                 };
                 let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
-                let (list, hidden) = self.director.brief(agent, obs, topic, all);
-                let more = if hidden > 0 {
-                    format!("\n(+{hidden} explored; all: true lists them)")
+                let l = self.director.listing(agent, obs, topic, all, LIST_MAX);
+                let mut more = if l.hidden > 0 {
+                    format!("\n(+{} explored; all: true lists them)", l.hidden)
                 } else {
                     String::new()
                 };
-                if list.is_empty() {
+                if let Some(p) = &l.pick {
+                    more.push_str(&format!("\nMy pick: {p}."));
+                }
+                if l.lines.is_empty() {
                     return (true, format!("None known yet.{more}"));
                 }
-                let lines: Vec<String> = list
-                    .iter()
-                    .take(LIST_MAX)
-                    .map(|e| format!("- {}", self.director.describe(e, obs)))
-                    .collect();
+                let lines: Vec<String> = l.lines.iter().map(|e| format!("- {e}")).collect();
                 (true, format!("{}{more}", lines.join("\n")))
+            }
+            "doom_look" => (true, self.director.look(agent, obs).join("\n")),
+            "doom_policy" => {
+                let idle = args.get("idle").and_then(Value::as_f64);
+                let hints = match arg("hints").map(Hints::parse) {
+                    Some(None) => return (false, "hints: off, on_stall or always.".into()),
+                    Some(h) => h,
+                    None => None,
+                };
+                if idle.is_none() && hints.is_none() {
+                    return (false, "Give idle or hints.".into());
+                }
+                if let Some(secs) = idle {
+                    self.director.idle_auto = (secs > 0.0).then_some((secs * 35.0) as i64);
+                }
+                if let Some(h) = hints {
+                    self.director.hints = h;
+                }
+                let idle = match self.director.idle_auto {
+                    Some(t) => format!("carries on by herself after {} s with no order", t / 35),
+                    None => "waits for orders".to_string(),
+                };
+                (
+                    true,
+                    format!("She {idle}; hints {}.", self.director.hints.name()),
+                )
             }
             "doom_inspect" => {
                 let Some(r) = arg("ref") else {

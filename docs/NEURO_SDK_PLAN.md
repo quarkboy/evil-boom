@@ -170,6 +170,27 @@ her context throughout). The nine that exist keep their shape.
 - **`doom_look`** (new): what's round her now, as a player's eyes would give it: the room
   (size, exits by direction, floor that hurts), what's in sight (monsters by kind and
   distance, items, switches, barrels), what she hears. The one call for "what's going on".
+  **Built** (`control/directed/look.rs`; `look` in a script): a line a kind of thing, none
+  for a kind there's nothing of:
+
+      In area-18: small room, explored.
+      Danger: deadly (outmatched). On monster-90 (Fatso) with the super shotgun.
+      Leads to: area-0 (SW 35, 10 to explore); not seen yet (SE 233)
+      Monsters: monster-90 Fatso (SW 428); monster-88 Fatso (NW 543)
+      Out of sight, seen lately: 2 (nearest W 600).
+      Items: item-t98: ShellBox (S 181); item-t78: PlasmaRifle (NW 550); +7 more
+      Untried: switch-l131 (N 814)
+      Barrels: 2, nearest NE 226.
+      Heard, not seen: about E 600.
+      My pick: door-l40: door not tried (N 210).
+
+  In sight is a line of sight from her eyes at the heights as they are, whichever way she
+  faces (a look is a look round), of what's on floor she knows; "leads to" is the areas across
+  the openings she's seen of the one she's in (a door, a step or a lift between counted
+  through; not a window's sill or a ledge above), one she's seen nothing of said as "not seen
+  yet". Out of a fight the last line is the explorer's pick; in one it's left out, and the
+  danger line names the monster and gun the fight has chosen. What's not in it yet: the
+  room's shape, and sounds other than the explorer's noises.
 - **`doom_why`** (new): why she's doing what she's doing, from the decision journal: the
   objective and what it was chosen over; in a fight, the move and its reason ("backing off: 2
   demons within reach, shotgun reloading"); why she isn't shooting (`HeldFire`, made one
@@ -404,6 +425,32 @@ it. Three strengths, set by policy `hints` (`off`, `on_stall`, `always`; default
 For the stream this also gives her something to push against: taking the bot's pick, or
 pointedly not, is a bit either way.
 
+**Built** (2026-11-11, `control/directed/look.rs`):
+
+- Lists come in the explorer's own order (a door, a switch, a wanted item by its objective's
+  place; an area by the best thing left to explore in it), the rest after, nearest first.
+- The pick is what she'd do next on her own: the first of the explorer's objectives she has a
+  way to, a pickup she takes by herself anyway left out, and never the exit while anything
+  else is left (as on her own: leaving is an order's). It's given under the id it's ordered
+  by (something to explore by its area, a key by the key) with why in a few words. `doom_list`
+  marks its line `(my pick: why)`, and under the areas gives it apart when it's none of them;
+  `doom_look` and a forced decision end with it.
+- A failed order says what would do: "No known way to the Soulsphere yet. Nearest untried to
+  it: area-98 (SW 1731)."; "Nothing to explore in area-65. My pick: door-l467: door not
+  tried, blue key in hand (SW 2118)."
+- The nudge: with no order for 30 s the pick is suggested, silent; at 60 s once more, not
+  silent. `hints always`: as soon as she waits. `hints off`: no pick anywhere (the lists'
+  order stays). Set by `doom_policy` (`idle`, `hints`: its first two keys), `hints` in a
+  script.
+- The test: E1M2 with every suggestion taken as an order and nothing else given (a script,
+  `hints always`): 70 picks, 68 carried out (one route failed at a drop, one wall was gone
+  by the time it was ordered), out by the exit at 738 s with every monster dead. So the pick
+  is always something she can order as it's written, and following it alone finishes a level.
+
+Not built of this section: "the same thing tried three times" and the 3-minute question (they
+want proposals, 4.6); the fight's one honest line on a tactic it rates badly; target and gun
+in the status line (they're in `doom_look`).
+
 ## 6. What the code needs (the boundary)
 
 The cleanup left typed pieces for this; the layer is built on them, in one module tree
@@ -432,7 +479,7 @@ reads is short.
 |---|---|---|
 | 0 | **Drive what exists by hand**: a level through `watch --headless --directed FILE` in real time, me as Evil, noting every moment I wanted to know or do something I couldn't | notes in this file (section 8); they reorder the stages below |
 | 1a | **First, from stage 0's notes**: the idle fallback (`idle` policy, announced); orders queue or say what they replaced, exploring goes on after an errand; short ids with a phrase; "seen, no way yet" as a state; an order's outcome says what came of it; a failure says what would work; lists ranked with a pick | E1M2 driven by hand again at the same pace: out in under 7 minutes, no order lost unsaid, idle under a fifth of the time |
-| 1 | `Situation`, typed `Event`, the grammar, the budgeter, the fight summary, `doom_look` | a recorded level's whole context reads well cold; under the word budget; GPT stand-in's choices no worse |
+| 1 | `Situation`, typed `Event`, the grammar, the budgeter, the fight summary (built), `doom_look` (built) | a recorded level's whole context reads well cold; under the word budget; GPT stand-in's choices no worse |
 | 2 | The journal always on; `doom_why`; the trigger's one reason | every "why" asked at 50 random moments of a run has a true, short answer |
 | 3 | `doom_mode` / `idle` fallback; `doom_goal` | a level finished with three goals and no orders; no stretch over 25 s with her idle and the bot still |
 | 4 | Proposals: the type, class D confirmations from `Refusal` and the tiers, deadlines, `doom_answer` | scripted answers at 2, 8 and 30 s late: each either applied or refused as stale, never applied wrong |
@@ -577,6 +624,11 @@ stopped for good with no exit known. All three are fixed below. What it showed:
 28. **What I was told was right for deciding and thin for a stream**: keys, guns, secrets,
     fast losses, deaths. A level's end said nothing (time, tally against par, what she
     carries out), nor a level's start (its name).
+
+29. **The pick followed blindly finishes a level** (E1M2, 738 s, section 5.5), and reads well
+    as a to-do: the door with the key in hand, the armour wanted, then the next room. Where
+    it's dull is the tail: wall after wall "to search" once the rooms are done. That's when
+    leaving should be offered (the exit check's question, as a proposal), not a sixth wall.
 
 What this changes in the stages: the idle fallback and order queueing move to the front
 (with the grammar: ids, "seen, no way yet", outcomes); rankings and the pick come with them
