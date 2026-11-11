@@ -221,6 +221,42 @@ follower and the explorer's tiers are the two I'd do most carefully.
    before anything else; `cargo fmt` before every commit from then on.
 4. **Step 3 does the fight and the explorer first**, then stock is taken.
 
+## Done so far
+
+| step | what | commit |
+|---|---|---|
+| 0 | the comment-only check and the parity set | 50e5e1d |
+| - | rustfmt over the crate | 930ecb2 |
+| 1 | comments: all of tactical, all of knowledge | 4d0d3b3 to 5a57a7d |
+| 3 | the debug switches read once (`debug.rs`) | b784191 |
+| 3 | a route refused is refused for a typed reason (`Refusal`) | fbea79c |
+| 3 | a path's notes are a type (`PathNote`), not strings to search | 4d54088 |
+
+Still to do of step 1: the follower (about 110 comments naming a level) and the navigation,
+planning and jump code (about 90), after stock is taken.
+
+## Findings (step 2), as they come
+
+Each needs its own scored fix (rule 2); none is fixed yet. The suspects listed under step 2
+above stand; these are from reading the code since:
+
+- **A clock runs for a monster she isn't standing for.** `standing` asks `no_shot_long`
+  (which runs the no-shot clock, and at its end gives the monster up) before it has checked
+  whether she'd stand at all (threat, health, a duel, in her way). A monster she has no shot
+  at is so given up on a while whether or not it was ever holding her, and "given up" is read
+  elsewhere (lost sight, the fist's choice).
+- **`size_up` isn't only sizing up.** It rests the closing clock, starts and ends the
+  barrel-avoiding way (`away_from_barrels`), and begins ducks and flights from an arch-vile:
+  state changed before any node has decided. The order the nodes are tried in then matters
+  in ways the tree's listing doesn't show.
+- **`Combat::observe` is half measurement.** About 200 of its 580 lines keep the run's
+  counts (shots, misses, what was on her line), threaded through what she perceives. The
+  counts read the game's own health figures, which is right for a count and wrong to have
+  beside the code that must not.
+- **Three sources decide the trigger**: the node's `hold_fire`, `Combat::hold_fire` (set by
+  the player for a retreat), and `aim_and_fire`'s own reasons (`HeldFire`); then `look`
+  holds it too. Only the last is logged.
+
 ## Numbers that look wrong (not to be changed in the cleanup)
 
 To be filled in as the survey goes.
