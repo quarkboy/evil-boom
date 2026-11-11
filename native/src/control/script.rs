@@ -5,7 +5,8 @@
 //!                       monsters, exits
 //!   name ID NAME...     a name for something listed (refused when too long or taken)
 //!   order go REF [risky] | order explore REF|DIR | order exit | order stop
-//!                       an order (REF an id or a name; DIR n, ne, east, ...)
+//!                       an order (REF an id or a name; DIR n, ne, east, ...); `then` last: after
+//!                       the order in hand, not instead of it
 //!   check REF [risky]   could she go there now (as doom_go asks), and if not, why
 //!   status              her health, armor, weapons, ammo, keys, what she's doing
 //!   where               where she is, her health, what she's doing
@@ -55,10 +56,11 @@ pub fn command(
             // (sure: leave the level even with something left, as Evil's sure; rush: press on
             // mid-fight, as Evil's rush; either last, in either order)
             let mut w: Vec<&str> = w.to_vec();
-            let (mut sure, mut rush) = (false, false);
-            while w.len() > 2 && matches!(w.last(), Some(&"sure") | Some(&"rush")) {
+            let (mut sure, mut rush, mut then) = (false, false, false);
+            while w.len() > 2 && matches!(w.last(), Some(&"sure") | Some(&"rush") | Some(&"then")) {
                 match w.pop() {
                     Some("sure") => sure = true,
+                    Some("then") => then = true,
                     _ => rush = true,
                 }
             }
@@ -93,7 +95,7 @@ pub fn command(
                 Some("stop") => Order::Stop,
                 _ => return Err("order go REF [risky] [sure] [rush] | explore REF|DIR [secrets 1-3] | exit [sure] | stop".into()),
             };
-            d.order_rushed(o, rush);
+            d.order_with(o, rush, then);
             Ok(Vec::new())
         }
         Some("status") => Ok(vec![d.status(agent, obs)]),

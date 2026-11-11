@@ -118,10 +118,55 @@ enum Doing {
     Pickup,
 }
 
+/// A fight under way: since when, what it's cost so far, what's been in it.
+struct Fight {
+    since: i64,
+    /// when nothing was last fighting her (None: something is)
+    calm_since: Option<i64>,
+    kills_at_start: i32,
+    health_lost: f64,
+    armor_lost: f64,
+    /// rounds gone, by pool: bullets, shells, rockets, cells
+    spent: [i32; 4],
+    /// the most of each kind fighting her at once
+    against: BTreeMap<&'static str, usize>,
+}
+
+/// What she had a tic ago.
+struct Had {
+    health: f64,
+    armor: f64,
+    ammo: [i32; 4],
+}
+
+/// the ammo pools, by a gun's slot that uses each, and what its rounds are called
+const POOLS: [(i32, &str); 4] = [(2, "bullets"), (3, "shells"), (5, "rockets"), (6, "cells")];
+/// health lost in this long (tics)...
+const HURT_WINDOW: i64 = 3 * 35;
+/// ...this much of it, is told at once, not left for a mark to be passed
+const HURT_FAST: f64 = 25.0;
+/// ...at most this often
+const HURT_AGAIN: i64 = 5 * 35;
+/// a fight's summary is worth a reaction when it cost this much health, or this many died
+const FIGHT_NOTABLE_HEALTH: f64 = 20.0;
+const FIGHT_NOTABLE_KILLS: i32 = 3;
+
+/// An order waiting its turn.
+struct Queued {
+    order: Order,
+    /// pressed on with mid-fight
+    rush: bool,
+    /// after the order in hand, not instead of it
+    then: bool,
+}
+
 #[derive(Default)]
 pub struct Director {
-    /// orders to carry out, each with whether to rush it (press on mid-fight)
-    queue: VecDeque<(Order, bool)>,
+    /// orders to carry out
+    queue: VecDeque<Queued>,
+    /// an explore order an errand broke into (a go, in the middle of it): gone on with once
+    /// the errand's done
+    resume: Option<Order>,
     doing: Option<Doing>,
     /// the objectives taken for the order in hand: not taken again for it (the explorer may go on
     /// offering one it counts as done, a wall "not seen yet" taken every tic, stood on)
@@ -157,6 +202,14 @@ pub struct Director {
     /// a switch pressed: its line, what it's called, and till when to watch for what it did (what
     /// it moves is learned seeing it move, a moment after)
     pressed: Option<(usize, String, i64)>,
+    /// the fight she's in, for its summary when it's over; and what she had last tic (what a
+    /// fight cost is the falls from tic to tic, so a medikit taken in the middle doesn't hide it)
+    fight: Option<Fight>,
+    was: Option<Had>,
+    /// her health lately, (tic, health): for telling a fast loss while there's time to act on it
+    health_lately: VecDeque<(i64, f64)>,
+    told_hurt: Option<i64>,
+    told_secrets: Option<i32>,
     /// the level's tally (kills, items, secrets: got, of), as a source port shows it; set each tic
     /// by whoever runs the game (it's the engine's, not in what she observes)
     pub tally: Tally,
@@ -211,13 +264,19 @@ impl Director {
     }
 
     pub fn order(&mut self, o: Order) {
-        self.queue.push_back((o, false));
+        self.order_with(o, false, false);
     }
 
     /// An order rushed (`rush`): pressed on with mid-fight, shooting and dodging on the way, not
     /// stopped for the fight (still getting clear of what claws, and away when nearly dead).
     pub fn order_rushed(&mut self, o: Order, rush: bool) {
-        self.queue.push_back((o, rush));
+        self.order_with(o, rush, false);
+    }
+
+    /// An order, rushed or not; `then`: once the order in hand is done, not instead of it (an
+    /// order given without it replaces the one in hand, which is said).
+    pub fn order_with(&mut self, order: Order, rush: bool, then: bool) {
+        self.queue.push_back(Queued { order, rush, then });
     }
 
     /// Doing nothing, waiting for an order?
@@ -231,6 +290,7 @@ impl Director {
     /// A new map: names, orders, places and what's been told are the old map's.
     pub fn new_map(&mut self) {
         self.queue.clear();
+        self.resume = None;
         self.doing = None;
         self.names.clear();
         self.places = None;
@@ -241,6 +301,10 @@ impl Director {
         self.told_monsters.clear();
         self.health_mark = None;
         self.told_dead = false;
+        self.fight = None;
+        self.was = None;
+        self.health_lately.clear();
+        self.told_secrets = None;
     }
 
     /// What she's doing on her orders, in a few words ("exploring area-0 +secrets 2, rushing").
@@ -307,27 +371,9 @@ impl Director {
             .collect();
         let doing = self.doing(agent);
         // (in a fight: what's in sight, the nearest; an order then is held up by it unless rushed)
-        let fight = engaged(agent, obs);
-        let doing = if fight.is_empty() {
-            doing
-        } else {
-            let pos = obs.pos();
-            let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
-            for t in &fight {
-                *counts.entry(t.name).or_insert(0) += 1;
-            }
-            let near = fight
-                .iter()
-                .map(|t| (t.x, t.y))
-                .min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b)))
-                .unwrap_or(pos);
-            let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
-            format!(
-                "{doing}; fighting {} ({} {:.0})",
-                what.join(", "),
-                compass(heading(pos, near)),
-                dist(pos, near)
-            )
+        let doing = match fighting(&engaged(agent, obs), obs) {
+            Some(what) => format!("{doing}; fighting {what}"),
+            None => doing,
         };
         // (short: what Evil reads costs her context)
         format!(
@@ -422,6 +468,7 @@ impl Director {
             }
             self.health_mark = mark;
         }
+        self.moments(agent, obs);
         if let Some(keys) = obs.keys {
             let got: Vec<_> = keys
                 .iter()
@@ -627,6 +674,141 @@ impl Director {
         }
         if !now.is_empty() {
             self.event(obs, notable, format!("Now reachable: {}.", now.join("; ")));
+        }
+    }
+
+    /// The things worth a word as they happen: a secret found; health going fast, while there's
+    /// time to do something about it; a fight over, with what it cost and what it killed.
+    fn moments(&mut self, agent: &Agent, obs: &Observation) {
+        let health = obs.health.unwrap_or(100.0);
+        let armor = obs.armor.unwrap_or(0.0);
+        let pool = |slot: i32| {
+            obs.ammo
+                .iter()
+                .flatten()
+                .find(|(s, _)| *s == slot)
+                .map_or(0, |(_, n)| *n)
+        };
+        let ammo = POOLS.map(|(slot, _)| pool(slot));
+        let secrets = self.tally.secrets.0;
+        if self.told_secrets.is_some_and(|n| secrets > n) {
+            self.event(
+                obs,
+                true,
+                format!("Secret found ({secrets}/{}).", self.tally.secrets.1),
+            );
+        }
+        self.told_secrets = Some(secrets);
+        let against = engaged(agent, obs);
+        // (a fight: from the first thing fighting her till nothing has for a moment)
+        if !against.is_empty() && self.fight.is_none() {
+            self.fight = Some(Fight {
+                since: obs.tic,
+                calm_since: None,
+                kills_at_start: self.tally.kills.0,
+                health_lost: 0.0,
+                armor_lost: 0.0,
+                spent: [0; 4],
+                against: BTreeMap::new(),
+            });
+        }
+        if let (Some(f), Some(was)) = (self.fight.as_mut(), self.was.as_ref()) {
+            f.health_lost += (was.health - health).max(0.0);
+            f.armor_lost += (was.armor - armor).max(0.0);
+            for (spent, (now, before)) in f.spent.iter_mut().zip(ammo.iter().zip(was.ammo)) {
+                *spent += (before - now).max(0);
+            }
+            let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
+            for t in &against {
+                *counts.entry(t.name).or_insert(0) += 1;
+            }
+            for (name, n) in counts {
+                let most = f.against.entry(name).or_insert(0);
+                *most = (*most).max(n);
+            }
+            f.calm_since = if against.is_empty() {
+                f.calm_since.or(Some(obs.tic))
+            } else {
+                None
+            };
+        }
+        self.was = Some(Had {
+            health,
+            armor,
+            ammo,
+        });
+        // (health going fast: told with what's doing it, once a while)
+        self.health_lately.push_back((obs.tic, health));
+        while self
+            .health_lately
+            .front()
+            .is_some_and(|&(t, _)| obs.tic - t > HURT_WINDOW)
+        {
+            self.health_lately.pop_front();
+        }
+        let top = self
+            .health_lately
+            .iter()
+            .map(|&(_, h)| h)
+            .fold(health, f64::max);
+        if top - health >= HURT_FAST && self.told_hurt.is_none_or(|t| obs.tic - t >= HURT_AGAIN) {
+            self.told_hurt = Some(obs.tic);
+            let by = fighting(&against, obs).map_or(String::new(), |w| format!(" to {w}"));
+            self.event(
+                obs,
+                true,
+                format!(
+                    "Losing health fast: {:.0} in {} s{by}. Health {health:.0}.",
+                    top - health,
+                    HURT_WINDOW / 35
+                ),
+            );
+        }
+        if self
+            .fight
+            .as_ref()
+            .is_some_and(|f| f.calm_since.is_some_and(|t| obs.tic - t >= RESUME_CALM))
+        {
+            if let Some(f) = self.fight.take() {
+                let killed = self.tally.kills.0 - f.kills_at_start;
+                let them: Vec<String> = f
+                    .against
+                    .iter()
+                    .map(|(name, n)| format!("{n} {name}"))
+                    .collect();
+                let mut cost = Vec::new();
+                if f.health_lost >= 1.0 {
+                    cost.push(format!("{:.0} health", f.health_lost));
+                }
+                if f.armor_lost >= 1.0 {
+                    cost.push(format!("{:.0} armor", f.armor_lost));
+                }
+                for (n, (_, what)) in f.spent.iter().zip(POOLS) {
+                    if *n > 0 {
+                        cost.push(format!("{n} {what}"));
+                    }
+                }
+                let notable =
+                    f.health_lost >= FIGHT_NOTABLE_HEALTH || killed >= FIGHT_NOTABLE_KILLS;
+                self.event(
+                    obs,
+                    notable,
+                    format!(
+                        "Fight over ({} s, against {}): {killed} killed; cost {}. Health {health:.0}.",
+                        (obs.tic - f.since) / 35,
+                        if them.is_empty() {
+                            "something unseen".to_string()
+                        } else {
+                            them.join(", ")
+                        },
+                        if cost.is_empty() {
+                            "nothing".to_string()
+                        } else {
+                            cost.join(", ")
+                        }
+                    ),
+                );
+            }
         }
     }
 
@@ -899,7 +1081,19 @@ impl Director {
                 );
             }
         }
-        if let Some((o, rush)) = self.queue.pop_front() {
+        // (the next order: at once, in place of the one in hand, unless it was given to come
+        // after it)
+        let in_hand = matches!(
+            self.doing,
+            Some(Doing::Once(..) | Doing::Area(..) | Doing::Way(..))
+        ) || self.pressed.is_some();
+        if let Some(Queued { order: o, rush, .. }) = self
+            .queue
+            .front()
+            .is_some_and(|q| !q.then || !in_hand)
+            .then(|| self.queue.pop_front())
+            .flatten()
+        {
             self.start(agent, obs, o);
             // (a single target only: a sweep of a room, rushed, is a run about it under fire)
             agent.x_mut().press_on = rush && matches!(self.doing, Some(Doing::Once(..)));
@@ -914,6 +1108,13 @@ impl Director {
         }
         if self.doing.is_none() || matches!(self.doing, Some(Doing::Off | Doing::Pickup)) {
             agent.x_mut().press_on = false; // (her own doing: no order's rush)
+        }
+        // (an errand done, or come to nothing: on with the exploring it broke into)
+        if self.doing.is_none() && self.queue.is_empty() && self.pressed.is_none() {
+            if let Some(order) = self.resume.take() {
+                self.order_with(order, false, false);
+                return;
+            }
         }
         match self.doing.take() {
             None => {
@@ -1031,8 +1232,45 @@ impl Director {
     }
 
     fn start(&mut self, agent: &mut Agent, obs: &Observation, o: Order) {
-        // (a new order replaces the one in hand, without a word: she gave it)
-        self.doing = None;
+        // (a new order replaces the one in hand, and says so: two given together, the first
+        // would be gone without a word. An errand in the middle of exploring is an errand: the
+        // exploring goes on after it)
+        let errand = matches!(o, Order::Go(..));
+        match self.doing.take() {
+            Some(Doing::Area(id, what, secrets)) if errand => {
+                self.resume = Some(Order::ExploreArea(id, secrets));
+                self.report(obs, true, format!("Exploring {what} goes on after this."));
+            }
+            Some(Doing::Way(b, secrets)) if errand => {
+                self.resume = Some(Order::ExploreWay(b, secrets));
+                self.report(
+                    obs,
+                    true,
+                    format!("Exploring {} goes on after this.", compass(b)),
+                );
+            }
+            Some(Doing::Once(_, what)) if !matches!(o, Order::Stop) => {
+                self.report(obs, false, format!("Dropped for the new order: {what}."));
+            }
+            Some(Doing::Area(_, what, _)) if !matches!(o, Order::Stop) => {
+                self.report(
+                    obs,
+                    false,
+                    format!("Dropped for the new order: exploring {what}."),
+                );
+            }
+            Some(Doing::Way(b, _)) if !matches!(o, Order::Stop) => {
+                self.report(
+                    obs,
+                    false,
+                    format!("Dropped for the new order: exploring {}.", compass(b)),
+                );
+            }
+            _ => {}
+        }
+        if !errand {
+            self.resume = None;
+        }
         let x = agent.x_mut();
         x.current = None;
         x.follower = None;
@@ -1621,6 +1859,27 @@ fn lock_name(l: crate::specials::Lock) -> Option<&'static str> {
 }
 
 /// The monsters fighting her now (`Combat::engaged`: able to hurt her from where they are).
+/// What's fighting her, in a phrase: how many of each kind, and where the nearest is
+/// ("2 Fatso, 1 Arachnotron (NW 650)"). None: nothing is.
+fn fighting(against: &[crate::motor::Thing], obs: &Observation) -> Option<String> {
+    let pos = obs.pos();
+    let near = against
+        .iter()
+        .map(|t| (t.x, t.y))
+        .min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b)))?;
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for t in against {
+        *counts.entry(t.name).or_insert(0) += 1;
+    }
+    let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
+    Some(format!(
+        "{} ({} {:.0})",
+        what.join(", "),
+        compass(heading(pos, near)),
+        dist(pos, near)
+    ))
+}
+
 fn engaged(agent: &Agent, obs: &Observation) -> Vec<crate::motor::Thing> {
     agent
         .player()
