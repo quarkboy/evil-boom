@@ -387,9 +387,9 @@ pub struct Steer {
     pub w_barrel: f64,
     /// towards an errand (health, a gun, ammo)
     pub w_toward: f64,
-    /// a way that takes her onto ground she's never been on, in a fight (0: not counted): the
-    /// reason: dodging and backing off into rooms she's never been in wakes what's in them;
-    /// where she's been is safe
+    /// a way that takes her onto ground she's never been on, in a fight (0: not counted).
+    /// Dodging and backing off into rooms she's never been in wakes what's in them; where
+    /// she's been is safe.
     pub w_new_ground: f64,
     /// a way she isn't looking along and hasn't looked along for `unlooked_tics`: she doesn't
     /// know what's there (0: not counted)
