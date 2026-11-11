@@ -5,9 +5,9 @@ use crate::geom::{cells, closest_point, dist, segments_cross, Point};
 use crate::mesh::Portal;
 use crate::motor::{fmt_live, heading, norm, Controls, Observation, BRAKE, TICRATE};
 use crate::nav::{can_cross, Heights};
-use crate::navigator::{closest_on_portal, rep, PLAYER_HEIGHT, PLAYER_RADIUS};
+use crate::navigator::{closest_on_portal, rep, TriggerLine, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::specials::{Category, Key, Trigger};
-use crate::walkthrough::{fmt_heights, Action, Expect};
+use crate::walkthrough::{fmt_heights, Action, Expect, Step};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
@@ -818,10 +818,12 @@ impl RouteFollower {
         self.walk(obs)
     }
 
+    /// At the step's goal: what the step is for. A line to press or shoot is faced first, then
+    /// waited at while pressing would do nothing or the wrong thing (`stairs_step_away`,
+    /// `surroundings_unsettled`, `busy_before_press`, `next_lift_away`), then pressed
+    /// (`press`).
     pub(super) fn act_at_goal(&mut self, obs: &Observation) -> Controls {
         let step = self.step().clone();
-        let view = Rc::clone(&self.view);
-        let nav = &view.nav;
         if step.action == Action::Endure {
             // an exit floor: stand on it while it hurts her down to 10 health, which ends the
             // level
@@ -832,96 +834,25 @@ impl RouteFollower {
         if step.action == Action::Cross && !self.crossed && step.trigger.is_some() {
             return self.walk_across(obs);
         }
-        if let Some(t) = step
-            .trigger
-            .as_ref()
-            .filter(|t| step.action == Action::Cross && t.info.category != Category::Exit)
-        {
-            if self.cross_tic.is_none() {
-                self.before = Some(
-                    t.effects
-                        .iter()
-                        .map(|(s, _)| (*s, obs.height(*s)))
-                        .collect(),
-                );
-                self.cross_tic = Some(obs.tic);
-            }
-            if !self.effect_started(obs, t) {
-                if obs.tic - self.cross_tic.unwrap_or(obs.tic) < 35 {
-                    return self.motion.hold(obs, (0.0, 0.0), self.look);
-                }
-                self.log.add(
-                    obs.tic,
-                    format!("crossing line {} didn't do anything", t.line),
-                );
-            }
+        if let Some(c) = self.crossing_held(obs, &step) {
+            return c;
         }
         if matches!(step.action, Action::Pickup | Action::Cross | Action::Walk) {
             self.next_step(obs.tic);
             return self.carry_on(obs);
         }
         if step.action == Action::Kill {
-            // (with monsters about: here till what their deaths move has moved, the killing
-            // the fight's)
-            let moved = step.trigger.as_ref().is_some_and(|t| {
-                t.effects.iter().all(|(s, hs)| {
-                    obs.height(*s).is_some_and(|l| {
-                        hs.iter().any(|h| {
-                            (l.floor - h.floor).abs() < 1.0 && (l.ceiling - h.ceiling).abs() < 1.0
-                        })
-                    })
-                })
-            });
-            let monsters = obs
-                .things
-                .iter()
-                .flatten()
-                .any(|t| t.category == "Monster" && t.health > 0);
-            if monsters && !moved {
-                self.step_tic = obs.tic;
-                self.progress_tic = obs.tic;
-                return self.motion.hold(obs, (0.0, 0.0), self.look);
-            }
-            self.log.add(
-                obs.tic,
-                if moved {
-                    "what the kills move has moved"
-                } else {
-                    "skipping boss kill (no monsters in this run)"
-                },
-            );
-            self.next_step(obs.tic);
-            return Controls::default();
+            return self.await_kills(obs, &step);
         }
         let Some(t) = step.trigger.clone() else {
             self.next_step(obs.tic);
             return self.carry_on(obs);
         };
-        // aim at the nearest part of the line (a little in from its ends): the use trace is a
-        // 64-unit ray, and from off to one side the line's middle can be out of its reach
         let li = t.linedef().unwrap_or(0);
-        let (a, b) = nav.map.line_seg(li);
-        let length = dist(a, b).max(1e-6);
         let pos = obs.pos();
-        let mut tt =
-            ((pos.0 - a.0) * (b.0 - a.0) + (pos.1 - a.1) * (b.1 - a.1)) / (length * length);
-        tt = tt
-            .max(0.5f64.min(8.0 / length))
-            .min(0.5f64.max(1.0 - 8.0 / length));
-        if step.action == Action::Shoot {
-            // (a shot reaches: the middle, where it's widest to hit; else the part of it in
-            // sight, its middle behind a corner maybe)
-            tt = SHOT_AIMS
-                .into_iter()
-                .find(|&t| {
-                    self.shot_clear(obs, pos, (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t), li)
-                })
-                .unwrap_or(0.5);
-        }
-        let aim = (a.0 + (b.0 - a.0) * tt, a.1 + (b.1 - a.1) * tt);
+        let (aim, span) = self.line_aim(obs, &step, li);
         let look = heading(pos, aim);
         let err = norm(look - obs.angle).abs();
-        let span = norm(heading(pos, a) - heading(pos, b)).abs();
         // hold still (brake) while turning to face the line
         let last_seg = &self.segments[self.segments.len() - 1].track;
         let mut end = last_seg.pts[last_seg.pts.len() - 1];
@@ -957,157 +888,20 @@ impl RouteFollower {
             }
             return controls;
         }
-        if step.action == Action::Use && self.action_tic.is_none() {
-            if let Some((s0, _)) = t.shift_from {
-                // stairs don't build while their first step is moving (it can be a lift as well):
-                // wait till it's back up where the stairs left it
-                let top = self.states[s0]
-                    .iter()
-                    .map(|h| h.floor)
-                    .fold(f64::NEG_INFINITY, f64::max);
-                if obs.height(s0).is_some_and(|l| l.floor < top - 0.5) {
-                    self.progress_tic = obs.tic;
-                    self.step_tic = obs.tic;
-                    return controls;
-                }
-            }
+        if step.action == Action::Use && self.action_tic.is_none() && self.stairs_step_away(obs, &t)
+        {
+            return controls;
         }
         let pressing =
             matches!(step.action, Action::Use | Action::Shoot) && self.action_tic.is_none();
-        if pressing {
-            if let Some(relevant) = &t.relevant {
-                // where it takes things depends on what's round it when pressed: wait for the
-                // lifts and doors among those to be where the plan has them
-                let init = &nav.movers.initial;
-                // (not what it moves itself: that's off already if it's been pressed once, and isn't
-                // to be waited for to go back)
-                let moves: BTreeSet<usize> = t.effects.iter().map(|(s, _)| *s).collect();
-                let off: Vec<usize> = relevant
-                    .iter()
-                    .copied()
-                    .filter(|x| !moves.contains(x))
-                    .filter(|&x| {
-                        obs.height(x).is_some_and(|l| {
-                            let h = rep(&self.states[x], init[x]);
-                            (l.floor - h.floor).abs() > 0.5 || (l.ceiling - h.ceiling).abs() > 0.5
-                        })
-                    })
-                    .collect();
-                if !off.is_empty() && self.settle_logged != self.step_i {
-                    self.log.add(
-                        obs.tic,
-                        format!(
-                            "waiting for sector {} to settle before line {}",
-                            off[0], t.line
-                        ),
-                    );
-                    self.settle_logged = self.step_i;
-                    self.goal_tic = obs.tic;
-                }
-                if !off.is_empty() && obs.tic - self.goal_tic < SETTLE_WAIT {
-                    self.progress_tic = obs.tic;
-                    self.step_tic = obs.tic;
-                    return controls;
-                }
-            }
+        if pressing && self.surroundings_unsettled(obs, &t) {
+            return controls;
         }
-        if pressing && t.once() && t.shift_from.is_none() {
-            // Doom ignores a switch on a sector that's busy (a door open on its timer), and a
-            // once-only one is still there to press then: wait till what it works is at rest.
-            // What it works if she knows, and what's moving right by it, which she sees.
-            let init = &nav.movers.initial;
-            let mut cands: BTreeSet<usize> = t.effects.iter().map(|(s, _)| *s).collect();
-            if cands.is_empty() {
-                // (what's moving right by it only while what it works isn't known: a door on its
-                // timer beside the switch isn't waited for once she knows it's not the switch's)
-                cands.extend(self.sectors_near(li));
-            }
-            let busy: Vec<usize> = cands
-                .into_iter()
-                .filter(|&x| {
-                    let Some(&m) = self.crusher.moved_at.get(&x) else {
-                        return false;
-                    };
-                    obs.tic - m < BUSY_TICS
-                        && !(obs.tic - m > REST_TICS
-                            && obs.height(x).is_some_and(|l| {
-                                (l.floor - init[x].floor).abs() < 0.5
-                                    && (l.ceiling - init[x].ceiling).abs() < 0.5
-                            }))
-                })
-                .collect();
-            // (what it works on its way already where it sends it: pressed, a noise looked round
-            // at before the press was counted; again would do nothing, or turn a door back)
-            let toward = |x: usize| {
-                obs.height(x).is_some_and(|l| {
-                    t.effects
-                        .iter()
-                        .filter(|(e, _)| *e == x)
-                        .flat_map(|(_, hs)| hs)
-                        .any(|h| {
-                            let (df, dc) = (l.floor - init[x].floor, l.ceiling - init[x].ceiling);
-                            (df.abs() > 0.5 && df * (h.floor - init[x].floor) > 0.0)
-                                || (dc.abs() > 0.5 && dc * (h.ceiling - init[x].ceiling) > 0.0)
-                        })
-                })
-            };
-            if !busy.is_empty() && busy.iter().all(|&x| toward(x)) {
-                self.log.add(
-                    obs.tic,
-                    format!("line {}'s already doing what it does: on", t.line),
-                );
-                self.next_step(obs.tic);
-                return controls;
-            }
-            // (its own timer: a door switch pressed with a lift set off on the way still running
-            // does nothing)
-            if !busy.is_empty() && self.rest_logged != self.step_i {
-                self.log.add(
-                    obs.tic,
-                    format!(
-                        "waiting for sector {} to come to rest before line {}",
-                        busy[0], t.line
-                    ),
-                );
-                self.rest_logged = self.step_i;
-                self.rest_tic = obs.tic;
-            }
-            if !busy.is_empty() && obs.tic - self.rest_tic < SETTLE_WAIT {
-                self.progress_tic = obs.tic;
-                self.step_tic = obs.tic;
-                return controls;
-            }
+        if pressing && t.once() && t.shift_from.is_none() && self.busy_before_press(obs, &t, li) {
+            return controls;
         }
-        if pressing {
-            if let Some(nt) = self
-                .steps
-                .get(self.step_i as usize + 1)
-                .filter(|n| n.action == Action::Cross)
-                .and_then(|n| n.trigger.clone())
-                .filter(|nt| nt.info.trigger == Trigger::WR && !nt.permanent())
-            {
-                // the next step crosses a lift line for its window: if that lift is away (set
-                // off on the way), wait for it now, before this press starts a timer of its own
-                // the wait would use up
-                let init = &nav.movers.initial;
-                let away: Vec<usize> = nt
-                    .effects
-                    .iter()
-                    .map(|(s, _)| *s)
-                    .filter(|&x| {
-                        obs.height(x)
-                            .is_some_and(|l| (l.floor - init[x].floor).abs() > 0.5)
-                    })
-                    .collect();
-                if !away.is_empty() && obs.tic - self.step_tic < CROSS_REST_WAIT {
-                    if !self.cross_wait_logged {
-                        self.log.add(obs.tic, format!("sector {} already away: waiting for it to come back before line {}", away[0], t.line));
-                        self.cross_wait_logged = true;
-                    }
-                    self.progress_tic = obs.tic;
-                    return controls;
-                }
-            }
+        if pressing && self.next_lift_away(obs, &t) {
+            return controls;
         }
         if step.action == Action::Shoot
             && self.action_tic.is_none()
@@ -1128,6 +922,279 @@ impl RouteFollower {
             self.progress_tic = obs.tic; // (waiting for the floor, a lift, to bring her level)
             return controls;
         }
+        self.press(obs, &step, &t, li, facing, controls)
+    }
+
+    /// A line just walked over for what it does: held a second to see it start. (None: on.)
+    fn crossing_held(&mut self, obs: &Observation, step: &Step) -> Option<Controls> {
+        let t = step
+            .trigger
+            .as_ref()
+            .filter(|t| step.action == Action::Cross && t.info.category != Category::Exit)?;
+        if self.cross_tic.is_none() {
+            self.before = Some(
+                t.effects
+                    .iter()
+                    .map(|(s, _)| (*s, obs.height(*s)))
+                    .collect(),
+            );
+            self.cross_tic = Some(obs.tic);
+        }
+        if !self.effect_started(obs, t) {
+            if obs.tic - self.cross_tic.unwrap_or(obs.tic) < 35 {
+                return Some(self.motion.hold(obs, (0.0, 0.0), self.look));
+            }
+            self.log.add(
+                obs.tic,
+                format!("crossing line {} didn't do anything", t.line),
+            );
+        }
+        None
+    }
+
+    /// A step that waits on kills: here till what their deaths move has moved, the killing the
+    /// fight's.
+    fn await_kills(&mut self, obs: &Observation, step: &Step) -> Controls {
+        let moved = step.trigger.as_ref().is_some_and(|t| {
+            t.effects.iter().all(|(s, hs)| {
+                obs.height(*s).is_some_and(|l| {
+                    hs.iter().any(|h| {
+                        (l.floor - h.floor).abs() < 1.0 && (l.ceiling - h.ceiling).abs() < 1.0
+                    })
+                })
+            })
+        });
+        let monsters = obs
+            .things
+            .iter()
+            .flatten()
+            .any(|t| t.category == "Monster" && t.health > 0);
+        if monsters && !moved {
+            self.step_tic = obs.tic;
+            self.progress_tic = obs.tic;
+            return self.motion.hold(obs, (0.0, 0.0), self.look);
+        }
+        self.log.add(
+            obs.tic,
+            if moved {
+                "what the kills move has moved"
+            } else {
+                "skipping boss kill (no monsters in this run)"
+            },
+        );
+        self.next_step(obs.tic);
+        Controls::default()
+    }
+
+    /// Where on line `li` to aim, and how wide the line is from here (degrees): the nearest
+    /// part of it (a little in from its ends), as the use trace is a 64-unit ray, and from off
+    /// to one side the line's middle can be out of its reach.
+    fn line_aim(&self, obs: &Observation, step: &Step, li: usize) -> (Point, f64) {
+        let (a, b) = self.view.nav.map.line_seg(li);
+        let length = dist(a, b).max(1e-6);
+        let pos = obs.pos();
+        let mut tt =
+            ((pos.0 - a.0) * (b.0 - a.0) + (pos.1 - a.1) * (b.1 - a.1)) / (length * length);
+        tt = tt
+            .max(0.5f64.min(8.0 / length))
+            .min(0.5f64.max(1.0 - 8.0 / length));
+        if step.action == Action::Shoot {
+            // (a shot reaches: the middle, where it's widest to hit; else the part of it in
+            // sight, its middle behind a corner maybe)
+            tt = SHOT_AIMS
+                .into_iter()
+                .find(|&t| {
+                    self.shot_clear(obs, pos, (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t), li)
+                })
+                .unwrap_or(0.5);
+        }
+        let aim = (a.0 + (b.0 - a.0) * tt, a.1 + (b.1 - a.1) * tt);
+        let span = norm(heading(pos, a) - heading(pos, b)).abs();
+        (aim, span)
+    }
+
+    /// Stairs don't build while their first step is moving (it can be a lift as well): wait
+    /// till it's back up where the stairs left it. True: waiting.
+    fn stairs_step_away(&mut self, obs: &Observation, t: &TriggerLine) -> bool {
+        let Some((s0, _)) = t.shift_from else {
+            return false;
+        };
+        let top = self.states[s0]
+            .iter()
+            .map(|h| h.floor)
+            .fold(f64::NEG_INFINITY, f64::max);
+        if obs.height(s0).is_some_and(|l| l.floor < top - 0.5) {
+            self.progress_tic = obs.tic;
+            self.step_tic = obs.tic;
+            return true;
+        }
+        false
+    }
+
+    /// Where a line takes things depends on what's round it when pressed: wait for the lifts
+    /// and doors among those to be where the plan has them. True: waiting.
+    fn surroundings_unsettled(&mut self, obs: &Observation, t: &TriggerLine) -> bool {
+        let Some(relevant) = &t.relevant else {
+            return false;
+        };
+        let nav = Rc::clone(&self.view.nav);
+        let init = &nav.movers.initial;
+        // (not what it moves itself: that's off already if it's been pressed once, and isn't
+        // to be waited for to go back)
+        let moves: BTreeSet<usize> = t.effects.iter().map(|(s, _)| *s).collect();
+        let off: Vec<usize> = relevant
+            .iter()
+            .copied()
+            .filter(|x| !moves.contains(x))
+            .filter(|&x| {
+                obs.height(x).is_some_and(|l| {
+                    let h = rep(&self.states[x], init[x]);
+                    (l.floor - h.floor).abs() > 0.5 || (l.ceiling - h.ceiling).abs() > 0.5
+                })
+            })
+            .collect();
+        if !off.is_empty() && self.settle_logged != self.step_i {
+            self.log.add(
+                obs.tic,
+                format!(
+                    "waiting for sector {} to settle before line {}",
+                    off[0], t.line
+                ),
+            );
+            self.settle_logged = self.step_i;
+            self.goal_tic = obs.tic;
+        }
+        if !off.is_empty() && obs.tic - self.goal_tic < SETTLE_WAIT {
+            self.progress_tic = obs.tic;
+            self.step_tic = obs.tic;
+            return true;
+        }
+        false
+    }
+
+    /// Doom ignores a switch on a sector that's busy (a door open on its timer), and a
+    /// once-only one is still there to press then: wait till what it works is at rest. What it
+    /// works if she knows, and what's moving right by it, which she sees. True: not pressed
+    /// this tic (waiting; or what it works is on its way already, and the step's done).
+    fn busy_before_press(&mut self, obs: &Observation, t: &TriggerLine, li: usize) -> bool {
+        let nav = Rc::clone(&self.view.nav);
+        let init = &nav.movers.initial;
+        let mut cands: BTreeSet<usize> = t.effects.iter().map(|(s, _)| *s).collect();
+        if cands.is_empty() {
+            // (what's moving right by it only while what it works isn't known: a door on its
+            // timer beside the switch isn't waited for once she knows it's not the switch's)
+            cands.extend(self.sectors_near(li));
+        }
+        let busy: Vec<usize> = cands
+            .into_iter()
+            .filter(|&x| {
+                let Some(&m) = self.crusher.moved_at.get(&x) else {
+                    return false;
+                };
+                obs.tic - m < BUSY_TICS
+                    && !(obs.tic - m > REST_TICS
+                        && obs.height(x).is_some_and(|l| {
+                            (l.floor - init[x].floor).abs() < 0.5
+                                && (l.ceiling - init[x].ceiling).abs() < 0.5
+                        }))
+            })
+            .collect();
+        // (what it works on its way already where it sends it: pressed, a noise looked round
+        // at before the press was counted; again would do nothing, or turn a door back)
+        let toward = |x: usize| {
+            obs.height(x).is_some_and(|l| {
+                t.effects
+                    .iter()
+                    .filter(|(e, _)| *e == x)
+                    .flat_map(|(_, hs)| hs)
+                    .any(|h| {
+                        let (df, dc) = (l.floor - init[x].floor, l.ceiling - init[x].ceiling);
+                        (df.abs() > 0.5 && df * (h.floor - init[x].floor) > 0.0)
+                            || (dc.abs() > 0.5 && dc * (h.ceiling - init[x].ceiling) > 0.0)
+                    })
+            })
+        };
+        if !busy.is_empty() && busy.iter().all(|&x| toward(x)) {
+            self.log.add(
+                obs.tic,
+                format!("line {}'s already doing what it does: on", t.line),
+            );
+            self.next_step(obs.tic);
+            return true;
+        }
+        // (its own timer: a door switch pressed with a lift set off on the way still running
+        // does nothing)
+        if !busy.is_empty() && self.rest_logged != self.step_i {
+            self.log.add(
+                obs.tic,
+                format!(
+                    "waiting for sector {} to come to rest before line {}",
+                    busy[0], t.line
+                ),
+            );
+            self.rest_logged = self.step_i;
+            self.rest_tic = obs.tic;
+        }
+        if !busy.is_empty() && obs.tic - self.rest_tic < SETTLE_WAIT {
+            self.progress_tic = obs.tic;
+            self.step_tic = obs.tic;
+            return true;
+        }
+        false
+    }
+
+    /// The next step crosses a lift line for its window: if that lift is away (set off on the
+    /// way), wait for it now, before this press starts a timer of its own the wait would use
+    /// up. True: waiting.
+    fn next_lift_away(&mut self, obs: &Observation, t: &TriggerLine) -> bool {
+        let Some(nt) = self
+            .steps
+            .get(self.step_i as usize + 1)
+            .filter(|n| n.action == Action::Cross)
+            .and_then(|n| n.trigger.clone())
+            .filter(|nt| nt.info.trigger == Trigger::WR && !nt.permanent())
+        else {
+            return false;
+        };
+        let nav = Rc::clone(&self.view.nav);
+        let init = &nav.movers.initial;
+        let away: Vec<usize> = nt
+            .effects
+            .iter()
+            .map(|(s, _)| *s)
+            .filter(|&x| {
+                obs.height(x)
+                    .is_some_and(|l| (l.floor - init[x].floor).abs() > 0.5)
+            })
+            .collect();
+        if !away.is_empty() && obs.tic - self.step_tic < CROSS_REST_WAIT {
+            if !self.cross_wait_logged {
+                self.log.add(
+                    obs.tic,
+                    format!(
+                        "sector {} already away: waiting for it to come back before line {}",
+                        away[0], t.line
+                    ),
+                );
+                self.cross_wait_logged = true;
+            }
+            self.progress_tic = obs.tic;
+            return true;
+        }
+        false
+    }
+
+    /// Facing the line: the press (or the shot), then whether it did anything; nothing, again
+    /// from a little closer, `PRESS_TRIES` times.
+    fn press(
+        &mut self,
+        obs: &Observation,
+        step: &Step,
+        t: &TriggerLine,
+        li: usize,
+        facing: bool,
+        mut controls: Controls,
+    ) -> Controls {
         if self.action_tic.is_none() && facing {
             self.action_tic = Some(obs.tic);
         }
@@ -1154,7 +1221,7 @@ impl RouteFollower {
                     .add(obs.tic, format!("{} line {li}{tries}", step.action.name()));
             }
             // did it do anything? (an exit ends the level; otherwise something should move)
-            if since > 8 && step.action != Action::Exit && self.effect_started(obs, &t) {
+            if since > 8 && step.action != Action::Exit && self.effect_started(obs, t) {
                 self.next_step(obs.tic);
             } else if since
                 > if step.action == Action::Exit {
