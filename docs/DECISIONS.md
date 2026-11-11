@@ -2784,3 +2784,18 @@ left "0" and was taken for the end).
 Checked: MAP07 from a pistol start at UV with 2 and 3 lives: each death told, the lives
 counted ("1 life left after this one", "Your last life"), the last told. Not seen in a game:
 a death by her own rocket (the wording's in a test). Parity: 24 runs the same.
+
+## Powerups told as she takes them, and as they run out (the user, 2026-11-11)
+
+She was told of a powerup when she saw it ("Spotted: megasphere"), never when she took it
+(keys and guns had their line; the game's own "Invulnerability!", "Supercharge!" went
+nowhere but the fight's own clock). Now (`control/directed/powers.rs`), by the game's word for
+each: what she got and what it does ("You got invulnerability: nothing can hurt you for 30 s.",
+"You got a soulsphere: health 200.", "You got a berserk pack: your fist hits ten times as hard
+till the level's end."); and for the ones with a time (Doom's: invulnerability 30 s,
+invisibility and the radiation suit 60 s, the visor 120 s; another of the same starts it again)
+"Your radiation suit runs out in 5 s." (urgent for invulnerability and the suit, what's keeping
+her alive) and "Your invisibility's worn off."
+
+Checked on MAP08 by instinct: the soulsphere, invisibility, two suits (the second's time from
+its own pickup), each running out and worn off on time. Parity: 24 runs the same.

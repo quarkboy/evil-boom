@@ -24,6 +24,7 @@ mod events;
 mod kills;
 mod look;
 mod moments;
+mod powers;
 mod restart;
 mod situation;
 
@@ -377,6 +378,8 @@ pub struct Director {
     /// (None: as long as it takes)
     asking: ask::Asking,
     pub answer_wait: Option<i64>,
+    /// powers running, (what, till when, told it's ending) (`powers.rs`)
+    running: Vec<(&'static str, i64, bool)>,
     /// what hurt her lately, (tic, what, health): her death's story (`death.rs`)
     hurt: VecDeque<(i64, String, i32)>,
     /// how things stand this tic (`situation.rs`): what tells her reads it
@@ -485,6 +488,7 @@ impl Director {
     pub fn new_map(&mut self) {
         self.overtaken("a new level");
         self.hurt.clear();
+        self.running.clear();
         self.resorts.clear();
         self.queue.clear();
         self.resume = None;
@@ -521,6 +525,7 @@ impl Director {
     fn new_life(&mut self) {
         self.overtaken("the level begun again");
         self.hurt.clear();
+        self.running.clear();
         self.queue.clear();
         self.resume = None;
         self.tactics = Tactics::default();
@@ -1351,6 +1356,7 @@ impl Director {
         self.kills(agent, obs);
         self.more_moments(agent, obs);
         self.watch_progress(agent, obs);
+        self.powers(obs);
         self.questions(agent, obs);
         self.apply_tactics(agent, obs);
         agent.x_mut().spares = obs

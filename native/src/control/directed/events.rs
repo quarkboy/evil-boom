@@ -61,6 +61,13 @@ pub enum Event {
     },
     /// the game's word on a lock tried without its key
     Lock,
+    /// a powerup taken (what it is and does)
+    Powerup,
+    /// one that runs out about to (`vital`: one keeping her alive, invulnerability or the suit)
+    PowerEnding {
+        vital: bool,
+    },
+    PowerOver,
 
     // Monsters.
     /// monsters first seen (`dangerous`: a heavy one or a boss)
@@ -138,6 +145,9 @@ impl Event {
             | E::Spotted
             | E::Reachable { notable: true }
             | E::Lock
+            | E::Powerup
+            | E::PowerEnding { vital: false }
+            | E::PowerOver
             | E::BigKill
             | E::MultiKill
             | E::Barrels
@@ -162,6 +172,7 @@ impl Event {
             | E::OutOfAmmo
             | E::Crushed
             | E::Trapped
+            | E::PowerEnding { vital: true }
             | E::Sighting { dangerous: true }
             | E::OnInstinct
             | E::LevelDone
