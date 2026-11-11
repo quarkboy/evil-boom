@@ -630,7 +630,7 @@ impl Player {
         self.explorer.restart();
         self.fight.combat.restart();
         self.retreat = None;
-        self.fight.combat.hold_fire = false;
+        self.fight.combat.baiting = false;
         self.trail.clear();
         self.fallen_for.clear();
         self.fight.hunted_spots.clear();
@@ -665,7 +665,7 @@ impl Player {
         self.explorer.restart();
         self.fight.combat.restart();
         self.retreat = None;
-        self.fight.combat.hold_fire = false;
+        self.fight.combat.baiting = false;
         self.trail.clear();
         self.fallen_for.clear();
         self.fight.hunted_spots.clear();
@@ -760,8 +760,8 @@ impl Player {
                 .flatten()
                 .find(|&p| dist(p, obs.pos()) > self.fight.tune.retreat.ahead)
         });
-        self.fight.combat.toward = if busy { toward } else { back.or(toward) };
-        self.fight.combat.routed = self
+        self.fight.combat.going_to = if busy { toward } else { back.or(toward) };
+        self.fight.combat.route_under_way = self
             .explorer
             .follower
             .as_ref()
@@ -1002,7 +1002,7 @@ impl Player {
                     self.wait_until = obs.tic + self.fight.tune.retreat.fall_back_wait;
                 }
                 self.retreat = None;
-                self.fight.combat.hold_fire = false;
+                self.fight.combat.baiting = false;
                 if let Some(f) = &mut self.explorer.follower {
                     f.resume(obs.tic);
                 }
@@ -1282,7 +1282,7 @@ impl Player {
             let b = self.baiting(obs)?;
             self.retreat_tic = obs.tic;
             self.bait_tic = obs.tic;
-            self.fight.combat.hold_fire = true;
+            self.fight.combat.baiting = true;
             (RetreatKind::Bait, Some(b))
         } else {
             return None;

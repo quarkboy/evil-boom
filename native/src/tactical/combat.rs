@@ -123,9 +123,9 @@ pub struct Decision {
     /// which decision it is (the label, `why`, is for the log)
     pub kind: Move,
     /// the node said so: the route keeps the legs (whatever else: missiles flying)
-    pub yields: bool,
+    pub route_keeps_legs: bool,
     /// a missile coming, or an arch-vile's fire: not walked on through
-    pub pressed: bool,
+    pub urgent: bool,
     /// the angle to turn to, if fighting at all
     pub aim: Option<f64>,
     pub fire: bool,
@@ -142,8 +142,8 @@ impl Decision {
     fn without_shot(kind: Move, aim: Option<f64>, moving: Option<Point>, why: String) -> Decision {
         Decision {
             kind,
-            yields: false,
-            pressed: false,
+            route_keeps_legs: false,
+            urgent: false,
             aim,
             fire: false,
             weapon: 0,
@@ -155,7 +155,7 @@ impl Decision {
     /// Turning to look `way`, the route keeping her legs.
     fn looking(way: f64) -> Decision {
         Decision {
-            yields: true,
+            route_keeps_legs: true,
             ..Decision::without_shot(Move::Looking, Some(way), None, "looking round".into())
         }
     }
@@ -163,7 +163,7 @@ impl Decision {
     /// Does this move want her legs (`busy`: in a jump or a timed crossing, the route's unless
     /// she's pressed)? Whether it gets them is the arbiter's (`tactical/arbiter.rs`).
     pub fn wants_legs(&self, busy: bool) -> bool {
-        !self.yields && ((!busy && !self.kind.route_goes_on()) || self.pressed)
+        !self.route_keeps_legs && ((!busy && !self.kind.route_goes_on()) || self.urgent)
     }
 }
 
@@ -187,7 +187,7 @@ pub struct Combat {
     /// every monster about now (as the engine has it)
     /// every monster in the level as it is now: her senses' only (`observe` makes what she
     /// sees and hears of them out of it); nothing decides by it
-    truth: BTreeMap<i32, Thing>,
+    game_monsters: BTreeMap<i32, Thing>,
     /// the monsters she knows are dead: seen to die, or heard to (a death's heard within
     /// `HEARD`, walls or none)
     dead: BTreeSet<i32>,
@@ -221,7 +221,7 @@ pub struct Combat {
     /// barrels she's seen that are still there
     pub barrels_seen: Vec<Point>,
     /// a route under way (the player's): its follower has its own crusher rules
-    pub routed: bool,
+    pub route_under_way: bool,
     pub target: Option<i32>,
     pub kills: i32,
     pub log: Vec<String>,
@@ -230,14 +230,15 @@ pub struct Combat {
     strafe: f64,
     strafe_until: i64,
     rate: f64,
-    mode: String,
+    /// what the fight was last logged as doing (`announce`): logged again when it changes
+    announced: String,
     held_fire: Option<HeldFire>,
     /// the monster a rocket's way at was last blocked close by (whatever's up), and when: the
     /// launcher isn't chosen for it for a while after. A while, not each tic it's clear, or she
     /// would switch guns back and forth as the lane opens and shuts.
     rocket_blocked: Option<(i32, i64)>,
-    /// baiting: the monsters in the way are the point
-    pub hold_fire: bool,
+    /// baiting: the monsters in the way are the point, the trigger's let go
+    pub baiting: bool,
     /// monsters she's after for the gun they carry (as of the last list of things to do): shot
     /// whatever the shot would wake
     pub wanted_dead: BTreeSet<i32>,
@@ -257,7 +258,7 @@ pub struct Combat {
     dodge_clear: bool,
     /// where the route's taking her mid-fight (an errand: health, a gun, ammo), for dodging
     /// towards: on to it while dodging, not dodging where she stands
-    pub toward: Option<Point>,
+    pub going_to: Option<Point>,
     /// the floors that would hurt her now, as she takes them, by sector (what she knows: the
     /// player's, each tic; `Knowledge::hazards`)
     pub hazards: Vec<bool>,
@@ -389,7 +390,7 @@ impl Combat {
             hearing: Hearing::new(&nav.map),
             nav,
             known: BTreeMap::new(),
-            truth: BTreeMap::new(),
+            game_monsters: BTreeMap::new(),
             dead: BTreeSet::new(),
             last_seen: BTreeMap::new(),
             missiles_seen: BTreeSet::new(),
@@ -405,7 +406,7 @@ impl Combat {
             tally: BTreeMap::new(),
             visible: Vec::new(),
             barrels_seen: Vec::new(),
-            routed: false,
+            route_under_way: false,
             target: None,
             kills: 0,
             log: Vec::new(),
@@ -414,10 +415,10 @@ impl Combat {
             strafe: 1.0,
             strafe_until: 0,
             rate: 0.0,
-            mode: String::new(),
+            announced: String::new(),
             held_fire: None,
             rocket_blocked: None,
-            hold_fire: false,
+            baiting: false,
             infight: BTreeMap::new(),
             heights_tic: None,
             heights_now: Vec::new(),
@@ -427,7 +428,7 @@ impl Combat {
             shake_spot: None,
             dodge_way: None,
             dodge_clear: false,
-            toward: None,
+            going_to: None,
             hazards: Vec::new(),
             sinks_into_harm,
             last_pos: None,
@@ -478,7 +479,7 @@ impl Combat {
 
     /// A new life: the level from the start (what's been seen is remembered).
     pub fn restart(&mut self) {
-        self.truth.clear();
+        self.game_monsters.clear();
         self.dead.clear();
         self.last_seen.clear();
         // What she had when she died isn't rounds spent in the life after.
@@ -504,7 +505,7 @@ impl Combat {
         self.invulnerable_until = i64::MIN / 2;
         self.target = None;
         self.health = None;
-        self.mode.clear();
+        self.announced.clear();
         self.dodging.clear();
         self.homing_since.clear();
         self.shake_spot = None;
@@ -644,7 +645,7 @@ impl Combat {
             .map(|t| (t.id, t.clone()))
             .collect();
         let was_visible: BTreeSet<i32> = self.visible.iter().map(|t| t.id).collect();
-        for i in self.truth.keys() {
+        for i in self.game_monsters.keys() {
             if monsters.contains_key(i) || self.dead.contains(i) || !was_visible.contains(i) {
                 continue;
             }
@@ -657,7 +658,7 @@ impl Combat {
                     .push(format!("tic {}: {} {i} dead", obs.tic, s.name));
             }
         }
-        self.truth = monsters;
+        self.game_monsters = monsters;
     }
 
     /// The monsters in her sight this tic (`visible`), and what she keeps of each: where and
@@ -665,7 +666,7 @@ impl Combat {
     fn see_monsters(&mut self, obs: &Observation, me: Body) {
         let pos = obs.pos();
         self.visible.clear();
-        for t in self.truth.values() {
+        for t in self.game_monsters.values() {
             let d = dist((t.x, t.y), pos);
             if !(0.0..self.tune.engage.range).contains(&d) {
                 continue;
@@ -1398,7 +1399,11 @@ impl Combat {
     /// so often, so that what comes up beside her as she travels is seen before it's on her.
     pub(super) fn glance(&mut self, obs: &Observation) {
         let every = self.tune.senses.glance_every;
-        if every <= 0 || !self.routed || self.alert.is_some() || obs.tic - self.glanced < every {
+        if every <= 0
+            || !self.route_under_way
+            || self.alert.is_some()
+            || obs.tic - self.glanced < every
+        {
             return;
         }
         self.glanced = obs.tic;
@@ -1443,7 +1448,7 @@ impl Combat {
     /// For measuring a run: was she going towards the monster with that id, away from it, or
     /// about still, by her own speed along the line to it.
     pub fn measure_approach(&self, pos: Point, id: i32) -> &'static str {
-        let Some(t) = self.truth.get(&id) else {
+        let Some(t) = self.game_monsters.get(&id) else {
             return "gone";
         };
         let d = dist((t.x, t.y), pos).max(1.0);
@@ -1594,7 +1599,7 @@ impl Combat {
         } else {
             "unknown"
         };
-        let far = match self.truth.get(&id) {
+        let far = match self.game_monsters.get(&id) {
             Some(t) if dist((t.x, t.y), pos) < 384.0 => "near",
             Some(_) => "far",
             None => "gone",
@@ -1801,7 +1806,7 @@ impl Combat {
             // route's turn comes after.
             if let Some((aim, _)) = self.rocket_held(obs) {
                 return Some(Decision {
-                    yields: true,
+                    route_keeps_legs: true,
                     ..Decision::without_shot(
                         Move::RocketHeld,
                         Some(aim),
@@ -1839,11 +1844,11 @@ impl Combat {
             }
         }
         let aim = act.aim.or(s.aim);
-        let fire = fire && !act.hold_fire && !self.hold_fire;
+        let fire = fire && !act.hold_fire && !self.baiting;
         let why = act.why;
         let kind = act.kind;
-        let pressed = !s.missiles.is_empty() || s.vile.is_some();
-        if why != self.mode {
+        let urgent = !s.missiles.is_empty() || s.vile.is_some();
+        if why != self.announced {
             let t = s.target.as_ref().map_or(String::new(), |t| {
                 format!(
                     " (target {} {}, {:.0} threat; health {:.0})",
@@ -1855,7 +1860,7 @@ impl Combat {
                 detail: why.clone(),
                 ..Record::new(obs.tic, "move", format!("{kind:?}"))
             });
-            self.mode = why.clone();
+            self.announced = why.clone();
         }
         if obs.tic % 175 == 0 && crate::debug::on().shot {
             if let Some(t) = &s.target {
@@ -1865,8 +1870,8 @@ impl Combat {
         self.last_move = Some(kind);
         Some(Decision {
             kind,
-            yields: act.route,
-            pressed,
+            route_keeps_legs: act.route_keeps_legs,
+            urgent,
             aim,
             fire,
             weapon,
@@ -1981,9 +1986,9 @@ impl Combat {
 
     /// What the fight is doing is logged when it changes (`mode`), not every tic.
     pub(super) fn announce(&mut self, obs: &Observation, why: &str) {
-        if why != self.mode {
+        if why != self.announced {
             self.log.push(format!("tic {}: {why}", obs.tic));
-            self.mode = why.to_string();
+            self.announced = why.to_string();
         }
     }
 
@@ -2214,7 +2219,7 @@ impl Combat {
     fn keep_line(&mut self, obs: &Observation, d: &Decision, c: &mut Controls, legs: bool) {
         /// longer than this with no shot out, the gun isn't coming up to fire (a switch, say)
         const GIVEN_UP: i64 = 12;
-        let Some(held) = obs.weapon.filter(|w| matches!(w, 2..=4) && !d.pressed) else {
+        let Some(held) = obs.weapon.filter(|w| matches!(w, 2..=4) && !d.urgent) else {
             self.line_held = None;
             return;
         };
@@ -2570,7 +2575,7 @@ impl Combat {
 
     /// What the fight's doing now ("" with none on).
     pub fn mode(&self) -> &str {
-        &self.mode
+        &self.announced
     }
 
     /// A switch to the ready gun asked for (not again till it's had time).

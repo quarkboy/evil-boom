@@ -297,13 +297,13 @@ impl Explorer {
             self.short_of_health = None;
         }
         self.suited = suited;
-        if self.difficult {
+        if self.missed_jumps_in {
             self.set_jumps(false); // (the jumps missed once: out again, other ways first)
         }
-        self.exits_open = !self.exit_last;
+        self.exits_offered = !self.exit_held_back;
         let perceive = self.knowledge.perceive;
-        self.strafe_ok = false;
-        self.harm_ok = false;
+        self.strafing_allowed = false;
+        self.harm_allowed = false;
         self.from_dead_end = false;
         let mut found = self.ordinary(obs, hooks);
         if !found {
@@ -323,13 +323,13 @@ impl Explorer {
         }
         // With the exit there, held back for what's left: one round of the walls with little to go
         // on, then out. A press that turns up something to do starts another round.
-        self.strong_only = self.exit_last && self.panic_tries >= PANIC_WALLS;
-        if !found && perceive && (!self.exit_last || !self.exits_open) {
+        self.strong_only = self.exit_held_back && self.panic_tries >= PANIC_WALLS;
+        if !found && perceive && (!self.exit_held_back || !self.exits_offered) {
             found = self.every_wall(obs, hooks);
         }
         self.suspecting = Suspecting::No;
         self.strong_only = false;
-        if !found && self.exit_last && hooks.before_exit(self, obs) {
+        if !found && self.exit_held_back && hooks.before_exit(self, obs) {
             self.log.push(format!(
                 "tic {}: nothing else to do here: the level again, for what's left",
                 obs.tic
@@ -340,7 +340,7 @@ impl Explorer {
         }
         // Not out while a door she set off that shuts for a while and opens again by itself is
         // still shut: what's past it is still to do, and a player waits for it.
-        if !found && self.exit_last && self.reopens_soon(obs) {
+        if !found && self.exit_held_back && self.reopens_soon(obs) {
             if self.current.is_some() || !self.waiting_reopen {
                 self.log.push(format!(
                     "tic {}: nothing else to do till a door opens again",
@@ -359,7 +359,7 @@ impl Explorer {
             self.current = None;
             return;
         }
-        if !found && self.exit_last {
+        if !found && self.exit_held_back {
             found = self.held_back_exit(obs, hooks);
         }
         if !found {
@@ -389,11 +389,11 @@ impl Explorer {
     /// for anything risky (`exit_before_risks`), the exit; then the risky ones.
     fn ordinary(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
         let mut found = self.try_objectives(obs, false, hooks);
-        if !found && self.exit_last && self.exit_before_risks {
+        if !found && self.exit_held_back && self.exit_before_risks {
             // The exit is held back for everything else, but not for what she mightn't come back from:
             // with nothing safe left, it's out.
-            self.exit_last = false;
-            self.exits_open = true;
+            self.exit_held_back = false;
+            self.exits_offered = true;
             self.log.push(format!(
                 "tic {}: nothing safe left to do: for the exit",
                 obs.tic
@@ -408,7 +408,7 @@ impl Explorer {
         if !self.nav.jumps.iter().any(|j| j.strafe) {
             return false;
         }
-        self.strafe_ok = true;
+        self.strafing_allowed = true;
         let found = self.safe_then_risky(obs, hooks);
         if found {
             self.log.push(format!(
@@ -416,7 +416,7 @@ impl Explorer {
                 obs.tic
             ));
         } else {
-            self.strafe_ok = false;
+            self.strafing_allowed = false;
         }
         found
     }
@@ -488,7 +488,7 @@ impl Explorer {
     /// And nothing to try either: is there a way out of here at all? Every wall round her,
     /// nearest first, as a player in a pit with no way out would.
     fn every_wall(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
-        self.suspecting = Suspecting::Panic;
+        self.suspecting = Suspecting::EveryWall;
         let found = self.safe_then_risky(obs, hooks);
         if found {
             // Counted: walls with no more to go on than one weak sign. Those with more are all pressed.
@@ -511,7 +511,7 @@ impl Explorer {
     fn held_back_exit(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
         self.log
             .push(format!("tic {}: nothing else to do: for the exit", obs.tic));
-        self.exits_open = true;
+        self.exits_offered = true;
         self.safe_then_risky(obs, hooks)
     }
 
@@ -547,11 +547,11 @@ impl Explorer {
         self.dropped
             .retain(|id, &mut t| t != tic || !refused.contains(id));
         self.refused_now.1 = refused;
-        self.harm_ok = true;
+        self.harm_allowed = true;
         // The walls too, every one round her: left out of this pass, a wall refused under the
         // margin would never be tried with the margin lifted.
         if self.knowledge.perceive {
-            self.suspecting = Suspecting::Panic;
+            self.suspecting = Suspecting::EveryWall;
         }
         let found = self.safe_then_risky(obs, hooks);
         self.suspecting = Suspecting::No;
@@ -563,7 +563,7 @@ impl Explorer {
         }
         self.from_dead_end = found;
         if !found {
-            self.harm_ok = false;
+            self.harm_allowed = false;
         }
         found
     }

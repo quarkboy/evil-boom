@@ -71,7 +71,7 @@ pub(super) struct Act {
     /// the trigger let go
     pub hold_fire: bool,
     /// the route keeps the legs (whatever else: missiles flying)
-    pub route: bool,
+    pub route_keeps_legs: bool,
 }
 
 impl Act {
@@ -82,7 +82,7 @@ impl Act {
             why,
             aim: None,
             hold_fire: false,
-            route: false,
+            route_keeps_legs: false,
         }
     }
 }
@@ -215,13 +215,13 @@ fn off_crusher(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
     if !c.under_crusher(obs) && !c.in_crusher(obs) {
         return None;
     }
-    if c.routed {
+    if c.route_under_way {
         let mut a = Act::new(
             Move::OffCrusher,
             None,
             "out from under a crusher (the route's way)".into(),
         );
-        a.route = true;
+        a.route_keeps_legs = true;
         return Some(a);
     }
     if s.busy {
@@ -256,7 +256,10 @@ fn off_lit_barrel(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<
 /// something that shoots awake: no standing in it to fight, dodge or keep clear. On along her
 /// route flat out, the trigger let go: a shot of hers sets them off as surely as theirs.
 fn through_barrels(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
-    if !c.routed || c.now.shooters.is_empty() || Combat::barrel_field(obs) < c.tune.barrels.field {
+    if !c.route_under_way
+        || c.now.shooters.is_empty()
+        || Combat::barrel_field(obs) < c.tune.barrels.field
+    {
         return None;
     }
     let mut a = Act::new(
@@ -264,7 +267,7 @@ fn through_barrels(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<
         None,
         "in a field of barrels: on through it".into(),
     );
-    a.route = true;
+    a.route_keeps_legs = true;
     a.hold_fire = true;
     Some(a)
 }
@@ -386,7 +389,7 @@ fn to_errand(c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
         None,
         format!("shooting on the way to {}", s.errand),
     );
-    let way = c.toward.map(|to| heading(s.pos, to));
+    let way = c.going_to.map(|to| heading(s.pos, to));
     let in_the_way = c
         .visible
         .iter()
@@ -497,7 +500,7 @@ fn stepping_for_plasma(c: &mut Combat, obs: &Observation, s: &Situation) -> Opti
 /// Fought where it stands, whatever else: a sniper she'd see off first (`takes_on`), or,
 /// outmatched, a hitscan shooter she'd see off quick (`quick_hitscan`): kept clear of or walked
 /// on past, its bullets reach her all the same.
-fn fought(c: &Combat, obs: &Observation, t: &Thing) -> bool {
+fn fought_where_it_stands(c: &Combat, obs: &Observation, t: &Thing) -> bool {
     c.takes_on(obs, t.name) || (c.now.outmatched && c.quick_hitscan(obs, t.name))
 }
 
@@ -535,7 +538,7 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
     let pos = s.pos;
     let t = s.target.as_ref().filter(|t| {
         c.now.outmatched
-            && !fought(c, obs, t)
+            && !fought_where_it_stands(c, obs, t)
             && c.known.get(&t.id).is_some_and(|k| k.awake)
             && dist((t.x, t.y), pos) < c.tune.engage.keep_clear
     })?;
@@ -568,7 +571,7 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
         .is_some_and(|way| norm(way - heading((t.x, t.y), pos)).abs() < 90.0)
     {
         a.moving = None;
-        a.route = true;
+        a.route_keeps_legs = true;
         a.why.push_str(": on along the route, away");
     }
     Some(a)
@@ -576,8 +579,12 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
 
 /// Outmatched: shooting on the way, the route going on.
 fn outmatched_get_past(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    (c.now.outmatched && !s.target.as_ref().is_some_and(|t| fought(c, obs, t)))
-        .then(|| Act::new(Move::GettingPast, None, "getting past".into()))
+    (c.now.outmatched
+        && !s
+            .target
+            .as_ref()
+            .is_some_and(|t| fought_where_it_stands(c, obs, t)))
+    .then(|| Act::new(Move::GettingPast, None, "getting past".into()))
 }
 
 /// Nearer the target than the gun she'd fight it with wants (`style::window`): back out to it.
@@ -636,7 +643,10 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     {
         return None;
     }
-    let duel = s.target.as_ref().is_some_and(|t| fought(c, obs, t));
+    let duel = s
+        .target
+        .as_ref()
+        .is_some_and(|t| fought_where_it_stands(c, obs, t));
     // Her route is about to take her onto ground she's never been on, with something to shoot
     // from here: from here, then.
     let hold = c.tune.engage.hold_known
@@ -714,7 +724,7 @@ impl Combat {
         // Out from under a crusher at work when there is no fight and no route under way:
         // between objectives nothing else moves her. A route under way is left alone: it has
         // its own crusher rules, and taking over from it turns a timed crossing back.
-        if !busy && !self.routed && self.under_crusher(obs) {
+        if !busy && !self.route_under_way && self.under_crusher(obs) {
             let gun = self.gun(obs);
             let moving = self.steer(obs, None, &gun);
             let why = "out from under a crusher".to_string();
@@ -727,7 +737,7 @@ impl Combat {
                 self.announce(obs, &why);
                 let aim = self.vile_face().map(|v| heading(obs.pos(), v));
                 return Some(Decision {
-                    pressed: true,
+                    urgent: true,
                     ..Decision::without_shot(Move::OutOfVileSight, aim, way, why)
                 });
             }
@@ -752,14 +762,14 @@ impl Combat {
         if let Some(way) = self.look(obs, false) {
             return Some(Decision::looking(way));
         }
-        if !self.mode.is_empty() {
+        if !self.announced.is_empty() {
             self.log.push(format!(
                 "tic {}: fight over ({} kills; {:.0} rounds spent, {:.0} damage done)",
                 obs.tic, self.kills, self.spent, self.dealt
             ));
             (self.spent, self.dealt) = (0.0, 0.0);
         }
-        self.mode.clear();
+        self.announced.clear();
         self.target = None;
         None
     }

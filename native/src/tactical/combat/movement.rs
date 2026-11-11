@@ -171,7 +171,7 @@ impl Combat {
             }
             // And, as clear, the way she's going (health, a gun, ammo across the room): dodging where
             // she stands, missile after missile, she never gets there.
-            if let Some(to) = self.toward.filter(|&to| s >= 0.0 && dist(to, pos) > 1.0) {
+            if let Some(to) = self.going_to.filter(|&to| s >= 0.0 && dist(to, pos) > 1.0) {
                 let d = dist(to, pos);
                 s += self.tune.dodge.toward * (way.0 * (to.0 - pos.0) + way.1 * (to.1 - pos.1)) / d;
             }

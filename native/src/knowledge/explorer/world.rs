@@ -268,16 +268,16 @@ impl Explorer {
             teleports: k.teleports.len(),
             spent_doors,
             spent_teleports,
-            exits_open: fresh || self.exits_open,
+            exits_offered: fresh || self.exits_offered,
             blocked: self.blocked(),
-            difficult: self.difficult,
+            missed_jumps_in: self.missed_jumps_in,
         }
     }
 
     fn build_view(&self, fresh: bool) -> View {
         let k = &self.knowledge;
         let (spent_doors, spent_teleports) = self.spent(fresh);
-        let exits_open = fresh || self.exits_open;
+        let exits_offered = fresh || self.exits_offered;
         let blocked = self.blocked();
         let nav = &self.nav;
         let mut triggers = Vec::new();
@@ -312,7 +312,7 @@ impl Explorer {
             }
         }
         let mut polys: BTreeSet<usize> = k.known_polys().difference(&blocked).copied().collect();
-        if !exits_open {
+        if !exits_offered {
             polys.retain(|p| !self.pads.0.contains(p));
         }
         let teleports: BTreeSet<usize> = k
@@ -341,7 +341,7 @@ impl Explorer {
     /// The run-jumps left out: those missed too often (and, unless with nothing else to do,
     /// those missed at all).
     pub(super) fn banned_jumps(&self) -> BTreeSet<usize> {
-        let limit = if self.difficult { JUMP_MISSES } else { 1 };
+        let limit = if self.missed_jumps_in { JUMP_MISSES } else { 1 };
         let missed = &self.knowledge.missed_jumps;
         // And strafing runs, except when there's nothing else to do: they're for where a straight
         // run won't go, not for a way round.
@@ -351,7 +351,7 @@ impl Explorer {
             .enumerate()
             .filter(|(_, j)| {
                 missed.get(&j.key()).copied().unwrap_or(0) >= limit
-                    || (j.strafe && !self.strafe_ok)
+                    || (j.strafe && !self.strafing_allowed)
                     || self.lapsing(&j.key())
             })
             .map(|(i, _)| i)
@@ -372,8 +372,8 @@ impl Explorer {
             && jumps.contains(key)
     }
 
-    pub(super) fn set_jumps(&mut self, difficult: bool) {
-        self.difficult = difficult;
+    pub(super) fn set_jumps(&mut self, missed_jumps_in: bool) {
+        self.missed_jumps_in = missed_jumps_in;
         self.view = None; // (it holds the old edges)
     }
 }

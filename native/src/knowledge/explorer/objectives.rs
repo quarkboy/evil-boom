@@ -261,7 +261,7 @@ impl Explorer {
         out.extend(self.untried(&by_line, &reach, keys, pos));
         let again = self.pressed_again(obs, &by_line, &reach, keys, pos);
         if self.suspecting != Suspecting::No {
-            let panic = self.suspecting == Suspecting::Panic;
+            let panic = self.suspecting == Suspecting::EveryWall;
             out.extend(self.walls(obs, &reach, panic));
         } else {
             // A wall she strongly suspects, right by her, is tried there and then, as a player in front
@@ -466,7 +466,7 @@ impl Explorer {
             self.knowledge.damaging(nav.sector_of_poly(here)) && !safe(&way_back(here));
         // Nor is the dry floor she waded off from a dead end: there was nothing to do there, so a
         // switch down here is hers to try before she goes back to stand on it.
-        let shut_in = self.harm_ok || self.waded_dead_end || stays_shut || !safe(&reach);
+        let shut_in = self.harm_allowed || self.waded_dead_end || stays_shut || !safe(&reach);
         let switch_in_harm = |this: &Self, o: &Objective| {
             o.kind == Kind::Switch
                 && !shut_in
@@ -611,7 +611,7 @@ impl Explorer {
 
     /// The exits she can set off from where she can get to, with the keys she has: exit lines,
     /// and floors that have ended the level under her before. None while the exit is held back
-    /// (`exits_open`).
+    /// (`exits_offered`).
     fn exits(
         &self,
         by_line: &BTreeMap<usize, &TriggerLine>,
@@ -622,7 +622,7 @@ impl Explorer {
         let nav = &self.nav;
         let k = &self.knowledge;
         let mut out: Vec<Objective> = Vec::new();
-        if self.exits_open {
+        if self.exits_offered {
             for li in k.exits() {
                 if let Some(t) = by_line
                     .get(&li)
@@ -1540,7 +1540,7 @@ impl Explorer {
                     .any(|trap| mesh.poly_at(o.goal).is_some_and(|p| trap.contains(&p)))
             });
         }
-        if !self.exits_open {
+        if !self.exits_offered {
             // Nor anywhere she'd slide over one getting there.
             let segs = self.pads.1.clone();
             options.retain(|o| {

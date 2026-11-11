@@ -53,7 +53,7 @@ pub struct Completionist {
 impl Completionist {
     /// the explorer's exit is held back
     pub fn new(explorer: &mut Explorer, restarts: i32) -> Completionist {
-        explorer.exit_last = true;
+        explorer.exit_held_back = true;
         Completionist {
             restarts,
             no_way_back: None,

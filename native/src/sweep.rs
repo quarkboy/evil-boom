@@ -245,17 +245,17 @@ pub(crate) fn hold_exit(
 ) {
     let tally = e.tally();
     if given_up {
-        agent.x_mut().exit_last = false;
+        agent.x_mut().exit_held_back = false;
     } else if o.complete {
         // (any of the three short: the kills too, whatever's left of them that she knows of
         // hunted down last)
-        agent.x_mut().exit_last = tally[0].0 < tally[0].1 - items_short
+        agent.x_mut().exit_held_back = tally[0].0 < tally[0].1 - items_short
             || tally[1].0 < tally[1].1
             || tally[2].0 < tally[2].1 - secrets_short;
     } else if o.secrets {
-        agent.x_mut().exit_last = tally[2].0 < tally[2].1 - secrets_short;
+        agent.x_mut().exit_held_back = tally[2].0 < tally[2].1 - secrets_short;
     } else if o.expert {
-        agent.x_mut().exit_last = tally[0].0 < tally[0].1 - items_short;
+        agent.x_mut().exit_held_back = tally[0].0 < tally[0].1 - items_short;
     }
 }
 
@@ -423,7 +423,7 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     agent.start_over();
     let start = e.tic;
     let log_from = agent.x().log.len();
-    let held = std::mem::replace(&mut agent.x_mut().exit_last, true); // (everything first, then out)
+    let held = std::mem::replace(&mut agent.x_mut().exit_held_back, true); // (everything first, then out)
     agent.x_mut().exit_before_risks = true;
     let mut c: Option<crate::motor::Controls> = None;
     let (mut best, mut best_tic, mut lives) = (0usize, e.tic, 0);
@@ -458,8 +458,8 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
         // (everything first, then out: out when there's nothing left but walls to press, not
         // after every wall of the level. MAP29's pass, all 205 sectors seen and nothing
         // untried, pressed walls for its last half hour, its time up with the exit not taken)
-        if agent.x().exit_last && agent.x().out_of_options.is_some() {
-            agent.x_mut().exit_last = false;
+        if agent.x().exit_held_back && agent.x().out_of_options.is_some() {
+            agent.x_mut().exit_held_back = false;
         }
         let k = &agent.x().knowledge;
         let known =
@@ -475,7 +475,7 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
         ended = "out by the exit";
     }
     let x = agent.x_mut();
-    x.exit_last = held;
+    x.exit_held_back = held;
     x.exit_before_risks = false;
     x.knowledge.immune = false;
     x.left_alive();

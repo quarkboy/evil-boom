@@ -291,7 +291,7 @@ impl Hooks for NoHooks {}
 enum Suspecting {
     No,
     Walls,
-    Panic,
+    EveryWall,
 }
 
 /// Points bucketed by a grid, for "is there one near here".
@@ -409,7 +409,7 @@ pub struct Explorer {
     glance_at: Option<f64>,
     idle_since: i64,
     /// the exit only once there's nothing else to do (the 100% runs)
-    pub exit_last: bool,
+    pub exit_held_back: bool,
     /// ...but before anything risky (a drop she mightn't come back from, a floor that hurts):
     /// the pass before a level known beforehand
     pub exit_before_risks: bool,
@@ -445,8 +445,8 @@ pub struct Explorer {
     reach_states: States,
     view: Option<(Rc<View>, ViewKey)>,
     /// the jumps missed once are in, for want of anything else
-    difficult: bool,
-    exits_open: bool,
+    missed_jumps_in: bool,
+    exits_offered: bool,
     /// polys beyond walk-over exit lines, and those lines
     pads: (BTreeSet<usize>, Vec<(Point, Point)>),
     /// where she could get to, with nothing at all to do
@@ -475,9 +475,9 @@ pub struct Explorer {
     /// waiting for a door that opens again by itself before anything else (logged once)
     waiting_reopen: bool,
     /// strafing run-jumps allowed (nothing else to do)
-    strafe_ok: bool,
+    strafing_allowed: bool,
     /// switches pressed from a floor that hurts allowed (nothing else at all to do)
-    harm_ok: bool,
+    harm_allowed: bool,
     /// her health when she stepped onto a floor that hurts for a risky objective there (on
     /// purpose, not fallen in), while she's still down on it
     waded: Option<f64>,
@@ -540,9 +540,9 @@ struct ViewKey {
     teleports: usize,
     spent_doors: BTreeSet<usize>,
     spent_teleports: BTreeSet<usize>,
-    exits_open: bool,
+    exits_offered: bool,
     blocked: BTreeSet<usize>,
-    difficult: bool,
+    missed_jumps_in: bool,
 }
 
 impl Explorer {
@@ -584,7 +584,7 @@ impl Explorer {
             follower_seen: 0,
             glance_at: None,
             idle_since: -1_000_000_000,
-            exit_last: false,
+            exit_held_back: false,
             exit_before_risks: false,
             patience: 1.0,
             restart_wanted: false,
@@ -602,8 +602,8 @@ impl Explorer {
             reach: BTreeSet::new(),
             reach_states: Vec::new(),
             view: None,
-            difficult: false,
-            exits_open: true,
+            missed_jumps_in: false,
+            exits_offered: true,
             trapped: None,
             suspecting: Suspecting::No,
             spares: BTreeSet::new(),
@@ -614,8 +614,8 @@ impl Explorer {
             panic_tries: 0,
             strong_only: false,
             waiting_reopen: false,
-            strafe_ok: false,
-            harm_ok: false,
+            strafing_allowed: false,
+            harm_allowed: false,
             from_dead_end: false,
             waded_dead_end: false,
             waded: None,

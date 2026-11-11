@@ -330,7 +330,7 @@ impl Combat {
         // Not towards an errand that lies in the claws' reach of something one hit of which could
         // kill her.
         let health = self.now.health;
-        let errand_way = self.toward.filter(|&to| {
+        let errand_way = self.going_to.filter(|&to| {
             dist(to, pos) > 1.0
                 && !them
                     .iter()

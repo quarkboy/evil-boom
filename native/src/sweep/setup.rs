@@ -117,7 +117,7 @@ pub fn setup(
     }
     let secrets_short = broken_secrets(&map_name);
     if o.secrets {
-        agent.x_mut().exit_last = true;
+        agent.x_mut().exit_held_back = true;
         agent.x_mut().secrets_mode = true;
     }
     // (her own waits inside the stall clock: given up on things back as soon, for its share of

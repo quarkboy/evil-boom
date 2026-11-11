@@ -243,7 +243,7 @@ impl Explorer {
             if obs.tic < until {
                 let mut c = turn_to(obs, Some(bearing));
                 // Not where the press would reach an exit behind it, while the exit is held back.
-                let exit = self.exit_last
+                let exit = self.exit_held_back
                     && self
                         .knowledge
                         .use_hits(obs.pos(), obs.angle, &obs.heights)
@@ -505,7 +505,7 @@ impl Explorer {
         if !self.directed
             && obj.kind != Kind::Exit
             && !committed
-            && !self.exit_last
+            && !self.exit_held_back
             && k.exits().len() > self.exits_seen
         {
             return self.ends(obs, "an exit came into view");

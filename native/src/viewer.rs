@@ -950,13 +950,13 @@ fn level(
         }
     });
     if o.secrets {
-        agent.x_mut().exit_last = true;
+        agent.x_mut().exit_held_back = true;
         agent.x_mut().secrets_mode = true;
     }
     if o.practice {
         // (as `sweep::scout` sets her up)
         agent.x_mut().knowledge.immune = true;
-        agent.x_mut().exit_last = true;
+        agent.x_mut().exit_held_back = true;
         agent.x_mut().exit_before_risks = true;
         if let Some(p) = agent.player_mut() {
             p.combat_mut().immune = true;

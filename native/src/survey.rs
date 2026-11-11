@@ -260,7 +260,7 @@ pub fn survey_map(wad: &str, map: &str) -> Result<(), String> {
     // (a revealing line she set out to press, as what, and the rubric's view of it just then:
     // found by her own means, the score she'd have given it)
     let mut taken: BTreeMap<usize, (String, Wall)> = BTreeMap::new();
-    agent.x_mut().exit_last = true; // (everything else before the exit)
+    agent.x_mut().exit_held_back = true; // (everything else before the exit)
     let mut c = None;
     let mut last = e.observe();
     let mut secrets_seen = 0;

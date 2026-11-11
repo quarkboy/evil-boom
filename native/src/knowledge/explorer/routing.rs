@@ -306,9 +306,9 @@ impl Explorer {
             view.teleports,
             view.spent_doors,
             view.spent_teleports,
-            view.exits_open,
+            view.exits_offered,
             view.blocked,
-            view.difficult,
+            view.missed_jumps_in,
         )
             .hash(&mut h);
         self.banned_jumps().hash(&mut h);
@@ -568,7 +568,7 @@ impl Explorer {
             // nothing else. Otherwise her best suspect can be refused by a few points while weaker
             // walls over cheaper floors are tried and wear her down past it.
             let walls = obj.kind == Kind::Wall && self.suspecting != super::Suspecting::No;
-            let margin = match (self.harm_ok || walls, way_on) {
+            let margin = match (self.harm_allowed || walls, way_on) {
                 (true, true) => 0.0,
                 (true, false) => self.hardest_floor_hit(&route.legs, obj, states),
                 (false, _) => HEALTH_MARGIN,
