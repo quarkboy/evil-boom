@@ -436,7 +436,7 @@ reads is short.
 | 2 | The journal always on; `doom_why`; the trigger's one reason | every "why" asked at 50 random moments of a run has a true, short answer |
 | 3 | `doom_mode` / `idle` fallback; `doom_goal` | a level finished with three goals and no orders; no stretch over 25 s with her idle and the bot still |
 | 4 | Proposals: the type, class D confirmations from `Refusal` and the tiers, deadlines, `doom_answer` | scripted answers at 2, 8 and 30 s late: each either applied or refused as stale, never applied wrong |
-| 1b (was 5) | Tactics: `doom_fight` and its seams, expiries; hurt told by rate, death told with its cause | arenas: each tactic visibly changes the fight and never lowers survival below autopilot's by more than noise when left to expire |
+| 1b (was 5) | Tactics: `doom_fight` and its seams, expiries; hurt told by rate, death told with its cause | arenas: each tactic visibly changes the fight and never lowers survival below autopilot's by more than noise when left to expire; MAP07 with the loadout, directed by hand: out alive at least once in six where the bot alone is 0 of 6 |
 | 6 | Class T proposals (act now, override in time); the "close or high-stake" filter tuned | a hard level with the stand-in: questions per minute within budget, share answered in time, outcomes |
 | 7 | `doom_policy`; then `doom_style` through the classifier | each setting's effect measured on the score's quarter set; none outside its documented range |
 | 8 | The game itself: `doom_game`, `doom_cheat`, the console's switches for what she's allowed and its view of questions and policy | an episode on stream settings, unattended, through a death, a pistol restart, a skill change and each cheat; a disallowed action refused; a cheated level never in a measure |
@@ -494,6 +494,11 @@ ran into, in the order it cost me:
 **MAP07, HMP, with a full loadout (super shotgun, chaingun, rocket launcher), one life.**
 Dead in 112 seconds, 6 of 12 killed. This is the level where the fight is everything, and I
 had no say in it at all:
+
+(The bot by itself, same loadout, six seeds: dead all six, in 51 to 124 s with 4 to 10 killed. So
+this isn't my idling: the level's past what her rules can do, which makes it the test for
+tactics: can a few orders a player would give (fight from the start room's door, rockets on
+the mancubi, the megasphere when it's low) get her through where the rules don't?)
 
 13. **No order means anything in a fight.** Go, explore, press, exit: none of them is "fight
     these", "fall back to the start room", "use the rockets". With no order she was "waiting",
