@@ -8,6 +8,8 @@
 //!                       an order (REF an id or a name; DIR n, ne, east, ...); `then` last: after
 //!                       the order in hand, not instead of it
 //!   check REF [risky]   could she go there now (as doom_go asks), and if not, why
+//!   idle SECONDS|wait   with no order that long she carries on by herself (not leaving the
+//!                       level); wait: she waits, as long as it takes
 //!   status              her health, armor, weapons, ammo, keys, what she's doing
 //!   where               where she is, her health, what she's doing
 //!   log [N]             her log's last N lines (40), as the watcher shows it
@@ -97,6 +99,17 @@ pub fn command(
             };
             d.order_with(o, rush, then);
             Ok(Vec::new())
+        }
+        Some("idle") => {
+            // (with no order this many seconds she carries on by herself; `idle wait`: she waits)
+            d.idle_auto = w
+                .get(1)
+                .and_then(|v| v.parse::<f64>().ok())
+                .map(|secs| (secs * 35.0) as i64);
+            Ok(vec![match d.idle_auto {
+                Some(t) => format!("with no order for {} s she carries on by herself", t / 35),
+                None => "with no order she waits".to_string(),
+            }])
         }
         Some("status") => Ok(vec![d.status(agent, obs)]),
         Some("check") => {

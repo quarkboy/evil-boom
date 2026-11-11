@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 
 use super::present::Stage;
 use super::{Canvas, MapView, Rect, Rgb, Watch, DIM};
-use crate::knowledge::explorer::Kind;
+use crate::control::directed::plain;
 
 /// the stream's window
 pub const SW: usize = 1920;
@@ -435,27 +435,6 @@ fn monster(class: &str) -> (String, String) {
         other => return (other.to_string(), format!("{other}s")),
     };
     (one.to_string(), many.to_string())
-}
-
-/// What she's after, in the viewers' words (not the objective's own: "try the wall (line 8)").
-fn plain(kind: Kind, label: &str) -> String {
-    match kind {
-        Kind::Exit => "heading for the exit".into(),
-        Kind::Key => "going for a key".into(),
-        Kind::Switch => "going to press a switch".into(),
-        Kind::Door => "going to open a door".into(),
-        Kind::Frontier | Kind::Room | Kind::Visit | Kind::Recheck => "exploring".into(),
-        Kind::Noise => "checking out a noise".into(),
-        Kind::Teleporter => "taking a teleporter".into(),
-        Kind::Item => label.strip_prefix("pick up ").map_or_else(
-            || "picking something up".into(),
-            |what| format!("picking up the {}", what.to_lowercase()),
-        ),
-        Kind::Hunt => "hunting".into(),
-        Kind::Wall => "searching for secrets".into(),
-        Kind::Secret => "going back to a secret".into(),
-        Kind::Barrel => "clearing a barrel".into(),
-    }
 }
 
 /// Text at `px` pixels a character; the next line's y.

@@ -455,6 +455,10 @@ impl Motion {
     ) -> Controls {
         let off = norm(direction - obs.angle).abs();
         let mut speed = speed;
+        // (slower the further the way is from her facing, to 15% backwards. With the fight's aim
+        // over a route's legs that's a crawl, and it's kept on purpose: the route at full pace
+        // whichever way she's turned, and the same for retreats only, each lost on the score
+        // (-0.017, -0.016; 2026-11-11). Going on slowly while she's shooting is a caution)
         if off > 90.0 {
             speed *= (0.45 - (off - 90.0) / 60.0 * 0.3).max(0.15);
         } else if off > STRAFE_FREE {

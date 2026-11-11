@@ -116,6 +116,9 @@ enum Doing {
     Off,
     /// a pickup she takes by herself, waiting (not news)
     Pickup,
+    /// no order for a while (`idle_auto`): carrying on by herself, the explorer choosing, till an
+    /// order comes or there's nothing left but to leave
+    Auto,
 }
 
 /// A fight under way: since when, what it's cost so far, what's been in it.
@@ -147,6 +150,8 @@ const HURT_WINDOW: i64 = 3 * 35;
 const HURT_FAST: f64 = 25.0;
 /// ...at most this often
 const HURT_AGAIN: i64 = 5 * 35;
+/// on her own, what she's doing is said at most this often (tics)
+const AUTO_SAY_EVERY: i64 = 8 * 35;
 /// a fight's summary is worth a reaction when it cost this much health, or this many died
 const FIGHT_NOTABLE_HEALTH: f64 = 20.0;
 const FIGHT_NOTABLE_KILLS: i32 = 3;
@@ -202,6 +207,13 @@ pub struct Director {
     /// a switch pressed: its line, what it's called, and till when to watch for what it did (what
     /// it moves is learned seeing it move, a moment after)
     pressed: Option<(usize, String, i64)>,
+    /// with no order this long (tics) she carries on by herself (None: she waits, as long as
+    /// it takes); and since when she's had none
+    pub idle_auto: Option<i64>,
+    idle_since: Option<i64>,
+    /// what she's last said she's doing by herself
+    told_auto: String,
+    told_auto_tic: Option<i64>,
     /// the fight she's in, for its summary when it's over; and what she had last tic (what a
     /// fight cost is the falls from tic to tic, so a medikit taken in the middle doesn't hide it)
     fight: Option<Fight>,
@@ -332,6 +344,14 @@ impl Director {
             ),
             Some(Doing::Off) => "getting off a hurting floor".to_string(),
             Some(Doing::Pickup) => "picking up nearby".to_string(),
+            Some(Doing::Auto) => format!(
+                "on her own (no order){}",
+                agent
+                    .x()
+                    .current
+                    .as_ref()
+                    .map_or(String::new(), |o| format!(": {}", o.label))
+            ),
             None if agent.x().current.is_some() => "busy".to_string(),
             None => "waiting".to_string(),
         };
@@ -790,6 +810,10 @@ impl Director {
                 }
                 let notable =
                     f.health_lost >= FIGHT_NOTABLE_HEALTH || killed >= FIGHT_NOTABLE_KILLS;
+                // (one that came to nothing, a monster seen and gone, isn't a fight to tell of)
+                if killed == 0 && cost.is_empty() {
+                    return;
+                }
                 self.event(
                     obs,
                     notable,
@@ -1102,9 +1126,43 @@ impl Director {
         if self.explore_paused(agent, obs) {
             return;
         }
+        if matches!(self.doing, Some(Doing::Auto)) {
+            self.auto(agent, obs);
+            return;
+        }
         let ended = agent.x_mut().ended.take();
         if agent.x().current.is_some() {
             return;
+        }
+        // (no order, nothing in hand: since when; and after `idle_auto` of it, on by herself)
+        let waiting = matches!(self.doing, None | Some(Doing::Off | Doing::Pickup))
+            && self.queue.is_empty()
+            && self.resume.is_none()
+            && self.pressed.is_none();
+        if !waiting {
+            self.idle_since = None;
+        } else if self.idle_since.is_none() {
+            self.idle_since = Some(obs.tic);
+        }
+        if let (Some(limit), Some(since)) = (self.idle_auto, self.idle_since) {
+            if obs.tic - since >= limit && obs.health.unwrap_or(0.0) > 0.0 {
+                self.idle_since = None;
+                self.doing = Some(Doing::Auto);
+                self.told_auto.clear();
+                let x = agent.x_mut();
+                x.directed = false;
+                x.exit_held_back = true;
+                x.out_of_options = None;
+                self.report(
+                    obs,
+                    true,
+                    format!(
+                        "No order for {} s: carrying on by myself (not leaving the level) till you give one.",
+                        limit / 35
+                    ),
+                );
+                return;
+            }
         }
         if self.doing.is_none() || matches!(self.doing, Some(Doing::Off | Doing::Pickup)) {
             agent.x_mut().press_on = false; // (her own doing: no order's rush)
@@ -1135,6 +1193,8 @@ impl Director {
                 }
             }
             Some(Doing::Off) => {}
+            // (handled above: never taken here)
+            Some(Doing::Auto) => self.doing = Some(Doing::Auto),
             Some(Doing::Once(id, what)) => {
                 let (ok, why, pressed_nothing) = ended
                     .map_or((false, "stopped".to_string(), false), |e| {
@@ -1231,11 +1291,66 @@ impl Director {
         self.paused
     }
 
+    /// On her own for want of an order: what she's taken up is said (quietly) as it changes;
+    /// with nothing left she'd do but leave, she stops and says so: leaving is an order's.
+    fn auto(&mut self, agent: &mut Agent, obs: &Observation) {
+        if agent.x().out_of_options.is_some() {
+            self.end_auto(agent);
+            self.doing = None;
+            let exits = self.objectives_of(agent, obs, &[Kind::Exit]);
+            self.report(
+                obs,
+                false,
+                match exits.first() {
+                    Some(e) => format!(
+                        "Nothing more I can find to do here but search walls or leave ({}).",
+                        self.describe(e, obs)
+                    ),
+                    None => "Nothing more I can find to do here, and no exit known.".to_string(),
+                },
+            );
+            return;
+        }
+        // (what she's taken up, in plain words, as it changes: not each pickup and barrel on
+        // the way, and not more than a line every few seconds)
+        let Some((kind, phrase)) = agent
+            .x()
+            .current
+            .as_ref()
+            .map(|o| (o.kind, plain(o.kind, &o.label)))
+        else {
+            return;
+        };
+        if !matches!(kind, Kind::Item | Kind::Barrel)
+            && phrase != self.told_auto
+            && self
+                .told_auto_tic
+                .is_none_or(|t| obs.tic - t >= AUTO_SAY_EVERY)
+        {
+            self.event(obs, false, format!("On my own: {phrase}."));
+            self.told_auto = phrase;
+            self.told_auto_tic = Some(obs.tic);
+        }
+    }
+
+    /// Back to her orders: the explorer chooses nothing of its own.
+    fn end_auto(&mut self, agent: &mut Agent) {
+        let x = agent.x_mut();
+        x.directed = true;
+        x.exit_held_back = false;
+        x.current = None;
+        x.follower = None;
+        x.ended = None;
+    }
+
     fn start(&mut self, agent: &mut Agent, obs: &Observation, o: Order) {
         // (a new order replaces the one in hand, and says so: two given together, the first
         // would be gone without a word. An errand in the middle of exploring is an errand: the
         // exploring goes on after it)
         let errand = matches!(o, Order::Go(..));
+        if matches!(self.doing, Some(Doing::Auto)) {
+            self.end_auto(agent);
+        }
         match self.doing.take() {
             Some(Doing::Area(id, what, secrets)) if errand => {
                 self.resume = Some(Order::ExploreArea(id, secrets));
@@ -1859,6 +1974,27 @@ fn lock_name(l: crate::specials::Lock) -> Option<&'static str> {
 }
 
 /// The monsters fighting her now (`Combat::engaged`: able to hurt her from where they are).
+/// What she's after, in the viewers' words (not the objective's own: "try the wall (line 8)").
+pub fn plain(kind: Kind, label: &str) -> String {
+    match kind {
+        Kind::Exit => "heading for the exit".into(),
+        Kind::Key => "going for a key".into(),
+        Kind::Switch => "going to press a switch".into(),
+        Kind::Door => "going to open a door".into(),
+        Kind::Frontier | Kind::Room | Kind::Visit | Kind::Recheck => "exploring".into(),
+        Kind::Noise => "checking out a noise".into(),
+        Kind::Teleporter => "taking a teleporter".into(),
+        Kind::Item => label.strip_prefix("pick up ").map_or_else(
+            || "picking something up".into(),
+            |what| format!("picking up the {}", what.to_lowercase()),
+        ),
+        Kind::Hunt => "hunting".into(),
+        Kind::Wall => "searching for secrets".into(),
+        Kind::Secret => "going back to a secret".into(),
+        Kind::Barrel => "clearing a barrel".into(),
+    }
+}
+
 /// What's fighting her, in a phrase: how many of each kind, and where the nearest is
 /// ("2 Fatso, 1 Arachnotron (NW 650)"). None: nothing is.
 fn fighting(against: &[crate::motor::Thing], obs: &Observation) -> Option<String> {
