@@ -21,6 +21,7 @@ use crate::play::Agent;
 mod kills;
 mod look;
 mod moments;
+mod restart;
 
 pub use look::{Hints, Listing, Pick};
 pub use moments::{skill_name, Level};
@@ -341,6 +342,12 @@ pub struct Director {
     /// the level, from the runner; and the moments being kept track of (`moments.rs`)
     pub level: Level,
     moments: moments::Moments,
+    /// the level again hers to ask for (the console's to say; set by the runner), and asked for
+    /// (for the runner to do); progress lately, (what it was, since when), and her told it's hers
+    pub restart_allowed: bool,
+    pub restart_wanted: bool,
+    progress: Option<((usize, [usize; 6]), i64)>,
+    told_restart: bool,
     /// the fight she's in, for its summary when it's over; and what she had last tic (what a
     /// fight cost is the falls from tic to tic, so a medikit taken in the middle doesn't hide it)
     fight: Option<Fight>,
@@ -456,6 +463,9 @@ impl Director {
         self.told_secrets = None;
         self.kills = kills::Kills::default();
         self.moments = moments::Moments::default();
+        self.progress = None;
+        self.told_restart = false;
+        self.restart_wanted = false;
     }
 
     /// She's died, with lives left: told, with what she was fighting; her orders and her say in
@@ -479,6 +489,12 @@ impl Director {
             notable: true,
             urgent: true,
         });
+        self.new_life();
+    }
+
+    /// The level again from its start (a death, a restart): her orders and her say in the fight
+    /// are the attempt before's; the fight, her health's marks and what's killed start afresh.
+    fn new_life(&mut self) {
         self.queue.clear();
         self.resume = None;
         self.tactics = Tactics::default();
@@ -1302,6 +1318,7 @@ impl Director {
         self.events(agent, obs);
         self.kills(agent, obs);
         self.more_moments(agent, obs);
+        self.watch_progress(agent, obs);
         self.apply_tactics(agent, obs);
         agent.x_mut().spares = obs
             .things

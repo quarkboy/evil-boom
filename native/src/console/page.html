@@ -145,6 +145,8 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <span class="check wide"><input type="checkbox" name="evil_starts" id="s-evil-starts"><label for="s-evil-starts" class="check">Evil starts the game (at the title card, and when what she chose is over)</label></span>
       <label>Levels she may start <input name="evil_maps" placeholder="the map above; all; E1M1, E2M1"></label>
       <label>Skills she may choose <input name="evil_skills" placeholder="the skill above; 3, 4"></label>
+      <span class="check"><input type="checkbox" name="evil_next" id="s-evil-next"><label for="s-evil-next" class="check">Evil goes on to the next level (from the tally; 30 s, else by itself)</label></span>
+      <span class="check"><input type="checkbox" name="evil_restart" id="s-evil-restart"><label for="s-evil-restart" class="check">Evil may restart a level (after 90 s with nothing new)</label></span>
       <label>Play she may choose <select name="evil_play"><option value="">as Whole episode above</option><option value="single">one level</option><option value="continuous">on through the episode</option><option value="both">either</option></select></label>
       <div class="row wide">
         <button id="s-save">Save</button>

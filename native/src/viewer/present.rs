@@ -24,6 +24,8 @@ const DEATH_HOLD: i64 = 105;
 const TALLY_READ: i64 = 88;
 /// a Doom II finale's text, all shown, read this long before a press
 const TEXT_READ: i64 = 210;
+/// the tally held for her word to go on this long at most (tics)
+const NEXT_WAIT: i64 = 30 * 35;
 /// a finale's text not typed on for this long (tics) is all there (a character takes 3)
 const TEXT_DONE: i64 = 12;
 /// still waiting after a press (a finale's first press finishes its text): pressed again after this
@@ -104,6 +106,8 @@ pub(super) enum Stage {
         grew: (usize, i64),
         /// the finale's text all told (an episode's end: a game hers to start from then)
         text_done: bool,
+        /// on through, the next level hers: told her so at the tally
+        next_told: bool,
     },
     /// the run's over (game over: the title card); the screen as it is till it's begun again
     Over,
@@ -276,6 +280,7 @@ fn tic(
                     told: 0,
                     grew: (0, 0),
                     text_done: false,
+                    next_told: false,
                 };
                 // (the level's end told now, with the tally on screen: the last level has no
                 // next one to tell it from)
@@ -319,6 +324,7 @@ fn tic(
             grew,
             text_done,
             last,
+            next_told,
         } => {
             // (a finale's story, typed out on screen: told her a sentence at a time as each is)
             if screen.state == 2 {
@@ -357,6 +363,25 @@ fn tic(
                 }
                 return Ok(watch);
             }
+            // (on through, the next level hers to go on to from the tally: held for her word,
+            // then on by itself after a while, the stream never left on it)
+            let hers = screen.state == 1
+                && !*last
+                && watch.choices.next
+                && game.is_some_and(|(_, o)| o.episode)
+                && (watch.feed.is_some() || watch.neuro.is_some());
+            if hers && screen.waiting {
+                if !*next_told {
+                    *next_told = true;
+                    let tic = watch.engine.tic;
+                    let line = format!(
+                        "On the tally screen: doom_game next to go on (it goes on by itself in {} s).",
+                        NEXT_WAIT / 35
+                    );
+                    watch.tell_screens(|d| d.offer_game(tic, &line));
+                }
+                watch.serve_game(false, true);
+            }
             let press = if screen.waiting {
                 let since = *waiting_since.get_or_insert_with(|| {
                     watch.agent.x_mut().log.push(format!(
@@ -370,7 +395,12 @@ fn tic(
                 } else {
                     TEXT_READ
                 };
-                p.clock - since >= read && pressed.is_none_or(|t| p.clock - t >= PRESS_AGAIN)
+                let read_out = if hers {
+                    watch.next_wanted || p.clock - since >= NEXT_WAIT
+                } else {
+                    p.clock - since >= read
+                };
+                read_out && pressed.is_none_or(|t| p.clock - t >= PRESS_AGAIN)
             } else {
                 *waiting_since = None;
                 false

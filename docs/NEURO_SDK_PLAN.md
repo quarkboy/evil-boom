@@ -711,9 +711,12 @@ planned. After MAP07: tactics move up to straight after 1a, with the telling of 
    - **restart** is hers, but only unlocked after no progress for a while (the score's stall
      measure: nothing new mapped, killed, set off or picked up); till then `doom_game
      restart` answers why not and how long. Proposed: 90 s; and at once after a death that
-     costs a life, as now.
+     costs a life, as now. **Built** (`control/directed/restart.rs`): 90 s, told her once
+     when it's hers; no life spent; what she came in with, what she knows kept.
    - **next level** is hers to give: after an exit the game holds at the tally screen till
      she says `doom_game next`, as a player presses a key there (she's told the tally there).
+     **Built** (stream mode, playing on through): held for her word, on by itself after 30 s
+     so the stream's never left there.
    - **choose a level** (changed, the user's): yes. She starts the game: the level, the skill,
      and single (just that level) or continuous (on through its episode; Doom II: through
      the game). Offered at the title card and again once what she chose is over (the level,

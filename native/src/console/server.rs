@@ -88,6 +88,10 @@ pub struct Settings {
     pub evil_skills: String,
     /// "" as "Whole episode" above, or "single", "continuous", "both"
     pub evil_play: String,
+    /// on through, the next level hers from the tally screen (else the game goes on itself)
+    pub evil_next: bool,
+    /// the level again from its start hers, after a while with nothing new
+    pub evil_restart: bool,
 }
 
 impl Default for Settings {
@@ -115,6 +119,8 @@ impl Default for Settings {
             evil_maps: String::new(),
             evil_skills: String::new(),
             evil_play: String::new(),
+            evil_next: true,
+            evil_restart: true,
         }
     }
 }
@@ -206,8 +212,23 @@ impl Settings {
     /// The games hers to start, in `--choices`' words, every part given (what's left empty
     /// here: the game as these settings start it); None: none.
     fn choices(&self) -> Option<String> {
+        let onoff = |b: bool| if b { "on" } else { "off" };
+        let control = format!(
+            "next={};restart={}",
+            onoff(self.evil_next),
+            onoff(self.evil_restart)
+        );
         if !self.evil_starts {
-            return None;
+            // (nothing to start, but on through and again hers as set: the game as the
+            // console starts it)
+            let play = if self.episode { "continuous" } else { "single" };
+            return (self.evil_next || self.evil_restart).then(|| {
+                format!(
+                    "maps={};skills={};play={play};start=off;{control}",
+                    self.map.to_uppercase(),
+                    self.skill.clamp(1, 5)
+                )
+            });
         }
         let maps = match self.evil_maps.trim() {
             "" => self.map.to_uppercase(),
@@ -224,7 +245,7 @@ impl Settings {
             _ if self.episode => "continuous",
             _ => "single",
         };
-        Some(format!("maps={maps};skills={skills};play={play}"))
+        Some(format!("maps={maps};skills={skills};play={play};{control}"))
     }
 }
 
@@ -886,6 +907,8 @@ fn handle(hub: &Hub, mut req: Request) {
                         evil_maps: new.evil_maps.clone(),
                         evil_skills: new.evil_skills.clone(),
                         evil_play: new.evil_play.clone(),
+                        evil_next: new.evil_next,
+                        evil_restart: new.evil_restart,
                         ..s.settings.clone()
                     };
                     let changed = unchanged != new;
@@ -974,16 +997,18 @@ mod tests {
         };
         assert_eq!(
             s.choices().as_deref(),
-            Some("maps=E1M1;skills=4;play=single")
+            Some("maps=E1M1;skills=4;play=single;next=on;restart=on")
         );
         s.evil_maps = "all".into();
         s.evil_skills = "3, 4".into();
         s.evil_play = "both".into();
         assert_eq!(
             s.choices().as_deref(),
-            Some("maps=all;skills=3,4;play=single,continuous")
+            Some("maps=all;skills=3,4;play=single,continuous;next=on;restart=on")
         );
         s.evil_starts = false;
+        s.evil_next = false;
+        s.evil_restart = false;
         assert_eq!(s.choices(), None);
     }
 

@@ -80,7 +80,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": "Your fight, for a while (10 s unless seconds; then by reflex again). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / steady: how you fight. auto: all by reflex again.", "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
         json!({ "name": "doom_policy", "description": "Standing settings. idle: seconds with no action before you carry on by instinct, not leaving (0: you wait). hints: suggestions of what to do next, off, on_stall or always.", "schema": s(json!({ "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
-        json!({ "name": "doom_game", "description": "Start a game, when you're offered one (at the start, and when a level or episode you chose is over). map, skill 1-5, play: single (just that level) or continuous (on through its episode). Only what's offered.", "schema": s(json!({ "do": { "type": "string", "enum": ["start"] }, "map": { "type": "string" }, "skill": { "type": "integer" }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
+        json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map, skill 1-5, play single or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer" }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
         json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, what you're doing, what you're fighting." }),
     ]
@@ -217,14 +217,14 @@ impl Session {
         }
     }
 
-    /// Off a level, a game hers to start (the title, a game over, the end of what she chose):
-    /// what comes in handled, `doom_game` by `start` (her choice checked: (success, message));
+    /// Off a level (the title, a game over, the end of what she chose, the tally screen): what
+    /// comes in handled, `doom_game` by `act` (checked: (success, message));
     /// any other action answered that there's no level to do it in. What's been told since,
     /// passed on. The lines for the log.
     pub fn off_level(
         &mut self,
         tic: i64,
-        mut start: impl FnMut(&Value) -> (bool, String),
+        mut act: impl FnMut(&Value) -> (bool, String),
     ) -> Vec<String> {
         let mut log = Vec::new();
         while let Ok(i) = self.link.incoming.try_recv() {
@@ -256,7 +256,7 @@ impl Session {
                         .and_then(|d| serde_json::from_str(d).ok())
                         .unwrap_or(Value::Null);
                     let (ok, msg) = if name == "doom_game" {
-                        start(&args)
+                        act(&args)
                     } else {
                         (
                             false,
@@ -553,10 +553,19 @@ impl Session {
                 (true, "OK.".into())
             }
             "doom_status" => (true, self.director.status(agent, obs)),
-            "doom_game" => (
-                false,
-                "You're in a level: a new game's offered when it's over.".into(),
-            ),
+            "doom_game" => match crate::control::game::GameAct::of_json(&args) {
+                Ok(crate::control::game::GameAct::Restart) => {
+                    match self.director.ask_restart(obs.tic) {
+                        Ok(said) => (true, said),
+                        Err(why) => (false, why),
+                    }
+                }
+                Ok(_) => (
+                    false,
+                    "You're in a level: a new game, or the next level, when it's over.".into(),
+                ),
+                Err(why) => (false, why),
+            },
             _ => (false, format!("No action \"{name}\".")),
         }
     }

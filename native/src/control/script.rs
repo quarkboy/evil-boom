@@ -141,7 +141,10 @@ pub fn command(
                 .ok_or("hints off|on_stall|always")?;
             Ok(vec![format!("hints {}", d.hints.name())])
         }
-        Some("game") => Err("in a level: a new game's offered when it's over".into()),
+        Some("game") => match crate::control::game::GameAct::of_words(&w[1..])? {
+            crate::control::game::GameAct::Restart => d.ask_restart(obs.tic).map(|s| vec![s]),
+            _ => Err("in a level: a new game, or the next level, when it's over".into()),
+        },
         Some("status") => Ok(vec![d.status(agent, obs)]),
         Some("check") => {
             let risky = w.last() == Some(&"risky");

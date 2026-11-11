@@ -1,7 +1,8 @@
-//! The game itself, as hers to start: which level, at which skill, and whether just that level
-//! or on through its episode (Doom II: through the game). Offered at the title, and again once
-//! what she chose is over (the level, or the episode); what's on offer is the stream console's
-//! to say (`--choices`), and may be no more than one level at one skill.
+//! The game itself, as hers: which level to start, at which skill, and whether just that level
+//! or on through its episode (Doom II: through the game), offered at the title and again once
+//! what she chose is over; on through, the next level when she says so at the tally screen; the
+//! level again from its start once she's made no progress for a while. What's hers is the
+//! stream console's to say (`--choices`), and may be no more than one level at one skill.
 
 /// What she may choose from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -14,6 +15,75 @@ pub struct Choices {
     pub single: bool,
     /// on from it through its episode (Doom II: through the game)
     pub continuous: bool,
+    /// a game hers to start at all (off: only next and restart, as set)
+    pub start: bool,
+    /// on through, the next level hers to go on to from the tally screen
+    pub next: bool,
+    /// the level again from its start hers, once she's made no progress for a while
+    pub restart: bool,
+}
+
+/// What she asks of the game (`doom_game`'s `do`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GameAct {
+    Start {
+        map: Option<String>,
+        skill: Option<i32>,
+        play: Option<String>,
+    },
+    Next,
+    Restart,
+}
+
+impl GameAct {
+    /// From `doom_game`'s data.
+    pub fn of_json(args: &serde_json::Value) -> Result<GameAct, String> {
+        let s = |k: &str| {
+            args.get(k)
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        };
+        match s("do").as_deref() {
+            Some("start") => Ok(GameAct::Start {
+                map: s("map"),
+                skill: args
+                    .get("skill")
+                    .and_then(serde_json::Value::as_i64)
+                    .and_then(|v| i32::try_from(v).ok()),
+                play: s("play"),
+            }),
+            Some("next") => Ok(GameAct::Next),
+            Some("restart") => Ok(GameAct::Restart),
+            _ => Err("do: start, next or restart.".into()),
+        }
+    }
+
+    /// From a script's words after `game`: `start [MAP] [SKILL] [single|continuous]`, `next`,
+    /// `restart`.
+    pub fn of_words(w: &[&str]) -> Result<GameAct, String> {
+        match w.first().copied() {
+            Some("start") => {
+                let play = w
+                    .iter()
+                    .copied()
+                    .find(|v| matches!(*v, "single" | "continuous"));
+                Ok(GameAct::Start {
+                    skill: w.iter().find_map(|v| v.parse::<i32>().ok()),
+                    map: w[1..]
+                        .iter()
+                        .copied()
+                        .find(|v| v.parse::<i32>().is_err() && Some(*v) != play)
+                        .map(str::to_string),
+                    play: play.map(str::to_string),
+                })
+            }
+            Some("next") => Ok(GameAct::Next),
+            Some("restart") => Ok(GameAct::Restart),
+            _ => Err(
+                "game start [MAP] [SKILL] [single|continuous] | game next | game restart".into(),
+            ),
+        }
+    }
 }
 
 /// What she chose.
@@ -32,6 +102,9 @@ impl Choices {
             skills: Vec::new(),
             single: false,
             continuous: false,
+            start: false,
+            next: false,
+            restart: false,
         }
     }
 
@@ -48,6 +121,9 @@ impl Choices {
             skills: vec![skill],
             single: !episode,
             continuous: episode,
+            start: true,
+            next: false,
+            restart: false,
         };
         for part in s.split(';').map(str::trim).filter(|p| !p.is_empty()) {
             let (key, value) = part
@@ -73,6 +149,18 @@ impl Choices {
                         .collect::<Option<Vec<i32>>>()
                         .ok_or("--choices: skills are 1-5")?;
                 }
+                "start" | "next" | "restart" => {
+                    let on = match list.as_slice() {
+                        [v] if v == "ON" => true,
+                        [v] if v == "OFF" => false,
+                        _ => return Err(format!("--choices: {} is on or off", key.trim())),
+                    };
+                    match key.trim() {
+                        "start" => c.start = on,
+                        "next" => c.next = on,
+                        _ => c.restart = on,
+                    }
+                }
                 "play" => {
                     c.single = list.iter().any(|p| p == "SINGLE");
                     c.continuous = list.iter().any(|p| p == "CONTINUOUS");
@@ -80,7 +168,11 @@ impl Choices {
                         return Err("--choices: play is single, continuous or both".into());
                     }
                 }
-                other => return Err(format!("--choices: no \"{other}\" (maps, skills, play)")),
+                other => {
+                    return Err(format!(
+                        "--choices: no \"{other}\" (maps, skills, play, start, next, restart)"
+                    ))
+                }
             }
         }
         Ok(c)
@@ -88,7 +180,10 @@ impl Choices {
 
     /// Anything to choose from at all.
     pub fn offered(&self) -> bool {
-        !self.maps.is_empty() && !self.skills.is_empty() && (self.single || self.continuous)
+        self.start
+            && !self.maps.is_empty()
+            && !self.skills.is_empty()
+            && (self.single || self.continuous)
     }
 
     /// Her choice checked against what's offered (what she leaves out: the one on offer, when

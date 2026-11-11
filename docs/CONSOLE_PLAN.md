@@ -229,4 +229,7 @@ either). They go to the game as `--choices` when it starts, and as the `choices`
 whenever they're saved (no restart needed). With Doom's own screens and "Wait at the title
 card", she's offered a game at the title; with any, again when what she chose is over (a
 level played by itself, at its tally; an episode, once its ending's text is told), and at a
-game over. The streamer's Begin still starts the console's own game.
+game over. The streamer's Begin still starts the console's own game. Two more switches, on by
+default: **Evil goes on to the next level** (playing on through, the tally screen waits for
+her `doom_game next`, 30 s at most) and **Evil may restart a level** (hers after 90 s with
+nothing new).

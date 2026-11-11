@@ -331,34 +331,51 @@ impl Watch {
         if self.start_wanted.is_some() {
             return; // (chosen: begun at the window's next turn)
         }
-        let offer = self.choices.offered().then(|| self.choices.offer());
         if self.offered.as_ref() != Some(&self.choices) {
             self.offered = Some(self.choices.clone());
-            if let Some(offer) = &offer {
-                let tic = self.engine.tic;
-                self.tell_screens(|d| d.offer_game(tic, offer));
+            if self.choices.offered() {
+                let (tic, offer) = (self.engine.tic, self.choices.offer());
+                self.tell_screens(|d| d.offer_game(tic, &offer));
             }
         }
+        self.serve_game(true, false);
+    }
+
+    /// Off a level: what she asks of the game taken (a game to start, if `start`; the next
+    /// level, if `next`), checked; the rest answered that it's not for now. A game chosen is
+    /// begun by the window's loop (`start_wanted`); the next level, by the tally screen's
+    /// (`next_wanted`).
+    pub(super) fn serve_game(&mut self, start: bool, next: bool) {
+        use crate::control::game::GameAct;
         let choices = self.choices.clone();
-        let mut wanted = None;
-        let mut take = |map: Option<&str>, skill: Option<i32>, play: Option<&str>| match choices
-            .check(map, skill, play)
-        {
-            Ok(s) => {
-                let msg = format!(
-                    "Starting {} at skill {}, {}.",
-                    s.map,
-                    s.skill,
-                    if s.continuous {
-                        "on through its episode"
-                    } else {
-                        "just that level"
+        let (mut wanted, mut go_on) = (None, false);
+        let mut take = |act: GameAct| match act {
+            GameAct::Start { map, skill, play } if start => {
+                match choices.check(map.as_deref(), skill, play.as_deref()) {
+                    Ok(s) => {
+                        let msg = format!(
+                            "Starting {} at skill {}, {}.",
+                            s.map,
+                            s.skill,
+                            if s.continuous {
+                                "on through its episode"
+                            } else {
+                                "just that level"
+                            }
+                        );
+                        wanted = Some(s);
+                        (true, msg)
                     }
-                );
-                wanted = Some(s);
-                (true, msg)
+                    Err(e) => (false, e),
+                }
             }
-            Err(e) => (false, e),
+            GameAct::Next if next => {
+                go_on = true;
+                (true, "On to the next level.".to_string())
+            }
+            GameAct::Start { .. } => (false, "Not now: this game's still on.".to_string()),
+            GameAct::Next => (false, "Not now: no level to go on to.".to_string()),
+            GameAct::Restart => (false, "Not in a level now.".to_string()),
         };
         let mut lines = Vec::new();
         if let Some(feed) = self.feed.as_mut() {
@@ -366,13 +383,9 @@ impl Watch {
         }
         if let Some(neuro) = self.neuro.as_mut() {
             let tic = self.engine.tic;
-            lines.extend(neuro.off_level(tic, |args| {
-                let skill = args
-                    .get("skill")
-                    .and_then(serde_json::Value::as_i64)
-                    .and_then(|s| i32::try_from(s).ok());
-                let s = |k: &str| args.get(k).and_then(serde_json::Value::as_str);
-                take(s("map"), skill, s("play"))
+            lines.extend(neuro.off_level(tic, |args| match GameAct::of_json(args) {
+                Ok(act) => take(act),
+                Err(e) => (false, e),
             }));
         }
         self.agent.x_mut().log.extend(lines);
@@ -381,6 +394,7 @@ impl Watch {
         if wanted.is_some() {
             self.start_wanted = wanted;
         }
+        self.next_wanted |= go_on;
     }
 
     /// The game's screens between levels told to whoever's directing (`f` on each director),
@@ -467,37 +481,25 @@ impl Feed {
             .collect()
     }
 
-    /// Off a level, a game hers to start: `game start [MAP] [SKILL] [single|continuous]` by
-    /// `start`; anything else refused, there being no level to do it in. Written out, with
-    /// what's been told since.
+    /// Off a level: `game ...` (start, next, restart) by `act`; anything else refused, there
+    /// being no level to do it in. Written out, with what's been told since.
     fn off_level(
         &mut self,
-        mut start: impl FnMut(Option<&str>, Option<i32>, Option<&str>) -> (bool, String),
+        mut act: impl FnMut(crate::control::game::GameAct) -> (bool, String),
     ) -> Vec<String> {
         let mut lines = Vec::new();
         for cmd in self.new_commands() {
             lines.push(format!(">> {cmd}"));
             let w: Vec<&str> = cmd.split_whitespace().collect();
-            let said = if w.get(..2) == Some(&["game", "start"]) {
-                let skill = w.iter().find_map(|v| v.parse::<i32>().ok());
-                let play = w
-                    .iter()
-                    .copied()
-                    .find(|v| matches!(*v, "single" | "continuous"));
-                let map = w
-                    .iter()
-                    .skip(2)
-                    .copied()
-                    .find(|v| v.parse::<i32>().is_err() && Some(*v) != play);
-                let (ok, msg) = start(map, skill, play);
-                if ok {
-                    msg
-                } else {
-                    format!("refused: {msg}")
-                }
-            } else {
-                "refused: not in a level now (game start [MAP] [SKILL] [single|continuous])"
-                    .to_string()
+            let said = match w.split_first() {
+                Some((&"game", rest)) => match crate::control::game::GameAct::of_words(rest) {
+                    Ok(a) => match act(a) {
+                        (true, msg) => msg,
+                        (false, msg) => format!("refused: {msg}"),
+                    },
+                    Err(e) => format!("refused: {e}"),
+                },
+                _ => "refused: not in a level now (game start|next|restart)".to_string(),
             };
             lines.push(format!("<< {said}"));
         }
@@ -564,6 +566,8 @@ struct Watch {
     wad_maps: Vec<String>,
     offered: Option<crate::control::game::Choices>,
     start_wanted: Option<crate::control::game::Start>,
+    /// on to the next level, she's said, at the tally screen
+    next_wanted: bool,
     /// no switches or doors (an arena's fight)
     no_use: bool,
     /// secrets found so far (as the tally has them)
@@ -1547,6 +1551,7 @@ impl Watch {
             wad_maps: Vec::new(),
             offered: None,
             start_wanted: None,
+            next_wanted: false,
             no_use: false,
             secrets_seen: 0,
             hits: Vec::new(),
@@ -1577,6 +1582,31 @@ impl Watch {
     }
 
     fn tic(&mut self) {
+        // (the level again, as she asked: what she came in with, what she knows kept, no life)
+        let asked = self
+            .feed
+            .as_ref()
+            .is_some_and(|f| f.director.restart_wanted)
+            || self
+                .neuro
+                .as_ref()
+                .is_some_and(|n| n.director.restart_wanted);
+        if asked {
+            self.engine.restart(true);
+            self.agent.start_over();
+            self.controls = None;
+            let tic = self.engine.tic;
+            if let Some(f) = self.feed.as_mut() {
+                f.director.restarted(tic);
+            }
+            if let Some(n) = self.neuro.as_mut() {
+                n.director.restarted(tic);
+            }
+            self.agent
+                .x_mut()
+                .log
+                .push("the level again, as she asked".into());
+        }
         let obs = self.engine.observe();
         if let (Some(st), Some(m)) = (self.stream.as_mut(), obs.message.as_deref()) {
             st.message(m, obs.tic);
@@ -1602,6 +1632,7 @@ impl Watch {
         if let Some(feed) = &mut self.feed {
             feed.director.tally = tally;
             feed.director.level = level.clone();
+            feed.director.restart_allowed = self.choices.restart;
             feed.director.gibbed.clone_from(&gibbed);
             feed.director.hits.clone_from(&hits);
             for l in feed.tic(&mut self.agent, &obs) {
@@ -1611,6 +1642,7 @@ impl Watch {
         if let Some(neuro) = &mut self.neuro {
             neuro.director.tally = tally;
             neuro.director.level = level;
+            neuro.director.restart_allowed = self.choices.restart;
             neuro.director.gibbed = gibbed;
             neuro.director.hits = hits;
             for l in neuro.tic(&mut self.agent, &obs) {

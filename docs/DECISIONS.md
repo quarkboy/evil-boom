@@ -2632,3 +2632,25 @@ she died to two mancubi at once (the fight's: MAP07 kills her playing alone too)
 before the SDK work: 42 actions, its choices the same kind (items, the switch, areas); the
 stand-in's choices aren't worse, the bot under them was what stalled. Parity: 24 runs the
 same.
+
+## Next level and restart hers (the user, 2026-11-11)
+
+The plan's answer 5, built (`doom_game next`, `doom_game restart`; the console's two switches,
+on by default; `--choices` `next=on`, `restart=on`, and `start=off` for those without a game to
+start).
+
+- **Next**: in stream mode, playing on through, the tally screen waits for her word (it was
+  pressed on after 2.5 s), and goes on by itself after 30 s so the stream's never stuck there
+  (the user didn't say; my default). She's told on the tally screen.
+- **Restart**: hers after 90 s with nothing new, progress counted as the score counts it
+  (`sweep::known_progress`, now shared: what's collected or killed, sectors seen, effects
+  learned, walls tried, lines mapped and set off, places walked), told her once when it's hers;
+  before, "not yet" with the seconds to go. The level from its start with what she came in
+  with, what she knows of it kept (`Agent::start_over`, as for a 100% run's restart), no life
+  spent (my default: lives are a test setting, and a restart she asks for isn't a death).
+- `doom_game` takes `do` start, next or restart (`control::game::GameAct`), in a level and out
+  of one; what isn't for now says so.
+
+Checked: E1M1 headless, restart refused at once ("90 s to go"), told hers at 94.9 s, granted,
+back at the start; E1M1 in stream mode on through, at the tally "On the tally screen: doom_game
+next ...", next given, E1M2 begun. Parity: 24 runs the same.

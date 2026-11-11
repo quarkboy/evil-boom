@@ -263,8 +263,6 @@ pub(crate) fn hold_exit(
 /// tallies together) and what's been learned of the level, each counted (any of them up is
 /// progress; the stall clock runs while none is).
 pub(crate) fn progress(e: &Engine, x: &Explorer, o: &RunOptions) -> [usize; 7] {
-    let k = &x.knowledge;
-    let fired: BTreeSet<usize> = k.fired.iter().map(|f| f.line).collect();
     let t = e.tally();
     let collected = if o.complete {
         t[0].0 + t[1].0 + t[2].0
@@ -274,8 +272,25 @@ pub(crate) fn progress(e: &Engine, x: &Explorer, o: &RunOptions) -> [usize; 7] {
         // (the kills as well, with monsters in: a fight going on is something happening)
         t[0].0 + t[1].0
     };
+    let [seen, learned, walls, mapped, fired, walked] = known_progress(x);
     [
         usize::try_from(collected).unwrap_or(0),
+        seen,
+        learned,
+        walls,
+        mapped,
+        fired,
+        walked,
+    ]
+}
+
+/// What she's come to know of the level, as progress counts it: the sectors seen, effects
+/// learned, walls tried, lines mapped, lines set off, places walked (with what's been
+/// collected, `progress`; directed play's restart goes by the same).
+pub fn known_progress(x: &Explorer) -> [usize; 6] {
+    let k = &x.knowledge;
+    let fired: BTreeSet<usize> = k.fired.iter().map(|f| f.line).collect();
+    [
         k.sectors.len(),
         k.learned.values().map(BTreeSet::len).sum::<usize>(),
         k.tried_walls.len(),
