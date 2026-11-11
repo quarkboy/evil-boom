@@ -61,10 +61,10 @@ impl Combat {
             else {
                 continue;
             };
-            if !self.dodging.contains(&t.id) && miss > clearance(&self.tune.dodge, &m) {
+            if !self.dodge.missiles.contains(&t.id) && miss > clearance(&self.tune.dodge, &m) {
                 continue;
             }
-            if self.dodging.insert(t.id) {
+            if self.dodge.missiles.insert(t.id) {
                 self.log.push(format!(
                     "tic {}: dodging {} {} (due in {when:.0} tics, {miss:.0} off)",
                     obs.tic, t.name, t.id
@@ -73,24 +73,25 @@ impl Combat {
             out.push((when, t.clone()));
         }
         let here: BTreeSet<i32> = out.iter().map(|(_, t)| t.id).collect();
-        self.dodging.retain(|i| here.contains(i));
+        self.dodge.missiles.retain(|i| here.contains(i));
         for (_, t) in out
             .iter()
             .filter(|(_, t)| missile(t.name).is_some_and(|m| m.homing))
         {
-            self.homing_since.entry(t.id).or_insert(obs.tic);
+            self.dodge.homing_since.entry(t.id).or_insert(obs.tic);
         }
         // One that has gone by and come round again is still the same one: kept while it flies.
         let flying: BTreeSet<i32> = obs.things.iter().flatten().map(|t| t.id).collect();
-        self.homing_since.retain(|i, _| flying.contains(i));
+        self.dodge.homing_since.retain(|i, _| flying.contains(i));
         if self
+            .dodge
             .shake_spot
-            .is_some_and(|(i, _)| !self.homing_since.contains_key(&i))
+            .is_some_and(|(i, _)| !self.dodge.homing_since.contains_key(&i))
         {
-            self.shake_spot = None;
+            self.dodge.shake_spot = None;
         }
         if here.is_empty() {
-            self.dodge_way = None;
+            self.dodge.way = None;
         }
         out.sort_by(|a, b| a.0.total_cmp(&b.0));
         out.into_iter().map(|(_, t)| t).collect()
@@ -111,7 +112,7 @@ impl Combat {
                 (a.cos(), a.sin())
             })
             .collect();
-        if let Some(w) = self.dodge_way {
+        if let Some(w) = self.dodge.way {
             ways.push(w);
         }
         let mut best: Option<(f64, Point, f64)> = None;
@@ -160,7 +161,7 @@ impl Combat {
                     .fold(0.0, f64::max);
                 s -= self.tune.dodge.along * along;
             }
-            if let Some(dw) = self.dodge_way {
+            if let Some(dw) = self.dodge.way {
                 s += 6.0 * (way.0 * dw.0 + way.1 * dw.1);
             }
             // As clear, a way that stays on ground she's been on: sideways where she is, not back
@@ -183,9 +184,9 @@ impl Combat {
                 best = Some((s, way, hit));
             }
         }
-        self.dodge_way = best.map(|b| b.1);
-        self.dodge_clear = best.is_some_and(|b| b.2 >= 0.0);
-        self.dodge_way
+        self.dodge.way = best.map(|b| b.1);
+        self.dodge.clear = best.is_some_and(|b| b.2 >= 0.0);
+        self.dodge.way
     }
 
     /// Would going `way` (none: coasting where she is) keep her clear of every one of these
@@ -213,7 +214,7 @@ impl Combat {
     /// Did the last dodge find a way clear of every missile coming? Clear of a missile's own hit,
     /// that is, whatever its blast: the hit is the blast and a good deal more.
     pub fn dodge_clear(&self) -> bool {
-        self.dodge_clear
+        self.dodge.clear
     }
 
     /// Back off from `what`: straight away if the floor's safe that way, else as near that as is.
@@ -340,7 +341,7 @@ impl Combat {
     /// to where it will (a walkway sinking into what's under it).
     pub(super) fn hurts(&self, obs: &Observation, s: usize) -> bool {
         self.hazards.get(s).copied().unwrap_or(false)
-            || (self.sinks_into_harm.contains(&s)
+            || (self.movers.sinks_into_harm.contains(&s)
                 && obs
                     .height(s)
                     .is_some_and(|h| h.floor < self.nav.movers.initial[s].floor - 0.5))

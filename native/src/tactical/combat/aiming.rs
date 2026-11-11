@@ -235,7 +235,7 @@ impl Combat {
         } else {
             None
         };
-        if held_fire != self.held_fire {
+        if held_fire != self.trigger.held_fire {
             if let Some(h) = held_fire {
                 self.log.push(format!(
                     "tic {}: holding fire at {} {}, {d:.0} off: {}",
@@ -249,7 +249,7 @@ impl Combat {
                     self.log.push(format!("    (she's at ({:.0}, {:.0}, {z:.0}), it's at ({:.0}, {:.0}, {:.0}); sectors {:?} {:?})", pos.0, pos.1, t.x, t.y, t.z, self.sector_at(pos), self.sector_at((t.x, t.y))));
                 }
             }
-            self.held_fire = held_fire;
+            self.trigger.held_fire = held_fire;
         }
         (aim, on && held_fire.is_none(), weapon)
     }
@@ -737,30 +737,35 @@ impl Combat {
     /// safe and clearing them, else a new one; None once clear (or she can't get so).
     pub(super) fn away_from_barrels(&mut self, obs: &Observation, nearest: Point) -> Option<Point> {
         let pos = obs.pos();
-        if obs.tic < self.barrel_rest_until {
+        if obs.tic < self.off_barrels.rest_until {
             return None;
         }
-        if self.barrel_way.is_none() {
-            self.barrel_since = obs.tic;
-        } else if obs.tic - self.barrel_since > self.tune.barrels.clear_tics {
-            self.barrel_way = None;
-            self.barrel_rest_until = obs.tic + self.tune.barrels.clear_rest;
+        if self.off_barrels.way.is_none() {
+            self.off_barrels.since = obs.tic;
+        } else if obs.tic - self.off_barrels.since > self.tune.barrels.clear_tics {
+            self.off_barrels.way = None;
+            self.off_barrels.rest_until = obs.tic + self.tune.barrels.clear_rest;
             return None;
         }
         if dist(nearest, pos)
-            >= self.tune.barrels.keep_clear + if self.barrel_way.is_some() { 64.0 } else { 0.0 }
+            >= self.tune.barrels.keep_clear
+                + if self.off_barrels.way.is_some() {
+                    64.0
+                } else {
+                    0.0
+                }
         {
-            self.barrel_way = None;
+            self.off_barrels.way = None;
             return None;
         }
-        if let Some(way) = self.barrel_way {
+        if let Some(way) = self.off_barrels.way {
             if self.safe(obs, way, 48.0) && self.clear_of_barrels(obs, way) {
                 return Some(way);
             }
         }
         let way = self.away_from(obs, nearest);
-        self.barrel_way = way.filter(|&w| self.clear_of_barrels(obs, w));
-        self.barrel_way
+        self.off_barrels.way = way.filter(|&w| self.clear_of_barrels(obs, w));
+        self.off_barrels.way
     }
 
     /// Does going that way (a second's run) leave her further from every barrel near her, and

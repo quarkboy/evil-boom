@@ -485,10 +485,9 @@ fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option
 /// pit, or the floor in front of them up on one): a step on to where it would get there, never
 /// off the ledge. Not for rockets (see `plasma_spot`).
 fn stepping_for_plasma(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    let t = s
-        .target
-        .as_ref()
-        .filter(|_| obs.weapon == Some(6) && c.held_fire == Some(HeldFire::PlasmaBlocked))?;
+    let t = s.target.as_ref().filter(|_| {
+        obs.weapon == Some(6) && c.trigger.held_fire == Some(HeldFire::PlasmaBlocked)
+    })?;
     let way = c.plasma_spot(obs, t)?;
     Some(Act::new(
         Move::SteppingForShot,

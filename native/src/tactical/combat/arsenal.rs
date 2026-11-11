@@ -593,7 +593,8 @@ impl Combat {
         let ready = if Some(w.slot) != obs.weapon {
             self.tune.aim.switch_wait as f64
         } else {
-            self.last_shot
+            self.trigger
+                .last_shot
                 .filter(|&(s, _)| s == w.slot)
                 .map_or(0.0, |(_, tic)| {
                     (tic as f64 + w.cycle - obs.tic as f64).max(0.0)

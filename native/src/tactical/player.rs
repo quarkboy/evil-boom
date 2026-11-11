@@ -769,7 +769,7 @@ impl Player {
         // What she knows of floors gone to something that hurts, for where the fight takes her.
         self.fight.combat.hazards = self.explorer.knowledge.hazards(obs.tic);
         // And the crushers she knows of, for where they could have her if they start again.
-        self.fight.combat.crushers = self.explorer.knowledge.crusher_sectors();
+        self.fight.combat.movers.crushers = self.explorer.knowledge.crusher_sectors();
         let d = self.fight.combat.decide(obs, busy, &errand);
         let retreating = !busy && self.retreating(obs);
         let legs = arbiter::arbitrate(

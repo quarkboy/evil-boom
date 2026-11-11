@@ -235,7 +235,8 @@ follower and the explorer's tiers are the two I'd do most carefully.
 | 3 | `Combat::observe` is the list of what she takes in each tic; the counts are three functions | ba0d76a, 44b7982 |
 | 3 | a decision with nothing in her sights is built and logged in one place | f62467b |
 | 3 | five kinds of objective have a function each | ae51a13 |
-| 3 | names, first pass (fight and explorer): a flag says what it means (`baiting`, `urgent`, `route_keeps_legs`, `exit_held_back`, `harm_allowed`, ...); `tools/rename.py` does a rename by the compiler's errors | this commit |
+| 3 | names, first pass (fight and explorer): a flag says what it means (`baiting`, `urgent`, `route_keeps_legs`, `exit_held_back`, `harm_allowed`, ...); `tools/rename.py` does a rename by the compiler's errors | f50c90f |
+| 3 | the fight's state by what it's for: 44 of `Combat`'s 97 fields are seven parts of it (`combat/state.rs`: movers, trigger, dodge, steer, cover, off_barrels, senses) | this commit |
 
 Still to do of step 1: the follower (about 110 comments naming a level) and the navigation,
 planning and jump code (about 90), after stock is taken.

@@ -44,19 +44,20 @@ impl Combat {
             .cloned()
         else {
             // Out of its sight now: stay there till it has gone off.
-            if obs.tic >= self.vile_until {
-                self.vile_way = None;
+            if obs.tic >= self.cover.vile_until {
+                self.cover.vile_way = None;
                 return None;
             }
             return Some((
                 "Archvile",
-                self.vile_way
+                self.cover
+                    .vile_way
                     .and_then(|(_, _, spot)| self.towards(obs, spot)),
             ));
         };
         let left = f64::from(VILE_BLAST - vile.attack - 2);
-        self.vile_until = obs.tic + VILE_BLAST as i64 - vile.attack as i64 + 4;
-        if let Some((_, id, spot)) = self.vile_way {
+        self.cover.vile_until = obs.tic + VILE_BLAST as i64 - vile.attack as i64 + 4;
+        if let Some((_, id, spot)) = self.cover.vile_way {
             if id == vile.id {
                 return Some((vile.name, self.towards(obs, spot)));
             }
@@ -104,10 +105,10 @@ impl Combat {
         // further, costs more shooting than it saves.
         let hug = hug.filter(|&(far, _)| left <= self.tune.hide.shelter_late + far / RUN);
         let Some((_, spot)) = best.or(hug) else {
-            self.vile_until = 0; // (nowhere to hide: fight on)
+            self.cover.vile_until = 0; // (nowhere to hide: fight on)
             return None;
         };
-        self.vile_way = Some((obs.tic, vile.id, spot));
+        self.cover.vile_way = Some((obs.tic, vile.id, spot));
         self.log.push(format!(
             "tic {}: hiding from {} {} at ({:.0}, {:.0}), {} tics in: to ({:.0}, {:.0}){}",
             obs.tic,
@@ -145,23 +146,24 @@ impl Combat {
             .min_by_key(|t| t.attack)
             .cloned();
         let Some(t) = shooter else {
-            if obs.tic >= self.duck_until {
-                self.duck_way = None;
+            if obs.tic >= self.cover.duck_until {
+                self.cover.duck_way = None;
                 return None;
             }
             return self
+                .cover
                 .duck_way
                 .map(|(_, name, spot)| (name, self.towards(obs, spot)));
         };
         let first = first_shot(t.name).unwrap_or(0);
         let to_shot = (first - t.attack).max(0);
         let left = f64::from(to_shot).max(self.tune.hide.duck_firing) - 2.0;
-        let spot = match self.duck_way {
+        let spot = match self.cover.duck_way {
             Some((id, _, spot)) if id == t.id => spot,
             _ => {
                 let Some((_, spot)) = self.shadow_spot(obs, eye(&t), left * RUN) else {
-                    self.duck_way = None;
-                    self.no_duck_tic = obs.tic;
+                    self.cover.duck_way = None;
+                    self.cover.no_duck_tic = obs.tic;
                     if t.attack == 0 || t.attack == first {
                         self.log.push(format!(
                             "tic {}: nowhere to duck from {} {} ({} tics in, {:.0} to get there)",
@@ -174,25 +176,25 @@ impl Combat {
                     }
                     return None; // (nowhere to duck: fight on)
                 };
-                self.duck_way = Some((t.id, t.name, spot));
+                self.cover.duck_way = Some((t.id, t.name, spot));
                 spot
             }
         };
         // Not till the last moment: its wind-up is the time to shoot it, out in the open. She goes
         // with just the time to get to the spot before its first shot.
-        let going = obs.tic < self.duck_until
+        let going = obs.tic < self.cover.duck_until
             || to_shot == 0
             || f64::from(to_shot) <= dist(spot, pos) / RUN + self.tune.hide.duck_late;
         if !going {
             return None;
         }
-        if obs.tic >= self.duck_until {
+        if obs.tic >= self.cover.duck_until {
             self.log.push(format!(
                 "tic {}: ducking from {} {}, {} tics in: to ({:.0}, {:.0})",
                 obs.tic, t.name, t.id, t.attack, spot.0, spot.1
             ));
         }
-        self.duck_until = obs.tic + i64::from(to_shot) + self.tune.hide.duck_hold;
+        self.cover.duck_until = obs.tic + i64::from(to_shot) + self.tune.hide.duck_hold;
         Some((t.name, self.towards(obs, spot)))
     }
 
@@ -211,7 +213,8 @@ impl Combat {
             return None;
         }
         let t = missiles.iter().find(|t| {
-            self.homing_since
+            self.dodge
+                .homing_since
                 .get(&t.id)
                 .is_some_and(|&since| obs.tic - since >= self.tune.hide.shake_after)
         })?;
@@ -222,6 +225,7 @@ impl Combat {
             height: 8.0,
         };
         let held = self
+            .dodge
             .shake_spot
             .filter(|&(id, _)| id == t.id)
             .map(|(_, spot)| spot);
@@ -241,7 +245,7 @@ impl Combat {
                         obs.tic, t.name, t.id
                     )),
                 }
-                self.shake_spot = Some((t.id, spot));
+                self.dodge.shake_spot = Some((t.id, spot));
                 spot
             }
         };
@@ -255,7 +259,7 @@ impl Combat {
     /// Sheltering from an arch-vile's blast rather than out of its sight: where it is, to face
     /// (the fire's put by her facing; turned away, the shelter fails).
     pub(super) fn vile_face(&self) -> Option<Point> {
-        let (_, id, _) = self.vile_way?;
+        let (_, id, _) = self.cover.vile_way?;
         // Still in its sight: sheltering from the blast, not hidden.
         self.visible.iter().find(|t| t.id == id).map(|v| (v.x, v.y))
     }
@@ -323,7 +327,7 @@ impl Combat {
             .collect();
         // A shotgun reloading: out of her target's sight too till it's ready, then back.
         let reloading = matches!(obs.weapon, Some(3))
-            && self.last_shot.is_some_and(|(s, tic)| {
+            && self.trigger.last_shot.is_some_and(|(s, tic)| {
                 s == 3 && ((obs.tic - tic) as f64) < gun.cycle - self.tune.steer.reload_back
             });
         self.refresh_tic_cache(obs);
@@ -342,10 +346,11 @@ impl Combat {
             .filter(|_| shooting && self.tune.steer.side_span > 0.0)
             .map(|t| {
                 let from = self
-                    .steer_from
+                    .steer
+                    .from
                     .filter(|&(id, _, tic)| id == t.id && obs.tic - tic <= 35)
                     .map_or(pos, |f| f.1);
-                self.steer_from = Some((t.id, from, obs.tic));
+                self.steer.from = Some((t.id, from, obs.tic));
                 let far = dist((t.x, t.y), from).max(1.0);
                 (from, ((t.x - from.0) / far, (t.y - from.1) / far))
             });
@@ -357,7 +362,8 @@ impl Combat {
                 continue;
             }
             if self
-                .steer_stuck
+                .steer
+                .stuck
                 .is_some_and(|(w, until)| obs.tic < until && d.0 * w.0 + d.1 * w.1 > 0.7)
             {
                 continue; // (pushed that way and got nowhere)
@@ -435,7 +441,7 @@ impl Combat {
                 s -= self.tune.steer.w_surround * ((after - spread_now) / 90.0).max(0.0)
                     + self.tune.steer.w_surround * (after / 360.0);
             }
-            if let Some(k) = self.steer_way {
+            if let Some(k) = self.steer.way {
                 s += self.tune.steer.w_keep * (d.0 * k.0 + d.1 * k.1);
             }
             if let Some((from, to)) = from {
@@ -453,7 +459,7 @@ impl Combat {
             }
             // A way she hasn't looked along lately: what's there she doesn't know.
             if self.tune.steer.w_unlooked > 0.0
-                && obs.tic - self.looked[i] > self.tune.steer.unlooked_tics
+                && obs.tic - self.senses.looked[i] > self.tune.steer.unlooked_tics
             {
                 s -= self.tune.steer.w_unlooked;
             }
@@ -483,20 +489,20 @@ impl Combat {
             }
         }
         // Pushing a way and not moving: caught on something the floor doesn't show.
-        if let Some(k) = self.steer_way {
-            if self.velocity.0.hypot(self.velocity.1) < 1.0 && self.steer_tic == obs.tic - 1 {
-                self.steer_still += 1;
+        if let Some(k) = self.steer.way {
+            if self.velocity.0.hypot(self.velocity.1) < 1.0 && self.steer.tic == obs.tic - 1 {
+                self.steer.still += 1;
             } else {
-                self.steer_still = 0;
+                self.steer.still = 0;
             }
-            if self.steer_still > self.tune.steer.stuck_tics {
-                self.steer_stuck = Some((k, obs.tic + self.tune.steer.stuck_tics * 4));
-                self.steer_still = 0;
+            if self.steer.still > self.tune.steer.stuck_tics {
+                self.steer.stuck = Some((k, obs.tic + self.tune.steer.stuck_tics * 4));
+                self.steer.still = 0;
                 self.bumped(obs, k.1.atan2(k.0).to_degrees());
             }
         }
-        self.steer_tic = obs.tic;
-        self.steer_way = best.map(|b| b.1);
-        self.steer_way
+        self.steer.tic = obs.tic;
+        self.steer.way = best.map(|b| b.1);
+        self.steer.way
     }
 }

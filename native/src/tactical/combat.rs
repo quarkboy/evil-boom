@@ -17,6 +17,7 @@ mod movement;
 mod moves;
 mod patience;
 mod sight;
+mod state;
 mod steering;
 mod style;
 mod tree;
@@ -34,10 +35,10 @@ use crate::navigator::{Navigator, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::specials::Category;
 pub use arsenal::Odds;
 pub use assess::Assessment;
-use moves::HeldFire;
 pub use moves::Move;
 use patience::{Effort, Patience};
 pub use sight::{eye, eye_of};
+use state::{Cover, Dodging, Movers, OffBarrels, Senses, Stepping, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
@@ -181,13 +182,10 @@ pub struct Combat {
     /// moves the tree isn't to make: a node giving one is passed over (forced likewise)
     pub barred: Vec<Move>,
     pub los: LineOfSight,
-    hearing: Hearing,
     /// every monster seen, by id
     pub known: BTreeMap<i32, Seen>,
-    /// every monster about now (as the engine has it)
-    /// every monster in the level as it is now: her senses' only (`observe` makes what she
-    /// sees and hears of them out of it); nothing decides by it
-    game_monsters: BTreeMap<i32, Thing>,
+    /// the works of her senses: the monsters they read, what was heard, when she looked where
+    senses: Senses,
     /// the monsters she knows are dead: seen to die, or heard to (a death's heard within
     /// `HEARD`, walls or none)
     dead: BTreeSet<i32>,
@@ -195,27 +193,15 @@ pub struct Combat {
     last_seen: BTreeMap<i32, Thing>,
     /// the missiles in flight she's noticed (seen as monsters are; her own always)
     pub missiles_seen: BTreeSet<i32>,
-    /// deaths she's seen whose cries are still to come: (when, the kind)
-    cries_due: Vec<(i64, &'static str)>,
-    /// something to turn and look at: a sound from out of her view, a hit, a bump
-    alert: Option<Alert>,
-    /// when she last looked about as she walked (`senses.glance_every`)
-    glanced: i64,
-    /// when she last looked round for one she remembers (`senses.check_every`)
-    checked: i64,
     /// monsters that only claw or charge, in her sight: since when, how far off then, and where
     /// she stood (for whether one can get at her: `cant_reach`)
     reach_watch: BTreeMap<i32, (i64, f64, Point)>,
     /// the ground she's been on, by the mesh's polys: where she knows is safe
     been: Vec<bool>,
-    /// when each way round her (the steering's sixteen) was last in her view
-    pub(super) looked: [i64; 16],
     /// the fight's move last tic, for measuring
     pub last_move: Option<Move>,
     /// counts for measuring a run (`STATS`): nothing decides by them
     pub tally: BTreeMap<String, f64>,
-    /// attacks heard lately: (when, the kinds that sound like it)
-    attacks_heard: Vec<(i64, &'static [&'static str])>,
     /// monsters she can see now
     pub visible: Vec<Thing>,
     /// barrels she's seen that are still there
@@ -232,7 +218,6 @@ pub struct Combat {
     rate: f64,
     /// what the fight was last logged as doing (`announce`): logged again when it changes
     announced: String,
-    held_fire: Option<HeldFire>,
     /// the monster a rocket's way at was last blocked close by (whatever's up), and when: the
     /// launcher isn't chosen for it for a while after. A while, not each tic it's clear, or she
     /// would switch guns back and forth as the lane opens and shuts.
@@ -247,73 +232,34 @@ pub struct Combat {
     heights_tic: Option<i64>,
     heights_now: Vec<(f64, f64)>,
     hit_cache: BTreeMap<(i32, u64), bool>,
-    /// missiles being dodged (till they've gone by)
-    dodging: BTreeSet<i32>,
-    /// homing missiles being dodged: since when; and where out of the sight of the one being
-    /// shaken off she's going
-    homing_since: BTreeMap<i32, i64>,
-    shake_spot: Option<(i32, Option<Point>)>,
-    dodge_way: Option<Point>,
-    /// does that way take her out of every missile's way (its hit; a blast may still reach her)?
-    dodge_clear: bool,
+    /// the missiles she's getting out of the way of, and the way
+    dodge: Dodging,
     /// where the route's taking her mid-fight (an errand: health, a gun, ammo), for dodging
     /// towards: on to it while dodging, not dodging where she stands
     pub going_to: Option<Point>,
     /// the floors that would hurt her now, as she takes them, by sector (what she knows: the
     /// player's, each tic; `Knowledge::hazards`)
     pub hazards: Vec<bool>,
-    /// floors a walked-over line lowers into something that hurts (going down: as good as hurting)
-    sinks_into_harm: BTreeSet<usize>,
-    /// sectors only doors move: a door closing on her goes back up, or rests on her, and does
-    /// no damage (vanilla T_VerticalDoor), so its ceiling coming down is no crusher
-    doors: BTreeSet<usize>,
-    /// sectors only lifts move: a lift coming up on her goes back down (vanilla T_PlatRaise
-    /// reverses a plat that doesn't crush, and none of the lifts do), so its floor coming up is no
-    /// crusher either
-    lifts: BTreeSet<usize>,
     last_pos: Option<Point>,
     velocity: Point,
     /// the way the route last walked her (in the world, whichever way she was turned to aim;
     /// kept while the fight holds the route): what's in her way is what's that way, not where
     /// she's facing (None: the route standing her still)
     route_way: Option<f64>,
-    barrel_way: Option<Point>,
-    barrel_since: i64,
-    barrel_rest_until: i64,
-    /// the way fighting moved her last
-    steer_way: Option<Point>,
-    /// where she took on the target she's stepping about (it, there, the last tic of it)
-    steer_from: Option<(i32, Point, i64)>,
-    steer_tic: i64,
-    steer_still: i64,
-    /// a way she got nowhere pushing, and till when it's left be
-    steer_stuck: Option<(Point, i64)>,
-    /// running from an arch-vile's fire: when the way was chosen, from which, the way
-    vile_way: Option<(i64, i32, Point)>,
-    /// ...and till when its fire might still go off
-    vile_until: i64,
-    /// ducking from a hitscan shooter's fire: from which, to where
-    duck_way: Option<(i32, &'static str, Point)>,
-    /// ...and till when it might still be firing
-    duck_until: i64,
-    /// when there was last nowhere to duck from one
-    no_duck_tic: i64,
+    /// keeping off the barrels by her while there's shooting
+    off_barrels: OffBarrels,
+    /// her stepping about a target: the way last taken, and what came of it
+    steer: Stepping,
+    /// getting out of fire there's no dodging: an arch-vile's, a hitscan shooter's
+    cover: Cover,
     /// invulnerable till this tic (from the pickup's message: 30 s, as a player knows it)
     invulnerable_until: i64,
     /// nothing can hurt her (the pass before a level known beforehand): as invulnerable, all of it
     pub immune: bool,
     /// where each monster in sight has been lately: (tic, x, y), oldest first
     tracks: BTreeMap<i32, std::collections::VecDeque<(i64, f64, f64)>>,
-    /// the trigger was down last tic
-    trigger_held: bool,
-    /// when a bullet or a shell last left the gun (by its ammo's count), and the slot's
-    shot_out: Option<(i32, i64)>,
-    /// since when her legs have been held for a shot on its way out
-    line_held: Option<i64>,
-    /// her legs her own till then, after a chaingun's burst they waited out
-    burst_rest: i64,
-    /// when the first bullet of the press she's in left the gun (the chaingun's second goes 4 on)
-    burst_from: i64,
+    /// the gun's timing: when the trigger was down, when a shot left, what her legs wait for
+    trigger: Trigger,
     /// health lost lately: (tic, how much)
     damage: Vec<(i64, f64)>,
     /// for the log: rounds spent this fight, and the health monsters lost as the engine has it.
@@ -328,29 +274,13 @@ pub struct Combat {
     /// what she's seen each monster lose (hits landing in her sight, hers or another's), by id:
     /// its health as she reckons it is its kind's less this
     seen_hurt: BTreeMap<i32, i32>,
-    /// each sector's ceiling last tic, and when it was last seen coming down
-    ceilings: Vec<f64>,
-    /// each sector's floor last tic, and when it was last seen coming up
-    floors: Vec<f64>,
-    floor_up: Vec<i64>,
-    ceiling_down: Vec<i64>,
-    /// crusher sectors she knows of, by kind (their lines learned; kept from what she knows by
-    /// the player)
-    pub crushers: BTreeMap<usize, crate::specials::CrusherKind>,
-    /// per crusher sector: tics to be out of it at the worst (`out_tics`)
-    crusher_out: BTreeMap<usize, f64>,
-    /// ...and last came down lower than she stands (a crusher at work, between strokes too)
-    crushed_low: Vec<i64>,
+    /// floors and ceilings on the move, as she's seen them go, and which of them crush
+    pub movers: Movers,
     /// how long she's been at each monster she's getting nowhere with, and those given up on
     /// (see `patience.rs`)
     pub(super) patience: Patience,
     /// the sector each stood in when closing in on it to hit it in melee got her no nearer
     pub(super) fist_stalled: BTreeMap<i32, usize>,
-    /// the gun last fired and when (its reload)
-    pub(super) last_shot: Option<(i32, i64)>,
-    /// the way she faced as she last pressed the rocket launcher's trigger (the rocket leaves along
-    /// the way she faces 8 tics later)
-    rocket_facing: Option<f64>,
 }
 
 impl Combat {
@@ -384,24 +314,24 @@ impl Combat {
             journal: Journal::default(),
             forced_target: None,
             barred: Vec::new(),
-            doors,
-            lifts,
             los: LineOfSight::new(&nav.map),
-            hearing: Hearing::new(&nav.map),
-            nav,
             known: BTreeMap::new(),
-            game_monsters: BTreeMap::new(),
+            senses: Senses {
+                game_monsters: BTreeMap::new(),
+                hearing: Hearing::new(&nav.map),
+                cries_due: Vec::new(),
+                attacks_heard: Vec::new(),
+                alert: None,
+                glanced: 0,
+                checked: 0,
+                looked: [i64::MIN / 2; 16],
+            },
             dead: BTreeSet::new(),
             last_seen: BTreeMap::new(),
             missiles_seen: BTreeSet::new(),
-            cries_due: Vec::new(),
-            attacks_heard: Vec::new(),
-            alert: None,
-            glanced: 0,
-            checked: 0,
             reach_watch: BTreeMap::new(),
             been: Vec::new(),
-            looked: [i64::MIN / 2; 16],
+            nav,
             last_move: None,
             tally: BTreeMap::new(),
             visible: Vec::new(),
@@ -416,46 +346,57 @@ impl Combat {
             strafe_until: 0,
             rate: 0.0,
             announced: String::new(),
-            held_fire: None,
             rocket_blocked: None,
             baiting: false,
             infight: BTreeMap::new(),
             heights_tic: None,
             heights_now: Vec::new(),
             hit_cache: BTreeMap::new(),
-            dodging: BTreeSet::new(),
-            homing_since: BTreeMap::new(),
-            shake_spot: None,
-            dodge_way: None,
-            dodge_clear: false,
+            dodge: Dodging {
+                missiles: BTreeSet::new(),
+                homing_since: BTreeMap::new(),
+                shake_spot: None,
+                way: None,
+                clear: false,
+            },
             going_to: None,
             hazards: Vec::new(),
-            sinks_into_harm,
             last_pos: None,
             velocity: (0.0, 0.0),
             route_way: None,
-            barrel_way: None,
-            barrel_since: 0,
-            barrel_rest_until: -1_000_000_000,
-            steer_way: None,
-            steer_from: None,
+            off_barrels: OffBarrels {
+                way: None,
+                since: 0,
+                rest_until: -1_000_000_000,
+            },
+            steer: Stepping {
+                way: None,
+                from: None,
+                tic: -1,
+                still: 0,
+                stuck: None,
+            },
             wanted_dead: BTreeSet::new(),
-            steer_tic: -1,
-            steer_still: 0,
-            steer_stuck: None,
-            vile_way: None,
-            vile_until: 0,
-            duck_way: None,
-            duck_until: 0,
-            no_duck_tic: i64::MIN / 2,
+            cover: Cover {
+                vile_way: None,
+                vile_until: 0,
+                duck_way: None,
+                duck_until: 0,
+                no_duck_tic: i64::MIN / 2,
+            },
             tracks: BTreeMap::new(),
             invulnerable_until: i64::MIN / 2,
             immune: false,
-            trigger_held: false,
-            shot_out: None,
-            line_held: None,
-            burst_rest: i64::MIN / 2,
-            burst_from: i64::MIN / 2,
+            trigger: Trigger {
+                held: false,
+                shot_out: None,
+                line_held: None,
+                burst_rest: i64::MIN / 2,
+                burst_from: i64::MIN / 2,
+                last_shot: None,
+                rocket_facing: None,
+                held_fire: None,
+            },
             damage: Vec::new(),
             spent: 0.0,
             dealt: 0.0,
@@ -463,23 +404,26 @@ impl Combat {
             put_in: BTreeMap::new(),
             health_was: BTreeMap::new(),
             seen_hurt: BTreeMap::new(),
-            ceilings: Vec::new(),
-            floors: Vec::new(),
-            floor_up: Vec::new(),
-            ceiling_down: Vec::new(),
-            crushers: BTreeMap::new(),
-            crusher_out: BTreeMap::new(),
-            crushed_low: Vec::new(),
+            movers: Movers {
+                ceilings: Vec::new(),
+                floors: Vec::new(),
+                floor_up: Vec::new(),
+                ceiling_down: Vec::new(),
+                crushers: BTreeMap::new(),
+                crusher_out: BTreeMap::new(),
+                crushed_low: Vec::new(),
+                doors,
+                lifts,
+                sinks_into_harm,
+            },
             patience: Patience::default(),
             fist_stalled: BTreeMap::new(),
-            last_shot: None,
-            rocket_facing: None,
         }
     }
 
     /// A new life: the level from the start (what's been seen is remembered).
     pub fn restart(&mut self) {
-        self.game_monsters.clear();
+        self.senses.game_monsters.clear();
         self.dead.clear();
         self.last_seen.clear();
         // What she had when she died isn't rounds spent in the life after.
@@ -495,9 +439,9 @@ impl Combat {
         self.patience = Patience::default();
         self.missiles_seen.clear();
         self.seen_hurt.clear();
-        self.cries_due.clear();
-        self.attacks_heard.clear();
-        self.alert = None;
+        self.senses.cries_due.clear();
+        self.senses.attacks_heard.clear();
+        self.senses.alert = None;
         self.visible.clear();
         self.now.nothing_in_sight();
         self.tracks.clear();
@@ -506,13 +450,13 @@ impl Combat {
         self.target = None;
         self.health = None;
         self.announced.clear();
-        self.dodging.clear();
-        self.homing_since.clear();
-        self.shake_spot = None;
+        self.dodge.missiles.clear();
+        self.dodge.homing_since.clear();
+        self.dodge.shake_spot = None;
         self.last_pos = None;
         self.velocity = (0.0, 0.0);
         self.route_way = None;
-        self.steer_from = None;
+        self.steer.from = None;
     }
 
     // --- what's about -----------------------------------------------------------------------
@@ -570,31 +514,32 @@ impl Combat {
     /// Ceilings coming down and floors coming up, by sector, and when: what the crusher tests go
     /// by. Crushers are where a fight's moves don't go.
     fn watch_movers(&mut self, obs: &Observation) {
-        if self.ceilings.len() != obs.heights.len() {
-            self.ceilings = obs.heights.iter().map(|h| h.ceiling).collect();
-            self.ceiling_down = vec![i64::MIN / 2; obs.heights.len()];
-            self.crushed_low = vec![i64::MIN / 2; obs.heights.len()];
+        if self.movers.ceilings.len() != obs.heights.len() {
+            self.movers.ceilings = obs.heights.iter().map(|h| h.ceiling).collect();
+            self.movers.ceiling_down = vec![i64::MIN / 2; obs.heights.len()];
+            self.movers.crushed_low = vec![i64::MIN / 2; obs.heights.len()];
         }
-        if self.floors.len() != obs.heights.len() {
-            self.floors = obs.heights.iter().map(|h| h.floor).collect();
-            self.floor_up = vec![i64::MIN / 2; obs.heights.len()];
+        if self.movers.floors.len() != obs.heights.len() {
+            self.movers.floors = obs.heights.iter().map(|h| h.floor).collect();
+            self.movers.floor_up = vec![i64::MIN / 2; obs.heights.len()];
         }
         for (i, h) in obs.heights.iter().enumerate() {
-            if h.ceiling < self.ceilings[i] - 0.01 {
-                self.ceiling_down[i] = obs.tic;
+            if h.ceiling < self.movers.ceilings[i] - 0.01 {
+                self.movers.ceiling_down[i] = obs.tic;
                 if h.ceiling - h.floor < PLAYER_HEIGHT {
-                    self.crushed_low[i] = obs.tic;
+                    self.movers.crushed_low[i] = obs.tic;
                 }
             }
-            self.ceilings[i] = h.ceiling;
-            if h.floor > self.floors[i] + 0.01 {
-                self.floor_up[i] = obs.tic;
+            self.movers.ceilings[i] = h.ceiling;
+            if h.floor > self.movers.floors[i] + 0.01 {
+                self.movers.floor_up[i] = obs.tic;
             }
-            self.floors[i] = h.floor;
+            self.movers.floors[i] = h.floor;
         }
-        for &s in self.crushers.keys() {
-            if !self.crusher_out.contains_key(&s) {
-                self.crusher_out
+        for &s in self.movers.crushers.keys() {
+            if !self.movers.crusher_out.contains_key(&s) {
+                self.movers
+                    .crusher_out
                     .insert(s, crate::crush::out_tics(&self.nav, &obs.heights, s));
             }
         }
@@ -645,20 +590,20 @@ impl Combat {
             .map(|t| (t.id, t.clone()))
             .collect();
         let was_visible: BTreeSet<i32> = self.visible.iter().map(|t| t.id).collect();
-        for i in self.game_monsters.keys() {
+        for i in self.senses.game_monsters.keys() {
             if monsters.contains_key(i) || self.dead.contains(i) || !was_visible.contains(i) {
                 continue;
             }
             if let Some(s) = self.known.get(i) {
                 self.dead.insert(*i);
                 self.kills += 1;
-                self.cries_due.push((obs.tic, s.name));
+                self.senses.cries_due.push((obs.tic, s.name));
                 *self.tally.entry("deaths seen".to_string()).or_insert(0.0) += 1.0;
                 self.log
                     .push(format!("tic {}: {} {i} dead", obs.tic, s.name));
             }
         }
-        self.game_monsters = monsters;
+        self.senses.game_monsters = monsters;
     }
 
     /// The monsters in her sight this tic (`visible`), and what she keeps of each: where and
@@ -666,7 +611,7 @@ impl Combat {
     fn see_monsters(&mut self, obs: &Observation, me: Body) {
         let pos = obs.pos();
         self.visible.clear();
-        for t in self.game_monsters.values() {
+        for t in self.senses.game_monsters.values() {
             let d = dist((t.x, t.y), pos);
             if !(0.0..self.tune.engage.range).contains(&d) {
                 continue;
@@ -936,7 +881,7 @@ impl Combat {
             self.been[p] = true;
         }
         // The ways round her that are in her view this tic.
-        for (i, at) in self.looked.iter_mut().enumerate() {
+        for (i, at) in self.senses.looked.iter_mut().enumerate() {
             if norm(22.5 * i as f64 - obs.angle).abs() < self.tune.senses.fov {
                 *at = obs.tic;
             }
@@ -965,19 +910,20 @@ impl Combat {
                         // The chaingun's second bullet, 4 tics on, is of the same press.
                         let second = obs.weapon == Some(4)
                             && self
+                                .trigger
                                 .shot_out
                                 .is_some_and(|(p, t)| p == s && obs.tic - t <= CHAINGUN_SECOND);
                         if s == 2 && !second {
-                            self.burst_from = obs.tic;
+                            self.trigger.burst_from = obs.tic;
                         }
                         if crate::debug::on().shot {
-                            let gap = self.shot_out.map_or(0, |(_, t)| obs.tic - t);
+                            let gap = self.trigger.shot_out.map_or(0, |(_, t)| obs.tic - t);
                             self.log.push(format!(
                                 "tic {}: a shot out, gun {:?}, {gap} tics after the last",
                                 obs.tic, obs.weapon
                             ));
                         }
-                        self.shot_out = Some((s, obs.tic));
+                        self.trigger.shot_out = Some((s, obs.tic));
                         let seen = self.visible.clone();
                         let on = seen.iter().any(|t| {
                             let d = dist((t.x, t.y), pos).max(1.0);
@@ -1011,7 +957,7 @@ impl Combat {
                                         )
                                     })
                                     .collect();
-                                self.log.push(format!("tic {}: a shot (slot {s}) with nothing on her line; target {:?}, pressed {:?}, the move {:?}; in sight: {}", obs.tic, self.target, self.last_shot, self.last_move, what.join("; ")));
+                                self.log.push(format!("tic {}: a shot (slot {s}) with nothing on her line; target {:?}, pressed {:?}, the move {:?}; in sight: {}", obs.tic, self.target, self.trigger.last_shot, self.last_move, what.join("; ")));
                             }
                             *self
                                 .tally
@@ -1099,7 +1045,9 @@ impl Combat {
             .keys()
             .any(|id| !now.contains_key(id) && self.visible.iter().any(|v| v.id == *id));
         // A bullet or a shell gone this tic, a monster in sight, and nothing hurt by it.
-        if self.shot_out.is_some_and(|(_, t)| t == obs.tic) && !self.visible.is_empty() && !hurt_any
+        if self.trigger.shot_out.is_some_and(|(_, t)| t == obs.tic)
+            && !self.visible.is_empty()
+            && !hurt_any
         {
             *self
                 .tally
@@ -1202,13 +1150,15 @@ impl Combat {
     /// attack: kept a moment, for whether something out of sight is firing.
     fn hear(&mut self, obs: &Observation) {
         let (tune, pos) = (Rc::clone(&self.tune), obs.pos());
-        self.cries_due
+        self.senses
+            .cries_due
             .retain(|&(tic, _)| obs.tic - tic <= tune.senses.cry_due);
-        self.attacks_heard
+        self.senses
+            .attacks_heard
             .retain(|&(tic, _)| obs.tic - tic <= tune.senses.heard_firing);
         for s in &obs.sounds {
             match s.what {
-                Heard::Attack => self.attacks_heard.push((obs.tic, s.kinds)),
+                Heard::Attack => self.senses.attacks_heard.push((obs.tic, s.kinds)),
                 // A monster's own steps. The few kinds that make any are heard all the while they walk, a
                 // step at a time, and say about where it is: as far off as the step is loud, on the side it
                 // came from. The one she knows of, of that kind, out of her sight, is put there: of the two
@@ -1251,11 +1201,12 @@ impl Combat {
                 }
                 Heard::Death => {
                     if let Some(i) = self
+                        .senses
                         .cries_due
                         .iter()
                         .position(|(_, kind)| s.kinds.contains(kind))
                     {
-                        self.cries_due.remove(i);
+                        self.senses.cries_due.remove(i);
                         continue;
                     }
                     // How far off by how loud: full within 160, nothing at 1200. A boss's cry is as loud
@@ -1311,7 +1262,7 @@ impl Combat {
         // One thing at a time. What she's looking round for is looked round for before the next,
         // its ways reckoned from where she faced when it came: a second sound reckoned from mid-turn
         // would have her turning to and fro and never round. Only a hit takes her from a sound.
-        if ways.is_empty() || self.alert.as_ref().is_some_and(|a| a.hit || !hit) {
+        if ways.is_empty() || self.senses.alert.as_ref().is_some_and(|a| a.hit || !hit) {
             return;
         }
         let side = |w: f64| match norm(w - obs.angle) {
@@ -1326,7 +1277,7 @@ impl Combat {
             detail: why.to_string(),
             ..Record::new(obs.tic, "alert", side(ways[0]).to_string())
         });
-        self.alert = Some(Alert {
+        self.senses.alert = Some(Alert {
             until: obs.tic + self.tune.senses.alert_tics,
             ways,
             hit,
@@ -1401,15 +1352,15 @@ impl Combat {
         let every = self.tune.senses.glance_every;
         if every <= 0
             || !self.route_under_way
-            || self.alert.is_some()
-            || obs.tic - self.glanced < every
+            || self.senses.alert.is_some()
+            || obs.tic - self.senses.glanced < every
         {
             return;
         }
-        self.glanced = obs.tic;
+        self.senses.glanced = obs.tic;
         let by = self.tune.senses.glance_angle;
         self.count("glances", 1.0);
-        self.alert = Some(Alert {
+        self.senses.alert = Some(Alert {
             until: obs.tic + self.tune.senses.alert_tics,
             ways: vec![obs.angle + by, obs.angle - by],
             hit: false,
@@ -1420,7 +1371,7 @@ impl Combat {
     /// One she remembers, close, not looked at for a while: round to where she last saw it.
     fn check(&mut self, obs: &Observation) {
         let (every, within) = (self.tune.senses.check_every, self.tune.senses.check_within);
-        if every <= 0 || self.alert.is_some() || obs.tic - self.checked < every {
+        if every <= 0 || self.senses.alert.is_some() || obs.tic - self.senses.checked < every {
             return;
         }
         let pos = obs.pos();
@@ -1435,9 +1386,9 @@ impl Combat {
         else {
             return;
         };
-        self.checked = obs.tic;
+        self.senses.checked = obs.tic;
         self.count("checks", 1.0);
-        self.alert = Some(Alert {
+        self.senses.alert = Some(Alert {
             until: obs.tic + self.tune.senses.alert_tics,
             ways: vec![way],
             hit: true,
@@ -1448,7 +1399,7 @@ impl Combat {
     /// For measuring a run: was she going towards the monster with that id, away from it, or
     /// about still, by her own speed along the line to it.
     pub fn measure_approach(&self, pos: Point, id: i32) -> &'static str {
-        let Some(t) = self.game_monsters.get(&id) else {
+        let Some(t) = self.senses.game_monsters.get(&id) else {
             return "gone";
         };
         let d = dist((t.x, t.y), pos).max(1.0);
@@ -1476,7 +1427,7 @@ impl Combat {
     /// over.
     fn look(&mut self, obs: &Observation, hit_only: bool) -> Option<f64> {
         let looked = self.tune.senses.looked;
-        let a = self.alert.as_mut()?;
+        let a = self.senses.alert.as_mut()?;
         while a
             .ways
             .first()
@@ -1488,7 +1439,7 @@ impl Combat {
             || a.ways.is_empty()
             || self.visible.iter().any(|t| !a.in_sight.contains(&t.id))
         {
-            self.alert = None;
+            self.senses.alert = None;
             return None;
         }
         (a.hit || !hit_only).then(|| a.ways[0])
@@ -1599,7 +1550,7 @@ impl Combat {
         } else {
             "unknown"
         };
-        let far = match self.game_monsters.get(&id) {
+        let far = match self.senses.game_monsters.get(&id) {
             Some(t) if dist((t.x, t.y), pos) < 384.0 => "near",
             Some(_) => "far",
             None => "gone",
@@ -1677,7 +1628,7 @@ impl Combat {
     pub fn firing(&self, obs: &Observation, s: &Seen) -> bool {
         match self.visible.iter().find(|t| t.id == s.id) {
             Some(t) => super::bestiary::first_shot(t.name).is_some_and(|f| t.attack >= f),
-            None => self.attacks_heard.iter().any(|&(tic, kinds)| {
+            None => self.senses.attacks_heard.iter().any(|&(tic, kinds)| {
                 obs.tic - tic <= self.tune.senses.heard_firing && kinds.contains(&s.name)
             }),
         }
@@ -1745,7 +1696,10 @@ impl Combat {
             .iter()
             .map(|&(floor, ceiling)| crate::nav::Heights { floor, ceiling })
             .collect();
-        let heard = self.hearing.heard(self.nav.sector_of_poly(here), &hs);
+        let heard = self
+            .senses
+            .hearing
+            .heard(self.nav.sector_of_poly(here), &hs);
         let sleepers: Vec<Seen> = self
             .remaining()
             .into_iter()
@@ -1778,6 +1732,7 @@ impl Combat {
     /// sends the rocket out mid-turn.
     fn rocket_held(&mut self, obs: &Observation) -> Option<(f64, bool)> {
         if !self
+            .trigger
             .last_shot
             .is_some_and(|(slot, tic)| slot == 5 && ((obs.tic - tic) as f64) < aiming::ROCKET_DELAY)
         {
@@ -1786,7 +1741,7 @@ impl Combat {
         if let Some(h) = self.rocket_way_out(obs) {
             return Some((h, true));
         }
-        self.rocket_facing.map(|f| (f, false))
+        self.trigger.rocket_facing.map(|f| (f, false))
     }
 
     /// What the fight needs this tic (None: nothing). `busy`: the route is in the middle of
@@ -2179,23 +2134,23 @@ impl Combat {
         c.attack = d.fire || base.is_some_and(|b| b.attack && !legs);
         // The rocket launcher and the BFG don't fire again with the trigger held: it is let go a tic
         // after each press, which is the game's way to fire the next.
-        if matches!(obs.weapon, Some(5 | 7)) && self.trigger_held {
+        if matches!(obs.weapon, Some(5 | 7)) && self.trigger.held {
             c.attack = false;
         }
         self.keep_line(obs, d, &mut c, legs || base.is_none());
         if d.fire {
             self.tap(obs, &mut c);
         }
-        self.trigger_held = c.attack;
+        self.trigger.held = c.attack;
         // A shot begun, that is: the trigger pulled on a gun with too little in it begins none, and
         // must not be taken for one.
         if let Some(s) = obs
             .weapon
             .filter(|&s| c.attack && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot)
         {
-            self.last_shot = Some((s, obs.tic));
+            self.trigger.last_shot = Some((s, obs.tic));
             if s == 5 {
-                self.rocket_facing = Some(obs.angle);
+                self.trigger.rocket_facing = Some(obs.angle);
             }
         }
         if d.weapon != 0 {
@@ -2220,21 +2175,23 @@ impl Combat {
         /// longer than this with no shot out, the gun isn't coming up to fire (a switch, say)
         const GIVEN_UP: i64 = 12;
         let Some(held) = obs.weapon.filter(|w| matches!(w, 2..=4) && !d.urgent) else {
-            self.line_held = None;
+            self.trigger.line_held = None;
             return;
         };
         if held == 4 {
-            self.line_held = None;
+            self.trigger.line_held = None;
             self.keep_burst(obs, c, legs);
             return;
         }
         let delay: i64 = if held == 2 { 4 } else { 3 };
         let since = self
+            .trigger
             .shot_out
             .filter(|&(s, _)| s == held)
             .map_or(i64::MAX / 2, |(_, t)| obs.tic - t);
         let pressed = c.attack
             || self
+                .trigger
                 .last_shot
                 .is_some_and(|(s, t)| s == held && obs.tic - t < delay);
         // The trigger held, the next shot leaves a cycle after the last.
@@ -2244,14 +2201,14 @@ impl Combat {
             .target
             .and_then(|id| self.visible.iter().find(|t| t.id == id).cloned());
         let (Some(t), true) = (target, due) else {
-            self.line_held = None;
+            self.trigger.line_held = None;
             return;
         };
         let pos = obs.pos();
         let reach = delay as f64;
         let h = mon(t.name).height;
         if !self.shot_clear(obs, (t.x, t.y), t.z, h) {
-            self.line_held = None;
+            self.trigger.line_held = None;
             return;
         }
         // The trigger not pulled yet, or held and the gun asking whether to fire again.
@@ -2261,7 +2218,7 @@ impl Combat {
         );
         if c.attack
             && d.fire
-            && (!self.trigger_held || since <= again + 1)
+            && (!self.trigger.held || since <= again + 1)
             && !self.shot_clear_from(obs, coast, (t.x, t.y), t.z, h)
         {
             c.attack = false;
@@ -2278,11 +2235,11 @@ impl Combat {
                     .entry("tics she slowed to get a shot off".to_string())
                     .or_insert(0.0) += 1.0;
             }
-            self.line_held = None;
+            self.trigger.line_held = None;
             return;
         }
         if !legs || c.forward.hypot(c.strafe) == 0.0 {
-            self.line_held = None;
+            self.trigger.line_held = None;
             return;
         }
         const STRIDE: f64 = 10.0; // (a tic's run, about, from a walk)
@@ -2292,10 +2249,10 @@ impl Combat {
             pos.1 + way.sin() * STRIDE * reach,
         );
         if self.shot_clear_from(obs, spot, (t.x, t.y), t.z, h) {
-            self.line_held = None;
+            self.trigger.line_held = None;
             return;
         }
-        let from = *self.line_held.get_or_insert(obs.tic);
+        let from = *self.trigger.line_held.get_or_insert(obs.tic);
         if obs.tic - from > GIVEN_UP {
             return;
         }
@@ -2346,7 +2303,7 @@ impl Combat {
         }
         // She sees the bullet gone a tic after the gun has let it go, and what she does now is the
         // game's next tic.
-        let since = obs.tic - self.burst_from;
+        let since = obs.tic - self.trigger.burst_from;
         if (asks - 2..=asks).contains(&since) {
             c.attack = false;
             *self
@@ -2369,6 +2326,7 @@ impl Combat {
         /// her legs are her own this long after a burst they waited for (tics)
         const REST: i64 = 12;
         let burst = self
+            .trigger
             .last_shot
             .is_some_and(|(s, t)| s == 4 && obs.tic - t < BURST);
         if !c.attack && !burst {
@@ -2408,7 +2366,7 @@ impl Combat {
         if !out_coast && !out_legs {
             return;
         }
-        if obs.tic < self.burst_rest {
+        if obs.tic < self.trigger.burst_rest {
             c.attack = false;
             return;
         }
@@ -2423,10 +2381,11 @@ impl Combat {
                     .or_insert(0.0) += 1.0;
             }
             if self
+                .trigger
                 .last_shot
                 .is_some_and(|(_, t)| obs.tic - t == BURST - 1)
             {
-                self.burst_rest = obs.tic + 1 + REST;
+                self.trigger.burst_rest = obs.tic + 1 + REST;
             }
             return;
         }
@@ -2457,8 +2416,9 @@ impl Combat {
     /// the last `senses.active_crusher` tics, whether or not it's at the top of its stroke now.
     /// The fight's moves don't go there at all, not just while it's on its way down.
     pub fn crusher_active(&self, obs: &Observation, s: usize) -> bool {
-        !self.doors.contains(&s)
+        !self.movers.doors.contains(&s)
             && self
+                .movers
                 .crushed_low
                 .get(s)
                 .is_some_and(|&t| obs.tic - t < self.tune.senses.active_crusher)
@@ -2470,8 +2430,8 @@ impl Combat {
     /// always; a fast one: more than a tenth of her health).
     pub fn crusher_trap(&self, obs: &Observation, s: usize) -> bool {
         let (Some(&kind), Some(&out), Some(h)) = (
-            self.crushers.get(&s),
-            self.crusher_out.get(&s),
+            self.movers.crushers.get(&s),
+            self.movers.crusher_out.get(&s),
             obs.height(s),
         ) else {
             return false;
@@ -2493,14 +2453,16 @@ impl Combat {
             .heights
             .get(s)
             .map_or(f64::INFINITY, |h| h.ceiling - h.floor);
-        (!self.doors.contains(&s)
+        (!self.movers.doors.contains(&s)
             && self
+                .movers
                 .ceiling_down
                 .get(s)
                 .is_some_and(|&t| obs.tic - t < self.tune.senses.crush_tics)
             && gap < self.tune.senses.crush_gap)
-            || (!self.lifts.contains(&s)
+            || (!self.movers.lifts.contains(&s)
                 && self
+                    .movers
                     .floor_up
                     .get(s)
                     .is_some_and(|&t| obs.tic - t < self.tune.senses.crush_tics)
@@ -2537,6 +2499,7 @@ impl Combat {
     /// stays where she can see them till then.
     pub fn bfg_flying(&self, obs: &Observation) -> bool {
         let charging = self
+            .trigger
             .last_shot
             .is_some_and(|(slot, tic)| slot == 7 && obs.tic - tic <= aiming::BFG_DELAY + 1);
         charging
@@ -2570,7 +2533,7 @@ impl Combat {
     /// Was there nowhere to duck from a hitscan shooter's fire just now (in a long fight with
     /// it)?
     pub fn in_the_open(&self, tic: i64) -> bool {
-        tic - self.no_duck_tic <= 1
+        tic - self.cover.no_duck_tic <= 1
     }
 
     /// What the fight's doing now ("" with none on).
