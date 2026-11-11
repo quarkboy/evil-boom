@@ -34,14 +34,10 @@ fn pickup_offsets() -> &'static [(i32, i32)] {
 }
 
 impl Explorer {
-    /// Can the box stand at q, come to from the floor there: clear of walls and things, room
-    /// overhead, and not hanging over a floor more than a step higher (MAP16)? `play`: with a
-    /// little play round it, for a spot to stop at (MAP21's look-out between a wall and key bars).
     /// Where she stands, for planning from: her middle, unless that's over a floor below her
-    /// feet while she's held up on a lip (the game keeps her at the highest floor under her box);
-    /// then the nearest point under her box on the floor she's on. E2M2: a demon's bite knocked
-    /// her onto the lip of a nukage pit, her middle over it; planned from inside the pit, the
-    /// next objective one down in it, walked off into it, no way out (seeds 5 and 6).
+    /// feet while she's held up on a lip (the game keeps her at the highest floor under her
+    /// box); then the nearest point under her box on the floor she's on. Planned from her
+    /// middle, the plan would start from down in whatever she's standing over.
     pub fn standing_point(&self, obs: &Observation) -> Point {
         let pos = obs.pos();
         let Some(z) = obs.z else { return pos };
@@ -51,8 +47,8 @@ impl Explorer {
                 .and_then(|p| obs.height(self.nav.sector_of_poly(p)))
                 .map(|h| h.floor)
         };
-        // (only over a drop she couldn't step back up: off a step, a moment above the floor below,
-        // she's where her middle is; E2M1, a route from the step's top edge, none)
+        // Only over a drop she couldn't step back up: off a step, a moment above the floor below,
+        // she's where her middle is.
         if floor_at(pos).is_none_or(|f| f >= z - MAX_STEP) {
             return pos;
         }
@@ -74,16 +70,19 @@ impl Explorer {
         .unwrap_or(pos)
     }
 
+    /// Can the box stand at q, come to from the floor there: clear of walls and things, room
+    /// overhead, and not hanging over a floor more than a step higher? `play`: with a little
+    /// play round it, for a spot to stop at.
     pub fn standable(&self, q: Point, play: bool) -> bool {
-        // (at the heights she last saw, not the map's starting ones: a door opened since, a
-        // floor risen)
+        // At the heights she last saw, not the map's starting ones: a door opened since, a floor
+        // risen.
         let heights = self.as_seen();
         self.standable_at(q, play, &heights)
     }
 
     /// `standable` at these heights (hers as seen), remembered while they stay as they are:
-    /// asked of every poly she can get to for each list of what she could do (E4M8: two
-    /// thirds of the time making them, the same answers each time).
+    /// it's asked of every poly she can get to for each list of what she could do, with the
+    /// same answers each time.
     pub(super) fn standable_at(&self, q: Point, play: bool, heights: &[(f64, f64)]) -> bool {
         let mut cache = self.standable_cache.borrow_mut();
         if cache.heights != heights {
@@ -116,16 +115,15 @@ impl Explorer {
 
     /// Where to stand to pick up a thing at `item`: there if the box can stand there, else the
     /// nearest spot it can, in a poly she can get to, close enough for the boxes to touch, on a
-    /// floor near the item's; None if there isn't one (MAP10's soulsphere in an alcove).
+    /// floor near the item's (an item in an alcove, say). `None` if there isn't one.
     pub fn touch_spot(&self, item: Point, reach: &BTreeSet<usize>) -> Option<Point> {
         let nav = &self.nav;
         let heights = self.roomiest();
         let probe = nav.jump_lab.at_heights(&heights);
-        // (the item on its floor as she believes it now: E3M9's invulnerability on a walkway
-        // lowered 64)
+        // The item on its floor as she believes it now (a floor it lies on may have moved).
         let floor = nav.poly_at(item).map(|p| heights[nav.sector_of_poly(p)].0);
-        // (square rings, as the boxes touch, every 4 round each: E4M7's blur sphere, on the point
-        // of a ledge, can be had only from a corner of the square)
+        // Square rings, as the boxes touch, every 4 round each: an item on the point of a ledge can
+        // be had only from a corner of the square.
         for &(dx, dy) in pickup_offsets() {
             let q = (item.0 + f64::from(dx), item.1 + f64::from(dy));
             if !nav.poly_at(q).is_some_and(|p| reach.contains(&p))
@@ -133,13 +131,10 @@ impl Explorer {
             {
                 continue;
             }
-            // (P_TouchSpecialThing: the item no higher than her height over her feet, no
-            // more than 8 under them; E4M7's blur sphere on a ledge 56 up, had from below.
-            // Her feet on the highest floor under the box: E2M7's armor bonus in a sunken
-            // strip, the box half over the floor 24 above it, where she'd come to a stop
-            // a few units short)
-            // (where she can stand, that is: not the box over a ledge she can't step up onto,
-            // MAP11's soulsphere 296 up)
+            // P_TouchSpecialThing: the item no higher than her height over her feet, and no more than 8
+            // under them (so one on a ledge above can be had from below). Her feet are on the highest
+            // floor under the box. And it must be where she can stand: not the box over a ledge she
+            // can't step up onto.
             let feet = [
                 (0.0, 0.0),
                 (ARRIVE_SLACK, 0.0),
@@ -168,8 +163,7 @@ impl Explorer {
 
     /// Each sector at its roomiest as she believes it now (floor, ceiling).
     pub(super) fn roomiest(&self) -> Vec<(f64, f64)> {
-        // (and what the triggers she knows could give, as of her last list: a lift she can lower;
-        // MAP10's soulsphere on a lift only 48 high, stood on lowered)
+        // And what the triggers she knows could give, as of her last list: a lift she can lower.
         let could = &self.reach_states;
         self.states()
             .iter()
@@ -184,8 +178,7 @@ impl Explorer {
     }
 
     /// `standable`, at `heights` rather than the map's starting ones: the box against the lines,
-    /// as the game has it (E3M4's door 147, shut at the start, open now; MAP16's bookcase,
-    /// opened by a shot, the megasphere in it).
+    /// as the game has it now (a door shut at the start and open since; a wall opened by a shot).
     pub(super) fn stands_at(&self, q: Point, heights: &[(f64, f64)]) -> bool {
         self.stands_with(q, heights, &self.nav.jump_lab.at_heights(heights))
     }
@@ -197,8 +190,8 @@ impl Explorer {
         probe: &crate::jumps::PlayerSim<'_>,
     ) -> bool {
         let mesh = &self.nav.mesh;
-        // (in the map, not in the solid between its rooms, which the BSP puts in the subsector
-        // beside it all the same: MAP15's blur sphere, touched for from inside the wall by it)
+        // In the map, not in the solid between its rooms, which the BSP puts in the subsector beside
+        // it all the same.
         let Some(p) = mesh.poly_at(q).filter(|&p| mesh.contains(p, q)) else {
             return false;
         };
@@ -208,16 +201,15 @@ impl Explorer {
     }
 
     /// `spot`, if the box can stand there; else the middle of its poly, or of one next to it she
-    /// can get to, where it can (E3M4).
+    /// can get to, where it can.
     pub(super) fn stand_spot(&self, spot: Point, reach: &BTreeSet<usize>) -> Point {
-        // (and clear of what's shut now: a door that moves isn't a wall to the map's own heights,
-        // but a spot against it shut is no spot: E3M4's door 146, a recheck 4 from its face)
+        // And clear of what's shut now: a door that moves isn't a wall at the map's own heights, but
+        // a spot against it shut is no spot.
         let heights = self.roomiest();
         let mesh = &self.nav.mesh;
         let probe = self.nav.jump_lab.at_heights(&heights);
-        // (with play: a spot where the box fits only to the unit, between a wall and a shut door's
-        // edge exactly 32 apart, is one the follower never gets to: MAP21's cage of door bars,
-        // pushed at for the hour)
+        // With play: a spot where the box fits only to the unit (between a wall and a shut door's
+        // edge exactly 32 apart) is one the follower never gets to.
         let clear = |q: Point| self.stands_with(q, &heights, &probe) && with_play(&probe, q);
         if clear(spot) {
             return spot;
@@ -225,8 +217,7 @@ impl Explorer {
         let Some(p) = mesh.poly_at(spot) else {
             return spot;
         };
-        // (two rings out, nearest first: E3M4's double door, a strip 8 deep between a door open
-        // and one shut, and the next strip 8 deep too)
+        // Two rings out, nearest first: the nearest strip that fits can be the next one over.
         let next = |ps: &[usize]| -> Vec<usize> {
             ps.iter()
                 .flat_map(|&a| {

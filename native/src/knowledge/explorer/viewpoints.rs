@@ -125,7 +125,7 @@ impl Explorer {
                     .map_or((s.floor, s.ceiling), |h| (h.floor, h.ceiling))
             })
             .collect();
-        // (only spots the box can stand at: E4M7's was in a shut door)
+        // Only spots the box can stand at.
         let seen = self.as_seen();
         let centres: Vec<Point> = reach
             .iter()

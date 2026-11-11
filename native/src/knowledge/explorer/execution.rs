@@ -54,14 +54,12 @@ impl Explorer {
             }
             self.glance_until = None;
             if let Some(f) = &mut self.follower {
-                f.resume(obs.tic); // (MAP24: "stuck" after looking round off a teleporter)
+                f.resume(obs.tic); // else the look round counts as time stuck
             }
         }
-        // (not standing on a floor that hurts: the look waits till she's off it, each second
-        // there a hit. E1M5 HMP, the user watching: stopped in the nukage to look at a noise)
-        // (unless the floor can't hurt her, in a suit or with nothing able to: MAP09's pass, a
-        // switch in a nukage pit that brings a lift down behind her for three seconds, pressed
-        // twice and never looked round from, what it does never learned, the pit never left)
+        // Not standing on a floor that hurts: the look waits till she's off it, since each second
+        // there is a hit. Unless the floor can't hurt her (a suit, or nothing able to): then she
+        // looks, or what a switch pressed from such a floor does would never be learned.
         if self.on_hurting_floor(obs)
             && !self.knowledge.immune
             && !self.knowledge.protected(obs.tic)
@@ -88,8 +86,8 @@ impl Explorer {
             .collect();
         while self.glanced < self.knowledge.fired.len() {
             let f = self.knowledge.fired[self.glanced];
-            // (not a teleporter she knows where goes: nothing to look for, and a stop on the way
-            // through, MAP21's to the megasphere's lift, a second over its window every time)
+            // Not a teleporter whose destination she knows: there's nothing to look for, and the stop
+            // costs time on the way through.
             let unknown = f.how == How::Walk
                 && !learned.contains(&(f.line as i64))
                 && !self.knowledge.teleports.contains_key(&f.line);
@@ -115,7 +113,7 @@ impl Explorer {
 
     fn start_glance(&mut self, obs: &Observation, bearing: Option<f64>, why: &str) -> Controls {
         self.last_glance = obs.tic;
-        // (a wall's try not yet pressed starts again after: the look takes the time it had)
+        // A wall's try not yet pressed starts again after: the look takes the time it had.
         if let Some(wall) = self
             .current
             .as_ref()
@@ -185,7 +183,7 @@ impl Explorer {
     pub(super) fn arrived(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> Option<Controls> {
         let obj = self.current.clone()?;
         let k = &self.knowledge;
-        // (this time: one pressed long ago doesn't count; MAP08's switch)
+        // This time: one pressed long ago doesn't count.
         let pressed_now = |li: i64| {
             usize::try_from(li).is_ok_and(|li| {
                 k.fired
@@ -232,10 +230,9 @@ impl Explorer {
         } else if obj.kind == Kind::Wall {
             // face it, press use, watch a moment (what it does, if anything, the knowledge sees)
             let wall = obj.wall.unwrap_or(0);
-            // (tried once pressed, or once the time for it's up unpressed: not on arrival, a look
-            // round taking the time to press it; E3M6, the secret door out of a room a closed door
-            // shut her in, its try begun as she stepped over a line that lowers a floor, the look
-            // round the press's time, the wall never pressed and never tried again, stuck)
+            // Tried once pressed, or once the time for it is up unpressed. Not on arrival: a look round
+            // can take the time to press it, and the wall would then count as tried without ever being
+            // pressed.
             if self.look_until.is_none() {
                 self.look_until = Some(obs.tic + WALL_TICS + 20);
             }
@@ -245,18 +242,15 @@ impl Explorer {
             let until = self.look_until.unwrap_or(obs.tic);
             if obs.tic < until {
                 let mut c = turn_to(obs, Some(bearing));
-                // (not where the press would reach an exit behind it, with the exit held back:
-                // MAP22's wall in front of the exit switch, the level ended an item short)
+                // Not where the press would reach an exit behind it, while the exit is held back.
                 let exit = self.exit_last
                     && self
                         .knowledge
                         .use_hits(obs.pos(), obs.angle, &obs.heights)
                         .is_some_and(|li| self.knowledge.is_exit(li));
-                // (a wall that stands out, up against it first, as a player goes right up to a mark:
-                // over anything on the floor in front, MAP10's triangle of walk-over lines before
-                // the marked wall that opens the way to the megasphere, stopped short of at the stand
-                // spot; not every wall, nor one by the way, the last steps over a trap's line: E2M4,
-                // MAP14)
+                // A wall that stands out is gone right up to first, as a player goes up to a mark, over
+                // anything on the floor in front of it. Not every wall, nor one tried by the way: the last
+                // steps can be over a trap's line.
                 let (wa, wb) = self.nav.map.line_seg(wall);
                 let gap = crate::geom::segment_distance(wa, wb, obs.pos(), obs.pos());
                 if off < 4.0
@@ -276,10 +270,10 @@ impl Explorer {
                     && obs.tic < until - 8
                     && obj.round
                 {
-                    // (and a few shots: some walls answer to a gun, not a hand; with the pistol,
-                    // single taps: a rocket sets off no wall, and blows up in her face; MAP11. Only
-                    // in a round of walls, coming back to search, not one tried on the way: a gun
-                    // line's rare, and a shot wakes what hears it; the user's)
+                    // And a few shots: some walls answer to a gun, not a hand. With the pistol, in single taps
+                    // (a rocket sets off no wall and blows up in her face). Only in a round of walls, coming
+                    // back to search, not for one tried on the way: a gun line is rare, and a shot wakes what
+                    // hears it.
                     let gun = crate::motor::follower::tap_gun(obs);
                     if obs.weapon != Some(gun) {
                         c.weapon = gun;
@@ -289,7 +283,7 @@ impl Explorer {
                     }
                 }
                 if c.use_ && obj.round {
-                    // (out with the pistol as she presses, ready to shoot after)
+                    // Out with the pistol as she presses, ready to shoot after.
                     c.weapon = crate::motor::follower::tap_gun(obs);
                 }
                 return Some(c);
@@ -298,10 +292,9 @@ impl Explorer {
                 .note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
         } else if matches!(obj.kind, Kind::Item | Kind::Hunt) && !hooks.gone(obs, &obj) {
             if obj.kind == Kind::Item {
-                // Doom picks things up only moving onto them: come down on one from a ledge and
-                // stand still, and it stays (MAP10's bonuses in the nukage pits). A shuffle first;
-                // back to the spot first if she's off it (E2M7's armor bonus in a sunken strip: the
-                // route over as she dropped into it, her run carrying her past and up the step beyond)
+                // Doom picks things up only when she moves onto them: come down on one from a ledge and
+                // stand still, and it stays. So a shuffle first, and back to the spot first if her run
+                // carried her off it.
                 let until = *self.look_until.get_or_insert(obs.tic + SHUFFLE_TICS);
                 if obs.tic < until {
                     let a = (obj.goal.1 - obs.y).atan2(obj.goal.0 - obs.x) - obs.angle.to_radians();
@@ -331,7 +324,7 @@ impl Explorer {
                 },
             );
         }
-        // (a line to walk over: tried, whichever way the trip went)
+        // A line to walk over: tried, whichever way the trip went.
         if let Some(li) = obj.wall.filter(|_| obj.kind == Kind::Visit) {
             self.knowledge.crossed.insert(li);
         }
@@ -355,7 +348,7 @@ impl Explorer {
     }
 
     /// Run-jumps the follower missed: counted (for the level, across lives), and left out from
-    /// now on (E4M2). True if one was.
+    /// now on. True if one was.
     fn note_misses(&mut self, obs: &Observation) -> bool {
         let Some(f) = &mut self.follower else {
             return false;
@@ -390,7 +383,7 @@ impl Explorer {
     }
 
     /// A route failed stuck: where is counted, for the level across lives; stuck there
-    /// STUCK_TIMES times, it's left out of the way (MAP18).
+    /// STUCK_TIMES times, it's left out of the way.
     fn note_stuck(&mut self, obs: &Observation) {
         let Some(p) = self.nav.poly_at(obs.pos()) else {
             return;
@@ -417,8 +410,9 @@ impl Explorer {
             None => return true,
             Some(f) => (f.done, f.failed),
         };
-        // (what it was for got on the way, then off a floor going down: done, not failed; the run
-        // off ends as a failure, for the explorer to choose again from where she's got to)
+        // What it was for was got on the way, then she ran off a floor going down: done, not
+        // failed. The run off ends as a failure, for the explorer to choose again from where she
+        // has got to.
         if failed && hooks.gone(obs, &obj) {
             self.log.push(format!(
                 "tic {}: '{}' got on the way, then off a floor going down",
@@ -447,9 +441,8 @@ impl Explorer {
                 self.drop_objective(&obj, obs, &format!("failed: {why}"));
                 if self.follower.as_ref().is_some_and(|f| f.failed_stuck) {
                     self.note_stuck(obs);
-                    // (stuck at one spot whatever she sets out for: wedged, a trap she couldn't
-                    // know of, as stranded as with nothing to do; MAP18's block, risen under the
-                    // edge of her box beside door 91, holding her up where the door's too low)
+                    // Stuck at one spot whatever she sets out for: wedged, in a trap she couldn't know of, and
+                    // as stranded as with nothing to do.
                     let here = obs.pos();
                     let same = self
                         .stuck_run
@@ -476,10 +469,9 @@ impl Explorer {
             }
             return true;
         }
-        // (in the middle of a run of jumps, or running over a floor sinking under her: nothing
-        // ends the route but its end, not even something seen on the way; MAP08: a wall seen as
-        // she landed on the sinking block, the route ended there, stopped on it, down with it into
-        // the pit, every run)
+        // In the middle of a run of jumps, or running over a floor sinking under her, nothing ends
+        // the route but its end, not even something seen on the way: ending it there stops her on
+        // the sinking floor.
         let committed = self
             .follower
             .as_ref()
@@ -496,9 +488,9 @@ impl Explorer {
             && self.seen_to(&obj)
             && dist(obs.pos(), obj.goal) < ROOM_NEAR
         {
-            // (the wall seen already, nearly there: on, not up to the spot to stop and look; E2M2's
-            // crates, a stop at each face. Only nearly there: the way there shows more, E2M1's
-            // way on, missed ending them as soon as seen)
+            // The wall seen already and she's nearly there: on, not up to the spot to stop and look.
+            // Only when nearly there: the way there shows more, and ending as soon as the wall is seen
+            // misses it.
             return self.ends(obs, "seen it on the way");
         }
         if obj.kind == Kind::Teleporter
@@ -508,8 +500,8 @@ impl Explorer {
         {
             return self.ends(obs, "been through");
         }
-        // (given objectives aren't ended by her own wants: an exit seen, a noise, a gun spotted;
-        // whoever gave it hears of those)
+        // Given objectives aren't ended by her own wants (an exit seen, a noise, a gun spotted):
+        // whoever gave it hears of those.
         if !self.directed
             && obj.kind != Kind::Exit
             && !committed
@@ -518,9 +510,8 @@ impl Explorer {
         {
             return self.ends(obs, "an exit came into view");
         }
-        // (gone, but running off a floor going down: on till she's on one that stays put, the
-        // user's rule; E3M1 directed, the shotgun on a stone in the blood got as the stone went
-        // down, the run off ended with the objective, and she stood on it, waiting, into the blood)
+        // Gone, but she's running off a floor going down: on till she's on one that stays put,
+        // rather than standing on it as it sinks.
         if hooks.gone(obs, &obj)
             && !self
                 .follower
@@ -531,8 +522,8 @@ impl Explorer {
         }
         let heard: Vec<Heard> = k.heard[self.urgent_n.min(k.heard.len())..].to_vec();
         self.urgent_n = k.heard.len();
-        // (something just went off out of sight: go and look first; not half way through a run
-        // of jumps: MAP08's)
+        // Something just went off out of sight: go and look first. Not half way through a run of
+        // jumps.
         let jumping = committed;
         if !self.directed
             && !(obj.kind == Kind::Noise && obj.urgent)
@@ -564,7 +555,7 @@ impl Explorer {
         false
     }
 
-    /// (an objective given up mid-way, for whoever's tracing: why)
+    /// An objective given up mid-way, for whoever's tracing: why.
     pub(super) fn ends(&mut self, obs: &Observation, why: &str) -> bool {
         self.end_why = Some((true, why.to_string()));
         self.end_kind = EndKind::Plain;

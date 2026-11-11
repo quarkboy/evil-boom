@@ -59,25 +59,22 @@ impl Explorer {
                 if t.permanent() && k.doubtful(f.line, s) {
                     continue; // (in doubt that it's gone for good: as seen, not built on)
                 }
-                // (not seen since the move should have finished: as it'll have left it; seen
-                // after, as seen. Stairs rise slowly: seen part way up is not the top)
+                // Not seen since the move should have finished: as it will have left it. Seen after: as
+                // seen. Stairs rise slowly, so seen part way up is not the top.
                 let h = hs[0];
                 let timing = (t.line >= 0)
                     .then(|| nav.movers.timing(t.info.special, &t.info.description, s, h));
                 let done = f.tic + timing.map_or(0, |tm| tm.travel as i64);
-                // (what comes back is only as moved till it's due back: MAP23's timed door)
+                // What comes back is only as moved till it's due back (a timed door).
                 let back = done
                     + timing
                         .and_then(|tm| tm.hold.map(|hold| (hold + tm.travel) as i64))
                         .unwrap_or(0);
                 if !t.permanent() && timing.is_some_and(|tm| tm.hold.is_some()) && now > back {
-                    // (back at rest, as far as she knows, whatever had it before: a door opened
-                    // for good, then pressed open again, shuts after its wait: E2M4's door 48)
-                    // (at rest where it was when she set it off, not where the map began it: a
-                    // step of stairs she'd built, 64 up, with a lift's switch on its side; the
-                    // lift pressed and not looked at again, it was taken for the floor it was at
-                    // the level's start, the way across it planned, walked into its side and
-                    // "pressed" there by the minute. MAP21, every run on the easiest skill)
+                    // Back at rest, as far as she knows, whatever had it before: a door opened for good and
+                    // then pressed open again shuts after its wait. At rest where it was when she set it off,
+                    // not where the map began it: a floor she has since raised and then set going as a lift
+                    // comes back to the raised height, not the level's starting one.
                     if cycles_back(t.info.special, &t.info.description)
                         && k.seen_tic.get(&s).copied().unwrap_or(-1) < back
                     {
@@ -100,9 +97,9 @@ impl Explorer {
                 }
             }
         }
-        // a lift or a timed door she knows comes back to where it rests, wherever she last saw
-        // it (E3M3); not a crusher stopped where it is (a crusher-stop line leaves it there till
-        // something starts it again: E2M4's, stopped low across the way, waited at for the hour)
+        // A lift or a timed door she knows comes back to where it rests, wherever she last saw it.
+        // Not a crusher stopped where it is: a crusher-stop line leaves it there till something
+        // starts it again.
         for (t, sectors) in known.values() {
             if !t.permanent() {
                 for &s in sectors {
@@ -115,8 +112,8 @@ impl Explorer {
                 }
             }
         }
-        // a slot narrower than the box is walked over at its sides' floor, however deep she saw
-        // it (E4M1), at each floor the sides can be at (MAP08's moat)
+        // A slot narrower than the box is walked over at its sides' floor, however deep she saw
+        // it, at each floor the sides can be at.
         for &tr in nav.trenches.keys() {
             let lo = nav.trench_floor(tr, |o| {
                 out[o].iter().map(|h| h.floor).fold(f64::INFINITY, f64::min)
@@ -172,8 +169,8 @@ impl Explorer {
         Rc::new(self.build_view(true))
     }
 
-    /// The once-only lines she's used this life: spent, to the planner (E3M4's door; E2M1's
-    /// door switch 288, pressed once from the alcove: the room behind is had then or not at all).
+    /// The once-only lines she has used this life: spent, to the planner. What such a line
+    /// opens is had then or not at all.
     pub(super) fn spent_once(&self) -> BTreeSet<usize> {
         let k = &self.knowledge;
         k.fired
@@ -191,8 +188,8 @@ impl Explorer {
     }
 
     /// Sectors a door or lift she pressed open this life holds open for now (as `states` has
-    /// them), and the tic each starts back. (Pressed: what she opened to go through; not a lift
-    /// she walked onto, which takes her away from where she was: E2M4's lift 66.)
+    /// them), and the tic each starts back. Pressed: what she opened to go through. Not a lift
+    /// she walked onto, which takes her away from where she was.
     pub(super) fn open_for_now(&self, tic: i64) -> BTreeMap<usize, i64> {
         let (k, nav) = (&self.knowledge, &self.nav);
         let known: BTreeMap<i64, (TriggerLine, BTreeSet<usize>)> = k
@@ -244,9 +241,9 @@ impl Explorer {
                 .map(|f| f.line)
                 .collect()
         };
-        // (once-only door lines used this life open nothing again: MAP19's door)
+        // Once-only door lines used this life open nothing again.
         let spent_doors = once_used(&|t, _| t == Trigger::D1);
-        // (and once-only teleporters used this life send no one anywhere: MAP27's)
+        // And once-only teleporters used this life send no one anywhere.
         let spent_teleports = once_used(&|t, c| t == Trigger::W1 && c == Category::Teleport);
         (spent_doors, spent_teleports)
     }
@@ -288,8 +285,8 @@ impl Explorer {
             if t.linedef().is_some_and(|li| spent_doors.contains(&li)) {
                 continue;
             }
-            // (and the slots beside them: walked at their sides' floor, they never move to be
-            // seen to; MAP08's moat)
+            // And the slots beside them: walked over at their sides' floor, they never move to be seen
+            // to.
             let mut keep: BTreeSet<usize> = sectors.clone();
             for (s, _) in &t.effects {
                 if nav
@@ -346,8 +343,8 @@ impl Explorer {
     pub(super) fn banned_jumps(&self) -> BTreeSet<usize> {
         let limit = if self.difficult { JUMP_MISSES } else { 1 };
         let missed = &self.knowledge.missed_jumps;
-        // (and strafing runs, but when there's nothing else to do: for where a run straight
-        // won't go, not a way round; MAP13's, taken as one, led her off from what was left)
+        // And strafing runs, except when there's nothing else to do: they're for where a straight
+        // run won't go, not for a way round.
         self.nav
             .jumps
             .iter()

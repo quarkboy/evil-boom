@@ -30,7 +30,7 @@ pub const COUNTED: [&str; 9] = [
 ];
 
 /// How many fewer than the level's item total is the best there is: every computer area map
-/// after the first (Doom II's MAP27, two in mirrored alcoves, tops out at 98%).
+/// after the first.
 pub fn most_items(m: &MapData, skill: i32) -> i32 {
     let maps = m
         .things
@@ -51,7 +51,7 @@ pub struct Completionist {
 }
 
 impl Completionist {
-    /// (the explorer's exit held back)
+    /// the explorer's exit is held back
     pub fn new(explorer: &mut Explorer, restarts: i32) -> Completionist {
         explorer.exit_last = true;
         Completionist {
@@ -81,8 +81,8 @@ impl Hooks for Completionist {
             if !Self::counted(t.name, obs) {
                 continue;
             }
-            // (seen; where it is needn't be somewhere she can get to, only somewhere to touch it
-            // from: E4M7's blur sphere, on a ledge she can reach up onto but not climb)
+            // Seen. Where it is needn't be somewhere she can get to, only somewhere to touch it from
+            // (on a ledge she can reach up onto but not climb).
             let Some(p) = x.nav.poly_at((t.x, t.y)) else {
                 continue;
             };
@@ -102,9 +102,9 @@ impl Hooks for Completionist {
         obj.kind == Kind::Item && !obs.things.iter().flatten().any(|t| Some(t.id) == obj.thing)
     }
 
-    /// Items she's seen she can't get to now, but could from the start of the level, as far as
-    /// she knows (E1M4's ledge: a floor that rises to it only with her on it): rather the level
-    /// again (while she may) than out without them.
+    /// Items she's seen that she can't get to now but could from the start of the level, as far
+    /// as she knows (a floor that rises to them only with her on it): rather the level again,
+    /// while she may, than out without them.
     fn before_exit(&mut self, x: &Explorer, obs: &Observation) -> bool {
         if self.restarts <= 0 {
             return false;
@@ -125,9 +125,8 @@ impl Hooks for Completionist {
         if left.is_empty() {
             return false;
         }
-        // (no way to them from the start then, knowing what she does now: none now. Asked every
-        // think while there's nothing else to do, a whole plan each time: MAP10, shut in, two
-        // seconds a second)
+        // No way to them from the start then, knowing what she does now: none now. This is asked
+        // every think while there's nothing else to do, a whole plan each time.
         let asked = (x.knowledge.summary(), left.clone());
         if self.no_way_back.as_ref() == Some(&asked) {
             return false;
@@ -159,8 +158,7 @@ impl Hooks for Completionist {
             self.no_way_back = Some(asked);
             return false;
         }
-        // (the level again for the same ones it last didn't get her: it won't now either; E3M4's
-        // mortal run, 209 times for a bonus out of reach every life)
+        // The level again for the same ones it last didn't get her: it won't now either.
         if self.asked_for.as_ref() == Some(&left) {
             return false;
         }
