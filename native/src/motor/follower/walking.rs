@@ -12,7 +12,7 @@ use crate::navigator::{
     TELEPORTERS_FOR_PLAYERS,
 };
 use crate::specials::Trigger;
-use crate::walkthrough::{fmt_heights, Action};
+use crate::walkthrough::{fmt_heights, Action, Step};
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
@@ -70,6 +70,9 @@ const UNSTICK_TICS: i64 = 12;
 const UNSTICKS_BEFORE_REPLAN: i32 = 2;
 
 impl RouteFollower {
+    /// Walking the segment's track: what comes before the walking (a jump or a barrel in hand,
+    /// a floor going down under her, a lift to wait for, a drop, a crusher, a door), getting
+    /// there, getting unstuck, and then the steering and the pace.
     pub(super) fn walk(&mut self, obs: &Observation) -> Controls {
         if self.jump.sprint.is_some() {
             return self.sprint_jump(obs);
@@ -80,116 +83,15 @@ impl RouteFollower {
         if self.shot.target.is_some() {
             return self.shoot_barrel(obs);
         }
-        {
-            // (but for one she's against already: the way leads off from it)
-            let pos = obs.pos();
-            self.weave.barrels = obs
-                .barrels
-                .iter()
-                .flatten()
-                .copied()
-                .filter(|&b| {
-                    !((pos.0 - b.0).abs() < super::lanes::ROOM
-                        && (pos.1 - b.1).abs() < super::lanes::ROOM)
-                })
-                .collect();
+        if let Some(c) = self.barrels_first(obs) {
+            return c;
         }
-        if !self.barrel_run {
-            if let Some(c) = self.keep_off_lit_chain(obs) {
-                return c;
-            }
-        }
-        // (a barrel to clear on this step: taken on at once, shot from the nearest place out of
-        // every blast of its chain, then on)
-        if let Some(b) = self
-            .step()
-            .barrel
-            .filter(|_| self.shot.step != Some(self.step_i))
-            .and_then(|b| super::barrel_now(obs, b))
-        {
-            self.shot.step = Some(self.step_i);
-            self.log.add(
-                obs.tic,
-                format!("clearing the barrel at ({:.0}, {:.0})", b.0, b.1),
-            );
-            self.shot.target = Some((b, obs.tic));
-            return self.shoot_barrel(obs);
-        }
-        let nav = Rc::clone(&self.view);
         let step = self.step().clone();
-        // (the floor she's walking on going down when nothing she's doing means it to (no move
-        // she's waiting on, not the step's own line): off it to the nearest floor that stays
-        // put, at once. Walking on to what she'd planned from it, a jump say, is from a floor
-        // that's no longer where the plan had it)
-        if let Some(s) = nav
-            .nav
-            .mesh
-            .poly_at(obs.pos())
-            .map(|p| nav.nav.sector_of_poly(p))
-        {
-            let on_floor = obs.z.is_none_or(|z| z <= obs.heights[s].floor + 0.5);
-            // (going down now, lower than a tic ago: not just lower than it started. A floor gone
-            // down for good is a floor, nukage or not: a bridge lowered into it the first time
-            // across is walked over after, not run off each time)
-            let going_down = obs
-                .height(s)
-                .zip(self.prev_live.get(s))
-                .is_some_and(|(l, p)| l.floor < p.floor - 0.01);
-            let expected = self.watches.iter().any(|w| w.expect.sector == s && !w.over)
-                || step.trigger.as_ref().is_some_and(|t| t.effect(s).is_some());
-            // (and only with somewhere to run to: down in the pit already, it's for the explorer
-            // to find the way out)
-            // (and only a floor going down into what hurts, as the triggers that move it have it:
-            // a lift going down under her is a lift)
-            let into_harm = || {
-                nav.nav.triggers.iter().any(|t| {
-                    t.info.trigger.walked()
-                        && t.effect(s).is_some()
-                        && nav.nav.floor_after(t, s) == Some(true)
-                })
-            };
-            if on_floor
-                && going_down
-                && self.jump.sinking.contains(&s)
-                && !expected
-                && into_harm()
-                && self.run_path(obs).is_some()
-            {
-                self.log.add(obs.tic, format!("sector {s} going down under her: running for the nearest floor that stays put"));
-                self.jump.run = Some(Run {
-                    heading: obs.angle,
-                    sector: None,
-                    next: obs.tic,
-                });
-                return self.run_step(obs);
-            }
+        if let Some(c) = self.off_sinking_floor(obs, &step) {
+            return c;
         }
-        if let Some(t) = step.trigger.as_ref().filter(|t| {
-            step.action == Action::Cross && t.info.trigger == Trigger::WR && !t.permanent()
-        }) {
-            if !self.cross_ready {
-                // A lift line to cross for its window: if the lift's away already (set off on the
-                // way), crossing now does nothing and the window is shorter than planned.
-                let init = &nav.nav.movers.initial;
-                let away: Vec<usize> = t
-                    .effects
-                    .iter()
-                    .map(|(s, _)| *s)
-                    .filter(|&x| {
-                        obs.height(x)
-                            .is_some_and(|live| (live.floor - init[x].floor).abs() > 0.5)
-                    })
-                    .collect();
-                if !away.is_empty() && obs.tic - self.step_tic < CROSS_REST_WAIT {
-                    if !self.cross_wait_logged {
-                        self.log.add(obs.tic, format!("sector {} already away: waiting for it to come back before crossing line {}", away[0], t.line));
-                        self.cross_wait_logged = true;
-                    }
-                    self.progress_tic = obs.tic;
-                    return self.motion.hold(obs, (0.0, 0.0), Some(obs.angle));
-                }
-                self.cross_ready = true;
-            }
+        if let Some(c) = self.lift_window_wait(obs, &step) {
+            return c;
         }
         if obs.tic < self.jump.brake_until {
             if self.motion.speed() > 1.0 {
@@ -288,50 +190,7 @@ impl RouteFollower {
             return c;
         }
         if obs.tic - self.progress_tic > STUCK_TICS {
-            self.unstick.count += 1;
-            // (on a floor that hurts, a new way at once, no backing off first: each try costs her
-            // health, and the way the plan saw may have gone with a floor that moved under her,
-            // a ledge lowered by the line she crossed)
-            let burning = {
-                let nav = &self.view.nav;
-                nav.poly_at(pos).is_some_and(|p| {
-                    nav.damage
-                        .get(nav.sector_of_poly(p))
-                        .is_some_and(|&d| d != 0)
-                })
-            };
-            if self.unstick.count > UNSTICKS_BEFORE_REPLAN || burning {
-                // (with the heights as they are: the way the plan saw may be shut now, a timed door
-                // closed, and the same path again is stuck again)
-                if !self.replan(obs, "stuck", true) {
-                    return self.fail(obs, "stuck");
-                }
-                return self.walk(obs);
-            }
-            if let Some(b) = obs
-                .barrels
-                .iter()
-                .flatten()
-                .copied()
-                .find(|&b| !self.barrel_run && dist(b, pos) < BARREL_IN_WAY)
-            {
-                // wedged against a barrel (they stand in rows across corridors): blow it up from a
-                // safe distance, as a player would
-                self.log.add(
-                    obs.tic,
-                    format!("barrel in the way at ({:.0}, {:.0}): shooting it", b.0, b.1),
-                );
-                self.shot.target = Some((b, obs.tic));
-                return self.shoot_barrel(obs);
-            }
-            self.log.add(
-                obs.tic,
-                format!("stuck at ({:.0}, {:.0}), backing off", obs.x, obs.y),
-            );
-            self.unstick.until = obs.tic + UNSTICK_TICS;
-            self.progress_tic = obs.tic + UNSTICK_TICS;
-            self.unstick.dir = self.away_from_walls(obs);
-            return self.unstick(obs);
+            return self.stuck(obs);
         }
         // follow the track: steer for a point a little ahead, look further ahead
         let mut carrot = self.carrot(pos, track);
@@ -391,6 +250,181 @@ impl RouteFollower {
             return self.motion.hold(obs, (0.0, 0.0), Some(look));
         }
         self.motion.go(obs, heading(pos, carrot), speed, Some(look))
+    }
+
+    /// The barrels she sees, for her steering; and those to deal with before walking on: a
+    /// chain going off to keep out of, a barrel this step is to clear.
+    fn barrels_first(&mut self, obs: &Observation) -> Option<Controls> {
+        {
+            // (but for one she's against already: the way leads off from it)
+            let pos = obs.pos();
+            self.weave.barrels = obs
+                .barrels
+                .iter()
+                .flatten()
+                .copied()
+                .filter(|&b| {
+                    !((pos.0 - b.0).abs() < super::lanes::ROOM
+                        && (pos.1 - b.1).abs() < super::lanes::ROOM)
+                })
+                .collect();
+        }
+        if !self.barrel_run {
+            if let Some(c) = self.keep_off_lit_chain(obs) {
+                return Some(c);
+            }
+        }
+        // (a barrel to clear on this step: taken on at once, shot from the nearest place out of
+        // every blast of its chain, then on)
+        let b = self
+            .step()
+            .barrel
+            .filter(|_| self.shot.step != Some(self.step_i))
+            .and_then(|b| super::barrel_now(obs, b))?;
+        self.shot.step = Some(self.step_i);
+        self.log.add(
+            obs.tic,
+            format!("clearing the barrel at ({:.0}, {:.0})", b.0, b.1),
+        );
+        self.shot.target = Some((b, obs.tic));
+        Some(self.shoot_barrel(obs))
+    }
+
+    /// The floor she's walking on going down when nothing she's doing means it to (no move
+    /// she's waiting on, not the step's own line): off it to the nearest floor that stays put,
+    /// at once. Walking on to what she'd planned from it, a jump say, is from a floor that's no
+    /// longer where the plan had it.
+    fn off_sinking_floor(&mut self, obs: &Observation, step: &Step) -> Option<Controls> {
+        let nav = Rc::clone(&self.view);
+        let s = nav
+            .nav
+            .mesh
+            .poly_at(obs.pos())
+            .map(|p| nav.nav.sector_of_poly(p))?;
+        let on_floor = obs.z.is_none_or(|z| z <= obs.heights[s].floor + 0.5);
+        // (going down now, lower than a tic ago: not just lower than it started. A floor gone
+        // down for good is a floor, nukage or not: a bridge lowered into it the first time
+        // across is walked over after, not run off each time)
+        let going_down = obs
+            .height(s)
+            .zip(self.prev_live.get(s))
+            .is_some_and(|(l, p)| l.floor < p.floor - 0.01);
+        let expected = self.watches.iter().any(|w| w.expect.sector == s && !w.over)
+            || step.trigger.as_ref().is_some_and(|t| t.effect(s).is_some());
+        // (and only with somewhere to run to: down in the pit already, it's for the explorer
+        // to find the way out)
+        // (and only a floor going down into what hurts, as the triggers that move it have it:
+        // a lift going down under her is a lift)
+        let into_harm = || {
+            nav.nav.triggers.iter().any(|t| {
+                t.info.trigger.walked()
+                    && t.effect(s).is_some()
+                    && nav.nav.floor_after(t, s) == Some(true)
+            })
+        };
+        if on_floor
+            && going_down
+            && self.jump.sinking.contains(&s)
+            && !expected
+            && into_harm()
+            && self.run_path(obs).is_some()
+        {
+            self.log.add(
+                obs.tic,
+                format!(
+                    "sector {s} going down under her: running for the nearest floor that stays put"
+                ),
+            );
+            self.jump.run = Some(Run {
+                heading: obs.angle,
+                sector: None,
+                next: obs.tic,
+            });
+            return Some(self.run_step(obs));
+        }
+        None
+    }
+
+    /// A lift line to cross for its window: if the lift's away already (set off on the way),
+    /// crossing now does nothing and the window is shorter than planned. Waited for, a while.
+    fn lift_window_wait(&mut self, obs: &Observation, step: &Step) -> Option<Controls> {
+        let t = step.trigger.as_ref().filter(|t| {
+            step.action == Action::Cross && t.info.trigger == Trigger::WR && !t.permanent()
+        })?;
+        if self.cross_ready {
+            return None;
+        }
+        let nav = Rc::clone(&self.view);
+        let init = &nav.nav.movers.initial;
+        let away: Vec<usize> = t
+            .effects
+            .iter()
+            .map(|(s, _)| *s)
+            .filter(|&x| {
+                obs.height(x)
+                    .is_some_and(|live| (live.floor - init[x].floor).abs() > 0.5)
+            })
+            .collect();
+        if !away.is_empty() && obs.tic - self.step_tic < CROSS_REST_WAIT {
+            if !self.cross_wait_logged {
+                self.log.add(obs.tic, format!("sector {} already away: waiting for it to come back before crossing line {}", away[0], t.line));
+                self.cross_wait_logged = true;
+            }
+            self.progress_tic = obs.tic;
+            return Some(self.motion.hold(obs, (0.0, 0.0), Some(obs.angle)));
+        }
+        self.cross_ready = true;
+        None
+    }
+
+    /// Nowhere for `STUCK_TICS`: back off and try again; after a couple of those (or at once
+    /// on a floor that hurts), a new way; wedged against a barrel, shoot it.
+    fn stuck(&mut self, obs: &Observation) -> Controls {
+        let pos = obs.pos();
+        self.unstick.count += 1;
+        // (on a floor that hurts, a new way at once, no backing off first: each try costs her
+        // health, and the way the plan saw may have gone with a floor that moved under her,
+        // a ledge lowered by the line she crossed)
+        let burning = {
+            let nav = &self.view.nav;
+            nav.poly_at(pos).is_some_and(|p| {
+                nav.damage
+                    .get(nav.sector_of_poly(p))
+                    .is_some_and(|&d| d != 0)
+            })
+        };
+        if self.unstick.count > UNSTICKS_BEFORE_REPLAN || burning {
+            // (with the heights as they are: the way the plan saw may be shut now, a timed door
+            // closed, and the same path again is stuck again)
+            if !self.replan(obs, "stuck", true) {
+                return self.fail(obs, "stuck");
+            }
+            return self.walk(obs);
+        }
+        if let Some(b) = obs
+            .barrels
+            .iter()
+            .flatten()
+            .copied()
+            .find(|&b| !self.barrel_run && dist(b, pos) < BARREL_IN_WAY)
+        {
+            // wedged against a barrel (they stand in rows across corridors): blow it up from a
+            // safe distance, as a player would
+            self.log.add(
+                obs.tic,
+                format!("barrel in the way at ({:.0}, {:.0}): shooting it", b.0, b.1),
+            );
+            self.shot.target = Some((b, obs.tic));
+            return self.shoot_barrel(obs);
+        }
+        self.log.add(
+            obs.tic,
+            format!("stuck at ({:.0}, {:.0}), backing off", obs.x, obs.y),
+        );
+        self.unstick.until = obs.tic + UNSTICK_TICS;
+        self.progress_tic = obs.tic + UNSTICK_TICS;
+        self.unstick.dir = self.away_from_walls(obs);
+        self.unstick(obs)
     }
 
     /// Where to steer for with barrels about: `carrot` if the line to it is clear of them; else
