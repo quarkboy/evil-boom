@@ -1324,6 +1324,11 @@ impl Combat {
             self.journal.note(|| Record { detail: why.clone(), ..Record::new(obs.tic, "move", format!("{kind:?}")) });
             self.mode = why.clone();
         }
+        if obs.tic % 175 == 0 && std::env::var_os("EVIL_DEBUG_SHOT").is_some() {
+            if let Some(t) = &s.target {
+                self.log.push(format!("tic {}: (she's at ({:.0}, {:.0}, {:.0}); {} {} at ({:.0}, {:.0}, {:.0}), {:.0} off; the move {kind:?}, going {:?}; gun {:?}, ammo {:?})", obs.tic, obs.x, obs.y, self.z(obs), t.name, t.id, t.x, t.y, t.z, dist((t.x, t.y), obs.pos()), act.moving.map(|m| (m.0.round(), m.1.round())), obs.weapon, obs.ammo));
+            }
+        }
         self.last_move = Some(kind);
         Some(Decision { kind, yields: act.route, pressed, aim, fire, weapon, moving: act.moving, why })
     }

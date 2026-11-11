@@ -453,6 +453,20 @@ Each line: the change, its score run for run against the build before on the sam
   hurt her (a suit, the pass), and a sound she's just set off gone to from a floor that
   hurts already. +0.0017 ± 0.0073 (438 / 159 / 171; HMP +0.018, UV -0.014; exits 382 -> 389;
   never beaten 61 -> 55); 0.448. Kept.
+- **Closing in is going nearer** (the user's: "I don't understand how they can stall, the
+  enemies are right in her face"). Out of her gun's reach, the standing node's "closing in"
+  took the steering's step, which keeps to ground she's been on and to the side: MAP07 on
+  the easiest skill, a mancubus 600 off across the yard, the super shotgun's reach 480, to
+  and fro along the edge of the start's platform for 1000 s with 96 shells and not one
+  fired, the route out into the yard never let go on. A step counts when it's within about
+  70 degrees of the way to it; else straight at it if that's safe; else the route goes on.
+  The same 16 seeds on skill 1: MAP07 3 exits -> 11 (stalled 12 -> 4), MAP25 3 -> 5. HMP and
+  UV: +0.0011 ± 0.0064 (544 / 144 / 143; exits 389 -> 393); 0.449. Kept.
+- **The two easiest skills** (the user's, to see what she can't beat at all; `out/score/
+  easy.tsv`, 8 seeds, and `easy-hard16.tsv`, 16 seeds of the worst eleven on skill 1):
+  skill 1 0.826 (427 of 544 out), skill 2 0.720 (357). Never out on skill 1 in 16: MAP21
+  (all stalled), MAP20 and MAP23 (dead in 40 s), E4M6 and MAP29 (dead or stalled late), and
+  the boss levels E3M8 and MAP30.
 - **A3** (the wait at a lift), **A5** (the edge of her view), **B2, B3**: not done yet.
 
 ## A level she knows, and lives (the evaluation asked for 2026-11-10)

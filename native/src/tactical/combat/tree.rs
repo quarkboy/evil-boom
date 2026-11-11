@@ -396,6 +396,9 @@ fn keeping_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
 /// line of fire. Not on a floor that hurts, unless it's in her way: the route held there costs a
 /// hurt every 32 tics, the route's way off is the fight's way too (E3M6 HMP: low, ten lost souls
 /// 1100-1400 off out of reach, the route over the nukage held for "closing in", 48 to 0).
+/// a step counts as towards something when it's within about 70 degrees of the way to it
+const NEARER: f64 = 0.3;
+
 fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if c.on_hurting_floor(obs) && !c.blocking(obs, s.target.as_ref()) {
         return None;
@@ -433,7 +436,18 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
             return None;
         }
         if !c.in_reach(&gun, t, d) || d > window(&gun, t).1 {
-            moving = moving.or_else(|| c.closing_in(obs, t, None));
+            // (out of reach, closing in is going nearer: a step of the steering's that isn't
+            // (it keeps to ground she's been on, and to the side) is no closing. MAP07 on the
+            // easiest skill: a mancubus 600 off across the yard, the super shotgun's reach
+            // 480; "closing in" to and fro along the edge of the start's platform for 1000 s,
+            // 96 shells in hand, not one fired, the route out into the yard never let go on)
+            if !c.in_reach(&gun, t, d) {
+                let to = ((t.x - s.pos.0) / d.max(1.0), (t.y - s.pos.1) / d.max(1.0));
+                let nearer = |m: &Point| (m.0 * to.0 + m.1 * to.1) / m.0.hypot(m.1).max(1e-6) > NEARER;
+                moving = moving.filter(nearer).or_else(|| c.closing_in(obs, t, None).filter(nearer));
+            } else {
+                moving = moving.or_else(|| c.closing_in(obs, t, None));
+            }
             // (out of reach and no step towards it that's safe: stood there she neither shoots
             // nor closes; the route goes on, a shot taken on the way when there's one. MAP29:
             // a revenant on a ledge 1400-2000 off, drops between; stood "closing in" by turns
