@@ -2346,3 +2346,13 @@ stage was tested by: `docs/CONSOLE_PLAN.md`.
   status bar's things (health, ammo, keys) aren't repeated: the game shows them.
 - **Volume**: DSDA's sfx and music volumes, and a master the patch adds (`evil_master_volume`,
   a gain in `I_UpdateSound`), each a slider; kept in the settings.
+
+## MAP07's exit step raised twice: left as the game has it (the user, 2026-11-10)
+
+The last two arachnotrons dead within one's death animation of the other (49-51 tics apart in
+the runs traced), the game's check runs for each and the step round the exit (tag 667, raised
+by its lower texture's 16) goes up twice, 8 to 40: 32 above the yard, no climbing it, no exit.
+3 of 16 runs on the easiest skill. The user's: "that's intended game design. We leave her
+stuck forever. That would actually be hilarious during a stream." So: no rule to space the
+last kills, no giving up when she sees it. Not to be "fixed". (Seen with it and not asked to
+be left: she waits for the step at 24, the model's height, when she sees it at 40.)
