@@ -6,6 +6,7 @@
 //! known map (places she can get to next to ones she hasn't seen); and, with nothing else,
 //! walls that might hide something.
 
+mod cut_off;
 mod execution;
 mod objectives;
 mod positions;

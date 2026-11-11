@@ -1,15 +1,13 @@
 //! Listing and ranking objectives in the currently reachable world.
 
-use super::{compass, Explorer, Hooks, Kind, Objective, Suspecting, KEEP_REACH, WHILE_OPEN};
+use super::cut_off::Reach;
+use super::{compass, Explorer, Hooks, Kind, Objective, Suspecting, WHILE_OPEN};
 use crate::geom::{dist, segment_distance, Point};
 use crate::knowledge::model::Heard;
 use crate::motor::Observation;
-use crate::movers::cycles_back;
 use crate::nav::can_cross;
-use crate::navigator::{
-    add_height, States, TeleEdge, TriggerLine, View, EXIT_FLOOR, MAX_STEP, PLAYER_HEIGHT,
-};
-use crate::specials::{classify_line, Category, Key, Keys, Trigger};
+use crate::navigator::{States, TeleEdge, TriggerLine, View, EXIT_FLOOR, MAX_STEP};
+use crate::specials::{classify_line, Key, Keys, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -60,9 +58,6 @@ const URGENT_TICS: i64 = 6 * 35;
 
 /// how fast she's taken to get places while a door she opened holds (units a tic: below a run)
 const OPEN_SPEED: f64 = 10.0;
-
-/// an objective that would cut her off from others comes after them
-const LATER: &str = " (after what it cuts off)";
 
 /// a noise is worth walking towards if it gets her this much nearer
 const HEAR_NEARER: f64 = 128.0;
@@ -299,314 +294,42 @@ impl Explorer {
             }
         }
         // Not anywhere that would cut her off from most of what she can get to now, as far as she
-        // knows. The way back is taken as it will be: a door that closes again is shut, unless
-        // something opens it for good or she can open it from where she'll be; a lift likewise is
-        // at rest unless she can call it from there.
-        let doors = view.local_doors(keys);
-        let known_triggers = self.knowledge.known_triggers();
-        // Not where a door or lift that comes back was set off since one that stays: pressed again
-        // from outside, a door open for good can shut behind her.
-        let last_fired = |pred: &dyn Fn(&TriggerLine) -> bool, s: usize| -> i64 {
-            let lines: BTreeSet<i64> = known_triggers
-                .iter()
-                .filter(|(t, secs)| pred(t) && secs.contains(&s))
-                .map(|(t, _)| t.line)
-                .collect();
-            self.knowledge
-                .fired
-                .iter()
-                .filter(|f| f.life == self.knowledge.lives && lines.contains(&(f.line as i64)))
-                .map(|f| f.tic)
-                .max()
-                .unwrap_or(-1)
+        // knows (`cut_off.rs`).
+        let now = Reach {
+            here,
+            keys,
+            polys: &reach,
+            states: &states,
+            states_all: &states_all,
         };
-        let for_good: BTreeSet<usize> = known_triggers
-            .iter()
-            .filter(|(t, _)| t.permanent())
-            .flat_map(|(_, s)| s.iter().copied())
-            .filter(|&s| {
-                last_fired(
-                    &|t| !t.permanent() && cycles_back(t.info.special, &t.info.description),
-                    s,
-                ) <= last_fired(&|t| t.permanent(), s)
-            })
-            .collect();
-        let mut states_back = states_all.clone();
-        let mut openers: Vec<(TriggerLine, BTreeSet<usize>)> = Vec::new();
-        for (t, secs) in &known_triggers {
-            let comes_back = t.info.category.is_door()
-                || (t.info.category == Category::Lift
-                    && cycles_back(t.info.special, &t.info.description));
-            if !t.permanent() && comes_back && !t.linedef().is_some_and(|li| spent.contains(&li)) {
-                let shut: BTreeSet<usize> = secs.difference(&for_good).copied().collect();
-                for &s in &shut {
-                    states_back[s] = vec![nav.movers.initial[s]];
-                }
-                openers.push((t.clone(), shut));
-            }
-        }
-        let way_back = |start: usize| -> BTreeSet<usize> {
-            // Opening, on the way, the doors she can open from there: by a switch or a walk-over line
-            // on the far side too.
-            let mut st = states_back.clone();
-            loop {
-                let after = view.reachable(start, &st, Some(&doors));
-                let more: Vec<&BTreeSet<usize>> = openers
-                    .iter()
-                    .filter(|(t, secs)| {
-                        !t.activators.is_disjoint(&after)
-                            && t.info.lock.satisfied(keys)
-                            && secs.iter().any(|&x| st[x] == vec![nav.movers.initial[x]])
-                    })
-                    .map(|(_, secs)| secs)
-                    .collect();
-                let before = st.clone();
-                for secs in more {
-                    for &x in secs {
-                        for &h in &states_all[x] {
-                            add_height(&mut st[x], h);
-                        }
-                    }
-                }
-                if st == before {
-                    return after; // (nothing more opens)
-                }
-            }
-        };
-        // What of where she can get to now she couldn't get back to from a poly.
-        let mut afters: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
-        // And whether where she'd be left is still open to finding a way out: an edge onto
-        // somewhere she's never seen, or a sector there she's never set foot in other than the
-        // goal's, where a walk-over line can be. No way out known isn't no way out.
-        let known_polys = self.knowledge.known_polys();
-        let entered: BTreeSet<usize> = self
-            .knowledge
-            .visited
-            .iter()
-            .map(|&q| nav.sector_of_poly(q))
-            .collect();
-        // Lines she has pressed or set off, and sectors she believes shut: a door's face she hasn't
-        // tried is a way out to try.
-        let pressed: BTreeSet<usize> = self
-            .knowledge
-            .fired
-            .iter()
-            .map(|f| f.line)
-            .chain(self.knowledge.tried_walls.keys().copied())
-            .collect();
-        let shut = |sec: usize| {
-            states[sec]
-                .iter()
-                .all(|h| h.ceiling - h.floor < PLAYER_HEIGHT)
-        };
-        let untried: Vec<&TriggerLine> = self
-            .knowledge
-            .interactables()
-            .iter()
-            .filter_map(|li| by_line.get(li).copied())
-            .collect();
-        let mut lost_from = |p: usize| -> (BTreeSet<usize>, bool) {
-            let after = afters.entry(p).or_insert_with(|| way_back(p));
-            if after.contains(&here) {
-                return (BTreeSet::new(), true);
-            }
-            let goal_sector = nav.sector_of_poly(p);
-            let unseen_edge = after.iter().any(|&q| {
-                nav.mesh
-                    .poly(q)
-                    .portals
-                    .iter()
-                    .any(|&pi| !known_polys.contains(&nav.mesh.portals[pi].other(q)))
-            });
-            let unwalked = after
-                .iter()
-                .map(|&q| nav.sector_of_poly(q))
-                .any(|sec| sec != goal_sector && !entered.contains(&sec));
-            let untried_door = after.iter().any(|&q| {
-                nav.mesh.poly(q).portals.iter().any(|&pi| {
-                    let portal = &nav.mesh.portals[pi];
-                    let other = nav.sector_of_poly(portal.other(q));
-                    shut(other) && portal.linedef.is_some_and(|li| !pressed.contains(&li))
-                })
-            });
-            // Or a switch or door not tried yet that she could press from there, as `shuts_in` has it.
-            let untried_switch = untried.iter().any(|t| !t.activators.is_disjoint(after));
-            (
-                reach.difference(after).copied().collect(),
-                unseen_edge || unwalked || untried_door || untried_switch,
-            )
-        };
-        let tic = obs.tic;
-        // An item the level put somewhere has a way back out from it, if not one she knows yet:
-        // nobody makes a pit with a prize and no way out. Not one a monster dropped, which can fall
-        // anywhere.
-        let placed = |o: &Objective| {
-            o.kind == Kind::Item
-                && o.thing
-                    .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
-                    .is_some_and(|t| {
-                        nav.map
-                            .things
-                            .iter()
-                            .any(|m| (m.x - t.x).abs() < 1.0 && (m.y - t.y).abs() < 1.0)
-                    })
-        };
-        // No switch is pressed from a floor that hurts while there's floor that doesn't to get to:
-        // what a switch does is anyone's guess, and shut in there is dead, suit or no suit (it runs
-        // out). Shut in already, with no floor that doesn't hurt in reach, it's hers to try; and
-        // with nothing else at all to do, walls and all, as `harm_ok` has it.
-        // A floor that doesn't hurt reached only through a door that shuts again by itself, with
-        // nothing on her side to open it, is no way out either: she's shut in once it shuts.
-        let safe = |polys: &BTreeSet<usize>| {
-            polys
-                .iter()
-                .any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)))
-        };
-        let stays_shut =
-            self.knowledge.damaging(nav.sector_of_poly(here)) && !safe(&way_back(here));
-        // Nor is the dry floor she waded off from a dead end: there was nothing to do there, so a
-        // switch down here is hers to try before she goes back to stand on it.
-        let shut_in = self.harm_allowed || self.waded_dead_end || stays_shut || !safe(&reach);
-        let switch_in_harm = |this: &Self, o: &Objective| {
-            o.kind == Kind::Switch
-                && !shut_in
-                && nav
-                    .poly_at(o.goal)
-                    .is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)))
-        };
-        // Down in a pit whose floor hurts, with no floor that doesn't in reach: every second costs
-        // health, so a switch or a door she can see (a way out someone built) comes before a guess
-        // at a plain wall.
-        let in_pit = self.knowledge.mortal
-            && self.on_hurting_floor(obs)
-            && (stays_shut || self.waded_dead_end || !safe(&reach));
-        let mut usable =
-            |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
-                let mut objectives: Vec<Objective> = objectives
-                    .into_iter()
-                    .filter(|o| !switch_in_harm(this, o))
-                    .collect();
-                if in_pit
-                    && objectives
-                        .iter()
-                        .any(|o| matches!(o.kind, Kind::Switch | Kind::Door))
-                {
-                    objectives.retain(|o| o.kind != Kind::Wall);
-                }
-                if risky {
-                    // Nothing safe left: anything, one-way drops and nukage and all. But not for what's worth
-                    // little: a sound, a place seen already looked at again, a monster gone from where it was
-                    // last seen. The health a way costs is weighed against what it's for. And never away from
-                    // every way out there is, as far as she knows.
-                    return objectives
-                        .into_iter()
-                        // But a sound just after she set something off, with her on a floor that hurts already:
-                        // what she set off is as like as not the way off it, and going to see is no new risk.
-                        .filter(|o| {
-                            !matches!(o.kind, Kind::Noise | Kind::Recheck | Kind::Hunt)
-                                || (o.kind == Kind::Noise && o.urgent && this.on_hurting_floor(obs))
-                        })
-                        .filter(|o| {
-                            exit_polys.is_empty()
-                                || o.kind == Kind::Exit
-                                || placed(o)
-                                || nav
-                                    .poly_at(o.goal)
-                                    .map(&mut lost_from)
-                                    .is_none_or(|(g, open)| open || !exit_polys.is_subset(&g))
-                        })
-                        .map(|o| Objective {
-                            label: format!("{} (risky)", o.label),
-                            risky: true,
-                            ..o
-                        })
-                        .filter(|o| this.fresh(o, tic))
-                        .collect::<Vec<_>>()
-                        .into_iter()
-                        // Risky as to the way there, not as to what's there. Items only: they're to be had or not.
-                        // The ways on go through it if need be.
-                        .filter(|o| o.kind != Kind::Item || !hooks.dangerous(obs, o))
-                        .collect();
-                }
-                let mut kept: Vec<Objective> = Vec::new();
-                let mut lost: Vec<BTreeSet<usize>> = Vec::new();
-                for o in objectives {
-                    if !this.fresh(&o, tic) || hooks.dangerous(obs, &o) {
-                        continue;
-                    }
-                    let cut = nav.poly_at(o.goal).map(&mut lost_from);
-                    let open = cut.as_ref().is_none_or(|c| c.1) || placed(&o);
-                    let gone = cut.map(|c| c.0);
-                    // Worth the risk, however far she can't get back from: the exit; a teleporter (where it
-                    // leads is the unknown); a key (it opens the way). And ammo or a gun the level put there
-                    // when she's next to out of it: nothing she can't get back to is worth much without, and
-                    // there's a way out from where the level put it.
-                    let risk_it = matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Key)
-                        || (placed(&o) && hooks.worth_cut_off(obs, &o));
-                    // Most of what she can get to, and never the way out, as far as she knows.
-                    let keeps = gone.as_ref().is_some_and(|g| {
-                        (reach.len() - g.len()) as f64 >= KEEP_REACH * reach.len() as f64
-                            && (exit_polys.is_empty() || open || !exit_polys.is_subset(g))
-                    });
-                    if risk_it || keeps {
-                        lost.push(gone.unwrap_or_default());
-                        kept.push(o);
-                    }
-                }
-                // What would cut her off from where there's more to do, as far as she knows, comes after
-                // that: as a player finishes a room before dropping out of it.
-                let goals: Vec<Option<usize>> = kept.iter().map(|o| nav.poly_at(o.goal)).collect();
-                for (i, o) in kept.iter_mut().enumerate() {
-                    if o.kind == Kind::Exit || lost[i].is_empty() {
-                        continue;
-                    }
-                    if goals
-                        .iter()
-                        .enumerate()
-                        .any(|(j, g)| j != i && g.is_some_and(|g| lost[i].contains(&g)))
-                    {
-                        o.later = true;
-                        o.label = format!("{}{LATER}", o.label);
-                    }
-                }
-                // Something she needs now that would cut her off still waits while there's something she
-                // needs now that wouldn't.
-                if kept
-                    .iter()
-                    .any(|o| o.kind == Kind::Item && o.urgent && !o.later)
-                {
-                    for o in kept.iter_mut().filter(|o| o.kind == Kind::Item && o.later) {
-                        o.urgent = false;
-                    }
-                }
-                kept
-            };
+        let back = self.way_back(&nav, &view, now, &by_line);
+        let mut sift = self.sift(obs, risky, back, exit_polys);
         // With nothing else left, the ways between rooms never walked over (walk-over lines are
         // thresholds), and last of all those onto floors that hurt.
-        let first = usable(self, hooks, out);
+        let first = self.usable(obs, hooks, &mut sift, out);
         if !first.is_empty() {
             return first;
         }
         let t1 = self.thresholds(&reach, false);
-        let x = usable(self, hooks, t1);
+        let x = self.usable(obs, hooks, &mut sift, t1);
         if !x.is_empty() {
             return x;
         }
         let t2 = self.thresholds(&reach, true);
-        let x = usable(self, hooks, t2);
+        let x = self.usable(obs, hooks, &mut sift, t2);
         if !x.is_empty() {
             return x;
         }
-        let x = usable(self, hooks, self.seams(&reach, pos));
+        let x = self.usable(obs, hooks, &mut sift, self.seams(&reach, pos));
         if !x.is_empty() {
             return x;
         }
-        let x = usable(self, hooks, again);
+        let x = self.usable(obs, hooks, &mut sift, again);
         if !x.is_empty() {
             return x;
         }
         let lr = hooks.last_resort(self, obs, &reach, pos);
-        usable(self, hooks, lr)
+        self.usable(obs, hooks, &mut sift, lr)
     }
 
     /// The exits she can set off from where she can get to, with the keys she has: exit lines,
