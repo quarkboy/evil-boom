@@ -104,8 +104,8 @@ pub struct PlanCaches {
     pub(super) reach: HashMap<(usize, KeySet, u64), Arc<HashSet<usize>>>,
     effects: HashMap<(usize, Vec<Pair>), Effects>,
     /// legs found (or not) between two points, by (from, to, heights hash, keys, timers hash,
-    /// strict fit): the same from one search to the next for the same view (MAP24's four
-    /// items compared, each searched for through the same lifts and teleports, 22s each)
+    /// strict fit): the same from one search to the next for the same view (several items
+    /// compared are each searched for through the same lifts and teleports)
     pub(super) timed: HashMap<TimedKey, Option<(Found, World)>>,
 }
 
@@ -333,7 +333,7 @@ impl Planner<'_> {
                     None
                 };
                 // also a height another line makes for good, if not there yet: this one takes
-                // it away again (MAP09)
+                // it away again
                 let held = timing.is_some_and(|tm| tm.hold.is_some())
                     && !base[*s].iter().any(|x| x.key() == h.key());
                 if self.facts.temporary.contains(&pair) || held {

@@ -61,10 +61,10 @@ fn boss_rules(map: &str) -> Vec<(u16, u16, u16, Category)> {
 }
 
 /// A sector lower than everything round it and too narrow anywhere for the player's box can't
-/// be stood in: the box always rests on the floor beside it (E4M1's 8-unit slot by the blue
-/// key room, taken for a pit; MAP08's nukage channel round the red key bridge). The planner
-/// sees it at its lowest neighbour's floor (and follows them as they move: with_trenches);
-/// the movers keep the real heights. Returns trench -> its neighbours.
+/// be stood in: the box always rests on the floor beside it (an 8-unit slot in a floor, a
+/// narrow channel round a bridge: no pits). The planner sees it at its lowest neighbour's
+/// floor (and follows them as they move: with_trenches); the movers keep the real heights.
+/// Returns trench -> its neighbours.
 pub(super) fn fill_trenches(
     m: &MapData,
     mesh: &Mesh,
@@ -346,8 +346,8 @@ impl<'a> Analysis<'a> {
                 keep: None,
             });
         }
-        // (a gun line shot only from where the floor can be at a height the shot hits it: MAP16's
-        // flame panel, from the table at its top, never from the floor of the room round it)
+        // (a gun line shot only from where the floor can be at a height the shot hits it: from a
+        // raised floor at its top, say, never from the floor of the room round it)
         let mut floors: BTreeMap<usize, Vec<f64>> = BTreeMap::new();
         for t in &out {
             for (s, hs) in &t.effects {
@@ -379,8 +379,8 @@ impl<'a> Analysis<'a> {
     }
 
     /// Gun lines: shot from anywhere with a view of the line where a level shot (no aiming up
-    /// or down) actually hits it, and not too edge-on (MAP19's line seen at 3 degrees from 340
-    /// away was 4 units wide).
+    /// or down) actually hits it, and not too edge-on (a line seen at 3 degrees from 340 away
+    /// is 4 units wide).
     fn gun_activators(&mut self, li: usize, mut candidates: BTreeSet<usize>) -> BTreeSet<usize> {
         let (a, b) = self.m.line_seg(li);
         let points: Vec<Point> = [0.25, 0.5, 0.75]
@@ -419,8 +419,7 @@ impl<'a> Analysis<'a> {
     }
 
     /// Sectors that end the level once the floor has hurt the player down to 10 health
-    /// (special 11: E1M8's exit, behind the barons): pseudo-triggers, line EXIT_FLOOR - sector,
-    /// set off by standing on them.
+    /// (special 11): pseudo-triggers, line EXIT_FLOOR - sector, set off by standing on them.
     fn exit_floors(&self) -> Vec<TriggerLine> {
         self.m
             .sectors
@@ -490,14 +489,13 @@ impl<'a> Analysis<'a> {
             if !(0..n).any(|i| segment_distance(vs[i], vs[(i + 1) % n], a, b) <= USE_REACH) {
                 continue;
             }
-            // ...and somewhere in it the box can stand within use range (MAP14's door was
-            // "pressed" from a floor below the one in front of it, out of reach)
+            // ...and somewhere in it the box can stand within use range (a floor below the one in
+            // front of a door can be out of reach of it)
             if !self.press_point_in(pi, poly, a, b) {
                 continue;
             }
             // The use trace stops at the first line with no opening: a switch behind shut bars
-            // (MAP32's exit, opened by killing the Keens) can only be pressed through them once
-            // they're open.
+            // can only be pressed through them once they're open.
             let near = spot_in_poly(vs, c, crate::geom::midpoint(a, b), 1.0);
             let length = dist(a, b).max(1e-6);
             let f = 0.45f64.min(2.0 / length);
@@ -589,8 +587,8 @@ impl<'a> Analysis<'a> {
 
     /// What's shut at the map's starting heights that the use trace from p to q (on the target
     /// line) passes: sectors shut in themselves (doors), and pairs of sectors with no gap
-    /// between them where one can move (MAP12's switch beside a raised platform); None if a
-    /// line that never opens is in the way.
+    /// between them where one can move (a switch beside a raised platform); None if a line
+    /// that never opens is in the way.
     fn use_gates_on(&self, p: Point, q: Point, target: usize) -> Option<UseGates> {
         let (m, init) = (self.m, &self.movers.initial);
         let (mut gates, mut pairs) = (BTreeSet::new(), BTreeSet::new());
@@ -608,8 +606,8 @@ impl<'a> Analysis<'a> {
                     _ => true,
                 };
                 // The trace also stops at the first other line with any special (vanilla: a
-                // walk-over line too; E2M4's door, pressed from beyond a walk-over line, did
-                // nothing). Once-only switches lose their special once used.
+                // walk-over line too, so a door pressed from beyond one does nothing). Once-only
+                // switches lose their special once used.
                 let usable = classify_line(m.linedefs[li].special)
                     .is_some_and(|i| !matches!(i.trigger, Trigger::S1 | Trigger::D1));
                 if !closed && !usable {

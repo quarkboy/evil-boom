@@ -151,7 +151,7 @@ impl Places {
 
     /// A few words for an area: how big, what's notable.
     pub fn sketch(a: &Area) -> String {
-        // (short: Evil reads it, and her context is precious, the user's)
+        // (short: Evil reads it, and her context is precious)
         let size = match a.size {
             s if s < 256.0 * 256.0 => "small ",
             s if s < 640.0 * 640.0 => "",

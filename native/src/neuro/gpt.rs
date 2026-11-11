@@ -137,8 +137,8 @@ pub fn serve(port: u16, config_path: &Path) -> Result<(), String> {
 }
 
 /// The stand-in in the background, on a free port, for a game in the same program to connect to
-/// (`watch --gpt`: one program, the user's). Its URL. The configuration's checked first, so a
-/// missing key stops it before the game starts.
+/// (`watch --gpt`: one program). Its URL. The configuration's checked first, so a missing key
+/// stops it before the game starts.
 pub fn start(config_path: &Path) -> Result<String, String> {
     let config = configured(config_path)?;
     let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("a local port: {e}"))?;

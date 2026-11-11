@@ -1,12 +1,12 @@
 //! The bot's score: every level from a pistol start on one life (mortal), on the chosen skills
 //! (HMP and UV unless told), each K times on random seeds; a row a run, kept as a TSV, then the
-//! report (a run with nothing new for 5 game minutes is over: STALLED, as good as stuck). A run scores 1 for getting out, else half the share of the level's monsters killed
-//! (partial credit: how far into the level's fight she got; the user's measure); a level's score
-//! is its runs' mean, the bot's the mean over levels and skills, every level weighing the same
-//! (not an episode's, where a level late in it only counts when everything before it went
-//! right). Arenas are no part of it (the user's: too artificial). How consistently a level's
-//! beaten is reported beside it: its runs' spread (the variance of their points), and the levels
-//! beaten every time.
+//! report (a run with nothing new for 5 game minutes is over: STALLED, as good as stuck). A run
+//! scores 1 for getting out, else half the share of the level's monsters killed (partial
+//! credit: how far into the level's fight she got); a level's score is its runs' mean, the
+//! bot's the mean over levels and skills, every level weighing the same (not an episode's,
+//! where a level late in it only counts when everything before it went right). Arenas are no
+//! part of it (too artificial). How consistently a level's beaten is reported beside it: its
+//! runs' spread (the variance of their points), and the levels beaten every time.
 //!
 //! Comparing two builds or two tunings: `--like FILE` plays the very runs of an earlier set (its
 //! levels, skills and seeds). A run is the same every time on the same seed, so runs a change
@@ -64,7 +64,7 @@ impl Row {
             0.0
         } else {
             // (at most all of them: monsters a level makes as it goes (a pain elemental's lost
-            // souls, a spawner's) count as kills but not in its total; MAP30 UV, 1.6 of it)
+            // souls, a spawner's) count as kills but not in its total)
             (f64::from(self.kills.0) / f64::from(self.kills.1)).min(1.0)
         }
     }

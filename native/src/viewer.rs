@@ -122,7 +122,7 @@ struct Canvas {
     /// its width in pixels (the watcher's W; the stream's layout its own)
     width: usize,
     clip: Rect,
-    /// all text this much bigger (T cycles TEXT_SIZES; the user's: it was small)
+    /// all text this much bigger (T cycles TEXT_SIZES)
     text_scale: f64,
 }
 
@@ -292,7 +292,7 @@ pub struct WatchOptions {
     /// the run did); its log written to out/watch/live.log as it plays
     pub headless: bool,
     /// --speed given: headless keeps to it in real time (a language model playing Evil, watched
-    /// through the logs: the user's) rather than flat out
+    /// through the logs) rather than flat out
     pub paced: bool,
     pub seed: Option<u32>,
     /// the map view centred on a point, zoomed in this much (for looking at one place)
@@ -442,7 +442,7 @@ struct Watch {
     sound_on: bool,
     show_all: bool,
     follow: bool,
-    /// the log panel showing only what passes between the game and Evil (L; the user's)
+    /// the log panel showing only what passes between the game and Evil (L)
     evil_log: bool,
     /// which of TEXT_SIZES the text's drawn at (T)
     text_size: usize,
@@ -622,7 +622,7 @@ pub fn record(
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     // (at x1, the game's sound too: taken a tic at a time beside the frames, put with them at the
-    // end; the user's)
+    // end)
     let video_out = if o.capture_sound {
         r.out.with_extension("video.mp4")
     } else {
@@ -690,7 +690,7 @@ pub fn record(
     let mut start = watch.engine.tic;
     let mut n: u64 = 0;
     // (directed, by Neuro or the GPT stand-in or an orders file: the game at its own pace, real
-    // time, whoever directs her thinking on the clock; the user's. The video's speed is --speed's)
+    // time, whoever directs her thinking on the clock. The video's speed is --speed's)
     let real_time = o.neuro.is_some() || o.directed.is_some();
     loop {
         let (paced_from, paced_tic) = (Instant::now(), watch.engine.tic);
@@ -919,7 +919,7 @@ fn level(
 ) -> Result<Watch, String> {
     let map_name = engine.map_name.clone();
     let skill = if o.fight > 0 { o.fight } else { 3 };
-    // (seeing as a run does: watched, a run plays as it did; the user's)
+    // (seeing as a run does: watched, a run plays as it did)
     let knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
     let mut agent = Agent::new(
         &nav,
@@ -1762,7 +1762,7 @@ impl Watch {
             c.text(&top, (GAME.0 + 8, GAME.1 + 9), TEXT, 2);
         }
         // (directed: her orders, not the explorer's objective; and what passes between the game and
-        // her above it, the latest few, for a recording of an LLM playing: the user's)
+        // her above it, the latest few, for a recording of an LLM playing)
         let director = self
             .neuro
             .as_ref()

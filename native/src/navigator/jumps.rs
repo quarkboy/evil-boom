@@ -248,8 +248,8 @@ impl Navigator {
             keep.push((j, r.clone()));
         }
         // how sure each is: of it made a little differently (shifted, turned, a longer or
-        // shorter run-up), the share that still comes off (E4M2: three jumps onto ledges came
-        // down 6-12 off, into the nukage); unverified ones (needing moved floors) at half
+        // shorter run-up), the share that still comes off (the follower's jumps come down
+        // some 6-12 off); unverified ones (needing moved floors) at half
         let tried: Vec<usize> = (0..keep.len())
             .filter(|&i| keep[i].1 != UNVERIFIED)
             .collect();

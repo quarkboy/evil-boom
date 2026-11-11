@@ -29,8 +29,8 @@ pub const ML_RESERVED: u16 = 0x0800;
 pub const ML_VANILLA: u16 = 0x01ff;
 
 /// A linedef's flags as the game takes them: with the reserved one set, only the vanilla ones,
-/// as DSDA-Doom has it at MBF21 (comp_reservedlineflag): E2M7's crates, flagged 0xfe04, would
-/// otherwise block the player.
+/// as DSDA-Doom has it at MBF21 (comp_reservedlineflag): lines flagged with junk in the high
+/// bits would otherwise block the player.
 pub fn line_flags(raw: u16) -> u16 {
     if raw & ML_RESERVED != 0 {
         raw & ML_VANILLA

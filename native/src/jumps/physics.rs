@@ -6,7 +6,7 @@
 //!     the turn in 1/32768ths of a half turn, moves clamped to 50 and shifted up 8.
 //!   P_MovePlayer: turn, then thrust along the new facing (P_ForwardThrust/P_SideThrust,
 //!     finesine as R_InitTables makes it); off the ground none (vanilla; ZDoom gives 1/256 of
-//!     it, aircontrol, and jumps checked with it landed 7-12 short in DSDA-Doom: E4M2's nukage).
+//!     it, aircontrol, and jumps checked with it land 7-12 short in DSDA-Doom).
 //!   P_XYMovement: sub-steps of at most radius - 1, each P_TryMove; blocked by a wall,
 //!     FSlide::SlideMove; by a solid thing, y alone, else x alone. Friction on the ground.
 //!   P_CheckPosition / PIT_CheckLine: the floor and ceiling over every line the box straddles
@@ -132,8 +132,8 @@ pub struct Controls {
 
 impl Controls {
     /// As the game gets them: (ucmd.yaw, ucmd.forwardmove, ucmd.sidemove), each rounded to
-    /// the nearest step as the DSDA-Doom adapter makes its ticcmd (crate::dsda; ViZDoom floored
-    /// them, and jumps checked so ran a little slow and landed short in DSDA-Doom: E4M2).
+    /// the nearest step as the DSDA-Doom adapter makes its ticcmd (crate::dsda; floored, jumps
+    /// checked so run a little slow and land short in DSDA-Doom).
     fn ticcmd(self) -> (i32, Fixed, Fixed) {
         let view = (self.turn / 180.0 * 32768.0).round() as i32;
         let mv = |v: f64| (v.round().clamp(-MAX_PLAYER_MOVE, MAX_PLAYER_MOVE) as Fixed) << 8;

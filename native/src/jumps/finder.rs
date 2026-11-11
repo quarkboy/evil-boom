@@ -180,8 +180,8 @@ impl JumpLab {
                                 // landing ends the takeoff search for this direction.
                                 let normal_landing = jump.is_some();
                                 // (none, and it came in too high for a ceiling: from a shorter
-                                // run-up, slower: MAP06's ledge behind the fake wall, its ceiling
-                                // 88 over the floor, too fast from far back)
+                                // run-up, slower, for a ledge under a low ceiling that's too
+                                // fast from far back)
                                 let found = jump
                                     .or_else(|| {
                                         self.try_jump(
@@ -221,7 +221,7 @@ impl JumpLab {
                                             .flatten()
                                     })
                                     // (still nowhere: strafing, faster, as a player runs for a far
-                                    // ledge: MAP03's well, over its rim from the walkway)
+                                    // ledge)
                                     .or_else(|| {
                                         self.try_jump(
                                             a,
@@ -243,7 +243,7 @@ impl JumpLab {
                                     });
                                 if let Some(j) = found {
                                     // (strafing runs apart: not taking the places of the jumps
-                                    // without, E3M6's off the lift to the soulsphere)
+                                    // without)
                                     let key = (a, mesh.poly(j.dest_poly).sector, j.strafe);
                                     let index = group_index.entry(key).or_insert_with(|| {
                                         groups.push(Vec::new());
@@ -267,7 +267,7 @@ impl JumpLab {
     }
 
     /// Keep the first jumps for a takeoff poly and target sector, plus alternatives
-    /// landing farther from a drop (a slightly short jump still lands on MAP24).
+    /// landing farther from a drop (a slightly short jump still lands on those).
     fn select_landings(&self, candidates: Vec<Jump>) -> Vec<Jump> {
         let mut cands = candidates.into_iter();
         let mut kept: Vec<Jump> = cands.by_ref().take(JUMPS_PER_TARGET).collect();
@@ -434,8 +434,8 @@ impl JumpLab {
 
     /// The jump off the edge at `takeoff` from poly `src` heading `n`, if there is one, from a
     /// run-up no longer than `how.cap`. `how.high`: sectors met in flight are taken at their
-    /// highest possible floor that works, rather than the first (a platform raised to land on:
-    /// MAP09's bridge).
+    /// highest possible floor that works, rather than the first (a platform raised to land on,
+    /// a bridge).
     fn try_jump(
         &self,
         src: usize,
@@ -478,10 +478,9 @@ impl JumpLab {
                 order.sort_by(|a, b| b.floor.total_cmp(&a.floor));
             }
             // (what one line moves it moves together: a sector isn't given the height the
-            // line leaves it at beside another of the line's left where it began. MAP09: the
-            // run off the top of three steps a line builds, kept with the top step built and
-            // the one below it not: a jump the world never has the heights for, the stairs to
-            // a door never taken, the door jumped at from a lift ten minutes)
+            // line leaves it at beside another of the line's left where it began. A run off
+            // the top of steps a line builds, with the top step built and the one below it
+            // not, is a jump the world never has the heights for)
             let moved = |effects: &[(usize, Vec<Heights>)], s: usize, h: Heights| -> Option<bool> {
                 let hs = &effects.iter().find(|(e, _)| *e == s)?.1;
                 let start = self.initial[s];
@@ -574,8 +573,8 @@ impl JumpLab {
         // ceilings under the box, then fall (first falling tic -2, then -1 per tic).
         let (mut x, mut y) = takeoff;
         // (a landing no higher than the floor below the edge is only an edge, a plain drop, if
-        // that floor walks to it: not MAP11's run off the walkway over the nukage, the lip past it
-        // and down into the room beyond)
+        // that floor walks to it: not a run off a walkway, over a lip and down into the room
+        // beyond)
         let below_poly = mesh.poly_at((takeoff.0 + n.0 * 2.0, takeoff.1 + n.1 * 2.0));
         let plain = |s: usize| {
             below_poly.is_none_or(|bp| {
@@ -587,8 +586,8 @@ impl JumpLab {
         let mut held = 0;
         let mut pinned = false;
         // (the floors under the box at its full size, as the game finds them: the highest any of
-        // it is over. A unit in, she's off the ledge a tic early and a tic lower at the far side:
-        // MAP15's run across the pit into the megasphere's door, 20 under its floor in the game)
+        // it is over. A unit in, she's off the ledge a tic early and a tic lower at the far side,
+        // which can be the difference at a doorway's floor)
         let all: Vec<Point> = box_points(PLAYER_RADIUS - FLOOR_EDGE)
             .iter()
             .copied()
@@ -608,10 +607,10 @@ impl JumpLab {
             let mut nn = (x + n.0 * v, y + n.1 * v);
             if self.box_hits_static_wall(nn) {
                 // (a wall in the way: she slides along it, as the game has her, one way or the
-                // other (P_SlideMove's stairstep): MAP06's jump along the pit's far wall into the
-                // ledge behind the fake wall. Nowhere to slide, something solid in the way, a
-                // barrel on the island: the run's over and she comes down where she is, a landing
-                // if that's on it: MAP25's stepping stones)
+                // other (P_SlideMove's stairstep), so a jump can go along a pit's far wall onto a
+                // ledge. Nowhere to slide, something solid in the way, a barrel on an island: the
+                // run's over and she comes down where she is, a landing if that's on it, as on
+                // stepping stones)
                 let (vx, vy) = (n.0 * v, n.1 * v);
                 let slide = [(vx, 0.0), (0.0, vy)].into_iter().find(|&(dx, dy)| {
                     dx.hypot(dy) > 0.5 && !self.box_hits_static_wall((x + dx, y + dy))
@@ -638,7 +637,7 @@ impl JumpLab {
                 if under.iter().any(|(t, _)| *t == s) {
                     continue;
                 }
-                // (a little headroom to spare in the air: MAP09's jump through a door)
+                // (a little headroom to spare in the air, for a jump through a door)
                 let zz = z;
                 let ok = move |h: Heights| {
                     h.floor <= zz + MAX_STEP
@@ -683,7 +682,7 @@ impl JumpLab {
                     );
                     let mut land = mesh.poly_at(on);
                     // (further on: the same sector, or one at the same height past a strip too
-                    // narrow to stop in: MAP06's, 8 wide, behind the fake wall)
+                    // narrow to stop in)
                     let level = |l: usize| {
                         let s = mesh.poly(l).sector;
                         s == mesh.poly(ahead).sector
@@ -711,8 +710,8 @@ impl JumpLab {
                 }
                 if !airborne {
                     // still on the ledge, the box hanging over the drop: fine for a few tics,
-                    // but a strip narrower than the box by a wall is down to the last unit
-                    // (MAP27), and a long one is no jump
+                    // but a strip narrower than the box by a wall is down to the last unit,
+                    // and a long one is no jump
                     held += 1;
                     pinned = pinned || self.pinned((x, y), z, &chosen);
                     if held > LONG_LEDGE_TICS || (held > LEDGE_TICS && pinned) {

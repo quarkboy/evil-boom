@@ -4,8 +4,8 @@
 //! to the edge, then coasting) is tried first: it lands slower, which narrow strips need; then
 //! pushing all the way; then letting go somewhere in between (a run along a channel narrower
 //! than the box, which holds the player up: coasting from the edge stops short, pushing on
-//! overshoots the landing, MAP24). Those, and shorter run-ups, aren't tried onto a floor that
-//! sinks under the player: there's no stopping on that, only running on (MAP08's exit run).
+//! overshoots the landing). Those, and shorter run-ups, aren't tried onto a floor that sinks
+//! under the player: there's no stopping on that, only running on.
 //!
 //! A jump counts only if it has slack to it: made the one way that holds up, it still gets
 //! there half a unit to either side and from a run-up a little longer or shorter. One that
@@ -19,15 +19,16 @@ use crate::motor::{FRICTION, MAX_MOVE, MAX_TURN, RUN_THRUST, TURN_ACCEL};
 use crate::nav::Heights;
 
 const TICRATE: usize = 35;
-/// a jump has to work this far to either side of its line too (1 was too strict: E4M6, MAP24)
+/// a jump has to work this far to either side of its line too (1 is too strict: it loses jumps
+/// the game allows)
 const ROBUST_SHIFT: f64 = 0.5;
-/// ...and get there from a run-up this much longer or shorter (4 lost E4M2's jumps onto ledges)
+/// ...and get there from a run-up this much longer or shorter (4 loses jumps onto ledges)
 const ROBUST_RUNUP: f64 = 2.0;
 /// How sure a jump is gets found making it: shifted this far to either side...
 const SURE_SHIFTS: [f64; 2] = [2.0, 4.0];
 /// ...turned this much either way about its takeoff (degrees)...
 const SURE_TURNS: [f64; 2] = [1.5, 3.0];
-/// ...and from a run-up this much longer or shorter (the follower's misses on E4M2: 6-12 off)
+/// ...and from a run-up this much longer or shorter (the follower's misses are 6-12 off)
 const SURE_RUNUP: f64 = 8.0;
 /// run-ups tried shorter by this much at a time, down to MIN_RUNUP, for a jump that won't stick
 const RUNUP_STEP: f64 = 16.0;
@@ -392,7 +393,7 @@ impl JumpLab {
 
     /// Soft, then pushing all the way, then letting go RELEASE_STEP further past the takeoff
     /// at a time; if none stops on the landing, run straight across it onto what's beyond
-    /// (MAP14's strips).
+    /// (narrow strips).
     fn test_jump(&self, sim: &mut PlayerSim<'_>, j: &Jump) -> Test {
         let edge = dist(j.runup, j.takeoff);
         let flight = edge + dist(j.takeoff, j.dest);
@@ -422,8 +423,8 @@ impl JumpLab {
         Test::Off { slid, through }
     }
 
-    /// The heights the jump needs (and whatever else the trigger making them moves: E4M6's two
-    /// posts lowering together), standing at the run-up facing the takeoff; the heading, or
+    /// The heights the jump needs (and whatever else the trigger making them moves: two posts
+    /// lowering together, say), standing at the run-up facing the takeoff; the heading, or
     /// None if it can't be stood at.
     fn prepare(&self, sim: &mut PlayerSim<'_>, j: &Jump) -> Option<f64> {
         let mut heights: Vec<Heights> = self

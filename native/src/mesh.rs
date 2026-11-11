@@ -107,8 +107,8 @@ fn bounds(vs: &[Point]) -> (f64, f64, f64, f64) {
 /// The overlap of two collinear segments, or None (with some tolerance for nodebuilder
 /// rounding: a poly's edge is its seg's line carried to the poly's corners, and a seg ending at
 /// a split vertex rounded to whole units leans off its linedef; carried twice its length, the
-/// lean reaches past 2 units. MAP19: a lift's diagonal face, a poly's edge on it 2.1 off at one
-/// end, had no portal: the lift was a wall, the way up out of a pit never planned)
+/// lean reaches past 2 units. Without it a diagonal face can have no portal: a lift a wall,
+/// the way up it never planned)
 fn shared_segment(a1: Point, a2: Point, b1: Point, b2: Point) -> Option<(Point, Point)> {
     let tol = 3.0;
     let d = (a2.0 - a1.0, a2.1 - a1.1);
@@ -324,9 +324,9 @@ impl Mesh {
                 // (by the line the seg's a piece of, not by the seg's own ends: where the node
                 // builder split a line, the new end is rounded to a whole unit, and a short seg
                 // between two such runs a good way off its line's heading; carried out along a
-                // long thin subsector, that cut it away. MAP24: a seg 6 units long on a wall
-                // sloping 1 in 20, a wedge of the nukage pit 440 long and 56 wide at its end gone
-                // from the mesh, the corner of the pit beyond it a room with no way out)
+                // long thin subsector, that cuts it away: a seg 6 units long on a wall sloping 1
+                // in 20 takes a wedge hundreds long out of the mesh, and what's beyond it is a
+                // room with no way out)
                 let line = &m.linedefs[seg.linedef];
                 let (a, b) = if seg.direction != 0 {
                     (m.vertexes[line.v2], m.vertexes[line.v1])

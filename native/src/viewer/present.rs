@@ -1,5 +1,5 @@
 //! Doom's own screens in the watcher, for the stream (`watch --present`, docs/CONSOLE_PLAN.md
-//! stage 4): the title card (held there, no demos: the user's), the menu walked to a new game,
+//! stage 4): the title card (held there, no demos), the menu walked to a new game,
 //! the melt between screens, a death as the game shows it, the tally and the finales with a
 //! press on each as a player makes it. The engine draws and runs them (evil_api.c's
 //! presentation); this says when, a tic at a time.

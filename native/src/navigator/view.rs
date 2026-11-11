@@ -434,8 +434,8 @@ impl Navigator {
     }
 
     /// Where to stand to use a switch, or to walk to so a walk-over line is crossed. A switch
-    /// spot the box can't be at (barrels before E1M9's switch) is moved straight back from the
-    /// line, as far as use range allows.
+    /// spot the box can't be at (barrels before the switch, say) is moved straight back from
+    /// the line, as far as use range allows.
     pub fn activation_point(&self, t: &TriggerLine, pos: Point, reach: &BTreeSet<usize>) -> Point {
         let spot = self.activation_spot(t, pos, reach);
         if t.line < 0
@@ -530,7 +530,7 @@ impl Navigator {
             }
         }
         // ...unless that's out of reach: then a spot in reach the box can stand at, nearest the
-        // line, along those polys' edges (MAP14's door, pressed from a floor 48 below)
+        // line, along those polys' edges (a door pressed from a floor below it)
         let mut near: Option<(f64, Point)> = None;
         for &pi in &in_reach {
             let poly = mesh.poly(pi);
@@ -849,7 +849,7 @@ impl View {
 
     /// (walk-over line, activator poly) -> the sector across the line from it. A walk-over
     /// line only goes off when her centre gets across it, so from below a ledge it can't be set
-    /// off (MAP09's lift line on a 48-unit step: only from the top, dropping over).
+    /// off (a lift's line on a step too high: only from the top, dropping over).
     pub fn cross_sides(&self) -> &HashMap<(usize, usize), usize> {
         self.cross_sides.get_or_init(|| {
             let m = &self.nav.map;
@@ -940,9 +940,9 @@ impl View {
     /// Fire every reachable trigger and take every reachable key until nothing changes:
     /// (reach, heights, keys) then. Every height a trigger gives is kept (it needn't be fired:
     /// this is the planner's first check, and mustn't come up short), but a sector moved only
-    /// for good is one way on a visit, from before to after (E4M9's lifts 151 and 153, lowered
-    /// for good to the room's floor, were walked onto from it at 0 and stepped off at 64 onto
-    /// the ledges beside: two dozen goals out of reach, planned for in vain every think).
+    /// for good is one way on a visit, from before to after (a lift lowered for good to a
+    /// room's floor isn't walked onto there and stepped off at its old height onto the ledges
+    /// beside: goals out of reach would be planned for in vain every think).
     pub fn saturate(
         &self,
         start: usize,

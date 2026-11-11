@@ -19,8 +19,8 @@ use crate::things::{shootable_obstacle, solid_radius};
 
 /// The box edges of solid decorations (barrels, lamps, pillars...), which block like walls but
 /// aren't lines, by grid cell. `shootable`: barrels too (they block till shot away; whether a way
-/// is there at all goes without them, as the mesh does: MAP04's corridor to the armour room,
-/// two barrels across it).
+/// is there at all goes without them, as the mesh does: barrels across a corridor don't shut
+/// it).
 pub(super) fn obstacle_grid(m: &MapData, skill: i32, shootable: bool) -> HashMap<Cell, Vec<Seg>> {
     let mut out: HashMap<Cell, Vec<Seg>> = HashMap::default();
     for t in &m.things {
@@ -379,7 +379,7 @@ impl Navigator {
     /// Is the portal ruled out whatever the heights (a blocking line, a teleport line walked
     /// from its front: that's the teleport, not a walk; a gap the box never fits)? Teleport lines
     /// in `spent` are walked over like any other: once-only ones gone off, the game clears their
-    /// special (E3M9's, in the way east, the way back that way after it).
+    /// special (and the way back over one is then a walk).
     pub fn statically_passable(&self, portal: usize, frm: usize, spent: &BTreeSet<usize>) -> bool {
         let p = &self.mesh.portals[portal];
         if let Some(li) = p.linedef {
@@ -409,9 +409,9 @@ impl Navigator {
 /// Can she drop off line `li` from sector `high`, whose floor is at `top`? Doom keeps you on
 /// the highest floor anywhere under your box, so you only fall once the whole box is past the
 /// ledge, and up there it must fit (not straddle a wall, nor an opening too low for someone at
-/// `top`). A gap exactly as wide as the box can't be dropped into (MAP15's 32-wide strip).
-/// Only walls and ceilings are checked (the map's): floors past the ledge may have moved, and
-/// a teleport line just past it means she never lands (MAP13).
+/// `top`). A gap exactly as wide as the box can't be dropped into. Only walls and ceilings
+/// are checked (the map's): floors past the ledge may have moved, and a teleport line just
+/// past it means she never lands.
 pub(super) fn landable(m: &MapData, lab: &JumpLab, li: usize, high: usize, top: f64) -> bool {
     let (a, b) = m.line_seg(li);
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
@@ -467,7 +467,7 @@ impl Navigator {
     /// Wall lines and solid things' box edges near the segment a-b. With `exempt` (the lines a
     /// path crosses: doors it opens, ledges it drops off), ledge edges and teleport lines count
     /// as walls too, and the exempt ones don't. With `live` heights, lines that are walls or
-    /// ledges now count as well (a floor that has risen makes new ledges: E4M2).
+    /// ledges now count as well (a floor that has risen makes new ledges).
     pub fn walls_near(
         &self,
         a: Point,

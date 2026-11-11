@@ -58,8 +58,8 @@ impl Planner<'_> {
     }
 
     /// A spot the box can stand at within use range of the line a-b, nearest it, along the
-    /// edges of these polys (moved in by the box): MAP14's door is pressed from a floor 48
-    /// below the one in front of it, and the spot nearest the line's middle was out of range.
+    /// edges of these polys (moved in by the box): a door can be pressed from a floor below
+    /// the one in front of it, where the spot nearest the line's middle is out of range.
     fn press_spot_in_reach(&self, polys: &[usize], a: Point, b: Point) -> Option<Point> {
         let mesh = &self.nav.mesh;
         let reach = USE_REACH as f64 + 12.0;

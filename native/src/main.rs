@@ -463,11 +463,10 @@ fn episode_one(args: &[String]) -> Result<(), String> {
         return Err("usage: evil-boom episode-one <wad> <first map> [run options]".into());
     };
     // (`--lives N`: N lives for the whole episode. Dead with one left, the level again from its
-    // start with what she came into it with, as she got out of the one before (the user's: "the
-    // weapons/armor ammo etc she had when exiting is saved after death and retry of that
-    // level"), and what she's learned of the level kept (the user's: "I would like knowledge
-    // kept"): a level's run with the lives she has left, as `run-map --lives` plays one. Its
-    // time's cap is for all its lives together: thrice a level's, with lives to spend)
+    // start with what she came into it with, as she got out of the one before, and what she's
+    // learned of the level kept: a level's run with the lives she has left, as `run-map --lives`
+    // plays one. Its time's cap is for all its lives together: thrice a level's, with lives to
+    // spend)
     let mut left = if o.lives == i32::MAX {
         1
     } else {
@@ -642,7 +641,7 @@ fn watch(args: &[String]) -> Result<(), String> {
         return Err("usage: evil-boom watch <wad> <map> [options]".into());
     };
     if let Some(config) = &w.gpt {
-        // (the stand-in in this program, on a port of its own: one program to run, the user's)
+        // (the stand-in in this program, on a port of its own: one program to run)
         w.neuro = Some(evildoom::neuro::gpt::start(config)?);
     }
     if o.snapshot.is_some() {

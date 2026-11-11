@@ -206,7 +206,7 @@ pub fn steps_from_legs(
             let t = view.trigger(id).clone();
             let effects = view.nav.effects_now(&t, &running);
             // another switch for the same stairs next: wait for these to stop first (a press
-            // while they're still moving does nothing: MAP21)
+            // while they're still moving does nothing)
             let next = legs[i + 1].trigger.map(|n| view.trigger(n));
             let also: BTreeSet<usize> =
                 if next.is_some_and(|n| t.shift_from.is_some() && n.shift_from == t.shift_from) {

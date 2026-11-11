@@ -48,8 +48,7 @@ pub const MIN_PORTAL: f64 = 4.0;
 /// pseudo-trigger lines below this: exit floors
 pub const EXIT_FLOOR: i64 = -1000;
 /// degrees a gun line must span from where it's shot (aim isn't exact: she faces it to within a
-/// third of that, and taps, the first shot going true; MAP16's flame panel, 3.3 across from the
-/// table, hit from its edge at 3)
+/// third of that, and taps, the first shot going true; a panel 3.3 across is hit from 3)
 pub const MIN_SHOT_SPAN: f64 = 3.0;
 /// the box must clear walls by this much: no one threads a gap exactly 32 wide
 pub const BOX_SLACK: f64 = 0.25;
@@ -94,10 +93,10 @@ pub struct TriggerLine {
     /// polys from which it can be set off (used, shot, crossed)
     pub activators: BTreeSet<usize>,
     /// Stairs build up from where the tagged sector is now: several switches for the same
-    /// stairs each raise them another step (MAP21's four). (start sector, its first floor).
+    /// stairs each raise them another step. (start sector, its first floor).
     pub shift_from: Option<(usize, f64)>,
-    /// Its target is worked out from the heights round it when it fires (MAP27's "lower to
-    /// highest neighbour + 8" once the platforms round it are down): the sectors it depends on.
+    /// Its target is worked out from the heights round it when it fires ("lower to highest
+    /// neighbour + 8", once the platforms round it are down): the sectors it depends on.
     pub relevant: Option<Vec<usize>>,
     /// in a view: only its effects on these sectors are known (None: all)
     pub keep: Option<BTreeSet<usize>>,
@@ -410,9 +409,7 @@ impl Navigator {
         let temporary = temporary_heights(&self.triggers, &self.movers);
         // (nor a jump whose run crosses a line that, walked over, moves the floor it takes off
         // from or the one it lands on: the run sets it going and the floor's away before she's
-        // at its edge. MAP06: a hop from a lift to a pillar beside it, its run begun off the
-        // lift over the lift's own line; down it went under her, "stuck" on it twice, the lift,
-        // the way on, not gone near again for four minutes)
+        // at its edge, as with a hop off a lift whose run begins over the lift's own line)
         let undoes = |j: &Jump| {
             let ends: Vec<usize> = j
                 .src_polys
@@ -481,7 +478,7 @@ impl Navigator {
     }
 
     /// Can this teleport or jump be taken with these heights? A walk-over teleport only goes
-    /// off if the player can step over its line (MAP08 has one before a shut niche); a jump
+    /// off if the player can step over its line (one can stand before a shut niche); a jump
     /// needs the moved heights it was found with.
     pub fn edge_ok(&self, e: TeleEdge, states: &States) -> bool {
         match e {
@@ -510,8 +507,8 @@ impl Navigator {
     pub fn local_doors(triggers: &[TriggerLine], keys: Keys, map: &MapData) -> Doors {
         let mut out = Doors::default();
         for t in triggers {
-            // (and a door's own face with a repeatable switch on it, pressed as a door is: MAP02's
-            // first door, blazing, shut again when she came back to it, waited at as at a lift)
+            // (and a door's own face with a repeatable switch on it, pressed as a door is: shut
+            // again when she comes back to it, it isn't waited at as at a lift)
             let face_switch = t.info.trigger == Trigger::SR
                 && t.info.category.is_door()
                 && t.linedef().is_some_and(|li| {
@@ -542,8 +539,8 @@ impl Navigator {
 
     /// Does sector s's floor hurt once trigger t has moved it, if t changes its type (None:
     /// it doesn't)? Lowering to the lowest neighbour and changing texture takes that
-    /// neighbour's flat and type (MAP08's trap drops a walkway into the nukage); raising to
-    /// the next higher one and changing texture clears the type.
+    /// neighbour's flat and type (a trap that drops a walkway into nukage); raising to the
+    /// next higher one and changing texture clears the type.
     pub fn floor_after(&self, t: &TriggerLine, s: usize) -> Option<bool> {
         self.floor_hit_after(t, s).map(|hit| hit != 0)
     }
@@ -648,8 +645,8 @@ impl Navigator {
 
     /// The heights the world can take after `t` fires: its targets added (lifts and timed
     /// doors come back; a rising floor can be stepped onto on its way), except that a floor
-    /// that drops for good replaces the old height (MAP07 can't be jumped from the lowered
-    /// ledge).
+    /// that drops for good replaces the old height (no jumping from a ledge that's been
+    /// lowered).
     pub fn apply_trigger(&self, states: &States, t: &TriggerLine) -> States {
         let mut out = states.clone();
         for (s, hs) in self.effects_now(t, states) {
@@ -780,8 +777,7 @@ impl Navigator {
         out
     }
 
-    /// Floors that sink once stepped on (a walk-over line on their own edge lowers them:
-    /// MAP08's exit run over the nukage).
+    /// Floors that sink once stepped on (a walk-over line on their own edge lowers them).
     pub fn sinking_sectors(&self) -> &BTreeSet<usize> {
         &self.sinking
     }

@@ -142,7 +142,7 @@ pub struct NavFacts {
     /// lines with a drop the player can't climb back up
     pub drops: HashSet<usize>,
     /// lines that set something off walked over, a path mustn't so much as graze unless it means
-    /// to cross them: teleports, and exits (MAP25's, round the pad atop the pyramid)
+    /// to cross them: teleports, and exits (a pad's edges can all be exits)
     pub trip_lines: HashSet<usize>,
     /// lines of sectors that shut by themselves (not to be counted as crossed)
     pub shutting: HashSet<usize>,
@@ -617,8 +617,8 @@ impl NavCore {
     }
 
     /// The polys reachable from `start`, no visit to a sector moved for good going from its
-    /// heights after back to those before (E4M9's lift 151, lowered for good to the room's
-    /// floor: got on from the room at 0, not off at 64 onto the ledge beside).
+    /// heights after back to those before (a lift lowered for good to a room's floor is got on
+    /// from the room, not off at its old height onto the ledge beside).
     pub fn reachable_phased(
         &mut self,
         start: usize,
@@ -650,7 +650,7 @@ impl NavCore {
                 }
             }
             // (on a sector at its heights after a move for good: only a jump found from those, not
-            // one from its heights before, as all the rest were: E4M9's off lift 151 at 64)
+            // one from its heights before, as all the rest were)
             let late_here = if late {
                 after.get(&self.poly_sector[poly])
             } else {

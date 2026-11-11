@@ -185,8 +185,8 @@ pub fn closest_on_portal(p: Point, p1: Point, p2: Point) -> Point {
 
 /// A portal's (left, right) ends crossing it from the side `from` is on (a point in the poly
 /// it's crossed from), shrunk by PATH_CLEARANCE. (The side, not the way to the next poly's
-/// centre: a long strip's centre can be off to one side, MAP24's, which flipped the ends and
-/// let the funnel go straight through walls.)
+/// centre: a long strip's centre can be off to one side, which flips the ends and lets the
+/// funnel go straight through walls.)
 pub fn oriented(p1: Point, p2: Point, from: Point) -> (Point, Point) {
     let (left, right) = if tri(p1, p2, from) > 0.0 {
         (p2, p1)

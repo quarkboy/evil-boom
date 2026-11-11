@@ -69,8 +69,8 @@ pub fn is_stairs(special: u16) -> bool {
 }
 
 /// Specials whose target depends on the heights round them (or their own) when they fire (a
-/// door opens to the lowest ceiling round it then, less 4: MAP14's, by a crusher stopped low,
-/// opened 42 high and she couldn't get under it).
+/// door opens to the lowest ceiling round it then, less 4: by a crusher stopped low it opens
+/// too low to get under).
 pub fn depends_on_heights(special: u16) -> bool {
     [
         FLOOR_LOWEST,
@@ -261,9 +261,9 @@ impl MoverModel {
 
     /// A lift goes through every height between its ends: where a sector beside it can be
     /// stepped onto only on the way (its floor between the lift's two, out of reach from either
-    /// end), the lift level with it is a height it has too (MAP17: the strip to the megasphere's
-    /// secret, a step off the blazing lift as it passes, under a ceiling it's above at the top).
-    /// Only those: every other lift stays two heights.
+    /// end), the lift level with it is a height it has too (a strip stepped onto off a lift as it
+    /// passes, under a ceiling the lift's above at the top). Only those: every other lift stays
+    /// two heights.
     fn step_offs(
         &self,
         s: usize,

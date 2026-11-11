@@ -395,8 +395,8 @@ impl Engine {
         for m in &self.mobjs {
             let name = dsda::type_name(m.kind);
             // (a barrel going off is a barrel till it's gone: hit, it blows 15 tics later, its
-            // death frames, and until then it's the most dangerous one there; E1M5's, shot, left
-            // out at once, taken for gone and walked past as it blew)
+            // death frames, and until then it's the most dangerous one there; left out at once,
+            // it's taken for gone and walked past as it blows)
             if name == Some("ExplosiveBarrel") {
                 barrels.push((m.x, m.y));
                 if m.health <= 0 {

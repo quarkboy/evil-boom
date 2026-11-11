@@ -1,4 +1,4 @@
-//! The survey of a WAD's secrets (`evil-boom secret-survey`), for the wall rubric (the user's):
+//! The survey of a WAD's secrets (`evil-boom secret-survey`), for the wall rubric:
 //! which lines must be pressed or shot to get into each secret sector, and how the rubric scores
 //! them, and every other wall she's mapped, as she sees them once she's explored all she can
 //! without searching (the moment a player starts looking for what's hidden).
@@ -181,7 +181,7 @@ pub fn secrets(m: &MapData, nav: &Navigator) -> Secrets {
         })
         .collect();
     // (a sector only a press or a shot opens, kept shut: the secrets it cuts off are revealed
-    // by every line that opens it, whichever she'd use; a door with a line either side, E1M1's)
+    // by every line that opens it, whichever she'd use; a door with a line either side, say)
     let mut reveals: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
     for &x in open.difference(&by_walking) {
         let mut shut = open.clone();

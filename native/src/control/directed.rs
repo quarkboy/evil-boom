@@ -81,7 +81,7 @@ pub enum Order {
     Go(String, bool),
     /// explore an area (by id or name) till there's nothing more known to do in it; and search
     /// its walls for secrets this thoroughly (0 not, 3 every suspicious one: slow, so hers to ask
-    /// for, the user's)
+    /// for)
     ExploreArea(String, u8),
     /// explore that way (degrees, 0 east, 90 north) till there's nothing more known that way;
     /// the search as for an area
@@ -124,7 +124,7 @@ pub struct Director {
     queue: VecDeque<(Order, bool)>,
     doing: Option<Doing>,
     /// the objectives taken for the order in hand: not taken again for it (the explorer may go on
-    /// offering one it counts as done: E1M1, a wall "not seen yet" taken every tic, stood on)
+    /// offering one it counts as done, a wall "not seen yet" taken every tic, stood on)
     taken: std::collections::BTreeSet<Taken>,
     /// id -> her name for it (this map)
     names: BTreeMap<String, String>,
@@ -329,7 +329,7 @@ impl Director {
                 dist(pos, near)
             )
         };
-        // (short: what Evil reads costs her context, the user's)
+        // (short: what Evil reads costs her context)
         format!(
             "Health {:.0}, armor {:.0}; {}; {}; {}; {}; {doing}",
             obs.health.unwrap_or(0.0),
@@ -354,8 +354,8 @@ impl Director {
     }
 
     /// Leaving now: what she'd leave behind, as a question to be sure (None: nothing left, the
-    /// tally complete and nothing more known to do). The user's: an exit asks first, for now.
-    /// (None too with no exit known: the order says so.)
+    /// tally complete and nothing more known to do). An exit asks first, for now. (None too with
+    /// no exit known: the order says so.)
     pub fn exit_check(&mut self, agent: &mut Agent, obs: &Observation) -> Option<String> {
         let open = self.open_objectives(agent, obs);
         if !open.iter().any(|o| o.kind == Kind::Exit) {
@@ -371,9 +371,8 @@ impl Director {
         let explore = count(&|o| explores(o));
         let switches = count(&|o| o.kind == Kind::Switch);
         let doors = count(&|o| o.kind == Kind::Door);
-        // (the items tally's own apart from the rest: "12 items seen" beside "items 5/6" read as
-        // a contradiction, the user's and GPT-Evil's E3M1; ammo and health she was full of are
-        // pickups, not the tally's)
+        // (the items tally's own apart from the rest: "12 items seen" beside "items 5/6" reads as
+        // a contradiction; ammo and health she was full of are pickups, not the tally's)
         let seen = self.list(agent, obs, Topic::Items);
         let counted = seen.iter().filter(|e| e.what.ends_with(COUNTS)).count();
         let pickups = seen.len() - counted;
@@ -449,7 +448,7 @@ impl Director {
         }
         // (exits, switches and doors as they come into view, mid-fight too: a switch the fight
         // swung her round to see is hers to rush to, not news for an explore order's end that a
-        // fight puts off; the user's, MAP07)
+        // fight puts off)
         let (mut exits, mut switches, mut doors) = (Vec::new(), Vec::new(), Vec::new());
         for e in self.objectives_of(agent, obs, &[Kind::Exit, Kind::Switch, Kind::Door]) {
             if !self.told_exits.insert(e.id.clone()) {
@@ -575,9 +574,9 @@ impl Director {
     }
 
     /// Items she's seen and couldn't get to that she now can (a floor gone down to them, a lift,
-    /// a door: whatever opened the way, seen), told: the user's, MAP07's weapons on the platforms
-    /// the switches lower, no word that they could be had. Notable if any's worth a decision
-    /// (a gun she hasn't, a powerup, armor, a key).
+    /// a door: whatever opened the way, seen), told: weapons on platforms a switch lowers are
+    /// hers to hear can be had. Notable if any's worth a decision (a gun she hasn't, a powerup,
+    /// armor, a key).
     fn newly_reachable(&mut self, agent: &Agent, obs: &Observation) {
         let x = agent.x();
         let known = x.knowledge.known_polys();
@@ -942,7 +941,7 @@ impl Director {
                     });
                 // (a switch pressed: what it did told when she's seen it, or after a while)
                 // (pressed and nothing seen to change is pressed all the same: what it moved may be
-                // out of sight, MAP07's platform across the arena; not "couldn't")
+                // out of sight, across an arena; not "couldn't")
                 let pressed = ok || pressed_nothing;
                 match id
                     .strip_prefix("switch-l")
@@ -994,8 +993,8 @@ impl Director {
 
     /// An explore order and a fight: paused while something's fighting her (the objective in
     /// hand dropped, the fight free to move her; what it shows her she maps all the same), on
-    /// again after RESUME_CALM with nothing fighting her. True while paused. (The user's: a sweep
-    /// of look-at spots under fire never ended in MAP07's arena, rushed or not.)
+    /// again after RESUME_CALM with nothing fighting her. True while paused. (A sweep of look-at
+    /// spots under fire never ends, rushed or not.)
     fn explore_paused(&mut self, agent: &mut Agent, obs: &Observation) -> bool {
         let fighting = !engaged(agent, obs).is_empty();
         if fighting {
@@ -1118,8 +1117,8 @@ impl Director {
     }
 
     /// Waiting on a floor that hurts: to the nearest known floor that doesn't, the way she was
-    /// going rather than back (through what she came for, out the far side: the user's, an item
-    /// in nukage picked up and stood on after, waiting for the next order). True if she's off to it.
+    /// going rather than back (through what she came for, out the far side: an item in nukage
+    /// picked up isn't stood on after, waiting for the next order). True if she's off to it.
     fn off_hurting_floor(&mut self, agent: &mut Agent, obs: &Observation) -> bool {
         let nav = std::rc::Rc::clone(&agent.x().nav);
         let pos = obs.pos();
@@ -1159,8 +1158,7 @@ impl Director {
                 return true;
             }
         }
-        // (no way off she knows of: hers to hear, once, not to die waiting in silence; E3M1, the
-        // stone gone down into the blood, the bank 40 up all round)
+        // (no way off she knows of: hers to hear, once, not to die waiting in silence)
         if !self.told_trapped {
             self.told_trapped = true;
             self.report(
@@ -1405,7 +1403,7 @@ impl Director {
 
     /// Is objective o one of exploring area `id`'s: done standing in it? (Looking out of it from
     /// inside, into a doorway or at the next room's wall, is exploring it; standing in the next
-    /// room looking back isn't: E1M1, "explore the room" through a door to the next room's edge.)
+    /// room looking back isn't.)
     fn in_area(&self, agent: &Agent, id: &str, o: &Objective) -> bool {
         let Some(places) = &self.places else {
             return false;
@@ -1540,7 +1538,7 @@ pub fn bearing(s: &str) -> Option<f64> {
 
 /// Is o one of exploring's? Not out by an exit or a teleporter, not after a noise or a monster;
 /// nor a switch: pressing one is hers to decide, it may set off anything (exploring finds them and
-/// says so, the user's); nor pressing walls for secrets (a search asked for adds its own).
+/// says so); nor pressing walls for secrets (a search asked for adds its own).
 fn explores(o: &Objective) -> bool {
     !matches!(
         o.kind,
@@ -1584,8 +1582,8 @@ fn with_secrets(secrets: u8) -> String {
     }
 }
 
-/// A pickup she takes by herself whenever it's safe (the user's): bonuses below 200, health that
-/// heals her without going to waste, ammo with room for all of it.
+/// A pickup she takes by herself whenever it's safe: bonuses below 200, health that heals her
+/// without going to waste, ammo with room for all of it.
 fn spare(name: &str, obs: &Observation) -> bool {
     use crate::tactical::bestiary::{ammo_item, ammo_max, health_item};
     let health = obs.health.unwrap_or(100.0);

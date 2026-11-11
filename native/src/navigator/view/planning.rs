@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 /// a plan search with every switch, after one with only those the relaxed plan needs found
-/// none (the most steps routes took before MAP24's needed more)
+/// none (more than the most steps a route has been seen to take)
 const WIDER_EXPANSIONS: usize = 2000;
 
 /// Bound the relaxed dependency walk independently of the concrete plan search budget.
@@ -21,8 +21,8 @@ const WIDER_BUDGET_DIVISOR: usize = 10;
 
 impl View {
     /// A height-dependent trigger's effects with the sectors round it at the lowest any trigger
-    /// puts them, and the (sector, heights) that assumes (MAP27: the red key's pedestal comes
-    /// down to 8 once the platforms round it are down).
+    /// puts them, and the (sector, heights) that assumes (a pedestal that comes down further
+    /// once the platforms round it are down).
     pub(super) fn low_variant(&self, t: &TriggerLine) -> LowVariant {
         let init = &self.nav.movers.initial;
         let lowest = self.lowest.get_or_init(|| {
@@ -232,10 +232,8 @@ impl View {
         // (first with only the lines the relaxed plan needs, to see if there's any way at all:
         // none, every way with those tried, then with them all as far as the search went before
         // routes needed more. Not every set of every switch in the level first, to find there's
-        // no way: MAP15's dozen, 12,000 steps and half a minute after a death, the wall's way
-        // there needing a block at the height its only switch takes it down from. A way with
-        // those: the route as ever, from them all; the few lines' route can be another, worse:
-        // E1M5's, MAP14's)
+        // no way: with a dozen switches that's thousands of steps and half a minute. A way with
+        // those: the route as ever, from them all; the few lines' route can be another, worse)
         let narrow = self.with_core(|nav, caches| {
             Planner::new(nav, facts, caches).plan(&query, world(&states0))
         });
@@ -408,7 +406,7 @@ impl View {
                             })
                             .collect();
                         // (fewest heights not there now; of those, the lowest floors: what's been
-                        // brought down is the likelier way through, MAP27's pedestal at 8)
+                        // brought down is the likelier way through)
                         let new = |ha: &Heights, hb: &Heights| {
                             usize::from(!states0[sa].contains(ha))
                                 + usize::from(!states0[sb].contains(hb))
@@ -444,10 +442,9 @@ impl View {
             }
             for sh in needed {
                 let cands: Vec<&TriggerLine> = producers.get(&sh).cloned().unwrap_or_default();
-                // A producer that can be got to without what it makes (MAP27: the switch that
-                // opens a door from inside); if there's none, and the sector is a locked door as
-                // well, that door's key is what's really needed (the yellow door before MAP27's
-                // blue key).
+                // A producer that can be got to without what it makes (a switch that opens a door
+                // from inside isn't one); if there's none, and the sector is a locked door as well,
+                // that door's key is what's really needed.
                 let w = without.entry(sh.0).or_insert_with(|| {
                     let mut st2 = states_all.clone();
                     if st2[sh.0].len() > 1 {
@@ -458,8 +455,8 @@ impl View {
                     d2.remove(&sh.0);
                     self.reachable(start, &st2, Some(&d2))
                 });
-                // (not from where the press itself waits on that sector: MAP27's lift switch,
-                // pressed from the floor below across the lift's edge only once it's down)
+                // (not from where the press itself waits on that sector: a lift's switch pressed
+                // from the floor below across the lift's edge only once it's down)
                 let free = |t: &TriggerLine| -> BTreeSet<usize> {
                     let li = t.linedef().unwrap_or(usize::MAX);
                     t.activators
@@ -501,8 +498,8 @@ impl View {
                         continue;
                     }
                     // where it can be used from without something having to be open in the way
-                    // of the press, if anywhere (MAP27's switch for the red key's pedestal,
-                    // behind a blue door: the path there names the blue key)
+                    // of the press, if anywhere (a switch behind a keyed door: the path there
+                    // names the key)
                     let li = t.linedef().unwrap_or(usize::MAX);
                     let clear: BTreeSet<usize> = t
                         .activators
@@ -548,9 +545,9 @@ impl View {
             }
         }
         // For those the change is what's needed, not the line: any other line making it counts
-        // too (MAP27: the platforms can be lowered from several places); only for heights a
+        // too (platforms can be lowered from several places); only for heights a
         // height-dependent trigger relies on round it (elsewhere the extra lines only widen the
-        // search, MAP15).
+        // search).
         for &t in triggers {
             if t.effects
                 .iter()

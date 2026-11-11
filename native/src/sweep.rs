@@ -405,17 +405,15 @@ pub fn run_map_full(wad: &str, map_name: &str, o: &RunOptions) -> Result<MapRun,
 /// killed. Then the level itself from the start, mortal if the run is, with what she learned
 /// and where each monster stands. Nothing of the time before is counted or logged as part of
 /// the run.
-/// (Not a look round the level with no monsters in it, as it was at first: that's another
-/// level. What a monster's death opens never opens: E1M8's star, shut till the barons die,
-/// was a drop into somewhere with no way back and nothing to try, and the level's guns with
-/// it; all 8 runs stood at the start.)
+/// (Not a look round the level with no monsters in it: that's another level. What a monster's
+/// death opens never opens, and what's behind it, the level's guns maybe, is never learned.)
 fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     const SCOUT_SECONDS: f64 = 3600.0;
     const SCOUT_STALL: i64 = 300 * 35;
     e.set_god(true);
     agent.x_mut().knowledge.immune = true;
-    // (and the fight knows it: outmatched and keeping clear of what can't hurt her, off for an
-    // invulnerability across the level, MAP13's pass stood about its first street for 300 s)
+    // (and the fight knows it: else she's outmatched and keeping clear of what can't hurt her,
+    // or off across the level for an invulnerability)
     if let Some(p) = agent.player_mut() {
         p.combat_mut().immune = true;
     }
@@ -456,8 +454,8 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
             agent.x_mut().knowledge.exit_floors.insert(sec);
         }
         // (everything first, then out: out when there's nothing left but walls to press, not
-        // after every wall of the level. MAP29's pass, all 205 sectors seen and nothing
-        // untried, pressed walls for its last half hour, its time up with the exit not taken)
+        // after every wall of the level, which can take its last half hour with the exit not
+        // taken)
         if agent.x().exit_held_back && agent.x().out_of_options.is_some() {
             agent.x_mut().exit_held_back = false;
         }
@@ -508,7 +506,7 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
 }
 
 /// The sector she's in, if its floor is the game's ending one (special 11: it hurts her down
-/// to a tenth of her health and that ends the level; E1M8's, behind the barons).
+/// to a tenth of her health and that ends the level).
 fn ending_floor(agent: &Agent, at: crate::geom::Point) -> Option<usize> {
     let nav = &agent.x().knowledge.nav;
     let sec = nav.sector_of_poly(nav.poly_at(at)?);
@@ -571,16 +569,14 @@ pub fn run_map_in(
     let mut journal_n = agent.x().knowledge.journal.len();
     let until = o.snapshot.map_or(o.max_seconds, |s| s.min(o.max_seconds));
     // (the 100% runs: the count she's after and what she knows of the level, and when either
-    // last grew: exploring a teleporter maze before any items is getting somewhere, MAP24; and
-    // the walls she's tried, each one a place she's looked for a way: E1M2's gun panel, a round
-    // of walls away when the clock ran out)
+    // last grew: exploring a teleporter maze before any items is getting somewhere; and the
+    // walls she's tried, each one a place she's looked for a way)
     let items_short = most_items(&m, skill);
-    // (and finding her way about: lines mapped, lines set off, places walked into; MAP03's
-    // exploring, none of it counted, over in a minute; the user's. Places by the poly: E4M9's
-    // steps over the lines beyond, each somewhere new in a sector she'd been in)
+    // (and finding her way about: lines mapped, lines set off, places walked into. Places by
+    // the poly: steps over the lines beyond are each somewhere new in a sector she's been in)
     let progress = |e: &Engine, x: &Explorer| progress(e, x, o);
     // (the best so far this life: a level again starts the clock afresh, collecting the same
-    // things again counted, the user's call; the run's time cap bounds it)
+    // things again counted; the run's time cap bounds it)
     let (mut best, mut best_tic) = (progress(&e, agent.x()), e.tic);
     let pellets_before = e.pellets();
     let mut stalled = false;
@@ -604,7 +600,7 @@ pub fn run_map_in(
             } else if (e.tic - best_tic) as f64 > o.stall_seconds * TICRATE {
                 if !given_up && (o.expert || o.secrets) {
                     // (what's left out of reach as far as she can tell: out, as a player gives up
-                    // on the last secret; a stall's time again to get there. E4M5's second secret)
+                    // on the last secret; a stall's time again to get there)
                     agent.x_mut().log.push(format!(
                         "tic {}: nothing more collected, learned or tried in {:.0}s: for the exit",
                         e.tic, o.stall_seconds
@@ -668,8 +664,8 @@ pub fn run_map_in(
         }
         let finished = e.finished();
         if finished || (stranded && deaths + 1 < o.lives) {
-            // dead, or stranded with nothing to do (a trap she couldn't know of: MAP12's floor
-            // that drops into a pit): the level again, knowing what she learned
+            // dead, or stranded with nothing to do (a trap she couldn't know of, a floor that drops
+            // into a pit): the level again, knowing what she learned
             let dead = e.dead();
             if (dead || stranded) && deaths + 1 < o.lives {
                 deaths += 1;
@@ -1036,8 +1032,8 @@ pub fn run_map_in(
     let stats = agent.player().map_or_else(
         || "{}".to_string(),
         |p| {
-            // (what her bullets and pellets hit, by the game's own count: the user's measure of
-            // shots into walls, a pellet at a time, a kill by one of seven not hiding the rest)
+            // (what her bullets and pellets hit, by the game's own count: shots into walls, a pellet
+            // at a time, a kill by one of seven not hiding the rest)
             let mut tally = p.combat().tally.clone();
             if let (Some(a), Some(b)) = (pellets_before, e.pellets()) {
                 let [fired, hit, barrel, after, shots, wide, held] =

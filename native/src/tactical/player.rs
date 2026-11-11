@@ -1368,10 +1368,9 @@ impl Player {
         Some(f)
     }
 
-    /// Caught in a bad place: in a fight that's going badly (losing health fast, or several
-    /// them on more than one side). Why, if so. In a tight ambush the choices are out, or kill
-    /// fast.
-    /// fast, the user's).
+    /// Caught in a bad place: a trap sprung (several of them seen all at once), or a fight that's
+    /// going badly (losing health fast, or them on more than one side). Why, if so. In a tight
+    /// ambush the choices are out, or kill fast.
     fn ambushed(&mut self, obs: &Observation) -> Option<String> {
         // (a trap sprung, or a room walked in on: several of them seen all at once)
         let (count, tics) = (

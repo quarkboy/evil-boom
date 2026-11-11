@@ -96,7 +96,7 @@ pub struct RunStart {
 
 /// A run key's sidestep (the game's sidemove with run held), and how far to face off the way to
 /// go straight along it running and strafing at once: atan(40 / 50), 38.7 degrees, for a speed
-/// 1.28 times running straight (MAP03's well: "do a strafe run off the walkway into the well").
+/// 1.28 times running straight (a strafe run, as players call it).
 pub const STRAFE_SIDE: f64 = 40.0;
 pub const STRAFE_FACING: f64 = 38.659_808_254_090_09;
 

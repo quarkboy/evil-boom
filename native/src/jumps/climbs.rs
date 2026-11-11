@@ -1,8 +1,8 @@
 //! Climbs: up a face more than a step high, by way of something lower beside it that the box
 //! stands on as it goes (the player stands on the highest floor under the box, so a crate a
-//! step up, off to one side of a taller one, is a stair to it: E2M7's crates, the
-//! invulnerability on top). The navmesh joins only sectors that touch; these are found by
-//! running at every such face in the simulator, and checked after like the jumps.
+//! step up, off to one side of a taller one, is a stair to it). The navmesh joins only sectors
+//! that touch; these are found by running at every such face in the simulator, and checked
+//! after like the jumps.
 
 use super::physics::{Controls, PlayerSim};
 use super::{Jump, JumpLab};
@@ -87,8 +87,8 @@ impl JumpLab {
     }
 
     /// Is there a way from `src` to `sector` near it on foot, up nothing more than steps, at the
-    /// starting heights? (Then a run that gets there up the side of the stairs is no climb:
-    /// MAP16's, the box over a step with her centre beside it.)
+    /// starting heights? (Then a run that gets there up the side of the stairs is no climb: the
+    /// box over a step with her centre beside it.)
     pub(super) fn walks_to(&self, src: usize, sector: usize, portal_fits: &[bool]) -> bool {
         let mesh = &self.mesh;
         let origin = mesh.center(src);
@@ -121,8 +121,8 @@ impl JumpLab {
 
     /// Running at the face through `takeoff` along `d` from the first run-up the box can stand
     /// at, on a floor of `floor` or a step above: where she first stands more than a step
-    /// higher, if anywhere, with the box over nothing a trigger moves on the way (MAP16's run
-    /// past a lift, up a step only at the lift's starting height).
+    /// higher, if anywhere, with the box over nothing a trigger moves on the way (a run past a
+    /// lift is up a step only at the lift's starting height).
     fn climb(
         &self,
         sim: &mut PlayerSim<'_>,

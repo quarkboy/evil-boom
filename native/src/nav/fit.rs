@@ -20,8 +20,8 @@ use std::time::Instant;
 /// How far waypoints are kept from walls.
 const WAYPOINT_CLEARANCE: f64 = 18.0;
 /// How far the path is kept from wall corners: the box's corner, coming at one diagonally,
-/// and room to spare, as nobody follows a line to the unit (MAP24: the box a unit off a wall's
-/// end, and the player wedged against it two units off the line).
+/// and room to spare, as nobody follows a line to the unit (a unit off a wall's end on the
+/// path is wedged against it two units off the line).
 const CORNER_CLEARANCE: f64 = PLAYER_RADIUS * std::f64::consts::SQRT_2 + 4.0;
 /// Extra room kept from solid things' corners when detouring round them.
 const THING_CLEARANCE: f64 = 6.0;
@@ -51,7 +51,7 @@ pub struct Squeezes {
 }
 
 /// How close to a wall a waypoint can be: enough for the box, whatever the wall's angle.
-/// (More than that squeezed MAP06's paths between waypoints.)
+/// (More than that squeezes paths between waypoints in narrow places.)
 fn box_clearance(a: Point, b: Point) -> f64 {
     let length = dist(a, b).max(1e-6);
     let (c, s) = ((b.0 - a.0).abs() / length, (b.1 - a.1).abs() / length);
@@ -201,7 +201,7 @@ impl NavCore {
 
     /// Where to cross teleport line `li`, and the spot 24 in front of it to come from: the
     /// point of the line nearest its middle where the box fits both just over it and at that
-    /// spot (MAP17's is a face of a closet too narrow at its middle for the box).
+    /// spot (the line can be a face of a closet too narrow at its middle for the box).
     fn teleport_crossing(&self, li: usize) -> (Point, Point) {
         let (a, b) = self.map.line_seg(li);
         let length = dist(a, b).max(1.0);
@@ -257,7 +257,7 @@ struct Fitter<'a> {
     /// jumps' runups and takeoffs: not moved or dropped
     pinned: HashSet<PointKey>,
     /// jumps' takeoffs: no shortcut from them (what follows is the flight, and going straight
-    /// on past the landing cuts across the pit the jump clears: MAP29)
+    /// on past the landing cuts across the pit the jump clears)
     takeoffs: HashSet<PointKey>,
     /// the sectors the path goes through: straightening stays in them
     sectors: HashSet<usize>,
@@ -279,8 +279,8 @@ impl Fitter<'_> {
     /// but not one it's wedged between (higher than a step on both sides, not in the middle).
     fn standing_floor(&mut self, a: Point) -> Option<f64> {
         let nav = self.nav;
-        // (on a line between two sectors, the one the path goes through: MAP11's path along the
-        // foot of a 112 ledge, its waypoints on the ledge's edge, taken for on top of it)
+        // (on a line between two sectors, the one the path goes through: a path along the foot
+        // of a ledge has its waypoints on the ledge's edge, and isn't on top of it)
         let here = [(0.0, 0.0), (0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)]
             .iter()
             .filter_map(|(dx, dy)| nav.sector_at((a.0 + dx, a.1 + dy)))
@@ -316,7 +316,7 @@ impl Fitter<'_> {
 
     /// Does the box at p hang over a floor more than a step above the one under its centre (not
     /// wedged between two: a rim walk)? It can only be there having come along the top, never
-    /// from beside it (MAP23: a detour round barrels went along a 128-high ledge).
+    /// from beside it (a detour round something mustn't go along a high ledge's foot as if on it).
     fn up_against_ledge(&mut self, p: Point) -> bool {
         let Some(here) = self.nav.sector_at(p) else {
             return false;
@@ -350,9 +350,9 @@ impl Fitter<'_> {
         let Some(ours) = self.standing_floor_cached(at, standing) else {
             return false;
         };
-        // a ledge (at the heights now, not only those at the start: MAP17's pillar rose out of
-        // the floor and a path cut its corner): in the way if its high side is more than a step
-        // above where we stand
+        // a ledge (at the heights now, not only those at the start: a pillar can rise out of
+        // the floor, and a path would cut its corner): in the way if its high side is more
+        // than a step above where we stand
         let high = fs
             .iter()
             .flat_map(|hf| bs.iter().map(|hb| hf.floor.max(hb.floor)))
@@ -416,8 +416,8 @@ impl Fitter<'_> {
             let e = nav.map.line_seg(li);
             let k = seg_key(e);
             // (an exit not meant to be crossed, given a wide berth: following a path wanders, and
-            // MAP25's went round the pad atop the pyramid, its edges exits, a box from it; not a
-            // teleport, which E2M7's ways go close by)
+            // a way round a pad whose edges are exits can be a box from them; not a teleport,
+            // which ways often go close by)
             let trip = nav.trip_lines.contains(&li)
                 && !self.exempt.contains(&li)
                 && crate::specials::classify_line(nav.map.linedefs[li].special)
@@ -428,8 +428,8 @@ impl Fitter<'_> {
             }
             // (one the box is over already doesn't count against leaving it, nor one the way
             // crosses, but a ledge more than a step above the floor under its centre does against
-            // going further over it: MAP19's fan of stairs, set off from the floor beside the
-            // point where they meet, the box already over the second step up, and along it)
+            // going further over it: where a fan of stairs meets at a point, the box set off beside
+            // it is over the second step up already, and mustn't go along it)
             if swept_box_hits(p, p, r, e)
                 && segment_distance(p, q, e.0, e.1) < dist(p, closest_point(p, e.0, e.1)) - 0.5
                 && self.ledge_over_centre(li, p)
@@ -523,9 +523,9 @@ impl Fitter<'_> {
             return false;
         }
         let room = |h: &Heights| h.ceiling - h.floor >= PLAYER_HEIGHT;
-        // (a wall along with it opens no more than they do: MAP18's way past door 91, between
-        // its jamb and the block risen beside it, 24 wide, handed out to squeeze through for a
-        // minute; but one between walls alone is as it was, a tight spot that may do)
+        // (a wall along with it opens no more than they do: a gap between a door's jamb and a
+        // block risen beside it, narrower than the box, is no squeeze to hand out; but one
+        // between walls alone is as it was, a tight spot that may do)
         let mut shut = false;
         for e in edges {
             let Some(&li) = self.nav.seg_lines.get(e) else {
@@ -536,7 +536,7 @@ impl Fitter<'_> {
             };
             // (a door's line: no more than its frame, open or shut, either way; a squeeze in a
             // doorway between its jambs is as before, one past the door to a block risen beside it
-            // is no way at all: MAP18's door 91 again, from the far side)
+            // is no way at all, from either side)
             if self
                 .doors
                 .is_some_and(|d| d.contains_key(&f) || d.contains_key(&b))
@@ -591,18 +591,17 @@ impl Fitter<'_> {
                 } else {
                     let points = self.squeeze_points(a, b, &ignore);
                     self.squeezes.points.extend(points.iter().copied());
-                    // (no way round a line that sets something off is no way at all: MAP13's path
-                    // over the corner of the exit pad, held back, as a squeeze past a wall)
+                    // (no way round a line that sets something off is no way at all: a path over the
+                    // corner of an exit pad is held back, as a squeeze past a wall)
                     let trips = hits.iter().any(|e| {
                         self.nav.seg_lines.get(e).is_some_and(|li| {
                             self.nav.trip_lines.contains(li) && !self.exempt.contains(li)
                         })
                     });
-                    // (and past shut sectors only, even where the box fits with no room to spare:
-                    // MAP21's cage of door bars, the gaps between them 32, the box's width, a way in
-                    // Doom only on the exact unit, which she never hits, and a box fitting near each
-                    // squeeze isn't one getting through, the bars' corners 24 apart both ways;
-                    // pushed at for the hour. MAP18's 24 is short)
+                    // (and past shut sectors only, even where the box fits with no room to spare: a
+                    // cage of door bars with gaps the box's own width is a way in Doom only on the
+                    // exact unit, which she never hits, and a box fitting near each squeeze isn't one
+                    // getting through)
                     if trips || self.shut_in(&hits) {
                         self.squeezes.hard = true;
                     }
@@ -799,8 +798,8 @@ impl Fitter<'_> {
                 }
                 let ignore = self.overlapped_at(a, b);
                 // (a wall the box already touches doesn't count against its edges, but going
-                // straight through it does: E3M7, in a doorway with the box flush to its side
-                // wall, a shortcut went through that wall, and she pushed into it for good)
+                // straight through it does: in a doorway with the box flush to its side wall, a
+                // shortcut through that wall is pushed into for good)
                 let through = ignore
                     .iter()
                     .any(|&(p, q)| segments_cross(a, b, key_point(p), key_point(q)));
@@ -833,8 +832,7 @@ impl Fitter<'_> {
                 // a wall or a ledge at these heights that wasn't: a platform risen since, the path
                 // hugging its foot)
                 // (open both ways, that is: a wall become a ledge is a ledge, the path off its foot
-                // like any other; MAP11's block of sector 10, lowered from 368 to 136, its corner
-                // cut by the path till she was pinned against it)
+                // like any other; a block lowered part way still pins her at the corner a path cuts)
                 let open_wall = nav.walls.contains(&li) && self.crossing(li) == Crossing::Open;
                 let at_start = (nav.walls.contains(&li) && !open_wall)
                     || nav.drops.contains(&li)
@@ -968,8 +966,8 @@ impl Fitter<'_> {
                 )
             };
             // (off the side of the corner the way is on; a corner right on the way has no side to
-            // it, and the one picked can be the wall: E3M7's corner where a wall ends on the line
-            // between two portals, pushed 30 into the wall, and she pushed into it for good)
+            // it, and the one picked can be the wall, where a wall ends on the line between two
+            // portals: pushed into the wall, she pushes into it for good)
             let walkable = |p: Point| {
                 self.nav
                     .mesh

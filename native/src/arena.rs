@@ -334,8 +334,8 @@ pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Out
             ));
         }
         let mut ctl = agent.act(&ob, c.as_ref());
-        // (the fight's the thing: no switches or doors, which in MAP07's ring set off what
-        // crushed her, between fights)
+        // (the fight's the thing: no switches or doors, which can set off what crushes her
+        // between fights)
         ctl.use_ = false;
         let l = &agent.x().log;
         log.extend(l[log_n.min(l.len())..].iter().cloned());

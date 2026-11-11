@@ -121,10 +121,9 @@ pub fn setup(
         agent.x_mut().secrets_mode = true;
     }
     // (her own waits inside the stall clock: given up on things back as soon, for its share of
-    // the usual 300 s, and counted stranded in half of it at most; MAP24's way out of the pit, a
-    // wall given another go a minute on, and E3M3's trap, stranded a minute on, both over first
-    // at a stall of 60 s. At 300 s, as ever: MAP14's door by the crusher, back every 150 s, lost
-    // it the blur sphere)
+    // the usual 300 s, and counted stranded in half of it at most; else a wall given another go
+    // a minute on, or a trap she's stranded in a minute on, is cut off by a stall of 60 s. At
+    // 300 s, as ever: back sooner than that loses what waiting gets her)
     agent.x_mut().patience = (o.stall_seconds / 300.0).min(1.0);
     let mut c: Option<Controls> = None;
     let mut obs: Option<Observation> = None;

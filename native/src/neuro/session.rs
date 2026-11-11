@@ -38,7 +38,7 @@ pub struct Session {
 /// The actions, as registered (descriptions and schemas Neuro reads as they are).
 pub fn actions() -> Vec<Value> {
     let s = |props: Value, required: &[&str]| json!({ "type": "object", "properties": props, "required": required });
-    // (short: every word here is in Evil's context for the whole game, the user's)
+    // (short: every word here is in Evil's context for the whole game)
     vec![
         json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids. Areas: only unexplored, current and named ones unless all; a/b/c walls to search: at secrets 1/2/3.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
         json!({ "name": "doom_press", "description": "Press a switch. Exploring never presses them. rush: as for doom_go.", "schema": s(json!({ "ref": { "type": "string" }, "rush": { "type": "boolean" } }), &["ref"]) }),

@@ -612,7 +612,7 @@ pub struct SectorInfo {
     /// health a damage tic (0, 5, 10, 20)
     pub damage: i32,
     pub secret: bool,
-    /// E1M8-style: hurts, and the level ends when health drops below 11
+    /// an exit floor: hurts, and the level ends when health drops below 11
     pub ends_level: bool,
 }
 
