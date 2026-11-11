@@ -7,17 +7,17 @@
 //! │    lost sight of it: keeping at it ·
 //! │    the fight over
 //! └─ a target, or a missile on its way
-//!    ├─ survive        out of a vile's sight · ducking a hitscan heavy · dodging · out from
-//!    │                 under a crusher ·
-//!    │                 away from a barrel
+//!    ├─ survive        out from under a crusher · out of a vile's sight · through a field
+//!    │                 of barrels · away from a barrel going off · ducking a hitscan heavy ·
+//!    │                 dodging · still for the BFG · away from a barrel
 //!    ├─ busy           (a jump: the route keeps the legs) shooting on the way
 //!    ├─ melee          (the weapon she'd fight it with, up close: `Style::Melee`) closing in
 //!    │                 · at it
-//!    └─ fight          backing off from what claws · sneaking past · shooting on the way to an
-//!                      errand · out of ammo: getting past · closing in (out of reach) ·
-//!                      out of reach: going on · stepping for a shot · outmatched: keeping
-//!                      clear · getting past · keeping off · standing and fighting ·
-//!                      shooting on the way
+//!    └─ fight          setting two bosses on each other · backing off from what claws ·
+//!                      sneaking past · shooting on the way to an errand · out of ammo:
+//!                      getting past · closing in (out of reach) · out of reach: going on ·
+//!                      stepping for a shot · outmatched: keeping clear · getting past ·
+//!                      keeping off · standing and fighting · shooting on the way
 //! ```
 //!
 //! The nodes are tried in that order and the first to give an `Act` wins. A node may look,
@@ -110,9 +110,8 @@ const FIGHT: [Node; 14] = [
 pub(super) fn engage(c: &mut Combat, obs: &Observation, s: &Situation) -> Act {
     let mut act =
         SURVIVE.iter().chain(&BUSY).chain(&MELEE).chain(&FIGHT).find_map(|node| node(c, obs, s).filter(|a| !c.barred.contains(&a.kind))).unwrap_or_else(|| Act::new(Move::ShootingOnTheWay, None, "shooting on the way".into()));
-    // (no shot at either of two bosses she'd set on each other, whatever she's doing: a shot of
-    // hers turns it back on her. MAP20, 67 bullets into a cyberdemon at 4000 between dodges of its
-    // rockets. One dead, the other turned to her: the fight as it ever was; the user's)
+    // No shot at either of two bosses she'd set on each other, whatever the move: a shot of hers
+    // turns it back on her. Once one is dead the other is fought as anything else is.
     if !act.hold_fire && s.target.as_ref().is_some_and(|t| mon(t.name).boss) && c.boss_pair(obs).is_some() {
         act.hold_fire = true;
     }
@@ -131,9 +130,8 @@ fn out_of_vile_sight(c: &mut Combat, _obs: &Observation, s: &Situation) -> Optio
 }
 
 /// Out of a hitscan shooter's sight before its first shot (it turns to her first), in a long
-/// fight: shooting on the way, as sized up. Not into a missile's way: then the dodge (a rocket's
-/// hit is up to 160 and its blast; MAP20, ducked from the spider mastermind's sight across a
-/// cyberdemon's rocket's line, 90 health gone at once).
+/// fight: shooting on the way, as sized up. Not into a missile's way: a direct hit costs more
+/// than the bullets would, so the dodge comes first.
 fn ducking(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let (name, way) = s.duck?;
     if !c.clear_of_hits(obs, &s.missiles, way) {
@@ -142,9 +140,10 @@ fn ducking(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     Some(Act::new(Move::Ducking, way, format!("ducking out of the {name}'s sight")))
 }
 
+/// Out of the way of the missile due soonest.
 fn dodging(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let m = s.missiles.first()?;
-    // (a homing one going round her: dodged towards a corner it'll fly into, never into it)
+    // A homing missile circling her is dodged towards a corner it will fly into.
     if let Some((name, way)) = c.shake_off(obs, &s.missiles) {
         let moving = c.dodge(obs, &s.missiles, way);
         return Some(Act::new(Move::ShakingOff, moving, format!("shaking off {name} round a corner")));
@@ -160,13 +159,13 @@ fn bfg_hold(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
     c.bfg_flying(obs).then(|| Act::new(Move::BfgHold, None, "holding still for the BFG's spray".into()))
 }
 
-/// Out from under a crusher first, whatever else (a missile maybe hits; a crusher at work
-/// does). With a route under way, its way: the route's own crusher logic times the crossing and
-/// has her out through or back by the nearest way to room overhead. Without, the shortest
-/// straight way out. Not the fight's steering: under a crusher every way is clear to it, and it
-/// kept her under one after an imp 2000 off, 7 a hit three times over (E2M2, seed 7).
+/// Out from under a crusher first, whatever else (a missile may hit; a crusher at work does).
+/// With a route under way, the route keeps the legs: its own crusher logic times the crossing
+/// and takes her out, through or back, by the nearest way to room overhead. Without one, the
+/// shortest straight way out. Never by the fight's steering, which sees every way under a
+/// crusher as clear and would hold her there.
 fn off_crusher(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    // (any crusher at work, between its strokes too: no place for a fight)
+    // Any crusher at work counts, between its strokes too: it is no place for a fight.
     if !c.under_crusher(obs) && !c.in_crusher(obs) {
         return None;
     }
@@ -190,11 +189,9 @@ fn off_lit_barrel(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<
     s.barrel_lit.map(|away| Act::new(Move::OffLitBarrel, Some(away), "away from a barrel going off".into()))
 }
 
-/// In a field of barrels, something that shoots awake: no standing in it to fight, dodge or keep
-/// clear; on along her route flat out, the trigger let go (a shot of hers sets them off as surely
-/// as theirs). The user's, of MAP23's field and its hall: run for the far end, weaving between
-/// them, and don't fire. (16 runs of 16 on the easiest skill dead by barrels: kept clear of a
-/// mancubus and of hell knights from in among them, their fireballs into the barrels by her.)
+/// In a field of barrels (`barrels.field` or more in the chain whose blasts reach her) with
+/// something that shoots awake: no standing in it to fight, dodge or keep clear. On along her
+/// route flat out, the trigger let go: a shot of hers sets them off as surely as theirs.
 fn through_barrels(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
     if !c.routed || c.now.shooters.is_empty() || Combat::barrel_field(obs) < c.tune.barrels.field {
         return None;
@@ -205,22 +202,23 @@ fn through_barrels(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<
     Some(a)
 }
 
-/// (MAP23: a mancubus's fireball set off the barrels she stood by)
+/// Away from a barrel by her while something that shoots is in sight: a stray shot sets it off.
 fn off_barrel(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
     s.barrel_away.map(|away| Act::new(Move::OffBarrel, Some(away), "away from a barrel".into()))
 }
 
 // --- busy --------------------------------------------------------------------------------------
 
+/// In a jump or a timed crossing the route keeps the legs; she still shoots.
 fn busy(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
     s.busy.then(|| Act::new(Move::ShootingOnTheWay, None, "shooting on the way".into()))
 }
 
 // --- up close ----------------------------------------------------------------------------------
 
-/// Straight at it, then standing at it hitting. The steering's pull to the gun's window, fine
-/// for a gun's 500 units, left her circling a revenant 100-200 off, never in the fist's reach,
-/// and holding the saw at a demon 99 off as it bit her (E3M4).
+/// The target is one she'd fight up close (`Style::Melee`): straight at it, then standing at it
+/// hitting. The steering isn't used: its pull is to a gun's window, hundreds of units out, and
+/// it never brings her into a fist's reach.
 fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let t = s.target.as_ref()?;
     let w = c.preferred_gun(obs, t);
@@ -231,19 +229,18 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         return None;
     }
     let d = dist((t.x, t.y), s.pos);
-    // (not for ever: one she can't hurt, given up a while, as out of reach is; E3M4, a demon
-    // closed in on and lost sight of, round and round, an hour. The clock goes back only when
-    // it's hurt, not when it's near: a demon on a floor below, close across but out of the
-    // fist's slope, "at" it and off again for an hour, never hit, MAP05 ITYTD)
+    // Not for ever: one she isn't hurting is given up on a while, as one out of reach is. The
+    // clock is set back only when it is hurt, not when it is near: one on a floor below can be
+    // close across and still out of the fist's slope.
     if c.patience.spent(Effort::MeleeUnhurt, t.id, obs.tic, c.tune.engage.close_give_up, Some((f64::from(t.health), 0.0)), None) {
         c.give_up(obs, t.id);
         return None;
     }
     Some(if d > w.reach - c.tune.engage.melee_slack {
-        // (nor closing in on what she gets no nearer: the way straight at it is blocked, a ledge
-        // above her or a wall between, and the fist has nothing else; MAP14 HMP, out of ammo,
-        // berserk, a chaingunner up on a ledge 300 off, walked at from below for 16 s of its
-        // bullets, to death, with ammo known about)
+        // Nor closing in on what she gets no nearer to: the way straight at it is blocked (a
+        // ledge above her, a wall between) and the fist has no other. It is given up on, and the
+        // sector it stood in remembered (`fist_stalled`), so the fist isn't chosen for it again
+        // from outside that sector.
         let stall = c.tune.engage.melee_stall;
         if c.patience.spent(Effort::MeleeNoNearer, t.id, obs.tic, stall, Some((d, c.tune.engage.melee_gain)), Some(stall)) {
             if let Some(sector) = c.sector_at((t.x, t.y)) {
@@ -260,14 +257,11 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
 
 // --- the fight ---------------------------------------------------------------------------------
 
-/// Backing off from the nearest thing that claws, close (armed, or low, or one hit of it could
-/// kill her). (Out of ammo, a demon that follows for ever: backing off got her nowhere, MAP22;
-/// the route takes her past it, faster than it. Not past one whose claw can take all she has:
-/// E2M3, out of ammo at 35, the route to a shell went by a baron, 10-80 a hit.)
+/// Backing off from the nearest thing that claws, when it's close and she is armed, or low, or
+/// one hit of it could kill her. Unarmed and in no such danger she doesn't: a clawing monster
+/// follows for ever, and the route takes her past it faster than backing off does.
 fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    // (nothing able to hurt her, a sphere's or the pass's: nothing to back off from. MAP13's
-    // pass: a demon she'd no shot at backed off from and kept off from by turns, the route's
-    // steps taking too long, 300 s)
+    // Nothing can hurt her (a sphere, or the practice pass): nothing to back off from.
     if c.now.invulnerable {
         return None;
     }
@@ -281,10 +275,9 @@ fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
     Some(Act::new(Move::BackingOff, moving, why))
 }
 
-/// On to the errand, shooting on the way; turned to a monster standing against her on the way to
-/// it (the route only pushes into its body): it's shot first. (MAP04, HMP: on her way to a
-/// shotgun, a zombieman in the doorway, 80 tics pushed into while she shot at the shotgun guys
-/// beyond, shot down there.)
+/// On to the errand, shooting on the way. A monster standing against her on the way to it is
+/// aimed at first, whatever the target: the route can only push into its body, so it has to be
+/// shot out of the way.
 fn to_errand(c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
     if s.errand.is_empty() {
         return None;
@@ -301,15 +294,13 @@ fn to_errand(c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
     Some(a)
 }
 
-/// (MAP05, MAP11: out of ammo, fist out, walked up to imps to punch them)
+/// Nothing to shoot with: the route goes on past them. She doesn't walk up to punch.
 fn unarmed(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
     (!c.armed(obs)).then(|| Act::new(Move::Unarmed, None, "out of ammo: getting past".into()))
 }
 
-/// A shot that would wake a sleeping pack worth too much isn't fired, on an errand too (the route
-/// keeps the legs, on to it). (E3M5 UV: out of ammo, the way to a clip through a room of seven
-/// sleeping demons she'd sneaked past three times; on the errand she shot at them on the way, the
-/// last bullets woke all seven, bitten to death.)
+/// A shot that would wake a sleeping pack worth too much (`Combat::would_wake`) isn't fired, on
+/// an errand too: the route keeps the legs and the trigger is let go.
 fn sneaking(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let woken = s.target.as_ref().map(|t| c.would_wake(obs, t)).filter(|w| !w.is_empty())?;
     let mut a = Act::new(Move::Sneaking, None, format!("sneaking past (a shot would wake {woken})"));
@@ -317,8 +308,8 @@ fn sneaking(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     Some(a)
 }
 
-/// After her, only too far for the guns she has: closer, as a player would (a cacodemon
-/// hanging back out of the shotgun's reach).
+/// Awake and after her, only too far for any gun she'd bring up: closer, till the closing has
+/// gone on too long without getting it in reach (`Combat::still_closing`).
 fn closing_out_of_reach(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let t = s.target.as_ref().filter(|t| !c.reachable(obs, t) && t.after_her && !c.now.outmatched && c.known.get(&t.id).is_some_and(|k| k.awake) && c.still_closing(obs, t.id))?;
     let gun = c.preferred_gun(obs, t);
@@ -326,14 +317,13 @@ fn closing_out_of_reach(c: &mut Combat, obs: &Observation, s: &Situation) -> Opt
     Some(Act::new(Move::ClosingOutOfReach, moving, format!("closing in on {} (out of reach)", t.name)))
 }
 
+/// Out of reach of every gun she'd bring up, and not being closed in on: the route goes on.
 fn out_of_reach(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     s.target.as_ref().is_some_and(|t| !c.reachable(obs, t)).then(|| Act::new(Move::OutOfReach, None, "out of reach: going on".into()))
 }
 
-/// The only one in sight, near, and no shot at it from here: a step to where there is. Not on a
-/// floor that hurts: the step keeps her on it, a hurt every 32 tics, for a shot she can take on
-/// the way off (E3M5's nukage pit, an imp on the ledge above 500 off: stepped away for the angle,
-/// out past 512, the route's way off brought her back in, 570 tics of it, dead).
+/// The only one in sight, near, and no shot at it from here: a step to where there is one. Not
+/// on a floor that hurts: the step keeps her on it, and the shot can be taken on the way off.
 fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if c.on_hurting_floor(obs) {
         return None;
@@ -343,10 +333,9 @@ fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option
     Some(Act::new(Move::SteppingForShot, Some(way), format!("stepping for a shot at {}", s.target.as_ref().map_or("", |t| t.name))))
 }
 
-/// Plasma up and autoaim taking it short of the target (into a ledge's lip with them down in a pit,
-/// or the floor in front of them up on one): a step on to where it would get there, never off the
-/// ledge (the user's: on till the weapon can hit, not falling down). Not for rockets (see
-/// `plasma_spot`).
+/// Plasma up and autoaim taking it short of the target (into a ledge's lip with them down in a
+/// pit, or the floor in front of them up on one): a step on to where it would get there, never
+/// off the ledge. Not for rockets (see `plasma_spot`).
 fn stepping_for_plasma(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let t = s.target.as_ref().filter(|_| obs.weapon == Some(6) && c.held_fire == Some(HeldFire::PlasmaBlocked))?;
     let way = c.plasma_spot(obs, t)?;
@@ -373,23 +362,22 @@ fn setting_on(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> 
     Some(a)
 }
 
-/// Outmatched by something awake and after her: keep her distance, still shooting (the route
-/// walked her up to the cyberdemon with a rocket or two short).
+/// Outmatched by something awake within `engage.keep_clear` that she wouldn't fight where it
+/// stands (`fought`): her distance kept, by the fight's steering. Still shooting, unless all the
+/// ammo she has couldn't kill it.
 fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let pos = s.pos;
     let t = s.target.as_ref().filter(|t| c.now.outmatched && !fought(c, obs, t) && c.known.get(&t.id).is_some_and(|k| k.awake) && dist((t.x, t.y), pos) < c.tune.engage.keep_clear)?;
     let gun = c.preferred_gun(obs, t);
     let moving = c.steer(obs, Some(t), &gun);
     let mut a = Act::new(Move::KeepingClear, moving, format!("outmatched: keeping clear of {}", t.name));
-    // (and no ammo spent on it when all she has couldn't kill it, unless it's in her way: every
-    // round a round short for what she can kill; E4M4, two cacodemons kept clear of and shot at
-    // till every gun was empty, then bitten to death unarmed)
+    // No ammo is spent on it when all she has couldn't kill it, unless it is in her way: every
+    // round would be a round short for what she can kill.
     if c.ammo_short_against(obs, t) && !c.in_her_way(obs, t) {
         a.hold_fire = true;
         a.why = format!("outmatched: keeping clear of {} (ammo kept)", t.name);
-        // (a hitscanner's bullets reach her at any range: no shot to take, out of its sight, not
-        // further off in it; MAP06 UV, the spider mastermind 500-700 off, kept clear of back and
-        // forth in its sight 20 s, the straight duck nowhere near enough, shot to death)
+        // A hitscanner's bullets reach her at any range, so with no shot to take she goes out of
+        // its sight, not further off in it.
         if mon(t.name).attack == Attack::Hitscan {
             if let Some(way) = c.out_of_sight_of(obs, t) {
                 a.moving = Some(way);
@@ -399,9 +387,8 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
             }
         }
     }
-    // (the route walking her away from it already: on along it, further each step. The
-    // steering holds her at a distance, in its fire; MAP23, a mancubus across a hall of barrels,
-    // held 400 off among them till its fireballs set them off round her, dead)
+    // The route is walking her away from it already: on along the route, further each step.
+    // The steering would hold her at a distance, still in its fire.
     if c.route_way.is_some_and(|way| norm(way - heading((t.x, t.y), pos)).abs() < 90.0) {
         a.moving = None;
         a.route = true;
@@ -415,9 +402,9 @@ fn outmatched_get_past(c: &mut Combat, obs: &Observation, s: &Situation) -> Opti
     (c.now.outmatched && !s.target.as_ref().is_some_and(|t| fought(c, obs, t))).then(|| Act::new(Move::GettingPast, None, "getting past".into()))
 }
 
-/// Too near for the gun she'd fight it with, or for them to miss.
+/// Nearer the target than the gun she'd fight it with wants (`style::window`): back out to it.
 fn keeping_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
-    // (nor to keep off from)
+    // Nothing can hurt her: nothing to keep off from.
     if c.now.invulnerable {
         return None;
     }
@@ -429,33 +416,33 @@ fn keeping_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
     Some(Act::new(Move::KeepingOff, Some(way), format!("keeping off from {}", s.target.as_ref().map_or("", |t| t.name))))
 }
 
-/// Enough in sight, low, or in the way: the route waits; into the gun's window, else across the
-/// line of fire. Not on a floor that hurts, unless it's in her way: the route held there costs a
-/// hurt every 32 tics, the route's way off is the fight's way too (E3M6 HMP: low, ten lost souls
-/// 1100-1400 off out of reach, the route over the nukage held for "closing in", 48 to 0).
-/// a step counts as towards something when it's within about 70 degrees of the way to it
+/// A step counts as towards something when it's within about 70 degrees of the way to it (the
+/// cosine of the angle between them is over this).
 const NEARER: f64 = 0.3;
 
+/// The route waits and she fights from where she is: when the threat in sight is enough, or she
+/// is low, or the target is one she'd fight where it stands (`fought`), or it is in her way, or
+/// her route is about to take her onto ground she's never been on. She moves into the gun's
+/// window ("closing in"), else across the line of fire.
+///
+/// Not on a floor that hurts unless the target is in her way: holding the route there costs a
+/// hit every 32 tics, and the route's way off the floor is the fight's way too.
 fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     if c.on_hurting_floor(obs) && !c.blocking(obs, s.target.as_ref()) {
         return None;
     }
-    // (not for one she's had no shot at a long while, see `no_shot_long`; in front of her or
-    // not: she faces what she aims at, and standing gets her no shot either way. E4M5 UV, landed
-    // on a ledge over a pit, a shotgun guy below too steep to aim at, the route's drop into the
-    // pit held 300 s, "standing and fighting")
+    // Not for one she's had no shot at for a long while (`no_shot_long`), in front of her or
+    // not: standing gets her no shot either way.
     if s.target.as_ref().is_some_and(|t| c.no_shot_long(obs, t)) {
         return None;
     }
-    // (nor for one that can't get at her and that she's no shot at: nothing comes of standing.
-    // MAP19's pass: on a ledge 216 up, ten demons milling below it, too steep to shoot, stood
-    // over for 530 s, by turns with backing off from them, till the pass gave up)
+    // Nor for one that can't get at her and that she has no shot at: nothing comes of standing.
     if s.target.as_ref().is_some_and(|t| c.cant_reach(obs, t) && !c.can_hit(obs, t, None)) {
         return None;
     }
     let duel = s.target.as_ref().is_some_and(|t| fought(c, obs, t));
-    // (her route about to take her onto ground she's never been on, with something to shoot
-    // from here: from here, then)
+    // Her route is about to take her onto ground she's never been on, with something to shoot
+    // from here: from here, then.
     let hold = c.tune.engage.hold_known && c.route_into_new(obs) && s.target.as_ref().is_some_and(|t| c.reachable(obs, t));
     if !(c.now.threat >= c.tune.engage.stand_threat || c.now.health < c.tune.engage.low_health || duel || hold || c.blocking(obs, s.target.as_ref())) {
         return None;
@@ -466,18 +453,15 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         let gun = c.preferred_gun(obs, t);
         let d = dist((t.x, t.y), s.pos);
         let mut moving = c.steer(obs, Some(t), &gun);
-        // (closed in on this long already without getting it where she wants it: left a while,
-        // as `closing_out_of_reach` leaves it. MAP29's pass: a revenant she'd no way to, closed
-        // in on for the last 300 s of it, not a round spent, the route's step taking too long)
+        // Closed in on this long already without getting it where she wants it: left a while,
+        // as `closing_out_of_reach` leaves it.
         if (!c.in_reach(&gun, t, d) || d > window(&gun, t).1) && !c.still_closing(obs, t.id) {
             return None;
         }
         if !c.in_reach(&gun, t, d) || d > window(&gun, t).1 {
-            // (out of reach, closing in is going nearer: a step of the steering's that isn't
-            // (it keeps to ground she's been on, and to the side) is no closing. MAP07 on the
-            // easiest skill: a mancubus 600 off across the yard, the super shotgun's reach
-            // 480; "closing in" to and fro along the edge of the start's platform for 1000 s,
-            // 96 shells in hand, not one fired, the route out into the yard never let go on)
+            // Out of reach, closing in has to go nearer. The steering keeps to ground she's
+            // been on and to the side, so a step of its that isn't towards the target is no
+            // closing, and isn't taken for one.
             if !c.in_reach(&gun, t, d) {
                 let to = ((t.x - s.pos.0) / d.max(1.0), (t.y - s.pos.1) / d.max(1.0));
                 let nearer = |m: &Point| (m.0 * to.0 + m.1 * to.1) / m.0.hypot(m.1).max(1e-6) > NEARER;
@@ -485,10 +469,8 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
             } else {
                 moving = moving.or_else(|| c.closing_in(obs, t, None));
             }
-            // (out of reach and no step towards it that's safe: stood there she neither shoots
-            // nor closes; the route goes on, a shot taken on the way when there's one. MAP29:
-            // a revenant on a ledge 1400-2000 off, drops between; stood "closing in" by turns
-            // with losing it, her legs never the route's)
+            // Out of reach with no safe step towards it: standing there she neither shoots nor
+            // closes, so the route goes on, and a shot is taken on the way when there is one.
             if moving.is_none() && !c.in_reach(&gun, t, d) {
                 return None;
             }
@@ -502,6 +484,7 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     Some(Act::new(kind, moving, why))
 }
 
+/// Nothing above applies: the route goes on and she shoots as she goes.
 fn shooting_on_the_way(_c: &mut Combat, _obs: &Observation, _s: &Situation) -> Option<Act> {
     Some(Act::new(Move::ShootingOnTheWay, None, "shooting on the way".into()))
 }
@@ -513,10 +496,9 @@ impl Combat {
     /// comes first), an awake monster just out of sight fought where it was, else the fight's
     /// over.
     pub(super) fn no_target(&mut self, obs: &Observation, busy: bool, errand: &str) -> Option<Decision> {
-        // (out from under a crusher at work with no fight on and no route under way: between
-        // objectives nothing else has her, E3M5's, a switch pressed in a crusher's alcove, the
-        // route over, stood there till it came down, pinned. A route has its own crusher rules:
-        // taken over from one, a timed crossing under E2M2's fast crusher was turned back in it)
+        // Out from under a crusher at work when there is no fight and no route under way:
+        // between objectives nothing else moves her. A route under way is left alone: it has
+        // its own crusher rules, and taking over from it turns a timed crossing back.
         if !busy && !self.routed && self.under_crusher(obs) {
             let gun = self.gun(obs);
             let moving = self.steer(obs, None, &gun);
@@ -538,7 +520,7 @@ impl Combat {
                 return Some(Decision { kind: Move::OutOfVileSight, yields: false, pressed: true, aim, fire: false, weapon: 0, moving: way, why });
             }
             if let Some((_, way)) = self.duck(obs) {
-                // (out of its sight now: held there till its fire's broken off)
+                // Out of its sight now: held there till its fire is broken off.
                 let why = "ducked: waiting out its fire".to_string();
                 if why != self.mode {
                     self.log.push(format!("tic {}: {why}", obs.tic));
@@ -546,8 +528,8 @@ impl Combat {
                 }
                 return Some(Decision { kind: Move::Ducked, yields: false, pressed: false, aim: None, fire: false, weapon: 0, moving: way, why });
             }
-            // (hit from where she isn't looking: that before a monster she's lost sight of. E1M6
-            // UV: "keeping at" an imp gone from sight, a shotgun guy at her side never looked at)
+            // Hit from where she isn't looking: she turns to that before going after a monster
+            // she has lost sight of.
             if let Some(way) = self.look(obs, true) {
                 return Some(Decision { kind: Move::Looking, yields: true, pressed: false, aim: Some(way), fire: false, weapon: 0, moving: None, why: "looking round".into() });
             }
@@ -555,8 +537,8 @@ impl Combat {
                 return Some(d);
             }
         }
-        // (nothing to fight that she can see: round to what she heard, was hit from, or bumped;
-        // or a look about as she walks)
+        // Nothing to fight that she can see: she turns to what she heard, was hit from or
+        // bumped into, or takes a look about as she walks.
         self.glance(obs);
         if let Some(way) = self.look(obs, false) {
             return Some(Decision { kind: Move::Looking, yields: true, pressed: false, aim: Some(way), fire: false, weapon: 0, moving: None, why: "looking round".into() });
