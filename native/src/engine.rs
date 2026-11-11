@@ -382,6 +382,11 @@ impl Engine {
         self.skill
     }
 
+    /// The skill for the next level begun (1-5).
+    pub fn set_skill(&mut self, skill: i32) {
+        self.skill = skill;
+    }
+
     pub fn tally(&self) -> [(i32, i32); 3] {
         let s = self.game.status();
         [

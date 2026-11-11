@@ -102,6 +102,8 @@ pub(super) enum Stage {
         /// last grew (it's typed out on screen: told a sentence at a time as each is)
         told: usize,
         grew: (usize, i64),
+        /// the finale's text all told (an episode's end: a game hers to start from then)
+        text_done: bool,
     },
     /// the run's over (game over: the title card); the screen as it is till it's begun again
     Over,
@@ -137,6 +139,14 @@ impl Present {
             skill,
             fresh: true,
         })
+    }
+
+    /// Her choice of game: begun from its level at its skill (a level loaded afresh: the one
+    /// loaded with the watcher was made for the skill as started).
+    pub(super) fn choose(&mut self, s: &crate::control::game::Start) {
+        self.first_map.clone_from(&s.map);
+        self.skill = s.skill;
+        self.fresh = false;
     }
 
     /// From the title card (again) through the menu to the run's first level, whatever's on now.
@@ -207,6 +217,10 @@ fn tic(
         watch.engine.wipe_tic();
         return Ok(watch);
     }
+    // (off a level with nothing under way: a game hers to start)
+    if matches!(p.stage, Stage::Title(None) | Stage::Over) {
+        watch.serve_choices();
+    }
     match &mut p.stage {
         Stage::Title(None) | Stage::Over => idle(&mut watch, false),
         Stage::Title(Some(walk)) => {
@@ -251,15 +265,17 @@ fn tic(
                 p.stage = Stage::Dead { since: p.clock };
                 idle(&mut watch, false);
             } else if watch.engine.exited() {
-                let last = game.is_some_and(|(_, o)| o.episode)
-                    && crate::sweep::next_map(&watch.map_name, watch.engine.secret_exit())
-                        .is_none();
+                // (an episode's last level, played on through it or by itself: the game's
+                // finale follows either way)
+                let last =
+                    crate::sweep::next_map(&watch.map_name, watch.engine.secret_exit()).is_none();
                 p.stage = Stage::Between {
                     waiting_since: None,
                     pressed: None,
                     last,
                     told: 0,
                     grew: (0, 0),
+                    text_done: false,
                 };
                 // (the level's end told now, with the tally on screen: the last level has no
                 // next one to tell it from)
@@ -301,7 +317,8 @@ fn tic(
             pressed,
             told,
             grew,
-            ..
+            text_done,
+            last,
         } => {
             // (a finale's story, typed out on screen: told her a sentence at a time as each is)
             if screen.state == 2 {
@@ -314,8 +331,14 @@ fn tic(
                         *told += chunk.len();
                         let tic = watch.engine.tic;
                         watch.tell_screens(|d| d.on_screen(tic, chunk));
+                    } else if done && *told > 0 {
+                        *text_done = true;
                     }
                 }
+            }
+            // (the episode over, its story told: a game hers to start)
+            if *last && *text_done {
+                watch.serve_choices();
             }
             if screen.held {
                 // (the game's moved on: the next level, started as an episode's is)

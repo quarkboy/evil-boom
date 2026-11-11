@@ -2565,3 +2565,25 @@ lines, 1 to 8 s apart.
 Checked: E1M8 in stream mode to Episode 1's end (its end line and its text). Doom II's
 stories go through the same finale screen; not seen in a test (MAP06 and MAP11 weren't left
 in the time given).
+
+## Evil starts the game: level, skill, one level or on through (the user, 2026-11-11)
+
+The user changed answer 5: she chooses the level to start at, the skill, and whether to play
+just that level or on through its episode (Doom II: through the game), from what the console
+offers (`control/game.rs` `Choices`; `doom_game start`). By default the console offers its own
+map and skill, one level (`evil_maps`, `evil_skills`, `evil_play` empty), so often her one
+choice is to start: what's on offer is the streamer's to widen.
+
+When: off a level with nothing under way (the title card waiting, a game over, a level played
+by itself once its tally's gone, an episode's end once its story's told), never mid-level
+("a new game's offered when it's over"). The offer is told her when it's first there and again
+whenever the console changes it. Her link is served on those screens (`Session::off_level`:
+any other action answered that there's no level to do it in). Her choice sets the skill for the
+next level begun (`Engine::set_skill`; the menu walk shows it), and the window's own copy of the
+options (skill, episode) the levels are loaded with; a chosen game is always a level loaded
+afresh. An episode's last level played by itself now ends in its finale too (it's the game's).
+
+Checked in a window: at the title, E1M9 refused (not offered), "E1M1 4" refused (single or
+continuous not said, both offered), "E1M1 4 single" started at Ultra-Violence (28 monsters
+where Hurt Me Plenty has 6); out by its exit, offered again at the title; "E1M2 3 continuous"
+started. Parity: 24 runs the same.

@@ -714,6 +714,12 @@ planned. After MAP07: tactics move up to straight after 1a, with the telling of 
      costs a life, as now.
    - **next level** is hers to give: after an exit the game holds at the tally screen till
      she says `doom_game next`, as a player presses a key there (she's told the tally there).
-   - **choose a level**: no, not for now.
+   - **choose a level** (changed, the user's): yes. She starts the game: the level, the skill,
+     and single (just that level) or continuous (on through its episode; Doom II: through
+     the game). Offered at the title card and again once what she chose is over (the level,
+     or the episode's end, its story told). What's on offer is the console's: by default only
+     its own map and skill, single, so often her one choice is to start. **Built**
+     (`control/game.rs`, `doom_game start`; the console's "Evil starts the game", "Levels she
+     may start", "Skills she may choose", "Play she may choose"; `--choices` for a watch).
    - **skill**: not asked; stays behind the console's switch, off.
    - **cheats**: held off. `doom_cheat` stays planned, not built, till you say.

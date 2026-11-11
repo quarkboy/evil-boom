@@ -182,7 +182,7 @@ fn png(w: usize, h: usize, px: &[u8], palette: Option<&[u8]>) -> Option<Vec<u8>>
 }
 
 /// The WAD's levels, in its order (E1M1 ..., MAP01 ...).
-fn maps(w: &Wad) -> Vec<String> {
+pub(super) fn maps(w: &Wad) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for l in &w.lumps {
         let n = l.name.to_uppercase();
@@ -353,6 +353,29 @@ impl Watch {
                             .log
                             .push(format!("console: no side \"{side}\" (left, right)")),
                     }
+                }
+                Command::Choices { spec } => {
+                    let line = match spec {
+                        None => {
+                            self.choices = crate::control::game::Choices::none();
+                            "console: no game hers to start".to_string()
+                        }
+                        Some(spec) => {
+                            let started = (self.map_name.clone(), self.engine.skill(), false);
+                            match crate::control::game::Choices::parse(
+                                &spec,
+                                &self.wad_maps,
+                                (&started.0, started.1, started.2),
+                            ) {
+                                Ok(c) => {
+                                    self.choices = c;
+                                    format!("console: hers to start: {spec}")
+                                }
+                                Err(e) => format!("console: not hers to start: {e}"),
+                            }
+                        }
+                    };
+                    self.agent.x_mut().log.push(line);
                 }
                 Command::Begin => match self.present.take() {
                     Some(mut p) => {

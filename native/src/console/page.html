@@ -142,6 +142,10 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <span class="check"><input type="checkbox" name="auto_restart" id="s-auto"><label for="s-auto" class="check">Restart it if it crashes</label></span>
       <span class="check"><input type="checkbox" name="present" id="s-present"><label for="s-present" class="check">Doom's own screens</label></span>
       <span class="check"><input type="checkbox" name="title_wait" id="s-title"><label for="s-title" class="check">Wait at the title card</label></span>
+      <span class="check wide"><input type="checkbox" name="evil_starts" id="s-evil-starts"><label for="s-evil-starts" class="check">Evil starts the game (at the title card, and when what she chose is over)</label></span>
+      <label>Levels she may start <input name="evil_maps" placeholder="the map above; all; E1M1, E2M1"></label>
+      <label>Skills she may choose <input name="evil_skills" placeholder="the skill above; 3, 4"></label>
+      <label>Play she may choose <select name="evil_play"><option value="">as Whole episode above</option><option value="single">one level</option><option value="continuous">on through the episode</option><option value="both">either</option></select></label>
       <div class="row wide">
         <button id="s-save">Save</button>
         <button class="primary" id="s-apply">Save and restart game</button>

@@ -23,7 +23,7 @@ mod look;
 mod moments;
 
 pub use look::{Hints, Listing, Pick};
-pub use moments::Level;
+pub use moments::{skill_name, Level};
 
 /// a name at most this long (refused, not cut: a name she didn't choose is one she won't use)
 pub const NAME_MAX: usize = 32;

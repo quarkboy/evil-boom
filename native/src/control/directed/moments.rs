@@ -69,6 +69,17 @@ impl Director {
         });
     }
 
+    /// A game hers to start, and what's on offer.
+    pub fn offer_game(&mut self, tic: i64, offer: &str) {
+        self.reports.push(super::Report {
+            tic,
+            ok: true,
+            text: offer.to_string(),
+            notable: true,
+            urgent: true,
+        });
+    }
+
     /// The game over: no lives left.
     pub fn game_over(&mut self) {
         let tic = self.moments.last_tic;
@@ -83,7 +94,7 @@ impl Director {
 }
 
 /// A skill as the game's menu has it.
-fn skill_name(skill: i32) -> &'static str {
+pub fn skill_name(skill: i32) -> &'static str {
     match skill {
         1 => "I'm too young to die",
         2 => "Hey, not too rough",

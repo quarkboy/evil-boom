@@ -9,7 +9,7 @@ pub mod server;
 use serde::{Deserialize, Serialize};
 
 /// The protocol's version, in the game's hello: a supervisor and a game built apart may not agree.
-pub const PROTOCOL: u32 = 2;
+pub const PROTOCOL: u32 = 3;
 
 /// What the console asks of the running game, applied by it at the top of a frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -74,6 +74,12 @@ pub enum Command {
     /// the stream window's column to this side ("left", "right")
     Panel {
         side: String,
+    },
+    /// the games hers to start (`control::game::Choices::parse`'s words, every part given);
+    /// none: none
+    Choices {
+        #[serde(default)]
+        spec: Option<String>,
     },
     /// from the title card through the menu to the run's first level (Doom's own screens on);
     /// from anything else, the run again from the title card

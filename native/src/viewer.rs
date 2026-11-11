@@ -262,6 +262,7 @@ impl Canvas {
 }
 
 /// How to watch.
+#[derive(Clone)]
 pub struct WatchOptions {
     pub speed: f64,
     pub show_all: bool,
@@ -318,10 +319,70 @@ pub struct WatchOptions {
     /// the window for the stream: 16:9, the game on one side and a column for the viewers on
     /// the other, the column's side this (see viewer::stream)
     pub stream: Option<StreamSide>,
+    /// the games hers to start (`control::game::Choices::parse`'s words); none: none
+    pub choices: Option<String>,
 }
 
-/// A watched game's orders, from a file added to as it plays.
 impl Watch {
+    /// Off a level with a game hers to start (the title, a game over, the end of what she
+    /// chose): what's on offer told her (again whenever it changes), and her choice taken,
+    /// checked, for the window's loop to begin.
+    pub(super) fn serve_choices(&mut self) {
+        if self.start_wanted.is_some() {
+            return; // (chosen: begun at the window's next turn)
+        }
+        let offer = self.choices.offered().then(|| self.choices.offer());
+        if self.offered.as_ref() != Some(&self.choices) {
+            self.offered = Some(self.choices.clone());
+            if let Some(offer) = &offer {
+                let tic = self.engine.tic;
+                self.tell_screens(|d| d.offer_game(tic, offer));
+            }
+        }
+        let choices = self.choices.clone();
+        let mut wanted = None;
+        let mut take = |map: Option<&str>, skill: Option<i32>, play: Option<&str>| match choices
+            .check(map, skill, play)
+        {
+            Ok(s) => {
+                let msg = format!(
+                    "Starting {} at skill {}, {}.",
+                    s.map,
+                    s.skill,
+                    if s.continuous {
+                        "on through its episode"
+                    } else {
+                        "just that level"
+                    }
+                );
+                wanted = Some(s);
+                (true, msg)
+            }
+            Err(e) => (false, e),
+        };
+        let mut lines = Vec::new();
+        if let Some(feed) = self.feed.as_mut() {
+            lines.extend(feed.off_level(&mut take));
+        }
+        if let Some(neuro) = self.neuro.as_mut() {
+            let tic = self.engine.tic;
+            lines.extend(neuro.off_level(tic, |args| {
+                let skill = args
+                    .get("skill")
+                    .and_then(serde_json::Value::as_i64)
+                    .and_then(|s| i32::try_from(s).ok());
+                let s = |k: &str| args.get(k).and_then(serde_json::Value::as_str);
+                take(s("map"), skill, s("play"))
+            }));
+        }
+        self.agent.x_mut().log.extend(lines);
+        // (offered again once what she's chosen is over: a level begun is a Watch afresh, with
+        // nothing offered)
+        if wanted.is_some() {
+            self.start_wanted = wanted;
+        }
+    }
+
     /// The game's screens between levels told to whoever's directing (`f` on each director),
     /// and passed on at once: no level's tics run then to pass them on.
     pub(super) fn tell_screens(&mut self, f: impl Fn(&mut crate::control::directed::Director)) {
@@ -338,6 +399,7 @@ impl Watch {
     }
 }
 
+/// A watched game's orders, from a file added to as it plays.
 struct Feed {
     director: crate::control::directed::Director,
     input: std::path::PathBuf,
@@ -372,27 +434,73 @@ impl Feed {
     fn tic(&mut self, agent: &mut Agent, obs: &Observation) -> Vec<String> {
         let mut lines = Vec::new();
         if obs.tic % 5 == 0 {
-            if let Ok(bytes) = std::fs::read(&self.input) {
-                if bytes.len() > self.read {
-                    let text = String::from_utf8_lossy(&bytes[self.read..]).to_string();
-                    // (whole lines only: one still being written waits)
-                    let upto = text.rfind('\n').map_or(0, |i| i + 1);
-                    self.read += upto;
-                    for cmd in text[..upto]
-                        .lines()
-                        .map(str::trim)
-                        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-                    {
-                        lines.push(format!(">> {cmd}"));
-                        match crate::control::script::command(&mut self.director, agent, obs, cmd) {
-                            Ok(out) => lines.extend(out.into_iter().map(|l| format!("<< {l}"))),
-                            Err(e) => lines.push(format!("<< refused: {e}")),
-                        }
-                    }
+            for cmd in self.new_commands() {
+                lines.push(format!(">> {cmd}"));
+                match crate::control::script::command(&mut self.director, agent, obs, &cmd) {
+                    Ok(out) => lines.extend(out.into_iter().map(|l| format!("<< {l}"))),
+                    Err(e) => lines.push(format!("<< refused: {e}")),
                 }
             }
         }
         self.director.tick(agent, obs);
+        self.write_news(&mut lines);
+        lines
+    }
+
+    /// The commands added to the file since it was last read (whole lines only: one still
+    /// being written waits).
+    fn new_commands(&mut self) -> Vec<String> {
+        let Ok(bytes) = std::fs::read(&self.input) else {
+            return Vec::new();
+        };
+        if bytes.len() <= self.read {
+            return Vec::new();
+        }
+        let text = String::from_utf8_lossy(&bytes[self.read..]).to_string();
+        let upto = text.rfind('\n').map_or(0, |i| i + 1);
+        self.read += upto;
+        text[..upto]
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// Off a level, a game hers to start: `game start [MAP] [SKILL] [single|continuous]` by
+    /// `start`; anything else refused, there being no level to do it in. Written out, with
+    /// what's been told since.
+    fn off_level(
+        &mut self,
+        mut start: impl FnMut(Option<&str>, Option<i32>, Option<&str>) -> (bool, String),
+    ) -> Vec<String> {
+        let mut lines = Vec::new();
+        for cmd in self.new_commands() {
+            lines.push(format!(">> {cmd}"));
+            let w: Vec<&str> = cmd.split_whitespace().collect();
+            let said = if w.get(..2) == Some(&["game", "start"]) {
+                let skill = w.iter().find_map(|v| v.parse::<i32>().ok());
+                let play = w
+                    .iter()
+                    .copied()
+                    .find(|v| matches!(*v, "single" | "continuous"));
+                let map = w
+                    .iter()
+                    .skip(2)
+                    .copied()
+                    .find(|v| v.parse::<i32>().is_err() && Some(*v) != play);
+                let (ok, msg) = start(map, skill, play);
+                if ok {
+                    msg
+                } else {
+                    format!("refused: {msg}")
+                }
+            } else {
+                "refused: not in a level now (game start [MAP] [SKILL] [single|continuous])"
+                    .to_string()
+            };
+            lines.push(format!("<< {said}"));
+        }
         self.write_news(&mut lines);
         lines
     }
@@ -449,6 +557,13 @@ struct Watch {
     feed: Option<Feed>,
     /// directed by Neuro
     neuro: Option<crate::neuro::session::Session>,
+    /// the games hers to start (the console's to say); the choices last offered her; and the
+    /// one she's chosen, for the window's loop to begin
+    choices: crate::control::game::Choices,
+    /// the WAD's levels (what may be on offer)
+    wad_maps: Vec<String>,
+    offered: Option<crate::control::game::Choices>,
+    start_wanted: Option<crate::control::game::Start>,
     /// no switches or doors (an arena's fight)
     no_use: bool,
     /// secrets found so far (as the tally has them)
@@ -489,6 +604,12 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     (watch.sound, watch.sound_on) = (sound, sound);
     if let Some(addr) = &o.control {
         watch.console = Some(console::Console::connect(addr, wad, map_name, &w)?);
+    }
+    watch.wad_maps = console::maps(&w);
+    if let Some(c) = &o.choices {
+        let skill = if o.fight > 0 { o.fight } else { 3 };
+        watch.choices =
+            crate::control::game::Choices::parse(c, &watch.wad_maps, (map_name, skill, o.episode))?;
     }
     if let Some(side) = o.stream {
         watch.stream = Some(stream::Stream::new(side, o.fight));
@@ -1080,6 +1201,7 @@ fn enter_level(
     // (out by its exit: the level's end told first, before the next one's begun)
     let exited = watch.engine.exited();
     let (mut feed, mut neuro) = (watch.feed, watch.neuro);
+    let (choices, wad_maps) = (watch.choices, watch.wad_maps);
     if let Some(f) = feed.as_mut() {
         if exited {
             f.director.level_done();
@@ -1107,6 +1229,7 @@ fn enter_level(
     watch.stream = stream;
     watch.feed = feed;
     watch.neuro = neuro;
+    (watch.choices, watch.wad_maps) = (choices, wad_maps);
     Ok(watch)
 }
 
@@ -1128,7 +1251,11 @@ pub fn watch_prepared(
 
 /// The window, till it's shut or Esc: space pauses, N (or the right arrow) steps a tic while
 /// paused, +/- the speed, A the whole map, F follow, the wheel zooms.
-fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> Result<(), String> {
+fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> Result<(), String> {
+    // (the options as she may change them: a game she starts, its skill and whether it goes
+    // on through the episode)
+    let wad = given.map(|(w, _)| w);
+    let mut opts = given.map(|(_, o)| o.clone());
     // (the stream's window its own size, and a plain title to find it by in OBS)
     let (ww, wh, title) = if watch.stream.is_some() {
         (stream::SW, stream::SH, "Evil DOOM")
@@ -1172,6 +1299,21 @@ fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> R
                 _ => {}
             }
         }
+        if let Some(s) = watch.start_wanted.take() {
+            if let Some(o) = opts.as_mut() {
+                if o.fight > 0 {
+                    o.fight = s.skill;
+                }
+                o.episode = s.continuous;
+            }
+            watch.engine.set_skill(s.skill);
+            if let Some(mut p) = watch.present.take() {
+                p.choose(&s);
+                p.begin(&watch);
+                watch.present = Some(p);
+            }
+        }
+        let game = wad.zip(opts.as_ref());
         match watch.console_frame() {
             console::Frame::Go => {}
             console::Frame::Quit => return Ok(()), // (the console's asked the game to close)
@@ -1401,6 +1543,10 @@ impl Watch {
             hold: None,
             feed: None,
             neuro: None,
+            choices: crate::control::game::Choices::none(),
+            wad_maps: Vec::new(),
+            offered: None,
+            start_wanted: None,
             no_use: false,
             secrets_seen: 0,
             hits: Vec::new(),

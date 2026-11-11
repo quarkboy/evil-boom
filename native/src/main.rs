@@ -780,6 +780,7 @@ fn watch_options(
         present: false,
         title_wait: false,
         stream: None,
+        choices: None,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -840,6 +841,11 @@ fn watch_options(
                 w.stream = Some(named.unwrap_or(evildoom::viewer::StreamSide::Right));
             }
             "--present" => w.present = true,
+            "--choices" => {
+                w.choices = Some(it.next().cloned().ok_or(
+                    "--choices \"maps=E1M1,E1M2|all;skills=3,4;play=single,continuous\" (the games hers to start)",
+                )?)
+            }
             "--title" => {
                 w.present = true;
                 w.title_wait = true;

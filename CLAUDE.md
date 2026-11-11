@@ -148,7 +148,9 @@ into a crowd, out of ammo, crushers, monsters raised, with at most 6 moments a m
 the urgent ones (`moments.rs`). Stage 1 of the SDK plan is done but for `Situation` and typed
 events, left for stage 4 (questions). The plan's five questions are answered (its section 9):
 with no action she waits and looks round; deadlines 3 s / 8 s; restart unlocked by no
-progress; next level hers from the tally screen; no level choice; cheats held off. To direct a game by hand: `watch <wad> <map> --headless
+progress; next level hers from the tally screen; cheats held off. And (changed) she starts the game:
+level, skill, one level or on through, from what the console offers (`control/game.rs`,
+`doom_game start`; offered at the title and when what she chose is over). To direct a game by hand: `watch <wad> <map> --headless
 --speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
 `.out` twin (`me.txt` gives `me.out`).
 

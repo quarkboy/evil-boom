@@ -141,6 +141,7 @@ pub fn command(
                 .ok_or("hints off|on_stall|always")?;
             Ok(vec![format!("hints {}", d.hints.name())])
         }
+        Some("game") => Err("in a level: a new game's offered when it's over".into()),
         Some("status") => Ok(vec![d.status(agent, obs)]),
         Some("check") => {
             let risky = w.last() == Some(&"risky");

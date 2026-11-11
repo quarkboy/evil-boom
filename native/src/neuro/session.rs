@@ -79,6 +79,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": "Your fight, for a while (10 s unless seconds; then by reflex again). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / steady: how you fight. auto: all by reflex again.", "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
         json!({ "name": "doom_policy", "description": "Standing settings. idle: seconds with no action before you carry on by instinct, not leaving (0: you wait). hints: suggestions of what to do next, off, on_stall or always.", "schema": s(json!({ "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
+        json!({ "name": "doom_game", "description": "Start a game, when you're offered one (at the start, and when a level or episode you chose is over). map, skill 1-5, play: single (just that level) or continuous (on through its episode). Only what's offered.", "schema": s(json!({ "do": { "type": "string", "enum": ["start"] }, "map": { "type": "string" }, "skill": { "type": "integer" }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
         json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, what you're doing, what you're fighting." }),
     ]
@@ -208,6 +209,62 @@ impl Session {
             );
             self.link.context(&text.join("\n"), !notable);
         }
+    }
+
+    /// Off a level, a game hers to start (the title, a game over, the end of what she chose):
+    /// what comes in handled, `doom_game` by `start` (her choice checked: (success, message));
+    /// any other action answered that there's no level to do it in. What's been told since,
+    /// passed on. The lines for the log.
+    pub fn off_level(
+        &mut self,
+        tic: i64,
+        mut start: impl FnMut(&Value) -> (bool, String),
+    ) -> Vec<String> {
+        let mut log = Vec::new();
+        while let Ok(i) = self.link.incoming.try_recv() {
+            match i {
+                Incoming::Connected => {
+                    log.push("neuro: connected".into());
+                    self.connected = true;
+                    self.forced = false;
+                    if !self.briefed {
+                        self.link.context(BRIEFING, true);
+                        self.briefed = true;
+                    }
+                }
+                Incoming::Hello { character, display } => {
+                    log.push(format!("neuro: playing with {display} ({character})"));
+                    self.who = format!("{display} ({character})");
+                    self.character = Character::of(&character);
+                }
+                Incoming::Lost(why) => {
+                    self.connected = false;
+                    if self.briefed {
+                        log.push(format!("neuro: connection lost ({why}); trying again"));
+                    }
+                    self.forced = false;
+                }
+                Incoming::Action { id, name, data } => {
+                    let args: Value = data
+                        .as_deref()
+                        .and_then(|d| serde_json::from_str(d).ok())
+                        .unwrap_or(Value::Null);
+                    let (ok, msg) = if name == "doom_game" {
+                        start(&args)
+                    } else {
+                        (
+                            false,
+                            "Not in a level now: start a game first (doom_game).".into(),
+                        )
+                    };
+                    log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
+                    log.push(format!("<< {}{msg}", if ok { "" } else { "FAILED: " }));
+                    self.link.result(&id, ok, &msg);
+                }
+            }
+        }
+        self.tell_news(tic, &mut log);
+        log
     }
 
     /// Between levels (the tally, a finale): what the director's been told of the screens,
@@ -490,6 +547,10 @@ impl Session {
                 (true, "OK.".into())
             }
             "doom_status" => (true, self.director.status(agent, obs)),
+            "doom_game" => (
+                false,
+                "You're in a level: a new game's offered when it's over.".into(),
+            ),
             _ => (false, format!("No action \"{name}\".")),
         }
     }

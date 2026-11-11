@@ -219,3 +219,14 @@ control.
 - Presentation: parity on fixed seeds (the bot's level play unchanged by it), then watched.
 - Nothing here runs in `score`: a change on this branch should score exactly 0.0000 different
   (`score --like`) when it's merged; one run of a few levels to confirm, not a sweep.
+
+## Evil starts the game (2026-11-11)
+
+Settings: **Evil starts the game** (on by default), **Levels she may start** (empty: the map
+above; `all`; or a list), **Skills she may choose** (empty: the skill above; or a list),
+**Play she may choose** (as "Whole episode" above, one level, on through the episode, or
+either). They go to the game as `--choices` when it starts, and as the `choices` command
+whenever they're saved (no restart needed). With Doom's own screens and "Wait at the title
+card", she's offered a game at the title; with any, again when what she chose is over (a
+level played by itself, at its tally; an episode, once its ending's text is told), and at a
+game over. The streamer's Begin still starts the console's own game.

@@ -80,6 +80,14 @@ pub struct Settings {
     pub layout: String,
     /// the stream window's column: "right" or "left"
     pub panel_side: String,
+    /// a game hers to start (Neuro's): at the title card, and when what she chose is over
+    pub evil_starts: bool,
+    /// the levels she may start at: "" the map above, "all", or a list ("E1M1, E2M1")
+    pub evil_maps: String,
+    /// the skills she may choose: "" the skill above, or a list ("3, 4")
+    pub evil_skills: String,
+    /// "" as "Whole episode" above, or "single", "continuous", "both"
+    pub evil_play: String,
 }
 
 impl Default for Settings {
@@ -103,6 +111,10 @@ impl Default for Settings {
             title_wait: true,
             layout: "stream".into(),
             panel_side: "right".into(),
+            evil_starts: true,
+            evil_maps: String::new(),
+            evil_skills: String::new(),
+            evil_play: String::new(),
         }
     }
 }
@@ -127,6 +139,18 @@ impl Settings {
             || !["right", "left"].contains(&self.panel_side.as_str())
         {
             return Err("layout: stream or watcher; panel_side: right or left".into());
+        }
+        if !["", "single", "continuous", "both"].contains(&self.evil_play.trim()) {
+            return Err("evil_play: single, continuous, both, or empty (as Whole episode)".into());
+        }
+        if self
+            .evil_skills
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .any(|s| !matches!(s, "1" | "2" | "3" | "4" | "5"))
+        {
+            return Err("evil_skills: a list of 1-5, or empty (the skill above)".into());
         }
         if !["bot", "neuro", "gpt"].contains(&self.mode.as_str()) {
             return Err("mode: bot, neuro or gpt".into());
@@ -172,8 +196,35 @@ impl Settings {
             "gpt" => a.push("--gpt".into()),
             _ => {}
         }
+        if let Some(c) = self.choices() {
+            a.extend(["--choices".into(), c]);
+        }
         a.extend(["--control".into(), control.to_string()]);
         a
+    }
+
+    /// The games hers to start, in `--choices`' words, every part given (what's left empty
+    /// here: the game as these settings start it); None: none.
+    fn choices(&self) -> Option<String> {
+        if !self.evil_starts {
+            return None;
+        }
+        let maps = match self.evil_maps.trim() {
+            "" => self.map.to_uppercase(),
+            m => m.replace(' ', ""),
+        };
+        let skills = match self.evil_skills.trim() {
+            "" => self.skill.clamp(1, 5).to_string(),
+            s => s.replace(' ', ""),
+        };
+        let play = match self.evil_play.trim() {
+            "both" => "single,continuous",
+            "single" => "single",
+            "continuous" => "continuous",
+            _ if self.episode => "continuous",
+            _ => "single",
+        };
+        Some(format!("maps={maps};skills={skills};play={play}"))
     }
 }
 
@@ -448,6 +499,8 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 if sfx.is_some() || music.is_some() || master.is_some() {
                     let _ = s.send(&Command::Volume { sfx, music, master });
                 }
+                let spec = s.settings.choices();
+                let _ = s.send(&Command::Choices { spec });
             }
             _ if !ours => return,
             FromGame::State(st) => {
@@ -823,7 +876,19 @@ fn handle(hub: &Hub, mut req: Request) {
                     if s.settings.panel_side != new.panel_side && s.to_game.is_some() {
                         let _ = s.send(&Command::Panel { side: new.panel_side.clone() });
                     }
-                    let changed = Settings { panel_side: new.panel_side.clone(), ..s.settings.clone() } != new;
+                    // (and what's hers to start: at once too)
+                    if s.settings.choices() != new.choices() && s.to_game.is_some() {
+                        let _ = s.send(&Command::Choices { spec: new.choices() });
+                    }
+                    let unchanged = Settings {
+                        panel_side: new.panel_side.clone(),
+                        evil_starts: new.evil_starts,
+                        evil_maps: new.evil_maps.clone(),
+                        evil_skills: new.evil_skills.clone(),
+                        evil_play: new.evil_play.clone(),
+                        ..s.settings.clone()
+                    };
+                    let changed = unchanged != new;
                     s.settings = new;
                     let running = s.child.is_some();
                     match s.save() {
@@ -897,6 +962,31 @@ fn same(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    /// What's hers to start: the console's own map, skill and play unless she's given more.
+    #[test]
+    fn evil_choices_from_settings() {
+        let mut s = super::Settings {
+            map: "e1m1".into(),
+            skill: 4,
+            episode: false,
+            ..super::Settings::default()
+        };
+        assert_eq!(
+            s.choices().as_deref(),
+            Some("maps=E1M1;skills=4;play=single")
+        );
+        s.evil_maps = "all".into();
+        s.evil_skills = "3, 4".into();
+        s.evil_play = "both".into();
+        assert_eq!(
+            s.choices().as_deref(),
+            Some("maps=all;skills=3,4;play=single,continuous")
+        );
+        s.evil_starts = false;
+        assert_eq!(s.choices(), None);
+    }
+
     use super::*;
 
     #[test]
