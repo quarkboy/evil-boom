@@ -541,6 +541,43 @@ fight. Then I lost her to the arachnotrons at 64 s all the same, and how is the 
     defaults have to carry her through a turn she misses. A tactic running out mid-fight goes
     back to the rules (it did); a stance she set stays its time.
 
+**Episodes 1 and 2, HMP, pistol start, directed by hand (2026-11-11).** Both finished, every
+level out by its exit, with the idle fallback at 6 s doing most of the playing and me giving
+the orders a commander would: leave when the exit's known, a stance or a gun for a hard
+fight, a nudge when she'd stalled.
+
+| | Levels | Game time | Deaths | My orders |
+|---|---|---|---|---|
+| Episode 1 | E1M1 to E1M8 | about 63 minutes | 1 (E1M6: four spectres and two imps at arm's length) | an exit each level; `fight careful` for E1M6's end the second time; `fight weapon rocket` on E1M8, which was a mistake (below) |
+| Episode 2 | E2M1 to E2M8 | about 110 minutes | 1 (E2M8, the Cyberdemon, in 35 s) | an exit each level; areas to explore when E2M4 stalled; `fight weapon rocket` on the Cyberdemon the second time: dead in 157 s, her health never under 200 |
+
+Not one unbroken run each: three times a fault of the layer's ended the game and I started
+it again at that level with what she'd carried in (given with `--carry`): the two deaths
+(`watch --episode` was one life whatever `--lives` said), and E2M4, where on her own she
+stopped for good with no exit known. All three are fixed below. What it showed:
+
+22. **The idle fallback is most of the game.** With it she's never standing; my part was a
+    dozen orders an episode. That's the right default for a stream: Evil can talk to chat for
+    two minutes and the level goes on.
+23. **On her own she won't leave, and the exits were hidden with that**: I had to stop her to
+    learn an exit was known. An exit seen should be told and listed at once, held or not; "may
+    I leave" is the question, not "is there an exit".
+24. **On her own she stopped when only walls were left, even with no exit known** (E2M4, 20
+    minutes in): now she keeps at it, last resorts and all, unless an exit's known.
+25. **Stopping her to ask something costs her what she was doing** (a timed lift, a route
+    half walked). Looks (`list`, `status`) must never need a stop.
+26. **My two worst orders were tactics.** "Rockets" on E1M8 with demons at arm's length took
+    her from 122 to 18 in four seconds (and the level then ended on its own floor, luckily);
+    the same order on the Cyberdemon at range won the fight untouched. The gun order needs the
+    bot's own safety on it (it has the launcher's "not into something near" rule; the blast
+    of a rocket at a demon in her face got past it), and the one honest line of 5.5.
+27. **The orders file was read from its start again on each level** (so "order exit sure" was
+    given again at the top of the next level) and Neuro's link was made afresh: fixed, the
+    director goes on to the next level with her.
+28. **What I was told was right for deciding and thin for a stream**: keys, guns, secrets,
+    fast losses, deaths. A level's end said nothing (time, tally against par, what she
+    carries out), nor a level's start (its name).
+
 What this changes in the stages: the idle fallback and order queueing move to the front
 (with the grammar: ids, "seen, no way yet", outcomes); rankings and the pick come with them
 rather than later; the events for moments (secrets, kills, the fight summary) are stage 1 as

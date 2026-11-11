@@ -1619,7 +1619,10 @@ impl Director {
     /// On her own for want of an order: what she's taken up is said (quietly) as it changes;
     /// with nothing left she'd do but leave, she stops and says so: leaving is an order's.
     fn auto(&mut self, agent: &mut Agent, obs: &Observation) {
-        if agent.x().out_of_options.is_some() {
+        // (nothing left she'd do but search walls: with an exit known, she stops, leaving being
+        // an order's. With none known the way on is still to find, and she keeps at it, last
+        // resorts and all, as she would playing by herself)
+        if agent.x().out_of_options.is_some() && !agent.x().knowledge.exits().is_empty() {
             self.end_auto(agent);
             self.doing = None;
             self.auto_spent = true;
@@ -1632,7 +1635,9 @@ impl Director {
                         "Nothing more I can find to do here but search walls or leave ({}).",
                         self.describe(e, obs)
                     ),
-                    None => "Nothing more I can find to do here, and no exit known.".to_string(),
+                    None => {
+                        "Nothing more I can find to do here but search walls or leave.".to_string()
+                    }
                 },
             );
             return;
