@@ -631,6 +631,17 @@ impl Explorer {
         if k.unseen_walls().iter().any(|(s, _)| sectors.contains(s)) {
             return false;
         }
+        // (nor when it's a wall well marked she's going down to try: that's what there is to
+        // try there. MAP21, on an islet in the nukage sea, everything else across it: the lifts
+        // out of the sea plain walls from below, marked as the one she'd found was, each
+        // refused as a drop with nothing to try; "nothing left to do" for the last 860 s)
+        if obj.kind == Kind::Wall && obj.suspicion >= super::objectives::NEAR_SUSPECT {
+            return false;
+        }
+        if std::env::var_os("EVIL_DEBUG_DEAD_END").is_some() {
+            let inter: Vec<String> = k.interactables().iter().map(|li| format!("{li}: activators in sectors {:?}", by_line.get(li).map(|t| t.activators.iter().map(|&p| nav.sector_of_poly(p)).collect::<BTreeSet<usize>>()))).collect();
+            self.log.push(format!("  dead end from poly {end} (sector {}), she's at poly {here} (sector {}): after it sectors {sectors:?}; to try: {inter:?}", nav.sector_of_poly(end), nav.sector_of_poly(here)));
+        }
         if self.current.as_ref().is_none_or(|c| c.ident() != obj.ident()) {
             self.log.push(format!("tic {}: '{}': a drop into somewhere with no way back and nothing there to try ({} polys)", obs.tic, obj.label, after.len()));
         }

@@ -37,7 +37,7 @@ const EXIT_MARGIN: f64 = 64.0;
 
 /// a wall suspected this much is tried when she's this near where she'd stand to (not only when
 /// there's nothing else to do)
-const NEAR_SUSPECT: f64 = 6.0;
+pub(super) const NEAR_SUSPECT: f64 = 6.0;
 
 /// (as she passes it, that is: a hall's width off, not only at her elbow. MAP32's marked
 /// doors down the sides of a hall 896 across, she down its middle; 128 it was)
@@ -135,6 +135,11 @@ impl Explorer {
         if std::env::var_os("EVIL_DEBUG_REACH").is_some_and(|v| v.to_str().and_then(|t| t.parse::<i64>().ok()) == Some(obs.tic)) {
             let sectors: BTreeSet<usize> = reach.iter().map(|&p| nav.sector_of_poly(p)).collect();
             self.log.push(format!("tic {}: reach from poly {here} (sector {}): {} polys, sectors {sectors:?}", obs.tic, nav.sector_of_poly(here), reach.len()));
+            if let Ok(want) = std::env::var("EVIL_DEBUG_HEIGHTS") {
+                for s in want.split(',').filter_map(|x| x.trim().parse::<usize>().ok()) {
+                    self.log.push(format!("  sector {s}: really at {:?}, last seen at {:?} (tic {:?}), believed {:?}", obs.heights.get(s), self.knowledge.seen_heights.get(&s), self.knowledge.seen_tic.get(&s), states.get(s)));
+                }
+            }
             for &p in &reach {
                 let poly = nav.mesh.poly(p);
                 self.log.push(format!("  poly {p}: {:?}", poly.vertices.iter().map(|v| (v.0.round(), v.1.round())).collect::<Vec<_>>()));

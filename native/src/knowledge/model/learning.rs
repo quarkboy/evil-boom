@@ -151,7 +151,14 @@ impl Knowledge {
         let a = last.angle.to_radians();
         let heights = &obs.heights;
         if c.use_ {
-            if let Some(li) = self.use_hits(last.pos(), last.angle, heights) {
+            // (the game turns her, then traces the use: by where she faces after the tic's turn.
+            // A press counted by where she faced before it, the turn taking her off the line:
+            // a once-only door taken for used, never pressed again)
+            let facing = last.angle - c.turn;
+            if std::env::var_os("EVIL_DEBUG_USE").is_some() {
+                self.events.push(format!("tic {}: use at ({:.0}, {:.0}) facing {facing:.1} (turned {:.1}): hits {:?}", obs.tic, last.x, last.y, c.turn, self.use_hits(last.pos(), facing, heights)));
+            }
+            if let Some(li) = self.use_hits(last.pos(), facing, heights) {
                 // (any line with a special stops it, a walk-over one too: E2M4's door behind
                 // one; only one that's used goes off. A locked one without its key does nothing,
                 // and the game says so: something to come back to with the key)

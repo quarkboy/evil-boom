@@ -723,6 +723,12 @@ impl RouteFollower {
         }
         let mut controls = self.motion.hold(obs, ((end.0 - obs.x) * 0.2, (end.1 - obs.y) * 0.2), Some(look));
         let facing = err < if step.action == Action::Shoot { 4.0f64.min(span / 3.0) } else { 4.0 };
+        if matches!(step.action, Action::Use | Action::Exit) && dist(pos, aim) < 2.0 * PRESS_RANGE {
+            // (at a line to press it, as at a door: the turn's the route's unless the fight
+            // fires. Use goes where she faces after the tic's turn; aimed by the fight at what
+            // it wasn't shooting, the press came with her turned off the line, or never came)
+            self.press_tic = Some(obs.tic);
+        }
         if step.action == Action::Face {
             // walk up to it and look at it; pressing is left to a person
             if facing {

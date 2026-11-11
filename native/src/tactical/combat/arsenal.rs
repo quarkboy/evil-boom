@@ -260,10 +260,23 @@ impl Combat {
     pub fn reachable(&self, obs: &Observation, t: &Thing) -> bool {
         let held = Self::held(obs);
         let d = dist((t.x, t.y), obs.pos());
+        // (by the guns she'd bring up for it: the pistol's reach is none of hers with another gun
+        // to hand, see `best_gun`. Counted, an imp 680 off over nukage was in reach by the pistol
+        // and fought with the shotgun, its 640 short: closed in on along the shore for 900 s,
+        // 41 shells and not one fired, the clock that gives it up set back every tic)
+        let other = self.other_gun(obs, t);
         SLOTS.iter().any(|&s| {
             let w = weapon_in(s, obs);
-            held.contains(&s) && Self::ammo(obs, s) >= w.ammo_per_shot && self.in_reach(&w, t, d)
+            held.contains(&s) && !(s == 2 && other) && Self::ammo(obs, s) >= w.ammo_per_shot && self.in_reach(&w, t, d)
         })
+    }
+
+    /// Has she a gun other than the pistol with a shot in it for t (a rocket only where it's
+    /// safe)? Then the pistol stays down.
+    fn other_gun(&self, obs: &Observation, t: &Thing) -> bool {
+        let held = Self::held(obs);
+        held.iter().any(|&s| matches!(s, 3 | 4 | 6 | 7) && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot.max(1))
+            || (held.contains(&5) && Self::ammo(obs, 5) >= 1 && self.rocket_safe(obs, t))
     }
 
     /// Has she a gun with ammo for it (more than the fist), or her fists berserk with nothing
@@ -362,8 +375,7 @@ impl Combat {
         // (the pistol only for want of any other gun with a shot in it, never for its reach: the
         // user's, MAP07, the super shotgun put away for it at mancubi 800 off. Taps at barrels,
         // switches and walls are the route's own gun, not this)
-        let other_gun = held.iter().any(|&s| matches!(s, 3 | 4 | 6 | 7) && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot.max(1))
-            || (held.contains(&5) && Self::ammo(obs, 5) >= 1 && self.rocket_safe(obs, t));
+        let other_gun = self.other_gun(obs, t);
         for &slot in &SLOTS {
             if !held.contains(&slot) || (slot == 2 && other_gun) {
                 continue;
