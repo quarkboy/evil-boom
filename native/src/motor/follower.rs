@@ -421,6 +421,7 @@ impl RouteFollower {
                 way: Vec::new(),
                 best: None,
                 last_shot: -1_000_000_000,
+                tapped: None,
                 flee_until: None,
                 flee_way: Vec::new(),
                 stay: false,

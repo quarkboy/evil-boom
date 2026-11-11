@@ -28,6 +28,10 @@ const BARREL_STALL: i64 = 2 * 35;
 /// (mortal) shot, no barrel gone this long: the chain's over
 const BARREL_SETTLE: i64 = 35;
 
+/// a tap's shot has landed, or hasn't, this many tics after the trigger (it leaves the gun 3 or
+/// 4 tics after, and a barrel hit is seen lit the tic after that)
+const TAP_SEEN: i64 = 8;
+
 /// (mortal) shot, she runs off this long...
 const BARREL_FLEE_TICS: i64 = 2 * 35;
 
@@ -256,6 +260,20 @@ impl RouteFollower {
 
     /// Back out of its blast (128 units) and shoot the barrel in the way, then carry on.
     pub(super) fn shoot_barrel(&mut self, obs: &Observation) -> Controls {
+        // (a tap that set nothing off: the run off and the wait for the chain to burn out are for
+        // barrels going off. Once the shot's had time to land with no barrel lit and none gone,
+        // she's back to tapping, at the pistol's own pace, not a run and a wait a tap)
+        if let Some((n, at)) = self.shot.tapped {
+            let going_off =
+                !obs.barrels_lit.is_empty() || obs.barrels.as_ref().map_or(0, Vec::len) != n;
+            if going_off {
+                self.shot.tapped = None;
+            } else if obs.tic - at >= TAP_SEEN {
+                self.shot.tapped = None;
+                self.shot.flee_until = None;
+                self.shot.settle = None;
+            }
+        }
         if let Some(until) = self.shot.flee_until {
             if obs.tic < until && !self.shot.flee_way.is_empty() {
                 self.progress_tic = obs.tic;
@@ -573,6 +591,10 @@ impl RouteFollower {
         {
             c.attack = true;
             self.shot.last_shot = obs.tic;
+            self.shot.tapped = Some((obs.barrels.as_ref().map_or(0, Vec::len), obs.tic));
+            if crate::debug::on().barrels {
+                eprintln!("tic {}: tap at the barrel at ({:.0}, {:.0}) from ({:.0}, {:.0}), {:.0} off, gun {gun}, ammo {:?}", obs.tic, at.0, at.1, pos.0, pos.1, dist(pos, at), obs.ammo);
+            }
             if self.mortal {
                 // (and off, the way worked out)
                 self.shot.flee_until = Some(obs.tic + BARREL_FLEE_TICS);

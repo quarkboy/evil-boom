@@ -18,6 +18,8 @@ pub struct BarrelShot {
     pub(super) best: Option<(f64, i64)>,
     /// the tic of the last shot at it
     pub(super) last_shot: i64,
+    /// a tap not yet seen to have set anything off: the barrels there were then, and when
+    pub(super) tapped: Option<(usize, i64)>,
     /// shot: running off till this tic, this way
     pub(super) flee_until: Option<i64>,
     /// ...along this way (the next first)
