@@ -354,6 +354,11 @@ pub(crate) enum EndKind {
     PressedNothing,
 }
 
+/// waiting for an order (directed): a look round this often (tics), turning this far (degrees)
+/// over this long
+const WAIT_LOOK_EVERY: i64 = 4 * 35;
+const WAIT_LOOK_TURN: f64 = 90.0;
+const WAIT_LOOK_TICS: i64 = 35;
 /// the run-jumps kept for whoever's directing
 const JUMPS_KEPT: usize = 8;
 
@@ -783,15 +788,28 @@ impl Explorer {
         }
         if self.directed {
             // Given objectives only: when the one in hand ends, how it ended is kept, and then nothing
-            // till the next is given. She stands still where she is, facing as she is.
+            // till the next is given. She stays where she is, looking round now and then (a
+            // quarter turn one way, a while, a quarter turn back), as a player waiting does.
             if (self.current.is_some() || self.follower.is_some()) && self.need_new(obs, hooks) {
                 self.note_end(obs);
             }
             if self.current.is_none() {
                 let (forward, strafe) = crate::motor::brake(obs, obs.angle);
+                let into = obs.tic.rem_euclid(WAIT_LOOK_EVERY);
+                let way = if (obs.tic / WAIT_LOOK_EVERY) % 2 == 0 {
+                    1.0
+                } else {
+                    -1.0
+                };
+                let turn = if into < WAIT_LOOK_TICS {
+                    way * WAIT_LOOK_TURN / WAIT_LOOK_TICS as f64
+                } else {
+                    0.0
+                };
                 return Controls {
                     forward,
                     strafe,
+                    turn,
                     ..Controls::default()
                 };
             }

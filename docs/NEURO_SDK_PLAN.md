@@ -259,7 +259,7 @@ One shape for every time the bot wants her say:
 
 ```
 [ask q17] One way on: a drop into the yard, no way back known. 3 things left up here.
-  a) take it   b) finish up here first (default, in 15 s)   c) stop
+  a) take it   b) finish up here first (default, in 8 s)   c) stop
 ```
 
 - An **id**, the question in a line, two to four **options with keys**, which is the
@@ -267,11 +267,11 @@ One shape for every time the bot wants her say:
 - **Class D** (the bot can wait): she holds somewhere safe; the question goes as context (not
   silent); if she hasn't acted in a few seconds it's an `actions/force` with `doom_answer` and
   the orders that would also resolve it, state ephemeral. At the deadline the default's taken
-  and said ("No answer: finishing up here first."). Deadline from policy: 15 s on stream by
-  default, `wait` to hold for her.
+  and said ("No answer: finishing up here first."). Deadline from policy: 8 s on stream by
+  default (section 9: she answers in 250 ms on average, rarely 5 s), `wait` to hold for her.
 - **Class T** (it can't wait): the bot **does its default at once** and says what, with the
   alternative and how long it's open: "[ask q18] Archvile, 600 E. Going for cover (default).
-  a) cover b) rush it c) keep on to the exit. Open 6 s." An answer in time switches; after,
+  a) cover b) rush it c) keep on to the exit. Open 3 s." An answer in time switches; after,
   it gets "too late: q18 closed (she's in cover)". Never forced: a force that arrives after the
   moment is worse than none.
 - **At most one open question**, at most a few a minute (a budget; over it, the default is
@@ -694,16 +694,26 @@ What this changes in the stages: the idle fallback and order queueing move to th
 rather than later; the events for moments (secrets, kills, the fight summary) are stage 1 as
 planned. After MAP07: tactics move up to straight after 1a, with the telling of hurt by rate and of death; a level like that is unplayable for her without them, and class T questions (the bot retreats by default, she overrides) come with them rather than two stages later.
 
-## 9. For the user to decide
+## 9. Decided by the user (2026-11-11)
 
-1. **The default mode on stream**: `auto` after 20 s with only irreversible things asked (my
-   proposal), or waiting for her as now?
-2. **How long she takes to answer** in practice (think plus speech): the deadlines (6 s for
-   class T, 15 s for D) are guesses until measured with her.
-3. **Sixteen actions**: is that too much standing context for her? The cut, if so: fold
-   `doom_look` into `doom_status`, and `doom_goal` into `doom_explore`.
-4. **`doom_style` free text**: wanted for the stream's sake ("play like a coward" is a bit),
-   or are the fixed settings enough to begin with?
-5. **Meta control**: which of restart, level, skill and cheats is hers by default, and which
-   only when you switch it on? My proposal: restart and next hers always; level, skill and
-   cheats behind the console's switches, off to begin with.
+1. **With no action from her she waits**: stays where she is, looks round now and then, fights
+   what comes at her, and doesn't go anywhere. Not `auto` by default (`doom_policy idle` is
+   still hers to set). Built: a quarter turn one way every 4 s, the next the other way; the
+   pickups she takes waiting only within 256 along the way (was 1024).
+2. **She's fast**: 100-150 ms at best, 250 ms on average; 2-3 s when busy or thinking, rarely
+   5. So the deadlines (4.6) are: **class T, 3 s** (the bot's default acts first and an answer
+   in 3 s overrides it); **class D, 8 s** (covers all but the rare slow answer; the default
+   then, said). The 15 s and 6 s guesses are gone.
+3. **Sixteen actions is fine.** No folding.
+4. **`doom_style` free text needs a Jev-like model**: a plan of its own after this one is
+   mostly done, maybe an experimental mode. Out of this plan's stages.
+5. **Meta control**:
+   - **restart** is hers, but only unlocked after no progress for a while (the score's stall
+     measure: nothing new mapped, killed, set off or picked up); till then `doom_game
+     restart` answers why not and how long. Proposed: 90 s; and at once after a death that
+     costs a life, as now.
+   - **next level** is hers to give: after an exit the game holds at the tally screen till
+     she says `doom_game next`, as a player presses a key there (she's told the tally there).
+   - **choose a level**: no, not for now.
+   - **skill**: not asked; stays behind the console's switch, off.
+   - **cheats**: held off. `doom_cheat` stays planned, not built, till you say.

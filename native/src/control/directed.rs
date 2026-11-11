@@ -38,8 +38,9 @@ const PRESS_WATCH: i64 = 3 * 35;
 const OFF_AGAIN: i64 = 35;
 /// how long nothing's fought her before a paused explore order goes on (tics)
 const RESUME_CALM: i64 = 2 * 35;
-/// how far (along the way there) she goes for a pickup by herself, waiting
-const PICKUP_RANGE: f64 = 1024.0;
+/// how far (along the way there) she goes for a pickup by herself, waiting: about the room
+/// she's in (the user's: waiting, she doesn't really go anywhere)
+const PICKUP_RANGE: f64 = 256.0;
 /// the nearest pickups tried for a way there, waiting
 const PICKUP_TRIES: usize = 4;
 /// an item listed that counts for the level's items tally (the rest are just pickups)

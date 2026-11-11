@@ -2532,3 +2532,14 @@ first rewording of one).
 
 Checked on MAP06 (jumps, a teleport), E1M1 to E1M2 (the level lines). Parity: 24 runs the
 same.
+
+## The SDK plan's open questions answered (the user, 2026-11-11)
+
+Section 9 of `docs/NEURO_SDK_PLAN.md` has them. What they change now: with no action from Evil
+she **waits** (not on by herself by default): stays put, looks round (a quarter turn every 4
+s, the other way the next time), takes pickups only within 256 (was 1024: waiting she
+doesn't really go anywhere), fights what comes. Directed play only: parity the same.
+For later stages: question deadlines 3 s (class T) and 8 s (class D), from her answering in
+250 ms on average and rarely 5 s; restart hers once she's made no progress for a while (90 s
+proposed); next level hers to give from the tally screen; no level choice; skill behind the
+console's switch; cheats held off; free-text style a plan of its own (a Jev-like model).
