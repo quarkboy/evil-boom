@@ -55,7 +55,10 @@ pub const SURE_TICS: i64 = 8;
 /// sector unused)
 pub const BUSY_TICS: i64 = 200;
 /// textures that make a line look like a switch, a door or a lift
-pub const LOOKS_INTERACTIVE: [&str; 11] = ["SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR", "ZELDOOR", "PLAT", "SUPPORT"];
+pub const LOOKS_INTERACTIVE: [&str; 11] = [
+    "SW1", "SW2", "DOOR", "BIGDOOR", "SPCDOOR", "EXITDOOR", "ZDOOR", "ICKDOOR", "ZELDOOR", "PLAT",
+    "SUPPORT",
+];
 
 /// a wall suspected this much is worth a press of use
 pub const SUSPICION_MIN: f64 = 2.0;
@@ -63,16 +66,28 @@ pub const SUSPICION_MIN: f64 = 2.0;
 /// "the game says the line needs a key"
 fn needs_key(message: &str) -> bool {
     let m = message.to_lowercase();
-    let words: Vec<&str> = m.split(|c: char| !c.is_ascii_alphanumeric()).filter(|w| !w.is_empty()).collect();
-    let Some(i) = words.iter().position(|w| *w == "need") else { return false };
-    words[i + 1..].iter().any(|w| matches!(*w, "key" | "keys" | "card" | "skull"))
+    let words: Vec<&str> = m
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    let Some(i) = words.iter().position(|w| *w == "need") else {
+        return false;
+    };
+    words[i + 1..]
+        .iter()
+        .any(|w| matches!(*w, "key" | "keys" | "card" | "skull"))
 }
 
 /// "floor raise N" and the like: each press adds on.
 fn adds_on(description: &str) -> bool {
     let mut words = description.split(|c: char| c.is_whitespace() || c == ',');
     while let Some(w) = words.next() {
-        if w == "raise" && words.clone().next().is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit())) {
+        if w == "raise"
+            && words
+                .clone()
+                .next()
+                .is_some_and(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+        {
             return true;
         }
     }
@@ -275,12 +290,22 @@ impl Knowledge {
                 by_line.entry(li).or_default().push(t.id);
             }
         }
-        let info: BTreeMap<usize, LineSpecial> = m.linedefs.iter().enumerate().filter_map(|(i, l)| classify_line(l.special).map(|s| (i, s))).collect();
+        let info: BTreeMap<usize, LineSpecial> = m
+            .linedefs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, l)| classify_line(l.special).map(|s| (i, s)))
+            .collect();
         let mut boxes: BTreeMap<usize, [f64; 4]> = BTreeMap::new();
         for (li, l) in m.linedefs.iter().enumerate() {
             let (a, b) = m.line_seg(li);
             for s in [m.front_sector(l), m.back_sector(l)].into_iter().flatten() {
-                let bx = boxes.entry(s).or_insert([f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY]);
+                let bx = boxes.entry(s).or_insert([
+                    f64::INFINITY,
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                    f64::NEG_INFINITY,
+                ]);
                 for v in [a, b] {
                     bx[0] = bx[0].min(v.0);
                     bx[1] = bx[1].min(v.1);
@@ -289,15 +314,29 @@ impl Knowledge {
                 }
             }
         }
-        let sound_origin = boxes.into_iter().map(|(s, b)| (s, ((b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0))).collect();
+        let sound_origin = boxes
+            .into_iter()
+            .map(|(s, b)| (s, ((b[0] + b[2]) / 2.0, (b[1] + b[3]) / 2.0)))
+            .collect();
         let drawable = (0..m.linedefs.len())
             .filter(|&li| {
                 let l = &m.linedefs[li];
                 match m.sides(li) {
                     (Some(f), Some(b)) => {
                         let (sf, sb) = (&m.sectors[f], &m.sectors[b]);
-                        (sf.floor, sf.ceiling, &sf.floor_tex, &sf.ceiling_tex, sf.light) != (sb.floor, sb.ceiling, &sb.floor_tex, &sb.ceiling_tex, sb.light)
-                            || !matches!(m.sidedefs[usize::from(l.front)].middle.as_str(), "-" | "")
+                        (
+                            sf.floor,
+                            sf.ceiling,
+                            &sf.floor_tex,
+                            &sf.ceiling_tex,
+                            sf.light,
+                        ) != (
+                            sb.floor,
+                            sb.ceiling,
+                            &sb.floor_tex,
+                            &sb.ceiling_tex,
+                            sb.light,
+                        ) || !matches!(m.sidedefs[usize::from(l.front)].middle.as_str(), "-" | "")
                     }
                     _ => true,
                 }
@@ -310,7 +349,15 @@ impl Knowledge {
             }
         }
         let mut ends: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-        let mut boxes = vec![(f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY); m.sectors.len()];
+        let mut boxes = vec![
+            (
+                f64::INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::NEG_INFINITY
+            );
+            m.sectors.len()
+        ];
         for (i, l) in m.linedefs.iter().enumerate() {
             for v in [l.v1, l.v2] {
                 ends.entry(v).or_default().push(i);
@@ -319,7 +366,12 @@ impl Knowledge {
             let (f, bk) = m.sides(i);
             for s in [f, bk].into_iter().flatten() {
                 let bx = &mut boxes[s];
-                *bx = (bx.0.min(a.0).min(b.0), bx.1.min(a.1).min(b.1), bx.2.max(a.0).max(b.0), bx.3.max(a.1).max(b.1));
+                *bx = (
+                    bx.0.min(a.0).min(b.0),
+                    bx.1.min(a.1).min(b.1),
+                    bx.2.max(a.0).max(b.0),
+                    bx.3.max(a.1).max(b.1),
+                );
             }
         }
         let narrowness = boxes.iter().map(|b| (b.2 - b.0).min(b.3 - b.1)).collect();
@@ -455,8 +507,13 @@ impl Knowledge {
     }
 
     fn opening(&self, li: usize, heights: &[Heights]) -> Option<(f64, f64)> {
-        let (Some(f), Some(b)) = self.nav.map.sides(li) else { return None };
-        Some((heights[f].floor.max(heights[b].floor), heights[f].ceiling.min(heights[b].ceiling)))
+        let (Some(f), Some(b)) = self.nav.map.sides(li) else {
+            return None;
+        };
+        Some((
+            heights[f].floor.max(heights[b].floor),
+            heights[f].ceiling.min(heights[b].ceiling),
+        ))
     }
 
     /// Teleport line `li` and those joined to it end to end with the same tag (the same
@@ -464,8 +521,14 @@ impl Knowledge {
     pub fn teleport_pad(&self, li: usize) -> BTreeSet<usize> {
         let m = &self.nav.map;
         let tag = m.linedefs[li].tag;
-        let same: Vec<usize> =
-            self.info.iter().filter(|(&o, i)| i.category == Category::Teleport && i.players && m.linedefs[o].tag == tag).map(|(&o, _)| o).collect();
+        let same: Vec<usize> = self
+            .info
+            .iter()
+            .filter(|(&o, i)| {
+                i.category == Category::Teleport && i.players && m.linedefs[o].tag == tag
+            })
+            .map(|(&o, _)| o)
+            .collect();
         let mut pad = BTreeSet::from([li]);
         let mut todo = vec![li];
         while let Some(x) = todo.pop() {
@@ -557,7 +620,11 @@ impl Knowledge {
     pub fn mechanism(&self, li: usize) -> Mechanism {
         let m = &self.nav.map;
         let l = &m.linedefs[li];
-        if self.info.get(&li).is_some_and(|i| matches!(i.trigger, Trigger::D1 | Trigger::DR)) {
+        if self
+            .info
+            .get(&li)
+            .is_some_and(|i| matches!(i.trigger, Trigger::D1 | Trigger::DR))
+        {
             return Mechanism::Door(m.back_sector(l).unwrap_or(li));
         }
         if l.tag != 0 {
@@ -570,7 +637,11 @@ impl Knowledge {
     /// stair built from where it is, a floor raised by so much) each is worth a press of its
     /// own (MAP21's four switches each build its stair 16 higher).
     pub fn tried_key(&self, li: usize) -> Mechanism {
-        if self.info.get(&li).is_some_and(|i| i.category == Category::Stairs || adds_on(&i.description)) {
+        if self
+            .info
+            .get(&li)
+            .is_some_and(|i| i.category == Category::Stairs || adds_on(&i.description))
+        {
             return Mechanism::Line(li);
         }
         self.mechanism(li)
@@ -585,7 +656,12 @@ impl Knowledge {
             .filter(|(&i, info)| {
                 let (f, b) = m.sides(i);
                 info.category.is_exit()
-                    && (self.mapped.contains(&i) || (info.trigger.walked() && [f, b].into_iter().flatten().any(|s| self.sectors.contains(&s))))
+                    && (self.mapped.contains(&i)
+                        || (info.trigger.walked()
+                            && [f, b]
+                                .into_iter()
+                                .flatten()
+                                .any(|s| self.sectors.contains(&s))))
             })
             .map(|(&i, _)| i)
             .collect()
@@ -605,7 +681,11 @@ impl Knowledge {
                 let (f, b) = m.sides(i);
                 info.category == Category::Teleport
                     && info.players
-                    && (self.mapped.contains(&i) || [f, b].into_iter().flatten().any(|s| self.sectors.contains(&s)))
+                    && (self.mapped.contains(&i)
+                        || [f, b]
+                            .into_iter()
+                            .flatten()
+                            .any(|s| self.sectors.contains(&s)))
             })
             .map(|(&i, _)| i)
             .collect()
@@ -617,7 +697,13 @@ impl Knowledge {
         nav.map
             .things
             .iter()
-            .filter(|t| t.in_skill(nav.skill) && nav.mesh.poly_at((t.x, t.y)).is_some_and(|p| self.sectors.contains(&nav.sector_of_poly(p))))
+            .filter(|t| {
+                t.in_skill(nav.skill)
+                    && nav
+                        .mesh
+                        .poly_at((t.x, t.y))
+                        .is_some_and(|p| self.sectors.contains(&nav.sector_of_poly(p)))
+            })
             .copied()
             .collect()
     }
@@ -628,8 +714,13 @@ impl Knowledge {
     pub fn unexplained_since(&self) -> Option<i64> {
         // (and a teleport she's been through does what it does: takes her there, nothing to look
         // round for; MAP29's line 516, her first time through it setting off 25 rechecks)
-        let explained: BTreeSet<i64> =
-            self.learned.iter().filter(|(_, s)| !s.is_empty()).map(|(&i, _)| self.trigger(i).line).chain(self.teleports.keys().map(|&l| l as i64)).collect();
+        let explained: BTreeSet<i64> = self
+            .learned
+            .iter()
+            .filter(|(_, s)| !s.is_empty())
+            .map(|(&i, _)| self.trigger(i).line)
+            .chain(self.teleports.keys().map(|&l| l as i64))
+            .collect();
         let mut first: BTreeMap<usize, i64> = BTreeMap::new();
         for f in &self.fired {
             if f.how == How::Walk {
@@ -638,7 +729,11 @@ impl Knowledge {
                 first.insert(f.line, f.tic);
             }
         }
-        first.iter().filter(|(&l, _)| !explained.contains(&(l as i64))).map(|(_, &t)| t).max()
+        first
+            .iter()
+            .filter(|(&l, _)| !explained.contains(&(l as i64)))
+            .map(|(_, &t)| t)
+            .max()
     }
 
     /// Known sectors not closed on the automap yet: sector -> its lines that would be drawn if
@@ -669,7 +764,13 @@ impl Knowledge {
     pub fn restart(&mut self) {
         let m = Arc::clone(&self.nav.map);
         for &s in &self.sectors {
-            self.seen_heights.insert(s, Heights { floor: m.sectors[s].floor, ceiling: m.sectors[s].ceiling });
+            self.seen_heights.insert(
+                s,
+                Heights {
+                    floor: m.sectors[s].floor,
+                    ceiling: m.sectors[s].ceiling,
+                },
+            );
         }
         self.suit_until = None;
         self.changed_floor.clear();
@@ -683,7 +784,10 @@ impl Knowledge {
         self.stopped_at.clear();
         self.taking.clear();
         self.lives += 1;
-        self.events.push(format!("--- life {}: the level from the start, knowing what she knew", self.lives));
+        self.events.push(format!(
+            "--- life {}: the level from the start, knowing what she knew",
+            self.lives
+        ));
     }
 
     /// Where she can plan to go: the parts of the map she's seen into or stood in.
@@ -699,7 +803,9 @@ impl Knowledge {
     pub fn crusher_sectors(&self) -> BTreeMap<usize, crate::specials::CrusherKind> {
         let mut out: BTreeMap<usize, crate::specials::CrusherKind> = BTreeMap::new();
         for (t, sectors) in self.known_triggers() {
-            let Some(kind) = crate::specials::crusher_kind(t.info.special) else { continue };
+            let Some(kind) = crate::specials::crusher_kind(t.info.special) else {
+                continue;
+            };
             for s in sectors {
                 let e = out.entry(s).or_insert(kind);
                 if kind.holds && !e.holds {
@@ -715,7 +821,10 @@ impl Knowledge {
         for (&i, sectors) in &self.learned {
             let t = self.trigger(i);
             if let (false, Some(li)) = (sectors.is_empty(), t.linedef()) {
-                by_mechanism.entry(self.mechanism(li)).or_default().extend(sectors.iter().copied());
+                by_mechanism
+                    .entry(self.mechanism(li))
+                    .or_default()
+                    .extend(sectors.iter().copied());
             }
         }
         let mut out = Vec::new();
@@ -731,7 +840,12 @@ impl Knowledge {
                 out.push((t.clone(), l.clone()));
             } else if self.mapped.contains(&li) {
                 if let Some(same) = by_mechanism.get(&self.mechanism(li)) {
-                    let both: BTreeSet<usize> = t.effects.iter().map(|(s, _)| *s).filter(|s| same.contains(s)).collect();
+                    let both: BTreeSet<usize> = t
+                        .effects
+                        .iter()
+                        .map(|(s, _)| *s)
+                        .filter(|s| same.contains(s))
+                        .collect();
                     if !both.is_empty() {
                         out.push((t.clone(), both));
                     }
@@ -801,7 +915,11 @@ pub enum Behind {
 fn segment_point_distance(a: Point, b: Point, p: Point) -> f64 {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let l2 = dx * dx + dy * dy;
-    let t = if l2 == 0.0 { 0.0 } else { (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0) };
+    let t = if l2 == 0.0 {
+        0.0
+    } else {
+        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / l2).clamp(0.0, 1.0)
+    };
     dist(p, (a.0 + t * dx, a.1 + t * dy))
 }
 

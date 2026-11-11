@@ -22,22 +22,22 @@ use crate::engine::{Engine, Options};
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::most_items;
 use crate::knowledge::explorer::{Kind, Objective};
-use crate::sweep::{broken_secrets, hold_exit, progress, RunOptions};
 use crate::knowledge::model::Knowledge;
-use crate::play::Agent;
-use crate::tactical::tuning::Tuning;
 use crate::map::{MapData, ML_DONTDRAW};
 use crate::motor::{Controls, Observation, TICRATE};
 use crate::navigator::Navigator;
+use crate::play::Agent;
 use crate::specials::Lock;
+use crate::sweep::{broken_secrets, hold_exit, progress, RunOptions};
+use crate::tactical::tuning::Tuning;
 use crate::things::{pickup, PickupKind};
 
 mod console;
 mod present;
 mod stream;
 
-pub use stream::Side as StreamSide;
 use crate::wad::{load_map, Wad};
+pub use stream::Side as StreamSide;
 
 const W: usize = 1600;
 const H: usize = 900;
@@ -137,7 +137,10 @@ struct MapView {
 
 impl MapView {
     fn at(&self, p: Point) -> Point {
-        (self.r.0 as f64 + self.r.2 as f64 / 2.0 + (p.0 - self.centre.0) * self.scale, self.r.1 as f64 + self.r.3 as f64 / 2.0 - (p.1 - self.centre.1) * self.scale)
+        (
+            self.r.0 as f64 + self.r.2 as f64 / 2.0 + (p.0 - self.centre.0) * self.scale,
+            self.r.1 as f64 + self.r.3 as f64 / 2.0 - (p.1 - self.centre.1) * self.scale,
+        )
     }
 }
 
@@ -150,7 +153,8 @@ impl Canvas {
         if x < cx as i64 || y < cy as i64 || x >= (cx + cw) as i64 || y >= (cy + ch) as i64 {
             return;
         }
-        self.px[y as usize * self.width + x as usize] = (u32::from(c.0) << 16) | (u32::from(c.1) << 8) | u32::from(c.2);
+        self.px[y as usize * self.width + x as usize] =
+            (u32::from(c.0) << 16) | (u32::from(c.1) << 8) | u32::from(c.2);
     }
 
     fn fill(&mut self, r: Rect, c: Rgb) {
@@ -196,13 +200,24 @@ impl Canvas {
     }
 
     fn triangle(&mut self, p: [Point; 3], c: Rgb) {
-        let (x0, x1) = (p.iter().map(|q| q.0).fold(f64::INFINITY, f64::min), p.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max));
-        let (y0, y1) = (p.iter().map(|q| q.1).fold(f64::INFINITY, f64::min), p.iter().map(|q| q.1).fold(f64::NEG_INFINITY, f64::max));
-        let side = |a: Point, b: Point, q: Point| (b.0 - a.0) * (q.1 - a.1) - (b.1 - a.1) * (q.0 - a.0);
+        let (x0, x1) = (
+            p.iter().map(|q| q.0).fold(f64::INFINITY, f64::min),
+            p.iter().map(|q| q.0).fold(f64::NEG_INFINITY, f64::max),
+        );
+        let (y0, y1) = (
+            p.iter().map(|q| q.1).fold(f64::INFINITY, f64::min),
+            p.iter().map(|q| q.1).fold(f64::NEG_INFINITY, f64::max),
+        );
+        let side =
+            |a: Point, b: Point, q: Point| (b.0 - a.0) * (q.1 - a.1) - (b.1 - a.1) * (q.0 - a.0);
         for y in y0.floor() as i64..=y1.ceil() as i64 {
             for x in x0.floor() as i64..=x1.ceil() as i64 {
                 let q = (x as f64, y as f64);
-                let s = [side(p[0], p[1], q), side(p[1], p[2], q), side(p[2], p[0], q)];
+                let s = [
+                    side(p[0], p[1], q),
+                    side(p[1], p[2], q),
+                    side(p[2], p[0], q),
+                ];
                 if s.iter().all(|&v| v >= 0.0) || s.iter().all(|&v| v <= 0.0) {
                     self.put(x, y, c);
                 }
@@ -239,10 +254,12 @@ impl Canvas {
     /// How many characters, and lines, of `scale` text fit `width` by `height`.
     fn fits(&self, scale: usize, width: usize, height: usize) -> (usize, usize) {
         let g = self.glyph(scale);
-        (width / g.max(1), height / (g + (3.0 * self.text_scale).round() as usize).max(1))
+        (
+            width / g.max(1),
+            height / (g + (3.0 * self.text_scale).round() as usize).max(1),
+        )
     }
 }
-
 
 /// How to watch.
 pub struct WatchOptions {
@@ -325,7 +342,13 @@ impl Feed {
         let out = input.with_extension("out");
         let _ = std::fs::write(&out, "");
         // (from its start: the file is this game's orders, and a saved one plays back)
-        Feed { director: crate::control::directed::Director::new(), input: input.to_path_buf(), read: 0, out, shown: 0 }
+        Feed {
+            director: crate::control::directed::Director::new(),
+            input: input.to_path_buf(),
+            read: 0,
+            out,
+            shown: 0,
+        }
     }
 
     /// The tic's orders read and carried out, the reports since; the lines for the log.
@@ -338,7 +361,11 @@ impl Feed {
                     // (whole lines only: one still being written waits)
                     let upto = text.rfind('\n').map_or(0, |i| i + 1);
                     self.read += upto;
-                    for cmd in text[..upto].lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+                    for cmd in text[..upto]
+                        .lines()
+                        .map(str::trim)
+                        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+                    {
                         lines.push(format!(">> {cmd}"));
                         match crate::control::script::command(&mut self.director, agent, obs, cmd) {
                             Ok(out) => lines.extend(out.into_iter().map(|l| format!("<< {l}"))),
@@ -350,7 +377,13 @@ impl Feed {
         }
         self.director.tick(agent, obs);
         for r in &self.director.reports[self.shown..] {
-            lines.push(format!("<< [{:.1}s] {}{}{}", r.tic as f64 / 35.0, if r.notable { "(!) " } else { "" }, if r.ok { "" } else { "FAILED: " }, r.text));
+            lines.push(format!(
+                "<< [{:.1}s] {}{}{}",
+                r.tic as f64 / 35.0,
+                if r.notable { "(!) " } else { "" },
+                if r.ok { "" } else { "FAILED: " },
+                r.text
+            ));
         }
         self.shown = self.director.reports.len();
         if !lines.is_empty() {
@@ -443,7 +476,12 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
 }
 
 /// The WAD and the watcher for the first level.
-fn first_watch(wad: &str, map_name: &str, o: &WatchOptions, sound: bool) -> Result<(Wad, Watch), String> {
+fn first_watch(
+    wad: &str,
+    map_name: &str,
+    o: &WatchOptions,
+    sound: bool,
+) -> Result<(Wad, Watch), String> {
     let iwad = resolve_wad(wad);
     let w = Wad::open(&iwad)?;
     let map_name = map_name.to_uppercase();
@@ -452,7 +490,19 @@ fn first_watch(wad: &str, map_name: &str, o: &WatchOptions, sound: bool) -> Resu
     let mut nav = Navigator::new(Arc::clone(&m), skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
-    let mut engine = Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert, drawn: true, sound, capture: o.capture_sound, seed: o.seed })?;
+    let mut engine = Engine::new(
+        &iwad,
+        &map_name,
+        &Options {
+            skill,
+            nomonsters: o.fight == 0,
+            objects: o.fight > 0 || o.expert,
+            drawn: true,
+            sound,
+            capture: o.capture_sound,
+            seed: o.seed,
+        },
+    )?;
     engine.carry.clone_from(&o.carry);
     engine.start();
     if !o.mortal || o.practice {
@@ -497,14 +547,29 @@ pub struct RecordOptions {
 
 /// ffmpeg: on the path, else where winget put it.
 pub fn find_ffmpeg() -> Option<std::path::PathBuf> {
-    let ok = |p: &std::path::Path| std::process::Command::new(p).arg("-version").stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success());
+    let ok = |p: &std::path::Path| {
+        std::process::Command::new(p)
+            .arg("-version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    };
     if ok(Path::new("ffmpeg")) {
         return Some("ffmpeg".into());
     }
     let local = std::env::var_os("LOCALAPPDATA")?;
-    let packages = Path::new(&local).join("Microsoft").join("WinGet").join("Packages");
+    let packages = Path::new(&local)
+        .join("Microsoft")
+        .join("WinGet")
+        .join("Packages");
     for e in std::fs::read_dir(&packages).ok()?.flatten() {
-        if !e.file_name().to_string_lossy().to_lowercase().contains("ffmpeg") {
+        if !e
+            .file_name()
+            .to_string_lossy()
+            .to_lowercase()
+            .contains("ffmpeg")
+        {
             continue;
         }
         for b in std::fs::read_dir(e.path()).ok()?.flatten() {
@@ -519,7 +584,12 @@ pub fn find_ffmpeg() -> Option<std::path::PathBuf> {
 
 /// The run watched, as fast as it goes, into an MP4 (ffmpeg encoding the frames piped to it):
 /// the level (and with --episode the ones after), as a watch plays it.
-pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) -> Result<(), String> {
+pub fn record(
+    wad: &str,
+    map_name: &str,
+    o: &WatchOptions,
+    r: &RecordOptions,
+) -> Result<(), String> {
     use std::io::Write;
     let (w, mut watch) = first_watch(wad, map_name, o, false)?;
     let (fw, fh) = match r.view {
@@ -527,7 +597,11 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
         RecordView::Hud => (GAME.2, GAME.3),
         RecordView::Game => {
             watch.tic();
-            watch.frame.as_ref().map(|f| (f.0, f.1)).ok_or("the game drew nothing")?
+            watch
+                .frame
+                .as_ref()
+                .map(|f| (f.0, f.1))
+                .ok_or("the game drew nothing")?
         }
     };
     let (ow, oh) = r.size.unwrap_or(match r.view {
@@ -535,28 +609,79 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
         _ => (fw as u32, fh as u32),
     });
     // (Doom's pixels are taller than wide: the game's view stretched to 4:3; crisp)
-    let scale = format!("scale={ow}:{oh}:flags={}", if r.view == RecordView::Game { "neighbor" } else { "bicubic" });
+    let scale = format!(
+        "scale={ow}:{oh}:flags={}",
+        if r.view == RecordView::Game {
+            "neighbor"
+        } else {
+            "bicubic"
+        }
+    );
     // (somewhere to put it: ffmpeg makes no folders)
     if let Some(dir) = r.out.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     // (at x1, the game's sound too: taken a tic at a time beside the frames, put with them at the
     // end; the user's)
-    let video_out = if o.capture_sound { r.out.with_extension("video.mp4") } else { r.out.clone() };
+    let video_out = if o.capture_sound {
+        r.out.with_extension("video.mp4")
+    } else {
+        r.out.clone()
+    };
     let audio_out = r.out.with_extension("audio.raw");
-    let mut audio = if o.capture_sound { Some(std::io::BufWriter::new(std::fs::File::create(&audio_out).map_err(|e| format!("{}: {e}", audio_out.display()))?)) } else { None };
+    let mut audio = if o.capture_sound {
+        Some(std::io::BufWriter::new(
+            std::fs::File::create(&audio_out)
+                .map_err(|e| format!("{}: {e}", audio_out.display()))?,
+        ))
+    } else {
+        None
+    };
     let mut audio_rate = 0;
     let mut ff = std::process::Command::new(&r.ffmpeg)
-        .args(["-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgr0", "-s", &format!("{fw}x{fh}"), "-r", "35", "-i", "-"])
-        .args(["-vf", &scale, "-c:v", "libx264", "-preset", &r.preset, "-crf", &r.crf.to_string(), "-pix_fmt", "yuv420p"])
+        .args([
+            "-y",
+            "-loglevel",
+            "error",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "bgr0",
+            "-s",
+            &format!("{fw}x{fh}"),
+            "-r",
+            "35",
+            "-i",
+            "-",
+        ])
+        .args([
+            "-vf",
+            &scale,
+            "-c:v",
+            "libx264",
+            "-preset",
+            &r.preset,
+            "-crf",
+            &r.crf.to_string(),
+            "-pix_fmt",
+            "yuv420p",
+        ])
         .arg(&video_out)
         .stdin(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| format!("{}: {e}", r.ffmpeg.display()))?;
     let mut pipe = ff.stdin.take().ok_or("no pipe to ffmpeg")?;
-    println!("recording {} at {ow}x{oh} (the view {fw}x{fh})", r.out.display());
+    println!(
+        "recording {} at {ow}x{oh} (the view {fw}x{fh})",
+        r.out.display()
+    );
     let mut began = Instant::now();
-    let mut canvas = Canvas { px: vec![0; W * H], width: W, clip: (0, 0, W, H), text_scale: 1.0 };
+    let mut canvas = Canvas {
+        px: vec![0; W * H],
+        width: W,
+        clip: (0, 0, W, H),
+        text_scale: 1.0,
+    };
     if r.view == RecordView::Hud {
         // (the corner map round her, near enough to read)
         (watch.follow, watch.zoom) = (true, HUD_ZOOM);
@@ -569,18 +694,26 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
     let real_time = o.neuro.is_some() || o.directed.is_some();
     loop {
         let (paced_from, paced_tic) = (Instant::now(), watch.engine.tic);
-        while !watch.engine.finished() && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE {
+        while !watch.engine.finished()
+            && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE
+        {
             if real_time {
-                let due = paced_from + std::time::Duration::from_secs_f64((watch.engine.tic - paced_tic) as f64 / TICRATE);
+                let due = paced_from
+                    + std::time::Duration::from_secs_f64(
+                        (watch.engine.tic - paced_tic) as f64 / TICRATE,
+                    );
                 if let Some(wait) = due.checked_duration_since(Instant::now()) {
                     std::thread::sleep(wait);
                 }
             }
             watch.tic();
-            if let (Some(file), Some((rate, samples))) = (audio.as_mut(), watch.engine.grab_tic_sound()) {
+            if let (Some(file), Some((rate, samples))) =
+                (audio.as_mut(), watch.engine.grab_tic_sound())
+            {
                 audio_rate = rate;
                 let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
-                file.write_all(&bytes).map_err(|e| format!("{}: {e}", audio_out.display()))?;
+                file.write_all(&bytes)
+                    .map_err(|e| format!("{}: {e}", audio_out.display()))?;
             }
             n += 1;
             if !n.is_multiple_of(u64::from(r.every.max(1))) {
@@ -589,7 +722,9 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
             bytes.clear();
             match r.view {
                 RecordView::Game => {
-                    let Some((gw, gh, px)) = &watch.frame else { continue };
+                    let Some((gw, gh, px)) = &watch.frame else {
+                        continue;
+                    };
                     if (*gw, *gh) != (fw, fh) {
                         continue;
                     }
@@ -617,15 +752,33 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
             if (watch.engine.tic - start) % TICRATE as i64 == 0 {
                 let secs = (watch.engine.tic - start) as f64 / TICRATE;
                 let real = began.elapsed().as_secs_f64().max(1e-3);
-                eprint!("
-  {} {}:{:02} game  ({:.1}x real time)   ", watch.map_name, secs as i64 / 60, secs as i64 % 60, secs / real);
+                eprint!(
+                    "
+  {} {}:{:02} game  ({:.1}x real time)   ",
+                    watch.map_name,
+                    secs as i64 / 60,
+                    secs as i64 % 60,
+                    secs / real
+                );
                 let _ = std::io::stderr().flush();
             }
         }
         eprintln!();
         let t = watch.engine.tally();
-        let how = if watch.engine.exited() { "EXITED" } else if watch.engine.dead() { "DIED" } else { "TIME" };
-        println!("{}: {how} items {}/{}, {:.0}s game", watch.map_name, t[0].0, t[0].1, (watch.engine.tic - start) as f64 / TICRATE);
+        let how = if watch.engine.exited() {
+            "EXITED"
+        } else if watch.engine.dead() {
+            "DIED"
+        } else {
+            "TIME"
+        };
+        println!(
+            "{}: {how} items {}/{}, {:.0}s game",
+            watch.map_name,
+            t[0].0,
+            t[0].1,
+            (watch.engine.tic - start) as f64 / TICRATE
+        );
         if !(o.episode && watch.engine.exited()) {
             break;
         }
@@ -655,7 +808,15 @@ pub fn record(wad: &str, map_name: &str, o: &WatchOptions, r: &RecordOptions) ->
             let muxed = std::process::Command::new(&r.ffmpeg)
                 .args(["-y", "-loglevel", "error", "-i"])
                 .arg(&video_out)
-                .args(["-f", "s16le", "-ar", &audio_rate.to_string(), "-ac", "2", "-i"])
+                .args([
+                    "-f",
+                    "s16le",
+                    "-ar",
+                    &audio_rate.to_string(),
+                    "-ac",
+                    "2",
+                    "-i",
+                ])
                 .arg(&audio_out)
                 .args(["-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-shortest"])
                 .arg(&r.out)
@@ -680,13 +841,25 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
     // (the log as it's written, to follow live: tail -f)
     let live = out_dir().join("watch").join("live.log");
     std::fs::create_dir_all(live.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-    let mut log = crate::config::Log::create(&live, &o.seed.map_or_else(String::new, |s| format!("s{s}"))).map_err(|e| e.to_string())?;
-    println!("log: {}{}", live.display(), if o.paced { format!(" (at x{})", o.speed) } else { String::new() });
+    let mut log =
+        crate::config::Log::create(&live, &o.seed.map_or_else(String::new, |s| format!("s{s}")))
+            .map_err(|e| e.to_string())?;
+    println!(
+        "log: {}{}",
+        live.display(),
+        if o.paced {
+            format!(" (at x{})", o.speed)
+        } else {
+            String::new()
+        }
+    );
     loop {
         let mut shown = 0;
         let (began, first) = (Instant::now(), watch.engine.tic);
         let _ = writeln!(log, "== {}", watch.map_name);
-        while !watch.engine.finished() && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE {
+        while !watch.engine.finished()
+            && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE
+        {
             watch.tic();
             let lines = &watch.agent.x().log;
             let at = watch.engine.tic as f64 / TICRATE;
@@ -695,15 +868,34 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
             }
             shown = lines.len();
             if o.paced && o.speed > 0.0 {
-                let due = began + std::time::Duration::from_secs_f64((watch.engine.tic - first) as f64 / (TICRATE * o.speed));
+                let due = began
+                    + std::time::Duration::from_secs_f64(
+                        (watch.engine.tic - first) as f64 / (TICRATE * o.speed),
+                    );
                 if let Some(wait) = due.checked_duration_since(Instant::now()) {
                     std::thread::sleep(wait);
                 }
             }
         }
         let t = watch.engine.tally();
-        let how = if watch.engine.exited() { "EXITED" } else if watch.engine.dead() { "DIED" } else { "TIME" };
-        let line = format!("{}: {how} kills {}/{}, items {}/{}, secrets {}/{}, {:.0}s game", watch.map_name, t[1].0, t[1].1, t[0].0, t[0].1, t[2].0, t[2].1, (watch.engine.tic - start) as f64 / TICRATE);
+        let how = if watch.engine.exited() {
+            "EXITED"
+        } else if watch.engine.dead() {
+            "DIED"
+        } else {
+            "TIME"
+        };
+        let line = format!(
+            "{}: {how} kills {}/{}, items {}/{}, secrets {}/{}, {:.0}s game",
+            watch.map_name,
+            t[1].0,
+            t[1].1,
+            t[0].0,
+            t[0].1,
+            t[2].0,
+            t[2].1,
+            (watch.engine.tic - start) as f64 / TICRATE
+        );
         println!("{line}");
         let _ = writeln!(log, "{line}");
         if !(o.episode && watch.engine.exited()) {
@@ -718,17 +910,44 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
 }
 
 /// The watcher for the level the engine's on: Evil in it afresh, as a run starts her.
-fn level(w: &Wad, m: Arc<MapData>, nav: Rc<Navigator>, engine: Engine, o: &WatchOptions) -> Result<Watch, String> {
+fn level(
+    w: &Wad,
+    m: Arc<MapData>,
+    nav: Rc<Navigator>,
+    engine: Engine,
+    o: &WatchOptions,
+) -> Result<Watch, String> {
     let map_name = engine.map_name.clone();
     let skill = if o.fight > 0 { o.fight } else { 3 };
     // (seeing as a run does: watched, a run plays as it did; the user's)
     let knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
-    let mut agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives, Tuning::from(o.tuning.as_deref())?);
+    let mut agent = Agent::new(
+        &nav,
+        knowledge,
+        o.fight,
+        o.expert,
+        o.lives,
+        Tuning::from(o.tuning.as_deref())?,
+    );
     // (a 100% run as a sweep plays it: the exit held back while what it's after is short, given
     // up on after a stall)
     let hold = (o.expert || o.secrets || o.complete).then(|| {
-        let ro = RunOptions { expert: o.expert, secrets: o.secrets, complete: o.complete, fight: o.fight, stall_seconds: o.stall_seconds, ..RunOptions::default() };
-        Hold { secrets_short: broken_secrets(&map_name), items_short: most_items(&m, skill), o: ro, best: [0; 7], best_tic: 0, given_up: false }
+        let ro = RunOptions {
+            expert: o.expert,
+            secrets: o.secrets,
+            complete: o.complete,
+            fight: o.fight,
+            stall_seconds: o.stall_seconds,
+            ..RunOptions::default()
+        };
+        Hold {
+            secrets_short: broken_secrets(&map_name),
+            items_short: most_items(&m, skill),
+            o: ro,
+            best: [0; 7],
+            best_tic: 0,
+            given_up: false,
+        }
     });
     if o.secrets {
         agent.x_mut().exit_last = true;
@@ -760,14 +979,20 @@ fn level(w: &Wad, m: Arc<MapData>, nav: Rc<Navigator>, engine: Engine, o: &Watch
 /// map the exit she took leads to (None: the episode's over).
 fn next_level(watch: Watch, w: &Wad, o: &WatchOptions) -> Result<Option<Watch>, String> {
     let secret = watch.engine.secret_exit();
-    let Some(next) = crate::sweep::next_map(&watch.map_name, secret) else { return Ok(None) };
+    let Some(next) = crate::sweep::next_map(&watch.map_name, secret) else {
+        return Ok(None);
+    };
     let loaded = load_level(w, &next, o)?;
     let carry = watch.engine.loadout();
     enter_level(watch, w, o, &next, loaded, Some(carry)).map(Some)
 }
 
 /// A level's map and its analysis, made ready (what can fail, before anything's changed).
-fn load_level(w: &Wad, name: &str, o: &WatchOptions) -> Result<(Arc<MapData>, Rc<Navigator>), String> {
+fn load_level(
+    w: &Wad,
+    name: &str,
+    o: &WatchOptions,
+) -> Result<(Arc<MapData>, Rc<Navigator>), String> {
     crate::engine::episode_map(name)?;
     let m = Arc::new(load_map(w, name, &[])?);
     let skill = if o.fight > 0 { o.fight } else { 3 };
@@ -779,10 +1004,18 @@ fn load_level(w: &Wad, name: &str, o: &WatchOptions) -> Result<(Arc<MapData>, Rc
 /// The engine on to the level `load_level` made ready, she in it afresh with `carry` (none: as
 /// the run was started, a pistol start unless --carry); the window's settings and the console
 /// kept.
-fn enter_level(watch: Watch, w: &Wad, o: &WatchOptions, name: &str, (m, nav): (Arc<MapData>, Rc<Navigator>), carry: Option<crate::dsda::Loadout>) -> Result<Watch, String> {
+fn enter_level(
+    watch: Watch,
+    w: &Wad,
+    o: &WatchOptions,
+    name: &str,
+    (m, nav): (Arc<MapData>, Rc<Navigator>),
+    carry: Option<crate::dsda::Loadout>,
+) -> Result<Watch, String> {
     let (speed, show_all, follow) = (watch.speed, watch.show_all, watch.follow);
     let (sound, muted, sound_on) = (watch.sound, watch.muted, watch.sound_on);
-    let (paused, mut console, present, stream) = (watch.paused, watch.console, watch.present, watch.stream);
+    let (paused, mut console, present, stream) =
+        (watch.paused, watch.console, watch.present, watch.stream);
     let mut engine = watch.engine;
     engine.carry = carry.or_else(|| o.carry.clone());
     engine.goto(name)?;
@@ -801,7 +1034,13 @@ fn enter_level(watch: Watch, w: &Wad, o: &WatchOptions, name: &str, (m, nav): (A
 
 /// A fight set up already (an arena: the engine with its monsters spawned and her loadout given,
 /// drawn; her agent), watched: one life, no switches or doors (as `evil-boom arena` plays it).
-pub fn watch_prepared(p: crate::arena::Prepared, map_name: &str, speed: f64, sound: bool, title: &str) -> Result<(), String> {
+pub fn watch_prepared(
+    p: crate::arena::Prepared,
+    map_name: &str,
+    speed: f64,
+    sound: bool,
+    title: &str,
+) -> Result<(), String> {
     let mut watch = Watch::new(&p.wad, p.map, map_name, p.engine, p.agent, None, 0);
     watch.speed = speed;
     (watch.sound, watch.sound_on) = (sound, sound);
@@ -813,10 +1052,30 @@ pub fn watch_prepared(p: crate::arena::Prepared, map_name: &str, speed: f64, sou
 /// paused, +/- the speed, A the whole map, F follow, the wheel zooms.
 fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> Result<(), String> {
     // (the stream's window its own size, and a plain title to find it by in OBS)
-    let (ww, wh, title) = if watch.stream.is_some() { (stream::SW, stream::SH, "Evil DOOM") } else { (W, H, title) };
-    let mut window = Window::new(title, ww, wh, WindowOptions { resize: true, scale: Scale::FitScreen, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() }).map_err(|e| e.to_string())?;
+    let (ww, wh, title) = if watch.stream.is_some() {
+        (stream::SW, stream::SH, "Evil DOOM")
+    } else {
+        (W, H, title)
+    };
+    let mut window = Window::new(
+        title,
+        ww,
+        wh,
+        WindowOptions {
+            resize: true,
+            scale: Scale::FitScreen,
+            scale_mode: ScaleMode::AspectRatioStretch,
+            ..WindowOptions::default()
+        },
+    )
+    .map_err(|e| e.to_string())?;
     window.set_target_fps(60);
-    let mut canvas = Canvas { px: vec![0; ww * wh], width: ww, clip: (0, 0, ww, wh), text_scale: 1.0 };
+    let mut canvas = Canvas {
+        px: vec![0; ww * wh],
+        width: ww,
+        clip: (0, 0, ww, wh),
+        text_scale: 1.0,
+    };
     let mut aside: Option<Canvas> = None;
     let mut last = Instant::now();
     let mut owed = 0.0;
@@ -844,7 +1103,8 @@ fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> R
             }
         }
         // (the sound only at the game's own speed: faster or slower it'd pile up or lag)
-        let sound = watch.sound && !watch.muted && !watch.paused && (watch.speed - 1.0).abs() < 1e-9;
+        let sound =
+            watch.sound && !watch.muted && !watch.paused && (watch.speed - 1.0).abs() < 1e-9;
         if sound != watch.sound_on {
             watch.engine.sound(sound);
             watch.sound_on = sound;
@@ -870,7 +1130,9 @@ fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> R
                 owed = 0.0;
             }
             paint(&mut watch, &mut canvas, &mut aside);
-            window.update_with_buffer(&canvas.px, ww, wh).map_err(|e| e.to_string())?;
+            window
+                .update_with_buffer(&canvas.px, ww, wh)
+                .map_err(|e| e.to_string())?;
             continue;
         }
         let wanted = watch.agent.x().restart_wanted;
@@ -895,8 +1157,20 @@ fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> R
             match next_level(watch, w, o)? {
                 Some(next) => {
                     watch = next;
-                    println!("{name} done: on to {} with health {} armor {}, ammo {}/{}/{}/{}", watch.map_name, carried.health, carried.armor, carried.clip, carried.shell, carried.cell, carried.rocket);
-                    window.set_title(&format!("evil-doom explorer: {} (from {name}: health {} armor {})", watch.map_name, carried.health, carried.armor));
+                    println!(
+                        "{name} done: on to {} with health {} armor {}, ammo {}/{}/{}/{}",
+                        watch.map_name,
+                        carried.health,
+                        carried.armor,
+                        carried.clip,
+                        carried.shell,
+                        carried.cell,
+                        carried.rocket
+                    );
+                    window.set_title(&format!(
+                        "evil-doom explorer: {} (from {name}: health {} armor {})",
+                        watch.map_name, carried.health, carried.armor
+                    ));
                 }
                 None => return Ok(()), // (the episode's over)
             }
@@ -905,7 +1179,9 @@ fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> R
             owed = 0.0;
         }
         paint(&mut watch, &mut canvas, &mut aside);
-        window.update_with_buffer(&canvas.px, ww, wh).map_err(|e| e.to_string())?;
+        window
+            .update_with_buffer(&canvas.px, ww, wh)
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -916,11 +1192,20 @@ fn show(mut watch: Watch, title: &str, game: Option<(&Wad, &WatchOptions)>) -> R
 fn paint(watch: &mut Watch, canvas: &mut Canvas, aside: &mut Option<Canvas>) {
     if watch.stream.is_some() {
         watch.draw_stream(canvas);
-        if watch.console.as_ref().is_some_and(console::Console::views_due) {
+        if watch
+            .console
+            .as_ref()
+            .is_some_and(console::Console::views_due)
+        {
             if let Some(c) = watch.console.as_mut() {
                 c.stream_view(&canvas.px, canvas.width, canvas.px.len() / canvas.width);
             }
-            let a = aside.get_or_insert_with(|| Canvas { px: vec![0; W * H], width: W, clip: (0, 0, W, H), text_scale: 1.0 });
+            let a = aside.get_or_insert_with(|| Canvas {
+                px: vec![0; W * H],
+                width: W,
+                clip: (0, 0, W, H),
+                text_scale: 1.0,
+            });
             watch.draw(a);
             if let Some(c) = watch.console.as_mut() {
                 c.views(&a.px, watch.frame.as_ref(), &watch.palette);
@@ -936,19 +1221,48 @@ fn paint(watch: &mut Watch, canvas: &mut Canvas, aside: &mut Option<Canvas>) {
 
 /// The window as it is now (the game's frame, the map, the panels) into out/watch.png, for a run
 /// played as a sweep plays it (run-map --snapshot): drawn once, at the end.
-pub fn save_snapshot(w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, agent: Agent, focus: Option<(f64, f64, f64)>) -> Result<(), String> {
-    snapshot_to(&out_dir().join("watch.png"), w, m, map_name, engine, agent, focus).2
+pub fn save_snapshot(
+    w: &Wad,
+    m: Arc<MapData>,
+    map_name: &str,
+    engine: Engine,
+    agent: Agent,
+    focus: Option<(f64, f64, f64)>,
+) -> Result<(), String> {
+    snapshot_to(
+        &out_dir().join("watch.png"),
+        w,
+        m,
+        map_name,
+        engine,
+        agent,
+        focus,
+    )
+    .2
 }
 
 /// The window drawn once into `path`, the game and Evil handed back after (evil-boom drive).
-pub fn snapshot_to(path: &Path, w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, agent: Agent, focus: Option<(f64, f64, f64)>) -> (Engine, Agent, Result<(), String>) {
+pub fn snapshot_to(
+    path: &Path,
+    w: &Wad,
+    m: Arc<MapData>,
+    map_name: &str,
+    engine: Engine,
+    agent: Agent,
+    focus: Option<(f64, f64, f64)>,
+) -> (Engine, Agent, Result<(), String>) {
     let mut watch = Watch::new(w, m, map_name, engine, agent, focus, 0);
     let obs = watch.engine.observe();
     watch.frame = watch.engine.frame();
     watch.options = watch.agent.objectives(&obs);
     watch.options_tic = obs.tic;
     watch.obs = Some(obs);
-    let mut canvas = Canvas { px: vec![0; W * H], width: W, clip: (0, 0, W, H), text_scale: 1.0 };
+    let mut canvas = Canvas {
+        px: vec![0; W * H],
+        width: W,
+        clip: (0, 0, W, H),
+        text_scale: 1.0,
+    };
     watch.draw(&mut canvas);
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
@@ -959,8 +1273,16 @@ pub fn snapshot_to(path: &Path, w: &Wad, m: Arc<MapData>, map_name: &str, engine
 
 /// PLAYPAL's first palette, as 0RGB.
 fn palette(w: &Wad) -> Vec<u32> {
-    let Some(lump) = w.lumps.iter().find(|l| l.name == "PLAYPAL") else { return (0..256).map(|i| i * 0x0001_0101).collect() };
-    w.read(lump).as_chunks::<3>().0.iter().take(256).map(|c| (u32::from(c[0]) << 16) | (u32::from(c[1]) << 8) | u32::from(c[2])).collect()
+    let Some(lump) = w.lumps.iter().find(|l| l.name == "PLAYPAL") else {
+        return (0..256).map(|i| i * 0x0001_0101).collect();
+    };
+    w.read(lump)
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .take(256)
+        .map(|c| (u32::from(c[0]) << 16) | (u32::from(c[1]) << 8) | u32::from(c[2]))
+        .collect()
 }
 
 fn save_png(path: &Path, px: &[u32]) -> Result<(), String> {
@@ -969,15 +1291,31 @@ fn save_png(path: &Path, px: &[u32]) -> Result<(), String> {
     enc.set_color(png::ColorType::Rgb);
     enc.set_depth(png::BitDepth::Eight);
     let mut writer = enc.write_header().map_err(|e| e.to_string())?;
-    let data: Vec<u8> = px.iter().flat_map(|&p| [(p >> 16) as u8, (p >> 8) as u8, p as u8]).collect();
+    let data: Vec<u8> = px
+        .iter()
+        .flat_map(|&p| [(p >> 16) as u8, (p >> 8) as u8, p as u8])
+        .collect();
     writer.write_image_data(&data).map_err(|e| e.to_string())
 }
 
 impl Watch {
-    fn new(w: &Wad, m: Arc<MapData>, map_name: &str, engine: Engine, agent: Agent, focus: Option<(f64, f64, f64)>, lives_left: i32) -> Watch {
+    fn new(
+        w: &Wad,
+        m: Arc<MapData>,
+        map_name: &str,
+        engine: Engine,
+        agent: Agent,
+        focus: Option<(f64, f64, f64)>,
+        lives_left: i32,
+    ) -> Watch {
         let xs = m.vertexes.iter().map(|v| v.x);
         let ys = m.vertexes.iter().map(|v| v.y);
-        let bounds = (xs.clone().fold(f64::INFINITY, f64::min), ys.clone().fold(f64::INFINITY, f64::min), xs.fold(f64::NEG_INFINITY, f64::max), ys.fold(f64::NEG_INFINITY, f64::max));
+        let bounds = (
+            xs.clone().fold(f64::INFINITY, f64::min),
+            ys.clone().fold(f64::INFINITY, f64::min),
+            xs.fold(f64::NEG_INFINITY, f64::max),
+            ys.fold(f64::NEG_INFINITY, f64::max),
+        );
         Watch {
             console: None,
             present: None,
@@ -1042,7 +1380,10 @@ impl Watch {
             }
             // (and what the GPT stand-in said, if it's in this program)
             for s in crate::neuro::gpt::take_said() {
-                self.agent.x_mut().log.push(format!("evil says: {}", s.replace('\n', " ")));
+                self.agent
+                    .x_mut()
+                    .log
+                    .push(format!("evil says: {}", s.replace('\n', " ")));
             }
         }
         let mut c = self.agent.act(&obs, self.controls.as_ref());
@@ -1051,8 +1392,17 @@ impl Watch {
         }
         self.engine.step(&c);
         for h in self.engine.take_hits() {
-            let armor = if h.armor > 0 { format!(" (and {} armor)", h.armor) } else { String::new() };
-            self.agent.x_mut().log.push(format!("tic {}: hit for {}{armor} by {}", self.engine.tic, h.health, h.from()));
+            let armor = if h.armor > 0 {
+                format!(" (and {} armor)", h.armor)
+            } else {
+                String::new()
+            };
+            self.agent.x_mut().log.push(format!(
+                "tic {}: hit for {}{armor} by {}",
+                self.engine.tic,
+                h.health,
+                h.from()
+            ));
         }
         self.controls = Some(c);
         if let Some(h) = self.hold.as_mut().filter(|_| obs.tic % TICRATE as i64 == 0) {
@@ -1062,9 +1412,19 @@ impl Watch {
                 h.best_tic = obs.tic;
             } else if !h.given_up && (obs.tic - h.best_tic) as f64 > h.o.stall_seconds * TICRATE {
                 h.given_up = true;
-                self.agent.x_mut().log.push(format!("tic {}: nothing more collected, learned or tried in {:.0}s: for the exit", obs.tic, h.o.stall_seconds));
+                self.agent.x_mut().log.push(format!(
+                    "tic {}: nothing more collected, learned or tried in {:.0}s: for the exit",
+                    obs.tic, h.o.stall_seconds
+                ));
             }
-            hold_exit(&self.engine, &mut self.agent, &h.o, h.secrets_short, h.items_short, h.given_up);
+            hold_exit(
+                &self.engine,
+                &mut self.agent,
+                &h.o,
+                h.secrets_short,
+                h.items_short,
+                h.given_up,
+            );
         }
         if obs.tic - self.options_tic >= TICRATE as i64 {
             self.options = self.agent.objectives(&obs);
@@ -1079,13 +1439,19 @@ impl Watch {
         let (x0, y0, x1, y1) = self.bounds;
         let pad = 12.0;
         let (mw, mh) = (MAP.2 as f64, MAP.3 as f64);
-        let scale = ((mw - 2.0 * pad) / (x1 - x0).max(1.0)).min((mh - 2.0 * pad) / (y1 - y0).max(1.0)) * self.zoom;
+        let scale = ((mw - 2.0 * pad) / (x1 - x0).max(1.0))
+            .min((mh - 2.0 * pad) / (y1 - y0).max(1.0))
+            * self.zoom;
         let centre = match (&self.obs, self.follow, self.center) {
             (Some(o), true, _) => (o.x, o.y),
             (_, _, Some(c)) => c,
             _ => ((x0 + x1) / 2.0, (y0 + y1) / 2.0),
         };
-        MapView { r: MAP, centre, scale }
+        MapView {
+            r: MAP,
+            centre,
+            scale,
+        }
     }
 
     fn draw(&self, c: &mut Canvas) {
@@ -1117,10 +1483,24 @@ impl Watch {
             }
         }
         if self.engine.finished() && self.present.is_none() {
-            c.text(if self.engine.exited() { "EXITED" } else { "GAME OVER" }, (GAME.0 + 20, GAME.1 + 20), (255, 255, 0), 3);
+            c.text(
+                if self.engine.exited() {
+                    "EXITED"
+                } else {
+                    "GAME OVER"
+                },
+                (GAME.0 + 20, GAME.1 + 20),
+                (255, 255, 0),
+                3,
+            );
         }
         if self.paused {
-            c.text("PAUSED", (GAME.0 + GAME.2 - 110, GAME.1 + 10), (255, 255, 0), 2);
+            c.text(
+                "PAUSED",
+                (GAME.0 + GAME.2 - 110, GAME.1 + 10),
+                (255, 255, 0),
+                2,
+            );
         }
     }
 
@@ -1132,15 +1512,39 @@ impl Watch {
             return;
         }
         let mut y = c.text("Log (L: Evil only)", (LOG.0 + 8, LOG.1 + 4), HEAD, 2);
-        let tic_of = |s: &str| if s.starts_with("tic ") { s.split(':').next().and_then(|t| t.split_whitespace().last()).and_then(|t| t.parse::<i64>().ok()) } else { None };
+        let tic_of = |s: &str| {
+            if s.starts_with("tic ") {
+                s.split(':')
+                    .next()
+                    .and_then(|t| t.split_whitespace().last())
+                    .and_then(|t| t.parse::<i64>().ok())
+            } else {
+                None
+            }
+        };
         // (a line without a tic of its own (Evil's, the orders') at the last one before it: not
         // sorted to the top, out of sight)
         let mut last = 0;
-        let mut merged: Vec<(i64, &String)> = x.log.iter().rev().take(40).rev().map(|l| {
-            last = tic_of(l).unwrap_or(last);
-            (last, l)
-        }).collect();
-        merged.extend(x.knowledge.events.iter().rev().take(40).rev().map(|l| (tic_of(l).unwrap_or(0), l)));
+        let mut merged: Vec<(i64, &String)> = x
+            .log
+            .iter()
+            .rev()
+            .take(40)
+            .rev()
+            .map(|l| {
+                last = tic_of(l).unwrap_or(last);
+                (last, l)
+            })
+            .collect();
+        merged.extend(
+            x.knowledge
+                .events
+                .iter()
+                .rev()
+                .take(40)
+                .rev()
+                .map(|l| (tic_of(l).unwrap_or(0), l)),
+        );
         merged.sort_by_key(|(t, _)| *t);
         let (width, rows) = c.fits(1, LOG.2 - 16, LOG.3 - (y - LOG.1));
         for (_, line) in merged.iter().rev().take(rows).rev() {
@@ -1151,7 +1555,13 @@ impl Watch {
             } else {
                 TEXT
             };
-            let s: String = line.split(" | ").next().unwrap_or("").chars().take(width).collect();
+            let s: String = line
+                .split(" | ")
+                .next()
+                .unwrap_or("")
+                .chars()
+                .take(width)
+                .collect();
             y = c.text(&s, (LOG.0 + 8, y), colour, 1);
         }
     }
@@ -1163,7 +1573,14 @@ impl Watch {
         let (fit, rows_fit) = c.fits(1, LOG.2 - 16, LOG.3 - (y - LOG.1));
         let (width, rows_max) = (fit.saturating_sub(3).max(10), rows_fit);
         let mut rows: Vec<(String, (u8, u8, u8))> = Vec::new();
-        for line in self.agent.x().log.iter().rev().filter(|l| is_evil_line(l) || l.starts_with("neuro: ")) {
+        for line in self
+            .agent
+            .x()
+            .log
+            .iter()
+            .rev()
+            .filter(|l| is_evil_line(l) || l.starts_with("neuro: "))
+        {
             let colour = if line.starts_with(">> ") {
                 (255, 220, 120)
             } else if line.starts_with("evil says: ") {
@@ -1176,7 +1593,17 @@ impl Watch {
                 TEXT
             };
             let chars: Vec<char> = line.chars().collect();
-            let wrapped: Vec<String> = chars.chunks(width).enumerate().map(|(i, ch)| format!("{}{}", if i > 0 { "   " } else { "" }, ch.iter().collect::<String>())).collect();
+            let wrapped: Vec<String> = chars
+                .chunks(width)
+                .enumerate()
+                .map(|(i, ch)| {
+                    format!(
+                        "{}{}",
+                        if i > 0 { "   " } else { "" },
+                        ch.iter().collect::<String>()
+                    )
+                })
+                .collect();
             rows.splice(0..0, wrapped.into_iter().map(|w| (w, colour)));
             if rows.len() >= rows_max {
                 break;
@@ -1206,11 +1633,20 @@ impl Watch {
                 let t = line.trim_start_matches("<< ");
                 let notable = t.contains("(!)") || t.contains("FAILED");
                 // (without the orders file's time and the notable mark: the colour says it)
-                let t = t.split_once("s] ").filter(|(at, _)| at.starts_with('[')).map_or(t, |(_, rest)| rest);
-                (t.trim_start_matches("(!) ").to_string(), if notable { (255, 150, 150) } else { TEXT })
+                let t = t
+                    .split_once("s] ")
+                    .filter(|(at, _)| at.starts_with('['))
+                    .map_or(t, |(_, rest)| rest);
+                (
+                    t.trim_start_matches("(!) ").to_string(),
+                    if notable { (255, 150, 150) } else { TEXT },
+                )
             };
             let chars: Vec<char> = text.chars().collect();
-            let wrapped: Vec<(String, Rgb)> = chars.chunks(width.max(10)).map(|ch| (ch.iter().collect(), colour)).collect();
+            let wrapped: Vec<(String, Rgb)> = chars
+                .chunks(width.max(10))
+                .map(|ch| (ch.iter().collect(), colour))
+                .collect();
             rows.splice(0..0, wrapped);
             if rows.len() >= ROWS {
                 break;
@@ -1248,15 +1684,31 @@ impl Watch {
         let small: Vec<u32> = (0..mh)
             .flat_map(|y| (0..mw).map(move |x| (x, y)))
             .map(|(x, y)| {
-                let (x0, x1) = (MAP.0 + x * MAP.2 / mw, MAP.0 + ((x + 1) * MAP.2 / mw).max(x * MAP.2 / mw + 1));
-                let (y0, y1) = (MAP.1 + y * MAP.3 / mh, MAP.1 + ((y + 1) * MAP.3 / mh).max(y * MAP.3 / mh + 1));
-                (y0..y1).flat_map(|yy| (x0..x1).map(move |xx| (xx, yy))).map(|(xx, yy)| c.px[yy * W + xx]).max_by_key(|&p| bright(p)).unwrap_or(0)
+                let (x0, x1) = (
+                    MAP.0 + x * MAP.2 / mw,
+                    MAP.0 + ((x + 1) * MAP.2 / mw).max(x * MAP.2 / mw + 1),
+                );
+                let (y0, y1) = (
+                    MAP.1 + y * MAP.3 / mh,
+                    MAP.1 + ((y + 1) * MAP.3 / mh).max(y * MAP.3 / mh + 1),
+                );
+                (y0..y1)
+                    .flat_map(|yy| (x0..x1).map(move |xx| (xx, yy)))
+                    .map(|(xx, yy)| c.px[yy * W + xx])
+                    .max_by_key(|&p| bright(p))
+                    .unwrap_or(0)
             })
             .collect();
         // (and two pixels wide: each the brightest of it and the ones right of and below it)
         let small: Vec<u32> = (0..mh)
             .flat_map(|y| (0..mw).map(move |x| (x, y)))
-            .map(|(x, y)| [(x, y), ((x + 1).min(mw - 1), y), (x, (y + 1).min(mh - 1))].iter().map(|&(a, b)| small[b * mw + a]).max_by_key(|&p| bright(p)).unwrap_or(0))
+            .map(|(x, y)| {
+                [(x, y), ((x + 1).min(mw - 1), y), (x, (y + 1).min(mh - 1))]
+                    .iter()
+                    .map(|&(a, b)| small[b * mw + a])
+                    .max_by_key(|&p| bright(p))
+                    .unwrap_or(0)
+            })
             .collect();
         c.clip = (0, 0, W, H);
         self.draw_game(c);
@@ -1286,7 +1738,17 @@ impl Watch {
         bar(c, low - 58);
         bar(c, low - 30);
         if let Some(obs) = &self.obs {
-            let ammo: Vec<String> = [2, 3, 5, 6].iter().map(|&s| obs.ammo.iter().flatten().find(|(x, _)| *x == s).map_or(0, |(_, n)| *n).to_string()).collect();
+            let ammo: Vec<String> = [2, 3, 5, 6]
+                .iter()
+                .map(|&s| {
+                    obs.ammo
+                        .iter()
+                        .flatten()
+                        .find(|(x, _)| *x == s)
+                        .map_or(0, |(_, n)| *n)
+                        .to_string()
+                })
+                .collect();
             let secs = (self.engine.tic as f64 / TICRATE) as i64;
             let top = format!(
                 "{}  {}:{:02}   health {:.0}  armor {:.0}   ammo {}",
@@ -1301,15 +1763,42 @@ impl Watch {
         }
         // (directed: her orders, not the explorer's objective; and what passes between the game and
         // her above it, the latest few, for a recording of an LLM playing: the user's)
-        let director = self.neuro.as_ref().map(|n| &n.director).or(self.feed.as_ref().map(|f| &f.director));
-        let doing = director.map_or_else(|| self.agent.x().current.as_ref().map_or("-".to_string(), |o| o.label.clone()), |d| d.doing(&self.agent));
-        c.text(&format!("{}: {}", if director.is_some() { "order" } else { "doing" }, doing.chars().take(46).collect::<String>()), (GAME.0 + 8, low - 53), TEXT, 2);
+        let director = self
+            .neuro
+            .as_ref()
+            .map(|n| &n.director)
+            .or(self.feed.as_ref().map(|f| &f.director));
+        let doing = director.map_or_else(
+            || {
+                self.agent
+                    .x()
+                    .current
+                    .as_ref()
+                    .map_or("-".to_string(), |o| o.label.clone())
+            },
+            |d| d.doing(&self.agent),
+        );
+        c.text(
+            &format!(
+                "{}: {}",
+                if director.is_some() { "order" } else { "doing" },
+                doing.chars().take(46).collect::<String>()
+            ),
+            (GAME.0 + 8, low - 53),
+            TEXT,
+            2,
+        );
         if director.is_some() {
             self.draw_hud_talk(c, low - 62);
         }
         let fight = self.agent.player().map_or("", |p| p.combat().mode());
         let fight = if fight.is_empty() { "no fight" } else { fight };
-        c.text(&format!("fight: {}", fight.chars().take(48).collect::<String>()), (GAME.0 + 8, low - 25), (255, 200, 120), 2);
+        c.text(
+            &format!("fight: {}", fight.chars().take(48).collect::<String>()),
+            (GAME.0 + 8, low - 25),
+            (255, 200, 120),
+            2,
+        );
     }
 
     fn draw_map(&self, c: &mut Canvas) {
@@ -1325,7 +1814,11 @@ impl Watch {
         let m = &self.m;
         let x = self.agent.x();
         let k = &x.knowledge;
-        let heights = self.obs.as_ref().map(|o| o.heights.clone()).unwrap_or_default();
+        let heights = self
+            .obs
+            .as_ref()
+            .map(|o| o.heights.clone())
+            .unwrap_or_default();
         for (li, line) in m.linedefs.iter().enumerate() {
             let (a, b) = m.line_seg(li);
             let mapped = k.mapped.contains(&li) && line.flags & ML_DONTDRAW == 0;
@@ -1349,9 +1842,31 @@ impl Watch {
         }
         // what lines are, as far as she can tell
         let fired: std::collections::BTreeSet<usize> = k.fired.iter().map(|f| f.line).collect();
-        let mut marks: Vec<(usize, Rgb)> = k.interactables().into_iter().map(|li| (li, if fired.contains(&li) { (90, 140, 90) } else { kind_colour(Kind::Switch) })).collect();
-        marks.extend(fired.iter().filter(|li| k.mapped.contains(li)).map(|&li| (li, (90, 140, 90))));
-        marks.extend(k.exits().into_iter().map(|li| (li, kind_colour(Kind::Exit))));
+        let mut marks: Vec<(usize, Rgb)> = k
+            .interactables()
+            .into_iter()
+            .map(|li| {
+                (
+                    li,
+                    if fired.contains(&li) {
+                        (90, 140, 90)
+                    } else {
+                        kind_colour(Kind::Switch)
+                    },
+                )
+            })
+            .collect();
+        marks.extend(
+            fired
+                .iter()
+                .filter(|li| k.mapped.contains(li))
+                .map(|&li| (li, (90, 140, 90))),
+        );
+        marks.extend(
+            k.exits()
+                .into_iter()
+                .map(|li| (li, kind_colour(Kind::Exit))),
+        );
         marks.extend(k.teleporters().into_iter().map(|li| (li, (255, 255, 255))));
         for (li, colour) in marks {
             let (a, b) = m.line_seg(li);
@@ -1359,7 +1874,9 @@ impl Watch {
         }
         // things she knows about
         for th in k.known_things() {
-            let Some((name, kind)) = pickup(th.kind) else { continue };
+            let Some((name, kind)) = pickup(th.kind) else {
+                continue;
+            };
             let p = v.at((th.x, th.y));
             if kind == PickupKind::Key {
                 c.circle(p, 6.0, key_colour(name), None);
@@ -1377,7 +1894,11 @@ impl Watch {
             }
             let fade = 1.0 - age as f64 / (3.0 * TICRATE);
             let n = kind_colour(Kind::Noise);
-            let col = ((f64::from(n.0) * fade) as u8, (f64::from(n.1) * fade) as u8, (f64::from(n.2) * fade) as u8);
+            let col = (
+                (f64::from(n.0) * fade) as u8,
+                (f64::from(n.1) * fade) as u8,
+                (f64::from(n.2) * fade) as u8,
+            );
             c.circle(v.at(h.origin), 6.0 + (age / 4) as f64, col, Some(2.0));
         }
         // objectives open to her, the current one, the route
@@ -1409,11 +1930,22 @@ impl Watch {
             let p = v.at(obs.pos());
             let a = obs.angle.to_radians();
             let at = |r: f64, off: f64| (p.0 + r * (a + off).cos(), p.1 - r * (a + off).sin());
-            c.triangle([at(10.0, 0.0), at(6.0, 2.5), at(6.0, -2.5)], (255, 255, 255));
+            c.triangle(
+                [at(10.0, 0.0), at(6.0, 2.5), at(6.0, -2.5)],
+                (255, 255, 255),
+            );
         }
         c.clip = clip;
         if labelled {
-            let label = format!("map as known{}{}", if self.show_all { "  (+ unknown, faint)" } else { "" }, if self.follow { "  [follow]" } else { "" });
+            let label = format!(
+                "map as known{}{}",
+                if self.show_all {
+                    "  (+ unknown, faint)"
+                } else {
+                    ""
+                },
+                if self.follow { "  [follow]" } else { "" }
+            );
             c.text(&label, (v.r.0 + 8, v.r.1 + 4), DIM, 1);
         }
     }
@@ -1437,25 +1969,68 @@ impl Watch {
             state += &format!("  {h:.0}hp");
         }
         if k.protected(tic) {
-            state += &format!("  suit {:.0}s", (k.suit_until.unwrap_or(tic) - tic) as f64 / TICRATE);
+            state += &format!(
+                "  suit {:.0}s",
+                (k.suit_until.unwrap_or(tic) - tic) as f64 / TICRATE
+            );
         }
-        let mut y = c.text(&format!("{}  {:6.1}s  x{}  {state}", self.map_name, tic as f64 / TICRATE, self.speed), (left, PANEL.1 + 6), HEAD, 1);
+        let mut y = c.text(
+            &format!(
+                "{}  {:6.1}s  x{}  {state}",
+                self.map_name,
+                tic as f64 / TICRATE,
+                self.speed
+            ),
+            (left, PANEL.1 + 6),
+            HEAD,
+            1,
+        );
         let cur = x.current.as_ref();
-        y = c.text(&format!("Now: {}", cur.map_or("-", |o| o.label.as_str())), (left, y + 2), cur.map_or(TEXT, |o| kind_colour(o.kind)), 1);
+        y = c.text(
+            &format!("Now: {}", cur.map_or("-", |o| o.label.as_str())),
+            (left, y + 2),
+            cur.map_or(TEXT, |o| kind_colour(o.kind)),
+            1,
+        );
         if let Some(f) = &x.follower {
             let s: String = f.objective().chars().take(48).collect();
             y = c.text(&format!("     {s}"), (left, y), DIM, 1);
         }
         let m = &self.m;
-        y = c.text(&format!("seen {}/{} lines, {}/{} sectors; {} fired", k.mapped.len(), m.linedefs.len(), k.sectors.len(), m.sectors.len(), k.fired.len()), (left, y + 2), DIM, 1);
+        y = c.text(
+            &format!(
+                "seen {}/{} lines, {}/{} sectors; {} fired",
+                k.mapped.len(),
+                m.linedefs.len(),
+                k.sectors.len(),
+                m.sectors.len(),
+                k.fired.len()
+            ),
+            (left, y + 2),
+            DIM,
+            1,
+        );
         y = c.text("Objectives open", (left, y + 6), HEAD, 1);
         let pos = self.obs.as_ref().map_or((0.0, 0.0), Observation::pos);
         let mut opts: Vec<&Objective> = self.options.iter().collect();
         opts.sort_by(|a, b| dist(a.goal, pos).total_cmp(&dist(b.goal, pos)));
         for o in opts.into_iter().take(14) {
-            let mark = if cur.is_some_and(|c| c.ident() == o.ident()) { ">" } else { " " };
+            let mark = if cur.is_some_and(|c| c.ident() == o.ident()) {
+                ">"
+            } else {
+                " "
+            };
             let label: String = o.label.chars().take(26).collect();
-            y = c.text(&format!("{mark} {:8} {label:26} {:5.0}", kind_name(o.kind), dist(o.goal, pos)), (left, y), kind_colour(o.kind), 1);
+            y = c.text(
+                &format!(
+                    "{mark} {:8} {label:26} {:5.0}",
+                    kind_name(o.kind),
+                    dist(o.goal, pos)
+                ),
+                (left, y),
+                kind_colour(o.kind),
+                1,
+            );
         }
         // what she has found
         let mut y = c.text("Found", (right, PANEL.1 + 4), HEAD, 2);
@@ -1463,7 +2038,9 @@ impl Watch {
         let mut keys: Vec<String> = Vec::new();
         let mut items: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for th in k.known_things() {
-            let Some((name, kind)) = pickup(th.kind) else { continue };
+            let Some((name, kind)) = pickup(th.kind) else {
+                continue;
+            };
             if kind == PickupKind::Key {
                 let has = crate::specials::Key::from_thing(th.kind).is_some_and(|kk| held.has(kk));
                 keys.push(format!("{name}{}", if has { " (held)" } else { "" }));
@@ -1478,35 +2055,129 @@ impl Watch {
                 items.entry(cat).or_default().push(name);
             }
         }
-        y = c.text(&format!("Keys: {}", if keys.is_empty() { "none seen".to_string() } else { keys.join(", ") }), (right, y + 2), (255, 255, 0), 1);
+        y = c.text(
+            &format!(
+                "Keys: {}",
+                if keys.is_empty() {
+                    "none seen".to_string()
+                } else {
+                    keys.join(", ")
+                }
+            ),
+            (right, y + 2),
+            (255, 255, 0),
+            1,
+        );
         for li in k.exits() {
-            y = c.text(&format!("Exit: line {li}"), (right, y), kind_colour(Kind::Exit), 1);
+            y = c.text(
+                &format!("Exit: line {li}"),
+                (right, y),
+                kind_colour(Kind::Exit),
+                1,
+            );
         }
         for li in k.teleporters() {
-            let to = k.teleports.get(&li).map_or(" (not used)".to_string(), |w| format!(" -> ({:.0}, {:.0})", w.0, w.1));
-            y = c.text(&format!("Teleporter: line {li}{to}"), (right, y), (255, 255, 255), 1);
+            let to = k.teleports.get(&li).map_or(" (not used)".to_string(), |w| {
+                format!(" -> ({:.0}, {:.0})", w.0, w.1)
+            });
+            y = c.text(
+                &format!("Teleporter: line {li}{to}"),
+                (right, y),
+                (255, 255, 255),
+                1,
+            );
         }
         let untried = k.interactables();
-        let locked: std::collections::BTreeSet<&str> = untried.iter().map(|&li| k.lock(li)).filter(|l| *l != Lock::None).map(Lock::value).collect();
-        let n_locked = untried.iter().filter(|&&li| k.lock(li) != Lock::None).count();
-        let extra = if n_locked > 0 { format!(" ({n_locked} locked: {})", locked.into_iter().collect::<Vec<_>>().join(", ")) } else { String::new() };
-        y = c.text(&format!("Untried switches/doors: {}{extra}", untried.len()), (right, y), kind_colour(Kind::Switch), 1);
-        for h in k.heard.iter().filter(|h| !h.seen).rev().take(3).collect::<Vec<_>>().into_iter().rev() {
-            y = c.text(&format!("Heard ({:.0}s ago): something moving, bearing {:.0}, ~{:.0} away", (tic - h.tic) as f64 / TICRATE, h.bearing, h.distance), (right, y), kind_colour(Kind::Noise), 1);
+        let locked: std::collections::BTreeSet<&str> = untried
+            .iter()
+            .map(|&li| k.lock(li))
+            .filter(|l| *l != Lock::None)
+            .map(Lock::value)
+            .collect();
+        let n_locked = untried
+            .iter()
+            .filter(|&&li| k.lock(li) != Lock::None)
+            .count();
+        let extra = if n_locked > 0 {
+            format!(
+                " ({n_locked} locked: {})",
+                locked.into_iter().collect::<Vec<_>>().join(", ")
+            )
+        } else {
+            String::new()
+        };
+        y = c.text(
+            &format!("Untried switches/doors: {}{extra}", untried.len()),
+            (right, y),
+            kind_colour(Kind::Switch),
+            1,
+        );
+        for h in k
+            .heard
+            .iter()
+            .filter(|h| !h.seen)
+            .rev()
+            .take(3)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
+            y = c.text(
+                &format!(
+                    "Heard ({:.0}s ago): something moving, bearing {:.0}, ~{:.0} away",
+                    (tic - h.tic) as f64 / TICRATE,
+                    h.bearing,
+                    h.distance
+                ),
+                (right, y),
+                kind_colour(Kind::Noise),
+                1,
+            );
         }
         let learned = k.known_triggers();
-        y = c.text(&format!("Learned: {} lines", learned.len()), (right, y), (140, 220, 255), 1);
-        for (t, secs) in learned.iter().rev().take(6).collect::<Vec<_>>().into_iter().rev() {
+        y = c.text(
+            &format!("Learned: {} lines", learned.len()),
+            (right, y),
+            (140, 220, 255),
+            1,
+        );
+        for (t, secs) in learned
+            .iter()
+            .rev()
+            .take(6)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
             let d: String = t.info.description.chars().take(28).collect();
-            let s: String = format!("  line {}: {d} -> sectors {:?}", t.line, secs.iter().collect::<Vec<_>>()).chars().take(60).collect();
+            let s: String = format!(
+                "  line {}: {d} -> sectors {:?}",
+                t.line,
+                secs.iter().collect::<Vec<_>>()
+            )
+            .chars()
+            .take(60)
+            .collect();
             y = c.text(&s, (right, y), (140, 220, 255), 1);
         }
         for cat in ["weapon", "health", "armor", "ammo", "powerup"] {
-            let Some(names) = items.get(cat) else { continue };
+            let Some(names) = items.get(cat) else {
+                continue;
+            };
             let mut uniq: Vec<&str> = names.clone();
             uniq.sort_unstable();
             uniq.dedup();
-            let summary: Vec<String> = uniq.iter().map(|n| { let k = names.iter().filter(|x| *x == n).count(); if k > 1 { format!("{n} x{k}") } else { (*n).to_string() } }).collect();
+            let summary: Vec<String> = uniq
+                .iter()
+                .map(|n| {
+                    let k = names.iter().filter(|x| *x == n).count();
+                    if k > 1 {
+                        format!("{n} x{k}")
+                    } else {
+                        (*n).to_string()
+                    }
+                })
+                .collect();
             let colour = match cat {
                 "weapon" => item_colour(PickupKind::Weapon),
                 "health" => item_colour(PickupKind::Health),
@@ -1516,7 +2187,10 @@ impl Watch {
             };
             let mut title = cat.to_string();
             title[..1].make_ascii_uppercase();
-            let s: String = format!("{title}: {}", summary.join(", ")).chars().take(62).collect();
+            let s: String = format!("{title}: {}", summary.join(", "))
+                .chars()
+                .take(62)
+                .collect();
             y = c.text(&s, (right, y), colour, 1);
         }
     }

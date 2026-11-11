@@ -20,7 +20,11 @@ pub enum Incoming {
     /// the startup acknowledgement: who's playing ("evil", "Evil Neuro")
     Hello { character: String, display: String },
     /// an action: its id, name, and data (a JSON string, unchecked)
-    Action { id: String, name: String, data: Option<String> },
+    Action {
+        id: String,
+        name: String,
+        data: Option<String>,
+    },
     /// lost the connection (it's tried again)
     Lost(String),
 }
@@ -51,11 +55,17 @@ impl Link {
     }
 
     pub fn context(&self, message: &str, silent: bool) {
-        self.send("context", Some(json!({ "message": message, "silent": silent })));
+        self.send(
+            "context",
+            Some(json!({ "message": message, "silent": silent })),
+        );
     }
 
     pub fn result(&self, id: &str, success: bool, message: &str) {
-        self.send("action/result", Some(json!({ "id": id, "success": success, "message": message })));
+        self.send(
+            "action/result",
+            Some(json!({ "id": id, "success": success, "message": message })),
+        );
     }
 
     pub fn force(&self, state: &str, query: &str, actions: &[&str], priority: &str) {
@@ -67,8 +77,15 @@ fn run(url: &str, actions: &[Value], out: &Receiver<Value>, incoming: &Sender<In
     loop {
         match connect(url) {
             Ok(mut ws) => {
-                let hello = [json!({ "command": "startup", "game": GAME }), json!({ "command": "actions/register", "game": GAME, "data": { "actions": actions } })];
-                if hello.iter().all(|m| ws.send(Message::text(m.to_string())).is_ok()) && incoming.send(Incoming::Connected).is_ok() {
+                let hello = [
+                    json!({ "command": "startup", "game": GAME }),
+                    json!({ "command": "actions/register", "game": GAME, "data": { "actions": actions } }),
+                ];
+                if hello
+                    .iter()
+                    .all(|m| ws.send(Message::text(m.to_string())).is_ok())
+                    && incoming.send(Incoming::Connected).is_ok()
+                {
                     let why = serve(&mut ws, out, incoming);
                     if incoming.send(Incoming::Lost(why)).is_err() {
                         return; // (the game's gone)
@@ -89,17 +106,28 @@ fn run(url: &str, actions: &[Value], out: &Receiver<Value>, incoming: &Sender<In
 }
 
 fn connect(url: &str) -> Result<WebSocket<TcpStream>, String> {
-    let hostport = url.trim_start_matches("ws://").split('/').next().unwrap_or("localhost:8000").to_string();
+    let hostport = url
+        .trim_start_matches("ws://")
+        .split('/')
+        .next()
+        .unwrap_or("localhost:8000")
+        .to_string();
     let stream = TcpStream::connect(&hostport).map_err(|e| format!("{hostport}: {e}"))?;
     stream.set_nodelay(true).ok();
     let (ws, _) = tungstenite::client(url, stream).map_err(|e| e.to_string())?;
     // (short reads, so what's to go out isn't held up by waiting for what comes in)
-    ws.get_ref().set_read_timeout(Some(Duration::from_millis(10))).map_err(|e| e.to_string())?;
+    ws.get_ref()
+        .set_read_timeout(Some(Duration::from_millis(10)))
+        .map_err(|e| e.to_string())?;
     Ok(ws)
 }
 
 /// The connection's life: what's to go out sent, what comes in passed on. Why it ended.
-fn serve(ws: &mut WebSocket<TcpStream>, out: &Receiver<Value>, incoming: &Sender<Incoming>) -> String {
+fn serve(
+    ws: &mut WebSocket<TcpStream>,
+    out: &Receiver<Value>,
+    incoming: &Sender<Incoming>,
+) -> String {
     loop {
         loop {
             match out.try_recv() {
@@ -122,7 +150,11 @@ fn serve(ws: &mut WebSocket<TcpStream>, out: &Receiver<Value>, incoming: &Sender
             }
             Ok(Message::Close(_)) => return "closed".into(),
             Ok(_) => {}
-            Err(tungstenite::Error::Io(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+            Err(tungstenite::Error::Io(e))
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) => {}
             Err(e) => return e.to_string(),
         }
     }
@@ -144,8 +176,16 @@ fn parse(text: &str) -> Option<Incoming> {
         "startup" => {
             let s = data?.get("session")?;
             Some(Incoming::Hello {
-                character: s.get("characterId").and_then(Value::as_str).unwrap_or("").to_string(),
-                display: s.get("displayName").and_then(Value::as_str).unwrap_or("").to_string(),
+                character: s
+                    .get("characterId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                display: s
+                    .get("displayName")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
             })
         }
         _ => None,

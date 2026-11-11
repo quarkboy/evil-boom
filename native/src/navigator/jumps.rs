@@ -66,13 +66,25 @@ fn cache_key(nav: &Navigator, options: &[Vec<Heights>]) -> String {
         let _ = write!(s, "{},{};", v.x, v.y);
     }
     for l in &m.linedefs {
-        let _ = write!(s, "{},{},{},{},{},{},{};", l.v1, l.v2, l.flags, l.special, l.tag, l.front, l.back);
+        let _ = write!(
+            s,
+            "{},{},{},{},{},{},{};",
+            l.v1, l.v2, l.flags, l.special, l.tag, l.front, l.back
+        );
     }
     for d in &m.sidedefs {
-        let _ = write!(s, "{},{},{},{},{},{};", d.x_offset, d.y_offset, d.upper, d.lower, d.middle, d.sector);
+        let _ = write!(
+            s,
+            "{},{},{},{},{},{};",
+            d.x_offset, d.y_offset, d.upper, d.lower, d.middle, d.sector
+        );
     }
     for sec in &m.sectors {
-        let _ = write!(s, "{},{},{},{},{},{},{};", sec.floor, sec.ceiling, sec.floor_tex, sec.ceiling_tex, sec.light, sec.special, sec.tag);
+        let _ = write!(
+            s,
+            "{},{},{},{},{},{},{};",
+            sec.floor, sec.ceiling, sec.floor_tex, sec.ceiling_tex, sec.light, sec.special, sec.tag
+        );
     }
     for t in &m.things {
         let _ = write!(s, "{},{},{},{},{};", t.x, t.y, t.angle, t.kind, t.flags);
@@ -102,7 +114,9 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
             }
         }
     }
-    let path = crate::config::out_dir().join("navcache").join(format!("jumps_rs_{}.json", cache_key(nav, &options)));
+    let path = crate::config::out_dir()
+        .join("navcache")
+        .join(format!("jumps_rs_{}.json", cache_key(nav, &options)));
     let from = |c: Cached| Jump {
         src_polys: c.src.into_iter().collect(),
         dest_poly: c.dest_poly,
@@ -110,18 +124,33 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
         runup: c.runup,
         takeoff: c.takeoff,
         speed: c.speed,
-        requires: c.requires.into_iter().map(|(s, (floor, ceiling))| (s, Heights { floor, ceiling })).collect(),
+        requires: c
+            .requires
+            .into_iter()
+            .map(|(s, (floor, ceiling))| (s, Heights { floor, ceiling }))
+            .collect(),
         soft: false,
         release: 0.0,
         through: false,
         sure: 1.0,
         strafe: c.strafe,
     };
-    if let Some(cached) = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<Vec<Cached>>(&t).ok()) {
+    if let Some(cached) = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|t| serde_json::from_str::<Vec<Cached>>(&t).ok())
+    {
         return cached.into_iter().map(from).collect();
     }
-    let moving: crate::det::HashSet<usize> = nav.triggers.iter().flat_map(|t| t.effects.iter().map(|(s, _)| *s)).collect();
-    let mut found = nav.jump_lab.find_jumps(&FinderInput { options, moving: moving.clone(), portal_fits: nav.portal_fits.clone() });
+    let moving: crate::det::HashSet<usize> = nav
+        .triggers
+        .iter()
+        .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
+        .collect();
+    let mut found = nav.jump_lab.find_jumps(&FinderInput {
+        options,
+        moving: moving.clone(),
+        portal_fits: nav.portal_fits.clone(),
+    });
     found.extend(nav.jump_lab.find_climbs(&moving, &nav.portal_fits));
     let out: Vec<Cached> = found
         .into_iter()
@@ -158,7 +187,10 @@ impl Navigator {
         for (j, r) in self.jumps.iter().zip(verdicts) {
             let mut j = j.clone();
             let mut r = r;
-            if let Some((v, at)) = r.split_once('~').map(|(a, b)| (a.to_string(), b.to_string())) {
+            if let Some((v, at)) = r
+                .split_once('~')
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+            {
                 let xy: Vec<f64> = at.split(',').filter_map(|x| x.parse().ok()).collect();
                 if let [x, y] = xy[..] {
                     j.runup = (x, y);
@@ -179,7 +211,12 @@ impl Navigator {
             .iter()
             .zip(&results)
             .filter(|(_, r)| *r == OK || *r == SOFT || r.contains('@'))
-            .map(|(j, _)| (j.src_polys.iter().copied().collect(), sector_of(j.dest_poly)))
+            .map(|(j, _)| {
+                (
+                    j.src_polys.iter().copied().collect(),
+                    sector_of(j.dest_poly),
+                )
+            })
             .collect();
         let mut keep: Vec<(Jump, String)> = Vec::new();
         for (j, r) in jumps.iter().zip(&results) {
@@ -197,7 +234,13 @@ impl Navigator {
                 }
             }
             let v = r.split('@').next().unwrap_or("");
-            if v == FAIL || v == SLID && sticks.contains(&(j.src_polys.iter().copied().collect(), sector_of(j.dest_poly))) {
+            if v == FAIL
+                || v == SLID
+                    && sticks.contains(&(
+                        j.src_polys.iter().copied().collect(),
+                        sector_of(j.dest_poly),
+                    ))
+            {
                 continue;
             }
             let mut j = j.clone();
@@ -207,8 +250,15 @@ impl Navigator {
         // how sure each is: of it made a little differently (shifted, turned, a longer or
         // shorter run-up), the share that still comes off (E4M2: three jumps onto ledges came
         // down 6-12 off, into the nukage); unverified ones (needing moved floors) at half
-        let tried: Vec<usize> = (0..keep.len()).filter(|&i| keep[i].1 != UNVERIFIED).collect();
-        let scores = self.jump_lab.robustness(&tried.iter().map(|&i| lab_jump(&keep[i].0)).collect::<Vec<_>>());
+        let tried: Vec<usize> = (0..keep.len())
+            .filter(|&i| keep[i].1 != UNVERIFIED)
+            .collect();
+        let scores = self.jump_lab.robustness(
+            &tried
+                .iter()
+                .map(|&i| lab_jump(&keep[i].0))
+                .collect::<Vec<_>>(),
+        );
         let mut sure = vec![0.5; keep.len()];
         for (&i, s) in tried.iter().zip(scores) {
             sure[i] = s;

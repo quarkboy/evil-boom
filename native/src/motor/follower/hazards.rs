@@ -2,8 +2,8 @@
 
 use super::{run_controls, RouteFollower};
 use crate::geom::{dist, Point};
-use crate::motor::{heading, Controls, Observation, FULL_SPEED};
 use crate::mesh::Mesh;
+use crate::motor::{heading, Controls, Observation, FULL_SPEED};
 use crate::navigator::{closest_on_portal, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap};
@@ -67,8 +67,16 @@ impl RouteFollower {
             .filter_map(|(dx, dy)| mesh.poly_at((obs.x + dx, obs.y + dy)))
             .map(|p| mesh.poly(p).sector)
             .collect();
-        let floor = secs.iter().filter_map(|&s| obs.height(s)).map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max);
-        let ceiling = secs.iter().filter_map(|&s| obs.height(s)).map(|h| h.ceiling).fold(f64::INFINITY, f64::min);
+        let floor = secs
+            .iter()
+            .filter_map(|&s| obs.height(s))
+            .map(|h| h.floor)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let ceiling = secs
+            .iter()
+            .filter_map(|&s| obs.height(s))
+            .map(|h| h.ceiling)
+            .fold(f64::INFINITY, f64::min);
         if ceiling - floor >= PLAYER_HEIGHT {
             self.pinned_since = None;
             return None;
@@ -82,12 +90,14 @@ impl RouteFollower {
             let pos = obs.pos();
             let r = PLAYER_RADIUS + 1.0;
             let roomy = |q: Point| {
-                [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)].iter().all(|(dx, dy)| {
-                    mesh.poly_at((q.0 + dx, q.1 + dy)).is_some_and(|p| {
-                        let h = obs.heights[mesh.poly(p).sector];
-                        h.ceiling - h.floor >= PLAYER_HEIGHT + 8.0
+                [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
+                    .iter()
+                    .all(|(dx, dy)| {
+                        mesh.poly_at((q.0 + dx, q.1 + dy)).is_some_and(|p| {
+                            let h = obs.heights[mesh.poly(p).sector];
+                            h.ceiling - h.floor >= PLAYER_HEIGHT + 8.0
+                        })
                     })
-                })
             };
             let mut out = None;
             let mut ring = 16.0;
@@ -102,12 +112,22 @@ impl RouteFollower {
                 }
                 ring += 16.0;
             }
-            let to = out.unwrap_or_else(|| self.segments[self.seg_i].track.point_at((self.s - 48.0).max(0.0)));
+            let to = out.unwrap_or_else(|| {
+                self.segments[self.seg_i]
+                    .track
+                    .point_at((self.s - 48.0).max(0.0))
+            });
             let h = heading(pos, to);
             return Some(self.motion.go(obs, h, FULL_SPEED, None));
         }
         let since = *self.pinned_since.get_or_insert_with(|| {
-            self.log.add(obs.tic, format!("pinned under a ceiling at ({:.0}, {:.0}): waiting for it to rise", obs.x, obs.y));
+            self.log.add(
+                obs.tic,
+                format!(
+                    "pinned under a ceiling at ({:.0}, {:.0}): waiting for it to rise",
+                    obs.x, obs.y
+                ),
+            );
             obs.tic
         });
         if obs.tic - since > PINNED_WAIT {
@@ -122,7 +142,10 @@ impl RouteFollower {
         self.view
             .triggers
             .iter()
-            .filter(|t| t.info.category == crate::specials::Category::Crusher && !t.info.description.contains("stop"))
+            .filter(|t| {
+                t.info.category == crate::specials::Category::Crusher
+                    && !t.info.description.contains("stop")
+            })
             .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
             .collect()
     }
@@ -131,7 +154,13 @@ impl RouteFollower {
     /// doesn't hurt (the game moves it with NO_CRUSH, and most go back up off her).
     pub(super) fn doors(&self) -> BTreeSet<usize> {
         let crushers = self.crushers();
-        self.view.triggers.iter().filter(|t| t.info.category.is_door()).flat_map(|t| t.effects.iter().map(|(s, _)| *s)).filter(|s| !crushers.contains(s)).collect()
+        self.view
+            .triggers
+            .iter()
+            .filter(|t| t.info.category.is_door())
+            .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
+            .filter(|s| !crushers.contains(s))
+            .collect()
     }
 
     /// The heading along the shortest way out from under ceilings on the move (`moving`) to the
@@ -144,13 +173,27 @@ impl RouteFollower {
     /// her middle under it, by the way out; only an edge of her, straight away from that edge
     /// (E3M4's, waiting at the crusher's edge a corner over it, held there). Full speed whichever
     /// way she's facing (backing out at a walk, caught).
-    fn escape_crusher(&mut self, obs: &Observation, s: usize, (dx, dy): Point, doors: &BTreeSet<usize>) -> Option<Controls> {
+    fn escape_crusher(
+        &mut self,
+        obs: &Observation,
+        s: usize,
+        (dx, dy): Point,
+        doors: &BTreeSet<usize>,
+    ) -> Option<Controls> {
         let pos = obs.pos();
         // (by the way to somewhere all of her is out; else, an edge of her under, straight away from it)
-        let way = self.out_from_under(obs, &|q| !doors.contains(&q) && (obs.heights[q].ceiling - self.prev_live[q].ceiling).abs() > 0.01).or_else(|| (dx != 0.0 || dy != 0.0).then(|| heading((pos.0 + dx, pos.1 + dy), pos)));
+        let way = self
+            .out_from_under(obs, &|q| {
+                !doors.contains(&q)
+                    && (obs.heights[q].ceiling - self.prev_live[q].ceiling).abs() > 0.01
+            })
+            .or_else(|| (dx != 0.0 || dy != 0.0).then(|| heading((pos.0 + dx, pos.1 + dy), pos)));
         let h = way?;
         if self.crusher_wait != Some(s) {
-            self.log.add(obs.tic, format!("the ceiling of sector {s} coming down on her: out from under it"));
+            self.log.add(
+                obs.tic,
+                format!("the ceiling of sector {s} coming down on her: out from under it"),
+            );
             self.crusher_wait = Some(s);
         }
         self.progress_tic = obs.tic;
@@ -175,11 +218,19 @@ impl RouteFollower {
         let pos = obs.pos();
         let coming_down = |s: usize| {
             let (now, before) = (obs.heights[s], self.prev_live[s]);
-            !doors.contains(&s) && now.ceiling < before.ceiling - 0.01 && now.ceiling - now.floor - PLAYER_HEIGHT < CRUSH_ESCAPE
+            !doors.contains(&s)
+                && now.ceiling < before.ceiling - 0.01
+                && now.ceiling - now.floor - PLAYER_HEIGHT < CRUSH_ESCAPE
         };
         let r = PLAYER_RADIUS + 2.0;
-        let box_at = |dx: f64, dy: f64| mesh.poly_at((pos.0 + dx, pos.1 + dy)).map(|p| mesh.poly(p).sector);
-        let under: Vec<(usize, Point)> = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)].iter().filter_map(|&(dx, dy)| box_at(dx, dy).map(|s| (s, (dx, dy)))).collect();
+        let box_at = |dx: f64, dy: f64| {
+            mesh.poly_at((pos.0 + dx, pos.1 + dy))
+                .map(|p| mesh.poly(p).sector)
+        };
+        let under: Vec<(usize, Point)> = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
+            .iter()
+            .filter_map(|&(dx, dy)| box_at(dx, dy).map(|s| (s, (dx, dy))))
+            .collect();
         let near = PLAYER_RADIUS + CRUSH_STEP;
         let next: Option<usize> = (0..8)
             .filter_map(|k| {
@@ -199,7 +250,12 @@ impl RouteFollower {
             return None;
         };
         if self.crusher_wait != Some(s) {
-            self.log.add(obs.tic, format!("the ceiling of sector {s} coming down beside her: waiting for it to go up"));
+            self.log.add(
+                obs.tic,
+                format!(
+                    "the ceiling of sector {s} coming down beside her: waiting for it to go up"
+                ),
+            );
             self.crusher_wait = Some(s);
         }
         self.progress_tic = obs.tic;
@@ -220,7 +276,12 @@ impl RouteFollower {
         let mut d_in = (mesh.poly_at(pos).map(|p| mesh.poly(p).sector) == Some(s)).then_some(0.0);
         for w in polys.windows(2) {
             let (cur, nxt) = (w[0], w[1]);
-            let pi = mesh.poly(cur).portals.iter().copied().find(|&pi| mesh.portals[pi].other(cur) == nxt)?;
+            let pi = mesh
+                .poly(cur)
+                .portals
+                .iter()
+                .copied()
+                .find(|&pi| mesh.portals[pi].other(cur) == nxt)?;
             let portal = &mesh.portals[pi];
             let p = closest_on_portal(at, portal.p1, portal.p2);
             along += dist(at, p);
@@ -275,14 +336,25 @@ impl RouteFollower {
     fn through_in_time(&self, obs: &Observation, polys: &[usize], s: usize) -> Option<bool> {
         let (d_in, d_out) = self.crossing(obs, polys, s)?;
         let v0 = self.motion.speed();
-        Some(self.room_through(obs, s, run_tics(v0, d_in), run_tics(v0, d_out) + CROSS_SLACK))
+        Some(self.room_through(
+            obs,
+            s,
+            run_tics(v0, d_in),
+            run_tics(v0, d_out) + CROSS_SLACK,
+        ))
     }
 
     /// Could she go into sector s now, on the way (`polys`, hers first)? Through it in time, and
     /// only while it's going up or still with room; a way that ends in there, in once it's rising
     /// with room (or still with room; or still and no crusher). With the crossing's timing (None:
     /// none out of it known).
-    fn crossable(&self, obs: &Observation, polys: &[usize], s: usize, crushers: &BTreeSet<usize>) -> (bool, Option<bool>) {
+    fn crossable(
+        &self,
+        obs: &Observation,
+        polys: &[usize],
+        s: usize,
+        crushers: &BTreeSet<usize>,
+    ) -> (bool, Option<bool>) {
         let (now, before) = (obs.heights[s], self.prev_live[s]);
         let rising = now.ceiling > before.ceiling + 0.01;
         let still = (now.ceiling - before.ceiling).abs() < 0.01;
@@ -296,16 +368,37 @@ impl RouteFollower {
     }
 
     /// Could she go into crusher s now, and on into the one straight after it, if any?
-    fn open_now(&self, obs: &Observation, polys: &[usize], s: usize, crushers: &BTreeSet<usize>, doors: &BTreeSet<usize>) -> bool {
-        self.crossable(obs, polys, s, crushers).0 && self.crusher_after(obs, polys, s, crushers, doors).is_none_or(|b| self.crossable(obs, polys, b, crushers).0)
+    fn open_now(
+        &self,
+        obs: &Observation,
+        polys: &[usize],
+        s: usize,
+        crushers: &BTreeSet<usize>,
+        doors: &BTreeSet<usize>,
+    ) -> bool {
+        self.crossable(obs, polys, s, crushers).0
+            && self
+                .crusher_after(obs, polys, s, crushers, doors)
+                .is_none_or(|b| self.crossable(obs, polys, b, crushers).0)
     }
 
     /// The crusher (or ceiling on the move) the way goes into straight out of sector s, if it
     /// does: none between, so no waiting for it but under s.
-    fn crusher_after(&self, obs: &Observation, polys: &[usize], s: usize, crushers: &BTreeSet<usize>, doors: &BTreeSet<usize>) -> Option<usize> {
+    fn crusher_after(
+        &self,
+        obs: &Observation,
+        polys: &[usize],
+        s: usize,
+        crushers: &BTreeSet<usize>,
+        doors: &BTreeSet<usize>,
+    ) -> Option<usize> {
         let mesh = &self.view.nav.mesh;
-        let (_, b) = polys.windows(2).map(|w| (mesh.poly(w[0]).sector, mesh.poly(w[1]).sector)).find(|&(a, b)| a == s && b != s)?;
-        let moving = !doors.contains(&b) && (obs.heights[b].ceiling - self.prev_live[b].ceiling).abs() > 0.01;
+        let (_, b) = polys
+            .windows(2)
+            .map(|w| (mesh.poly(w[0]).sector, mesh.poly(w[1]).sector))
+            .find(|&(a, b)| a == s && b != s)?;
+        let moving = !doors.contains(&b)
+            && (obs.heights[b].ceiling - self.prev_live[b].ceiling).abs() > 0.01;
         (crushers.contains(&b) || moving).then_some(b)
     }
 
@@ -330,7 +423,9 @@ impl RouteFollower {
         let pos = obs.pos();
         // (a crusher she knows of, or any ceiling she sees on its way down, or up without room
         // yet: one she doesn't know may be a crusher too; a shut door standing still is a door's)
-        let moving = |s: usize| !doors.contains(&s) && (obs.heights[s].ceiling - self.prev_live[s].ceiling).abs() > 0.01;
+        let moving = |s: usize| {
+            !doors.contains(&s) && (obs.heights[s].ceiling - self.prev_live[s].ceiling).abs() > 0.01
+        };
         // (under one already, any of her: no stopping there to wait for the next; E4M7's two side
         // by side, waited at the second under the first)
         let r = PLAYER_RADIUS + 2.0;
@@ -339,13 +434,22 @@ impl RouteFollower {
             .filter_map(|(dx, dy)| mesh.poly_at((pos.0 + dx, pos.1 + dy)))
             .map(|p| mesh.poly(p).sector)
             .any(|s| crushers.contains(&s) || moving(s));
-        let polys: Vec<usize> = path.polys.iter().skip(self.poly_i).take(32).copied().collect();
+        let polys: Vec<usize> = path
+            .polys
+            .iter()
+            .skip(self.poly_i)
+            .take(32)
+            .copied()
+            .collect();
         if under {
             // (but with it coming down on her and not much room left, out from under it now, by
             // the nearest way to a ceiling that isn't: E3M4's ring round the pillar, its slow
             // crusher already on its way down, the way on round inside it, caught at head
             // height, pinned there, Doom moving her nowhere, till dead)
-            let moving_down = |s: usize| obs.heights[s].ceiling < self.prev_live[s].ceiling - 0.01 && obs.heights[s].ceiling - obs.heights[s].floor - PLAYER_HEIGHT < CRUSH_ESCAPE;
+            let moving_down = |s: usize| {
+                obs.heights[s].ceiling < self.prev_live[s].ceiling - 0.01
+                    && obs.heights[s].ceiling - obs.heights[s].floor - PLAYER_HEIGHT < CRUSH_ESCAPE
+            };
             // (any of her under it: a crusher crushes whatever's even partly under it)
             // (on through, if she'll be out the far side with room over her all the way: back
             // out of a fast one she's halfway under is caught as surely; E2M2's passage, 64
@@ -354,17 +458,29 @@ impl RouteFollower {
             // on under the edge of the other, pinned)
             let pressing = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
                 .iter()
-                .filter_map(|&(dx, dy)| mesh.poly_at((pos.0 + dx, pos.1 + dy)).map(|p| (mesh.poly(p).sector, (dx, dy))))
-                .find(|&(s, _)| moving_down(s) && self.through_in_time(obs, &polys, s) != Some(true));
+                .filter_map(|&(dx, dy)| {
+                    mesh.poly_at((pos.0 + dx, pos.1 + dy))
+                        .map(|p| (mesh.poly(p).sector, (dx, dy)))
+                })
+                .find(|&(s, _)| {
+                    moving_down(s) && self.through_in_time(obs, &polys, s) != Some(true)
+                });
             // (the way on out of where her middle is into a crusher she couldn't go into now (the
             // walking rule's, the one after it too): out from under all of them, not on into it,
             // nor a wait at its edge under one; MAP13's fast crusher, a slow one beyond with the
             // plasma rifle in it, walked into on its way down, pinned under its edge; and the fast
             // one walked into on its way down, an edge of her under it already. A crossing begun
             // is gone through)
-            let committed = |b: usize| self.crusher_cross.is_some_and(|(c, since)| c == b && obs.tic - since < CROSS_COMMIT);
-            let next_closed = here.and_then(|h| self.crusher_after(obs, &polys, h, &crushers, &doors)).filter(|&b| !committed(b) && !self.open_now(obs, &polys, b, &crushers, &doors));
-            if let Some((s, offset)) = pressing.or_else(|| here.zip(next_closed).map(|(h, _)| (h, (0.0, 0.0)))) {
+            let committed = |b: usize| {
+                self.crusher_cross
+                    .is_some_and(|(c, since)| c == b && obs.tic - since < CROSS_COMMIT)
+            };
+            let next_closed = here
+                .and_then(|h| self.crusher_after(obs, &polys, h, &crushers, &doors))
+                .filter(|&b| !committed(b) && !self.open_now(obs, &polys, b, &crushers, &doors));
+            if let Some((s, offset)) =
+                pressing.or_else(|| here.zip(next_closed).map(|(h, _)| (h, (0.0, 0.0))))
+            {
                 self.crusher_cross = None;
                 if let Some(c) = self.escape_crusher(obs, s, offset, &doors) {
                     return Some(c);
@@ -377,7 +493,15 @@ impl RouteFollower {
         let mut ahead = None;
         for w in polys.windows(2).take(15) {
             let (cur, nxt) = (w[0], w[1]);
-            let Some(pi) = mesh.poly(cur).portals.iter().copied().find(|&pi| mesh.portals[pi].other(cur) == nxt) else { break };
+            let Some(pi) = mesh
+                .poly(cur)
+                .portals
+                .iter()
+                .copied()
+                .find(|&pi| mesh.portals[pi].other(cur) == nxt)
+            else {
+                break;
+            };
             let portal = &mesh.portals[pi];
             if dist(closest_on_portal(pos, portal.p1, portal.p2), pos) > CRUSH_LOOK {
                 break;
@@ -397,7 +521,10 @@ impl RouteFollower {
             return None;
         };
         // (a crossing timed and begun: gone through, not waited out halfway)
-        if self.crusher_cross.is_some_and(|(c, since)| c == s && obs.tic - since < CROSS_COMMIT) {
+        if self
+            .crusher_cross
+            .is_some_and(|(c, since)| c == s && obs.tic - since < CROSS_COMMIT)
+        {
             return None;
         }
         let (now, before) = (obs.heights[s], self.prev_live[s]);
@@ -421,7 +548,10 @@ impl RouteFollower {
         let (go, timed) = self.crossable(obs, &polys, s, &crushers);
         // (and out of it into another she couldn't go into now: not in, a wait under the first is
         // no wait, MAP13's fast crusher to a slow one, the second come down on her)
-        let go = go && self.crusher_after(obs, &polys, s, &crushers, &doors).is_none_or(|b| self.crossable(obs, &polys, b, &crushers).0);
+        let go = go
+            && self
+                .crusher_after(obs, &polys, s, &crushers, &doors)
+                .is_none_or(|b| self.crossable(obs, &polys, b, &crushers).0);
         if go {
             // (committed to only a crossing that comes out the far side: one into an alcove under
             // it is waited at again, pulled out of it as it came down, E3M5's switch, walked back
@@ -433,31 +563,46 @@ impl RouteFollower {
         // (waiting is no crossing)
         self.crusher_cross = None;
         if self.crusher_wait != Some(s) {
-            self.log.add(obs.tic, format!("waiting for the crusher (sector {s}) to come up"));
+            self.log.add(
+                obs.tic,
+                format!("waiting for the crusher (sector {s}) to come up"),
+            );
             self.crusher_wait = Some(s);
         }
         // (one that's stopped, too low to be under, isn't coming up: a crusher turns at each end at
         // once, so still for a while is stopped (a crusher-stop line). The way's no way while it's
         // there; E2M4's, stopped low across the way, waited at for the hour)
-        if still && !room && obs.tic - self.moved_at.get(&s).copied().unwrap_or(i64::MIN / 2) > CRUSH_STOPPED {
+        if still
+            && !room
+            && obs.tic - self.moved_at.get(&s).copied().unwrap_or(i64::MIN / 2) > CRUSH_STOPPED
+        {
             // (stopped with her height under it, if no more: it does nothing while it's stopped,
             // and the room to spare was for one coming down. Through, then; its start line
             // crossed on the way out sets it going behind her. The user's: "you are supposed
             // to eventually walk into the crusher". Lower than her height, there's no going in)
             let gap = now.ceiling - now.floor;
             if gap >= PLAYER_HEIGHT {
-                self.log.add(obs.tic, format!("the crusher (sector {s}) has stopped {gap:.0} up: through under it"));
+                self.log.add(
+                    obs.tic,
+                    format!("the crusher (sector {s}) has stopped {gap:.0} up: through under it"),
+                );
                 self.crusher_cross = Some((s, obs.tic));
                 self.crusher_wait = None;
                 return None;
             }
-            return Some(self.fail(obs, &format!("the crusher (sector {s}) has stopped too low to get under ({gap:.0} up)")));
+            return Some(self.fail(
+                obs,
+                &format!("the crusher (sector {s}) has stopped too low to get under ({gap:.0} up)"),
+            ));
         }
         self.progress_tic = obs.tic;
         self.step_tic = obs.tic;
         // (all of her out of it: a crusher crushes whatever's even partly under it)
         let r = PLAYER_RADIUS + 2.0;
-        let over = [(-r, -r), (r, -r), (r, r), (-r, r)].iter().any(|(dx, dy)| mesh.poly_at((pos.0 + dx, pos.1 + dy)).is_some_and(|p| mesh.poly(p).sector == s));
+        let over = [(-r, -r), (r, -r), (r, r), (-r, r)].iter().any(|(dx, dy)| {
+            mesh.poly_at((pos.0 + dx, pos.1 + dy))
+                .is_some_and(|p| mesh.poly(p).sector == s)
+        });
         if over {
             let track = &self.segments[self.seg_i].track;
             let back = track.point_at((self.s - 32.0).max(0.0));
@@ -474,7 +619,11 @@ impl RouteFollower {
         self.view
             .triggers
             .iter()
-            .filter(|t| t.linedef() == Some(li) && t.info.trigger.walked() && t.effects.iter().any(|(x, _)| *x == s))
+            .filter(|t| {
+                t.linedef() == Some(li)
+                    && t.info.trigger.walked()
+                    && t.effects.iter().any(|(x, _)| *x == s)
+            })
             .find_map(|t| crate::specials::crusher_kind(t.info.special))
     }
 
@@ -483,7 +632,13 @@ impl RouteFollower {
     /// side (and its stroke's more than she'd take on), step just over that line to set it off and
     /// let it come up first. None: on as it is. Fails the step if even backing out from the line
     /// wouldn't beat it.
-    fn set_off_first(&mut self, obs: &Observation, polys: &[usize], s: usize, entry: usize) -> Option<Controls> {
+    fn set_off_first(
+        &mut self,
+        obs: &Observation,
+        polys: &[usize],
+        s: usize,
+        entry: usize,
+    ) -> Option<Controls> {
         let nav = std::rc::Rc::clone(&self.view.nav);
         let mesh = &nav.mesh;
         // (the last line on the way that sets it off, up to and over its edge: E3M4's, its start
@@ -495,12 +650,20 @@ impl RouteFollower {
         let mut entry_along = None;
         for w in polys.windows(2) {
             let (cur, nxt) = (w[0], w[1]);
-            let pi = mesh.poly(cur).portals.iter().copied().find(|&pi| mesh.portals[pi].other(cur) == nxt)?;
+            let pi = mesh
+                .poly(cur)
+                .portals
+                .iter()
+                .copied()
+                .find(|&pi| mesh.portals[pi].other(cur) == nxt)?;
             let portal = &mesh.portals[pi];
             let p = closest_on_portal(at, portal.p1, portal.p2);
             along += dist(at, p);
             at = p;
-            if let Some(kind) = portal.linedef.and_then(|li| self.starts_crusher(li, s).map(|k| (li, k))) {
+            if let Some(kind) = portal
+                .linedef
+                .and_then(|li| self.starts_crusher(li, s).map(|k| (li, k)))
+            {
                 found = Some((kind, pi, at, along, mesh.poly(nxt).center));
             }
             if pi == entry {
@@ -513,7 +676,9 @@ impl RouteFollower {
         let portal = &mesh.portals[pi];
         let h = obs.heights[s];
         let room = crate::crush::room_tics(h, kind);
-        if crate::crush::stroke_cost(kind, obs) <= crate::knowledge::RISK_SHARE * obs.health.unwrap_or(100.0) {
+        if crate::crush::stroke_cost(kind, obs)
+            <= crate::knowledge::RISK_SHARE * obs.health.unwrap_or(100.0)
+        {
             return None;
         }
         // (it starts as her middle crosses the line; out the far side then, from where she is at
@@ -530,7 +695,11 @@ impl RouteFollower {
         let length = dist(a, b).max(1e-6);
         let (nx, ny) = ((b.1 - a.1) / length, -(b.0 - a.0) / length);
         let at = closest_on_portal(at, portal.p1, portal.p2);
-        let sign = if (beyond.0 - at.0) * nx + (beyond.1 - at.1) * ny > 0.0 { 1.0 } else { -1.0 };
+        let sign = if (beyond.0 - at.0) * nx + (beyond.1 - at.1) * ny > 0.0 {
+            1.0
+        } else {
+            -1.0
+        };
         let clear = (PLAYER_RADIUS * (nx.abs() + ny.abs()) + KICK_PAST - gap).max(0.0) + 1.0;
         if room < run_tics(-KICK_SPEED, clear) + CROSS_SLACK {
             return Some(self.fail(obs, &format!("the crusher (sector {s}) has stopped too low to get through or set off from its edge")));
@@ -551,13 +720,21 @@ impl RouteFollower {
         }
         if obs.tic - since > KICK_TICS {
             self.crusher_kick = None;
-            return Some(self.fail(obs, &format!("the crusher (sector {s}) didn't start from its edge")));
+            return Some(self.fail(
+                obs,
+                &format!("the crusher (sector {s}) didn't start from its edge"),
+            ));
         }
         self.progress_tic = obs.tic;
         self.step_tic = obs.tic;
         let pos = obs.pos();
         let hd = heading(pos, spot);
-        Some(self.motion.go(obs, hd, (0.3 * dist(pos, spot) + KICK_SPEED).min(8.0), Some(hd)))
+        Some(self.motion.go(
+            obs,
+            hd,
+            (0.3 * dist(pos, spot) + KICK_SPEED).min(8.0),
+            Some(hd),
+        ))
     }
 }
 
@@ -570,14 +747,29 @@ fn escape_heading(mesh: &Mesh, obs: &Observation, moving: &dyn Fn(usize) -> bool
     // crusher corridor, her west half under sector 23 as it came down, her middle on the floor
     // beside it taken for out, slid along the wall there, pinned)
     let r = PLAYER_RADIUS + 2.0;
-    let clear = |c: Point| [(-r, -r), (r, -r), (r, r), (-r, r)].iter().all(|(dx, dy)| mesh.poly_at((c.0 + dx, c.1 + dy)).is_some_and(|q| !moving(mesh.poly(q).sector)));
-    nearest_heading(mesh, obs, &|p| !moving(mesh.poly(p).sector) && clear(mesh.poly(p).center), ESCAPE_LOOK)
+    let clear = |c: Point| {
+        [(-r, -r), (r, -r), (r, r), (-r, r)].iter().all(|(dx, dy)| {
+            mesh.poly_at((c.0 + dx, c.1 + dy))
+                .is_some_and(|q| !moving(mesh.poly(q).sector))
+        })
+    };
+    nearest_heading(
+        mesh,
+        obs,
+        &|p| !moving(mesh.poly(p).sector) && clear(mesh.poly(p).center),
+        ESCAPE_LOOK,
+    )
 }
 
 /// The heading to the nearest poly that's a `goal`, by the mesh, no further than `look` along the
 /// way: the first portal on the way, steps she can take, room to stand, aimed well into the poly
 /// beyond (her own poly a goal: its middle).
-pub fn nearest_heading(mesh: &Mesh, obs: &Observation, goal_poly: &dyn Fn(usize) -> bool, look: f64) -> Option<f64> {
+pub fn nearest_heading(
+    mesh: &Mesh,
+    obs: &Observation,
+    goal_poly: &dyn Fn(usize) -> bool,
+    look: f64,
+) -> Option<f64> {
     let start = mesh.poly_at(obs.pos())?;
     let n = mesh.polys.len();
     let mut cost = vec![f64::INFINITY; n];
@@ -601,7 +793,10 @@ pub fn nearest_heading(mesh: &Mesh, obs: &Observation, goal_poly: &dyn Fn(usize)
             let q = &mesh.portals[qi];
             let o = q.other(p);
             let ho = obs.heights[mesh.poly(o).sector];
-            if ho.floor > h.floor + MAX_STEP || ho.ceiling - ho.floor < PLAYER_HEIGHT || dist(q.p1, q.p2) < 2.0 * PLAYER_RADIUS {
+            if ho.floor > h.floor + MAX_STEP
+                || ho.ceiling - ho.floor < PLAYER_HEIGHT
+                || dist(q.p1, q.p2) < 2.0 * PLAYER_RADIUS
+            {
                 continue;
             }
             let at = closest_on_portal(entry[p], q.p1, q.p2);
@@ -627,6 +822,9 @@ pub fn nearest_heading(mesh: &Mesh, obs: &Observation, goal_poly: &dyn Fn(usize)
     let at = closest_on_portal(obs.pos(), q.p1, q.p2);
     let c = mesh.poly(beyond).center;
     let d = dist(at, c).max(1.0);
-    let aim = (at.0 + (c.0 - at.0) / d * d.min(ESCAPE_INTO), at.1 + (c.1 - at.1) / d * d.min(ESCAPE_INTO));
+    let aim = (
+        at.0 + (c.0 - at.0) / d * d.min(ESCAPE_INTO),
+        at.1 + (c.1 - at.1) / d * d.min(ESCAPE_INTO),
+    );
     Some(heading(obs.pos(), aim))
 }

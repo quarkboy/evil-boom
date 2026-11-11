@@ -18,8 +18,12 @@ pub enum Command {
     Pause,
     Resume,
     /// times the game's own speed (the watcher's 0.25-16)
-    Speed { x: f64 },
-    Mute { on: bool },
+    Speed {
+        x: f64,
+    },
+    Mute {
+        on: bool,
+    },
     /// the level from its start again, no life spent (what she remembers of it kept, as a death
     /// keeps it)
     RestartLevel,
@@ -43,11 +47,17 @@ pub enum Command {
         master: Option<i32>,
     },
     /// damage does nothing to her (rehearsals), or does again
-    God { on: bool },
+    God {
+        on: bool,
+    },
     /// lives left from now (a death with none left ends the game)
-    Lives { n: i32 },
+    Lives {
+        n: i32,
+    },
     /// a line from the streamer to Evil (Neuro's context; directed by Neuro only)
-    Say { text: String },
+    Say {
+        text: String,
+    },
     /// an action as if from Evil (`doom_go`, ...; `data` its JSON, as Neuro sends it); directed by
     /// Neuro only
     Order {
@@ -62,7 +72,9 @@ pub enum Command {
         secret: bool,
     },
     /// the stream window's column to this side ("left", "right")
-    Panel { side: String },
+    Panel {
+        side: String,
+    },
     /// from the title card through the menu to the run's first level (Doom's own screens on);
     /// from anything else, the run again from the title card
     Begin,
@@ -102,7 +114,11 @@ const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 pub fn base64(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
-        let b = [chunk[0], chunk.get(1).copied().unwrap_or(0), chunk.get(2).copied().unwrap_or(0)];
+        let b = [
+            chunk[0],
+            chunk.get(1).copied().unwrap_or(0),
+            chunk.get(2).copied().unwrap_or(0),
+        ];
         let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
         for i in 0..4 {
             if i <= chunk.len() {
@@ -178,11 +194,23 @@ mod tests {
 
     #[test]
     fn commands_read_as_sent() {
-        assert_eq!(serde_json::from_str::<Command>(r#"{"cmd":"speed","x":2}"#).ok(), Some(Command::Speed { x: 2.0 }));
-        assert_eq!(serde_json::from_str::<Command>(r#"{"cmd":"restart_level"}"#).ok(), Some(Command::RestartLevel));
+        assert_eq!(
+            serde_json::from_str::<Command>(r#"{"cmd":"speed","x":2}"#).ok(),
+            Some(Command::Speed { x: 2.0 })
+        );
+        assert_eq!(
+            serde_json::from_str::<Command>(r#"{"cmd":"restart_level"}"#).ok(),
+            Some(Command::RestartLevel)
+        );
         assert!(serde_json::from_str::<Command>(r#"{"cmd":"explode"}"#).is_err());
         assert!(serde_json::from_str::<Command>("not json").is_err());
-        assert_eq!(serde_json::from_str::<Command>(r#"{"cmd":"goto_map","map":"MAP07"}"#).ok(), Some(Command::GotoMap { map: "MAP07".into(), carry: false }));
+        assert_eq!(
+            serde_json::from_str::<Command>(r#"{"cmd":"goto_map","map":"MAP07"}"#).ok(),
+            Some(Command::GotoMap {
+                map: "MAP07".into(),
+                carry: false
+            })
+        );
         let back = serde_json::to_string(&Command::Mute { on: true }).unwrap_or_default();
         assert_eq!(back, r#"{"cmd":"mute","on":true}"#);
     }
@@ -201,7 +229,12 @@ mod tests {
 
     #[test]
     fn game_lines_read_back() {
-        let line = serde_json::to_string(&FromGame::State(GameState { map: "MAP01".into(), health: 100, ..GameState::default() })).unwrap_or_default();
+        let line = serde_json::to_string(&FromGame::State(GameState {
+            map: "MAP01".into(),
+            health: 100,
+            ..GameState::default()
+        }))
+        .unwrap_or_default();
         match serde_json::from_str::<FromGame>(&line) {
             Ok(FromGame::State(s)) => assert_eq!((s.map.as_str(), s.health), ("MAP01", 100)),
             other => panic!("{other:?}"),

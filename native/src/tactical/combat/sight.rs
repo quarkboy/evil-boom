@@ -14,17 +14,32 @@ use crate::navigator::{PLAYER_HEIGHT, PLAYER_RADIUS};
 
 /// Where a monster sees from: all of it.
 pub fn eye(t: &Thing) -> Body {
-    Body { x: t.x, y: t.y, z: t.z, height: mon(t.name).height }
+    Body {
+        x: t.x,
+        y: t.y,
+        z: t.z,
+        height: mon(t.name).height,
+    }
 }
 
 /// ...one out of sight, from where she last saw it.
 pub fn eye_of(s: &Seen) -> Body {
-    Body { x: s.x, y: s.y, z: s.z, height: mon(s.name).height }
+    Body {
+        x: s.x,
+        y: s.y,
+        z: s.z,
+        height: mon(s.name).height,
+    }
 }
 
 /// Her, standing at p on a floor at z.
 pub fn standing(p: Point, z: f64) -> Body {
-    Body { x: p.0, y: p.1, z, height: PLAYER_HEIGHT }
+    Body {
+        x: p.0,
+        y: p.1,
+        z,
+        height: PLAYER_HEIGHT,
+    }
 }
 
 impl Combat {
@@ -37,7 +52,12 @@ impl Combat {
     /// The nearest place, `reach` or less away along one of the ways round, that something seeing
     /// from `eye` can't see her (well into its shadow: the spot half `SHADOW` past where it loses
     /// her, and all of `SHADOW` past still hidden), as (how far till hidden, the spot).
-    pub(super) fn shadow_spot(&mut self, obs: &Observation, eye: Body, reach: f64) -> Option<(f64, Point)> {
+    pub(super) fn shadow_spot(
+        &mut self,
+        obs: &Observation,
+        eye: Body,
+        reach: f64,
+    ) -> Option<(f64, Point)> {
         let pos = obs.pos();
         self.refresh_tic_cache(obs);
         let z = self.z(obs);
@@ -56,7 +76,13 @@ impl Combat {
                     // pillar's corner, it still saw her)
                     let deep = far + self.tune.hide.shadow;
                     if deep <= room && hidden(self, (pos.0 + d.0 * deep, pos.1 + d.1 * deep)) {
-                        best = Some((far, (pos.0 + d.0 * (far + self.tune.hide.shadow / 2.0), pos.1 + d.1 * (far + self.tune.hide.shadow / 2.0))));
+                        best = Some((
+                            far,
+                            (
+                                pos.0 + d.0 * (far + self.tune.hide.shadow / 2.0),
+                                pos.1 + d.1 * (far + self.tune.hide.shadow / 2.0),
+                            ),
+                        ));
                         break;
                     }
                 }
@@ -76,7 +102,9 @@ impl Combat {
             let c = mesh.poly(p).center;
             self.fits(obs, c) && !self.sees(eye, c, z, &self.heights_now)
         };
-        let h = crate::motor::follower::nearest_heading(&mesh, obs, &hidden, self.tune.hide.shake_far)?.to_radians();
+        let h =
+            crate::motor::follower::nearest_heading(&mesh, obs, &hidden, self.tune.hide.shake_far)?
+                .to_radians();
         Some((h.cos(), h.sin()))
     }
 
@@ -91,7 +119,10 @@ impl Combat {
     /// let loose on her, kept clear of in their sight, the rockets' blasts off the walls by her;
     /// the two at 3500 of 4000 and 2800 of 3000 at her death, never set on each other. The
     /// user's: the level's made for it.)
-    pub(super) fn set_on(&mut self, obs: &Observation) -> Option<(Thing, Thing, Option<Option<Point>>)> {
+    pub(super) fn set_on(
+        &mut self,
+        obs: &Observation,
+    ) -> Option<(Thing, Thing, Option<Option<Point>>)> {
         /// how far past the one between she'd stand, nearest first
         const PAST: [f64; 5] = [256.0, 384.0, 512.0, 640.0, 768.0];
         /// how far a way to there is looked for
@@ -107,9 +138,19 @@ impl Combat {
         // it; past the gun, what the other throws at her hits that)
         let apart = dist((gun.x, gun.y), (other.x, other.y)).max(1.0);
         let u = ((other.x - gun.x) / apart, (other.y - gun.y) / apart);
-        let thrower = matches!(mon(other.name).attack, super::Attack::Missile | super::Attack::Hitscan);
-        let past_other = PAST.iter().map(|k| (other.x + u.0 * k, other.y + u.1 * k)).map(|p| (p, eye(&gun)));
-        let past_gun = PAST.iter().filter(|_| thrower).map(|k| (gun.x - u.0 * k, gun.y - u.1 * k)).map(|p| (p, eye(&other)));
+        let thrower = matches!(
+            mon(other.name).attack,
+            super::Attack::Missile | super::Attack::Hitscan
+        );
+        let past_other = PAST
+            .iter()
+            .map(|k| (other.x + u.0 * k, other.y + u.1 * k))
+            .map(|p| (p, eye(&gun)));
+        let past_gun = PAST
+            .iter()
+            .filter(|_| thrower)
+            .map(|k| (gun.x - u.0 * k, gun.y - u.1 * k))
+            .map(|p| (p, eye(&other)));
         let spot = past_other
             .chain(past_gun)
             .filter(|&(p, far)| self.fits(obs, p) && self.sees(far, p, z, &self.heights_now))
@@ -126,7 +167,8 @@ impl Combat {
         } else if here == Some(there) {
             Some(((spot.0 - pos.0) / d, (spot.1 - pos.1) / d))
         } else {
-            let h = crate::motor::follower::nearest_heading(&mesh, obs, &|p| p == there, LOOK)?.to_radians();
+            let h = crate::motor::follower::nearest_heading(&mesh, obs, &|p| p == there, LOOK)?
+                .to_radians();
             Some((h.cos(), h.sin()))
         };
         Some((gun, other, Some(way)))
@@ -136,9 +178,21 @@ impl Combat {
     /// other, the nearest such).
     pub(super) fn boss_pair(&self, obs: &Observation) -> Option<(Thing, Thing)> {
         let pos = obs.pos();
-        let bosses: Vec<&Thing> = self.now.about.iter().filter(|t| t.health > 0 && mon(t.name).boss && self.known.get(&t.id).is_some_and(|k| k.awake)).collect();
-        let gun = *bosses.iter().find(|t| mon(t.name).attack == super::Attack::Hitscan)?;
-        let other = *bosses.iter().filter(|t| t.name != gun.name).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
+        let bosses: Vec<&Thing> = self
+            .now
+            .about
+            .iter()
+            .filter(|t| {
+                t.health > 0 && mon(t.name).boss && self.known.get(&t.id).is_some_and(|k| k.awake)
+            })
+            .collect();
+        let gun = *bosses
+            .iter()
+            .find(|t| mon(t.name).attack == super::Attack::Hitscan)?;
+        let other = *bosses
+            .iter()
+            .filter(|t| t.name != gun.name)
+            .min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
         Some((gun.clone(), other.clone()))
     }
 
@@ -148,5 +202,4 @@ impl Combat {
     pub(super) fn out_of_sight_of(&mut self, obs: &Observation, t: &Thing) -> Option<Point> {
         self.hidden_way(obs, eye(t))
     }
-
 }

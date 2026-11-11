@@ -32,7 +32,14 @@ pub struct Record {
 
 impl Record {
     pub fn new(tic: i64, point: &'static str, chosen: String) -> Record {
-        Record { tic, point, chosen, detail: String::new(), options: Vec::new(), state: None }
+        Record {
+            tic,
+            point,
+            chosen,
+            detail: String::new(),
+            options: Vec::new(),
+            state: None,
+        }
     }
 }
 
@@ -53,6 +60,10 @@ impl Journal {
 
     /// A line of JSON a record.
     pub fn lines(&self) -> String {
-        self.records.iter().filter_map(|r| serde_json::to_string(r).ok()).map(|l| l + "\n").collect()
+        self.records
+            .iter()
+            .filter_map(|r| serde_json::to_string(r).ok())
+            .map(|l| l + "\n")
+            .collect()
     }
 }

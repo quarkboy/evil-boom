@@ -20,8 +20,11 @@ fn pickup_offsets() -> &'static [(i32, i32)] {
         PICKUP_RADII
             .into_iter()
             .flat_map(|r| {
-                let mut ring: Vec<_> =
-                    (-r..=r).step_by(PICKUP_SAMPLE_STEP).chain(std::iter::once(r)).flat_map(|i| [(i, -r), (i, r), (-r, i), (r, i)]).collect();
+                let mut ring: Vec<_> = (-r..=r)
+                    .step_by(PICKUP_SAMPLE_STEP)
+                    .chain(std::iter::once(r))
+                    .flat_map(|i| [(i, -r), (i, r), (-r, i), (r, i)])
+                    .collect();
                 ring.sort_by_key(|&(dx, dy)| (dx * dx + dy * dy, dx, dy));
                 ring.dedup();
                 ring
@@ -42,19 +45,33 @@ impl Explorer {
     pub fn standing_point(&self, obs: &Observation) -> Point {
         let pos = obs.pos();
         let Some(z) = obs.z else { return pos };
-        let floor_at = |q: Point| self.nav.poly_at(q).and_then(|p| obs.height(self.nav.sector_of_poly(p))).map(|h| h.floor);
+        let floor_at = |q: Point| {
+            self.nav
+                .poly_at(q)
+                .and_then(|p| obs.height(self.nav.sector_of_poly(p)))
+                .map(|h| h.floor)
+        };
         // (only over a drop she couldn't step back up: off a step, a moment above the floor below,
         // she's where her middle is; E2M1, a route from the step's top edge, none)
         if floor_at(pos).is_none_or(|f| f >= z - MAX_STEP) {
             return pos;
         }
         let r = PLAYER_RADIUS - 1.0;
-        [(r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r), (r, r), (r, -r), (-r, r), (-r, -r)]
-            .into_iter()
-            .map(|(dx, dy)| (pos.0 + dx, pos.1 + dy))
-            .filter(|&q| floor_at(q).is_some_and(|f| (f - z).abs() < 1.0))
-            .min_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)))
-            .unwrap_or(pos)
+        [
+            (r, 0.0),
+            (-r, 0.0),
+            (0.0, r),
+            (0.0, -r),
+            (r, r),
+            (r, -r),
+            (-r, r),
+            (-r, -r),
+        ]
+        .into_iter()
+        .map(|(dx, dy)| (pos.0 + dx, pos.1 + dy))
+        .filter(|&q| floor_at(q).is_some_and(|f| (f - z).abs() < 1.0))
+        .min_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)))
+        .unwrap_or(pos)
     }
 
     pub fn standable(&self, q: Point, play: bool) -> bool {
@@ -87,7 +104,14 @@ impl Explorer {
     /// Each sector as she last saw it (floor, ceiling); the starting heights where she hasn't.
     pub(super) fn as_seen(&self) -> Vec<(f64, f64)> {
         let k = &self.knowledge;
-        self.nav.movers.initial.iter().enumerate().map(|(s, &h)| k.seen_heights.get(&s).copied().unwrap_or(h)).map(|h| (h.floor, h.ceiling)).collect()
+        self.nav
+            .movers
+            .initial
+            .iter()
+            .enumerate()
+            .map(|(s, &h)| k.seen_heights.get(&s).copied().unwrap_or(h))
+            .map(|h| (h.floor, h.ceiling))
+            .collect()
     }
 
     /// Where to stand to pick up a thing at `item`: there if the box can stand there, else the
@@ -104,7 +128,9 @@ impl Explorer {
         // of a ledge, can be had only from a corner of the square)
         for &(dx, dy) in pickup_offsets() {
             let q = (item.0 + f64::from(dx), item.1 + f64::from(dy));
-            if !nav.poly_at(q).is_some_and(|p| reach.contains(&p)) || !self.stands_with(q, &heights, &probe) {
+            if !nav.poly_at(q).is_some_and(|p| reach.contains(&p))
+                || !self.stands_with(q, &heights, &probe)
+            {
                 continue;
             }
             // (P_TouchSpecialThing: the item no higher than her height over her feet, no
@@ -114,12 +140,18 @@ impl Explorer {
             // a few units short)
             // (where she can stand, that is: not the box over a ledge she can't step up onto,
             // MAP11's soulsphere 296 up)
-            let feet = [(0.0, 0.0), (ARRIVE_SLACK, 0.0), (-ARRIVE_SLACK, 0.0), (0.0, ARRIVE_SLACK), (0.0, -ARRIVE_SLACK)]
-                .iter()
-                .map(|(dx, dy)| (q.0 + dx, q.1 + dy))
-                .filter(|&at| at == q || self.stands_with(at, &heights, &probe))
-                .map(|at| probe.fits_at(at).1)
-                .fold(f64::NEG_INFINITY, f64::max);
+            let feet = [
+                (0.0, 0.0),
+                (ARRIVE_SLACK, 0.0),
+                (-ARRIVE_SLACK, 0.0),
+                (0.0, ARRIVE_SLACK),
+                (0.0, -ARRIVE_SLACK),
+            ]
+            .iter()
+            .map(|(dx, dy)| (q.0 + dx, q.1 + dy))
+            .filter(|&at| at == q || self.stands_with(at, &heights, &probe))
+            .map(|at| probe.fits_at(at).1)
+            .fold(f64::NEG_INFINITY, f64::max);
             if floor.is_some_and(|f| !(-PICKUP_BELOW..=PLAYER_HEIGHT).contains(&(f - feet))) {
                 continue;
             }
@@ -158,13 +190,21 @@ impl Explorer {
         self.stands_with(q, heights, &self.nav.jump_lab.at_heights(heights))
     }
 
-    fn stands_with(&self, q: Point, heights: &[(f64, f64)], probe: &crate::jumps::PlayerSim<'_>) -> bool {
+    fn stands_with(
+        &self,
+        q: Point,
+        heights: &[(f64, f64)],
+        probe: &crate::jumps::PlayerSim<'_>,
+    ) -> bool {
         let mesh = &self.nav.mesh;
         // (in the map, not in the solid between its rooms, which the BSP puts in the subsector
         // beside it all the same: MAP15's blur sphere, touched for from inside the wall by it)
-        let Some(p) = mesh.poly_at(q).filter(|&p| mesh.contains(p, q)) else { return false };
+        let Some(p) = mesh.poly_at(q).filter(|&p| mesh.contains(p, q)) else {
+            return false;
+        };
         let (fits, floor, ceiling) = probe.fits_at(q);
-        fits && ceiling - floor >= PLAYER_HEIGHT && floor <= heights[mesh.poly(p).sector].0 + MAX_STEP
+        fits && ceiling - floor >= PLAYER_HEIGHT
+            && floor <= heights[mesh.poly(p).sector].0 + MAX_STEP
     }
 
     /// `spot`, if the box can stand there; else the middle of its poly, or of one next to it she
@@ -182,16 +222,34 @@ impl Explorer {
         if clear(spot) {
             return spot;
         }
-        let Some(p) = mesh.poly_at(spot) else { return spot };
+        let Some(p) = mesh.poly_at(spot) else {
+            return spot;
+        };
         // (two rings out, nearest first: E3M4's double door, a strip 8 deep between a door open
         // and one shut, and the next strip 8 deep too)
         let next = |ps: &[usize]| -> Vec<usize> {
-            ps.iter().flat_map(|&a| mesh.poly(a).portals.iter().map(move |&q| mesh.portals[q].other(a))).filter(|q| reach.contains(q)).collect()
+            ps.iter()
+                .flat_map(|&a| {
+                    mesh.poly(a)
+                        .portals
+                        .iter()
+                        .map(move |&q| mesh.portals[q].other(a))
+                })
+                .filter(|q| reach.contains(q))
+                .collect()
         };
         let one = next(&[p]);
         let two = next(&one);
-        for ring in [vec![p].into_iter().filter(|q| reach.contains(q)).collect(), one, two] {
-            let best = ring.into_iter().map(|pi| mesh.poly(pi).center).filter(|&c| clear(c)).min_by(|a, b| dist(*a, spot).total_cmp(&dist(*b, spot)));
+        for ring in [
+            vec![p].into_iter().filter(|q| reach.contains(q)).collect(),
+            one,
+            two,
+        ] {
+            let best = ring
+                .into_iter()
+                .map(|pi| mesh.poly(pi).center)
+                .filter(|&c| clear(c))
+                .min_by(|a, b| dist(*a, spot).total_cmp(&dist(*b, spot)));
             if let Some(c) = best {
                 return c;
             }
@@ -202,5 +260,7 @@ impl Explorer {
 
 /// Does the box fit half a unit to either side of `q`, each way (not only to the unit there)?
 fn with_play(probe: &crate::jumps::PlayerSim<'_>, q: Point) -> bool {
-    [(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)].iter().all(|(dx, dy)| probe.fits_at((q.0 + dx, q.1 + dy)).0)
+    [(0.5, 0.0), (-0.5, 0.0), (0.0, 0.5), (0.0, -0.5)]
+        .iter()
+        .all(|(dx, dy)| probe.fits_at((q.0 + dx, q.1 + dy)).0)
 }

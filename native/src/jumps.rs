@@ -35,8 +35,25 @@ pub struct Jump {
 }
 
 impl Jump {
-    fn new(src: usize, dest_poly: usize, dest: Point, runup: Point, takeoff: Point, speed: f64, requires: Vec<(usize, Heights)>) -> Jump {
-        Jump { src_polys: vec![src], dest_poly, dest, runup, takeoff, speed, requires, strafe: false }
+    fn new(
+        src: usize,
+        dest_poly: usize,
+        dest: Point,
+        runup: Point,
+        takeoff: Point,
+        speed: f64,
+        requires: Vec<(usize, Heights)>,
+    ) -> Jump {
+        Jump {
+            src_polys: vec![src],
+            dest_poly,
+            dest,
+            runup,
+            takeoff,
+            speed,
+            requires,
+            strafe: false,
+        }
     }
 
     /// Which way to face to go along `heading` (degrees): straight on, or strafing, turned off
@@ -61,7 +78,10 @@ impl Jump {
     /// Its identity, as evildoom.nav.reach.Jump.key has it.
     pub fn key(&self) -> String {
         let (r, t, d) = (self.runup, self.takeoff, self.dest);
-        format!("{:.0},{:.0}>{:.0},{:.0}>{:.0},{:.0}", r.0, r.1, t.0, t.1, d.0, d.1)
+        format!(
+            "{:.0},{:.0}>{:.0},{:.0}>{:.0},{:.0}",
+            r.0, r.1, t.0, t.1, d.0, d.1
+        )
     }
 }
 
@@ -144,7 +164,14 @@ impl JumpLab {
     /// Running from `start` pushing towards each of `headings`, with the sectors at `heights`:
     /// where each first comes down on a floor off `sector` (point and sector), within `tics`,
     /// or None (a teleport, or nowhere).
-    pub fn run_landings(&self, start: &RunStart, heights: &[(f64, f64)], sector: usize, headings: &[f64], tics: usize) -> Vec<Option<(Point, usize)>> {
+    pub fn run_landings(
+        &self,
+        start: &RunStart,
+        heights: &[(f64, f64)],
+        sector: usize,
+        headings: &[f64],
+        tics: usize,
+    ) -> Vec<Option<(Point, usize)>> {
         let mut sim = self.at_heights(heights);
         headings
             .iter()
@@ -155,11 +182,18 @@ impl JumpLab {
                     // as the follower's _run_controls: full thrust towards the heading, turning
                     let d = (heading - sim.angle_degrees() + 180.0).rem_euclid(360.0) - 180.0;
                     let (s, c) = d.to_radians().sin_cos();
-                    sim.step(Controls { forward: MAX_MOVE * c, strafe: -MAX_MOVE * s, turn: (-d).clamp(-RUN_TURN, RUN_TURN) });
+                    sim.step(Controls {
+                        forward: MAX_MOVE * c,
+                        strafe: -MAX_MOVE * s,
+                        turn: (-d).clamp(-RUN_TURN, RUN_TURN),
+                    });
                     if sim.teleported {
                         return None;
                     }
-                    let here = self.mesh.poly_at(sim.pos()).map(|p| self.mesh.poly(p).sector);
+                    let here = self
+                        .mesh
+                        .poly_at(sim.pos())
+                        .map(|p| self.mesh.poly(p).sector);
                     if let Some(q) = here.filter(|&q| q != sector) {
                         if sim.on_floor() && (sim.floorz_units() - heights[q].0).abs() < 0.5 {
                             return Some((sim.pos(), q));
@@ -174,7 +208,12 @@ impl JumpLab {
     /// The player from standing at `start` (x, y, angle) on the floor, given these controls a
     /// tic (forward, strafe, turn): where after each, (x, y, z, vx, vy). For comparing the
     /// simulator with the game.
-    pub fn simulate(&self, start: (f64, f64, f64), heights: &[(f64, f64)], controls: &[Controls]) -> Vec<(f64, f64, f64, f64, f64)> {
+    pub fn simulate(
+        &self,
+        start: (f64, f64, f64),
+        heights: &[(f64, f64)],
+        controls: &[Controls],
+    ) -> Vec<(f64, f64, f64, f64, f64)> {
         let mut sim = self.at_heights(heights);
         sim.place((start.0, start.1), start.2);
         controls
@@ -195,13 +234,22 @@ impl JumpLab {
                 Some((_, v)) => v.push(poly.center),
                 None => centres.push((poly.sector, vec![poly.center])),
             }
-            sector_edges.entry(poly.sector).or_default().extend(poly.edges());
+            sector_edges
+                .entry(poly.sector)
+                .or_default()
+                .extend(poly.edges());
         }
         let sector_centres = centres
             .into_iter()
             .map(|(s, ps)| {
                 let n = ps.len() as f64;
-                (s, (ps.iter().map(|p| p.0).sum::<f64>() / n, ps.iter().map(|p| p.1).sum::<f64>() / n))
+                (
+                    s,
+                    (
+                        ps.iter().map(|p| p.0).sum::<f64>() / n,
+                        ps.iter().map(|p| p.1).sum::<f64>() / n,
+                    ),
+                )
             })
             .collect();
         let mut sector_lines: HashMap<usize, Vec<usize>> = HashMap::default();
@@ -211,7 +259,15 @@ impl JumpLab {
                 sector_lines.entry(s).or_default().push(li);
             }
         }
-        let JumpFacts { static_grid, obstacle_grid, initial, teleports, start_angle, permanent, sinking } = facts;
+        let JumpFacts {
+            static_grid,
+            obstacle_grid,
+            initial,
+            teleports,
+            start_angle,
+            permanent,
+            sinking,
+        } = facts;
         JumpLab {
             map,
             mesh,

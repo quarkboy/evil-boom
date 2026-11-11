@@ -35,7 +35,10 @@ struct Covered {
 
 impl Covered {
     fn new(width: i32) -> Self {
-        Covered { ranges: Vec::new(), width }
+        Covered {
+            ranges: Vec::new(),
+            width,
+        }
     }
 
     fn full(&self) -> bool {
@@ -45,18 +48,26 @@ impl Covered {
     /// Is any column of first..=last not covered?
     fn any_open(&self, first: i32, last: i32) -> bool {
         let i = self.ranges.partition_point(|&(_, end)| end < first);
-        self.ranges.get(i).is_none_or(|&(start, end)| start > first || end < last)
+        self.ranges
+            .get(i)
+            .is_none_or(|&(start, end)| start > first || end < last)
     }
 
     /// Cover first..=last (merging with ranges it touches).
     fn cover(&mut self, first: i32, last: i32) {
-        let start = self.ranges.partition_point(|&(_, end)| end < first.saturating_sub(1));
-        let overlaps = self.ranges[start..].partition_point(|&(begin, _)| begin <= last.saturating_add(1));
+        let start = self
+            .ranges
+            .partition_point(|&(_, end)| end < first.saturating_sub(1));
+        let overlaps =
+            self.ranges[start..].partition_point(|&(begin, _)| begin <= last.saturating_add(1));
         if overlaps == 0 {
             self.ranges.insert(start, (first, last));
         } else {
             let end = start + overlaps;
-            self.ranges[start] = (first.min(self.ranges[start].0), last.max(self.ranges[end - 1].1));
+            self.ranges[start] = (
+                first.min(self.ranges[start].0),
+                last.max(self.ranges[end - 1].1),
+            );
             self.ranges.drain(start + 1..end);
         }
     }
@@ -102,7 +113,11 @@ impl Sight {
             .iter()
             .map(|s| {
                 let l = &m.linedefs[s.linedef];
-                let (side, other) = if s.direction == 0 { (l.front, l.back) } else { (l.back, l.front) };
+                let (side, other) = if s.direction == 0 {
+                    (l.front, l.back)
+                } else {
+                    (l.back, l.front)
+                };
                 let side = usize::from(side);
                 ViewSeg {
                     v1: m.vertexes[s.v1].point(),
@@ -118,17 +133,41 @@ impl Sight {
         Sight {
             line_count: m.linedefs.len(),
             segs,
-            subsectors: m.subsectors.iter().map(|ss| ss.first_seg..ss.first_seg + ss.seg_count).collect(),
+            subsectors: m
+                .subsectors
+                .iter()
+                .map(|ss| ss.first_seg..ss.first_seg + ss.seg_count)
+                .collect(),
             nodes: m.nodes.clone(),
-            looks: m.sectors.iter().map(|s| (s.floor_tex.clone(), s.ceiling_tex.clone(), s.light)).collect(),
-            textured: m.sidedefs.iter().map(|sd| (has(&sd.upper), has(&sd.lower), has(&sd.middle))).collect(),
+            looks: m
+                .sectors
+                .iter()
+                .map(|s| (s.floor_tex.clone(), s.ceiling_tex.clone(), s.light))
+                .collect(),
+            textured: m
+                .sidedefs
+                .iter()
+                .map(|sd| (has(&sd.upper), has(&sd.lower), has(&sd.middle)))
+                .collect(),
         }
     }
 
     /// What this view shows.
     pub fn view(&self, view: &View<'_>) -> Seen {
         let (sin, cos) = view.angle.to_radians().sin_cos();
-        let mut walk = Walk { sight: self, view, covered: Covered::new(view.width), seen: vec![LineSeen::default(); self.line_count], out: Seen { drawn: Vec::new(), through: Vec::new(), subsectors: Vec::new() }, sin, cos };
+        let mut walk = Walk {
+            sight: self,
+            view,
+            covered: Covered::new(view.width),
+            seen: vec![LineSeen::default(); self.line_count],
+            out: Seen {
+                drawn: Vec::new(),
+                through: Vec::new(),
+                subsectors: Vec::new(),
+            },
+            sin,
+            cos,
+        };
         match self.nodes.len().checked_sub(1) {
             None => walk.subsector(0),
             Some(root) => walk.node(u16::try_from(root).unwrap_or(0)),
@@ -172,7 +211,9 @@ impl Walk<'_> {
     }
 
     fn subsector(&mut self, ss: usize) {
-        let Some(range) = self.sight.subsectors.get(ss).cloned() else { return };
+        let Some(range) = self.sight.subsectors.get(ss).cloned() else {
+            return;
+        };
         if range.clone().any(|i| self.open_either_side(i)) {
             self.out.subsectors.push(ss);
         }
@@ -185,7 +226,10 @@ impl Walk<'_> {
     fn open_either_side(&self, i: usize) -> bool {
         let s = &self.sight.segs[i];
         let (a, b) = (self.to_view(s.v1), self.to_view(s.v2));
-        [(a, b), (b, a)].into_iter().any(|(l, r)| self.columns(l, r).is_some_and(|(x1, x2)| self.covered.any_open(x1, x2 - 1)))
+        [(a, b), (b, a)].into_iter().any(|(l, r)| {
+            self.columns(l, r)
+                .is_some_and(|(x1, x2)| self.covered.any_open(x1, x2 - 1))
+        })
     }
 
     /// A point in view space: (to the right, depth).
@@ -245,7 +289,9 @@ impl Walk<'_> {
     /// Does the seg block the view behind it (a wall, or a closed door), let it through (a
     /// window: heights or looks differ), or is it not drawn at all (an invisible line)?
     fn classify(&self, s: &ViewSeg) -> Option<bool> {
-        let Some(back) = s.back else { return Some(true) };
+        let Some(back) = s.back else {
+            return Some(true);
+        };
         let hs = self.view.heights;
         let ((ff, fc), (bf, bc)) = (hs[s.front], hs[back]);
         if bc <= ff || bf >= fc {
@@ -254,7 +300,11 @@ impl Walk<'_> {
         let (front_look, back_look) = (&self.sight.looks[s.front], &self.sight.looks[back]);
         let (top, bottom, middle) = self.sight.textured[s.side];
         // (a door shut from behind, killough's automap fix: ZDoom's doorclosed)
-        if (back_look.1 != SKY_FLAT || front_look.1 != SKY_FLAT) && bc <= bf && (bc >= fc || top) && (bf <= ff || bottom) {
+        if (back_look.1 != SKY_FLAT || front_look.1 != SKY_FLAT)
+            && bc <= bf
+            && (bc >= fc || top)
+            && (bf <= ff || bottom)
+        {
             return Some(true);
         }
         if bf != ff || bc != fc || front_look != back_look || middle {
@@ -270,7 +320,9 @@ impl Walk<'_> {
         if dx * (self.view.y - s.v1.1) - dy * (self.view.x - s.v1.0) >= 0.0 {
             return;
         }
-        let Some((x1, x2)) = self.columns(self.to_view(s.v1), self.to_view(s.v2)) else { return };
+        let Some((x1, x2)) = self.columns(self.to_view(s.v1), self.to_view(s.v2)) else {
+            return;
+        };
         let solid = self.classify(s);
         if !self.covered.any_open(x1, x2 - 1) {
             return;

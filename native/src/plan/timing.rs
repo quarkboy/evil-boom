@@ -39,7 +39,10 @@ impl Planner<'_> {
                     let n = ((seg / ARRIVAL_SAMPLE_STEP).floor() as i64).max(1);
                     for i in 1..=n {
                         let (fi, nf) = (i as f64, n as f64);
-                        note((pr.0 + (p.0 - pr.0) * fi / nf, pr.1 + (p.1 - pr.1) * fi / nf), so_far + seg * fi / nf);
+                        note(
+                            (pr.0 + (p.0 - pr.0) * fi / nf, pr.1 + (p.1 - pr.1) * fi / nf),
+                            so_far + seg * fi / nf,
+                        );
                     }
                     so_far += seg;
                 }
@@ -47,25 +50,41 @@ impl Planner<'_> {
             prev = Some(p);
         }
         for &poly in &path.polys {
-            out.entry(self.nav.poly_sector[poly]).or_insert(ACTIVATION_TICS + path.cost / LEG_SPEED);
+            out.entry(self.nav.poly_sector[poly])
+                .or_insert(ACTIVATION_TICS + path.cost / LEG_SPEED);
         }
         out
     }
 
     /// The jumps along a path: (takeoff, the sectors and heights each needs).
-    fn jumps<'p>(&'p self, path: &'p Found) -> impl Iterator<Item = (Point, &'p [(usize, Heights)])> + 'p {
-        path.vias.iter().enumerate().filter_map(move |(i, via)| match via {
-            Some(Via::Tele(ti)) => match &self.nav.tele[path.polys[i - 1]][*ti].kind {
-                TeleKind::Jump { takeoff, requires, .. } => Some((*takeoff, requires.as_slice())),
-                TeleKind::Line { .. } => None,
-            },
-            _ => None,
-        })
+    fn jumps<'p>(
+        &'p self,
+        path: &'p Found,
+    ) -> impl Iterator<Item = (Point, &'p [(usize, Heights)])> + 'p {
+        path.vias
+            .iter()
+            .enumerate()
+            .filter_map(move |(i, via)| match via {
+                Some(Via::Tele(ti)) => match &self.nav.tele[path.polys[i - 1]][*ti].kind {
+                    TeleKind::Jump {
+                        takeoff, requires, ..
+                    } => Some((*takeoff, requires.as_slice())),
+                    TeleKind::Line { .. } => None,
+                },
+                _ => None,
+            })
     }
 
     /// A path from `start` to `goal`, not relying on temporary heights (`deadlines`) it would
     /// be too late for; and the heights it was found with.
-    pub(super) fn timed_path(&mut self, start: Point, goal: Point, states: &World, keys: KeySet, deadlines: &Timers) -> Option<(Found, World)> {
+    pub(super) fn timed_path(
+        &mut self,
+        start: Point,
+        goal: Point,
+        states: &World,
+        keys: KeySet,
+        deadlines: &Timers,
+    ) -> Option<(Found, World)> {
         let t0 = Instant::now();
         let timers = {
             use std::hash::{Hash, Hasher};
@@ -75,7 +94,16 @@ impl Planner<'_> {
             }
             h.finish()
         };
-        let key: TimedKey = (start.0.to_bits(), start.1.to_bits(), goal.0.to_bits(), goal.1.to_bits(), world_hash(states), keys, timers, self.strict_fit);
+        let key: TimedKey = (
+            start.0.to_bits(),
+            start.1.to_bits(),
+            goal.0.to_bits(),
+            goal.1.to_bits(),
+            world_hash(states),
+            keys,
+            timers,
+            self.strict_fit,
+        );
         if let Some(found) = self.caches.timed.get(&key) {
             let out = found.clone();
             stats::record(Phase::TimedPath, t0);
@@ -91,16 +119,27 @@ impl Planner<'_> {
         out
     }
 
-    fn timed_path_inner(&mut self, start: Point, goal: Point, states: &World, doors: &Arc<Doors>, deadlines: &Timers) -> Option<(Found, World)> {
+    fn timed_path_inner(
+        &mut self,
+        start: Point,
+        goal: Point,
+        states: &World,
+        doors: &Arc<Doors>,
+        deadlines: &Timers,
+    ) -> Option<(Found, World)> {
         let doors = (!doors.is_empty()).then_some(&**doors);
-        let path = self.nav.find_path(start, goal, &mut Planned(states), doors, self.strict_fit)?;
+        let path = self
+            .nav
+            .find_path(start, goal, &mut Planned(states), doors, self.strict_fit)?;
         if deadlines.is_empty() {
             return Some((path, states.clone()));
         }
         let mut arrive = self.arrival_tics(&path);
         // what a jump needs, it needs when taking off
         for (takeoff, requires) in self.jumps(&path) {
-            let Some(&at) = self.nav.sector_at(takeoff).and_then(|src| arrive.get(&src)) else { continue };
+            let Some(&at) = self.nav.sector_at(takeoff).and_then(|src| arrive.get(&src)) else {
+                continue;
+            };
             for (s, _) in requires {
                 let cur = arrive.get(s).copied().unwrap_or(f64::INFINITY);
                 arrive.insert(*s, cur.min(at));
@@ -109,10 +148,14 @@ impl Planner<'_> {
         // a jump off a lift that's still down waits for it to come back (and everything after
         // the takeoff is that much later)
         for (takeoff, requires) in self.jumps(&path) {
-            let Some(&t_off) = self.nav.sector_at(takeoff).and_then(|src| arrive.get(&src)) else { continue };
+            let Some(&t_off) = self.nav.sector_at(takeoff).and_then(|src| arrive.get(&src)) else {
+                continue;
+            };
             let mut lifts: HashMap<usize, f64> = HashMap::default();
             for (&(s2, h2), &left) in deadlines {
-                if self.facts.temporary.contains(&(s2, h2)) && requires.iter().any(|(s, h)| *s == s2 && h.key() != h2) {
+                if self.facts.temporary.contains(&(s2, h2))
+                    && requires.iter().any(|(s, h)| *s == s2 && h.key() != h2)
+                {
                     lifts.insert(s2, left);
                 }
             }
@@ -128,16 +171,27 @@ impl Planner<'_> {
                 }
             }
         }
-        let late: Vec<Pair> = deadlines.iter().filter(|(&(s, _), &left)| arrive.get(&s).is_some_and(|&a| a > left)).map(|(k, _)| *k).collect();
+        let late: Vec<Pair> = deadlines
+            .iter()
+            .filter(|(&(s, _), &left)| arrive.get(&s).is_some_and(|&a| a > left))
+            .map(|(k, _)| *k)
+            .collect();
         if late.is_empty() {
             return Some((path, states.clone()));
         }
         let slower = without(states, late);
-        self.nav.find_path(start, goal, &mut Planned(&slower), doors, self.strict_fit).map(|p| (p, slower))
+        self.nav
+            .find_path(start, goal, &mut Planned(&slower), doors, self.strict_fit)
+            .map(|p| (p, slower))
     }
 
     /// The polys reachable from `poly` in this world with these keys (cached).
-    pub(super) fn reach_from(&mut self, poly: usize, states: &World, keys: KeySet) -> Arc<HashSet<usize>> {
+    pub(super) fn reach_from(
+        &mut self,
+        poly: usize,
+        states: &World,
+        keys: KeySet,
+    ) -> Arc<HashSet<usize>> {
         let t0 = Instant::now();
         let key = (poly, keys, world_hash(states));
         if let Some(r) = self.caches.reach.get(&key) {

@@ -70,7 +70,11 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
         }
         println!("> {line}");
         let w: Vec<&str> = line.split_whitespace().collect();
-        let num = |k: usize| w.get(k).and_then(|v| v.parse::<f64>().ok()).ok_or_else(|| format!("line {}: {line}: a number wanted", i + 1));
+        let num = |k: usize| {
+            w.get(k)
+                .and_then(|v| v.parse::<f64>().ok())
+                .ok_or_else(|| format!("line {}: {line}: a number wanted", i + 1))
+        };
         match w[0] {
             "fits" => {
                 // (does the box stand at a point, at the heights she last saw: as the wall stand
@@ -79,7 +83,10 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 let x = s.agent.x();
                 let k = &x.knowledge;
                 let init = &s.nav.movers.initial;
-                let heights: Vec<(f64, f64)> = (0..init.len()).map(|i| k.seen_heights.get(&i).copied().unwrap_or(init[i])).map(|h| (h.floor, h.ceiling)).collect();
+                let heights: Vec<(f64, f64)> = (0..init.len())
+                    .map(|i| k.seen_heights.get(&i).copied().unwrap_or(init[i]))
+                    .map(|h| (h.floor, h.ceiling))
+                    .collect();
                 let (clear, floor, ceiling) = s.nav.jump_lab.fits_at_heights(q, &heights);
                 println!("  ({:.0}, {:.0}): clear {clear}, floor {floor}, ceiling {ceiling}; standable {}", q.0, q.1, x.standable(q, false));
             }
@@ -100,7 +107,11 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 // could give things: for an option offered with no route)
                 let goal = (num(1)?, num(2)?);
                 let obs = s.obs();
-                match s.agent.x_mut().reach_chain(&obs, goal, w.get(3) == Some(&"plan")) {
+                match s
+                    .agent
+                    .x_mut()
+                    .reach_chain(&obs, goal, w.get(3) == Some(&"plan"))
+                {
                     None => println!("  not in reach"),
                     Some(chain) => {
                         for l in chain {
@@ -116,16 +127,33 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 let x = s.agent.x_mut();
                 let known = x.knowledge.known_polys();
                 let at = s.nav.poly_at(goal);
-                println!("    goal poly {:?}: known {}, sector {:?}", at, at.is_some_and(|p| known.contains(&p)), at.map(|p| s.nav.sector_of_poly(p)));
+                println!(
+                    "    goal poly {:?}: known {}, sector {:?}",
+                    at,
+                    at.is_some_and(|p| known.contains(&p)),
+                    at.map(|p| s.nav.sector_of_poly(p))
+                );
                 match x.route_to(&Objective::new(Kind::Visit, goal, "go there"), &obs) {
                     None => println!("  no way there, by what she knows"),
                     Some(steps) => {
                         for st in &steps {
                             println!("  step: {}", st.label);
                             if let Some(p) = &st.path {
-                                let pts: Vec<String> = p.waypoints.iter().map(|w| w.map_or("teleport".to_string(), |w| format!("({:.0}, {:.0})", w.0, w.1))).collect();
+                                let pts: Vec<String> = p
+                                    .waypoints
+                                    .iter()
+                                    .map(|w| {
+                                        w.map_or("teleport".to_string(), |w| {
+                                            format!("({:.0}, {:.0})", w.0, w.1)
+                                        })
+                                    })
+                                    .collect();
                                 println!("    {}", pts.join(" "));
-                                let polys: Vec<String> = p.polys.iter().map(|&q| format!("{q}/{}", s.nav.sector_of_poly(q))).collect();
+                                let polys: Vec<String> = p
+                                    .polys
+                                    .iter()
+                                    .map(|&q| format!("{q}/{}", s.nav.sector_of_poly(q)))
+                                    .collect();
                                 println!("    polys (poly/sector): {}", polys.join(" "));
                                 if !p.steps.is_empty() {
                                     println!("    {}", p.steps.join("; "));
@@ -144,7 +172,10 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
             }
             "power" => {
                 // (a power for looking round: 5 the light amplification visor, a dark room seen)
-                let (power, tics) = (num(1)? as i32, w.get(2).and_then(|v| v.parse().ok()).unwrap_or(35 * 60));
+                let (power, tics) = (
+                    num(1)? as i32,
+                    w.get(2).and_then(|v| v.parse().ok()).unwrap_or(35 * 60),
+                );
                 if !s.e.game.power(power, tics) {
                     println!("  the game library hasn't evil_power (rebuild it)");
                 }
@@ -165,11 +196,23 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                     if off.abs() < 1.0 {
                         break;
                     }
-                    tick(&mut s, Controls { turn: (-off).clamp(-20.0, 20.0), ..Controls::default() });
+                    tick(
+                        &mut s,
+                        Controls {
+                            turn: (-off).clamp(-20.0, 20.0),
+                            ..Controls::default()
+                        },
+                    );
                 }
             }
             "use" => {
-                tick(&mut s, Controls { use_: true, ..Controls::default() });
+                tick(
+                    &mut s,
+                    Controls {
+                        use_: true,
+                        ..Controls::default()
+                    },
+                );
                 for _ in 0..3 {
                     tick(&mut s, Controls::default());
                 }
@@ -178,25 +221,49 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 }
             }
             "move" => {
-                let ctl = Controls { forward: num(1)?, strafe: num(2)?, turn: num(3)?, run: true, ..Controls::default() };
+                let ctl = Controls {
+                    forward: num(1)?,
+                    strafe: num(2)?,
+                    turn: num(3)?,
+                    run: true,
+                    ..Controls::default()
+                };
                 for _ in 0..num(4)? as i64 {
                     tick(&mut s, ctl);
                 }
             }
             "fire" => {
                 if let Ok(slot) = num(2) {
-                    tick(&mut s, Controls { weapon: slot as i32, ..Controls::default() });
+                    tick(
+                        &mut s,
+                        Controls {
+                            weapon: slot as i32,
+                            ..Controls::default()
+                        },
+                    );
                     for _ in 0..20 {
                         tick(&mut s, Controls::default());
                     }
                     let o = s.obs();
-                    println!("  weapon now {:?} (owns {:?}, ammo {:?})", o.weapon, o.weapons, o.ammo);
+                    println!(
+                        "  weapon now {:?} (owns {:?}, ammo {:?})",
+                        o.weapon, o.weapons, o.ammo
+                    );
                 }
                 for _ in 0..num(1)? as i64 {
-                    tick(&mut s, Controls { attack: true, ..Controls::default() });
+                    tick(
+                        &mut s,
+                        Controls {
+                            attack: true,
+                            ..Controls::default()
+                        },
+                    );
                 }
                 let obs = s.obs();
-                println!("  barrels left: {}", obs.barrels.as_ref().map_or(0, Vec::len));
+                println!(
+                    "  barrels left: {}",
+                    obs.barrels.as_ref().map_or(0, Vec::len)
+                );
             }
             "wait" => {
                 for _ in 0..num(1)? as i64 {
@@ -212,7 +279,10 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                     s.obs = Some(obs);
                 }
                 let x = s.agent.x();
-                println!("  doing: {}", x.current.as_ref().map_or("-", |c| c.label.as_str()));
+                println!(
+                    "  doing: {}",
+                    x.current.as_ref().map_or("-", |c| c.label.as_str())
+                );
             }
             "where" => where_(&mut s),
             "walls" => {
@@ -224,7 +294,10 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 let found = x.suspected(&obs, &reach, w.get(1) == Some(&"all"));
                 println!("  {} walls suspected", found.len());
                 for (score, li, stand, _) in found.iter().take(30) {
-                    println!("    line {li}: {score:.1}, from ({:.0}, {:.0})", stand.0, stand.1);
+                    println!(
+                        "    line {li}: {score:.1}, from ({:.0}, {:.0})",
+                        stand.0, stand.1
+                    );
                 }
             }
             "items" => {
@@ -236,30 +309,77 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 let fresh = x.fresh_view();
                 let start = s.m.things.iter().find(|t| t.kind == 1).map(|t| (t.x, t.y));
                 let states = fresh.initial_states();
-                for t in obs.things.iter().flatten().filter(|t| crate::knowledge::completion::COUNTED.contains(&t.name)) {
+                for t in obs
+                    .things
+                    .iter()
+                    .flatten()
+                    .filter(|t| crate::knowledge::completion::COUNTED.contains(&t.name))
+                {
                     let p = s.nav.poly_at((t.x, t.y));
                     let seen = p.is_some_and(|p| known.contains(&p));
                     let now = seen && x.touch_spot((t.x, t.y), &x.reach).is_some();
-                    let from_start = seen && start.is_some_and(|st| fresh.plan(st, &[(t.x, t.y)], &Plan { states: Some(&states), max_expansions: 2000, max_seconds: 10.0, ..Plan::default() }).is_some());
-                    println!("  {} at ({:.0}, {:.0}) sector {}: {}", t.name, t.x, t.y, p.map_or("-".into(), |p| s.nav.sector_of_poly(p).to_string()), if !seen { "never seen" } else if now { "seen, hers to get now" } else if from_start { "seen, not now, but from the start" } else { "seen, not to be had" });
+                    let from_start = seen
+                        && start.is_some_and(|st| {
+                            fresh
+                                .plan(
+                                    st,
+                                    &[(t.x, t.y)],
+                                    &Plan {
+                                        states: Some(&states),
+                                        max_expansions: 2000,
+                                        max_seconds: 10.0,
+                                        ..Plan::default()
+                                    },
+                                )
+                                .is_some()
+                        });
+                    println!(
+                        "  {} at ({:.0}, {:.0}) sector {}: {}",
+                        t.name,
+                        t.x,
+                        t.y,
+                        p.map_or("-".into(), |p| s.nav.sector_of_poly(p).to_string()),
+                        if !seen {
+                            "never seen"
+                        } else if now {
+                            "seen, hers to get now"
+                        } else if from_start {
+                            "seen, not now, but from the start"
+                        } else {
+                            "seen, not to be had"
+                        }
+                    );
                 }
             }
             "exit?" => {
                 let obs = s.obs();
                 let plan = crate::sweep::plan_here(&s.nav, &obs, 20.0);
-                println!("  knowing the whole map, from here: {}", if plan.complete { format!("out in {} steps", plan.steps.len()) } else { plan.problem.clone() });
+                println!(
+                    "  knowing the whole map, from here: {}",
+                    if plan.complete {
+                        format!("out in {} steps", plan.steps.len())
+                    } else {
+                        plan.problem.clone()
+                    }
+                );
             }
             "sector" => {
                 let states = s.agent.x().states();
                 let obs = s.obs();
                 for v in &w[1..] {
-                    let Ok(sec) = v.parse::<usize>() else { continue };
+                    let Ok(sec) = v.parse::<usize>() else {
+                        continue;
+                    };
                     let live = obs.heights.get(sec).copied();
                     let seen = s.agent.x().knowledge.seen_tic.get(&sec).copied();
                     println!(
                         "  sector {sec}: now {}, she believes {}, last seen tic {}",
                         live.map_or("?".into(), |h| format!("{}..{}", h.floor, h.ceiling)),
-                        states.get(sec).map_or("?".into(), |hs| hs.iter().map(|h| format!("{}..{}", h.floor, h.ceiling)).collect::<Vec<_>>().join(" or ")),
+                        states.get(sec).map_or("?".into(), |hs| hs
+                            .iter()
+                            .map(|h| format!("{}..{}", h.floor, h.ceiling))
+                            .collect::<Vec<_>>()
+                            .join(" or ")),
                         seen.map_or("never".into(), |t| t.to_string())
                     );
                 }
@@ -268,7 +388,8 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 let k = &s.agent.x().knowledge;
                 for v in &w[1..] {
                     let Ok(li) = v.parse::<usize>() else { continue };
-                    let special = classify_line(s.m.linedefs[li].special).map_or("-".to_string(), |i| i.description);
+                    let special = classify_line(s.m.linedefs[li].special)
+                        .map_or("-".to_string(), |i| i.description);
                     let fired = k.fired.iter().filter(|f| f.line == li).count();
                     println!(
                         "  line {li} ({special}): mapped {}, fired {fired}x, tried as a wall {}, locked {}, in the way {}",
@@ -279,13 +400,37 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                     );
                     // (and as a trigger: does she take it for one, and where it's set off from)
                     let x = s.agent.x();
-                    println!("    looks interactive {}, offered {}", k.looks_interactive(li), k.interactables().contains(&li));
+                    println!(
+                        "    looks interactive {}, offered {}",
+                        k.looks_interactive(li),
+                        k.interactables().contains(&li)
+                    );
                     for t in s.nav.triggers.iter().filter(|t| t.linedef() == Some(li)) {
                         let reach = t.activators.intersection(&x.reach).count();
-                        let shots: std::collections::BTreeSet<(i64, i64)> = t.activators.iter().filter_map(|&p| s.nav.shot_floors.get(&(li, p))).map(|&(lo, hi)| (lo as i64, hi as i64)).collect();
-                        let sectors: std::collections::BTreeSet<usize> = t.activators.iter().map(|&p| s.nav.sector_of_poly(p)).collect();
+                        let shots: std::collections::BTreeSet<(i64, i64)> = t
+                            .activators
+                            .iter()
+                            .filter_map(|&p| s.nav.shot_floors.get(&(li, p)))
+                            .map(|&(lo, hi)| (lo as i64, hi as i64))
+                            .collect();
+                        let sectors: std::collections::BTreeSet<usize> = t
+                            .activators
+                            .iter()
+                            .map(|&p| s.nav.sector_of_poly(p))
+                            .collect();
                         println!("    trigger {}: {} activators ({reach} in reach), sectors {sectors:?}{}", t.id, t.activators.len(), if shots.is_empty() { String::new() } else { format!(", shot from floors {shots:?}") });
-                        let polys: Vec<String> = t.activators.iter().map(|&p| format!("{p}{}@({:.0},{:.0})", if x.reach.contains(&p) { "*" } else { "" }, s.nav.mesh.center(p).0, s.nav.mesh.center(p).1)).collect();
+                        let polys: Vec<String> = t
+                            .activators
+                            .iter()
+                            .map(|&p| {
+                                format!(
+                                    "{p}{}@({:.0},{:.0})",
+                                    if x.reach.contains(&p) { "*" } else { "" },
+                                    s.nav.mesh.center(p).0,
+                                    s.nav.mesh.center(p).1
+                                )
+                            })
+                            .collect();
                         println!("      from polys (* in reach): {}", polys.join(" "));
                     }
                 }
@@ -313,7 +458,12 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                     director.tally = crate::control::directed::Tally::of(s.e.tally());
                     director.tick(&mut s.agent, &obs);
                     for r in &director.reports[shown..] {
-                        println!("  [{:6.1}s] {} {}", r.tic as f64 / TICRATE, if r.ok { "+" } else { "-" }, r.text);
+                        println!(
+                            "  [{:6.1}s] {} {}",
+                            r.tic as f64 / TICRATE,
+                            if r.ok { "+" } else { "-" },
+                            r.text
+                        );
                     }
                     started |= !director.idle(&s.agent) || director.reports.len() > shown;
                     shown = director.reports.len();
@@ -330,18 +480,45 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                         break; // (done and waiting)
                     }
                 }
-                println!("  at ({:.0}, {:.0}), {:.1}s{}", s.obs().x, s.obs().y, s.e.tic as f64 / TICRATE, if s.e.finished() { "; the level's over" } else { "" });
+                println!(
+                    "  at ({:.0}, {:.0}), {:.1}s{}",
+                    s.obs().x,
+                    s.obs().y,
+                    s.e.tic as f64 / TICRATE,
+                    if s.e.finished() {
+                        "; the level's over"
+                    } else {
+                        ""
+                    }
+                );
             }
             "objectives" => {
                 let obs = s.obs();
                 listed.clear();
                 for risky in [false, true] {
                     let options = s.agent.ranked(&obs, risky);
-                    println!("  {} options{}", options.len(), if risky { " (risky)" } else { "" });
+                    println!(
+                        "  {} options{}",
+                        options.len(),
+                        if risky { " (risky)" } else { "" }
+                    );
                     for obj in options.into_iter().take(12) {
                         let route = s.agent.x_mut().route_to(&obj, &obs);
-                        let how = route.map_or("no route".to_string(), |st| format!("{} steps, {:.0} long", st.len(), crate::knowledge::explorer::route_length(&st)));
-                        println!("    {:2}. {} at ({:.0}, {:.0}), priority {}: {how}", listed.len() + 1, obj.label, obj.goal.0, obj.goal.1, obj.priority());
+                        let how = route.map_or("no route".to_string(), |st| {
+                            format!(
+                                "{} steps, {:.0} long",
+                                st.len(),
+                                crate::knowledge::explorer::route_length(&st)
+                            )
+                        });
+                        println!(
+                            "    {:2}. {} at ({:.0}, {:.0}), priority {}: {how}",
+                            listed.len() + 1,
+                            obj.label,
+                            obj.goal.0,
+                            obj.goal.1,
+                            obj.priority()
+                        );
                         listed.push(obj);
                     }
                 }
@@ -353,13 +530,22 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
             }
             "pick" => {
                 let n = num(1)? as usize;
-                let Some(obj) = n.checked_sub(1).and_then(|i| listed.get(i)).cloned() else { return Err(format!("line {}: no option {n} (`objectives` first)", i + 1)) };
+                let Some(obj) = n.checked_sub(1).and_then(|i| listed.get(i)).cloned() else {
+                    return Err(format!(
+                        "line {}: no option {n} (`objectives` first)",
+                        i + 1
+                    ));
+                };
                 take(&mut s, obj);
             }
             "force" => {
                 let obj = match w.get(1).copied() {
-                    Some("visit") => Objective::new(Kind::Visit, (num(2)?, num(3)?), "go there (forced)"),
-                    Some("item") => Objective::new(Kind::Item, (num(2)?, num(3)?), "pick it up (forced)"),
+                    Some("visit") => {
+                        Objective::new(Kind::Visit, (num(2)?, num(3)?), "go there (forced)")
+                    }
+                    Some("item") => {
+                        Objective::new(Kind::Item, (num(2)?, num(3)?), "pick it up (forced)")
+                    }
                     Some("wall") => {
                         let li = num(2)? as usize;
                         let (a, b) = s.m.line_seg(li);
@@ -367,12 +553,21 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                         let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
                         // (pressed from in front: the front is right of v1->v2)
                         let (nx, ny) = ((b.1 - a.1) / len, -(b.0 - a.0) / len);
-                        let mut o = Objective::new(Kind::Wall, (mid.0 + nx * 40.0, mid.1 + ny * 40.0), format!("try the wall (line {li}, forced)"));
+                        let mut o = Objective::new(
+                            Kind::Wall,
+                            (mid.0 + nx * 40.0, mid.1 + ny * 40.0),
+                            format!("try the wall (line {li}, forced)"),
+                        );
                         o.wall = Some(li);
                         o.look_at = Some(mid);
                         o
                     }
-                    _ => return Err(format!("line {}: force visit X Y | force wall LINE | force item X Y", i + 1)),
+                    _ => {
+                        return Err(format!(
+                            "line {}: force visit X Y | force wall LINE | force item X Y",
+                            i + 1
+                        ))
+                    }
                 };
                 take(&mut s, obj);
             }
@@ -382,7 +577,11 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                     let p: Vec<f64> = v.split(',').filter_map(|x| x.parse().ok()).collect();
                     (p.len() == 3).then(|| (p[0], p[1], p[2]))
                 });
-                let (back, r) = snapshot(s, &out_dir().join("drive").join(format!("{name}.png")), focus);
+                let (back, r) = snapshot(
+                    s,
+                    &out_dir().join("drive").join(format!("{name}.png")),
+                    focus,
+                );
                 s = back;
                 r?;
             }
@@ -436,12 +635,22 @@ fn carry_out(s: &mut Setup, doing: Option<Ident>) {
         println!("  {l}");
     }
     let after = s.e.tally();
-    println!("  took {:.1}s; items {} -> {}, secrets {} -> {}", (s.e.tic - start_tic) as f64 / TICRATE, tally[0].0, after[0].0, tally[2].0, after[2].0);
+    println!(
+        "  took {:.1}s; items {} -> {}, secrets {} -> {}",
+        (s.e.tic - start_tic) as f64 / TICRATE,
+        tally[0].0,
+        after[0].0,
+        tally[2].0,
+        after[2].0
+    );
     let k = x.knowledge.summary();
     if k != knew {
         println!("  knows now: {k}");
     }
-    println!("  next: {}", x.current.as_ref().map_or("-", |c| c.label.as_str()));
+    println!(
+        "  next: {}",
+        x.current.as_ref().map_or("-", |c| c.label.as_str())
+    );
 }
 
 /// A tic with these controls; what she sees goes into her knowledge.
@@ -482,12 +691,30 @@ fn goto(s: &mut Setup, goal: Point, full: bool) {
     let (view, steps, states) = if full {
         let view = Rc::new(s.nav.full_view());
         let states: States = obs.heights.iter().map(|h| vec![*h]).collect();
-        let route = view.plan(obs.pos(), &[goal], &Plan { keys, states: Some(&states), max_expansions: 2000, max_seconds: 60.0, ..Plan::default() });
+        let route = view.plan(
+            obs.pos(),
+            &[goal],
+            &Plan {
+                keys,
+                states: Some(&states),
+                max_expansions: 2000,
+                max_seconds: 60.0,
+                ..Plan::default()
+            },
+        );
         let Some(route) = route else {
             println!("  no way there, knowing the whole map");
             return;
         };
-        let walk = crate::walkthrough::Step { path: None, action: crate::walkthrough::Action::Walk, trigger: None, key: None, label: "go there".into(), expects: Vec::new(), barrel: None };
+        let walk = crate::walkthrough::Step {
+            path: None,
+            action: crate::walkthrough::Action::Walk,
+            trigger: None,
+            key: None,
+            label: "go there".into(),
+            expects: Vec::new(),
+            barrel: None,
+        };
         let steps = steps_from_legs(&view, &route.legs, Some(walk), Some(&states));
         (view, steps, states)
     } else {
@@ -518,21 +745,75 @@ fn goto(s: &mut Setup, goal: Point, full: bool) {
         seen = f.log.events.len();
     }
     let obs = s.obs();
-    println!("  {} at ({:.0}, {:.0}), {:.0} from the goal", if f.done { "arrived" } else if f.failed { "failed" } else { "gave up" }, obs.x, obs.y, dist(obs.pos(), goal));
+    println!(
+        "  {} at ({:.0}, {:.0}), {:.0} from the goal",
+        if f.done {
+            "arrived"
+        } else if f.failed {
+            "failed"
+        } else {
+            "gave up"
+        },
+        obs.x,
+        obs.y,
+        dist(obs.pos(), goal)
+    );
 }
 
 #[cfg(feature = "viewer")]
 fn snapshot(s: Setup, path: &Path, focus: Option<(f64, f64, f64)>) -> (Setup, Result<(), String>) {
     // (the viewer has the game and Evil for a moment)
-    let Setup { iwad, w, m, map_name, skill, nav, e, agent, deaths, c, obs, rec, secrets_short } = s;
-    let (e, agent, r) = crate::viewer::snapshot_to(path, &w, std::sync::Arc::clone(&m), &map_name, e, agent, focus);
+    let Setup {
+        iwad,
+        w,
+        m,
+        map_name,
+        skill,
+        nav,
+        e,
+        agent,
+        deaths,
+        c,
+        obs,
+        rec,
+        secrets_short,
+    } = s;
+    let (e, agent, r) = crate::viewer::snapshot_to(
+        path,
+        &w,
+        std::sync::Arc::clone(&m),
+        &map_name,
+        e,
+        agent,
+        focus,
+    );
     if r.is_ok() {
         println!("  saved {}", path.display());
     }
-    (Setup { iwad, w, m, map_name, skill, nav, e, agent, deaths, c, obs, rec, secrets_short }, r)
+    (
+        Setup {
+            iwad,
+            w,
+            m,
+            map_name,
+            skill,
+            nav,
+            e,
+            agent,
+            deaths,
+            c,
+            obs,
+            rec,
+            secrets_short,
+        },
+        r,
+    )
 }
 
 #[cfg(not(feature = "viewer"))]
 fn snapshot(s: Setup, _: &Path, _: Option<(f64, f64, f64)>) -> (Setup, Result<(), String>) {
-    (s, Err("built without the viewer (the `viewer` feature)".into()))
+    (
+        s,
+        Err("built without the viewer (the `viewer` feature)".into()),
+    )
 }

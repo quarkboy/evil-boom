@@ -53,7 +53,10 @@ impl Combat {
                     if !(z - 24.0 < hz && hz < z + PLAYER_HEIGHT + 24.0) {
                         return None;
                     }
-                    Some((when, (t.x + rvx * when - pos.0).hypot(t.y + rvy * when - pos.1)))
+                    Some((
+                        when,
+                        (t.x + rvx * when - pos.0).hypot(t.y + rvy * when - pos.1),
+                    ))
                 })
                 .min_by(|a, b| a.1.total_cmp(&b.1))
             else {
@@ -63,19 +66,28 @@ impl Combat {
                 continue;
             }
             if self.dodging.insert(t.id) {
-                self.log.push(format!("tic {}: dodging {} {} (due in {when:.0} tics, {miss:.0} off)", obs.tic, t.name, t.id));
+                self.log.push(format!(
+                    "tic {}: dodging {} {} (due in {when:.0} tics, {miss:.0} off)",
+                    obs.tic, t.name, t.id
+                ));
             }
             out.push((when, t.clone()));
         }
         let here: BTreeSet<i32> = out.iter().map(|(_, t)| t.id).collect();
         self.dodging.retain(|i| here.contains(i));
-        for (_, t) in out.iter().filter(|(_, t)| missile(t.name).is_some_and(|m| m.homing)) {
+        for (_, t) in out
+            .iter()
+            .filter(|(_, t)| missile(t.name).is_some_and(|m| m.homing))
+        {
             self.homing_since.entry(t.id).or_insert(obs.tic);
         }
         // (one that's gone by and come round again is still the one: kept while it flies)
         let flying: BTreeSet<i32> = obs.things.iter().flatten().map(|t| t.id).collect();
         self.homing_since.retain(|i, _| flying.contains(i));
-        if self.shake_spot.is_some_and(|(i, _)| !self.homing_since.contains_key(&i)) {
+        if self
+            .shake_spot
+            .is_some_and(|(i, _)| !self.homing_since.contains_key(&i))
+        {
             self.shake_spot = None;
         }
         if here.is_empty() {
@@ -87,7 +99,12 @@ impl Combat {
 
     /// The way to run that keeps her furthest from all of them as they go by, where the floor's
     /// safe; the way she's going already when it's as good (no dithering).
-    pub(super) fn dodge(&mut self, obs: &Observation, missiles: &[Thing], prefer: Option<Point>) -> Option<Point> {
+    pub(super) fn dodge(
+        &mut self,
+        obs: &Observation,
+        missiles: &[Thing],
+        prefer: Option<Point>,
+    ) -> Option<Point> {
         let pos = obs.pos();
         let mut ways: Vec<Point> = (0..DODGE_WAYS)
             .map(|i| {
@@ -104,14 +121,33 @@ impl Combat {
                 continue;
             }
             let room = self.clear_run(obs, way, 16.0 * self.tune.dodge.within_tics as f64);
-            let misses: Vec<(f64, f64)> = missiles.iter().filter_map(|t| missile(t.name).map(|m| (miss_by(&self.tune.dodge, pos, self.velocity, way, room, t), m))).map(|(d, m)| (d - clearance(&self.tune.dodge, &m), d - hit_clearance(&self.tune.dodge, &m))).collect();
+            let misses: Vec<(f64, f64)> = missiles
+                .iter()
+                .filter_map(|t| {
+                    missile(t.name).map(|m| {
+                        (
+                            miss_by(&self.tune.dodge, pos, self.velocity, way, room, t),
+                            m,
+                        )
+                    })
+                })
+                .map(|(d, m)| {
+                    (
+                        d - clearance(&self.tune.dodge, &m),
+                        d - hit_clearance(&self.tune.dodge, &m),
+                    )
+                })
+                .collect();
             let mut s = misses.iter().map(|m| m.0).fold(f64::INFINITY, f64::min);
             // (clear of the missile itself, its blast or not)
             let hit = misses.iter().map(|m| m.1).fold(f64::INFINITY, f64::min);
             s = s.min(48.0); // (clear is clear: then the rest decides)
-            // (among those, where there's room after: dodged along a wall into a corner, the next
-            // rocket had her)
-            let ahead = (pos.0 + way.0 * room.min(160.0), pos.1 + way.1 * room.min(160.0));
+                             // (among those, where there's room after: dodged along a wall into a corner, the next
+                             // rocket had her)
+            let ahead = (
+                pos.0 + way.0 * room.min(160.0),
+                pos.1 + way.1 * room.min(160.0),
+            );
             if s >= 0.0 {
                 s += 24.0 * self.openness(obs, ahead, 192.0);
                 // (across its way, not along it: a step aside clears its line for good; backing
@@ -157,9 +193,24 @@ impl Combat {
 
     /// Would going `way` (none: coasting where she is) keep her clear of every one of these
     /// missiles' own hit, blasts or not?
-    pub(super) fn clear_of_hits(&self, obs: &Observation, missiles: &[Thing], way: Option<Point>) -> bool {
-        let (way, room) = way.map_or(((0.0, 0.0), f64::INFINITY), |w| (w, self.clear_run(obs, w, 16.0 * self.tune.dodge.within_tics as f64)));
-        missiles.iter().all(|t| missile(t.name).is_none_or(|m| miss_by(&self.tune.dodge, obs.pos(), self.velocity, way, room, t) >= hit_clearance(&self.tune.dodge, &m)))
+    pub(super) fn clear_of_hits(
+        &self,
+        obs: &Observation,
+        missiles: &[Thing],
+        way: Option<Point>,
+    ) -> bool {
+        let (way, room) = way.map_or(((0.0, 0.0), f64::INFINITY), |w| {
+            (
+                w,
+                self.clear_run(obs, w, 16.0 * self.tune.dodge.within_tics as f64),
+            )
+        });
+        missiles.iter().all(|t| {
+            missile(t.name).is_none_or(|m| {
+                miss_by(&self.tune.dodge, obs.pos(), self.velocity, way, room, t)
+                    >= hit_clearance(&self.tune.dodge, &m)
+            })
+        })
     }
 
     /// Did the last dodge find a way clear of every missile coming? Of a rocket's hit, that is,
@@ -197,7 +248,12 @@ impl Combat {
     }
 
     /// Away from t, aslant (the strafe's way and back), as far as it's safe.
-    pub(super) fn keeping_off(&mut self, obs: &Observation, t: &Thing, aim: Option<f64>) -> Option<Point> {
+    pub(super) fn keeping_off(
+        &mut self,
+        obs: &Observation,
+        t: &Thing,
+        aim: Option<f64>,
+    ) -> Option<Point> {
         let a = (obs.y - t.y).atan2(obs.x - t.x);
         let back = (a.cos(), a.sin());
         let mut ways = vec![back];
@@ -215,7 +271,12 @@ impl Combat {
     }
 
     /// Towards t, zig-zagging (the strafe's way and forwards), as far as it's safe.
-    pub(super) fn closing_in(&mut self, obs: &Observation, t: &Thing, strafe: Option<Point>) -> Option<Point> {
+    pub(super) fn closing_in(
+        &mut self,
+        obs: &Observation,
+        t: &Thing,
+        strafe: Option<Point>,
+    ) -> Option<Point> {
         let a = (t.y - obs.y).atan2(t.x - obs.x);
         let ahead = (a.cos(), a.sin());
         // (and, straight on not clear, a little to either side of it: a side of her caught on a
@@ -223,7 +284,14 @@ impl Combat {
         // knocked back off a chaingunner in a doorway by its bullets, a unit off line with the
         // jamb, stood still out of the fist's reach to death)
         let mut ways = vec![ahead];
-        ways.extend(self.tune.dodge.close_veer.iter().flat_map(|&v| [a + v, a - v]).map(|b| (b.cos(), b.sin())));
+        ways.extend(
+            self.tune
+                .dodge
+                .close_veer
+                .iter()
+                .flat_map(|&v| [a + v, a - v])
+                .map(|b| (b.cos(), b.sin())),
+        );
         if let Some(s) = strafe {
             let mixed = (ahead.0 + s.0, ahead.1 + s.1);
             let n = mixed.0.hypot(mixed.1);
@@ -231,7 +299,9 @@ impl Combat {
                 ways.insert(0, (mixed.0 / n, mixed.1 / n));
             }
         }
-        ways.into_iter().find(|&w| self.safe(obs, w, 64.0)).or(strafe)
+        ways.into_iter()
+            .find(|&w| self.safe(obs, w, 64.0))
+            .or(strafe)
     }
 
     /// Side to side across the line of fire, a second or so each way, where it's safe.
@@ -258,13 +328,18 @@ impl Combat {
         // (her middle and both sides: MAP07, the middle clear past a block's corner, the side
         // caught on it, pushing that way for ever)
         let side = (-d.1 * PLAYER_RADIUS, d.0 * PLAYER_RADIUS);
-        [(0.0, 0.0), side, (-side.0, -side.1)].into_iter().map(|o| self.clear_line(obs, (obs.x + o.0, obs.y + o.1), d, length)).fold(length, f64::min)
+        [(0.0, 0.0), side, (-side.0, -side.1)]
+            .into_iter()
+            .map(|o| self.clear_line(obs, (obs.x + o.0, obs.y + o.1), d, length))
+            .fold(length, f64::min)
     }
 
     /// Is she standing on a floor that hurts? Then that's no reason not to go a way (every way
     /// is over it; E1M5: stood still in the nukage, fighting, to death, 257 bullets left).
     pub(super) fn on_hurting_floor(&self, obs: &Observation) -> bool {
-        self.nav.poly_at(obs.pos()).is_some_and(|p| self.hurts(obs, self.nav.sector_of_poly(p)))
+        self.nav
+            .poly_at(obs.pos())
+            .is_some_and(|p| self.hurts(obs, self.nav.sector_of_poly(p)))
     }
 
     /// Does sector s's floor hurt, or is it about to: as she takes it (`hazards`: felt, else by
@@ -274,7 +349,10 @@ impl Combat {
     /// just going down, not much of a step yet, in the blood with it a moment later).
     pub(super) fn hurts(&self, obs: &Observation, s: usize) -> bool {
         self.hazards.get(s).copied().unwrap_or(false)
-            || (self.sinks_into_harm.contains(&s) && obs.height(s).is_some_and(|h| h.floor < self.nav.movers.initial[s].floor - 0.5))
+            || (self.sinks_into_harm.contains(&s)
+                && obs
+                    .height(s)
+                    .is_some_and(|h| h.floor < self.nav.movers.initial[s].floor - 0.5))
     }
 
     /// Is she under a crusher at work?
@@ -318,7 +396,10 @@ impl Combat {
     pub(super) fn way_out_of_crusher(&self, obs: &Observation) -> Option<Point> {
         let nav = &self.nav;
         let pos = obs.pos();
-        let floor0 = nav.poly_at(pos).and_then(|p| obs.height(nav.sector_of_poly(p))).map(|h| h.floor)?;
+        let floor0 = nav
+            .poly_at(pos)
+            .and_then(|p| obs.height(nav.sector_of_poly(p)))
+            .map(|h| h.floor)?;
         (0..16)
             .filter_map(|i| {
                 let a = f64::from(i) * std::f64::consts::PI / 8.0;
@@ -329,12 +410,17 @@ impl Combat {
                     let q = (pos.0 + d.0 * f, pos.1 + d.1 * f);
                     let s = nav.sector_of_poly(nav.poly_in(q)?);
                     let h = obs.height(s)?;
-                    if (h.floor - floor).abs() > MAX_STEP || (self.hurts(obs, s) && !self.on_hurting_floor(obs)) {
+                    if (h.floor - floor).abs() > MAX_STEP
+                        || (self.hurts(obs, s) && !self.on_hurting_floor(obs))
+                    {
                         return None;
                     }
                     // (a corner of her in the solid: a wall or a pillar's corner in the way)
                     let r = PLAYER_RADIUS - 1.0;
-                    if [(-r, -r), (r, -r), (r, r), (-r, r)].iter().any(|(dx, dy)| nav.poly_in((q.0 + dx, q.1 + dy)).is_none()) {
+                    if [(-r, -r), (r, -r), (r, r), (-r, r)]
+                        .iter()
+                        .any(|(dx, dy)| nav.poly_in((q.0 + dx, q.1 + dy)).is_none())
+                    {
                         return None;
                     }
                     if !self.box_in_crusher(obs, q) {
@@ -351,13 +437,17 @@ impl Combat {
     /// Does going `length` that way get her out from under a crusher?
     pub(super) fn gets_out(&self, obs: &Observation, d: Point, length: f64) -> bool {
         let p = (obs.x + d.0 * length, obs.y + d.1 * length);
-        self.nav.poly_in(p).is_some_and(|q| !self.no_go_crusher(obs, self.nav.sector_of_poly(q)))
+        self.nav
+            .poly_in(p)
+            .is_some_and(|q| !self.no_go_crusher(obs, self.nav.sector_of_poly(q)))
     }
 
     /// Does going `length` that way get her off a floor that hurts?
     pub(super) fn gets_off(&self, obs: &Observation, d: Point, length: f64) -> bool {
         let p = (obs.x + d.0 * length, obs.y + d.1 * length);
-        self.nav.poly_in(p).is_some_and(|q| !self.hurts(obs, self.nav.sector_of_poly(q)))
+        self.nav
+            .poly_in(p)
+            .is_some_and(|q| !self.hurts(obs, self.nav.sector_of_poly(q)))
     }
 
     /// How open it is round p: the mean of how far she could go from there each way, up to
@@ -376,8 +466,16 @@ impl Combat {
 
     fn clear_line(&self, obs: &Observation, from: Point, d: Point, length: f64) -> f64 {
         let nav = &self.nav;
-        let Some(here) = nav.poly_at(from).or_else(|| nav.poly_at(obs.pos())) else { return 0.0 };
-        let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
+        let Some(here) = nav.poly_at(from).or_else(|| nav.poly_at(obs.pos())) else {
+            return 0.0;
+        };
+        let floor_of = |p: usize| {
+            obs.height(nav.sector_of_poly(p))
+                .unwrap_or(crate::nav::Heights {
+                    floor: 0.0,
+                    ceiling: 0.0,
+                })
+        };
         let mut floor = floor_of(here).floor;
         let n = ((length / 16.0).floor() as usize).max(2);
         for i in 0..=n {
@@ -387,7 +485,11 @@ impl Combat {
             let Some(p) = nav.poly_in(q) else { return back };
             let h = floor_of(p);
             let s = nav.sector_of_poly(p);
-            if (h.floor - floor).abs() > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT || (self.hurts(obs, s) && !self.on_hurting_floor(obs)) || (self.no_go_crusher(obs, s) && !self.in_crusher(obs)) {
+            if (h.floor - floor).abs() > MAX_STEP
+                || h.ceiling - h.floor < PLAYER_HEIGHT
+                || (self.hurts(obs, s) && !self.on_hurting_floor(obs))
+                || (self.no_go_crusher(obs, s) && !self.in_crusher(obs))
+            {
                 return back;
             }
             floor = h.floor;
@@ -398,7 +500,10 @@ impl Combat {
     /// A monster near and in front of her (as she faces: whatever she's fighting close, the route
     /// waits for).
     pub(super) fn blocking(&self, obs: &Observation, t: Option<&Thing>) -> bool {
-        t.is_some_and(|t| dist((t.x, t.y), obs.pos()) < 320.0 && norm(heading(obs.pos(), (t.x, t.y)) - obs.angle).abs() < 60.0)
+        t.is_some_and(|t| {
+            dist((t.x, t.y), obs.pos()) < 320.0
+                && norm(heading(obs.pos(), (t.x, t.y)) - obs.angle).abs() < 60.0
+        })
     }
 
     /// A monster near and ahead the way the route walks her: walking on would walk into it. (Not
@@ -406,7 +511,10 @@ impl Combat {
     /// shooting at was in her way; E2M3, UV, cacodemons she couldn't kill kept clear of with the
     /// ammo kept every other tic, shot at the tics between, the pistol emptied on them.)
     pub(super) fn in_her_way(&self, obs: &Observation, t: &Thing) -> bool {
-        self.route_way.is_some_and(|way| dist((t.x, t.y), obs.pos()) < 320.0 && norm(heading(obs.pos(), (t.x, t.y)) - way).abs() < 60.0)
+        self.route_way.is_some_and(|way| {
+            dist((t.x, t.y), obs.pos()) < 320.0
+                && norm(heading(obs.pos(), (t.x, t.y)) - way).abs() < 60.0
+        })
     }
 
     /// Is it all right to go `length` that way: floor all the way, no drop or step up she
@@ -415,13 +523,23 @@ impl Combat {
     /// slid into the nukage)?
     pub(super) fn safe(&self, obs: &Observation, d: Point, length: f64) -> bool {
         let nav = &self.nav;
-        let Some(here) = nav.poly_at(obs.pos()) else { return false };
-        let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
+        let Some(here) = nav.poly_at(obs.pos()) else {
+            return false;
+        };
+        let floor_of = |p: usize| {
+            obs.height(nav.sector_of_poly(p))
+                .unwrap_or(crate::nav::Heights {
+                    floor: 0.0,
+                    ceiling: 0.0,
+                })
+        };
         // (where she stands, not the floor under her middle: on a ledge's lip, her middle over the
         // drop, the game keeps her up at the highest floor her box is on; judged from the floor
         // below, the drop wasn't one. MAP06, walked off a crate top 552 down, then along the lip
         // of a nukage channel she couldn't climb out of, closing in on an imp)
-        let floor0 = obs.z.map_or(floor_of(here).floor, |z| z.max(floor_of(here).floor));
+        let floor0 = obs
+            .z
+            .map_or(floor_of(here).floor, |z| z.max(floor_of(here).floor));
         if self.clear_run(obs, d, length) < length {
             return false;
         }
@@ -435,8 +553,12 @@ impl Combat {
     /// into the pit, no way out of it.)
     pub(super) fn coasting_off(&self, obs: &Observation) -> bool {
         let nav = &self.nav;
-        let Some(here) = nav.poly_at(obs.pos()) else { return false };
-        let floor = obs.height(nav.sector_of_poly(here)).map_or(0.0, |h| h.floor);
+        let Some(here) = nav.poly_at(obs.pos()) else {
+            return false;
+        };
+        let floor = obs
+            .height(nav.sector_of_poly(here))
+            .map_or(0.0, |h| h.floor);
         !self.slide_ok(obs, obs.z.map_or(floor, |z| z.max(floor)), None)
     }
 
@@ -447,12 +569,30 @@ impl Combat {
     /// in a closet with two more, out of ammo, its one way out behind them).
     fn slide_ok(&self, obs: &Observation, floor0: f64, push: Option<Point>) -> bool {
         let nav = &self.nav;
-        let floor_of = |p: usize| obs.height(nav.sector_of_poly(p)).unwrap_or(crate::nav::Heights { floor: 0.0, ceiling: 0.0 });
-        let teleports: Vec<(Point, Point)> = nav.map.linedefs.iter().filter(|l| TELEPORTERS_FOR_PLAYERS.contains(&l.special)).map(|l| nav.map.line_seg(l.index)).collect();
+        let floor_of = |p: usize| {
+            obs.height(nav.sector_of_poly(p))
+                .unwrap_or(crate::nav::Heights {
+                    floor: 0.0,
+                    ceiling: 0.0,
+                })
+        };
+        let teleports: Vec<(Point, Point)> = nav
+            .map
+            .linedefs
+            .iter()
+            .filter(|l| TELEPORTERS_FOR_PLAYERS.contains(&l.special))
+            .map(|l| nav.map.line_seg(l.index))
+            .collect();
         // (crossing (a, b) from its front, the right of a->b, as the game's P_CrossSpecialLine
         // and EV_Teleport take it)
-        let side = |(a, b): (Point, Point), p: Point| (b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0);
-        let teleported = |from: Point, to: Point| teleports.iter().any(|&l| side(l, from) <= 0.0 && side(l, to) > 0.0 && segments_cross(from, to, l.0, l.1));
+        let side = |(a, b): (Point, Point), p: Point| {
+            (b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0)
+        };
+        let teleported = |from: Point, to: Point| {
+            teleports.iter().any(|&l| {
+                side(l, from) <= 0.0 && side(l, to) > 0.0 && segments_cross(from, to, l.0, l.1)
+            })
+        };
         let (mut x, mut y) = obs.pos();
         let (mut vx, mut vy) = self.velocity;
         let mut floor = floor0;
@@ -475,7 +615,11 @@ impl Combat {
             if h.floor - floor > MAX_STEP || h.ceiling - h.floor < PLAYER_HEIGHT {
                 break;
             }
-            if floor - h.floor > MAX_STEP || (self.hurts(obs, nav.sector_of_poly(p)) && !self.on_hurting_floor(obs) && !self.now.invulnerable) {
+            if floor - h.floor > MAX_STEP
+                || (self.hurts(obs, nav.sector_of_poly(p))
+                    && !self.on_hurting_floor(obs)
+                    && !self.now.invulnerable)
+            {
                 return false;
             }
             floor = h.floor;

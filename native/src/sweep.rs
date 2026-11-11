@@ -133,19 +133,39 @@ fn plan_report(lp: &LevelPlan, x: &Explorer, real: &[Heights]) -> Vec<String> {
     let mut out = Vec::new();
     for st in &lp.steps {
         if let Some(path) = &st.path {
-            let unknown: Vec<usize> = path.polys.iter().copied().filter(|p| !known.contains(p)).collect();
-            let off: BTreeSet<usize> =
-                path.polys.iter().map(|&p| mesh.poly(p).sector).filter(|&s| real.get(s).is_some_and(|h| !believed[s].contains(h))).collect();
+            let unknown: Vec<usize> = path
+                .polys
+                .iter()
+                .copied()
+                .filter(|p| !known.contains(p))
+                .collect();
+            let off: BTreeSet<usize> = path
+                .polys
+                .iter()
+                .map(|&p| mesh.poly(p).sector)
+                .filter(|&s| real.get(s).is_some_and(|h| !believed[s].contains(h)))
+                .collect();
             if !unknown.is_empty() || !off.is_empty() {
-                let mut line = format!("    (the way: {} of {} polys unknown", unknown.len(), path.polys.len());
+                let mut line = format!(
+                    "    (the way: {} of {} polys unknown",
+                    unknown.len(),
+                    path.polys.len()
+                );
                 if let Some(&u) = unknown.first() {
                     let c = mesh.poly(u).center;
                     line += &format!(", from poly {u} at ({}, {})", c.0.round(), c.1.round());
                 }
                 for s in &off {
-                    let mut b: Vec<String> = believed[*s].iter().map(|h| crate::motor::fmt_live(Some(*h))).collect();
+                    let mut b: Vec<String> = believed[*s]
+                        .iter()
+                        .map(|h| crate::motor::fmt_live(Some(*h)))
+                        .collect();
                     b.sort();
-                    line += &format!("; sector {s} is {}, she takes it as [{}]", crate::motor::fmt_live(Some(real[*s])), b.join(", "));
+                    line += &format!(
+                        "; sector {s} is {}, she takes it as [{}]",
+                        crate::motor::fmt_live(Some(real[*s])),
+                        b.join(", ")
+                    );
                 }
                 if !path.steps.is_empty() {
                     line += &format!("; via {:?}", path.steps);
@@ -153,10 +173,20 @@ fn plan_report(lp: &LevelPlan, x: &Explorer, real: &[Heights]) -> Vec<String> {
                 out.push(line + ")");
             }
             let reach = &x.reach;
-            if let Some(cut) = path.polys.iter().position(|p| !reach.contains(p)).filter(|_| !reach.is_empty()) {
+            if let Some(cut) = path
+                .polys
+                .iter()
+                .position(|p| !reach.contains(p))
+                .filter(|_| !reach.is_empty())
+            {
                 let p = path.polys[cut];
                 let c = mesh.poly(p).center;
-                let mut line = format!("    (her reach ends at poly {p}, sector {}, ({}, {})", mesh.poly(p).sector, c.0.round(), c.1.round());
+                let mut line = format!(
+                    "    (her reach ends at poly {p}, sector {}, ({}, {})",
+                    mesh.poly(p).sector,
+                    c.0.round(),
+                    c.1.round()
+                );
                 if cut > 0 {
                     line += &format!(", from sector {}", mesh.poly(path.polys[cut - 1]).sector);
                 }
@@ -204,14 +234,23 @@ fn py_bool(b: bool) -> &'static str {
 /// The omniscient plan from where she is, with the heights as they are.
 /// The 100% runs: the exit last while the count she's after (on the automap, as a player sees it)
 /// is short of all there is; then out.
-pub(crate) fn hold_exit(e: &Engine, agent: &mut Agent, o: &RunOptions, secrets_short: i32, items_short: i32, given_up: bool) {
+pub(crate) fn hold_exit(
+    e: &Engine,
+    agent: &mut Agent,
+    o: &RunOptions,
+    secrets_short: i32,
+    items_short: i32,
+    given_up: bool,
+) {
     let tally = e.tally();
     if given_up {
         agent.x_mut().exit_last = false;
     } else if o.complete {
         // (any of the three short: the kills too, whatever's left of them that she knows of
         // hunted down last)
-        agent.x_mut().exit_last = tally[0].0 < tally[0].1 - items_short || tally[1].0 < tally[1].1 || tally[2].0 < tally[2].1 - secrets_short;
+        agent.x_mut().exit_last = tally[0].0 < tally[0].1 - items_short
+            || tally[1].0 < tally[1].1
+            || tally[2].0 < tally[2].1 - secrets_short;
     } else if o.secrets {
         agent.x_mut().exit_last = tally[2].0 < tally[2].1 - secrets_short;
     } else if o.expert {
@@ -277,7 +316,13 @@ pub fn next_map(map: &str, secret: bool) -> Option<String> {
 /// (recordings of different kinds of run kept apart)
 fn mode_suffix(o: &RunOptions) -> String {
     let mut out = String::new();
-    for (on, name) in [(o.complete, "_complete"), (o.fight > 0, "_fight"), (o.expert, "_expert"), (o.secrets, "_secrets"), (o.peek, "_peek")] {
+    for (on, name) in [
+        (o.complete, "_complete"),
+        (o.fight > 0, "_fight"),
+        (o.expert, "_expert"),
+        (o.secrets, "_secrets"),
+        (o.peek, "_peek"),
+    ] {
         if on {
             out.push_str(name);
         }
@@ -291,7 +336,14 @@ pub fn plan_here(nav: &Rc<Navigator>, obs: &Observation, max_seconds: f64) -> Le
     plan_from(
         &view,
         obs.pos(),
-        &Rest { keys: obs.keys.unwrap_or_default(), states: Some(&states), reach: None, max_seconds, max_expansions: 20000, fired: &BTreeSet::new() },
+        &Rest {
+            keys: obs.keys.unwrap_or_default(),
+            states: Some(&states),
+            reach: None,
+            max_seconds,
+            max_expansions: 20000,
+            fired: &BTreeSet::new(),
+        },
     )
 }
 
@@ -322,7 +374,11 @@ fn damage_summary(damage: &BTreeMap<String, (i32, i32, Vec<i64>)>) -> String {
     d.sort_by_key(|(_, (h, a, _))| std::cmp::Reverse(h + a));
     d.iter()
         .map(|(from, (h, a, tics))| {
-            let armor = if *a > 0 { format!(" (+{a} armor)") } else { String::new() };
+            let armor = if *a > 0 {
+                format!(" (+{a} armor)")
+            } else {
+                String::new()
+            };
             let mut at: Vec<String> = tics.iter().take(SHOWN).map(i64::to_string).collect();
             at[0] = format!("{} ({:.0}s)", tics[0], tics[0] as f64 / TICRATE);
             if tics.len() > SHOWN {
@@ -405,7 +461,8 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
             agent.x_mut().exit_last = false;
         }
         let k = &agent.x().knowledge;
-        let known = k.mapped.len() + k.visited.len() + k.learned.len() + e.tally()[1].0.max(0) as usize;
+        let known =
+            k.mapped.len() + k.visited.len() + k.learned.len() + e.tally()[1].0.max(0) as usize;
         if known > best {
             (best, best_tic) = (known, e.tic);
         } else if e.tic - best_tic > SCOUT_STALL {
@@ -421,7 +478,11 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     x.exit_before_risks = false;
     x.knowledge.immune = false;
     x.left_alive();
-    let summary = format!("--- the level played through beforehand (nothing able to hurt her; {ended}, {:.0} s): {}", (e.tic - start) as f64 / TICRATE, x.knowledge.summary());
+    let summary = format!(
+        "--- the level played through beforehand (nothing able to hurt her; {ended}, {:.0} s): {}",
+        (e.tic - start) as f64 / TICRATE,
+        x.knowledge.summary()
+    );
     if std::env::var_os("EVIL_DEBUG_SCOUT").is_none() {
         x.log.truncate(log_from);
     }
@@ -438,7 +499,9 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
         p.combat_mut().forget_counts();
         p.know_monsters(&first);
         let n = p.combat().known_count();
-        p.explorer.log.push(format!("--- and its monsters known: {n} of them, where they stand"));
+        p.explorer.log.push(format!(
+            "--- and its monsters known: {n} of them, where they stand"
+        ));
     }
     e.tic
 }
@@ -452,9 +515,27 @@ fn ending_floor(agent: &Agent, at: crate::geom::Point) -> Option<usize> {
 }
 
 /// A map played in the game already going if there is one (see `setup`).
-pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engine>) -> Result<MapRun, String> {
-    let Setup { iwad, w, m, map_name, skill, nav, mut e, mut agent, mut deaths, mut c, mut obs, mut rec, secrets_short } =
-        setup(wad, map_name, o, o.snapshot.is_some(), engine)?;
+pub fn run_map_in(
+    wad: &str,
+    map_name: &str,
+    o: &RunOptions,
+    engine: Option<Engine>,
+) -> Result<MapRun, String> {
+    let Setup {
+        iwad,
+        w,
+        m,
+        map_name,
+        skill,
+        nav,
+        mut e,
+        mut agent,
+        mut deaths,
+        mut c,
+        mut obs,
+        mut rec,
+        secrets_short,
+    } = setup(wad, map_name, o, o.snapshot.is_some(), engine)?;
     // (the level looked round first: the run's own time is from after that)
     let mut tic0 = 0;
     if o.known {
@@ -469,7 +550,10 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
         } else {
             tic0 = scout(&mut e, &mut agent, o.mortal);
             (c, obs, deaths) = (None, None, 0);
-            if let Some(p) = agent.player_mut().filter(|_| only.as_deref() == Some("map")) {
+            if let Some(p) = agent
+                .player_mut()
+                .filter(|_| only.as_deref() == Some("map"))
+            {
                 p.combat_mut().forget_monsters();
             }
         }
@@ -477,7 +561,12 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     let t0 = Instant::now();
     let mut idle_since: Option<i64> = None;
     let (mut t_engine, mut t_observe, mut t_think) = (0.0, 0.0, 0.0);
-    let mut status = Status::open(&iwad.file_stem().map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase()), &map_name);
+    let mut status = Status::open(
+        &iwad
+            .file_stem()
+            .map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase()),
+        &map_name,
+    );
     let mut journal_n = agent.x().knowledge.journal.len();
     let until = o.snapshot.map_or(o.max_seconds, |s| s.min(o.max_seconds));
     // (the 100% runs: the count she's after and what she knows of the level, and when either
@@ -515,22 +604,46 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
                 if !given_up && (o.expert || o.secrets) {
                     // (what's left out of reach as far as she can tell: out, as a player gives up
                     // on the last secret; a stall's time again to get there. E4M5's second secret)
-                    agent.x_mut().log.push(format!("tic {}: nothing more collected, learned or tried in {:.0}s: for the exit", e.tic, o.stall_seconds));
+                    agent.x_mut().log.push(format!(
+                        "tic {}: nothing more collected, learned or tried in {:.0}s: for the exit",
+                        e.tic, o.stall_seconds
+                    ));
                     given_up = true;
                     best_tic = e.tic;
                     hold_exit(&e, &mut agent, o, secrets_short, items_short, given_up);
                 } else {
-                    agent.x_mut().log.push(format!("tic {}: nothing more collected, learned or tried in {:.0}s: over", e.tic, o.stall_seconds));
+                    agent.x_mut().log.push(format!(
+                        "tic {}: nothing more collected, learned or tried in {:.0}s: over",
+                        e.tic, o.stall_seconds
+                    ));
                     stalled = true;
                     break;
                 }
             }
         }
-        let mut stranded = idle_since.is_some_and(|i| e.tic - i > STRANDED_TICS.min((o.stall_seconds * TICRATE / 2.0) as i64)) || agent.x().restart_wanted;
+        let mut stranded = idle_since.is_some_and(|i| {
+            e.tic - i > STRANDED_TICS.min((o.stall_seconds * TICRATE / 2.0) as i64)
+        }) || agent.x().restart_wanted;
         if let (true, Some(ob), Some(p)) = (e.finished() && e.dead(), &obs, agent.player_mut()) {
             let pos = ob.pos();
-            let seen: Vec<String> = p.combat().visible.iter().map(|t| format!("{} {:.0} away ({} health)", t.name, crate::geom::dist((t.x, t.y), pos), t.health)).collect();
-            let doing = p.explorer.current.as_ref().map_or("-".to_string(), |c| c.label.clone());
+            let seen: Vec<String> = p
+                .combat()
+                .visible
+                .iter()
+                .map(|t| {
+                    format!(
+                        "{} {:.0} away ({} health)",
+                        t.name,
+                        crate::geom::dist((t.x, t.y), pos),
+                        t.health
+                    )
+                })
+                .collect();
+            let doing = p
+                .explorer
+                .current
+                .as_ref()
+                .map_or("-".to_string(), |c| c.label.clone());
             let msg = format!(
                 "tic {}: killed at ({:.0}, {:.0}) by {}: health {:.0}, armor {:.0}, weapon {}, weapons {:?}, ammo {:?}; in sight: {}; doing: {doing}",
                 e.tic,
@@ -566,13 +679,19 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
                 } else {
                     "stranded"
                 };
-                agent.x_mut().log.push(format!("tic {}: {why}: starting again", e.tic));
+                agent
+                    .x_mut()
+                    .log
+                    .push(format!("tic {}: {why}: starting again", e.tic));
                 if why == "stranded" {
                     if let Some(ob) = &obs {
                         // (a trap she walked into, or a way on she couldn't see?)
                         let lp = plan_here(&nav, ob, 20.0);
                         let x = agent.x();
-                        let label = x.current.as_ref().map_or("-".to_string(), |c| c.label.clone());
+                        let label = x
+                            .current
+                            .as_ref()
+                            .map_or("-".to_string(), |c| c.label.clone());
                         let head = format!(
                             "  stranded at ({:.0}, {:.0}), objective {label}; omniscient plan from there: {}",
                             ob.x,
@@ -624,9 +743,13 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
             let (now, legs) = (ctl.turn, p.legs());
             if was * now < 0.0 && was.abs() > 2.0 && now.abs() > 2.0 {
                 turn_flips.push(ob.tic);
-                p.combat_mut().count(&format!("turn reversals, on the {legs:?} legs"), 1.0);
+                p.combat_mut()
+                    .count(&format!("turn reversals, on the {legs:?} legs"), 1.0);
                 // (four in a third of a second: a jitter to look at)
-                if turn_flips.len() >= 4 && ob.tic - turn_flips[turn_flips.len() - 4] <= 12 && ob.tic - last_jitter > 35 {
+                if turn_flips.len() >= 4
+                    && ob.tic - turn_flips[turn_flips.len() - 4] <= 12
+                    && ob.tic - last_jitter > 35
+                {
                     last_jitter = ob.tic;
                     p.combat_mut().count("jitters", 1.0);
                     p.explorer.log.push(format!("tic {}: (measuring) jitter: her turn back and forth four times in a third of a second, the last {was:.0} then {now:.0} degrees", ob.tic));
@@ -635,9 +758,15 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
             // (and her steps to the side in a fight, across the line to her target: each run one
             // way, how far it went before she stopped or came back)
             let pos = ob.pos();
-            let target = p.combat().target.and_then(|id| p.combat().visible.iter().find(|t| t.id == id)).map(|t| (t.x, t.y));
+            let target = p
+                .combat()
+                .target
+                .and_then(|id| p.combat().visible.iter().find(|t| t.id == id))
+                .map(|t| (t.x, t.y));
             let across = match (legs, target, side_from) {
-                (crate::tactical::arbiter::Legs::Fight, Some(t), Some(from)) if crate::geom::dist(t, pos) > 1.0 => {
+                (crate::tactical::arbiter::Legs::Fight, Some(t), Some(from))
+                    if crate::geom::dist(t, pos) > 1.0 =>
+                {
                     let (dx, dy) = (t.0 - pos.0, t.1 - pos.1);
                     Some(((pos.0 - from.0) * dy - (pos.1 - from.1) * dx) / dx.hypot(dy))
                 }
@@ -650,13 +779,20 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
                 _ => {
                     let far = side_run.abs();
                     if far >= 16.0 {
-                        let doing = p.combat().last_move.map_or("no move".to_string(), |m| format!("{m:?}"));
+                        let doing = p
+                            .combat()
+                            .last_move
+                            .map_or("no move".to_string(), |m| format!("{m:?}"));
                         p.combat_mut().count("side runs", 1.0);
                         p.combat_mut().count("side runs, units", far);
                         for over in [96.0, 192.0] {
                             if far > over {
-                                p.combat_mut().count(&format!("side runs over {over:.0}"), 1.0);
-                                p.combat_mut().count(&format!("side runs over {over:.0}, the move: {doing}"), 1.0);
+                                p.combat_mut()
+                                    .count(&format!("side runs over {over:.0}"), 1.0);
+                                p.combat_mut().count(
+                                    &format!("side runs over {over:.0}, the move: {doing}"),
+                                    1.0,
+                                );
                             }
                         }
                     }
@@ -667,12 +803,19 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
                 p.combat_mut().count("tics turning over 18 degrees", 1.0);
             }
             if (now - was).abs() > 12.0 {
-                p.combat_mut().count("tics the turn changed by over 12 degrees", 1.0);
+                p.combat_mut()
+                    .count("tics the turn changed by over 12 degrees", 1.0);
             }
         }
         let t3 = Instant::now();
         if let Some(st) = status.as_mut() {
-            st.think(&ob, (t3 - t2).as_secs_f64(), agent.x(), log_n, t0.elapsed().as_secs_f64());
+            st.think(
+                &ob,
+                (t3 - t2).as_secs_f64(),
+                agent.x(),
+                log_n,
+                t0.elapsed().as_secs_f64(),
+            );
         }
         if agent.x().current.is_none() {
             idle_since.get_or_insert(e.tic);
@@ -682,8 +825,15 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
         e.step(&ctl);
         for h in e.take_hits() {
             let from = h.from();
-            let armor = if h.armor > 0 { format!(" (and {} armor)", h.armor) } else { String::new() };
-            agent.x_mut().log.push(format!("tic {}: hit for {}{armor} by {from}", e.tic, h.health));
+            let armor = if h.armor > 0 {
+                format!(" (and {} armor)", h.armor)
+            } else {
+                String::new()
+            };
+            agent.x_mut().log.push(format!(
+                "tic {}: hit for {}{armor} by {from}",
+                e.tic, h.health
+            ));
             // (for measuring: what hit her, how, and what she knew of it)
             if let Some(p) = agent.player_mut() {
                 let how = match (h.cause, h.own, h.inflictor, h.source) {
@@ -691,12 +841,25 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
                     (crate::dsda::HitCause::Crusher, ..) => "crusher",
                     (crate::dsda::HitCause::Other, ..) => "other",
                     (_, true, ..) => "her own",
-                    (_, _, Some(i), _) if crate::dsda::type_name(i) == Some("ExplosiveBarrel") => "barrel",
+                    (_, _, Some(i), _) if crate::dsda::type_name(i) == Some("ExplosiveBarrel") => {
+                        "barrel"
+                    }
                     (_, _, Some(i), Some(s)) if i != s => "missile",
-                    (_, _, _, Some(s)) if crate::dsda::type_name(s).and_then(crate::tactical::bestiary::monster).is_some_and(|m| m.attack == crate::tactical::bestiary::Attack::Hitscan) => "bullet",
+                    (_, _, _, Some(s))
+                        if crate::dsda::type_name(s)
+                            .and_then(crate::tactical::bestiary::monster)
+                            .is_some_and(|m| {
+                                m.attack == crate::tactical::bestiary::Attack::Hitscan
+                            }) =>
+                    {
+                        "bullet"
+                    }
                     _ => "claw",
                 };
-                let key = match h.source_id.filter(|_| matches!(how, "missile" | "bullet" | "claw")) {
+                let key = match h
+                    .source_id
+                    .filter(|_| matches!(how, "missile" | "bullet" | "claw"))
+                {
                     Some(id) => {
                         let (knew, far) = p.combat().measure((ob.x, ob.y), id);
                         let side = match h.side {
@@ -705,12 +868,26 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
                             None => "nowhere",
                         };
                         if knew != "in view" && far == "near" {
-                            let (legs, going) = (p.legs(), p.combat().measure_approach((ob.x, ob.y), id));
-                            p.combat_mut().count(&format!("unseen near: on the {legs:?} legs"), f64::from(h.health));
-                            p.combat_mut().count(&format!("unseen near: {going}"), f64::from(h.health));
-                            p.combat_mut().count(&format!("unseen near: {how}, on the {legs:?} legs, {going}"), f64::from(h.health));
-                            let doing = p.combat().last_move.map_or("no move".to_string(), |m| format!("{m:?}"));
-                            p.combat_mut().count(&format!("unseen near, the move: {doing}"), f64::from(h.health));
+                            let (legs, going) =
+                                (p.legs(), p.combat().measure_approach((ob.x, ob.y), id));
+                            p.combat_mut().count(
+                                &format!("unseen near: on the {legs:?} legs"),
+                                f64::from(h.health),
+                            );
+                            p.combat_mut()
+                                .count(&format!("unseen near: {going}"), f64::from(h.health));
+                            p.combat_mut().count(
+                                &format!("unseen near: {how}, on the {legs:?} legs, {going}"),
+                                f64::from(h.health),
+                            );
+                            let doing = p
+                                .combat()
+                                .last_move
+                                .map_or("no move".to_string(), |m| format!("{m:?}"));
+                            p.combat_mut().count(
+                                &format!("unseen near, the move: {doing}"),
+                                f64::from(h.health),
+                            );
                             p.combat_mut().count(&format!("unseen near, move and legs: {doing} on the {legs:?} legs, {going}"), f64::from(h.health));
                         }
                         format!("hurt by a {how}, its source {knew}, {far}, {side}")
@@ -728,7 +905,11 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
         rec.entries.push(Entry::Tic(ob.tic, ctl));
         {
             let k = &agent.x().knowledge;
-            rec.entries.extend(k.journal[journal_n.min(k.journal.len())..].iter().map(|(t, nt)| Entry::Note(*t, nt.clone())));
+            rec.entries.extend(
+                k.journal[journal_n.min(k.journal.len())..]
+                    .iter()
+                    .map(|(t, nt)| Entry::Note(*t, nt.clone())),
+            );
             journal_n = k.journal.len();
         }
         t_observe += (t2 - t1).as_secs_f64();
@@ -737,7 +918,11 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
         c = Some(ctl);
         obs = Some(ob);
     }
-    let (exited, died, game_s) = (e.exited(), e.finished() && e.dead(), (e.tic - tic0) as f64 / TICRATE);
+    let (exited, died, game_s) = (
+        e.exited(),
+        e.finished() && e.dead(),
+        (e.tic - tic0) as f64 / TICRATE,
+    );
     if o.decisions {
         if let Some(p) = agent.player_mut() {
             p.file_decisions();
@@ -753,20 +938,42 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     lines.push(String::new());
     lines.push(k.summary());
     if !k.doubts.is_empty() {
-        let d: Vec<String> = k.doubts.iter().map(|((key, s), tic)| format!("{key} moves sector {s} (since tic {tic})")).collect();
+        let d: Vec<String> = k
+            .doubts
+            .iter()
+            .map(|((key, s), tic)| format!("{key} moves sector {s} (since tic {tic})"))
+            .collect();
         lines.push(format!("in doubt: {}", d.join(", ")));
     }
     if let (false, Some(ob)) = (exited, &obs) {
-        let label = x.current.as_ref().map_or("-".to_string(), |c| c.label.clone());
-        lines.push(format!("ended at ({:.0}, {:.0}), objective: {label}", ob.x, ob.y));
+        let label = x
+            .current
+            .as_ref()
+            .map_or("-".to_string(), |c| c.label.clone());
+        lines.push(format!(
+            "ended at ({:.0}, {:.0}), objective: {label}",
+            ob.x, ob.y
+        ));
         let lp = plan_here(&nav, ob, 30.0);
-        lines.push(format!("omniscient plan from there: {}", if lp.complete { "ok".to_string() } else { lp.problem.clone() }));
+        lines.push(format!(
+            "omniscient plan from there: {}",
+            if lp.complete {
+                "ok".to_string()
+            } else {
+                lp.problem.clone()
+            }
+        ));
         lines.extend(plan_report(&lp, x, &ob.heights));
     }
     let tally = e.tally();
     if let (true, Some(ob)) = (o.expert, &obs) {
         let known = k.known_polys();
-        for t in ob.things.iter().flatten().filter(|t| COUNTED.contains(&t.name)) {
+        for t in ob
+            .things
+            .iter()
+            .flatten()
+            .filter(|t| COUNTED.contains(&t.name))
+        {
             let poly = nav.poly_at((t.x, t.y));
             let seen = poly.is_some_and(|p| known.contains(&p));
             lines.push(format!(
@@ -794,7 +1001,11 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
     if o.expert && exited && tally[0].0 >= tally[0].1 - most_items(&m, skill) {
         outcome = "EXPERT"; // (every item there is to get, then out)
     }
-    if o.complete && outcome == "EXPERT" && (!o.secrets || tally[2].0 >= tally[2].1 - secrets_short) && tally[1].0 >= tally[1].1 {
+    if o.complete
+        && outcome == "EXPERT"
+        && (!o.secrets || tally[2].0 >= tally[2].1 - secrets_short)
+        && tally[1].0 >= tally[1].1
+    {
         outcome = "COMPLETE"; // (every kill, item and secret, then out)
     }
     let real = t0.elapsed().as_secs_f64();
@@ -803,10 +1014,21 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
         real - t_engine - t_observe - t_think,
         e.tic as f64 / real.max(1e-9)
     ));
-    let mut detail = format!("{game_s:.0}s game, {real:.0}s real, {deaths} deaths; {}", k.summary());
-    detail = format!("items {}/{}, {detail}", tally[0].0.max(best_life.0), tally[0].1);
+    let mut detail = format!(
+        "{game_s:.0}s game, {real:.0}s real, {deaths} deaths; {}",
+        k.summary()
+    );
+    detail = format!(
+        "items {}/{}, {detail}",
+        tally[0].0.max(best_life.0),
+        tally[0].1
+    );
     if o.secrets {
-        detail = format!("secrets {}/{}, {detail}", tally[2].0.max(best_life.1), tally[2].1);
+        detail = format!(
+            "secrets {}/{}, {detail}",
+            tally[2].0.max(best_life.1),
+            tally[2].1
+        );
     }
     // (the kills always: the score's partial credit for a run that doesn't get out)
     detail = format!("kills {}/{}, {detail}", tally[1].0, tally[1].1);
@@ -817,7 +1039,8 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
             // shots into walls, a pellet at a time, a kill by one of seven not hiding the rest)
             let mut tally = p.combat().tally.clone();
             if let (Some(a), Some(b)) = (pellets_before, e.pellets()) {
-                let [fired, hit, barrel, after, shots, wide, held] = [0, 1, 2, 3, 4, 5, 6].map(|i| f64::from(b[i] - a[i]));
+                let [fired, hit, barrel, after, shots, wide, held] =
+                    [0, 1, 2, 3, 4, 5, 6].map(|i| f64::from(b[i] - a[i]));
                 tally.insert("pellets fired with the trigger held".into(), held);
                 tally.insert("shots, by the game's count".into(), shots);
                 tally.insert("shots with no pellet on anything".into(), wide);
@@ -831,37 +1054,90 @@ pub fn run_map_in(wad: &str, map_name: &str, o: &RunOptions, engine: Option<Engi
         },
     );
     let hurt = damage_summary(&damage);
-    lines.push(format!("damage taken: {}", if hurt.is_empty() { "none" } else { &hurt }));
+    lines.push(format!(
+        "damage taken: {}",
+        if hurt.is_empty() { "none" } else { &hurt }
+    ));
     lines.push(format!("RESULT {outcome} {detail}"));
     let dir = log_dir();
     let _ = std::fs::create_dir_all(&dir);
-    let stem = iwad.file_stem().map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase());
+    let stem = iwad
+        .file_stem()
+        .map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase());
     // (and kept, by the commit, the time and the seed: not written over by the next run)
-    let _ = crate::config::write_log(&dir.join(format!("{stem}_{map_name}.txt")), &o.seed.map_or_else(|| "random".to_string(), |s| format!("s{s}")), &(lines.join("\n") + "\n"));
+    let _ = crate::config::write_log(
+        &dir.join(format!("{stem}_{map_name}.txt")),
+        &o.seed
+            .map_or_else(|| "random".to_string(), |s| format!("s{s}")),
+        &(lines.join("\n") + "\n"),
+    );
     if o.decisions {
-        let _ = std::fs::write(dir.join(format!("{stem}_{map_name}.decisions.jsonl")), agent.x().journal.lines());
+        let _ = std::fs::write(
+            dir.join(format!("{stem}_{map_name}.decisions.jsonl")),
+            agent.x().journal.lines(),
+        );
     }
     {
         let k = &agent.x().knowledge;
-        rec.entries.extend(k.journal[journal_n.min(k.journal.len())..].iter().map(|(t, nt)| Entry::Note(*t, nt.clone())));
+        rec.entries.extend(
+            k.journal[journal_n.min(k.journal.len())..]
+                .iter()
+                .map(|(t, nt)| Entry::Note(*t, nt.clone())),
+        );
     }
     let branch = if o.from.is_some() { "_branch" } else { "" };
-    rec.write(&out_dir().join("runs").join(format!("{stem}_{map_name}{}{branch}.run", mode_suffix(o))))?;
+    rec.write(
+        &out_dir()
+            .join("runs")
+            .join(format!("{stem}_{map_name}{}{branch}.run", mode_suffix(o))),
+    )?;
     let carry = exited.then(|| e.loadout());
     let secret = exited && e.secret_exit();
     if o.snapshot.is_some() {
         snapshot(&w, m, &map_name, e, agent, o.focus)?;
-        return Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, stats, engine: None, deaths });
+        return Ok(MapRun {
+            outcome: outcome.to_string(),
+            detail,
+            carry,
+            secret,
+            damage: hurt,
+            stats,
+            engine: None,
+            deaths,
+        });
     }
-    Ok(MapRun { outcome: outcome.to_string(), detail, carry, secret, damage: hurt, stats, engine: Some(e), deaths })
+    Ok(MapRun {
+        outcome: outcome.to_string(),
+        detail,
+        carry,
+        secret,
+        damage: hurt,
+        stats,
+        engine: Some(e),
+        deaths,
+    })
 }
 
 #[cfg(feature = "viewer")]
-fn snapshot(w: &Wad, m: Arc<MapData>, map_name: &str, e: Engine, agent: Agent, focus: Option<(f64, f64, f64)>) -> Result<(), String> {
+fn snapshot(
+    w: &Wad,
+    m: Arc<MapData>,
+    map_name: &str,
+    e: Engine,
+    agent: Agent,
+    focus: Option<(f64, f64, f64)>,
+) -> Result<(), String> {
     crate::viewer::save_snapshot(w, m, map_name, e, agent, focus)
 }
 
 #[cfg(not(feature = "viewer"))]
-fn snapshot(_: &Wad, _: Arc<MapData>, _: &str, _: Engine, _: Agent, _: Option<(f64, f64, f64)>) -> Result<(), String> {
+fn snapshot(
+    _: &Wad,
+    _: Arc<MapData>,
+    _: &str,
+    _: Engine,
+    _: Agent,
+    _: Option<(f64, f64, f64)>,
+) -> Result<(), String> {
     Err("built without the viewer (the `viewer` feature)".into())
 }

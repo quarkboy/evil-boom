@@ -5,7 +5,9 @@ use std::collections::BTreeSet;
 use crate::geom::Point;
 use crate::movers::{Effects, TICRATE};
 use crate::nav::Heights;
-use crate::navigator::{add_height, KeyItems, Leg, Path, Plan, States, TriggerLine, View, EXIT_FLOOR};
+use crate::navigator::{
+    add_height, KeyItems, Leg, Path, Plan, States, TriggerLine, View, EXIT_FLOOR,
+};
 use crate::specials::{Category, Key, Keys, Trigger};
 
 /// What a trigger step should make happen, for checking as it runs: `sector` reaches `heights`
@@ -83,7 +85,10 @@ impl Step {
     /// The step spelled out, for the log: walk, act, then what to wait for (moves that stay put
     /// the next path needs) or beat (ones that go back).
     pub fn substeps(&self) -> Vec<String> {
-        let goal = self.path.as_ref().and_then(|p| p.waypoints.iter().rev().find_map(|w| *w));
+        let goal = self
+            .path
+            .as_ref()
+            .and_then(|p| p.waypoints.iter().rev().find_map(|w| *w));
         let notes = match &self.path {
             Some(p) if !p.steps.is_empty() => format!(" ({})", p.steps.join("; ")),
             _ => String::new(),
@@ -106,8 +111,17 @@ impl Step {
         }
         for e in self.expects.iter().filter(|e| e.needed) {
             match e.hold {
-                None => out.push(format!("wait for sector {} to reach {} (~{:.1}s)", e.sector, fmt_heights(e.heights), e.travel / TICRATE)),
-                Some(hold) => out.push(format!("get to sector {} within {:.1}s, before it moves back", e.sector, (e.travel + hold) / TICRATE)),
+                None => out.push(format!(
+                    "wait for sector {} to reach {} (~{:.1}s)",
+                    e.sector,
+                    fmt_heights(e.heights),
+                    e.travel / TICRATE
+                )),
+                Some(hold) => out.push(format!(
+                    "get to sector {} within {:.1}s, before it moves back",
+                    e.sector,
+                    (e.travel + hold) / TICRATE
+                )),
             }
         }
         out
@@ -137,9 +151,17 @@ pub fn action_for(t: &TriggerLine) -> Action {
 
 /// What firing `t` should do (`effects`: as fired, by default its plain effects), with
 /// timings; `needed` where the path `after` depends on it, or for sectors in `also`.
-pub fn expects_of(view: &View, t: &TriggerLine, after: Option<&Path>, effects: Option<&Effects>, also: &BTreeSet<usize>) -> Vec<Expect> {
+pub fn expects_of(
+    view: &View,
+    t: &TriggerLine,
+    after: Option<&Path>,
+    effects: Option<&Effects>,
+    also: &BTreeSet<usize>,
+) -> Vec<Expect> {
     let nav = &view.nav;
-    let mut on_path: BTreeSet<usize> = after.map(|p| p.polys.iter().map(|&q| nav.sector_of_poly(q)).collect()).unwrap_or_default();
+    let mut on_path: BTreeSet<usize> = after
+        .map(|p| p.polys.iter().map(|&q| nav.sector_of_poly(q)).collect())
+        .unwrap_or_default();
     on_path.extend(also.iter().copied());
     if t.info.description.contains("perpetual") {
         return Vec::new(); // (they keep going: nothing to wait for or beat)
@@ -150,8 +172,17 @@ pub fn expects_of(view: &View, t: &TriggerLine, after: Option<&Path>, effects: O
         if h == nav.movers.initial[*s] && hs.len() == 1 {
             continue; // (already like that)
         }
-        let timing = (t.line >= 0).then(|| nav.movers.timing(t.info.special, &t.info.description, *s, h));
-        out.push(Expect { sector: *s, heights: h, travel: timing.map_or(0.0, |tm| tm.travel), hold: timing.and_then(|tm| tm.hold), needed: on_path.contains(s) });
+        let timing = (t.line >= 0).then(|| {
+            nav.movers
+                .timing(t.info.special, &t.info.description, *s, h)
+        });
+        out.push(Expect {
+            sector: *s,
+            heights: h,
+            travel: timing.map_or(0.0, |tm| tm.travel),
+            hold: timing.and_then(|tm| tm.hold),
+            needed: on_path.contains(s),
+        });
     }
     out
 }
@@ -159,7 +190,12 @@ pub fn expects_of(view: &View, t: &TriggerLine, after: Option<&Path>, effects: O
 /// Steps for a route's legs. The last (goal) leg becomes `goal_step` with that leg's path, or
 /// is dropped without one. Trigger steps get `expects` (from `states`, the heights at the
 /// start: stairs build on from where they are).
-pub fn steps_from_legs(view: &View, legs: &[Leg], goal_step: Option<Step>, states: Option<&States>) -> Vec<Step> {
+pub fn steps_from_legs(
+    view: &View,
+    legs: &[Leg],
+    goal_step: Option<Step>,
+    states: Option<&States>,
+) -> Vec<Step> {
     let mut steps = Vec::new();
     let mut running: States = states.cloned().unwrap_or_else(|| view.initial_states());
     for (i, leg) in legs.iter().enumerate().take(legs.len().saturating_sub(1)) {
@@ -169,12 +205,33 @@ pub fn steps_from_legs(view: &View, legs: &[Leg], goal_step: Option<Step>, state
             // another switch for the same stairs next: wait for these to stop first (a press
             // while they're still moving does nothing: MAP21)
             let next = legs[i + 1].trigger.map(|n| view.trigger(n));
-            let also: BTreeSet<usize> = if next.is_some_and(|n| t.shift_from.is_some() && n.shift_from == t.shift_from) { effects.iter().map(|(s, _)| *s).collect() } else { BTreeSet::new() };
+            let also: BTreeSet<usize> =
+                if next.is_some_and(|n| t.shift_from.is_some() && n.shift_from == t.shift_from) {
+                    effects.iter().map(|(s, _)| *s).collect()
+                } else {
+                    BTreeSet::new()
+                };
             let expects = expects_of(view, &t, Some(&legs[i + 1].path), Some(&effects), &also);
             running = view.nav.apply_trigger(&running, &t);
-            steps.push(Step { path: Some(leg.path.clone()), action: action_for(&t), label: format!("line {}: {}", t.line, t.info.description), trigger: Some(t), key: None, expects, barrel: None });
+            steps.push(Step {
+                path: Some(leg.path.clone()),
+                action: action_for(&t),
+                label: format!("line {}: {}", t.line, t.info.description),
+                trigger: Some(t),
+                key: None,
+                expects,
+                barrel: None,
+            });
         } else if let Some(k) = leg.key {
-            steps.push(Step { path: Some(leg.path.clone()), action: Action::Pickup, trigger: None, key: Some(k), label: format!("pick up {}", k.name()), expects: Vec::new(), barrel: None });
+            steps.push(Step {
+                path: Some(leg.path.clone()),
+                action: Action::Pickup,
+                trigger: None,
+                key: Some(k),
+                label: format!("pick up {}", k.name()),
+                expects: Vec::new(),
+                barrel: None,
+            });
         }
     }
     if let (Some(mut g), Some(last)) = (goal_step, legs.last()) {
@@ -198,19 +255,50 @@ fn exit_step(t: &TriggerLine) -> Step {
         Action::Use => Action::Exit,
         a => a,
     };
-    Step { path: None, action, trigger: Some(t.clone()), key: None, label: format!("exit via line {}", t.line), expects: Vec::new(), barrel: None }
+    Step {
+        path: None,
+        action,
+        trigger: Some(t.clone()),
+        key: None,
+        label: format!("exit via line {}", t.line),
+        expects: Vec::new(),
+        barrel: None,
+    }
 }
 
 /// From the map's starting heights, finish the level: one search whose goal is any exit,
 /// using switches and picking up keys in whatever order works.
 pub fn plan_level(view: &View, start: Point, max_seconds: f64, max_expansions: usize) -> LevelPlan {
-    let Some(start_poly) = view.nav.poly_at(start) else { return LevelPlan { problem: "start off the map".into(), ..LevelPlan::default() } };
+    let Some(start_poly) = view.nav.poly_at(start) else {
+        return LevelPlan {
+            problem: "start off the map".into(),
+            ..LevelPlan::default()
+        };
+    };
     let stages = view.progression(start_poly);
-    if !stages.iter().any(|s| s.exits.iter().any(|&id| view.trigger(id).info.category == Category::Exit)) {
-        return LevelPlan { problem: "no route to the exit (not reachable even in principle)".into(), ..LevelPlan::default() };
+    if !stages.iter().any(|s| {
+        s.exits
+            .iter()
+            .any(|&id| view.trigger(id).info.category == Category::Exit)
+    }) {
+        return LevelPlan {
+            problem: "no route to the exit (not reachable even in principle)".into(),
+            ..LevelPlan::default()
+        };
     }
     let reach = stages.last().map(|s| s.reached.clone());
-    plan_from(view, start, &Rest { keys: Keys::default(), states: None, reach: reach.as_ref(), max_seconds, max_expansions, fired: &BTreeSet::new() })
+    plan_from(
+        view,
+        start,
+        &Rest {
+            keys: Keys::default(),
+            states: None,
+            reach: reach.as_ref(),
+            max_seconds,
+            max_expansions,
+            fired: &BTreeSet::new(),
+        },
+    )
 }
 
 /// What `plan_from` plans with: the keys held, the heights the world can take now (default:
@@ -227,7 +315,14 @@ pub struct Rest<'a> {
 
 /// Plan the rest of the level from `pos`.
 pub fn plan_from(view: &View, pos: Point, rest: &Rest<'_>) -> LevelPlan {
-    let Rest { keys, states, reach, max_seconds, max_expansions, fired } = *rest;
+    let Rest {
+        keys,
+        states,
+        reach,
+        max_seconds,
+        max_expansions,
+        fired,
+    } = *rest;
     let all: BTreeSet<usize>;
     let reach = match reach {
         Some(r) => r,
@@ -238,18 +333,50 @@ pub fn plan_from(view: &View, pos: Point, rest: &Rest<'_>) -> LevelPlan {
     };
     let exits = exit_goals(view, pos, reach);
     if exits.is_empty() {
-        return LevelPlan { problem: "no exit lines".into(), ..LevelPlan::default() };
+        return LevelPlan {
+            problem: "no exit lines".into(),
+            ..LevelPlan::default()
+        };
     }
     let goals: Vec<Point> = exits.iter().map(|(p, _)| *p).collect();
     let key_items: KeyItems = view.nav.key_items(None);
     let t0 = std::time::Instant::now();
-    let route = view.plan(pos, &goals, &Plan { keys, states, key_items: &key_items, max_expansions, max_seconds, goal_triggers: &exits, fired });
+    let route = view.plan(
+        pos,
+        &goals,
+        &Plan {
+            keys,
+            states,
+            key_items: &key_items,
+            max_expansions,
+            max_seconds,
+            goal_triggers: &exits,
+            fired,
+        },
+    );
     let Some(route) = route else {
         let timed_out = t0.elapsed().as_secs_f64() >= max_seconds;
-        return LevelPlan { problem: format!("no route to the exit{}", if timed_out { format!(" (search gave up after {max_seconds:.0}s)") } else { String::new() }), ..LevelPlan::default() };
+        return LevelPlan {
+            problem: format!(
+                "no route to the exit{}",
+                if timed_out {
+                    format!(" (search gave up after {max_seconds:.0}s)")
+                } else {
+                    String::new()
+                }
+            ),
+            ..LevelPlan::default()
+        };
     };
-    let goal = route.goal.and_then(|g| exits.iter().find(|(p, _)| *p == g)).map(|(_, id)| exit_step(view.trigger(*id)));
-    LevelPlan { steps: steps_from_legs(view, &route.legs, goal, states), complete: true, problem: String::new() }
+    let goal = route
+        .goal
+        .and_then(|g| exits.iter().find(|(p, _)| *p == g))
+        .map(|(_, id)| exit_step(view.trigger(*id)));
+    LevelPlan {
+        steps: steps_from_legs(view, &route.legs, goal, states),
+        complete: true,
+        problem: String::new(),
+    }
 }
 
 /// One stage of `progression`: the keys held, where she gets to, the triggers fired then, the
@@ -265,7 +392,10 @@ pub struct Stage {
 impl View {
     /// The trigger with this id, as this view has it.
     pub fn trigger(&self, id: usize) -> &TriggerLine {
-        self.triggers.iter().find(|t| t.id == id).unwrap_or(&self.nav.triggers[id])
+        self.triggers
+            .iter()
+            .find(|t| t.id == id)
+            .unwrap_or(&self.nav.triggers[id])
     }
 
     /// Alternate: fire every usable trigger till nothing changes, then pick up every key there
@@ -275,13 +405,27 @@ impl View {
         let mut states = self.initial_states();
         let mut keys = Keys::default();
         let mut fired: BTreeSet<i64> = BTreeSet::new();
-        let key_things: Vec<(Key, Point)> = nav.map.things.iter().filter(|t| t.in_skill(nav.skill)).filter_map(|t| Key::from_thing(t.kind).map(|k| (k, (t.x, t.y)))).collect();
+        let key_things: Vec<(Key, Point)> = nav
+            .map
+            .things
+            .iter()
+            .filter(|t| t.in_skill(nav.skill))
+            .filter_map(|t| Key::from_thing(t.kind).map(|k| (k, (t.x, t.y))))
+            .collect();
         let mut stages = Vec::new();
         loop {
             let mut fired_now = Vec::new();
             let reached = loop {
                 let reached = self.reachable(start, &states, None);
-                let usable: Vec<&TriggerLine> = self.triggers.iter().filter(|t| !fired.contains(&t.line) && !t.activators.is_disjoint(&reached) && t.info.lock.satisfied(keys)).collect();
+                let usable: Vec<&TriggerLine> = self
+                    .triggers
+                    .iter()
+                    .filter(|t| {
+                        !fired.contains(&t.line)
+                            && !t.activators.is_disjoint(&reached)
+                            && t.info.lock.satisfied(keys)
+                    })
+                    .collect();
                 if usable.is_empty() {
                     break reached;
                 }
@@ -295,10 +439,29 @@ impl View {
                     }
                 }
             };
-            let available: Keys = key_things.iter().filter(|(_, (x, y))| self.pickup_spots(*x, *y, &states).iter().any(|(p, _)| reached.contains(p))).map(|(k, _)| *k).collect();
-            let exits = self.triggers.iter().filter(|t| t.info.category.is_exit() && fired.contains(&t.line)).map(|t| t.id).collect();
+            let available: Keys = key_things
+                .iter()
+                .filter(|(_, (x, y))| {
+                    self.pickup_spots(*x, *y, &states)
+                        .iter()
+                        .any(|(p, _)| reached.contains(p))
+                })
+                .map(|(k, _)| *k)
+                .collect();
+            let exits = self
+                .triggers
+                .iter()
+                .filter(|t| t.info.category.is_exit() && fired.contains(&t.line))
+                .map(|t| t.id)
+                .collect();
             let done = keys.covers(available);
-            stages.push(Stage { keys, reached, fired: fired_now, keys_available: available, exits });
+            stages.push(Stage {
+                keys,
+                reached,
+                fired: fired_now,
+                keys_available: available,
+                exits,
+            });
             if done {
                 break;
             }

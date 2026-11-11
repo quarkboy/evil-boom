@@ -1,11 +1,11 @@
 //! Planning objectives, caching failed searches and checking route risk.
 
-use crate::det::HashMap;
-use crate::knowledge::RISK_SHARE;
-use crate::nav::Heights;
 use super::{Explorer, GoalKey, Kind, Objective, KEEP_REACH};
+use crate::det::HashMap;
 use crate::geom::{dist, segments_cross, Point};
+use crate::knowledge::RISK_SHARE;
 use crate::motor::Observation;
+use crate::nav::Heights;
 use crate::navigator::{add_height, Plan, Route, States, TriggerLine, View, MAX_STEP};
 use crate::specials::Key;
 use crate::walkthrough::{action_for, steps_from_legs, Action, Step};
@@ -63,9 +63,14 @@ impl Explorer {
             for i in 0..n {
                 let f = (i as f64 + 0.5) / n as f64;
                 let q = (pr.0 + (p.0 - pr.0) * f, pr.1 + (p.1 - pr.1) * f);
-                let Some(poly) = mesh.poly_at(q) else { continue };
+                let Some(poly) = mesh.poly_at(q) else {
+                    continue;
+                };
                 let s = mesh.poly(poly).sector;
-                let floor = heights[s].iter().map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max);
+                let floor = heights[s]
+                    .iter()
+                    .map(|h| h.floor)
+                    .fold(f64::NEG_INFINITY, f64::max);
                 if !k.damaging(s) {
                     on = Some(floor);
                 } else if on.is_none_or(|o| floor >= o - MAX_STEP) {
@@ -80,8 +85,16 @@ impl Explorer {
     /// (mortal runs) The health a route's legs would cost her: her time down on floors that
     /// hurt, at what each does (one that only looks it: at the worst); a suit on, nothing for
     /// the time it has left, but the worst floors' now and then.
-    fn route_damage(&self, legs: &[crate::navigator::Leg], states: &States, obs: &Observation) -> f64 {
-        let suit_left = self.knowledge.suit_until.map_or(0.0, |u| (u - obs.tic) as f64);
+    fn route_damage(
+        &self,
+        legs: &[crate::navigator::Leg],
+        states: &States,
+        obs: &Observation,
+    ) -> f64 {
+        let suit_left = self
+            .knowledge
+            .suit_until
+            .map_or(0.0, |u| (u - obs.tic) as f64);
         let mut tics = 0.0;
         let mut total = 0.0;
         for leg in legs {
@@ -108,10 +121,25 @@ impl Explorer {
     /// game's clock can add to the damage `expected_damage` spreads over the time (a floor hits
     /// once every 32 tics of the level's clock, so a wade can take one more hit than its time's
     /// share, by when it starts).
-    fn hardest_floor_hit(&self, legs: &[crate::navigator::Leg], obj: &Objective, states: &States) -> f64 {
-        let end = self.nav.poly_at(obj.goal).map(|p| self.nav.sector_of_poly(p)).filter(|&s| self.knowledge.damaging(s));
-        let way = legs.iter().flat_map(|leg| self.wades(&leg.path.waypoints, states)).map(|(s, _)| s);
-        way.chain(end).map(|s| self.knowledge.floor_hit(s, WORST_FLOOR)).max().map_or(0.0, f64::from)
+    fn hardest_floor_hit(
+        &self,
+        legs: &[crate::navigator::Leg],
+        obj: &Objective,
+        states: &States,
+    ) -> f64 {
+        let end = self
+            .nav
+            .poly_at(obj.goal)
+            .map(|p| self.nav.sector_of_poly(p))
+            .filter(|&s| self.knowledge.damaging(s));
+        let way = legs
+            .iter()
+            .flat_map(|leg| self.wades(&leg.path.waypoints, states))
+            .map(|(s, _)| s);
+        way.chain(end)
+            .map(|s| self.knowledge.floor_hit(s, WORST_FLOOR))
+            .max()
+            .map_or(0.0, f64::from)
     }
 
     /// The health going to obj by these legs and doing it would cost her: the way there on floors
@@ -122,19 +150,37 @@ impl Explorer {
     /// each a tenth of her health or less, 47 s of it to death.) As she knows the floors: one
     /// changed to one that hurts since (E3M1's way over the blood gone down into it) at the worst
     /// floors' if the map has none for it.
-    fn expected_damage(&self, legs: &[crate::navigator::Leg], obj: &Objective, states: &States, obs: &Observation) -> f64 {
+    fn expected_damage(
+        &self,
+        legs: &[crate::navigator::Leg],
+        obj: &Objective,
+        states: &States,
+        obs: &Observation,
+    ) -> f64 {
         let way = self.route_damage(legs, states, obs);
         // (the worst only for one the map doesn't say, and none of its look felt: 5 a hit counted
         // as 20, E1M9's lip over the nukage at 68 health, every way on refused as costing too
         // much, stood there)
-        let end = self.nav.poly_at(obj.goal).map(|p| self.nav.sector_of_poly(p)).filter(|&s| self.knowledge.damaging(s)).map_or(0, |s| self.knowledge.floor_hit(s, WORST_FLOOR));
+        let end = self
+            .nav
+            .poly_at(obj.goal)
+            .map(|p| self.nav.sector_of_poly(p))
+            .filter(|&s| self.knowledge.damaging(s))
+            .map_or(0, |s| self.knowledge.floor_hit(s, WORST_FLOOR));
         // (through her armor, which takes its share of a floor's hits as of any: E2M4 HNTR, 80
         // health and blue armor, a secret door pressed from the lava counted 70, 35 it'd cost;
         // refused, nothing left to do)
-        if end == 0 || obj.kind == Kind::Exit || self.knowledge.suit_until.is_some_and(|u| u >= obs.tic) {
+        if end == 0
+            || obj.kind == Kind::Exit
+            || self.knowledge.suit_until.is_some_and(|u| u >= obs.tic)
+        {
             return obs.through_armor(way);
         }
-        let stay = if matches!(obj.kind, Kind::Item | Kind::Key) { 0.0 } else { f64::from(end) * END_STAY };
+        let stay = if matches!(obj.kind, Kind::Item | Kind::Key) {
+            0.0
+        } else {
+            f64::from(end) * END_STAY
+        };
         obs.through_armor(2.0 * way + stay)
     }
 
@@ -148,17 +194,28 @@ impl Explorer {
         let mut costs: HashMap<usize, (usize, f64)> = HashMap::default();
         if self.knowledge.mortal {
             let nav = Rc::clone(&self.nav);
-            let rest: Vec<Heights> = states.iter().enumerate().map(|(s, hs)| hs.first().copied().unwrap_or(nav.movers.initial[s])).collect();
+            let rest: Vec<Heights> = states
+                .iter()
+                .enumerate()
+                .map(|(s, hs)| hs.first().copied().unwrap_or(nav.movers.initial[s]))
+                .collect();
             let afford = RISK_SHARE * obs.health.unwrap_or(100.0);
             for (t, sectors) in self.knowledge.known_triggers() {
-                let (Some(kind), Some(li)) = (crate::specials::crusher_kind(t.info.special), t.linedef()) else { continue };
+                let (Some(kind), Some(li)) =
+                    (crate::specials::crusher_kind(t.info.special), t.linedef())
+                else {
+                    continue;
+                };
                 if !t.info.trigger.walked() {
                     continue;
                 }
                 for s in sectors {
                     // (where she last saw it, and it's not known to be on the move)
                     let [h] = states[s].as_slice() else { continue };
-                    let out = *self.crusher_out.entry(s).or_insert_with(|| crate::crush::out_tics(&nav, &rest, s));
+                    let out = *self
+                        .crusher_out
+                        .entry(s)
+                        .or_insert_with(|| crate::crush::out_tics(&nav, &rest, s));
                     if crate::crush::trap(*h, kind, out, afford, obs) {
                         let top = nav.movers.initial[s].ceiling.max(h.ceiling);
                         let stroke = 2.0 * (top - h.floor - crate::crush::BOTTOM) / kind.speed;
@@ -184,7 +241,11 @@ impl Explorer {
             try_other_activators: matches!(obj.kind, Kind::Switch | Kind::Door | Kind::Exit),
         };
         let sig = self.plan_signature(obs);
-        if self.no_route.get(&goal).is_some_and(|&(s, tic)| s == sig && obs.tic - tic < NO_ROUTE_TICS) {
+        if self
+            .no_route
+            .get(&goal)
+            .is_some_and(|&(s, tic)| s == sig && obs.tic - tic < NO_ROUTE_TICS)
+        {
             self.stats.known_none += 1;
             return None;
         }
@@ -249,7 +310,12 @@ impl Explorer {
         // searched again each time a lift went by, ten and twenty times; the user's rule)
         let states = self.states();
         let nav = &self.nav;
-        let mut known: Vec<BTreeSet<crate::nav::HeightsKey>> = nav.movers.initial.iter().map(|h| BTreeSet::from([h.key()])).collect();
+        let mut known: Vec<BTreeSet<crate::nav::HeightsKey>> = nav
+            .movers
+            .initial
+            .iter()
+            .map(|h| BTreeSet::from([h.key()]))
+            .collect();
         for (t, sectors) in self.knowledge.known_triggers() {
             for (sec, hs) in nav.effects_now(&t, &states) {
                 if sectors.contains(&sec) {
@@ -269,7 +335,12 @@ impl Explorer {
         h.finish()
     }
 
-    fn plan_route(&mut self, obj: &Objective, obs: &Observation, failed: (GoalKey, u64)) -> Option<Vec<Step>> {
+    fn plan_route(
+        &mut self,
+        obj: &Objective,
+        obs: &Observation,
+        failed: (GoalKey, u64),
+    ) -> Option<Vec<Step>> {
         let view = self.view();
         let nav = Rc::clone(&self.nav);
         let keys = obs.keys.unwrap_or_default();
@@ -288,7 +359,8 @@ impl Explorer {
         }
         // (the once-only lines she's used this life are spent: E3M4's door)
         let fired = self.spent_once();
-        let budget = (self.plan_expansions >> self.budget_cuts.min(MAX_BUDGET_CUTS)).max(MIN_EXPANSIONS.min(self.plan_expansions));
+        let budget = (self.plan_expansions >> self.budget_cuts.min(MAX_BUDGET_CUTS))
+            .max(MIN_EXPANSIONS.min(self.plan_expansions));
         // (from the floor she's on: on a lip, not the drop her middle's over)
         let start = self.standing_point(obs);
         let plan = |goal: Point| {
@@ -310,10 +382,20 @@ impl Explorer {
         // no way to the nearest spot to press it from: the next nearest (MAP08's exit door)
         let mut goal = obj.goal;
         let mut tried: BTreeSet<usize> = BTreeSet::new();
-        while route.is_none() && matches!(obj.kind, Kind::Switch | Kind::Door | Kind::Exit) && tried.len() < ALTERNATE_ACTIVATORS {
-            let (Some(t), Some(at)) = (obj.trigger.as_ref(), nav.poly_at(goal)) else { break };
+        while route.is_none()
+            && matches!(obj.kind, Kind::Switch | Kind::Door | Kind::Exit)
+            && tried.len() < ALTERNATE_ACTIVATORS
+        {
+            let (Some(t), Some(at)) = (obj.trigger.as_ref(), nav.poly_at(goal)) else {
+                break;
+            };
             tried.insert(at);
-            let rest: BTreeSet<usize> = t.activators.intersection(&self.reach).copied().filter(|p| !tried.contains(p)).collect();
+            let rest: BTreeSet<usize> = t
+                .activators
+                .intersection(&self.reach)
+                .copied()
+                .filter(|p| !tried.contains(p))
+                .collect();
             if rest.is_empty() {
                 break;
             }
@@ -328,29 +410,71 @@ impl Explorer {
         // door a switch opens for four seconds, the lift's ride after the switch; and the
         // lift's line crossed, then the switch, then back to the lift, long up again; ten
         // minutes of both, the stairs to the same door never taken)
-        if let Some(want) = std::env::var("EVIL_DEBUG_JUMPS_INTO").ok().and_then(|v| v.parse::<usize>().ok()) {
+        if let Some(want) = std::env::var("EVIL_DEBUG_JUMPS_INTO")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+        {
             let banned = self.banned_jumps();
-            for (ji, j) in nav.jumps.iter().enumerate().filter(|(_, j)| nav.sector_of_poly(j.dest_poly) == want) {
-                let from: BTreeSet<usize> = j.src_polys.iter().map(|&p| nav.sector_of_poly(p)).collect();
-                let needs: Vec<String> = j.requires.iter().map(|(rs, rh)| format!("{rs} at ({}, {}): believed {}", rh.floor, rh.ceiling, states[*rs].iter().any(|h| h.key() == rh.key()))).collect();
+            for (ji, j) in nav
+                .jumps
+                .iter()
+                .enumerate()
+                .filter(|(_, j)| nav.sector_of_poly(j.dest_poly) == want)
+            {
+                let from: BTreeSet<usize> =
+                    j.src_polys.iter().map(|&p| nav.sector_of_poly(p)).collect();
+                let needs: Vec<String> = j
+                    .requires
+                    .iter()
+                    .map(|(rs, rh)| {
+                        format!(
+                            "{rs} at ({}, {}): believed {}",
+                            rh.floor,
+                            rh.ceiling,
+                            states[*rs].iter().any(|h| h.key() == rh.key())
+                        )
+                    })
+                    .collect();
                 eprintln!("JUMP {ji} from {from:?} off ({:.0}, {:.0}): banned {}, strafe {}, soft {}, sure {:.2}, through {}; needs {needs:?}", j.takeoff.0, j.takeoff.1, banned.contains(&ji), j.strafe, j.soft, j.sure, j.through);
             }
         }
         const REPLANS: usize = 6;
         for _ in 0..REPLANS {
-            let Some(late) = route.as_ref().and_then(|r| self.lapses(r, &view, &states)) else { break };
+            let Some(late) = route.as_ref().and_then(|r| self.lapses(r, &view, &states)) else {
+                break;
+            };
             if late.is_empty() {
                 route = None;
                 break;
             }
-            let learned = self.knowledge.learned.values().map(BTreeSet::len).sum::<usize>();
+            let learned = self
+                .knowledge
+                .learned
+                .values()
+                .map(BTreeSet::len)
+                .sum::<usize>();
             if self.lapsing_jumps.1 != learned {
                 self.lapsing_jumps = (BTreeSet::new(), learned);
             }
-            self.log.push(format!("tic {}: '{}': a way with a jump too late for what's timed before it: another", obs.tic, obj.label));
+            self.log.push(format!(
+                "tic {}: '{}': a way with a jump too late for what's timed before it: another",
+                obs.tic, obj.label
+            ));
             self.lapsing_jumps.0.extend(late);
             let without = self.view();
-            route = without.plan(start, &[goal], &Plan { keys, states: Some(&states), key_items: &key_items, max_expansions: budget, max_seconds: PLAN_SECONDS, goal_triggers: &[], fired: &fired });
+            route = without.plan(
+                start,
+                &[goal],
+                &Plan {
+                    keys,
+                    states: Some(&states),
+                    key_items: &key_items,
+                    max_expansions: budget,
+                    max_seconds: PLAN_SECONDS,
+                    goal_triggers: &[],
+                    fired: &fired,
+                },
+            );
         }
         if route.is_none() && std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
             let sec = |p: Point| nav.poly_at(p).map(|q| (q, nav.sector_of_poly(q)));
@@ -372,13 +496,22 @@ impl Explorer {
             barrel: None,
         };
         let last = match obj.kind {
-            Kind::Frontier | Kind::Recheck | Kind::Visit | Kind::Noise | Kind::Room | Kind::Item | Kind::Hunt | Kind::Wall | Kind::Secret => {
-                step(Action::Walk, None, None)
-            }
+            Kind::Frontier
+            | Kind::Recheck
+            | Kind::Visit
+            | Kind::Noise
+            | Kind::Room
+            | Kind::Item
+            | Kind::Hunt
+            | Kind::Wall
+            | Kind::Secret => step(Action::Walk, None, None),
             Kind::Key => step(Action::Pickup, None, obj.key),
             // (towards it; the follower takes it on at once, from the nearest place out of its
             // chain's blasts)
-            Kind::Barrel => Step { barrel: obj.look_at, ..step(Action::Walk, None, None) },
+            Kind::Barrel => Step {
+                barrel: obj.look_at,
+                ..step(Action::Walk, None, None)
+            },
             Kind::Teleporter => step(Action::Cross, obj.trigger.clone(), None),
             _ => {
                 let t = obj.trigger.clone()?;
@@ -423,7 +556,9 @@ impl Explorer {
             };
             if cost > RISK_SHARE * health && health - cost < margin {
                 self.short_of_health = Some(obs.tic);
-                if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 1: cost {cost:.0} (the way {:.0}) against health {health:.0}, armor {:?}, margin {margin:.0}, nothing else to do {}", obj.label, self.route_damage(&route.legs, &states, obs), obs.armor, self.harm_ok)); }
+                if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+                    self.log.push(format!("  no route for '{}': refusal 1: cost {cost:.0} (the way {:.0}) against health {health:.0}, armor {:?}, margin {margin:.0}, nothing else to do {}", obj.label, self.route_damage(&route.legs, &states, obs), obs.armor, self.harm_ok));
+                }
                 return None;
             }
         }
@@ -437,8 +572,12 @@ impl Explorer {
             let here = nav.poly_at(obs.pos()).map(|p| nav.sector_of_poly(p));
             // (not one that's gone down into what hurts since: crossing it before, it was a
             // walkway still, E3M1's, dropped into after to look at a wall, no way out)
-            let escaped: BTreeSet<usize> =
-                k.visited.iter().map(|&p| nav.sector_of_poly(p)).filter(|s| Some(*s) != here && !k.changed_floor.get(s).is_some_and(|&h| h != 0)).collect();
+            let escaped: BTreeSet<usize> = k
+                .visited
+                .iter()
+                .map(|&p| nav.sector_of_poly(p))
+                .filter(|s| Some(*s) != here && !k.changed_floor.get(s).is_some_and(|&h| h != 0))
+                .collect();
             for leg in &route.legs {
                 for n in &leg.path.steps {
                     if !n.contains("one-way drop") {
@@ -446,8 +585,11 @@ impl Explorer {
                     }
                     if let Some(s) = n.rsplit(' ').next().and_then(|x| x.parse::<usize>().ok()) {
                         if k.damaging(s) && !escaped.contains(&s) {
-                            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 2", obj.label)); }
-                return None;
+                            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+                                self.log
+                                    .push(format!("  no route for '{}': refusal 2", obj.label));
+                            }
+                            return None;
                         }
                     }
                 }
@@ -458,15 +600,24 @@ impl Explorer {
             // pit opens; E4M2, a lava pit at 32 health, the door's line out refused at 23 against
             // 3.2, walls tried in the lava till dead. Not for walls or looking: lifted for every
             // way, she fought and wandered in the lava, worse)
-            let shut_in = self.on_hurting_floor(obs) && self.reach.iter().all(|&p| self.knowledge.damaging(nav.sector_of_poly(p)));
+            let shut_in = self.on_hurting_floor(obs)
+                && self
+                    .reach
+                    .iter()
+                    .all(|&p| self.knowledge.damaging(nav.sector_of_poly(p)));
             // (a wall tried over any floor that hurts is the risky twin's: a dip is no hit or a
             // whole one, and the walls with least to go on, a tenth of her health each as
             // reckoned, came before the one she most suspected, which stood on the worst of it.
             // E2M4 in an episode: 58 at the ledge, walls across the lava tried first, 41 by the
             // time the secret door's own was weighed, 12 short; an hour there, 8 of 12 episodes)
             let wall_over_harm = obj.kind == Kind::Wall && damage > 0.0;
-            if (damage > RISK_SHARE * obs.health.unwrap_or(100.0) || wall_over_harm) && !(shut_in && obj.trigger.is_some()) {
-                if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 3", obj.label)); }
+            if (damage > RISK_SHARE * obs.health.unwrap_or(100.0) || wall_over_harm)
+                && !(shut_in && obj.trigger.is_some())
+            {
+                if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+                    self.log
+                        .push(format!("  no route for '{}': refusal 3", obj.label));
+                }
                 return None;
             }
         }
@@ -475,19 +626,41 @@ impl Explorer {
         // off. MAP06: a shotgun across a lava trench, the bridge to it through a room not
         // looked into yet; the jump taken, a lost soul in its run, down in the trench, banks
         // of 72 all round, for good)
-        if obj.kind != Kind::Exit && !obj.risky && route.legs.iter().any(|leg| leg.path.jumps.iter().any(|j| self.falls_for_good(j, &view, &route.states))) {
-            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 4", obj.label)); }
-                return None;
+        if obj.kind != Kind::Exit
+            && !obj.risky
+            && route.legs.iter().any(|leg| {
+                leg.path
+                    .jumps
+                    .iter()
+                    .any(|j| self.falls_for_good(j, &view, &route.states))
+            })
+        {
+            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+                self.log
+                    .push(format!("  no route for '{}': refusal 4", obj.label));
+            }
+            return None;
         }
         if obj.kind != Kind::Exit && self.dead_end(&route, obj, obs, &view) {
-            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 5", obj.label)); }
-                return None;
+            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+                self.log
+                    .push(format!("  no route for '{}': refusal 5", obj.label));
+            }
+            return None;
         }
         if obj.kind != Kind::Exit && !obj.risky && self.shuts_in(&route, obj, obs, &view) {
-            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() { self.log.push(format!("  no route for '{}': refusal 6", obj.label)); }
-                return None;
+            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+                self.log
+                    .push(format!("  no route for '{}': refusal 6", obj.label));
+            }
+            return None;
         }
-        Some(steps_from_legs(&view, &route.legs, Some(last), Some(&states)))
+        Some(steps_from_legs(
+            &view,
+            &route.legs,
+            Some(last),
+            Some(&states),
+        ))
     }
 
     /// Does the route count on something timed that will have lapsed by the time it's needed?
@@ -519,7 +692,13 @@ impl Explorer {
             }
             None
         };
-        let length = |leg: &crate::navigator::Leg| leg.path.polys.windows(2).map(|w| dist(nav.poly_center(w[0]), nav.poly_center(w[1]))).sum::<f64>();
+        let length = |leg: &crate::navigator::Leg| {
+            leg.path
+                .polys
+                .windows(2)
+                .map(|w| dist(nav.poly_center(w[0]), nav.poly_center(w[1])))
+                .sum::<f64>()
+        };
         let mut running = states.clone();
         for i in 0..legs.len().saturating_sub(1) {
             let Some(id) = legs[i].trigger else { continue };
@@ -529,10 +708,16 @@ impl Explorer {
             let timed: Vec<(usize, Heights, f64)> = nav
                 .effects_now(&t, &running)
                 .iter()
-                .filter(|(s, hs)| !hs.is_empty() && !running[*s].iter().any(|h| h.key() == hs[0].key()))
+                .filter(|(s, hs)| {
+                    !hs.is_empty() && !running[*s].iter().any(|h| h.key() == hs[0].key())
+                })
                 .filter_map(|(s, hs)| {
-                    let tm = nav.movers.timing(t.info.special, &t.info.description, *s, hs[0]);
-                    tm.hold.filter(|_| t.line >= 0).map(|hold| (*s, hs[0], tm.travel + hold))
+                    let tm = nav
+                        .movers
+                        .timing(t.info.special, &t.info.description, *s, hs[0]);
+                    tm.hold
+                        .filter(|_| t.line >= 0)
+                        .map(|hold| (*s, hs[0], tm.travel + hold))
                 })
                 .collect();
             if timed.is_empty() {
@@ -545,13 +730,32 @@ impl Explorer {
             }
             let mut elapsed = 0.0;
             for (j, leg) in legs.iter().enumerate().skip(i + 1) {
-                let jumps = || leg.path.jumps.iter().map(crate::navigator::Jump::key).collect::<BTreeSet<String>>();
+                let jumps = || {
+                    leg.path
+                        .jumps
+                        .iter()
+                        .map(crate::navigator::Jump::key)
+                        .collect::<BTreeSet<String>>()
+                };
                 for (s, h, window) in &timed {
                     // (a jump that needs it as it is meanwhile: its takeoff, lined up, and the
                     // wait for a floor it leaves from that's away meanwhile too)
-                    for jump in leg.path.jumps.iter().filter(|jump| jump.requires.iter().any(|(rs, rh)| rs == s && rh.key() == h.key())) {
+                    for jump in leg.path.jumps.iter().filter(|jump| {
+                        jump.requires
+                            .iter()
+                            .any(|(rs, rh)| rs == s && rh.key() == h.key())
+                    }) {
                         let to = along(leg, &|p| jump.src_polys.contains(&p)).unwrap_or(0.0);
-                        let ride = jump.requires.iter().filter_map(|(rs, rh)| timed.iter().find(|(os, oh, _)| os == rs && oh.key() != rh.key()).map(|o| o.2)).fold(0.0, f64::max);
+                        let ride = jump
+                            .requires
+                            .iter()
+                            .filter_map(|(rs, rh)| {
+                                timed
+                                    .iter()
+                                    .find(|(os, oh, _)| os == rs && oh.key() != rh.key())
+                                    .map(|o| o.2)
+                            })
+                            .fold(0.0, f64::max);
                         if elapsed + to / PACE + LINE_UP + ride > *window {
                             return Some(jumps());
                         }
@@ -559,8 +763,21 @@ impl Explorer {
                     // (a walk into it a leg or more on: is there a way without it?)
                     if j > i + 1 {
                         if let Some(to) = along(leg, &|p| nav.sector_of_poly(p) == *s) {
-                            let (Some(&a), Some(&b)) = (leg.path.polys.first(), leg.path.polys.last()) else { continue };
-                            if elapsed + to / PACE > *window && view.find_path(nav.poly_center(a), nav.poly_center(b), &lapsed, None).is_none() {
+                            let (Some(&a), Some(&b)) =
+                                (leg.path.polys.first(), leg.path.polys.last())
+                            else {
+                                continue;
+                            };
+                            if elapsed + to / PACE > *window
+                                && view
+                                    .find_path(
+                                        nav.poly_center(a),
+                                        nav.poly_center(b),
+                                        &lapsed,
+                                        None,
+                                    )
+                                    .is_none()
+                            {
                                 return Some(jumps());
                             }
                         }
@@ -581,13 +798,18 @@ impl Explorer {
     fn falls_for_good(&self, jump: &crate::navigator::Jump, view: &View, states: &States) -> bool {
         const EVERY: f64 = 16.0;
         let nav = &self.nav;
-        let Some(from) = nav.poly_at(jump.takeoff) else { return false };
+        let Some(from) = nav.poly_at(jump.takeoff) else {
+            return false;
+        };
         let ends = [nav.sector_of_poly(from), nav.sector_of_poly(jump.dest_poly)];
         let length = dist(jump.takeoff, jump.dest);
         let mut under: BTreeMap<usize, usize> = BTreeMap::new();
         let mut at = EVERY;
         while at < length {
-            let p = (jump.takeoff.0 + (jump.dest.0 - jump.takeoff.0) * at / length, jump.takeoff.1 + (jump.dest.1 - jump.takeoff.1) * at / length);
+            let p = (
+                jump.takeoff.0 + (jump.dest.0 - jump.takeoff.0) * at / length,
+                jump.takeoff.1 + (jump.dest.1 - jump.takeoff.1) * at / length,
+            );
             if let Some(poly) = nav.poly_at(p) {
                 let sector = nav.sector_of_poly(poly);
                 if !ends.contains(&sector) {
@@ -606,13 +828,26 @@ impl Explorer {
     /// (no part of the map she hasn't seen beyond it, no switch or door she hasn't tried)? A pit,
     /// risky or not: E3M3, everything else far off, the nearest a drop of 48 into a pool she'd
     /// seen all round, walls on every side, its floor hurting after all, died in it pressing walls.
-    pub(super) fn dead_end(&mut self, route: &Route, obj: &Objective, obs: &Observation, view: &View) -> bool {
+    pub(super) fn dead_end(
+        &mut self,
+        route: &Route,
+        obj: &Objective,
+        obs: &Observation,
+        view: &View,
+    ) -> bool {
         // (a teleporter is a way on of itself: MAP09's, refused as a pit it's the way out of)
-        if obj.kind == Kind::Teleporter || !route.legs.iter().any(|leg| leg.path.steps.iter().any(|n| n.contains("one-way drop"))) {
+        if obj.kind == Kind::Teleporter
+            || !route
+                .legs
+                .iter()
+                .any(|leg| leg.path.steps.iter().any(|n| n.contains("one-way drop")))
+        {
             return false;
         }
         let nav = Rc::clone(&self.nav);
-        let (Some(end), Some(here)) = (nav.poly_at(obj.goal), nav.poly_at(obs.pos())) else { return false };
+        let (Some(end), Some(here)) = (nav.poly_at(obj.goal), nav.poly_at(obs.pos())) else {
+            return false;
+        };
         // (with the key it's for in hand: on a level she knows, the door it opens is the way on
         // from where it lies, and nothing unseen is left there to say so. MAP02 known
         // beforehand: its blue key refused 23 times, the level's hour stood out)
@@ -624,26 +859,50 @@ impl Explorer {
                 add_height(&mut states[d], h);
             }
         }
-        let actions: Vec<&TriggerLine> = view.triggers.iter().filter(|t| !t.effects.is_empty()).collect();
+        let actions: Vec<&TriggerLine> = view
+            .triggers
+            .iter()
+            .filter(|t| !t.effects.is_empty())
+            .collect();
         let after = view.saturate(end, &states, keys, &[], &actions).0;
         if after.contains(&here) {
             return false;
         }
         let k = &self.knowledge;
         // (nor is it a dead end with a way out of the level from it)
-        if view.triggers.iter().any(|t| t.linedef().is_some_and(|li| k.is_exit(li)) && !t.activators.is_disjoint(&after)) {
+        if view.triggers.iter().any(|t| {
+            t.linedef().is_some_and(|li| k.is_exit(li)) && !t.activators.is_disjoint(&after)
+        }) {
             return false;
         }
         let known = k.known_polys();
-        if after.iter().any(|&pi| nav.mesh.poly(pi).portals.iter().any(|&q| !known.contains(&nav.mesh.portals[q].other(pi)))) {
+        if after.iter().any(|&pi| {
+            nav.mesh
+                .poly(pi)
+                .portals
+                .iter()
+                .any(|&q| !known.contains(&nav.mesh.portals[q].other(pi)))
+        }) {
             return false;
         }
-        let by_line: BTreeMap<usize, &TriggerLine> = nav.triggers.iter().filter_map(|t| t.linedef().map(|li| (li, t))).collect();
-        if k.interactables().iter().any(|li| by_line.get(li).is_some_and(|t| !t.activators.is_disjoint(&after))) {
+        let by_line: BTreeMap<usize, &TriggerLine> = nav
+            .triggers
+            .iter()
+            .filter_map(|t| t.linedef().map(|li| (li, t)))
+            .collect();
+        if k.interactables().iter().any(|li| {
+            by_line
+                .get(li)
+                .is_some_and(|t| !t.activators.is_disjoint(&after))
+        }) {
             return false;
         }
         // (nor with a teleporter there: a way out)
-        if nav.teleports.iter().any(|tp| !tp.src_polys.is_disjoint(&after)) {
+        if nav
+            .teleports
+            .iter()
+            .any(|tp| !tp.src_polys.is_disjoint(&after))
+        {
             return false;
         }
         // (nor with walls round it she hasn't seen yet: any of them could be the switch out.
@@ -661,10 +920,27 @@ impl Explorer {
             return false;
         }
         if std::env::var_os("EVIL_DEBUG_DEAD_END").is_some() {
-            let inter: Vec<String> = k.interactables().iter().map(|li| format!("{li}: activators in sectors {:?}", by_line.get(li).map(|t| t.activators.iter().map(|&p| nav.sector_of_poly(p)).collect::<BTreeSet<usize>>()))).collect();
+            let inter: Vec<String> = k
+                .interactables()
+                .iter()
+                .map(|li| {
+                    format!(
+                        "{li}: activators in sectors {:?}",
+                        by_line.get(li).map(|t| t
+                            .activators
+                            .iter()
+                            .map(|&p| nav.sector_of_poly(p))
+                            .collect::<BTreeSet<usize>>())
+                    )
+                })
+                .collect();
             self.log.push(format!("  dead end from poly {end} (sector {}), she's at poly {here} (sector {}): after it sectors {sectors:?}; to try: {inter:?}", nav.sector_of_poly(end), nav.sector_of_poly(here)));
         }
-        if self.current.as_ref().is_none_or(|c| c.ident() != obj.ident()) {
+        if self
+            .current
+            .as_ref()
+            .is_none_or(|c| c.ident() != obj.ident())
+        {
             self.log.push(format!("tic {}: '{}': a drop into somewhere with no way back and nothing there to try ({} polys)", obs.tic, obj.label, after.len()));
         }
         true
@@ -672,21 +948,44 @@ impl Explorer {
 
     /// Would the walk-over lines the route goes over cut her off at its end, where she wouldn't
     /// be without them? (MAP08: the line by the red skull drops the floor she'd come back over.)
-    pub(super) fn shuts_in(&mut self, route: &Route, obj: &Objective, obs: &Observation, view: &View) -> bool {
+    pub(super) fn shuts_in(
+        &mut self,
+        route: &Route,
+        obj: &Objective,
+        obs: &Observation,
+        view: &View,
+    ) -> bool {
         let nav = Rc::clone(&self.nav);
-        let (Some(end), Some(here)) = (nav.poly_at(obj.goal), nav.poly_at(obs.pos())) else { return false };
+        let (Some(end), Some(here)) = (nav.poly_at(obj.goal), nav.poly_at(obs.pos())) else {
+            return false;
+        };
         if route.legs.is_empty() {
             return false;
         }
         let doors = view.local_doors(route.keys);
         let k = &self.knowledge;
-        let spent: BTreeSet<usize> = k.fired.iter().filter(|f| f.life == k.lives).map(|f| f.line).collect();
-        let legs: Vec<(Point, Point)> = route.legs.iter().flat_map(|leg| leg.path.waypoints.windows(2).filter_map(|w| Some((w[0]?, w[1]?)))).collect();
+        let spent: BTreeSet<usize> = k
+            .fired
+            .iter()
+            .filter(|f| f.life == k.lives)
+            .map(|f| f.line)
+            .collect();
+        let legs: Vec<(Point, Point)> = route
+            .legs
+            .iter()
+            .flat_map(|leg| {
+                leg.path
+                    .waypoints
+                    .windows(2)
+                    .filter_map(|w| Some((w[0]?, w[1]?)))
+            })
+            .collect();
         let mut final_states = route.states.clone();
         let mut changed = false;
         for t in &view.triggers {
             let Some(li) = t.linedef() else { continue };
-            if t.effects.is_empty() || !t.info.trigger.walked() || (t.once() && spent.contains(&li)) {
+            if t.effects.is_empty() || !t.info.trigger.walked() || (t.once() && spent.contains(&li))
+            {
                 continue;
             }
             let (a, b) = nav.map.line_seg(li);
@@ -709,23 +1008,49 @@ impl Explorer {
             out
         };
         // (with what she knows how to work from there: MAP08's switch by the red skull)
-        let actions: Vec<&TriggerLine> = view.triggers.iter().filter(|t| !t.effects.is_empty()).collect();
-        let before = view.saturate(end, &opened(&route.states), route.keys, &[], &actions).0;
-        let after = view.saturate(end, &opened(&final_states), route.keys, &[], &actions).0;
+        let actions: Vec<&TriggerLine> = view
+            .triggers
+            .iter()
+            .filter(|t| !t.effects.is_empty())
+            .collect();
+        let before = view
+            .saturate(end, &opened(&route.states), route.keys, &[], &actions)
+            .0;
+        let after = view
+            .saturate(end, &opened(&final_states), route.keys, &[], &actions)
+            .0;
         if after.contains(&here) || after.len() as f64 >= KEEP_REACH * before.len() as f64 {
             return false;
         }
         // (shut in with something left to try is the way on, maybe: unseen parts, switches not
         // pressed; MAP08's sinking floors to the exit door)
         let known = k.known_polys();
-        if after.iter().any(|&pi| nav.mesh.poly(pi).portals.iter().any(|&q| !known.contains(&nav.mesh.portals[q].other(pi)))) {
+        if after.iter().any(|&pi| {
+            nav.mesh
+                .poly(pi)
+                .portals
+                .iter()
+                .any(|&q| !known.contains(&nav.mesh.portals[q].other(pi)))
+        }) {
             return false;
         }
-        let by_line: BTreeMap<usize, &TriggerLine> = nav.triggers.iter().filter_map(|t| t.linedef().map(|li| (li, t))).collect();
-        if k.interactables().iter().any(|li| by_line.get(li).is_some_and(|t| !t.activators.is_disjoint(&after))) {
+        let by_line: BTreeMap<usize, &TriggerLine> = nav
+            .triggers
+            .iter()
+            .filter_map(|t| t.linedef().map(|li| (li, t)))
+            .collect();
+        if k.interactables().iter().any(|li| {
+            by_line
+                .get(li)
+                .is_some_and(|t| !t.activators.is_disjoint(&after))
+        }) {
             return false;
         }
-        if self.current.as_ref().is_none_or(|c| c.ident() != obj.ident()) {
+        if self
+            .current
+            .as_ref()
+            .is_none_or(|c| c.ident() != obj.ident())
+        {
             self.log.push(format!(
                 "tic {}: '{}': what the way there sets off would shut her in ({} polys to get to after, {} before)",
                 obs.tic,

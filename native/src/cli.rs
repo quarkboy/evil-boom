@@ -9,28 +9,62 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
     let mut rest = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
-        let mut value = |name: &str| it.next().cloned().ok_or_else(|| format!("{name} needs a value"));
+        let mut value = |name: &str| {
+            it.next()
+                .cloned()
+                .ok_or_else(|| format!("{name} needs a value"))
+        };
         match a.as_str() {
             "--lives" => o.lives = value("--lives")?.parse().map_err(|_| "--lives: a number")?,
-            "--snapshot" => o.snapshot = Some(value("--snapshot")?.parse().map_err(|_| "--snapshot: game seconds")?),
-            "--stall" => o.stall_seconds = value("--stall")?.parse().map_err(|_| "--stall: game seconds")?,
+            "--snapshot" => {
+                o.snapshot = Some(
+                    value("--snapshot")?
+                        .parse()
+                        .map_err(|_| "--snapshot: game seconds")?,
+                )
+            }
+            "--stall" => {
+                o.stall_seconds = value("--stall")?
+                    .parse()
+                    .map_err(|_| "--stall: game seconds")?
+            }
             "--from" => {
                 let v = value("--from")?;
                 let (file, at) = v.rsplit_once('@').ok_or("--from: FILE@SECONDS")?;
-                o.from = Some((std::path::PathBuf::from(file), at.parse().map_err(|_| "--from: FILE@SECONDS")?));
+                o.from = Some((
+                    std::path::PathBuf::from(file),
+                    at.parse().map_err(|_| "--from: FILE@SECONDS")?,
+                ));
             }
             "--focus" => {
-                let v: Vec<f64> = value("--focus")?.split(',').filter_map(|x| x.trim().parse().ok()).collect();
-                let [x, y, z] = v.as_slice() else { return Err("--focus: X,Y,ZOOM".into()) };
+                let v: Vec<f64> = value("--focus")?
+                    .split(',')
+                    .filter_map(|x| x.trim().parse().ok())
+                    .collect();
+                let [x, y, z] = v.as_slice() else {
+                    return Err("--focus: X,Y,ZOOM".into());
+                };
                 o.focus = Some((*x, *y, *z));
             }
-            "--max-seconds" => o.max_seconds = value("--max-seconds")?.parse().map_err(|_| "--max-seconds: a number")?,
+            "--max-seconds" => {
+                o.max_seconds = value("--max-seconds")?
+                    .parse()
+                    .map_err(|_| "--max-seconds: a number")?
+            }
             "--seed" => {
                 let v = value("--seed")?;
-                o.seed = if v == "random" { None } else { Some(v.parse().map_err(|_| "--seed: a number or 'random'")?) };
+                o.seed = if v == "random" {
+                    None
+                } else {
+                    Some(v.parse().map_err(|_| "--seed: a number or 'random'")?)
+                };
             }
             "--jobs" => jobs = value("--jobs")?.parse().map_err(|_| "--jobs: a number")?,
-            "--fight" => o.fight = value("--fight")?.parse().map_err(|_| "--fight: a skill, 1-5")?,
+            "--fight" => {
+                o.fight = value("--fight")?
+                    .parse()
+                    .map_err(|_| "--fight: a skill, 1-5")?
+            }
             "--expert" => o.expert = true,
             "--peek" => o.peek = true,
             "--secrets" => o.secrets = true,
@@ -60,13 +94,19 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
 /// A loadout as `--carry` gives it: weapons (a bit each, by the game's numbering), clip, shell,
 /// cell, rocket, backpack (0/1), health, armor, armor type.
 pub(crate) fn parse_carry(v: &str) -> Result<evildoom::dsda::Loadout, String> {
-    let n: Vec<i32> = v.split(',').map(|x| x.trim().parse().map_err(|_| format!("--carry: {v}"))).collect::<Result<_, _>>()?;
+    let n: Vec<i32> = v
+        .split(',')
+        .map(|x| x.trim().parse().map_err(|_| format!("--carry: {v}")))
+        .collect::<Result<_, _>>()?;
     // (a tenth, if given: the weapon in her hands, the game's number for it)
     let (n, ready) = match n.as_slice() {
         [first @ .., r] if first.len() == 9 => (first.to_vec(), Some(*r).filter(|&r| r >= 0)),
         _ => (n, None),
     };
-    let [weapons, clip, shell, cell, rocket, backpack, health, armor, armor_type] = n.as_slice() else { return Err(format!("--carry: nine numbers (or ten), not {v}")) };
+    let [weapons, clip, shell, cell, rocket, backpack, health, armor, armor_type] = n.as_slice()
+    else {
+        return Err(format!("--carry: nine numbers (or ten), not {v}"));
+    };
     Ok(evildoom::dsda::Loadout {
         weapons: *weapons,
         clip: *clip,
@@ -83,7 +123,18 @@ pub(crate) fn parse_carry(v: &str) -> Result<evildoom::dsda::Loadout, String> {
 
 /// A loadout as `--carry` takes it.
 pub(crate) fn carry_arg(l: &evildoom::dsda::Loadout) -> String {
-    let nine = format!("{},{},{},{},{},{},{},{},{}", l.weapons, l.clip, l.shell, l.cell, l.rocket, i32::from(l.backpack), l.health, l.armor, l.armor_type);
+    let nine = format!(
+        "{},{},{},{},{},{},{},{},{}",
+        l.weapons,
+        l.clip,
+        l.shell,
+        l.cell,
+        l.rocket,
+        i32::from(l.backpack),
+        l.health,
+        l.armor,
+        l.armor_type
+    );
     l.ready.map_or(nine.clone(), |r| format!("{nine},{r}"))
 }
 
@@ -103,7 +154,14 @@ pub(crate) fn option_args(o: &RunOptions) -> Vec<String> {
         out.push("--fight".into());
         out.push(o.fight.to_string());
     }
-    for (on, flag) in [(o.peek, "--peek"), (o.secrets, "--secrets"), (o.mortal, "--mortal"), (o.expert, "--expert"), (o.complete, "--complete"), (o.stall_out, "--stall-out")] {
+    for (on, flag) in [
+        (o.peek, "--peek"),
+        (o.secrets, "--secrets"),
+        (o.mortal, "--mortal"),
+        (o.expert, "--expert"),
+        (o.complete, "--complete"),
+        (o.stall_out, "--stall-out"),
+    ] {
         if on {
             out.push(flag.into());
         }

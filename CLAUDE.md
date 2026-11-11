@@ -34,7 +34,12 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   its chain; shotgun within ~320 with 12+ shells, else single pistol taps (first shot is
   accurate). Walls/switches shot with pistol taps.
 - **Rust only**, idiomatic, no `#[allow]`s, no warnings: `cargo clippy --release --all-targets`
-  clean. Don't run `cargo fmt` (it reformats ~74 files; the code isn't fmt-formatted).
+  clean. The code is rustfmt-formatted (its defaults): `cargo fmt` before every commit,
+  `cargo fmt --check` clean.
+- **A refactor changes nothing she does**, and that's checked: `tools/parity.sh save` with the
+  build before, `tools/parity.sh check [BINARY]` with the build after (24 fixed-seed runs, half
+  a minute); a comment pass, `tools/code_only.py --check`. The cleanup under way:
+  `docs/CLEANUP_PLAN.md`.
 - **Commit to `main`** when a change is tested and no worse. Commit messages say what failed,
   why, what the rule is, and the before/after numbers.
 - **Builds:** Linux (Fedora 45 under WSL, VS Code over WSL) is the main machine now; Windows

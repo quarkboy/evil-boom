@@ -1,9 +1,9 @@
 //! The navigation mesh: one convex polygon per subsector (from the BSP), cut around solid
 //! things, joined by portals where polygons share an edge.
 
+use crate::det::{HashMap, HashSet};
 use crate::geom::{cells, Cell, Point};
 use crate::map::{MapData, Node, NF_SUBSECTOR};
-use crate::det::{HashMap, HashSet};
 use std::fmt;
 
 const EPS: f64 = 0.01;
@@ -22,8 +22,12 @@ pub enum MeshError {
 impl fmt::Display for MeshError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MeshError::NoNodes => write!(f, "no usable BSP nodes (extended node formats unsupported)"),
-            MeshError::BadSubsector(i) => write!(f, "subsector {i} refers to segs that aren't there"),
+            MeshError::NoNodes => {
+                write!(f, "no usable BSP nodes (extended node formats unsupported)")
+            }
+            MeshError::BadSubsector(i) => {
+                write!(f, "subsector {i} refers to segs that aren't there")
+            }
         }
     }
 }
@@ -63,7 +67,11 @@ fn edges(vs: &[Point]) -> impl Iterator<Item = (Point, Point)> + '_ {
 }
 
 fn area(poly: &[Point]) -> f64 {
-    edges(poly).map(|(a, b)| a.0 * b.1 - b.0 * a.1).sum::<f64>().abs() / 2.0
+    edges(poly)
+        .map(|(a, b)| a.0 * b.1 - b.0 * a.1)
+        .sum::<f64>()
+        .abs()
+        / 2.0
 }
 
 fn centroid(poly: &[Point]) -> Point {
@@ -76,15 +84,24 @@ fn centroid(poly: &[Point]) -> Point {
     }
     if a.abs() < 1e-9 {
         let len = poly.len() as f64;
-        return (poly.iter().map(|p| p.0).sum::<f64>() / len, poly.iter().map(|p| p.1).sum::<f64>() / len);
+        return (
+            poly.iter().map(|p| p.0).sum::<f64>() / len,
+            poly.iter().map(|p| p.1).sum::<f64>() / len,
+        );
     }
     (cx / (3.0 * a), cy / (3.0 * a))
 }
 
 fn bounds(vs: &[Point]) -> (f64, f64, f64, f64) {
-    vs.iter().fold((f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY), |(x0, x1, y0, y1), p| {
-        (x0.min(p.0), x1.max(p.0), y0.min(p.1), y1.max(p.1))
-    })
+    vs.iter().fold(
+        (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        ),
+        |(x0, x1, y0, y1), p| (x0.min(p.0), x1.max(p.0), y0.min(p.1), y1.max(p.1)),
+    )
 }
 
 /// The overlap of two collinear segments, or None (with some tolerance for nodebuilder
@@ -99,7 +116,10 @@ fn shared_segment(a1: Point, a2: Point, b1: Point, b2: Point) -> Option<(Point, 
     if length < 1e-6 {
         return None;
     }
-    if [b1, b2].iter().any(|&p| cross(a1, d, p).abs() / length > tol) {
+    if [b1, b2]
+        .iter()
+        .any(|&p| cross(a1, d, p).abs() / length > tol)
+    {
         return None;
     }
     let (ux, uy) = (d.0 / length, d.1 / length);
@@ -110,7 +130,10 @@ fn shared_segment(a1: Point, a2: Point, b1: Point, b2: Point) -> Option<(Point, 
     if hi - lo < 1.0 {
         return None;
     }
-    Some(((a1.0 + ux * lo, a1.1 + uy * lo), (a1.0 + ux * hi, a1.1 + uy * hi)))
+    Some((
+        (a1.0 + ux * lo, a1.1 + uy * lo),
+        (a1.0 + ux * hi, a1.1 + uy * hi),
+    ))
 }
 
 /// Is the point inside (or on) the convex polygon?
@@ -143,7 +166,14 @@ pub struct Poly {
 impl Poly {
     fn new(sector: usize, vertices: Vec<Point>) -> Poly {
         let center = centroid(&vertices);
-        Poly { sector, vertices, center, lines_front: HashSet::default(), lines_back: HashSet::default(), portals: Vec::new() }
+        Poly {
+            sector,
+            vertices,
+            center,
+            lines_front: HashSet::default(),
+            lines_back: HashSet::default(),
+            portals: Vec::new(),
+        }
     }
 
     pub fn edges(&self) -> impl Iterator<Item = (Point, Point)> + '_ {
@@ -163,7 +193,11 @@ pub struct Portal {
 
 impl Portal {
     pub fn other(&self, poly: usize) -> usize {
-        if poly == self.a { self.b } else { self.a }
+        if poly == self.a {
+            self.b
+        } else {
+            self.a
+        }
     }
 }
 
@@ -191,7 +225,13 @@ impl Mesh {
                 line_grid.entry(c).or_default().push(li);
             }
         }
-        let mut mesh = Mesh { polys: Vec::new(), portals: Vec::new(), pieces: HashMap::default(), line_grid, nodes: m.nodes.clone() };
+        let mut mesh = Mesh {
+            polys: Vec::new(),
+            portals: Vec::new(),
+            pieces: HashMap::default(),
+            line_grid,
+            nodes: m.nodes.clone(),
+        };
         mesh.build_polys(m)?;
         if !obstacles.is_empty() {
             mesh.cut_obstacles(obstacles);
@@ -204,11 +244,15 @@ impl Mesh {
     /// Poly `i`, which must be one that exists (polys are only ever reached through the
     /// mesh's own lists, which skip the dropped ones).
     pub fn poly(&self, i: usize) -> &Poly {
-        self.polys[i].as_ref().expect("a dropped poly was referred to")
+        self.polys[i]
+            .as_ref()
+            .expect("a dropped poly was referred to")
     }
 
     fn poly_mut(&mut self, i: usize) -> &mut Poly {
-        self.polys[i].as_mut().expect("a dropped poly was referred to")
+        self.polys[i]
+            .as_mut()
+            .expect("a dropped poly was referred to")
     }
 
     pub fn center(&self, i: usize) -> Point {
@@ -229,14 +273,28 @@ impl Mesh {
     }
 
     pub fn live_polys(&self) -> impl Iterator<Item = (usize, &Poly)> {
-        self.polys.iter().enumerate().filter_map(|(i, p)| p.as_ref().map(|p| (i, p)))
+        self.polys
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| p.as_ref().map(|p| (i, p)))
     }
 
     fn build_polys(&mut self, m: &MapData) -> Result<(), MeshError> {
-        let (minx, maxx, miny, maxy) = bounds(&m.vertexes.iter().map(|v| v.point()).collect::<Vec<_>>());
+        let (minx, maxx, miny, maxy) =
+            bounds(&m.vertexes.iter().map(|v| v.point()).collect::<Vec<_>>());
         let pad = 64.0;
-        let world = vec![(minx - pad, miny - pad), (maxx + pad, miny - pad), (maxx + pad, maxy + pad), (minx - pad, maxy + pad)];
-        fn descend(m: &MapData, child: u16, poly: Vec<Point>, out: &mut HashMap<usize, Vec<Point>>) {
+        let world = vec![
+            (minx - pad, miny - pad),
+            (maxx + pad, miny - pad),
+            (maxx + pad, maxy + pad),
+            (minx - pad, maxy + pad),
+        ];
+        fn descend(
+            m: &MapData,
+            child: u16,
+            poly: Vec<Point>,
+            out: &mut HashMap<usize, Vec<Point>>,
+        ) {
             if child & NF_SUBSECTOR != 0 {
                 out.insert(usize::from(child & !NF_SUBSECTOR), poly);
                 return;
@@ -257,7 +315,10 @@ impl Mesh {
             Err(_) => return Err(MeshError::NoNodes),
         }
         for (i, ss) in m.subsectors.iter().enumerate() {
-            let segs = m.segs.get(ss.first_seg..ss.first_seg + ss.seg_count).ok_or(MeshError::BadSubsector(i))?;
+            let segs = m
+                .segs
+                .get(ss.first_seg..ss.first_seg + ss.seg_count)
+                .ok_or(MeshError::BadSubsector(i))?;
             let mut poly = by_subsector.remove(&i).unwrap_or_default();
             for seg in segs {
                 // (by the line the seg's a piece of, not by the seg's own ends: where the node
@@ -267,7 +328,11 @@ impl Mesh {
                 // sloping 1 in 20, a wedge of the nukage pit 440 long and 56 wide at its end gone
                 // from the mesh, the corner of the pit beyond it a room with no way out)
                 let line = &m.linedefs[seg.linedef];
-                let (a, b) = if seg.direction != 0 { (m.vertexes[line.v2], m.vertexes[line.v1]) } else { (m.vertexes[line.v1], m.vertexes[line.v2]) };
+                let (a, b) = if seg.direction != 0 {
+                    (m.vertexes[line.v2], m.vertexes[line.v1])
+                } else {
+                    (m.vertexes[line.v1], m.vertexes[line.v2])
+                };
                 if poly.len() >= 3 {
                     poly = clip(&poly, a.point(), (b.x - a.x, b.y - a.y), true);
                 }
@@ -281,7 +346,11 @@ impl Mesh {
                 continue;
             }
             let line = &m.linedefs[first.linedef];
-            let side = if first.direction != 0 { line.back } else { line.front };
+            let side = if first.direction != 0 {
+                line.back
+            } else {
+                line.front
+            };
             let mut p = Poly::new(m.sidedefs[usize::from(side)].sector, poly);
             for seg in segs {
                 if seg.direction != 0 {
@@ -304,14 +373,26 @@ impl Mesh {
             let middle = clip(&rest, (x1, 0.0), (0.0, 1.0), false);
             let below = clip(&middle, (0.0, y0), (1.0, 0.0), true);
             let above = clip(&middle, (0.0, y1), (1.0, 0.0), false);
-            [left, right, below, above].into_iter().filter(|p| p.len() >= 3 && area(p) >= 1.0).collect()
+            [left, right, below, above]
+                .into_iter()
+                .filter(|p| p.len() >= 3 && area(p) >= 1.0)
+                .collect()
         }
-        let rects: Vec<(f64, f64, f64, f64)> = obstacles.iter().map(|&(x, y, r)| (x - r, x + r, y - r, y + r)).collect();
+        let rects: Vec<(f64, f64, f64, f64)> = obstacles
+            .iter()
+            .map(|&(x, y, r)| (x - r, x + r, y - r, y + r))
+            .collect();
         for ss in 0..self.polys.len() {
-            let Some(poly) = &self.polys[ss] else { continue };
+            let Some(poly) = &self.polys[ss] else {
+                continue;
+            };
             let sector = poly.sector;
             let (minx, maxx, miny, maxy) = bounds(&poly.vertices);
-            let hits: Vec<_> = rects.iter().copied().filter(|b| b.0 < maxx && b.1 > minx && b.2 < maxy && b.3 > miny).collect();
+            let hits: Vec<_> = rects
+                .iter()
+                .copied()
+                .filter(|b| b.0 < maxx && b.1 > minx && b.2 < maxy && b.3 > miny)
+                .collect();
             if hits.is_empty() {
                 continue;
             }
@@ -339,7 +420,9 @@ impl Mesh {
 
     /// Linedefs collinear with and overlapping the segment p-q, ascending.
     fn lines_on_edge(&self, m: &MapData, p: Point, q: Point) -> Vec<usize> {
-        let mut found: Vec<usize> = cells(p.0, p.1, q.0, q.1).flat_map(|c| self.line_grid.get(&c).into_iter().flatten().copied()).collect();
+        let mut found: Vec<usize> = cells(p.0, p.1, q.0, q.1)
+            .flat_map(|c| self.line_grid.get(&c).into_iter().flatten().copied())
+            .collect();
         found.sort_unstable();
         found.dedup();
         found.retain(|&li| {
@@ -400,7 +483,9 @@ impl Mesh {
                     if pa == pb || seen.contains(&key) {
                         continue;
                     }
-                    let Some((o1, o2)) = shared_segment(a1, a2, b1, b2) else { continue };
+                    let Some((o1, o2)) = shared_segment(a1, a2, b1, b2) else {
+                        continue;
+                    };
                     seen.insert(key);
                     self.add_portal(m, pa, pb, o1, o2);
                 }
@@ -411,14 +496,19 @@ impl Mesh {
     /// The portal(s) between polys a and b along p1-p2: one per two-sided linedef between
     /// their sectors there, else one without a linedef.
     fn add_portal(&mut self, m: &MapData, a: usize, b: usize, p1: Point, p2: Point) {
-        let sectors: HashSet<usize> = [self.poly(a).sector, self.poly(b).sector].into_iter().collect();
+        let sectors: HashSet<usize> = [self.poly(a).sector, self.poly(b).sector]
+            .into_iter()
+            .collect();
         let mut pieces: Vec<(Point, Point, Option<usize>)> = Vec::new();
         for li in self.lines_on_edge(m, p1, p2) {
             let l = &m.linedefs[li];
             if !l.two_sided() {
                 continue;
             }
-            let ls: HashSet<usize> = [m.front_sector(l), m.back_sector(l)].into_iter().flatten().collect();
+            let ls: HashSet<usize> = [m.front_sector(l), m.back_sector(l)]
+                .into_iter()
+                .flatten()
+                .collect();
             if ls == sectors {
                 let (v1, v2) = m.line_seg(li);
                 if let Some((q1, q2)) = shared_segment(p1, p2, v1, v2) {
@@ -431,7 +521,13 @@ impl Mesh {
         }
         for (q1, q2, linedef) in pieces {
             let idx = self.portals.len();
-            self.portals.push(Portal { a, b, p1: q1, p2: q2, linedef });
+            self.portals.push(Portal {
+                a,
+                b,
+                p1: q1,
+                p2: q2,
+                linedef,
+            });
             self.poly_mut(a).portals.push(idx);
             self.poly_mut(b).portals.push(idx);
         }
@@ -460,7 +556,11 @@ impl Mesh {
     /// in the solid between rooms too: this tells them apart.
     pub fn contains(&self, i: usize, p: Point) -> bool {
         let vs = &self.poly(i).vertices;
-        inside(vs, p.0, p.1) || vs.iter().zip(vs.iter().cycle().skip(1)).any(|(&a, &b)| crate::geom::segment_distance(a, b, p, p) < 0.5)
+        inside(vs, p.0, p.1)
+            || vs
+                .iter()
+                .zip(vs.iter().cycle().skip(1))
+                .any(|(&a, &b)| crate::geom::segment_distance(a, b, p, p) < 0.5)
     }
 
     pub fn poly_at(&self, (x, y): Point) -> Option<usize> {
@@ -481,7 +581,10 @@ impl Mesh {
             if inside(vs, x, y) {
                 return Some(i);
             }
-            let d = vs.iter().map(|q| (x - q.0).hypot(y - q.1)).fold(f64::INFINITY, f64::min);
+            let d = vs
+                .iter()
+                .map(|q| (x - q.0).hypot(y - q.1))
+                .fold(f64::INFINITY, f64::min);
             if best.is_none_or(|(bd, _)| d < bd) {
                 best = Some((d, i));
             }

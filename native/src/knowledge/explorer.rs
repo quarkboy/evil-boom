@@ -98,7 +98,16 @@ impl Kind {
 
 /// "to the NE" and so on.
 fn compass(bearing: f64) -> &'static str {
-    const NAMES: [&str; 8] = ["to the E", "to the NE", "to the N", "to the NW", "to the W", "to the SW", "to the S", "to the SE"];
+    const NAMES: [&str; 8] = [
+        "to the E",
+        "to the NE",
+        "to the N",
+        "to the NW",
+        "to the W",
+        "to the SW",
+        "to the S",
+        "to the SE",
+    ];
     NAMES[((bearing / 45.0).round_ties_even() as i64).rem_euclid(8) as usize]
 }
 
@@ -140,7 +149,15 @@ pub struct Objective {
 }
 
 /// An objective's identity, for dropping it a while.
-pub type Ident = (Kind, Option<i64>, BTreeSet<usize>, Option<Key>, BTreeSet<i64>, bool, Option<i32>);
+pub type Ident = (
+    Kind,
+    Option<i64>,
+    BTreeSet<usize>,
+    Option<Key>,
+    BTreeSet<i64>,
+    bool,
+    Option<i32>,
+);
 
 impl Objective {
     pub fn new(kind: Kind, goal: Point, label: impl Into<String>) -> Objective {
@@ -169,8 +186,23 @@ impl Objective {
     pub fn ident(&self) -> Ident {
         // (a wall by its line: not every wall given up on with the one that had no way there,
         // the walls of the floor she stood on with the far ones out of reach. E4M6 UV)
-        let line = if self.pad.is_empty() { self.trigger.as_ref().map(|t| t.line).or(self.wall.map(|w| w as i64)) } else { None };
-        (self.kind, line, self.pad.clone(), self.key, self.reveals.clone(), self.risky, self.thing)
+        let line = if self.pad.is_empty() {
+            self.trigger
+                .as_ref()
+                .map(|t| t.line)
+                .or(self.wall.map(|w| w as i64))
+        } else {
+            None
+        };
+        (
+            self.kind,
+            line,
+            self.pad.clone(),
+            self.key,
+            self.reveals.clone(),
+            self.risky,
+            self.thing,
+        )
     }
 
     /// Taken up before anything nearer of a lower one: the exit, then the doors and switches a
@@ -183,7 +215,12 @@ impl Objective {
         if self.later && !self.urgent {
             return 3; // (first what it would cut her off from; but not what's to be had only now)
         }
-        if matches!(self.kind, Kind::Door | Kind::Switch) && self.trigger.as_ref().is_some_and(|t| t.info.lock != Lock::None) {
+        if matches!(self.kind, Kind::Door | Kind::Switch)
+            && self
+                .trigger
+                .as_ref()
+                .is_some_and(|t| t.info.lock != Lock::None)
+        {
             return 1;
         }
         if self.urgent || self.needed {
@@ -199,11 +236,23 @@ pub trait Hooks {
     /// she's where a hunt took her, and what it was after is neither there nor dead
     fn hunted_in_vain(&mut self, _obj: &Objective) {}
     /// offered with the rest
-    fn wanted(&mut self, _x: &Explorer, _obs: &Observation, _reach: &BTreeSet<usize>, _pos: Point) -> Vec<Objective> {
+    fn wanted(
+        &mut self,
+        _x: &Explorer,
+        _obs: &Observation,
+        _reach: &BTreeSet<usize>,
+        _pos: Point,
+    ) -> Vec<Objective> {
         Vec::new()
     }
     /// only once there's nothing else
-    fn last_resort(&mut self, _x: &Explorer, _obs: &Observation, _reach: &BTreeSet<usize>, _pos: Point) -> Vec<Objective> {
+    fn last_resort(
+        &mut self,
+        _x: &Explorer,
+        _obs: &Observation,
+        _reach: &BTreeSet<usize>,
+        _pos: Point,
+    ) -> Vec<Objective> {
         Vec::new()
     }
     /// it's no longer there to be done
@@ -254,15 +303,30 @@ impl Spots {
     fn new(points: impl Iterator<Item = Point>) -> Spots {
         let mut cells: BTreeMap<(i64, i64), Vec<Point>> = BTreeMap::new();
         for p in points {
-            cells.entry(((p.0 / Self::CELL).floor() as i64, (p.1 / Self::CELL).floor() as i64)).or_default().push(p);
+            cells
+                .entry((
+                    (p.0 / Self::CELL).floor() as i64,
+                    (p.1 / Self::CELL).floor() as i64,
+                ))
+                .or_default()
+                .push(p);
         }
         Spots(cells)
     }
 
     fn near(&self, q: Point, r: f64) -> bool {
-        let (cx, cy) = ((q.0 / Self::CELL).floor() as i64, (q.1 / Self::CELL).floor() as i64);
+        let (cx, cy) = (
+            (q.0 / Self::CELL).floor() as i64,
+            (q.1 / Self::CELL).floor() as i64,
+        );
         let reach = (r / Self::CELL).floor() as i64 + 1;
-        (-reach..=reach).any(|dx| (-reach..=reach).any(|dy| self.0.get(&(cx + dx, cy + dy)).is_some_and(|ps| ps.iter().any(|&p| dist(p, q) < r))))
+        (-reach..=reach).any(|dx| {
+            (-reach..=reach).any(|dy| {
+                self.0
+                    .get(&(cx + dx, cy + dy))
+                    .is_some_and(|ps| ps.iter().any(|&p| dist(p, q) < r))
+            })
+        })
     }
 }
 
@@ -578,12 +642,16 @@ impl Explorer {
 
     pub fn restart(&mut self) {
         if let Some(t) = self.trapped.take() {
-            self.log.push(format!("--- that was a trap ({} polys): not going back in", t.len()));
+            self.log.push(format!(
+                "--- that was a trap ({} polys): not going back in",
+                t.len()
+            ));
             self.knowledge.note(Note::Trap(t));
         }
         self.sensed = None;
         self.knowledge.restart();
-        self.log.push(format!("--- died: life {}", self.knowledge.lives));
+        self.log
+            .push(format!("--- died: life {}", self.knowledge.lives));
         self.current = None;
         self.follower = None;
         self.dropped.clear();
@@ -612,7 +680,9 @@ impl Explorer {
         self.current = None;
         self.follower = None;
         self.since = tic;
-        self.log.push(format!("--- played back to tic {tic}: from here, the bot as it is now"));
+        self.log.push(format!(
+            "--- played back to tic {tic}: from here, the bot as it is now"
+        ));
     }
 
     /// Something else has the controls this tic (a fight): take in what's seen, and carry on
@@ -634,7 +704,12 @@ impl Explorer {
         }
     }
 
-    pub fn act(&mut self, obs: &Observation, last: Option<&Controls>, hooks: &mut dyn Hooks) -> Controls {
+    pub fn act(
+        &mut self,
+        obs: &Observation,
+        last: Option<&Controls>,
+        hooks: &mut dyn Hooks,
+    ) -> Controls {
         if let Some(h) = self.held_since.take() {
             self.since += obs.tic - h;
             if let Some(f) = &mut self.follower {
@@ -642,19 +717,32 @@ impl Explorer {
             }
         }
         self.sense(obs, last);
-        if let Some(s) = self.nav.poly_at(obs.pos()).map(|p| self.nav.sector_of_poly(p)) {
+        if let Some(s) = self
+            .nav
+            .poly_at(obs.pos())
+            .map(|p| self.nav.sector_of_poly(p))
+        {
             if self.nav.damage[s] == 0 {
                 self.waded = None;
                 self.waded_dead_end = false;
             }
             if Some(s) != self.sector {
-                let meant = self.current.as_ref().is_some_and(|o| o.risky && self.nav.poly_at(o.goal).is_some_and(|p| self.knowledge.damaging(self.nav.sector_of_poly(p))));
+                let meant = self.current.as_ref().is_some_and(|o| {
+                    o.risky
+                        && self
+                            .nav
+                            .poly_at(o.goal)
+                            .is_some_and(|p| self.knowledge.damaging(self.nav.sector_of_poly(p)))
+                });
                 if meant && self.waded.is_none() && self.knowledge.damaging(s) {
                     self.waded = obs.health;
                     self.waded_dead_end = self.from_dead_end;
                 }
                 if self.nav.damage[s] != 0 {
-                    let doing = self.follower.as_ref().map_or("-".to_string(), RouteFollower::objective);
+                    let doing = self
+                        .follower
+                        .as_ref()
+                        .map_or("-".to_string(), RouteFollower::objective);
                     self.log.push(format!(
                         "tic {}: onto damaging floor (sector {s}) from sector {}, doing: {doing}",
                         obs.tic,
@@ -693,16 +781,27 @@ impl Explorer {
             }
             if self.current.is_none() {
                 let (forward, strafe) = crate::motor::brake(obs, obs.angle);
-                return Controls { forward, strafe, ..Controls::default() };
+                return Controls {
+                    forward,
+                    strafe,
+                    ..Controls::default()
+                };
             }
-        } else if self.need_new(obs, hooks) && (self.current.is_some() || self.follower.is_some() || obs.tic - self.idle_since >= IDLE_RETRY) {
+        } else if self.need_new(obs, hooks)
+            && (self.current.is_some()
+                || self.follower.is_some()
+                || obs.tic - self.idle_since >= IDLE_RETRY)
+        {
             self.next(obs, hooks);
             if self.current.is_none() {
                 self.idle_since = obs.tic;
             }
         }
         let Some(f) = &mut self.follower else {
-            return Controls { turn: 10.0, ..Controls::default() }; // (nothing to do: look round)
+            return Controls {
+                turn: 10.0,
+                ..Controls::default()
+            }; // (nothing to do: look round)
         };
         let out = f.act(obs);
         // (what the follower had to say: jumps, waits, trouble)
@@ -742,8 +841,14 @@ impl Explorer {
                 (false, "no way there now".to_string())
             }
         };
-        self.log.push(format!("tic {}: '{}' over: {}", obs.tic, obj.label, why));
-        self.ended = Some(Ended { label: obj.label, ok, why, pressed });
+        self.log
+            .push(format!("tic {}: '{}' over: {}", obs.tic, obj.label, why));
+        self.ended = Some(Ended {
+            label: obj.label,
+            ok,
+            why,
+            pressed,
+        });
         self.follower = None;
     }
 }
@@ -759,19 +864,36 @@ fn turn_to(obs: &Observation, bearing: Option<f64>) -> Controls {
     };
     // (standing still while she turns: no sliding on with what momentum she had)
     let (forward, strafe) = crate::motor::brake(obs, obs.angle - turn);
-    Controls { turn, forward, strafe, ..Controls::default() }
+    Controls {
+        turn,
+        forward,
+        strafe,
+        ..Controls::default()
+    }
 }
 
 pub fn route_length(steps: &[Step]) -> f64 {
-    steps.iter().filter_map(|st| st.path.as_ref()).flat_map(|p| p.waypoints.windows(2).filter_map(|w| Some(dist(w[0]?, w[1]?)))).sum()
+    steps
+        .iter()
+        .filter_map(|st| st.path.as_ref())
+        .flat_map(|p| {
+            p.waypoints
+                .windows(2)
+                .filter_map(|w| Some(dist(w[0]?, w[1]?)))
+        })
+        .sum()
 }
 
 /// The polys beyond walk-over exit lines (of the two sides of each, the sector more of whose
 /// edge is exit lines: MAP24's pad), and those lines.
 fn exit_pads(nav: &Navigator) -> (BTreeSet<usize>, Vec<(Point, Point)>) {
     let m = &nav.map;
-    let exit_lines: Vec<usize> =
-        (0..m.linedefs.len()).filter(|&li| classify_line(m.linedefs[li].special).is_some_and(|i| i.category.is_exit() && i.trigger.walked())).collect();
+    let exit_lines: Vec<usize> = (0..m.linedefs.len())
+        .filter(|&li| {
+            classify_line(m.linedefs[li].special)
+                .is_some_and(|i| i.category.is_exit() && i.trigger.walked())
+        })
+        .collect();
     let length = |li: usize| {
         let (a, b) = m.line_seg(li);
         dist(a, b)
@@ -785,17 +907,30 @@ fn exit_pads(nav: &Navigator) -> (BTreeSet<usize>, Vec<(Point, Point)>) {
             .collect();
         let total: f64 = edge.iter().map(|&li| length(li)).sum();
         let total = if total == 0.0 { 1.0 } else { total };
-        edge.iter().filter(|li| exit_lines.contains(li)).map(|&li| length(li)).sum::<f64>() / total
+        edge.iter()
+            .filter(|li| exit_lines.contains(li))
+            .map(|&li| length(li))
+            .sum::<f64>()
+            / total
     };
     let mut pads: BTreeSet<usize> = BTreeSet::new();
     for &li in &exit_lines {
         let (f, b) = m.sides(li);
         let sides: Vec<usize> = [f, b].into_iter().flatten().collect();
-        if let Some(best) = sides.iter().copied().reduce(|x, y| if share(y) > share(x) { y } else { x }) {
+        if let Some(best) = sides
+            .iter()
+            .copied()
+            .reduce(|x, y| if share(y) > share(x) { y } else { x })
+        {
             pads.insert(best);
         }
     }
-    let polys = nav.mesh.live_polys().filter(|(_, p)| pads.contains(&p.sector)).map(|(i, _)| i).collect();
+    let polys = nav
+        .mesh
+        .live_polys()
+        .filter(|(_, p)| pads.contains(&p.sector))
+        .map(|(i, _)| i)
+        .collect();
     let segs = exit_lines.iter().map(|&li| m.line_seg(li)).collect();
     (polys, segs)
 }

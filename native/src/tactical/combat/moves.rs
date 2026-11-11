@@ -117,7 +117,20 @@ impl Move {
 
     /// The route keeps her legs through it (unless a missile's coming or an arch-vile's fire).
     pub fn route_goes_on(self) -> bool {
-        matches!(self, Move::ShootingOnTheWay | Move::ToErrand | Move::GettingPast | Move::LeavingToIt | Move::ThroughBarrels | Move::OutOfVileSight | Move::OutOfReach | Move::Unarmed | Move::Sneaking | Move::RocketHeld | Move::Looking)
+        matches!(
+            self,
+            Move::ShootingOnTheWay
+                | Move::ToErrand
+                | Move::GettingPast
+                | Move::LeavingToIt
+                | Move::ThroughBarrels
+                | Move::OutOfVileSight
+                | Move::OutOfReach
+                | Move::Unarmed
+                | Move::Sneaking
+                | Move::RocketHeld
+                | Move::Looking
+        )
     }
 
     /// The route has her eyes as well as her legs: she faces the way she runs, nothing aimed at.
@@ -128,7 +141,16 @@ impl Move {
 
     /// Out of the way of something: where it takes her isn't second-guessed at a ledge's edge.
     pub fn escaping(self) -> bool {
-        matches!(self, Move::Dodging | Move::Ducking | Move::Ducked | Move::OutOfVileSight | Move::OffCrusher | Move::OffLitBarrel | Move::OffBarrel)
+        matches!(
+            self,
+            Move::Dodging
+                | Move::Ducking
+                | Move::Ducked
+                | Move::OutOfVileSight
+                | Move::OffCrusher
+                | Move::OffLitBarrel
+                | Move::OffBarrel
+        )
     }
 }
 

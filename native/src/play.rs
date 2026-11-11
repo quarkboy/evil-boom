@@ -20,7 +20,14 @@ pub enum Agent {
 impl Agent {
     /// `fight`: monsters in at that skill (0: none); `expert`: every item, then out (`lives - 1`
     /// levels again she may ask for); `tune`: the numbers she judges a fight by.
-    pub fn new(nav: &Rc<Navigator>, knowledge: Knowledge, fight: i32, expert: bool, lives: i32, tune: Rc<Tuning>) -> Agent {
+    pub fn new(
+        nav: &Rc<Navigator>,
+        knowledge: Knowledge,
+        fight: i32,
+        expert: bool,
+        lives: i32,
+        tune: Rc<Tuning>,
+    ) -> Agent {
         if fight > 0 {
             let mut p = Player::new(Rc::clone(nav), knowledge, tune);
             if expert {

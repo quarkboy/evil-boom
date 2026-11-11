@@ -60,13 +60,19 @@ impl Places {
             }
         }
         for li in 0..m.linedefs.len() {
-            let (Some(a), Some(b)) = m.sides(li) else { continue };
+            let (Some(a), Some(b)) = m.sides(li) else {
+                continue;
+            };
             if a == b || movers[a] || movers[b] {
                 continue;
             }
             let (sa, sb) = (&m.sectors[a], &m.sectors[b]);
             let open = |s: &crate::map::Sector| s.ceiling - s.floor >= PLAYER_HEIGHT;
-            if (sa.floor - sb.floor).abs() > MAX_STEP || !open(sa) || !open(sb) || sa.ceiling.min(sb.ceiling) - sa.floor.max(sb.floor) < PLAYER_HEIGHT {
+            if (sa.floor - sb.floor).abs() > MAX_STEP
+                || !open(sa)
+                || !open(sb)
+                || sa.ceiling.min(sb.ceiling) - sa.floor.max(sb.floor) < PLAYER_HEIGHT
+            {
                 continue;
             }
             let (p, q) = m.line_seg(li);
@@ -104,7 +110,14 @@ impl Places {
         for s in 0..n {
             let r = root(&mut parent, s);
             let i = *index.entry(r).or_insert_with(|| {
-                areas.push(Area { id: format!("area-{r}"), sectors: Vec::new(), center: (0.0, 0.0), size: 0.0, hurts: false, outdoors: false });
+                areas.push(Area {
+                    id: format!("area-{r}"),
+                    sectors: Vec::new(),
+                    center: (0.0, 0.0),
+                    size: 0.0,
+                    hurts: false,
+                    outdoors: false,
+                });
                 areas.len() - 1
             });
             area_of[s] = i;
@@ -115,7 +128,12 @@ impl Places {
             a.outdoors |= m.sectors[s].ceiling_tex.starts_with("F_SKY");
         }
         for a in &mut areas {
-            if let Some((_, c)) = a.sectors.iter().filter_map(|&s| biggest[s]).max_by(|x, y| x.0.total_cmp(&y.0)) {
+            if let Some((_, c)) = a
+                .sectors
+                .iter()
+                .filter_map(|&s| biggest[s])
+                .max_by(|x, y| x.0.total_cmp(&y.0))
+            {
                 a.center = c;
             }
         }
@@ -151,8 +169,17 @@ impl Places {
 fn moving_sectors(m: &MapData) -> Vec<bool> {
     let mut moving = vec![false; m.sectors.len()];
     for l in &m.linedefs {
-        let Some(info) = classify_line(l.special) else { continue };
-        if matches!(info.category, Category::Light | Category::Exit | Category::SecretExit | Category::Teleport | Category::Other) {
+        let Some(info) = classify_line(l.special) else {
+            continue;
+        };
+        if matches!(
+            info.category,
+            Category::Light
+                | Category::Exit
+                | Category::SecretExit
+                | Category::Teleport
+                | Category::Other
+        ) {
             continue;
         }
         if l.tag != 0 {
@@ -172,5 +199,9 @@ fn moving_sectors(m: &MapData) -> Vec<bool> {
 
 fn shoelace(v: &[Point]) -> f64 {
     let n = v.len();
-    (0..n).map(|i| v[i].0 * v[(i + 1) % n].1 - v[(i + 1) % n].0 * v[i].1).sum::<f64>().abs() / 2.0
+    (0..n)
+        .map(|i| v[i].0 * v[(i + 1) % n].1 - v[(i + 1) % n].0 * v[i].1)
+        .sum::<f64>()
+        .abs()
+        / 2.0
 }

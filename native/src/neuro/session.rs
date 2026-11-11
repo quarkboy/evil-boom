@@ -58,7 +58,18 @@ Ids come from doom_list; your names work as ids. \"NE 400\": north-east, 400 uni
 
 impl Session {
     pub fn new(url: &str) -> Session {
-        Session { link: Link::start(url, actions()), url: url.to_string(), connected: false, who: String::new(), director: Director::new(), forced: false, idle_since: 0, told_status: (i64::MIN / 2, String::new()), shown: 0, briefed: false }
+        Session {
+            link: Link::start(url, actions()),
+            url: url.to_string(),
+            connected: false,
+            who: String::new(),
+            director: Director::new(),
+            forced: false,
+            idle_since: 0,
+            told_status: (i64::MIN / 2, String::new()),
+            shown: 0,
+            briefed: false,
+        }
     }
 
     /// A tic: what's come in handled; what's happened told; a decision forced if she's waited.
@@ -97,7 +108,11 @@ impl Session {
                     self.idle_since = obs.tic;
                     let (ok, msg) = self.action(agent, obs, &name, data.as_deref());
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
-                    log.push(format!("<< {}{}", if ok { "" } else { "FAILED: " }, msg.lines().next().unwrap_or("")));
+                    log.push(format!(
+                        "<< {}{}",
+                        if ok { "" } else { "FAILED: " },
+                        msg.lines().next().unwrap_or("")
+                    ));
                     self.link.result(&id, ok, &msg);
                 }
             }
@@ -109,7 +124,10 @@ impl Session {
         if !news.is_empty() {
             let text: Vec<String> = news.iter().map(|r| r.text.clone()).collect();
             let notable = news.iter().any(|r| r.notable);
-            log.extend(text.iter().map(|t| format!("<< {}{t}", if notable { "(!) " } else { "" })));
+            log.extend(
+                text.iter()
+                    .map(|t| format!("<< {}{t}", if notable { "(!) " } else { "" })),
+            );
             self.link.context(&text.join("\n"), !notable);
         }
         let status = self.director.status(agent, obs);
@@ -122,7 +140,20 @@ impl Session {
             self.idle_since = obs.tic;
         } else if !self.forced && obs.tic - self.idle_since >= IDLE_FORCE {
             let state = self.state(agent, obs);
-            self.link.force(&state, "She's waiting. Next order?", &["doom_explore", "doom_go", "doom_exit", "doom_list", "doom_inspect", "doom_name", "doom_status"], "medium");
+            self.link.force(
+                &state,
+                "She's waiting. Next order?",
+                &[
+                    "doom_explore",
+                    "doom_go",
+                    "doom_exit",
+                    "doom_list",
+                    "doom_inspect",
+                    "doom_name",
+                    "doom_status",
+                ],
+                "medium",
+            );
             self.forced = true;
             log.push("neuro: waiting on her: decision forced".into());
         }
@@ -145,7 +176,13 @@ impl Session {
     /// Her state and options, for a forced decision (Markdown, no top-level heading).
     fn state(&mut self, agent: &mut Agent, obs: &Observation) -> String {
         let mut s = format!("## Status\n{}\n", self.director.status(agent, obs));
-        for (topic, title, n) in [(Topic::Areas, "Areas", 8), (Topic::Exits, "Exits", 3), (Topic::Doors, "Doors", 5), (Topic::Switches, "Switches", 5), (Topic::Items, "Items", 6)] {
+        for (topic, title, n) in [
+            (Topic::Areas, "Areas", 8),
+            (Topic::Exits, "Exits", 3),
+            (Topic::Doors, "Doors", 5),
+            (Topic::Switches, "Switches", 5),
+            (Topic::Items, "Items", 6),
+        ] {
             let (list, hidden) = self.director.brief(agent, obs, topic, false);
             if list.is_empty() && hidden == 0 {
                 continue;
@@ -171,47 +208,88 @@ impl Session {
     /// checked and carried out as hers is, the answer back to the streamer. An order (not a look:
     /// a list, an inspection, her status) she's told of, quietly, with what came of it: her orders
     /// may have changed under her.
-    pub fn streamer_action(&mut self, agent: &mut Agent, obs: &Observation, name: &str, data: Option<&str>) -> (bool, String) {
+    pub fn streamer_action(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        name: &str,
+        data: Option<&str>,
+    ) -> (bool, String) {
         let (ok, msg) = self.action(agent, obs, name, data);
         if !matches!(name, "doom_list" | "doom_inspect" | "doom_status") {
             let first = msg.lines().next().unwrap_or("");
-            self.link.context(&format!("The streamer did {name} {}: {}{first}", data.unwrap_or(""), if ok { "" } else { "failed: " }), true);
+            self.link.context(
+                &format!(
+                    "The streamer did {name} {}: {}{first}",
+                    data.unwrap_or(""),
+                    if ok { "" } else { "failed: " }
+                ),
+                true,
+            );
             self.idle_since = obs.tic;
         }
         (ok, msg)
     }
 
     /// An action checked, carried out (an order queued), answered: (success, message).
-    fn action(&mut self, agent: &mut Agent, obs: &Observation, name: &str, data: Option<&str>) -> (bool, String) {
+    fn action(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        name: &str,
+        data: Option<&str>,
+    ) -> (bool, String) {
         let args: Value = match data.map(serde_json::from_str::<Value>) {
             None => Value::Null,
             Some(Ok(v)) => v,
             Some(Err(_)) => return (false, "The action's data wasn't valid JSON.".into()),
         };
-        let arg = |k: &str| args.get(k).and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty());
+        let arg = |k: &str| {
+            args.get(k)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+        };
         let sure = args.get("sure").and_then(Value::as_bool).unwrap_or(false);
         let rush = args.get("rush").and_then(Value::as_bool).unwrap_or(false);
         match name {
             "doom_list" => {
-                let Some(topic) = arg("what").and_then(Topic::parse) else { return (false, "what: areas, doors, switches, items, monsters or exits.".into()) };
+                let Some(topic) = arg("what").and_then(Topic::parse) else {
+                    return (
+                        false,
+                        "what: areas, doors, switches, items, monsters or exits.".into(),
+                    );
+                };
                 let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
                 let (list, hidden) = self.director.brief(agent, obs, topic, all);
-                let more = if hidden > 0 { format!("\n(+{hidden} explored; all: true lists them)") } else { String::new() };
+                let more = if hidden > 0 {
+                    format!("\n(+{hidden} explored; all: true lists them)")
+                } else {
+                    String::new()
+                };
                 if list.is_empty() {
                     return (true, format!("None known yet.{more}"));
                 }
-                let lines: Vec<String> = list.iter().take(LIST_MAX).map(|e| format!("- {}", self.director.describe(e, obs))).collect();
+                let lines: Vec<String> = list
+                    .iter()
+                    .take(LIST_MAX)
+                    .map(|e| format!("- {}", self.director.describe(e, obs)))
+                    .collect();
                 (true, format!("{}{more}", lines.join("\n")))
             }
             "doom_inspect" => {
-                let Some(r) = arg("ref") else { return (false, "ref: an id or name.".into()) };
+                let Some(r) = arg("ref") else {
+                    return (false, "ref: an id or name.".into());
+                };
                 match self.director.find(agent, obs, r) {
                     Some(e) => (true, self.director.describe(&e, obs)),
                     None => (false, format!("Nothing known as \"{r}\".")),
                 }
             }
             "doom_go" => {
-                let Some(r) = arg("ref") else { return (false, "ref: an id or name.".into()) };
+                let Some(r) = arg("ref") else {
+                    return (false, "ref: an id or name.".into());
+                };
                 let risky = args.get("risky").and_then(Value::as_bool).unwrap_or(false);
                 if self.director.resolve(r).starts_with("exit-") && !sure {
                     if let Some(q) = self.director.exit_check(agent, obs) {
@@ -220,7 +298,8 @@ impl Session {
                 }
                 match self.director.check_go(agent, obs, r, risky) {
                     Ok(_) => {
-                        self.director.order_rushed(Order::Go(r.to_string(), risky), rush);
+                        self.director
+                            .order_rushed(Order::Go(r.to_string(), risky), rush);
                         (true, "OK.".into())
                     }
                     // (not to be retried as it is: the reason says what would do)
@@ -228,21 +307,26 @@ impl Session {
                 }
             }
             "doom_press" => {
-                let Some(r) = arg("ref") else { return (false, "ref: a switch's id or name.".into()) };
+                let Some(r) = arg("ref") else {
+                    return (false, "ref: a switch's id or name.".into());
+                };
                 let id = self.director.resolve(r);
                 if !id.starts_with("switch-") && !id.starts_with("door-") {
                     return (false, format!("\"{r}\" isn't a switch."));
                 }
                 match self.director.check_go(agent, obs, r, false) {
                     Ok(_) => {
-                        self.director.order_rushed(Order::Go(r.to_string(), false), rush);
+                        self.director
+                            .order_rushed(Order::Go(r.to_string(), false), rush);
                         (true, "OK.".into())
                     }
                     Err(why) => (false, why),
                 }
             }
             "doom_explore" => {
-                let Some(t) = arg("target") else { return (false, "target: an area or a direction (N, NE, ...).".into()) };
+                let Some(t) = arg("target") else {
+                    return (false, "target: an area or a direction (N, NE, ...).".into());
+                };
                 // (0-3; true, as it was, the middle one)
                 let secrets = match args.get("secrets") {
                     Some(Value::Bool(true)) => 2,
@@ -250,18 +334,24 @@ impl Session {
                     None => 0,
                 };
                 if let Some(b) = bearing(t) {
-                    self.director.order_rushed(Order::ExploreWay(b, secrets), rush);
+                    self.director
+                        .order_rushed(Order::ExploreWay(b, secrets), rush);
                     (true, "OK.".into())
                 } else if self.director.is_area(agent, t) {
-                    self.director.order_rushed(Order::ExploreArea(t.to_string(), secrets), rush);
+                    self.director
+                        .order_rushed(Order::ExploreArea(t.to_string(), secrets), rush);
                     (true, "OK.".into())
                 } else {
                     (false, format!("\"{t}\" isn't an area or a direction."))
                 }
             }
             "doom_name" => {
-                let (Some(r), Some(n)) = (arg("ref"), arg("name")) else { return (false, "Give ref and name.".into()) };
-                let Some(e) = self.director.find(agent, obs, r) else { return (false, format!("Nothing known as \"{r}\".")) };
+                let (Some(r), Some(n)) = (arg("ref"), arg("name")) else {
+                    return (false, "Give ref and name.".into());
+                };
+                let Some(e) = self.director.find(agent, obs, r) else {
+                    return (false, format!("Nothing known as \"{r}\"."));
+                };
                 match self.director.name(&e.id, n) {
                     Ok(()) => (true, format!("{} is \"{n}\" now.", e.id)),
                     Err(why) => (false, format!("Not named: {why}.")),

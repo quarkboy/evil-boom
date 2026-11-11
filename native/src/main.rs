@@ -90,15 +90,35 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
     println!("jumps found {}", nav.jumps.len());
     let checks = nav.keep_verified();
     println!("jumps kept {} {checks:?}", nav.jumps.len());
-    println!("polys {} portals {} fits {}", nav.mesh.polys.len(), nav.mesh.portals.len(), nav.portal_fits.iter().filter(|&&f| f).count());
+    println!(
+        "polys {} portals {} fits {}",
+        nav.mesh.polys.len(),
+        nav.mesh.portals.len(),
+        nav.portal_fits.iter().filter(|&&f| f).count()
+    );
     println!("trenches {:?}", nav.trenches);
     for t in &nav.triggers {
-        let mut eff: Vec<String> = t.effects.iter().map(|(s, hs)| format!("{s}:{:?}", hs.iter().map(|h| (h.floor, h.ceiling)).collect::<Vec<_>>())).collect();
+        let mut eff: Vec<String> = t
+            .effects
+            .iter()
+            .map(|(s, hs)| {
+                format!(
+                    "{s}:{:?}",
+                    hs.iter().map(|h| (h.floor, h.ceiling)).collect::<Vec<_>>()
+                )
+            })
+            .collect();
         eff.sort();
-        println!("trigger {} {} {:?} act={:?} eff={:?} rel={:?}", t.line, t.info.description, t.sectors, t.activators, eff, t.relevant);
+        println!(
+            "trigger {} {} {:?} act={:?} eff={:?} rel={:?}",
+            t.line, t.info.description, t.sectors, t.activators, eff, t.relevant
+        );
     }
     for tp in &nav.teleports {
-        println!("teleport {} {:?} -> {} ({:.0}, {:.0})", tp.line, tp.src_polys, tp.dest_poly, tp.dest.0, tp.dest.1);
+        println!(
+            "teleport {} {:?} -> {} ({:.0}, {:.0})",
+            tp.line, tp.src_polys, tp.dest_poly, tp.dest.0, tp.dest.1
+        );
     }
     let mut ug: Vec<_> = nav.use_gates.iter().collect();
     ug.sort();
@@ -110,7 +130,12 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
     sf.sort_by_key(|a| a.0);
     println!("shot_floors {sf:?}");
     let nav = Rc::new(nav);
-    let start = m.things.iter().find(|t| t.kind == 1).map(|t| (t.x, t.y)).ok_or("no player start")?;
+    let start = m
+        .things
+        .iter()
+        .find(|t| t.kind == 1)
+        .map(|t| (t.x, t.y))
+        .ok_or("no player start")?;
     let view = nav.full_view();
     let sp = nav.poly_at(start).ok_or("start off the map")?;
     let reach = view.reachable(sp, &nav.initial_states(), None);
@@ -141,7 +166,13 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
             s.floor, s.ceiling, s.floor_tex, s.ceiling_tex, s.light, s.special, s.tag
         );
         let area = places.area_of(si);
-        println!("  in {} ({}, {:.0} square units): sectors {:?}", area.id, evildoom::control::places::Places::sketch(area), area.size, area.sectors);
+        println!(
+            "  in {} ({}, {:.0} square units): sectors {:?}",
+            area.id,
+            evildoom::control::places::Places::sketch(area),
+            area.size,
+            area.sectors
+        );
         for l in &m.linedefs {
             let (front, back) = (m.front_sector(l), m.back_sector(l));
             if front != Some(si) && back != Some(si) {
@@ -149,10 +180,18 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
             }
             let other = if front == Some(si) { back } else { front };
             let side = |sd: u16| {
-                m.sidedefs.get(usize::from(sd)).map_or_else(String::new, |d| format!("[{} {} {} @{},{}]", d.upper, d.middle, d.lower, d.x_offset, d.y_offset))
+                m.sidedefs
+                    .get(usize::from(sd))
+                    .map_or_else(String::new, |d| {
+                        format!(
+                            "[{} {} {} @{},{}]",
+                            d.upper, d.middle, d.lower, d.x_offset, d.y_offset
+                        )
+                    })
             };
             let (a, b) = (m.line_seg(l.index).0, m.line_seg(l.index).1);
-            let what = classify_line(l.special).map_or_else(String::new, |i| format!(" {}", i.description));
+            let what = classify_line(l.special)
+                .map_or_else(String::new, |i| format!(" {}", i.description));
             println!(
                 "  line {} ({:.0},{:.0})-({:.0},{:.0}) flags {:#x} special {}{what} tag {} -> {} front {} back {}",
                 l.index,
@@ -169,22 +208,51 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
             );
         }
         if s.tag != 0 {
-            for l in m.linedefs.iter().filter(|l| l.tag == s.tag && l.special != 0) {
+            for l in m
+                .linedefs
+                .iter()
+                .filter(|l| l.tag == s.tag && l.special != 0)
+            {
                 let what = classify_line(l.special).map_or_else(String::new, |i| i.description);
-                println!("  moved by line {} ({what}) between sectors {:?}/{:?}", l.index, m.front_sector(l), m.back_sector(l));
+                println!(
+                    "  moved by line {} ({what}) between sectors {:?}/{:?}",
+                    l.index,
+                    m.front_sector(l),
+                    m.back_sector(l)
+                );
             }
         }
-        for t in m.things.iter().filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| nav.mesh.polys[p].as_ref().is_some_and(|q| q.sector == si))) {
-            println!("  thing {} at ({}, {}) flags {:#x}", t.kind, t.x, t.y, t.flags);
+        for t in m.things.iter().filter(|t| {
+            nav.poly_at((t.x, t.y))
+                .is_some_and(|p| nav.mesh.polys[p].as_ref().is_some_and(|q| q.sector == si))
+        }) {
+            println!(
+                "  thing {} at ({}, {}) flags {:#x}",
+                t.kind, t.x, t.y, t.flags
+            );
         }
         // (the navmesh's portals along its lines: where the mesh cuts an edge)
         for (pi, portal) in nav.mesh.portals.iter().enumerate() {
-            if portal.linedef.is_some_and(|li| m.front_sector(&m.linedefs[li]) == Some(si) || m.back_sector(&m.linedefs[li]) == Some(si)) {
-                println!("  portal {pi} on line {:?}: ({:.0},{:.0})-({:.0},{:.0})", portal.linedef, portal.p1.0, portal.p1.1, portal.p2.0, portal.p2.1);
+            if portal.linedef.is_some_and(|li| {
+                m.front_sector(&m.linedefs[li]) == Some(si)
+                    || m.back_sector(&m.linedefs[li]) == Some(si)
+            }) {
+                println!(
+                    "  portal {pi} on line {:?}: ({:.0},{:.0})-({:.0},{:.0})",
+                    portal.linedef, portal.p1.0, portal.p1.1, portal.p2.0, portal.p2.1
+                );
             }
         }
         // (the run-jumps found landing here, and what the movement check makes of them)
-        let into: Vec<&evildoom::navigator::Jump> = nav.jumps.iter().filter(|j| nav.mesh.polys[j.dest_poly].as_ref().is_some_and(|q| q.sector == si)).collect();
+        let into: Vec<&evildoom::navigator::Jump> = nav
+            .jumps
+            .iter()
+            .filter(|j| {
+                nav.mesh.polys[j.dest_poly]
+                    .as_ref()
+                    .is_some_and(|q| q.sector == si)
+            })
+            .collect();
         let lab: Vec<evildoom::jumps::Jump> = into
             .iter()
             .map(|j| evildoom::jumps::Jump {
@@ -199,7 +267,11 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
             })
             .collect();
         for (j, verdict) in into.iter().zip(nav.jump_lab.check_jumps(&lab)) {
-            let from: BTreeSet<usize> = j.src_polys.iter().filter_map(|&p| nav.mesh.polys[p].as_ref().map(|q| q.sector)).collect();
+            let from: BTreeSet<usize> = j
+                .src_polys
+                .iter()
+                .filter_map(|&p| nav.mesh.polys[p].as_ref().map(|q| q.sector))
+                .collect();
             println!(
                 "  jump in from sectors {from:?}: run-up ({:.0}, {:.0}), takeoff ({:.0}, {:.0}), lands ({:.0}, {:.0}): {verdict}",
                 j.runup.0, j.runup.1, j.takeoff.0, j.takeoff.1, j.dest.0, j.dest.1
@@ -220,12 +292,24 @@ fn follow(wad: &str, map: &str) -> Result<(), String> {
     nav.keep_verified();
     let nav = Rc::new(nav);
     let view = std::rc::Rc::new(nav.full_view());
-    let start = m.things.iter().find(|t| t.kind == 1).map(|t| (t.x, t.y)).ok_or("no player start")?;
+    let start = m
+        .things
+        .iter()
+        .find(|t| t.kind == 1)
+        .map(|t| (t.x, t.y))
+        .ok_or("no player start")?;
     let plan = evildoom::walkthrough::plan_level(&view, start, 60.0, 20000);
     if !plan.complete {
         return Err(plan.problem);
     }
-    let mut e = Engine::new(&iwad, map, &Options { seed: Some(0), ..Options::default() })?;
+    let mut e = Engine::new(
+        &iwad,
+        map,
+        &Options {
+            seed: Some(0),
+            ..Options::default()
+        },
+    )?;
     e.start();
     e.set_god(true);
     let mut f = RouteFollower::new(view, plan.steps, Default::default(), None, true, e.tic);
@@ -243,11 +327,17 @@ fn follow(wad: &str, map: &str) -> Result<(), String> {
 
 fn run_one(args: &[String]) -> Result<(), String> {
     let (o, _, rest) = run_options(args)?;
-    let [wad, map] = rest.as_slice() else { return Err("usage: evil-boom run-map <wad> <map> [options]".into()) };
+    let [wad, map] = rest.as_slice() else {
+        return Err("usage: evil-boom run-map <wad> <map> [options]".into());
+    };
     let r = evildoom::sweep::run_map_full(wad, map, &o)?;
     // (what she got out with, for the next level of an episode; the secret exit taken)
     if let Some(l) = &r.carry {
-        println!("CARRY {}{}", cli::carry_arg(l), if r.secret { " SECRET" } else { "" });
+        println!(
+            "CARRY {}{}",
+            cli::carry_arg(l),
+            if r.secret { " SECRET" } else { "" }
+        );
     }
     println!("DAMAGE {}", r.damage);
     println!("STATS {}", r.stats);
@@ -272,7 +362,9 @@ fn episode(args: &[String]) -> Result<(), String> {
             names.push(a.clone());
         }
     }
-    let [wad, first] = names.as_slice() else { return Err("usage: evil-boom episode <wad> <first map> [--seeds K] [run options]".into()) };
+    let [wad, first] = names.as_slice() else {
+        return Err("usage: evil-boom episode <wad> <first map> [--seeds K] [run options]".into());
+    };
     // (one life unless told: `--lives N`, see `episode_one`)
     if o.lives == i32::MAX {
         o.lives = 1;
@@ -303,20 +395,44 @@ fn episode(args: &[String]) -> Result<(), String> {
         let mut os = o.clone();
         os.seed = Some(*seed);
         println!("seed {seed}: {levels} levels, {end}");
-        println!("    to watch it all: evil-boom watch {wad} {first} {} --episode", option_args(&os).join(" "));
+        println!(
+            "    to watch it all: evil-boom watch {wad} {first} {} --episode",
+            option_args(&os).join(" ")
+        );
     }
     let mean = done.iter().map(|d| d.1 as f64).sum::<f64>() / done.len().max(1) as f64;
     let through = done.iter().filter(|d| d.2 == "the episode through").count();
     println!();
-    println!("{mean:.1} levels on {} on average; the episode through in {through}/{}", if lives == 1 { "one life".to_string() } else { format!("{lives} lives") }, done.len());
+    println!(
+        "{mean:.1} levels on {} on average; the episode through in {through}/{}",
+        if lives == 1 {
+            "one life".to_string()
+        } else {
+            format!("{lives} lives")
+        },
+        done.len()
+    );
     Ok(())
 }
 
 /// One episode on one life (see `episode`), in a process of its own (`episode-one`): a line for
 /// each level as it ends, then how many levels she got through, and how it ended.
-fn episode_chain(me: &std::path::Path, wad: &str, first: &str, o: &evildoom::sweep::RunOptions) -> (usize, String) {
+fn episode_chain(
+    me: &std::path::Path,
+    wad: &str,
+    first: &str,
+    o: &evildoom::sweep::RunOptions,
+) -> (usize, String) {
     let seed = o.seed.unwrap_or(0);
-    let Ok(mut child) = Command::new(me).arg("episode-one").arg(wad).arg(first).args(option_args(o)).stdout(Stdio::piped()).stderr(Stdio::null()).spawn() else {
+    let Ok(mut child) = Command::new(me)
+        .arg("episode-one")
+        .arg(wad)
+        .arg(first)
+        .args(option_args(o))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
         return (0, "couldn't run".into());
     };
     let mut end = (0, "no result".to_string());
@@ -343,14 +459,20 @@ fn episode_chain(me: &std::path::Path, wad: &str, first: &str, o: &evildoom::swe
 /// WATCH (how to watch the level it ended on), END (levels got through, how it ended).
 fn episode_one(args: &[String]) -> Result<(), String> {
     let (mut o, _, rest) = run_options(args)?;
-    let [wad, first] = rest.as_slice() else { return Err("usage: evil-boom episode-one <wad> <first map> [run options]".into()) };
+    let [wad, first] = rest.as_slice() else {
+        return Err("usage: evil-boom episode-one <wad> <first map> [run options]".into());
+    };
     // (`--lives N`: N lives for the whole episode. Dead with one left, the level again from its
     // start with what she came into it with, as she got out of the one before (the user's: "the
     // weapons/armor ammo etc she had when exiting is saved after death and retry of that
     // level"), and what she's learned of the level kept (the user's: "I would like knowledge
     // kept"): a level's run with the lives she has left, as `run-map --lives` plays one. Its
     // time's cap is for all its lives together: thrice a level's, with lives to spend)
-    let mut left = if o.lives == i32::MAX { 1 } else { o.lives.max(1) };
+    let mut left = if o.lives == i32::MAX {
+        1
+    } else {
+        o.lives.max(1)
+    };
     if left > 1 {
         o.max_seconds *= 3.0;
     }
@@ -361,19 +483,33 @@ fn episode_one(args: &[String]) -> Result<(), String> {
         o.lives = left;
         let r = evildoom::sweep::run_map_in(wad, &m, &o, engine.take())?;
         left -= r.deaths;
-        let lost = if r.deaths > 0 { format!(" | {} lives lost, {left} left", r.deaths) } else { String::new() };
-        let line = format!("{m}: {} {}{lost}", r.outcome, r.detail.chars().take(70).collect::<String>());
+        let lost = if r.deaths > 0 {
+            format!(" | {} lives lost, {left} left", r.deaths)
+        } else {
+            String::new()
+        };
+        let line = format!(
+            "{m}: {} {}{lost}",
+            r.outcome,
+            r.detail.chars().take(70).collect::<String>()
+        );
         let Some(l) = r.carry else {
             println!("LEVEL {line}");
             println!("DAMAGE {}", r.damage);
             let mut os = o.clone();
             os.carry = None;
-            println!("WATCH evil-boom watch {wad} {first} {} --episode", option_args(&os).join(" "));
+            println!(
+                "WATCH evil-boom watch {wad} {first} {} --episode",
+                option_args(&os).join(" ")
+            );
             println!("END {levels} {m}: {}", r.outcome);
             return Ok(());
         };
         levels += 1;
-        println!("LEVEL {line} | out with health {} armor {}, ammo {}/{}/{}/{}", l.health, l.armor, l.clip, l.shell, l.cell, l.rocket);
+        println!(
+            "LEVEL {line} | out with health {} armor {}, ammo {}/{}/{}/{}",
+            l.health, l.armor, l.clip, l.shell, l.cell, l.rocket
+        );
         o.carry = Some(l);
         engine = r.engine;
         map = evildoom::sweep::next_map(&m, r.secret);
@@ -394,7 +530,9 @@ fn drive(args: &[String]) -> Result<(), String> {
             names.push(a.clone());
         }
     }
-    let ([wad, map], Some(script)) = (names.as_slice(), script) else { return Err("usage: evil-boom drive <wad> <map> --script FILE [run options]".into()) };
+    let ([wad, map], Some(script)) = (names.as_slice(), script) else {
+        return Err("usage: evil-boom drive <wad> <map> --script FILE [run options]".into());
+    };
     evildoom::drive::drive(wad, map, &o, std::path::Path::new(&script))
 }
 
@@ -414,7 +552,11 @@ fn sweep(args: &[String]) -> Result<(), String> {
     }
     let mut todo: VecDeque<(String, String)> = VecDeque::new();
     for (w, maps) in groups {
-        let maps = if maps.is_empty() { Wad::open(&resolve_wad(&w))?.map_names() } else { maps };
+        let maps = if maps.is_empty() {
+            Wad::open(&resolve_wad(&w))?.map_names()
+        } else {
+            maps
+        };
         todo.extend(maps.into_iter().map(|m| (w.clone(), m)));
     }
     let total = todo.len();
@@ -423,7 +565,9 @@ fn sweep(args: &[String]) -> Result<(), String> {
     let mut results: Vec<String> = Vec::new();
     while !todo.is_empty() || !running.is_empty() {
         while running.len() < jobs.max(1) {
-            let Some((w, m)) = todo.pop_front() else { break };
+            let Some((w, m)) = todo.pop_front() else {
+                break;
+            };
             let child = Command::new(&me)
                 .arg("run-map")
                 .arg(&w)
@@ -451,23 +595,42 @@ fn sweep(args: &[String]) -> Result<(), String> {
             .stdout
             .take()
             .map(BufReader::new)
-            .and_then(|r| r.lines().map_while(Result::ok).find(|l| l.starts_with("RESULT ")))
+            .and_then(|r| {
+                r.lines()
+                    .map_while(Result::ok)
+                    .find(|l| l.starts_with("RESULT "))
+            })
             .unwrap_or_else(|| "RESULT ERROR (no result)".into());
         let line = line.trim_start_matches("RESULT ").to_string();
         let outcome = line.split(' ').next().unwrap_or("ERROR").to_string();
         results.push(outcome);
         println!("[{:3}/{total}] {w} {m}: {line}", results.len());
     }
-    let done = results.iter().filter(|o| matches!(o.as_str(), "EXITED" | "EXPERT" | "SECRETS" | "COMPLETE")).count();
+    let done = results
+        .iter()
+        .filter(|o| matches!(o.as_str(), "EXITED" | "EXPERT" | "SECRETS" | "COMPLETE"))
+        .count();
     println!("\n{done}/{} exited", results.len());
     if o.expert {
-        println!("{}/{} with every item", results.iter().filter(|o| *o == "EXPERT").count(), results.len());
+        println!(
+            "{}/{} with every item",
+            results.iter().filter(|o| *o == "EXPERT").count(),
+            results.len()
+        );
     }
     if o.secrets {
-        println!("{}/{} with every secret", results.iter().filter(|o| *o == "SECRETS").count(), results.len());
+        println!(
+            "{}/{} with every secret",
+            results.iter().filter(|o| *o == "SECRETS").count(),
+            results.len()
+        );
     }
     if o.complete {
-        println!("{}/{} with every kill, item and secret", results.iter().filter(|o| *o == "COMPLETE").count(), results.len());
+        println!(
+            "{}/{} with every kill, item and secret",
+            results.iter().filter(|o| *o == "COMPLETE").count(),
+            results.len()
+        );
     }
     Ok(())
 }
@@ -475,7 +638,9 @@ fn sweep(args: &[String]) -> Result<(), String> {
 #[cfg(feature = "viewer")]
 fn watch(args: &[String]) -> Result<(), String> {
     let (mut w, names, o) = watch_options(args)?;
-    let [wad, map] = names.as_slice() else { return Err("usage: evil-boom watch <wad> <map> [options]".into()) };
+    let [wad, map] = names.as_slice() else {
+        return Err("usage: evil-boom watch <wad> <map> [options]".into());
+    };
     if let Some(config) = &w.gpt {
         // (the stand-in in this program, on a port of its own: one program to run, the user's)
         w.neuro = Some(evildoom::neuro::gpt::start(config)?);
@@ -516,30 +681,76 @@ fn record(args: &[String]) -> Result<(), String> {
             "--size" => {
                 let v = it.next().ok_or("--size WxH")?;
                 let (x, y) = v.split_once(['x', 'X']).ok_or("--size WxH")?;
-                size = Some((x.parse().map_err(|_| "--size WxH")?, y.parse().map_err(|_| "--size WxH")?));
+                size = Some((
+                    x.parse().map_err(|_| "--size WxH")?,
+                    y.parse().map_err(|_| "--size WxH")?,
+                ));
             }
-            "--speed" => every = it.next().and_then(|v| v.parse().ok()).ok_or("--speed N (whole times as fast)")?,
-            "--ffmpeg" => ffmpeg = Some(std::path::PathBuf::from(it.next().ok_or("--ffmpeg PATH")?)),
-            "--crf" => crf = it.next().and_then(|v| v.parse().ok()).ok_or("--crf N (0-51; 20 unless told)")?,
-            "--preset" => preset = it.next().ok_or("--preset NAME (ultrafast .. veryslow)")?.clone(),
+            "--speed" => {
+                every = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--speed N (whole times as fast)")?
+            }
+            "--ffmpeg" => {
+                ffmpeg = Some(std::path::PathBuf::from(it.next().ok_or("--ffmpeg PATH")?))
+            }
+            "--crf" => {
+                crf = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--crf N (0-51; 20 unless told)")?
+            }
+            "--preset" => {
+                preset = it
+                    .next()
+                    .ok_or("--preset NAME (ultrafast .. veryslow)")?
+                    .clone()
+            }
             _ => rest.push(a.clone()),
         }
     }
     let (mut w, names, _) = watch_options(&rest)?;
-    let [wad, map, out] = names.as_slice() else { return Err("usage: evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode] [options]".into()) };
+    let [wad, map, out] = names.as_slice() else {
+        return Err("usage: evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode] [options]".into());
+    };
     // (the game's sound, at x1: each tic's beside each frame)
     w.capture_sound = every == 1;
     if let Some(config) = &w.gpt {
         // (the stand-in in this program, as watch has it; directed, it plays in real time)
         w.neuro = Some(evildoom::neuro::gpt::start(config)?);
     }
-    let ffmpeg = ffmpeg.or_else(evildoom::viewer::find_ffmpeg).ok_or("no ffmpeg found (on the path, or winget's on Windows): --ffmpeg PATH")?;
-    evildoom::viewer::record(wad, map, &w, &RecordOptions { out: out.into(), view, size, every, crf, preset, ffmpeg })
+    let ffmpeg = ffmpeg
+        .or_else(evildoom::viewer::find_ffmpeg)
+        .ok_or("no ffmpeg found (on the path, or winget's on Windows): --ffmpeg PATH")?;
+    evildoom::viewer::record(
+        wad,
+        map,
+        &w,
+        &RecordOptions {
+            out: out.into(),
+            view,
+            size,
+            every,
+            crf,
+            preset,
+            ffmpeg,
+        },
+    )
 }
 
 /// The watcher's options among `args`: (them, the names left, the run options).
 #[cfg(feature = "viewer")]
-fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec<String>, evildoom::sweep::RunOptions), String> {
+fn watch_options(
+    args: &[String],
+) -> Result<
+    (
+        evildoom::viewer::WatchOptions,
+        Vec<String>,
+        evildoom::sweep::RunOptions,
+    ),
+    String,
+> {
     let (o, _, rest) = run_options(args)?;
     let mut w = evildoom::viewer::WatchOptions {
         speed: 1.0,
@@ -576,26 +787,54 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
     while let Some(a) = it.next() {
         match a.as_str() {
             "--speed" => {
-                w.speed = it.next().and_then(|v| v.parse().ok()).ok_or("--speed: a number")?;
+                w.speed = it
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--speed: a number")?;
                 w.paced = true;
             }
             "--all" => w.show_all = true,
             "--episode" => w.episode = true,
             "--headless" => w.headless = true,
             "--mute" => w.sound = false,
-            "--neuro" => w.neuro = Some(it.next().cloned().unwrap_or_else(|| "ws://127.0.0.1:8000".into())),
+            "--neuro" => {
+                w.neuro = Some(
+                    it.next()
+                        .cloned()
+                        .unwrap_or_else(|| "ws://127.0.0.1:8000".into()),
+                )
+            }
             "--gpt" => {
                 // (its config, if one's named: the next argument, a .json)
-                let named = it.as_slice().first().filter(|a| a.ends_with(".json")).cloned();
+                let named = it
+                    .as_slice()
+                    .first()
+                    .filter(|a| a.ends_with(".json"))
+                    .cloned();
                 if named.is_some() {
                     it.next();
                 }
-                w.gpt = Some(named.map_or_else(|| evildoom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from));
+                w.gpt = Some(named.map_or_else(
+                    || {
+                        evildoom::config::root()
+                            .join("config")
+                            .join("neuro-gpt.json")
+                    },
+                    std::path::PathBuf::from,
+                ));
             }
-            "--directed" => w.directed = Some(std::path::PathBuf::from(it.next().ok_or("--directed FILE (orders, a line each, read as they're added)")?)),
+            "--directed" => {
+                w.directed = Some(std::path::PathBuf::from(
+                    it.next()
+                        .ok_or("--directed FILE (orders, a line each, read as they're added)")?,
+                ))
+            }
             "--stream" => {
                 // (the column's side, if one's named: right unless told)
-                let named = it.as_slice().first().and_then(|a| evildoom::viewer::StreamSide::parse(a));
+                let named = it
+                    .as_slice()
+                    .first()
+                    .and_then(|a| evildoom::viewer::StreamSide::parse(a));
                 if named.is_some() {
                     it.next();
                 }
@@ -606,7 +845,11 @@ fn watch_options(args: &[String]) -> Result<(evildoom::viewer::WatchOptions, Vec
                 w.present = true;
                 w.title_wait = true;
             }
-            "--control" => w.control = Some(it.next().cloned().ok_or("--control HOST:PORT (the stream console's, which starts the game with it)")?),
+            "--control" => {
+                w.control = Some(it.next().cloned().ok_or(
+                    "--control HOST:PORT (the stream console's, which starts the game with it)",
+                )?)
+            }
             _ => names.push(a.clone()),
         }
     }
@@ -630,24 +873,37 @@ fn arena_one(args: &[String]) -> Result<(), String> {
     while i < args.len() {
         if args[i] == "--seed" {
             let v = args.get(i + 1).ok_or("--seed N")?;
-            seed = if v == "random" { None } else { Some(v.parse().map_err(|_| "--seed N")?) };
+            seed = if v == "random" {
+                None
+            } else {
+                Some(v.parse().map_err(|_| "--seed N")?)
+            };
             i += 2;
             continue;
         }
         rest.push(&args[i]);
         i += 1;
     }
-    let [file, name] = rest.as_slice() else { return Err("usage: evil-boom arena-one FILE NAME [--seed N]".into()) };
+    let [file, name] = rest.as_slice() else {
+        return Err("usage: evil-boom arena-one FILE NAME [--seed N]".into());
+    };
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let scenarios = evildoom::arena::parse(&text)?;
-    let s = scenarios.iter().find(|s| &s.name == *name).ok_or_else(|| format!("{name}: not in {file}"))?;
+    let s = scenarios
+        .iter()
+        .find(|s| &s.name == *name)
+        .ok_or_else(|| format!("{name}: not in {file}"))?;
     let mut log = Vec::new();
     let o = evildoom::arena::run(s, seed, &mut log)?;
     let dir = evildoom::config::out_dir().join("arena");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let tag = seed.map_or("random".to_string(), |s| s.to_string());
-    evildoom::config::write_log(&dir.join(format!("{name}_{tag}.txt")), "", &log.join("\n")).map_err(|e| e.to_string())?;
-    println!("RESULT {} {:.0}s health {} armor {} kills {}/{}", o.result, o.seconds, o.health, o.armor, o.kills, o.monsters);
+    evildoom::config::write_log(&dir.join(format!("{name}_{tag}.txt")), "", &log.join("\n"))
+        .map_err(|e| e.to_string())?;
+    println!(
+        "RESULT {} {:.0}s health {} armor {} kills {}/{}",
+        o.result, o.seconds, o.health, o.armor, o.kills, o.monsters
+    );
     Ok(())
 }
 
@@ -665,11 +921,18 @@ fn arena_watch(args: &[String]) -> Result<(), String> {
             }
             "--seed" => {
                 let v = args.get(i + 1).ok_or("--seed N")?;
-                seed = if v == "random" { None } else { Some(v.parse().map_err(|_| "--seed N")?) };
+                seed = if v == "random" {
+                    None
+                } else {
+                    Some(v.parse().map_err(|_| "--seed N")?)
+                };
                 i += 2;
             }
             "--speed" => {
-                speed = args.get(i + 1).and_then(|v| v.parse().ok()).ok_or("--speed X")?;
+                speed = args
+                    .get(i + 1)
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--speed X")?;
                 i += 2;
             }
             _ => {
@@ -678,10 +941,17 @@ fn arena_watch(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    let [file, name] = rest.as_slice() else { return Err("usage: evil-boom arena-watch FILE NAME [--seed N] [--speed X] [--mute]".into()) };
+    let [file, name] = rest.as_slice() else {
+        return Err(
+            "usage: evil-boom arena-watch FILE NAME [--seed N] [--speed X] [--mute]".into(),
+        );
+    };
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let scenarios = evildoom::arena::parse(&text)?;
-    let s = scenarios.iter().find(|s| &s.name == *name).ok_or_else(|| format!("{name}: not in {file}"))?;
+    let s = scenarios
+        .iter()
+        .find(|s| &s.name == *name)
+        .ok_or_else(|| format!("{name}: not in {file}"))?;
     let p = evildoom::arena::prepare(s, seed, true, sound)?;
     evildoom::viewer::watch_prepared(p, &s.map, speed, sound, &format!("evil-doom arena: {name}"))
 }
@@ -694,11 +964,17 @@ fn arena(args: &[String]) -> Result<(), String> {
     while i < args.len() {
         match args[i].as_str() {
             "--jobs" => {
-                jobs = args.get(i + 1).and_then(|v| v.parse().ok()).ok_or("--jobs N")?;
+                jobs = args
+                    .get(i + 1)
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--jobs N")?;
                 i += 2;
             }
             "--seeds" => {
-                seeds = args.get(i + 1).and_then(|v| v.parse().ok()).ok_or("--seeds K")?;
+                seeds = args
+                    .get(i + 1)
+                    .and_then(|v| v.parse().ok())
+                    .ok_or("--seeds K")?;
                 i += 2;
             }
             _ => {
@@ -707,20 +983,33 @@ fn arena(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    let file = rest.first().ok_or("usage: evil-boom arena FILE [names...] [--jobs N] [--seeds K]")?.clone();
+    let file = rest
+        .first()
+        .ok_or("usage: evil-boom arena FILE [names...] [--jobs N] [--seeds K]")?
+        .clone();
     let text = std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?;
-    let names: Vec<String> = evildoom::arena::parse(&text)?.into_iter().map(|s| s.name).filter(|n| rest.len() < 2 || rest[1..].contains(n)).collect();
-    let mut todo: VecDeque<(String, u32)> = names.iter().flat_map(|n| (0..seeds).map(move |k| (n.clone(), k))).collect();
+    let names: Vec<String> = evildoom::arena::parse(&text)?
+        .into_iter()
+        .map(|s| s.name)
+        .filter(|n| rest.len() < 2 || rest[1..].contains(n))
+        .collect();
+    let mut todo: VecDeque<(String, u32)> = names
+        .iter()
+        .flat_map(|n| (0..seeds).map(move |k| (n.clone(), k)))
+        .collect();
     let total = todo.len();
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut running: Vec<(String, u32, Child)> = Vec::new();
     let mut tally: std::collections::BTreeMap<String, [u32; 4]> = std::collections::BTreeMap::new();
     // (health left, a lost fight's none; seconds taken, won)
-    let mut left: std::collections::BTreeMap<String, (f64, f64)> = std::collections::BTreeMap::new();
+    let mut left: std::collections::BTreeMap<String, (f64, f64)> =
+        std::collections::BTreeMap::new();
     let mut n = 0;
     while !todo.is_empty() || !running.is_empty() {
         while running.len() < jobs.max(1) {
-            let Some((name, k)) = todo.pop_front() else { break };
+            let Some((name, k)) = todo.pop_front() else {
+                break;
+            };
             let child = Command::new(&me)
                 .args(["arena-one", &file, &name, "--seed", &k.to_string()])
                 .stdout(Stdio::piped())
@@ -729,27 +1018,54 @@ fn arena(args: &[String]) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
             running.push((name, k, child));
         }
-        let Some(i) = running.iter_mut().position(|(_, _, c)| c.try_wait().ok().flatten().is_some()) else {
+        let Some(i) = running
+            .iter_mut()
+            .position(|(_, _, c)| c.try_wait().ok().flatten().is_some())
+        else {
             std::thread::sleep(std::time::Duration::from_millis(50));
             continue;
         };
         let (name, k, mut child) = running.swap_remove(i);
         let mut out = String::new();
         if let Some(s) = child.stdout.take() {
-            out = BufReader::new(s).lines().map_while(Result::ok).find(|l| l.starts_with("RESULT ")).unwrap_or_default();
+            out = BufReader::new(s)
+                .lines()
+                .map_while(Result::ok)
+                .find(|l| l.starts_with("RESULT "))
+                .unwrap_or_default();
         }
         if out.is_empty() {
-            let err = child.stderr.take().map(|s| BufReader::new(s).lines().map_while(Result::ok).collect::<Vec<_>>().join(" ")).unwrap_or_default();
+            let err = child
+                .stderr
+                .take()
+                .map(|s| {
+                    BufReader::new(s)
+                        .lines()
+                        .map_while(Result::ok)
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .unwrap_or_default();
             out = format!("RESULT ERROR {err}");
         }
         let line = out.trim_start_matches("RESULT ").to_string();
         let t = tally.entry(name.clone()).or_default();
         let words: Vec<&str> = line.split(' ').collect();
-        let after = |k: &str| words.iter().position(|w| *w == k).and_then(|i| words.get(i + 1)).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+        let after = |k: &str| {
+            words
+                .iter()
+                .position(|w| *w == k)
+                .and_then(|i| words.get(i + 1))
+                .and_then(|v| v.parse::<f64>().ok())
+                .unwrap_or(0.0)
+        };
         let l = left.entry(name.clone()).or_default();
         if words.first() == Some(&"WON") {
             l.0 += after("health");
-            l.1 += words.get(1).and_then(|s| s.trim_end_matches('s').parse::<f64>().ok()).unwrap_or(0.0);
+            l.1 += words
+                .get(1)
+                .and_then(|s| s.trim_end_matches('s').parse::<f64>().ok())
+                .unwrap_or(0.0);
         }
         match words.first().copied() {
             Some("WON") => t[0] += 1,
@@ -771,10 +1087,17 @@ fn arena(args: &[String]) -> Result<(), String> {
             "{name:24} won {w:2}  lost {l:2}  drawn {d:2}  health left {:5.1}  {:4.0}s a win{}",
             h / runs,
             s / f64::from(*w).max(1.0),
-            if *e > 0 { format!("  errors {e}") } else { String::new() }
+            if *e > 0 {
+                format!("  errors {e}")
+            } else {
+                String::new()
+            }
         );
     }
-    println!("\n{won}/{total} won, health left {:.1} a fight", health / (total as f64).max(1.0));
+    println!(
+        "\n{won}/{total} won, health left {:.1} a fight",
+        health / (total as f64).max(1.0)
+    );
     Ok(())
 }
 

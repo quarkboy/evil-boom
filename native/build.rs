@@ -4,10 +4,21 @@
 use std::process::Command;
 
 fn main() {
-    let git = |args: &[&str]| Command::new("git").args(args).output().ok().filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+    let git = |args: &[&str]| {
+        Command::new("git")
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    };
     let hash = git(&["rev-parse", "--short", "HEAD"]).unwrap_or_else(|| "nogit".into());
-    let dirty = git(&["status", "--porcelain", "--untracked-files=no"]).is_some_and(|s| !s.is_empty());
-    println!("cargo:rustc-env=EVIL_COMMIT={hash}{}", if dirty { "-dirty" } else { "" });
+    let dirty =
+        git(&["status", "--porcelain", "--untracked-files=no"]).is_some_and(|s| !s.is_empty());
+    println!(
+        "cargo:rustc-env=EVIL_COMMIT={hash}{}",
+        if dirty { "-dirty" } else { "" }
+    );
     // (again on a commit, or a change to the sources)
     for p in ["../.git/HEAD", "../.git/index", "src"] {
         println!("cargo:rerun-if-changed={p}");

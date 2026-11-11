@@ -78,7 +78,10 @@ fn lit_chain_by(obs: &Observation, p: Point) -> Option<Point> {
         }
         i += 1;
     }
-    chain.into_iter().filter(|&b| blast_gap(p, b) < BARREL_SAFE).min_by(|a, b| blast_gap(*a, p).total_cmp(&blast_gap(*b, p)))
+    chain
+        .into_iter()
+        .filter(|&b| blast_gap(p, b) < BARREL_SAFE)
+        .min_by(|a, b| blast_gap(*a, p).total_cmp(&blast_gap(*b, p)))
 }
 
 impl RouteFollower {
@@ -106,18 +109,26 @@ impl RouteFollower {
             return None;
         }
         if !self.chain_wait {
-            self.log.add(obs.tic, "barrels going off ahead: keeping out of their blasts till they're done");
+            self.log.add(
+                obs.tic,
+                "barrels going off ahead: keeping out of their blasts till they're done",
+            );
             self.chain_wait = true;
         }
         Some(match by {
             Some(b) => {
                 // (by a way out of all of them, kept to till she's out; none found, looked for
                 // again a blast on)
-                if self.chain_flee.is_empty() && obs.tic - self.chain_flee_tic >= BARREL_DELAY as i64 {
+                if self.chain_flee.is_empty()
+                    && obs.tic - self.chain_flee_tic >= BARREL_DELAY as i64
+                {
                     self.chain_flee = self.way_off_chain(obs);
                     self.chain_flee_tic = obs.tic;
                     if let Some(&to) = self.chain_flee.last() {
-                        self.log.add(obs.tic, format!("off to ({:.0}, {:.0}), out of their blasts", to.0, to.1));
+                        self.log.add(
+                            obs.tic,
+                            format!("off to ({:.0}, {:.0}), out of their blasts", to.0, to.1),
+                        );
                     }
                 }
                 while self.chain_flee.len() > 1 && dist(pos, self.chain_flee[0]) < 16.0 {
@@ -167,13 +178,20 @@ impl RouteFollower {
         while i < barrels.len() {
             let c = barrels[i];
             for &x in &all {
-                if blast_gap(c, x) < BARREL_CHAIN && !barrels.iter().any(|&y| dist(x, y) < 1.0) && !self.use_walled(c, x) {
+                if blast_gap(c, x) < BARREL_CHAIN
+                    && !barrels.iter().any(|&y| dist(x, y) < 1.0)
+                    && !self.use_walled(c, x)
+                {
                     barrels.push(x);
                 }
             }
             i += 1;
         }
-        let clear = |p: Point| barrels.iter().all(|&b| self.use_walled(b, p) || blast_gap(p, b) >= BARREL_SAFE);
+        let clear = |p: Point| {
+            barrels
+                .iter()
+                .all(|&b| self.use_walled(b, p) || blast_gap(p, b) >= BARREL_SAFE)
+        };
         // (how far along a way till it's out of every blast, and stays out the next stretch)
         let out_at = |way: &[Point]| {
             let length: f64 = way.windows(2).map(|w| dist(w[0], w[1])).sum();
@@ -186,13 +204,24 @@ impl RouteFollower {
             }
             None
         };
-        let route: Vec<Point> = std::iter::once(pos).chain(self.planned_path(None).into_iter().map_while(|p| p)).collect();
-        let by_route = if route.len() > 1 { out_at(&route) } else { None };
+        let route: Vec<Point> = std::iter::once(pos)
+            .chain(self.planned_path(None).into_iter().map_while(|p| p))
+            .collect();
+        let by_route = if route.len() > 1 {
+            out_at(&route)
+        } else {
+            None
+        };
         let nav = &self.view.nav;
         let mesh = &nav.mesh;
         let mut places: Vec<Point> = (0..mesh.polys.len())
             .filter_map(|pi| mesh.polys[pi].as_ref().map(|poly| (pi, poly.center)))
-            .filter(|&(pi, q)| nav.damage.get(nav.sector_of_poly(pi)).is_none_or(|&d| d == 0) && clear(q))
+            .filter(|&(pi, q)| {
+                nav.damage
+                    .get(nav.sector_of_poly(pi))
+                    .is_none_or(|&d| d == 0)
+                    && clear(q)
+            })
             .map(|(_, q)| q)
             .collect();
         places.sort_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)));
@@ -202,11 +231,15 @@ impl RouteFollower {
             if best.as_ref().is_some_and(|b| dist(q, pos) >= b.0) {
                 break; // (no shorter way to anywhere further off)
             }
-            let Some(path) = self.view.find_path(pos, q, &states, None) else { continue };
+            let Some(path) = self.view.find_path(pos, q, &states, None) else {
+                continue;
+            };
             if !path.jumps.is_empty() {
                 continue;
             }
-            let way: Vec<Point> = std::iter::once(pos).chain(path.waypoints.iter().flatten().copied()).collect();
+            let way: Vec<Point> = std::iter::once(pos)
+                .chain(path.waypoints.iter().flatten().copied())
+                .collect();
             let Some(d) = out_at(&way) else { continue };
             if best.as_ref().is_none_or(|b| d < b.0) {
                 best = Some((d, way));
@@ -270,10 +303,16 @@ impl RouteFollower {
             }
             self.barrel_settle = None;
         }
-        let Some((was, since)) = self.barrel else { return self.walk(obs) };
+        let Some((was, since)) = self.barrel else {
+            return self.walk(obs);
+        };
         let pos = obs.pos();
         // (mortal: time to walk off to somewhere outside the blasts first)
-        let give_up = if self.mortal { BARREL_GIVE_UP_FAR } else { BARREL_GIVE_UP };
+        let give_up = if self.mortal {
+            BARREL_GIVE_UP_FAR
+        } else {
+            BARREL_GIVE_UP
+        };
         // (the same barrel, pushed by the shots at it: E1M1's, a pistol tap moving it 8 units,
         // taken for gone, shot at again as another, 16 times)
         let now = barrel_now(obs, was);
@@ -285,7 +324,14 @@ impl RouteFollower {
             self.barrel_way.clear();
             self.barrel_best = None;
             self.reset_progress(obs.tic);
-            self.log.add(obs.tic, if obs.tic - since <= give_up { "barrel gone" } else { "couldn't shoot the barrel" });
+            self.log.add(
+                obs.tic,
+                if obs.tic - since <= give_up {
+                    "barrel gone"
+                } else {
+                    "couldn't shoot the barrel"
+                },
+            );
             return self.walk(obs);
         }
         self.progress_tic = obs.tic;
@@ -335,7 +381,9 @@ impl RouteFollower {
                 let mut cands: Vec<Point> = behind.clone();
                 let mesh = &self.view.nav.mesh;
                 for pi in 0..mesh.polys.len() {
-                    let Some(poly) = mesh.polys[pi].as_ref() else { continue };
+                    let Some(poly) = mesh.polys[pi].as_ref() else {
+                        continue;
+                    };
                     if dist(poly.center, at) < BARREL_LOOK {
                         cands.push(poly.center);
                     }
@@ -344,27 +392,58 @@ impl RouteFollower {
                 // (the barrel in the way, or any it sets off: shot from where one of those can be
                 // seen, the chain takes the rest; MAP02's corridor of them, the one in the way round
                 // a corner from anywhere clear of the others)
-                let group: Vec<Point> = self.barrel_chain(&barrels, at, at).into_iter().map(|(b, _)| b).collect();
+                let group: Vec<Point> = self
+                    .barrel_chain(&barrels, at, at)
+                    .into_iter()
+                    .map(|(b, _)| b)
+                    .collect();
                 // (not on a floor that hurts: she stays where she shoots from till the chain's done;
                 // E1M3, a post on nukage, the barrel not to be had from there, dead standing on it)
                 let nav = &self.view.nav;
-                cands.retain(|&q| nav.poly_at(q).is_none_or(|p| nav.damage.get(nav.sector_of_poly(p)).is_none_or(|&d| d == 0)));
+                cands.retain(|&q| {
+                    nav.poly_at(q).is_none_or(|p| {
+                        nav.damage
+                            .get(nav.sector_of_poly(p))
+                            .is_none_or(|&d| d == 0)
+                    })
+                });
                 // (and from where a shot would get to it, heights and all: a ledge, a step, a low
                 // ceiling between take the shot as surely as a wall; the user's, posts chosen the
                 // barrel couldn't be hit from, the shots into the floor or a lip)
-                let heights: Vec<(f64, f64)> = obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
-                let floor_at = |p: Point| nav.poly_at(p).map(|i| obs.heights[nav.sector_of_poly(i)].floor);
+                let heights: Vec<(f64, f64)> =
+                    obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
+                let floor_at = |p: Point| {
+                    nav.poly_at(p)
+                        .map(|i| obs.heights[nav.sector_of_poly(i)].floor)
+                };
                 let shot = |q: Point, b: Point| match (floor_at(q), floor_at(b)) {
                     (Some(fq), Some(fb)) => nav.sight().clear(
-                        crate::los::Body { x: q.0, y: q.1, z: fq, height: crate::navigator::PLAYER_HEIGHT },
-                        crate::los::Body { x: b.0, y: b.1, z: fb, height: BARREL_HEIGHT },
+                        crate::los::Body {
+                            x: q.0,
+                            y: q.1,
+                            z: fq,
+                            height: crate::navigator::PLAYER_HEIGHT,
+                        },
+                        crate::los::Body {
+                            x: b.0,
+                            y: b.1,
+                            z: fb,
+                            height: BARREL_HEIGHT,
+                        },
                         &heights,
                     ),
                     _ => false,
                 };
                 let mut seen: Vec<(Point, Point)> = cands
                     .into_iter()
-                    .filter_map(|q| group.iter().copied().filter(|&b| !self.use_walled(q, b) && shot(q, b)).min_by(|a, b| dist(*a, q).total_cmp(&dist(*b, q))).map(|b| (q, b)))
+                    .filter_map(|q| {
+                        group
+                            .iter()
+                            .copied()
+                            .filter(|&b| !self.use_walled(q, b) && shot(q, b))
+                            .min_by(|a, b| dist(*a, q).total_cmp(&dist(*b, q)))
+                            .map(|b| (q, b))
+                    })
                     .collect();
                 seen.sort_by(|a, b| dist(a.0, pos).total_cmp(&dist(b.0, pos)));
                 let mut best: Option<Post> = None;
@@ -373,35 +452,79 @@ impl RouteFollower {
                     let way: Vec<Point> = if dist(q, pos) < 8.0 {
                         vec![pos]
                     } else {
-                        let Some(path) = self.view.find_path(pos, q, &states, None) else { continue };
+                        let Some(path) = self.view.find_path(pos, q, &states, None) else {
+                            continue;
+                        };
                         path.waypoints.iter().flatten().copied().collect()
                     };
                     // (not a way past a barrel: E4M5's, a spot found beyond it, walked into it; nor
                     // one under a crusher: E3M4's, gone under the one she'd just set off)
-                    if way.windows(2).any(|w| barrels.iter().any(|&b| segment_distance(w[0], w[1], b, b) < PLAYER_RADIUS + BARREL_RADIUS)) {
+                    if way.windows(2).any(|w| {
+                        barrels.iter().any(|&b| {
+                            segment_distance(w[0], w[1], b, b) < PLAYER_RADIUS + BARREL_RADIUS
+                        })
+                    }) {
                         continue;
                     }
-                    if way.iter().any(|&w| mesh.poly_at(w).is_some_and(|p| crushers.contains(&mesh.poly(p).sector))) {
+                    if way.iter().any(|&w| {
+                        mesh.poly_at(w)
+                            .is_some_and(|p| crushers.contains(&mesh.poly(p).sector))
+                    }) {
                         continue;
                     }
-                    let flee: Vec<Point> = way.iter().rev().copied().chain(behind.iter().copied()).collect();
-                    let Some(stay) = self.flee_safe(&barrels, aim, q, &flee) else { continue };
+                    let flee: Vec<Point> = way
+                        .iter()
+                        .rev()
+                        .copied()
+                        .chain(behind.iter().copied())
+                        .collect();
+                    let Some(stay) = self.flee_safe(&barrels, aim, q, &flee) else {
+                        continue;
+                    };
                     // (out of every blast where she shoots from: she stays there; the way back she
                     // came may go back by the barrel, E1M5's, 27 off it when the post was chosen,
                     // run back past it as it went off)
                     let flee = if stay { Vec::new() } else { flee };
                     let length: f64 = way.windows(2).map(|w| dist(w[0], w[1])).sum();
                     if best.as_ref().is_none_or(|b| length < b.length) {
-                        best = Some(Post { length, q, aim, way, flee, stay });
+                        best = Some(Post {
+                            length,
+                            q,
+                            aim,
+                            way,
+                            flee,
+                            stay,
+                        });
                     }
                 }
-                if let Some(Post { q, aim, way, flee, stay, .. }) = best {
-                    let then = if stay { "staying there, out of every blast" } else { "then off back the way she came" };
-                    self.log.add(obs.tic, format!("shooting it from ({:.0}, {:.0}), {then}", q.0, q.1));
+                if let Some(Post {
+                    q,
+                    aim,
+                    way,
+                    flee,
+                    stay,
+                    ..
+                }) = best
+                {
+                    let then = if stay {
+                        "staying there, out of every blast"
+                    } else {
+                        "then off back the way she came"
+                    };
+                    self.log.add(
+                        obs.tic,
+                        format!("shooting it from ({:.0}, {:.0}), {then}", q.0, q.1),
+                    );
                     self.barrel_stay = stay;
                     if dist(aim, at) > 1.0 {
                         // (another of them, the chain to take it)
-                        self.log.add(obs.tic, format!("(at the one at ({:.0}, {:.0}), that sets it off)", aim.0, aim.1));
+                        self.log.add(
+                            obs.tic,
+                            format!(
+                                "(at the one at ({:.0}, {:.0}), that sets it off)",
+                                aim.0, aim.1
+                            ),
+                        );
                         self.barrel = self.barrel.map(|(_, since)| (aim, since));
                     }
                     self.barrel_post = Some(q);
@@ -411,7 +534,10 @@ impl RouteFollower {
             }
             let Some(post) = self.barrel_post else {
                 self.barrel = None;
-                return self.fail(obs, "a barrel in the way, nowhere to shoot it from and run off out of the blasts");
+                return self.fail(
+                    obs,
+                    "a barrel in the way, nowhere to shoot it from and run off out of the blasts",
+                );
             };
             if dist(pos, post) > 8.0 {
                 // (getting no nearer for a while: give it up)
@@ -423,7 +549,10 @@ impl RouteFollower {
                         self.barrel_post = None;
                         self.barrel_way.clear();
                         self.barrel_best = None;
-                        return self.fail(obs, "a barrel in the way, and no getting to somewhere to shoot it from");
+                        return self.fail(
+                            obs,
+                            "a barrel in the way, and no getting to somewhere to shoot it from",
+                        );
                     }
                     None => self.barrel_best = Some((d, obs.tic)),
                     _ => {}
@@ -438,7 +567,9 @@ impl RouteFollower {
             }
         } else if dist(pos, at) < BARREL_SAFE && obs.tic - since < 3 * 35 {
             let away = (pos.1 - at.1).atan2(pos.0 - at.0);
-            return self.motion.hold(obs, (away.cos() * 8.0, away.sin() * 8.0), Some(look));
+            return self
+                .motion
+                .hold(obs, (away.cos() * 8.0, away.sin() * 8.0), Some(look));
         }
         let mut c = self.motion.hold(obs, (0.0, 0.0), Some(look));
         // (single taps, the trigger let go between: the first shot of a burst goes straight,
@@ -463,12 +594,22 @@ impl RouteFollower {
     fn barrel_chain(&self, barrels: &[Point], at: Point, pos: Point) -> Vec<(Point, u32)> {
         // (each with how many blasts in turn it goes off after: one goes off a while after it's
         // hit, so the chain takes time to come her way)
-        let mut chain: Vec<(Point, u32)> =
-            std::iter::once(at).chain(barrels.iter().copied().filter(|&b| segment_distance(pos, at, b, b) < BARREL_RADIUS + 2.0)).map(|b| (b, 0)).collect();
+        let mut chain: Vec<(Point, u32)> = std::iter::once(at)
+            .chain(
+                barrels
+                    .iter()
+                    .copied()
+                    .filter(|&b| segment_distance(pos, at, b, b) < BARREL_RADIUS + 2.0),
+            )
+            .map(|b| (b, 0))
+            .collect();
         let mut todo: std::collections::VecDeque<(Point, u32)> = chain.iter().copied().collect();
         while let Some((b, hops)) = todo.pop_front() {
             for &c in barrels {
-                if blast_gap(b, c) < BARREL_CHAIN && !chain.iter().any(|&(x, _)| dist(x, c) < 1.0) && !self.use_walled(b, c) {
+                if blast_gap(b, c) < BARREL_CHAIN
+                    && !chain.iter().any(|&(x, _)| dist(x, c) < 1.0)
+                    && !self.use_walled(b, c)
+                {
                     chain.push((c, hops + 1));
                     todo.push_back((c, hops + 1));
                 }
@@ -485,7 +626,10 @@ impl RouteFollower {
         // (shot from somewhere already out of every blast of it: no running needed; MAP02's
         // barrels before the way to the exit, none of the spots with a run off safe, given up on
         // for the hour)
-        if chain.iter().all(|&(b, _)| self.use_walled(b, q) || blast_gap(q, b) >= BARREL_SAFE) {
+        if chain
+            .iter()
+            .all(|&(b, _)| self.use_walled(b, q) || blast_gap(q, b) >= BARREL_SAFE)
+        {
             return Some(true);
         }
         chain

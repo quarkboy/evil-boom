@@ -24,10 +24,10 @@ use crate::config::resolve_wad;
 use crate::dsda::{type_of, Loadout};
 use crate::engine::{Engine, Options};
 use crate::knowledge::model::Knowledge;
+use crate::map::MapData;
 use crate::motor::{Controls, TICRATE};
 use crate::navigator::Navigator;
 use crate::play::Agent;
-use crate::map::MapData;
 use crate::wad::{load_map, Wad};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -68,7 +68,18 @@ pub struct Outcome {
 }
 
 fn default_loadout() -> Loadout {
-    Loadout { weapons: 0b11, clip: 50, shell: 0, cell: 0, rocket: 0, backpack: false, health: 100, armor: 0, armor_type: 0, ready: None }
+    Loadout {
+        weapons: 0b11,
+        clip: 50,
+        shell: 0,
+        cell: 0,
+        rocket: 0,
+        backpack: false,
+        health: 100,
+        armor: 0,
+        armor_type: 0,
+        ready: None,
+    }
 }
 
 /// The scenarios in `text`.
@@ -81,7 +92,11 @@ pub fn parse(text: &str) -> Result<Vec<Scenario>, String> {
         }
         let w: Vec<&str> = line.split_whitespace().collect();
         let bad = |what: &str| format!("line {}: {what}: {raw}", n + 1);
-        let num = |i: usize| w.get(i).and_then(|v| v.parse::<f64>().ok()).ok_or_else(|| bad("a number wanted"));
+        let num = |i: usize| {
+            w.get(i)
+                .and_then(|v| v.parse::<f64>().ok())
+                .ok_or_else(|| bad("a number wanted"))
+        };
         if w[0] == "arena" {
             out.push(Scenario {
                 name: w.get(1).ok_or_else(|| bad("a name wanted"))?.to_string(),
@@ -96,7 +111,9 @@ pub fn parse(text: &str) -> Result<Vec<Scenario>, String> {
             });
             continue;
         }
-        let s = out.last_mut().ok_or_else(|| bad("no `arena` line before this"))?;
+        let s = out
+            .last_mut()
+            .ok_or_else(|| bad("no `arena` line before this"))?;
         match w[0] {
             "map" => {
                 s.wad = w.get(1).ok_or_else(|| bad("a WAD wanted"))?.to_string();
@@ -116,7 +133,9 @@ pub fn parse(text: &str) -> Result<Vec<Scenario>, String> {
             "give" => {
                 let g = &mut s.give;
                 for item in &w[1..] {
-                    let (k, v) = item.split_once('=').map_or((*item, None), |(k, v)| (k, v.parse::<i32>().ok()));
+                    let (k, v) = item
+                        .split_once('=')
+                        .map_or((*item, None), |(k, v)| (k, v.parse::<i32>().ok()));
                     let bit = |b: i32| 1 << b;
                     match (k, v) {
                         ("fist", None) => g.weapons |= bit(0),
@@ -164,19 +183,39 @@ pub struct Prepared {
 
 /// Set scenario `s` up (`drawn`: the game draws its frames, for watching; `sound`: its sound out
 /// loud too).
-pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool, sound: bool) -> Result<Prepared, String> {
+pub fn prepare(
+    s: &Scenario,
+    seed: Option<u32>,
+    drawn: bool,
+    sound: bool,
+) -> Result<Prepared, String> {
     let iwad = resolve_wad(&s.wad);
     let w = Wad::open(&iwad)?;
     let m = Arc::new(load_map(&w, &s.map, &[])?);
     let mut nav = Navigator::new(Arc::clone(&m), s.skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
-    let mut e = Engine::new(&iwad, &s.map, &Options { skill: s.skill, nomonsters: true, objects: true, drawn, sound, capture: false, seed })?;
+    let mut e = Engine::new(
+        &iwad,
+        &s.map,
+        &Options {
+            skill: s.skill,
+            nomonsters: true,
+            objects: true,
+            drawn,
+            sound,
+            capture: false,
+            seed,
+        },
+    )?;
     e.start();
     // (a tic for the level to be there)
     e.step(&Controls::default());
     if !e.game.warp(s.at.0, s.at.1, s.at.2) {
-        return Err(format!("{}: can't stand at ({}, {})", s.name, s.at.0, s.at.1));
+        return Err(format!(
+            "{}: can't stand at ({}, {})",
+            s.name, s.at.0, s.at.1
+        ));
     }
     if !s.items && e.game.clear_items().is_none() {
         return Err("the game library hasn't evil_clear_items (rebuild it)".into());
@@ -189,14 +228,24 @@ pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool, sound: bool) -> Res
         let kind = type_of(&sp.name).ok_or_else(|| format!("{}: no such thing", sp.name))?;
         // (where it's put, else the nearest spot round it where it fits, up to 96 off: a place
         // picked from the map's lines can be a hair too tight for the thing)
-        let rings = std::iter::once((0.0, 0.0)).chain((1..=6).flat_map(|r| (0..8).map(move |k| {
-            let a = f64::from(k) * std::f64::consts::FRAC_PI_4;
-            (a.cos() * 16.0 * f64::from(r), a.sin() * 16.0 * f64::from(r))
-        })));
+        let rings = std::iter::once((0.0, 0.0)).chain((1..=6).flat_map(|r| {
+            (0..8).map(move |k| {
+                let a = f64::from(k) * std::f64::consts::FRAC_PI_4;
+                (a.cos() * 16.0 * f64::from(r), a.sin() * 16.0 * f64::from(r))
+            })
+        }));
         let id = rings
             .into_iter()
-            .find_map(|(dx, dy)| e.game.spawn(kind, sp.x + dx, sp.y + dy, sp.angle, sp.ambush))
-            .ok_or_else(|| format!("{}: can't spawn at ({}, {}) or near it", sp.name, sp.x, sp.y))?;
+            .find_map(|(dx, dy)| {
+                e.game
+                    .spawn(kind, sp.x + dx, sp.y + dy, sp.angle, sp.ambush)
+            })
+            .ok_or_else(|| {
+                format!(
+                    "{}: can't spawn at ({}, {}) or near it",
+                    sp.name, sp.x, sp.y
+                )
+            })?;
         // (the fight is its monsters: solid columns put about for it aren't to be killed)
         if crate::tactical::bestiary::monster(&sp.name).is_some() {
             ids.push(id);
@@ -204,19 +253,33 @@ pub fn prepare(s: &Scenario, seed: Option<u32>, drawn: bool, sound: bool) -> Res
     }
     let knowledge = Knowledge::new(Rc::clone(&nav), true, true);
     let agent = Agent::new(&nav, knowledge, s.skill, false, 1, Rc::default());
-    Ok(Prepared { engine: e, agent, ids, wad: w, map: m })
+    Ok(Prepared {
+        engine: e,
+        agent,
+        ids,
+        wad: w,
+        map: m,
+    })
 }
 
 /// Play scenario `s` (one a process: the engine is all globals). The fight's log goes to `log`.
 pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Outcome, String> {
-    let Prepared { engine: mut e, mut agent, ids, .. } = prepare(s, seed, false, false)?;
+    let Prepared {
+        engine: mut e,
+        mut agent,
+        ids,
+        ..
+    } = prepare(s, seed, false, false)?;
     let start = e.tic;
     let until = start + (s.seconds * TICRATE) as i64;
     let mut c: Option<Controls> = None;
     let mut log_n = 0;
     let result = loop {
         let ob = e.observe();
-        let alive = ids.iter().filter(|id| ob.things.iter().flatten().any(|t| t.id == **id)).count();
+        let alive = ids
+            .iter()
+            .filter(|id| ob.things.iter().flatten().any(|t| t.id == **id))
+            .count();
         if e.dead() {
             break "LOST";
         }
@@ -232,11 +295,30 @@ pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Out
                 .iter()
                 .flatten()
                 .filter(|t| ids.contains(&t.id))
-                .map(|t| format!("{} {:.0} ({} hp)", t.name, crate::geom::dist((t.x, t.y), ob.pos()), t.health))
+                .map(|t| {
+                    format!(
+                        "{} {:.0} ({} hp)",
+                        t.name,
+                        crate::geom::dist((t.x, t.y), ob.pos()),
+                        t.health
+                    )
+                })
                 .collect();
             let p = e.game.player();
-            let states: Vec<String> = ob.things.iter().flatten().filter(|t| ids.contains(&t.id)).map(|t| format!("{}@{}", t.state, t.attack)).collect();
-            log.push(format!("  (pending {} mom {:.1},{:.1} states {})", p.pendingweapon, p.momx, p.momy, states.join(" ")));
+            let states: Vec<String> = ob
+                .things
+                .iter()
+                .flatten()
+                .filter(|t| ids.contains(&t.id))
+                .map(|t| format!("{}@{}", t.state, t.attack))
+                .collect();
+            log.push(format!(
+                "  (pending {} mom {:.1},{:.1} states {})",
+                p.pendingweapon,
+                p.momx,
+                p.momy,
+                states.join(" ")
+            ));
             log.push(format!(
                 "tic {}: health {} armor {}, ammo {:?}, at ({:.0}, {:.0}, z {:?}) weapon {:?}; {}; last {:?}",
                 ob.tic,
@@ -261,13 +343,32 @@ pub fn run(s: &Scenario, seed: Option<u32>, log: &mut Vec<String>) -> Result<Out
         e.step(&ctl);
         // (every hit on her, as the runs have them: what a lost fight was lost to)
         for h in e.take_hits() {
-            let armor = if h.armor > 0 { format!(" (and {} armor)", h.armor) } else { String::new() };
-            log.push(format!("tic {}: hit for {}{armor} by {}", e.tic, h.health, h.from()));
+            let armor = if h.armor > 0 {
+                format!(" (and {} armor)", h.armor)
+            } else {
+                String::new()
+            };
+            log.push(format!(
+                "tic {}: hit for {}{armor} by {}",
+                e.tic,
+                h.health,
+                h.from()
+            ));
         }
         c = Some(ctl);
     };
     let ob = e.observe();
-    let alive = ids.iter().filter(|id| ob.things.iter().flatten().any(|t| t.id == **id)).count();
+    let alive = ids
+        .iter()
+        .filter(|id| ob.things.iter().flatten().any(|t| t.id == **id))
+        .count();
     let p = e.game.player();
-    Ok(Outcome { result, seconds: (e.tic - start) as f64 / TICRATE, health: p.health, armor: p.armor, kills: ids.len() - alive, monsters: ids.len() })
+    Ok(Outcome {
+        result,
+        seconds: (e.tic - start) as f64 / TICRATE,
+        health: p.health,
+        armor: p.armor,
+        kills: ids.len() - alive,
+        monsters: ids.len(),
+    })
 }

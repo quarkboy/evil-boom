@@ -31,15 +31,31 @@ impl Status {
         let file = std::fs::File::create(dir.join(format!("{iwad}_{map}.status"))).ok()?;
         let searches = std::fs::File::create(dir.join(format!("{iwad}_{map}.searches"))).ok()?;
         crate::stats::collect_searches(true);
-        Some(Status { file, searches, secs: 0.0, slowest: 0.0 })
+        Some(Status {
+            file,
+            searches,
+            secs: 0.0,
+            slowest: 0.0,
+        })
     }
 
-    pub(super) fn think(&mut self, ob: &Observation, took: f64, x: &Explorer, log_n: usize, real: f64) {
+    pub(super) fn think(
+        &mut self,
+        ob: &Observation,
+        took: f64,
+        x: &Explorer,
+        log_n: usize,
+        real: f64,
+    ) {
         use std::io::Write;
         self.secs += took;
         self.slowest = self.slowest.max(took);
         for s in crate::stats::take_searches() {
-            let _ = writeln!(self.searches, "{},{},{:?},{:.4},{}", s.budget, s.expansions, s.ended, s.secs, ob.tic);
+            let _ = writeln!(
+                self.searches,
+                "{},{},{:?},{:.4},{}",
+                s.budget, s.expansions, s.ended, s.secs, ob.tic
+            );
         }
         if took > SLOW_THINK {
             let _ = writeln!(self.file, "  slow think at tic {}: {:.1}s", ob.tic, took);

@@ -35,7 +35,10 @@ impl JumpLab {
         let mut found: HashSet<(usize, usize)> = HashSet::default();
         let mut out = Vec::new();
         for portal in &mesh.portals {
-            if portal.linedef.is_some_and(|li| self.map.linedefs[li].blocks_player()) {
+            if portal
+                .linedef
+                .is_some_and(|li| self.map.linedefs[li].blocks_player())
+            {
                 continue;
             }
             let ((x1, y1), (x2, y2)) = (portal.p1, portal.p2);
@@ -66,9 +69,13 @@ impl JumpLab {
                     for ang in CLIMB_ANGLES {
                         let (s, c) = ang.to_radians().sin_cos();
                         let d = (nx * c - ny * s, nx * s + ny * c);
-                        let Some(j) = self.climb(&mut sim, takeoff, d, fa, moving) else { continue };
+                        let Some(j) = self.climb(&mut sim, takeoff, d, fa, moving) else {
+                            continue;
+                        };
                         let key = (j.src_polys[0], mesh.poly(j.dest_poly).sector);
-                        if !found.contains(&key) && !self.walks_to(j.src_polys[0], key.1, portal_fits) {
+                        if !found.contains(&key)
+                            && !self.walks_to(j.src_polys[0], key.1, portal_fits)
+                        {
                             out.push(j);
                         }
                         found.insert(key);
@@ -97,7 +104,11 @@ impl JumpLab {
                 let q = mesh.portals[pi].other(p);
                 let t = mesh.poly(q).sector;
                 let (f, (g, c)) = (self.initial[s].0, self.initial[t]);
-                if !portal_fits.get(pi).copied().unwrap_or(false) || g - f > MAX_STEP || c - g.max(f) < PLAYER_HEIGHT || dist(origin, mesh.center(q)) > CLIMB_WALK {
+                if !portal_fits.get(pi).copied().unwrap_or(false)
+                    || g - f > MAX_STEP
+                    || c - g.max(f) < PLAYER_HEIGHT
+                    || dist(origin, mesh.center(q)) > CLIMB_WALK
+                {
                     continue;
                 }
                 if seen.insert(q) {
@@ -112,16 +123,29 @@ impl JumpLab {
     /// at, on a floor of `floor` or a step above: where she first stands more than a step
     /// higher, if anywhere, with the box over nothing a trigger moves on the way (MAP16's run
     /// past a lift, up a step only at the lift's starting height).
-    fn climb(&self, sim: &mut PlayerSim<'_>, takeoff: Point, d: Point, floor: f64, moving: &HashSet<usize>) -> Option<Jump> {
+    fn climb(
+        &self,
+        sim: &mut PlayerSim<'_>,
+        takeoff: Point,
+        d: Point,
+        floor: f64,
+        moving: &HashSet<usize>,
+    ) -> Option<Jump> {
         let mesh = &self.mesh;
-        let runup = CLIMB_RUNUPS.iter().map(|r| (takeoff.0 - d.0 * r, takeoff.1 - d.1 * r)).find(|&p| {
-            let (clear, f, c) = self.fits_at(p);
-            // (a step up already, the box over something low beside the face, will do; but the
-            // centre over the floor run from, where she can be got to: not a crate's edge with
-            // the room floor under it, filed as a climb from the room)
-            let centre = mesh.poly_at(p).map(|q| self.initial[mesh.poly(q).sector].0);
-            clear && (-0.5..=MAX_STEP).contains(&(f - floor)) && c - f >= PLAYER_HEIGHT && centre.is_some_and(|g| (-0.5..=MAX_STEP).contains(&(g - floor)))
-        })?;
+        let runup = CLIMB_RUNUPS
+            .iter()
+            .map(|r| (takeoff.0 - d.0 * r, takeoff.1 - d.1 * r))
+            .find(|&p| {
+                let (clear, f, c) = self.fits_at(p);
+                // (a step up already, the box over something low beside the face, will do; but the
+                // centre over the floor run from, where she can be got to: not a crate's edge with
+                // the room floor under it, filed as a climb from the room)
+                let centre = mesh.poly_at(p).map(|q| self.initial[mesh.poly(q).sector].0);
+                clear
+                    && (-0.5..=MAX_STEP).contains(&(f - floor))
+                    && c - f >= PLAYER_HEIGHT
+                    && centre.is_some_and(|g| (-0.5..=MAX_STEP).contains(&(g - floor)))
+            })?;
         let src = mesh.poly_at(runup)?;
         sim.place(runup, d.1.atan2(d.0).to_degrees());
         let mut speed = 0.0;
@@ -130,17 +154,29 @@ impl JumpLab {
         let mut under = floor;
         let mut lifted = false;
         for _ in 0..CLIMB_TICS {
-            sim.step(Controls { forward: MAX_MOVE, strafe: 0.0, turn: 0.0 });
+            sim.step(Controls {
+                forward: MAX_MOVE,
+                strafe: 0.0,
+                turn: 0.0,
+            });
             if sim.teleported {
                 return None;
             }
             let pos = sim.pos();
             let r = PLAYER_RADIUS;
-            if [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)].iter().any(|(dx, dy)| mesh.poly_at((pos.0 + dx, pos.1 + dy)).is_some_and(|q| moving.contains(&mesh.poly(q).sector))) {
+            if [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
+                .iter()
+                .any(|(dx, dy)| {
+                    mesh.poly_at((pos.0 + dx, pos.1 + dy))
+                        .is_some_and(|q| moving.contains(&mesh.poly(q).sector))
+                })
+            {
                 return None;
             }
             let (rx, ry) = (pos.0 - runup.0, pos.1 - runup.1);
-            if (rx * d.1 - ry * d.0).abs() > CLIMB_OFF_LINE || rx * d.0 + ry * d.1 > dist(runup, takeoff) + CLIMB_PAST {
+            if (rx * d.1 - ry * d.0).abs() > CLIMB_OFF_LINE
+                || rx * d.0 + ry * d.1 > dist(runup, takeoff) + CLIMB_PAST
+            {
                 return None;
             }
             let (vx, vy) = sim.velocity();
@@ -153,7 +189,11 @@ impl JumpLab {
             lifted = lifted || high - under > MAX_STEP;
             under = high;
             // (stood on, the centre over it: not the box over its edge with the centre lower)
-            if lifted && sim.on_floor() && (sim.floorz_units() - high).abs() < 0.5 && high > floor + MAX_STEP {
+            if lifted
+                && sim.on_floor()
+                && (sim.floorz_units() - high).abs() < 0.5
+                && high > floor + MAX_STEP
+            {
                 return Some(Jump::new(src, p, pos, runup, takeoff, speed, Vec::new()));
             }
         }

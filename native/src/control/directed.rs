@@ -173,16 +173,27 @@ pub struct Tally {
 impl Tally {
     /// From the engine's (items, kills, secrets).
     pub fn of(t: [(i32, i32); 3]) -> Tally {
-        Tally { items: t[0], kills: t[1], secrets: t[2] }
+        Tally {
+            items: t[0],
+            kills: t[1],
+            secrets: t[2],
+        }
     }
 
     fn line(&self) -> String {
         let f = |(got, of): (i32, i32)| format!("{got}/{of}");
-        format!("kills {}, items {}, secrets {}", f(self.kills), f(self.items), f(self.secrets))
+        format!(
+            "kills {}, items {}, secrets {}",
+            f(self.kills),
+            f(self.items),
+            f(self.secrets)
+        )
     }
 
     fn complete(&self) -> bool {
-        [self.kills, self.items, self.secrets].iter().all(|(got, of)| got >= of)
+        [self.kills, self.items, self.secrets]
+            .iter()
+            .all(|(got, of)| got >= of)
     }
 }
 
@@ -211,7 +222,10 @@ impl Director {
 
     /// Doing nothing, waiting for an order?
     pub fn idle(&self, agent: &Agent) -> bool {
-        self.queue.is_empty() && self.doing.is_none() && self.pressed.is_none() && agent.x().current.is_none()
+        self.queue.is_empty()
+            && self.doing.is_none()
+            && self.pressed.is_none()
+            && agent.x().current.is_none()
     }
 
     /// A new map: names, orders, places and what's been told are the old map's.
@@ -233,8 +247,25 @@ impl Director {
     pub fn doing(&self, agent: &Agent) -> String {
         let doing = match &self.doing {
             Some(Doing::Once(_, w)) => format!("going to {w}"),
-            Some(Doing::Area(_, w, secrets)) => format!("exploring {w}{}{}", with_secrets(*secrets), if self.paused { " (paused for the fight)" } else { "" }),
-            Some(Doing::Way(b, secrets)) => format!("exploring {}{}{}", compass(*b), with_secrets(*secrets), if self.paused { " (paused for the fight)" } else { "" }),
+            Some(Doing::Area(_, w, secrets)) => format!(
+                "exploring {w}{}{}",
+                with_secrets(*secrets),
+                if self.paused {
+                    " (paused for the fight)"
+                } else {
+                    ""
+                }
+            ),
+            Some(Doing::Way(b, secrets)) => format!(
+                "exploring {}{}{}",
+                compass(*b),
+                with_secrets(*secrets),
+                if self.paused {
+                    " (paused for the fight)"
+                } else {
+                    ""
+                }
+            ),
             Some(Doing::Off) => "getting off a hurting floor".to_string(),
             Some(Doing::Pickup) => "picking up nearby".to_string(),
             None if agent.x().current.is_some() => "busy".to_string(),
@@ -249,15 +280,31 @@ impl Director {
 
     /// Her state in a line: health, armor, weapons, ammo, keys, what she's doing.
     pub fn status(&self, agent: &Agent, obs: &Observation) -> String {
-        let weapons: Vec<&str> = obs.weapons.iter().flatten().map(|&w| weapon_name(w, obs)).collect();
-        let ammo = |slot: i32| obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n);
+        let weapons: Vec<&str> = obs
+            .weapons
+            .iter()
+            .flatten()
+            .map(|&w| weapon_name(w, obs))
+            .collect();
+        let ammo = |slot: i32| {
+            obs.ammo
+                .iter()
+                .flatten()
+                .find(|(s, _)| *s == slot)
+                .map_or(0, |(_, n)| *n)
+        };
         let mut pools = Vec::new();
         for (slot, what) in [(2, "bullets"), (3, "shells"), (5, "rockets"), (6, "cells")] {
             if ammo(slot) > 0 {
                 pools.push(format!("{} {what}", ammo(slot)));
             }
         }
-        let keys: Vec<String> = obs.keys.unwrap_or_default().iter().map(|k| key_name(k).to_string()).collect();
+        let keys: Vec<String> = obs
+            .keys
+            .unwrap_or_default()
+            .iter()
+            .map(|k| key_name(k).to_string())
+            .collect();
         let doing = self.doing(agent);
         // (in a fight: what's in sight, the nearest; an order then is held up by it unless rushed)
         let fight = engaged(agent, obs);
@@ -269,18 +316,39 @@ impl Director {
             for t in &fight {
                 *counts.entry(t.name).or_insert(0) += 1;
             }
-            let near = fight.iter().map(|t| (t.x, t.y)).min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b))).unwrap_or(pos);
+            let near = fight
+                .iter()
+                .map(|t| (t.x, t.y))
+                .min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b)))
+                .unwrap_or(pos);
             let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
-            format!("{doing}; fighting {} ({} {:.0})", what.join(", "), compass(heading(pos, near)), dist(pos, near))
+            format!(
+                "{doing}; fighting {} ({} {:.0})",
+                what.join(", "),
+                compass(heading(pos, near)),
+                dist(pos, near)
+            )
         };
         // (short: what Evil reads costs her context, the user's)
         format!(
             "Health {:.0}, armor {:.0}; {}; {}; {}; {}; {doing}",
             obs.health.unwrap_or(0.0),
             obs.armor.unwrap_or(0.0),
-            if weapons.is_empty() { "no weapons".to_string() } else { weapons.join(", ") },
-            if pools.is_empty() { "no ammo".to_string() } else { pools.join(", ") },
-            if keys.is_empty() { "no keys".to_string() } else { keys.join(", ") },
+            if weapons.is_empty() {
+                "no weapons".to_string()
+            } else {
+                weapons.join(", ")
+            },
+            if pools.is_empty() {
+                "no ammo".to_string()
+            } else {
+                pools.join(", ")
+            },
+            if keys.is_empty() {
+                "no keys".to_string()
+            } else {
+                keys.join(", ")
+            },
             self.tally.line()
         )
     }
@@ -293,7 +361,13 @@ impl Director {
         if !open.iter().any(|o| o.kind == Kind::Exit) {
             return None;
         }
-        let count = |f: &dyn Fn(&Objective) -> bool| open.iter().filter(|o| f(o)).map(id_of).collect::<std::collections::BTreeSet<_>>().len();
+        let count = |f: &dyn Fn(&Objective) -> bool| {
+            open.iter()
+                .filter(|o| f(o))
+                .map(id_of)
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+        };
         let explore = count(&|o| explores(o));
         let switches = count(&|o| o.kind == Kind::Switch);
         let doors = count(&|o| o.kind == Kind::Door);
@@ -318,8 +392,15 @@ impl Director {
         if left.is_empty() && self.tally.complete() {
             return None;
         }
-        let known = if left.is_empty() { String::new() } else { format!("{}; ", left.join(", ")) };
-        Some(format!("Still here: {known}{}. Leave anyway? Resend with sure: true.", self.tally.line()))
+        let known = if left.is_empty() {
+            String::new()
+        } else {
+            format!("{}; ", left.join(", "))
+        };
+        Some(format!(
+            "Still here: {known}{}. Leave anyway? Resend with sure: true.",
+            self.tally.line()
+        ))
     }
 
     /// What's new since last told: an exit, things of note seen, monsters, keys and weapons got,
@@ -343,14 +424,21 @@ impl Director {
             self.health_mark = mark;
         }
         if let Some(keys) = obs.keys {
-            let got: Vec<_> = keys.iter().filter(|k| self.had_keys.is_some_and(|h| !h.has(*k))).collect();
+            let got: Vec<_> = keys
+                .iter()
+                .filter(|k| self.had_keys.is_some_and(|h| !h.has(*k)))
+                .collect();
             for k in got {
                 self.event(obs, true, format!("Got the {}.", key_name(k)));
             }
             self.had_keys = Some(keys);
         }
         if let Some(weapons) = &obs.weapons {
-            let got: Vec<i32> = weapons.iter().copied().filter(|w| self.had_weapons.as_ref().is_some_and(|h| !h.contains(w))).collect();
+            let got: Vec<i32> = weapons
+                .iter()
+                .copied()
+                .filter(|w| self.had_weapons.as_ref().is_some_and(|h| !h.contains(w)))
+                .collect();
             for w in got {
                 self.event(obs, true, format!("Got the {}.", weapon_name(w, obs)));
             }
@@ -377,13 +465,37 @@ impl Director {
             }
         }
         if !exits.is_empty() {
-            self.event(obs, true, format!("Exit{} found: {}.", if exits.len() == 1 { "" } else { "s" }, exits.join(", ")));
+            self.event(
+                obs,
+                true,
+                format!(
+                    "Exit{} found: {}.",
+                    if exits.len() == 1 { "" } else { "s" },
+                    exits.join(", ")
+                ),
+            );
         }
         if !switches.is_empty() {
-            self.event(obs, true, format!("Switch{} found: {}.", if switches.len() == 1 { "" } else { "es" }, switches.join(", ")));
+            self.event(
+                obs,
+                true,
+                format!(
+                    "Switch{} found: {}.",
+                    if switches.len() == 1 { "" } else { "es" },
+                    switches.join(", ")
+                ),
+            );
         }
         if !doors.is_empty() {
-            self.event(obs, false, format!("Door{} found: {}.", if doors.len() == 1 { "" } else { "s" }, doors.join(", ")));
+            self.event(
+                obs,
+                false,
+                format!(
+                    "Door{} found: {}.",
+                    if doors.len() == 1 { "" } else { "s" },
+                    doors.join(", ")
+                ),
+            );
         }
         let known = agent.x().knowledge.known_polys();
         let nav = std::rc::Rc::clone(&agent.x().nav);
@@ -392,14 +504,32 @@ impl Director {
         for t in obs.things.iter().flatten() {
             let notable = match t.category {
                 "Key" | "Powerup" => true,
-                "Weapon" => crate::tactical::bestiary::weapon_item(t.name).is_some_and(|w| !held.contains(&w)),
-                "Health" | "Armor" => matches!(t.name, "Soulsphere" | "Megasphere" | "BlueArmor" | "GreenArmor" | "Berserk"),
+                "Weapon" => crate::tactical::bestiary::weapon_item(t.name)
+                    .is_some_and(|w| !held.contains(&w)),
+                "Health" | "Armor" => matches!(
+                    t.name,
+                    "Soulsphere" | "Megasphere" | "BlueArmor" | "GreenArmor" | "Berserk"
+                ),
                 _ => false,
             };
-            if notable && !self.told_items.contains(&t.id) && nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
+            if notable
+                && !self.told_items.contains(&t.id)
+                && nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p))
+            {
                 self.told_items.insert(t.id);
-                let id = format!("{}-t{}", if t.category == "Key" { "key" } else { "item" }, t.id);
-                seen.push(self.describe(&Entry { id, what: t.name.to_string(), at: (t.x, t.y) }, obs));
+                let id = format!(
+                    "{}-t{}",
+                    if t.category == "Key" { "key" } else { "item" },
+                    t.id
+                );
+                seen.push(self.describe(
+                    &Entry {
+                        id,
+                        what: t.name.to_string(),
+                        at: (t.x, t.y),
+                    },
+                    obs,
+                ));
             }
         }
         if !seen.is_empty() {
@@ -422,10 +552,25 @@ impl Director {
                 self.told_monsters.insert(*id);
                 *counts.entry(name).or_insert(0) += 1;
             }
-            let nearest = new.iter().map(|m| m.2).min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b))).unwrap_or(pos);
+            let nearest = new
+                .iter()
+                .map(|m| m.2)
+                .min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b)))
+                .unwrap_or(pos);
             let what: Vec<String> = counts.iter().map(|(n, c)| format!("{c} {n}")).collect();
-            let dangerous = new.iter().any(|m| crate::tactical::bestiary::monster(m.1).is_some_and(|i| i.boss || i.threat >= 6.0));
-            self.event(obs, dangerous, format!("Monsters: {} ({} {:.0}).", what.join(", "), compass(heading(pos, nearest)), dist(pos, nearest)));
+            let dangerous = new.iter().any(|m| {
+                crate::tactical::bestiary::monster(m.1).is_some_and(|i| i.boss || i.threat >= 6.0)
+            });
+            self.event(
+                obs,
+                dangerous,
+                format!(
+                    "Monsters: {} ({} {:.0}).",
+                    what.join(", "),
+                    compass(heading(pos, nearest)),
+                    dist(pos, nearest)
+                ),
+            );
         }
     }
 
@@ -439,8 +584,17 @@ impl Director {
         let held = obs.weapons.clone().unwrap_or_default();
         let mut now = Vec::new();
         let mut notable = false;
-        for t in obs.things.iter().flatten().filter(|t| matches!(t.category, "Weapon" | "Ammo" | "Health" | "Armor" | "Key" | "Powerup")) {
-            if !x.nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
+        for t in obs.things.iter().flatten().filter(|t| {
+            matches!(
+                t.category,
+                "Weapon" | "Ammo" | "Health" | "Armor" | "Key" | "Powerup"
+            )
+        }) {
+            if !x
+                .nav
+                .poly_at((t.x, t.y))
+                .is_some_and(|p| known.contains(&p))
+            {
                 continue;
             }
             let reachable = x.touch_spot((t.x, t.y), &x.reach).is_some();
@@ -451,13 +605,25 @@ impl Director {
                 }
             } else if self.out_of_reach.remove(&t.id) {
                 self.told_reachable.insert(t.id);
-                let id = format!("{}-t{}", if t.category == "Key" { "key" } else { "item" }, t.id);
+                let id = format!(
+                    "{}-t{}",
+                    if t.category == "Key" { "key" } else { "item" },
+                    t.id
+                );
                 notable |= match t.category {
-                    "Weapon" => crate::tactical::bestiary::weapon_item(t.name).is_some_and(|w| !held.contains(&w)),
+                    "Weapon" => crate::tactical::bestiary::weapon_item(t.name)
+                        .is_some_and(|w| !held.contains(&w)),
                     "Key" | "Powerup" | "Armor" => true,
                     _ => matches!(t.name, "Soulsphere" | "Megasphere" | "Berserk"),
                 };
-                now.push(self.describe(&Entry { id, what: t.name.to_string(), at: (t.x, t.y) }, obs));
+                now.push(self.describe(
+                    &Entry {
+                        id,
+                        what: t.name.to_string(),
+                        at: (t.x, t.y),
+                    },
+                    obs,
+                ));
             }
         }
         if !now.is_empty() {
@@ -466,11 +632,17 @@ impl Director {
     }
 
     fn event(&mut self, obs: &Observation, notable: bool, text: String) {
-        self.reports.push(Report { tic: obs.tic, ok: true, text, notable });
+        self.reports.push(Report {
+            tic: obs.tic,
+            ok: true,
+            text,
+            notable,
+        });
     }
 
     fn places(&mut self, agent: &Agent) -> &Places {
-        self.places.get_or_insert_with(|| Places::build(&agent.x().nav))
+        self.places
+            .get_or_insert_with(|| Places::build(&agent.x().nav))
     }
 
     /// A list of what she knows of, nearest first.
@@ -480,7 +652,7 @@ impl Director {
             Topic::Areas => {
                 let open = self.open_objectives(agent, obs);
                 let walls = agent.x_mut().suspected_walls(obs, 3);
-                                let known = agent.x().knowledge.known_polys();
+                let known = agent.x().knowledge.known_polys();
                 let nav = std::rc::Rc::clone(&agent.x().nav);
                 let here = nav.poly_at(pos).map(|p| nav.sector_of_poly(p));
                 let places = self.places(agent);
@@ -495,7 +667,10 @@ impl Director {
                 let entries = seen
                     .values()
                     .map(|a| {
-                        let inside = |o: &&Objective| nav.poly_at(o.goal).is_some_and(|p| a.sectors.contains(&nav.sector_of_poly(p)));
+                        let inside = |o: &&Objective| {
+                            nav.poly_at(o.goal)
+                                .is_some_and(|p| a.sectors.contains(&nav.sector_of_poly(p)))
+                        };
                         let left = open.iter().filter(|o| explores(o)).filter(inside).count();
                         let hiding = by_thoroughness(walls.iter().filter(inside));
                         let mut what = Places::sketch(a);
@@ -510,7 +685,11 @@ impl Director {
                             (0, [a, b, c]) => format!(", explored, {a}/{b}/{c} walls to search"),
                             (n, _) => format!(", {n} to explore"),
                         });
-                        Entry { id: a.id.clone(), what, at: a.center }
+                        Entry {
+                            id: a.id.clone(),
+                            what,
+                            at: a.center,
+                        }
                     })
                     .collect();
                 self.done_areas = done;
@@ -520,9 +699,16 @@ impl Director {
             Topic::Switches => {
                 let mut out = self.objectives_of(agent, obs, &[Kind::Switch]);
                 for e in &mut out {
-                    let effect = e.id.strip_prefix("switch-l").and_then(|l| l.parse().ok()).and_then(|l| self.effect_of(agent, obs, l));
+                    let effect =
+                        e.id.strip_prefix("switch-l")
+                            .and_then(|l| l.parse().ok())
+                            .and_then(|l| self.effect_of(agent, obs, l));
                     let lock = std::mem::take(&mut e.what);
-                    e.what = [effect.unwrap_or_else(|| "effect unknown".to_string()), lock].into_iter().filter(|w| !w.is_empty()).collect::<Vec<_>>().join(", ");
+                    e.what = [effect.unwrap_or_else(|| "effect unknown".to_string()), lock]
+                        .into_iter()
+                        .filter(|w| !w.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(", ");
                 }
                 out
             }
@@ -533,11 +719,24 @@ impl Director {
                 obs.things
                     .iter()
                     .flatten()
-                    .filter(|t| matches!(t.category, "Weapon" | "Ammo" | "Health" | "Armor" | "Key" | "Powerup"))
+                    .filter(|t| {
+                        matches!(
+                            t.category,
+                            "Weapon" | "Ammo" | "Health" | "Armor" | "Key" | "Powerup"
+                        )
+                    })
                     .filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)))
                     .map(|t| Entry {
-                        id: format!("{}-t{}", if t.category == "Key" { "key" } else { "item" }, t.id),
-                        what: if crate::knowledge::completion::Completionist::counted(t.name, obs) { format!("{}{COUNTS}", t.name) } else { t.name.to_string() },
+                        id: format!(
+                            "{}-t{}",
+                            if t.category == "Key" { "key" } else { "item" },
+                            t.id
+                        ),
+                        what: if crate::knowledge::completion::Completionist::counted(t.name, obs) {
+                            format!("{}{COUNTS}", t.name)
+                        } else {
+                            t.name.to_string()
+                        },
                         at: (t.x, t.y),
                     })
                     .collect()
@@ -549,8 +748,16 @@ impl Director {
                 .into_iter()
                 .map(|(id, name, at, tic, awake)| {
                     let when = (obs.tic - tic) as f64 / 35.0;
-                    let seen = if when < 1.0 { "in sight".to_string() } else { format!("seen {when:.0}s ago") };
-                    Entry { id: format!("monster-{id}"), what: format!("{name}, {seen}{}", if awake { "" } else { ", asleep" }), at }
+                    let seen = if when < 1.0 {
+                        "in sight".to_string()
+                    } else {
+                        format!("seen {when:.0}s ago")
+                    };
+                    Entry {
+                        id: format!("monster-{id}"),
+                        what: format!("{name}, {seen}{}", if awake { "" } else { ", asleep" }),
+                        at,
+                    }
                 })
                 .collect(),
         };
@@ -560,13 +767,22 @@ impl Director {
 
     /// A list as she's shown it: areas with nothing more to explore left out (unless `all`), but
     /// where she is and those she's named kept; and how many were left out.
-    pub fn brief(&mut self, agent: &mut Agent, obs: &Observation, topic: Topic, all: bool) -> (Vec<Entry>, usize) {
+    pub fn brief(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        topic: Topic,
+        all: bool,
+    ) -> (Vec<Entry>, usize) {
         let entries = self.list(agent, obs, topic);
         if all || topic != Topic::Areas {
             return (entries, 0);
         }
         let n = entries.len();
-        let kept: Vec<Entry> = entries.into_iter().filter(|e| !self.done_areas.contains(&e.id) || self.names.contains_key(&e.id)).collect();
+        let kept: Vec<Entry> = entries
+            .into_iter()
+            .filter(|e| !self.done_areas.contains(&e.id) || self.names.contains_key(&e.id))
+            .collect();
         let hidden = n - kept.len();
         (kept, hidden)
     }
@@ -574,7 +790,16 @@ impl Director {
     /// What a reference (an id or one of her names) is, among everything listable now.
     pub fn find(&mut self, agent: &mut Agent, obs: &Observation, r: &str) -> Option<Entry> {
         let id = self.resolve(r);
-        [Topic::Areas, Topic::Doors, Topic::Switches, Topic::Items, Topic::Exits, Topic::Monsters].into_iter().find_map(|t| self.list(agent, obs, t).into_iter().find(|e| e.id == id))
+        [
+            Topic::Areas,
+            Topic::Doors,
+            Topic::Switches,
+            Topic::Items,
+            Topic::Exits,
+            Topic::Monsters,
+        ]
+        .into_iter()
+        .find_map(|t| self.list(agent, obs, t).into_iter().find(|e| e.id == id))
     }
 
     /// Is something listed under that id or name an area?
@@ -587,24 +812,45 @@ impl Director {
     pub fn describe(&self, e: &Entry, obs: &Observation) -> String {
         let pos = obs.pos();
         let d = dist(pos, e.at);
-        let name = self.names.get(&e.id).map_or(String::new(), |n| format!(" \"{n}\""));
-        let way = if d < 64.0 { "here".to_string() } else { format!("{} {:.0}", compass(heading(pos, e.at)), d) };
-        let what = if e.what.is_empty() { String::new() } else { format!(": {}", e.what) };
+        let name = self
+            .names
+            .get(&e.id)
+            .map_or(String::new(), |n| format!(" \"{n}\""));
+        let way = if d < 64.0 {
+            "here".to_string()
+        } else {
+            format!("{} {:.0}", compass(heading(pos, e.at)), d)
+        };
+        let what = if e.what.is_empty() {
+            String::new()
+        } else {
+            format!(": {}", e.what)
+        };
         format!("{}{name}{what} ({way})", e.id)
     }
 
     /// Something by id in a report: the id, her name for it, a thing's kind (no more: she has the
     /// list for the rest).
     fn tag(&self, id: &str, obs: &Observation) -> String {
-        let name = self.names.get(id).map_or(String::new(), |n| format!(" \"{n}\""));
-        let thing = id.split_once("-t").and_then(|(_, n)| n.parse::<i32>().ok()).and_then(|n| obs.things.iter().flatten().find(|t| t.id == n)).map_or(String::new(), |t| format!(" ({})", t.name));
+        let name = self
+            .names
+            .get(id)
+            .map_or(String::new(), |n| format!(" \"{n}\""));
+        let thing = id
+            .split_once("-t")
+            .and_then(|(_, n)| n.parse::<i32>().ok())
+            .and_then(|n| obs.things.iter().flatten().find(|t| t.id == n))
+            .map_or(String::new(), |t| format!(" ({})", t.name));
         format!("{id}{name}{thing}")
     }
 
     /// The id a reference means: one of her names, else itself.
     pub fn resolve(&self, r: &str) -> String {
         let r = r.trim();
-        self.names.iter().find(|(_, n)| n.eq_ignore_ascii_case(r)).map_or_else(|| r.to_string(), |(id, _)| id.clone())
+        self.names
+            .iter()
+            .find(|(_, n)| n.eq_ignore_ascii_case(r))
+            .map_or_else(|| r.to_string(), |(id, _)| id.clone())
     }
 
     /// Her name for an id; refused (with why) when too long, empty, or used for something else.
@@ -614,9 +860,15 @@ impl Director {
             return Err("a name can't be empty".into());
         }
         if name.chars().count() > NAME_MAX {
-            return Err(format!("\"{name}\" is too long: {NAME_MAX} characters at most"));
+            return Err(format!(
+                "\"{name}\" is too long: {NAME_MAX} characters at most"
+            ));
         }
-        if let Some((other, _)) = self.names.iter().find(|(i, n)| n.eq_ignore_ascii_case(name) && *i != id) {
+        if let Some((other, _)) = self
+            .names
+            .iter()
+            .find(|(i, n)| n.eq_ignore_ascii_case(name) && *i != id)
+        {
             return Err(format!("\"{name}\" is already the name of {other}"));
         }
         self.names.insert(id.to_string(), name.to_string());
@@ -627,15 +879,25 @@ impl Director {
     /// order taken up.
     pub fn tick(&mut self, agent: &mut Agent, obs: &Observation) {
         self.events(agent, obs);
-        agent.x_mut().spares = obs.things.iter().flatten().filter(|t| spare(t.name, obs)).map(|t| t.id).collect();
+        agent.x_mut().spares = obs
+            .things
+            .iter()
+            .flatten()
+            .filter(|t| spare(t.name, obs))
+            .map(|t| t.id)
+            .collect();
         if let Some((line, what, until)) = self.pressed.clone() {
             let effect = self.effect_of(agent, obs, line);
             if effect.is_some() || obs.tic >= until {
                 self.pressed = None;
-                self.report(obs, true, match effect {
-                    Some(w) => format!("Pressed {what}: {w}."),
-                    None => format!("Pressed {what}: no change seen."),
-                });
+                self.report(
+                    obs,
+                    true,
+                    match effect {
+                        Some(w) => format!("Pressed {what}: {w}."),
+                        None => format!("Pressed {what}: no change seen."),
+                    },
+                );
             }
         }
         if let Some((o, rush)) = self.queue.pop_front() {
@@ -674,14 +936,29 @@ impl Director {
             }
             Some(Doing::Off) => {}
             Some(Doing::Once(id, what)) => {
-                let (ok, why, pressed_nothing) = ended.map_or((false, "stopped".to_string(), false), |e| (e.ok, e.why, e.pressed));
+                let (ok, why, pressed_nothing) = ended
+                    .map_or((false, "stopped".to_string(), false), |e| {
+                        (e.ok, e.why, e.pressed)
+                    });
                 // (a switch pressed: what it did told when she's seen it, or after a while)
                 // (pressed and nothing seen to change is pressed all the same: what it moved may be
                 // out of sight, MAP07's platform across the arena; not "couldn't")
                 let pressed = ok || pressed_nothing;
-                match id.strip_prefix("switch-l").and_then(|l| l.parse::<usize>().ok()).filter(|_| pressed) {
+                match id
+                    .strip_prefix("switch-l")
+                    .and_then(|l| l.parse::<usize>().ok())
+                    .filter(|_| pressed)
+                {
                     Some(l) => self.pressed = Some((l, id.clone(), obs.tic + PRESS_WATCH)),
-                    None => self.report(obs, ok, if ok { format!("Done: {what}.") } else { format!("Couldn't: {what} ({why}).") }),
+                    None => self.report(
+                        obs,
+                        ok,
+                        if ok {
+                            format!("Done: {what}.")
+                        } else {
+                            format!("Couldn't: {what} ({why}).")
+                        },
+                    ),
                 }
             }
             Some(Doing::Area(id, what, secrets)) => {
@@ -689,17 +966,27 @@ impl Director {
                     self.doing = Some(Doing::Area(id, what, secrets));
                 } else {
                     let found = self.found(agent, obs, |d, a, o| d.in_area(a, &id, o));
-                    self.report(obs, true, format!("Explored {what}{}.{found}", searched(secrets)));
+                    self.report(
+                        obs,
+                        true,
+                        format!("Explored {what}{}.{found}", searched(secrets)),
+                    );
                 }
             }
             Some(Doing::Way(b, secrets)) => {
                 let pos = obs.pos();
-                let fits = move |_: &Self, _: &Agent, o: &Objective| dist(pos, o.goal) > 64.0 && norm(heading(pos, o.goal) - b).abs() < EXPLORE_CONE;
+                let fits = move |_: &Self, _: &Agent, o: &Objective| {
+                    dist(pos, o.goal) > 64.0 && norm(heading(pos, o.goal) - b).abs() < EXPLORE_CONE
+                };
                 if self.next_in(agent, obs, secrets, fits) {
                     self.doing = Some(Doing::Way(b, secrets));
                 } else {
                     let found = self.found(agent, obs, fits);
-                    self.report(obs, true, format!("Explored {}{}.{found}", compass(b), searched(secrets)));
+                    self.report(
+                        obs,
+                        true,
+                        format!("Explored {}{}.{found}", compass(b), searched(secrets)),
+                    );
                 }
             }
         }
@@ -731,7 +1018,11 @@ impl Director {
             // (told once: in an arena it goes on and off, each time a word in her context)
             if !self.told_paused {
                 self.told_paused = true;
-                self.report(obs, true, "Exploring paused while she's fighting; it goes on after.".into());
+                self.report(
+                    obs,
+                    true,
+                    "Exploring paused while she's fighting; it goes on after.".into(),
+                );
             }
         }
         if self.paused && self.calm_since.is_some_and(|t| obs.tic - t >= RESUME_CALM) {
@@ -751,7 +1042,11 @@ impl Director {
         self.told_paused = false;
         match o {
             Order::Stop => self.report(obs, true, "Stopped.".into()),
-            Order::Exit => match self.objectives_of(agent, obs, &[Kind::Exit]).into_iter().next() {
+            Order::Exit => match self
+                .objectives_of(agent, obs, &[Kind::Exit])
+                .into_iter()
+                .next()
+            {
                 Some(e) => self.go(agent, obs, &e.id, false),
                 None => self.report(obs, false, "No exit known yet.".into()),
             },
@@ -768,22 +1063,55 @@ impl Director {
                 let what = self.tag(&a.id, obs);
                 let fits = |d: &Self, a2: &Agent, o: &Objective| d.in_area(a2, &id, o);
                 if self.next_in(agent, obs, secrets, fits) {
-                    self.report(obs, true, format!("Exploring {what}{}.", with_secrets(secrets)));
+                    self.report(
+                        obs,
+                        true,
+                        format!("Exploring {what}{}.", with_secrets(secrets)),
+                    );
                     self.doing = Some(Doing::Area(id, what, secrets));
                 } else {
                     let found = self.found(agent, obs, fits);
-                    self.report(obs, true, format!("Nothing to {} in {what}.{found}", if secrets > 0 { "explore or search" } else { "explore" }));
+                    self.report(
+                        obs,
+                        true,
+                        format!(
+                            "Nothing to {} in {what}.{found}",
+                            if secrets > 0 {
+                                "explore or search"
+                            } else {
+                                "explore"
+                            }
+                        ),
+                    );
                 }
             }
             Order::ExploreWay(b, secrets) => {
                 let pos = obs.pos();
-                let fits = move |_: &Self, _: &Agent, o: &Objective| dist(pos, o.goal) > 64.0 && norm(heading(pos, o.goal) - b).abs() < EXPLORE_CONE;
+                let fits = move |_: &Self, _: &Agent, o: &Objective| {
+                    dist(pos, o.goal) > 64.0 && norm(heading(pos, o.goal) - b).abs() < EXPLORE_CONE
+                };
                 if self.next_in(agent, obs, secrets, fits) {
-                    self.report(obs, true, format!("Exploring {}{}.", compass(b), with_secrets(secrets)));
+                    self.report(
+                        obs,
+                        true,
+                        format!("Exploring {}{}.", compass(b), with_secrets(secrets)),
+                    );
                     self.doing = Some(Doing::Way(b, secrets));
                 } else {
                     let found = self.found(agent, obs, fits);
-                    self.report(obs, false, format!("Nothing to {} {}.{found}", if secrets > 0 { "explore or search" } else { "explore" }, compass(b)));
+                    self.report(
+                        obs,
+                        false,
+                        format!(
+                            "Nothing to {} {}.{found}",
+                            if secrets > 0 {
+                                "explore or search"
+                            } else {
+                                "explore"
+                            },
+                            compass(b)
+                        ),
+                    );
                 }
             }
         }
@@ -795,13 +1123,19 @@ impl Director {
     fn off_hurting_floor(&mut self, agent: &mut Agent, obs: &Observation) -> bool {
         let nav = std::rc::Rc::clone(&agent.x().nav);
         let pos = obs.pos();
-        let Some(here) = nav.poly_at(pos) else { return false };
+        let Some(here) = nav.poly_at(pos) else {
+            return false;
+        };
         if !agent.x().knowledge.damaging(nav.sector_of_poly(here)) {
             self.told_trapped = false;
             return false;
         }
         let v = obs.velocity.unwrap_or((0.0, 0.0));
-        let way = if v.0.hypot(v.1) > 1.0 { v.1.atan2(v.0).to_degrees() } else { obs.angle };
+        let way = if v.0.hypot(v.1) > 1.0 {
+            v.1.atan2(v.0).to_degrees()
+        } else {
+            obs.angle
+        };
         let _ = self.open_objectives(agent, obs); // (what she can get to, up to date)
         let x = agent.x();
         let mut spots: Vec<(f64, Point)> = x
@@ -829,7 +1163,14 @@ impl Director {
         // stone gone down into the blood, the bank 40 up all round)
         if !self.told_trapped {
             self.told_trapped = true;
-            self.report(obs, false, format!("On a hurting floor, no known way off (health {:.0}).", obs.health.unwrap_or(0.0)));
+            self.report(
+                obs,
+                false,
+                format!(
+                    "On a hurting floor, no known way off (health {:.0}).",
+                    obs.health.unwrap_or(0.0)
+                ),
+            );
         }
         false
     }
@@ -839,11 +1180,20 @@ impl Director {
     /// not far. True if she's off for it.
     fn pick_up_nearby(&mut self, agent: &mut Agent, obs: &Observation) -> bool {
         let spares = agent.x().spares.clone();
-        let mut options: Vec<Objective> = self.open_objectives(agent, obs).into_iter().filter(|o| o.kind == Kind::Item && !o.risky && o.thing.is_some_and(|t| spares.contains(&t))).collect();
+        let mut options: Vec<Objective> = self
+            .open_objectives(agent, obs)
+            .into_iter()
+            .filter(|o| {
+                o.kind == Kind::Item && !o.risky && o.thing.is_some_and(|t| spares.contains(&t))
+            })
+            .collect();
         let pos = obs.pos();
         options.sort_by(|a, b| dist(pos, a.goal).total_cmp(&dist(pos, b.goal)));
         for o in options.into_iter().take(PICKUP_TRIES) {
-            let near = agent.x_mut().route_to(&o, obs).is_some_and(|st| crate::knowledge::explorer::route_length(&st) <= PICKUP_RANGE);
+            let near = agent
+                .x_mut()
+                .route_to(&o, obs)
+                .is_some_and(|st| crate::knowledge::explorer::route_length(&st) <= PICKUP_RANGE);
             if near && agent.x_mut().take(obs, o) {
                 return true;
             }
@@ -852,17 +1202,32 @@ impl Director {
     }
 
     /// The objective going to (trying, picking up) `id` would be; why not, if there's none.
-    fn objective_for(&mut self, agent: &mut Agent, obs: &Observation, id: &str) -> Result<Objective, String> {
+    fn objective_for(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        id: &str,
+    ) -> Result<Objective, String> {
         // (the explorer's options, which also brings what she can get to up to date)
         let open = self.open_objectives(agent, obs);
         if let Some(a) = self.places(agent).by_id(id).cloned() {
             let x = agent.x();
             let at = x.stand_spot_for(a.center, &x.reach);
-            return Ok(Objective::new(Kind::Visit, at, format!("go to {}", Places::sketch(&a))));
+            return Ok(Objective::new(
+                Kind::Visit,
+                at,
+                format!("go to {}", Places::sketch(&a)),
+            ));
         }
-        if let Some(t) = id.split_once("-t").and_then(|(_, n)| n.parse::<i32>().ok()).and_then(|n| obs.things.iter().flatten().find(|t| t.id == n)) {
+        if let Some(t) = id
+            .split_once("-t")
+            .and_then(|(_, n)| n.parse::<i32>().ok())
+            .and_then(|n| obs.things.iter().flatten().find(|t| t.id == n))
+        {
             let x = agent.x();
-            let at = x.touch_spot((t.x, t.y), &x.reach).ok_or_else(|| format!("No known way to the {} yet; explore near it.", t.name))?;
+            let at = x
+                .touch_spot((t.x, t.y), &x.reach)
+                .ok_or_else(|| format!("No known way to the {} yet; explore near it.", t.name))?;
             let mut o = Objective::new(Kind::Item, at, format!("pick up {}", t.name));
             o.thing = Some(t.id);
             return Ok(o);
@@ -870,12 +1235,21 @@ impl Director {
         // (or what she's doing this moment: listed a moment ago, then taken up by the order in hand
         // as she got to it; GPT-Evil's door-l148, "here" in the list, "nothing to go to" a tic later)
         let current = agent.x().current.clone().filter(|o| id_of(o) == id);
-        open.into_iter().find(|o| id_of(o) == id).or(current).ok_or_else(|| format!("Nothing \"{id}\" to go to (done, gone or unknown)."))
+        open.into_iter()
+            .find(|o| id_of(o) == id)
+            .or(current)
+            .ok_or_else(|| format!("Nothing \"{id}\" to go to (done, gone or unknown)."))
     }
 
     /// Could she go to `r` now (risky: past what she'd rather not, if it won't kill her)? What
     /// it is, or why not (and what would do it, if risky would).
-    pub fn check_go(&mut self, agent: &mut Agent, obs: &Observation, r: &str, risky: bool) -> Result<String, String> {
+    pub fn check_go(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        r: &str,
+        risky: bool,
+    ) -> Result<String, String> {
         let id = self.resolve(r);
         let mut obj = self.objective_for(agent, obs, &id)?;
         obj.risky = risky;
@@ -933,18 +1307,29 @@ impl Director {
             .map(|o| {
                 let info = o.trigger.as_ref().map(|t| &t.info);
                 let what = match info {
-                    Some(i) if i.category == crate::specials::Category::SecretExit => "secret exit".to_string(),
+                    Some(i) if i.category == crate::specials::Category::SecretExit => {
+                        "secret exit".to_string()
+                    }
                     Some(i) => lock_name(i.lock).map_or(String::new(), |k| format!("needs {k}")),
                     None => String::new(),
                 };
-                Entry { id: id_of(&o), what, at: o.goal }
+                Entry {
+                    id: id_of(&o),
+                    what,
+                    at: o.goal,
+                }
             })
             .collect()
     }
 
     /// What an exploring order leaves to her, as sentences for its end ("" if nothing): the
     /// switches found and not pressed, and the walls still to search at each thoroughness.
-    fn found(&mut self, agent: &mut Agent, obs: &Observation, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> String {
+    fn found(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        fits: impl Fn(&Self, &Agent, &Objective) -> bool,
+    ) -> String {
         let mut out = self.switches_found(agent, obs, &fits);
         let walls = agent.x_mut().suspected_walls(obs, 3);
         let [a, b, c] = by_thoroughness(walls.iter().filter(|o| fits(self, agent, o)));
@@ -956,19 +1341,46 @@ impl Director {
 
     /// The switches not pressed yet that `fits` (where she'd press them from), as a sentence for an
     /// exploring order's end ("" if none).
-    fn switches_found(&mut self, agent: &mut Agent, obs: &Observation, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> String {
-        let found: Vec<Objective> = self.open_objectives(agent, obs).into_iter().filter(|o| o.kind == Kind::Switch && fits(self, agent, o)).collect();
+    fn switches_found(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        fits: impl Fn(&Self, &Agent, &Objective) -> bool,
+    ) -> String {
+        let found: Vec<Objective> = self
+            .open_objectives(agent, obs)
+            .into_iter()
+            .filter(|o| o.kind == Kind::Switch && fits(self, agent, o))
+            .collect();
         if found.is_empty() {
             return String::new();
         }
-        let lines: Vec<String> = found.iter().map(|o| self.describe(&Entry { id: id_of(o), what: String::new(), at: o.goal }, obs)).collect();
+        let lines: Vec<String> = found
+            .iter()
+            .map(|o| {
+                self.describe(
+                    &Entry {
+                        id: id_of(o),
+                        what: String::new(),
+                        at: o.goal,
+                    },
+                    obs,
+                )
+            })
+            .collect();
         format!(" Switches: {}.", lines.join(", "))
     }
 
     /// What a line (a switch) does, as far as she knows: from having set it off, or another of the
     /// same mechanism. None if not known (never pressed: she's no way to know).
     fn effect_of(&mut self, agent: &mut Agent, obs: &Observation, line: usize) -> Option<String> {
-        let sectors = agent.x().knowledge.known_triggers().into_iter().find(|(t, _)| t.line == line as i64).map(|(_, s)| s)?;
+        let sectors = agent
+            .x()
+            .knowledge
+            .known_triggers()
+            .into_iter()
+            .find(|(t, _)| t.line == line as i64)
+            .map(|(_, s)| s)?;
         if sectors.is_empty() {
             return None;
         }
@@ -977,7 +1389,17 @@ impl Director {
         let mut areas: Vec<&Area> = sectors.iter().map(|&s| places.area_of(s)).collect();
         areas.sort_by(|a, b| a.id.cmp(&b.id));
         areas.dedup_by(|a, b| a.id == b.id);
-        let wheres: Vec<String> = areas.iter().map(|a| format!("{} ({} {:.0})", a.id, compass(heading(pos, a.center)), dist(pos, a.center))).collect();
+        let wheres: Vec<String> = areas
+            .iter()
+            .map(|a| {
+                format!(
+                    "{} ({} {:.0})",
+                    a.id,
+                    compass(heading(pos, a.center)),
+                    dist(pos, a.center)
+                )
+            })
+            .collect();
         Some(format!("moves {}", wheres.join(", ")))
     }
 
@@ -985,20 +1407,34 @@ impl Director {
     /// inside, into a doorway or at the next room's wall, is exploring it; standing in the next
     /// room looking back isn't: E1M1, "explore the room" through a door to the next room's edge.)
     fn in_area(&self, agent: &Agent, id: &str, o: &Objective) -> bool {
-        let Some(places) = &self.places else { return false };
+        let Some(places) = &self.places else {
+            return false;
+        };
         let nav = &agent.x().nav;
-        nav.poly_at(o.goal).is_some_and(|q| places.area_of(nav.sector_of_poly(q)).id == id)
+        nav.poly_at(o.goal)
+            .is_some_and(|q| places.area_of(nav.sector_of_poly(q)).id == id)
     }
 
     /// The best of the explorer's objectives that `fits` (and an exploring one: not out by an exit,
     /// not off through a teleporter), taken up. False if there's none (or no way to any).
-    fn next_in(&mut self, agent: &mut Agent, obs: &Observation, secrets: u8, fits: impl Fn(&Self, &Agent, &Objective) -> bool) -> bool {
+    fn next_in(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        secrets: u8,
+        fits: impl Fn(&Self, &Agent, &Objective) -> bool,
+    ) -> bool {
         let open = self.open_objectives(agent, obs);
         // (the walls searched that thoroughly, not the strong ones by her the explorer offers;
         // after the rest, as a player does: what's in plain sight first)
         let walls = agent.x_mut().suspected_walls(obs, secrets);
-        let options: Vec<Objective> =
-            open.into_iter().filter(explores).chain(walls).filter(|o| !self.taken.contains(&taken_key(o))).filter(|o| fits(self, agent, o)).collect();
+        let options: Vec<Objective> = open
+            .into_iter()
+            .filter(explores)
+            .chain(walls)
+            .filter(|o| !self.taken.contains(&taken_key(o)))
+            .filter(|o| fits(self, agent, o))
+            .collect();
         for o in options {
             let id = taken_key(&o);
             if agent.x_mut().take(obs, o) {
@@ -1013,7 +1449,12 @@ impl Director {
     /// An order's news: started, done, couldn't (worth a reaction when it's done or couldn't be).
     fn report(&mut self, obs: &Observation, ok: bool, text: String) {
         let notable = !text.starts_with("Going") && !text.starts_with("Exploring");
-        self.reports.push(Report { tic: obs.tic, ok, text, notable });
+        self.reports.push(Report {
+            tic: obs.tic,
+            ok,
+            text,
+            notable,
+        });
     }
 }
 
@@ -1101,7 +1542,10 @@ pub fn bearing(s: &str) -> Option<f64> {
 /// nor a switch: pressing one is hers to decide, it may set off anything (exploring finds them and
 /// says so, the user's); nor pressing walls for secrets (a search asked for adds its own).
 fn explores(o: &Objective) -> bool {
-    !matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Noise | Kind::Recheck | Kind::Hunt | Kind::Switch) && !is_search(o)
+    !matches!(
+        o.kind,
+        Kind::Exit | Kind::Teleporter | Kind::Noise | Kind::Recheck | Kind::Hunt | Kind::Switch
+    ) && !is_search(o)
 }
 
 /// The walls among `walls` (a search's, their suspicion the secret score) to search at each
@@ -1148,11 +1592,17 @@ fn spare(name: &str, obs: &Observation) -> bool {
     match name {
         "HealthBonus" => health < 200.0,
         "ArmorBonus" => obs.armor.unwrap_or(0.0) < 200.0,
-        "Stimpack" | "Medikit" => health_item(name).is_some_and(|(amount, cap)| health + f64::from(amount) <= f64::from(cap)),
+        "Stimpack" | "Medikit" => health_item(name)
+            .is_some_and(|(amount, cap)| health + f64::from(amount) <= f64::from(cap)),
         "Backpack" => false,
         _ => ammo_item(name).is_some_and(|(slots, amount)| {
             let slot = slots[0];
-            let have = obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n);
+            let have = obs
+                .ammo
+                .iter()
+                .flatten()
+                .find(|(s, _)| *s == slot)
+                .map_or(0, |(_, n)| *n);
             let max = ammo_max(slot) * if obs.backpack == Some(true) { 2.0 } else { 1.0 };
             f64::from(have + amount) <= max
         }),
@@ -1174,5 +1624,8 @@ fn lock_name(l: crate::specials::Lock) -> Option<&'static str> {
 
 /// The monsters fighting her now (`Combat::engaged`: able to hurt her from where they are).
 fn engaged(agent: &Agent, obs: &Observation) -> Vec<crate::motor::Thing> {
-    agent.player().map(|p| p.combat().engaged(obs)).unwrap_or_default()
+    agent
+        .player()
+        .map(|p| p.combat().engaged(obs))
+        .unwrap_or_default()
 }

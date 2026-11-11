@@ -23,7 +23,9 @@ const MOST: usize = 400_000;
 
 /// Is p clear of every barrel, her box against theirs?
 pub fn clear_of(barrels: &[Point], p: Point) -> bool {
-    barrels.iter().all(|b| (p.0 - b.0).abs() >= ROOM || (p.1 - b.1).abs() >= ROOM)
+    barrels
+        .iter()
+        .all(|b| (p.0 - b.0).abs() >= ROOM || (p.1 - b.1).abs() >= ROOM)
 }
 
 /// Is the straight line from a to b clear of every barrel all along?
@@ -39,17 +41,35 @@ pub fn chord_clear_of(barrels: &[Point], a: Point, b: Point) -> bool {
 /// The way from `from` to `to` between `barrels`, near the way `along` (the mesh's): the floor
 /// under a point where she can stand there (`floor`: None where she can't), a step between
 /// neighbouring cells no more than `step`. The points to walk by, `from` left out; None: no way.
-pub fn lane(from: Point, to: Point, along: &[Point], barrels: &[Point], floor: &dyn Fn(Point) -> Option<f64>, step: f64) -> Option<Vec<Point>> {
+pub fn lane(
+    from: Point,
+    to: Point,
+    along: &[Point],
+    barrels: &[Point],
+    floor: &dyn Fn(Point) -> Option<f64>,
+    step: f64,
+) -> Option<Vec<Point>> {
     let xs = along.iter().chain([&from, &to]).map(|p| p.0);
     let ys = along.iter().chain([&from, &to]).map(|p| p.1);
-    let (x0, x1) = (xs.clone().fold(f64::INFINITY, f64::min) - MARGIN, xs.fold(f64::NEG_INFINITY, f64::max) + MARGIN);
-    let (y0, y1) = (ys.clone().fold(f64::INFINITY, f64::min) - MARGIN, ys.fold(f64::NEG_INFINITY, f64::max) + MARGIN);
+    let (x0, x1) = (
+        xs.clone().fold(f64::INFINITY, f64::min) - MARGIN,
+        xs.fold(f64::NEG_INFINITY, f64::max) + MARGIN,
+    );
+    let (y0, y1) = (
+        ys.clone().fold(f64::INFINITY, f64::min) - MARGIN,
+        ys.fold(f64::NEG_INFINITY, f64::max) + MARGIN,
+    );
     let (w, h) = (((x1 - x0) / CELL) as i64 + 1, ((y1 - y0) / CELL) as i64 + 1);
     if w <= 0 || h <= 0 || (w * h) as usize > 4 * MOST {
         return None;
     }
     let at = |c: (i64, i64)| (x0 + c.0 as f64 * CELL, y0 + c.1 as f64 * CELL);
-    let cell = |p: Point| (((p.0 - x0) / CELL).round() as i64, ((p.1 - y0) / CELL).round() as i64);
+    let cell = |p: Point| {
+        (
+            ((p.0 - x0) / CELL).round() as i64,
+            ((p.1 - y0) / CELL).round() as i64,
+        )
+    };
     let (start, goal) = (cell(from), cell(to));
     // (the floor at a cell, None where she can't be: looked up once)
     let mut floors: HashMap<(i64, i64), Option<f64>> = HashMap::new();
@@ -79,25 +99,49 @@ pub fn lane(from: Point, to: Point, along: &[Point], barrels: &[Point], floor: &
                 cells.push(p);
             }
             cells.reverse();
-            let pts: Vec<Point> = std::iter::once(from).chain(cells[1..].iter().map(|&c| at(c))).collect();
+            let pts: Vec<Point> = std::iter::once(from)
+                .chain(cells[1..].iter().map(|&c| at(c)))
+                .collect();
             return Some(straightened(&pts, barrels, floor, step));
         }
         looked += 1;
         if looked > MOST {
             return None;
         }
-        let (Some(fc), Some(&g)) = (floor_at(c, &mut floors), best.get(&c)) else { continue };
-        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] {
+        let (Some(fc), Some(&g)) = (floor_at(c, &mut floors), best.get(&c)) else {
+            continue;
+        };
+        for (dx, dy) in [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ] {
             let n = (c.0 + dx, c.1 + dy);
-            let Some(fne) = floor_at(n, &mut floors) else { continue };
+            let Some(fne) = floor_at(n, &mut floors) else {
+                continue;
+            };
             if (fne - fc).abs() > step {
                 continue;
             }
             // (aslant only past two free corners)
-            if dx != 0 && dy != 0 && (floor_at((c.0 + dx, c.1), &mut floors).is_none() || floor_at((c.0, c.1 + dy), &mut floors).is_none()) {
+            if dx != 0
+                && dy != 0
+                && (floor_at((c.0 + dx, c.1), &mut floors).is_none()
+                    || floor_at((c.0, c.1 + dy), &mut floors).is_none())
+            {
                 continue;
             }
-            let k = g + CELL * if dx != 0 && dy != 0 { std::f64::consts::SQRT_2 } else { 1.0 };
+            let k = g + CELL
+                * if dx != 0 && dy != 0 {
+                    std::f64::consts::SQRT_2
+                } else {
+                    1.0
+                };
             if best.get(&n).is_none_or(|&b| k < b) {
                 best.insert(n, k);
                 came.insert(n, c);
@@ -110,7 +154,12 @@ pub fn lane(from: Point, to: Point, along: &[Point], barrels: &[Point], floor: &
 
 /// The grid's way with its corners taken out: each point the furthest on that a straight line
 /// gets to, clear of barrels and on floor she can walk all along. Without `pts[0]`.
-fn straightened(pts: &[Point], barrels: &[Point], floor: &dyn Fn(Point) -> Option<f64>, step: f64) -> Vec<Point> {
+fn straightened(
+    pts: &[Point],
+    barrels: &[Point],
+    floor: &dyn Fn(Point) -> Option<f64>,
+    step: f64,
+) -> Vec<Point> {
     let walkable = |a: Point, b: Point| {
         let n = (dist(a, b) / CELL).ceil().max(1.0) as usize;
         let mut last = floor(a);

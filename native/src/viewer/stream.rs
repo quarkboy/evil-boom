@@ -10,8 +10,8 @@ use std::collections::VecDeque;
 use std::collections::BTreeMap;
 
 use super::present::Stage;
-use crate::knowledge::explorer::Kind;
 use super::{Canvas, MapView, Rect, Rgb, Watch, DIM};
+use crate::knowledge::explorer::Kind;
 
 /// the stream's window
 pub const SW: usize = 1920;
@@ -82,7 +82,19 @@ impl Stream {
             4 => "Ultra-Violence",
             _ => "Nightmare!",
         };
-        Stream { side, skill, title: (String::new(), String::new()), events: VecDeque::new(), said: VecDeque::new(), log_seen: 0, levels: 0, deaths: 0, run_tics: 0, last_tic: 0, last: (String::new(), false, false, 0) }
+        Stream {
+            side,
+            skill,
+            title: (String::new(), String::new()),
+            events: VecDeque::new(),
+            said: VecDeque::new(),
+            log_seen: 0,
+            levels: 0,
+            deaths: 0,
+            run_tics: 0,
+            last_tic: 0,
+            last: (String::new(), false, false, 0),
+        }
     }
 
     fn event(&mut self, text: String, colour: Rgb) {
@@ -109,13 +121,19 @@ impl Stream {
     /// What's changed since the last frame.
     fn update(&mut self, w: &Watch) {
         let tic = w.engine.tic;
-        if tic > self.last_tic && w.engine.screen().is_none_or(|s| s.state == 0) && !w.engine.finished() {
+        if tic > self.last_tic
+            && w.engine.screen().is_none_or(|s| s.state == 0)
+            && !w.engine.finished()
+        {
             self.run_tics += tic - self.last_tic;
         }
         self.last_tic = tic;
         // (a level's title once it's on, the automap's, its "level 7:" left off: the game has it
         // for a level only)
-        if self.title.1 != w.map_name && w.engine.screen().is_none_or(|s| s.state == 0 && !s.wiping) && w.engine.tic > crate::engine::WARMUP_TICS {
+        if self.title.1 != w.map_name
+            && w.engine.screen().is_none_or(|s| s.state == 0 && !s.wiping)
+            && w.engine.tic > crate::engine::WARMUP_TICS
+        {
             if let Some(t) = w.engine.level_title() {
                 let name = t.split_once(':').map_or(t.as_str(), |(_, n)| n).trim();
                 let name = title_case(name);
@@ -124,7 +142,12 @@ impl Stream {
             }
         }
         let secrets = w.engine.tally()[2].0;
-        let now = (w.map_name.clone(), w.engine.dead(), w.engine.exited(), secrets);
+        let now = (
+            w.map_name.clone(),
+            w.engine.dead(),
+            w.engine.exited(),
+            secrets,
+        );
         if now.0 == self.last.0 {
             if now.1 && !self.last.1 {
                 self.deaths += 1;
@@ -133,7 +156,13 @@ impl Stream {
             if now.2 && !self.last.2 {
                 self.levels += 1;
                 let t = w.engine.tally();
-                self.event(format!("{} done: kills {}/{}, secrets {}/{}", now.0, t[1].0, t[1].1, t[2].0, t[2].1), (90, 210, 110));
+                self.event(
+                    format!(
+                        "{} done: kills {}/{}, secrets {}/{}",
+                        now.0, t[1].0, t[1].1, t[2].0, t[2].1
+                    ),
+                    (90, 210, 110),
+                );
             }
             if now.3 > self.last.3 {
                 self.event("Found a secret!".into(), (240, 210, 70));
@@ -153,8 +182,19 @@ impl Stream {
                 while self.said.len() > SAID {
                     self.said.pop_front();
                 }
-            } else if let Some(order) = l.strip_prefix(">> ").filter(|o| o.starts_with("doom_") && !o.starts_with("doom_list") && !o.starts_with("doom_inspect") && !o.starts_with("doom_status")) {
-                self.event(format!("Evil: {}", order.replace("doom_", "").replace(['{', '}', '"'], "")), EVIL);
+            } else if let Some(order) = l.strip_prefix(">> ").filter(|o| {
+                o.starts_with("doom_")
+                    && !o.starts_with("doom_list")
+                    && !o.starts_with("doom_inspect")
+                    && !o.starts_with("doom_status")
+            }) {
+                self.event(
+                    format!(
+                        "Evil: {}",
+                        order.replace("doom_", "").replace(['{', '}', '"'], "")
+                    ),
+                    EVIL,
+                );
             }
         }
     }
@@ -163,7 +203,9 @@ impl Stream {
 impl Watch {
     /// The stream's window: the game on its side, the column on the other.
     pub(super) fn draw_stream(&mut self, c: &mut Canvas) {
-        let Some(mut st) = self.stream.take() else { return };
+        let Some(mut st) = self.stream.take() else {
+            return;
+        };
         st.update(self);
         let (game, column): (Rect, Rect) = match st.side {
             Side::Right => ((0, 0, GW, SH), (GW, 0, PW, SH)),
@@ -207,12 +249,31 @@ impl Watch {
             y = say(c, &line, (x, y), 20.0, TEXT);
         }
         let level_time = clock(self.engine.tic);
-        y = say(c, &format!("{}  ·  {level_time}", st.skill), (x, y + 2), 14.0, DIM) + 10;
+        y = say(
+            c,
+            &format!("{}  ·  {level_time}", st.skill),
+            (x, y + 2),
+            14.0,
+            DIM,
+        ) + 10;
         // the map of what she's seen, following her
         let bx: Rect = (x, y, inner, inner);
         match &self.obs {
-            Some(o) if self.present.as_ref().is_none_or(|p| matches!(p.stage, Stage::Level | Stage::Dead { .. })) => {
-                self.draw_map_in(c, MapView { r: bx, centre: (o.x, o.y), scale: inner as f64 / MAP_SPAN }, false);
+            Some(o)
+                if self
+                    .present
+                    .as_ref()
+                    .is_none_or(|p| matches!(p.stage, Stage::Level | Stage::Dead { .. })) =>
+            {
+                self.draw_map_in(
+                    c,
+                    MapView {
+                        r: bx,
+                        centre: (o.x, o.y),
+                        scale: inner as f64 / MAP_SPAN,
+                    },
+                    false,
+                );
             }
             _ => c.fill(bx, (8, 8, 10)),
         }
@@ -239,26 +300,54 @@ impl Watch {
         // the tally
         y = heading(c, "TALLY", (x, y));
         let t = self.engine.tally();
-        for (name, (got, of), colour) in [("Kills", t[1], (200, 64, 52)), ("Items", t[0], (72, 160, 224)), ("Secrets", t[2], (232, 200, 64))] {
+        for (name, (got, of), colour) in [
+            ("Kills", t[1], (200, 64, 52)),
+            ("Items", t[0], (72, 160, 224)),
+            ("Secrets", t[2], (232, 200, 64)),
+        ] {
             say(c, name, (x, y), 15.0, TEXT);
             let n = format!("{got}/{of}");
             say(c, &n, (x + inner - n.len() * 15, y), 15.0, TEXT);
             y += 19;
             c.fill((x, y, inner, 7), (40, 40, 48));
-            let filled = if of > 0 { inner * usize::try_from(got.clamp(0, of)).unwrap_or(0) / usize::try_from(of).unwrap_or(1) } else { 0 };
+            let filled = if of > 0 {
+                inner * usize::try_from(got.clamp(0, of)).unwrap_or(0)
+                    / usize::try_from(of).unwrap_or(1)
+            } else {
+                0
+            };
             c.fill((x, y, filled, 7), colour);
             y += 15;
         }
         y += 6;
         // the run
         y = heading(c, "RUN", (x, y));
-        y = say(c, &format!("levels {}  ·  deaths {}  ·  {}", st.levels, st.deaths, clock(st.run_tics)), (x, y), 15.0, TEXT) + 10;
+        y = say(
+            c,
+            &format!(
+                "levels {}  ·  deaths {}  ·  {}",
+                st.levels,
+                st.deaths,
+                clock(st.run_tics)
+            ),
+            (x, y),
+            15.0,
+            TEXT,
+        ) + 10;
         // lately, newest first, till the column's full
         y = heading(c, "LATELY", (x, y));
         for (i, (text, colour, n)) in st.events.iter().rev().enumerate() {
-            let text = if *n > 1 { format!("{text} x{n}") } else { text.clone() };
+            let text = if *n > 1 {
+                format!("{text} x{n}")
+            } else {
+                text.clone()
+            };
             let fade = 1.0 - (i as f64 * 0.07).min(0.6);
-            let col = ((f64::from(colour.0) * fade) as u8, (f64::from(colour.1) * fade) as u8, (f64::from(colour.2) * fade) as u8);
+            let col = (
+                (f64::from(colour.0) * fade) as u8,
+                (f64::from(colour.1) * fade) as u8,
+                (f64::from(colour.2) * fade) as u8,
+            );
             for line in wrap(&text, inner / 14) {
                 if y + 16 > r.3 - PAD {
                     return;
@@ -283,7 +372,11 @@ impl Watch {
         }
         // (in a fight: what she's fighting, as the directed status has it)
         if let Some(obs) = &self.obs {
-            let foes = self.agent.player().map(|p| p.combat().engaged(obs)).unwrap_or_default();
+            let foes = self
+                .agent
+                .player()
+                .map(|p| p.combat().engaged(obs))
+                .unwrap_or_default();
             if !foes.is_empty() {
                 let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
                 for t in &foes {
@@ -310,10 +403,16 @@ impl Watch {
         } else if let Some(f) = &self.feed {
             f.director.doing(&self.agent)
         } else {
-            self.agent.x().current.as_ref().map_or_else(|| "exploring".into(), |o| plain(o.kind, &o.label))
+            self.agent
+                .x()
+                .current
+                .as_ref()
+                .map_or_else(|| "exploring".into(), |o| plain(o.kind, &o.label))
         };
         let mut chars = doing.chars();
-        chars.next().map_or(doing.clone(), |first| first.to_uppercase().chain(chars).collect())
+        chars.next().map_or(doing.clone(), |first| {
+            first.to_uppercase().chain(chars).collect()
+        })
     }
 }
 
@@ -348,7 +447,10 @@ fn plain(kind: Kind, label: &str) -> String {
         Kind::Frontier | Kind::Room | Kind::Visit | Kind::Recheck => "exploring".into(),
         Kind::Noise => "checking out a noise".into(),
         Kind::Teleporter => "taking a teleporter".into(),
-        Kind::Item => label.strip_prefix("pick up ").map_or_else(|| "picking something up".into(), |what| format!("picking up the {}", what.to_lowercase())),
+        Kind::Item => label.strip_prefix("pick up ").map_or_else(
+            || "picking something up".into(),
+            |what| format!("picking up the {}", what.to_lowercase()),
+        ),
         Kind::Hunt => "hunting".into(),
         Kind::Wall => "searching for secrets".into(),
         Kind::Secret => "going back to a secret".into(),
@@ -391,7 +493,8 @@ fn title_case(s: &str) -> String {
     s.split_whitespace()
         .map(|w| {
             let mut cs = w.chars();
-            cs.next().map_or_else(String::new, |f| f.to_uppercase().chain(cs).collect())
+            cs.next()
+                .map_or_else(String::new, |f| f.to_uppercase().chain(cs).collect())
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -432,15 +535,24 @@ mod tests {
 
     #[test]
     fn words_wrapped() {
-        assert_eq!(wrap("going to the blue door, rushing", 12), vec!["going to the", "blue door,", "rushing"]);
+        assert_eq!(
+            wrap("going to the blue door, rushing", 12),
+            vec!["going to the", "blue door,", "rushing"]
+        );
         assert_eq!(wrap("abcdefghij", 4), vec!["abcd", "efgh", "ij"]);
         assert!(wrap("", 10).is_empty());
     }
 
     #[test]
     fn monsters_named() {
-        assert_eq!(monster("Fatso"), ("Mancubus".to_string(), "Mancubi".to_string()));
-        assert_eq!(monster("Demon"), ("Demon".to_string(), "Demons".to_string()));
+        assert_eq!(
+            monster("Fatso"),
+            ("Mancubus".to_string(), "Mancubi".to_string())
+        );
+        assert_eq!(
+            monster("Demon"),
+            ("Demon".to_string(), "Demons".to_string())
+        );
     }
 
     #[test]

@@ -25,7 +25,9 @@ const LOW_BULLETS: i32 = 10;
 const LOW_SHELLS: i32 = 4;
 
 /// what gives bullets or shells for tapping walls and gun lines
-const TAP_AMMO: [&str; 7] = ["Clip", "ClipBox", "Shell", "ShellBox", "Backpack", "Chaingun", "Shotgun"];
+const TAP_AMMO: [&str; 7] = [
+    "Clip", "ClipBox", "Shell", "ShellBox", "Backpack", "Chaingun", "Shotgun",
+];
 
 /// a threshold's spot: this far over the line
 const THRESHOLD_IN: f64 = 8.0;
@@ -74,7 +76,12 @@ impl Explorer {
     /// How what she'd be offered (the saturated reach) gets her to `goal`: the flood fill's way
     /// there, at all the heights the triggers she could fire give (`drive reach`); or, `planner`,
     /// as the planner's first check has it (no use-doors among the triggers, keys she knows of).
-    pub fn reach_chain(&mut self, obs: &Observation, goal: Point, planner: bool) -> Option<Vec<String>> {
+    pub fn reach_chain(
+        &mut self,
+        obs: &Observation,
+        goal: Point,
+        planner: bool,
+    ) -> Option<Vec<String>> {
         let nav = Rc::clone(&self.nav);
         let view = self.view();
         let here = nav.poly_at(obs.pos())?;
@@ -93,14 +100,23 @@ impl Explorer {
         let actions: Vec<&TriggerLine> = view
             .triggers
             .iter()
-            .filter(|t| !t.effects.is_empty() && !t.linedef().is_some_and(|li| spent.contains(&li)) && !(planner && t.info.trigger == Trigger::DR))
+            .filter(|t| {
+                !t.effects.is_empty()
+                    && !t.linedef().is_some_and(|li| spent.contains(&li))
+                    && !(planner && t.info.trigger == Trigger::DR)
+            })
             .collect();
         let (_, all, keys_all) = view.saturate(here, &states, keys, &key_items, &actions);
         view.reach_chain(here, to, &all, Some(&view.local_doors(keys_all)))
     }
 
     /// What she could go and do now.
-    pub fn objectives(&mut self, obs: &Observation, risky: bool, hooks: &mut dyn Hooks) -> Vec<Objective> {
+    pub fn objectives(
+        &mut self,
+        obs: &Observation,
+        risky: bool,
+        hooks: &mut dyn Hooks,
+    ) -> Vec<Objective> {
         let t0 = Instant::now();
         let mut out = self.list_objectives(obs, risky, hooks);
         if self.knowledge.mortal {
@@ -109,8 +125,19 @@ impl Explorer {
             // looked at from under them, crushed)
             let crushers = self.crusher_sectors();
             out.retain(|o| {
-                matches!(o.kind, Kind::Item | Kind::Key | Kind::Switch | Kind::Door | Kind::Exit | Kind::Teleporter | Kind::Secret)
-                    || !self.nav.poly_at(o.goal).is_some_and(|p| crushers.contains(&self.nav.sector_of_poly(p)))
+                matches!(
+                    o.kind,
+                    Kind::Item
+                        | Kind::Key
+                        | Kind::Switch
+                        | Kind::Door
+                        | Kind::Exit
+                        | Kind::Teleporter
+                        | Kind::Secret
+                ) || !self
+                    .nav
+                    .poly_at(o.goal)
+                    .is_some_and(|p| crushers.contains(&self.nav.sector_of_poly(p)))
             });
         }
         self.stats.listed += 1;
@@ -118,36 +145,77 @@ impl Explorer {
         out
     }
 
-    fn list_objectives(&mut self, obs: &Observation, risky: bool, hooks: &mut dyn Hooks) -> Vec<Objective> {
+    fn list_objectives(
+        &mut self,
+        obs: &Observation,
+        risky: bool,
+        hooks: &mut dyn Hooks,
+    ) -> Vec<Objective> {
         let nav = Rc::clone(&self.nav);
         let view = self.view();
         let pos = obs.pos();
         // (from the floor she's on: on a lip, not the drop her middle's over)
-        let Some(here) = nav.poly_at(self.standing_point(obs)) else { return Vec::new() };
+        let Some(here) = nav.poly_at(self.standing_point(obs)) else {
+            return Vec::new();
+        };
         let keys = obs.keys.unwrap_or_default();
         let states = self.states();
         // (what she could get to using what she's learned: the planner works out how)
         let spent = self.spent_once();
-        let actions: Vec<&TriggerLine> = view.triggers.iter().filter(|t| !t.effects.is_empty() && !t.linedef().is_some_and(|li| spent.contains(&li))).collect();
+        let actions: Vec<&TriggerLine> = view
+            .triggers
+            .iter()
+            .filter(|t| !t.effects.is_empty() && !t.linedef().is_some_and(|li| spent.contains(&li)))
+            .collect();
         let t_sat = Instant::now();
         let (reach, states_all, _) = view.saturate(here, &states, keys, &[], &actions);
         self.stats.saturate_secs += t_sat.elapsed().as_secs_f64();
-        if std::env::var_os("EVIL_DEBUG_REACH").is_some_and(|v| v.to_str().and_then(|t| t.parse::<i64>().ok()) == Some(obs.tic)) {
+        if std::env::var_os("EVIL_DEBUG_REACH")
+            .is_some_and(|v| v.to_str().and_then(|t| t.parse::<i64>().ok()) == Some(obs.tic))
+        {
             let sectors: BTreeSet<usize> = reach.iter().map(|&p| nav.sector_of_poly(p)).collect();
-            self.log.push(format!("tic {}: reach from poly {here} (sector {}): {} polys, sectors {sectors:?}", obs.tic, nav.sector_of_poly(here), reach.len()));
+            self.log.push(format!(
+                "tic {}: reach from poly {here} (sector {}): {} polys, sectors {sectors:?}",
+                obs.tic,
+                nav.sector_of_poly(here),
+                reach.len()
+            ));
             if let Ok(want) = std::env::var("EVIL_DEBUG_HEIGHTS") {
-                for s in want.split(',').filter_map(|x| x.trim().parse::<usize>().ok()) {
-                    self.log.push(format!("  sector {s}: really at {:?}, last seen at {:?} (tic {:?}), believed {:?}", obs.heights.get(s), self.knowledge.seen_heights.get(&s), self.knowledge.seen_tic.get(&s), states.get(s)));
+                for s in want
+                    .split(',')
+                    .filter_map(|x| x.trim().parse::<usize>().ok())
+                {
+                    self.log.push(format!(
+                        "  sector {s}: really at {:?}, last seen at {:?} (tic {:?}), believed {:?}",
+                        obs.heights.get(s),
+                        self.knowledge.seen_heights.get(&s),
+                        self.knowledge.seen_tic.get(&s),
+                        states.get(s)
+                    ));
                 }
             }
             for &p in &reach {
                 let poly = nav.mesh.poly(p);
-                self.log.push(format!("  poly {p}: {:?}", poly.vertices.iter().map(|v| (v.0.round(), v.1.round())).collect::<Vec<_>>()));
+                self.log.push(format!(
+                    "  poly {p}: {:?}",
+                    poly.vertices
+                        .iter()
+                        .map(|v| (v.0.round(), v.1.round()))
+                        .collect::<Vec<_>>()
+                ));
                 for &pi in &nav.mesh.poly(p).portals {
                     let portal = &nav.mesh.portals[pi];
                     let o = portal.other(p);
                     if !reach.contains(&o) {
-                        self.log.push(format!("    (poly {o}: {:?})", nav.mesh.poly(o).vertices.iter().map(|v| (v.0.round(), v.1.round())).collect::<Vec<_>>()));
+                        self.log.push(format!(
+                            "    (poly {o}: {:?})",
+                            nav.mesh
+                                .poly(o)
+                                .vertices
+                                .iter()
+                                .map(|v| (v.0.round(), v.1.round()))
+                                .collect::<Vec<_>>()
+                        ));
                         self.log.push(format!("    out of reach past the portal ({:.0}, {:.0})-({:.0}, {:.0}) (line {:?}), {:.0} wide, into sector {}", portal.p1.0, portal.p1.1, portal.p2.0, portal.p2.1, portal.linedef, dist(portal.p1, portal.p2), nav.sector_of_poly(o)));
                     }
                 }
@@ -177,36 +245,69 @@ impl Explorer {
         };
         let closes = open.values().copied().min().unwrap_or(obs.tic);
         let mut out: Vec<Objective> = Vec::new();
-        let by_line: BTreeMap<usize, &TriggerLine> = nav.triggers.iter().filter_map(|t| t.linedef().map(|li| (li, t))).collect();
+        let by_line: BTreeMap<usize, &TriggerLine> = nav
+            .triggers
+            .iter()
+            .filter_map(|t| t.linedef().map(|li| (li, t)))
+            .collect();
         let k = &self.knowledge;
         // (where she can set off an exit from, as things are)
         let exit_polys: BTreeSet<usize> = k
             .exits()
             .into_iter()
             .filter_map(|li| by_line.get(&li).filter(|t| t.info.lock.satisfied(keys)))
-            .flat_map(|t| t.activators.intersection(&reach).copied().collect::<Vec<_>>())
+            .flat_map(|t| {
+                t.activators
+                    .intersection(&reach)
+                    .copied()
+                    .collect::<Vec<_>>()
+            })
             .collect();
         if self.exits_open {
             for li in k.exits() {
-                if let Some(t) = by_line.get(&li).filter(|t| !t.activators.is_disjoint(&reach) && t.info.lock.satisfied(keys)) {
-                    let mut o = Objective::new(Kind::Exit, nav.activation_point(t, pos, &reach), format!("exit (line {li})"));
+                if let Some(t) = by_line
+                    .get(&li)
+                    .filter(|t| !t.activators.is_disjoint(&reach) && t.info.lock.satisfied(keys))
+                {
+                    let mut o = Objective::new(
+                        Kind::Exit,
+                        nav.activation_point(t, pos, &reach),
+                        format!("exit (line {li})"),
+                    );
                     o.trigger = Some((*t).clone());
                     out.push(o);
                 }
             }
             // (a floor she's had end the level under her: stood on again)
             for &sec in &k.exit_floors {
-                if let Some(t) = nav.triggers.iter().find(|t| t.line == EXIT_FLOOR - sec as i64 && !t.activators.is_disjoint(&reach)) {
-                    let mut o = Objective::new(Kind::Exit, nav.activation_point(t, pos, &reach), format!("exit (the floor of sector {sec})"));
+                if let Some(t) = nav.triggers.iter().find(|t| {
+                    t.line == EXIT_FLOOR - sec as i64 && !t.activators.is_disjoint(&reach)
+                }) {
+                    let mut o = Objective::new(
+                        Kind::Exit,
+                        nav.activation_point(t, pos, &reach),
+                        format!("exit (the floor of sector {sec})"),
+                    );
                     o.trigger = Some(t.clone());
                     out.push(o);
                 }
             }
         }
         for th in k.known_things() {
-            let Some(kk) = Key::from_thing(th.kind).filter(|kk| !keys.has(*kk)) else { continue };
-            let spots: Vec<Point> = view.pickup_spots(th.x, th.y, &states).into_iter().filter(|(p, _)| reach.contains(p)).map(|(_, pt)| pt).collect();
-            if let Some(pt) = spots.into_iter().reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a }) {
+            let Some(kk) = Key::from_thing(th.kind).filter(|kk| !keys.has(*kk)) else {
+                continue;
+            };
+            let spots: Vec<Point> = view
+                .pickup_spots(th.x, th.y, &states)
+                .into_iter()
+                .filter(|(p, _)| reach.contains(p))
+                .map(|(_, pt)| pt)
+                .collect();
+            if let Some(pt) =
+                spots
+                    .into_iter()
+                    .reduce(|a, b| if dist(b, pos) < dist(a, pos) { b } else { a })
+            {
                 let mut o = Objective::new(Kind::Key, pt, format!("pick up {}", kk.name()));
                 o.key = Some(kk);
                 out.push(o);
@@ -217,22 +318,46 @@ impl Explorer {
         let rounds = |slot: i32| crate::motor::follower::tap_rounds(obs, slot);
         if obs.ammo.is_some() && rounds(2).max(rounds(4)) < LOW_BULLETS && rounds(3) < LOW_SHELLS {
             let known = k.known_polys();
-            for t in obs.things.iter().flatten().filter(|t| TAP_AMMO.contains(&t.name)) {
+            for t in obs
+                .things
+                .iter()
+                .flatten()
+                .filter(|t| TAP_AMMO.contains(&t.name))
+            {
                 if !nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
                     continue;
                 }
                 if let Some(spot) = self.touch_spot((t.x, t.y), &reach) {
-                    let mut o = Objective::new(Kind::Item, spot, format!("pick up {} (for the gun)", t.name));
+                    let mut o = Objective::new(
+                        Kind::Item,
+                        spot,
+                        format!("pick up {} (for the gun)", t.name),
+                    );
                     o.thing = Some(t.id);
                     out.push(o);
                 }
             }
         }
         for li in k.interactables() {
-            let Some(t) = by_line.get(&li).filter(|t| !t.activators.is_disjoint(&reach) && t.info.lock.satisfied(keys)) else { continue };
-            let kind = if t.info.category.is_door() { Kind::Door } else { Kind::Switch };
-            let mut o =
-                Objective::new(kind, nav.activation_point(t, pos, &reach), format!("try {} (line {li})", if kind == Kind::Door { "door" } else { "switch" }));
+            let Some(t) = by_line
+                .get(&li)
+                .filter(|t| !t.activators.is_disjoint(&reach) && t.info.lock.satisfied(keys))
+            else {
+                continue;
+            };
+            let kind = if t.info.category.is_door() {
+                Kind::Door
+            } else {
+                Kind::Switch
+            };
+            let mut o = Objective::new(
+                kind,
+                nav.activation_point(t, pos, &reach),
+                format!(
+                    "try {} (line {li})",
+                    if kind == Kind::Door { "door" } else { "switch" }
+                ),
+            );
             o.trigger = Some((*t).clone());
             out.push(o);
         }
@@ -240,7 +365,12 @@ impl Explorer {
         // once there's nothing else (E3M4); by what it works (MAP08's switch, pressed "again"
         // every few seconds, set off the one in front each time); and those whose effect she's
         // put down to them on timing alone, unsure: pressed again and watched, once a life
-        let learned_lines: BTreeSet<i64> = k.learned.iter().filter(|(_, s)| !s.is_empty()).map(|(&i, _)| nav.triggers[i].line).collect();
+        let learned_lines: BTreeSet<i64> = k
+            .learned
+            .iter()
+            .filter(|(_, s)| !s.is_empty())
+            .map(|(&i, _)| nav.triggers[i].line)
+            .collect();
         let mut last_by_key: BTreeMap<crate::knowledge::model::Mechanism, i64> = BTreeMap::new();
         for f in &k.fired {
             last_by_key.insert(k.tried_key(f.line), f.tic);
@@ -253,30 +383,43 @@ impl Explorer {
                 None => last_press.push((f.line, tic)),
             }
         }
-        let doubted: BTreeSet<crate::knowledge::model::Mechanism> = k.doubts.keys().map(|(m, _)| *m).collect();
+        let doubted: BTreeSet<crate::knowledge::model::Mechanism> =
+            k.doubts.keys().map(|(m, _)| *m).collect();
         let mut again = Vec::new();
         for &(li, tic) in &last_press {
             let Some(t) = by_line.get(&li) else { continue };
             if !k.mapped.contains(&li) || !matches!(t.info.trigger, Trigger::SR | Trigger::GR) {
                 continue;
             }
-            let unsure = doubted.contains(&k.tried_key(li)) && !k.rechecked.contains(&(k.tried_key(li), k.lives));
+            let unsure = doubted.contains(&k.tried_key(li))
+                && !k.rechecked.contains(&(k.tried_key(li), k.lives));
             if learned_lines.contains(&(li as i64)) && !unsure {
                 continue;
             }
-            if (obs.tic - tic < REPRESS_AFTER && !unsure) || t.activators.is_disjoint(&reach) || !t.info.lock.satisfied(keys) {
+            if (obs.tic - tic < REPRESS_AFTER && !unsure)
+                || t.activators.is_disjoint(&reach)
+                || !t.info.lock.satisfied(keys)
+            {
                 continue;
             }
             // (not again knowing no more than when last set out to press it: what was missed then
             // is missed again; MAP19's lift switch at the bottom of a pit, pressed every minute,
             // each time just before she'd have counted herself stranded there)
-            if !unsure && self.pressed_knowing.get(&li).is_some_and(|known| *known == k.known_summary()) {
+            if !unsure
+                && self
+                    .pressed_knowing
+                    .get(&li)
+                    .is_some_and(|known| *known == k.known_summary())
+            {
                 continue;
             }
             let mut o = Objective::new(
                 Kind::Switch,
                 nav.activation_point(t, pos, &reach),
-                format!("try switch again (line {li}{})", if unsure { ", unsure what it does" } else { "" }),
+                format!(
+                    "try switch again (line {li}{})",
+                    if unsure { ", unsure what it does" } else { "" }
+                ),
             );
             o.trigger = Some((*t).clone());
             again.push(o);
@@ -291,8 +434,12 @@ impl Explorer {
             let near: Vec<Objective> = self
                 .suspected(obs, &reach, false)
                 .into_iter()
-                .filter(|w| w.0 >= NEAR_SUSPECT && dist(w.2, pos) <= NEAR_WALL && self.standable(w.2, false))
-                .map(|(score, li, stand, mid)| super::selection::wall_objective(score, li, stand, mid, false))
+                .filter(|w| {
+                    w.0 >= NEAR_SUSPECT && dist(w.2, pos) <= NEAR_WALL && self.standable(w.2, false)
+                })
+                .map(|(score, li, stand, mid)| {
+                    super::selection::wall_objective(score, li, stand, mid, false)
+                })
                 .collect();
             out.extend(near);
         }
@@ -308,7 +455,9 @@ impl Explorer {
         out.extend(self.noises(&reach, pos, obs.tic));
         out.extend(hooks.wanted(self, obs, &reach, pos));
         if !while_open.is_empty() {
-            for o in out.iter_mut().filter(|o| o.kind != Kind::Exit && nav.poly_at(o.goal).is_some_and(|p| while_open.contains(&p))) {
+            for o in out.iter_mut().filter(|o| {
+                o.kind != Kind::Exit && nav.poly_at(o.goal).is_some_and(|p| while_open.contains(&p))
+            }) {
                 o.urgent = true;
                 o.worth = Some((closes - obs.tic) as f64 * OPEN_SPEED);
                 o.label = format!("{}{WHILE_OPEN}", o.label);
@@ -324,19 +473,36 @@ impl Explorer {
         // (not where a door or lift that comes back was set off since one that stays: E2M4's
         // door 48, open for good, pressed again from outside, shuts behind her)
         let last_fired = |pred: &dyn Fn(&TriggerLine) -> bool, s: usize| -> i64 {
-            let lines: BTreeSet<i64> = known_triggers.iter().filter(|(t, secs)| pred(t) && secs.contains(&s)).map(|(t, _)| t.line).collect();
-            self.knowledge.fired.iter().filter(|f| f.life == self.knowledge.lives && lines.contains(&(f.line as i64))).map(|f| f.tic).max().unwrap_or(-1)
+            let lines: BTreeSet<i64> = known_triggers
+                .iter()
+                .filter(|(t, secs)| pred(t) && secs.contains(&s))
+                .map(|(t, _)| t.line)
+                .collect();
+            self.knowledge
+                .fired
+                .iter()
+                .filter(|f| f.life == self.knowledge.lives && lines.contains(&(f.line as i64)))
+                .map(|f| f.tic)
+                .max()
+                .unwrap_or(-1)
         };
         let for_good: BTreeSet<usize> = known_triggers
             .iter()
             .filter(|(t, _)| t.permanent())
             .flat_map(|(_, s)| s.iter().copied())
-            .filter(|&s| last_fired(&|t| !t.permanent() && cycles_back(t.info.special, &t.info.description), s) <= last_fired(&|t| t.permanent(), s))
+            .filter(|&s| {
+                last_fired(
+                    &|t| !t.permanent() && cycles_back(t.info.special, &t.info.description),
+                    s,
+                ) <= last_fired(&|t| t.permanent(), s)
+            })
             .collect();
         let mut states_back = states_all.clone();
         let mut openers: Vec<(TriggerLine, BTreeSet<usize>)> = Vec::new();
         for (t, secs) in &known_triggers {
-            let comes_back = t.info.category.is_door() || (t.info.category == Category::Lift && cycles_back(t.info.special, &t.info.description));
+            let comes_back = t.info.category.is_door()
+                || (t.info.category == Category::Lift
+                    && cycles_back(t.info.special, &t.info.description));
             if !t.permanent() && comes_back && !t.linedef().is_some_and(|li| spent.contains(&li)) {
                 let shut: BTreeSet<usize> = secs.difference(&for_good).copied().collect();
                 for &s in &shut {
@@ -354,7 +520,9 @@ impl Explorer {
                 let more: Vec<&BTreeSet<usize>> = openers
                     .iter()
                     .filter(|(t, secs)| {
-                        !t.activators.is_disjoint(&after) && t.info.lock.satisfied(keys) && secs.iter().any(|&x| st[x] == vec![nav.movers.initial[x]])
+                        !t.activators.is_disjoint(&after)
+                            && t.info.lock.satisfied(keys)
+                            && secs.iter().any(|&x| st[x] == vec![nav.movers.initial[x]])
                     })
                     .map(|(_, secs)| secs)
                     .collect();
@@ -379,20 +547,49 @@ impl Explorer {
         // its switch for the lift out in an alcove she'd not seen into; its room of bonuses, the
         // lines round the pad in the middle opening its doors for good)
         let known_polys = self.knowledge.known_polys();
-        let entered: BTreeSet<usize> = self.knowledge.visited.iter().map(|&q| nav.sector_of_poly(q)).collect();
+        let entered: BTreeSet<usize> = self
+            .knowledge
+            .visited
+            .iter()
+            .map(|&q| nav.sector_of_poly(q))
+            .collect();
         // (lines she's pressed or set off, and sectors she believes shut: a door's face she's not
         // tried is a way out to try, MAP04's hidden door shutting behind her)
-        let pressed: BTreeSet<usize> = self.knowledge.fired.iter().map(|f| f.line).chain(self.knowledge.tried_walls.keys().copied()).collect();
-        let shut = |sec: usize| states[sec].iter().all(|h| h.ceiling - h.floor < PLAYER_HEIGHT);
-        let untried: Vec<&TriggerLine> = self.knowledge.interactables().iter().filter_map(|li| by_line.get(li).copied()).collect();
+        let pressed: BTreeSet<usize> = self
+            .knowledge
+            .fired
+            .iter()
+            .map(|f| f.line)
+            .chain(self.knowledge.tried_walls.keys().copied())
+            .collect();
+        let shut = |sec: usize| {
+            states[sec]
+                .iter()
+                .all(|h| h.ceiling - h.floor < PLAYER_HEIGHT)
+        };
+        let untried: Vec<&TriggerLine> = self
+            .knowledge
+            .interactables()
+            .iter()
+            .filter_map(|li| by_line.get(li).copied())
+            .collect();
         let mut lost_from = |p: usize| -> (BTreeSet<usize>, bool) {
             let after = afters.entry(p).or_insert_with(|| way_back(p));
             if after.contains(&here) {
                 return (BTreeSet::new(), true);
             }
             let goal_sector = nav.sector_of_poly(p);
-            let unseen_edge = after.iter().any(|&q| nav.mesh.poly(q).portals.iter().any(|&pi| !known_polys.contains(&nav.mesh.portals[pi].other(q))));
-            let unwalked = after.iter().map(|&q| nav.sector_of_poly(q)).any(|sec| sec != goal_sector && !entered.contains(&sec));
+            let unseen_edge = after.iter().any(|&q| {
+                nav.mesh
+                    .poly(q)
+                    .portals
+                    .iter()
+                    .any(|&pi| !known_polys.contains(&nav.mesh.portals[pi].other(q)))
+            });
+            let unwalked = after
+                .iter()
+                .map(|&q| nav.sector_of_poly(q))
+                .any(|sec| sec != goal_sector && !entered.contains(&sec));
             let untried_door = after.iter().any(|&q| {
                 nav.mesh.poly(q).portals.iter().any(|&pi| {
                     let portal = &nav.mesh.portals[pi];
@@ -403,7 +600,10 @@ impl Explorer {
             // (or a switch or door not tried yet that she could press from there: E4M9's pit of
             // bonuses, its lift out a face of plain support at the south end, as `shuts_in` has it)
             let untried_switch = untried.iter().any(|t| !t.activators.is_disjoint(after));
-            (reach.difference(after).copied().collect(), unseen_edge || unwalked || untried_door || untried_switch)
+            (
+                reach.difference(after).copied().collect(),
+                unseen_edge || unwalked || untried_door || untried_switch,
+            )
         };
         let tic = obs.tic;
         // (an item the level put somewhere has a way back out from it, if not one she knows yet:
@@ -413,7 +613,12 @@ impl Explorer {
             o.kind == Kind::Item
                 && o.thing
                     .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
-                    .is_some_and(|t| nav.map.things.iter().any(|m| (m.x - t.x).abs() < 1.0 && (m.y - t.y).abs() < 1.0))
+                    .is_some_and(|t| {
+                        nav.map
+                            .things
+                            .iter()
+                            .any(|m| (m.x - t.x).abs() < 1.0 && (m.y - t.y).abs() < 1.0)
+                    })
         };
         // (no switch pressed from a floor that hurts while there's floor that doesn't to get to:
         // what a switch does is anyone's guess, and shut in there is dead, a suit on or not (it
@@ -426,108 +631,148 @@ impl Explorer {
         // (E1M9: a nukage room behind a door walk-over lines outside open for a few seconds,
         // the lift out of it a switch inside, never pressed while the door stood open; once
         // shut, too far a wade back in for her health)
-        let safe = |polys: &BTreeSet<usize>| polys.iter().any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)));
-        let stays_shut = self.knowledge.damaging(nav.sector_of_poly(here)) && !safe(&way_back(here));
+        let safe = |polys: &BTreeSet<usize>| {
+            polys
+                .iter()
+                .any(|&p| !self.knowledge.damaging(nav.sector_of_poly(p)))
+        };
+        let stays_shut =
+            self.knowledge.damaging(nav.sector_of_poly(here)) && !safe(&way_back(here));
         // (nor is the dry floor she waded off from a dead end: there was nothing to do there,
         // so a switch down here is hers to try, before going back to stand on it. E1M9 HMP: an
         // island in a nukage pit, nothing left on it, waded through a door the island's lines
         // open into the room with the lift out; straight back to the island, too low for the
         // wade again, the lift's switch never pressed)
         let shut_in = self.harm_ok || self.waded_dead_end || stays_shut || !safe(&reach);
-        let switch_in_harm = |this: &Self, o: &Objective| o.kind == Kind::Switch && !shut_in && nav.poly_at(o.goal).is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)));
+        let switch_in_harm = |this: &Self, o: &Objective| {
+            o.kind == Kind::Switch
+                && !shut_in
+                && nav
+                    .poly_at(o.goal)
+                    .is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)))
+        };
         // (down in a pit whose floor hurts, no floor that doesn't in reach: every second there
         // costs health, so a switch or door she can see, a way out someone built, before a guess
         // at a plain wall. E4M8: a missed jump into the lava, three walls tried by the lift's
         // switch, dead on the way to it)
-        let in_pit = self.knowledge.mortal && self.on_hurting_floor(obs) && (stays_shut || self.waded_dead_end || !safe(&reach));
-        let mut usable = |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
-            let mut objectives: Vec<Objective> = objectives.into_iter().filter(|o| !switch_in_harm(this, o)).collect();
-            if in_pit && objectives.iter().any(|o| matches!(o.kind, Kind::Switch | Kind::Door)) {
-                objectives.retain(|o| o.kind != Kind::Wall);
-            }
-            if risky {
-                // nothing safe left: anything, one-way drops and nukage and all; but not for what
-                // little it's worth: a sound (MAP09: a noise far off took her down into a pit), a
-                // place seen already looked at again, a monster gone from where it was last seen
-                // (the health a way costs against what it's for, as a player weighs it: nothing new
-                // to find there, the floor's hits for nothing); and never away from
-                // every way out there is, as far as she knows (MAP24's secret ledge over the
-                // nukage pit: the level given up for a look)
-                return objectives
+        let in_pit = self.knowledge.mortal
+            && self.on_hurting_floor(obs)
+            && (stays_shut || self.waded_dead_end || !safe(&reach));
+        let mut usable =
+            |this: &Self, hooks: &mut dyn Hooks, objectives: Vec<Objective>| -> Vec<Objective> {
+                let mut objectives: Vec<Objective> = objectives
                     .into_iter()
-                    // (but a sound just after she set something off, and she on a floor that
-                    // hurts already: what she set off is as like as not the way off it, and
-                    // going to see is no new risk. MAP09: a switch in a nukage pit, a lift down
-                    // behind a wall for three seconds, heard and never gone to look at, what
-                    // the switch does never learned, the pit never left)
-                    .filter(|o| !matches!(o.kind, Kind::Noise | Kind::Recheck | Kind::Hunt) || (o.kind == Kind::Noise && o.urgent && this.on_hurting_floor(obs)))
-                    .filter(|o| {
-                        exit_polys.is_empty()
-                            || o.kind == Kind::Exit
-                            || placed(o)
-                            || nav.poly_at(o.goal).map(&mut lost_from).is_none_or(|(g, open)| open || !exit_polys.is_subset(&g))
-                    })
-                    .map(|o| Objective { label: format!("{} (risky)", o.label), risky: true, ..o })
-                    .filter(|o| this.fresh(o, tic))
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    // (risky as to the way there, not as to what's there: MAP08's box of rockets in
-                    // the cyberdemon's room, the last thing to do, walked in for at 137 health)
-                    // (items only: they're to be had or not; the ways on, through it if need be:
-                    // MAP06's spider's hall)
-                    .filter(|o| o.kind != Kind::Item || !hooks.dangerous(obs, o))
+                    .filter(|o| !switch_in_harm(this, o))
                     .collect();
-            }
-            let mut kept: Vec<Objective> = Vec::new();
-            let mut lost: Vec<BTreeSet<usize>> = Vec::new();
-            for o in objectives {
-                if !this.fresh(&o, tic) || hooks.dangerous(obs, &o) {
-                    continue;
+                if in_pit
+                    && objectives
+                        .iter()
+                        .any(|o| matches!(o.kind, Kind::Switch | Kind::Door))
+                {
+                    objectives.retain(|o| o.kind != Kind::Wall);
                 }
-                let cut = nav.poly_at(o.goal).map(&mut lost_from);
-                let open = cut.as_ref().is_none_or(|c| c.1) || placed(&o);
-                let gone = cut.map(|c| c.0);
-                // (worth the risk, however far she can't get back from: the exit, a teleporter,
-                // where it leads is the unknown; a key, it opens the way)
-                // (and ammo or a gun the level put there when she's next to out of it: nothing she
-                // can't get back to is worth much without, and there's a way out from where the
-                // level put it. E2M5 on UV: six shots, the clips she'd seen past doors she knew no
-                // way back through, left for walls by a baron she couldn't kill; cornered, dead)
-                let risk_it = matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Key) || (placed(&o) && hooks.worth_cut_off(obs, &o));
-                // (most of what she can get to, and never the way out, as far as she knows: MAP24's
-                // nukage pit, where a wall was worth a one-way drop by the rest of it)
-                let keeps = gone.as_ref().is_some_and(|g| {
-                    (reach.len() - g.len()) as f64 >= KEEP_REACH * reach.len() as f64 && (exit_polys.is_empty() || open || !exit_polys.is_subset(g))
-                });
-                if risk_it || keeps {
-                    lost.push(gone.unwrap_or_default());
-                    kept.push(o);
+                if risky {
+                    // nothing safe left: anything, one-way drops and nukage and all; but not for what
+                    // little it's worth: a sound (MAP09: a noise far off took her down into a pit), a
+                    // place seen already looked at again, a monster gone from where it was last seen
+                    // (the health a way costs against what it's for, as a player weighs it: nothing new
+                    // to find there, the floor's hits for nothing); and never away from
+                    // every way out there is, as far as she knows (MAP24's secret ledge over the
+                    // nukage pit: the level given up for a look)
+                    return objectives
+                        .into_iter()
+                        // (but a sound just after she set something off, and she on a floor that
+                        // hurts already: what she set off is as like as not the way off it, and
+                        // going to see is no new risk. MAP09: a switch in a nukage pit, a lift down
+                        // behind a wall for three seconds, heard and never gone to look at, what
+                        // the switch does never learned, the pit never left)
+                        .filter(|o| {
+                            !matches!(o.kind, Kind::Noise | Kind::Recheck | Kind::Hunt)
+                                || (o.kind == Kind::Noise && o.urgent && this.on_hurting_floor(obs))
+                        })
+                        .filter(|o| {
+                            exit_polys.is_empty()
+                                || o.kind == Kind::Exit
+                                || placed(o)
+                                || nav
+                                    .poly_at(o.goal)
+                                    .map(&mut lost_from)
+                                    .is_none_or(|(g, open)| open || !exit_polys.is_subset(&g))
+                        })
+                        .map(|o| Objective {
+                            label: format!("{} (risky)", o.label),
+                            risky: true,
+                            ..o
+                        })
+                        .filter(|o| this.fresh(o, tic))
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        // (risky as to the way there, not as to what's there: MAP08's box of rockets in
+                        // the cyberdemon's room, the last thing to do, walked in for at 137 health)
+                        // (items only: they're to be had or not; the ways on, through it if need be:
+                        // MAP06's spider's hall)
+                        .filter(|o| o.kind != Kind::Item || !hooks.dangerous(obs, o))
+                        .collect();
                 }
-            }
-            // what would cut her off from where there's more to do, as far as she knows, after
-            // that (as a player finishes a room before dropping out of it: E2M1's, with the
-            // teleporter in it, left by its door, whose switches are spent or inside)
-            let goals: Vec<Option<usize>> = kept.iter().map(|o| nav.poly_at(o.goal)).collect();
-            for (i, o) in kept.iter_mut().enumerate() {
-                if o.kind == Kind::Exit || lost[i].is_empty() {
-                    continue;
+                let mut kept: Vec<Objective> = Vec::new();
+                let mut lost: Vec<BTreeSet<usize>> = Vec::new();
+                for o in objectives {
+                    if !this.fresh(&o, tic) || hooks.dangerous(obs, &o) {
+                        continue;
+                    }
+                    let cut = nav.poly_at(o.goal).map(&mut lost_from);
+                    let open = cut.as_ref().is_none_or(|c| c.1) || placed(&o);
+                    let gone = cut.map(|c| c.0);
+                    // (worth the risk, however far she can't get back from: the exit, a teleporter,
+                    // where it leads is the unknown; a key, it opens the way)
+                    // (and ammo or a gun the level put there when she's next to out of it: nothing she
+                    // can't get back to is worth much without, and there's a way out from where the
+                    // level put it. E2M5 on UV: six shots, the clips she'd seen past doors she knew no
+                    // way back through, left for walls by a baron she couldn't kill; cornered, dead)
+                    let risk_it = matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Key)
+                        || (placed(&o) && hooks.worth_cut_off(obs, &o));
+                    // (most of what she can get to, and never the way out, as far as she knows: MAP24's
+                    // nukage pit, where a wall was worth a one-way drop by the rest of it)
+                    let keeps = gone.as_ref().is_some_and(|g| {
+                        (reach.len() - g.len()) as f64 >= KEEP_REACH * reach.len() as f64
+                            && (exit_polys.is_empty() || open || !exit_polys.is_subset(g))
+                    });
+                    if risk_it || keeps {
+                        lost.push(gone.unwrap_or_default());
+                        kept.push(o);
+                    }
                 }
-                if goals.iter().enumerate().any(|(j, g)| j != i && g.is_some_and(|g| lost[i].contains(&g))) {
-                    o.later = true;
-                    o.label = format!("{}{LATER}", o.label);
+                // what would cut her off from where there's more to do, as far as she knows, after
+                // that (as a player finishes a room before dropping out of it: E2M1's, with the
+                // teleporter in it, left by its door, whose switches are spent or inside)
+                let goals: Vec<Option<usize>> = kept.iter().map(|o| nav.poly_at(o.goal)).collect();
+                for (i, o) in kept.iter_mut().enumerate() {
+                    if o.kind == Kind::Exit || lost[i].is_empty() {
+                        continue;
+                    }
+                    if goals
+                        .iter()
+                        .enumerate()
+                        .any(|(j, g)| j != i && g.is_some_and(|g| lost[i].contains(&g)))
+                    {
+                        o.later = true;
+                        o.label = format!("{}{LATER}", o.label);
+                    }
                 }
-            }
-            // (something she needs now that would cut her off waits all the same while there's
-            // something she needs now that wouldn't: MAP24, out of ammo, the rockets down a 512
-            // drop into a corner of the pit gone for before a clip and a shotgun a little
-            // farther, and the level's doors and teleporters with them, left above for good)
-            if kept.iter().any(|o| o.kind == Kind::Item && o.urgent && !o.later) {
-                for o in kept.iter_mut().filter(|o| o.kind == Kind::Item && o.later) {
-                    o.urgent = false;
+                // (something she needs now that would cut her off waits all the same while there's
+                // something she needs now that wouldn't: MAP24, out of ammo, the rockets down a 512
+                // drop into a corner of the pit gone for before a clip and a shotgun a little
+                // farther, and the level's doors and teleporters with them, left above for good)
+                if kept
+                    .iter()
+                    .any(|o| o.kind == Kind::Item && o.urgent && !o.later)
+                {
+                    for o in kept.iter_mut().filter(|o| o.kind == Kind::Item && o.later) {
+                        o.urgent = false;
+                    }
                 }
-            }
-            kept
-        };
+                kept
+            };
         // with nothing else left, the ways between rooms never walked over (walk-over lines are
         // thresholds: E4M7's), and last of all, those onto floors that hurt (E4M2's door opener
         // is on lava)
@@ -577,10 +822,20 @@ impl Explorer {
                 unseen.entry(os).or_default().insert(other as i64);
                 // look from the way in, just this side of it (from the poly's middle it can be
                 // round a corner: E2M4)
-                let mid = ((portal.p1.0 + portal.p2.0) / 2.0, (portal.p1.1 + portal.p2.1) / 2.0);
+                let mid = (
+                    (portal.p1.0 + portal.p2.0) / 2.0,
+                    (portal.p1.1 + portal.p2.1) / 2.0,
+                );
                 let back = dist(mid, poly.center);
-                let k = if back > 0.0 { 1.0f64.min(FRONTIER_BACK / back) } else { 0.0 };
-                let mut spot = (mid.0 + (poly.center.0 - mid.0) * k, mid.1 + (poly.center.1 - mid.1) * k);
+                let k = if back > 0.0 {
+                    1.0f64.min(FRONTIER_BACK / back)
+                } else {
+                    0.0
+                };
+                let mut spot = (
+                    mid.0 + (poly.center.0 - mid.0) * k,
+                    mid.1 + (poly.center.1 - mid.1) * k,
+                );
                 if mesh.poly_at(spot) != Some(pi) {
                     spot = poly.center;
                 }
@@ -600,7 +855,11 @@ impl Explorer {
         order
             .into_iter()
             .map(|s| {
-                let mut o = Objective::new(Kind::Frontier, self.stand_spot(best[&s].1, reach), format!("look into sector {s}"));
+                let mut o = Objective::new(
+                    Kind::Frontier,
+                    self.stand_spot(best[&s].1, reach),
+                    format!("look into sector {s}"),
+                );
                 o.reveals = unseen[&s].clone();
                 o
             })
@@ -619,13 +878,24 @@ impl Explorer {
             }
             for &q in &poly.portals {
                 let portal = &mesh.portals[q];
-                let Some(li) = portal.linedef.filter(|_| k.visited.contains(&portal.other(pi))) else { continue };
-                let mid = ((portal.p1.0 + portal.p2.0) / 2.0, (portal.p1.1 + portal.p2.1) / 2.0);
+                let Some(li) = portal
+                    .linedef
+                    .filter(|_| k.visited.contains(&portal.other(pi)))
+                else {
+                    continue;
+                };
+                let mid = (
+                    (portal.p1.0 + portal.p2.0) / 2.0,
+                    (portal.p1.1 + portal.p2.1) / 2.0,
+                );
                 let d = dist(mid, poly.center);
                 if d < 1e-6 {
                     continue;
                 }
-                let spot = (mid.0 + (poly.center.0 - mid.0) / d * THRESHOLD_IN, mid.1 + (poly.center.1 - mid.1) / d * THRESHOLD_IN);
+                let spot = (
+                    mid.0 + (poly.center.0 - mid.0) / d * THRESHOLD_IN,
+                    mid.1 + (poly.center.1 - mid.1) / d * THRESHOLD_IN,
+                );
                 if mesh.poly_at(spot) != Some(pi) || !self.standable(spot, false) {
                     continue; // (a sliver by a wall or shut door the box can't stand in)
                 }
@@ -649,7 +919,11 @@ impl Explorer {
         let alike = |a: usize, b: usize| {
             let (x, y) = (&sectors[a], &sectors[b]);
             let (hx, hy) = (k.first_heights.get(&a), k.first_heights.get(&b));
-            hx.is_some() && hx == hy && x.floor_tex == y.floor_tex && x.ceiling_tex == y.ceiling_tex && x.light == y.light
+            hx.is_some()
+                && hx == hy
+                && x.floor_tex == y.floor_tex
+                && x.ceiling_tex == y.ceiling_tex
+                && x.light == y.light
         };
         let mut done: BTreeSet<usize> = BTreeSet::new();
         let mut out = Vec::new();
@@ -657,22 +931,47 @@ impl Explorer {
             for &q in &mesh.poly(pi).portals {
                 let portal = &mesh.portals[q];
                 let other = portal.other(pi);
-                let Some(li) = portal.linedef.filter(|li| !k.crossed.contains(li) && !done.contains(li)) else { continue };
+                let Some(li) = portal
+                    .linedef
+                    .filter(|li| !k.crossed.contains(li) && !done.contains(li))
+                else {
+                    continue;
+                };
                 let (a, b) = (mesh.poly(pi).sector, mesh.poly(other).sector);
-                if a == b || !k.visited.contains(&other) || !reach.contains(&other) || !alike(a, b) {
+                if a == b || !k.visited.contains(&other) || !reach.contains(&other) || !alike(a, b)
+                {
                     continue;
                 }
-                let mid = ((portal.p1.0 + portal.p2.0) / 2.0, (portal.p1.1 + portal.p2.1) / 2.0);
+                let mid = (
+                    (portal.p1.0 + portal.p2.0) / 2.0,
+                    (portal.p1.1 + portal.p2.1) / 2.0,
+                );
                 // (the far side from her: from where she is, over it)
-                let far = [pi, other].into_iter().max_by(|&x, &y| dist(mesh.poly(x).center, pos).total_cmp(&dist(mesh.poly(y).center, pos))).unwrap_or(other);
+                let far = [pi, other]
+                    .into_iter()
+                    .max_by(|&x, &y| {
+                        dist(mesh.poly(x).center, pos).total_cmp(&dist(mesh.poly(y).center, pos))
+                    })
+                    .unwrap_or(other);
                 let d = dist(mid, mesh.poly(far).center);
                 if d < 1e-6 {
                     continue;
                 }
                 // (in far enough that getting there is going over: not done within arrival of it)
                 let c = mesh.poly(far).center;
-                let at = |depth: f64| (mid.0 + (c.0 - mid.0) / d * depth, mid.1 + (c.1 - mid.1) / d * depth);
-                let Some(spot) = [SEAM_IN, THRESHOLD_IN].map(at).into_iter().find(|&p| mesh.poly_at(p) == Some(far) && self.standable(p, false)) else { continue };
+                let at = |depth: f64| {
+                    (
+                        mid.0 + (c.0 - mid.0) / d * depth,
+                        mid.1 + (c.1 - mid.1) / d * depth,
+                    )
+                };
+                let Some(spot) = [SEAM_IN, THRESHOLD_IN]
+                    .map(at)
+                    .into_iter()
+                    .find(|&p| mesh.poly_at(p) == Some(far) && self.standable(p, false))
+                else {
+                    continue;
+                };
                 done.insert(li);
                 let mut o = Objective::new(Kind::Visit, spot, format!("walk over line {li}"));
                 o.reveals = BTreeSet::from([far as i64]);
@@ -701,7 +1000,10 @@ impl Explorer {
                 .tele_from
                 .iter()
                 .enumerate()
-                .filter(|(_, es)| es.iter().any(|e| matches!(e, TeleEdge::Teleport(i) if nav.teleports[*i].line == li)))
+                .filter(|(_, es)| {
+                    es.iter()
+                        .any(|e| matches!(e, TeleEdge::Teleport(i) if nav.teleports[*i].line == li))
+                })
                 .map(|(p, _)| p)
                 .filter(|p| reach.contains(p))
                 .collect();
@@ -710,7 +1012,10 @@ impl Explorer {
             }
             let (front, back) = nav.map.sides(li);
             if let (Some(f), Some(b)) = (front, back) {
-                if !now[f].iter().any(|&a| now[b].iter().any(|&c| can_cross(a, c))) {
+                if !now[f]
+                    .iter()
+                    .any(|&a| now[b].iter().any(|&c| can_cross(a, c)))
+                {
                     continue; // (the pad isn't down yet, as far as she's seen)
                 }
             }
@@ -718,14 +1023,23 @@ impl Explorer {
             let length = dist(a, b).max(1.0);
             let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
             // the front side (the one that teleports), a little back from the line
-            let mut spot = (mid.0 + (b.1 - a.1) / length * 24.0, mid.1 - (b.0 - a.0) / length * 24.0);
+            let mut spot = (
+                mid.0 + (b.1 - a.1) / length * 24.0,
+                mid.1 - (b.0 - a.0) / length * 24.0,
+            );
             if !nav.poly_at(spot).is_some_and(|p| reach.contains(&p)) {
-                spot = src.iter().map(|&p| nav.poly_center(p)).reduce(|x, y| if dist(y, mid) < dist(x, mid) { y } else { x }).unwrap_or(spot);
+                spot = src
+                    .iter()
+                    .map(|&p| nav.poly_center(p))
+                    .reduce(|x, y| if dist(y, mid) < dist(x, mid) { y } else { x })
+                    .unwrap_or(spot);
             }
             // (somewhere she fits first: not up against a torch in front of the pad, MAP11's,
             // when another side of it is clear)
             let fits = self.stands_at(spot, &heights);
-            let Some(info) = classify_line(nav.map.linedefs[li].special) else { continue };
+            let Some(info) = classify_line(nav.map.linedefs[li].special) else {
+                continue;
+            };
             let t = TriggerLine {
                 id: usize::MAX,
                 line: li as i64,
@@ -738,11 +1052,17 @@ impl Explorer {
                 keep: None,
             };
             let pad = k.teleport_pad(li);
-            let mut o = Objective::new(Kind::Teleporter, spot, format!("try teleporter (line {li})"));
+            let mut o = Objective::new(
+                Kind::Teleporter,
+                spot,
+                format!("try teleporter (line {li})"),
+            );
             o.trigger = Some(t);
             o.pad = pad.clone();
             match best.iter_mut().find(|(p, _, _)| *p == pad) {
-                Some((_, bf, b)) if (fits, -dist(spot, pos)) > (*bf, -dist(b.goal, pos)) => (*bf, *b) = (fits, o),
+                Some((_, bf, b)) if (fits, -dist(spot, pos)) > (*bf, -dist(b.goal, pos)) => {
+                    (*bf, *b) = (fits, o)
+                }
                 Some(_) => {}
                 None => best.push((pad, fits, o)),
             }
@@ -760,8 +1080,13 @@ impl Explorer {
                 continue;
             }
             let urgent = self.urgent(h, tic);
-            let Some(best) = reach.iter().copied().reduce(|a, b| if dist(mesh.poly(b).center, h.origin) < dist(mesh.poly(a).center, h.origin) { b } else { a })
-            else {
+            let Some(best) = reach.iter().copied().reduce(|a, b| {
+                if dist(mesh.poly(b).center, h.origin) < dist(mesh.poly(a).center, h.origin) {
+                    b
+                } else {
+                    a
+                }
+            }) else {
                 continue;
             };
             // (where the box can stand: MAP05's)
@@ -772,7 +1097,12 @@ impl Explorer {
             let mut o = Objective::new(
                 Kind::Noise,
                 spot,
-                format!("check a noise {} (~{:.0}){}", compass(h.bearing), h.distance, if urgent { " right away" } else { "" }),
+                format!(
+                    "check a noise {} (~{:.0}){}",
+                    compass(h.bearing),
+                    h.distance,
+                    if urgent { " right away" } else { "" }
+                ),
             );
             o.reveals = BTreeSet::from([h.tic]);
             o.heard = Some(*h);
@@ -790,14 +1120,27 @@ impl Explorer {
             return false;
         }
         let n = k.fired.len();
-        let lines: BTreeSet<i64> =
-            k.fired[n.saturating_sub(8)..].iter().filter(|f| (0..=CAUSE_TICS).contains(&(h.tic - f.tic))).map(|f| f.line as i64).collect();
-        self.nav.triggers.iter().any(|t| lines.contains(&t.line) && k.learned.get(&t.id).is_none_or(BTreeSet::is_empty))
+        let lines: BTreeSet<i64> = k.fired[n.saturating_sub(8)..]
+            .iter()
+            .filter(|f| (0..=CAUSE_TICS).contains(&(h.tic - f.tic)))
+            .map(|f| f.line as i64)
+            .collect();
+        self.nav
+            .triggers
+            .iter()
+            .any(|t| lines.contains(&t.line) && k.learned.get(&t.id).is_none_or(BTreeSet::is_empty))
     }
 
     /// Has where a sound seemed to come from been in view since?
     pub(super) fn noise_seen(&self, h: &Heard) -> bool {
-        self.nav.poly_at(h.origin).is_some_and(|p| self.knowledge.seen_tic.get(&self.nav.sector_of_poly(p)).copied().unwrap_or(-1) > h.tic)
+        self.nav.poly_at(h.origin).is_some_and(|p| {
+            self.knowledge
+                .seen_tic
+                .get(&self.nav.sector_of_poly(p))
+                .copied()
+                .unwrap_or(-1)
+                > h.tic
+        })
     }
 
     /// Is the box (with the checks' slack) at p over a line that teleports her or ends the level?
@@ -808,7 +1151,8 @@ impl Explorer {
             mesh.line_grid.get(&c).into_iter().flatten().any(|&li| {
                 let sp = m.linedefs[li].special;
                 let trips = crate::navigator::TELEPORTERS_FOR_PLAYERS.contains(&sp)
-                    || crate::specials::classify_line(sp).is_some_and(|i| i.category.is_exit() && i.trigger.walked());
+                    || crate::specials::classify_line(sp)
+                        .is_some_and(|i| i.category.is_exit() && i.trigger.walked());
                 trips && crate::geom::swept_box_hits(p, p, r, m.line_seg(li))
             })
         })
@@ -842,7 +1186,10 @@ impl Explorer {
                     None => nearest.push((poly.sector, d, pi)),
                 }
             }
-            let gap = stood.iter().map(|&c| dist(poly.center, c)).fold(f64::INFINITY, f64::min);
+            let gap = stood
+                .iter()
+                .map(|&c| dist(poly.center, c))
+                .fold(f64::INFINITY, f64::min);
             if gap < COVER_GAP {
                 continue;
             }
@@ -859,7 +1206,11 @@ impl Explorer {
         }
         best.into_iter()
             .map(|(s, _, pi)| {
-                let mut o = Objective::new(Kind::Visit, mesh.poly(pi).center, format!("walk across sector {s}"));
+                let mut o = Objective::new(
+                    Kind::Visit,
+                    mesh.poly(pi).center,
+                    format!("walk across sector {s}"),
+                );
                 o.reveals = BTreeSet::from([pi as i64]);
                 o
             })
@@ -871,16 +1222,25 @@ impl Explorer {
         self.nav
             .triggers
             .iter()
-            .filter(|t| t.info.category == crate::specials::Category::Crusher && !t.info.description.contains("stop"))
+            .filter(|t| {
+                t.info.category == crate::specials::Category::Crusher
+                    && !t.info.description.contains("stop")
+            })
             .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
             .collect()
     }
 
     /// Is she down on a floor she takes to hurt?
     pub(super) fn on_hurting_floor(&self, obs: &Observation) -> bool {
-        let Some(p) = self.nav.poly_at(obs.pos()) else { return false };
+        let Some(p) = self.nav.poly_at(obs.pos()) else {
+            return false;
+        };
         let s = self.nav.sector_of_poly(p);
-        self.knowledge.damaging(s) && obs.z.is_some_and(|z| (z - obs.heights[s].floor).abs() < 1.0) && !self.knowledge.protected(obs.tic)
+        self.knowledge.damaging(s)
+            && obs
+                .z
+                .is_some_and(|z| (z - obs.heights[s].floor).abs() < 1.0)
+            && !self.knowledge.protected(obs.tic)
     }
 
     /// (mortal runs) Down on a floor that hurts: off it, to the nearest floor that doesn't she
@@ -896,7 +1256,10 @@ impl Explorer {
             return Vec::new();
         }
         let health = obs.health.unwrap_or(100.0);
-        let meant = self.waded_dead_end || self.waded.is_some_and(|h| health - (h - health) > super::routing::HEALTH_MARGIN);
+        let meant = self.waded_dead_end
+            || self
+                .waded
+                .is_some_and(|h| health - (h - health) > super::routing::HEALTH_MARGIN);
         if meant && !risky {
             return Vec::new();
         }
@@ -905,10 +1268,19 @@ impl Explorer {
         let best = reach
             .iter()
             .copied()
-            .filter(|&p| !self.knowledge.damaging(mesh.poly(p).sector) && self.standable(mesh.poly(p).center, false))
-            .min_by(|&a, &b| dist(mesh.poly(a).center, pos).total_cmp(&dist(mesh.poly(b).center, pos)));
+            .filter(|&p| {
+                !self.knowledge.damaging(mesh.poly(p).sector)
+                    && self.standable(mesh.poly(p).center, false)
+            })
+            .min_by(|&a, &b| {
+                dist(mesh.poly(a).center, pos).total_cmp(&dist(mesh.poly(b).center, pos))
+            });
         best.map(|p| {
-            let mut o = Objective::new(Kind::Visit, mesh.poly(p).center, "get off the floor that hurts");
+            let mut o = Objective::new(
+                Kind::Visit,
+                mesh.poly(p).center,
+                "get off the floor that hurts",
+            );
             o.reveals = BTreeSet::from([p as i64]);
             o.urgent = !meant;
             o
@@ -924,21 +1296,35 @@ impl Explorer {
             return Vec::new();
         }
         let health = obs.health.unwrap_or(100.0);
-        let short = self.short_of_health.is_some_and(|t| obs.tic - t < SHORT_TICS);
+        let short = self
+            .short_of_health
+            .is_some_and(|t| obs.tic - t < SHORT_TICS);
         let known = self.knowledge.known_polys();
         let mut out = Vec::new();
         for t in obs.things.iter().flatten() {
             // (what heals her past 100 counts as an item, had anyway: these only below it)
-            let heals = matches!(t.name, "Stimpack" | "Medikit") && health < 100.0 && (short || health < HEAL_BELOW);
-            let suit = t.name == "RadSuit" && (short || self.on_hurting_floor(obs)) && !self.knowledge.protected(obs.tic);
+            let heals = matches!(t.name, "Stimpack" | "Medikit")
+                && health < 100.0
+                && (short || health < HEAL_BELOW);
+            let suit = t.name == "RadSuit"
+                && (short || self.on_hurting_floor(obs))
+                && !self.knowledge.protected(obs.tic);
             if !heals && !suit {
                 continue;
             }
-            if !self.nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
+            if !self
+                .nav
+                .poly_at((t.x, t.y))
+                .is_some_and(|p| known.contains(&p))
+            {
                 continue;
             }
             if let Some(spot) = self.touch_spot((t.x, t.y), reach) {
-                let why = if suit { "for the floors that hurt" } else { "to heal" };
+                let why = if suit {
+                    "for the floors that hurt"
+                } else {
+                    "to heal"
+                };
                 let mut o = Objective::new(Kind::Item, spot, format!("pick up {} ({why})", t.name));
                 o.thing = Some(t.id);
                 o.urgent = health < HEAL_BELOW;
@@ -955,8 +1341,17 @@ impl Explorer {
         }
         let known = self.knowledge.known_polys();
         let mut out = Vec::new();
-        for t in obs.things.iter().flatten().filter(|t| self.spares.contains(&t.id)) {
-            if !self.nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
+        for t in obs
+            .things
+            .iter()
+            .flatten()
+            .filter(|t| self.spares.contains(&t.id))
+        {
+            if !self
+                .nav
+                .poly_at((t.x, t.y))
+                .is_some_and(|p| known.contains(&p))
+            {
                 continue;
             }
             if let Some(spot) = self.touch_spot((t.x, t.y), reach) {
@@ -992,10 +1387,15 @@ impl Explorer {
                 for &pi in &mesh.poly(p).portals {
                     let portal = &mesh.portals[pi];
                     let q = portal.other(p);
-                    if !self.reach.contains(&q) || floors(q).fold(f64::INFINITY, f64::min) - high > MAX_STEP {
+                    if !self.reach.contains(&q)
+                        || floors(q).fold(f64::INFINITY, f64::min) - high > MAX_STEP
+                    {
                         continue;
                     }
-                    let mid = ((portal.p1.0 + portal.p2.0) / 2.0, (portal.p1.1 + portal.p2.1) / 2.0);
+                    let mid = (
+                        (portal.p1.0 + portal.p2.0) / 2.0,
+                        (portal.p1.1 + portal.p2.1) / 2.0,
+                    );
                     let nd = d + dist(at, mid);
                     if best.get(&q).is_none_or(|&(od, _)| nd < od) {
                         best.insert(q, (nd, mid));
@@ -1032,9 +1432,15 @@ impl Explorer {
                 .iter()
                 .copied()
                 .filter(|&p| mesh.poly(p).sector == s && self.standable(mesh.poly(p).center, false))
-                .min_by(|&a, &b| dist(mesh.poly(a).center, pos).total_cmp(&dist(mesh.poly(b).center, pos)));
+                .min_by(|&a, &b| {
+                    dist(mesh.poly(a).center, pos).total_cmp(&dist(mesh.poly(b).center, pos))
+                });
             if let Some(p) = nearest {
-                let mut o = Objective::new(Kind::Secret, mesh.poly(p).center, format!("back into secret sector {s}"));
+                let mut o = Objective::new(
+                    Kind::Secret,
+                    mesh.poly(p).center,
+                    format!("back into secret sector {s}"),
+                );
                 o.reveals = BTreeSet::from([s as i64]);
                 out.push(o);
             }
@@ -1046,14 +1452,19 @@ impl Explorer {
     /// seen since, one per sector, at the reachable poly next to it nearest her.
     fn recheck(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let (k, mesh) = (&self.knowledge, &self.nav.mesh);
-        let Some(since) = k.unexplained_since() else { return Vec::new() };
+        let Some(since) = k.unexplained_since() else {
+            return Vec::new();
+        };
         let reach_sectors: BTreeSet<usize> = reach.iter().map(|&p| mesh.poly(p).sector).collect();
         let mut best: Vec<(usize, f64, Point)> = Vec::new();
         for &pi in reach {
             let poly = mesh.poly(pi);
             for &q in &poly.portals {
                 let s = mesh.poly(mesh.portals[q].other(pi)).sector;
-                if reach_sectors.contains(&s) || !k.sectors.contains(&s) || k.seen_tic.get(&s).copied().unwrap_or(-1) > since {
+                if reach_sectors.contains(&s)
+                    || !k.sectors.contains(&s)
+                    || k.seen_tic.get(&s).copied().unwrap_or(-1) > since
+                {
                     continue;
                 }
                 let d = dist(poly.center, pos);
@@ -1066,7 +1477,11 @@ impl Explorer {
         }
         best.into_iter()
             .map(|(s, _, c)| {
-                let mut o = Objective::new(Kind::Recheck, self.stand_spot(c, reach), format!("look at sector {s} again"));
+                let mut o = Objective::new(
+                    Kind::Recheck,
+                    self.stand_spot(c, reach),
+                    format!("look at sector {s} again"),
+                );
                 o.reveals = BTreeSet::from([s as i64]);
                 o
             })
@@ -1075,30 +1490,63 @@ impl Explorer {
 
     /// The objectives open, the explorer's way round: the exit first if she can get there, then
     /// the locks her keys open, then by distance as the crow flies (weighted by kind).
-    pub fn ranked(&mut self, obs: &Observation, risky: bool, hooks: &mut dyn Hooks) -> Vec<Objective> {
+    pub fn ranked(
+        &mut self,
+        obs: &Observation,
+        risky: bool,
+        hooks: &mut dyn Hooks,
+    ) -> Vec<Objective> {
         let mut options = self.objectives(obs, risky, hooks);
         let mesh = Arc::clone(&self.nav.mesh);
         if risky && !self.knowledge.traps.is_empty() {
             // (not back into a trap she's been stuck in before: MAP18's moat; but in one already,
             // it's all there is: MAP21's pit)
             let here = mesh.poly_at(obs.pos());
-            let traps: Vec<&BTreeSet<usize>> = self.knowledge.traps.iter().filter(|t| here.is_none_or(|h| !t.contains(&h))).collect();
-            options.retain(|o| !traps.iter().any(|trap| mesh.poly_at(o.goal).is_some_and(|p| trap.contains(&p))));
+            let traps: Vec<&BTreeSet<usize>> = self
+                .knowledge
+                .traps
+                .iter()
+                .filter(|t| here.is_none_or(|h| !t.contains(&h)))
+                .collect();
+            options.retain(|o| {
+                !traps
+                    .iter()
+                    .any(|trap| mesh.poly_at(o.goal).is_some_and(|p| trap.contains(&p)))
+            });
         }
         if !self.exits_open {
             // (nor anywhere she'd slide over one getting there: MAP24's pad, 38 off a goal)
             let segs = self.pads.1.clone();
-            options.retain(|o| segs.iter().all(|&(a, b)| segment_distance(a, b, o.goal, o.goal) >= EXIT_MARGIN));
+            options.retain(|o| {
+                segs.iter()
+                    .all(|&(a, b)| segment_distance(a, b, o.goal, o.goal) >= EXIT_MARGIN)
+            });
         }
         // (near as she'd walk it, not as the crow flies: the user's, E2M2, a wall 224 off as the
         // crow flies and 4287 along the way, taken first; a tenth of the objectives with ways four
         // times their straight line or more, a quarter of all the walking)
         let travel = self.travel(obs);
-        let mut weighed: Vec<(f64, Objective)> = options.into_iter().map(|o| (travel(o.goal) * o.kind.weight() * hooks.weigh(obs, &o), o)).collect();
-        weighed.sort_by(|a, b| (a.1.priority(), a.0).partial_cmp(&(b.1.priority(), b.0)).unwrap_or(std::cmp::Ordering::Equal));
-        if self.debug_tics.is_some_and(|(a, b)| (a..=b).contains(&obs.tic)) {
+        let mut weighed: Vec<(f64, Objective)> = options
+            .into_iter()
+            .map(|o| (travel(o.goal) * o.kind.weight() * hooks.weigh(obs, &o), o))
+            .collect();
+        weighed.sort_by(|a, b| {
+            (a.1.priority(), a.0)
+                .partial_cmp(&(b.1.priority(), b.0))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        if self
+            .debug_tics
+            .is_some_and(|(a, b)| (a..=b).contains(&obs.tic))
+        {
             for (d, o) in &weighed {
-                self.log.push(format!("  (ranked) '{}' weighed {d:.0}, priority {}, needed {}, urgent {}", o.label, o.priority(), o.needed, o.urgent));
+                self.log.push(format!(
+                    "  (ranked) '{}' weighed {d:.0}, priority {}, needed {}, urgent {}",
+                    o.label,
+                    o.priority(),
+                    o.needed,
+                    o.urgent
+                ));
             }
         }
         weighed.into_iter().map(|(_, o)| o).collect()

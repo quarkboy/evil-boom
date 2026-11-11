@@ -15,11 +15,19 @@ pub const WARMUP_TICS: i64 = 8;
 
 /// Where the game's library and its own WAD are built.
 pub fn build_dir() -> PathBuf {
-    config::root().join("third_party").join("dsda-doom").join("prboom2").join("build")
+    config::root()
+        .join("third_party")
+        .join("dsda-doom")
+        .join("prboom2")
+        .join("build")
 }
 
 pub fn library() -> PathBuf {
-    build_dir().join(if cfg!(windows) { "libdsda-evil.dll" } else { "libdsda-evil.so" })
+    build_dir().join(if cfg!(windows) {
+        "libdsda-evil.dll"
+    } else {
+        "libdsda-evil.so"
+    })
 }
 
 /// (episode, map) from a map name: E1M1 or MAP01.
@@ -30,7 +38,12 @@ pub fn episode_map(name: &str) -> Result<(i32, i32), String> {
         return Ok((1, rest.parse().map_err(|_| bad())?));
     }
     let b = n.as_bytes();
-    if b.len() == 4 && b[0] == b'E' && b[2] == b'M' && b[1].is_ascii_digit() && b[3].is_ascii_digit() {
+    if b.len() == 4
+        && b[0] == b'E'
+        && b[2] == b'M'
+        && b[1].is_ascii_digit()
+        && b[3].is_ascii_digit()
+    {
         return Ok((i32::from(b[1] - b'0'), i32::from(b[3] - b'0')));
     }
     Err(bad())
@@ -54,7 +67,15 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Options { skill: 3, nomonsters: true, objects: false, drawn: false, sound: false, capture: false, seed: None }
+        Options {
+            skill: 3,
+            nomonsters: true,
+            objects: false,
+            drawn: false,
+            sound: false,
+            capture: false,
+            seed: None,
+        }
     }
 }
 
@@ -104,9 +125,21 @@ impl Engine {
             std::env::set_var("SDL_VIDEODRIVER", "dummy");
         }
         // straight into the level (no title screen: its attract-mode demo took her commands)
-        let warp: Vec<String> = if map_name.to_uppercase().starts_with("MAP") { vec![map.to_string()] } else { vec![episode.to_string(), map.to_string()] };
-        let mut args: Vec<String> =
-            ["-iwad", &iwad.to_string_lossy(), "-nomouse", "-skill", &o.skill.to_string()].iter().map(|s| s.to_string()).collect();
+        let warp: Vec<String> = if map_name.to_uppercase().starts_with("MAP") {
+            vec![map.to_string()]
+        } else {
+            vec![episode.to_string(), map.to_string()]
+        };
+        let mut args: Vec<String> = [
+            "-iwad",
+            &iwad.to_string_lossy(),
+            "-nomouse",
+            "-skill",
+            &o.skill.to_string(),
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
         if o.capture {
             args.push("-evilsoundcap".into()); // (a dummy device: mixed for her, not played)
         } else if !o.sound {
@@ -121,7 +154,11 @@ impl Engine {
             args.push("-nomonsters".into());
         }
         let dirs = dll_dirs();
-        let game = Dsda::load(&library(), &dirs.iter().map(PathBuf::as_path).collect::<Vec<_>>(), &args)?;
+        let game = Dsda::load(
+            &library(),
+            &dirs.iter().map(PathBuf::as_path).collect::<Vec<_>>(),
+            &args,
+        )?;
         game.seed(o.seed);
         if o.sound || o.capture {
             game.sound(true);
@@ -157,9 +194,25 @@ impl Engine {
     /// health, armour; not keys or powers).
     pub fn loadout(&self) -> crate::dsda::Loadout {
         let p = self.game.player();
-        let weapons = p.weaponowned.iter().enumerate().filter(|(_, &o)| o != 0).fold(0, |m, (i, _)| m | (1 << i));
+        let weapons = p
+            .weaponowned
+            .iter()
+            .enumerate()
+            .filter(|(_, &o)| o != 0)
+            .fold(0, |m, (i, _)| m | (1 << i));
         let [clip, shell, cell, rocket] = p.ammo;
-        crate::dsda::Loadout { weapons, clip, shell, cell, rocket, backpack: p.backpack != 0, health: p.health, armor: p.armor, armor_type: p.armortype , ready: Some(p.readyweapon) }
+        crate::dsda::Loadout {
+            weapons,
+            clip,
+            shell,
+            cell,
+            rocket,
+            backpack: p.backpack != 0,
+            health: p.health,
+            armor: p.armor,
+            armor_type: p.armortype,
+            ready: Some(p.readyweapon),
+        }
     }
 
     /// On to another map, started as a new process would start it (things numbered afresh), with
@@ -181,7 +234,11 @@ impl Engine {
         // from a life before is of it)
         self.game.reset_ids();
         self.new_game();
-        self.tic = if keep_time { tic + WARMUP_TICS } else { WARMUP_TICS };
+        self.tic = if keep_time {
+            tic + WARMUP_TICS
+        } else {
+            WARMUP_TICS
+        };
     }
 
     /// Her bullets and pellets so far (see `Game::pellets`).
@@ -190,7 +247,8 @@ impl Engine {
     }
 
     fn new_game(&mut self) {
-        self.game.new_game(self.skill, self.episode, self.map, self.nomonsters);
+        self.game
+            .new_game(self.skill, self.episode, self.map, self.nomonsters);
         self.suits = 0;
         self.ironfeet = 0;
         self.message_tic = -1;
@@ -200,7 +258,10 @@ impl Engine {
         if let Some(l) = &self.carry {
             self.game.give(l);
             if std::env::var_os("EVIL_DEBUG_CARRY").is_some() {
-                eprintln!("carried in: {l:?}; in her hands now, the game's weapon {}", self.game.player().readyweapon);
+                eprintln!(
+                    "carried in: {l:?}; in her hands now, the game's weapon {}",
+                    self.game.player().readyweapon
+                );
             }
         }
         if self.god {
@@ -272,7 +333,8 @@ impl Engine {
     /// sample rate. None without capture.
     pub fn grab_tic_sound(&self) -> Option<(u32, Vec<i16>)> {
         let rate = self.game.sound_rate()?;
-        self.game.grab_sound((rate as usize).div_ceil(crate::motor::TICRATE as usize))
+        self.game
+            .grab_sound((rate as usize).div_ceil(crate::motor::TICRATE as usize))
     }
 
     pub fn god(&self) -> bool {
@@ -287,7 +349,11 @@ impl Engine {
     /// The level's tally so far: items, kills, secrets, each (got, of).
     pub fn tally(&self) -> [(i32, i32); 3] {
         let s = self.game.status();
-        [(s.items, s.total_items), (s.kills, s.total_kills), (s.secrets, s.total_secrets)]
+        [
+            (s.items, s.total_items),
+            (s.kills, s.total_kills),
+            (s.secrets, s.total_secrets),
+        ]
     }
 
     pub fn exited(&self) -> bool {
@@ -317,7 +383,11 @@ impl Engine {
     pub fn observe(&mut self) -> Observation {
         let p = self.game.player();
         self.game.sectors(&mut self.sectors);
-        let heights: Vec<Heights> = self.sectors.iter().map(|&(floor, ceiling)| Heights { floor, ceiling }).collect();
+        let heights: Vec<Heights> = self
+            .sectors
+            .iter()
+            .map(|&(floor, ceiling)| Heights { floor, ceiling })
+            .collect();
         self.game.things(&mut self.mobjs);
         let mut barrels = Vec::new();
         let mut barrels_lit = Vec::new();
@@ -333,14 +403,33 @@ impl Engine {
                     barrels_lit.push((m.x, m.y));
                 }
             }
-            if m.kind == 0 || m.flags & dsda::MF_CORPSE != 0 || (m.flags & dsda::MF_SHOOTABLE != 0 && m.health <= 0) {
+            if m.kind == 0
+                || m.flags & dsda::MF_CORPSE != 0
+                || (m.flags & dsda::MF_SHOOTABLE != 0 && m.health <= 0)
+            {
                 continue;
             }
             let Some(name) = name else { continue };
             if let Some(things) = things.as_mut() {
                 let category = category(name);
                 if !matches!(name, "DoomPlayer" | "BossTarget") && category != "Other" {
-                    things.push(Thing { id: m.id, name, category, x: m.x, y: m.y, z: m.z, vx: m.momx, vy: m.momy, vz: m.momz, angle: m.angle, health: m.health, owner: m.owner_type, state: m.state, after_her: m.after_her != 0, attack: m.attack });
+                    things.push(Thing {
+                        id: m.id,
+                        name,
+                        category,
+                        x: m.x,
+                        y: m.y,
+                        z: m.z,
+                        vx: m.momx,
+                        vy: m.momy,
+                        vz: m.momz,
+                        angle: m.angle,
+                        health: m.health,
+                        owner: m.owner_type,
+                        state: m.state,
+                        after_her: m.after_her != 0,
+                        attack: m.attack,
+                    });
                 }
             }
         }
@@ -350,7 +439,12 @@ impl Engine {
         self.ironfeet = p.ironfeet;
         let message = (p.message_tic != self.message_tic).then(|| {
             self.message_tic = p.message_tic;
-            let text: Vec<u8> = p.message.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
+            let text: Vec<u8> = p
+                .message
+                .iter()
+                .take_while(|&&c| c != 0)
+                .map(|&c| c as u8)
+                .collect();
             String::from_utf8_lossy(&text).into_owned()
         });
         let names = self.game.sfx_names();
@@ -358,26 +452,45 @@ impl Engine {
             .game
             .sounds()
             .into_iter()
-            .map(|[_tic, sfx, id, kind, own, volume, separation, x, y, chasing]| {
-                let name = usize::try_from(sfx).ok().and_then(|i| names.get(i)).copied().unwrap_or("");
-                let (what, kinds) = self.sound_book().classify(name, (kind >= 0).then_some(kind), chasing != 0);
-                (name, what, kinds, id, kind, own, volume, separation, x, y)
-            })
-            .map(|(name, what, kinds, id, kind, own, volume, separation, x, y)| Sound {
-                name,
-                what,
-                kinds,
-                own: own != 0,
-                volume,
-                separation,
-                from: (kind >= 0).then(|| (id, dsda::type_name(kind).unwrap_or(""))),
-                at: (f64::from(x), f64::from(y)),
-            })
+            .map(
+                |[_tic, sfx, id, kind, own, volume, separation, x, y, chasing]| {
+                    let name = usize::try_from(sfx)
+                        .ok()
+                        .and_then(|i| names.get(i))
+                        .copied()
+                        .unwrap_or("");
+                    let (what, kinds) =
+                        self.sound_book()
+                            .classify(name, (kind >= 0).then_some(kind), chasing != 0);
+                    (name, what, kinds, id, kind, own, volume, separation, x, y)
+                },
+            )
+            .map(
+                |(name, what, kinds, id, kind, own, volume, separation, x, y)| Sound {
+                    name,
+                    what,
+                    kinds,
+                    own: own != 0,
+                    volume,
+                    separation,
+                    from: (kind >= 0).then(|| (id, dsda::type_name(kind).unwrap_or(""))),
+                    at: (f64::from(x), f64::from(y)),
+                },
+            )
             .collect();
-        let keys: Keys = Key::ENGINE_ORDER.iter().zip(p.cards).filter(|(_, held)| *held != 0).map(|(k, _)| *k).collect();
+        let keys: Keys = Key::ENGINE_ORDER
+            .iter()
+            .zip(p.cards)
+            .filter(|(_, held)| *held != 0)
+            .map(|(k, _)| *k)
+            .collect();
         let [clip, shell, cell, rocket] = p.ammo;
-        let weapons: Vec<i32> =
-            (0..9).filter(|&w| p.weaponowned[w as usize] != 0).map(dsda::weapon_slot).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
+        let weapons: Vec<i32> = (0..9)
+            .filter(|&w| p.weaponowned[w as usize] != 0)
+            .map(dsda::weapon_slot)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
         Observation {
             x: p.x,
             y: p.y,
@@ -393,7 +506,15 @@ impl Engine {
             suits: Some(self.suits),
             things,
             weapons: Some(weapons),
-            ammo: Some(vec![(1, 0), (2, clip), (3, shell), (4, clip), (5, rocket), (6, cell), (7, cell)]),
+            ammo: Some(vec![
+                (1, 0),
+                (2, clip),
+                (3, shell),
+                (4, clip),
+                (5, rocket),
+                (6, cell),
+                (7, cell),
+            ]),
             armor: Some(f64::from(p.armor)),
             armor_type: Some(p.armortype),
             super_shotgun: Some(p.weaponowned[8] != 0),
@@ -420,7 +541,8 @@ impl Engine {
         });
         self.tic += 1;
         let hits = self.game.hits();
-        self.hit_sides.extend(hits.iter().filter(|h| !h.own).filter_map(|h| h.side));
+        self.hit_sides
+            .extend(hits.iter().filter(|h| !h.own).filter_map(|h| h.side));
         self.hits.extend(hits);
     }
 
@@ -447,7 +569,8 @@ fn dll_dirs() -> Vec<PathBuf> {
     if !cfg!(windows) {
         return Vec::new();
     }
-    let bin = std::env::var_os("EVIL_MINGW_BIN").map_or_else(|| PathBuf::from(r"C:\msys64\mingw64\bin"), PathBuf::from);
+    let bin = std::env::var_os("EVIL_MINGW_BIN")
+        .map_or_else(|| PathBuf::from(r"C:\msys64\mingw64\bin"), PathBuf::from);
     if bin.is_dir() {
         vec![bin]
     } else {
@@ -476,12 +599,19 @@ impl SoundBook {
     fn new(game: &dsda::Dsda) -> SoundBook {
         let names = game.sfx_names();
         let mut of = std::collections::BTreeMap::new();
-        let mut makers: std::collections::BTreeMap<(&'static str, usize), Vec<&'static str>> = std::collections::BTreeMap::new();
-        let mut alone: std::collections::BTreeMap<&'static str, &'static [&'static str]> = std::collections::BTreeMap::new();
+        let mut makers: std::collections::BTreeMap<(&'static str, usize), Vec<&'static str>> =
+            std::collections::BTreeMap::new();
+        let mut alone: std::collections::BTreeMap<&'static str, &'static [&'static str]> =
+            std::collections::BTreeMap::new();
         let mut kind = 0;
         while let Some(sounds) = game.mobj_sounds(kind) {
             if let Some(thing) = dsda::type_name(kind) {
-                let families = sounds.map(|s| usize::try_from(s).ok().and_then(|i| names.get(i)).map_or("", |n| family(n)));
+                let families = sounds.map(|s| {
+                    usize::try_from(s)
+                        .ok()
+                        .and_then(|i| names.get(i))
+                        .map_or("", |n| family(n))
+                });
                 for (role, f) in families.iter().enumerate().filter(|(_, f)| !f.is_empty()) {
                     let list = makers.entry((f, role)).or_default();
                     if !list.contains(&thing) {
@@ -493,26 +623,41 @@ impl SoundBook {
             }
             kind += 1;
         }
-        let makers = makers.into_iter().map(|(k, v)| (k, &*Box::leak(v.into_boxed_slice()))).collect();
+        let makers = makers
+            .into_iter()
+            .map(|(k, v)| (k, &*Box::leak(v.into_boxed_slice())))
+            .collect();
         SoundBook { of, makers, alone }
     }
 
     /// What a sound is and the kinds that make it, by its name and the type of thing it came
     /// from (None: no thing: a boss's cry, heard everywhere, or a door, a switch, her own).
-    fn classify(&self, name: &str, from: Option<i32>, chasing: bool) -> (Heard, &'static [&'static str]) {
+    fn classify(
+        &self,
+        name: &str,
+        from: Option<i32>,
+        chasing: bool,
+    ) -> (Heard, &'static [&'static str]) {
         let f = family(name);
         let made = |role: usize| self.makers.get(&(f, role)).copied();
         let Some(kind) = from else {
             // (no thing: a boss's cry, if any kind dies or wakes with it)
-            return made(3).map(|k| (Heard::Death, k)).or_else(|| made(0).map(|k| (Heard::Sight, k))).unwrap_or((Heard::Other, &[]));
+            return made(3)
+                .map(|k| (Heard::Death, k))
+                .or_else(|| made(0).map(|k| (Heard::Sight, k)))
+                .unwrap_or((Heard::Other, &[]));
         };
         let thing = dsda::type_name(kind).unwrap_or("");
-        let missile = crate::tactical::bestiary::missile(thing).is_some() && crate::tactical::bestiary::monster(thing).is_none();
+        let missile = crate::tactical::bestiary::missile(thing).is_some()
+            && crate::tactical::bestiary::monster(thing).is_none();
         // (blown apart: the game's one sound for it, whatever died: A_XScream)
         if f == "dsslop" {
             return (Heard::Death, self.alone.get(thing).copied().unwrap_or(&[]));
         }
-        let role = self.of.get(&kind).and_then(|fs| [3, 0, 2, 1, 4].into_iter().find(|&r| fs[r] == f));
+        let role = self
+            .of
+            .get(&kind)
+            .and_then(|fs| [3, 0, 2, 1, 4].into_iter().find(|&r| fs[r] == f));
         match role {
             Some(0) if missile => (Heard::Launch, made(0).unwrap_or(&[])),
             Some(3) if missile => (Heard::Impact, made(3).unwrap_or(&[])),
@@ -525,8 +670,13 @@ impl SoundBook {
             // zombieman's pistol, a chaingunner's burst. The kind is the game's word for what
             // made it: a shotgun's blast is a sergeant's, a chaingunner's or a spider's by ear)
             // (...unless it's made as it walks: a cyberdemon's hoof, a spider's legs)
-            None if crate::tactical::bestiary::monster(thing).is_some() && chasing => (Heard::Walking, self.alone.get(thing).copied().unwrap_or(&[])),
-            None if crate::tactical::bestiary::monster(thing).is_some() => (Heard::Attack, self.alone.get(thing).copied().unwrap_or(&[])),
+            None if crate::tactical::bestiary::monster(thing).is_some() && chasing => (
+                Heard::Walking,
+                self.alone.get(thing).copied().unwrap_or(&[]),
+            ),
+            None if crate::tactical::bestiary::monster(thing).is_some() => {
+                (Heard::Attack, self.alone.get(thing).copied().unwrap_or(&[]))
+            }
             None => (Heard::Other, &[]),
         }
     }

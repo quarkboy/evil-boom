@@ -222,13 +222,28 @@ impl Dsda {
         if LOADED.swap(true, Ordering::SeqCst) {
             return Err("DSDA-Doom is already loaded in this process (one game a process)".into());
         }
-        let lib = open_library(lib, dll_dirs).map_err(|e| format!("loading {}: {e}", lib.display()))?;
+        let lib =
+            open_library(lib, dll_dirs).map_err(|e| format!("loading {}: {e}", lib.display()))?;
         let sym = |name: &[u8]| -> Result<*const (), String> {
             // SAFETY: as above; the pointer is only turned into the matching fn type.
-            unsafe { lib.get::<*const ()>(name) }.map(|s| *s).map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
+            unsafe { lib.get::<*const ()>(name) }
+                .map(|s| *s)
+                .map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
         };
         // SAFETY: each symbol is the function of that name in evil_api.c, with this signature.
-        let (init_fn, new_game_fn, god_fn, seed_fn, tic_fn, warp_fn, draw_fn, status_fn, sectors_fn, mobjs_fn, player_fn) = unsafe {
+        let (
+            init_fn,
+            new_game_fn,
+            god_fn,
+            seed_fn,
+            tic_fn,
+            warp_fn,
+            draw_fn,
+            status_fn,
+            sectors_fn,
+            mobjs_fn,
+            player_fn,
+        ) = unsafe {
             (
                 std::mem::transmute::<*const (), InitFn>(sym(b"evil_init")?),
                 std::mem::transmute::<*const (), NewGameFn>(sym(b"evil_new_game")?),
@@ -244,46 +259,95 @@ impl Dsda {
             )
         };
         // SAFETY: as above, evil_power's signature; optional, an older library hasn't it.
-        let power_fn = sym(b"evil_power").ok().map(|p| unsafe { std::mem::transmute::<*const (), PowerFn>(p) });
+        let power_fn = sym(b"evil_power")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), PowerFn>(p) });
         // SAFETY: as above (evil_sound(int)).
-        let sound_fn = sym(b"evil_sound").ok().map(|p| unsafe { std::mem::transmute::<*const (), SoundFn>(p) });
+        let sound_fn = sym(b"evil_sound")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), SoundFn>(p) });
         // SAFETY: as above, evil_spawn's and evil_give's signatures; optional.
-        let spawn_fn = sym(b"evil_spawn").ok().map(|p| unsafe { std::mem::transmute::<*const (), SpawnFn>(p) });
-        let give_fn = sym(b"evil_give").ok().map(|p| unsafe { std::mem::transmute::<*const (), GiveFn>(p) });
+        let spawn_fn = sym(b"evil_spawn")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), SpawnFn>(p) });
+        let give_fn = sym(b"evil_give")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), GiveFn>(p) });
         // SAFETY: the symbol, if the library has it, is `void evil_ready(int)`.
-        let ready_fn = sym(b"evil_ready").ok().map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
+        let ready_fn = sym(b"evil_ready")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
         // SAFETY: as above, evil_clear_items's signature; optional.
-        let clear_fn = sym(b"evil_clear_items").ok().map(|p| unsafe { std::mem::transmute::<*const (), ClearFn>(p) });
+        let clear_fn = sym(b"evil_clear_items")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), ClearFn>(p) });
         // SAFETY: as above, evil_reset_ids's signature; optional.
-        let reset_ids_fn = sym(b"evil_reset_ids").ok().map(|p| unsafe { std::mem::transmute::<*const (), ResetIdsFn>(p) });
+        let reset_ids_fn = sym(b"evil_reset_ids")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), ResetIdsFn>(p) });
         // SAFETY: as above, evil_hits_since's signature; optional.
-        let hits_fn = sym(b"evil_hits_since").ok().map(|p| unsafe { std::mem::transmute::<*const (), HitsFn>(p) });
+        let hits_fn = sym(b"evil_hits_since")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), HitsFn>(p) });
         // SAFETY: as above, evil_pellets_so_far(int*); optional.
-        let pellets_fn = sym(b"evil_pellets_so_far").ok().map(|p| unsafe { std::mem::transmute::<*const (), PelletsFn>(p) });
+        let pellets_fn = sym(b"evil_pellets_so_far")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), PelletsFn>(p) });
         // SAFETY: as above, evil_sounds_since's and evil_sfx_name's signatures; optional.
-        let sounds_fn = sym(b"evil_sounds_since").ok().map(|p| unsafe { std::mem::transmute::<*const (), SoundsFn>(p) });
-        let mobj_sounds_fn = sym(b"evil_mobj_sounds").ok().map(|p| unsafe { std::mem::transmute::<*const (), MobjSoundsFn>(p) });
-        let sfx_name_fn = sym(b"evil_sfx_name").ok().map(|p| unsafe { std::mem::transmute::<*const (), SfxNameFn>(p) });
+        let sounds_fn = sym(b"evil_sounds_since")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), SoundsFn>(p) });
+        let mobj_sounds_fn = sym(b"evil_mobj_sounds")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), MobjSoundsFn>(p) });
+        let sfx_name_fn = sym(b"evil_sfx_name")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), SfxNameFn>(p) });
         // SAFETY: as above, evil_grab_sound's signature; optional.
-        let grab_sound_fn = sym(b"evil_grab_sound").ok().map(|p| unsafe { std::mem::transmute::<*const (), GrabSoundFn>(p) });
+        let grab_sound_fn = sym(b"evil_grab_sound")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), GrabSoundFn>(p) });
         // SAFETY: as above, evil_sound_rate's signature; optional.
-        let sound_rate_fn = sym(b"evil_sound_rate").ok().map(|p| unsafe { std::mem::transmute::<*const (), SoundRateFn>(p) });
+        let sound_rate_fn = sym(b"evil_sound_rate")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), SoundRateFn>(p) });
         // SAFETY: as above, evil_volume's and evil_get_volume's signatures; optional.
-        let volume_fn = sym(b"evil_volume").ok().map(|p| unsafe { std::mem::transmute::<*const (), VolumeFn>(p) });
-        let get_volume_fn = sym(b"evil_get_volume").ok().map(|p| unsafe { std::mem::transmute::<*const (), GetVolumeFn>(p) });
+        let volume_fn = sym(b"evil_volume")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), VolumeFn>(p) });
+        let get_volume_fn = sym(b"evil_get_volume")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), GetVolumeFn>(p) });
         // SAFETY: as above, the presentation's calls' signatures (evil_present, evil_title,
         // evil_wipe_tic, evil_menu, evil_screen); optional.
-        let present_fn = sym(b"evil_present").ok().map(|p| unsafe { std::mem::transmute::<*const (), PresentFn>(p) });
-        let title_fn = sym(b"evil_title").ok().map(|p| unsafe { std::mem::transmute::<*const (), PlainFn>(p) });
-        let wipe_tic_fn = sym(b"evil_wipe_tic").ok().map(|p| unsafe { std::mem::transmute::<*const (), PlainFn>(p) });
-        let menu_fn = sym(b"evil_menu").ok().map(|p| unsafe { std::mem::transmute::<*const (), MenuFn>(p) });
-        let screen_fn = sym(b"evil_screen").ok().map(|p| unsafe { std::mem::transmute::<*const (), ScreenFn>(p) });
+        let present_fn = sym(b"evil_present")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), PresentFn>(p) });
+        let title_fn = sym(b"evil_title")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), PlainFn>(p) });
+        let wipe_tic_fn = sym(b"evil_wipe_tic")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), PlainFn>(p) });
+        let menu_fn = sym(b"evil_menu")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), MenuFn>(p) });
+        let screen_fn = sym(b"evil_screen")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), ScreenFn>(p) });
         // SAFETY: as above, evil_exit(int); optional.
-        let exit_fn = sym(b"evil_exit").ok().map(|p| unsafe { std::mem::transmute::<*const (), PresentFn>(p) });
+        let exit_fn = sym(b"evil_exit")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), PresentFn>(p) });
         // SAFETY: as above, evil_level_title(char*, int); optional.
-        let level_title_fn = sym(b"evil_level_title").ok().map(|p| unsafe { std::mem::transmute::<*const (), TitleFn>(p) });
-        let argv: Vec<CString> =
-            std::iter::once("evil".to_string()).chain(args.iter().cloned()).map(CString::new).collect::<Result<_, _>>().map_err(|e| e.to_string())?;
+        let level_title_fn = sym(b"evil_level_title")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), TitleFn>(p) });
+        let argv: Vec<CString> = std::iter::once("evil".to_string())
+            .chain(args.iter().cloned())
+            .map(CString::new)
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.to_string())?;
         let mut argv_ptrs: Vec<*mut c_char> = argv.iter().map(|a| a.as_ptr().cast_mut()).collect();
         // SAFETY: argv and its pointers live in the returned value, as long as the game.
         unsafe { init_fn(argv_ptrs.len() as c_int, argv_ptrs.as_mut_ptr()) };
@@ -351,7 +415,10 @@ impl Dsda {
         let mut out = vec![0i16; samples * 2];
         // SAFETY: out holds 2 * samples shorts, all the call writes; see `load`.
         let rate = unsafe { f(out.as_mut_ptr(), c_int::try_from(samples).ok()?) };
-        u32::try_from(rate).ok().filter(|&r| r > 0).map(|r| (r, out))
+        u32::try_from(rate)
+            .ok()
+            .filter(|&r| r > 0)
+            .map(|r| (r, out))
     }
 
     /// The sound's sample rate (None without the call, or no sound).
@@ -374,7 +441,9 @@ impl Dsda {
     /// Doom's own screens on or off (the presentation: see evil_api.c). False: the library
     /// hasn't them.
     pub fn present(&self, on: bool) -> bool {
-        let Some(f) = self.present_fn else { return false };
+        let Some(f) = self.present_fn else {
+            return false;
+        };
         // SAFETY: a plain value into the game; see `load`.
         unsafe { f(c_int::from(on)) };
         true
@@ -420,7 +489,11 @@ impl Dsda {
         let mut buf = vec![0 as c_char; 128];
         // SAFETY: the buffer's size given; it writes at most that, ended; see `load`.
         let n = unsafe { f(buf.as_mut_ptr(), buf.len() as c_int) };
-        let bytes: Vec<u8> = buf.iter().take(usize::try_from(n).ok()?).map(|&c| c as u8).collect();
+        let bytes: Vec<u8> = buf
+            .iter()
+            .take(usize::try_from(n).ok()?)
+            .map(|&c| c as u8)
+            .collect();
         Some(String::from_utf8_lossy(&bytes).into_owned()).filter(|t| !t.is_empty())
     }
 
@@ -430,7 +503,14 @@ impl Dsda {
         let mut o = [0 as c_int; 6];
         // SAFETY: room for the six it writes; see `load`.
         unsafe { f(o.as_mut_ptr()) };
-        Some(Screen { state: o[0], wiping: o[1] != 0, menu: o[2] != 0, held: o[3] != 0, waiting: o[4] != 0, item: o[5] })
+        Some(Screen {
+            state: o[0],
+            wiping: o[1] != 0,
+            menu: o[2] != 0,
+            held: o[3] != 0,
+            waiting: o[4] != 0,
+            item: o[5],
+        })
     }
 
     /// The loudness set (None: that one left as it is); no effect without the call.
@@ -461,7 +541,9 @@ impl Dsda {
 
     /// Number things from 1 again (as a new process does); false if the library hasn't the call.
     pub fn reset_ids(&self) -> bool {
-        let Some(f) = self.reset_ids_fn else { return false };
+        let Some(f) = self.reset_ids_fn else {
+            return false;
+        };
         // SAFETY: no arguments; see `load`.
         unsafe { f() };
         true
@@ -470,7 +552,9 @@ impl Dsda {
     /// The sounds the game's started since the last call, as she'd hear them (none in a library
     /// without the call): ten numbers each, as the engine's `evil_sound_t` has them.
     pub fn sounds(&self) -> Vec<[i32; 10]> {
-        let Some(f) = self.sounds_fn else { return Vec::new() };
+        let Some(f) = self.sounds_fn else {
+            return Vec::new();
+        };
         const MAX: usize = 256;
         let mut raw = [0 as c_int; 10 * MAX];
         // SAFETY: room for MAX sounds of ten ints each, as the call is told; see `load`.
@@ -494,15 +578,23 @@ impl Dsda {
         static NAMES: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
         NAMES.get_or_init(|| {
             let mut names: Vec<&'static str> = vec![""];
-            let Some(f) = self.sfx_name_fn else { return names };
+            let Some(f) = self.sfx_name_fn else {
+                return names;
+            };
             loop {
                 let mut buf = [0 as c_char; 32];
                 // SAFETY: a buffer of 32 bytes, as the call is told; it ends what it writes with a 0.
                 if unsafe { f(names.len() as c_int, buf.as_mut_ptr(), 32) } == 0 {
                     break;
                 }
-                let text: Vec<u8> = buf.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
-                names.push(Box::leak(String::from_utf8_lossy(&text).into_owned().into_boxed_str()));
+                let text: Vec<u8> = buf
+                    .iter()
+                    .take_while(|&&c| c != 0)
+                    .map(|&c| c as u8)
+                    .collect();
+                names.push(Box::leak(
+                    String::from_utf8_lossy(&text).into_owned().into_boxed_str(),
+                ));
             }
             names
         })
@@ -523,7 +615,9 @@ impl Dsda {
     }
 
     pub fn hits(&self) -> Vec<Hit> {
-        let Some(f) = self.hits_fn else { return Vec::new() };
+        let Some(f) = self.hits_fn else {
+            return Vec::new();
+        };
         const MAX: usize = 64;
         let mut raw = [0 as c_int; 8 * MAX];
         // SAFETY: room for MAX hits of eight ints each, as the call is told; see `load`.
@@ -532,21 +626,23 @@ impl Dsda {
             .0
             .iter()
             .take(n)
-            .map(|&[health, armor, inflictor, source, own, cause, side, source_id]| Hit {
-                side: (side != 2).then_some(side),
-                source_id: (source_id > 0).then_some(source_id),
-                health,
-                armor,
-                inflictor: (inflictor >= 0).then_some(inflictor),
-                source: (source >= 0).then_some(source),
-                own: own != 0,
-                cause: match cause {
-                    0 => HitCause::Thing,
-                    1 => HitCause::Crusher,
-                    2 => HitCause::Floor,
-                    _ => HitCause::Other,
+            .map(
+                |&[health, armor, inflictor, source, own, cause, side, source_id]| Hit {
+                    side: (side != 2).then_some(side),
+                    source_id: (source_id > 0).then_some(source_id),
+                    health,
+                    armor,
+                    inflictor: (inflictor >= 0).then_some(inflictor),
+                    source: (source >= 0).then_some(source),
+                    own: own != 0,
+                    cause: match cause {
+                        0 => HitCause::Thing,
+                        1 => HitCause::Crusher,
+                        2 => HitCause::Floor,
+                        _ => HitCause::Other,
+                    },
                 },
-            })
+            )
             .collect()
     }
 
@@ -561,7 +657,19 @@ impl Dsda {
     pub fn give(&self, l: &Loadout) -> bool {
         let Some(f) = self.give_fn else { return false };
         // SAFETY: plain values into the game; see `load`.
-        unsafe { f(l.weapons, l.clip, l.shell, l.cell, l.rocket, c_int::from(l.backpack), l.health, l.armor, l.armor_type) };
+        unsafe {
+            f(
+                l.weapons,
+                l.clip,
+                l.shell,
+                l.cell,
+                l.rocket,
+                c_int::from(l.backpack),
+                l.health,
+                l.armor,
+                l.armor_type,
+            )
+        };
         // (and the weapon she had up, if it's said and the library can: else the pistol the game
         // starts her with, till she changes it herself)
         if let (Some(ready), Some(w)) = (self.ready_fn, l.ready) {
@@ -580,7 +688,12 @@ impl Dsda {
     /// given the same commands), or from the clock as the game has them (None: a real run).
     pub fn seed(&self, seed: Option<u32>) {
         // SAFETY: as above.
-        unsafe { (self.seed_fn)(c_int::from(seed.is_some()), c_ulong::from(seed.unwrap_or(0))) }
+        unsafe {
+            (self.seed_fn)(
+                c_int::from(seed.is_some()),
+                c_ulong::from(seed.unwrap_or(0)),
+            )
+        }
     }
 
     pub fn tic(&self, cmd: TicCmd) {
@@ -595,7 +708,14 @@ impl Dsda {
             buttons |= BT_CHANGE | ((cmd.weapon - 1) << BT_WEAPONSHIFT);
         }
         // SAFETY: as above.
-        unsafe { (self.tic_fn)(cmd.forward.clamp(-50, 50), cmd.side.clamp(-50, 50), cmd.turn.clamp(-32768, 32767), buttons) }
+        unsafe {
+            (self.tic_fn)(
+                cmd.forward.clamp(-50, 50),
+                cmd.side.clamp(-50, 50),
+                cmd.turn.clamp(-32768, 32767),
+                buttons,
+            )
+        }
     }
 
     /// Put the player at (x, y) facing `angle` (degrees), still, on the floor (for checking
@@ -630,14 +750,21 @@ impl Dsda {
     pub fn sectors(&self, out: &mut Vec<(f64, f64)>) {
         let mut flat = self.sector_buffer.borrow_mut();
         // SAFETY: the game writes at most `max` pairs into the buffer it's given.
-        let mut n = unsafe { (self.sectors_fn)(flat.as_mut_ptr(), (flat.len() / 2) as c_int) } as usize;
+        let mut n =
+            unsafe { (self.sectors_fn)(flat.as_mut_ptr(), (flat.len() / 2) as c_int) } as usize;
         if 2 * n > flat.len() {
             flat.resize(2 * n, 0.0);
             // SAFETY: as above, with room for all.
             n = unsafe { (self.sectors_fn)(flat.as_mut_ptr(), n as c_int) } as usize;
         }
         out.clear();
-        out.extend(flat[..2 * n].as_chunks::<2>().0.iter().map(|&[floor, ceiling]| (floor, ceiling)));
+        out.extend(
+            flat[..2 * n]
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|&[floor, ceiling]| (floor, ceiling)),
+        );
     }
 
     /// Every thing about now.
@@ -861,13 +988,22 @@ fn open_library(lib: &Path, dll_dirs: &[&Path]) -> Result<Library, libloading::E
         fn AddDllDirectory(new_directory: *const u16) -> *mut std::ffi::c_void;
     }
     for dir in dll_dirs {
-        let wide: Vec<u16> = dir.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+        let wide: Vec<u16> = dir
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
         // SAFETY: a nul-terminated wide string that outlives the call.
         unsafe { AddDllDirectory(wide.as_ptr()) };
     }
     // SAFETY: the library is dsda/evil_api.c built with DSDA-Doom; the functions taken from it
     // have exactly the C signatures they're given here.
-    let lib = unsafe { libloading::os::windows::Library::load_with_flags(lib, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR) }?;
+    let lib = unsafe {
+        libloading::os::windows::Library::load_with_flags(
+            lib,
+            LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR,
+        )
+    }?;
     Ok(lib.into())
 }
 

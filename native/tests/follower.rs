@@ -6,6 +6,8 @@ mod drive;
 
 #[test]
 fn bot_exits_e1m1() {
-    let Some((exited, _, events)) = drive::drive(false) else { return };
+    let Some((exited, _, events)) = drive::drive(false) else {
+        return;
+    };
     assert!(exited, "{}", events.join("\n"));
 }

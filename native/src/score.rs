@@ -44,7 +44,10 @@ pub struct Row {
 
 impl Row {
     pub fn exited(&self) -> bool {
-        matches!(self.outcome.as_str(), "EXITED" | "EXPERT" | "SECRETS" | "COMPLETE")
+        matches!(
+            self.outcome.as_str(),
+            "EXITED" | "EXPERT" | "SECRETS" | "COMPLETE"
+        )
     }
 
     /// A run's points: 1 out, else half the share of monsters killed.
@@ -71,7 +74,21 @@ impl Row {
     fn tsv(&self) -> String {
         format!(
             "{}\t{}\t{}\t{}\t{}\t{:.0}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.wad, self.map, self.skill, self.seed, self.outcome, self.seconds, self.kills.0, self.kills.1, self.items.0, self.items.1, self.lines.0, self.lines.1, self.sectors.0, self.sectors.1, self.deaths
+            self.wad,
+            self.map,
+            self.skill,
+            self.seed,
+            self.outcome,
+            self.seconds,
+            self.kills.0,
+            self.kills.1,
+            self.items.0,
+            self.items.1,
+            self.lines.0,
+            self.lines.1,
+            self.sectors.0,
+            self.sectors.1,
+            self.deaths
         )
     }
 
@@ -96,13 +113,28 @@ impl Row {
     /// From a run-map's RESULT line ("EXITED items 4/9, 81s game, ...; 342/370 lines, 58/59
     /// sectors, ...").
     fn from_result(wad: &str, map: &str, skill: u32, seed: u32, result: &str) -> Row {
-        let words: Vec<&str> = result.split([' ', ',', ';']).filter(|w| !w.is_empty()).collect();
+        let words: Vec<&str> = result
+            .split([' ', ',', ';'])
+            .filter(|w| !w.is_empty())
+            .collect();
         let pair = |w: &str| {
             let (a, b) = w.split_once('/')?;
             Some((a.parse().ok()?, b.parse().ok()?))
         };
-        let before = |what: &str| words.iter().position(|w| *w == what).and_then(|i| i.checked_sub(1)).and_then(|i| pair(words[i])).unwrap_or((0, 0));
-        let seconds = words.iter().position(|w| *w == "game").and_then(|i| i.checked_sub(1)).and_then(|i| words[i].trim_end_matches('s').parse().ok()).unwrap_or(0.0);
+        let before = |what: &str| {
+            words
+                .iter()
+                .position(|w| *w == what)
+                .and_then(|i| i.checked_sub(1))
+                .and_then(|i| pair(words[i]))
+                .unwrap_or((0, 0))
+        };
+        let seconds = words
+            .iter()
+            .position(|w| *w == "game")
+            .and_then(|i| i.checked_sub(1))
+            .and_then(|i| words[i].trim_end_matches('s').parse().ok())
+            .unwrap_or(0.0);
         Row {
             wad: wad.to_string(),
             map: map.to_string(),
@@ -110,11 +142,26 @@ impl Row {
             seed,
             outcome: words.first().copied().unwrap_or("ERROR").to_string(),
             seconds,
-            kills: words.iter().position(|w| *w == "kills").and_then(|i| words.get(i + 1)).and_then(|w| pair(w)).unwrap_or((0, 0)),
-            items: words.iter().position(|w| *w == "items").and_then(|i| words.get(i + 1)).and_then(|w| pair(w)).unwrap_or((0, 0)),
+            kills: words
+                .iter()
+                .position(|w| *w == "kills")
+                .and_then(|i| words.get(i + 1))
+                .and_then(|w| pair(w))
+                .unwrap_or((0, 0)),
+            items: words
+                .iter()
+                .position(|w| *w == "items")
+                .and_then(|i| words.get(i + 1))
+                .and_then(|w| pair(w))
+                .unwrap_or((0, 0)),
             lines: before("lines"),
             sectors: before("sectors"),
-            deaths: words.iter().position(|w| *w == "deaths").and_then(|i| i.checked_sub(1)).and_then(|i| words[i].parse().ok()).unwrap_or(0),
+            deaths: words
+                .iter()
+                .position(|w| *w == "deaths")
+                .and_then(|i| i.checked_sub(1))
+                .and_then(|i| words[i].parse().ok())
+                .unwrap_or(0),
         }
     }
 }
@@ -124,7 +171,9 @@ const PARTIAL: f64 = 0.5;
 
 /// A seed from the clock and a count (splitmix64): a new one each run.
 fn random_seed(count: u64) -> u32 {
-    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
+    let t = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos() as u64);
     let mut z = t ^ count.wrapping_mul(0x9E37_79B9_7F4A_7C15);
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
@@ -142,7 +191,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
         let v = args.get(i + 1);
         match args[i].as_str() {
             "--skills" => {
-                skills = v.ok_or("--skills 3,4")?.split(',').map(|s| s.parse().map_err(|_| "--skills 3,4".to_string())).collect::<Result<_, _>>()?;
+                skills = v
+                    .ok_or("--skills 3,4")?
+                    .split(',')
+                    .map(|s| s.parse().map_err(|_| "--skills 3,4".to_string()))
+                    .collect::<Result<_, _>>()?;
                 i += 2;
             }
             "--seeds" => {
@@ -164,7 +217,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
             "--lives" => {
                 let n: u32 = v.and_then(|v| v.parse().ok()).ok_or("--lives N")?;
                 // (several lives: the hour a run has is for one; so many hours, up to four)
-                passed.extend(["--lives".to_string(), n.to_string(), "--max-seconds".to_string(), (3600 * n.clamp(1, 4)).to_string()]);
+                passed.extend([
+                    "--lives".to_string(),
+                    n.to_string(),
+                    "--max-seconds".to_string(),
+                    (3600 * n.clamp(1, 4)).to_string(),
+                ]);
                 lives = n;
                 i += 2;
             }
@@ -210,7 +268,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
     }
     let mut levels: Vec<(String, String)> = Vec::new();
     for (w, maps) in groups {
-        let maps = if maps.is_empty() { crate::wad::Wad::open(&crate::config::resolve_wad(&w))?.map_names() } else { maps };
+        let maps = if maps.is_empty() {
+            crate::wad::Wad::open(&crate::config::resolve_wad(&w))?.map_names()
+        } else {
+            maps
+        };
         levels.extend(maps.into_iter().map(|m| (w.clone(), m)));
     }
     // (each level's runs spread over the whole sweep, not one level's all at once: the long ones
@@ -226,20 +288,37 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
     }
     if let Some(rows) = like {
-        todo = rows.into_iter().map(|r| (r.wad, r.map, r.skill, r.seed)).collect();
+        todo = rows
+            .into_iter()
+            .map(|r| (r.wad, r.map, r.skill, r.seed))
+            .collect();
     }
     let total = todo.len();
-    let path = out.map_or_else(|| crate::config::out_dir().join("score").join(format!("score.{}.tsv", crate::config::run_stamp())), std::path::PathBuf::from);
+    let path = out.map_or_else(
+        || {
+            crate::config::out_dir()
+                .join("score")
+                .join(format!("score.{}.tsv", crate::config::run_stamp()))
+        },
+        std::path::PathBuf::from,
+    );
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
     let mut file = std::fs::File::create(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     writeln!(file, "{}", Row::HEADER).map_err(|e| e.to_string())?;
-    let mut stats = std::fs::File::create(path.with_extension("stats.jsonl")).map_err(|e| e.to_string())?;
+    let mut stats =
+        std::fs::File::create(path.with_extension("stats.jsonl")).map_err(|e| e.to_string())?;
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     // (the progress window, its own process: a failure to open one costs the score nothing)
     if window && cfg!(feature = "viewer") {
-        let _ = Command::new(&me).arg("score-watch").arg(&path).args(["--total", &total.to_string()]).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+        let _ = Command::new(&me)
+            .arg("score-watch")
+            .arg(&path)
+            .args(["--total", &total.to_string()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn();
     }
     let mut running: Vec<((String, String, u32, u32), Child)> = Vec::new();
     let mut rows: Vec<Row> = Vec::new();
@@ -247,8 +326,22 @@ pub fn run(args: &[String]) -> Result<(), String> {
         while running.len() < jobs.max(1) {
             let Some(job) = todo.pop_front() else { break };
             let child = Command::new(&me)
-                .args(["run-map", &job.0, &job.1, "--fight", &job.2.to_string(), "--mortal", "--seed", &job.3.to_string(), "--stall-out"])
-                .args(if lives == 1 { &["--lives", "1"][..] } else { &[] })
+                .args([
+                    "run-map",
+                    &job.0,
+                    &job.1,
+                    "--fight",
+                    &job.2.to_string(),
+                    "--mortal",
+                    "--seed",
+                    &job.3.to_string(),
+                    "--stall-out",
+                ])
+                .args(if lives == 1 {
+                    &["--lives", "1"][..]
+                } else {
+                    &[]
+                })
                 .args(&passed)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
@@ -256,20 +349,37 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
             running.push((job, child));
         }
-        let Some(i) = running.iter_mut().position(|(_, c)| c.try_wait().ok().flatten().is_some()) else {
+        let Some(i) = running
+            .iter_mut()
+            .position(|(_, c)| c.try_wait().ok().flatten().is_some())
+        else {
             std::thread::sleep(std::time::Duration::from_millis(100));
             continue;
         };
         let ((w, m, skill, seed), mut child) = running.swap_remove(i);
-        let lines: Vec<String> = child.stdout.take().map(BufReader::new).map(|r| r.lines().map_while(Result::ok).collect()).unwrap_or_default();
-        let line = lines.iter().find(|l| l.starts_with("RESULT ")).cloned().unwrap_or_else(|| "RESULT ERROR".into());
+        let lines: Vec<String> = child
+            .stdout
+            .take()
+            .map(BufReader::new)
+            .map(|r| r.lines().map_while(Result::ok).collect())
+            .unwrap_or_default();
+        let line = lines
+            .iter()
+            .find(|l| l.starts_with("RESULT "))
+            .cloned()
+            .unwrap_or_else(|| "RESULT ERROR".into());
         // (the run's counts, a line of JSON a run beside the TSV: FILE.stats.jsonl)
         if let Some(st) = lines.iter().find_map(|l| l.strip_prefix("STATS ")) {
             let _ = writeln!(stats, "{{\"wad\":\"{w}\",\"map\":\"{m}\",\"skill\":{skill},\"seed\":{seed},\"stats\":{st}}}");
         }
         let row = Row::from_result(&w, &m, skill, seed, line.trim_start_matches("RESULT "));
         writeln!(file, "{}", row.tsv()).map_err(|e| e.to_string())?;
-        println!("[{:4}/{total}] {w} {m} skill {skill} seed {seed}: {} {:.0}s", rows.len() + 1, row.outcome, row.seconds);
+        println!(
+            "[{:4}/{total}] {w} {m} skill {skill} seed {seed}: {} {:.0}s",
+            rows.len() + 1,
+            row.outcome,
+            row.seconds
+        );
         rows.push(row);
     }
     println!("\nruns in {}\n", path.display());
@@ -281,7 +391,12 @@ pub fn report_files(paths: &[String]) -> Result<(), String> {
     let mut sets = Vec::new();
     for p in paths {
         let text = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?;
-        sets.push(text.lines().skip(1).filter_map(Row::from_tsv).collect::<Vec<_>>());
+        sets.push(
+            text.lines()
+                .skip(1)
+                .filter_map(Row::from_tsv)
+                .collect::<Vec<_>>(),
+        );
     }
     print!("{}", report(&sets));
     Ok(())
@@ -303,13 +418,19 @@ struct Level {
 fn tally(rows: &[Row]) -> BTreeMap<Key, Level> {
     let mut by: BTreeMap<Key, Vec<&Row>> = BTreeMap::new();
     for r in rows {
-        by.entry((r.wad.clone(), r.map.clone(), r.skill)).or_default().push(r);
+        by.entry((r.wad.clone(), r.map.clone(), r.skill))
+            .or_default()
+            .push(r);
     }
     by.into_iter()
         .map(|(k, rs)| {
             let n = rs.len() as f64;
             let points = rs.iter().map(|r| r.points()).sum::<f64>() / n;
-            let spread = rs.iter().map(|r| (r.points() - points).powi(2)).sum::<f64>() / n;
+            let spread = rs
+                .iter()
+                .map(|r| (r.points() - points).powi(2))
+                .sum::<f64>()
+                / n;
             let level = Level {
                 runs: rs.len() as u32,
                 exits: rs.iter().filter(|r| r.exited()).count() as u32,
@@ -324,8 +445,15 @@ fn tally(rows: &[Row]) -> BTreeMap<Key, Level> {
 
 /// Over levels (on one skill, or all): (score, exit share, kill share, spread, beaten every run,
 /// never beaten, levels).
-fn summary(t: &BTreeMap<Key, Level>, skill: Option<u32>) -> (f64, f64, f64, f64, usize, usize, usize) {
-    let ls: Vec<&Level> = t.iter().filter(|(k, _)| skill.is_none_or(|s| k.2 == s)).map(|(_, l)| l).collect();
+fn summary(
+    t: &BTreeMap<Key, Level>,
+    skill: Option<u32>,
+) -> (f64, f64, f64, f64, usize, usize, usize) {
+    let ls: Vec<&Level> = t
+        .iter()
+        .filter(|(k, _)| skill.is_none_or(|s| k.2 == s))
+        .map(|(_, l)| l)
+        .collect();
     let n = ls.len().max(1) as f64;
     let mean = |f: &dyn Fn(&Level) -> f64| ls.iter().map(|l| f(l)).sum::<f64>() / n;
     (
@@ -354,7 +482,15 @@ pub fn report(sets: &[Vec<Row>]) -> String {
     keys.dedup();
     out += "level          skill  per set: exits/runs points\n";
     for k in &keys {
-        let cells: Vec<String> = tallies.iter().map(|t| t.get(k).map_or_else(|| "    -     ".into(), |l| format!("{:2}/{:<2} {:.2}", l.exits, l.runs, l.points))).collect();
+        let cells: Vec<String> = tallies
+            .iter()
+            .map(|t| {
+                t.get(k).map_or_else(
+                    || "    -     ".into(),
+                    |l| format!("{:2}/{:<2} {:.2}", l.exits, l.runs, l.points),
+                )
+            })
+            .collect();
         out += &format!("{:5} {:6} {:5}  {}\n", k.0, k.1, k.2, cells.join("   "));
     }
     out += "\n";
@@ -373,13 +509,18 @@ pub fn report(sets: &[Vec<Row>]) -> String {
         // (how far apart the sets are: the score's own noise, and each level's)
         let scores: Vec<f64> = tallies.iter().map(|t| summary(t, None).0).collect();
         let m = scores.iter().sum::<f64>() / scores.len() as f64;
-        let sd = (scores.iter().map(|s| (s - m).powi(2)).sum::<f64>() / (scores.len() - 1) as f64).sqrt();
+        let sd = (scores.iter().map(|s| (s - m).powi(2)).sum::<f64>() / (scores.len() - 1) as f64)
+            .sqrt();
         out += &format!("\nscore over the sets: mean {m:.3}, standard deviation {sd:.3}\n");
         let mut level_var = 0.0;
         let mut counted = 0;
         let mut apart: Vec<(f64, &Key)> = Vec::new();
         for k in &keys {
-            let ps: Vec<f64> = tallies.iter().filter_map(|t| t.get(k)).map(|l| l.points).collect();
+            let ps: Vec<f64> = tallies
+                .iter()
+                .filter_map(|t| t.get(k))
+                .map(|l| l.points)
+                .collect();
             if ps.len() < 2 {
                 continue;
             }
@@ -389,7 +530,10 @@ pub fn report(sets: &[Vec<Row>]) -> String {
             counted += 1;
             apart.push((v.sqrt(), k));
         }
-        out += &format!("a level's points between sets: standard deviation {:.3} on average\n", (level_var / f64::from(counted.max(1))).sqrt());
+        out += &format!(
+            "a level's points between sets: standard deviation {:.3} on average\n",
+            (level_var / f64::from(counted.max(1))).sqrt()
+        );
         apart.sort_by(|a, b| b.0.total_cmp(&a.0));
         out += "furthest apart:";
         for (sd, k) in apart.iter().take(10) {
@@ -415,9 +559,19 @@ fn by_life(sets: &[Vec<Row>]) -> String {
         skills.sort_unstable();
         skills.dedup();
         for skill in skills.iter().map(|&s| Some(s)).chain([None]) {
-            let of: Vec<&Row> = rows.iter().filter(|r| skill.is_none_or(|s| r.skill == s)).collect();
+            let of: Vec<&Row> = rows
+                .iter()
+                .filter(|r| skill.is_none_or(|s| r.skill == s))
+                .collect();
             let n = of.len().max(1) as f64;
-            let shares: Vec<String> = (1..=most + 1).map(|life| format!("{life}: {:.3}", of.iter().filter(|r| r.exited() && r.deaths < life).count() as f64 / n)).collect();
+            let shares: Vec<String> = (1..=most + 1)
+                .map(|life| {
+                    format!(
+                        "{life}: {:.3}",
+                        of.iter().filter(|r| r.exited() && r.deaths < life).count() as f64 / n
+                    )
+                })
+                .collect();
             let name = skill.map_or_else(|| "all    ".to_string(), |s| format!("skill {s}"));
             out += &format!("  set {} {name}: {}\n", i + 1, shares.join("  "));
         }
@@ -432,7 +586,10 @@ fn paired(sets: &[Vec<Row>]) -> String {
     let [a, b] = sets else { return String::new() };
     let key = |r: &Row| (r.wad.clone(), r.map.clone(), r.skill, r.seed);
     let first: BTreeMap<_, &Row> = a.iter().map(|r| (key(r), r)).collect();
-    let pairs: Vec<(&Row, &Row)> = b.iter().filter_map(|r| first.get(&key(r)).map(|&x| (x, r))).collect();
+    let pairs: Vec<(&Row, &Row)> = b
+        .iter()
+        .filter_map(|r| first.get(&key(r)).map(|&x| (x, r)))
+        .collect();
     if pairs.len() < a.len().min(b.len()) / 2 || pairs.is_empty() {
         return String::new(); // (seeds of their own: nothing to pair)
     }
@@ -440,9 +597,16 @@ fn paired(sets: &[Vec<Row>]) -> String {
     let n = pairs.len() as f64;
     let diffs: Vec<f64> = pairs.iter().map(|(x, y)| y.points() - x.points()).collect();
     let mean = diffs.iter().sum::<f64>() / n;
-    let se = (diffs.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1.0).max(1.0) / n).sqrt();
-    let same = pairs.iter().filter(|(x, y)| x.outcome == y.outcome && x.seconds == y.seconds && x.kills == y.kills).count();
-    let (better, worse) = (diffs.iter().filter(|&&d| d > 1e-9).count(), diffs.iter().filter(|&&d| d < -1e-9).count());
+    let se =
+        (diffs.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1.0).max(1.0) / n).sqrt();
+    let same = pairs
+        .iter()
+        .filter(|(x, y)| x.outcome == y.outcome && x.seconds == y.seconds && x.kills == y.kills)
+        .count();
+    let (better, worse) = (
+        diffs.iter().filter(|&&d| d > 1e-9).count(),
+        diffs.iter().filter(|&&d| d < -1e-9).count(),
+    );
     out += &format!(
         "\nrun for run ({} runs on the same seeds): set 2 less set 1 {mean:+.4}, standard error {se:.4}; {same} runs the same to the tic, {better} better, {worse} worse\n",
         pairs.len()
@@ -453,16 +617,29 @@ fn paired(sets: &[Vec<Row>]) -> String {
         s.dedup();
         s
     } {
-        let d: Vec<f64> = pairs.iter().filter(|(x, _)| x.skill == skill).map(|(x, y)| y.points() - x.points()).collect();
-        out += &format!("  skill {skill}: {:+.4}\n", d.iter().sum::<f64>() / d.len().max(1) as f64);
+        let d: Vec<f64> = pairs
+            .iter()
+            .filter(|(x, _)| x.skill == skill)
+            .map(|(x, y)| y.points() - x.points())
+            .collect();
+        out += &format!(
+            "  skill {skill}: {:+.4}\n",
+            d.iter().sum::<f64>() / d.len().max(1) as f64
+        );
     }
     let mut by: BTreeMap<Key, (f64, u32)> = BTreeMap::new();
     for (x, y) in &pairs {
-        let e = by.entry((x.wad.clone(), x.map.clone(), x.skill)).or_default();
+        let e = by
+            .entry((x.wad.clone(), x.map.clone(), x.skill))
+            .or_default();
         e.0 += y.points() - x.points();
         e.1 += 1;
     }
-    let mut moved: Vec<(f64, &Key)> = by.iter().map(|(k, &(d, c))| (d / f64::from(c.max(1)), k)).filter(|(d, _)| d.abs() > 1e-9).collect();
+    let mut moved: Vec<(f64, &Key)> = by
+        .iter()
+        .map(|(k, &(d, c))| (d / f64::from(c.max(1)), k))
+        .filter(|(d, _)| d.abs() > 1e-9)
+        .collect();
     moved.sort_by(|p, q| q.0.abs().total_cmp(&p.0.abs()));
     out += "  moved most:";
     for (d, k) in moved.iter().take(12) {
@@ -480,9 +657,18 @@ pub fn watch(args: &[String]) -> Result<(), String> {
     use minifb::{Key, Window, WindowOptions};
     const W: usize = 460;
     const H: usize = 132;
-    let file = args.first().ok_or("usage: evil-boom score-watch FILE [--total N]")?.clone();
-    let total: usize = args.iter().position(|a| a == "--total").and_then(|i| args.get(i + 1)).and_then(|v| v.parse().ok()).unwrap_or(1088);
-    let mut window = Window::new("Evil: score", W, H, WindowOptions::default()).map_err(|e| e.to_string())?;
+    let file = args
+        .first()
+        .ok_or("usage: evil-boom score-watch FILE [--total N]")?
+        .clone();
+    let total: usize = args
+        .iter()
+        .position(|a| a == "--total")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1088);
+    let mut window =
+        Window::new("Evil: score", W, H, WindowOptions::default()).map_err(|e| e.to_string())?;
     window.set_target_fps(4);
     let mut buf = vec![0u32; W * H];
     let start = std::time::Instant::now();
@@ -506,15 +692,29 @@ pub fn watch(args: &[String]) -> Result<(), String> {
         }
     };
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        let rows: Vec<Row> = std::fs::read_to_string(&file).map(|t| t.lines().skip(1).filter_map(Row::from_tsv).collect()).unwrap_or_default();
+        let rows: Vec<Row> = std::fs::read_to_string(&file)
+            .map(|t| t.lines().skip(1).filter_map(Row::from_tsv).collect())
+            .unwrap_or_default();
         let n = rows.len();
         // (the time left from the pace since this window first saw rows come in)
         let now = std::time::Instant::now();
         let base = *first.get_or_insert((now, n));
-        let rate = if n > base.1 { (n - base.1) as f64 / now.duration_since(base.0).as_secs_f64().max(1.0) } else { 0.0 };
-        let left = if rate > 0.0 { (total.saturating_sub(n)) as f64 / rate } else { f64::NAN };
+        let rate = if n > base.1 {
+            (n - base.1) as f64 / now.duration_since(base.0).as_secs_f64().max(1.0)
+        } else {
+            0.0
+        };
+        let left = if rate > 0.0 {
+            (total.saturating_sub(n)) as f64 / rate
+        } else {
+            f64::NAN
+        };
         let exits = rows.iter().filter(|r| r.exited()).count();
-        let points = if n == 0 { 0.0 } else { rows.iter().map(Row::points).sum::<f64>() / n as f64 };
+        let points = if n == 0 {
+            0.0
+        } else {
+            rows.iter().map(Row::points).sum::<f64>() / n as f64
+        };
         buf.fill(0x0016_1a20);
         let share = (n as f64 / total.max(1) as f64).min(1.0);
         let (bx, by, bw, bh) = (16, 16, W - 32, 26);
@@ -524,11 +724,35 @@ pub fn watch(args: &[String]) -> Result<(), String> {
                 buf[y * W + x] = if inside { 0x0040_a060 } else { 0x0030_343c };
             }
         }
-        text(&mut buf, &format!("{n}/{total} runs  {:.0}%", share * 100.0), 16, 54, 0x00e0_e0e0);
-        text(&mut buf, &format!("exits {exits}  points {points:.2}"), 16, 78, 0x00b0_d0b0);
-        let eta = if left.is_finite() { format!("{:.0} min left", (left / 60.0).ceil()) } else { format!("{:.0} s in", start.elapsed().as_secs_f64()) };
-        text(&mut buf, &if n >= total { "done".to_string() } else { eta }, 16, 102, 0x00a0_a0b0);
-        window.update_with_buffer(&buf, W, H).map_err(|e| e.to_string())?;
+        text(
+            &mut buf,
+            &format!("{n}/{total} runs  {:.0}%", share * 100.0),
+            16,
+            54,
+            0x00e0_e0e0,
+        );
+        text(
+            &mut buf,
+            &format!("exits {exits}  points {points:.2}"),
+            16,
+            78,
+            0x00b0_d0b0,
+        );
+        let eta = if left.is_finite() {
+            format!("{:.0} min left", (left / 60.0).ceil())
+        } else {
+            format!("{:.0} s in", start.elapsed().as_secs_f64())
+        };
+        text(
+            &mut buf,
+            &if n >= total { "done".to_string() } else { eta },
+            16,
+            102,
+            0x00a0_a0b0,
+        );
+        window
+            .update_with_buffer(&buf, W, H)
+            .map_err(|e| e.to_string())?;
         if n >= total {
             // (a moment on "done", then gone)
             if done_at.get_or_insert(now).elapsed().as_secs() >= 5 {

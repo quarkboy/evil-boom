@@ -35,13 +35,24 @@ impl Combat {
     /// there's none (then she shoots: nothing else helps).
     pub(super) fn vile_fire(&mut self, obs: &Observation) -> Option<(&'static str, Option<Point>)> {
         let pos = obs.pos();
-        let Some(vile) = self.now.against_her.iter().filter(|t| (0..VILE_BLAST).contains(&t.attack) && mon(t.name).attack == Attack::Fire).min_by_key(|t| t.attack).cloned() else {
+        let Some(vile) = self
+            .now
+            .against_her
+            .iter()
+            .filter(|t| (0..VILE_BLAST).contains(&t.attack) && mon(t.name).attack == Attack::Fire)
+            .min_by_key(|t| t.attack)
+            .cloned()
+        else {
             // (out of its sight now: stay there till it's gone off)
             if obs.tic >= self.vile_until {
                 self.vile_way = None;
                 return None;
             }
-            return Some(("Archvile", self.vile_way.and_then(|(_, _, spot)| self.towards(obs, spot))));
+            return Some((
+                "Archvile",
+                self.vile_way
+                    .and_then(|(_, _, spot)| self.towards(obs, spot)),
+            ));
         };
         let left = f64::from(VILE_BLAST - vile.attack - 2);
         self.vile_until = obs.tic + VILE_BLAST as i64 - vile.attack as i64 + 4;
@@ -65,14 +76,24 @@ impl Combat {
             let mut far = 0.0;
             while far <= room {
                 let p = (pos.0 + d.0 * far, pos.1 + d.1 * far);
-                let me = Body { x: p.0, y: p.1, z, height: PLAYER_HEIGHT };
+                let me = Body {
+                    x: p.0,
+                    y: p.1,
+                    z,
+                    height: PLAYER_HEIGHT,
+                };
                 if !self.fits(obs, p) {
                     far += 16.0;
                     continue;
                 }
                 if far <= self.tune.hide.shelter_near && hug.is_none_or(|(hf, _)| far < hf) {
                     let to = dist(p, (vile.x, vile.y)).max(1.0);
-                    let blast = Body { x: p.0 + (vile.x - p.0) / to * FIRE_SHORT, y: p.1 + (vile.y - p.1) / to * FIRE_SHORT, z, height: FIRE_HEIGHT };
+                    let blast = Body {
+                        x: p.0 + (vile.x - p.0) / to * FIRE_SHORT,
+                        y: p.1 + (vile.y - p.1) / to * FIRE_SHORT,
+                        z,
+                        height: FIRE_HEIGHT,
+                    };
                     if !self.los.clear(blast, me, &self.heights_now) {
                         hug = Some((far, p));
                     }
@@ -98,7 +119,11 @@ impl Combat {
             vile.attack,
             spot.0,
             spot.1,
-            if best.is_none() { " (its blast blocked there)" } else { "" }
+            if best.is_none() {
+                " (its blast blocked there)"
+            } else {
+                ""
+            }
         ));
         Some((vile.name, self.towards(obs, spot)))
     }
@@ -126,7 +151,9 @@ impl Combat {
                 self.duck_way = None;
                 return None;
             }
-            return self.duck_way.map(|(_, name, spot)| (name, self.towards(obs, spot)));
+            return self
+                .duck_way
+                .map(|(_, name, spot)| (name, self.towards(obs, spot)));
         };
         let first = first_shot(t.name).unwrap_or(0);
         let to_shot = (first - t.attack).max(0);
@@ -138,7 +165,14 @@ impl Combat {
                     self.duck_way = None;
                     self.no_duck_tic = obs.tic;
                     if t.attack == 0 || t.attack == first {
-                        self.log.push(format!("tic {}: nowhere to duck from {} {} ({} tics in, {:.0} to get there)", obs.tic, t.name, t.id, t.attack, left * RUN));
+                        self.log.push(format!(
+                            "tic {}: nowhere to duck from {} {} ({} tics in, {:.0} to get there)",
+                            obs.tic,
+                            t.name,
+                            t.id,
+                            t.attack,
+                            left * RUN
+                        ));
                     }
                     return None; // (nowhere to duck: fight on)
                 };
@@ -149,12 +183,17 @@ impl Combat {
         // (not till the last moment: its wind-up's the time to shoot it, out in the open; off
         // to the spot with just the time to get there before its first shot. Off at once, it
         // got next to no shooting done: MAP16's cover, 6/8 lost or drawn, all won before)
-        let going = obs.tic < self.duck_until || to_shot == 0 || f64::from(to_shot) <= dist(spot, pos) / RUN + self.tune.hide.duck_late;
+        let going = obs.tic < self.duck_until
+            || to_shot == 0
+            || f64::from(to_shot) <= dist(spot, pos) / RUN + self.tune.hide.duck_late;
         if !going {
             return None;
         }
         if obs.tic >= self.duck_until {
-            self.log.push(format!("tic {}: ducking from {} {}, {} tics in: to ({:.0}, {:.0})", obs.tic, t.name, t.id, t.attack, spot.0, spot.1));
+            self.log.push(format!(
+                "tic {}: ducking from {} {}, {} tics in: to ({:.0}, {:.0})",
+                obs.tic, t.name, t.id, t.attack, spot.0, spot.1
+            ));
         }
         self.duck_until = obs.tic + i64::from(to_shot) + self.tune.hide.duck_hold;
         Some((t.name, self.towards(obs, spot)))
@@ -165,22 +204,46 @@ impl Combat {
     /// the way to the nearest place it can't see her, round a corner it flies into on its way
     /// after her, as a player shakes one off, once nothing else in sight is after her. None: none,
     /// or nowhere out of its sight in reach.
-    pub(super) fn shake_off(&mut self, obs: &Observation, missiles: &[Thing]) -> Option<(&'static str, Option<Point>)> {
+    pub(super) fn shake_off(
+        &mut self,
+        obs: &Observation,
+        missiles: &[Thing],
+    ) -> Option<(&'static str, Option<Point>)> {
         // (with nothing else in sight after her: in a fight, dodged as it comes, running off round
         // a corner from the revenant still shooting walked her into the arachnotron's plasma)
         if !self.now.about.is_empty() {
             return None;
         }
-        let t = missiles.iter().find(|t| self.homing_since.get(&t.id).is_some_and(|&since| obs.tic - since >= self.tune.hide.shake_after))?;
-        let eye = Body { x: t.x, y: t.y, z: t.z, height: 8.0 };
-        let held = self.shake_spot.filter(|&(id, _)| id == t.id).map(|(_, spot)| spot);
+        let t = missiles.iter().find(|t| {
+            self.homing_since
+                .get(&t.id)
+                .is_some_and(|&since| obs.tic - since >= self.tune.hide.shake_after)
+        })?;
+        let eye = Body {
+            x: t.x,
+            y: t.y,
+            z: t.z,
+            height: 8.0,
+        };
+        let held = self
+            .shake_spot
+            .filter(|&(id, _)| id == t.id)
+            .map(|(_, spot)| spot);
         let spot = match held {
             Some(spot) => spot,
             None => {
-                let spot = self.shadow_spot(obs, eye, self.tune.hide.shake_reach).map(|(_, spot)| spot);
+                let spot = self
+                    .shadow_spot(obs, eye, self.tune.hide.shake_reach)
+                    .map(|(_, spot)| spot);
                 match spot {
-                    Some(p) => self.log.push(format!("tic {}: shaking off {} {}: to ({:.0}, {:.0})", obs.tic, t.name, t.id, p.0, p.1)),
-                    None => self.log.push(format!("tic {}: shaking off {} {} round a corner", obs.tic, t.name, t.id)),
+                    Some(p) => self.log.push(format!(
+                        "tic {}: shaking off {} {}: to ({:.0}, {:.0})",
+                        obs.tic, t.name, t.id, p.0, p.1
+                    )),
+                    None => self.log.push(format!(
+                        "tic {}: shaking off {} {} round a corner",
+                        obs.tic, t.name, t.id
+                    )),
                 }
                 self.shake_spot = Some((t.id, spot));
                 spot
@@ -205,13 +268,30 @@ impl Combat {
     /// Is there room for her at p (all of her, not only her middle)?
     pub(super) fn fits(&self, obs: &Observation, p: Point) -> bool {
         let nav = &self.nav;
-        let Some(at) = nav.poly_in(p) else { return false };
+        let Some(at) = nav.poly_in(p) else {
+            return false;
+        };
         let floor = obs.height(nav.sector_of_poly(at)).map_or(0.0, |h| h.floor);
         // (her box is square, the game's way: its corners and sides)
         let r = PLAYER_RADIUS + 1.0;
-        [(-r, -r), (0.0, -r), (r, -r), (r, 0.0), (r, r), (0.0, r), (-r, r), (-r, 0.0)].into_iter().all(|(dx, dy)| {
+        [
+            (-r, -r),
+            (0.0, -r),
+            (r, -r),
+            (r, 0.0),
+            (r, r),
+            (0.0, r),
+            (-r, r),
+            (-r, 0.0),
+        ]
+        .into_iter()
+        .all(|(dx, dy)| {
             let q = (p.0 + dx, p.1 + dy);
-            nav.poly_in(q).and_then(|r| obs.height(nav.sector_of_poly(r))).is_some_and(|h| (h.floor - floor).abs() <= MAX_STEP && h.ceiling - h.floor >= PLAYER_HEIGHT)
+            nav.poly_in(q)
+                .and_then(|r| obs.height(nav.sector_of_poly(r)))
+                .is_some_and(|h| {
+                    (h.floor - floor).abs() <= MAX_STEP && h.ceiling - h.floor >= PLAYER_HEIGHT
+                })
         })
     }
 
@@ -222,35 +302,60 @@ impl Combat {
     }
 
     /// The way to move fighting `target` with `gun` (None: nowhere safe).
-    pub(super) fn steer(&mut self, obs: &Observation, target: Option<&Thing>, gun: &Weapon) -> Option<Point> {
+    pub(super) fn steer(
+        &mut self,
+        obs: &Observation,
+        target: Option<&Thing>,
+        gun: &Weapon,
+    ) -> Option<Point> {
         let pos = obs.pos();
         let mut them = self.now.about.clone();
         if let Some(t) = target.filter(|t| !them.iter().any(|m| m.id == t.id)) {
             them.push(t.clone()); // (out of sight just now: where it was)
         }
-        let shooting = target.is_some_and(|t| matches!(mon(t.name).attack, Attack::Missile | Attack::Hitscan));
+        let shooting =
+            target.is_some_and(|t| matches!(mon(t.name).attack, Attack::Missile | Attack::Hitscan));
         let spread_now = spread(pos, &them.iter().map(|t| (t.x, t.y)).collect::<Vec<_>>());
         let hurting = self.on_hurting_floor(obs);
-        let shooters = them.iter().any(|m| matches!(mon(m.name).attack, Attack::Hitscan | Attack::Missile));
+        let shooters = them
+            .iter()
+            .any(|m| matches!(mon(m.name).attack, Attack::Hitscan | Attack::Missile));
         let crushed = self.under_crusher(obs);
-        let hitscanners: Vec<Thing> = them.iter().filter(|m| mon(m.name).attack == Attack::Hitscan).cloned().collect();
+        let hitscanners: Vec<Thing> = them
+            .iter()
+            .filter(|m| mon(m.name).attack == Attack::Hitscan)
+            .cloned()
+            .collect();
         // (a shotgun reloading: out of her target's sight too till it's ready, then back; Astra's
         // branch's reload cover)
-        let reloading = matches!(obs.weapon, Some(3)) && self.last_shot.is_some_and(|(s, tic)| s == 3 && ((obs.tic - tic) as f64) < gun.cycle - self.tune.steer.reload_back);
+        let reloading = matches!(obs.weapon, Some(3))
+            && self.last_shot.is_some_and(|(s, tic)| {
+                s == 3 && ((obs.tic - tic) as f64) < gun.cycle - self.tune.steer.reload_back
+            });
         self.refresh_tic_cache(obs);
         // (not towards an errand in the claws' reach of something one hit of which could kill her:
         // E2M3, 35 health, out of ammo, the shell she backed off towards 50 from a baron, 10-80 a
         // hit, kept her by it till it hit)
         let health = self.now.health;
-        let errand_way = self.toward.filter(|&to| dist(to, pos) > 1.0 && !them.iter().any(|m| claw_max(m.name) >= health && dist(to, (m.x, m.y)) < CLAW_REACH));
+        let errand_way = self.toward.filter(|&to| {
+            dist(to, pos) > 1.0
+                && !them
+                    .iter()
+                    .any(|m| claw_max(m.name) >= health && dist(to, (m.x, m.y)) < CLAW_REACH)
+        });
         // (where she took this target on: her steps to the side kept about there. Afresh for
         // another target, or after a second of anything else)
-        let from = target.filter(|_| shooting && self.tune.steer.side_span > 0.0).map(|t| {
-            let from = self.steer_from.filter(|&(id, _, tic)| id == t.id && obs.tic - tic <= 35).map_or(pos, |f| f.1);
-            self.steer_from = Some((t.id, from, obs.tic));
-            let far = dist((t.x, t.y), from).max(1.0);
-            (from, ((t.x - from.0) / far, (t.y - from.1) / far))
-        });
+        let from = target
+            .filter(|_| shooting && self.tune.steer.side_span > 0.0)
+            .map(|t| {
+                let from = self
+                    .steer_from
+                    .filter(|&(id, _, tic)| id == t.id && obs.tic - tic <= 35)
+                    .map_or(pos, |f| f.1);
+                self.steer_from = Some((t.id, from, obs.tic));
+                let far = dist((t.x, t.y), from).max(1.0);
+                (from, ((t.x - from.0) / far, (t.y - from.1) / far))
+            });
         let mut best: Option<(f64, Point)> = None;
         for i in 0..WAYS {
             let a = 2.0 * std::f64::consts::PI * i as f64 / WAYS as f64;
@@ -258,16 +363,29 @@ impl Combat {
             if !self.safe(obs, d, 64.0) {
                 continue;
             }
-            if self.steer_stuck.is_some_and(|(w, until)| obs.tic < until && d.0 * w.0 + d.1 * w.1 > 0.7) {
+            if self
+                .steer_stuck
+                .is_some_and(|(w, until)| obs.tic < until && d.0 * w.0 + d.1 * w.1 > 0.7)
+            {
                 continue; // (pushed that way and got nowhere)
             }
-            let step = (pos.0 + d.0 * self.tune.steer.body_look, pos.1 + d.1 * self.tune.steer.body_look);
-            if them.iter().any(|m| segment_point_distance(pos, step, (m.x, m.y)) < mon(m.name).radius + PLAYER_RADIUS && dist((m.x, m.y), step) < dist((m.x, m.y), pos)) {
+            let step = (
+                pos.0 + d.0 * self.tune.steer.body_look,
+                pos.1 + d.1 * self.tune.steer.body_look,
+            );
+            if them.iter().any(|m| {
+                segment_point_distance(pos, step, (m.x, m.y)) < mon(m.name).radius + PLAYER_RADIUS
+                    && dist((m.x, m.y), step) < dist((m.x, m.y), pos)
+            }) {
                 continue; // (a monster's body in the way: they're solid)
             }
             let room = self.clear_run(obs, d, self.tune.steer.room);
-            let ahead = (pos.0 + d.0 * self.tune.steer.look.min(room), pos.1 + d.1 * self.tune.steer.look.min(room));
-            let mut s = self.tune.steer.w_room * room / self.tune.steer.room + self.tune.steer.w_open * self.openness(obs, ahead, self.tune.steer.open);
+            let ahead = (
+                pos.0 + d.0 * self.tune.steer.look.min(room),
+                pos.1 + d.1 * self.tune.steer.look.min(room),
+            );
+            let mut s = self.tune.steer.w_room * room / self.tune.steer.room
+                + self.tune.steer.w_open * self.openness(obs, ahead, self.tune.steer.open);
             if hurting && self.gets_off(obs, d, self.tune.steer.look.min(room)) {
                 s += self.tune.steer.w_off_floor; // (off the floor that's hurting her, before anything)
             }
@@ -279,7 +397,8 @@ impl Combat {
                 for b in obs.barrels.iter().flatten() {
                     let gap = crate::motor::follower::blast_gap(ahead, *b);
                     if gap < self.tune.steer.barrel_keep {
-                        s -= self.tune.steer.w_barrel * (self.tune.steer.barrel_keep - gap) / self.tune.steer.barrel_keep;
+                        s -= self.tune.steer.w_barrel * (self.tune.steer.barrel_keep - gap)
+                            / self.tune.steer.barrel_keep;
                     }
                 }
             }
@@ -290,7 +409,11 @@ impl Combat {
                 let info = mon(m.name);
                 let w = (info.threat + 1.0).sqrt();
                 let at = dist(ahead, (m.x, m.y));
-                let (near, far) = if Some(m.id) == target.map(|t| t.id) { window(gun, m) } else { (standoff(m.name), f64::INFINITY) };
+                let (near, far) = if Some(m.id) == target.map(|t| t.id) {
+                    window(gun, m)
+                } else {
+                    (standoff(m.name), f64::INFINITY)
+                };
                 if at < near {
                     s -= self.tune.steer.w_near * w * (near - at) / self.tune.steer.look;
                 }
@@ -301,18 +424,25 @@ impl Combat {
             // (hitscanners besides her target that'd see her there: one at a time from cover, not
             // all of them at once)
             let z = self.z(obs);
-            for m in hitscanners.iter().filter(|m| reloading || Some(m.id) != target.map(|t| t.id)) {
+            for m in hitscanners
+                .iter()
+                .filter(|m| reloading || Some(m.id) != target.map(|t| t.id))
+            {
                 if self.sees(eye(m), ahead, z, &self.heights_now) {
                     s -= self.tune.steer.w_exposed * mon(m.name).threat / 4.0;
                 }
             }
             if let Some(t) = target.filter(|_| shooting) {
-                let to = ((t.x - pos.0) / dist((t.x, t.y), pos).max(1.0), (t.y - pos.1) / dist((t.x, t.y), pos).max(1.0));
+                let to = (
+                    (t.x - pos.0) / dist((t.x, t.y), pos).max(1.0),
+                    (t.y - pos.1) / dist((t.x, t.y), pos).max(1.0),
+                );
                 s += self.tune.steer.w_across * (d.0 * to.1 - d.1 * to.0).abs();
             }
             if them.len() >= 2 {
                 let after = spread(ahead, &them.iter().map(|t| (t.x, t.y)).collect::<Vec<_>>());
-                s -= self.tune.steer.w_surround * ((after - spread_now) / 90.0).max(0.0) + self.tune.steer.w_surround * (after / 360.0);
+                s -= self.tune.steer.w_surround * ((after - spread_now) / 90.0).max(0.0)
+                    + self.tune.steer.w_surround * (after / 360.0);
             }
             if let Some(k) = self.steer_way {
                 s += self.tune.steer.w_keep * (d.0 * k.0 + d.1 * k.1);
@@ -326,24 +456,37 @@ impl Combat {
                 }
             }
             // (onto ground she's never been on: what's there she doesn't know, and wakes)
-            if self.tune.steer.w_new_ground > 0.0 && (self.off_known(step) || self.off_known(ahead)) {
+            if self.tune.steer.w_new_ground > 0.0 && (self.off_known(step) || self.off_known(ahead))
+            {
                 s -= self.tune.steer.w_new_ground;
             }
             // (a way she hasn't looked along lately: what's there she doesn't know)
-            if self.tune.steer.w_unlooked > 0.0 && obs.tic - self.looked[i] > self.tune.steer.unlooked_tics {
+            if self.tune.steer.w_unlooked > 0.0
+                && obs.tic - self.looked[i] > self.tune.steer.unlooked_tics
+            {
                 s -= self.tune.steer.w_unlooked;
             }
             // (from there, facing her target: what she knows is about and would have behind her)
             if let Some(t) = target.filter(|_| self.tune.steer.w_out_of_view > 0.0) {
                 let facing = crate::motor::heading(ahead, (t.x, t.y));
-                let hidden: f64 = them.iter().filter(|m| m.id != t.id && crate::motor::norm(crate::motor::heading(ahead, (m.x, m.y)) - facing).abs() > self.tune.senses.fov).map(|m| mon(m.name).threat).sum();
+                let hidden: f64 = them
+                    .iter()
+                    .filter(|m| {
+                        m.id != t.id
+                            && crate::motor::norm(crate::motor::heading(ahead, (m.x, m.y)) - facing)
+                                .abs()
+                                > self.tune.senses.fov
+                    })
+                    .map(|m| mon(m.name).threat)
+                    .sum();
                 s -= self.tune.steer.w_out_of_view * hidden / 4.0;
             }
             // (the way she's going, an errand (health, a gun, ammo): backing off towards it, not
             // round and round where she is; the user's: 1% health, a cacodemon on her, the
             // medikit in the room never got to)
             if let Some(to) = errand_way {
-                s += self.tune.steer.w_toward * (d.0 * (to.0 - pos.0) + d.1 * (to.1 - pos.1)) / dist(to, pos);
+                s += self.tune.steer.w_toward * (d.0 * (to.0 - pos.0) + d.1 * (to.1 - pos.1))
+                    / dist(to, pos);
             }
             if best.is_none_or(|(bs, _)| s > bs) {
                 best = Some((s, d));

@@ -32,7 +32,9 @@ fn nearest_centres(centres: &[Point], mid: Point) -> Vec<Point> {
             (distance <= ROOM_LOOK_RANGE).then_some((distance, i, c))
         })
         .collect();
-    let compare = |a: &(f64, usize, Point), b: &(f64, usize, Point)| a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1));
+    let compare = |a: &(f64, usize, Point), b: &(f64, usize, Point)| {
+        a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1))
+    };
     if near.len() > ROOM_SPOTS {
         near.select_nth_unstable_by(ROOM_SPOTS, compare);
         near.truncate(ROOM_SPOTS);
@@ -41,11 +43,30 @@ fn nearest_centres(centres: &[Point], mid: Point) -> Vec<Point> {
     near.into_iter().map(|(_, _, c)| c).collect()
 }
 
-fn visible_viewpoint(line: usize, mid: Point, pos: Point, centres: &[Point], sight: &Sight, width: i32, heights: &[(f64, f64)]) -> Option<WallViewpoint> {
+fn visible_viewpoint(
+    line: usize,
+    mid: Point,
+    pos: Point,
+    centres: &[Point],
+    sight: &Sight,
+    width: i32,
+    heights: &[(f64, f64)],
+) -> Option<WallViewpoint> {
     nearest_centres(centres, mid).into_iter().find_map(|c| {
         let angle = (mid.1 - c.1).atan2(mid.0 - c.0).to_degrees();
-        let seen = sight.view(&View { x: c.0, y: c.1, angle, width, heights });
-        seen.drawn.contains(&line).then(|| WallViewpoint { score: dist(c, pos) + dist(c, mid), line, position: c, wall_middle: mid })
+        let seen = sight.view(&View {
+            x: c.0,
+            y: c.1,
+            angle,
+            width,
+            heights,
+        });
+        seen.drawn.contains(&line).then(|| WallViewpoint {
+            score: dist(c, pos) + dist(c, mid),
+            line,
+            position: c,
+            wall_middle: mid,
+        })
     })
 }
 
@@ -55,7 +76,10 @@ fn best_viewpoint(visible: impl Iterator<Item = WallViewpoint>) -> Option<WallVi
 
 /// Test independent walls in parallel, returning results in the original order so equal
 /// scores select the same objective. The calling thread also evaluates one batch.
-fn wall_viewpoints(walls: &[usize], viewpoint: impl Fn(usize) -> Option<WallViewpoint> + Sync) -> Vec<Option<WallViewpoint>> {
+fn wall_viewpoints(
+    walls: &[usize],
+    viewpoint: impl Fn(usize) -> Option<WallViewpoint> + Sync,
+) -> Vec<Option<WallViewpoint>> {
     let evaluate = |batch: &[usize]| batch.iter().copied().map(&viewpoint).collect::<Vec<_>>();
     let batches = (walls.len() / WALLS_PER_WORKER).min(MAX_VIEWPOINT_WORKERS);
     if batches < 2 {
@@ -91,11 +115,23 @@ impl Explorer {
     /// spot it can be seen from (checked by looking from there), nearest her first.
     pub(super) fn unfinished(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let (mesh, m, k) = (&self.nav.mesh, &self.nav.map, &self.knowledge);
-        let heights: Vec<(f64, f64)> =
-            m.sectors.iter().enumerate().map(|(i, s)| k.seen_heights.get(&i).map_or((s.floor, s.ceiling), |h| (h.floor, h.ceiling))).collect();
+        let heights: Vec<(f64, f64)> = m
+            .sectors
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                k.seen_heights
+                    .get(&i)
+                    .map_or((s.floor, s.ceiling), |h| (h.floor, h.ceiling))
+            })
+            .collect();
         // (only spots the box can stand at: E4M7's was in a shut door)
         let seen = self.as_seen();
-        let centres: Vec<Point> = reach.iter().map(|&p| mesh.poly(p).center).filter(|&c| self.standable_at(c, true, &seen)).collect();
+        let centres: Vec<Point> = reach
+            .iter()
+            .map(|&p| mesh.poly(p).center)
+            .filter(|&c| self.standable_at(c, true, &seen))
+            .collect();
         let sight = &k.sight;
         let rooms = k.unseen_walls();
         // A wall bordering two known rooms has the same viewpoint for both.
@@ -119,7 +155,11 @@ impl Explorer {
                 candidates[slot]
             });
             if let Some(best) = best_viewpoint(visible) {
-                let mut o = Objective::new(Kind::Room, best.position, format!("look at a wall of sector {s} not seen yet"));
+                let mut o = Objective::new(
+                    Kind::Room,
+                    best.position,
+                    format!("look at a wall of sector {s} not seen yet"),
+                );
                 o.reveals.insert(best.line as i64);
                 o.look_at = Some(best.wall_middle);
                 out.push(o);
@@ -143,7 +183,11 @@ mod tests {
         for len in [0, 1, ROOM_SPOTS, ROOM_SPOTS + 1, centres.len()] {
             for mid in [(0.0, 0.0), (10.0, -3.0), (768.0, 0.0)] {
                 let input = &centres[..len];
-                let mut expected: Vec<_> = input.iter().copied().filter(|&c| dist(c, mid) <= ROOM_LOOK_RANGE).collect();
+                let mut expected: Vec<_> = input
+                    .iter()
+                    .copied()
+                    .filter(|&c| dist(c, mid) <= ROOM_LOOK_RANGE)
+                    .collect();
                 expected.sort_by(|a, b| dist(*a, mid).total_cmp(&dist(*b, mid)));
                 expected.truncate(ROOM_SPOTS);
                 assert_eq!(nearest_centres(input, mid), expected);
@@ -153,8 +197,17 @@ mod tests {
 
     #[test]
     fn viewpoint_batches_preserve_wall_order_and_missing_results() {
-        let walls: Vec<_> = (0..MAX_VIEWPOINT_WORKERS * WALLS_PER_WORKER + 1).rev().collect();
-        let viewpoint = |line| (line % 3 != 0).then_some(WallViewpoint { score: 1.0, line, position: (0.0, 0.0), wall_middle: (1.0, 1.0) });
+        let walls: Vec<_> = (0..MAX_VIEWPOINT_WORKERS * WALLS_PER_WORKER + 1)
+            .rev()
+            .collect();
+        let viewpoint = |line| {
+            (line % 3 != 0).then_some(WallViewpoint {
+                score: 1.0,
+                line,
+                position: (0.0, 0.0),
+                wall_middle: (1.0, 1.0),
+            })
+        };
         for len in [0, WALLS_PER_WORKER, 2 * WALLS_PER_WORKER, walls.len()] {
             let batch = &walls[..len];
             let serial: Vec<_> = batch.iter().copied().map(viewpoint).collect();
@@ -163,7 +216,12 @@ mod tests {
     }
     #[test]
     fn equally_scored_walls_keep_the_first_in_room_order() {
-        let first = WallViewpoint { score: 2.0, line: 17, position: (0.0, 0.0), wall_middle: (1.0, 1.0) };
+        let first = WallViewpoint {
+            score: 2.0,
+            line: 17,
+            position: (0.0, 0.0),
+            wall_middle: (1.0, 1.0),
+        };
         let tied = WallViewpoint { line: 3, ..first };
         assert_eq!(best_viewpoint([first, tied].into_iter()), Some(first));
     }

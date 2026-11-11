@@ -49,7 +49,12 @@ pub struct Config {
 impl Config {
     /// The settings file, overlaid by its local twin (FILE.local.json) if there is one.
     pub fn load(path: &Path) -> Result<Config, String> {
-        let read = |p: &Path| -> Result<Value, String> { serde_json::from_str(&std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?).map_err(|e| format!("{}: {e}", p.display())) };
+        let read = |p: &Path| -> Result<Value, String> {
+            serde_json::from_str(
+                &std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?,
+            )
+            .map_err(|e| format!("{}: {e}", p.display()))
+        };
         let mut v = read(path)?;
         let local = path.with_extension("local.json");
         if local.exists() {
@@ -66,26 +71,47 @@ impl Config {
             model: s("model", ""),
             api_key: s("api_key", ""),
             api_key_env: s("api_key_env", "OPENAI_API_KEY"),
-            reasoning_effort: v.get("reasoning_effort").and_then(Value::as_str).map(str::to_string),
+            reasoning_effort: v
+                .get("reasoning_effort")
+                .and_then(Value::as_str)
+                .map(str::to_string),
             temperature: v.get("temperature").and_then(Value::as_f64),
             persona: s("persona", ""),
             history: n("history", 80.0) as usize,
             max_steps: n("max_steps", 4.0) as usize,
-            act_on_news: v.get("act_on_news").and_then(Value::as_bool).unwrap_or(true),
+            act_on_news: v
+                .get("act_on_news")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
         })
     }
 
     fn key(&self) -> String {
-        if self.api_key.is_empty() { std::env::var(&self.api_key_env).unwrap_or_default() } else { self.api_key.clone() }
+        if self.api_key.is_empty() {
+            std::env::var(&self.api_key_env).unwrap_or_default()
+        } else {
+            self.api_key.clone()
+        }
     }
 }
 
 /// What the WebSocket side tells the model's side.
 enum Event {
     Actions(Vec<Value>),
-    Context { message: String, silent: bool },
-    Force { state: String, query: String, names: Vec<String> },
-    Result { id: String, success: bool, message: String },
+    Context {
+        message: String,
+        silent: bool,
+    },
+    Force {
+        state: String,
+        query: String,
+        names: Vec<String>,
+    },
+    Result {
+        id: String,
+        success: bool,
+        message: String,
+    },
     Gone,
 }
 
@@ -98,12 +124,15 @@ static SAID: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 /// What the stand-in has said since last asked.
 pub fn take_said() -> Vec<String> {
-    SAID.lock().map(|mut s| std::mem::take(&mut *s)).unwrap_or_default()
+    SAID.lock()
+        .map(|mut s| std::mem::take(&mut *s))
+        .unwrap_or_default()
 }
 
 pub fn serve(port: u16, config_path: &Path) -> Result<(), String> {
     let config = configured(config_path)?;
-    let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
+    let listener =
+        TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
     run(&listener, &config)
 }
 
@@ -126,7 +155,11 @@ pub fn start(config_path: &Path) -> Result<String, String> {
 fn configured(config_path: &Path) -> Result<Config, String> {
     let config = Config::load(config_path)?;
     if config.key().is_empty() {
-        return Err(format!("no API key: put \"api_key\" in {}, or set {}", config_path.with_extension("local.json").display(), config.api_key_env));
+        return Err(format!(
+            "no API key: put \"api_key\" in {}, or set {}",
+            config_path.with_extension("local.json").display(),
+            config.api_key_env
+        ));
     }
     Ok(config)
 }
@@ -135,8 +168,11 @@ fn configured(config_path: &Path) -> Result<Config, String> {
 fn run(listener: &TcpListener, config: &Config) -> Result<(), String> {
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let log_path = crate::config::out_dir().join("neuro").join("gpt.log");
-    std::fs::create_dir_all(log_path.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-    let log = std::sync::Arc::new(std::sync::Mutex::new(crate::config::Log::create(&log_path, "").map_err(|e| e.to_string())?));
+    std::fs::create_dir_all(log_path.parent().unwrap_or(Path::new(".")))
+        .map_err(|e| e.to_string())?;
+    let log = std::sync::Arc::new(std::sync::Mutex::new(
+        crate::config::Log::create(&log_path, "").map_err(|e| e.to_string())?,
+    ));
     let say = {
         let log = std::sync::Arc::clone(&log);
         move |line: String| {
@@ -146,11 +182,18 @@ fn run(listener: &TcpListener, config: &Config) -> Result<(), String> {
             }
         }
     };
-    say(format!("GPT stand-in for Evil on ws://127.0.0.1:{port}: {} (reasoning {}); log in {}", config.model, config.reasoning_effort.as_deref().unwrap_or("default"), log_path.display()));
+    say(format!(
+        "GPT stand-in for Evil on ws://127.0.0.1:{port}: {} (reasoning {}); log in {}",
+        config.model,
+        config.reasoning_effort.as_deref().unwrap_or("default"),
+        log_path.display()
+    ));
     for stream in listener.incoming() {
         let stream = stream.map_err(|e| e.to_string())?;
         let mut ws = tungstenite::accept(stream).map_err(|e| e.to_string())?;
-        ws.get_ref().set_read_timeout(Some(Duration::from_millis(20))).map_err(|e| e.to_string())?;
+        ws.get_ref()
+            .set_read_timeout(Some(Duration::from_millis(20)))
+            .map_err(|e| e.to_string())?;
         say("game connected".into());
         let (ev_tx, ev_rx) = channel::<Event>();
         let (act_tx, act_rx) = channel::<Send>();
@@ -168,27 +211,54 @@ fn run(listener: &TcpListener, config: &Config) -> Result<(), String> {
 }
 
 /// The WebSocket: what comes in passed to the model's side; its actions sent.
-fn pump(ws: &mut tungstenite::WebSocket<std::net::TcpStream>, ev: &Sender<Event>, acts: &Receiver<Send>, say: &impl Fn(String)) -> String {
+fn pump(
+    ws: &mut tungstenite::WebSocket<std::net::TcpStream>,
+    ev: &Sender<Event>,
+    acts: &Receiver<Send>,
+    say: &impl Fn(String),
+) -> String {
     loop {
         while let Ok((id, name, data)) = acts.try_recv() {
             let mut d = json!({ "id": id, "name": name });
             if let Some(data) = data {
                 d["data"] = Value::String(data);
             }
-            if let Err(e) = ws.send(Message::text(json!({ "command": "action", "data": d }).to_string())) {
+            if let Err(e) = ws.send(Message::text(
+                json!({ "command": "action", "data": d }).to_string(),
+            )) {
                 return e.to_string();
             }
         }
         match ws.read() {
             Ok(Message::Text(t)) => {
-                let Ok(v) = serde_json::from_str::<Value>(t.as_str()) else { continue };
+                let Ok(v) = serde_json::from_str::<Value>(t.as_str()) else {
+                    continue;
+                };
                 let d = &v["data"];
                 let s = |k: &str| d.get(k).and_then(Value::as_str).unwrap_or("").to_string();
                 let e = match v["command"].as_str().unwrap_or("") {
-                    "actions/register" => Event::Actions(d["actions"].as_array().cloned().unwrap_or_default()),
-                    "context" => Event::Context { message: s("message"), silent: d["silent"].as_bool().unwrap_or(false) },
-                    "actions/force" => Event::Force { state: s("state"), query: s("query"), names: d["action_names"].as_array().into_iter().flatten().filter_map(|x| x.as_str().map(str::to_string)).collect() },
-                    "action/result" => Event::Result { id: s("id"), success: d["success"].as_bool().unwrap_or(false), message: s("message") },
+                    "actions/register" => {
+                        Event::Actions(d["actions"].as_array().cloned().unwrap_or_default())
+                    }
+                    "context" => Event::Context {
+                        message: s("message"),
+                        silent: d["silent"].as_bool().unwrap_or(false),
+                    },
+                    "actions/force" => Event::Force {
+                        state: s("state"),
+                        query: s("query"),
+                        names: d["action_names"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|x| x.as_str().map(str::to_string))
+                            .collect(),
+                    },
+                    "action/result" => Event::Result {
+                        id: s("id"),
+                        success: d["success"].as_bool().unwrap_or(false),
+                        message: s("message"),
+                    },
                     "startup" => {
                         say("STARTUP".into());
                         continue;
@@ -201,7 +271,11 @@ fn pump(ws: &mut tungstenite::WebSocket<std::net::TcpStream>, ev: &Sender<Event>
             }
             Ok(Message::Close(_)) => return "closed".into(),
             Ok(_) => {}
-            Err(tungstenite::Error::Io(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {}
+            Err(tungstenite::Error::Io(e))
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) => {}
             Err(e) => return e.to_string(),
         }
     }
@@ -235,7 +309,15 @@ struct Brain<F: Fn(String)> {
 
 impl<F: Fn(String)> Brain<F> {
     fn new(config: Config, acts: Sender<Send>, say: F) -> Self {
-        Brain { config, acts, say, tools: Vec::new(), history: VecDeque::new(), next_id: 1, backlog: VecDeque::new() }
+        Brain {
+            config,
+            acts,
+            say,
+            tools: Vec::new(),
+            history: VecDeque::new(),
+            next_id: 1,
+            backlog: VecDeque::new(),
+        }
     }
 
     fn run(mut self, events: &Receiver<Event>) {
@@ -250,7 +332,13 @@ impl<F: Fn(String)> Brain<F> {
             match e {
                 Event::Gone => return,
                 Event::Actions(a) => {
-                    (self.say)(format!("REGISTER {}", a.iter().filter_map(|x| x["name"].as_str()).collect::<Vec<_>>().join(", ")));
+                    (self.say)(format!(
+                        "REGISTER {}",
+                        a.iter()
+                            .filter_map(|x| x["name"].as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
                     // (a function tool: the action's name, description, and schema as its parameters;
                     // not strict, some parameters being optional)
                     self.tools = a
@@ -262,15 +350,26 @@ impl<F: Fn(String)> Brain<F> {
                         .collect();
                 }
                 Event::Context { message, silent } => {
-                    (self.say)(format!("GAME{} {message}", if silent { " (silent)" } else { "" }));
+                    (self.say)(format!(
+                        "GAME{} {message}",
+                        if silent { " (silent)" } else { "" }
+                    ));
                     self.push(json!({ "role": "user", "content": format!("[game] {message}") }));
                     if !silent && self.config.act_on_news {
                         self.turn(events, None, None);
                     }
                 }
-                Event::Force { state, query, names } => {
+                Event::Force {
+                    state,
+                    query,
+                    names,
+                } => {
                     (self.say)(format!("FORCE {query} [{}]", names.join(", ")));
-                    self.turn(events, Some(&names), Some(format!("[game, decide now] {query}\n\n{state}")));
+                    self.turn(
+                        events,
+                        Some(&names),
+                        Some(format!("[game, decide now] {query}\n\n{state}")),
+                    );
                 }
                 Event::Result { .. } => {} // (a result not waited for: a stale one)
             }
@@ -279,7 +378,12 @@ impl<F: Fn(String)> Brain<F> {
 
     /// One turn: the model asked (forced: it must call one of `names`), its calls sent as actions,
     /// their results given back; after a look, asked again, a few steps at most.
-    fn turn(&mut self, events: &Receiver<Event>, names: Option<&Vec<String>>, ephemeral: Option<String>) {
+    fn turn(
+        &mut self,
+        events: &Receiver<Event>,
+        names: Option<&Vec<String>>,
+        ephemeral: Option<String>,
+    ) {
         let mut steps = 0;
         let mut forced = names.cloned();
         let mut tries = 0;
@@ -311,7 +415,11 @@ impl<F: Fn(String)> Brain<F> {
             let mut failed = false;
             for (call_id, name, args) in &reply.calls {
                 let (ok, message) = self.act(events, name, args.clone());
-                (self.say)(format!("EVIL -> {name} {}\n  {} {message}", args.clone().unwrap_or_default(), if ok { "ok" } else { "FAILED" }));
+                (self.say)(format!(
+                    "EVIL -> {name} {}\n  {} {message}",
+                    args.clone().unwrap_or_default(),
+                    if ok { "ok" } else { "FAILED" }
+                ));
                 self.push(json!({ "type": "function_call_output", "call_id": call_id, "output": format!("{}{message}", if ok { "" } else { "Failed: " }) }));
                 looked |= LOOKS.contains(&name.as_str());
                 failed |= !ok;
@@ -330,15 +438,28 @@ impl<F: Fn(String)> Brain<F> {
     }
 
     /// An action sent; its result (success, message), what else comes in meanwhile kept for after.
-    fn act(&mut self, events: &Receiver<Event>, name: &str, data: Option<String>) -> (bool, String) {
+    fn act(
+        &mut self,
+        events: &Receiver<Event>,
+        name: &str,
+        data: Option<String>,
+    ) -> (bool, String) {
         let id = format!("g{}", self.next_id);
         self.next_id += 1;
-        if self.acts.send((id.clone(), name.to_string(), data)).is_err() {
+        if self
+            .acts
+            .send((id.clone(), name.to_string(), data))
+            .is_err()
+        {
             return (false, "the game's gone".into());
         }
         loop {
             match events.recv_timeout(Duration::from_secs(20)) {
-                Ok(Event::Result { id: rid, success, message }) if rid == id => return (success, message),
+                Ok(Event::Result {
+                    id: rid,
+                    success,
+                    message,
+                }) if rid == id => return (success, message),
                 Ok(Event::Gone) => {
                     self.backlog.push_back(Event::Gone);
                     return (false, "the game's gone".into());
@@ -369,7 +490,9 @@ impl<F: Fn(String)> Brain<F> {
         if !self.tools.is_empty() {
             body["tools"] = Value::Array(self.tools.clone());
             body["tool_choice"] = match forced {
-                Some(names) => json!({ "type": "allowed_tools", "mode": "required", "tools": names.iter().map(|n| json!({ "type": "function", "name": n })).collect::<Vec<_>>() }),
+                Some(names) => {
+                    json!({ "type": "allowed_tools", "mode": "required", "tools": names.iter().map(|n| json!({ "type": "function", "name": n })).collect::<Vec<_>>() })
+                }
                 None => json!("auto"),
             };
         }
@@ -380,25 +503,56 @@ impl<F: Fn(String)> Brain<F> {
             body["temperature"] = json!(t);
         }
         let url = format!("{}/responses", self.config.base_url.trim_end_matches('/'));
-        let resp: Value = match ureq::post(&url).timeout(Duration::from_secs(180)).set("Authorization", &format!("Bearer {}", self.config.key())).send_json(body) {
+        let resp: Value = match ureq::post(&url)
+            .timeout(Duration::from_secs(180))
+            .set("Authorization", &format!("Bearer {}", self.config.key()))
+            .send_json(body)
+        {
             Ok(r) => r.into_json().map_err(|e| e.to_string())?,
-            Err(ureq::Error::Status(code, r)) => return Err(format!("{code}: {}", r.into_string().unwrap_or_default().chars().take(500).collect::<String>())),
+            Err(ureq::Error::Status(code, r)) => {
+                return Err(format!(
+                    "{code}: {}",
+                    r.into_string()
+                        .unwrap_or_default()
+                        .chars()
+                        .take(500)
+                        .collect::<String>()
+                ))
+            }
             Err(e) => return Err(e.to_string()),
         };
-        let output = resp["output"].as_array().ok_or_else(|| format!("no output: {}", resp.to_string().chars().take(300).collect::<String>()))?;
+        let output = resp["output"].as_array().ok_or_else(|| {
+            format!(
+                "no output: {}",
+                resp.to_string().chars().take(300).collect::<String>()
+            )
+        })?;
         let mut text = String::new();
         let mut calls = Vec::new();
         for o in output {
             match o["type"].as_str().unwrap_or("") {
                 "message" => {
-                    for c in o["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "output_text") {
+                    for c in o["content"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|c| c["type"] == "output_text")
+                    {
                         text.push_str(c["text"].as_str().unwrap_or(""));
                     }
                 }
-                "function_call" => calls.push((o["call_id"].as_str().unwrap_or("").to_string(), o["name"].as_str().unwrap_or("").to_string(), o["arguments"].as_str().map(str::to_string))),
+                "function_call" => calls.push((
+                    o["call_id"].as_str().unwrap_or("").to_string(),
+                    o["name"].as_str().unwrap_or("").to_string(),
+                    o["arguments"].as_str().map(str::to_string),
+                )),
                 _ => {}
             }
         }
-        Ok(Reply { text, calls, items: output.clone() })
+        Ok(Reply {
+            text,
+            calls,
+            items: output.clone(),
+        })
     }
 }

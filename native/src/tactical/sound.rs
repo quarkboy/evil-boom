@@ -25,7 +25,9 @@ impl Hearing {
     pub fn new(m: &MapData) -> Hearing {
         let mut links: Vec<Vec<(usize, bool)>> = vec![Vec::new(); m.sectors.len()];
         for line in m.linedefs.iter().filter(|l| l.two_sided()) {
-            let (Some(a), Some(b)) = (m.front_sector(line), m.back_sector(line)) else { continue };
+            let (Some(a), Some(b)) = (m.front_sector(line), m.back_sector(line)) else {
+                continue;
+            };
             if a == b {
                 continue;
             }
@@ -33,7 +35,10 @@ impl Hearing {
             links[a].push((b, block));
             links[b].push((a, block));
         }
-        Hearing { links, cache: RefCell::new(None) }
+        Hearing {
+            links,
+            cache: RefCell::new(None),
+        }
     }
 
     /// The sectors a shot from `sector` is heard in, the floors and ceilings as they are.
@@ -45,7 +50,8 @@ impl Hearing {
         }
         // (P_RecursiveSound: a sector is gone into again only if it's reached through fewer
         // sound-blocking lines than before)
-        let mut best: std::collections::BTreeMap<usize, u8> = std::collections::BTreeMap::from([(sector, 0)]);
+        let mut best: std::collections::BTreeMap<usize, u8> =
+            std::collections::BTreeMap::from([(sector, 0)]);
         let mut stack = vec![(sector, 0u8)];
         while let Some((s, blocks)) = stack.pop() {
             if best.get(&s).copied().unwrap_or(2) < blocks {

@@ -9,10 +9,13 @@
 //! `requires`: the jump is only usable once the world has them.
 
 use super::{Jump, JumpLab, STRAFE_SIDE};
-use crate::geom::{box_hits_segment, cells, closest_point, dist, segments_cross, Point, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
+use crate::det::{HashMap, HashSet};
+use crate::geom::{
+    box_hits_segment, cells, closest_point, dist, segments_cross, Point, MAX_STEP, PLAYER_HEIGHT,
+    PLAYER_RADIUS,
+};
 use crate::motor::{FRICTION, RUN_THRUST};
 use crate::nav::{can_cross, Heights};
-use crate::det::{HashMap, HashSet};
 use std::cell::Cell;
 
 /// degrees off the edge normal
@@ -59,13 +62,27 @@ fn takeoff_samples(width: f64) -> Vec<f64> {
             samples.push(t);
         }
     }
-    samples.sort_by(|p, q| (p - 0.5).abs().total_cmp(&(q - 0.5).abs()).then(p.total_cmp(q)));
+    samples.sort_by(|p, q| {
+        (p - 0.5)
+            .abs()
+            .total_cmp(&(q - 0.5).abs())
+            .then(p.total_cmp(q))
+    });
     samples
 }
 
 /// The box's corners and edge middles, for what's under it.
 fn box_points(r: f64) -> [Point; 8] {
-    [(-r, -r), (0.0, -r), (r, -r), (r, 0.0), (r, r), (0.0, r), (-r, r), (-r, 0.0)]
+    [
+        (-r, -r),
+        (0.0, -r),
+        (r, -r),
+        (r, 0.0),
+        (r, r),
+        (0.0, r),
+        (-r, r),
+        (-r, 0.0),
+    ]
 }
 
 /// How a jump is tried: `high`, sectors met in flight at their highest floor that works; `cap`,
@@ -107,7 +124,10 @@ impl JumpLab {
             if !input.portal_fits.get(pi).copied().unwrap_or(false) {
                 continue;
             }
-            if portal.linedef.is_some_and(|li| self.map.linedefs[li].blocks_player()) {
+            if portal
+                .linedef
+                .is_some_and(|li| self.map.linedefs[li].blocks_player())
+            {
                 continue;
             }
             let width = dist(portal.p1, portal.p2);
@@ -129,16 +149,33 @@ impl JumpLab {
                         }
                         // fixed angles, plus aiming at nearby sectors high enough to land on (an
                         // island in a pit isn't at any fixed angle)
-                        let aimed = self.aim_angles(mid, (nx, ny), hb.floor + MAX_STEP, &input.options);
+                        let aimed =
+                            self.aim_angles(mid, (nx, ny), hb.floor + MAX_STEP, &input.options);
                         let samples = samples.get_or_insert_with(|| takeoff_samples(width));
                         for ang in JUMP_ANGLES.into_iter().chain(aimed) {
                             let (s, c) = ang.to_radians().sin_cos();
                             let d = (nx * c - ny * s, nx * s + ny * c);
                             for &t in samples.iter() {
                                 let takeoff = (x1 + (x2 - x1) * t, y1 + (y2 - y1) * t);
-                                let chosen = Chosen(if sa == sb { vec![(sa, ha)] } else { vec![(sa, ha), (sb, hb)] });
+                                let chosen = Chosen(if sa == sb {
+                                    vec![(sa, ha)]
+                                } else {
+                                    vec![(sa, ha), (sb, hb)]
+                                });
                                 let ceiling = Cell::new(false);
-                                let jump = self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: false, cap: MAX_RUNUP, ceiling: Some(&ceiling), strafe: false });
+                                let jump = self.try_jump(
+                                    a,
+                                    takeoff,
+                                    d,
+                                    chosen.clone(),
+                                    input,
+                                    Flight {
+                                        high: false,
+                                        cap: MAX_RUNUP,
+                                        ceiling: Some(&ceiling),
+                                        strafe: false,
+                                    },
+                                );
                                 // A raised-floor landing is an alternative. Only a normal
                                 // landing ends the takeoff search for this direction.
                                 let normal_landing = jump.is_some();
@@ -146,13 +183,60 @@ impl JumpLab {
                                 // run-up, slower: MAP06's ledge behind the fake wall, its ceiling
                                 // 88 over the floor, too fast from far back)
                                 let found = jump
-                                    .or_else(|| self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: true, cap: MAX_RUNUP, ceiling: None, strafe: false }))
-                                    .or_else(|| ceiling.get().then(|| RUNUP_CAPS[1..].iter().find_map(|&cap| self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: false, cap, ceiling: None, strafe: false }))).flatten())
+                                    .or_else(|| {
+                                        self.try_jump(
+                                            a,
+                                            takeoff,
+                                            d,
+                                            chosen.clone(),
+                                            input,
+                                            Flight {
+                                                high: true,
+                                                cap: MAX_RUNUP,
+                                                ceiling: None,
+                                                strafe: false,
+                                            },
+                                        )
+                                    })
+                                    .or_else(|| {
+                                        ceiling
+                                            .get()
+                                            .then(|| {
+                                                RUNUP_CAPS[1..].iter().find_map(|&cap| {
+                                                    self.try_jump(
+                                                        a,
+                                                        takeoff,
+                                                        d,
+                                                        chosen.clone(),
+                                                        input,
+                                                        Flight {
+                                                            high: false,
+                                                            cap,
+                                                            ceiling: None,
+                                                            strafe: false,
+                                                        },
+                                                    )
+                                                })
+                                            })
+                                            .flatten()
+                                    })
                                     // (still nowhere: strafing, faster, as a player runs for a far
                                     // ledge: MAP03's well, over its rim from the walkway)
                                     .or_else(|| {
-                                        self.try_jump(a, takeoff, d, chosen.clone(), input, Flight { high: false, cap: MAX_RUNUP, ceiling: None, strafe: true })
-                                            .map(|mut j| {
+                                        self.try_jump(
+                                            a,
+                                            takeoff,
+                                            d,
+                                            chosen.clone(),
+                                            input,
+                                            Flight {
+                                                high: false,
+                                                cap: MAX_RUNUP,
+                                                ceiling: None,
+                                                strafe: true,
+                                            },
+                                        )
+                                        .map(|mut j| {
                                             j.strafe = true;
                                             j
                                         })
@@ -176,7 +260,10 @@ impl JumpLab {
                 }
             }
         }
-        groups.into_iter().flat_map(|group| self.select_landings(group)).collect()
+        groups
+            .into_iter()
+            .flat_map(|group| self.select_landings(group))
+            .collect()
     }
 
     /// Keep the first jumps for a takeoff poly and target sector, plus alternatives
@@ -190,9 +277,17 @@ impl JumpLab {
                 .then_with(|| dist(a.takeoff, a.dest).total_cmp(&dist(b.takeoff, b.dest)))
                 .then_with(|| a.key().cmp(&b.key()))
         });
-        let best = kept.iter().map(|j| self.landing_margin(j)).fold(f64::NEG_INFINITY, f64::max);
+        let best = kept
+            .iter()
+            .map(|j| self.landing_margin(j))
+            .fold(f64::NEG_INFINITY, f64::max);
         for (m, j) in rest.into_iter().take(JUMPS_PER_TARGET) {
-            if m > best + MIN_MARGIN_GAIN && kept.iter().all(|k| dist(j.takeoff, k.takeoff) > MIN_JUMP_SEPARATION || dist(j.dest, k.dest) > MIN_JUMP_SEPARATION) {
+            if m > best + MIN_MARGIN_GAIN
+                && kept.iter().all(|k| {
+                    dist(j.takeoff, k.takeoff) > MIN_JUMP_SEPARATION
+                        || dist(j.dest, k.dest) > MIN_JUMP_SEPARATION
+                })
+            {
                 kept.push(j);
             }
         }
@@ -201,33 +296,60 @@ impl JumpLab {
 
     /// Angles (degrees off normal n, within +-75) towards nearby sectors whose floor could be
     /// landed on (above min_floor): their middles, then their nearest parts (a little in).
-    fn aim_angles(&self, origin: Point, n: Point, min_floor: f64, options: &[Vec<Heights>]) -> Vec<f64> {
+    fn aim_angles(
+        &self,
+        origin: Point,
+        n: Point,
+        min_floor: f64,
+        options: &[Vec<Heights>],
+    ) -> Vec<f64> {
         let base = n.1.atan2(n.0);
         let mut out: Vec<f64> = Vec::new();
         let add = |out: &mut Vec<f64>, p: Point| {
             let ang = ((p.1 - origin.1).atan2(p.0 - origin.0) - base).to_degrees();
             let ang = (ang + 180.0).rem_euclid(360.0) - 180.0;
-            if ang.abs() <= MAX_AIM_ANGLE && JUMP_ANGLES.iter().chain(out.iter()).all(|a| (ang - a).abs() > MIN_AIM_SEPARATION) {
+            if ang.abs() <= MAX_AIM_ANGLE
+                && JUMP_ANGLES
+                    .iter()
+                    .chain(out.iter())
+                    .all(|a| (ang - a).abs() > MIN_AIM_SEPARATION)
+            {
                 out.push(ang.round_ties_even());
             }
         };
         let mut nearby = Vec::new();
         for &(s, c) in &self.sector_centres {
             let d = dist(origin, c);
-            if d > AIM_RANGE || d < 16.0 || options[s].iter().map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max) <= min_floor {
+            if d > AIM_RANGE
+                || d < 16.0
+                || options[s]
+                    .iter()
+                    .map(|h| h.floor)
+                    .fold(f64::NEG_INFINITY, f64::max)
+                    <= min_floor
+            {
                 continue;
             }
             add(&mut out, c);
             nearby.push((s, c));
         }
         for (s, c) in nearby {
-            let near = self.sector_edges.get(&s).into_iter().flatten().map(|&(a, b)| closest_point(origin, a, b)).fold(None, |best: Option<Point>, q| match best {
-                Some(b) if dist(b, origin) <= dist(q, origin) => Some(b),
-                _ => Some(q),
-            });
+            let near = self
+                .sector_edges
+                .get(&s)
+                .into_iter()
+                .flatten()
+                .map(|&(a, b)| closest_point(origin, a, b))
+                .fold(None, |best: Option<Point>, q| match best {
+                    Some(b) if dist(b, origin) <= dist(q, origin) => Some(b),
+                    _ => Some(q),
+                });
             if let Some(near) = near.filter(|&q| dist(q, origin) > 1.0) {
                 let k = (AIM_INSIDE / dist(near, c).max(1.0)).min(1.0);
-                add(&mut out, (near.0 + (c.0 - near.0) * k, near.1 + (c.1 - near.1) * k));
+                add(
+                    &mut out,
+                    (near.0 + (c.0 - near.0) * k, near.1 + (c.1 - near.1) * k),
+                );
             }
         }
         out
@@ -255,21 +377,38 @@ impl JumpLab {
     /// Does the box at p straddle a static wall or a solid thing's edge?
     fn box_hits_static_wall(&self, p: Point) -> bool {
         let r = PLAYER_RADIUS - 0.1;
-        cells(p.0 - r, p.1 - r, p.0 + r, p.1 + r).any(|c| self.static_grid.get(&c).into_iter().flatten().any(|&e| box_hits_segment(p.0, p.1, r, e)))
+        cells(p.0 - r, p.1 - r, p.0 + r, p.1 + r).any(|c| {
+            self.static_grid
+                .get(&c)
+                .into_iter()
+                .flatten()
+                .any(|&e| box_hits_segment(p.0, p.1, r, e))
+        })
     }
 
     /// A wall (static, a solid thing, or a floor more than a step above z at the heights being
     /// assumed) within PIN_MARGIN of the box at p?
     fn pinned(&self, p: Point, z: f64, chosen: &Chosen) -> bool {
         let r = PLAYER_RADIUS + PIN_MARGIN;
-        if cells(p.0 - r, p.1 - r, p.0 + r, p.1 + r).any(|c| self.static_grid.get(&c).into_iter().flatten().any(|&e| box_hits_segment(p.0, p.1, r, e))) {
+        if cells(p.0 - r, p.1 - r, p.0 + r, p.1 + r).any(|c| {
+            self.static_grid
+                .get(&c)
+                .into_iter()
+                .flatten()
+                .any(|&e| box_hits_segment(p.0, p.1, r, e))
+        }) {
             return true;
         }
         box_points(r).iter().any(|&(dx, dy)| {
             let q = (p.0 + dx, p.1 + dy);
             self.mesh.poly_at(q).is_some_and(|pi| {
                 let poly = self.mesh.poly(pi);
-                crate::mesh::inside(&poly.vertices, q.0, q.1) && chosen.get(poly.sector).unwrap_or(self.initial_heights(poly.sector)).floor > z + MAX_STEP
+                crate::mesh::inside(&poly.vertices, q.0, q.1)
+                    && chosen
+                        .get(poly.sector)
+                        .unwrap_or(self.initial_heights(poly.sector))
+                        .floor
+                        > z + MAX_STEP
             })
         })
     }
@@ -281,7 +420,9 @@ impl JumpLab {
 
     /// The linedefs the segment a-b properly crosses (ascending).
     fn crossed(&self, a: Point, b: Point) -> Vec<usize> {
-        let mut cand: Vec<usize> = cells(a.0, a.1, b.0, b.1).flat_map(|c| self.mesh.line_grid.get(&c).into_iter().flatten().copied()).collect();
+        let mut cand: Vec<usize> = cells(a.0, a.1, b.0, b.1)
+            .flat_map(|c| self.mesh.line_grid.get(&c).into_iter().flatten().copied())
+            .collect();
         cand.sort_unstable();
         cand.dedup();
         cand.retain(|&li| {
@@ -295,15 +436,40 @@ impl JumpLab {
     /// run-up no longer than `how.cap`. `how.high`: sectors met in flight are taken at their
     /// highest possible floor that works, rather than the first (a platform raised to land on:
     /// MAP09's bridge).
-    fn try_jump(&self, src: usize, takeoff: Point, mut n: Point, mut chosen: Chosen, input: &FinderInput, how: Flight) -> Option<Jump> {
-        let Flight { high, cap, ceiling, strafe } = how;
+    fn try_jump(
+        &self,
+        src: usize,
+        takeoff: Point,
+        mut n: Point,
+        mut chosen: Chosen,
+        input: &FinderInput,
+        how: Flight,
+    ) -> Option<Jump> {
+        let Flight {
+            high,
+            cap,
+            ceiling,
+            strafe,
+        } = how;
         // (running and strafing at once: forward and sideways thrust together)
-        let thrust = if strafe { RUN_THRUST * (1.0 + (STRAFE_SIDE / 50.0).powi(2)).sqrt() } else { RUN_THRUST };
+        let thrust = if strafe {
+            RUN_THRUST * (1.0 + (STRAFE_SIDE / 50.0).powi(2)).sqrt()
+        } else {
+            RUN_THRUST
+        };
         let mesh = &self.mesh;
         let src_sector = mesh.poly(src).sector;
         let floor = chosen.get(src_sector)?.floor;
-        let below = chosen.0.iter().find(|(s, _)| *s != src_sector).map_or(floor, |(_, h)| h.floor);
-        let pick = |chosen: &mut Chosen, sector: usize, ok: &dyn Fn(Heights) -> bool, flight: bool| -> Option<Heights> {
+        let below = chosen
+            .0
+            .iter()
+            .find(|(s, _)| *s != src_sector)
+            .map_or(floor, |(_, h)| h.floor);
+        let pick = |chosen: &mut Chosen,
+                    sector: usize,
+                    ok: &dyn Fn(Heights) -> bool,
+                    flight: bool|
+         -> Option<Heights> {
             if let Some(h) = chosen.get(sector) {
                 return ok(h).then_some(h);
             }
@@ -319,12 +485,18 @@ impl JumpLab {
             let moved = |effects: &[(usize, Vec<Heights>)], s: usize, h: Heights| -> Option<bool> {
                 let hs = &effects.iter().find(|(e, _)| *e == s)?.1;
                 let start = self.initial[s];
-                hs.iter().any(|x| (x.floor, x.ceiling) != start).then(|| (h.floor, h.ceiling) != start && hs.contains(&h))
+                hs.iter()
+                    .any(|x| (x.floor, x.ceiling) != start)
+                    .then(|| (h.floor, h.ceiling) != start && hs.contains(&h))
             };
             let together = |h: Heights| {
                 self.permanent.iter().all(|effects| {
-                    let Some(mine) = moved(effects, sector, h) else { return true };
-                    chosen.0.iter().all(|&(other, oh)| moved(effects, other, oh).is_none_or(|theirs| theirs == mine))
+                    let Some(mine) = moved(effects, sector, h) else {
+                        return true;
+                    };
+                    chosen.0.iter().all(|&(other, oh)| {
+                        moved(effects, other, oh).is_none_or(|theirs| theirs == mine)
+                    })
                 })
             };
             let h = order.into_iter().find(|&h| ok(h) && together(h))?;
@@ -337,16 +509,31 @@ impl JumpLab {
         let r = PLAYER_RADIUS - 1.0;
         let bx = box_points(r);
         'run: while runup < cap {
-            let nxt = (takeoff.0 - n.0 * (runup + RUNUP_STEP), takeoff.1 - n.1 * (runup + RUNUP_STEP));
+            let nxt = (
+                takeoff.0 - n.0 * (runup + RUNUP_STEP),
+                takeoff.1 - n.1 * (runup + RUNUP_STEP),
+            );
             let Some(here) = mesh.poly_at(nxt) else { break };
             if self.box_hits_static_wall(nxt) {
                 break;
             }
             // the whole box has to fit: the player stands on the highest floor under it
-            let Some(hc) = pick(&mut chosen, mesh.poly(here).sector, &|h: Heights| h.ceiling - h.floor >= PLAYER_HEIGHT, false) else { break };
+            let Some(hc) = pick(
+                &mut chosen,
+                mesh.poly(here).sector,
+                &|h: Heights| h.ceiling - h.floor >= PLAYER_HEIGHT,
+                false,
+            ) else {
+                break;
+            };
             for &(dx, dy) in &bx {
-                let Some(q) = mesh.poly_at((nxt.0 + dx, nxt.1 + dy)) else { break 'run };
-                let ok = |h: Heights| h.floor <= hc.floor + MAX_STEP && h.ceiling - h.floor.max(hc.floor) >= PLAYER_HEIGHT;
+                let Some(q) = mesh.poly_at((nxt.0 + dx, nxt.1 + dy)) else {
+                    break 'run;
+                };
+                let ok = |h: Heights| {
+                    h.floor <= hc.floor + MAX_STEP
+                        && h.ceiling - h.floor.max(hc.floor) >= PLAYER_HEIGHT
+                };
                 if pick(&mut chosen, mesh.poly(q).sector, &ok, false).is_none() {
                     break 'run;
                 }
@@ -354,13 +541,16 @@ impl JumpLab {
             for li in self.crossed(nxt, back) {
                 let l = &self.map.linedefs[li];
                 let (f, b) = self.map.sides(li);
-                let (Some(f), Some(b)) = (f, b) else { break 'run };
+                let (Some(f), Some(b)) = (f, b) else {
+                    break 'run;
+                };
                 if l.blocks_player() {
                     break 'run;
                 }
                 // which side is behind (farther from the takeoff)?
                 let (v1, v2) = self.map.line_seg(li);
-                let behind_front = (v2.0 - v1.0) * (nxt.1 - v1.1) - (v2.1 - v1.1) * (nxt.0 - v1.0) < 0.0;
+                let behind_front =
+                    (v2.0 - v1.0) * (nxt.1 - v1.1) - (v2.1 - v1.1) * (nxt.0 - v1.0) < 0.0;
                 let (far, near) = if behind_front { (f, b) } else { (b, f) };
                 let hf = pick(&mut chosen, far, &|_| true, false)?;
                 if pick(&mut chosen, near, &|h| can_cross(hf, h), false).is_none() {
@@ -387,7 +577,11 @@ impl JumpLab {
         // that floor walks to it: not MAP11's run off the walkway over the nukage, the lip past it
         // and down into the room beyond)
         let below_poly = mesh.poly_at((takeoff.0 + n.0 * 2.0, takeoff.1 + n.1 * 2.0));
-        let plain = |s: usize| below_poly.is_none_or(|bp| mesh.poly(bp).sector == s || self.walks_to(bp, s, &input.portal_fits));
+        let plain = |s: usize| {
+            below_poly.is_none_or(|bp| {
+                mesh.poly(bp).sector == s || self.walks_to(bp, s, &input.portal_fits)
+            })
+        };
         let (mut z, mut vz) = (floor, 0.0);
         let mut airborne = false;
         let mut held = 0;
@@ -395,9 +589,20 @@ impl JumpLab {
         // (the floors under the box at its full size, as the game finds them: the highest any of
         // it is over. A unit in, she's off the ledge a tic early and a tic lower at the far side:
         // MAP15's run across the pit into the megasphere's door, 20 under its floor in the game)
-        let all: Vec<Point> = box_points(PLAYER_RADIUS - FLOOR_EDGE).iter().copied().chain([(0.0, 0.0)]).collect();
+        let all: Vec<Point> = box_points(PLAYER_RADIUS - FLOOR_EDGE)
+            .iter()
+            .copied()
+            .chain([(0.0, 0.0)])
+            .collect();
         let requires = |chosen: &Chosen| -> Vec<(usize, Heights)> {
-            chosen.0.iter().copied().filter(|&(s, h)| (h.floor, h.ceiling) != self.initial[s] || input.moving.contains(&s)).collect()
+            chosen
+                .0
+                .iter()
+                .copied()
+                .filter(|&(s, h)| {
+                    (h.floor, h.ceiling) != self.initial[s] || input.moving.contains(&s)
+                })
+                .collect()
         };
         for _ in 0..MAX_FLIGHT_TICS {
             let mut nn = (x + n.0 * v, y + n.1 * v);
@@ -408,7 +613,9 @@ impl JumpLab {
                 // barrel on the island: the run's over and she comes down where she is, a landing
                 // if that's on it: MAP25's stepping stones)
                 let (vx, vy) = (n.0 * v, n.1 * v);
-                let slide = [(vx, 0.0), (0.0, vy)].into_iter().find(|&(dx, dy)| dx.hypot(dy) > 0.5 && !self.box_hits_static_wall((x + dx, y + dy)));
+                let slide = [(vx, 0.0), (0.0, vy)].into_iter().find(|&(dx, dy)| {
+                    dx.hypot(dy) > 0.5 && !self.box_hits_static_wall((x + dx, y + dy))
+                });
                 if let Some((dx, dy)) = slide {
                     v = dx.hypot(dy);
                     n = (dx / v, dy / v);
@@ -433,41 +640,74 @@ impl JumpLab {
                 }
                 // (a little headroom to spare in the air: MAP09's jump through a door)
                 let zz = z;
-                let ok = move |h: Heights| h.floor <= zz + MAX_STEP && h.ceiling - zz.max(h.floor) >= PLAYER_HEIGHT + FLIGHT_HEADROOM;
+                let ok = move |h: Heights| {
+                    h.floor <= zz + MAX_STEP
+                        && h.ceiling - zz.max(h.floor) >= PLAYER_HEIGHT + FLIGHT_HEADROOM
+                };
                 let Some(h) = pick(&mut chosen, s, &ok, true) else {
                     // (a floor she'd come down on, but no room under its ceiling this high)
-                    if let Some(c) = ceiling.filter(|_| input.options[s].iter().any(|h| h.floor <= zz + MAX_STEP && h.ceiling - h.floor >= PLAYER_HEIGHT)) {
+                    if let Some(c) = ceiling.filter(|_| {
+                        input.options[s].iter().any(|h| {
+                            h.floor <= zz + MAX_STEP && h.ceiling - h.floor >= PLAYER_HEIGHT
+                        })
+                    }) {
                         c.set(true);
                     }
                     return None;
                 };
                 under.push((s, h));
             }
-            let fmax = under.iter().map(|(_, h)| h.floor).fold(f64::NEG_INFINITY, f64::max);
+            let fmax = under
+                .iter()
+                .map(|(_, h)| h.floor)
+                .fold(f64::NEG_INFINITY, f64::max);
             let floor_of = |s: usize| under.iter().find(|(t, _)| *t == s).map(|(_, h)| h.floor);
             (x, y) = nn;
             z += vz;
             if z <= fmax {
                 z = fmax;
                 vz = 0.0;
-                let ahead = mesh.poly_at((x + n.0 * (PLAYER_RADIUS - 1.0), y + n.1 * (PLAYER_RADIUS - 1.0)));
-                if let Some(ahead) = ahead.filter(|&p| mesh.poly(p).sector != src_sector && floor_of(mesh.poly(p).sector) == Some(fmax)) {
+                let ahead = mesh.poly_at((
+                    x + n.0 * (PLAYER_RADIUS - 1.0),
+                    y + n.1 * (PLAYER_RADIUS - 1.0),
+                ));
+                if let Some(ahead) = ahead.filter(|&p| {
+                    mesh.poly(p).sector != src_sector && floor_of(mesh.poly(p).sector) == Some(fmax)
+                }) {
                     if fmax <= below + MAX_STEP && plain(mesh.poly(ahead).sector) {
                         return None; // just dropped to the floor below: an ordinary edge
                     }
-                    let mut on = (x + n.0 * (PLAYER_RADIUS + 8.0), y + n.1 * (PLAYER_RADIUS + 8.0));
+                    let mut on = (
+                        x + n.0 * (PLAYER_RADIUS + 8.0),
+                        y + n.1 * (PLAYER_RADIUS + 8.0),
+                    );
                     let mut land = mesh.poly_at(on);
                     // (further on: the same sector, or one at the same height past a strip too
                     // narrow to stop in: MAP06's, 8 wide, behind the fake wall)
                     let level = |l: usize| {
                         let s = mesh.poly(l).sector;
-                        s == mesh.poly(ahead).sector || chosen.get(s).or_else(|| input.options[s].first().copied()).is_some_and(|h| h.floor == fmax)
+                        s == mesh.poly(ahead).sector
+                            || chosen
+                                .get(s)
+                                .or_else(|| input.options[s].first().copied())
+                                .is_some_and(|h| h.floor == fmax)
                     };
                     if land.is_none_or(|l| !level(l)) {
                         land = Some(ahead);
-                        on = (x + n.0 * (PLAYER_RADIUS - 1.0), y + n.1 * (PLAYER_RADIUS - 1.0));
+                        on = (
+                            x + n.0 * (PLAYER_RADIUS - 1.0),
+                            y + n.1 * (PLAYER_RADIUS - 1.0),
+                        );
                     }
-                    return Some(Jump::new(src, land?, on, back, takeoff, v, requires(&chosen)));
+                    return Some(Jump::new(
+                        src,
+                        land?,
+                        on,
+                        back,
+                        takeoff,
+                        v,
+                        requires(&chosen),
+                    ));
                 }
                 if !airborne {
                     // still on the ledge, the box hanging over the drop: fine for a few tics,
@@ -485,19 +725,40 @@ impl JumpLab {
                     let support: Vec<Point> = all
                         .iter()
                         .copied()
-                        .filter(|&(dx, dy)| mesh.poly_at((x + dx, y + dy)).is_some_and(|q| mesh.poly(q).sector != src_sector && floor_of(mesh.poly(q).sector) == Some(fmax)))
+                        .filter(|&(dx, dy)| {
+                            mesh.poly_at((x + dx, y + dy)).is_some_and(|q| {
+                                mesh.poly(q).sector != src_sector
+                                    && floor_of(mesh.poly(q).sector) == Some(fmax)
+                            })
+                        })
                         .collect();
-                    let &(dx, dy) = support.iter().min_by(|a, b| (a.0.abs() + a.1.abs()).total_cmp(&(b.0.abs() + b.1.abs())))?;
+                    let &(dx, dy) = support.iter().min_by(|a, b| {
+                        (a.0.abs() + a.1.abs()).total_cmp(&(b.0.abs() + b.1.abs()))
+                    })?;
                     let on = (x + dx * 0.8, y + dy * 0.8);
                     let land = mesh.poly_at(on)?;
-                    if floor_of(mesh.poly(land).sector) != Some(fmax) || fmax <= below + MAX_STEP && plain(mesh.poly(land).sector) {
+                    if floor_of(mesh.poly(land).sector) != Some(fmax)
+                        || fmax <= below + MAX_STEP && plain(mesh.poly(land).sector)
+                    {
                         return None;
                     }
-                    return Some(Jump::new(src, land, on, back, takeoff, v, requires(&chosen)));
+                    return Some(Jump::new(
+                        src,
+                        land,
+                        on,
+                        back,
+                        takeoff,
+                        v,
+                        requires(&chosen),
+                    ));
                 }
             } else {
                 airborne = true;
-                vz = if vz == 0.0 { -2.0 * GRAVITY } else { vz - GRAVITY };
+                vz = if vz == 0.0 {
+                    -2.0 * GRAVITY
+                } else {
+                    vz - GRAVITY
+                };
             }
         }
         None

@@ -4,9 +4,9 @@
 //! seen from the eyes, as slopes over the distance along the trace). The REJECT table is
 //! left out (it only ever says no early, and maps rarely lie with it).
 
+use crate::det::HashMap;
 use crate::geom::{cells, Cell, Point, GRID};
 use crate::map::MapData;
-use crate::det::HashMap;
 
 /// A line as the trace needs it.
 struct SightLine {
@@ -64,9 +64,14 @@ impl LineOfSight {
         // Each opening only narrows the same slope interval. Intersecting the windows in
         // grid order (even visiting a line twice) gives the same answer and lets a wall
         // stop the trace before we visit the remaining cells.
-        for &li in segment_cells(a, b).filter_map(|c| self.grid.get(&c)).flatten() {
+        for &li in segment_cells(a, b)
+            .filter_map(|c| self.grid.get(&c))
+            .flatten()
+        {
             let l = &self.lines[li];
-            let Some(frac) = crossing(a, b, l.a, l.b) else { continue };
+            let Some(frac) = crossing(a, b, l.a, l.b) else {
+                continue;
+            };
             let (Some(f), Some(k)) = (l.front, l.back) else {
                 return false;
             };
@@ -133,14 +138,32 @@ mod tests {
     fn crossing_finds_the_fraction() {
         let t = crossing((0.0, 0.0), (10.0, 0.0), (5.0, -1.0), (5.0, 1.0));
         assert_eq!(t, Some(0.5));
-        assert_eq!(crossing((0.0, 0.0), (4.0, 0.0), (5.0, -1.0), (5.0, 1.0)), None);
+        assert_eq!(
+            crossing((0.0, 0.0), (4.0, 0.0), (5.0, -1.0), (5.0, 1.0)),
+            None
+        );
     }
 
     #[test]
     fn openings_share_a_slope_window_in_any_visit_order() {
-        let opening = |x, back| SightLine { a: (x, 0.0), b: (x, 10.0), front: Some(0), back: Some(back) };
-        let from = Body { x: 0.0, y: 5.0, z: -3.0, height: 4.0 }; // eye at zero
-        let to = Body { x: 100.0, y: 5.0, z: 0.0, height: 100.0 };
+        let opening = |x, back| SightLine {
+            a: (x, 0.0),
+            b: (x, 10.0),
+            front: Some(0),
+            back: Some(back),
+        };
+        let from = Body {
+            x: 0.0,
+            y: 5.0,
+            z: -3.0,
+            height: 4.0,
+        }; // eye at zero
+        let to = Body {
+            x: 100.0,
+            y: 5.0,
+            z: 0.0,
+            height: 100.0,
+        };
         for visits in [vec![0, 1], vec![1, 0, 1]] {
             let sight = LineOfSight {
                 lines: vec![opening(25.0, 1), opening(75.0, 2)],

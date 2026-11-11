@@ -35,7 +35,9 @@ impl Tuning {
 
     /// A run's: the file's if one's given, else the defaults.
     pub fn from(path: Option<&std::path::Path>) -> Result<std::rc::Rc<Tuning>, String> {
-        Ok(std::rc::Rc::new(path.map_or_else(|| Ok(Tuning::default()), Tuning::load)?))
+        Ok(std::rc::Rc::new(
+            path.map_or_else(|| Ok(Tuning::default()), Tuning::load)?,
+        ))
     }
 
     /// These numbers with some others over them (`over`: any groups and fields, as a file has
@@ -43,7 +45,10 @@ impl Tuning {
     pub fn with(&self, over: &serde_json::Value) -> Result<Tuning, String> {
         let mut all = serde_json::to_value(self).map_err(|e| e.to_string())?;
         for (group, fields) in over.as_object().into_iter().flatten() {
-            let into = all.get_mut(group).and_then(serde_json::Value::as_object_mut).ok_or_else(|| format!("no tuning group called {group}"))?;
+            let into = all
+                .get_mut(group)
+                .and_then(serde_json::Value::as_object_mut)
+                .ok_or_else(|| format!("no tuning group called {group}"))?;
             for (field, value) in fields.as_object().into_iter().flatten() {
                 if !into.contains_key(field) {
                     return Err(format!("no tuning field called {group}.{field}"));
@@ -818,7 +823,10 @@ mod tests {
 
     #[test]
     fn a_file_changes_only_what_it_names() {
-        let t: Tuning = serde_json::from_str(r#"{"engage": {"leave_be": 20.0}, "dodge": {"strafe_tics": [10, 30]}}"#).unwrap();
+        let t: Tuning = serde_json::from_str(
+            r#"{"engage": {"leave_be": 20.0}, "dodge": {"strafe_tics": [10, 30]}}"#,
+        )
+        .unwrap();
         let d = Tuning::default();
         assert_eq!(t.engage.leave_be, 20.0);
         assert_eq!(t.dodge.strafe_tics, (10, 30));
@@ -835,10 +843,14 @@ mod tests {
     #[test]
     fn numbers_put_over_others() {
         let d = Tuning::default();
-        let t = d.with(&serde_json::json!({"retreat": {"health": 55.0}})).unwrap();
+        let t = d
+            .with(&serde_json::json!({"retreat": {"health": 55.0}}))
+            .unwrap();
         assert_eq!(t.retreat.health, 55.0);
         assert_eq!(t.engage, d.engage);
-        assert!(d.with(&serde_json::json!({"retreat": {"helth": 55.0}})).is_err());
+        assert!(d
+            .with(&serde_json::json!({"retreat": {"helth": 55.0}}))
+            .is_err());
     }
 
     #[test]

@@ -7,7 +7,9 @@ mod drive;
 
 #[test]
 fn bot_recovers_after_being_knocked_off_course() {
-    let Some((exited, replans, events)) = drive::drive(true) else { return };
+    let Some((exited, replans, events)) = drive::drive(true) else {
+        return;
+    };
     assert!(exited, "{}", events.join("\n"));
     assert!(replans >= 1, "{}", events.join("\n"));
 }

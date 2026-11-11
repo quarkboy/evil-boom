@@ -2,12 +2,14 @@
 //! it), whether she's armed, what she can do with it all (firepower, outmatched), and the gun
 //! she'd fight a monster with, every rule for choosing it in `best_gun`.
 
-use super::style::window;
 use super::steering::CLAW_REACH;
+use super::style::window;
 use super::{mon, Combat, SLOTS};
 use crate::geom::dist;
 use crate::motor::{Observation, Thing, TICRATE};
-use crate::tactical::bestiary::{claw_max, melee_at, punchable, weapon, weapon_in, Attack, Monster, Weapon, CHAINSAW};
+use crate::tactical::bestiary::{
+    claw_max, melee_at, punchable, weapon, weapon_in, Attack, Monster, Weapon, CHAINSAW,
+};
 
 /// tics to the first shot of a gun already up
 const FIRST_SHOT: f64 = 4.0;
@@ -60,7 +62,8 @@ impl Odds {
         if self.unhurt {
             return false;
         }
-        self.kill_secs > secs || (!self.fists && (self.kill_secs > self.last_secs || self.ammo_short))
+        self.kill_secs > secs
+            || (!self.fists && (self.kill_secs > self.last_secs || self.ammo_short))
     }
 }
 
@@ -70,7 +73,11 @@ impl Combat {
     }
 
     pub(super) fn ammo(obs: &Observation, slot: i32) -> i32 {
-        obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n)
+        obs.ammo
+            .iter()
+            .flatten()
+            .find(|(s, _)| *s == slot)
+            .map_or(0, |(_, n)| *n)
     }
 
     /// Damage a second she can do with the best gun she has ammo for (the fist's, else: as a
@@ -102,10 +109,20 @@ impl Combat {
     /// and two rockets: closed in on): `now.odds`, and `now.outmatched` by it.
     pub(super) fn odds_in_sight(&self, obs: &Observation) -> Odds {
         let remembered = self.remembered(obs);
-        let mut near: Vec<&'static str> = self.visible.iter().chain(&remembered).filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0 || self.sniper(obs, t.name)).map(|t| t.name).collect();
+        let mut near: Vec<&'static str> = self
+            .visible
+            .iter()
+            .chain(&remembered)
+            .filter(|t| dist((t.x, t.y), obs.pos()) < 1200.0 || self.sniper(obs, t.name))
+            .map(|t| t.name)
+            .collect();
         // (and what she knows from before is standing close by, not yet seen this time: what
         // she's about to walk in on)
-        near.extend(self.expected(obs.pos(), self.tune.senses.expect_range).iter().map(|s| s.name));
+        near.extend(
+            self.expected(obs.pos(), self.tune.senses.expect_range)
+                .iter()
+                .map(|s| s.name),
+        );
         self.odds(obs, &near)
     }
 
@@ -115,7 +132,8 @@ impl Combat {
     /// their sight left undone, E3M9 and MAP06 stuck 4/8 and 4/16.
     pub fn sniper(&self, obs: &Observation, name: &str) -> bool {
         let m = mon(name);
-        m.attack == Attack::Hitscan && f64::from(m.health) / self.firepower(obs).max(1.0) > self.tune.hide.duck_fight
+        m.attack == Attack::Hitscan
+            && f64::from(m.health) / self.firepower(obs).max(1.0) > self.tune.hide.duck_fight
     }
 
     /// A hitscan shooter she'd see off in a few seconds with what she has (not a sniper): fought,
@@ -134,7 +152,9 @@ impl Combat {
     /// armor in hand, the spider mastermind fighting a cacodemon: walked on in its sight.
     pub fn takes_on(&self, obs: &Observation, name: &str) -> bool {
         let m = mon(name);
-        self.sniper(obs, name) && f64::from(m.health) / self.firepower(obs).max(1.0) <= Self::lasts(obs) / m.threat.max(1.0)
+        self.sniper(obs, name)
+            && f64::from(m.health) / self.firepower(obs).max(1.0)
+                <= Self::lasts(obs) / m.threat.max(1.0)
     }
 
     /// Her odds against these, with what she has (`obs`: as she is, or as she'd be with
@@ -143,12 +163,20 @@ impl Combat {
         let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
         // (berserk, against nothing but what she'd punch: the fist, ammo or none)
         let fists = Self::fists_for(obs, names);
-        let firepower = if fists { self.firepower(obs).max(weapon_in(1, obs).dps()) } else { self.firepower(obs) };
+        let firepower = if fists {
+            self.firepower(obs).max(weapon_in(1, obs).dps())
+        } else {
+            self.firepower(obs)
+        };
         let rate: f64 = names.iter().map(|n| mon(n).threat).sum();
         Odds {
             unhurt: self.invulnerable(obs.tic),
             kill_secs: hp / firepower,
-            last_secs: if rate > 0.0 { Self::lasts(obs) / rate } else { f64::INFINITY },
+            last_secs: if rate > 0.0 {
+                Self::lasts(obs) / rate
+            } else {
+                f64::INFINITY
+            },
             fists,
             ammo_short: !fists && self.ammo_short_for(obs, names),
         }
@@ -173,7 +201,10 @@ impl Combat {
     /// for a box of four shells, nothing else to shoot with, clawed dead with it in hand).
     pub fn ammo_short_for_each(&self, obs: &Observation, names: &[&str]) -> bool {
         let hp: f64 = names.iter().map(|n| f64::from(mon(n).health)).sum();
-        let most = names.iter().map(|n| f64::from(mon(n).health)).fold(0.0, f64::max);
+        let most = names
+            .iter()
+            .map(|n| f64::from(mon(n).health))
+            .fold(0.0, f64::max);
         self.ammo_short_of(obs, names, hp, most)
     }
 
@@ -190,7 +221,12 @@ impl Combat {
         // (or what she's seen it lose, to whatever: more than she's put in, another's been at it.
         // MAP20, the cyberdemon left at 600-900 by the spider mastermind, held too much for her
         // 63 bullets and 5 shells at its full 4000)
-        let lost = self.put_in.get(&id).copied().unwrap_or(0.0).max(self.seen_hurt.get(&id).copied().map_or(0.0, f64::from));
+        let lost = self
+            .put_in
+            .get(&id)
+            .copied()
+            .unwrap_or(0.0)
+            .max(self.seen_hurt.get(&id).copied().map_or(0.0, f64::from));
         let hp = f64::from(mon(name).health) - lost;
         self.ammo_short_of(obs, &[name], hp.max(0.0), f64::INFINITY)
     }
@@ -207,8 +243,13 @@ impl Combat {
                 .filter(|s| held.contains(s))
                 .map(|&s| {
                     let w = weapon_in(s, obs);
-                    let per = if boss && s == 5 { w.damage / 2.0 } else { w.damage };
-                    f64::from(Self::ammo(obs, s) / w.ammo_per_shot.max(1)) * (per * w.hits(radius, 384.0)).min(most)
+                    let per = if boss && s == 5 {
+                        w.damage / 2.0
+                    } else {
+                        w.damage
+                    };
+                    f64::from(Self::ammo(obs, s) / w.ammo_per_shot.max(1))
+                        * (per * w.hits(radius, 384.0)).min(most)
                 })
                 .fold(0.0, f64::max);
             worth += best;
@@ -220,7 +261,11 @@ impl Combat {
     /// Her health as it would go under fire: armor takes its share of each hit (a third green,
     /// half blue) till it's gone (P_DamageMobj), so so much more health's worth.
     pub fn lasts(obs: &Observation) -> f64 {
-        Self::lasts_with(obs.health.unwrap_or(100.0), obs.armor.unwrap_or(0.0), obs.armor_type.unwrap_or(0))
+        Self::lasts_with(
+            obs.health.unwrap_or(100.0),
+            obs.armor.unwrap_or(0.0),
+            obs.armor_type.unwrap_or(0),
+        )
     }
 
     /// ...with that health, and that many points of armor of that kind (1 green, 2 blue).
@@ -234,7 +279,11 @@ impl Combat {
         // (all her health lost with the armor holding: health / (1 - share) taken, the armor's
         // share of it within what she has; else the armor gone first, then health alone)
         let all = health / (1.0 - share);
-        if armor >= all * share { all } else { health + armor }
+        if armor >= all * share {
+            all
+        } else {
+            health + armor
+        }
     }
 
     /// What picking that up would add to how much she can take (`lasts`), by the game's rules
@@ -244,7 +293,11 @@ impl Combat {
     /// of each hit where it was half, and she lasts less for it; over fewer blue points than
     /// half her health it's the better. A megaarmor on full health doubles what she can take.
     pub fn pickup_gain(obs: &Observation, name: &str) -> f64 {
-        let (health, armor, kind) = (obs.health.unwrap_or(100.0), obs.armor.unwrap_or(0.0), obs.armor_type.unwrap_or(0));
+        let (health, armor, kind) = (
+            obs.health.unwrap_or(100.0),
+            obs.armor.unwrap_or(0.0),
+            obs.armor_type.unwrap_or(0),
+        );
         let after = match name {
             "GreenArmor" if armor < 100.0 => (health, 100.0, 1),
             "BlueArmor" if armor < 200.0 => (health, 200.0, 2),
@@ -271,7 +324,10 @@ impl Combat {
         let other = self.other_gun(obs, t);
         SLOTS.iter().any(|&s| {
             let w = weapon_in(s, obs);
-            held.contains(&s) && !(s == 2 && other) && Self::ammo(obs, s) >= w.ammo_per_shot && self.in_reach(&w, t, d)
+            held.contains(&s)
+                && !(s == 2 && other)
+                && Self::ammo(obs, s) >= w.ammo_per_shot
+                && self.in_reach(&w, t, d)
         })
     }
 
@@ -279,8 +335,10 @@ impl Combat {
     /// safe)? Then the pistol stays down.
     fn other_gun(&self, obs: &Observation, t: &Thing) -> bool {
         let held = Self::held(obs);
-        held.iter().any(|&s| matches!(s, 3 | 4 | 6 | 7) && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot.max(1))
-            || (held.contains(&5) && Self::ammo(obs, 5) >= 1 && self.rocket_safe(obs, t))
+        held.iter().any(|&s| {
+            matches!(s, 3 | 4 | 6 | 7)
+                && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot.max(1)
+        }) || (held.contains(&5) && Self::ammo(obs, 5) >= 1 && self.rocket_safe(obs, t))
     }
 
     /// Has she a gun with ammo for it (more than the fist), or her fists berserk with nothing
@@ -288,18 +346,24 @@ impl Combat {
     /// shooting her, berserk and out of ammo; "armed", the ammo she knew of never gone for)
     pub fn armed(&self, obs: &Observation) -> bool {
         let them = &self.now.about;
-        self.guns_armed(obs) || (Self::fists_for(obs, &them.iter().map(|t| t.name).collect::<Vec<_>>()) && !them.iter().any(|t| self.out_of_fist_reach(obs, t)))
+        self.guns_armed(obs)
+            || (Self::fists_for(obs, &them.iter().map(|t| t.name).collect::<Vec<_>>())
+                && !them.iter().any(|t| self.out_of_fist_reach(obs, t)))
     }
 
     /// Has she a gun with ammo for it (more than slot 1's)?
     pub(super) fn guns_armed(&self, obs: &Observation) -> bool {
         let held = Self::held(obs);
-        SLOTS.iter().any(|&s| s != 1 && held.contains(&s) && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot)
+        SLOTS.iter().any(|&s| {
+            s != 1 && held.contains(&s) && Self::ammo(obs, s) >= weapon_in(s, obs).ammo_per_shot
+        })
     }
 
     /// Berserk, and these all things she'd punch?
     fn fists_for(obs: &Observation, names: &[&str]) -> bool {
-        obs.berserk == Some(true) && Self::held(obs).contains(&1) && names.iter().all(|n| punchable(n))
+        obs.berserk == Some(true)
+            && Self::held(obs).contains(&1)
+            && names.iter().all(|n| punchable(n))
     }
 
     /// Next to nothing left to shoot with (the fist doesn't count).
@@ -334,15 +398,22 @@ impl Combat {
         // gun up's the one she was fighting it with; E3M8, the shotgun brought up each time the
         // spider mastermind went out of sight, the plasma rifle back each time it came in, 14
         // times, a second without a shot each)
-        if self.remaining().iter().any(|s| s.awake && mon(s.name).attack != Attack::None) {
+        if self
+            .remaining()
+            .iter()
+            .any(|s| s.awake && mon(s.name).attack != Attack::None)
+        {
             return None;
         }
         let held = Self::held(obs);
-        let want = [(3, 4), (4, 20), (6, 40), (2, 1)].into_iter().find(|&(slot, shots)| {
-            let w = weapon_in(slot, obs);
-            held.contains(&slot) && Self::ammo(obs, slot) >= w.ammo_per_shot * shots
-        })?;
-        (obs.weapon != Some(want.0) && obs.tic - self.switch_tic > self.tune.aim.switch_wait).then_some(want.0)
+        let want = [(3, 4), (4, 20), (6, 40), (2, 1)]
+            .into_iter()
+            .find(|&(slot, shots)| {
+                let w = weapon_in(slot, obs);
+                held.contains(&slot) && Self::ammo(obs, slot) >= w.ammo_per_shot * shots
+            })?;
+        (obs.weapon != Some(want.0) && obs.tic - self.switch_tic > self.tune.aim.switch_wait)
+            .then_some(want.0)
     }
 
     /// The gun she'd rather fight t with, wherever she stood: each gun judged from the nearest
@@ -368,14 +439,31 @@ impl Combat {
         // cacodemons 180 off with others about, E3M4; on a demon 1474 off, beyond the spray)
         let me = obs.pos();
         let shot = crate::motor::heading(me, (t.x, t.y));
-        let crowd = self.visible.iter().filter(|m| dist((m.x, m.y), me) < BFG_SPRAY && crate::motor::norm(crate::motor::heading(me, (m.x, m.y)) - shot).abs() < 45.0).count();
+        let crowd = self
+            .visible
+            .iter()
+            .filter(|m| {
+                dist((m.x, m.y), me) < BFG_SPRAY
+                    && crate::motor::norm(crate::motor::heading(me, (m.x, m.y)) - shot).abs() < 45.0
+            })
+            .count();
         // (a boss seen and still about, t not it: the big guns' ammo kept for it, as a player
         // would; E3M8, 138 cells on two cacodemons, the spider mastermind left to 22 rockets)
-        let saving = !info.boss && self.remaining().iter().any(|m| m.id != t.id && mon(m.name).boss);
+        let saving = !info.boss
+            && self
+                .remaining()
+                .iter()
+                .any(|m| m.id != t.id && mon(m.name).boss);
         let (mut best, mut cost) = (obs.weapon.unwrap_or(2), f64::INFINITY);
         let mut blocked = None;
         // (others awake shooting at her from a distance, t aside)
-        let pelted = self.now.engaged.iter().any(|m| m.id != t.id && matches!(mon(m.name).attack, Attack::Hitscan | Attack::Missile | Attack::Fire));
+        let pelted = self.now.engaged.iter().any(|m| {
+            m.id != t.id
+                && matches!(
+                    mon(m.name).attack,
+                    Attack::Hitscan | Attack::Missile | Attack::Fire
+                )
+        });
         // (the pistol only for want of any other gun with a shot in it, never for its reach: the
         // user's, MAP07, the super shotgun put away for it at mancubi 800 off. Taps at barrels,
         // switches and walls are the route's own gun, not this)
@@ -392,7 +480,9 @@ impl Combat {
             // now; MAP08, demons on her at 50-180 with 11 rockets, the launcher left out for it,
             // backing off with the fist up, bitten to death)
             let safe_there = d > here && d >= Self::rocket_clear() + info.radius;
-            if (w.ammo_per_shot > 0 && have < w.ammo_per_shot) || (slot == 5 && !safe_there && !self.rocket_safe(obs, t)) {
+            if (w.ammo_per_shot > 0 && have < w.ammo_per_shot)
+                || (slot == 5 && !safe_there && !self.rocket_safe(obs, t))
+            {
                 continue;
             }
             if slot == 1 && !self.in_reach(&w, t, d) {
@@ -417,8 +507,17 @@ impl Combat {
             // down and 16 up (LOWERSPEED, RAISESPEED), is longer than any claw's cycle, a demon's
             // 24; MAP28 HMP, the saw brought up 50 off a demon at 43 health, 69 bullets in the
             // pistol: bitten to 15 mid-switch, then backing off with the saw up, dead)
-            let claws = if obs.weapon != Some(1) && here < CLAW_REACH { 2.0 } else { 1.0 };
-            if slot == 1 && ((w == CHAINSAW && !melee_at(&w, t.name)) || (health < self.tune.engage.low_health && w != weapon(1)) || claws * claw_max(t.name) >= health) && self.guns_armed(obs) {
+            let claws = if obs.weapon != Some(1) && here < CLAW_REACH {
+                2.0
+            } else {
+                1.0
+            };
+            if slot == 1
+                && ((w == CHAINSAW && !melee_at(&w, t.name))
+                    || (health < self.tune.engage.low_health && w != weapon(1))
+                    || claws * claw_max(t.name) >= health)
+                && self.guns_armed(obs)
+            {
                 // (not the saw at what it won't keep flinching, with a gun to hand: a cacodemon's
                 // bites, a baron's claws come through it; nor the saw or the berserk fist at
                 // anything, hurt: E3M4, at 14 health, up to a demon with the saw, one bite; nor
@@ -427,7 +526,12 @@ impl Combat {
                 // and never a shot for 600 tics, then clawed to death)
                 continue;
             }
-            if slot == 1 && melee_at(&w, t.name) && here > w.reach - self.tune.engage.melee_slack && pelted && self.guns_armed(obs) {
+            if slot == 1
+                && melee_at(&w, t.name)
+                && here > w.reach - self.tune.engage.melee_slack
+                && pelted
+                && self.guns_armed(obs)
+            {
                 // (nor going in up close, a gun to hand, while others shoot at her: straight in
                 // and standing at one, every other's shots free; MAP01 UV, the saw taken to the
                 // nearest of five imps, killed by the other four's fireballs, 67 bullets unfired.
@@ -436,17 +540,34 @@ impl Combat {
             }
             let mut c = self.time_to_kill(&w, t, d) + (d - here).abs() / GET_THERE;
             if w.ammo_per_shot > 0 {
-                let shots = (f64::from(info.health) / (w.damage_on(&info) * w.hits(info.radius, d)).max(1.0)).max(1.0);
+                let shots = (f64::from(info.health)
+                    / (w.damage_on(&info) * w.hits(info.radius, d)).max(1.0))
+                .max(1.0);
                 let (per, low) = ammo_cost(slot);
-                let kept = if saving && slot >= 5 { self.tune.guns.boss_save } else { 1.0 };
-                c += shots * f64::from(w.ammo_per_shot) * per * kept * (low / f64::from(have)).max(1.0);
+                let kept = if saving && slot >= 5 {
+                    self.tune.guns.boss_save
+                } else {
+                    1.0
+                };
+                c += shots
+                    * f64::from(w.ammo_per_shot)
+                    * per
+                    * kept
+                    * (low / f64::from(have)).max(1.0);
             }
             if info.attack == Attack::Fire && t.attack >= 0 {
                 // (winding up its fire: what counts is the chance of a flinch before it goes off,
                 // the shots that land in time, after the switch, the reload, the launch, the
                 // flight; Astra's branch's reckoning)
-                let chance = self.interrupt_chance(obs, &w, t, d, f64::from(super::steering::VILE_BLAST - t.attack));
-                c = self.tune.guns.vile_kill_weight * c + self.tune.guns.vile_missed * (1.0 - chance);
+                let chance = self.interrupt_chance(
+                    obs,
+                    &w,
+                    t,
+                    d,
+                    f64::from(super::steering::VILE_BLAST - t.attack),
+                );
+                c = self.tune.guns.vile_kill_weight * c
+                    + self.tune.guns.vile_missed * (1.0 - chance);
             } else if info.attack == Attack::Fire {
                 // (an arch-vile flinches out of its fire one hit in 25: the super shotgun's 20
                 // pellets, plasma's stream, the chaingun's, stun it best)
@@ -464,7 +585,11 @@ impl Combat {
                 // a second without a shot each time; E3M8 lost with it on 20 health)
                 c *= self.tune.guns.held_keep;
             }
-            if slot == 5 && self.rocket_blocked.is_some_and(|(id, tic)| id == t.id && obs.tic - tic < self.tune.guns.blocked_keep) {
+            if slot == 5
+                && self.rocket_blocked.is_some_and(|(id, tic)| {
+                    id == t.id && obs.tic - tic < self.tune.guns.blocked_keep
+                })
+            {
                 blocked = Some(c);
                 continue;
             }
@@ -485,14 +610,25 @@ impl Combat {
     /// The chance a shot at t with w makes it flinch within `window` tics: the shots that land
     /// in time (a switch first, what's left of the reload, the launch, the flight), each hit
     /// a roll of its pain chance.
-    fn interrupt_chance(&self, obs: &Observation, w: &Weapon, t: &Thing, d: f64, window: f64) -> f64 {
+    fn interrupt_chance(
+        &self,
+        obs: &Observation,
+        w: &Weapon,
+        t: &Thing,
+        d: f64,
+        window: f64,
+    ) -> f64 {
         if w.ammo_per_shot == 0 {
             return 0.0;
         }
         let ready = if Some(w.slot) != obs.weapon {
             self.tune.aim.switch_wait as f64
         } else {
-            self.last_shot.filter(|&(s, _)| s == w.slot).map_or(0.0, |(_, tic)| (tic as f64 + w.cycle - obs.tic as f64).max(0.0))
+            self.last_shot
+                .filter(|&(s, _)| s == w.slot)
+                .map_or(0.0, |(_, tic)| {
+                    (tic as f64 + w.cycle - obs.tic as f64).max(0.0)
+                })
         };
         let launch = match w.slot {
             3 => 3.0,
@@ -505,7 +641,8 @@ impl Combat {
         if left < 0.0 {
             return 0.0;
         }
-        let shots = ((left / w.cycle).floor() + 1.0).min(f64::from(Self::ammo(obs, w.slot) / w.ammo_per_shot));
+        let shots = ((left / w.cycle).floor() + 1.0)
+            .min(f64::from(Self::ammo(obs, w.slot) / w.ammo_per_shot));
         let rolls = w.pellets * w.hits(mon(t.name).radius, d);
         1.0 - (1.0 - VILE_PAIN).powf(shots * rolls)
     }

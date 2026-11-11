@@ -33,8 +33,20 @@ impl Link {
         let lost_w = lost_tx.clone();
         thread::spawn(move || write_all(stream, &out_rx, &lost_w));
         thread::spawn(move || read_all(reader, &cmd_tx, &lost_tx));
-        let link = Link { out, commands, lost, last_state: None };
-        link.send(FromGame::Hello { protocol: PROTOCOL, pid: std::process::id(), commit: crate::config::COMMIT.to_string(), wad: wad.to_string(), map: map.to_uppercase(), maps });
+        let link = Link {
+            out,
+            commands,
+            lost,
+            last_state: None,
+        };
+        link.send(FromGame::Hello {
+            protocol: PROTOCOL,
+            pid: std::process::id(),
+            commit: crate::config::COMMIT.to_string(),
+            wad: wad.to_string(),
+            map: map.to_uppercase(),
+            maps,
+        });
         Ok(link)
     }
 
@@ -70,7 +82,9 @@ impl Link {
 
 fn write_all(mut stream: TcpStream, out: &Receiver<FromGame>, lost: &Sender<String>) {
     for m in out {
-        let Ok(line) = serde_json::to_string(&m) else { continue };
+        let Ok(line) = serde_json::to_string(&m) else {
+            continue;
+        };
         if let Err(e) = writeln!(stream, "{line}").and_then(|()| stream.flush()) {
             let _ = lost.send(e.to_string());
             return;

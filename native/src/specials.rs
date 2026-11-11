@@ -62,8 +62,16 @@ impl Trigger {
     }
 }
 
-const GEN_TRIGGERS: [Trigger; 8] =
-    [Trigger::W1, Trigger::WR, Trigger::S1, Trigger::SR, Trigger::G1, Trigger::GR, Trigger::D1, Trigger::DR];
+const GEN_TRIGGERS: [Trigger; 8] = [
+    Trigger::W1,
+    Trigger::WR,
+    Trigger::S1,
+    Trigger::SR,
+    Trigger::G1,
+    Trigger::GR,
+    Trigger::D1,
+    Trigger::DR,
+];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Category {
@@ -110,7 +118,14 @@ pub enum Color {
 }
 
 impl Key {
-    pub const ALL: [Key; 6] = [Key::BlueCard, Key::YellowCard, Key::RedCard, Key::RedSkull, Key::YellowSkull, Key::BlueSkull];
+    pub const ALL: [Key; 6] = [
+        Key::BlueCard,
+        Key::YellowCard,
+        Key::RedCard,
+        Key::RedSkull,
+        Key::YellowSkull,
+        Key::BlueSkull,
+    ];
 
     pub fn from_thing(kind: u16) -> Option<Key> {
         Key::ALL.into_iter().find(|&k| k as u16 == kind)
@@ -138,7 +153,14 @@ impl Key {
 
     /// The order the engine reports keys held in (blue card, yellow card, red card, blue
     /// skull, yellow skull, red skull).
-    pub const ENGINE_ORDER: [Key; 6] = [Key::BlueCard, Key::YellowCard, Key::RedCard, Key::BlueSkull, Key::YellowSkull, Key::RedSkull];
+    pub const ENGINE_ORDER: [Key; 6] = [
+        Key::BlueCard,
+        Key::YellowCard,
+        Key::RedCard,
+        Key::BlueSkull,
+        Key::YellowSkull,
+        Key::RedSkull,
+    ];
 }
 
 /// A set of keys held, as bits by `Key::ALL`'s order.
@@ -210,7 +232,9 @@ impl Lock {
             Lock::Blue => keys.has_color(Color::Blue),
             Lock::Yellow => keys.has_color(Color::Yellow),
             Lock::Any => !keys.is_empty(),
-            Lock::AllColors => [Color::Red, Color::Blue, Color::Yellow].into_iter().all(|c| keys.has_color(c)),
+            Lock::AllColors => [Color::Red, Color::Blue, Color::Yellow]
+                .into_iter()
+                .all(|c| keys.has_color(c)),
             Lock::AllSix => keys.covers(Key::ALL.into_iter().collect()),
             Lock::RedCard => keys.has(Key::RedCard),
             Lock::BlueCard => keys.has(Key::BlueCard),
@@ -434,8 +458,16 @@ const TABLE: &[Entry] = &[
     m(244, T::WR, C::Teleport, "silent line-to-line teleport"),
 ];
 
-const GEN_LOCKS: [Lock; 8] =
-    [Lock::Any, Lock::RedCard, Lock::BlueCard, Lock::YellowCard, Lock::RedSkull, Lock::BlueSkull, Lock::YellowSkull, Lock::AllSix];
+const GEN_LOCKS: [Lock; 8] = [
+    Lock::Any,
+    Lock::RedCard,
+    Lock::BlueCard,
+    Lock::YellowCard,
+    Lock::RedSkull,
+    Lock::BlueSkull,
+    Lock::YellowSkull,
+    Lock::AllSix,
+];
 const SPEEDS: [&str; 4] = ["slow", "normal", "fast", "turbo"];
 
 /// A lock that a card or a skull of its color opens alike.
@@ -472,31 +504,71 @@ fn generalized(special: u16) -> Option<LineSpecial> {
         let direction = if special & 0x40 != 0 { "up" } else { "down" };
         let crush = if special & 0x1000 != 0 { ", crush" } else { "" };
         return Some(if is_floor {
-            make(Category::Floor, format!("floor move {direction}{crush}"), Lock::None, monsters)
+            make(
+                Category::Floor,
+                format!("floor move {direction}{crush}"),
+                Lock::None,
+                monsters,
+            )
         } else {
-            make(Category::Ceiling, format!("ceiling move {direction}{crush}"), Lock::None, monsters)
+            make(
+                Category::Ceiling,
+                format!("ceiling move {direction}{crush}"),
+                Lock::None,
+                monsters,
+            )
         });
     }
     if special >= 0x3C00 {
-        let kind = ["open-wait-close", "open stay", "close-wait-open", "close"][usize::from((special >> 5) & 3)];
-        return Some(make(Category::Door, format!("door {kind}"), Lock::None, special & 0x80 != 0));
+        let kind = ["open-wait-close", "open stay", "close-wait-open", "close"]
+            [usize::from((special >> 5) & 3)];
+        return Some(make(
+            Category::Door,
+            format!("door {kind}"),
+            Lock::None,
+            special & 0x80 != 0,
+        ));
     }
     if special >= 0x3800 {
-        let kind = if special & 0x20 != 0 { "open stay" } else { "open-wait-close" };
+        let kind = if special & 0x20 != 0 {
+            "open stay"
+        } else {
+            "open-wait-close"
+        };
         let mut lock = GEN_LOCKS[usize::from((special >> 6) & 7)];
         if special & 0x200 != 0 {
             lock = skull_is_card(lock);
         }
-        return Some(make(Category::LockedDoor, format!("{} locked door {kind}", lock.value()), lock, false));
+        return Some(make(
+            Category::LockedDoor,
+            format!("{} locked door {kind}", lock.value()),
+            lock,
+            false,
+        ));
     }
     if special >= 0x3400 {
-        return Some(make(Category::Lift, "lift".into(), Lock::None, special & 0x20 != 0));
+        return Some(make(
+            Category::Lift,
+            "lift".into(),
+            Lock::None,
+            special & 0x20 != 0,
+        ));
     }
     if special >= 0x3000 {
-        return Some(make(Category::Stairs, "build stairs".into(), Lock::None, special & 0x20 != 0));
+        return Some(make(
+            Category::Stairs,
+            "build stairs".into(),
+            Lock::None,
+            special & 0x20 != 0,
+        ));
     }
     if special >= 0x2F80 {
-        return Some(make(Category::Crusher, "crusher".into(), Lock::None, special & 0x20 != 0));
+        return Some(make(
+            Category::Crusher,
+            "crusher".into(),
+            Lock::None,
+            special & 0x20 != 0,
+        ));
     }
     None
 }
@@ -554,7 +626,11 @@ pub fn classify_sector(special: u16) -> SectorInfo {
         _ => 0,
     };
     let boom = [0, 5, 10, 20][usize::from((special >> 5) & 3)];
-    SectorInfo { damage: vanilla.max(boom), secret: base == 9 || special & 0x80 != 0, ends_level: base == 11 }
+    SectorInfo {
+        damage: vanilla.max(boom),
+        secret: base == 9 || special & 0x80 != 0,
+        ends_level: base == 11,
+    }
 }
 
 #[cfg(test)]
@@ -564,7 +640,10 @@ mod tests {
     #[test]
     fn vanilla_and_generalized() {
         let d = classify_line(26).unwrap();
-        assert_eq!((d.trigger, d.category, d.lock), (Trigger::DR, Category::LockedDoor, Lock::Blue));
+        assert_eq!(
+            (d.trigger, d.category, d.lock),
+            (Trigger::DR, Category::LockedDoor, Lock::Blue)
+        );
         assert!(classify_line(1).unwrap().monsters);
         assert!(!classify_line(125).unwrap().players);
         assert_eq!(classify_line(9999).unwrap().category, Category::Other);
@@ -606,11 +685,20 @@ pub struct CrusherKind {
 /// The kind of crusher a line's special starts; None for anything else (a crusher-stop line too).
 pub fn crusher_kind(special: u16) -> Option<CrusherKind> {
     match special {
-        6 | 77 => Some(CrusherKind { speed: 2.0, holds: false }),
-        25 | 49 | 73 | 141 => Some(CrusherKind { speed: 1.0, holds: true }),
+        6 | 77 => Some(CrusherKind {
+            speed: 2.0,
+            holds: false,
+        }),
+        25 | 49 | 73 | 141 => Some(CrusherKind {
+            speed: 1.0,
+            holds: true,
+        }),
         0x2F80..0x3000 => {
             let code = (special & 0x18) >> 3;
-            Some(CrusherKind { speed: f64::from(1u16 << code), holds: code <= 1 })
+            Some(CrusherKind {
+                speed: f64::from(1u16 << code),
+                holds: code <= 1,
+            })
         }
         _ => None,
     }

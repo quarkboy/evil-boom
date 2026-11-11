@@ -84,7 +84,26 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Settings {
-        Settings { wad: "doom2".into(), map: "MAP01".into(), skill: 3, mortal: true, lives: 1, seed: None, episode: true, mode: "bot".into(), neuro_url: "ws://127.0.0.1:8000".into(), muted: false, sfx_volume: None, music_volume: None, master_volume: None, auto_restart: true, present: true, title_wait: true, layout: "stream".into(), panel_side: "right".into() }
+        Settings {
+            wad: "doom2".into(),
+            map: "MAP01".into(),
+            skill: 3,
+            mortal: true,
+            lives: 1,
+            seed: None,
+            episode: true,
+            mode: "bot".into(),
+            neuro_url: "ws://127.0.0.1:8000".into(),
+            muted: false,
+            sfx_volume: None,
+            music_volume: None,
+            master_volume: None,
+            auto_restart: true,
+            present: true,
+            title_wait: true,
+            layout: "stream".into(),
+            panel_side: "right".into(),
+        }
     }
 }
 
@@ -92,7 +111,10 @@ impl Settings {
     fn check(&self) -> Result<(), String> {
         if !crate::config::iwad_names().any(|n| n == self.wad) {
             // (a name, never a path: the page can't reach for files on the PC)
-            return Err(format!("wad: one of {}", crate::config::iwad_names().collect::<Vec<_>>().join(", ")));
+            return Err(format!(
+                "wad: one of {}",
+                crate::config::iwad_names().collect::<Vec<_>>().join(", ")
+            ));
         }
         crate::engine::episode_map(&self.map)?;
         if !(0..=5).contains(&self.skill) {
@@ -101,7 +123,9 @@ impl Settings {
         if !(1..=99).contains(&self.lives) {
             return Err("lives: 1-99".into());
         }
-        if !["stream", "watcher"].contains(&self.layout.as_str()) || !["right", "left"].contains(&self.panel_side.as_str()) {
+        if !["stream", "watcher"].contains(&self.layout.as_str())
+            || !["right", "left"].contains(&self.panel_side.as_str())
+        {
             return Err("layout: stream or watcher; panel_side: right or left".into());
         }
         if !["bot", "neuro", "gpt"].contains(&self.mode.as_str()) {
@@ -123,12 +147,22 @@ impl Settings {
             a.push("--mortal".into());
         }
         a.extend(["--lives".into(), self.lives.to_string()]);
-        a.extend(["--seed".into(), self.seed.map_or_else(|| "random".into(), |s| s.to_string())]);
+        a.extend([
+            "--seed".into(),
+            self.seed.map_or_else(|| "random".into(), |s| s.to_string()),
+        ]);
         if self.episode {
             a.push("--episode".into());
         }
         if self.present {
-            a.push(if self.title_wait { "--title" } else { "--present" }.into());
+            a.push(
+                if self.title_wait {
+                    "--title"
+                } else {
+                    "--present"
+                }
+                .into(),
+            );
         }
         if self.layout == "stream" {
             a.extend(["--stream".into(), self.panel_side.clone()]);
@@ -156,7 +190,11 @@ struct Saved {
 
 impl Default for Saved {
     fn default() -> Saved {
-        Saved { token: String::new(), settings: Settings::default(), neuro_urls: vec!["ws://127.0.0.1:8000".into()] }
+        Saved {
+            token: String::new(),
+            settings: Settings::default(),
+            neuro_urls: vec!["ws://127.0.0.1:8000".into()],
+        }
     }
 }
 
@@ -224,18 +262,25 @@ impl Shared {
     }
 
     fn save(&self) -> Result<(), String> {
-        let saved = Saved { token: self.token.clone(), settings: self.settings.clone(), neuro_urls: self.neuro_urls.clone() };
+        let saved = Saved {
+            token: self.token.clone(),
+            settings: self.settings.clone(),
+            neuro_urls: self.neuro_urls.clone(),
+        };
         let text = serde_json::to_string_pretty(&saved).map_err(|e| e.to_string())?;
         if let Some(dir) = self.saved_path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
-        std::fs::write(&self.saved_path, text).map_err(|e| format!("{}: {e}", self.saved_path.display()))
+        std::fs::write(&self.saved_path, text)
+            .map_err(|e| format!("{}: {e}", self.saved_path.display()))
     }
 
     fn send(&mut self, c: &Command) -> Result<(), String> {
         let line = serde_json::to_string(c).map_err(|e| e.to_string())?;
         let stream = self.to_game.as_mut().ok_or("no game connected")?;
-        writeln!(stream, "{line}").and_then(|()| stream.flush()).map_err(|e| format!("the game didn't take it: {e}"))
+        writeln!(stream, "{line}")
+            .and_then(|()| stream.flush())
+            .map_err(|e| format!("the game didn't take it: {e}"))
     }
 }
 
@@ -249,13 +294,19 @@ fn lock(hub: &Hub) -> MutexGuard<'_, Shared> {
 /// Serve the console on `bind` (host:port) till the program's stopped; `new_token`: the old token
 /// no longer works (one that's got out).
 pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
-    let saved_path = crate::config::root().join("config").join("console.local.json");
+    let saved_path = crate::config::root()
+        .join("config")
+        .join("console.local.json");
     let saved: Saved = match std::fs::read_to_string(&saved_path) {
         // (a file that's there but can't be read isn't written over: it's the streamer's)
         Ok(t) => serde_json::from_str(&t).map_err(|e| format!("{}: {e}", saved_path.display()))?,
         Err(_) => Saved::default(),
     };
-    let token = if saved.token.len() >= 16 && !new_token_wanted { saved.token } else { new_token() };
+    let token = if saved.token.len() >= 16 && !new_token_wanted {
+        saved.token
+    } else {
+        new_token()
+    };
     let control = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("the game's link: {e}"))?;
     let control_addr = control.local_addr().map_err(|e| e.to_string())?.to_string();
     let server = Server::http(bind).map_err(|e| format!("{bind}: {e}"))?;
@@ -317,7 +368,9 @@ fn session_log() -> Option<std::fs::File> {
 /// randomness), as hex.
 fn new_token() -> String {
     use std::hash::{BuildHasher, Hasher};
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
     (0..2u64)
         .map(|i| {
             let mut h = std::collections::hash_map::RandomState::new().build_hasher();
@@ -346,31 +399,52 @@ fn accept_games(control: &TcpListener, hub: &Hub) {
 }
 
 fn read_game(stream: TcpStream, hub: &Hub) {
-    let Ok(writer) = stream.try_clone() else { return };
+    let Ok(writer) = stream.try_clone() else {
+        return;
+    };
     writer.set_write_timeout(Some(Duration::from_secs(1))).ok();
     let mut writer = Some(writer);
     let mut ours = false;
     for line in BufReader::new(stream).lines().map_while(Result::ok) {
-        let Ok(m) = serde_json::from_str::<FromGame>(&line) else { continue };
+        let Ok(m) = serde_json::from_str::<FromGame>(&line) else {
+            continue;
+        };
         let mut s = lock(hub);
         match m {
-            FromGame::Hello { protocol, pid, commit, wad, map, maps } => {
+            FromGame::Hello {
+                protocol,
+                pid,
+                commit,
+                wad,
+                map,
+                maps,
+            } => {
                 if s.game.pid != Some(pid) {
-                    s.push(format!("[console] a game not started here tried to connect (pid {pid}): refused"));
+                    s.push(format!(
+                        "[console] a game not started here tried to connect (pid {pid}): refused"
+                    ));
                     return;
                 }
                 if protocol != PROTOCOL {
                     s.push(format!("[console] the game speaks protocol {protocol}, this console {PROTOCOL}: rebuild one of them"));
                 }
-                s.push(format!("[console] game connected: {wad} {map}, build {commit}"));
-                s.hello = Some(json!({ "pid": pid, "commit": commit, "wad": wad, "map": map, "maps": maps }));
+                s.push(format!(
+                    "[console] game connected: {wad} {map}, build {commit}"
+                ));
+                s.hello = Some(
+                    json!({ "pid": pid, "commit": commit, "wad": wad, "map": map, "maps": maps }),
+                );
                 s.heard = Some(Instant::now());
                 s.to_game = writer.take();
                 ours = true;
                 if s.game.start_muted {
                     let _ = s.send(&Command::Mute { on: true });
                 }
-                let (sfx, music, master) = (s.settings.sfx_volume, s.settings.music_volume, s.settings.master_volume);
+                let (sfx, music, master) = (
+                    s.settings.sfx_volume,
+                    s.settings.music_volume,
+                    s.settings.master_volume,
+                );
                 if sfx.is_some() || music.is_some() || master.is_some() {
                     let _ = s.send(&Command::Volume { sfx, music, master });
                 }
@@ -414,24 +488,49 @@ fn watch_child(hub: &Hub) {
             continue;
         };
         let crashed = crashed && !s.game.stopping;
-        let how = if s.game.stopping { "stopped".to_string() } else if s.game.hung { format!("{how} (hung)") } else { how };
+        let how = if s.game.stopping {
+            "stopped".to_string()
+        } else if s.game.hung {
+            format!("{how} (hung)")
+        } else {
+            how
+        };
         s.push(format!("[console] the game ended: {how}"));
         // (where she was, to go on from: the same WAD's level, as the game last told it)
-        let same_wad = s.hello.as_ref().and_then(|h| h.get("wad")).and_then(Value::as_str) == Some(s.settings.wad.as_str());
-        let at = s.state.as_ref().filter(|_| same_wad).map(|st| st.map.clone());
+        let same_wad = s
+            .hello
+            .as_ref()
+            .and_then(|h| h.get("wad"))
+            .and_then(Value::as_str)
+            == Some(s.settings.wad.as_str());
+        let at = s
+            .state
+            .as_ref()
+            .filter(|_| same_wad)
+            .map(|st| st.map.clone());
         s.child = None;
         s.to_game = None;
-        s.game = GameProc { last_exit: Some(how), ..GameProc::default() };
+        s.game = GameProc {
+            last_exit: Some(how),
+            ..GameProc::default()
+        };
         if crashed && s.settings.auto_restart {
             let now = Instant::now();
             s.crashes.retain(|t| now.duration_since(*t) < CRASH_WINDOW);
             s.crashes.push_back(now);
             if s.crashes.len() >= CRASH_LIMIT {
                 let n = s.crashes.len();
-                s.push(format!("[console] {n} crashes in {}s: not started again (start it from the page)", CRASH_WINDOW.as_secs()));
+                s.push(format!(
+                    "[console] {n} crashes in {}s: not started again (start it from the page)",
+                    CRASH_WINDOW.as_secs()
+                ));
                 s.crashes.clear();
             } else {
-                s.push(format!("[console] starting it again in {}s{}", RESTART_DELAY.as_secs(), at.as_ref().map_or(String::new(), |m| format!(", at {m}"))));
+                s.push(format!(
+                    "[console] starting it again in {}s{}",
+                    RESTART_DELAY.as_secs(),
+                    at.as_ref().map_or(String::new(), |m| format!(", at {m}"))
+                ));
                 let hub = Arc::clone(hub);
                 thread::spawn(move || {
                     thread::sleep(RESTART_DELAY);
@@ -457,8 +556,15 @@ fn check_hang(s: &mut Shared) {
         _ => false,
     };
     if silent {
-        let waited = if s.to_game.is_some() { HANG } else { HELLO_WAIT };
-        s.push(format!("[console] no word from the game in {}s: killed as hung", waited.as_secs()));
+        let waited = if s.to_game.is_some() {
+            HANG
+        } else {
+            HELLO_WAIT
+        };
+        s.push(format!(
+            "[console] no word from the game in {}s: killed as hung",
+            waited.as_secs()
+        ));
         s.game.hung = true;
         if let Some(c) = s.child.as_mut() {
             let _ = c.kill();
@@ -485,8 +591,29 @@ fn start_at(hub: &Hub, map: Option<String>) -> Result<(), String> {
     settings.check()?;
     let args = settings.args(&s.control_addr);
     let exe = s.exe.clone();
-    let mut child = Process::new(&exe).args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("{}: {e}", exe.display()))?;
-    for (out, tag) in [(child.stdout.take().map(|o| Box::new(o) as Box<dyn Read + Send>), "out"), (child.stderr.take().map(|o| Box::new(o) as Box<dyn Read + Send>), "err")] {
+    let mut child = Process::new(&exe)
+        .args(&args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("{}: {e}", exe.display()))?;
+    for (out, tag) in [
+        (
+            child
+                .stdout
+                .take()
+                .map(|o| Box::new(o) as Box<dyn Read + Send>),
+            "out",
+        ),
+        (
+            child
+                .stderr
+                .take()
+                .map(|o| Box::new(o) as Box<dyn Read + Send>),
+            "err",
+        ),
+    ] {
         if let Some(out) = out {
             let hub = Arc::clone(hub);
             thread::spawn(move || {
@@ -497,7 +624,15 @@ fn start_at(hub: &Hub, map: Option<String>) -> Result<(), String> {
         }
     }
     s.push(format!("[console] started: evil-boom {}", args.join(" ")));
-    s.game = GameProc { running: true, pid: Some(child.id()), last_exit: s.game.last_exit.take(), stopping: false, started: Some(Instant::now()), start_muted: s.settings.muted, hung: false };
+    s.game = GameProc {
+        running: true,
+        pid: Some(child.id()),
+        last_exit: s.game.last_exit.take(),
+        stopping: false,
+        started: Some(Instant::now()),
+        start_muted: s.settings.muted,
+        hung: false,
+    };
     s.heard = None;
     s.child = Some(child);
     s.hello = None;
@@ -542,27 +677,51 @@ fn stop(hub: &Hub) {
 fn handle(hub: &Hub, mut req: Request) {
     let url = req.url().to_string();
     let (path, query) = url.split_once('?').unwrap_or((url.as_str(), ""));
-    let param = |k: &str| query.split('&').filter_map(|kv| kv.split_once('=')).find(|(n, _)| *n == k).map(|(_, v)| v.to_string());
+    let param = |k: &str| {
+        query
+            .split('&')
+            .filter_map(|kv| kv.split_once('='))
+            .find(|(n, _)| *n == k)
+            .map(|(_, v)| v.to_string())
+    };
     let method = req.method().clone();
     // (behind someone's proxy or tunnel it may be under a path of theirs, /doom/: what's from
     // /api/ on is the call, and the page asks by paths relative to itself)
     let Some(path) = path.find("/api/").map(|i| &path[i..]) else {
-        let file = path.rsplit('/').next().is_some_and(|last| last.contains('.') && last != "index.html");
+        let file = path
+            .rsplit('/')
+            .next()
+            .is_some_and(|last| last.contains('.') && last != "index.html");
         let _ = req.respond(if method != Method::Get || file {
             Response::from_string("not found").with_status_code(404)
         } else if path.ends_with('/') || path.ends_with("/index.html") {
             // (the page is the same for anyone: nothing in it is secret, the API is)
-            with_header(Response::from_string(PAGE), "Content-Type", "text/html; charset=utf-8")
+            with_header(
+                Response::from_string(PAGE),
+                "Content-Type",
+                "text/html; charset=utf-8",
+            )
         } else {
             // (/doom to /doom/, so the page's relative calls go under it)
-            let to = if query.is_empty() { format!("{path}/") } else { format!("{path}/?{query}") };
-            with_header(Response::from_string("").with_status_code(308), "Location", &to)
+            let to = if query.is_empty() {
+                format!("{path}/")
+            } else {
+                format!("{path}/?{query}")
+            };
+            with_header(
+                Response::from_string("").with_status_code(308),
+                "Location",
+                &to,
+            )
         });
         return;
     };
     let token = lock(hub).token.clone();
     if !param("t").is_some_and(|t| same(&t, &token)) {
-        let _ = req.respond(json_response(401, &json!({ "error": "the console's token is needed (?t=, as printed when it started)" })));
+        let _ = req.respond(json_response(
+            401,
+            &json!({ "error": "the console's token is needed (?t=, as printed when it started)" }),
+        ));
         return;
     }
     // (who's asking, for the log: the login a tunnel in front vouches for, else where it's from)
@@ -574,20 +733,43 @@ fn handle(hub: &Hub, mut req: Request) {
         .or_else(|| req.remote_addr().map(|a| a.ip().to_string()))
         .unwrap_or_else(|| "?".into());
     let mut body = String::new();
-    if method == Method::Post && req.as_reader().take(BODY_MAX).read_to_string(&mut body).is_err() {
-        let _ = req.respond(json_response(400, &json!({ "error": "the body wasn't text" })));
+    if method == Method::Post
+        && req
+            .as_reader()
+            .take(BODY_MAX)
+            .read_to_string(&mut body)
+            .is_err()
+    {
+        let _ = req.respond(json_response(
+            400,
+            &json!({ "error": "the body wasn't text" }),
+        ));
         return;
     }
     if method == Method::Post && !body.starts_with(r#"{"cmd":"volume""#) {
         // (what each did, and who; not the volume, a slider sends many)
         let what = path.trim_start_matches("/api/");
-        lock(hub).push(format!("[console] {who}: {what} {}", body.chars().take(300).collect::<String>()));
+        lock(hub).push(format!(
+            "[console] {who}: {what} {}",
+            body.chars().take(300).collect::<String>()
+        ));
     }
-    if let Some(name) = path.strip_prefix("/api/view/").and_then(|n| n.strip_suffix(".png")).filter(|_| method == Method::Get) {
+    if let Some(name) = path
+        .strip_prefix("/api/view/")
+        .and_then(|n| n.strip_suffix(".png"))
+        .filter(|_| method == Method::Get)
+    {
         let png = lock(hub).views.get(name).map(|v| v.1.clone());
         let _ = match png {
-            Some(bytes) => req.respond(with_header(with_header(Response::from_data(bytes), "Content-Type", "image/png"), "Cache-Control", "no-store")),
-            None => req.respond(json_response(404, &json!({ "error": "no such picture yet" }))),
+            Some(bytes) => req.respond(with_header(
+                with_header(Response::from_data(bytes), "Content-Type", "image/png"),
+                "Cache-Control",
+                "no-store",
+            )),
+            None => req.respond(json_response(
+                404,
+                &json!({ "error": "no such picture yet" }),
+            )),
         };
         return;
     }
@@ -663,7 +845,12 @@ fn poll(hub: &Hub, since: u64) -> Value {
     let s = lock(hub);
     // (a page from before the console was restarted: everything kept, from the start)
     let since = if since > s.seq { 0 } else { since };
-    let log: Vec<&(u64, String)> = s.log.iter().filter(|(n, _)| *n > since).take(POLL_LINES).collect();
+    let log: Vec<&(u64, String)> = s
+        .log
+        .iter()
+        .filter(|(n, _)| *n > since)
+        .take(POLL_LINES)
+        .collect();
     let seq = log.last().map_or(s.seq, |(n, _)| *n);
     json!({
         "settings": s.settings,
@@ -687,7 +874,11 @@ fn done(r: Result<(), String>) -> (u16, Value) {
 }
 
 fn json_response(code: u16, v: &Value) -> Response<std::io::Cursor<Vec<u8>>> {
-    let r = with_header(Response::from_string(v.to_string()).with_status_code(code), "Content-Type", "application/json");
+    let r = with_header(
+        Response::from_string(v.to_string()).with_status_code(code),
+        "Content-Type",
+        "application/json",
+    );
     with_header(r, "Cache-Control", "no-store")
 }
 
@@ -711,22 +902,72 @@ mod tests {
     #[test]
     fn settings_checked() {
         assert!(Settings::default().check().is_ok());
-        assert!(Settings { map: "MAP99X".into(), ..Settings::default() }.check().is_err());
-        assert!(Settings { skill: 6, ..Settings::default() }.check().is_err());
-        assert!(Settings { wad: "/etc/passwd".into(), ..Settings::default() }.check().is_err());
-        assert!(Settings { wad: "doom".into(), map: "E1M1".into(), ..Settings::default() }.check().is_ok());
-        assert!(Settings { mode: "chaos".into(), ..Settings::default() }.check().is_err());
-        assert!(Settings { mode: "neuro".into(), neuro_url: "http://x".into(), ..Settings::default() }.check().is_err());
+        assert!(Settings {
+            map: "MAP99X".into(),
+            ..Settings::default()
+        }
+        .check()
+        .is_err());
+        assert!(Settings {
+            skill: 6,
+            ..Settings::default()
+        }
+        .check()
+        .is_err());
+        assert!(Settings {
+            wad: "/etc/passwd".into(),
+            ..Settings::default()
+        }
+        .check()
+        .is_err());
+        assert!(Settings {
+            wad: "doom".into(),
+            map: "E1M1".into(),
+            ..Settings::default()
+        }
+        .check()
+        .is_ok());
+        assert!(Settings {
+            mode: "chaos".into(),
+            ..Settings::default()
+        }
+        .check()
+        .is_err());
+        assert!(Settings {
+            mode: "neuro".into(),
+            neuro_url: "http://x".into(),
+            ..Settings::default()
+        }
+        .check()
+        .is_err());
     }
 
     #[test]
     fn settings_make_watch_args() {
-        let a = (Settings { skill: 4, seed: Some(7), mode: "neuro".into(), ..Settings::default() }).args("127.0.0.1:1");
+        let a = (Settings {
+            skill: 4,
+            seed: Some(7),
+            mode: "neuro".into(),
+            ..Settings::default()
+        })
+        .args("127.0.0.1:1");
         let line = a.join(" ");
         assert!(line.starts_with("watch doom2 MAP01 --fight 4 --mortal --lives 1 --seed 7 --episode --title --stream right --neuro ws://127.0.0.1:8000"), "{line}");
         assert!(line.ends_with("--control 127.0.0.1:1"), "{line}");
-        let none = (Settings { skill: 0, mortal: false, muted: true, ..Settings::default() }).args("127.0.0.1:1").join(" ");
-        assert!(!none.contains("--fight") && !none.contains("--mortal") && none.contains("--seed random"), "{none}");
+        let none = (Settings {
+            skill: 0,
+            mortal: false,
+            muted: true,
+            ..Settings::default()
+        })
+        .args("127.0.0.1:1")
+        .join(" ");
+        assert!(
+            !none.contains("--fight")
+                && !none.contains("--mortal")
+                && none.contains("--seed random"),
+            "{none}"
+        );
         // (muted by a command once it's up, not --mute: that takes the sound away for the run)
         assert!(!none.contains("--mute"), "{none}");
     }
@@ -742,7 +983,11 @@ mod tests {
 
     #[test]
     fn partial_settings_take_defaults() {
-        let s: Settings = serde_json::from_str(r#"{"map":"E1M1","wad":"doom"}"#).unwrap_or_default();
-        assert_eq!((s.wad.as_str(), s.map.as_str(), s.skill), ("doom", "E1M1", 3));
+        let s: Settings =
+            serde_json::from_str(r#"{"map":"E1M1","wad":"doom"}"#).unwrap_or_default();
+        assert_eq!(
+            (s.wad.as_str(), s.map.as_str(), s.skill),
+            ("doom", "E1M1", 3)
+        );
     }
 }

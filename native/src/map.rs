@@ -59,7 +59,13 @@ pub struct Thing {
 impl Thing {
     /// Is it there at this skill (1-5: 1-2 the easy bit, 3 normal, 4-5 hard), in single player?
     pub fn in_skill(&self, skill: i32) -> bool {
-        let bit = if skill <= 2 { MTF_EASY } else if skill == 3 { MTF_NORMAL } else { MTF_HARD };
+        let bit = if skill <= 2 {
+            MTF_EASY
+        } else if skill == 3 {
+            MTF_NORMAL
+        } else {
+            MTF_HARD
+        };
         self.flags & bit != 0 && self.flags & MTF_NOTSINGLE == 0
     }
 }
@@ -152,7 +158,11 @@ pub struct Node {
 impl Node {
     /// The child on the side of the partition line that (x, y) is on.
     pub fn child_toward(&self, x: f64, y: f64) -> u16 {
-        if self.dx * (y - self.y) - self.dy * (x - self.x) < 0.0 { self.front } else { self.back }
+        if self.dx * (y - self.y) - self.dy * (x - self.x) < 0.0 {
+            self.front
+        } else {
+            self.back
+        }
     }
 }
 
@@ -207,7 +217,11 @@ impl MapData {
         if tag == 0 {
             return Vec::new();
         }
-        self.sectors.iter().filter(|s| s.tag == tag).map(|s| s.index).collect()
+        self.sectors
+            .iter()
+            .filter(|s| s.tag == tag)
+            .map(|s| s.index)
+            .collect()
     }
 
     /// Line `li` as a segment from its first vertex to its second.

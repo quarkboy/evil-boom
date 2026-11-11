@@ -87,7 +87,10 @@ impl Config {
     /// The settings file, overlaid by its local twin (FILE.local.json) if there is one.
     pub fn load(path: &Path) -> Result<Config, String> {
         let read = |p: &Path| -> Result<Value, String> {
-            serde_json::from_str(&std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?).map_err(|e| format!("{}: {e}", p.display()))
+            serde_json::from_str(
+                &std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?,
+            )
+            .map_err(|e| format!("{}: {e}", p.display()))
         };
         let mut v = read(path)?;
         let local = path.with_extension("local.json");
@@ -107,7 +110,11 @@ impl Config {
                 m.iter()
                     .map(|(name, st)| Stance {
                         name: name.clone(),
-                        says: st.get("says").and_then(Value::as_str).unwrap_or(name).to_string(),
+                        says: st
+                            .get("says")
+                            .and_then(Value::as_str)
+                            .unwrap_or(name)
+                            .to_string(),
                         tuning: st.get("tuning").cloned().unwrap_or_else(|| json!({})),
                     })
                     .collect()
@@ -132,13 +139,23 @@ impl Config {
         match self.backend.as_str() {
             "first" => Ok(Box::new(First)),
             "systemone" => {
-                let key = if self.api_key.is_empty() { std::env::var(&self.api_key_env).unwrap_or_default() } else { self.api_key.clone() };
+                let key = if self.api_key.is_empty() {
+                    std::env::var(&self.api_key_env).unwrap_or_default()
+                } else {
+                    self.api_key.clone()
+                };
                 if self.base_url.is_empty() {
                     return Err("the advisor's settings name no base_url".into());
                 }
-                Ok(Box::new(SystemOne { url: self.base_url.clone(), model: self.model.clone(), key }))
+                Ok(Box::new(SystemOne {
+                    url: self.base_url.clone(),
+                    model: self.model.clone(),
+                    key,
+                }))
             }
-            other => Err(format!("the advisor's backend: \"systemone\" or \"first\", not \"{other}\"")),
+            other => Err(format!(
+                "the advisor's backend: \"systemone\" or \"first\", not \"{other}\""
+            )),
         }
     }
 }
@@ -148,7 +165,11 @@ struct First;
 
 impl Backend for First {
     fn answer(&mut self, q: &Question) -> Result<Vec<(String, f64)>, String> {
-        Ok(q.options.iter().enumerate().map(|(i, (k, _))| (k.clone(), if i == 0 { 1.0 } else { 0.0 })).collect())
+        Ok(q.options
+            .iter()
+            .enumerate()
+            .map(|(i, (k, _))| (k.clone(), if i == 0 { 1.0 } else { 0.0 }))
+            .collect())
     }
 }
 
@@ -162,7 +183,11 @@ struct SystemOne {
 
 impl Backend for SystemOne {
     fn answer(&mut self, q: &Question) -> Result<Vec<(String, f64)>, String> {
-        let criteria: serde_json::Map<String, Value> = q.options.iter().map(|(k, says)| (k.clone(), json!(says))).collect();
+        let criteria: serde_json::Map<String, Value> = q
+            .options
+            .iter()
+            .map(|(k, says)| (k.clone(), json!(says)))
+            .collect();
         let mut body = json!({"state": q.state, "questions": {q.point: {"type": "choice", "instructions": q.instructions, "criteria": criteria}}});
         if !self.model.is_empty() {
             body["model"] = json!(self.model);
@@ -173,10 +198,31 @@ impl Backend for SystemOne {
         }
         let resp: Value = match req.send_json(body) {
             Ok(r) => r.into_json().map_err(|e| e.to_string())?,
-            Err(ureq::Error::Status(code, r)) => return Err(format!("{code}: {}", r.into_string().unwrap_or_default().chars().take(300).collect::<String>())),
+            Err(ureq::Error::Status(code, r)) => {
+                return Err(format!(
+                    "{code}: {}",
+                    r.into_string()
+                        .unwrap_or_default()
+                        .chars()
+                        .take(300)
+                        .collect::<String>()
+                ))
+            }
             Err(e) => return Err(e.to_string()),
         };
-        shares(resp.get("answers").unwrap_or(&resp).get(q.point).unwrap_or(&Value::Null), &q.options).ok_or_else(|| format!("no answer read from {}", resp.to_string().chars().take(300).collect::<String>()))
+        shares(
+            resp.get("answers")
+                .unwrap_or(&resp)
+                .get(q.point)
+                .unwrap_or(&Value::Null),
+            &q.options,
+        )
+        .ok_or_else(|| {
+            format!(
+                "no answer read from {}",
+                resp.to_string().chars().take(300).collect::<String>()
+            )
+        })
     }
 }
 
@@ -185,15 +231,32 @@ impl Backend for SystemOne {
 /// or as sure as a "confidence" or "probability" beside it says).
 fn shares(answer: &Value, options: &[(String, String)]) -> Option<Vec<(String, f64)>> {
     let of = |m: &Value| -> Option<Vec<(String, f64)>> {
-        let out: Vec<(String, f64)> = options.iter().filter_map(|(k, _)| Some((k.clone(), m.get(k)?.as_f64()?))).collect();
+        let out: Vec<(String, f64)> = options
+            .iter()
+            .filter_map(|(k, _)| Some((k.clone(), m.get(k)?.as_f64()?)))
+            .collect();
         (!out.is_empty()).then_some(out)
     };
-    if let Some(found) = of(answer).or_else(|| ["probabilities", "scores", "options"].iter().find_map(|k| of(answer.get(k)?))) {
+    if let Some(found) = of(answer).or_else(|| {
+        ["probabilities", "scores", "options"]
+            .iter()
+            .find_map(|k| of(answer.get(k)?))
+    }) {
         return Some(found);
     }
-    let chosen = answer.as_str().or_else(|| ["choice", "answer", "value"].iter().find_map(|k| answer.get(k)?.as_str()))?;
-    let sure = ["confidence", "probability"].iter().find_map(|k| answer.get(k)?.as_f64()).unwrap_or(1.0);
-    options.iter().any(|(k, _)| k == chosen).then(|| vec![(chosen.to_string(), sure)])
+    let chosen = answer.as_str().or_else(|| {
+        ["choice", "answer", "value"]
+            .iter()
+            .find_map(|k| answer.get(k)?.as_str())
+    })?;
+    let sure = ["confidence", "probability"]
+        .iter()
+        .find_map(|k| answer.get(k)?.as_f64())
+        .unwrap_or(1.0);
+    options
+        .iter()
+        .any(|(k, _)| k == chosen)
+        .then(|| vec![(chosen.to_string(), sure)])
 }
 
 /// A reply as the backend's thread sends it: the question's kind and tic, and each choice's share.
@@ -231,7 +294,14 @@ impl Advisor {
                 }
             }
         });
-        Ok(Advisor { config, live, out, back, asked: VecDeque::new(), errors: Vec::new() })
+        Ok(Advisor {
+            config,
+            live,
+            out,
+            back,
+            asked: VecDeque::new(),
+            errors: Vec::new(),
+        })
     }
 
     /// Is a question of this kind out, unanswered or its answer not yet due?
@@ -244,7 +314,11 @@ impl Advisor {
         if self.waiting(q.point) || q.options.len() < 2 {
             return;
         }
-        self.asked.push_back(Asked { point: q.point, tic: q.tic, reply: None });
+        self.asked.push_back(Asked {
+            point: q.point,
+            tic: q.tic,
+            reply: None,
+        });
         if self.out.send(q).is_err() {
             self.asked.pop_back();
         }
@@ -253,13 +327,21 @@ impl Advisor {
     fn take(&mut self, got: Reply) {
         let (point, tic, result) = got;
         let best = match result {
-            Ok(shares) => shares.into_iter().max_by(|a, b| a.1.total_cmp(&b.1)).filter(|(_, s)| *s >= self.config.min_share),
+            Ok(shares) => shares
+                .into_iter()
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+                .filter(|(_, s)| *s >= self.config.min_share),
             Err(e) => {
-                self.errors.push(format!("the advisor, asked for a {point}: {e}"));
+                self.errors
+                    .push(format!("the advisor, asked for a {point}: {e}"));
                 None
             }
         };
-        if let Some(a) = self.asked.iter_mut().find(|a| a.point == point && a.tic == tic) {
+        if let Some(a) = self
+            .asked
+            .iter_mut()
+            .find(|a| a.point == point && a.tic == tic)
+        {
             a.reply = Some(best);
         }
     }
@@ -285,15 +367,23 @@ impl Advisor {
                         continue;
                     }
                     Err(_) => {
-                        self.errors.push("the advisor gave no answer in 30 s: left".into());
+                        self.errors
+                            .push("the advisor gave no answer in 30 s: left".into());
                         self.asked.pop_front();
                         continue;
                     }
                 }
             }
-            let Some(a) = self.asked.pop_front() else { break };
+            let Some(a) = self.asked.pop_front() else {
+                break;
+            };
             if let Some(Some((choice, share))) = a.reply {
-                out.push(Answer { point: a.point, asked: a.tic, choice, share });
+                out.push(Answer {
+                    point: a.point,
+                    asked: a.tic,
+                    choice,
+                    share,
+                });
             }
         }
         out
@@ -306,15 +396,30 @@ mod tests {
     use serde_json::json;
 
     fn options() -> Vec<(String, String)> {
-        vec![("a".into(), "the first".into()), ("b".into(), "the second".into())]
+        vec![
+            ("a".into(), "the first".into()),
+            ("b".into(), "the second".into()),
+        ]
     }
 
     #[test]
     fn shares_are_read_however_laid_out() {
-        assert_eq!(shares(&json!({"a": 0.2, "b": 0.8}), &options()), Some(vec![("a".into(), 0.2), ("b".into(), 0.8)]));
-        assert_eq!(shares(&json!({"probabilities": {"a": 0.9, "b": 0.1}}), &options()), Some(vec![("a".into(), 0.9), ("b".into(), 0.1)]));
-        assert_eq!(shares(&json!({"choice": "b", "confidence": 0.7}), &options()), Some(vec![("b".into(), 0.7)]));
-        assert_eq!(shares(&json!("a"), &options()), Some(vec![("a".into(), 1.0)]));
+        assert_eq!(
+            shares(&json!({"a": 0.2, "b": 0.8}), &options()),
+            Some(vec![("a".into(), 0.2), ("b".into(), 0.8)])
+        );
+        assert_eq!(
+            shares(&json!({"probabilities": {"a": 0.9, "b": 0.1}}), &options()),
+            Some(vec![("a".into(), 0.9), ("b".into(), 0.1)])
+        );
+        assert_eq!(
+            shares(&json!({"choice": "b", "confidence": 0.7}), &options()),
+            Some(vec![("b".into(), 0.7)])
+        );
+        assert_eq!(
+            shares(&json!("a"), &options()),
+            Some(vec![("a".into(), 1.0)])
+        );
         assert_eq!(shares(&json!({"choice": "zzz"}), &options()), None);
     }
 
@@ -334,7 +439,13 @@ mod tests {
             stances: Vec::new(),
         };
         let mut advisor = Advisor::new(config, false).unwrap();
-        advisor.ask(Question { point: "target", tic: 100, state: String::new(), instructions: String::new(), options: options() });
+        advisor.ask(Question {
+            point: "target",
+            tic: 100,
+            state: String::new(),
+            instructions: String::new(),
+            options: options(),
+        });
         assert!(advisor.waiting("target"));
         assert!(advisor.due(106).is_empty());
         let got = advisor.due(107);

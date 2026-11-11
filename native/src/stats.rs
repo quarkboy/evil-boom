@@ -25,7 +25,10 @@ struct Tally {
 
 impl Tally {
     const fn new() -> Self {
-        Tally { count: [0; PHASES], seconds: [0.0; PHASES] }
+        Tally {
+            count: [0; PHASES],
+            seconds: [0.0; PHASES],
+        }
     }
 }
 
@@ -141,8 +144,18 @@ mod tests {
         for enabled in [false, true, false] {
             collect_searches(enabled);
             take_maxed();
-            search_done(Search { budget: 10, expansions: 10, ended: Ended::Budget, secs: 0.0 });
-            search_done(Search { budget: 10, expansions: 3, ended: Ended::Found, secs: 0.0 });
+            search_done(Search {
+                budget: 10,
+                expansions: 10,
+                ended: Ended::Budget,
+                secs: 0.0,
+            });
+            search_done(Search {
+                budget: 10,
+                expansions: 3,
+                ended: Ended::Found,
+                secs: 0.0,
+            });
             assert_eq!(last_ended(), Some(Ended::Found));
             assert!(take_maxed());
             assert!(!take_maxed());

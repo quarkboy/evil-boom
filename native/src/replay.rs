@@ -34,14 +34,34 @@ impl Recording {
         let mut out = String::new();
         for e in &self.entries {
             let _ = match e {
-                Entry::Tic(t, c) => writeln!(out, "c {t} {:?} {:?} {:?} {} {} {} {}", c.forward, c.strafe, c.turn, u8::from(c.use_), u8::from(c.attack), u8::from(c.run), c.weapon),
+                Entry::Tic(t, c) => writeln!(
+                    out,
+                    "c {t} {:?} {:?} {:?} {} {} {} {}",
+                    c.forward,
+                    c.strafe,
+                    c.turn,
+                    u8::from(c.use_),
+                    u8::from(c.attack),
+                    u8::from(c.run),
+                    c.weapon
+                ),
                 Entry::Restart(t, why) => writeln!(out, "r {t} {why}"),
                 Entry::Note(t, n) => match n {
                     Note::TriedWall(li, keys) => writeln!(out, "n {t} tried {li} {}", keys.0),
                     Note::Stuck(p, times) => writeln!(out, "n {t} stuck {p} {times}"),
                     Note::MissedJump(key, times) => writeln!(out, "n {t} missed {key} {times}"),
-                    Note::Trap(polys) => writeln!(out, "n {t} trap {}", polys.iter().map(usize::to_string).collect::<Vec<_>>().join(",")),
-                    Note::FailedPress(at, li) => writeln!(out, "n {t} pressed {:?} {:?} {li}", at.0, at.1),
+                    Note::Trap(polys) => writeln!(
+                        out,
+                        "n {t} trap {}",
+                        polys
+                            .iter()
+                            .map(usize::to_string)
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    ),
+                    Note::FailedPress(at, li) => {
+                        writeln!(out, "n {t} pressed {:?} {:?} {li}", at.0, at.1)
+                    }
                 },
             };
         }
@@ -57,21 +77,51 @@ impl Recording {
         for (i, line) in text.lines().enumerate() {
             let bad = || format!("{}:{}: can't read {line:?}", path.display(), i + 1);
             let w: Vec<&str> = line.split_whitespace().collect();
-            let (Some(kind), Some(tic)) = (w.first(), w.get(1).and_then(|t| t.parse::<i64>().ok())) else { return Err(bad()) };
+            let (Some(kind), Some(tic)) = (w.first(), w.get(1).and_then(|t| t.parse::<i64>().ok()))
+            else {
+                return Err(bad());
+            };
             let f = |k: usize| w.get(k).and_then(|v| v.parse::<f64>().ok()).ok_or_else(bad);
-            let n = |k: usize| w.get(k).and_then(|v| v.parse::<usize>().ok()).ok_or_else(bad);
+            let n = |k: usize| {
+                w.get(k)
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .ok_or_else(bad)
+            };
             let int = |k: usize| w.get(k).and_then(|v| v.parse::<i32>().ok()).ok_or_else(bad);
             let flag = |k: usize| Ok::<bool, String>(n(k)? != 0);
             entries.push(match *kind {
-                "c" => Entry::Tic(tic, Controls { forward: f(2)?, strafe: f(3)?, turn: f(4)?, use_: flag(5)?, attack: flag(6)?, run: flag(7)?, weapon: int(8)? }),
+                "c" => Entry::Tic(
+                    tic,
+                    Controls {
+                        forward: f(2)?,
+                        strafe: f(3)?,
+                        turn: f(4)?,
+                        use_: flag(5)?,
+                        attack: flag(6)?,
+                        run: flag(7)?,
+                        weapon: int(8)?,
+                    },
+                ),
                 "r" => Entry::Restart(tic, w[2..].join(" ")),
                 "n" => Entry::Note(
                     tic,
                     match w.get(2).copied() {
-                        Some("tried") => Note::TriedWall(n(3)?, Keys(u8::try_from(n(4)?).map_err(|_| bad())?)),
+                        Some("tried") => {
+                            Note::TriedWall(n(3)?, Keys(u8::try_from(n(4)?).map_err(|_| bad())?))
+                        }
                         Some("stuck") => Note::Stuck(n(3)?, int(4)?),
-                        Some("missed") => Note::MissedJump(w.get(3).ok_or_else(bad)?.to_string(), int(4)?),
-                        Some("trap") => Note::Trap(w.get(3).map(|v| v.split(',').filter_map(|p| p.parse().ok()).collect::<BTreeSet<usize>>()).ok_or_else(bad)?),
+                        Some("missed") => {
+                            Note::MissedJump(w.get(3).ok_or_else(bad)?.to_string(), int(4)?)
+                        }
+                        Some("trap") => Note::Trap(
+                            w.get(3)
+                                .map(|v| {
+                                    v.split(',')
+                                        .filter_map(|p| p.parse().ok())
+                                        .collect::<BTreeSet<usize>>()
+                                })
+                                .ok_or_else(bad)?,
+                        ),
                         Some("pressed") => Note::FailedPress((f(3)?, f(4)?), n(5)?),
                         _ => return Err(bad()),
                     },

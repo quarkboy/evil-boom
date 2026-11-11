@@ -4,12 +4,14 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::map::{Blockmap, Linedef, MapData, MapSeg, Node, Sector, Sidedef, Subsector, Thing, Vertex};
+use crate::map::{
+    Blockmap, Linedef, MapData, MapSeg, Node, Sector, Sidedef, Subsector, Thing, Vertex,
+};
 
 /// Lumps that may follow a map marker, in any of the three map formats.
 const MAP_LUMPS: [&str; 16] = [
-    "THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SEGS", "SSECTORS", "NODES", "SECTORS",
-    "REJECT", "BLOCKMAP", "BEHAVIOR", "SCRIPTS", "TEXTMAP", "ZNODES", "DIALOGUE", "ENDMAP",
+    "THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SEGS", "SSECTORS", "NODES", "SECTORS", "REJECT",
+    "BLOCKMAP", "BEHAVIOR", "SCRIPTS", "TEXTMAP", "ZNODES", "DIALOGUE", "ENDMAP",
 ];
 
 pub struct Lump {
@@ -57,9 +59,17 @@ impl Wad {
             let entry = data.get(at..at + 16).ok_or_else(bad)?;
             let offset = usize::try_from(i32_at(entry, 0).ok_or_else(bad)?).map_err(|_| bad())?;
             let size = usize::try_from(i32_at(entry, 4).ok_or_else(bad)?).map_err(|_| bad())?;
-            lumps.push(Lump { name: name8(&entry[8..16]), offset, size });
+            lumps.push(Lump {
+                name: name8(&entry[8..16]),
+                offset,
+                size,
+            });
         }
-        Ok(Self { path: path.to_path_buf(), data, lumps })
+        Ok(Self {
+            path: path.to_path_buf(),
+            data,
+            lumps,
+        })
     }
 
     pub fn read(&self, lump: &Lump) -> &[u8] {
@@ -81,7 +91,10 @@ impl Wad {
         let map_name = map_name.to_uppercase();
         for i in (0..self.lumps.len()).rev() {
             if self.lumps[i].name == map_name
-                && self.lumps.get(i + 1).is_some_and(|l| l.name == "THINGS" || l.name == "TEXTMAP")
+                && self
+                    .lumps
+                    .get(i + 1)
+                    .is_some_and(|l| l.name == "THINGS" || l.name == "TEXTMAP")
             {
                 let mut out = BTreeMap::new();
                 for lump in &self.lumps[i + 1..] {
@@ -93,25 +106,38 @@ impl Wad {
                 return Ok(out);
             }
         }
-        Err(format!("map {map_name} not found in {}", self.path.display()))
+        Err(format!(
+            "map {map_name} not found in {}",
+            self.path.display()
+        ))
     }
 
     /// Wall texture heights from TEXTURE1/TEXTURE2 (for "raise floor by shortest lower
     /// texture").
     pub fn texture_heights(&self) -> BTreeMap<String, i32> {
         let mut out = BTreeMap::new();
-        for lump in self.lumps.iter().filter(|l| l.name == "TEXTURE1" || l.name == "TEXTURE2") {
+        for lump in self
+            .lumps
+            .iter()
+            .filter(|l| l.name == "TEXTURE1" || l.name == "TEXTURE2")
+        {
             let data = self.read(lump);
-            let count = i32_at(data, 0).and_then(|c| usize::try_from(c).ok()).unwrap_or(0);
+            let count = i32_at(data, 0)
+                .and_then(|c| usize::try_from(c).ok())
+                .unwrap_or(0);
             for i in 0..count {
-                let Some(offset) = i32_at(data, 4 + 4 * i).and_then(|o| usize::try_from(o).ok()) else {
+                let Some(offset) = i32_at(data, 4 + 4 * i).and_then(|o| usize::try_from(o).ok())
+                else {
                     continue;
                 };
                 if offset + 16 > data.len() {
                     continue;
                 }
                 // name[8], masked (i32), width (i16), height (i16)
-                out.insert(name8(&data[offset..offset + 8]), i32::from(i16_at(data, offset + 14)));
+                out.insert(
+                    name8(&data[offset..offset + 8]),
+                    i32::from(i16_at(data, offset + 14)),
+                );
             }
         }
         out
@@ -153,7 +179,13 @@ fn blockmap(data: &[u8]) -> Option<Blockmap> {
         }
         blocks.push(lines);
     }
-    Some(Blockmap { x, y, columns, rows, blocks })
+    Some(Blockmap {
+        x,
+        y,
+        columns,
+        rows,
+        blocks,
+    })
 }
 
 /// Load a map. Texture heights come from `texture_wads` (the IWAD when the map is in a PWAD)
@@ -177,7 +209,10 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
         })
         .collect();
     let vertexes = records(lump("VERTEXES"), 4)
-        .map(|r| Vertex { x: f64::from(i16_at(r, 0)), y: f64::from(i16_at(r, 2)) })
+        .map(|r| Vertex {
+            x: f64::from(i16_at(r, 0)),
+            y: f64::from(i16_at(r, 2)),
+        })
         .collect();
     let linedefs = records(lump("LINEDEFS"), 14)
         .enumerate()
@@ -217,7 +252,11 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
         .collect();
     // standard nodes only (extended/GL nodes are left empty)
     let (ssectors, nodes_raw) = (lump("SSECTORS"), lump("NODES"));
-    let extended = |d: &[u8]| [b"XNOD", b"ZNOD", b"XGLN", b"ZGLN"].iter().any(|m| d.starts_with(*m));
+    let extended = |d: &[u8]| {
+        [b"XNOD", b"ZNOD", b"XGLN", b"ZGLN"]
+            .iter()
+            .any(|m| d.starts_with(*m))
+    };
     let (mut segs, mut subsectors, mut nodes) = (Vec::new(), Vec::new(), Vec::new());
     if !ssectors.is_empty() && !extended(ssectors) && !extended(nodes_raw) {
         segs = records(lump("SEGS"), 12)
@@ -229,7 +268,10 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
             })
             .collect();
         subsectors = records(ssectors, 4)
-            .map(|r| Subsector { seg_count: usize::from(u16_at(r, 0)), first_seg: usize::from(u16_at(r, 2)) })
+            .map(|r| Subsector {
+                seg_count: usize::from(u16_at(r, 0)),
+                first_seg: usize::from(u16_at(r, 2)),
+            })
             .collect();
         // x, y, dx, dy, front bbox (4), back bbox (4), front child, back child
         nodes = records(nodes_raw, 28)

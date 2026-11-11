@@ -14,7 +14,10 @@ pub const TICRATE: f64 = 35.0;
 /// Per sector moved: the heights it can be moved to (in the order found).
 pub type Effects = Vec<(usize, Vec<Heights>)>;
 
-const DOOR_OPEN: &[u16] = &[1, 2, 4, 26, 27, 28, 29, 31, 32, 33, 34, 46, 61, 63, 86, 90, 99, 103, 105, 106, 108, 109, 111, 112, 114, 115, 117, 118, 133, 134, 135, 136, 137];
+const DOOR_OPEN: &[u16] = &[
+    1, 2, 4, 26, 27, 28, 29, 31, 32, 33, 34, 46, 61, 63, 86, 90, 99, 103, 105, 106, 108, 109, 111,
+    112, 114, 115, 117, 118, 133, 134, 135, 136, 137,
+];
 const DOOR_CLOSE: &[u16] = &[3, 16, 42, 50, 75, 76, 107, 110, 113, 116];
 const LIFT: &[u16] = &[10, 21, 62, 88, 120, 121, 122, 123];
 const PERPETUAL_LIFT: &[u16] = &[53, 87];
@@ -46,7 +49,10 @@ fn floor_raise(special: u16) -> Option<f64> {
 /// Does it go once and come back to where it was (a door that waits and closes, or closes and
 /// opens again; a lift down and up)? Not a crusher, nor a lift that goes up and down for ever.
 pub fn cycles_back(special: u16, description: &str) -> bool {
-    LIFT.contains(&special) || DOOR_CLOSE_30.contains(&special) || ((DOOR_OPEN.contains(&special) || DOOR_CLOSE.contains(&special)) && description.contains("wait"))
+    LIFT.contains(&special)
+        || DOOR_CLOSE_30.contains(&special)
+        || ((DOOR_OPEN.contains(&special) || DOOR_CLOSE.contains(&special))
+            && description.contains("wait"))
 }
 
 /// Stairs: the step height.
@@ -66,9 +72,19 @@ pub fn is_stairs(special: u16) -> bool {
 /// door opens to the lowest ceiling round it then, less 4: MAP14's, by a crusher stopped low,
 /// opened 42 high and she couldn't get under it).
 pub fn depends_on_heights(special: u16) -> bool {
-    [FLOOR_LOWEST, FLOOR_HIGHEST, FLOOR_TURBO, FLOOR_LOWEST_CEIL, FLOOR_LOWEST_CEIL_CRUSH, FLOOR_NEXT_HIGHER, FLOOR_SHORTEST_TEX, CEIL_HIGHEST, DOOR_OPEN]
-        .iter()
-        .any(|set| set.contains(&special))
+    [
+        FLOOR_LOWEST,
+        FLOOR_HIGHEST,
+        FLOOR_TURBO,
+        FLOOR_LOWEST_CEIL,
+        FLOOR_LOWEST_CEIL_CRUSH,
+        FLOOR_NEXT_HIGHER,
+        FLOOR_SHORTEST_TEX,
+        CEIL_HIGHEST,
+        DOOR_OPEN,
+    ]
+    .iter()
+    .any(|set| set.contains(&special))
         || floor_raise(special).is_some()
 }
 
@@ -110,8 +126,20 @@ pub type HeightsNow<'a> = Option<&'a dyn Fn(usize) -> Option<Heights>>;
 
 impl MoverModel {
     pub fn new(map: Arc<MapData>, neighbors: Vec<Vec<usize>>) -> Self {
-        let real: Vec<Heights> = map.sectors.iter().map(|s| Heights { floor: s.floor, ceiling: s.ceiling }).collect();
-        MoverModel { initial: real.clone(), real, neighbors, map }
+        let real: Vec<Heights> = map
+            .sectors
+            .iter()
+            .map(|s| Heights {
+                floor: s.floor,
+                ceiling: s.ceiling,
+            })
+            .collect();
+        MoverModel {
+            initial: real.clone(),
+            real,
+            neighbors,
+            map,
+        }
     }
 
     pub fn neighbors(&self, s: usize) -> &[usize] {
@@ -139,11 +167,30 @@ impl MoverModel {
     }
 
     fn sector_effect(&self, special: u16, s: usize, now: HeightsNow<'_>) -> Vec<Heights> {
-        let Heights { floor, ceiling: ceil } = self.at(s, now);
-        let nf: Vec<f64> = self.neighbors[s].iter().map(|&n| self.at(n, now).floor).collect();
-        let nc: Vec<f64> = self.neighbors[s].iter().map(|&n| self.at(n, now).ceiling).collect();
-        let min = |v: &[f64], d: f64| v.iter().copied().fold(None, |m: Option<f64>, x| Some(m.map_or(x, |m| m.min(x)))).unwrap_or(d);
-        let max = |v: &[f64], d: f64| v.iter().copied().fold(None, |m: Option<f64>, x| Some(m.map_or(x, |m| m.max(x)))).unwrap_or(d);
+        let Heights {
+            floor,
+            ceiling: ceil,
+        } = self.at(s, now);
+        let nf: Vec<f64> = self.neighbors[s]
+            .iter()
+            .map(|&n| self.at(n, now).floor)
+            .collect();
+        let nc: Vec<f64> = self.neighbors[s]
+            .iter()
+            .map(|&n| self.at(n, now).ceiling)
+            .collect();
+        let min = |v: &[f64], d: f64| {
+            v.iter()
+                .copied()
+                .fold(None, |m: Option<f64>, x| Some(m.map_or(x, |m| m.min(x))))
+                .unwrap_or(d)
+        };
+        let max = |v: &[f64], d: f64| {
+            v.iter()
+                .copied()
+                .fold(None, |m: Option<f64>, x| Some(m.map_or(x, |m| m.max(x))))
+                .unwrap_or(d)
+        };
         let h = |floor, ceiling| vec![Heights { floor, ceiling }];
         let is = |set: &[u16]| set.contains(&special);
         if is(DOOR_OPEN) {
@@ -161,7 +208,16 @@ impl MoverModel {
             return out;
         }
         if is(PERPETUAL_LIFT) {
-            return vec![Heights { floor: min(&nf, floor).min(floor), ceiling: ceil }, Heights { floor: max(&nf, floor).max(floor), ceiling: ceil }];
+            return vec![
+                Heights {
+                    floor: min(&nf, floor).min(floor),
+                    ceiling: ceil,
+                },
+                Heights {
+                    floor: max(&nf, floor).max(floor),
+                    ceiling: ceil,
+                },
+            ];
         }
         if is(FLOOR_HIGHEST) {
             return h(max(&nf, -500.0), ceil);
@@ -172,7 +228,14 @@ impl MoverModel {
         }
         if is(FLOOR_LOWEST_CEIL) || is(FLOOR_LOWEST_CEIL_CRUSH) {
             let dest = min(&nc, ceil).min(ceil);
-            return h(if is(FLOOR_LOWEST_CEIL_CRUSH) { dest - 8.0 } else { dest }, ceil);
+            return h(
+                if is(FLOOR_LOWEST_CEIL_CRUSH) {
+                    dest - 8.0
+                } else {
+                    dest
+                },
+                ceil,
+            );
         }
         if is(FLOOR_NEXT_HIGHER) {
             let higher: Vec<f64> = nf.iter().copied().filter(|&f| f > floor).collect();
@@ -201,15 +264,38 @@ impl MoverModel {
     /// end), the lift level with it is a height it has too (MAP17: the strip to the megasphere's
     /// secret, a step off the blazing lift as it passes, under a ceiling it's above at the top).
     /// Only those: every other lift stays two heights.
-    fn step_offs(&self, s: usize, low: f64, high: f64, ceiling: f64, now: HeightsNow<'_>) -> Vec<Heights> {
-        let (at_low, at_high) = (Heights { floor: low, ceiling }, Heights { floor: high, ceiling });
+    fn step_offs(
+        &self,
+        s: usize,
+        low: f64,
+        high: f64,
+        ceiling: f64,
+        now: HeightsNow<'_>,
+    ) -> Vec<Heights> {
+        let (at_low, at_high) = (
+            Heights {
+                floor: low,
+                ceiling,
+            },
+            Heights {
+                floor: high,
+                ceiling,
+            },
+        );
         let mut out: Vec<Heights> = Vec::new();
         for &n in &self.neighbors[s] {
             let hn = self.at(n, now);
-            if hn.floor <= low || hn.floor >= high || can_cross(at_low, hn) || can_cross(at_high, hn) {
+            if hn.floor <= low
+                || hn.floor >= high
+                || can_cross(at_low, hn)
+                || can_cross(at_high, hn)
+            {
                 continue;
             }
-            let level = Heights { floor: hn.floor, ceiling };
+            let level = Heights {
+                floor: hn.floor,
+                ceiling,
+            };
             if can_cross(level, hn) && !out.contains(&level) {
                 out.push(level);
             }
@@ -221,8 +307,12 @@ impl MoverModel {
     /// how long it stays there (near enough: vanilla speeds, from rest).
     pub fn timing(&self, special: u16, description: &str, s: usize, target: Heights) -> Timing {
         let Heights { floor, ceiling } = self.initial[s];
-        let fast = description.contains("blazing") || description.contains("turbo") || description.contains("fast");
-        let moved = (target.floor - floor).abs().max((target.ceiling - ceiling).abs());
+        let fast = description.contains("blazing")
+            || description.contains("turbo")
+            || description.contains("fast");
+        let moved = (target.floor - floor)
+            .abs()
+            .max((target.ceiling - ceiling).abs());
         let is = |set: &[u16]| set.contains(&special);
         let (speed, hold) = if is(DOOR_OPEN) || is(DOOR_CLOSE) {
             let hold = if is(DOOR_CLOSE_30) {
@@ -246,7 +336,10 @@ impl MoverModel {
         } else {
             (if fast { FLOOR_FAST } else { FLOOR_SPEED }, None)
         };
-        Timing { travel: (moved / speed).ceil() + 1.0, hold }
+        Timing {
+            travel: (moved / speed).ceil() + 1.0,
+            hold,
+        }
     }
 
     /// The shortest lower texture on the sector's two-sided lines (both sides). Missing ones
@@ -255,7 +348,11 @@ impl MoverModel {
     pub fn shortest_lower_texture(&self, s: usize) -> f64 {
         let m = &self.map;
         let mut best: Option<i32> = None;
-        for line in m.linedefs.iter().filter(|l| m.front_sector(l) == Some(s) || m.back_sector(l) == Some(s)) {
+        for line in m
+            .linedefs
+            .iter()
+            .filter(|l| m.front_sector(l) == Some(s) || m.back_sector(l) == Some(s))
+        {
             if !line.two_sided() {
                 continue;
             }
@@ -278,22 +375,36 @@ impl MoverModel {
         let mut out: Effects = Vec::new();
         let has = |out: &Effects, s: usize| out.iter().any(|(x, _)| *x == s);
         // (a dict, as Python's: a sector set again keeps its place)
-        let set = |out: &mut Effects, s: usize, h: Heights| match out.iter_mut().find(|(x, _)| *x == s) {
-            Some(e) => e.1 = vec![h],
-            None => out.push((s, vec![h])),
-        };
+        let set =
+            |out: &mut Effects, s: usize, h: Heights| match out.iter_mut().find(|(x, _)| *x == s) {
+                Some(e) => e.1 = vec![h],
+                None => out.push((s, vec![h])),
+            };
         for &start in sectors {
             let mut sec = start;
             let mut height = self.real[sec].floor + step;
             let texture = &m.sectors[sec].floor_tex;
-            set(&mut out, sec, Heights { floor: height, ceiling: self.real[sec].ceiling });
+            set(
+                &mut out,
+                sec,
+                Heights {
+                    floor: height,
+                    ceiling: self.real[sec].ceiling,
+                },
+            );
             loop {
                 let mut next = None;
-                for line in m.linedefs.iter().filter(|l| m.front_sector(l) == Some(sec) || m.back_sector(l) == Some(sec)) {
+                for line in m
+                    .linedefs
+                    .iter()
+                    .filter(|l| m.front_sector(l) == Some(sec) || m.back_sector(l) == Some(sec))
+                {
                     if line.flags & ML_TWOSIDED == 0 || m.front_sector(line) != Some(sec) {
                         continue;
                     }
-                    let Some(back) = m.back_sector(line) else { continue };
+                    let Some(back) = m.back_sector(line) else {
+                        continue;
+                    };
                     if &m.sectors[back].floor_tex != texture {
                         continue;
                     }
@@ -306,7 +417,14 @@ impl MoverModel {
                 }
                 let Some(n) = next else { break };
                 sec = n;
-                set(&mut out, sec, Heights { floor: height, ceiling: self.real[sec].ceiling });
+                set(
+                    &mut out,
+                    sec,
+                    Heights {
+                        floor: height,
+                        ceiling: self.real[sec].ceiling,
+                    },
+                );
             }
         }
         out

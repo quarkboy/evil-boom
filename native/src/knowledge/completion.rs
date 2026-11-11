@@ -17,12 +17,26 @@ use crate::specials::Keys;
 const ALLMAP: u16 = 2026;
 
 /// What counts towards the items tally (MF_COUNTITEM in the game's tables).
-pub const COUNTED: [&str; 9] = ["HealthBonus", "ArmorBonus", "Soulsphere", "Megasphere", "Berserk", "Allmap", "Infrared", "InvulnerabilitySphere", "BlurSphere"];
+pub const COUNTED: [&str; 9] = [
+    "HealthBonus",
+    "ArmorBonus",
+    "Soulsphere",
+    "Megasphere",
+    "Berserk",
+    "Allmap",
+    "Infrared",
+    "InvulnerabilitySphere",
+    "BlurSphere",
+];
 
 /// How many fewer than the level's item total is the best there is: every computer area map
 /// after the first (Doom II's MAP27, two in mirrored alcoves, tops out at 98%).
 pub fn most_items(m: &MapData, skill: i32) -> i32 {
-    let maps = m.things.iter().filter(|t| t.kind == ALLMAP && t.in_skill(skill)).count();
+    let maps = m
+        .things
+        .iter()
+        .filter(|t| t.kind == ALLMAP && t.in_skill(skill))
+        .count();
     i32::try_from(maps.saturating_sub(1)).unwrap_or(0)
 }
 
@@ -40,7 +54,11 @@ impl Completionist {
     /// (the explorer's exit held back)
     pub fn new(explorer: &mut Explorer, restarts: i32) -> Completionist {
         explorer.exit_last = true;
-        Completionist { restarts, no_way_back: None, asked_for: None }
+        Completionist {
+            restarts,
+            no_way_back: None,
+            asked_for: None,
+        }
     }
 
     /// Does a thing of this name count for the items tally now (a computer map after the first doesn't)?
@@ -50,7 +68,13 @@ impl Completionist {
 }
 
 impl Hooks for Completionist {
-    fn wanted(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, _pos: Point) -> Vec<Objective> {
+    fn wanted(
+        &mut self,
+        x: &Explorer,
+        obs: &Observation,
+        reach: &BTreeSet<usize>,
+        _pos: Point,
+    ) -> Vec<Objective> {
         let known = x.knowledge.known_polys();
         let mut out = Vec::new();
         for t in obs.things.iter().flatten() {
@@ -59,7 +83,9 @@ impl Hooks for Completionist {
             }
             // (seen; where it is needn't be somewhere she can get to, only somewhere to touch it
             // from: E4M7's blur sphere, on a ledge she can reach up onto but not climb)
-            let Some(p) = x.nav.poly_at((t.x, t.y)) else { continue };
+            let Some(p) = x.nav.poly_at((t.x, t.y)) else {
+                continue;
+            };
             if !known.contains(&p) {
                 continue;
             }
@@ -84,7 +110,18 @@ impl Hooks for Completionist {
             return false;
         }
         let known = x.knowledge.known_polys();
-        let left: Vec<Point> = obs.things.iter().flatten().filter(|t| Self::counted(t.name, obs) && x.nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p))).map(|t| (t.x, t.y)).collect();
+        let left: Vec<Point> = obs
+            .things
+            .iter()
+            .flatten()
+            .filter(|t| {
+                Self::counted(t.name, obs)
+                    && x.nav
+                        .poly_at((t.x, t.y))
+                        .is_some_and(|p| known.contains(&p))
+            })
+            .map(|t| (t.x, t.y))
+            .collect();
         if left.is_empty() {
             return false;
         }
@@ -95,10 +132,29 @@ impl Hooks for Completionist {
         if self.no_way_back.as_ref() == Some(&asked) {
             return false;
         }
-        let Some(start) = x.nav.map.things.iter().find(|t| t.kind == 1).map(|t| (t.x, t.y)) else { return false };
+        let Some(start) = x
+            .nav
+            .map
+            .things
+            .iter()
+            .find(|t| t.kind == 1)
+            .map(|t| (t.x, t.y))
+        else {
+            return false;
+        };
         let view = x.fresh_view();
         let states = view.initial_states();
-        let route = view.plan(start, &left, &Plan { keys: Keys::default(), states: Some(&states), max_expansions: 20000, max_seconds: 600.0, ..Plan::default() });
+        let route = view.plan(
+            start,
+            &left,
+            &Plan {
+                keys: Keys::default(),
+                states: Some(&states),
+                max_expansions: 20000,
+                max_seconds: 600.0,
+                ..Plan::default()
+            },
+        );
         if route.is_none() {
             self.no_way_back = Some(asked);
             return false;

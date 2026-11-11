@@ -24,13 +24,19 @@ pub const GRID: f64 = 128.0;
 /// Does the axis-aligned box of half-width r at (cx, cy) straddle the segment?
 pub fn box_hits_segment(cx: f64, cy: f64, r: f64, seg: Seg) -> bool {
     let ((ax, ay), (bx, by)) = seg;
-    if ax.max(bx) <= cx - r || ax.min(bx) >= cx + r || ay.max(by) <= cy - r || ay.min(by) >= cy + r {
+    if ax.max(bx) <= cx - r || ax.min(bx) >= cx + r || ay.max(by) <= cy - r || ay.min(by) >= cy + r
+    {
         return false;
     }
     let (dx, dy) = (bx - ax, by - ay);
     let mut lo = f64::INFINITY;
     let mut hi = f64::NEG_INFINITY;
-    for (px, py) in [(cx - r, cy - r), (cx + r, cy - r), (cx + r, cy + r), (cx - r, cy + r)] {
+    for (px, py) in [
+        (cx - r, cy - r),
+        (cx + r, cy - r),
+        (cx + r, cy + r),
+        (cx - r, cy + r),
+    ] {
         let s = dx * (py - ay) - dy * (px - ax);
         lo = lo.min(s);
         hi = hi.max(s);
@@ -66,7 +72,12 @@ fn tri(a: Point, b: Point, c: Point) -> f64 {
 pub fn segments_cross(p1: Point, p2: Point, q1: Point, q2: Point) -> bool {
     let (d1, d2) = (tri(q1, q2, p1), tri(q1, q2, p2));
     let (d3, d4) = (tri(p1, p2, q1), tri(p1, p2, q2));
-    (d1 > 0.0) != (d2 > 0.0) && (d3 > 0.0) != (d4 > 0.0) && d1 != 0.0 && d2 != 0.0 && d3 != 0.0 && d4 != 0.0
+    (d1 > 0.0) != (d2 > 0.0)
+        && (d3 > 0.0) != (d4 > 0.0)
+        && d1 != 0.0
+        && d2 != 0.0
+        && d3 != 0.0
+        && d4 != 0.0
 }
 
 /// The point of segment a-b closest to p.
@@ -177,7 +188,11 @@ pub fn closest_on_portal(p: Point, p1: Point, p2: Point) -> Point {
 /// centre: a long strip's centre can be off to one side, MAP24's, which flipped the ends and
 /// let the funnel go straight through walls.)
 pub fn oriented(p1: Point, p2: Point, from: Point) -> (Point, Point) {
-    let (left, right) = if tri(p1, p2, from) > 0.0 { (p2, p1) } else { (p1, p2) };
+    let (left, right) = if tri(p1, p2, from) > 0.0 {
+        (p2, p1)
+    } else {
+        (p1, p2)
+    };
     let length = dist(left, right);
     if length <= 2.0 * PATH_CLEARANCE {
         let m = midpoint(p1, p2);
@@ -199,7 +214,12 @@ pub fn cells(x0: f64, y0: f64, x1: f64, y1: f64) -> impl Iterator<Item = Cell> {
 
 /// The grid cells covering the bounding box of a-b grown by `pad`.
 pub fn cells_around(a: Point, b: Point, pad: f64) -> impl Iterator<Item = Cell> {
-    cells(a.0.min(b.0) - pad, a.1.min(b.1) - pad, a.0.max(b.0) + pad, a.1.max(b.1) + pad)
+    cells(
+        a.0.min(b.0) - pad,
+        a.1.min(b.1) - pad,
+        a.0.max(b.0) + pad,
+        a.1.max(b.1) + pad,
+    )
 }
 
 #[cfg(test)]
@@ -208,36 +228,75 @@ mod tests {
 
     #[test]
     fn funnel_straight_corridor_is_one_segment() {
-        let portals: Vec<_> = [10.0, 20.0, 30.0].iter().map(|&x| ((x, 10.0), (x, -10.0))).collect();
-        assert_eq!(funnel((0.0, 0.0), (40.0, 0.0), &portals), vec![(0.0, 0.0), (40.0, 0.0)]);
+        let portals: Vec<_> = [10.0, 20.0, 30.0]
+            .iter()
+            .map(|&x| ((x, 10.0), (x, -10.0)))
+            .collect();
+        assert_eq!(
+            funnel((0.0, 0.0), (40.0, 0.0), &portals),
+            vec![(0.0, 0.0), (40.0, 0.0)]
+        );
     }
 
     #[test]
     fn funnel_bends_around_corner() {
         // the corridor goes +x then turns +y; the inside corner is at (10, 10)
         let portals = [((10.0, 10.0), (10.0, -10.0)), ((10.0, 10.0), (30.0, 10.0))];
-        assert_eq!(funnel((0.0, 0.0), (20.0, 40.0), &portals), vec![(0.0, 0.0), (10.0, 10.0), (20.0, 40.0)]);
+        assert_eq!(
+            funnel((0.0, 0.0), (20.0, 40.0), &portals),
+            vec![(0.0, 0.0), (10.0, 10.0), (20.0, 40.0)]
+        );
     }
 
     #[test]
     fn funnel_without_portals_goes_straight() {
-        assert_eq!(funnel((0.0, 0.0), (5.0, 5.0), &[]), vec![(0.0, 0.0), (5.0, 5.0)]);
+        assert_eq!(
+            funnel((0.0, 0.0), (5.0, 5.0), &[]),
+            vec![(0.0, 0.0), (5.0, 5.0)]
+        );
         assert_eq!(funnel((1.0, 1.0), (1.0, 1.0), &[]), vec![(1.0, 1.0)]);
     }
 
     #[test]
     fn touching_segments_do_not_cross() {
-        assert!(segments_cross((0.0, 0.0), (2.0, 2.0), (0.0, 2.0), (2.0, 0.0)));
-        assert!(!segments_cross((0.0, 0.0), (1.0, 1.0), (1.0, 1.0), (2.0, 0.0)));
-        assert!(!segments_cross((0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)));
+        assert!(segments_cross(
+            (0.0, 0.0),
+            (2.0, 2.0),
+            (0.0, 2.0),
+            (2.0, 0.0)
+        ));
+        assert!(!segments_cross(
+            (0.0, 0.0),
+            (1.0, 1.0),
+            (1.0, 1.0),
+            (2.0, 0.0)
+        ));
+        assert!(!segments_cross(
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (0.0, 1.0),
+            (1.0, 1.0)
+        ));
     }
 
     #[test]
     fn closest_point_clamps_to_the_ends() {
-        assert_eq!(closest_point((5.0, 3.0), (0.0, 0.0), (10.0, 0.0)), (5.0, 0.0));
-        assert_eq!(closest_point((-4.0, 3.0), (0.0, 0.0), (10.0, 0.0)), (0.0, 0.0));
-        assert_eq!(closest_point((3.0, 3.0), (2.0, 2.0), (2.0, 2.0)), (2.0, 2.0));
-        assert_eq!(segment_distance((0.0, 1.0), (10.0, 1.0), (0.0, -2.0), (10.0, -2.0)), 3.0);
+        assert_eq!(
+            closest_point((5.0, 3.0), (0.0, 0.0), (10.0, 0.0)),
+            (5.0, 0.0)
+        );
+        assert_eq!(
+            closest_point((-4.0, 3.0), (0.0, 0.0), (10.0, 0.0)),
+            (0.0, 0.0)
+        );
+        assert_eq!(
+            closest_point((3.0, 3.0), (2.0, 2.0), (2.0, 2.0)),
+            (2.0, 2.0)
+        );
+        assert_eq!(
+            segment_distance((0.0, 1.0), (10.0, 1.0), (0.0, -2.0), (10.0, -2.0)),
+            3.0
+        );
     }
 
     #[test]
@@ -247,21 +306,36 @@ mod tests {
         assert!(swept_box_hits((0.0, 0.0), (0.0, 0.0), 11.0, wall));
         assert!(!swept_box_hits((0.0, 0.0), (0.0, 30.0), 9.0, wall));
         // diagonal move past the end of a short edge
-        assert!(!swept_box_hits((0.0, 0.0), (20.0, 20.0), 1.0, ((15.0, 0.0), (20.0, 0.0))));
+        assert!(!swept_box_hits(
+            (0.0, 0.0),
+            (20.0, 20.0),
+            1.0,
+            ((15.0, 0.0), (20.0, 0.0))
+        ));
     }
 
     #[test]
     fn narrow_portals_are_crossed_in_the_middle() {
-        assert_eq!(closest_on_portal((100.0, 0.0), (0.0, 0.0), (40.0, 0.0)), (20.0, 0.0));
-        assert_eq!(closest_on_portal((100.0, 5.0), (0.0, 0.0), (200.0, 0.0)), (100.0, 0.0));
+        assert_eq!(
+            closest_on_portal((100.0, 0.0), (0.0, 0.0), (40.0, 0.0)),
+            (20.0, 0.0)
+        );
+        assert_eq!(
+            closest_on_portal((100.0, 5.0), (0.0, 0.0), (200.0, 0.0)),
+            (100.0, 0.0)
+        );
         let end = closest_on_portal((0.0, 5.0), (0.0, 0.0), (200.0, 0.0));
         assert!((end.0 - PATH_CLEARANCE).abs() < 1e-9 && end.1 == 0.0);
         // walking +x through a portal along x = 0: the left end is the one at +y
         let (l, r) = oriented((0.0, 0.0), (0.0, 100.0), (-10.0, 50.0));
-        assert!(dist(l, (0.0, 100.0 - PATH_CLEARANCE)) < 1e-9 && dist(r, (0.0, PATH_CLEARANCE)) < 1e-9);
+        assert!(
+            dist(l, (0.0, 100.0 - PATH_CLEARANCE)) < 1e-9 && dist(r, (0.0, PATH_CLEARANCE)) < 1e-9
+        );
         // ...and walking -x, whichever way the end points are given
         let (l, r) = oriented((0.0, 100.0), (0.0, 0.0), (10.0, -500.0));
-        assert!(dist(l, (0.0, PATH_CLEARANCE)) < 1e-9 && dist(r, (0.0, 100.0 - PATH_CLEARANCE)) < 1e-9);
+        assert!(
+            dist(l, (0.0, PATH_CLEARANCE)) < 1e-9 && dist(r, (0.0, 100.0 - PATH_CLEARANCE)) < 1e-9
+        );
     }
 
     #[test]

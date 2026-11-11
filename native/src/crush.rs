@@ -41,7 +41,9 @@ pub fn stroke_cost(kind: CrusherKind, obs: &Observation) -> f64 {
 pub fn out_tics(nav: &Navigator, heights: &[Heights], s: usize) -> f64 {
     let mesh = &nav.mesh;
     let Some(fh) = heights.get(s) else { return 0.0 };
-    let polys: Vec<usize> = (0..mesh.polys.len()).filter(|&p| mesh.polys[p].as_ref().is_some_and(|q| q.sector == s)).collect();
+    let polys: Vec<usize> = (0..mesh.polys.len())
+        .filter(|&p| mesh.polys[p].as_ref().is_some_and(|q| q.sector == s))
+        .collect();
     let mut ways: Vec<(Point, Point)> = Vec::new();
     for &p in &polys {
         for &pi in &mesh.poly(p).portals {
@@ -49,7 +51,9 @@ pub fn out_tics(nav: &Navigator, heights: &[Heights], s: usize) -> f64 {
             let o = mesh.poly(q.other(p)).sector;
             if o != s
                 && nav.statically_passable(pi, p, &BTreeSet::new())
-                && heights.get(o).is_some_and(|oh| oh.floor <= fh.floor + MAX_STEP && oh.ceiling - oh.floor >= PLAYER_HEIGHT)
+                && heights.get(o).is_some_and(|oh| {
+                    oh.floor <= fh.floor + MAX_STEP && oh.ceiling - oh.floor >= PLAYER_HEIGHT
+                })
             {
                 ways.push((q.p1, q.p2));
             }
@@ -60,8 +64,18 @@ pub fn out_tics(nav: &Navigator, heights: &[Heights], s: usize) -> f64 {
     }
     let far = polys
         .iter()
-        .flat_map(|&p| mesh.poly(p).vertices.iter().copied().chain([mesh.poly(p).center]))
-        .map(|pt| ways.iter().map(|&(a, b)| crate::tactical::combat::segment_point_distance(a, b, pt)).fold(f64::INFINITY, f64::min))
+        .flat_map(|&p| {
+            mesh.poly(p)
+                .vertices
+                .iter()
+                .copied()
+                .chain([mesh.poly(p).center])
+        })
+        .map(|pt| {
+            ways.iter()
+                .map(|&(a, b)| crate::tactical::combat::segment_point_distance(a, b, pt))
+                .fold(f64::INFINITY, f64::min)
+        })
         .fold(0.0, f64::max);
     run_tics(-FULL_SPEED, far + PLAYER_RADIUS, 1.0)
 }

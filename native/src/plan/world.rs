@@ -59,9 +59,16 @@ fn push_new(hs: &mut Vec<Heights>, new: &[Heights]) {
 pub fn apply_effects(states: &World, permanent: bool, effects: &Effects) -> World {
     let mut out: Vec<Rc<Vec<Heights>>> = (**states).clone();
     for (s, hs) in effects {
-        let cur_min = out[*s].iter().map(|h| h.floor).fold(f64::INFINITY, f64::min);
+        let cur_min = out[*s]
+            .iter()
+            .map(|h| h.floor)
+            .fold(f64::INFINITY, f64::min);
         let hs_max = hs.iter().map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max);
-        let mut new = if permanent && hs_max < cur_min { Vec::new() } else { (*out[*s]).clone() };
+        let mut new = if permanent && hs_max < cur_min {
+            Vec::new()
+        } else {
+            (*out[*s]).clone()
+        };
         push_new(&mut new, hs);
         out[*s] = Rc::new(new);
     }
@@ -71,13 +78,27 @@ pub fn apply_effects(states: &World, permanent: bool, effects: &Effects) -> Worl
 /// Walking from `from` to `to`: the timers that are still running when there, the world
 /// without the heights whose timers ran out (or that are on their way off for good), and
 /// those heights.
-pub fn expire(states: &World, timers: &Timers, from: Point, to: Point, moving_off: &HashSet<Pair>) -> (World, Timers, BTreeSet<Pair>) {
+pub fn expire(
+    states: &World,
+    timers: &Timers,
+    from: Point,
+    to: Point,
+    moving_off: &HashSet<Pair>,
+) -> (World, Timers, BTreeSet<Pair>) {
     if timers.is_empty() {
         return (states.clone(), Timers::new(), BTreeSet::new());
     }
     let took = dist(from, to) / LEG_SPEED + ACTIVATION_TICS;
-    let left: Timers = timers.iter().filter(|(k, v)| **v - took > 0.0 && !moving_off.contains(k)).map(|(k, v)| (*k, *v - took)).collect();
-    let gone: BTreeSet<Pair> = timers.keys().copied().filter(|k| !left.contains_key(k)).collect();
+    let left: Timers = timers
+        .iter()
+        .filter(|(k, v)| **v - took > 0.0 && !moving_off.contains(k))
+        .map(|(k, v)| (*k, *v - took))
+        .collect();
+    let gone: BTreeSet<Pair> = timers
+        .keys()
+        .copied()
+        .filter(|k| !left.contains_key(k))
+        .collect();
     if gone.is_empty() {
         return (states.clone(), left, gone);
     }
@@ -98,7 +119,10 @@ mod tests {
 
     #[test]
     fn without_keeps_a_sector_at_some_height() {
-        let w = world(vec![vec![h(0.0, 128.0), h(64.0, 128.0)], vec![h(8.0, 72.0)]]);
+        let w = world(vec![
+            vec![h(0.0, 128.0), h(64.0, 128.0)],
+            vec![h(8.0, 72.0)],
+        ]);
         let out = without(&w, [(0, h(0.0, 128.0).key()), (1, h(8.0, 72.0).key())]);
         assert_eq!(*out[0], vec![h(64.0, 128.0)]);
         assert_eq!(*out[1], vec![h(8.0, 72.0)]);
@@ -109,7 +133,10 @@ mod tests {
         let w = world(vec![vec![h(64.0, 128.0)]]);
         let effects = vec![(0, vec![h(0.0, 128.0)])];
         assert_eq!(*apply_effects(&w, true, &effects)[0], vec![h(0.0, 128.0)]);
-        assert_eq!(*apply_effects(&w, false, &effects)[0], vec![h(64.0, 128.0), h(0.0, 128.0)]);
+        assert_eq!(
+            *apply_effects(&w, false, &effects)[0],
+            vec![h(64.0, 128.0), h(0.0, 128.0)]
+        );
         // raising: the old heights stay possible (it may not have got there yet)
         let up = vec![(0, vec![h(96.0, 128.0)])];
         assert_eq!(apply_effects(&w, true, &up)[0].len(), 2);
@@ -123,7 +150,8 @@ mod tests {
         // 120 units: 10 tics of walking, plus 10
         let (_, left, gone) = expire(&w, &timers, (0.0, 0.0), (119.0, 0.0), &HashSet::default());
         assert!(gone.is_empty() && left[&pair] > 0.0);
-        let (after, left, gone) = expire(&w, &timers, (0.0, 0.0), (121.0, 0.0), &HashSet::default());
+        let (after, left, gone) =
+            expire(&w, &timers, (0.0, 0.0), (121.0, 0.0), &HashSet::default());
         assert!(left.is_empty() && gone.contains(&pair));
         assert_eq!(*after[0], vec![h(64.0, 128.0)]);
     }

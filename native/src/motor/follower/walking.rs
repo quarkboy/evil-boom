@@ -1,10 +1,16 @@
 //! Path tracking, landing caution, pickup approach and recovery from obstacles.
 
-use super::{last_point, roll_speed, stops, Drop, Phase, RouteFollower, Run, SegEnd, Segment, CROSS_REST_WAIT, PRESS_RANGE};
+use super::{
+    last_point, roll_speed, stops, Drop, Phase, RouteFollower, Run, SegEnd, Segment,
+    CROSS_REST_WAIT, PRESS_RANGE,
+};
 use crate::geom::{cells, closest_point, dist, segment_distance, Point};
 use crate::motor::{heading, Controls, Observation, Track, BRAKE, FULL_SPEED, TICRATE};
 use crate::nav::{can_cross, Heights};
-use crate::navigator::{closest_on_portal, ITEM_RADIUS, MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT, PLAYER_RADIUS, TELEPORTERS_FOR_PLAYERS};
+use crate::navigator::{
+    closest_on_portal, ITEM_RADIUS, MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT, PLAYER_RADIUS,
+    TELEPORTERS_FOR_PLAYERS,
+};
 use crate::specials::Trigger;
 use crate::walkthrough::{fmt_heights, Action};
 use std::collections::BTreeSet;
@@ -77,7 +83,16 @@ impl RouteFollower {
         {
             // (but for one she's against already: the way leads off from it)
             let pos = obs.pos();
-            self.run_barrels = obs.barrels.iter().flatten().copied().filter(|&b| !((pos.0 - b.0).abs() < super::lanes::ROOM && (pos.1 - b.1).abs() < super::lanes::ROOM)).collect();
+            self.run_barrels = obs
+                .barrels
+                .iter()
+                .flatten()
+                .copied()
+                .filter(|&b| {
+                    !((pos.0 - b.0).abs() < super::lanes::ROOM
+                        && (pos.1 - b.1).abs() < super::lanes::ROOM)
+                })
+                .collect();
         }
         if !self.barrel_run {
             if let Some(c) = self.keep_off_lit_chain(obs) {
@@ -86,9 +101,17 @@ impl RouteFollower {
         }
         // (a barrel to clear on this step: taken on at once, shot from the nearest place out of
         // every blast of its chain, then on)
-        if let Some(b) = self.step().barrel.filter(|_| self.barrel_step != Some(self.step_i)).and_then(|b| super::barrel_now(obs, b)) {
+        if let Some(b) = self
+            .step()
+            .barrel
+            .filter(|_| self.barrel_step != Some(self.step_i))
+            .and_then(|b| super::barrel_now(obs, b))
+        {
             self.barrel_step = Some(self.step_i);
-            self.log.add(obs.tic, format!("clearing the barrel at ({:.0}, {:.0})", b.0, b.1));
+            self.log.add(
+                obs.tic,
+                format!("clearing the barrel at ({:.0}, {:.0})", b.0, b.1),
+            );
             self.barrel = Some((b, obs.tic));
             return self.shoot_barrel(obs);
         }
@@ -98,32 +121,66 @@ impl RouteFollower {
         // she's waiting on, not the step's own line): the user's rule, for the nearest floor
         // that stays put at once. E3M1: walked over the way over the blood, its first stone
         // went down under her, walked on to the jump she'd planned, off its corner into the blood)
-        if let Some(s) = nav.nav.mesh.poly_at(obs.pos()).map(|p| nav.nav.sector_of_poly(p)) {
+        if let Some(s) = nav
+            .nav
+            .mesh
+            .poly_at(obs.pos())
+            .map(|p| nav.nav.sector_of_poly(p))
+        {
             let on_floor = obs.z.is_none_or(|z| z <= obs.heights[s].floor + 0.5);
             // (going down now, lower than a tic ago: not just lower than it started. A floor gone
             // down for good is a floor, nukage or not: E2M1's bridge over the nukage, lowered into
             // it the first time across, "going down under her" each time after, run off twelve
             // times, the door past it never got to; seeds 3 and 6 stuck)
-            let going_down = obs.height(s).zip(self.prev_live.get(s)).is_some_and(|(l, p)| l.floor < p.floor - 0.01);
-            let expected = self.watches.iter().any(|w| w.expect.sector == s && !w.over) || step.trigger.as_ref().is_some_and(|t| t.effect(s).is_some());
+            let going_down = obs
+                .height(s)
+                .zip(self.prev_live.get(s))
+                .is_some_and(|(l, p)| l.floor < p.floor - 0.01);
+            let expected = self.watches.iter().any(|w| w.expect.sector == s && !w.over)
+                || step.trigger.as_ref().is_some_and(|t| t.effect(s).is_some());
             // (and only with somewhere to run to: down in the pit already, it's for the explorer
             // to find the way out)
             // (and only a floor going down into what hurts, as the triggers that move it have it:
             // a lift going down under her is a lift, E1M2's, run off two thousand times)
-            let into_harm = || nav.nav.triggers.iter().any(|t| t.info.trigger.walked() && t.effect(s).is_some() && nav.nav.floor_after(t, s) == Some(true));
-            if on_floor && going_down && self.sinking.contains(&s) && !expected && into_harm() && self.run_path(obs).is_some() {
+            let into_harm = || {
+                nav.nav.triggers.iter().any(|t| {
+                    t.info.trigger.walked()
+                        && t.effect(s).is_some()
+                        && nav.nav.floor_after(t, s) == Some(true)
+                })
+            };
+            if on_floor
+                && going_down
+                && self.sinking.contains(&s)
+                && !expected
+                && into_harm()
+                && self.run_path(obs).is_some()
+            {
                 self.log.add(obs.tic, format!("sector {s} going down under her: running for the nearest floor that stays put"));
-                self.run = Some(Run { heading: obs.angle, sector: None, next: obs.tic });
+                self.run = Some(Run {
+                    heading: obs.angle,
+                    sector: None,
+                    next: obs.tic,
+                });
                 return self.run_step(obs);
             }
         }
-        if let Some(t) = step.trigger.as_ref().filter(|t| step.action == Action::Cross && t.info.trigger == Trigger::WR && !t.permanent()) {
+        if let Some(t) = step.trigger.as_ref().filter(|t| {
+            step.action == Action::Cross && t.info.trigger == Trigger::WR && !t.permanent()
+        }) {
             if !self.cross_ready {
                 // A lift line to cross for its window: if the lift's away already (set off on the
                 // way, MAP09), crossing now does nothing and the window is shorter than planned.
                 let init = &nav.nav.movers.initial;
-                let away: Vec<usize> =
-                    t.effects.iter().map(|(s, _)| *s).filter(|&x| obs.height(x).is_some_and(|live| (live.floor - init[x].floor).abs() > 0.5)).collect();
+                let away: Vec<usize> = t
+                    .effects
+                    .iter()
+                    .map(|(s, _)| *s)
+                    .filter(|&x| {
+                        obs.height(x)
+                            .is_some_and(|live| (live.floor - init[x].floor).abs() > 0.5)
+                    })
+                    .collect();
                 if !away.is_empty() && obs.tic - self.step_tic < CROSS_REST_WAIT {
                     if !self.cross_wait_logged {
                         self.log.add(obs.tic, format!("sector {} already away: waiting for it to come back before crossing line {}", away[0], t.line));
@@ -171,13 +228,21 @@ impl RouteFollower {
         let last = self.seg_i == self.segments.len() - 1;
         let stop = seg.end == SegEnd::Jump || (last && stops(step.action));
         // near the end only counts once she's come along the track (paths double back)
-        let to_end = if track.length - self.s < 48.0 { dist(pos, end) } else { f64::INFINITY };
+        let to_end = if track.length - self.s < 48.0 {
+            dist(pos, end)
+        } else {
+            f64::INFINITY
+        };
         if seg.end == SegEnd::Jump && to_end <= RUNUP_TOLERANCE {
             if let Some(j) = &seg.jump {
                 return self.line_up(obs, j);
             }
         }
-        if step.action == Action::Pickup && obs.keys.is_some_and(|k| step.key.is_some_and(|sk| k.has(sk))) {
+        if step.action == Action::Pickup
+            && obs
+                .keys
+                .is_some_and(|k| step.key.is_some_and(|sk| k.has(sk)))
+        {
             self.phase = Phase::Act; // (got it, maybe on the way)
             return self.act_at_goal(obs);
         }
@@ -231,7 +296,11 @@ impl RouteFollower {
             // up there into the side of a stair, backed off twice, dead before the new path)
             let burning = {
                 let nav = &self.view.nav;
-                nav.poly_at(pos).is_some_and(|p| nav.damage.get(nav.sector_of_poly(p)).is_some_and(|&d| d != 0))
+                nav.poly_at(pos).is_some_and(|p| {
+                    nav.damage
+                        .get(nav.sector_of_poly(p))
+                        .is_some_and(|&d| d != 0)
+                })
             };
             if self.unsticks > UNSTICKS_BEFORE_REPLAN || burning {
                 // (with the heights as they are: the way the plan saw may be shut now; MAP23's
@@ -241,14 +310,26 @@ impl RouteFollower {
                 }
                 return self.walk(obs);
             }
-            if let Some(b) = obs.barrels.iter().flatten().copied().find(|&b| !self.barrel_run && dist(b, pos) < BARREL_IN_WAY) {
+            if let Some(b) = obs
+                .barrels
+                .iter()
+                .flatten()
+                .copied()
+                .find(|&b| !self.barrel_run && dist(b, pos) < BARREL_IN_WAY)
+            {
                 // wedged against a barrel (MAP23 has rows of them across corridors): blow it up
                 // from a safe distance, as a player would
-                self.log.add(obs.tic, format!("barrel in the way at ({:.0}, {:.0}): shooting it", b.0, b.1));
+                self.log.add(
+                    obs.tic,
+                    format!("barrel in the way at ({:.0}, {:.0}): shooting it", b.0, b.1),
+                );
                 self.barrel = Some((b, obs.tic));
                 return self.shoot_barrel(obs);
             }
-            self.log.add(obs.tic, format!("stuck at ({:.0}, {:.0}), backing off", obs.x, obs.y));
+            self.log.add(
+                obs.tic,
+                format!("stuck at ({:.0}, {:.0}), backing off", obs.x, obs.y),
+            );
             self.unstick_until = obs.tic + UNSTICK_TICS;
             self.progress_tic = obs.tic + UNSTICK_TICS;
             self.unstick_dir = self.away_from_walls(obs);
@@ -260,7 +341,10 @@ impl RouteFollower {
             carrot = seg.look.pts[seg.look.pts.len() - 1]; // (keep going through the line)
         }
         // (barrels standing in the track: by a lane between them to where it's clear again)
-        let on: Vec<Point> = [192.0, 320.0, 512.0, 96.0, 768.0].into_iter().map(|d| track.point_at((self.s + d).min(track.length))).collect();
+        let on: Vec<Point> = [192.0, 320.0, 512.0, 96.0, 768.0]
+            .into_iter()
+            .map(|d| track.point_at((self.s + d).min(track.length)))
+            .collect();
         carrot = self.lane_carrot(obs, carrot, &on);
         let end_speed = if stop {
             0.0
@@ -272,14 +356,19 @@ impl RouteFollower {
         // what's left of the track: off its end, as far as the end really is (MAP24: braked to a
         // stop 25 past a run-up the track ended at, and stood there "arrived")
         let rest = (track.length - self.s).max(dist(pos, end));
-        let mut speed = FULL_SPEED.min(track.speed_limit(track.length - rest, end_speed)).min(self.speed_cap);
+        let mut speed = FULL_SPEED
+            .min(track.speed_limit(track.length - rest, end_speed))
+            .min(self.speed_cap);
         if stop {
             speed = speed.min(0.3 * to_end + 0.5);
             if self.by_a_drop(obs, end) {
                 // (stopping at the brink of a drop: in gently, slowly over the last stretch, as for
                 // a run-up; E1M3, a spot to look into a nukage pit from, run at off a step down,
                 // in the air where braking does nothing, onto the lip and over, no way back up)
-                speed = speed.min(0.06 * rest + 1.5).min(if rest < 128.0 { 6.0 } else { FULL_SPEED });
+                speed =
+                    speed
+                        .min(0.06 * rest + 1.5)
+                        .min(if rest < 128.0 { 6.0 } else { FULL_SPEED });
             }
         }
         if seg.end == SegEnd::Jump {
@@ -287,7 +376,10 @@ impl RouteFollower {
             // (braking does nothing between steps down: MAP17's run-up at the foot of a stair
             // was overshot into the pit beyond)
             if self.steps_down_to_end(obs, track) {
-                speed = speed.min(0.06 * rest + 1.5).min(if rest < 128.0 { 6.0 } else { FULL_SPEED });
+                speed =
+                    speed
+                        .min(0.06 * rest + 1.5)
+                        .min(if rest < 128.0 { 6.0 } else { FULL_SPEED });
             } else {
                 speed = speed.min(0.12 * rest + 1.5);
             }
@@ -327,12 +419,27 @@ impl RouteFollower {
         if obs.tic - self.detour_tic >= 8 {
             let nav = &self.view.nav;
             let floor = |p: Point| {
-                let at = |q: Point| nav.poly_at(q).map(|i| nav.sector_of_poly(i)).filter(|&s| nav.damage.get(s).is_none_or(|&d| d == 0)).and_then(|s| obs.height(s)).filter(|h| h.ceiling - h.floor >= crate::navigator::PLAYER_HEIGHT);
+                let at = |q: Point| {
+                    nav.poly_at(q)
+                        .map(|i| nav.sector_of_poly(i))
+                        .filter(|&s| nav.damage.get(s).is_none_or(|&d| d == 0))
+                        .and_then(|s| obs.height(s))
+                        .filter(|h| h.ceiling - h.floor >= crate::navigator::PLAYER_HEIGHT)
+                };
                 let r = PLAYER_RADIUS + 1.0;
                 let mid = at(p)?.floor;
-                [(-r, -r), (r, -r), (r, r), (-r, r)].into_iter().all(|(dx, dy)| at((p.0 + dx, p.1 + dy)).is_some_and(|h| (h.floor - mid).abs() <= MAX_STEP)).then_some(mid)
+                [(-r, -r), (r, -r), (r, r), (-r, r)]
+                    .into_iter()
+                    .all(|(dx, dy)| {
+                        at((p.0 + dx, p.1 + dy)).is_some_and(|h| (h.floor - mid).abs() <= MAX_STEP)
+                    })
+                    .then_some(mid)
             };
-            let found = on.iter().copied().filter(|&q| dist(q, pos) > 32.0 && clear_of(&self.run_barrels, q)).find_map(|q| lane(pos, q, &[pos, q], &self.run_barrels, &floor, MAX_STEP));
+            let found = on
+                .iter()
+                .copied()
+                .filter(|&q| dist(q, pos) > 32.0 && clear_of(&self.run_barrels, q))
+                .find_map(|q| lane(pos, q, &[pos, q], &self.run_barrels, &floor, MAX_STEP));
             match found {
                 Some(way) if !way.is_empty() => {
                     self.detour = way;
@@ -368,26 +475,47 @@ impl RouteFollower {
         let ahead = |b: Point| (b.0 - pos.0) * u.0 + (b.1 - pos.1) * u.1 > 8.0;
         // (a way's clear of a barrel that stays its room off it; or that she's against now
         // and the way leads off from)
-        let passes = |q: Point, o: Point| segment_distance(pos, q, o, o) >= ROOM || (dist(pos, o) < ROOM + 4.0 && (q.0 - pos.0) * (o.0 - pos.0) + (q.1 - pos.1) * (o.1 - pos.1) <= 0.0);
-        let Some(&b) = barrels.iter().filter(|&&b| ahead(b) && segment_distance(pos, carrot, b, b) < ROOM).min_by(|x, y| dist(**x, pos).total_cmp(&dist(**y, pos))) else {
+        let passes = |q: Point, o: Point| {
+            segment_distance(pos, q, o, o) >= ROOM
+                || (dist(pos, o) < ROOM + 4.0
+                    && (q.0 - pos.0) * (o.0 - pos.0) + (q.1 - pos.1) * (o.1 - pos.1) <= 0.0)
+        };
+        let Some(&b) = barrels
+            .iter()
+            .filter(|&&b| ahead(b) && segment_distance(pos, carrot, b, b) < ROOM)
+            .min_by(|x, y| dist(**x, pos).total_cmp(&dist(**y, pos)))
+        else {
             return carrot;
         };
         let n = (-u.1, u.0);
-        let sides = [1.0, -1.0].into_iter().map(|k| (b.0 + n.0 * PASS * k, b.1 + n.1 * PASS * k));
-        let gaps = barrels.iter().filter(|&&o| dist(o, b) > 2.0 * ROOM && dist(o, b) < ROW).map(|&o| ((b.0 + o.0) / 2.0, (b.1 + o.1) / 2.0));
+        let sides = [1.0, -1.0]
+            .into_iter()
+            .map(|k| (b.0 + n.0 * PASS * k, b.1 + n.1 * PASS * k));
+        let gaps = barrels
+            .iter()
+            .filter(|&&o| dist(o, b) > 2.0 * ROOM && dist(o, b) < ROW)
+            .map(|&o| ((b.0 + o.0) / 2.0, (b.1 + o.1) / 2.0));
         let nav = &self.view.nav;
         sides
             .chain(gaps)
             .filter(|&q| {
-                nav.poly_at(q).is_some_and(|p| nav.damage.get(nav.sector_of_poly(p)).is_none_or(|&h| h == 0))
-                    && dist(pos, q) > 16.0
+                nav.poly_at(q).is_some_and(|p| {
+                    nav.damage
+                        .get(nav.sector_of_poly(p))
+                        .is_none_or(|&h| h == 0)
+                }) && dist(pos, q) > 16.0
                     && self.chord_clear(pos, q)
                     && barrels.iter().all(|&o| passes(q, o))
             })
-            .min_by(|x, y| (dist(pos, *x) + dist(*x, carrot)).total_cmp(&(dist(pos, *y) + dist(*y, carrot))))
+            .min_by(|x, y| {
+                (dist(pos, *x) + dist(*x, carrot)).total_cmp(&(dist(pos, *y) + dist(*y, carrot)))
+            })
             .unwrap_or_else(|| {
                 if std::env::var_os("EVIL_DEBUG_PACE").is_some() && obs.tic % 10 == 0 {
-                    eprintln!("  no way round the barrel at ({:.0}, {:.0}) from ({:.0}, {:.0})", b.0, b.1, pos.0, pos.1);
+                    eprintln!(
+                        "  no way round the barrel at ({:.0}, {:.0}) from ({:.0}, {:.0})",
+                        b.0, b.1, pos.0, pos.1
+                    );
                 }
                 carrot
             })
@@ -408,20 +536,31 @@ impl RouteFollower {
             let q = track.point_at(self.s + f);
             let t = track.point_at(self.s + f + 1.0);
             let (dx, dy) = (t.0 - q.0, t.1 - q.1);
-            let Some(poly) = mesh.poly_at(q) else { continue };
+            let Some(poly) = mesh.poly_at(q) else {
+                continue;
+            };
             let floor = obs.height(mesh.poly(poly).sector).map_or(0.0, |h| h.floor);
             if prev.is_some_and(|p| floor < p) {
                 steps_down.push(f);
             }
             prev = Some(floor);
             let mut sides: BTreeSet<bool> = BTreeSet::new();
-            for cell in cells(q.0 - LEDGE_NEAR, q.1 - LEDGE_NEAR, q.0 + LEDGE_NEAR, q.1 + LEDGE_NEAR) {
+            for cell in cells(
+                q.0 - LEDGE_NEAR,
+                q.1 - LEDGE_NEAR,
+                q.0 + LEDGE_NEAR,
+                q.1 + LEDGE_NEAR,
+            ) {
                 for &li in mesh.line_grid.get(&cell).into_iter().flatten() {
                     if !drops.contains(&li) {
                         continue;
                     }
-                    let (Some(fs), Some(bs)) = m.sides(li) else { continue };
-                    let (Some(hf), Some(hb)) = (obs.height(fs), obs.height(bs)) else { continue };
+                    let (Some(fs), Some(bs)) = m.sides(li) else {
+                        continue;
+                    };
+                    let (Some(hf), Some(hb)) = (obs.height(fs), obs.height(bs)) else {
+                        continue;
+                    };
                     if (hf.floor - hb.floor).abs() <= MAX_STEP {
                         continue; // (not a drop at the heights now)
                     }
@@ -450,8 +589,15 @@ impl RouteFollower {
         let near = 2.0 * LEDGE_NEAR;
         cells(p.0 - near, p.1 - near, p.0 + near, p.1 + near).any(|cell| {
             mesh.line_grid.get(&cell).into_iter().flatten().any(|&li| {
-                let (Some(fs), Some(bs)) = (drops.contains(&li).then_some(()).and(m.sides(li).0), m.sides(li).1) else { return false };
-                let (Some(hf), Some(hb)) = (obs.height(fs), obs.height(bs)) else { return false };
+                let (Some(fs), Some(bs)) = (
+                    drops.contains(&li).then_some(()).and(m.sides(li).0),
+                    m.sides(li).1,
+                ) else {
+                    return false;
+                };
+                let (Some(hf), Some(hb)) = (obs.height(fs), obs.height(bs)) else {
+                    return false;
+                };
                 let (a, c) = m.line_seg(li);
                 (hf.floor - hb.floor).abs() > MAX_STEP && segment_distance(a, c, p, p) < near
             })
@@ -463,7 +609,14 @@ impl RouteFollower {
         let step = self.step();
         let key = step.key.filter(|_| step.action == Action::Pickup)?;
         let goal = last_point(step.path.as_ref()?)?;
-        self.view.nav.map.things.iter().filter(|t| t.kind == key as u16).map(|t| (t.x, t.y)).min_by(|a, b| dist(*a, goal).total_cmp(&dist(*b, goal)))
+        self.view
+            .nav
+            .map
+            .things
+            .iter()
+            .filter(|t| t.kind == key as u16)
+            .map(|t| (t.x, t.y))
+            .min_by(|a, b| dist(*a, goal).total_cmp(&dist(*b, goal)))
     }
 
     /// Close enough that the boxes overlap, and at a height the game lets her have it from:
@@ -476,7 +629,8 @@ impl RouteFollower {
         }
         let nav = &self.view.nav;
         match (obs.z, nav.poly_at(it)) {
-            (Some(z), Some(p)) => (-PICKUP_BELOW..=PLAYER_HEIGHT).contains(&(obs.heights[nav.sector_of_poly(p)].floor - z)),
+            (Some(z), Some(p)) => (-PICKUP_BELOW..=PLAYER_HEIGHT)
+                .contains(&(obs.heights[nav.sector_of_poly(p)].floor - z)),
             _ => true,
         }
     }
@@ -492,7 +646,10 @@ impl RouteFollower {
                 continue;
             }
             // (no corner cut into a barrel)
-            if dist(pos, q) < 1.0 || (self.chord_clear(pos, q) && super::lanes::chord_clear_of(&self.run_barrels, pos, q)) {
+            if dist(pos, q) < 1.0
+                || (self.chord_clear(pos, q)
+                    && super::lanes::chord_clear_of(&self.run_barrels, pos, q))
+            {
                 return q;
             }
         }
@@ -503,7 +660,13 @@ impl RouteFollower {
     /// (uncrossed) ledge? Edges she's close to already only need not get closer.
     pub(super) fn chord_clear(&self, p: Point, q: Point) -> bool {
         let nav = &self.view.nav;
-        for (e1, e2) in nav.walls_near(p, q, 2.0 * PLAYER_RADIUS, Some(&self.crossing_lines), Some(&self.live)) {
+        for (e1, e2) in nav.walls_near(
+            p,
+            q,
+            2.0 * PLAYER_RADIUS,
+            Some(&self.crossing_lines),
+            Some(&self.live),
+        ) {
             let length = dist(e1, e2).max(1e-6);
             let (c, s) = ((e2.0 - e1.0).abs() / length, (e2.1 - e1.1).abs() / length);
             let reach = PLAYER_RADIUS * (c + s) + 2.0; // (the box's extent across this edge)
@@ -516,7 +679,9 @@ impl RouteFollower {
         let m = &nav.map;
         for cell in cells(p.0.min(q.0), p.1.min(q.1), p.0.max(q.0), p.1.max(q.1)) {
             for &li in nav.mesh.line_grid.get(&cell).into_iter().flatten() {
-                if !TELEPORTERS_FOR_PLAYERS.contains(&m.linedefs[li].special) || self.crossing_lines.contains(&li) {
+                if !TELEPORTERS_FOR_PLAYERS.contains(&m.linedefs[li].special)
+                    || self.crossing_lines.contains(&li)
+                {
                     continue;
                 }
                 let (v1, v2) = m.line_seg(li);
@@ -533,7 +698,11 @@ impl RouteFollower {
     /// point is too near to give a steady direction.
     fn look_angle(&mut self, obs: &Observation, seg: &Segment) -> f64 {
         let look = &seg.look;
-        let s = if look.length > seg.track.length { look.project(obs.pos(), self.s, 64.0).1 } else { self.s };
+        let s = if look.length > seg.track.length {
+            look.project(obs.pos(), self.s, 64.0).1
+        } else {
+            self.s
+        };
         let point = look.point_at(s + LOOK_AHEAD);
         if dist(obs.pos(), point) >= 40.0 || self.look.is_none() {
             if dist(obs.pos(), point) > 1.0 {
@@ -550,7 +719,13 @@ impl RouteFollower {
     fn away_from_walls(&self, obs: &Observation) -> f64 {
         let pos = obs.pos();
         let (mut ax, mut ay) = (0.0, 0.0);
-        for (a, b) in self.view.nav.walls_near(pos, pos, 40.0, Some(&self.crossing_lines), Some(&obs.heights)) {
+        for (a, b) in self.view.nav.walls_near(
+            pos,
+            pos,
+            40.0,
+            Some(&self.crossing_lines),
+            Some(&obs.heights),
+        ) {
             let q = closest_point(pos, a, b);
             let d = dist(pos, q);
             if 1e-6 < d && d < 40.0 {
@@ -566,7 +741,13 @@ impl RouteFollower {
         let away = ay.atan2(ax);
         let back_r = back.to_radians();
         // mostly sideways off what she's snagged on, a bit backwards
-        heading((0.0, 0.0), (away.cos() * 2.0 + back_r.cos(), away.sin() * 2.0 + back_r.sin()))
+        heading(
+            (0.0, 0.0),
+            (
+                away.cos() * 2.0 + back_r.cos(),
+                away.sin() * 2.0 + back_r.sin(),
+            ),
+        )
     }
 
     fn unstick(&mut self, obs: &Observation) -> Controls {
@@ -580,7 +761,10 @@ impl RouteFollower {
         let mesh = &self.view.nav.mesh;
         let start = (track.length - 128.0).max(0.0);
         let floors: Vec<f64> = (0..9)
-            .filter_map(|k| mesh.poly_at(track.point_at(start + (track.length - start) * f64::from(k) / 8.0)).map(|q| obs.heights[mesh.poly(q).sector].floor))
+            .filter_map(|k| {
+                mesh.poly_at(track.point_at(start + (track.length - start) * f64::from(k) / 8.0))
+                    .map(|q| obs.heights[mesh.poly(q).sector].floor)
+            })
             .collect();
         floors.windows(2).any(|w| w[1] < w[0])
     }
@@ -596,7 +780,9 @@ impl RouteFollower {
     fn creep_to_drop(&mut self, obs: &Observation) {
         let view = Rc::clone(&self.view);
         let mesh = &view.nav.mesh;
-        let Some(path) = self.step().path.clone() else { return };
+        let Some(path) = self.step().path.clone() else {
+            return;
+        };
         let pos = obs.pos();
         let upto = (self.poly_i + 4).min(path.polys.len().saturating_sub(1));
         for j in self.poly_i..upto {
@@ -606,24 +792,40 @@ impl RouteFollower {
             if cs == ns || a.floor - b.floor <= MAX_STEP {
                 continue;
             }
-            let Some(portal) = mesh.poly(cur).portals.iter().map(|&pi| &mesh.portals[pi]).find(|p| p.other(cur) == nxt) else { return };
+            let Some(portal) = mesh
+                .poly(cur)
+                .portals
+                .iter()
+                .map(|&pi| &mesh.portals[pi])
+                .find(|p| p.other(cur) == nxt)
+            else {
+                return;
+            };
             let edge = closest_on_portal(pos, portal.p1, portal.p2);
             if dist(edge, pos) > CREEP_RANGE {
                 return;
             }
             // (the way she'll go over: on from her to the edge, or, at it, the way the landing is)
-            let to = if dist(edge, pos) > 4.0 { pos } else { mesh.poly(cur).center };
+            let to = if dist(edge, pos) > 4.0 {
+                pos
+            } else {
+                mesh.poly(cur).center
+            };
             let len = dist(edge, to).max(1e-6);
             let dir = ((edge.0 - to.0) / len, (edge.1 - to.1) / len);
             // (the floor she'd land on, how far on before it drops away again)
             let room = (1..)
                 .map(|k| f64::from(k) * 8.0)
                 .take_while(|&r| r < LANDING_ROOM)
-                .find(|&r| mesh.poly_at((edge.0 + dir.0 * r, edge.1 + dir.1 * r)).is_none_or(|q| obs.heights[mesh.poly(q).sector].floor < b.floor - MAX_STEP));
+                .find(|&r| {
+                    mesh.poly_at((edge.0 + dir.0 * r, edge.1 + dir.1 * r))
+                        .is_none_or(|q| obs.heights[mesh.poly(q).sector].floor < b.floor - MAX_STEP)
+                });
             // (as fast as goes no further than that: the fall, about sqrt(2h) tics, and the
             // slide on landing, 1 / (1 - friction) tics' worth, at the speed she went over)
             if let Some(room) = room {
-                let tics = (2.0 * (a.floor - b.floor)).sqrt() + 1.0 / (1.0 - crate::motor::FRICTION);
+                let tics =
+                    (2.0 * (a.floor - b.floor)).sqrt() + 1.0 / (1.0 - crate::motor::FRICTION);
                 self.speed_cap = self.speed_cap.min((room / tics).max(DROP_CREEP));
             }
             return;
@@ -633,7 +835,9 @@ impl RouteFollower {
     fn unexpected_drop(&mut self, obs: &Observation) -> Drop {
         let view = Rc::clone(&self.view);
         let mesh = &view.nav.mesh;
-        let Some(path) = self.step().path.clone() else { return Drop::None };
+        let Some(path) = self.step().path.clone() else {
+            return Drop::None;
+        };
         // (the drops the plan means to take, this step's and the rest's)
         let planned: BTreeSet<String> = self.steps[self.step_i as usize..]
             .iter()
@@ -649,16 +853,44 @@ impl RouteFollower {
             if cs == ns {
                 continue;
             }
-            let Some(portal) = mesh.poly(cur).portals.iter().map(|&pi| &mesh.portals[pi]).find(|p| p.other(cur) == nxt) else { return Drop::None };
-            if dist(closest_on_portal(obs.pos(), portal.p1, portal.p2), obs.pos()) > DROP_CHECK_DIST {
+            let Some(portal) = mesh
+                .poly(cur)
+                .portals
+                .iter()
+                .map(|&pi| &mesh.portals[pi])
+                .find(|p| p.other(cur) == nxt)
+            else {
+                return Drop::None;
+            };
+            if dist(
+                closest_on_portal(obs.pos(), portal.p1, portal.p2),
+                obs.pos(),
+            ) > DROP_CHECK_DIST
+            {
                 return Drop::None;
             }
             let (a, b) = (obs.heights[cs], obs.heights[ns]);
-            let key = (cs, ns, [a.floor.to_bits(), a.ceiling.to_bits(), b.floor.to_bits(), b.ceiling.to_bits()]);
-            if planned.contains(&ns.to_string()) || self.drops_ok.contains(&key) || !can_cross(a, b) || can_cross(b, a) {
+            let key = (
+                cs,
+                ns,
+                [
+                    a.floor.to_bits(),
+                    a.ceiling.to_bits(),
+                    b.floor.to_bits(),
+                    b.ceiling.to_bits(),
+                ],
+            );
+            if planned.contains(&ns.to_string())
+                || self.drops_ok.contains(&key)
+                || !can_cross(a, b)
+                || can_cross(b, a)
+            {
                 continue;
             }
-            if !self.states[cs].iter().any(|&ha| self.states[ns].iter().any(|&hb| can_cross(hb, ha))) {
+            if !self.states[cs]
+                .iter()
+                .any(|&ha| self.states[ns].iter().any(|&hb| can_cross(hb, ha)))
+            {
                 continue; // (one-way in the plan as well)
             }
             // (or the lift it'd drop off, on its way down to level: MAP05's, pressed to be ridden,
@@ -670,16 +902,22 @@ impl RouteFollower {
                     let fits = if w.expect.sector == ns {
                         can_cross(a, w.expect.heights) && can_cross(w.expect.heights, a)
                     } else {
-                        w.expect.sector == cs && can_cross(w.expect.heights, b) && can_cross(b, w.expect.heights)
+                        w.expect.sector == cs
+                            && can_cross(w.expect.heights, b)
+                            && can_cross(b, w.expect.heights)
                     };
-                    fits && w.reached.is_none() && ((obs.tic - w.since) as f64) < 1.5 * w.expect.travel + 10.0 * TICRATE
+                    fits && w.reached.is_none()
+                        && ((obs.tic - w.since) as f64) < 1.5 * w.expect.travel + 10.0 * TICRATE
                 })
                 .map(|w| w.expect.heights);
             if let Some(h) = coming {
                 // still on its way to where the plan has it (MAP29: a floor that takes half a
                 // minute to rise to the walkway): wait at the edge
                 if !self.edge_wait {
-                    self.log.add(obs.tic, format!("waiting for sector {ns} to reach {}", fmt_heights(h)));
+                    self.log.add(
+                        obs.tic,
+                        format!("waiting for sector {ns} to reach {}", fmt_heights(h)),
+                    );
                     self.edge_wait = true;
                 }
                 self.speed_cap = 0.0;
@@ -692,13 +930,25 @@ impl RouteFollower {
             // (heights she allowed for, a lift down that she counted on coming up: only the timing
             // is off, on by the drop as before. Heights she didn't: what's beyond is for the
             // explorer to judge again)
-            let allowed = |s: usize, h: Heights| self.states[s].iter().any(|x| (x.floor - h.floor).abs() < 1.0 && (x.ceiling - h.ceiling).abs() < 1.0);
+            let allowed = |s: usize, h: Heights| {
+                self.states[s]
+                    .iter()
+                    .any(|x| (x.floor - h.floor).abs() < 1.0 && (x.ceiling - h.ceiling).abs() < 1.0)
+            };
             // (or one the plan is waiting to see move, caught on its way: MAP06's lift, pressed to
             // be got onto, sinking under her as she stood by its switch)
-            let on_its_way = |s: usize| self.watches.iter().any(|w| w.expect.sector == s && w.reached.is_none());
+            let on_its_way = |s: usize| {
+                self.watches
+                    .iter()
+                    .any(|w| w.expect.sector == s && w.reached.is_none())
+            };
             let foreseen = (allowed(cs, a) || on_its_way(cs)) && (allowed(ns, b) || on_its_way(ns));
             if !self.replan(obs, &why, true) {
-                return if foreseen { Drop::None } else { Drop::GiveBack(format!("{why}, and no other way on")) };
+                return if foreseen {
+                    Drop::None
+                } else {
+                    Drop::GiveBack(format!("{why}, and no other way on"))
+                };
             }
             if foreseen {
                 return Drop::Replanned;
@@ -712,7 +962,9 @@ impl RouteFollower {
                 .filter_map(|n| n.split("into sector ").nth(1).map(str::to_string))
                 .collect();
             if !dropped.is_subset(&planned) {
-                return Drop::GiveBack(format!("{why}: the only way on drops where the plan didn't"));
+                return Drop::GiveBack(format!(
+                    "{why}: the only way on drops where the plan didn't"
+                ));
             }
             return Drop::Replanned;
         }

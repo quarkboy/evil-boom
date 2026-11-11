@@ -13,10 +13,10 @@
 
 use super::physics::{Controls, PlayerSim};
 use super::{Jump, JumpLab};
+use crate::det::HashSet;
 use crate::geom::{dist, Point, MAX_STEP};
 use crate::motor::{FRICTION, MAX_MOVE, MAX_TURN, RUN_THRUST, TURN_ACCEL};
 use crate::nav::Heights;
-use crate::det::HashSet;
 
 const TICRATE: usize = 35;
 /// a jump has to work this far to either side of its line too (1 was too strict: E4M6, MAP24)
@@ -66,7 +66,10 @@ enum Test {
     Stuck(Push),
     /// it doesn't stop on the landing: it lands but slides off (`slid`), or not even that;
     /// and, run straight across the landing onto what's beyond, where it stops
-    Off { slid: bool, through: Option<Point> },
+    Off {
+        slid: bool,
+        through: Option<Point>,
+    },
     Unverified,
 }
 
@@ -105,7 +108,10 @@ impl Motion {
     /// Stop where we are, facing `look`.
     fn brake(&mut self, angle: f64, look: f64) -> Controls {
         let err = norm(look - angle);
-        let want = (MAX_TURN.min((2.0 * TURN_ACCEL * err.abs()).sqrt()).min(err.abs())).copysign(err);
+        let want = (MAX_TURN
+            .min((2.0 * TURN_ACCEL * err.abs()).sqrt())
+            .min(err.abs()))
+        .copysign(err);
         self.rate = want.clamp(self.rate - TURN_ACCEL, self.rate + TURN_ACCEL);
         if err.abs() < 0.25 && self.rate.abs() <= TURN_ACCEL {
             self.rate = err;
@@ -119,7 +125,11 @@ impl Motion {
             cy *= MAX_MOVE / mag;
         }
         let (sin, cos) = facing.sin_cos();
-        Controls { forward: cx * cos + cy * sin, strafe: cx * sin - cy * cos, turn: -self.rate }
+        Controls {
+            forward: cx * cos + cy * sin,
+            strafe: cx * sin - cy * cos,
+            turn: -self.rate,
+        }
     }
 }
 
@@ -155,11 +165,18 @@ impl JumpLab {
     fn verdict(&self, sim: &mut PlayerSim<'_>, j: &Jump) -> String {
         match self.test_jump(sim, j) {
             Test::Stuck(push) => {
-                let modes: &[Push] = if push == Push::Release(0.0) { &[Push::Release(0.0), Push::Full] } else { &[push] };
+                let modes: &[Push] = if push == Push::Release(0.0) {
+                    &[Push::Release(0.0), Push::Full]
+                } else {
+                    &[push]
+                };
                 modes
                     .iter()
                     .copied()
-                    .find(|&m| self.works(sim, j, m, false) && self.variants(j).iter().all(|v| self.works(sim, v, m, true)))
+                    .find(|&m| {
+                        self.works(sim, j, m, false)
+                            && self.variants(j).iter().all(|v| self.works(sim, v, m, true))
+                    })
                     .map_or_else(|| "fail".to_string(), Push::label)
             }
             Test::Off { slid, through } => {
@@ -187,11 +204,17 @@ impl JumpLab {
         if length < 1e-6 {
             return Vec::new();
         }
-        let (ux, uy) = ((j.takeoff.0 - j.runup.0) / length, (j.takeoff.1 - j.runup.1) / length);
+        let (ux, uy) = (
+            (j.takeoff.0 - j.runup.0) / length,
+            (j.takeoff.1 - j.runup.1) / length,
+        );
         (1..)
             .map(|k| length - RUNUP_STEP * f64::from(k))
             .take_while(|&l| l >= MIN_RUNUP)
-            .map(|l| Jump { runup: (j.takeoff.0 - ux * l, j.takeoff.1 - uy * l), ..j.clone() })
+            .map(|l| Jump {
+                runup: (j.takeoff.0 - ux * l, j.takeoff.1 - uy * l),
+                ..j.clone()
+            })
             .collect()
     }
 
@@ -199,7 +222,9 @@ impl JumpLab {
     pub fn trace(&self, j: &Jump, soft: bool) -> Vec<(f64, f64, f64, f64)> {
         let push = if soft { Push::Release(0.0) } else { Push::Full };
         let mut sim = PlayerSim::new(self, self.world());
-        let Some(heading) = self.prepare(&mut sim, j) else { return Vec::new() };
+        let Some(heading) = self.prepare(&mut sim, j) else {
+            return Vec::new();
+        };
         let edge = dist(j.runup, j.takeoff);
         let flight = edge + dist(j.takeoff, j.dest);
         let (uy, ux) = heading.to_radians().sin_cos();
@@ -210,7 +235,11 @@ impl JumpLab {
             let flown = (o.0 - j.runup.0) * ux + (o.1 - j.runup.1) * uy;
             let pushing = flown < push.until(edge, flight);
             let turn = (-norm(j.facing(heading) - sim.angle_degrees())).clamp(-3.0, 3.0);
-            sim.step(Controls { forward: if pushing { 50.0 } else { 0.0 }, strafe: if pushing { j.sidestep() } else { 0.0 }, turn });
+            sim.step(Controls {
+                forward: if pushing { 50.0 } else { 0.0 },
+                strafe: if pushing { j.sidestep() } else { 0.0 },
+                turn,
+            });
         }
         out
     }
@@ -219,7 +248,9 @@ impl JumpLab {
     /// (sliding on after touching down is all right, not falling short); a variant that can't
     /// be set up or can't get going (its run-up backed into a wall) doesn't count against it.
     fn works(&self, sim: &mut PlayerSim<'_>, j: &Jump, push: Push, reach: bool) -> bool {
-        let Some(heading) = self.prepare(sim, j) else { return reach };
+        let Some(heading) = self.prepare(sim, j) else {
+            return reach;
+        };
         let (result, at) = self.fly(sim, j, heading, push, false);
         if reach && result == Flight::Missed && dist(at, j.runup) < 4.0 {
             return true;
@@ -248,7 +279,10 @@ impl JumpLab {
         }
         for d in [-ROBUST_RUNUP, ROBUST_RUNUP] {
             if length - d > 1.0 {
-                out.push(Jump { runup: (rx + ux * d, ry + uy * d), ..j.clone() });
+                out.push(Jump {
+                    runup: (rx + ux * d, ry + uy * d),
+                    ..j.clone()
+                });
             }
         }
         out.retain(|v| self.mesh.poly_at(v.runup).is_some());
@@ -264,20 +298,31 @@ impl JumpLab {
         jumps
             .iter()
             .map(|j| {
-                let variants: Vec<Jump> = self.sure_variants(j).into_iter().filter(|v| self.mesh.poly_at(v.runup).is_some()).collect();
+                let variants: Vec<Jump> = self
+                    .sure_variants(j)
+                    .into_iter()
+                    .filter(|v| self.mesh.poly_at(v.runup).is_some())
+                    .collect();
                 let mut tried = 0usize;
                 let mut landed = 0usize;
                 for v in &variants {
                     match self.test_jump(&mut sim, v) {
                         Test::Unverified => {}
-                        Test::Off { slid: false, through: None } => tried += 1,
+                        Test::Off {
+                            slid: false,
+                            through: None,
+                        } => tried += 1,
                         _ => {
                             tried += 1;
                             landed += 1;
                         }
                     }
                 }
-                if tried == 0 { 1.0 } else { landed as f64 / tried as f64 }
+                if tried == 0 {
+                    1.0
+                } else {
+                    landed as f64 / tried as f64
+                }
             })
             .collect()
     }
@@ -303,11 +348,17 @@ impl JumpLab {
         for a in SURE_TURNS.iter().flat_map(|&a| [a, -a]) {
             let (sin, cos) = a.to_radians().sin_cos();
             let (dx, dy) = (rx - tx, ry - ty);
-            out.push(Jump { runup: (tx + dx * cos - dy * sin, ty + dx * sin + dy * cos), ..j.clone() });
+            out.push(Jump {
+                runup: (tx + dx * cos - dy * sin, ty + dx * sin + dy * cos),
+                ..j.clone()
+            });
         }
         for d in [SURE_RUNUP, -SURE_RUNUP] {
             if length + d > 1.0 {
-                out.push(Jump { runup: (tx - ux * (length + d), ty - uy * (length + d)), ..j.clone() });
+                out.push(Jump {
+                    runup: (tx - ux * (length + d), ty - uy * (length + d)),
+                    ..j.clone()
+                });
             }
         }
         out
@@ -328,7 +379,14 @@ impl JumpLab {
                 dest: (j.dest.0 + px * s, j.dest.1 + py * s),
                 ..j.clone()
             };
-            self.mesh.poly_at(shifted.runup).is_some() && !matches!(self.test_jump(sim, &shifted), Test::Off { slid: false, through: None })
+            self.mesh.poly_at(shifted.runup).is_some()
+                && !matches!(
+                    self.test_jump(sim, &shifted),
+                    Test::Off {
+                        slid: false,
+                        through: None
+                    }
+                )
         })
     }
 
@@ -339,19 +397,27 @@ impl JumpLab {
         let edge = dist(j.runup, j.takeoff);
         let flight = edge + dist(j.takeoff, j.dest);
         let releases = if self.lands_sinking(j) { 0 } else { usize::MAX };
-        let partial = (1..).map(|k| RELEASE_STEP * f64::from(k)).take_while(|&r| edge + r < flight - 8.0).map(Push::Release).take(releases);
+        let partial = (1..)
+            .map(|k| RELEASE_STEP * f64::from(k))
+            .take_while(|&r| edge + r < flight - 8.0)
+            .map(Push::Release)
+            .take(releases);
         let mut slid = false;
         for push in [Push::Release(0.0), Push::Full].into_iter().chain(partial) {
-            let Some(heading) = self.prepare(sim, j) else { return Test::Unverified };
+            let Some(heading) = self.prepare(sim, j) else {
+                return Test::Unverified;
+            };
             match self.fly(sim, j, heading, push, false).0 {
                 Flight::Stuck => return Test::Stuck(push),
                 Flight::Slid if push == Push::Full => slid = true,
                 _ => {}
             }
         }
-        let through = self.prepare(sim, j).and_then(|heading| match self.fly(sim, j, heading, Push::Full, true) {
-            (Flight::Stuck, at) => Some(at),
-            _ => None,
+        let through = self.prepare(sim, j).and_then(|heading| {
+            match self.fly(sim, j, heading, Push::Full, true) {
+                (Flight::Stuck, at) => Some(at),
+                _ => None,
+            }
         });
         Test::Off { slid, through }
     }
@@ -360,13 +426,21 @@ impl JumpLab {
     /// posts lowering together), standing at the run-up facing the takeoff; the heading, or
     /// None if it can't be stood at.
     fn prepare(&self, sim: &mut PlayerSim<'_>, j: &Jump) -> Option<f64> {
-        let mut heights: Vec<Heights> = self.initial.iter().map(|&(floor, ceiling)| Heights { floor, ceiling }).collect();
+        let mut heights: Vec<Heights> = self
+            .initial
+            .iter()
+            .map(|&(floor, ceiling)| Heights { floor, ceiling })
+            .collect();
         for &(s, h) in &j.requires {
             let init = self.initial[s];
             if (h.floor, h.ceiling) == init {
                 continue;
             }
-            if let Some(t) = self.permanent.iter().find(|t| t.iter().any(|(ts, hs)| *ts == s && hs.contains(&h))) {
+            if let Some(t) = self
+                .permanent
+                .iter()
+                .find(|t| t.iter().any(|(ts, hs)| *ts == s && hs.contains(&h)))
+            {
                 for (ts, hs) in t {
                     if let Some(first) = hs.first() {
                         heights[*ts] = *first;
@@ -377,7 +451,15 @@ impl JumpLab {
         for &(s, h) in &j.requires {
             heights[s] = h;
         }
-        sim.heights = heights.iter().map(|h| (super::physics::to_fixed(h.floor), super::physics::to_fixed(h.ceiling))).collect();
+        sim.heights = heights
+            .iter()
+            .map(|h| {
+                (
+                    super::physics::to_fixed(h.floor),
+                    super::physics::to_fixed(h.ceiling),
+                )
+            })
+            .collect();
         sim.place((j.runup.0.round(), j.runup.1.round()), self.start_angle);
         for _ in 0..4 {
             sim.step(Controls::default());
@@ -385,14 +467,19 @@ impl JumpLab {
         if dist(sim.pos(), j.runup) > 4.0 {
             return None;
         }
-        let heading = (j.takeoff.1 - j.runup.1).atan2(j.takeoff.0 - j.runup.0).to_degrees();
+        let heading = (j.takeoff.1 - j.runup.1)
+            .atan2(j.takeoff.0 - j.runup.0)
+            .to_degrees();
         // (faced off the way, strafing: the way's still `heading`)
         for _ in 0..20 {
             let diff = norm(j.facing(heading) - sim.angle_degrees());
             if diff.abs() < 1.0 {
                 break;
             }
-            sim.step(Controls { turn: (-diff).clamp(-25.0, 25.0), ..Controls::default() });
+            sim.step(Controls {
+                turn: (-diff).clamp(-25.0, 25.0),
+                ..Controls::default()
+            });
         }
         Some(heading)
     }
@@ -400,12 +487,23 @@ impl JumpLab {
     /// Sprint, then brake on touchdown: and where we ended up. `through`: keep sprinting
     /// across the landing sector and land on whatever comes next (no lower than a step below
     /// it).
-    fn fly(&self, sim: &mut PlayerSim<'_>, j: &Jump, heading: f64, push: Push, through: bool) -> (Flight, Point) {
+    fn fly(
+        &self,
+        sim: &mut PlayerSim<'_>,
+        j: &Jump,
+        heading: f64,
+        push: Push,
+        through: bool,
+    ) -> (Flight, Point) {
         let edge = dist(j.runup, j.takeoff);
         let flight = edge + dist(j.takeoff, j.dest);
         let (uy, ux) = heading.to_radians().sin_cos();
         let mut want = self.mesh.poly(j.dest_poly).sector;
-        let src: HashSet<usize> = j.src_polys.iter().map(|&p| self.mesh.poly(p).sector).collect();
+        let src: HashSet<usize> = j
+            .src_polys
+            .iter()
+            .map(|&p| self.mesh.poly(p).sector)
+            .collect();
         let mut motion = Motion::default();
         let mut last = sim.pos();
         let mut touched: Option<usize> = None;
@@ -425,7 +523,12 @@ impl JumpLab {
                 if (sim.z_units() - sim.floor_of(s)).abs() < 1.0 {
                     if !through && s == want {
                         touched = Some(i);
-                    } else if through && crossed && !src.contains(&s) && s != want && sim.floor_of(s) >= sim.floor_of(want) - MAX_STEP {
+                    } else if through
+                        && crossed
+                        && !src.contains(&s)
+                        && s != want
+                        && sim.floor_of(s) >= sim.floor_of(want) - MAX_STEP
+                    {
                         touched = Some(i);
                         want = s;
                     }
@@ -433,7 +536,14 @@ impl JumpLab {
             }
             if let Some(t) = touched {
                 if motion.speed() < 0.3 || i - t > 2 * TICRATE {
-                    return (if here == Some(want) { Flight::Stuck } else { Flight::Slid }, last);
+                    return (
+                        if here == Some(want) {
+                            Flight::Stuck
+                        } else {
+                            Flight::Slid
+                        },
+                        last,
+                    );
                 }
                 let c = motion.brake(sim.angle_degrees(), heading);
                 sim.step(c);
@@ -445,7 +555,11 @@ impl JumpLab {
             }
             let pushing = through || flown < push.until(edge, flight);
             let turn = (-norm(j.facing(heading) - sim.angle_degrees())).clamp(-3.0, 3.0);
-            sim.step(Controls { forward: if pushing { 50.0 } else { 0.0 }, strafe: if pushing { j.sidestep() } else { 0.0 }, turn });
+            sim.step(Controls {
+                forward: if pushing { 50.0 } else { 0.0 },
+                strafe: if pushing { j.sidestep() } else { 0.0 },
+                turn,
+            });
         }
         (Flight::Missed, last)
     }

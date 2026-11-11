@@ -27,10 +27,23 @@ pub fn drive(knock: bool) -> Option<(bool, i32, Vec<String>)> {
     nav.keep_verified();
     let nav = Rc::new(nav);
     let view = Rc::new(nav.full_view());
-    let start = m.things.iter().find(|t| t.kind == 1).map(|t| (t.x, t.y)).expect("a start");
+    let start = m
+        .things
+        .iter()
+        .find(|t| t.kind == 1)
+        .map(|t| (t.x, t.y))
+        .expect("a start");
     let plan = plan_level(&view, start, 60.0, 20000);
     assert!(plan.complete, "{}", plan.problem);
-    let mut e = Engine::new(&iwad, "E1M1", &Options { seed: Some(0), ..Options::default() }).expect("the game starts");
+    let mut e = Engine::new(
+        &iwad,
+        "E1M1",
+        &Options {
+            seed: Some(0),
+            ..Options::default()
+        },
+    )
+    .expect("the game starts");
     e.start();
     let mut f = RouteFollower::new(view, plan.steps, Default::default(), None, true, e.tic);
     let mut knocked = !knock;

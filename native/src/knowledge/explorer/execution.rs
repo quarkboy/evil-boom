@@ -1,6 +1,9 @@
 //! Following objectives, looking around, and recording arrival or failure.
 
-use super::{turn_to, EndKind, Explorer, Hooks, Kind, Objective, ARRIVE_SLACK, JUMP_MISSES, LOOK_TICS, STUCK_TIMES};
+use super::{
+    turn_to, EndKind, Explorer, Hooks, Kind, Objective, ARRIVE_SLACK, JUMP_MISSES, LOOK_TICS,
+    STUCK_TIMES,
+};
 use crate::geom::dist;
 use crate::knowledge::model::{Heard, How, Note};
 use crate::motor::follower::RouteFollower;
@@ -59,28 +62,47 @@ impl Explorer {
         // (unless the floor can't hurt her, in a suit or with nothing able to: MAP09's pass, a
         // switch in a nukage pit that brings a lift down behind her for three seconds, pressed
         // twice and never looked round from, what it does never learned, the pit never left)
-        if self.on_hurting_floor(obs) && !self.knowledge.immune && !self.knowledge.protected(obs.tic) {
+        if self.on_hurting_floor(obs)
+            && !self.knowledge.immune
+            && !self.knowledge.protected(obs.tic)
+        {
             return None;
         }
         while self.heard_n < self.knowledge.heard.len() {
             let h = self.knowledge.heard[self.heard_n];
             self.heard_n += 1;
             if self.worth_a_look(&h) && obs.tic - self.last_glance >= GLANCE_GAP {
-                return Some(self.start_glance(obs, Some(h.bearing), &format!("heard something, bearing {:.0}", h.bearing)));
+                return Some(self.start_glance(
+                    obs,
+                    Some(h.bearing),
+                    &format!("heard something, bearing {:.0}", h.bearing),
+                ));
             }
         }
-        let learned: BTreeSet<i64> = self.knowledge.learned.iter().filter(|(_, s)| !s.is_empty()).map(|(&i, _)| self.nav.triggers[i].line).collect();
+        let learned: BTreeSet<i64> = self
+            .knowledge
+            .learned
+            .iter()
+            .filter(|(_, s)| !s.is_empty())
+            .map(|(&i, _)| self.nav.triggers[i].line)
+            .collect();
         while self.glanced < self.knowledge.fired.len() {
             let f = self.knowledge.fired[self.glanced];
             // (not a teleporter she knows where goes: nothing to look for, and a stop on the way
             // through, MAP21's to the megasphere's lift, a second over its window every time)
-            let unknown = f.how == How::Walk && !learned.contains(&(f.line as i64)) && !self.knowledge.teleports.contains_key(&f.line);
+            let unknown = f.how == How::Walk
+                && !learned.contains(&(f.line as i64))
+                && !self.knowledge.teleports.contains_key(&f.line);
             if unknown && obs.tic - f.tic < GLANCE_AFTER {
                 return None; // (give it a moment to be seen first)
             }
             self.glanced += 1;
             if unknown {
-                return Some(self.start_glance(obs, None, &format!("set off line {} walking", f.line)));
+                return Some(self.start_glance(
+                    obs,
+                    None,
+                    &format!("set off line {} walking", f.line),
+                ));
             }
         }
         None
@@ -94,12 +116,25 @@ impl Explorer {
     fn start_glance(&mut self, obs: &Observation, bearing: Option<f64>, why: &str) -> Controls {
         self.last_glance = obs.tic;
         // (a wall's try not yet pressed starts again after: the look takes the time it had)
-        if let Some(wall) = self.current.as_ref().filter(|o| o.kind == Kind::Wall).and_then(|o| o.wall) {
+        if let Some(wall) = self
+            .current
+            .as_ref()
+            .filter(|o| o.kind == Kind::Wall)
+            .and_then(|o| o.wall)
+        {
             if !self.knowledge.tried_walls.contains_key(&wall) {
                 self.look_until = None;
             }
         }
-        self.log.push(format!("tic {}: {why}: looking {}", obs.tic, if bearing.is_none() { "round" } else { "that way" }));
+        self.log.push(format!(
+            "tic {}: {why}: looking {}",
+            obs.tic,
+            if bearing.is_none() {
+                "round"
+            } else {
+                "that way"
+            }
+        ));
         self.glance_until = Some(obs.tic + LOOK_TICS);
         self.glance_at = bearing;
         turn_to(obs, bearing)
@@ -108,7 +143,12 @@ impl Explorer {
     /// A sound heard again and again from the same place (a lift going up and down for ever):
     /// tuned out.
     fn ambient(&self, h: &Heard) -> bool {
-        self.knowledge.heard.iter().filter(|o| dist(o.origin, h.origin) < AMBIENT_RADIUS && o.tic <= h.tic).count() > AMBIENT_REPEATS
+        self.knowledge
+            .heard
+            .iter()
+            .filter(|o| dist(o.origin, h.origin) < AMBIENT_RADIUS && o.tic <= h.tic)
+            .count()
+            > AMBIENT_REPEATS
     }
 
     /// Has what the objective was to look at been seen?
@@ -119,11 +159,23 @@ impl Explorer {
                 let known = k.known_polys();
                 obj.reveals.iter().any(|&p| known.contains(&(p as usize)))
             }
-            Kind::Recheck => obj.reveals.iter().all(|&s| k.seen_tic.get(&(s as usize)).copied().unwrap_or(-1) >= self.since),
+            Kind::Recheck => obj
+                .reveals
+                .iter()
+                .all(|&s| k.seen_tic.get(&(s as usize)).copied().unwrap_or(-1) >= self.since),
             Kind::Noise => obj.heard.as_ref().is_some_and(|h| self.noise_seen(h)),
-            Kind::Room => obj.reveals.iter().all(|&l| k.mapped.contains(&(l as usize))),
-            Kind::Visit => obj.reveals.iter().all(|&p| k.visited.contains(&(p as usize))),
-            Kind::Secret => obj.reveals.iter().all(|&s| self.secrets_had.contains(&(s as usize))),
+            Kind::Room => obj
+                .reveals
+                .iter()
+                .all(|&l| k.mapped.contains(&(l as usize))),
+            Kind::Visit => obj
+                .reveals
+                .iter()
+                .all(|&p| k.visited.contains(&(p as usize))),
+            Kind::Secret => obj
+                .reveals
+                .iter()
+                .all(|&s| self.secrets_had.contains(&(s as usize))),
             _ => false,
         }
     }
@@ -134,17 +186,36 @@ impl Explorer {
         let obj = self.current.clone()?;
         let k = &self.knowledge;
         // (this time: one pressed long ago doesn't count; MAP08's switch)
-        let pressed_now = |li: i64| usize::try_from(li).is_ok_and(|li| k.fired.iter().any(|f| k.tried_key(f.line) == k.tried_key(li) && f.tic >= self.since));
-        if matches!(obj.kind, Kind::Switch | Kind::Door) && !obj.trigger.as_ref().is_some_and(|t| pressed_now(t.line)) {
+        let pressed_now = |li: i64| {
+            usize::try_from(li).is_ok_and(|li| {
+                k.fired
+                    .iter()
+                    .any(|f| k.tried_key(f.line) == k.tried_key(li) && f.tic >= self.since)
+            })
+        };
+        if matches!(obj.kind, Kind::Switch | Kind::Door)
+            && !obj.trigger.as_ref().is_some_and(|t| pressed_now(t.line))
+        {
             self.drop_objective(&obj, obs, "pressed, but nothing went off");
             self.end_kind = EndKind::PressedNothing;
-        } else if matches!(obj.kind, Kind::Frontier | Kind::Switch | Kind::Recheck | Kind::Noise | Kind::Room) && !self.seen_to(&obj) {
+        } else if matches!(
+            obj.kind,
+            Kind::Frontier | Kind::Switch | Kind::Recheck | Kind::Noise | Kind::Room
+        ) && !self.seen_to(&obj)
+        {
             let until = *self.look_until.get_or_insert(obs.tic + LOOK_TICS);
             if obs.tic < until {
-                let at = if obj.kind == Kind::Noise { obj.heard.map(|h| h.origin) } else { obj.look_at };
+                let at = if obj.kind == Kind::Noise {
+                    obj.heard.map(|h| h.origin)
+                } else {
+                    obj.look_at
+                };
                 return Some(match at {
                     Some(at) => turn_to(obs, Some((at.1 - obs.y).atan2(at.0 - obs.x).to_degrees())),
-                    None => Controls { turn: 360.0 / LOOK_TICS as f64, ..Controls::default() },
+                    None => Controls {
+                        turn: 360.0 / LOOK_TICS as f64,
+                        ..Controls::default()
+                    },
                 });
             }
             if obj.kind != Kind::Switch && !self.seen_to(&obj) {
@@ -153,7 +224,9 @@ impl Explorer {
         } else if obj.kind == Kind::Visit && !self.seen_to(&obj) {
             self.drop_objective(&obj, obs, "got there but not in it");
         } else if obj.kind == Kind::Teleporter
-            && !obj.trigger.as_ref().is_some_and(|t| usize::try_from(t.line).is_ok_and(|li| self.knowledge.teleports.contains_key(&li)))
+            && !obj.trigger.as_ref().is_some_and(|t| {
+                usize::try_from(t.line).is_ok_and(|li| self.knowledge.teleports.contains_key(&li))
+            })
         {
             self.drop_objective(&obj, obs, "didn't take me anywhere");
         } else if obj.kind == Kind::Wall {
@@ -174,7 +247,11 @@ impl Explorer {
                 let mut c = turn_to(obs, Some(bearing));
                 // (not where the press would reach an exit behind it, with the exit held back:
                 // MAP22's wall in front of the exit switch, the level ended an item short)
-                let exit = self.exit_last && self.knowledge.use_hits(obs.pos(), obs.angle, &obs.heights).is_some_and(|li| self.knowledge.is_exit(li));
+                let exit = self.exit_last
+                    && self
+                        .knowledge
+                        .use_hits(obs.pos(), obs.angle, &obs.heights)
+                        .is_some_and(|li| self.knowledge.is_exit(li));
                 // (a wall that stands out, up against it first, as a player goes right up to a mark:
                 // over anything on the floor in front, MAP10's triangle of walk-over lines before
                 // the marked wall that opens the way to the megasphere, stopped short of at the stand
@@ -192,8 +269,13 @@ impl Explorer {
                 } else if off < 4.0 && obs.tic < until - WALL_TICS && !exit {
                     c.use_ = true;
                     self.look_until = Some(obs.tic + WALL_TICS); // (pressed: now watch)
-                    self.knowledge.note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
-                } else if off < 4.0 && obs.tic > until - WALL_TICS + 4 && obs.tic < until - 8 && obj.round {
+                    self.knowledge
+                        .note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
+                } else if off < 4.0
+                    && obs.tic > until - WALL_TICS + 4
+                    && obs.tic < until - 8
+                    && obj.round
+                {
                     // (and a few shots: some walls answer to a gun, not a hand; with the pistol,
                     // single taps: a rocket sets off no wall, and blows up in her face; MAP11. Only
                     // in a round of walls, coming back to search, not one tried on the way: a gun
@@ -212,7 +294,8 @@ impl Explorer {
                 }
                 return Some(c);
             }
-            self.knowledge.note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
+            self.knowledge
+                .note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
         } else if matches!(obj.kind, Kind::Item | Kind::Hunt) && !hooks.gone(obs, &obj) {
             if obj.kind == Kind::Item {
                 // Doom picks things up only moving onto them: come down on one from a ledge and
@@ -223,14 +306,30 @@ impl Explorer {
                 if obs.tic < until {
                     let a = (obj.goal.1 - obs.y).atan2(obj.goal.0 - obs.x) - obs.angle.to_radians();
                     let off = dist(obs.pos(), obj.goal) > ARRIVE_SLACK;
-                    let push = if off || (obs.tic / 4) % 2 == 0 { 20.0 } else { -20.0 };
-                    return Some(Controls { forward: push * a.cos(), strafe: -push * a.sin(), ..Controls::default() });
+                    let push = if off || (obs.tic / 4) % 2 == 0 {
+                        20.0
+                    } else {
+                        -20.0
+                    };
+                    return Some(Controls {
+                        forward: push * a.cos(),
+                        strafe: -push * a.sin(),
+                        ..Controls::default()
+                    });
                 }
             }
             if obj.kind == Kind::Hunt {
                 hooks.hunted_in_vain(&obj);
             }
-            self.drop_objective(&obj, obs, if obj.kind == Kind::Hunt { "not there" } else { "couldn't pick it up" });
+            self.drop_objective(
+                &obj,
+                obs,
+                if obj.kind == Kind::Hunt {
+                    "not there"
+                } else {
+                    "couldn't pick it up"
+                },
+            );
         }
         // (a line to walk over: tried, whichever way the trip went)
         if let Some(li) = obj.wall.filter(|_| obj.kind == Kind::Visit) {
@@ -247,7 +346,10 @@ impl Explorer {
         let presses = std::mem::take(&mut f.failed_presses);
         for (at, li) in presses {
             for other in self.knowledge.note(Note::FailedPress(at, li)) {
-                self.log.push(format!("tic {}: line {li} did nothing: line {other} is in the way of it", obs.tic));
+                self.log.push(format!(
+                    "tic {}: line {li} did nothing: line {other} is in the way of it",
+                    obs.tic
+                ));
             }
         }
     }
@@ -255,20 +357,32 @@ impl Explorer {
     /// Run-jumps the follower missed: counted (for the level, across lives), and left out from
     /// now on (E4M2). True if one was.
     fn note_misses(&mut self, obs: &Observation) -> bool {
-        let Some(f) = &mut self.follower else { return false };
+        let Some(f) = &mut self.follower else {
+            return false;
+        };
         if f.missed.is_empty() {
             return false;
         }
         let missed = std::mem::take(&mut f.missed);
         for j in missed {
-            let n = self.knowledge.missed_jumps.get(&j.key()).copied().unwrap_or(0) + 1;
+            let n = self
+                .knowledge
+                .missed_jumps
+                .get(&j.key())
+                .copied()
+                .unwrap_or(0)
+                + 1;
             self.knowledge.note(Note::MissedJump(j.key(), n));
             self.log.push(format!(
                 "tic {}: missed the jump off ({:.0}, {:.0}) {}",
                 obs.tic,
                 j.takeoff.0,
                 j.takeoff.1,
-                if n >= JUMP_MISSES { "for good: not trying it again" } else { "once: another way first" }
+                if n >= JUMP_MISSES {
+                    "for good: not trying it again"
+                } else {
+                    "once: another way first"
+                }
             ));
         }
         self.set_jumps(false);
@@ -278,11 +392,16 @@ impl Explorer {
     /// A route failed stuck: where is counted, for the level across lives; stuck there
     /// STUCK_TIMES times, it's left out of the way (MAP18).
     fn note_stuck(&mut self, obs: &Observation) {
-        let Some(p) = self.nav.poly_at(obs.pos()) else { return };
+        let Some(p) = self.nav.poly_at(obs.pos()) else {
+            return;
+        };
         let n = self.knowledge.stuck_at.get(&p).copied().unwrap_or(0) + 1;
         self.knowledge.note(Note::Stuck(p, n));
         if n == STUCK_TIMES {
-            self.log.push(format!("tic {}: stuck at ({:.0}, {:.0}) {STUCK_TIMES} times: not going that way again", obs.tic, obs.x, obs.y));
+            self.log.push(format!(
+                "tic {}: stuck at ({:.0}, {:.0}) {STUCK_TIMES} times: not going that way again",
+                obs.tic, obs.x, obs.y
+            ));
         }
     }
 
@@ -301,13 +420,30 @@ impl Explorer {
         // (what it was for got on the way, then off a floor going down: done, not failed; the run
         // off ends as a failure, for the explorer to choose again from where she's got to)
         if failed && hooks.gone(obs, &obj) {
-            self.log.push(format!("tic {}: '{}' got on the way, then off a floor going down", obs.tic, obj.label));
+            self.log.push(format!(
+                "tic {}: '{}' got on the way, then off a floor going down",
+                obs.tic, obj.label
+            ));
             return self.ends(obs, "gone");
         }
         if done || failed {
             if failed {
-                let why = self.follower.as_ref().and_then(|f| f.log.events.iter().rev().find(|e| e.contains("FAILED")).cloned()).unwrap_or_default();
-                let why = why.split_once("] ").map_or(why.as_str(), |(_, r)| r).to_string();
+                let why = self
+                    .follower
+                    .as_ref()
+                    .and_then(|f| {
+                        f.log
+                            .events
+                            .iter()
+                            .rev()
+                            .find(|e| e.contains("FAILED"))
+                            .cloned()
+                    })
+                    .unwrap_or_default();
+                let why = why
+                    .split_once("] ")
+                    .map_or(why.as_str(), |(_, r)| r)
+                    .to_string();
                 self.drop_objective(&obj, obs, &format!("failed: {why}"));
                 if self.follower.as_ref().is_some_and(|f| f.failed_stuck) {
                     self.note_stuck(obs);
@@ -315,11 +451,20 @@ impl Explorer {
                     // know of, as stranded as with nothing to do; MAP18's block, risen under the
                     // edge of her box beside door 91, holding her up where the door's too low)
                     let here = obs.pos();
-                    let same = self.stuck_run.is_some_and(|(at, _)| dist(at, here) < STUCK_SAME);
-                    let n = if same { self.stuck_run.map_or(0, |(_, n)| n) + 1 } else { 1 };
+                    let same = self
+                        .stuck_run
+                        .is_some_and(|(at, _)| dist(at, here) < STUCK_SAME);
+                    let n = if same {
+                        self.stuck_run.map_or(0, |(_, n)| n) + 1
+                    } else {
+                        1
+                    };
                     self.stuck_run = Some((here, n));
                     if n >= STUCK_RUN && self.knowledge.summary() == self.stuck_known {
-                        self.log.push(format!("tic {}: stuck here {n} times over, whatever for: stranded", obs.tic));
+                        self.log.push(format!(
+                            "tic {}: stuck here {n} times over, whatever for: stranded",
+                            obs.tic
+                        ));
                         self.restart_wanted = true;
                     }
                     self.stuck_known = self.knowledge.summary();
@@ -335,7 +480,10 @@ impl Explorer {
         // ends the route but its end, not even something seen on the way; MAP08: a wall seen as
         // she landed on the sinking block, the route ended there, stopped on it, down with it into
         // the pit, every run)
-        let committed = self.follower.as_ref().is_some_and(|f| f.in_jump() || f.jumps_ahead());
+        let committed = self
+            .follower
+            .as_ref()
+            .is_some_and(|f| f.in_jump() || f.jumps_ahead());
         let k = &self.knowledge;
         if obj.kind == Kind::Frontier && !committed {
             let known = k.known_polys();
@@ -343,24 +491,42 @@ impl Explorer {
                 return self.ends(obs, "seen it on the way");
             }
         }
-        if obj.kind == Kind::Room && !committed && self.seen_to(&obj) && dist(obs.pos(), obj.goal) < ROOM_NEAR {
+        if obj.kind == Kind::Room
+            && !committed
+            && self.seen_to(&obj)
+            && dist(obs.pos(), obj.goal) < ROOM_NEAR
+        {
             // (the wall seen already, nearly there: on, not up to the spot to stop and look; E2M2's
             // crates, a stop at each face. Only nearly there: the way there shows more, E2M1's
             // way on, missed ending them as soon as seen)
             return self.ends(obs, "seen it on the way");
         }
-        if obj.kind == Kind::Teleporter && obj.trigger.as_ref().is_some_and(|t| usize::try_from(t.line).is_ok_and(|li| k.teleports.contains_key(&li))) {
+        if obj.kind == Kind::Teleporter
+            && obj.trigger.as_ref().is_some_and(|t| {
+                usize::try_from(t.line).is_ok_and(|li| k.teleports.contains_key(&li))
+            })
+        {
             return self.ends(obs, "been through");
         }
         // (given objectives aren't ended by her own wants: an exit seen, a noise, a gun spotted;
         // whoever gave it hears of those)
-        if !self.directed && obj.kind != Kind::Exit && !committed && !self.exit_last && k.exits().len() > self.exits_seen {
+        if !self.directed
+            && obj.kind != Kind::Exit
+            && !committed
+            && !self.exit_last
+            && k.exits().len() > self.exits_seen
+        {
             return self.ends(obs, "an exit came into view");
         }
         // (gone, but running off a floor going down: on till she's on one that stays put, the
         // user's rule; E3M1 directed, the shotgun on a stone in the blood got as the stone went
         // down, the run off ended with the objective, and she stood on it, waiting, into the blood)
-        if hooks.gone(obs, &obj) && !self.follower.as_ref().is_some_and(RouteFollower::running_off) {
+        if hooks.gone(obs, &obj)
+            && !self
+                .follower
+                .as_ref()
+                .is_some_and(RouteFollower::running_off)
+        {
             return self.ends(obs, "gone");
         }
         let heard: Vec<Heard> = k.heard[self.urgent_n.min(k.heard.len())..].to_vec();
@@ -368,7 +534,13 @@ impl Explorer {
         // (something just went off out of sight: go and look first; not half way through a run
         // of jumps: MAP08's)
         let jumping = committed;
-        if !self.directed && !(obj.kind == Kind::Noise && obj.urgent) && !jumping && heard.iter().any(|h| self.urgent(h, obs.tic) && self.worth_a_look(h)) {
+        if !self.directed
+            && !(obj.kind == Kind::Noise && obj.urgent)
+            && !jumping
+            && heard
+                .iter()
+                .any(|h| self.urgent(h, obs.tic) && self.worth_a_look(h))
+        {
             return self.ends(obs, "something went off out of sight");
         }
         if !self.directed && !jumping && hooks.interrupt(self, obs, &obj) {
@@ -376,7 +548,14 @@ impl Explorer {
         }
         if obs.tic - self.since > self.allowed {
             self.drop_objective(&obj, obs, "took too long");
-            let stuck = self.follower.as_ref().is_some_and(|f| f.log.events.iter().rev().take(6).any(|e| e.contains("stuck at")));
+            let stuck = self.follower.as_ref().is_some_and(|f| {
+                f.log
+                    .events
+                    .iter()
+                    .rev()
+                    .take(6)
+                    .any(|e| e.contains("stuck at"))
+            });
             if stuck {
                 self.note_stuck(obs); // (timed out stuck: the same as failing stuck)
             }
@@ -389,8 +568,12 @@ impl Explorer {
     pub(super) fn ends(&mut self, obs: &Observation, why: &str) -> bool {
         self.end_why = Some((true, why.to_string()));
         self.end_kind = EndKind::Plain;
-        if self.debug_tics.is_some_and(|(a, b)| (a..=b).contains(&obs.tic)) {
-            self.log.push(format!("  (objective ends at tic {}: {why})", obs.tic));
+        if self
+            .debug_tics
+            .is_some_and(|(a, b)| (a..=b).contains(&obs.tic))
+        {
+            self.log
+                .push(format!("  (objective ends at tic {}: {why})", obs.tic));
         }
         true
     }
@@ -422,6 +605,7 @@ impl Explorer {
         if let Some(w) = obj.wall {
             *self.wall_drops.entry(w).or_insert(0) += 1;
         }
-        self.log.push(format!("tic {}: dropped '{}' ({why})", obs.tic, obj.label));
+        self.log
+            .push(format!("tic {}: dropped '{}' ({why})", obs.tic, obj.label));
     }
 }

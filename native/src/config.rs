@@ -28,7 +28,9 @@ fn default_doom_dir() -> PathBuf {
     if cfg!(windows) {
         return Path::new(r"C:\Program Files (x86)\Steam").join(STEAM_DOOM);
     }
-    std::env::var_os("HOME").map_or_else(|| PathBuf::from("."), PathBuf::from).join(".local/share/evildoom")
+    std::env::var_os("HOME")
+        .map_or_else(|| PathBuf::from("."), PathBuf::from)
+        .join(".local/share/evildoom")
 }
 
 /// A short IWAD name ("doom2") or a path, absolute or from the Doom folder.
@@ -47,7 +49,11 @@ pub fn resolve_wad(name_or_path: &str) -> PathBuf {
 /// The project folder (EVILDOOM_ROOT, else the folder above the one this was built in).
 pub fn root() -> PathBuf {
     std::env::var_os("EVILDOOM_ROOT").map_or_else(
-        || Path::new(env!("CARGO_MANIFEST_DIR")).parent().map_or_else(|| PathBuf::from("."), Path::to_path_buf),
+        || {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+        },
         PathBuf::from,
     )
 }
@@ -69,7 +75,9 @@ pub fn run_stamp() -> &'static str {
 
 /// Now, UTC, as YYYYMMDD-HHMMSS.
 fn utc_now() -> String {
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
     let (days, rest) = ((secs / 86_400) as i64, secs % 86_400);
     // (days since 1970 to a civil date: Howard Hinnant's algorithm)
     let z = days + 719_468;
@@ -81,15 +89,28 @@ fn utc_now() -> String {
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = yoe + era * 400 + i64::from(m <= 2);
-    format!("{y:04}{m:02}{d:02}-{:02}{:02}{:02}", rest / 3600, rest / 60 % 60, rest % 60)
+    format!(
+        "{y:04}{m:02}{d:02}-{:02}{:02}{:02}",
+        rest / 3600,
+        rest / 60 % 60,
+        rest % 60
+    )
 }
 
 /// A log's kept name: `path` with the run's stamp (and `extra`, a seed, if any) before its
 /// extension: out/explore/DOOM_E1M1.txt -> out/explore/DOOM_E1M1.s3.81d5352-20261108-231500.txt.
 pub fn stamped(path: &Path, extra: &str) -> PathBuf {
-    let stem = path.file_stem().map_or_else(String::new, |s| s.to_string_lossy().to_string());
-    let ext = path.extension().map_or_else(String::new, |e| format!(".{}", e.to_string_lossy()));
-    let extra = if extra.is_empty() { String::new() } else { format!(".{extra}") };
+    let stem = path
+        .file_stem()
+        .map_or_else(String::new, |s| s.to_string_lossy().to_string());
+    let ext = path
+        .extension()
+        .map_or_else(String::new, |e| format!(".{}", e.to_string_lossy()));
+    let extra = if extra.is_empty() {
+        String::new()
+    } else {
+        format!(".{extra}")
+    };
     path.with_file_name(format!("{stem}{extra}.{}{ext}", run_stamp()))
 }
 
@@ -112,7 +133,12 @@ impl Log {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        Ok(Log { files: vec![std::fs::File::create(path)?, std::fs::File::create(stamped(path, extra))?] })
+        Ok(Log {
+            files: vec![
+                std::fs::File::create(path)?,
+                std::fs::File::create(stamped(path, extra))?,
+            ],
+        })
     }
 }
 

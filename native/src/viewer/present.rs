@@ -51,18 +51,33 @@ impl Walk {
     /// straight in.
     fn to(map: &str, skill: i32) -> Walk {
         let m = map.to_uppercase();
-        let doom1_episode = m.strip_prefix('E').filter(|r| r.ends_with("M1")).and_then(|r| r[..1].parse::<i32>().ok());
+        let doom1_episode = m
+            .strip_prefix('E')
+            .filter(|r| r.ends_with("M1"))
+            .and_then(|r| r[..1].parse::<i32>().ok());
         let steps = if m == "MAP01" || doom1_episode.is_some() {
-            let mut s = vec![(TITLE_HOLD, Step::Open), (MENU_STEP, Step::To(0)), (MENU_CHOOSE, Step::Choose)];
+            let mut s = vec![
+                (TITLE_HOLD, Step::Open),
+                (MENU_STEP, Step::To(0)),
+                (MENU_CHOOSE, Step::Choose),
+            ];
             if let Some(e) = doom1_episode {
                 s.extend([(MENU_CHOOSE, Step::To(e - 1)), (MENU_CHOOSE, Step::Choose)]);
             }
-            s.extend([(MENU_CHOOSE, Step::To(skill - 1)), (MENU_CHOOSE, Step::Choose), (MENU_CHOOSE, Step::Start)]);
+            s.extend([
+                (MENU_CHOOSE, Step::To(skill - 1)),
+                (MENU_CHOOSE, Step::Choose),
+                (MENU_CHOOSE, Step::Start),
+            ]);
             s
         } else {
             vec![(TITLE_HOLD, Step::Start)]
         };
-        Walk { wait: steps[0].0, steps, at: 0 }
+        Walk {
+            wait: steps[0].0,
+            steps,
+            at: 0,
+        }
     }
 }
 
@@ -71,11 +86,17 @@ pub(super) enum Stage {
     Title(Option<Walk>),
     Level,
     /// dead, the view sinking
-    Dead { since: i64 },
+    Dead {
+        since: i64,
+    },
     /// out of the level: the tally, a finale (the clock when it began waiting for a press, and
     /// when it was last pressed); `last`: the episode's last level (its end, the screens from
     /// here on the game's own for good)
-    Between { waiting_since: Option<i64>, pressed: Option<i64>, last: bool },
+    Between {
+        waiting_since: Option<i64>,
+        pressed: Option<i64>,
+        last: bool,
+    },
     /// the run's over (game over: the title card); the screen as it is till it's begun again
     Over,
 }
@@ -103,7 +124,13 @@ impl Present {
         let skill = if o.fight > 0 { o.fight } else { 3 };
         let first_map = watch.map_name.clone();
         let stage = Stage::Title((!wait).then(|| Walk::to(&first_map, skill)));
-        Some(Present { stage, clock: 0, first_map, skill, fresh: true })
+        Some(Present {
+            stage,
+            clock: 0,
+            first_map,
+            skill,
+            fresh: true,
+        })
     }
 
     /// From the title card (again) through the menu to the run's first level, whatever's on now.
@@ -130,11 +157,17 @@ impl Present {
 }
 
 /// The tics owed, as the screens have them; the watcher (a new one on a new level).
-pub(super) fn run(mut watch: Watch, game: Option<(&Wad, &WatchOptions)>, owed: &mut f64) -> Result<Watch, String> {
+pub(super) fn run(
+    mut watch: Watch,
+    game: Option<(&Wad, &WatchOptions)>,
+    owed: &mut f64,
+) -> Result<Watch, String> {
     let mut ticked = false;
     while *owed >= 1.0 && !watch.paused {
         *owed -= 1.0;
-        let Some(mut p) = watch.present.take() else { break };
+        let Some(mut p) = watch.present.take() else {
+            break;
+        };
         p.clock += 1;
         watch = tic(watch, &mut p, game)?;
         if watch.present.is_none() {
@@ -151,11 +184,18 @@ pub(super) fn run(mut watch: Watch, game: Option<(&Wad, &WatchOptions)>, owed: &
 /// A tic of the game with nobody playing: on a screen, or dead (`press`: use, as a player
 /// presses on).
 fn idle(watch: &mut Watch, press: bool) {
-    watch.engine.step(&Controls { use_: press, ..Controls::default() });
+    watch.engine.step(&Controls {
+        use_: press,
+        ..Controls::default()
+    });
     let _ = watch.engine.take_hits();
 }
 
-fn tic(mut watch: Watch, p: &mut Present, game: Option<(&Wad, &WatchOptions)>) -> Result<Watch, String> {
+fn tic(
+    mut watch: Watch,
+    p: &mut Present,
+    game: Option<(&Wad, &WatchOptions)>,
+) -> Result<Watch, String> {
     let screen = watch.engine.screen().unwrap_or_default();
     if screen.wiping {
         watch.engine.wipe_tic();
@@ -176,7 +216,9 @@ fn tic(mut watch: Watch, p: &mut Present, game: Option<(&Wad, &WatchOptions)>) -
                     true
                 }
                 Step::To(t) if screen.item != t => {
-                    watch.engine.menu(1, screen.item + (t - screen.item).signum());
+                    watch
+                        .engine
+                        .menu(1, screen.item + (t - screen.item).signum());
                     walk.wait = MENU_STEP;
                     false
                 }
@@ -203,8 +245,14 @@ fn tic(mut watch: Watch, p: &mut Present, game: Option<(&Wad, &WatchOptions)>) -
                 p.stage = Stage::Dead { since: p.clock };
                 idle(&mut watch, false);
             } else if watch.engine.exited() {
-                let last = game.is_some_and(|(_, o)| o.episode) && crate::sweep::next_map(&watch.map_name, watch.engine.secret_exit()).is_none();
-                p.stage = Stage::Between { waiting_since: None, pressed: None, last };
+                let last = game.is_some_and(|(_, o)| o.episode)
+                    && crate::sweep::next_map(&watch.map_name, watch.engine.secret_exit())
+                        .is_none();
+                p.stage = Stage::Between {
+                    waiting_since: None,
+                    pressed: None,
+                    last,
+                };
                 idle(&mut watch, false);
             } else {
                 // (a level again, asked for by a 100% run, as the window's loop gives it)
@@ -236,7 +284,11 @@ fn tic(mut watch: Watch, p: &mut Present, game: Option<(&Wad, &WatchOptions)>) -
                 p.stage = Stage::Over;
             }
         }
-        Stage::Between { waiting_since, pressed, .. } => {
+        Stage::Between {
+            waiting_since,
+            pressed,
+            ..
+        } => {
             if screen.held {
                 // (the game's moved on: the next level, started as an episode's is)
                 match game.filter(|(_, o)| o.episode) {
@@ -256,10 +308,17 @@ fn tic(mut watch: Watch, p: &mut Present, game: Option<(&Wad, &WatchOptions)>) -
             }
             let press = if screen.waiting {
                 let since = *waiting_since.get_or_insert_with(|| {
-                    watch.agent.x_mut().log.push(format!("present: the {} waits for a press", if screen.state == 1 { "tally" } else { "finale" }));
+                    watch.agent.x_mut().log.push(format!(
+                        "present: the {} waits for a press",
+                        if screen.state == 1 { "tally" } else { "finale" }
+                    ));
                     p.clock
                 });
-                let read = if screen.state == 1 { TALLY_READ } else { TEXT_READ };
+                let read = if screen.state == 1 {
+                    TALLY_READ
+                } else {
+                    TEXT_READ
+                };
                 p.clock - since >= read && pressed.is_none_or(|t| p.clock - t >= PRESS_AGAIN)
             } else {
                 *waiting_since = None;
@@ -267,7 +326,10 @@ fn tic(mut watch: Watch, p: &mut Present, game: Option<(&Wad, &WatchOptions)>) -
             };
             if press {
                 *pressed = Some(p.clock);
-                watch.agent.x_mut().log.push(format!("present: pressed on ({})", if screen.state == 1 { "tally" } else { "finale" }));
+                watch.agent.x_mut().log.push(format!(
+                    "present: pressed on ({})",
+                    if screen.state == 1 { "tally" } else { "finale" }
+                ));
             }
             idle(&mut watch, press);
         }
@@ -277,7 +339,11 @@ fn tic(mut watch: Watch, p: &mut Present, game: Option<(&Wad, &WatchOptions)>) -
 
 /// The run's first level begun, from the title: the one loaded with the watcher as it is if it
 /// hasn't been played, else afresh (a new agent, the lives again).
-fn start_level(mut watch: Watch, p: &mut Present, game: Option<(&Wad, &WatchOptions)>) -> Result<Watch, String> {
+fn start_level(
+    mut watch: Watch,
+    p: &mut Present,
+    game: Option<(&Wad, &WatchOptions)>,
+) -> Result<Watch, String> {
     let lives = game.map_or(watch.lives_left + 1, |(_, o)| o.lives);
     if p.fresh && watch.map_name == p.first_map {
         // (the engine's level begun again, as the run begins it; her agent as it was made: it

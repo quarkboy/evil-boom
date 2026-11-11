@@ -4,7 +4,10 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use super::{box_hits_segment, Navigator, TriggerLine, BOX_SLACK, MIN_PORTAL, PLAYER_HEIGHT, PLAYER_RADIUS, TELEPORTERS_FOR_PLAYERS};
+use super::{
+    box_hits_segment, Navigator, TriggerLine, BOX_SLACK, MIN_PORTAL, PLAYER_HEIGHT, PLAYER_RADIUS,
+    TELEPORTERS_FOR_PLAYERS,
+};
 use crate::det::HashMap;
 use crate::geom::{cells, dist, Cell, Point, Seg};
 use crate::jumps::JumpLab;
@@ -21,11 +24,18 @@ use crate::things::{shootable_obstacle, solid_radius};
 pub(super) fn obstacle_grid(m: &MapData, skill: i32, shootable: bool) -> HashMap<Cell, Vec<Seg>> {
     let mut out: HashMap<Cell, Vec<Seg>> = HashMap::default();
     for t in &m.things {
-        let Some(r) = solid_radius(t.kind) else { continue };
+        let Some(r) = solid_radius(t.kind) else {
+            continue;
+        };
         if !t.in_skill(skill) || (!shootable && shootable_obstacle(t.kind)) {
             continue;
         }
-        let c = [(t.x - r, t.y - r), (t.x + r, t.y - r), (t.x + r, t.y + r), (t.x - r, t.y + r)];
+        let c = [
+            (t.x - r, t.y - r),
+            (t.x + r, t.y - r),
+            (t.x + r, t.y + r),
+            (t.x - r, t.y + r),
+        ];
         for i in 0..4 {
             let (a, b) = (c[i], c[(i + 1) % 4]);
             for cell in cells(a.0, a.1, b.0, b.1) {
@@ -37,7 +47,10 @@ pub(super) fn obstacle_grid(m: &MapData, skill: i32, shootable: bool) -> HashMap
 }
 
 fn moving_sectors(triggers: &[TriggerLine]) -> BTreeSet<usize> {
-    triggers.iter().flat_map(|t| t.effects.iter().map(|(s, _)| *s)).collect()
+    triggers
+        .iter()
+        .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
+        .collect()
 }
 
 /// Two-sided lines that can only be crossed one way at the starting heights (a drop of more
@@ -59,7 +72,10 @@ pub(crate) fn wall_lines(m: &MapData, movers: &MoverModel) -> BTreeSet<usize> {
         .filter(|&li| {
             let line = &m.linedefs[li];
             match m.sides(li) {
-                (Some(f), Some(b)) => line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0 || !(can_cross(init[f], init[b]) || can_cross(init[b], init[f])),
+                (Some(f), Some(b)) => {
+                    line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0
+                        || !(can_cross(init[f], init[b]) || can_cross(init[b], init[f]))
+                }
                 _ => true,
             }
         })
@@ -68,12 +84,21 @@ pub(crate) fn wall_lines(m: &MapData, movers: &MoverModel) -> BTreeSet<usize> {
 
 /// Lines that teleport her when walked over (from the front).
 pub(crate) fn teleport_lines(m: &MapData) -> BTreeSet<usize> {
-    m.linedefs.iter().filter(|l| TELEPORTERS_FOR_PLAYERS.contains(&l.special)).map(|l| l.index).collect()
+    m.linedefs
+        .iter()
+        .filter(|l| TELEPORTERS_FOR_PLAYERS.contains(&l.special))
+        .map(|l| l.index)
+        .collect()
 }
 
 /// Walk-over lines that end the level.
 pub(crate) fn exit_walk_lines(m: &MapData) -> BTreeSet<usize> {
-    (0..m.linedefs.len()).filter(|&li| crate::specials::classify_line(m.linedefs[li].special).is_some_and(|i| i.category.is_exit() && i.trigger.walked())).collect()
+    (0..m.linedefs.len())
+        .filter(|&li| {
+            crate::specials::classify_line(m.linedefs[li].special)
+                .is_some_and(|i| i.category.is_exit() && i.trigger.walked())
+        })
+        .collect()
 }
 
 /// Walk-over lines that shut (no headroom) a sector on either side of themselves.
@@ -85,7 +110,10 @@ pub(crate) fn shutting_lines(m: &MapData, triggers: &[TriggerLine]) -> BTreeSet<
             continue;
         }
         let (f, b) = m.sides(li);
-        if t.effects.iter().any(|(s, hs)| (Some(*s) == f || Some(*s) == b) && hs.iter().any(|h| h.ceiling - h.floor < PLAYER_HEIGHT)) {
+        if t.effects.iter().any(|(s, hs)| {
+            (Some(*s) == f || Some(*s) == b)
+                && hs.iter().any(|h| h.ceiling - h.floor < PLAYER_HEIGHT)
+        }) {
             out.insert(li);
         }
     }
@@ -138,14 +166,24 @@ impl PortalFit {
         let ((x1, y1), (x2, y2)) = (p.p1, p.p2);
         let r = PLAYER_RADIUS + BOX_SLACK;
         let mut walls: Vec<Seg> = Vec::new();
-        for cell in cells(x1.min(x2) - r, y1.min(y2) - r, x1.max(x2) + r, y1.max(y2) + r) {
+        for cell in cells(
+            x1.min(x2) - r,
+            y1.min(y2) - r,
+            x1.max(x2) + r,
+            y1.max(y2) + r,
+        ) {
             for &(e, line) in self.grid.get(&cell).into_iter().flatten() {
                 if (line.is_none() || line != p.linedef) && !walls.contains(&e) {
                     walls.push(e);
                 }
             }
         }
-        walls.extend(gates.iter().filter(|g| blocking.contains(&g.0)).map(|g| g.1));
+        walls.extend(
+            gates
+                .iter()
+                .filter(|g| blocking.contains(&g.0))
+                .map(|g| g.1),
+        );
         let v = box_fits_somewhere(p, r, &walls);
         self.cache.borrow_mut().insert(key, v);
         v
@@ -153,7 +191,13 @@ impl PortalFit {
 }
 
 impl Widths {
-    pub(super) fn new(m: &MapData, mesh: &Arc<Mesh>, movers: &MoverModel, triggers: &[TriggerLine], obstacles: &HashMap<Cell, Vec<Seg>>) -> Widths {
+    pub(super) fn new(
+        m: &MapData,
+        mesh: &Arc<Mesh>,
+        movers: &MoverModel,
+        triggers: &[TriggerLine],
+        obstacles: &HashMap<Cell, Vec<Seg>>,
+    ) -> Widths {
         let moving = moving_sectors(triggers);
         let walls = static_walls(m, movers, &moving, obstacles);
         let mut grid: HashMap<Cell, Vec<(Seg, Option<usize>)>> = HashMap::default();
@@ -180,7 +224,12 @@ impl Widths {
         let mut gates_out = HashMap::default();
         for (pi, portal) in mesh.portals.iter().enumerate() {
             let ((x1, y1), (x2, y2)) = (portal.p1, portal.p2);
-            let bx = (x1.min(x2) - r, y1.min(y2) - r, x1.max(x2) + r, y1.max(y2) + r);
+            let bx = (
+                x1.min(x2) - r,
+                y1.min(y2) - r,
+                x1.max(x2) + r,
+                y1.max(y2) + r,
+            );
             // (the portal's own line is judged by flags and heights, not here)
             let mut near: Vec<Seg> = Vec::new();
             for cell in cells(bx.0, bx.1, bx.2, bx.3) {
@@ -191,7 +240,8 @@ impl Widths {
                 }
             }
             // (slivers, BSP leftovers a unit or so wide, are never the real way through)
-            let ok = dist(portal.p1, portal.p2) >= MIN_PORTAL && box_fits_somewhere(portal, r, &near);
+            let ok =
+                dist(portal.p1, portal.p2) >= MIN_PORTAL && box_fits_somewhere(portal, r, &near);
             fits.push(ok);
             if !ok {
                 continue;
@@ -200,15 +250,21 @@ impl Widths {
             let mut gates: Gates = Vec::new();
             for cell in cells(bx.0, bx.1, bx.2, bx.3) {
                 for &li in mesh.line_grid.get(&cell).into_iter().flatten() {
-                    let (Some(f), Some(b)) = m.sides(li) else { continue };
-                    if Some(li) == portal.linedef || !(moving.contains(&f) || moving.contains(&b) || ledges.contains(&li)) || gates.iter().any(|g| g.0 == li) {
+                    let (Some(f), Some(b)) = m.sides(li) else {
+                        continue;
+                    };
+                    if Some(li) == portal.linedef
+                        || !(moving.contains(&f) || moving.contains(&b) || ledges.contains(&li))
+                        || gates.iter().any(|g| g.0 == li)
+                    {
                         continue;
                     }
                     // only lines across the portal narrow it (one alongside, a thin BSP strip by
                     // a door, matters for the next crossing instead)
                     let (v1, v2) = m.line_seg(li);
                     let (lx, ly) = (v2.0 - v1.0, v2.1 - v1.1);
-                    let cos = (lx * (x2 - x1) + ly * (y2 - y1)).abs() / (lx.hypot(ly) * (x2 - x1).hypot(y2 - y1)).max(1e-9);
+                    let cos = (lx * (x2 - x1) + ly * (y2 - y1)).abs()
+                        / (lx.hypot(ly) * (x2 - x1).hypot(y2 - y1)).max(1e-9);
                     if cos < 0.87 {
                         gates.push((li, (v1, v2), (f, b)));
                     }
@@ -221,21 +277,37 @@ impl Widths {
                 }
             }
         }
-        Widths { fits, fit: PortalFit { mesh: Arc::clone(mesh), gates: gates_out, grid, cache: RefCell::new(HashMap::default()) }, static_wall_grid }
+        Widths {
+            fits,
+            fit: PortalFit {
+                mesh: Arc::clone(mesh),
+                gates: gates_out,
+                grid,
+                cache: RefCell::new(HashMap::default()),
+            },
+            static_wall_grid,
+        }
     }
 }
 
 /// (segment, linedef or None) for everything that blocks her and never changes: one-sided,
 /// impassable-flagged, or a height difference that can't be crossed either way between
 /// sectors no mover touches; plus solid decorations' box edges.
-fn static_walls(m: &MapData, movers: &MoverModel, moving: &BTreeSet<usize>, obstacles: &HashMap<Cell, Vec<Seg>>) -> Vec<(Seg, Option<usize>)> {
+fn static_walls(
+    m: &MapData,
+    movers: &MoverModel,
+    moving: &BTreeSet<usize>,
+    obstacles: &HashMap<Cell, Vec<Seg>>,
+) -> Vec<(Seg, Option<usize>)> {
     let init = &movers.initial;
     let mut out: Vec<(Seg, Option<usize>)> = Vec::new();
     for (li, line) in m.linedefs.iter().enumerate() {
         let wall = match m.sides(li) {
             (Some(f), Some(b)) => {
                 line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0
-                    || (!moving.contains(&f) && !moving.contains(&b) && !(can_cross(init[f], init[b]) || can_cross(init[b], init[f])))
+                    || (!moving.contains(&f)
+                        && !moving.contains(&b)
+                        && !(can_cross(init[f], init[b]) || can_cross(init[b], init[f])))
             }
             _ => true,
         };
@@ -255,7 +327,18 @@ fn static_walls(m: &MapData, movers: &MoverModel, moving: &BTreeSet<usize>, obst
     }
     out.extend(edges.into_iter().map(|e| (e, None)));
     // (sorted, unique: as the Python had them)
-    out.sort_by(|a, b| a.0 .0 .0.total_cmp(&b.0 .0 .0).then(a.0 .0 .1.total_cmp(&b.0 .0 .1)).then(a.0 .1 .0.total_cmp(&b.0 .1 .0)).then(a.0 .1 .1.total_cmp(&b.0 .1 .1)).then(a.1.map_or(-1, |l| l as i64).cmp(&b.1.map_or(-1, |l| l as i64))));
+    out.sort_by(|a, b| {
+        a.0 .0
+             .0
+            .total_cmp(&b.0 .0 .0)
+            .then(a.0 .0 .1.total_cmp(&b.0 .0 .1))
+            .then(a.0 .1 .0.total_cmp(&b.0 .1 .0))
+            .then(a.0 .1 .1.total_cmp(&b.0 .1 .1))
+            .then(
+                a.1.map_or(-1, |l| l as i64)
+                    .cmp(&b.1.map_or(-1, |l| l as i64)),
+            )
+    });
     out.dedup();
     out
 }
@@ -268,7 +351,18 @@ impl Navigator {
 
     /// The gate lines at each portal: (line, sectors either side).
     pub fn portal_gate_lines(&self) -> HashMap<usize, Vec<(usize, Vec<usize>)>> {
-        self.fit.gates.iter().map(|(&pi, g)| (pi, g.iter().map(|(li, _, (f, b))| (*li, vec![*f, *b])).collect())).collect()
+        self.fit
+            .gates
+            .iter()
+            .map(|(&pi, g)| {
+                (
+                    pi,
+                    g.iter()
+                        .map(|(li, _, (f, b))| (*li, vec![*f, *b]))
+                        .collect(),
+                )
+            })
+            .collect()
     }
 
     /// Can she drop off line `li` from sector `high`, whose floor is at `top`? (`landable`)
@@ -293,7 +387,10 @@ impl Navigator {
             if line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0 {
                 return false;
             }
-            if self.front_teleport(portal, frm).is_some_and(|t| !spent.contains(&t)) {
+            if self
+                .front_teleport(portal, frm)
+                .is_some_and(|t| !spent.contains(&t))
+            {
                 return false;
             }
         }
@@ -302,7 +399,10 @@ impl Navigator {
 
     /// The teleport line portal `portal` crosses from its front, coming from poly `frm`.
     pub fn front_teleport(&self, portal: usize, frm: usize) -> Option<usize> {
-        self.mesh.portals[portal].linedef.filter(|&li| TELEPORTERS_FOR_PLAYERS.contains(&self.map.linedefs[li].special) && self.mesh.poly(frm).lines_front.contains(&li))
+        self.mesh.portals[portal].linedef.filter(|&li| {
+            TELEPORTERS_FOR_PLAYERS.contains(&self.map.linedefs[li].special)
+                && self.mesh.poly(frm).lines_front.contains(&li)
+        })
     }
 }
 
@@ -345,7 +445,11 @@ pub(super) struct LineSets {
 
 impl LineSets {
     pub(super) fn new(m: &MapData, movers: &MoverModel) -> LineSets {
-        LineSets { walls: wall_lines(m, movers), drops: drop_lines(m, movers), teleports: teleport_lines(m) }
+        LineSets {
+            walls: wall_lines(m, movers),
+            drops: drop_lines(m, movers),
+            teleports: teleport_lines(m),
+        }
     }
 }
 
@@ -364,16 +468,31 @@ impl Navigator {
     /// path crosses: doors it opens, ledges it drops off), ledge edges and teleport lines count
     /// as walls too, and the exempt ones don't. With `live` heights, lines that are walls or
     /// ledges now count as well (a floor that has risen makes new ledges: E4M2).
-    pub fn walls_near(&self, a: Point, b: Point, pad: f64, exempt: Option<&BTreeSet<usize>>, live: Option<&[crate::nav::Heights]>) -> Vec<Seg> {
+    pub fn walls_near(
+        &self,
+        a: Point,
+        b: Point,
+        pad: f64,
+        exempt: Option<&BTreeSet<usize>>,
+        live: Option<&[crate::nav::Heights]>,
+    ) -> Vec<Seg> {
         let ls = &self.line_sets;
         let is_wall = |li: usize| match exempt {
-            Some(ex) => (ls.walls.contains(&li) || ls.drops.contains(&li) || ls.teleports.contains(&li)) && !ex.contains(&li),
+            Some(ex) => {
+                (ls.walls.contains(&li) || ls.drops.contains(&li) || ls.teleports.contains(&li))
+                    && !ex.contains(&li)
+            }
             None => ls.walls.contains(&li),
         };
         let mut seen_lines: BTreeSet<usize> = BTreeSet::new();
         let mut seen_edges: Vec<Seg> = Vec::new();
         let mut out: Vec<Seg> = Vec::new();
-        for cell in cells(a.0.min(b.0) - pad, a.1.min(b.1) - pad, a.0.max(b.0) + pad, a.1.max(b.1) + pad) {
+        for cell in cells(
+            a.0.min(b.0) - pad,
+            a.1.min(b.1) - pad,
+            a.0.max(b.0) + pad,
+            a.1.max(b.1) + pad,
+        ) {
             for &li in self.mesh.line_grid.get(&cell).into_iter().flatten() {
                 if !seen_lines.insert(li) {
                     continue;

@@ -175,7 +175,12 @@ impl Divline {
     /// P_InterceptVector(self, other): how far along self (16.16) it meets other.
     fn intercept(&self, other: &Divline) -> Fixed {
         let (v2x, v2y, v2dx, v2dy) = (self.x as f64, self.y as f64, self.dx as f64, self.dy as f64);
-        let (v1x, v1y, v1dx, v1dy) = (other.x as f64, other.y as f64, other.dx as f64, other.dy as f64);
+        let (v1x, v1y, v1dx, v1dy) = (
+            other.x as f64,
+            other.y as f64,
+            other.dx as f64,
+            other.dy as f64,
+        );
         let den = v1dy * v2dx - v1dx * v2dy;
         if den == 0.0 {
             return 0;
@@ -194,7 +199,12 @@ impl SimLine {
 
     /// P_MakeDivline
     fn divline(&self) -> Divline {
-        Divline { x: self.x1, y: self.y1, dx: self.dx, dy: self.dy }
+        Divline {
+            x: self.x1,
+            y: self.y1,
+            dx: self.dx,
+            dy: self.dy,
+        }
     }
 
     /// FBoundingBox::BoxOnLineSide == -1: the box straddles the line.
@@ -212,7 +222,10 @@ impl SimLine {
 
     /// Outside the line's bounding box (PIT_CheckLine's first test).
     fn bbox_misses(&self, b: &BBox) -> bool {
-        b.right <= self.x1.min(self.x2) || b.left >= self.x1.max(self.x2) || b.top <= self.y1.min(self.y2) || b.bottom >= self.y1.max(self.y2)
+        b.right <= self.x1.min(self.x2)
+            || b.left >= self.x1.max(self.x2)
+            || b.top <= self.y1.min(self.y2)
+            || b.bottom >= self.y1.max(self.y2)
     }
 }
 
@@ -226,7 +239,12 @@ struct BBox {
 
 impl BBox {
     fn around(x: Fixed, y: Fixed) -> BBox {
-        BBox { left: x - RADIUS, right: x + RADIUS, bottom: y - RADIUS, top: y + RADIUS }
+        BBox {
+            left: x - RADIUS,
+            right: x + RADIUS,
+            bottom: y - RADIUS,
+            top: y + RADIUS,
+        }
     }
 }
 
@@ -254,7 +272,13 @@ struct Blocks {
 
 impl Blocks {
     fn new(b: &Blockmap) -> Blocks {
-        Blocks { x: Fixed::from(b.x) << 16, y: Fixed::from(b.y) << 16, columns: b.columns as i64, rows: b.rows as i64, lines: b.blocks.clone() }
+        Blocks {
+            x: Fixed::from(b.x) << 16,
+            y: Fixed::from(b.y) << 16,
+            columns: b.columns as i64,
+            rows: b.rows as i64,
+            lines: b.blocks.clone(),
+        }
     }
 
     fn block(&self, bx: i64, by: i64) -> &[usize] {
@@ -304,19 +328,48 @@ impl World {
         let nodes = m
             .nodes
             .iter()
-            .map(|n| SimNode { x: to_fixed(n.x), y: to_fixed(n.y), dx: to_fixed(n.dx), dy: to_fixed(n.dy), children: [n.front, n.back] })
+            .map(|n| SimNode {
+                x: to_fixed(n.x),
+                y: to_fixed(n.y),
+                dx: to_fixed(n.dx),
+                dy: to_fixed(n.dy),
+                children: [n.front, n.back],
+            })
             .collect();
         let things = lab
             .obstacle_grid
             .iter()
-            .map(|(c, es)| (*c, es.iter().map(|&(a, b)| ((to_fixed(a.0), to_fixed(a.1)), (to_fixed(b.0), to_fixed(b.1)))).collect()))
+            .map(|(c, es)| {
+                (
+                    *c,
+                    es.iter()
+                        .map(|&(a, b)| {
+                            (
+                                (to_fixed(a.0), to_fixed(a.1)),
+                                (to_fixed(b.0), to_fixed(b.1)),
+                            )
+                        })
+                        .collect(),
+                )
+            })
             .collect();
-        World { lines, nodes, subsector_sectors: subsector_sectors(m), blocks: m.blockmap.as_ref().map(Blocks::new), things }
+        World {
+            lines,
+            nodes,
+            subsector_sectors: subsector_sectors(m),
+            blocks: m.blockmap.as_ref().map(Blocks::new),
+            things,
+        }
     }
 
     /// The lines in the blockmap blocks from (minx, miny) to (maxx, maxy) (block numbers), each
     /// once, in FBlockLinesIterator's order; added to `out`.
-    fn block_lines(&self, (minx, miny): (i64, i64), (maxx, maxy): (i64, i64), out: &mut Vec<usize>) {
+    fn block_lines(
+        &self,
+        (minx, miny): (i64, i64),
+        (maxx, maxy): (i64, i64),
+        out: &mut Vec<usize>,
+    ) {
         let Some(b) = &self.blocks else { return };
         for by in miny..=maxy {
             for bx in minx..=maxx {
@@ -337,7 +390,9 @@ fn subsector_sectors(m: &MapData) -> Vec<usize> {
         .map(|ss| {
             let seg = &m.segs[ss.first_seg];
             let (front, back) = m.sides(seg.linedef);
-            if seg.direction == 0 { front } else { back }.or(front).unwrap_or(0)
+            if seg.direction == 0 { front } else { back }
+                .or(front)
+                .unwrap_or(0)
         })
         .collect()
 }
@@ -380,8 +435,26 @@ impl<'a> PlayerSim<'a> {
     }
 
     pub(super) fn with_heights(lab: &'a JumpLab, world: &'a World, heights: &[(f64, f64)]) -> Self {
-        let heights = heights.iter().map(|&(f, c)| (to_fixed(f), to_fixed(c))).collect();
-        PlayerSim { lab, world, heights, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, angle: 0, floorz: 0, ceilz: 0, blocked_by_thing: false, teleported: false }
+        let heights = heights
+            .iter()
+            .map(|&(f, c)| (to_fixed(f), to_fixed(c)))
+            .collect();
+        PlayerSim {
+            lab,
+            world,
+            heights,
+            x: 0,
+            y: 0,
+            z: 0,
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            angle: 0,
+            floorz: 0,
+            ceilz: 0,
+            blocked_by_thing: false,
+            teleported: false,
+        }
     }
 
     /// Stand still at (x, y) on the floor facing `angle` (like the "warp" console command).
@@ -479,13 +552,20 @@ impl<'a> PlayerSim<'a> {
         let maxmove = RADIUS - FRAC;
         let (xspeed, yspeed) = (xmove.abs(), ymove.abs());
         let speed = if xspeed > yspeed { xspeed } else { yspeed };
-        let mut steps = if speed > maxmove { 1 + speed / maxmove } else { 1 };
+        let mut steps = if speed > maxmove {
+            1 + speed / maxmove
+        } else {
+            1
+        };
         let (mut onestepx, mut onestepy) = (xmove / steps, ymove / steps);
         let (mut startx, mut starty) = (self.x, self.y);
         let totalsteps = steps;
         let mut step = 1;
         while step <= steps {
-            let (ptryx, ptryy) = (startx + scale(xmove, step, steps), starty + scale(ymove, step, steps));
+            let (ptryx, ptryy) = (
+                startx + scale(xmove, step, steps),
+                starty + scale(ymove, step, steps),
+            );
             let (startvx, startvy) = (self.vx, self.vy);
             if !self.try_move(ptryx, ptryy) {
                 if self.teleported {
@@ -527,7 +607,12 @@ impl<'a> PlayerSim<'a> {
         if self.z > self.floorz {
             return;
         }
-        if self.vx > -STOP_SPEED && self.vx < STOP_SPEED && self.vy > -STOP_SPEED && self.vy < STOP_SPEED && !pushing {
+        if self.vx > -STOP_SPEED
+            && self.vx < STOP_SPEED
+            && self.vy > -STOP_SPEED
+            && self.vy < STOP_SPEED
+            && !pushing
+        {
             self.vx = 0;
             self.vy = 0;
         } else {
@@ -542,8 +627,16 @@ impl<'a> PlayerSim<'a> {
     /// alone, else x alone.
     fn slide_move(&mut self, mut tryx: Fixed, mut tryy: Fixed, numsteps: Fixed) {
         for _ in 0..2 {
-            let (leadx, trailx) = if tryx > 0 { (self.x + RADIUS, self.x - RADIUS) } else { (self.x - RADIUS, self.x + RADIUS) };
-            let (leady, traily) = if tryy > 0 { (self.y + RADIUS, self.y - RADIUS) } else { (self.y - RADIUS, self.y + RADIUS) };
+            let (leadx, trailx) = if tryx > 0 {
+                (self.x + RADIUS, self.x - RADIUS)
+            } else {
+                (self.x - RADIUS, self.x + RADIUS)
+            };
+            let (leady, traily) = if tryy > 0 {
+                (self.y + RADIUS, self.y - RADIUS)
+            } else {
+                (self.y - RADIUS, self.y + RADIUS)
+            };
             let mut best: Option<(Fixed, usize)> = None;
             self.slide_traverse((leadx, leady), (leadx + tryx, leady + tryy), &mut best);
             self.slide_traverse((trailx, leady), (trailx + tryx, leady + tryy), &mut best);
@@ -552,7 +645,10 @@ impl<'a> PlayerSim<'a> {
             let frac = frac - FRAC / 32;
             if frac > 0 {
                 let (startvx, startvy) = (self.vx, self.vy);
-                if !self.try_move(self.x + fixed_mul(tryx, frac), self.y + fixed_mul(tryy, frac)) {
+                if !self.try_move(
+                    self.x + fixed_mul(tryx, frac),
+                    self.y + fixed_mul(tryy, frac),
+                ) {
                     break;
                 }
                 if self.vx != startvx || self.vy != startvy || self.teleported {
@@ -588,20 +684,37 @@ impl<'a> PlayerSim<'a> {
             return (mx, 0);
         }
         let dll = l.divline();
-        let across = Divline { x: self.x, y: self.y, dx: dll.dy, dy: -dll.dx };
+        let across = Divline {
+            x: self.x,
+            y: self.y,
+            dx: dll.dy,
+            dy: -dll.dx,
+        };
         let inter1 = dll.intercept(&across);
-        let along = Divline { dx: mx, dy: my, ..across };
+        let along = Divline {
+            dx: mx,
+            dy: my,
+            ..across
+        };
         let inter2 = dll.intercept(&along);
         let inter3 = along.intercept(&dll);
         if inter3 == 0 {
             return (0, 0);
         }
-        (scale(inter2 - inter1, dll.dx, inter3), scale(inter2 - inter1, dll.dy, inter3))
+        (
+            scale(inter2 - inter1, dll.dx, inter3),
+            scale(inter2 - inter1, dll.dy, inter3),
+        )
     }
 
     /// FSlide::SlideTraverse: the first line along the trace that would stop the box (if
     /// nearer than `best`, it becomes `best`).
-    fn slide_traverse(&self, from: (Fixed, Fixed), to: (Fixed, Fixed), best: &mut Option<(Fixed, usize)>) {
+    fn slide_traverse(
+        &self,
+        from: (Fixed, Fixed),
+        to: (Fixed, Fixed),
+        best: &mut Option<(Fixed, usize)>,
+    ) {
         for (frac, li) in self.path_traverse(from, to) {
             let l = &self.world.lines[li];
             let blocks = match (l.front, l.back) {
@@ -626,7 +739,11 @@ impl<'a> PlayerSim<'a> {
 
     /// FPathTraverse (lines only): the lines the trace crosses as (how far along, line),
     /// nearest first (ties in the order they were found).
-    fn path_traverse(&self, (mut x1, mut y1): (Fixed, Fixed), (x2, y2): (Fixed, Fixed)) -> Vec<(Fixed, usize)> {
+    fn path_traverse(
+        &self,
+        (mut x1, mut y1): (Fixed, Fixed),
+        (x2, y2): (Fixed, Fixed),
+    ) -> Vec<(Fixed, usize)> {
         let mut candidates = Vec::new();
         match &self.world.blocks {
             Some(b) => {
@@ -643,10 +760,21 @@ impl<'a> PlayerSim<'a> {
             }
             None => {
                 let (ax, ay, bx, by) = (to_units(x1), to_units(y1), to_units(x2), to_units(y2));
-                self.grid_lines(ax.min(bx), ay.min(by), ax.max(bx), ay.max(by), &mut candidates);
+                self.grid_lines(
+                    ax.min(bx),
+                    ay.min(by),
+                    ax.max(bx),
+                    ay.max(by),
+                    &mut candidates,
+                );
             }
         }
-        let trace = Divline { x: x1, y: y1, dx: x2 - x1, dy: y2 - y1 };
+        let trace = Divline {
+            x: x1,
+            y: y1,
+            dx: x2 - x1,
+            dy: y2 - y1,
+        };
         let long = trace.dx.abs() > 16 * FRAC || trace.dy.abs() > 16 * FRAC;
         let mut found: Vec<(Fixed, usize)> = candidates
             .into_iter()
@@ -655,7 +783,10 @@ impl<'a> PlayerSim<'a> {
                 let (s1, s2) = if long {
                     (trace.point_side(l.x1, l.y1), trace.point_side(l.x2, l.y2))
                 } else {
-                    (l.point_side(trace.x, trace.y), l.point_side(trace.x + trace.dx, trace.y + trace.dy))
+                    (
+                        l.point_side(trace.x, trace.y),
+                        l.point_side(trace.x + trace.dx, trace.y + trace.dy),
+                    )
                 };
                 if s1 == s2 {
                     return None;
@@ -674,14 +805,21 @@ impl<'a> PlayerSim<'a> {
     fn sector_at(&self, x: Fixed, y: Fixed) -> Option<usize> {
         let nodes = &self.world.nodes;
         let Some(last) = nodes.len().checked_sub(1) else {
-            return self.lab.mesh.poly_at((to_units(x), to_units(y))).map(|p| self.lab.mesh.poly(p).sector);
+            return self
+                .lab
+                .mesh
+                .poly_at((to_units(x), to_units(y)))
+                .map(|p| self.lab.mesh.poly(p).sector);
         };
         let mut child = last as u16;
         while child & NF_SUBSECTOR == 0 {
             let n = &nodes[usize::from(child)];
             child = n.children[usize::from(dmul_scale32_positive(y - n.y, n.dx, n.x - x, n.dy))];
         }
-        self.world.subsector_sectors.get(usize::from(child & !NF_SUBSECTOR)).copied()
+        self.world
+            .subsector_sectors
+            .get(usize::from(child & !NF_SUBSECTOR))
+            .copied()
     }
 
     /// Lines near the box, from the navmesh's grid (when the map has no blockmap).
@@ -700,11 +838,23 @@ impl<'a> PlayerSim<'a> {
         let mut out = Vec::new();
         match &self.world.blocks {
             Some(bm) => {
-                let lo = ((b.left - bm.x) >> BLOCK_SHIFT, (b.bottom - bm.y) >> BLOCK_SHIFT);
-                let hi = ((b.right - bm.x) >> BLOCK_SHIFT, (b.top - bm.y) >> BLOCK_SHIFT);
+                let lo = (
+                    (b.left - bm.x) >> BLOCK_SHIFT,
+                    (b.bottom - bm.y) >> BLOCK_SHIFT,
+                );
+                let hi = (
+                    (b.right - bm.x) >> BLOCK_SHIFT,
+                    (b.top - bm.y) >> BLOCK_SHIFT,
+                );
                 self.world.block_lines(lo, hi, &mut out);
             }
-            None => self.grid_lines(to_units(b.left), to_units(b.bottom), to_units(b.right), to_units(b.top), &mut out),
+            None => self.grid_lines(
+                to_units(b.left),
+                to_units(b.bottom),
+                to_units(b.right),
+                to_units(b.top),
+                &mut out,
+            ),
         }
         out
     }
@@ -714,14 +864,26 @@ impl<'a> PlayerSim<'a> {
     /// one-sided or blocking line. (Its last test, the room left between floor and ceiling,
     /// is try_move's.)
     fn check(&self, x: Fixed, y: Fixed) -> Check {
-        let blocked = |floor, ceil, thing| Check { clear: false, floor, ceil, thing, teleports: Vec::new() };
-        let Some(sector) = self.sector_at(x, y) else { return blocked(0, 0, false) };
+        let blocked = |floor, ceil, thing| Check {
+            clear: false,
+            floor,
+            ceil,
+            thing,
+            teleports: Vec::new(),
+        };
+        let Some(sector) = self.sector_at(x, y) else {
+            return blocked(0, 0, false);
+        };
         let (mut floor, mut ceil) = self.heights[sector];
         let b = BBox::around(x, y);
         let (ux, uy, r) = (to_units(x), to_units(y), to_units(RADIUS));
         for c in cells(ux - r, uy - r, ux + r, uy + r) {
             for &((ax, ay), (bx, by)) in self.world.things.get(&c).into_iter().flatten() {
-                if ax.max(bx) > b.left && ax.min(bx) < b.right && ay.max(by) > b.bottom && ay.min(by) < b.top {
+                if ax.max(bx) > b.left
+                    && ax.min(bx) < b.right
+                    && ay.max(by) > b.bottom
+                    && ay.min(by) < b.top
+                {
                     return blocked(floor, ceil, true);
                 }
             }
@@ -743,14 +905,24 @@ impl<'a> PlayerSim<'a> {
             }
             // P_LineOpening, from the box's centre: the front floor unless the floors differ
             let ((ff, fc), (bf, bc)) = (self.heights[f], self.heights[bk]);
-            let bottom = if (ff - bf).abs() > 256 { ff.max(bf) } else { ff };
+            let bottom = if (ff - bf).abs() > 256 {
+                ff.max(bf)
+            } else {
+                ff
+            };
             ceil = ceil.min(fc.min(bc));
             floor = floor.max(bottom);
             if l.teleport {
                 teleports.push(li);
             }
         }
-        Check { clear: good, floor, ceil, thing: false, teleports }
+        Check {
+            clear: good,
+            floor,
+            ceil,
+            thing: false,
+            teleports,
+        }
     }
 
     /// P_TryMove: into (x, y) if the box fits there from where it is (a step of at most 24 up,
@@ -758,7 +930,11 @@ impl<'a> PlayerSim<'a> {
     fn try_move(&mut self, x: Fixed, y: Fixed) -> bool {
         let c = self.check(x, y);
         self.blocked_by_thing = c.thing;
-        if !c.clear || c.ceil - c.floor < HEIGHT || c.ceil - self.z < HEIGHT || c.floor - self.z > MAX_STEP {
+        if !c.clear
+            || c.ceil - c.floor < HEIGHT
+            || c.ceil - self.z < HEIGHT
+            || c.floor - self.z > MAX_STEP
+        {
             return false;
         }
         // spechit: a teleport line fires going from its front to its back
@@ -803,7 +979,12 @@ impl<'a> PlayerSim<'a> {
 /// The blocks FPathTraverse visits from (x1, y1) to (x2, y2), in order.
 fn walk_blocks(b: &Blocks, (x1, y1): (Fixed, Fixed), (x2, y2): (Fixed, Fixed)) -> Vec<(i64, i64)> {
     let (x1, y1, x2, y2) = (x1 - b.x, y1 - b.y, x2 - b.x, y2 - b.y);
-    let (xt1, yt1, xt2, yt2) = (x1 >> BLOCK_SHIFT, y1 >> BLOCK_SHIFT, x2 >> BLOCK_SHIFT, y2 >> BLOCK_SHIFT);
+    let (xt1, yt1, xt2, yt2) = (
+        x1 >> BLOCK_SHIFT,
+        y1 >> BLOCK_SHIFT,
+        x2 >> BLOCK_SHIFT,
+        y2 >> BLOCK_SHIFT,
+    );
     let frac_in = |v: Fixed| (v >> BLOCK_TO_FRAC) & (FRAC - 1);
     let (mapxstep, mut partialx, ystep) = match xt2.cmp(&xt1) {
         std::cmp::Ordering::Greater => (1, FRAC - frac_in(x1), fixed_div(y2 - y1, (x2 - x1).abs())),

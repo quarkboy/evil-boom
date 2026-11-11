@@ -42,9 +42,32 @@ impl View {
             return v.clone();
         }
         let relevant = t.relevant.clone().unwrap_or_default();
-        let reps: Vec<(usize, Heights)> = relevant.iter().map(|&s| (s, if t.sectors.contains(&s) { init[s] } else { lowest[s] })).collect();
-        let assumes: Vec<(usize, Heights)> = reps.iter().copied().filter(|(s, h)| *h != init[*s]).collect();
-        let v = (if assumes.is_empty() { Vec::new() } else { self.nav.effects_from_reps(t, &reps) }, assumes);
+        let reps: Vec<(usize, Heights)> = relevant
+            .iter()
+            .map(|&s| {
+                (
+                    s,
+                    if t.sectors.contains(&s) {
+                        init[s]
+                    } else {
+                        lowest[s]
+                    },
+                )
+            })
+            .collect();
+        let assumes: Vec<(usize, Heights)> = reps
+            .iter()
+            .copied()
+            .filter(|(s, h)| *h != init[*s])
+            .collect();
+        let v = (
+            if assumes.is_empty() {
+                Vec::new()
+            } else {
+                self.nav.effects_from_reps(t, &reps)
+            },
+            assumes,
+        );
         self.low_variants.borrow_mut().insert(t.id, v.clone());
         v
     }
@@ -63,10 +86,18 @@ impl View {
                     if line.is_some() {
                         for (s, hs) in &t.effects {
                             for h in hs {
-                                timing.insert((*s, h.key()), n.movers.timing(t.info.special, &t.info.description, *s, *h));
+                                timing.insert(
+                                    (*s, h.key()),
+                                    n.movers.timing(t.info.special, &t.info.description, *s, *h),
+                                );
                             }
                             if let Some(h) = hs.first() {
-                                perm_travel.insert(*s, n.movers.timing(t.info.special, &t.info.description, *s, *h).travel);
+                                perm_travel.insert(
+                                    *s,
+                                    n.movers
+                                        .timing(t.info.special, &t.info.description, *s, *h)
+                                        .travel,
+                                );
                             }
                         }
                     }
@@ -94,16 +125,34 @@ impl View {
                     }
                 })
                 .collect();
-            let specials: Vec<(u16, Vec<usize>)> = self.triggers.iter().map(|t| (t.info.special, t.sectors.clone())).collect();
+            let specials: Vec<(u16, Vec<usize>)> = self
+                .triggers
+                .iter()
+                .map(|t| (t.info.special, t.sectors.clone()))
+                .collect();
             let (movers, trenches) = (Arc::clone(&n.movers), n.trenches.clone());
             PlanFacts {
                 triggers,
-                use_gates: n.use_gates.iter().map(|(k, v)| (*k, v.iter().copied().collect())).collect(),
-                use_line_gates: n.use_line_gates.iter().map(|(k, v)| (*k, v.iter().copied().collect())).collect(),
+                use_gates: n
+                    .use_gates
+                    .iter()
+                    .map(|(k, v)| (*k, v.iter().copied().collect()))
+                    .collect(),
+                use_line_gates: n
+                    .use_line_gates
+                    .iter()
+                    .map(|(k, v)| (*k, v.iter().copied().collect()))
+                    .collect(),
                 shot_floors: n.shot_floors.clone(),
                 cross_sides: self.cross_sides().clone(),
-                temporary: crate::navigator::temporary_heights(&self.triggers, &n.movers).into_iter().collect(),
-                key_positions: self.key_positions.iter().map(|(k, ps)| (key_bit(*k), ps.clone())).collect(),
+                temporary: crate::navigator::temporary_heights(&self.triggers, &n.movers)
+                    .into_iter()
+                    .collect(),
+                key_positions: self
+                    .key_positions
+                    .iter()
+                    .map(|(k, ps)| (key_bit(*k), ps.clone()))
+                    .collect(),
                 effects_from_reps: Box::new(move |ti, reps| {
                     let (special, sectors) = &specials[ti];
                     crate::navigator::effects_from_reps(&movers, &trenches, *special, sectors, reps)
@@ -123,25 +172,54 @@ impl View {
         if goal_polys.is_empty() {
             return None;
         }
-        let actions: Vec<&TriggerLine> = self.triggers.iter().filter(|t| t.info.trigger != Trigger::DR && !t.effects.is_empty()).collect();
+        let actions: Vec<&TriggerLine> = self
+            .triggers
+            .iter()
+            .filter(|t| t.info.trigger != Trigger::DR && !t.effects.is_empty())
+            .collect();
         let states0 = q.states.cloned().unwrap_or_else(|| self.initial_states());
-        let (reach_all, states_all, keys_all) = self.saturate(start_poly, &states0, q.keys, q.key_items, &actions);
+        let (reach_all, states_all, keys_all) =
+            self.saturate(start_poly, &states0, q.keys, q.key_items, &actions);
         if goal_polys.is_disjoint(&reach_all) {
             return None;
         }
-        let (rel_t, rel_k) = self.relaxed_needs(start_poly, &goal_polys, &states0, q.key_items, &actions, (&reach_all, &states_all, keys_all));
+        let (rel_t, rel_k) = self.relaxed_needs(
+            start_poly,
+            &goal_polys,
+            &states0,
+            q.key_items,
+            &actions,
+            (&reach_all, &states_all, keys_all),
+        );
         if std::env::var_os("EVIL_DEBUG_RELAXED").is_some() {
-            eprintln!("relaxed: lines {:?} keys {:?}", rel_t, rel_k.iter().map(Key::name).collect::<Vec<_>>());
+            eprintln!(
+                "relaxed: lines {:?} keys {:?}",
+                rel_t,
+                rel_k.iter().map(Key::name).collect::<Vec<_>>()
+            );
         }
-        let index: BTreeMap<usize, usize> = self.triggers.iter().enumerate().map(|(i, t)| (t.id, i)).collect();
+        let index: BTreeMap<usize, usize> = self
+            .triggers
+            .iter()
+            .enumerate()
+            .map(|(i, t)| (t.id, i))
+            .collect();
         let query = Query {
             start,
             goals: goals.to_vec(),
             keys: KeySet(q.keys.0),
-            key_items: q.key_items.iter().map(|(k, spots)| (key_bit(*k), spots.clone())).collect(),
+            key_items: q
+                .key_items
+                .iter()
+                .map(|(k, spots)| (key_bit(*k), spots.clone()))
+                .collect(),
             max_expansions: q.max_expansions,
             max_seconds: q.max_seconds,
-            goal_triggers: q.goal_triggers.iter().filter_map(|(p, id)| index.get(id).map(|&i| (point_key(*p), i))).collect(),
+            goal_triggers: q
+                .goal_triggers
+                .iter()
+                .filter_map(|(p, id)| index.get(id).map(|&i| (point_key(*p), i)))
+                .collect(),
             relevant_lines: rel_t.iter().map(|&l| usize::try_from(l).ok()).collect(),
             relevant_keys: KeySet(rel_k.0),
             useful_lines: Some(rel_t.iter().map(|&l| usize::try_from(l).ok()).collect()),
@@ -158,12 +236,25 @@ impl View {
         // there needing a block at the height its only switch takes it down from. A way with
         // those: the route as ever, from them all; the few lines' route can be another, worse:
         // E1M5's, MAP14's)
-        let narrow = self.with_core(|nav, caches| Planner::new(nav, facts, caches).plan(&query, world(&states0)));
-        let none = narrow.is_none() && crate::stats::last_ended() == Some(crate::stats::Ended::Exhausted);
+        let narrow = self.with_core(|nav, caches| {
+            Planner::new(nav, facts, caches).plan(&query, world(&states0))
+        });
+        let none =
+            narrow.is_none() && crate::stats::last_ended() == Some(crate::stats::Ended::Exhausted);
         // (a tenth of the budget, which comes down as searches use theirs up: the explorer's)
-        let max_expansions = if none { (q.max_expansions / WIDER_BUDGET_DIVISOR).min(WIDER_EXPANSIONS) } else { q.max_expansions };
-        let wider = Query { useful_lines: None, max_expansions, ..query };
-        let found = self.with_core(|nav, caches| Planner::new(nav, facts, caches).plan(&wider, world(&states0)));
+        let max_expansions = if none {
+            (q.max_expansions / WIDER_BUDGET_DIVISOR).min(WIDER_EXPANSIONS)
+        } else {
+            q.max_expansions
+        };
+        let wider = Query {
+            useful_lines: None,
+            max_expansions,
+            ..query
+        };
+        let found = self.with_core(|nav, caches| {
+            Planner::new(nav, facts, caches).plan(&wider, world(&states0))
+        });
         if crate::stats::enabled() {
             eprintln!("{}", crate::stats::report(t0.elapsed().as_secs_f64()));
         }
@@ -181,7 +272,12 @@ impl View {
                 }
             })
             .collect();
-        Some(Route { legs, states: states_of(&route.states), keys: Keys(route.keys.0), goal: Some(route.goal) })
+        Some(Route {
+            legs,
+            states: states_of(&route.states),
+            keys: Keys(route.keys.0),
+            goal: Some(route.goal),
+        })
     }
 
     /// The relaxed plan (order ignored): which triggers and keys a route to `goals` depends on.
@@ -216,7 +312,9 @@ impl View {
                 let (effects, assumes) = self.low_variant(t);
                 for (s, hs) in effects {
                     for h in hs {
-                        if let std::collections::btree_map::Entry::Vacant(e) = producers.entry((s, h.key())) {
+                        if let std::collections::btree_map::Entry::Vacant(e) =
+                            producers.entry((s, h.key()))
+                        {
                             e.insert(vec![t]);
                             assumed.insert((s, h.key()), assumes.clone());
                         }
@@ -224,8 +322,19 @@ impl View {
                 }
             }
         }
-        let key_for = |lock: Lock| key_items.iter().map(|(k, _)| *k).find(|k| lock.satisfied(Keys::default().with(*k)));
-        let spots_of = |k: Key| -> BTreeSet<usize> { key_items.iter().filter(|(x, _)| *x == k).flat_map(|(_, s)| s.iter().map(|(p, _)| *p)).collect() };
+        let key_for = |lock: Lock| {
+            key_items
+                .iter()
+                .map(|(k, _)| *k)
+                .find(|k| lock.satisfied(Keys::default().with(*k)))
+        };
+        let spots_of = |k: Key| -> BTreeSet<usize> {
+            key_items
+                .iter()
+                .filter(|(x, _)| *x == k)
+                .flat_map(|(_, s)| s.iter().map(|(p, _)| *p))
+                .collect()
+        };
         let mut need_t: BTreeSet<i64> = BTreeSet::new();
         let mut need_k = Keys::default();
         let mut without: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
@@ -241,7 +350,8 @@ impl View {
             }
             seen_goals.insert(target.clone());
             // breadth first with parents, in the saturated world
-            let mut parent: BTreeMap<usize, (Option<usize>, Option<Step>)> = BTreeMap::from([(start, (None, None))]);
+            let mut parent: BTreeMap<usize, (Option<usize>, Option<Step>)> =
+                BTreeMap::from([(start, (None, None))]);
             let mut todo = std::collections::VecDeque::from([start]);
             let mut end = None;
             while let Some(p) = todo.pop_front() {
@@ -259,7 +369,10 @@ impl View {
                 moves.extend(
                     n.tele_from[p]
                         .iter()
-                        .filter(|&&e| !matches!(e, TeleEdge::Jump(j) if self.banned_jumps.contains(&j)) && n.edge_ok(e, states_all))
+                        .filter(|&&e| {
+                            !matches!(e, TeleEdge::Jump(j) if self.banned_jumps.contains(&j))
+                                && n.edge_ok(e, states_all)
+                        })
                         .map(|&e| (n.edge_dest(e).0, Step::Tele(e))),
                 );
                 for (to, via) in moves {
@@ -281,19 +394,30 @@ impl View {
                             needed_h.insert((s, h.key()), h);
                         }
                     }
-                    Some(Step::Portal(pi)) if !n.passable(pi, prev, states0, None, self.spent()) => {
+                    Some(Step::Portal(pi))
+                        if !n.passable(pi, prev, states0, None, self.spent()) =>
+                    {
                         let (sa, sb) = (n.sector_of_poly(prev), n.sector_of_poly(p));
                         let pairs: Vec<(Heights, Heights)> = states_all[sa]
                             .iter()
-                            .flat_map(|&ha| states_all[sb].iter().filter(move |&&hb| can_cross(ha, hb)).map(move |&hb| (ha, hb)))
+                            .flat_map(|&ha| {
+                                states_all[sb]
+                                    .iter()
+                                    .filter(move |&&hb| can_cross(ha, hb))
+                                    .map(move |&hb| (ha, hb))
+                            })
                             .collect();
                         // (fewest heights not there now; of those, the lowest floors: what's been
                         // brought down is the likelier way through, MAP27's pedestal at 8)
-                        let new = |ha: &Heights, hb: &Heights| usize::from(!states0[sa].contains(ha)) + usize::from(!states0[sb].contains(hb));
-                        if let Some(&(ha, hb)) = pairs
-                            .iter()
-                            .min_by(|(a1, b1), (a2, b2)| new(a1, b1).cmp(&new(a2, b2)).then((a1.floor + b1.floor).total_cmp(&(a2.floor + b2.floor))))
-                        {
+                        let new = |ha: &Heights, hb: &Heights| {
+                            usize::from(!states0[sa].contains(ha))
+                                + usize::from(!states0[sb].contains(hb))
+                        };
+                        if let Some(&(ha, hb)) = pairs.iter().min_by(|(a1, b1), (a2, b2)| {
+                            new(a1, b1)
+                                .cmp(&new(a2, b2))
+                                .then((a1.floor + b1.floor).total_cmp(&(a2.floor + b2.floor)))
+                        }) {
                             for (s, h) in [(sa, ha), (sb, hb)] {
                                 if !states0[s].contains(&h) {
                                     needed.insert((s, h.key()));
@@ -304,7 +428,9 @@ impl View {
                             // a use-door: which key does it need?
                             for t in &self.triggers {
                                 if t.sectors.contains(&sb) && t.info.lock != Lock::None {
-                                    if let Some(k) = key_for(t.info.lock).filter(|k| !need_k.has(*k)) {
+                                    if let Some(k) =
+                                        key_for(t.info.lock).filter(|k| !need_k.has(*k))
+                                    {
                                         need_k = need_k.with(k);
                                         queue.push(spots_of(k));
                                     }
@@ -341,7 +467,9 @@ impl View {
                         .copied()
                         .filter(|&p| {
                             !n.use_gates.get(&(li, p)).is_some_and(|g| g.contains(&sh.0))
-                                && !n.use_line_gates.get(&(li, p)).is_some_and(|g| g.iter().any(|pr| pr.0 == sh.0 || pr.1 == sh.0))
+                                && !n.use_line_gates.get(&(li, p)).is_some_and(|g| {
+                                    g.iter().any(|pr| pr.0 == sh.0 || pr.1 == sh.0)
+                                })
                         })
                         .collect()
                 };
@@ -376,15 +504,33 @@ impl View {
                     // of the press, if anywhere (MAP27's switch for the red key's pedestal,
                     // behind a blue door: the path there names the blue key)
                     let li = t.linedef().unwrap_or(usize::MAX);
-                    let clear: BTreeSet<usize> =
-                        t.activators.iter().copied().filter(|&p| !n.use_gates.contains_key(&(li, p)) && !n.use_line_gates.contains_key(&(li, p))).collect();
-                    let clear_reach: BTreeSet<usize> = clear.intersection(reach_all).copied().collect();
-                    queue.push(if clear_reach.is_empty() { t.activators.clone() } else { clear_reach.clone() });
+                    let clear: BTreeSet<usize> = t
+                        .activators
+                        .iter()
+                        .copied()
+                        .filter(|&p| {
+                            !n.use_gates.contains_key(&(li, p))
+                                && !n.use_line_gates.contains_key(&(li, p))
+                        })
+                        .collect();
+                    let clear_reach: BTreeSet<usize> =
+                        clear.intersection(reach_all).copied().collect();
+                    queue.push(if clear_reach.is_empty() {
+                        t.activators.clone()
+                    } else {
+                        clear_reach.clone()
+                    });
                     if clear_reach.is_empty() {
                         // pressed through a door: its key
-                        let gates: BTreeSet<usize> = t.activators.iter().flat_map(|&p| n.use_gates.get(&(li, p)).into_iter().flatten().copied()).collect();
+                        let gates: BTreeSet<usize> = t
+                            .activators
+                            .iter()
+                            .flat_map(|&p| n.use_gates.get(&(li, p)).into_iter().flatten().copied())
+                            .collect();
                         for dt in &self.triggers {
-                            if dt.sectors.iter().any(|s| gates.contains(s)) && dt.info.lock != Lock::None {
+                            if dt.sectors.iter().any(|s| gates.contains(s))
+                                && dt.info.lock != Lock::None
+                            {
                                 if let Some(k) = key_for(dt.info.lock).filter(|k| !need_k.has(*k)) {
                                     need_k = need_k.with(k);
                                     queue.push(spots_of(k));
@@ -406,7 +552,10 @@ impl View {
         // height-dependent trigger relies on round it (elsewhere the extra lines only widen the
         // search, MAP15).
         for &t in triggers {
-            if t.effects.iter().any(|(s, hs)| hs.iter().any(|h| relied.contains(&(*s, h.key())))) {
+            if t.effects
+                .iter()
+                .any(|(s, hs)| hs.iter().any(|h| relied.contains(&(*s, h.key()))))
+            {
                 need_t.insert(t.line);
             }
         }

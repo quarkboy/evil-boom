@@ -22,27 +22,54 @@ impl Explorer {
         let k = &self.knowledge;
         let nav = &self.nav;
         let now = self.now();
-        let mut out: States = nav.movers.initial.iter().enumerate().map(|(s, &h)| vec![k.seen_heights.get(&s).copied().unwrap_or(h)]).collect();
-        let known: BTreeMap<i64, (TriggerLine, BTreeSet<usize>)> = k.known_triggers().into_iter().map(|(t, s)| (t.line, (t, s))).collect();
+        let mut out: States = nav
+            .movers
+            .initial
+            .iter()
+            .enumerate()
+            .map(|(s, &h)| vec![k.seen_heights.get(&s).copied().unwrap_or(h)])
+            .collect();
+        let known: BTreeMap<i64, (TriggerLine, BTreeSet<usize>)> = k
+            .known_triggers()
+            .into_iter()
+            .map(|(t, s)| (t.line, (t, s)))
+            .collect();
         for f in &k.fired {
             if f.life != k.lives {
                 continue; // (this life's: the level's started again)
             }
-            let Some((t, sectors)) = known.get(&(f.line as i64)) else { continue };
+            let Some((t, sectors)) = known.get(&(f.line as i64)) else {
+                continue;
+            };
             // (as worked out when it went off; else from the heights as they're believed now)
-            let effects = k.fired_effects.get(&(t.id, f.tic)).cloned().unwrap_or_else(|| nav.effects_now(t, &out));
+            let effects = k
+                .fired_effects
+                .get(&(t.id, f.tic))
+                .cloned()
+                .unwrap_or_else(|| nav.effects_now(t, &out));
             for &s in sectors {
-                let Some(hs) = effects.iter().find(|(x, _)| *x == s).map(|(_, hs)| hs.clone()).filter(|hs| !hs.is_empty()) else { continue };
+                let Some(hs) = effects
+                    .iter()
+                    .find(|(x, _)| *x == s)
+                    .map(|(_, hs)| hs.clone())
+                    .filter(|hs| !hs.is_empty())
+                else {
+                    continue;
+                };
                 if t.permanent() && k.doubtful(f.line, s) {
                     continue; // (in doubt that it's gone for good: as seen, not built on)
                 }
                 // (not seen since the move should have finished: as it'll have left it; seen
                 // after, as seen. Stairs rise slowly: seen part way up is not the top)
                 let h = hs[0];
-                let timing = (t.line >= 0).then(|| nav.movers.timing(t.info.special, &t.info.description, s, h));
+                let timing = (t.line >= 0)
+                    .then(|| nav.movers.timing(t.info.special, &t.info.description, s, h));
                 let done = f.tic + timing.map_or(0, |tm| tm.travel as i64);
                 // (what comes back is only as moved till it's due back: MAP23's timed door)
-                let back = done + timing.and_then(|tm| tm.hold.map(|hold| (hold + tm.travel) as i64)).unwrap_or(0);
+                let back = done
+                    + timing
+                        .and_then(|tm| tm.hold.map(|hold| (hold + tm.travel) as i64))
+                        .unwrap_or(0);
                 if !t.permanent() && timing.is_some_and(|tm| tm.hold.is_some()) && now > back {
                     // (back at rest, as far as she knows, whatever had it before: a door opened
                     // for good, then pressed open again, shuts after its wait: E2M4's door 48)
@@ -51,8 +78,14 @@ impl Explorer {
                     // lift pressed and not looked at again, it was taken for the floor it was at
                     // the level's start, the way across it planned, walked into its side and
                     // "pressed" there by the minute. MAP21, every run on the easiest skill)
-                    if cycles_back(t.info.special, &t.info.description) && k.seen_tic.get(&s).copied().unwrap_or(-1) < back {
-                        let rest = k.fired_rest.get(&(t.id, f.tic)).and_then(|r| r.iter().find(|(x, _)| *x == s)).map_or(nav.movers.initial[s], |r| r.1);
+                    if cycles_back(t.info.special, &t.info.description)
+                        && k.seen_tic.get(&s).copied().unwrap_or(-1) < back
+                    {
+                        let rest = k
+                            .fired_rest
+                            .get(&(t.id, f.tic))
+                            .and_then(|r| r.iter().find(|(x, _)| *x == s))
+                            .map_or(nav.movers.initial[s], |r| r.1);
                         out[s] = vec![rest];
                     }
                     continue;
@@ -73,7 +106,9 @@ impl Explorer {
         for (t, sectors) in known.values() {
             if !t.permanent() {
                 for &s in sectors {
-                    if t.info.category == Category::Crusher && k.stopped_for(s, now, CRUSHER_STOPPED) {
+                    if t.info.category == Category::Crusher
+                        && k.stopped_for(s, now, CRUSHER_STOPPED)
+                    {
                         continue;
                     }
                     add_height(&mut out[s], nav.movers.initial[s]);
@@ -83,13 +118,26 @@ impl Explorer {
         // a slot narrower than the box is walked over at its sides' floor, however deep she saw
         // it (E4M1), at each floor the sides can be at (MAP08's moat)
         for &tr in nav.trenches.keys() {
-            let lo = nav.trench_floor(tr, |o| out[o].iter().map(|h| h.floor).fold(f64::INFINITY, f64::min));
-            let hi = nav.trench_floor(tr, |o| out[o].iter().map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max));
+            let lo = nav.trench_floor(tr, |o| {
+                out[o].iter().map(|h| h.floor).fold(f64::INFINITY, f64::min)
+            });
+            let hi = nav.trench_floor(tr, |o| {
+                out[o]
+                    .iter()
+                    .map(|h| h.floor)
+                    .fold(f64::NEG_INFINITY, f64::max)
+            });
             let floors: Vec<f64> = if lo == hi { vec![lo] } else { vec![lo, hi] };
             let mut hs: Vec<Heights> = Vec::new();
             for h in &out[tr] {
                 for &floor in &floors {
-                    add_height(&mut hs, Heights { floor, ceiling: h.ceiling });
+                    add_height(
+                        &mut hs,
+                        Heights {
+                            floor,
+                            ceiling: h.ceiling,
+                        },
+                    );
                 }
             }
             out[tr] = hs;
@@ -128,7 +176,18 @@ impl Explorer {
     /// door switch 288, pressed once from the alcove: the room behind is had then or not at all).
     pub(super) fn spent_once(&self) -> BTreeSet<usize> {
         let k = &self.knowledge;
-        k.fired.iter().filter(|f| f.life == k.lives && self.nav.triggers.iter().any(|t| t.line == f.line as i64 && t.once())).map(|f| f.line).collect()
+        k.fired
+            .iter()
+            .filter(|f| {
+                f.life == k.lives
+                    && self
+                        .nav
+                        .triggers
+                        .iter()
+                        .any(|t| t.line == f.line as i64 && t.once())
+            })
+            .map(|f| f.line)
+            .collect()
     }
 
     /// Sectors a door or lift she pressed open this life holds open for now (as `states` has
@@ -136,16 +195,28 @@ impl Explorer {
     /// she walked onto, which takes her away from where she was: E2M4's lift 66.)
     pub(super) fn open_for_now(&self, tic: i64) -> BTreeMap<usize, i64> {
         let (k, nav) = (&self.knowledge, &self.nav);
-        let known: BTreeMap<i64, (TriggerLine, BTreeSet<usize>)> = k.known_triggers().into_iter().map(|(t, s)| (t.line, (t, s))).collect();
+        let known: BTreeMap<i64, (TriggerLine, BTreeSet<usize>)> = k
+            .known_triggers()
+            .into_iter()
+            .map(|(t, s)| (t.line, (t, s)))
+            .collect();
         let mut out: BTreeMap<usize, i64> = BTreeMap::new();
-        for f in k.fired.iter().filter(|f| f.life == k.lives && f.how == How::Use) {
-            let Some((t, sectors)) = known.get(&(f.line as i64)) else { continue };
+        for f in k
+            .fired
+            .iter()
+            .filter(|f| f.life == k.lives && f.how == How::Use)
+        {
+            let Some((t, sectors)) = known.get(&(f.line as i64)) else {
+                continue;
+            };
             if t.permanent() || t.line < 0 || !cycles_back(t.info.special, &t.info.description) {
                 continue;
             }
             for (s, hs) in t.effects.iter().filter(|(s, _)| sectors.contains(s)) {
                 let Some(&h) = hs.first() else { continue };
-                let timing = nav.movers.timing(t.info.special, &t.info.description, *s, h);
+                let timing = nav
+                    .movers
+                    .timing(t.info.special, &t.info.description, *s, h);
                 let Some(hold) = timing.hold else { continue };
                 let until = f.tic + (timing.travel + hold) as i64;
                 if tic < until {
@@ -163,7 +234,15 @@ impl Explorer {
             if fresh {
                 return BTreeSet::new();
             }
-            k.fired.iter().filter(|f| f.life == k.lives && k.special(f.line).is_some_and(|i| pred(i.trigger, i.category))).map(|f| f.line).collect()
+            k.fired
+                .iter()
+                .filter(|f| {
+                    f.life == k.lives
+                        && k.special(f.line)
+                            .is_some_and(|i| pred(i.trigger, i.category))
+                })
+                .map(|f| f.line)
+                .collect()
         };
         // (once-only door lines used this life open nothing again: MAP19's door)
         let spent_doors = once_used(&|t, _| t == Trigger::D1);
@@ -173,7 +252,12 @@ impl Explorer {
     }
 
     pub(super) fn blocked(&self) -> BTreeSet<usize> {
-        self.knowledge.stuck_at.iter().filter(|(_, &n)| n >= STUCK_TIMES).map(|(&p, _)| p).collect()
+        self.knowledge
+            .stuck_at
+            .iter()
+            .filter(|(_, &n)| n >= STUCK_TIMES)
+            .map(|(&p, _)| p)
+            .collect()
     }
 
     pub(super) fn view_key(&self, fresh: bool) -> ViewKey {
@@ -208,7 +292,11 @@ impl Explorer {
             // seen to; MAP08's moat)
             let mut keep: BTreeSet<usize> = sectors.clone();
             for (s, _) in &t.effects {
-                if nav.trenches.get(s).is_some_and(|around| around.iter().any(|x| sectors.contains(x))) {
+                if nav
+                    .trenches
+                    .get(s)
+                    .is_some_and(|around| around.iter().any(|x| sectors.contains(x)))
+                {
                     keep.insert(*s);
                 }
             }
@@ -230,9 +318,27 @@ impl Explorer {
         if !exits_open {
             polys.retain(|p| !self.pads.0.contains(p));
         }
-        let teleports: BTreeSet<usize> = k.teleports.keys().copied().filter(|l| !spent_teleports.contains(l)).collect();
-        let banned = if fresh { BTreeSet::new() } else { self.banned_jumps() };
-        self.nav.restricted_to(Restriction { polys, teleports, spent: spent_teleports }, triggers, keys_at, banned)
+        let teleports: BTreeSet<usize> = k
+            .teleports
+            .keys()
+            .copied()
+            .filter(|l| !spent_teleports.contains(l))
+            .collect();
+        let banned = if fresh {
+            BTreeSet::new()
+        } else {
+            self.banned_jumps()
+        };
+        self.nav.restricted_to(
+            Restriction {
+                polys,
+                teleports,
+                spent: spent_teleports,
+            },
+            triggers,
+            keys_at,
+            banned,
+        )
     }
 
     /// The run-jumps left out: those missed too often (and, unless with nothing else to do,
@@ -246,7 +352,11 @@ impl Explorer {
             .jumps
             .iter()
             .enumerate()
-            .filter(|(_, j)| missed.get(&j.key()).copied().unwrap_or(0) >= limit || (j.strafe && !self.strafe_ok) || self.lapsing(&j.key()))
+            .filter(|(_, j)| {
+                missed.get(&j.key()).copied().unwrap_or(0) >= limit
+                    || (j.strafe && !self.strafe_ok)
+                    || self.lapsing(&j.key())
+            })
             .map(|(i, _)| i)
             .collect()
     }
@@ -255,7 +365,14 @@ impl Explorer {
     /// nothing since that might change it)?
     fn lapsing(&self, key: &str) -> bool {
         let (jumps, learned) = &self.lapsing_jumps;
-        *learned == self.knowledge.learned.values().map(BTreeSet::len).sum::<usize>() && jumps.contains(key)
+        *learned
+            == self
+                .knowledge
+                .learned
+                .values()
+                .map(BTreeSet::len)
+                .sum::<usize>()
+            && jumps.contains(key)
     }
 
     pub(super) fn set_jumps(&mut self, difficult: bool) {

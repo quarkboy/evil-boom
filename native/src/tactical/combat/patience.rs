@@ -44,9 +44,26 @@ impl Patience {
     /// progress): progress sets the clock back. `stale`: not at it for longer than this, the
     /// clock starts afresh. Out of patience, the effort's forgotten (the next starts afresh):
     /// the caller gives the monster up.
-    pub fn spent(&mut self, effort: Effort, id: i32, tic: i64, limit: i64, measure: Option<(f64, f64)>, stale: Option<i64>) -> bool {
-        let fresh = Trying { since: tic, last: tic, best: measure.map_or(0.0, |m| m.0) };
-        let mut t = self.trying.get(&(effort, id)).copied().filter(|t| stale.is_none_or(|s| tic - t.last <= s)).unwrap_or(fresh);
+    pub fn spent(
+        &mut self,
+        effort: Effort,
+        id: i32,
+        tic: i64,
+        limit: i64,
+        measure: Option<(f64, f64)>,
+        stale: Option<i64>,
+    ) -> bool {
+        let fresh = Trying {
+            since: tic,
+            last: tic,
+            best: measure.map_or(0.0, |m| m.0),
+        };
+        let mut t = self
+            .trying
+            .get(&(effort, id))
+            .copied()
+            .filter(|t| stale.is_none_or(|s| tic - t.last <= s))
+            .unwrap_or(fresh);
         if let Some((now, _)) = measure.filter(|&(now, gain)| now < t.best - gain) {
             t.since = tic;
             t.best = now;

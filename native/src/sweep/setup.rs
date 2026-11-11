@@ -9,8 +9,8 @@ use crate::map::MapData;
 use crate::motor::{Controls, Observation, TICRATE};
 use crate::navigator::Navigator;
 use crate::play::Agent;
-use crate::tactical::tuning::Tuning;
 use crate::replay::{Entry, Recording};
+use crate::tactical::tuning::Tuning;
 use crate::wad::{load_map, Wad};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -50,7 +50,13 @@ pub struct Setup {
 
 /// `engine`: the game already going (an episode's next level, in the same process: on to this
 /// map with what she carries), else a new one.
-pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Option<Engine>) -> Result<Setup, String> {
+pub fn setup(
+    wad: &str,
+    map_name: &str,
+    o: &RunOptions,
+    drawn: bool,
+    engine: Option<Engine>,
+) -> Result<Setup, String> {
     let iwad = resolve_wad(wad);
     let w = Wad::open(&iwad)?;
     let map_name = map_name.to_uppercase();
@@ -62,7 +68,19 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Opt
     let fresh = engine.is_none();
     let mut e = match engine {
         Some(e) => e,
-        None => Engine::new(&iwad, &map_name, &Options { skill, nomonsters: o.fight == 0, objects: o.fight > 0 || o.expert || o.things, drawn, sound: false, capture: false, seed: o.seed })?,
+        None => Engine::new(
+            &iwad,
+            &map_name,
+            &Options {
+                skill,
+                nomonsters: o.fight == 0,
+                objects: o.fight > 0 || o.expert || o.things,
+                drawn,
+                sound: false,
+                capture: false,
+                seed: o.seed,
+            },
+        )?,
     };
     e.carry.clone_from(&o.carry);
     if fresh {
@@ -74,7 +92,14 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Opt
         e.set_god(true);
     }
     let knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
-    let mut agent = Agent::new(&nav, knowledge, o.fight, o.expert, o.lives, Tuning::from(o.tuning.as_deref())?);
+    let mut agent = Agent::new(
+        &nav,
+        knowledge,
+        o.fight,
+        o.expert,
+        o.lives,
+        Tuning::from(o.tuning.as_deref())?,
+    );
     if o.decisions {
         agent.x_mut().journal.on = true;
         if let Some(p) = agent.player_mut() {
@@ -82,7 +107,10 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Opt
         }
     }
     if let (Some(path), Some(p)) = (&o.advisor, agent.player_mut()) {
-        p.advise(crate::advisor::Advisor::new(crate::advisor::Config::load(path)?, false)?);
+        p.advise(crate::advisor::Advisor::new(
+            crate::advisor::Config::load(path)?,
+            false,
+        )?);
     }
     if let (Some(names), Some(p)) = (&o.bar, agent.player_mut()) {
         p.bar(names)?;
@@ -109,9 +137,24 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Opt
         }
         let run = Recording::read(path)?;
         let to = (at * TICRATE).round() as i64;
-        let mut tics = run.entries.iter().filter_map(|en| if let Entry::Tic(t, ctl) = en { Some((*t, *ctl)) } else { None });
-        let restarts: BTreeMap<i64, String> =
-            run.entries.iter().filter_map(|en| if let Entry::Restart(t, why) = en { Some((*t, why.clone())) } else { None }).collect();
+        let mut tics = run.entries.iter().filter_map(|en| {
+            if let Entry::Tic(t, ctl) = en {
+                Some((*t, *ctl))
+            } else {
+                None
+            }
+        });
+        let restarts: BTreeMap<i64, String> = run
+            .entries
+            .iter()
+            .filter_map(|en| {
+                if let Entry::Restart(t, why) = en {
+                    Some((*t, why.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
         let mut notes: BTreeMap<i64, Vec<Note>> = BTreeMap::new();
         for en in &run.entries {
             if let Entry::Note(t, n) = en {
@@ -132,16 +175,29 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Opt
                 continue;
             }
             if e.tic % 35 == 0 {
-                hold_exit(&e, &mut agent, o, secrets_short, most_items(&m, skill), false);
+                hold_exit(
+                    &e,
+                    &mut agent,
+                    o,
+                    secrets_short,
+                    most_items(&m, skill),
+                    false,
+                );
             }
             let ob = e.observe();
             agent.x_mut().knowledge.update(&ob, c.as_ref());
             for n in notes.remove(&ob.tic).unwrap_or_default() {
                 agent.x_mut().knowledge.note(n);
             }
-            let Some((t, ctl)) = tics.next() else { return Err(format!("{}: ends before {at}s", path.display())) };
+            let Some((t, ctl)) = tics.next() else {
+                return Err(format!("{}: ends before {at}s", path.display()));
+            };
             if t != ob.tic {
-                return Err(format!("{}: tic {t} where {} was expected (a different level, options or engine?)", path.display(), ob.tic));
+                return Err(format!(
+                    "{}: tic {t} where {} was expected (a different level, options or engine?)",
+                    path.display(),
+                    ob.tic
+                ));
             }
             rec.entries.push(Entry::Tic(t, ctl));
             e.step(&ctl);
@@ -149,8 +205,26 @@ pub fn setup(wad: &str, map_name: &str, o: &RunOptions, drawn: bool, engine: Opt
             obs = Some(ob);
         }
         let n = agent.x().knowledge.journal.len();
-        rec.entries.extend(agent.x().knowledge.journal[..n].iter().map(|(t, nt)| Entry::Note(*t, nt.clone())));
+        rec.entries.extend(
+            agent.x().knowledge.journal[..n]
+                .iter()
+                .map(|(t, nt)| Entry::Note(*t, nt.clone())),
+        );
         agent.x_mut().resume(e.tic);
     }
-    Ok(Setup { iwad, w, m, map_name, skill: skill_used, nav, e, agent, deaths, c, obs, rec, secrets_short })
+    Ok(Setup {
+        iwad,
+        w,
+        m,
+        map_name,
+        skill: skill_used,
+        nav,
+        e,
+        agent,
+        deaths,
+        c,
+        obs,
+        rec,
+        secrets_short,
+    })
 }

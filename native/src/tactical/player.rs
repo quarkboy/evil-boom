@@ -6,8 +6,11 @@
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use super::bestiary::{ammo_item, armor_item, carries, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW, SUPER_SHOTGUN};
 use super::arbiter::{self, Legs};
+use super::bestiary::{
+    ammo_item, armor_item, carries, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW,
+    SUPER_SHOTGUN,
+};
 use super::combat::{eye, eye_of, segment_point_distance, spread, Combat, Move, Seen};
 use super::tuning::Tuning;
 use crate::advisor::{Advisor, Question};
@@ -31,7 +34,15 @@ const POST_LOOKS: usize = 3000;
 /// ...looked at on a grid this fine...
 const POST_GRID: f64 = 48.0;
 /// monsters whose attacks, landing on others, set them fighting
-const HEAVIES: [&str; 7] = ["Cyberdemon", "SpiderMastermind", "Fatso", "Arachnotron", "Revenant", "BaronOfHell", "HellKnight"];
+const HEAVIES: [&str; 7] = [
+    "Cyberdemon",
+    "SpiderMastermind",
+    "Fatso",
+    "Arachnotron",
+    "Revenant",
+    "BaronOfHell",
+    "HellKnight",
+];
 /// units a second she gets along a route, about (turns, doors, lifts)
 const RUN_SPEED: f64 = 400.0;
 /// the trail back: a place every this far, at most this many
@@ -51,7 +62,13 @@ fn species(name: &str) -> &str {
 fn keeps_clear(obs: &Observation, f: &RouteFollower, them: &[Thing], clear: f64) -> bool {
     let path = f.planned_path(Some(obs.pos()));
     !path.is_empty()
-        && path.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).all(|(a, b)| them.iter().all(|t| segment_point_distance(a, b, (t.x, t.y)) >= clear))
+        && path
+            .windows(2)
+            .filter_map(|w| Some((w[0]?, w[1]?)))
+            .all(|(a, b)| {
+                them.iter()
+                    .all(|t| segment_point_distance(a, b, (t.x, t.y)) >= clear)
+            })
 }
 
 fn mhealth(name: &str) -> f64 {
@@ -175,7 +192,16 @@ pub enum RetreatKind {
 }
 
 impl RetreatKind {
-    const ALL: [RetreatKind; 8] = [RetreatKind::Cover, RetreatKind::ForAmmo, RetreatKind::Back, RetreatKind::Out, RetreatKind::Bait, RetreatKind::Post, RetreatKind::FallBack, RetreatKind::OutOfBarrels];
+    const ALL: [RetreatKind; 8] = [
+        RetreatKind::Cover,
+        RetreatKind::ForAmmo,
+        RetreatKind::Back,
+        RetreatKind::Out,
+        RetreatKind::Bait,
+        RetreatKind::Post,
+        RetreatKind::FallBack,
+        RetreatKind::OutOfBarrels,
+    ];
 
     fn name(self) -> &'static str {
         match self {
@@ -257,7 +283,19 @@ impl Player {
     pub fn new(nav: Rc<Navigator>, knowledge: Knowledge, tune: Rc<Tuning>) -> Player {
         Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
-            fight: Fight { combat: Combat::new(nav, Rc::clone(&tune)), tune: Rc::clone(&tune), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), hunted_spots: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false, gun_out_of_reach: false, toward_gun: BTreeSet::new() },
+            fight: Fight {
+                combat: Combat::new(nav, Rc::clone(&tune)),
+                tune: Rc::clone(&tune),
+                pending_log: Vec::new(),
+                offered: BTreeSet::new(),
+                present: BTreeSet::new(),
+                hunted_spots: BTreeSet::new(),
+                completion: None,
+                deaths: Vec::new(),
+                rethink: false,
+                gun_out_of_reach: false,
+                toward_gun: BTreeSet::new(),
+            },
             retreat: None,
             bait_tic: -1_000_000_000,
             barrel_run_again: 0,
@@ -290,7 +328,10 @@ impl Player {
     /// `restarts` levels again she may ask for, for ones out of reach.
     /// Something that lies where it is (an item, a lamp, a column): not a monster or a missile.
     fn lies_about(t: &Thing) -> bool {
-        t.category != "Monster" && t.category != "Projectile" && monster(t.name).is_none() && super::bestiary::missile(t.name).is_none()
+        t.category != "Monster"
+            && t.category != "Projectile"
+            && monster(t.name).is_none()
+            && super::bestiary::missile(t.name).is_none()
     }
 
     /// A thing lying about as she remembers it: what it is and where. Not the game's number for
@@ -310,7 +351,11 @@ impl Player {
             if self.things_seen.contains(&Self::what_where(t)) {
                 continue;
             }
-            let in_view = nav.poly_at((t.x, t.y)).is_some_and(|p| k.seen_tic.get(&nav.sector_of_poly(p)).is_some_and(|&tic| tic == obs.tic));
+            let in_view = nav.poly_at((t.x, t.y)).is_some_and(|p| {
+                k.seen_tic
+                    .get(&nav.sector_of_poly(p))
+                    .is_some_and(|&tic| tic == obs.tic)
+            });
             if in_view {
                 self.things_seen.insert(Self::what_where(t));
             }
@@ -349,7 +394,8 @@ impl Player {
         }
         let barrels = &self.fight.combat.barrels_seen;
         seen.barrels = obs.barrels.as_ref().map(|_| barrels.clone());
-        seen.barrels_lit.retain(|&l| barrels.iter().any(|&b| dist(b, l) < 1.0));
+        seen.barrels_lit
+            .retain(|&l| barrels.iter().any(|&b| dist(b, l) < 1.0));
         seen
     }
 
@@ -361,18 +407,32 @@ impl Player {
     /// The advisor's answers that are due, taken; then what there is to ask it, asked. An
     /// answer holds a while (`hold_tics`) and lapses: the rules', and the tuning she came with.
     fn consult(&mut self, obs: &Observation) {
-        let Some(advisor) = self.advisor.as_mut() else { return };
-        let (hold, every) = (advisor.config.hold_tics, (advisor.config.target_every, advisor.config.stance_every));
+        let Some(advisor) = self.advisor.as_mut() else {
+            return;
+        };
+        let (hold, every) = (
+            advisor.config.hold_tics,
+            (advisor.config.target_every, advisor.config.stance_every),
+        );
         let mut said: Vec<String> = std::mem::take(&mut advisor.errors);
         for a in advisor.due(obs.tic) {
             match a.point {
                 "target" => {
-                    let Some(id) = a.choice.strip_prefix('m').and_then(|n| n.parse::<i32>().ok()) else { continue };
+                    let Some(id) = a
+                        .choice
+                        .strip_prefix('m')
+                        .and_then(|n| n.parse::<i32>().ok())
+                    else {
+                        continue;
+                    };
                     self.fight.combat.forced_target = Some(id);
                     self.target_until = obs.tic + hold;
                 }
                 "stance" => {
-                    let Some(stance) = advisor.config.stances.iter().find(|s| s.name == a.choice) else { continue };
+                    let Some(stance) = advisor.config.stances.iter().find(|s| s.name == a.choice)
+                    else {
+                        continue;
+                    };
                     match self.base_tune.with(&stance.tuning) {
                         Ok(t) => {
                             let t = Rc::new(t);
@@ -388,8 +448,17 @@ impl Player {
                 }
                 _ => continue,
             }
-            said.push(format!("advised (asked at tic {}): {} {}, {:.0}% sure", a.asked, a.point, a.choice, a.share * 100.0));
-            self.explorer.journal.note(|| Record { detail: format!("{:.2}", a.share), ..Record::new(obs.tic, "advised", format!("{} {}", a.point, a.choice)) });
+            said.push(format!(
+                "advised (asked at tic {}): {} {}, {:.0}% sure",
+                a.asked,
+                a.point,
+                a.choice,
+                a.share * 100.0
+            ));
+            self.explorer.journal.note(|| Record {
+                detail: format!("{:.2}", a.share),
+                ..Record::new(obs.tic, "advised", format!("{} {}", a.point, a.choice))
+            });
         }
         if obs.tic >= self.target_until {
             self.fight.combat.forced_target = None;
@@ -401,18 +470,52 @@ impl Player {
         }
         let now = &self.fight.combat.now;
         let state = || now.words(obs.armor.unwrap_or(0.0));
-        if now.against_her.len() >= 2 && obs.tic - self.asked.0 >= every.0 && !advisor.waiting("target") {
+        if now.against_her.len() >= 2
+            && obs.tic - self.asked.0 >= every.0
+            && !advisor.waiting("target")
+        {
             self.asked.0 = obs.tic;
-            let options = now.against_her.iter().map(|t| (format!("m{}", t.id), format!("the {} {:.0} away", t.name, dist((t.x, t.y), now.pos)))).collect();
-            advisor.ask(Question { point: "target", tic: obs.tic, state: state(), instructions: "Which should she shoot first?".into(), options });
+            let options = now
+                .against_her
+                .iter()
+                .map(|t| {
+                    (
+                        format!("m{}", t.id),
+                        format!("the {} {:.0} away", t.name, dist((t.x, t.y), now.pos)),
+                    )
+                })
+                .collect();
+            advisor.ask(Question {
+                point: "target",
+                tic: obs.tic,
+                state: state(),
+                instructions: "Which should she shoot first?".into(),
+                options,
+            });
         }
-        if !now.against_her.is_empty() && obs.tic - self.asked.1 >= every.1 && !advisor.waiting("stance") {
+        if !now.against_her.is_empty()
+            && obs.tic - self.asked.1 >= every.1
+            && !advisor.waiting("stance")
+        {
             self.asked.1 = obs.tic;
-            let options = advisor.config.stances.iter().map(|s| (s.name.clone(), s.says.clone())).collect();
-            advisor.ask(Question { point: "stance", tic: obs.tic, state: state(), instructions: "How should she fight this?".into(), options });
+            let options = advisor
+                .config
+                .stances
+                .iter()
+                .map(|s| (s.name.clone(), s.says.clone()))
+                .collect();
+            advisor.ask(Question {
+                point: "stance",
+                tic: obs.tic,
+                state: state(),
+                instructions: "How should she fight this?".into(),
+                options,
+            });
         }
         for line in said {
-            self.explorer.log.push(format!("  [fight] tic {}: {line}", obs.tic));
+            self.explorer
+                .log
+                .push(format!("  [fight] tic {}: {line}", obs.tic));
         }
     }
 
@@ -430,12 +533,20 @@ impl Player {
         for name in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
             if let Some(m) = Move::named(name) {
                 self.fight.combat.barred.push(m);
-            } else if let Some(k) = RetreatKind::ALL.into_iter().find(|k| format!("{k:?}") == name) {
+            } else if let Some(k) = RetreatKind::ALL
+                .into_iter()
+                .find(|k| format!("{k:?}") == name)
+            {
                 self.barred_retreats.push(k);
             } else {
                 let moves: Vec<String> = Move::ALL.iter().map(|m| format!("{m:?}")).collect();
-                let retreats: Vec<String> = RetreatKind::ALL.iter().map(|k| format!("{k:?}")).collect();
-                return Err(format!("--bar: no move or retreat called {name}; moves: {}; retreats: {}", moves.join(", "), retreats.join(", ")));
+                let retreats: Vec<String> =
+                    RetreatKind::ALL.iter().map(|k| format!("{k:?}")).collect();
+                return Err(format!(
+                    "--bar: no move or retreat called {name}; moves: {}; retreats: {}",
+                    moves.join(", "),
+                    retreats.join(", ")
+                ));
             }
         }
         Ok(())
@@ -460,9 +571,18 @@ impl Player {
         if !self.explorer.journal.on {
             return;
         }
-        self.explorer.journal.records.append(&mut self.fight.combat.journal.records);
+        self.explorer
+            .journal
+            .records
+            .append(&mut self.fight.combat.journal.records);
         let state = self.fight.combat.now.summary();
-        for r in self.explorer.journal.records.iter_mut().filter(|r| r.state.is_none()) {
+        for r in self
+            .explorer
+            .journal
+            .records
+            .iter_mut()
+            .filter(|r| r.state.is_none())
+        {
             r.state = Some(state.clone());
         }
     }
@@ -487,11 +607,20 @@ impl Player {
 
     /// Monsters she's seen that are still about: (id, kind, where last seen, when, awake).
     pub fn known_monsters(&self) -> Vec<(i32, &'static str, crate::geom::Point, i64, bool)> {
-        self.fight.combat.remaining().into_iter().map(|s| (s.id, s.name, s.pos(), s.tic, s.awake)).collect()
+        self.fight
+            .combat
+            .remaining()
+            .into_iter()
+            .map(|s| (s.id, s.name, s.pos(), s.tic, s.awake))
+            .collect()
     }
 
     /// Her options now, best first, the fight's own wants in (supplies, barrels).
-    pub fn ranked(&mut self, obs: &Observation, risky: bool) -> Vec<crate::knowledge::explorer::Objective> {
+    pub fn ranked(
+        &mut self,
+        obs: &Observation,
+        risky: bool,
+    ) -> Vec<crate::knowledge::explorer::Objective> {
         self.explorer.ranked(obs, risky, &mut self.fight)
     }
 
@@ -517,8 +646,20 @@ impl Player {
         // green armor down in the nukage under fire, five lives running. A level again asked for
         // for what's left has nothing on)
         if let Some(cur) = &self.explorer.current {
-            let d = Death { at: self.last_pos, kind: cur.kind, goal: cur.goal, label: cur.label.clone(), why: self.plight.why(self.fight.tune.deaths.blast_hit) };
-            self.explorer.log.push(format!("  [fight] died at ({:.0}, {:.0}) going for: {} ({})", d.at.0, d.at.1, d.label, d.why.label()));
+            let d = Death {
+                at: self.last_pos,
+                kind: cur.kind,
+                goal: cur.goal,
+                label: cur.label.clone(),
+                why: self.plight.why(self.fight.tune.deaths.blast_hit),
+            };
+            self.explorer.log.push(format!(
+                "  [fight] died at ({:.0}, {:.0}) going for: {} ({})",
+                d.at.0,
+                d.at.1,
+                d.label,
+                d.why.label()
+            ));
             self.fight.deaths.push(d);
         }
         self.forget_dropped();
@@ -535,7 +676,11 @@ impl Player {
     /// its start (what the map puts there). What a monster dropped dying isn't there now.
     fn forget_dropped(&mut self) {
         let map = &self.explorer.nav.map;
-        self.things_seen.retain(|&(_, x, y)| map.things.iter().any(|t| t.x.round() as i32 == x && t.y.round() as i32 == y));
+        self.things_seen.retain(|&(_, x, y)| {
+            map.things
+                .iter()
+                .any(|t| t.x.round() as i32 == x && t.y.round() as i32 == y)
+        });
     }
 
     /// What she does this tic: whoever decides it (`decide`), and then her hand: one hand turns
@@ -545,7 +690,10 @@ impl Player {
     /// meant, whatever she ends up facing.
     pub fn act(&mut self, obs: &Observation, last: Option<&Controls>) -> Controls {
         let mut c = self.decide(obs, last);
-        let (most, accel) = (self.fight.tune.aim.hand_turn, self.fight.tune.aim.hand_accel);
+        let (most, accel) = (
+            self.fight.tune.aim.hand_turn,
+            self.fight.tune.aim.hand_accel,
+        );
         if accel > 0.0 {
             let was = last.map_or(0.0, |l| l.turn);
             let turn = c.turn.clamp(-most, most).clamp(was - accel, was + accel);
@@ -569,9 +717,15 @@ impl Player {
         // (pushing and not moving, where the map has room: a bump, something to look at)
         let pushed = last.filter(|c| c.forward.hypot(c.strafe) > 10.0);
         let still = obs.velocity.is_some_and(|v| v.0.hypot(v.1) < 1.0);
-        self.pushing_still = if pushed.is_some() && still { self.pushing_still + 1 } else { 0 };
+        self.pushing_still = if pushed.is_some() && still {
+            self.pushing_still + 1
+        } else {
+            0
+        };
         if let Some(c) = pushed.filter(|_| self.pushing_still == self.fight.tune.steer.stuck_tics) {
-            self.fight.combat.bumped(obs, obs.angle + (-c.strafe).atan2(c.forward).to_degrees());
+            self.fight
+                .combat
+                .bumped(obs, obs.angle + (-c.strafe).atan2(c.forward).to_degrees());
         }
         self.explorer.sense(obs, last);
         self.notice_things(obs);
@@ -586,26 +740,54 @@ impl Player {
         self.keep_out_of_sight(obs);
         // (in a jump, or crossing a crusher it's timed: the route keeps the legs, the fight shoots;
         // E2M2 seed 7, a crossing begun, an imp seen 2000 off, the fight's steering under it)
-        let busy = self.explorer.follower.as_ref().is_some_and(|f| f.jumping() || f.crossing_crusher());
-        let (errand, toward) = if busy { (String::new(), None) } else { self.fight.errand(&self.explorer, obs).map_or((String::new(), None), |(e, at)| (e, Some(at))) };
+        let busy = self
+            .explorer
+            .follower
+            .as_ref()
+            .is_some_and(|f| f.jumping() || f.crossing_crusher());
+        let (errand, toward) = if busy {
+            (String::new(), None)
+        } else {
+            self.fight
+                .errand(&self.explorer, obs)
+                .map_or((String::new(), None), |(e, at)| (e, Some(at)))
+        };
         // (falling back, the retreat's way is the way she's going: a dodge as clear along it
         // takes it, not the errand's. Its errand the key she stood on, she dodged back and forth
         // over it under fire from all round, the way back out never taken)
-        let back = self.retreat.as_ref().and_then(|r| r.route.planned_path(Some(obs.pos())).into_iter().flatten().find(|&p| dist(p, obs.pos()) > self.fight.tune.retreat.ahead));
+        let back = self.retreat.as_ref().and_then(|r| {
+            r.route
+                .planned_path(Some(obs.pos()))
+                .into_iter()
+                .flatten()
+                .find(|&p| dist(p, obs.pos()) > self.fight.tune.retreat.ahead)
+        });
         self.fight.combat.toward = if busy { toward } else { back.or(toward) };
-        self.fight.combat.routed = self.explorer.follower.as_ref().is_some_and(|f| !f.done && !f.failed);
+        self.fight.combat.routed = self
+            .explorer
+            .follower
+            .as_ref()
+            .is_some_and(|f| !f.done && !f.failed);
         // (what she knows of floors gone to something that hurts, for where the fight takes her)
         self.fight.combat.hazards = self.explorer.knowledge.hazards(obs.tic);
         // (and the crushers she knows of, for where they could have her if they start again)
         self.fight.combat.crushers = self.explorer.knowledge.crusher_sectors();
         let d = self.fight.combat.decide(obs, busy, &errand);
         let retreating = !busy && self.retreating(obs);
-        let legs = arbiter::arbitrate(d.as_ref(), busy, retreating, self.fight.combat.dodge_clear());
+        let legs = arbiter::arbitrate(
+            d.as_ref(),
+            busy,
+            retreating,
+            self.fight.combat.dodge_clear(),
+        );
         // (moved a long way by the fight or a retreat: what she was going for thought again, as
         // the route takes her legs back. MAP07, the user watching: dodged away from the switch
         // she was going for, others nearer by then, the first never changed)
         if legs == Legs::Route {
-            let moved = self.left_route_at.take().map_or(0.0, |at| dist(at, obs.pos()));
+            let moved = self
+                .left_route_at
+                .take()
+                .map_or(0.0, |at| dist(at, obs.pos()));
             let far = self.fight.tune.errands.rethink_moved;
             if far > 0.0 && moved > far {
                 self.fight.rethink = true;
@@ -617,13 +799,22 @@ impl Player {
         if legs != self.legs {
             self.legs = legs;
             self.fight.combat.count("changes of legs", 1.0);
-            self.explorer.journal.note(|| Record::new(obs.tic, "legs", format!("{legs:?}")));
+            self.explorer
+                .journal
+                .note(|| Record::new(obs.tic, "legs", format!("{legs:?}")));
         }
         if retreating {
             self.explorer.hold(obs, last);
-            let mut c = self.retreat.as_mut().map_or_else(Controls::default, |r| r.route.act(obs));
+            let mut c = self
+                .retreat
+                .as_mut()
+                .map_or_else(Controls::default, |r| r.route.act(obs));
             // (out of the barrels: her legs and her eyes the run's, whatever the fight says)
-            if self.retreat.as_ref().is_some_and(|r| r.kind == RetreatKind::OutOfBarrels) {
+            if self
+                .retreat
+                .as_ref()
+                .is_some_and(|r| r.kind == RetreatKind::OutOfBarrels)
+            {
                 return c;
             }
             if self.hold_at_edge(obs, &c) {
@@ -631,12 +822,23 @@ impl Player {
             }
             return match d {
                 // (a missile about to hit still comes first, when there's a way clear of it)
-                Some(d) if d.kind == Move::Dodging && legs == Legs::Fight => self.fight.combat.controls(obs, &d, None, true),
+                Some(d) if d.kind == Move::Dodging && legs == Legs::Fight => {
+                    self.fight.combat.controls(obs, &d, None, true)
+                }
                 // (the retreat's legs, the fight aiming over them; or the fight's move, the
                 // retreat's way where its steering leans)
                 Some(d) => {
-                    let pressing = self.retreat.as_ref().is_some_and(|r| r.route.pressing(obs.tic));
-                    Self::press_turn(self.fight.combat.controls(obs, &d, Some(&c), legs == Legs::Fight), &c, pressing)
+                    let pressing = self
+                        .retreat
+                        .as_ref()
+                        .is_some_and(|r| r.route.pressing(obs.tic));
+                    Self::press_turn(
+                        self.fight
+                            .combat
+                            .controls(obs, &d, Some(&c), legs == Legs::Fight),
+                        &c,
+                        pressing,
+                    )
                 }
                 None => c,
             };
@@ -653,22 +855,38 @@ impl Player {
         }
         // (fallen back, none of them in sight yet: waited for where she is, facing where the
         // nearest was, not walked back in to them)
-        if d.is_none() && obs.tic < self.wait_until && self.fight.combat.now.against_her.is_empty() {
+        if d.is_none() && obs.tic < self.wait_until && self.fight.combat.now.against_her.is_empty()
+        {
             let pos = obs.pos();
-            let near = self.fight.combat.woken_ahead().into_iter().min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)));
+            let near = self
+                .fight
+                .combat
+                .woken_ahead()
+                .into_iter()
+                .min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)));
             if let Some(t) = near {
                 self.explorer.hold(obs, last);
                 let most = self.fight.tune.aim.hand_turn;
-                let turn = crate::motor::norm(obs.angle - crate::motor::heading(pos, (t.x, t.y))).clamp(-most, most);
+                let turn = crate::motor::norm(obs.angle - crate::motor::heading(pos, (t.x, t.y)))
+                    .clamp(-most, most);
                 let (forward, strafe) = crate::motor::brake(obs, obs.angle - turn);
-                return Controls { forward, strafe, turn, ..Controls::default() };
+                return Controls {
+                    forward,
+                    strafe,
+                    turn,
+                    ..Controls::default()
+                };
             }
         }
         let mut c = self.explorer.act(obs, last, &mut self.fight);
         for line in std::mem::take(&mut self.fight.pending_log) {
             self.explorer.log.push(format!("  [fight] {line}"));
         }
-        let shooting = self.explorer.follower.as_ref().is_some_and(RouteFollower::shooting);
+        let shooting = self
+            .explorer
+            .follower
+            .as_ref()
+            .is_some_and(RouteFollower::shooting);
         if d.is_none() {
             self.fight.combat.route_walks(obs, &c);
         }
@@ -684,8 +902,16 @@ impl Player {
         }
         match d {
             Some(d) => {
-                let pressing = self.explorer.follower.as_ref().is_some_and(|f| f.pressing(obs.tic));
-                let mut c = Self::press_turn(self.fight.combat.controls(obs, &d, Some(&c), false), &c, pressing);
+                let pressing = self
+                    .explorer
+                    .follower
+                    .as_ref()
+                    .is_some_and(|f| f.pressing(obs.tic));
+                let mut c = Self::press_turn(
+                    self.fight.combat.controls(obs, &d, Some(&c), false),
+                    &c,
+                    pressing,
+                );
                 if self.hold_at_edge(obs, &c) {
                     (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
                 }
@@ -710,13 +936,25 @@ impl Player {
     fn plight_now(&mut self, obs: &Observation) -> Plight {
         let nav = &self.explorer.nav;
         let pos = obs.pos();
-        let hurting_floor = nav.poly_at(pos).is_some_and(|p| self.explorer.knowledge.damaging(nav.sector_of_poly(p)));
+        let hurting_floor = nav
+            .poly_at(pos)
+            .is_some_and(|p| self.explorer.knowledge.damaging(nav.sector_of_poly(p)));
         let c = &self.fight.combat;
         let (last_hit, close) = match c.last_hit() {
-            Some((tic, amount)) if obs.tic - tic <= 1 => (amount, c.visible.iter().any(|t| dist((t.x, t.y), pos) < 128.0)),
+            Some((tic, amount)) if obs.tic - tic <= 1 => (
+                amount,
+                c.visible.iter().any(|t| dist((t.x, t.y), pos) < 128.0),
+            ),
             _ => (self.plight.last_hit, self.plight.close),
         };
-        Plight { armed: c.armed(obs), hurting_floor, surrounded: c.now.surrounded, outmatched: c.now.outmatched, last_hit, close }
+        Plight {
+            armed: c.armed(obs),
+            hurting_floor,
+            surrounded: c.now.surrounded,
+            outmatched: c.now.outmatched,
+            last_hit,
+            close,
+        }
     }
 
     // --- backing off ------------------------------------------------------------------------
@@ -733,11 +971,20 @@ impl Player {
         }
         // (in among barrels, something about to set them off: out of them before anything else,
         // whatever she was at, another retreat too)
-        if self.retreat.as_ref().is_none_or(|r| r.kind != RetreatKind::OutOfBarrels) && obs.tic >= self.barrel_run_again && self.barrel_run_due(obs) {
+        if self
+            .retreat
+            .as_ref()
+            .is_none_or(|r| r.kind != RetreatKind::OutOfBarrels)
+            && obs.tic >= self.barrel_run_again
+            && self.barrel_run_due(obs)
+        {
             match self.out_of_barrels(obs) {
                 Some(route) => {
                     self.barrel_runs.push(obs.pos());
-                    self.retreat = Some(Retreat { kind: RetreatKind::OutOfBarrels, route });
+                    self.retreat = Some(Retreat {
+                        kind: RetreatKind::OutOfBarrels,
+                        route,
+                    });
                     self.retreat_tic = obs.tic;
                 }
                 None => self.barrel_run_again = obs.tic + 15,
@@ -749,7 +996,11 @@ impl Player {
                 self.walled_tic = obs.tic;
             }
             if r.route.done || r.route.failed || self.retreat_over(obs, r.kind) || walled {
-                let msg = if r.route.done { "got there".to_string() } else { format!("{} over", r.kind.name()) };
+                let msg = if r.route.done {
+                    "got there".to_string()
+                } else {
+                    format!("{} over", r.kind.name())
+                };
                 let kind = r.kind;
                 self.log(format!("tic {}: {msg}", obs.tic));
                 if kind == RetreatKind::FallBack {
@@ -766,7 +1017,9 @@ impl Player {
         // (a try at some other retreat that found no way doesn't hold off cover when it's due:
         // MAP04 UV, a way back tried and not found at full health, cover due 105 tics later at
         // 28, too late)
-        if obs.tic - self.retreat_tic < self.fight.tune.retreat.again && (self.tried_cover || !self.cover_due()) {
+        if obs.tic - self.retreat_tic < self.fight.tune.retreat.again
+            && (self.tried_cover || !self.cover_due())
+        {
             return false;
         }
         self.retreat = self.start_retreat(obs);
@@ -783,10 +1036,17 @@ impl Player {
         /// a run begun this near one before, nothing having come of the barrels: not again
         const SAME_PLACE: f64 = 512.0;
         let c = &self.fight.combat;
-        if c.now.invulnerable || crate::tactical::combat::Combat::barrel_field(obs) < self.fight.tune.barrels.field {
+        if c.now.invulnerable
+            || crate::tactical::combat::Combat::barrel_field(obs) < self.fight.tune.barrels.field
+        {
             return false;
         }
-        !c.now.shooters.is_empty() || !obs.barrels_lit.is_empty() || !self.barrel_runs.iter().any(|&p| dist(p, obs.pos()) < SAME_PLACE)
+        !c.now.shooters.is_empty()
+            || !obs.barrels_lit.is_empty()
+            || !self
+                .barrel_runs
+                .iter()
+                .any(|&p| dist(p, obs.pos()) < SAME_PLACE)
     }
 
     /// The shortest way to somewhere she knows of out of every barrel's blast (the user's:
@@ -815,7 +1075,11 @@ impl Player {
             .into_iter()
             .filter(|&p| !k.damaging(nav.sector_of_poly(p)))
             .map(|p| nav.poly_center(p))
-            .filter(|&q| barrels.iter().all(|&b| crate::motor::follower::blast_gap(q, b) >= AWAY))
+            .filter(|&q| {
+                barrels
+                    .iter()
+                    .all(|&b| crate::motor::follower::blast_gap(q, b) >= AWAY)
+            })
             .collect();
         places.sort_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)));
         let hurting: Vec<bool> = (0..obs.heights.len()).map(|s| k.damaging(s)).collect();
@@ -824,10 +1088,22 @@ impl Player {
         // (where she can stand, for the lanes between the barrels: all her box on floor she can
         // step between, with room overhead, none of it hurting)
         let floor = |p: Point| {
-            let at = |q: Point| nav.poly_at(q).map(|i| nav.sector_of_poly(i)).filter(|&s| !hurting[s]).map(|s| obs.heights[s]).filter(|h| h.ceiling - h.floor >= crate::navigator::PLAYER_HEIGHT);
+            let at = |q: Point| {
+                nav.poly_at(q)
+                    .map(|i| nav.sector_of_poly(i))
+                    .filter(|&s| !hurting[s])
+                    .map(|s| obs.heights[s])
+                    .filter(|h| h.ceiling - h.floor >= crate::navigator::PLAYER_HEIGHT)
+            };
             let r = crate::navigator::PLAYER_RADIUS + 1.0;
             let mid = at(p)?.floor;
-            [(-r, -r), (r, -r), (r, r), (-r, r)].into_iter().all(|(dx, dy)| at((p.0 + dx, p.1 + dy)).is_some_and(|h| (h.floor - mid).abs() <= crate::navigator::MAX_STEP)).then_some(mid)
+            [(-r, -r), (r, -r), (r, r), (-r, r)]
+                .into_iter()
+                .all(|(dx, dy)| {
+                    at((p.0 + dx, p.1 + dy))
+                        .is_some_and(|h| (h.floor - mid).abs() <= crate::navigator::MAX_STEP)
+                })
+                .then_some(mid)
         };
         let length = |pts: &[Point]| pts.windows(2).map(|w| dist(w[0], w[1])).sum::<f64>();
         let mut best: Option<(f64, crate::navigator::Path)> = None;
@@ -836,19 +1112,37 @@ impl Player {
             if tried >= LANES || best.as_ref().is_some_and(|b| dist(q, pos) >= b.0) {
                 break; // (no shorter way to anywhere further off)
             }
-            let Some(mut path) = view.find_path(pos, q, &live, None) else { continue };
+            let Some(mut path) = view.find_path(pos, q, &live, None) else {
+                continue;
+            };
             if !path.jumps.is_empty() || path.waypoints.iter().any(Option::is_none) {
                 continue;
             }
             // (not a way back through the ones going off: run on ahead of the chain to 680 on,
             // the nearest place she knew back at the start, 1300 off through it; dead in it)
-            if path.waypoints.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).any(|(a, b)| obs.barrels_lit.iter().any(|&l| segment_point_distance(a, b, l) < CLEAR)) {
+            if path
+                .waypoints
+                .windows(2)
+                .filter_map(|w| Some((w[0]?, w[1]?)))
+                .any(|(a, b)| {
+                    obs.barrels_lit
+                        .iter()
+                        .any(|&l| segment_point_distance(a, b, l) < CLEAR)
+                })
+            {
                 continue;
             }
             // (the mesh's way has no barrels in it: the lanes between them, round about it)
             tried += 1;
             let along: Vec<Point> = path.waypoints.iter().flatten().copied().collect();
-            let Some(lane) = crate::motor::follower::lanes::lane(pos, q, &along, &barrels, &floor, crate::navigator::MAX_STEP) else {
+            let Some(lane) = crate::motor::follower::lanes::lane(
+                pos,
+                q,
+                &along,
+                &barrels,
+                &floor,
+                crate::navigator::MAX_STEP,
+            ) else {
                 if std::env::var_os("EVIL_DEBUG_PACE").is_some() {
                     eprintln!("tic {}: no lane from ({:.0}, {:.0}) to ({:.0}, {:.0}) among {} barrels (floor here {:?}, there {:?})", obs.tic, pos.0, pos.1, q.0, q.1, barrels.len(), floor(pos), floor(q));
                 }
@@ -863,12 +1157,40 @@ impl Player {
         }
         let (length, path) = best?;
         if std::env::var_os("EVIL_DEBUG_PACE").is_some() {
-            eprintln!("lane: {:?}", path.waypoints.iter().flatten().map(|p| (p.0.round(), p.1.round())).collect::<Vec<_>>());
+            eprintln!(
+                "lane: {:?}",
+                path.waypoints
+                    .iter()
+                    .flatten()
+                    .map(|p| (p.0.round(), p.1.round()))
+                    .collect::<Vec<_>>()
+            );
         }
-        let to = path.waypoints.iter().flatten().last().copied().unwrap_or(pos);
+        let to = path
+            .waypoints
+            .iter()
+            .flatten()
+            .last()
+            .copied()
+            .unwrap_or(pos);
         self.log(format!("tic {}: in among barrels: running for ({:.0}, {:.0}), {length:.0} off between them, out of their blasts", obs.tic, to.0, to.1));
-        let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, barrel: None, label: "out of the barrels".to_string(), expects: Vec::new() };
-        let mut f = RouteFollower::new(view, vec![step], obs.keys.unwrap_or_default(), Some(live), false, obs.tic);
+        let step = Step {
+            path: Some(path),
+            action: Action::Walk,
+            trigger: None,
+            key: None,
+            barrel: None,
+            label: "out of the barrels".to_string(),
+            expects: Vec::new(),
+        };
+        let mut f = RouteFollower::new(
+            view,
+            vec![step],
+            obs.keys.unwrap_or_default(),
+            Some(live),
+            false,
+            obs.tic,
+        );
         f.barrel_run = true;
         Some(f)
     }
@@ -882,8 +1204,18 @@ impl Player {
         let calm = obs.tic - self.shooters_tic > self.fight.tune.retreat.clear_tics;
         match kind {
             RetreatKind::Out => since > self.fight.tune.retreat.out_tics,
-            RetreatKind::Bait => since > self.fight.tune.retreat.out_tics || self.fight.combat.visible.iter().any(|t| self.fight.combat.infighting(t)),
-            RetreatKind::ForAmmo => self.fight.combat.armed(obs) || since > self.fight.tune.retreat.ammo_tics,
+            RetreatKind::Bait => {
+                since > self.fight.tune.retreat.out_tics
+                    || self
+                        .fight
+                        .combat
+                        .visible
+                        .iter()
+                        .any(|t| self.fight.combat.infighting(t))
+            }
+            RetreatKind::ForAmmo => {
+                self.fight.combat.armed(obs) || since > self.fight.tune.retreat.ammo_tics
+            }
             RetreatKind::Back => calm || since > self.fight.tune.retreat.back_tics,
             RetreatKind::Cover => calm,
             RetreatKind::Post => since > self.fight.tune.retreat.post_tics,
@@ -902,8 +1234,11 @@ impl Player {
         let pos = obs.pos();
         let path = route.planned_path(Some(pos));
         self.fight.combat.now.about.iter().any(|t| {
-            let touch = (monster(t.name).map_or(20.0, |m| m.radius) + PLAYER_RADIUS).min(dist((t.x, t.y), pos) - self.fight.tune.retreat.ammo_margin);
-            path.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).any(|(a, b)| segment_point_distance(a, b, (t.x, t.y)) < touch)
+            let touch = (monster(t.name).map_or(20.0, |m| m.radius) + PLAYER_RADIUS)
+                .min(dist((t.x, t.y), pos) - self.fight.tune.retreat.ammo_margin);
+            path.windows(2)
+                .filter_map(|w| Some((w[0]?, w[1]?)))
+                .any(|(a, b)| segment_point_distance(a, b, (t.x, t.y)) < touch)
         })
     }
 
@@ -937,7 +1272,10 @@ impl Player {
             // shells, cacodemons on her, a way off chosen and called off every tic for 30 tics
             // under their fireballs)
             let walled = obs.tic - self.walled_tic < self.fight.tune.retreat.again;
-            match (unarmed && !walled).then(|| self.for_ammo(obs, on_way, false)).flatten() {
+            match (unarmed && !walled)
+                .then(|| self.for_ammo(obs, on_way, false))
+                .flatten()
+            {
                 Some(r) => (RetreatKind::ForAmmo, Some(r)),
                 None if on_way => (RetreatKind::ForAmmo, None),
                 None => (RetreatKind::Cover, self.find_cover(obs)),
@@ -975,7 +1313,9 @@ impl Player {
             return None;
         }
         if route.is_some() {
-            self.explorer.journal.note(|| Record::new(obs.tic, "retreat", format!("{kind:?}")));
+            self.explorer
+                .journal
+                .note(|| Record::new(obs.tic, "retreat", format!("{kind:?}")));
             self.fight.combat.count(&format!("retreat: {kind:?}"), 1.0);
         }
         route.map(|route| Retreat { kind, route })
@@ -986,14 +1326,22 @@ impl Player {
     /// (MAP04 UV: a pack of hitscanners raking her in the open, 67 to 28 in 8 tics, the cover 600
     /// back; gone for at 28, dead on the way).
     fn cover_due(&mut self) -> bool {
-        let (health, rate) = (self.fight.combat.now.health, self.fight.combat.now.damage_rate);
-        (health < self.fight.tune.retreat.health || health - rate * self.fight.tune.retreat.cover_range / RUN_SPEED < self.fight.tune.retreat.health) && !self.fight.combat.now.shooters.is_empty()
+        let (health, rate) = (
+            self.fight.combat.now.health,
+            self.fight.combat.now.damage_rate,
+        );
+        (health < self.fight.tune.retreat.health
+            || health - rate * self.fight.tune.retreat.cover_range / RUN_SPEED
+                < self.fight.tune.retreat.health)
+            && !self.fight.combat.now.shooters.is_empty()
     }
 
     /// Where she stands now, while nothing's shooting at her and nothing's hurting her: on the
     /// trail back.
     fn keep_trail(&mut self, obs: &Observation) {
-        let calm = self.fight.combat.now.shooters.is_empty() && self.fight.combat.now.damage_rate == 0.0 && !self.plight.hurting_floor;
+        let calm = self.fight.combat.now.shooters.is_empty()
+            && self.fight.combat.now.damage_rate == 0.0
+            && !self.plight.hurting_floor;
         if !calm {
             return;
         }
@@ -1022,12 +1370,23 @@ impl Player {
         let nav = Rc::clone(&self.explorer.nav);
         let k = &self.explorer.knowledge;
         // (the nearest place on her trail that far back, not on a floor that hurts)
-        let spot = self.trail.iter().rev().copied().find(|&p| dist(p, pos) >= back && nav.poly_at(p).is_some_and(|pi| !k.damaging(nav.sector_of_poly(pi))))?;
+        let spot = self.trail.iter().rev().copied().find(|&p| {
+            dist(p, pos) >= back
+                && nav
+                    .poly_at(p)
+                    .is_some_and(|pi| !k.damaging(nav.sector_of_poly(pi)))
+        })?;
         let pi = nav.poly_at(spot)?;
         let them = self.fight.combat.now.about.clone();
         let f = self.go_to(obs, pi, &them, "fall back")?;
         self.fight.combat.count("fall backs", 1.0);
-        self.log(format!("tic {}: {} woken on ground she's not been on: back to ({:.0}, {:.0}) to let them come", obs.tic, woken.len(), spot.0, spot.1));
+        self.log(format!(
+            "tic {}: {} woken on ground she's not been on: back to ({:.0}, {:.0}) to let them come",
+            obs.tic,
+            woken.len(),
+            spot.0,
+            spot.1
+        ));
         Some(f)
     }
 
@@ -1037,21 +1396,41 @@ impl Player {
     /// fast, the user's).
     fn ambushed(&mut self, obs: &Observation) -> Option<String> {
         // (a trap sprung, or a room walked in on: several of them seen all at once)
-        let (count, tics) = (self.fight.tune.retreat.trap_count, self.fight.tune.retreat.trap_tics);
-        if count > 0 && self.fight.combat.newly_seen(obs.tic, tics) >= count && !self.fight.combat.now.about.is_empty() {
-            return Some(format!("a trap: {} of them all at once", self.fight.combat.newly_seen(obs.tic, tics)));
+        let (count, tics) = (
+            self.fight.tune.retreat.trap_count,
+            self.fight.tune.retreat.trap_tics,
+        );
+        if count > 0
+            && self.fight.combat.newly_seen(obs.tic, tics) >= count
+            && !self.fight.combat.now.about.is_empty()
+        {
+            return Some(format!(
+                "a trap: {} of them all at once",
+                self.fight.combat.newly_seen(obs.tic, tics)
+            ));
         }
         let them = self.fight.combat.now.shooters.clone();
         if them.is_empty() {
             return None;
         }
         let pos = obs.pos();
-        let close: Vec<Point> = self.fight.combat.now.about.iter().filter(|t| dist((t.x, t.y), pos) < self.fight.tune.retreat.ambush_near).map(|t| (t.x, t.y)).collect();
+        let close: Vec<Point> = self
+            .fight
+            .combat
+            .now
+            .about
+            .iter()
+            .filter(|t| dist((t.x, t.y), pos) < self.fight.tune.retreat.ambush_near)
+            .map(|t| (t.x, t.y))
+            .collect();
         let losing = self.fight.combat.now.damage_rate > self.fight.tune.retreat.ambush_rate;
         if !losing && close.len() < self.fight.tune.retreat.ambush_count {
             return None;
         }
-        let open = self.fight.combat.openness(obs, pos, self.fight.tune.retreat.open_look);
+        let open = self
+            .fight
+            .combat
+            .openness(obs, pos, self.fight.tune.retreat.open_look);
         let sides = spread(pos, &close);
         let bad = if self.plight.hurting_floor {
             "on a floor that hurts"
@@ -1062,7 +1441,14 @@ impl Player {
         } else {
             return None;
         };
-        Some(format!("{bad}, {}", if losing { "losing health fast" } else { "several close" }))
+        Some(format!(
+            "{bad}, {}",
+            if losing {
+                "losing health fast"
+            } else {
+                "several close"
+            }
+        ))
     }
 
     /// Back the way she came, to the nearest place on it none of them can see her (or well clear
@@ -1075,16 +1461,33 @@ impl Player {
         // (not back onto a floor that hurts now: the way she came may have gone down into it,
         // E3M1's way over the blood, backed out down it into the blood from imps on the far bank)
         let k = &self.explorer.knowledge;
-        let trail: Vec<Point> =
-            self.trail.iter().rev().copied().filter(|&p| dist(p, pos) > self.fight.tune.retreat.back_min && nav.poly_at(p).is_none_or(|pi| !k.damaging(nav.sector_of_poly(pi)))).collect();
+        let trail: Vec<Point> = self
+            .trail
+            .iter()
+            .rev()
+            .copied()
+            .filter(|&p| {
+                dist(p, pos) > self.fight.tune.retreat.back_min
+                    && nav
+                        .poly_at(p)
+                        .is_none_or(|pi| !k.damaging(nav.sector_of_poly(pi)))
+            })
+            .collect();
         for p in trail {
             let Some(pi) = nav.poly_at(p) else { continue };
             let z = heights[nav.sector_of_poly(pi)].0;
-            let seen = them.iter().any(|t| self.fight.combat.sees(eye(t), p, z, &heights));
-            let clear = them.iter().all(|t| dist((t.x, t.y), p) > self.fight.tune.retreat.back_clear);
+            let seen = them
+                .iter()
+                .any(|t| self.fight.combat.sees(eye(t), p, z, &heights));
+            let clear = them
+                .iter()
+                .all(|t| dist((t.x, t.y), p) > self.fight.tune.retreat.back_clear);
             if !seen || clear {
                 if let Some(f) = self.go_to(obs, pi, &them, "back out") {
-                    self.log(format!("tic {}: caught in {why}: backing out the way she came to ({:.0}, {:.0})", obs.tic, p.0, p.1));
+                    self.log(format!(
+                        "tic {}: caught in {why}: backing out the way she came to ({:.0}, {:.0})",
+                        obs.tic, p.0, p.1
+                    ));
                     return Some(f);
                 }
             }
@@ -1097,7 +1500,13 @@ impl Player {
     fn visited_spots(&self, obs: &Observation, near: f64, far: f64, n: usize) -> Vec<(f64, usize)> {
         let k = &self.explorer.knowledge;
         let nav = &self.explorer.nav;
-        let mut spots: Vec<(f64, usize)> = k.visited.iter().filter(|&&p| !k.damaging(nav.sector_of_poly(p))).map(|&p| (dist(nav.poly_center(p), obs.pos()), p)).filter(|&(d, _)| near < d && d < far).collect();
+        let mut spots: Vec<(f64, usize)> = k
+            .visited
+            .iter()
+            .filter(|&&p| !k.damaging(nav.sector_of_poly(p)))
+            .map(|&p| (dist(nav.poly_center(p), obs.pos()), p))
+            .filter(|&(d, _)| near < d && d < far)
+            .collect();
         spots.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
         spots.truncate(n);
         spots
@@ -1108,20 +1517,42 @@ impl Player {
     fn baiting(&mut self, obs: &Observation) -> Option<RouteFollower> {
         let them = self.fight.combat.now.about.clone();
         let fp = self.fight.combat.now.firepower;
-        let heavies: Vec<&Thing> = them.iter().filter(|h| HEAVIES.contains(&h.name) && mhealth(h.name) / fp > self.fight.tune.retreat.bait_heavy).collect();
+        let heavies: Vec<&Thing> = them
+            .iter()
+            .filter(|h| {
+                HEAVIES.contains(&h.name)
+                    && mhealth(h.name) / fp > self.fight.tune.retreat.bait_heavy
+            })
+            .collect();
         if heavies.is_empty() {
             return None;
         }
-        let spots = self.visited_spots(obs, 64.0, self.fight.tune.retreat.bait_range, COVER_SPOTS * 2);
+        let spots = self.visited_spots(
+            obs,
+            64.0,
+            self.fight.tune.retreat.bait_range,
+            COVER_SPOTS * 2,
+        );
         let nav = Rc::clone(&self.explorer.nav);
         let mut good: Vec<(f64, usize, Thing, Thing)> = Vec::new();
         for h in &heavies {
             let kind = species(h.name);
-            let shields: Vec<&Thing> = self.fight.combat.visible.iter().filter(|b| b.id != h.id && species(b.name) != kind && dist((b.x, b.y), (h.x, h.y)) < 1024.0).collect();
+            let shields: Vec<&Thing> = self
+                .fight
+                .combat
+                .visible
+                .iter()
+                .filter(|b| {
+                    b.id != h.id && species(b.name) != kind && dist((b.x, b.y), (h.x, h.y)) < 1024.0
+                })
+                .collect();
             for &(d, pi) in &spots {
                 let c = nav.poly_center(pi);
                 if let Some(b) = shields.iter().find(|b| {
-                    segment_point_distance((h.x, h.y), c, (b.x, b.y)) < monster(b.name).map_or(20.0, |m| m.radius) + 8.0 && 64.0 < dist((h.x, h.y), (b.x, b.y)) && dist((h.x, h.y), (b.x, b.y)) < dist((h.x, h.y), c) - 128.0
+                    segment_point_distance((h.x, h.y), c, (b.x, b.y))
+                        < monster(b.name).map_or(20.0, |m| m.radius) + 8.0
+                        && 64.0 < dist((h.x, h.y), (b.x, b.y))
+                        && dist((h.x, h.y), (b.x, b.y)) < dist((h.x, h.y), c) - 128.0
                 }) {
                     good.push((d, pi, (*h).clone(), (*b).clone()));
                 }
@@ -1130,7 +1561,10 @@ impl Player {
         good.sort_by(|a, b| a.0.total_cmp(&b.0));
         for (_, pi, h, b) in good.into_iter().take(6) {
             if let Some(f) = self.go_to(obs, pi, &them, "bait") {
-                self.log(format!("tic {}: baiting {} {} into {} {}", obs.tic, h.name, h.id, b.name, b.id));
+                self.log(format!(
+                    "tic {}: baiting {} {} into {} {}",
+                    obs.tic, h.name, h.id, b.name, b.id
+                ));
                 return Some(f);
             }
         }
@@ -1142,13 +1576,27 @@ impl Player {
     /// Through doors if need be (E3M1: the doors shut behind her, every way off through one).
     /// No plain way to ammo but on her way for some already (`on_way`): on with that, not away.
     /// No way to ammo at all, not hurt (`keep_on`), and her way on clear of them: on with it.
-    fn for_ammo(&mut self, obs: &Observation, on_way: bool, keep_on: bool) -> Option<RouteFollower> {
+    fn for_ammo(
+        &mut self,
+        obs: &Observation,
+        on_way: bool,
+        keep_on: bool,
+    ) -> Option<RouteFollower> {
         let them = self.fight.combat.now.about.clone();
         let pos = obs.pos();
         // (no nearer to any of them than she is: one on her already, every way off starts by
         // it, and away is still away)
-        let nearest = them.iter().map(|m| dist((m.x, m.y), pos)).fold(f64::INFINITY, f64::min);
-        let clear = self.fight.tune.errands.past_clear.min(nearest - self.fight.tune.retreat.ammo_margin).max(0.0);
+        let nearest = them
+            .iter()
+            .map(|m| dist((m.x, m.y), pos))
+            .fold(f64::INFINITY, f64::min);
+        let clear = self
+            .fight
+            .tune
+            .errands
+            .past_clear
+            .min(nearest - self.fight.tune.retreat.ammo_margin)
+            .max(0.0);
         let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
         let known = self.explorer.knowledge.known_polys();
         let nav = Rc::clone(&self.explorer.nav);
@@ -1160,7 +1608,8 @@ impl Player {
             .flatten()
             .filter(|t| {
                 weapon_item(t.name).is_some_and(|s| s != 1 && s != 8)
-                    || ammo_item(t.name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))
+                    || ammo_item(t.name)
+                        .is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))
             })
             .filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)))
             .map(|t| (dist((t.x, t.y), pos), (t.x, t.y), t.name, t.id))
@@ -1178,11 +1627,20 @@ impl Player {
         // it'd only take her back into them once she's away, again and again. E4M9 UV: a rocket
         // launcher behind a door that opened on an imp and a baron, 8 rockets in hand, 1200 tics
         // of off and back in until the route gave up; chosen afresh, with them known)
-        if self.explorer.current.as_ref().is_some_and(|c| c.kind == Kind::Item && c.thing.is_some_and(|t| refused.contains(&t))) {
-            self.explorer.give_up(obs, "out of ammo, no way to it clear of them");
+        if self
+            .explorer
+            .current
+            .as_ref()
+            .is_some_and(|c| c.kind == Kind::Item && c.thing.is_some_and(|t| refused.contains(&t)))
+        {
+            self.explorer
+                .give_up(obs, "out of ammo, no way to it clear of them");
         }
         if on_way {
-            self.log(format!("tic {}: out of ammo: on her way for it already", obs.tic));
+            self.log(format!(
+                "tic {}: out of ammo: on her way for it already",
+                obs.tic
+            ));
             return None;
         }
         // (no way to ammo clear of them, and her own way on keeps clear of them: on with it, not
@@ -1194,26 +1652,44 @@ impl Player {
         // imps 45 off clawing her while she waited on a lift, 120 health to 19). And none of them
         // a hitscanner: no way is clear of its shots (MAP06 HMP: a chaingunner and a sergeant
         // raking her on her way across their room, dead)
-        let hitscan = them.iter().any(|t| monster(t.name).is_some_and(|m| matches!(m.attack, Attack::Hitscan)));
+        let hitscan = them
+            .iter()
+            .any(|t| monster(t.name).is_some_and(|m| matches!(m.attack, Attack::Hitscan)));
         if keep_on && !hitscan && self.route_clear(obs, &them, self.fight.tune.errands.past_clear) {
-            self.log(format!("tic {}: out of ammo, none to get to: on her way, clear of them", obs.tic));
+            self.log(format!(
+                "tic {}: out of ammo, none to get to: on her way, clear of them",
+                obs.tic
+            ));
             return None;
         }
         let mut spots: Vec<(f64, usize)> = self
             .visited_spots(obs, 128.0, self.fight.tune.retreat.ammo_away, COVER_SPOTS)
             .into_iter()
-            .map(|(_, pi)| (them.iter().map(|m| dist((m.x, m.y), nav.poly_center(pi))).fold(f64::INFINITY, f64::min), pi))
+            .map(|(_, pi)| {
+                (
+                    them.iter()
+                        .map(|m| dist((m.x, m.y), nav.poly_center(pi)))
+                        .fold(f64::INFINITY, f64::min),
+                    pi,
+                )
+            })
             .collect();
         spots.sort_by(|a, b| b.0.total_cmp(&a.0));
         // (all of them, furthest first: the furthest may be beyond a lift, no way there for a
         // plain way; E3M1's start, back down the lift from the cacodemon's room)
         for (_, pi) in spots {
             if let Some(f) = self.go_to_clear(obs, pi, &them, "for ammo", clear, true) {
-                self.log(format!("tic {}: out of ammo, none known: away from them", obs.tic));
+                self.log(format!(
+                    "tic {}: out of ammo, none known: away from them",
+                    obs.tic
+                ));
                 return Some(f);
             }
         }
-        self.log(format!("tic {}: out of ammo: no way off for ammo or away that isn't past them", obs.tic));
+        self.log(format!(
+            "tic {}: out of ammo: no way off for ammo or away that isn't past them",
+            obs.tic
+        ));
         None
     }
 
@@ -1225,56 +1701,142 @@ impl Player {
     /// run-jump; away through the door out of its sight, back through it on the route, 600 s of
     /// it, every errand dropped).
     fn on_for_ammo(&self, obs: &Observation) -> bool {
-        let Some(cur) = self.explorer.current.as_ref().filter(|c| c.kind == Kind::Item) else { return false };
-        let Some(f) = self.explorer.follower.as_ref() else { return false };
+        let Some(cur) = self
+            .explorer
+            .current
+            .as_ref()
+            .filter(|c| c.kind == Kind::Item)
+        else {
+            return false;
+        };
+        let Some(f) = self.explorer.follower.as_ref() else {
+            return false;
+        };
         let name = cur.label.strip_prefix("pick up ").unwrap_or(&cur.label);
         let name = name.split(' ').next().unwrap_or(name);
         let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
-        if !(weapon_item(name).is_some_and(|s| s != 1 && s != 8) || ammo_item(name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))) {
+        if !(weapon_item(name).is_some_and(|s| s != 1 && s != 8)
+            || ammo_item(name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s))))
+        {
             return false;
         }
         let them = self.fight.combat.now.about.clone();
-        let nearest = them.iter().map(|m| dist((m.x, m.y), obs.pos())).fold(f64::INFINITY, f64::min);
-        let clear = self.fight.tune.errands.past_clear.min(nearest - self.fight.tune.retreat.ammo_margin).max(0.0);
+        let nearest = them
+            .iter()
+            .map(|m| dist((m.x, m.y), obs.pos()))
+            .fold(f64::INFINITY, f64::min);
+        let clear = self
+            .fight
+            .tune
+            .errands
+            .past_clear
+            .min(nearest - self.fight.tune.retreat.ammo_margin)
+            .max(0.0);
         keeps_clear(obs, f, &them, clear)
     }
 
     /// The explorer's way on, the rest of it, passes none of them nearer than `clear`.
     fn route_clear(&self, obs: &Observation, them: &[Thing], clear: f64) -> bool {
-        self.explorer.current.is_some() && self.explorer.follower.as_ref().is_some_and(|f| keeps_clear(obs, f, them, clear))
+        self.explorer.current.is_some()
+            && self
+                .explorer
+                .follower
+                .as_ref()
+                .is_some_and(|f| keeps_clear(obs, f, them, clear))
     }
 
     /// A way to that poly (not past monsters), if there is one.
-    fn go_to(&mut self, obs: &Observation, pi: usize, them: &[Thing], label: &str) -> Option<RouteFollower> {
-        self.go_to_clear(obs, pi, them, label, self.fight.tune.errands.past_clear, false)
+    fn go_to(
+        &mut self,
+        obs: &Observation,
+        pi: usize,
+        them: &[Thing],
+        label: &str,
+    ) -> Option<RouteFollower> {
+        self.go_to_clear(
+            obs,
+            pi,
+            them,
+            label,
+            self.fight.tune.errands.past_clear,
+            false,
+        )
     }
 
     /// A way to that poly passing no monster closer than `clear` (`doors`: through doors she
     /// can open, else none).
-    fn go_to_clear(&mut self, obs: &Observation, pi: usize, them: &[Thing], label: &str, clear: f64, doors: bool) -> Option<RouteFollower> {
+    fn go_to_clear(
+        &mut self,
+        obs: &Observation,
+        pi: usize,
+        them: &[Thing],
+        label: &str,
+        clear: f64,
+        doors: bool,
+    ) -> Option<RouteFollower> {
         let goal = self.explorer.nav.poly_center(pi);
         self.go_to_point(obs, goal, them, label, clear, doors)
     }
 
     /// The same, to a point.
-    fn go_to_point(&mut self, obs: &Observation, goal: Point, them: &[Thing], label: &str, clear: f64, doors: bool) -> Option<RouteFollower> {
+    fn go_to_point(
+        &mut self,
+        obs: &Observation,
+        goal: Point,
+        them: &[Thing],
+        label: &str,
+        clear: f64,
+        doors: bool,
+    ) -> Option<RouteFollower> {
         let view = self.explorer.view();
         let live: States = obs.heights.iter().map(|&h| vec![h]).collect();
         let openable = doors.then(|| view.local_doors(obs.keys.unwrap_or_default()));
         let path = view.find_path(obs.pos(), goal, &live, openable.as_ref())?;
-        let through = path.waypoints.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).flat_map(|(a, b)| them.iter().map(move |t| segment_point_distance(a, b, (t.x, t.y)))).fold(f64::INFINITY, f64::min);
+        let through = path
+            .waypoints
+            .windows(2)
+            .filter_map(|w| Some((w[0]?, w[1]?)))
+            .flat_map(|(a, b)| {
+                them.iter()
+                    .map(move |t| segment_point_distance(a, b, (t.x, t.y)))
+            })
+            .fold(f64::INFINITY, f64::min);
         if through < clear {
             return None; // (not past them)
         }
-        let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, barrel: None, label: label.to_string(), expects: Vec::new() };
-        Some(RouteFollower::new(view, vec![step], obs.keys.unwrap_or_default(), Some(live), false, obs.tic))
+        let step = Step {
+            path: Some(path),
+            action: Action::Walk,
+            trigger: None,
+            key: None,
+            barrel: None,
+            label: label.to_string(),
+            expects: Vec::new(),
+        };
+        Some(RouteFollower::new(
+            view,
+            vec![step],
+            obs.keys.unwrap_or_default(),
+            Some(live),
+            false,
+            obs.tic,
+        ))
     }
 
     /// Seen-by score of spots, by the monsters' eyes.
-    fn seen_from(&mut self, obs: &Observation, spots: &[(f64, usize)], them: &[Thing], weigh: bool) -> Vec<f64> {
+    fn seen_from(
+        &mut self,
+        obs: &Observation,
+        spots: &[(f64, usize)],
+        them: &[Thing],
+        weigh: bool,
+    ) -> Vec<f64> {
         let nav = Rc::clone(&self.explorer.nav);
         let heights = self.fight.combat.heights(obs).to_vec();
-        let places: Vec<(Point, f64)> = spots.iter().map(|&(_, pi)| (nav.poly_center(pi), heights[nav.sector_of_poly(pi)].0)).collect();
+        let places: Vec<(Point, f64)> = spots
+            .iter()
+            .map(|&(_, pi)| (nav.poly_center(pi), heights[nav.sector_of_poly(pi)].0))
+            .collect();
         let mut seen = vec![0.0; spots.len()];
         for t in them {
             let Some(m) = monster(t.name) else { continue };
@@ -1290,8 +1852,20 @@ impl Player {
     /// To somewhere she's been nearby where fewer of them can see her, they're further, and all
     /// on one side of her, by a way that doesn't go through them.
     fn out_of_it(&mut self, obs: &Observation) -> Option<RouteFollower> {
-        let them: Vec<Thing> = self.fight.combat.visible.iter().filter(|t| monster(t.name).is_some_and(|m| m.attack != Attack::None)).cloned().collect();
-        let spots = self.visited_spots(obs, 96.0, self.fight.tune.retreat.spot_range, COVER_SPOTS * 2);
+        let them: Vec<Thing> = self
+            .fight
+            .combat
+            .visible
+            .iter()
+            .filter(|t| monster(t.name).is_some_and(|m| m.attack != Attack::None))
+            .cloned()
+            .collect();
+        let spots = self.visited_spots(
+            obs,
+            96.0,
+            self.fight.tune.retreat.spot_range,
+            COVER_SPOTS * 2,
+        );
         if spots.is_empty() || them.is_empty() {
             return None;
         }
@@ -1302,20 +1876,35 @@ impl Player {
             .zip(&seen)
             .map(|(&(d, pi), &sees)| {
                 let c = nav.poly_center(pi);
-                let nearest = them.iter().map(|t| dist(c, (t.x, t.y))).fold(f64::INFINITY, f64::min);
+                let nearest = them
+                    .iter()
+                    .map(|t| dist(c, (t.x, t.y)))
+                    .fold(f64::INFINITY, f64::min);
                 let pts: Vec<Point> = them.iter().map(|t| (t.x, t.y)).collect();
-                (sees + spread(c, &pts) / 45.0 - nearest.min(640.0) / 96.0 + d / 256.0, pi)
+                (
+                    sees + spread(c, &pts) / 45.0 - nearest.min(640.0) / 96.0 + d / 256.0,
+                    pi,
+                )
             })
             .collect();
         scored.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
         for (_, pi) in scored.into_iter().take(6) {
             if let Some(f) = self.go_to(obs, pi, &them, "out of it") {
                 let g = nav.poly_center(pi);
-                self.log(format!("tic {}: surrounded by {}: getting out to ({:.0}, {:.0})", obs.tic, them.len(), g.0, g.1));
+                self.log(format!(
+                    "tic {}: surrounded by {}: getting out to ({:.0}, {:.0})",
+                    obs.tic,
+                    them.len(),
+                    g.0,
+                    g.1
+                ));
                 return Some(f);
             }
         }
-        self.log(format!("tic {}: surrounded, nowhere better in reach", obs.tic));
+        self.log(format!(
+            "tic {}: surrounded, nowhere better in reach",
+            obs.tic
+        ));
         None
     }
 
@@ -1345,13 +1934,23 @@ impl Player {
         }
         let pos = obs.pos();
         let way = (obs.angle - c.turn + (-c.strafe).atan2(c.forward).to_degrees()).to_radians();
-        let ahead = (pos.0 + way.cos() * self.fight.tune.retreat.edge_look, pos.1 + way.sin() * self.fight.tune.retreat.edge_look);
-        let hidden_now = !firing.iter().any(|s| self.fight.combat.shot_from(obs, s, pos));
-        let seen_ahead = firing.iter().any(|s| self.fight.combat.shot_from(obs, s, ahead));
+        let ahead = (
+            pos.0 + way.cos() * self.fight.tune.retreat.edge_look,
+            pos.1 + way.sin() * self.fight.tune.retreat.edge_look,
+        );
+        let hidden_now = !firing
+            .iter()
+            .any(|s| self.fight.combat.shot_from(obs, s, pos));
+        let seen_ahead = firing
+            .iter()
+            .any(|s| self.fight.combat.shot_from(obs, s, ahead));
         if hidden_now && seen_ahead {
             if obs.tic - self.edge_log > 35 {
                 self.edge_log = obs.tic;
-                self.log(format!("tic {}: holding at the edge of cover till the {} stops firing", obs.tic, firing[0].name));
+                self.log(format!(
+                    "tic {}: holding at the edge of cover till the {} stops firing",
+                    obs.tic, firing[0].name
+                ));
             }
             return true;
         }
@@ -1374,7 +1973,14 @@ impl Player {
             // (not one she can see fighting something else: it won't shoot her till it's done
             // or she hurts it, the time to cross; out of sight, taken to be after her. A monster
             // sees all round once awake (A_Chase): its target's what counts, not its facing)
-            .filter(|s| self.fight.combat.visible.iter().find(|t| t.id == s.id).is_none_or(|t| t.after_her))
+            .filter(|s| {
+                self.fight
+                    .combat
+                    .visible
+                    .iter()
+                    .find(|t| t.id == s.id)
+                    .is_none_or(|t| t.after_her)
+            })
             .collect();
         let at: Vec<Point> = them.iter().map(Seen::pos).collect();
         if at.is_empty() {
@@ -1384,7 +1990,12 @@ impl Player {
             return;
         }
         let fresh = self.exposure.as_ref().is_some_and(|(tic, was)| {
-            obs.tic - tic < self.fight.tune.retreat.exposure_again && was.len() == at.len() && was.iter().zip(&at).all(|(&a, &b)| dist(a, b) < self.fight.tune.retreat.exposure_moved)
+            obs.tic - tic < self.fight.tune.retreat.exposure_again
+                && was.len() == at.len()
+                && was
+                    .iter()
+                    .zip(&at)
+                    .all(|(&a, &b)| dist(a, b) < self.fight.tune.retreat.exposure_moved)
         });
         if fresh {
             return;
@@ -1400,9 +2011,14 @@ impl Player {
                 let c = nav.poly_center(pi);
                 let z = heights.get(nav.sector_of_poly(pi)).map_or(0.0, |h| h.0);
                 let seen = them.iter().any(|s| {
-                    dist(c, s.pos()) < self.fight.tune.retreat.exposure_range && combat.sees(eye_of(s), c, z, &heights)
+                    dist(c, s.pos()) < self.fight.tune.retreat.exposure_range
+                        && combat.sees(eye_of(s), c, z, &heights)
                 });
-                if seen { self.fight.tune.retreat.exposed } else { 1.0 }
+                if seen {
+                    self.fight.tune.retreat.exposed
+                } else {
+                    1.0
+                }
             })
             .collect();
         // (first seen: the way she's on was chosen without it; again)
@@ -1434,20 +2050,38 @@ impl Player {
         };
         let fits = |p: Point| {
             let r = PLAYER_RADIUS;
-            [(-r, -r), (r, -r), (r, r), (-r, r)].into_iter().all(|(dx, dy)| on_known((p.0 + dx, p.1 + dy)).is_some())
+            [(-r, -r), (r, -r), (r, r), (-r, r)]
+                .into_iter()
+                .all(|(dx, dy)| on_known((p.0 + dx, p.1 + dy)).is_some())
         };
         let n = (self.fight.tune.retreat.post_range / POST_GRID) as i32;
         let mut grid: Vec<(f64, Point, f64)> = (-n..=n)
-            .flat_map(|i| (-n..=n).map(move |j| (pos.0 + f64::from(i) * POST_GRID, pos.1 + f64::from(j) * POST_GRID)))
+            .flat_map(|i| {
+                (-n..=n).map(move |j| {
+                    (
+                        pos.0 + f64::from(i) * POST_GRID,
+                        pos.1 + f64::from(j) * POST_GRID,
+                    )
+                })
+            })
             .filter_map(|p| {
                 let d = dist(p, pos);
-                (32.0 < d && d < self.fight.tune.retreat.post_range && fits(p)).then_some((d, p, on_known(p)?))
+                (32.0 < d && d < self.fight.tune.retreat.post_range && fits(p)).then_some((
+                    d,
+                    p,
+                    on_known(p)?,
+                ))
             })
             .collect();
         grid.sort_by(|a, b| a.0.total_cmp(&b.0));
         let combat = &self.fight.combat;
         let seen = |p: Point, z: f64| shooters.iter().any(|t| combat.sees(eye(t), p, z, &heights));
-        let from_them = |p: Point| shooters.iter().map(|t| dist(p, (t.x, t.y))).fold(f64::INFINITY, f64::min);
+        let from_them = |p: Point| {
+            shooters
+                .iter()
+                .map(|t| dist(p, (t.x, t.y)))
+                .fold(f64::INFINITY, f64::min)
+        };
         let mut posts: Vec<(f64, Point)> = Vec::new();
         for &(d, p, z) in grid.iter().take(POST_LOOKS) {
             if seen(p, z) {
@@ -1455,7 +2089,12 @@ impl Player {
             }
             let peek = (0..8).any(|k| {
                 let a = f64::from(k) * std::f64::consts::FRAC_PI_4;
-                [self.fight.tune.retreat.post_peek / 2.0, self.fight.tune.retreat.post_peek].into_iter().any(|r| {
+                [
+                    self.fight.tune.retreat.post_peek / 2.0,
+                    self.fight.tune.retreat.post_peek,
+                ]
+                .into_iter()
+                .any(|r| {
                     let q = (p.0 + a.cos() * r, p.1 + a.sin() * r);
                     on_known(q).is_some_and(|qz| seen(q, qz))
                 })
@@ -1470,26 +2109,57 @@ impl Player {
         posts.sort_by(|a, b| a.0.total_cmp(&b.0));
         let found = posts.len();
         for g in posts.into_iter().take(4).map(|(_, p)| p) {
-            if let Some(f) = self.go_to_point(obs, g, &shooters, "post", self.fight.tune.errands.past_clear, false) {
-                self.log(format!("tic {}: in the open: to a post at ({:.0}, {:.0}), health {:.0}", obs.tic, g.0, g.1, obs.health.unwrap_or(0.0)));
+            if let Some(f) = self.go_to_point(
+                obs,
+                g,
+                &shooters,
+                "post",
+                self.fight.tune.errands.past_clear,
+                false,
+            ) {
+                self.log(format!(
+                    "tic {}: in the open: to a post at ({:.0}, {:.0}), health {:.0}",
+                    obs.tic,
+                    g.0,
+                    g.1,
+                    obs.health.unwrap_or(0.0)
+                ));
                 return Some(f);
             }
         }
-        self.log(format!("tic {}: in the open, no post in reach ({} places, {found} posts)", obs.tic, grid.len()));
+        self.log(format!(
+            "tic {}: in the open, no post in reach ({} places, {found} posts)",
+            obs.tic,
+            grid.len()
+        ));
         None
     }
 
     fn find_cover(&mut self, obs: &Observation) -> Option<RouteFollower> {
         let shooters = self.fight.combat.now.shooters.clone();
-        let spots = self.visited_spots(obs, f64::NEG_INFINITY, self.fight.tune.retreat.cover_range, COVER_SPOTS);
+        let spots = self.visited_spots(
+            obs,
+            f64::NEG_INFINITY,
+            self.fight.tune.retreat.cover_range,
+            COVER_SPOTS,
+        );
         if spots.is_empty() {
             return None;
         }
         let seen = self.seen_from(obs, &spots, &shooters, false);
         // (not in a door shut now: hidden only while it's shut, and open with her in it; MAP20,
         // fallen back to the door out of a cyberdemon's lane, rockets on her waiting at it)
-        let open = |pi: usize| obs.heights.get(self.explorer.nav.sector_of_poly(pi)).is_some_and(|h| h.ceiling - h.floor >= PLAYER_HEIGHT);
-        let hidden: Vec<usize> = spots.iter().zip(&seen).filter(|(&(d, pi), &v)| v == 0.0 && d > 32.0 && open(pi)).map(|(&(_, pi), _)| pi).collect();
+        let open = |pi: usize| {
+            obs.heights
+                .get(self.explorer.nav.sector_of_poly(pi))
+                .is_some_and(|h| h.ceiling - h.floor >= PLAYER_HEIGHT)
+        };
+        let hidden: Vec<usize> = spots
+            .iter()
+            .zip(&seen)
+            .filter(|(&(d, pi), &v)| v == 0.0 && d > 32.0 && open(pi))
+            .map(|(&(_, pi), _)| pi)
+            .collect();
         if hidden.is_empty() {
             self.log(format!("tic {}: no cover in reach", obs.tic));
             return None;
@@ -1502,14 +2172,38 @@ impl Player {
         // found shut, shot down where she stood)
         let doors = view.local_doors(obs.keys.unwrap_or_default());
         let hidden: Vec<usize> = hidden.into_iter().take(4).collect();
-        let found = [None, Some(&doors)].into_iter().find_map(|d| hidden.iter().find_map(|&pi| {
-            let goal = view.nav.poly_center(pi);
-            view.find_path(obs.pos(), goal, &live, d).map(|path| (goal, path))
-        }));
+        let found = [None, Some(&doors)].into_iter().find_map(|d| {
+            hidden.iter().find_map(|&pi| {
+                let goal = view.nav.poly_center(pi);
+                view.find_path(obs.pos(), goal, &live, d)
+                    .map(|path| (goal, path))
+            })
+        });
         if let Some((goal, path)) = found {
-            self.log(format!("tic {}: falling back to cover at ({:.0}, {:.0}), health {:.0}", obs.tic, goal.0, goal.1, obs.health.unwrap_or(0.0)));
-            let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, barrel: None, label: "cover".into(), expects: Vec::new() };
-            return Some(RouteFollower::new(Rc::clone(&view), vec![step], obs.keys.unwrap_or_default(), Some(live), false, obs.tic));
+            self.log(format!(
+                "tic {}: falling back to cover at ({:.0}, {:.0}), health {:.0}",
+                obs.tic,
+                goal.0,
+                goal.1,
+                obs.health.unwrap_or(0.0)
+            ));
+            let step = Step {
+                path: Some(path),
+                action: Action::Walk,
+                trigger: None,
+                key: None,
+                barrel: None,
+                label: "cover".into(),
+                expects: Vec::new(),
+            };
+            return Some(RouteFollower::new(
+                Rc::clone(&view),
+                vec![step],
+                obs.keys.unwrap_or_default(),
+                Some(live),
+                false,
+                obs.tic,
+            ));
         }
         None
     }
@@ -1524,8 +2218,16 @@ impl Fight {
         self.combat
             .remaining()
             .iter()
-            .filter(|s| s.awake && self.combat.too_much(obs, &[s.name], self.tune.engage.leave_be))
-            .all(|s| segment_point_distance(pos, p, s.pos()) > self.tune.errands.way_clear + monster(s.name).map_or(20.0, |m| m.radius))
+            .filter(|s| {
+                s.awake
+                    && self
+                        .combat
+                        .too_much(obs, &[s.name], self.tune.engage.leave_be)
+            })
+            .all(|s| {
+                segment_point_distance(pos, p, s.pos())
+                    > self.tune.errands.way_clear + monster(s.name).map_or(20.0, |m| m.radius)
+            })
     }
 
     /// The way to the ammo or gun at p, armed with it (obs): clear as above, and all of what's
@@ -1538,7 +2240,11 @@ impl Fight {
             .combat
             .remaining()
             .iter()
-            .filter(|s| s.awake && segment_point_distance(pos, p, s.pos()) <= self.tune.errands.way_clear + monster(s.name).map_or(20.0, |m| m.radius))
+            .filter(|s| {
+                s.awake
+                    && segment_point_distance(pos, p, s.pos())
+                        <= self.tune.errands.way_clear + monster(s.name).map_or(20.0, |m| m.radius)
+            })
             .map(|s| s.name)
             .collect();
         self.clear_way_to(obs, p) && !self.combat.ammo_short_for_each(obs, &by)
@@ -1550,23 +2256,44 @@ impl Fight {
         // (one of them too much for her, or all that's about her together: a ring of imps and
         // zombiemen is each nothing and together what the sphere's for; E3M6's trap, the user
         // watching: weak ones spawned all round her, the sphere beside her never gone back for)
-        self.combat.now.outmatched || self.combat.now.surrounded || self.combat.remaining().iter().any(|s| s.awake && self.combat.too_much(obs, &[s.name], self.tune.engage.leave_be))
+        self.combat.now.outmatched
+            || self.combat.now.surrounded
+            || self.combat.remaining().iter().any(|s| {
+                s.awake
+                    && self
+                        .combat
+                        .too_much(obs, &[s.name], self.tune.engage.leave_be)
+            })
     }
 
     /// Barrels she's seen, near, with nothing in sight and the ammo for it: each to be shot from out
     /// of its chain's blasts (the follower's), before a shot sets it off by her, hers at something
     /// beside it or a monster's at her (the user's: barrels are dangerous wherever they are).
-    fn barrels(&self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
+    fn barrels(
+        &self,
+        x: &Explorer,
+        obs: &Observation,
+        reach: &BTreeSet<usize>,
+        pos: Point,
+    ) -> Vec<Objective> {
         if !self.combat.visible.is_empty() {
             return Vec::new(); // (in a fight, the fight's: shot by what they'd take with them)
         }
         if !obs.barrels_lit.is_empty() {
             return Vec::new(); // (nor while any are going off: the chain's not done)
         }
-        let ammo = |slot: i32| obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n);
+        let ammo = |slot: i32| {
+            obs.ammo
+                .iter()
+                .flatten()
+                .find(|(s, _)| *s == slot)
+                .map_or(0, |(_, n)| *n)
+        };
         let held = obs.weapons.clone().unwrap_or_default();
         // (the barrel rule: the shotgun with 12 shells and more, else single pistol taps)
-        if !(held.contains(&2) && ammo(2) >= self.tune.barrels.bullets) && !(held.contains(&3) && ammo(3) >= self.tune.barrels.shells) {
+        if !(held.contains(&2) && ammo(2) >= self.tune.barrels.bullets)
+            && !(held.contains(&3) && ammo(3) >= self.tune.barrels.shells)
+        {
             return Vec::new();
         }
         let nav = &x.nav;
@@ -1575,11 +2302,26 @@ impl Fight {
             if dist(b, pos) > self.tune.barrels.clear_within {
                 continue;
             }
-            let Some(pi) = reach.iter().copied().filter(|&pi| dist(nav.poly_center(pi), b) < self.tune.barrels.spot).min_by(|&p, &q| dist(nav.poly_center(p), b).total_cmp(&dist(nav.poly_center(q), b))) else { continue };
-            let mut o = Objective::new(Kind::Barrel, nav.poly_center(pi), format!("clear the barrel at ({:.0}, {:.0})", b.0, b.1));
+            let Some(pi) = reach
+                .iter()
+                .copied()
+                .filter(|&pi| dist(nav.poly_center(pi), b) < self.tune.barrels.spot)
+                .min_by(|&p, &q| {
+                    dist(nav.poly_center(p), b).total_cmp(&dist(nav.poly_center(q), b))
+                })
+            else {
+                continue;
+            };
+            let mut o = Objective::new(
+                Kind::Barrel,
+                nav.poly_center(pi),
+                format!("clear the barrel at ({:.0}, {:.0})", b.0, b.1),
+            );
             o.look_at = Some(b);
             // (one objective a barrel, by where it is: given up on as any other is)
-            o.reveals = std::iter::once(((b.0.round() as i64) << 32) | (b.1.round() as i64 & 0xffff_ffff)).collect();
+            o.reveals =
+                std::iter::once(((b.0.round() as i64) << 32) | (b.1.round() as i64 & 0xffff_ffff))
+                    .collect();
             out.push(o);
         }
         out
@@ -1611,7 +2353,8 @@ impl Fight {
     /// cells).
     fn armed_with(obs: &Observation, name: &str) -> Observation {
         let mut o = obs.clone();
-        let (pool, comes): (&[i32], i32) = if let Some(slot) = weapon_item(name).filter(|&s| s != 1) {
+        let (pool, comes): (&[i32], i32) = if let Some(slot) = weapon_item(name).filter(|&s| s != 1)
+        {
             let held = o.weapons.get_or_insert_with(|| vec![1, 2]);
             if !held.contains(&slot) {
                 held.push(slot);
@@ -1644,8 +2387,16 @@ impl Fight {
         // to, and it takes no rocket's blast. E3M8 from a pistol start: the plasma rifle 246 off
         // "no better" than the launcher, so not gone for first; the spider mastermind wandered
         // into sight of it, it was left, and she was shot down with the rockets spent)
-        let boss = self.combat.remaining().iter().filter_map(|s| monster(s.name)).find(|m| m.boss);
-        name != "Chainsaw" && Self::new_gun(obs, name) && Combat::dps_on(&Self::gun(obs, name), boss.as_ref()) > self.combat.firepower_on(obs, boss.as_ref())
+        let boss = self
+            .combat
+            .remaining()
+            .iter()
+            .filter_map(|s| monster(s.name))
+            .find(|m| m.boss);
+        name != "Chainsaw"
+            && Self::new_gun(obs, name)
+            && Combat::dps_on(&Self::gun(obs, name), boss.as_ref())
+                > self.combat.firepower_on(obs, boss.as_ref())
     }
 
     /// Seconds of walking a gun is worth: what it'd save killing what she knows is still about
@@ -1655,7 +2406,13 @@ impl Fight {
         let now = self.combat.now.firepower;
         // (what she's met this life: with a level known beforehand that'd be everything in it,
         // and every gun in it worth any walk: MAP13's BFG 4400 off the first thing she did)
-        let hp: f64 = self.combat.remaining().iter().filter(|s| !s.foreknown).map(|s| mhealth(s.name)).sum();
+        let hp: f64 = self
+            .combat
+            .remaining()
+            .iter()
+            .filter(|s| !s.foreknown)
+            .map(|s| mhealth(s.name))
+            .sum();
         self.tune.errands.gun_worth + (hp / now - hp / w.dps().max(now)).max(0.0)
     }
 
@@ -1678,7 +2435,8 @@ impl Fight {
                 _ => straight,
             }
         };
-        self.errand_any(x, obs).filter(|(_, at)| x.press_on || far(*at) < reach)
+        self.errand_any(x, obs)
+            .filter(|(_, at)| x.press_on || far(*at) < reach)
     }
 
     fn errand_any(&self, x: &Explorer, obs: &Observation) -> Option<(String, Point)> {
@@ -1696,7 +2454,9 @@ impl Fight {
             // MAP10 UV, at 38 a stimpack 1100 off across a yard of imps and zombiemen, walked
             // on into them shooting, down to 3 and dead; the fight's own retreats and cover
             // are what keep her alive there, and its 10 don't pay for the way)
-            let heals = health_item(name).is_some_and(|(amount, cap)| amount >= 10 && self.combat.now.health < f64::from(cap));
+            let heals = health_item(name).is_some_and(|(amount, cap)| {
+                amount >= 10 && self.combat.now.health < f64::from(cap)
+            });
             // (ammo, urgent, only within the reach ammo is turned aside for mid-fight: HMP, six
             // rockets too near four cacodemons to fire, a rocket box 3900 off the errand, backed
             // off "towards" it into them from 180 health to dead)
@@ -1708,10 +2468,14 @@ impl Fight {
                 return Some((name.to_string(), cur.goal));
             }
         }
-        if self.combat.now.firepower > self.tune.errands.pistol_only && !self.combat.now.short_of_ammo {
+        if self.combat.now.firepower > self.tune.errands.pistol_only
+            && !self.combat.now.short_of_ammo
+        {
             return None;
         }
-        self.errands(x, obs).first().map(|t| (t.name.to_string(), (t.x, t.y)))
+        self.errands(x, obs)
+            .first()
+            .map(|t| (t.name.to_string(), (t.x, t.y)))
     }
 
     /// Guns and ammo she knows where they are and hasn't turned aside for yet: better guns worth
@@ -1728,18 +2492,33 @@ impl Fight {
             .filter(|t| {
                 if t.name == "InvulnerabilitySphere" {
                     // (in the middle of a fight she can't win as she is: what wins it)
-                    return dist((t.x, t.y), pos) < 2.0 * self.tune.errands.item_range && self.needs_invulnerability(obs) && self.clear_way_to(obs, (t.x, t.y));
+                    return dist((t.x, t.y), pos) < 2.0 * self.tune.errands.item_range
+                        && self.needs_invulnerability(obs)
+                        && self.clear_way_to(obs, (t.x, t.y));
                 }
-                if let Some(slot) = weapon_item(t.name).filter(|&s| s != 1 && held.contains(&s) && !Self::new_gun(obs, t.name)) {
+                if let Some(slot) = weapon_item(t.name)
+                    .filter(|&s| s != 1 && held.contains(&s) && !Self::new_gun(obs, t.name))
+                {
                     // (one she has: its ammo)
-                    short && held.contains(&slot) && dist((t.x, t.y), pos) < self.tune.errands.item_range
+                    short
+                        && held.contains(&slot)
+                        && dist((t.x, t.y), pos) < self.tune.errands.item_range
                 } else if weapon_item(t.name).is_some() {
-                    (self.better_gun(obs, t.name) || (short && Self::new_gun(obs, t.name) && t.name != "Chainsaw")) && dist((t.x, t.y), pos) <= self.gun_worth(obs, t.name) * RUN_SPEED
+                    (self.better_gun(obs, t.name)
+                        || (short && Self::new_gun(obs, t.name) && t.name != "Chainsaw"))
+                        && dist((t.x, t.y), pos) <= self.gun_worth(obs, t.name) * RUN_SPEED
                 } else {
-                    short && ammo_item(t.name).is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s))) && dist((t.x, t.y), pos) < self.tune.errands.item_range
+                    short
+                        && ammo_item(t.name)
+                            .is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))
+                        && dist((t.x, t.y), pos) < self.tune.errands.item_range
                 }
             })
-            .filter(|t| x.nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)))
+            .filter(|t| {
+                x.nav
+                    .poly_at((t.x, t.y))
+                    .is_some_and(|p| known.contains(&p))
+            })
             .cloned()
             .collect()
     }
@@ -1747,11 +2526,25 @@ impl Fight {
 
 impl Fight {
     /// Items she has seen that she could use now.
-    fn supplies(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
+    fn supplies(
+        &mut self,
+        x: &Explorer,
+        obs: &Observation,
+        reach: &BTreeSet<usize>,
+        pos: Point,
+    ) -> Vec<Objective> {
         let known = x.knowledge.known_polys();
         let health = self.combat.now.health;
         let held = obs.weapons.clone().unwrap_or_default();
-        let ammo = |s: i32| f64::from(obs.ammo.iter().flatten().find(|(x, _)| *x == s).map_or(0, |(_, n)| *n));
+        let ammo = |s: i32| {
+            f64::from(
+                obs.ammo
+                    .iter()
+                    .flatten()
+                    .find(|(x, _)| *x == s)
+                    .map_or(0, |(_, n)| *n),
+            )
+        };
         // (then ammo and guns before anything else. Not sooner for having died for want of it:
         // made urgent, past the dangers, MAP12's start, the ammo there walked into for half the
         // map)
@@ -1762,8 +2555,16 @@ impl Fight {
         // shotgun guy by the start, and the level's shotgun 1900 off the first thing she did)
         let mut carried: Vec<(&'static str, Seen)> = Vec::new();
         for s in self.combat.remaining() {
-            let Some(gun) = carries(s.name).filter(|g| weapon_item(g).is_some() && self.better_gun(obs, g)) else { continue };
-            if !x.nav.poly_at(s.pos()).is_some_and(|p| known.contains(&p) && reach.contains(&p)) {
+            let Some(gun) =
+                carries(s.name).filter(|g| weapon_item(g).is_some() && self.better_gun(obs, g))
+            else {
+                continue;
+            };
+            if !x
+                .nav
+                .poly_at(s.pos())
+                .is_some_and(|p| known.contains(&p) && reach.contains(&p))
+            {
                 continue;
             }
             match carried.iter_mut().find(|(g, _)| *g == gun) {
@@ -1774,7 +2575,11 @@ impl Fight {
         }
         self.combat.wanted_dead = carried.iter().map(|(_, s)| s.id).collect();
         for (gun, s) in &carried {
-            let mut o = Objective::new(Kind::Hunt, x.stand_spot_for(s.pos(), reach), format!("hunt {} {} (for its {gun})", s.name, s.id));
+            let mut o = Objective::new(
+                Kind::Hunt,
+                x.stand_spot_for(s.pos(), reach),
+                format!("hunt {} {} (for its {gun})", s.name, s.id),
+            );
             o.thing = Some(s.id);
             // (as a better gun lying about is: first, and for all that's by it)
             o.needed = true;
@@ -1782,16 +2587,22 @@ impl Fight {
             out.push(o);
         }
         for t in obs.things.iter().flatten() {
-            let Some(p) = x.nav.poly_at((t.x, t.y)) else { continue };
+            let Some(p) = x.nav.poly_at((t.x, t.y)) else {
+                continue;
+            };
             if !known.contains(&p) || !reach.contains(&p) {
                 continue;
             }
             let d = dist((t.x, t.y), pos);
             // (the same gun carried by something nearer: this one in its turn)
-            let carried_nearer = carried.iter().any(|(gun, s)| *gun == t.name && dist(s.pos(), pos) < d);
+            let carried_nearer = carried
+                .iter()
+                .any(|(gun, s)| *gun == t.name && dist(s.pos(), pos) < d);
             // how much it's needed (0: not at all, 1: badly)
             let mut need = 0.0;
-            let invulnerability = t.name == "InvulnerabilitySphere" && self.needs_invulnerability(obs) && self.clear_way_to(obs, (t.x, t.y));
+            let invulnerability = t.name == "InvulnerabilitySphere"
+                && self.needs_invulnerability(obs)
+                && self.clear_way_to(obs, (t.x, t.y));
             if invulnerability || (weapon_item(t.name).is_some() && Self::new_gun(obs, t.name)) {
                 need = 1.0;
             } else if let Some(slot) = weapon_item(t.name).filter(|&s| s != 1) {
@@ -1799,7 +2610,11 @@ impl Fight {
                 // lying about, MAP04's shells gone by the end and MAP05 begun without any)
                 need = (1.0 - ammo(slot) / ammo_max(slot) * 1.5).max(0.0);
             } else if let Some((slots, _)) = ammo_item(t.name) {
-                let fill: Vec<f64> = slots.iter().filter(|s| held.contains(s)).map(|&s| ammo(s) / ammo_max(s)).collect();
+                let fill: Vec<f64> = slots
+                    .iter()
+                    .filter(|s| held.contains(s))
+                    .map(|&s| ammo(s) / ammo_max(s))
+                    .collect();
                 if t.name == "Backpack" {
                     need = 0.8;
                 } else if let Some(min) = fill.iter().copied().reduce(f64::min) {
@@ -1819,13 +2634,17 @@ impl Fight {
             if need <= 0.1 || (d > self.tune.errands.item_range && need < 0.8) {
                 continue;
             }
-            let Some(goal) = x.touch_spot((t.x, t.y), reach) else { continue };
+            let Some(goal) = x.touch_spot((t.x, t.y), reach) else {
+                continue;
+            };
             let mut why = "";
             if invulnerability {
                 // (E3M9's, behind the cyberdemon, spotted mid-fight and left for the blue key, a
                 // wall, a noise; killed at full health by one of its rockets)
                 why = " (something about she can't take on)";
-            } else if (weapon_item(t.name).is_some() || ammo_item(t.name).is_some()) && !self.clear_way_armed(&Self::armed_with(obs, t.name), (t.x, t.y)) {
+            } else if (weapon_item(t.name).is_some() || ammo_item(t.name).is_some())
+                && !self.clear_way_armed(&Self::armed_with(obs, t.name), (t.x, t.y))
+            {
                 // (something to fight with, but on the way something she couldn't take on even
                 // with it: not worth dropping everything for. MAP20, a rocket launcher by the
                 // cyberdemon, no ammo left, gone for again and again under its rockets for the
@@ -1835,9 +2654,14 @@ impl Fight {
                 why = " (a better gun)";
             } else if short && (weapon_item(t.name).is_some() || ammo_item(t.name).is_some()) {
                 why = " (out of ammo)";
-            } else if health < self.tune.errands.hurt && health_item(t.name).is_some_and(|(a, _)| a >= 10) {
+            } else if health < self.tune.errands.hurt
+                && health_item(t.name).is_some_and(|(a, _)| a >= 10)
+            {
                 why = " (hurt)";
-            } else if health < self.tune.errands.survive_health && health_item(t.name).is_some_and(|(a, _)| a >= 10) && self.combat.now.time_to_death < self.tune.errands.survive_secs {
+            } else if health < self.tune.errands.survive_health
+                && health_item(t.name).is_some_and(|(a, _)| a >= 10)
+                && self.combat.now.time_to_death < self.tune.errands.survive_secs
+            {
                 // (losing health fast, not yet down to the rest: off for it now, while she can)
                 why = " (to survive)";
             }
@@ -1854,7 +2678,6 @@ impl Fight {
         }
         out
     }
-
 }
 
 impl Fight {
@@ -1875,7 +2698,13 @@ impl Fight {
     /// with, anything but ammo or a gun while something's about (MAP29: a green armor down a
     /// pit, under fire, no ammo).
     fn not_worth_it(&mut self, obs: &Observation, obj: &Objective) -> bool {
-        let Some(t) = obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).cloned() else { return false };
+        let Some(t) = obj
+            .thing
+            .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
+            .cloned()
+        else {
+            return false;
+        };
         let pos = obs.pos();
         let health = self.combat.now.health;
         let short = self.combat.now.short_of_ammo;
@@ -1884,9 +2713,17 @@ impl Fight {
         } else if armor_item(t.name).is_some() {
             Combat::pickup_gain(obs, t.name).max(1.0)
         } else if ammo_item(t.name).is_some() {
-            if short { 60.0 } else { 15.0 }
+            if short {
+                60.0
+            } else {
+                15.0
+            }
         } else if weapon_item(t.name).is_some() {
-            if Self::new_gun(obs, t.name) { 60.0 } else { 15.0 }
+            if Self::new_gun(obs, t.name) {
+                60.0
+            } else {
+                15.0
+            }
         } else {
             5.0
         };
@@ -1896,12 +2733,24 @@ impl Fight {
             .combat
             .remaining()
             .into_iter()
-            .filter(|s| s.awake && monster(s.name).is_some_and(|m| m.attack != Attack::None) && segment_point_distance(pos, obj.goal, s.pos()) < self.tune.errands.exposed_near)
+            .filter(|s| {
+                s.awake
+                    && monster(s.name).is_some_and(|m| m.attack != Attack::None)
+                    && segment_point_distance(pos, obj.goal, s.pos())
+                        < self.tune.errands.exposed_near
+            })
             .collect();
         // (lying on a floor that hurts: a hit or two to fetch it. E1M5, the user watching: back
         // and forth across the nukage for clips, each trip more health than the clip's worth)
-        let on_harm = self.combat.sector_at(obj.goal).is_some_and(|s| self.combat.hazards.get(s).copied().unwrap_or(false));
-        let floor = if on_harm { self.tune.errands.floor_cost } else { 0.0 };
+        let on_harm = self
+            .combat
+            .sector_at(obj.goal)
+            .is_some_and(|s| self.combat.hazards.get(s).copied().unwrap_or(false));
+        let floor = if on_harm {
+            self.tune.errands.floor_cost
+        } else {
+            0.0
+        };
         if threats.is_empty() {
             return floor > worth;
         }
@@ -1909,7 +2758,13 @@ impl Fight {
         if !self.combat.armed(obs) && !supplies {
             return true;
         }
-        let cost: f64 = floor + threats.iter().map(|s| monster(s.name).map_or(0.0, |m| m.threat) * self.tune.errands.hits * exposed).sum::<f64>();
+        let cost: f64 = floor
+            + threats
+                .iter()
+                .map(|s| {
+                    monster(s.name).map_or(0.0, |m| m.threat) * self.tune.errands.hits * exposed
+                })
+                .sum::<f64>();
         cost > worth && cost > self.tune.errands.cost_floor
     }
 }
@@ -1917,12 +2772,25 @@ impl Fight {
 impl Hooks for Fight {
     /// Ammo or a gun she's off for because she's short of ammo.
     fn worth_cut_off(&mut self, obs: &Observation, obj: &Objective) -> bool {
-        let Some(t) = obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)) else { return false };
-        obj.urgent && (ammo_item(t.name).is_some() || weapon_item(t.name).is_some()) && self.combat.now.short_of_ammo
+        let Some(t) = obj
+            .thing
+            .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
+        else {
+            return false;
+        };
+        obj.urgent
+            && (ammo_item(t.name).is_some() || weapon_item(t.name).is_some())
+            && self.combat.now.short_of_ammo
     }
 
     /// Items she could use now; with --complete, every counted item she's seen too.
-    fn wanted(&mut self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
+    fn wanted(
+        &mut self,
+        x: &Explorer,
+        obs: &Observation,
+        reach: &BTreeSet<usize>,
+        pos: Point,
+    ) -> Vec<Objective> {
         let known = x.knowledge.known_polys();
         let gun_sectors: BTreeSet<usize> = obs
             .things
@@ -1936,7 +2804,12 @@ impl Hooks for Fight {
         self.gun_out_of_reach = !gun_sectors.is_empty();
         let mesh = &x.nav.mesh;
         self.toward_gun = (0..mesh.polys.len())
-            .filter(|&p| mesh.polys[p].as_ref().is_some_and(|q| gun_sectors.contains(&q.sector)) && !known.contains(&p))
+            .filter(|&p| {
+                mesh.polys[p]
+                    .as_ref()
+                    .is_some_and(|q| gun_sectors.contains(&q.sector))
+                    && !known.contains(&p)
+            })
             .map(|p| p as i64)
             .collect();
         let mut out = self.supplies(x, obs, reach, pos);
@@ -1953,26 +2826,57 @@ impl Hooks for Fight {
 
     /// (--complete: rather the level again than out without items she could get from its start)
     fn before_exit(&mut self, x: &Explorer, obs: &Observation) -> bool {
-        self.completion.as_mut().is_some_and(|c| c.before_exit(x, obs))
+        self.completion
+            .as_mut()
+            .is_some_and(|c| c.before_exit(x, obs))
     }
 
     /// Monsters seen that are still about: go where each was last seen.
-    fn last_resort(&mut self, x: &Explorer, _obs: &Observation, reach: &BTreeSet<usize>, _pos: Point) -> Vec<Objective> {
+    fn last_resort(
+        &mut self,
+        x: &Explorer,
+        _obs: &Observation,
+        reach: &BTreeSet<usize>,
+        _pos: Point,
+    ) -> Vec<Objective> {
         let nav = &x.nav;
         let mut out = Vec::new();
         for s in self.combat.remaining() {
             let goal = match nav.poly_at(s.pos()).filter(|p| reach.contains(p)) {
                 Some(_) => s.pos(),
                 None => {
-                    let Some(pi) = reach.iter().copied().filter(|&pi| dist(nav.poly_center(pi), s.pos()) < self.tune.errands.hunt_near).reduce(|a, b| if dist(nav.poly_center(b), s.pos()) < dist(nav.poly_center(a), s.pos()) { b } else { a }) else { continue };
+                    let Some(pi) = reach
+                        .iter()
+                        .copied()
+                        .filter(|&pi| {
+                            dist(nav.poly_center(pi), s.pos()) < self.tune.errands.hunt_near
+                        })
+                        .reduce(|a, b| {
+                            if dist(nav.poly_center(b), s.pos()) < dist(nav.poly_center(a), s.pos())
+                            {
+                                b
+                            } else {
+                                a
+                            }
+                        })
+                    else {
+                        continue;
+                    };
                     nav.poly_center(pi)
                 }
             };
-            let mut o = Objective::new(Kind::Hunt, x.stand_spot_for(goal, reach), format!("hunt {} {}", s.name, s.id));
+            let mut o = Objective::new(
+                Kind::Hunt,
+                x.stand_spot_for(goal, reach),
+                format!("hunt {} {}", s.name, s.id),
+            );
             // (been there for it once and it wasn't to be had from there: not again. MAP06: eight
             // imps on a ledge out of her reach, the spot under each gone to in turn, 32 times,
             // four minutes of the level, till a lift she'd missed got its second go)
-            if self.hunted_spots.contains(&(s.id, o.goal.0.round() as i64, o.goal.1.round() as i64)) {
+            if self
+                .hunted_spots
+                .contains(&(s.id, o.goal.0.round() as i64, o.goal.1.round() as i64))
+            {
                 continue;
             }
             o.thing = Some(s.id);
@@ -1983,15 +2887,20 @@ impl Hooks for Fight {
 
     fn hunted_in_vain(&mut self, obj: &Objective) {
         if let Some(id) = obj.thing {
-            self.hunted_spots.insert((id, obj.goal.0.round() as i64, obj.goal.1.round() as i64));
+            self.hunted_spots
+                .insert((id, obj.goal.0.round() as i64, obj.goal.1.round() as i64));
         }
     }
 
     fn gone(&mut self, obs: &Observation, obj: &Objective) -> bool {
         match obj.kind {
             Kind::Item => obj.thing.is_none_or(|t| !self.present.contains(&t)),
-            Kind::Hunt => obj.thing.is_none_or(|t| !self.combat.remaining().iter().any(|s| s.id == t)),
-            Kind::Barrel => obj.look_at.is_none_or(|b| crate::motor::follower::barrel_now(obs, b).is_none()),
+            Kind::Hunt => obj
+                .thing
+                .is_none_or(|t| !self.combat.remaining().iter().any(|s| s.id == t)),
+            Kind::Barrel => obj
+                .look_at
+                .is_none_or(|b| crate::motor::follower::barrel_now(obs, b).is_none()),
             _ => false,
         }
     }
@@ -2004,7 +2913,11 @@ impl Hooks for Fight {
         }
         // (invulnerability kept for a fight that needs it: not picked up in passing, its thirty
         // seconds spent on nothing; with something about she can't take on, it's what she goes for)
-        if obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).is_some_and(|t| t.name == "InvulnerabilitySphere") {
+        if obj
+            .thing
+            .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
+            .is_some_and(|t| t.name == "InvulnerabilitySphere")
+        {
             return !self.needs_invulnerability(obs);
         }
         if self.combat.now.invulnerable {
@@ -2014,7 +2927,13 @@ impl Hooks for Fight {
         // and again, whatever for: MAP04's corner, five lives for the shotgun, the chaingun,
         // a wall, the key there)
         let died = self.died_for(obj);
-        let here = self.deaths.iter().filter(|d| d.why != Cause::Unarmed && dist(d.at, obj.goal) < self.tune.deaths.death_zone).count();
+        let here = self
+            .deaths
+            .iter()
+            .filter(|d| {
+                d.why != Cause::Unarmed && dist(d.at, obj.goal) < self.tune.deaths.death_zone
+            })
+            .count();
         if died >= self.tune.deaths.deaths_give_up || here >= self.tune.deaths.death_zone_urgent {
             return true;
         }
@@ -2028,7 +2947,14 @@ impl Hooks for Fight {
         // boxes picked up in the spider mastermind's sight, 0/16, the building with the plasma
         // rifle and the blue armor left shut)
         let known = self.combat.remaining();
-        let near: Vec<&str> = known.iter().filter(|s| dist(s.pos(), obj.goal) < self.tune.errands.danger_near || self.combat.shot_from(obs, s, obj.goal)).map(|s| s.name).collect();
+        let near: Vec<&str> = known
+            .iter()
+            .filter(|s| {
+                dist(s.pos(), obj.goal) < self.tune.errands.danger_near
+                    || self.combat.shot_from(obs, s, obj.goal)
+            })
+            .map(|s| s.name)
+            .collect();
         if !near.is_empty() && self.combat.too_much(obs, &near, self.tune.engage.leave_be) {
             return true;
         }
@@ -2057,12 +2983,25 @@ impl Hooks for Fight {
         if obj.kind == Kind::Frontier && !obj.reveals.is_disjoint(&self.toward_gun) {
             return self.tune.errands.switch_for_gun;
         }
-        let ammo = obj.kind == Kind::Item && obj.thing.and_then(|id| obs.things.iter().flatten().find(|t| t.id == id)).is_some_and(|t| ammo_item(t.name).is_some());
+        let ammo = obj.kind == Kind::Item
+            && obj
+                .thing
+                .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
+                .is_some_and(|t| ammo_item(t.name).is_some());
         if !ammo || self.combat.now.short_of_ammo {
             return 1.0;
         }
-        let known: Vec<&'static str> = self.combat.remaining().iter().filter(|s| s.awake).map(|s| s.name).collect();
-        if known.iter().any(|n| self.combat.too_much(obs, &[n], self.tune.engage.leave_be)) {
+        let known: Vec<&'static str> = self
+            .combat
+            .remaining()
+            .iter()
+            .filter(|s| s.awake)
+            .map(|s| s.name)
+            .collect();
+        if known
+            .iter()
+            .any(|n| self.combat.too_much(obs, &[n], self.tune.engage.leave_be))
+        {
             self.tune.errands.ammo_outmatched
         } else {
             1.0
@@ -2078,9 +3017,12 @@ impl Hooks for Fight {
         if obj.urgent || obj.kind == Kind::Exit {
             return false;
         }
-        let Some(t) = self.errands(x, obs).into_iter().next() else { return false };
+        let Some(t) = self.errands(x, obs).into_iter().next() else {
+            return false;
+        };
         self.offered.insert(t.id);
-        self.pending_log.push(format!("tic {}: spotted a {}", obs.tic, t.name));
+        self.pending_log
+            .push(format!("tic {}: spotted a {}", obs.tic, t.name));
         true
     }
 }

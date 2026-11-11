@@ -3,9 +3,9 @@
 
 use super::world::{Pair, Timers, World};
 use super::{KeySet, Planner};
+use crate::det::{HashMap, HashSet};
 use crate::geom::{Point, MAX_STEP};
 use crate::nav::{can_cross, DoorOpening, Doors, Found, Heights};
-use crate::det::{HashMap, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -127,9 +127,17 @@ impl Planner<'_> {
             return Arc::clone(d);
         }
         let mut out: Doors = HashMap::default();
-        for t in self.facts.triggers.iter().filter(|t| t.kind.is_door() && t.usable_with(keys)) {
+        for t in self
+            .facts
+            .triggers
+            .iter()
+            .filter(|t| t.kind.is_door() && t.usable_with(keys))
+        {
             for (s, hs) in &t.effects {
-                let door = out.entry(*s).or_insert_with(|| DoorOpening { heights: Vec::new(), users: HashSet::default() });
+                let door = out.entry(*s).or_insert_with(|| DoorOpening {
+                    heights: Vec::new(),
+                    users: HashSet::default(),
+                });
                 for h in hs {
                     if !door.heights.iter().any(|x| x.key() == h.key()) {
                         door.heights.push(*h);
@@ -146,22 +154,35 @@ impl Planner<'_> {
     /// The polys trigger `ti` can be fired from now: those whose use gates are open, that
     /// are at a height a gun line can be shot from, and (walk-over lines) from which the
     /// far side can be walked onto.
-    pub(super) fn activators_now(&self, ti: usize, states: &World, doors: Option<&Doors>) -> HashSet<usize> {
+    pub(super) fn activators_now(
+        &self,
+        ti: usize,
+        states: &World,
+        doors: Option<&Doors>,
+    ) -> HashSet<usize> {
         let t = &self.facts.triggers[ti];
-        let Some(line) = t.line else { return t.activators.clone() };
+        let Some(line) = t.line else {
+            return t.activators.clone();
+        };
         let openable = |s: usize| doors.is_some_and(|d| d.contains_key(&s));
         t.activators
             .iter()
             .copied()
             .filter(|&p| {
                 if let Some(gates) = self.facts.use_gates.get(&(line, p)) {
-                    if !gates.iter().all(|&s| states[s].iter().any(|h| h.ceiling - h.floor > 0.0) || openable(s)) {
+                    if !gates.iter().all(|&s| {
+                        states[s].iter().any(|h| h.ceiling - h.floor > 0.0) || openable(s)
+                    }) {
                         return false;
                     }
                 }
                 if let Some(pairs) = self.facts.use_line_gates.get(&(line, p)) {
                     let gap = |f: usize, b: usize| {
-                        states[f].iter().any(|a| states[b].iter().any(|c| a.ceiling.min(c.ceiling) - a.floor.max(c.floor) > 0.0))
+                        states[f].iter().any(|a| {
+                            states[b]
+                                .iter()
+                                .any(|c| a.ceiling.min(c.ceiling) - a.floor.max(c.floor) > 0.0)
+                        })
                     };
                     if !pairs.iter().all(|&(f, b)| gap(f, b)) {
                         return false;
@@ -174,7 +195,11 @@ impl Planner<'_> {
                     }
                 }
                 if let Some(&far) = self.facts.cross_sides.get(&(line, p)) {
-                    if !openable(far) && !here.iter().any(|&a| states[far].iter().any(|&b| can_cross(a, b))) {
+                    if !openable(far)
+                        && !here
+                            .iter()
+                            .any(|&a| states[far].iter().any(|&b| can_cross(a, b)))
+                    {
                         return false;
                     }
                 }
@@ -196,15 +221,31 @@ impl Planner<'_> {
                 let init = self.nav.initial[s];
                 let rep = match hs.as_slice() {
                     [only] => *only,
-                    _ if hs.iter().any(|h| h.floor == init.floor && h.ceiling == init.ceiling) => init,
-                    _ => hs.iter().copied().max_by(|a, b| a.floor.total_cmp(&b.floor).then(a.ceiling.total_cmp(&b.ceiling))).unwrap_or(init),
+                    _ if hs
+                        .iter()
+                        .any(|h| h.floor == init.floor && h.ceiling == init.ceiling) =>
+                    {
+                        init
+                    }
+                    _ => hs
+                        .iter()
+                        .copied()
+                        .max_by(|a, b| {
+                            a.floor
+                                .total_cmp(&b.floor)
+                                .then(a.ceiling.total_cmp(&b.ceiling))
+                        })
+                        .unwrap_or(init),
                 };
                 reps.push((s, rep));
             }
             if reps.iter().all(|&(s, rep)| rep == self.nav.initial[s]) {
                 return t.effects.clone();
             }
-            let key = (ti, reps.iter().map(|&(s, h)| (s, h.key())).collect::<Vec<_>>());
+            let key = (
+                ti,
+                reps.iter().map(|&(s, h)| (s, h.key())).collect::<Vec<_>>(),
+            );
             if let Some(v) = self.caches.effects.get(&key) {
                 return v.clone();
             }
@@ -212,46 +253,99 @@ impl Planner<'_> {
             self.caches.effects.insert(key, effects.clone());
             return effects;
         }
-        let Some((s0, f0)) = t.shift_from else { return t.effects.clone() };
+        let Some((s0, f0)) = t.shift_from else {
+            return t.effects.clone();
+        };
         // stairs: as far up as the start has risen
-        let shift = states[s0].iter().map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max) - f0;
+        let shift = states[s0]
+            .iter()
+            .map(|h| h.floor)
+            .fold(f64::NEG_INFINITY, f64::max)
+            - f0;
         if shift == 0.0 {
             return t.effects.clone();
         }
-        t.effects.iter().map(|(s, hs)| (*s, hs.iter().map(|h| Heights { floor: h.floor + shift, ceiling: h.ceiling }).collect())).collect()
+        t.effects
+            .iter()
+            .map(|(s, hs)| {
+                (
+                    *s,
+                    hs.iter()
+                        .map(|h| Heights {
+                            floor: h.floor + shift,
+                            ceiling: h.ceiling,
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
     }
 
     /// How long the heights trigger `ti` makes (`effects`, fired with the world at `base`,
     /// making it `trial`) last: for moves that stay put the old heights until it's moved off
     /// them (those returned too), else the temporary ones until they go back.
-    pub(super) fn deadlines_of(&self, ti: usize, effects: &Effects, base: &World, trial: &World) -> (Timers, Vec<Pair>) {
+    pub(super) fn deadlines_of(
+        &self,
+        ti: usize,
+        effects: &Effects,
+        base: &World,
+        trial: &World,
+    ) -> (Timers, Vec<Pair>) {
         let t = &self.facts.triggers[ti];
         let mut out = Timers::new();
         let mut moving_off = Vec::new();
         for (s, hs) in effects {
             if t.permanent {
-                let travel = if t.line.is_some() { t.perm_travel.get(s).copied().unwrap_or(0.0) } else { 0.0 };
+                let travel = if t.line.is_some() {
+                    t.perm_travel.get(s).copied().unwrap_or(0.0)
+                } else {
+                    0.0
+                };
                 let Some(target) = hs.first() else { continue };
-                let mut olds: Vec<Heights> = trial[*s].iter().copied().filter(|h| !hs.iter().any(|x| x.key() == h.key())).collect();
-                olds.sort_by(|a, b| a.floor.total_cmp(&b.floor).then(a.ceiling.total_cmp(&b.ceiling)));
+                let mut olds: Vec<Heights> = trial[*s]
+                    .iter()
+                    .copied()
+                    .filter(|h| !hs.iter().any(|x| x.key() == h.key()))
+                    .collect();
+                olds.sort_by(|a, b| {
+                    a.floor
+                        .total_cmp(&b.floor)
+                        .then(a.ceiling.total_cmp(&b.ceiling))
+                });
                 let rise = target.floor;
                 for h in olds {
                     moving_off.push((*s, h.key()));
                     // a rising floor: only until it's a step above
-                    let last = if rise <= h.floor { travel } else { travel.min((travel - 1.0) * MAX_STEP / (rise - h.floor) + 1.0) };
+                    let last = if rise <= h.floor {
+                        travel
+                    } else {
+                        travel.min((travel - 1.0) * MAX_STEP / (rise - h.floor) + 1.0)
+                    };
                     out.insert((*s, h.key()), last);
                 }
                 continue;
             }
             for h in hs {
                 let pair = (*s, h.key());
-                let timing = if t.line.is_some() { t.timing.get(&pair).copied() } else { None };
+                let timing = if t.line.is_some() {
+                    t.timing.get(&pair).copied()
+                } else {
+                    None
+                };
                 // also a height another line makes for good, if not there yet: this one takes
                 // it away again (MAP09)
-                let held = timing.is_some_and(|tm| tm.hold.is_some()) && !base[*s].iter().any(|x| x.key() == h.key());
+                let held = timing.is_some_and(|tm| tm.hold.is_some())
+                    && !base[*s].iter().any(|x| x.key() == h.key());
                 if self.facts.temporary.contains(&pair) || held {
-                    let tm = timing.unwrap_or(Timing { travel: 0.0, hold: None });
-                    let lasts = if t.line.is_some() { tm.travel + tm.hold.unwrap_or(0.0) } else { 0.0 };
+                    let tm = timing.unwrap_or(Timing {
+                        travel: 0.0,
+                        hold: None,
+                    });
+                    let lasts = if t.line.is_some() {
+                        tm.travel + tm.hold.unwrap_or(0.0)
+                    } else {
+                        0.0
+                    };
                     out.insert(pair, lasts);
                 }
             }

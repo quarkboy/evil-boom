@@ -31,7 +31,10 @@ fn along(pts: &[Point], d: f64) -> Point {
         let l = dist(w[0], w[1]);
         if left <= l {
             let f = if l > 1e-6 { left / l } else { 0.0 };
-            return (w[0].0 + (w[1].0 - w[0].0) * f, w[0].1 + (w[1].1 - w[0].1) * f);
+            return (
+                w[0].0 + (w[1].0 - w[0].0) * f,
+                w[0].1 + (w[1].1 - w[0].1) * f,
+            );
         }
         left -= l;
     }
@@ -49,7 +52,14 @@ pub fn blast_gap(a: Point, b: Point) -> f64 {
 /// shells to spare and it's near enough for most of the pellets to land, one blast and it's gone
 /// (20 health, the user's: surer than taps); else the pistol, single taps.
 pub fn barrel_gun(obs: &Observation, d: f64) -> i32 {
-    if d < BARREL_SHOTGUN_RANGE && obs.weapons.as_ref().is_some_and(|w| w.contains(&3)) && obs.ammo.iter().flatten().any(|&(s, n)| s == 3 && n >= BARREL_SHELLS) {
+    if d < BARREL_SHOTGUN_RANGE
+        && obs.weapons.as_ref().is_some_and(|w| w.contains(&3))
+        && obs
+            .ammo
+            .iter()
+            .flatten()
+            .any(|&(s, n)| s == 3 && n >= BARREL_SHELLS)
+    {
         3
     } else {
         tap_gun(obs)
@@ -65,7 +75,10 @@ const BARREL_SHELLS: i32 = 12;
 /// in hand: not the BFG with 20 cells of the 40 it needs (MAP23), nor a missile, which sets off no
 /// gun line.
 pub fn tap_gun(obs: &Observation) -> i32 {
-    TAP_GUNS.into_iter().find(|&slot| tap_rounds(obs, slot) > 0).unwrap_or(2)
+    TAP_GUNS
+        .into_iter()
+        .find(|&slot| tap_rounds(obs, slot) > 0)
+        .unwrap_or(2)
 }
 
 /// the guns that tap (hitscan), in the order taken up: pistol, chaingun, shotgun
@@ -77,7 +90,10 @@ pub fn tap_rounds(obs: &Observation, slot: i32) -> i32 {
     if obs.weapons.as_ref().is_some_and(|w| !w.contains(&slot)) {
         return 0;
     }
-    obs.ammo.as_ref().and_then(|a| a.iter().find(|w| w.0 == slot)).map_or(1, |w| w.1)
+    obs.ammo
+        .as_ref()
+        .and_then(|a| a.iter().find(|w| w.0 == slot))
+        .map_or(1, |w| w.1)
 }
 
 /// tics between shots at a barrel or a wall (the pistol ready again, the trigger let go: a first shot each time)
@@ -89,7 +105,12 @@ pub const BARREL_TRACK: f64 = 48.0;
 
 /// The barrel there is now, of one that was at `at` (pushed about by shots).
 pub fn barrel_now(obs: &Observation, at: Point) -> Option<Point> {
-    obs.barrels.iter().flatten().copied().filter(|&b| dist(b, at) < BARREL_TRACK).min_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at)))
+    obs.barrels
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|&b| dist(b, at) < BARREL_TRACK)
+        .min_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at)))
 }
 
 /// the longest wait for a lift to come back before crossing its line
@@ -119,7 +140,16 @@ const GIVE_UP_TICS: i64 = 60 * 35;
 /// The actions she stops at the end of (the explorer's goto included: where it goes next is
 /// anyone's guess; E3M3 slid off a ledge it arrived at running).
 fn stops(a: Action) -> bool {
-    matches!(a, Action::Use | Action::Shoot | Action::Exit | Action::Face | Action::Kill | Action::Endure | Action::Walk)
+    matches!(
+        a,
+        Action::Use
+            | Action::Shoot
+            | Action::Exit
+            | Action::Face
+            | Action::Kill
+            | Action::Endure
+            | Action::Walk
+    )
 }
 
 /// A trigger's expected effect being checked as it plays out.
@@ -155,7 +185,8 @@ impl FollowerLog {
         if std::env::var_os("EVIL_DEBUG_PACE").is_some() {
             eprintln!("    follower tic {tic}: {}", msg.as_ref());
         }
-        self.events.push(format!("[{:6.1}s] {}", tic as f64 / TICRATE, msg.as_ref()));
+        self.events
+            .push(format!("[{:6.1}s] {}", tic as f64 / TICRATE, msg.as_ref()));
     }
 }
 
@@ -210,7 +241,12 @@ type Blocked = (usize, usize, usize, Option<Point>);
 fn run_controls(angle: f64, direction: f64) -> Controls {
     let d = norm(direction - angle);
     let rad = d.to_radians();
-    Controls { forward: 50.0 * rad.cos(), strafe: -50.0 * rad.sin(), turn: (-d).clamp(-RUN_TURN, RUN_TURN), ..Controls::default() }
+    Controls {
+        forward: 50.0 * rad.cos(),
+        strafe: -50.0 * rad.sin(),
+        turn: (-d).clamp(-RUN_TURN, RUN_TURN),
+        ..Controls::default()
+    }
 }
 
 fn last_point(path: &Path) -> Option<Point> {
@@ -367,9 +403,21 @@ pub struct RouteFollower {
 impl RouteFollower {
     /// `keys` held and `states` (the heights the world can take) at the start; `tic`: the game
     /// tic it starts at.
-    pub fn new(view: Rc<View>, steps: Vec<Step>, keys: Keys, states: Option<States>, replan_level: bool, tic: i64) -> RouteFollower {
+    pub fn new(
+        view: Rc<View>,
+        steps: Vec<Step>,
+        keys: Keys,
+        states: Option<States>,
+        replan_level: bool,
+        tic: i64,
+    ) -> RouteFollower {
         let doors = view.local_doors(Key::ALL.into_iter().collect());
-        let lift_sectors = view.triggers.iter().filter(|t| !t.permanent()).flat_map(|t| t.effects.iter().map(|(s, _)| *s)).collect();
+        let lift_sectors = view
+            .triggers
+            .iter()
+            .filter(|t| !t.permanent())
+            .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
+            .collect();
         let states = states.unwrap_or_else(|| view.initial_states());
         let sinking = view.nav.sinking_sectors().clone();
         let mut f = RouteFollower {
@@ -484,7 +532,11 @@ impl RouteFollower {
     }
 
     fn trigger_line_no(&self) -> usize {
-        self.step().trigger.as_ref().and_then(|t| t.linedef()).unwrap_or(0)
+        self.step()
+            .trigger
+            .as_ref()
+            .and_then(|t| t.linedef())
+            .unwrap_or(0)
     }
 
     /// In the middle of a run-jump (lining up, sprinting, running over sinking floors).
@@ -513,7 +565,13 @@ impl RouteFollower {
     /// Shooting something with the gun it picks for that (a barrel in the way, its blasts
     /// waited out; a switch to shoot): the gun's the route's for now.
     pub fn shooting(&self) -> bool {
-        self.barrel.is_some() || self.barrel_flee.is_some() || self.barrel_settle.is_some() || usize::try_from(self.step_i).ok().and_then(|i| self.steps.get(i)).is_some_and(|s| s.action == crate::walkthrough::Action::Shoot)
+        self.barrel.is_some()
+            || self.barrel_flee.is_some()
+            || self.barrel_settle.is_some()
+            || usize::try_from(self.step_i)
+                .ok()
+                .and_then(|i| self.steps.get(i))
+                .is_some_and(|s| s.action == crate::walkthrough::Action::Shoot)
     }
 
     /// Waiting at a door or switch to press it this tic: her turn is the press's (use goes
@@ -525,7 +583,11 @@ impl RouteFollower {
     /// Run-jumps still to come on the route.
     pub fn jumps_ahead(&self) -> bool {
         let from = usize::try_from(self.step_i).unwrap_or(0);
-        self.steps.iter().skip(from).filter_map(|st| st.path.as_ref()).any(|p| p.steps.iter().any(|n| n.contains("run-jump")))
+        self.steps
+            .iter()
+            .skip(from)
+            .filter_map(|st| st.path.as_ref())
+            .any(|p| p.steps.iter().any(|n| n.contains("run-jump")))
     }
 
     // --- what she's doing (for display) -----------------------------------------------------
@@ -540,11 +602,24 @@ impl RouteFollower {
         let step = self.step();
         let subs = step.substeps();
         let sub = match self.phase {
-            Phase::Settle => self.settle.iter().map(|e| format!("wait for sector {}", e.sector)).collect::<Vec<_>>().join(", "),
+            Phase::Settle => self
+                .settle
+                .iter()
+                .map(|e| format!("wait for sector {}", e.sector))
+                .collect::<Vec<_>>()
+                .join(", "),
             Phase::Walk => subs[0].clone(),
-            _ => subs.get(1).cloned().unwrap_or_else(|| step.action.name().to_string()),
+            _ => subs
+                .get(1)
+                .cloned()
+                .unwrap_or_else(|| step.action.name().to_string()),
         };
-        format!("step {}/{}: {sub} ({})", self.step_i + 1, self.steps.len(), step.label)
+        format!(
+            "step {}/{}: {sub} ({})",
+            self.step_i + 1,
+            self.steps.len(),
+            step.label
+        )
     }
 
     /// The rest of the current step's path from `pos` (None: a teleport or jump).
@@ -555,7 +630,11 @@ impl RouteFollower {
         let mut out: Vec<Option<Point>> = pos.into_iter().map(Some).collect();
         for i in self.seg_i..self.segments.len() {
             let pts = &self.segments[i].track.pts;
-            let from = if i == self.seg_i { (self.k + 1).min(pts.len()) } else { 0 };
+            let from = if i == self.seg_i {
+                (self.k + 1).min(pts.len())
+            } else {
+                0
+            };
             out.extend(pts[from..].iter().map(|&p| Some(p)));
             if i + 1 < self.segments.len() {
                 out.push(None);
@@ -566,9 +645,21 @@ impl RouteFollower {
 
     /// How far the rest of the route is from `pos`, along it.
     pub fn way_left(&self, pos: Point) -> f64 {
-        let length = |pts: &[Option<Point>]| pts.windows(2).filter_map(|w| Some(dist(w[0]?, w[1]?))).sum::<f64>();
-        let later = usize::try_from(self.step_i + 1).ok().and_then(|i| self.steps.get(i..)).unwrap_or_default();
-        length(&self.planned_path(Some(pos))) + later.iter().filter_map(|st| st.path.as_ref()).map(|p| length(&p.waypoints)).sum::<f64>()
+        let length = |pts: &[Option<Point>]| {
+            pts.windows(2)
+                .filter_map(|w| Some(dist(w[0]?, w[1]?)))
+                .sum::<f64>()
+        };
+        let later = usize::try_from(self.step_i + 1)
+            .ok()
+            .and_then(|i| self.steps.get(i..))
+            .unwrap_or_default();
+        length(&self.planned_path(Some(pos)))
+            + later
+                .iter()
+                .filter_map(|st| st.path.as_ref())
+                .map(|p| length(&p.waypoints))
+                .sum::<f64>()
     }
 
     // --- step and segment bookkeeping ---------------------------------------------------------
@@ -610,7 +701,12 @@ impl RouteFollower {
                 self.keys = self.keys.with(k);
             }
             // a quick permanent move the next path needs: let it finish first
-            let settle: Vec<Expect> = done.expects.iter().filter(|e| e.needed && e.hold.is_none() && e.travel <= SETTLE_MAX).cloned().collect();
+            let settle: Vec<Expect> = done
+                .expects
+                .iter()
+                .filter(|e| e.needed && e.hold.is_none() && e.travel <= SETTLE_MAX)
+                .cloned()
+                .collect();
             if !settle.is_empty() {
                 self.settle = settle;
                 self.settle_tic = tic;
@@ -633,7 +729,10 @@ impl RouteFollower {
             return;
         }
         let subs = self.step().substeps().join(" -> ");
-        self.log.add(tic, format!("step {}/{}: {subs}", self.step_i + 1, self.steps.len()));
+        self.log.add(
+            tic,
+            format!("step {}/{}: {subs}", self.step_i + 1, self.steps.len()),
+        );
         self.step_tic = tic;
         self.crossed = false;
         self.item = self.item_of();
@@ -666,7 +765,11 @@ impl RouteFollower {
             .windows(2)
             .flat_map(|w| {
                 let (a, b) = (w[0], w[1]);
-                mesh.poly(a).portals.iter().filter(move |&&pi| mesh.portals[pi].other(a) == b).filter_map(|&pi| mesh.portals[pi].linedef)
+                mesh.poly(a)
+                    .portals
+                    .iter()
+                    .filter(move |&&pi| mesh.portals[pi].other(a) == b)
+                    .filter_map(|&pi| mesh.portals[pi].linedef)
             })
             .collect();
         self.off_since = None;
@@ -686,7 +789,9 @@ impl RouteFollower {
     /// The waypoints in segments, split at teleports and jump run-ups.
     fn split(&self) -> Vec<Segment> {
         let step = self.step();
-        let Some(path) = &step.path else { return Vec::new() };
+        let Some(path) = &step.path else {
+            return Vec::new();
+        };
         let pts = &path.waypoints;
         let mut raw: Vec<(Vec<Point>, SegEnd, Option<Jump>)> = Vec::new();
         let mut cur: Vec<Point> = Vec::new();
@@ -711,7 +816,8 @@ impl RouteFollower {
                 // itself is dropped; a nearby one can be where the step ends: E4M6's switch is
                 // 26 past the landing, and a track of just that point is "already there")
                 cur = vec![jump.dest];
-                let land = (i + 2..pts.len()).find(|&k| pts[k].is_some_and(|q| dist(q, jump.dest) < 32.0));
+                let land =
+                    (i + 2..pts.len()).find(|&k| pts[k].is_some_and(|q| dist(q, jump.dest) < 32.0));
                 i = land.unwrap_or(i + 2);
                 if i < pts.len() && pts[i].is_some_and(|q| dist(q, jump.dest) < 4.0) {
                     i += 1;
@@ -726,18 +832,31 @@ impl RouteFollower {
             .enumerate()
             .map(|(idx, (mut seg_pts, end, jump))| {
                 if seg_pts.is_empty() {
-                    seg_pts = vec![jump.as_ref().map_or_else(|| last_point(path).unwrap_or((0.0, 0.0)), |j| j.dest)];
+                    seg_pts = vec![jump
+                        .as_ref()
+                        .map_or_else(|| last_point(path).unwrap_or((0.0, 0.0)), |j| j.dest)];
                 }
                 let tail = self.look_tail(&seg_pts, end, jump.as_ref(), idx == n - 1);
                 let mut look = seg_pts.clone();
                 look.extend(tail);
-                Segment { track: Track::new(seg_pts), end, jump, look: Track::new(look) }
+                Segment {
+                    track: Track::new(seg_pts),
+                    end,
+                    jump,
+                    look: Track::new(look),
+                }
             })
             .collect()
     }
 
     /// Where to look once the segment's own points run out.
-    fn look_tail(&self, pts: &[Point], end: SegEnd, jump: Option<&Jump>, _last: bool) -> Vec<Point> {
+    fn look_tail(
+        &self,
+        pts: &[Point],
+        end: SegEnd,
+        jump: Option<&Jump>,
+        _last: bool,
+    ) -> Vec<Point> {
         match end {
             SegEnd::Jump => return jump.map(|j| vec![j.takeoff]).unwrap_or_default(),
             SegEnd::Teleport => {
@@ -760,7 +879,14 @@ impl RouteFollower {
         if let Some(next) = self.steps.get(self.step_i as usize + 1) {
             // rolling on into the next step: look where it goes
             if let Some(p) = &next.path {
-                return p.waypoints.iter().skip(1).take(5).filter_map(|w| *w).take(3).collect();
+                return p
+                    .waypoints
+                    .iter()
+                    .skip(1)
+                    .take(5)
+                    .filter_map(|w| *w)
+                    .take(3)
+                    .collect();
             }
         }
         Vec::new()
@@ -800,7 +926,9 @@ impl RouteFollower {
             let mut o = obs.clone();
             for &t in nav.nav.trenches.keys() {
                 if t < o.heights.len() {
-                    let f = nav.nav.trench_floor(t, |x| obs.heights.get(x).map_or(f64::INFINITY, |h| h.floor));
+                    let f = nav
+                        .nav
+                        .trench_floor(t, |x| obs.heights.get(x).map_or(f64::INFINITY, |h| h.floor));
                     o.heights[t].floor = f;
                 }
             }
@@ -837,13 +965,21 @@ impl RouteFollower {
             // pass: a revenant closed in on by turns with the route, each turn back taken for
             // the teleport ahead, the way on from it followed from where she stood, off course,
             // planned again, till "replanned too often", 42 times)
-            let lands = self.segments.get(self.seg_i + 1).map(|seg| seg.track.point_at(0.0));
-            if self.segments[self.seg_i].end == SegEnd::Teleport && lands.is_some_and(|at| dist(pos, at) <= 64.0) {
+            let lands = self
+                .segments
+                .get(self.seg_i + 1)
+                .map(|seg| seg.track.point_at(0.0));
+            if self.segments[self.seg_i].end == SegEnd::Teleport
+                && lands.is_some_and(|at| dist(pos, at) <= 64.0)
+            {
                 self.log.add(obs.tic, "teleported");
                 self.seg_i += 1;
                 self.enter_segment(obs.tic);
             } else {
-                self.log.add(obs.tic, format!("moved unexpectedly to ({:.0}, {:.0})", obs.x, obs.y));
+                self.log.add(
+                    obs.tic,
+                    format!("moved unexpectedly to ({:.0}, {:.0})", obs.x, obs.y),
+                );
                 if matches!(self.phase, Phase::Act | Phase::Fetch) {
                     // (teleported off the spot she was acting from: a press from there is no
                     // try, the use ray reaches 64. Walk back to it. MAP21: a dodge at a key bar
@@ -860,7 +996,11 @@ impl RouteFollower {
                 // (a teleporter goes off only crossed from its front, the right of its run, as
                 // the engine has it: over it from behind is not crossing it)
                 let from_front = (b.0 - a.0) * (last.1 - a.1) - (b.1 - a.1) * (last.0 - a.0) < 0.0;
-                let front_only = self.step().trigger.as_ref().is_some_and(|t| t.info.category == crate::specials::Category::Teleport);
+                let front_only = self
+                    .step()
+                    .trigger
+                    .as_ref()
+                    .is_some_and(|t| t.info.category == crate::specials::Category::Teleport);
                 self.crossed = segments_cross(last, pos, a, b) && (from_front || !front_only);
             }
         }
@@ -895,7 +1035,12 @@ impl RouteFollower {
     fn fail(&mut self, obs: &Observation, why: &str) -> Controls {
         self.failed = true;
         let label = self.step().label.clone();
-        let line = format!("FAILED at ({:.0}, {:.0}): {why} (step {}: {label})", obs.x, obs.y, self.step_i + 1);
+        let line = format!(
+            "FAILED at ({:.0}, {:.0}): {why} (step {}: {label})",
+            obs.x,
+            obs.y,
+            self.step_i + 1
+        );
         self.failed_stuck = line.contains("stuck");
         self.log.add(obs.tic, line);
         Controls::default()
@@ -909,7 +1054,9 @@ impl RouteFollower {
     fn standing(&self, obs: &Observation) -> (Option<usize>, Point) {
         let mesh = &self.view.nav.mesh;
         let here = mesh.poly_at(obs.pos());
-        let (Some(z), Some(h)) = (obs.z, here) else { return (here, obs.pos()) };
+        let (Some(z), Some(h)) = (obs.z, here) else {
+            return (here, obs.pos());
+        };
         if (obs.heights[mesh.poly(h).sector].floor - z).abs() < 0.5 {
             return (here, obs.pos());
         }
@@ -921,7 +1068,9 @@ impl RouteFollower {
                 let q = (obs.x + dx, obs.y + dy);
                 if let Some(p) = mesh.poly_at(q) {
                     let poly = mesh.poly(p);
-                    if (obs.heights[poly.sector].floor - z).abs() < 0.5 && inside(&poly.vertices, q.0, q.1) {
+                    if (obs.heights[poly.sector].floor - z).abs() < 0.5
+                        && inside(&poly.vertices, q.0, q.1)
+                    {
                         let d = dx.hypot(dy);
                         if best.is_none_or(|(bd, _, _)| d < bd) {
                             best = Some((d, p, q));
@@ -983,9 +1132,16 @@ impl RouteFollower {
     /// from a landing was smoothed across the jump and can wander: MAP22's swung back off the
     /// ledge it lands on). Not a replan: the plan holds.
     fn path_on(&mut self, obs: &Observation) {
-        let Some(goal) = self.step().path.as_ref().and_then(last_point) else { return };
+        let Some(goal) = self.step().path.as_ref().and_then(last_point) else {
+            return;
+        };
         let doors = self.view.local_doors(self.keys);
-        if let Some(path) = self.view.find_path(self.standing(obs).1, goal, &self.world_states(obs), Some(&doors)) {
+        if let Some(path) = self.view.find_path(
+            self.standing(obs).1,
+            goal,
+            &self.world_states(obs),
+            Some(&doors),
+        ) {
             self.steps[self.step_i as usize].path = Some(path);
             self.start_step(obs.tic);
         }
@@ -1004,12 +1160,24 @@ impl RouteFollower {
         let view = Rc::clone(&self.view);
         let pos = self.standing(obs).1;
         let step = self.step().clone();
-        let Some(goal) = step.path.as_ref().and_then(last_point) else { return false };
-        let states = if live_only { Self::live_states(obs) } else { self.world_states(obs) };
+        let Some(goal) = step.path.as_ref().and_then(last_point) else {
+            return false;
+        };
+        let states = if live_only {
+            Self::live_states(obs)
+        } else {
+            self.world_states(obs)
+        };
         let doors = view.local_doors(self.keys);
         if let Some(path) = view.find_path(pos, goal, &states, Some(&doors)) {
             self.steps[self.step_i as usize].path = Some(path);
-            self.log.add(obs.tic, format!("{why} at ({:.0}, {:.0}): new path to ({:.0}, {:.0})", obs.x, obs.y, goal.0, goal.1));
+            self.log.add(
+                obs.tic,
+                format!(
+                    "{why} at ({:.0}, {:.0}): new path to ({:.0}, {:.0})",
+                    obs.x, obs.y, goal.0, goal.1
+                ),
+            );
         } else {
             let route = view.plan(
                 pos,
@@ -1028,23 +1196,48 @@ impl RouteFollower {
                 let n = new.len();
                 let i = self.step_i as usize;
                 self.steps.splice(i..=i, new);
-                self.log.add(obs.tic, format!("{why} at ({:.0}, {:.0}): back on track via {} extra step(s)", obs.x, obs.y, n as i64 - 1));
+                self.log.add(
+                    obs.tic,
+                    format!(
+                        "{why} at ({:.0}, {:.0}): back on track via {} extra step(s)",
+                        obs.x,
+                        obs.y,
+                        n as i64 - 1
+                    ),
+                );
             } else if self.replan_level {
                 let plan = plan_from(
                     &view,
                     pos,
-                    &Rest { keys: self.keys, states: Some(&states), reach: None, max_seconds: 600.0, max_expansions: 1000, fired: &self.fired },
+                    &Rest {
+                        keys: self.keys,
+                        states: Some(&states),
+                        reach: None,
+                        max_seconds: 600.0,
+                        max_expansions: 1000,
+                        fired: &self.fired,
+                    },
                 );
                 if !plan.complete {
-                    self.log.add(obs.tic, format!("{why}: no way to the step goal or the exit"));
+                    self.log.add(
+                        obs.tic,
+                        format!("{why}: no way to the step goal or the exit"),
+                    );
                     return false;
                 }
                 let n = plan.steps.len();
                 self.steps.truncate(self.step_i as usize);
                 self.steps.extend(plan.steps);
-                self.log.add(obs.tic, format!("{why} at ({:.0}, {:.0}): replanned the rest of the level ({n} steps)", obs.x, obs.y));
+                self.log.add(
+                    obs.tic,
+                    format!(
+                        "{why} at ({:.0}, {:.0}): replanned the rest of the level ({n} steps)",
+                        obs.x, obs.y
+                    ),
+                );
             } else {
-                self.log.add(obs.tic, format!("{why}: no way to the step goal"));
+                self.log
+                    .add(obs.tic, format!("{why}: no way to the step goal"));
                 return false;
             }
         }

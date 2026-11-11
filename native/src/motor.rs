@@ -41,7 +41,14 @@ pub const BRAKE: f64 = 1.5;
 /// moving up to this far off the facing direction costs no speed
 const STRAFE_FREE: f64 = 40.0;
 /// (turn in degrees, speed to take it at)
-const CORNER_SPEEDS: [(f64, f64); 6] = [(0.0, FULL_SPEED), (20.0, FULL_SPEED), (45.0, 11.0), (90.0, 6.5), (135.0, 4.5), (180.0, 3.0)];
+const CORNER_SPEEDS: [(f64, f64); 6] = [
+    (0.0, FULL_SPEED),
+    (20.0, FULL_SPEED),
+    (45.0, 11.0),
+    (90.0, 6.5),
+    (135.0, 4.5),
+    (180.0, 3.0),
+];
 /// turns within this distance count as one corner
 const CORNER_SPAN: f64 = 48.0;
 /// how close to a waypoint before steering on past it
@@ -210,7 +217,15 @@ pub struct Controls {
 
 impl Default for Controls {
     fn default() -> Self {
-        Controls { forward: 0.0, strafe: 0.0, turn: 0.0, use_: false, attack: false, run: true, weapon: 0 }
+        Controls {
+            forward: 0.0,
+            strafe: 0.0,
+            turn: 0.0,
+            use_: false,
+            attack: false,
+            run: true,
+            weapon: 0,
+        }
     }
 }
 
@@ -268,7 +283,12 @@ impl Track {
             }
             corner[i] = f64::max(f64::abs(total), turns[i].abs());
         }
-        Track { pts, cum, length, corner }
+        Track {
+            pts,
+            cum,
+            length,
+            corner,
+        }
     }
 
     /// (segment, arc length, distance) of the closest point on the track between a little
@@ -294,7 +314,11 @@ impl Track {
             let mut s = self.cum[k] + dist(a, q);
             if s > hi || s < lo {
                 s = s.max(lo).max(self.cum[k]).min(hi).min(self.cum[k + 1]);
-                let t = if seg > 1e-9 { (s - self.cum[k]) / seg } else { 0.0 };
+                let t = if seg > 1e-9 {
+                    (s - self.cum[k]) / seg
+                } else {
+                    0.0
+                };
                 q = (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
             }
             let d = dist(p, q);
@@ -381,7 +405,10 @@ impl Motion {
     /// This tic's turn rate: easing in and out to land on `angle`.
     pub fn turn_towards(&mut self, obs: &Observation, angle: Option<f64>) -> f64 {
         let err = angle.map_or(0.0, |a| norm(a - obs.angle));
-        let want = MAX_TURN.min((2.0 * TURN_ACCEL * err.abs()).sqrt()).min(err.abs()).copysign(err);
+        let want = MAX_TURN
+            .min((2.0 * TURN_ACCEL * err.abs()).sqrt())
+            .min(err.abs())
+            .copysign(err);
         self.rate = (self.rate - TURN_ACCEL).max((self.rate + TURN_ACCEL).min(want));
         if err.abs() < 0.25 && self.rate.abs() <= TURN_ACCEL {
             self.rate = err;
@@ -389,23 +416,43 @@ impl Motion {
         self.rate
     }
 
-    pub fn drive(&mut self, obs: &Observation, want: Point, look: Option<f64>, cap: f64) -> Controls {
+    pub fn drive(
+        &mut self,
+        obs: &Observation,
+        want: Point,
+        look: Option<f64>,
+        cap: f64,
+    ) -> Controls {
         let rate = self.turn_towards(obs, look);
         let facing = (obs.angle + rate).to_radians(); // (thrust goes by the angle after this tic's turn)
-        // next tic's displacement is FRICTION * this one's + thrust (on the ground)
-        let (ax, ay) = (want.0 - FRICTION * self.disp.0, want.1 - FRICTION * self.disp.1);
+                                                      // next tic's displacement is FRICTION * this one's + thrust (on the ground)
+        let (ax, ay) = (
+            want.0 - FRICTION * self.disp.0,
+            want.1 - FRICTION * self.disp.1,
+        );
         let (mut cx, mut cy) = (ax / RUN_THRUST * MAX_MOVE, ay / RUN_THRUST * MAX_MOVE);
         let mag = cx.hypot(cy);
         if mag > cap {
             (cx, cy) = (cx * cap / mag, cy * cap / mag);
         }
         let (sin, cos) = facing.sin_cos();
-        Controls { forward: cx * cos + cy * sin, strafe: cx * sin - cy * cos, turn: -rate, ..Controls::default() }
+        Controls {
+            forward: cx * cos + cy * sin,
+            strafe: cx * sin - cy * cos,
+            turn: -rate,
+            ..Controls::default()
+        }
     }
 
     /// Go `speed` units a tic towards world angle `direction`, slower when that's far off where
     /// she's looking (a little strafing is fine; running sideways isn't).
-    pub fn go(&mut self, obs: &Observation, direction: f64, speed: f64, look: Option<f64>) -> Controls {
+    pub fn go(
+        &mut self,
+        obs: &Observation,
+        direction: f64,
+        speed: f64,
+        look: Option<f64>,
+    ) -> Controls {
         let off = norm(direction - obs.angle).abs();
         let mut speed = speed;
         if off > 90.0 {
@@ -426,7 +473,9 @@ impl Motion {
 /// tic's turn: turning on the spot is standing still while she turns, not sliding on (MAP24: a
 /// look round just after landing a jump, onto a small ledge, slid her off it).
 pub fn brake(obs: &Observation, facing: f64) -> (f64, f64) {
-    let Some((vx, vy)) = obs.velocity else { return (0.0, 0.0) };
+    let Some((vx, vy)) = obs.velocity else {
+        return (0.0, 0.0);
+    };
     let (ax, ay) = (-FRICTION * vx, -FRICTION * vy);
     let (mut cx, mut cy) = (ax / RUN_THRUST * MAX_MOVE, ay / RUN_THRUST * MAX_MOVE);
     let mag = cx.hypot(cy);

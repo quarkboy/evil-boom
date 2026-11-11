@@ -28,8 +28,23 @@ pub struct Monster {
     pub boss: bool,
 }
 
-const fn mon(radius: f64, height: f64, health: i32, attack: Attack, melee: bool, threat: f64) -> Monster {
-    Monster { radius, height, health, attack, melee, threat, boss: false }
+const fn mon(
+    radius: f64,
+    height: f64,
+    health: i32,
+    attack: Attack,
+    melee: bool,
+    threat: f64,
+) -> Monster {
+    Monster {
+        radius,
+        height,
+        health,
+        attack,
+        melee,
+        threat,
+        boss: false,
+    }
 }
 
 pub fn monster(name: &str) -> Option<Monster> {
@@ -50,8 +65,14 @@ pub fn monster(name: &str) -> Option<Monster> {
         "Revenant" => mon(20.0, 56.0, 300, A::Missile, true, 6.0),
         "Fatso" => mon(48.0, 64.0, 600, A::Missile, false, 7.0),
         "Archvile" => mon(20.0, 56.0, 700, A::Fire, false, 12.0),
-        "Cyberdemon" => Monster { boss: true, ..mon(40.0, 110.0, 4000, A::Missile, false, 15.0) },
-        "SpiderMastermind" => Monster { boss: true, ..mon(128.0, 100.0, 3000, A::Hitscan, false, 15.0) },
+        "Cyberdemon" => Monster {
+            boss: true,
+            ..mon(40.0, 110.0, 4000, A::Missile, false, 15.0)
+        },
+        "SpiderMastermind" => Monster {
+            boss: true,
+            ..mon(128.0, 100.0, 3000, A::Hitscan, false, 15.0)
+        },
         "CommanderKeen" => mon(16.0, 72.0, 100, A::None, false, 0.0),
         _ => return None,
     })
@@ -105,15 +126,27 @@ pub struct Missile {
 }
 
 pub fn missile(name: &str) -> Option<Missile> {
-    let m = |radius, speed, damage| Missile { radius, speed, damage, splash: false, homing: false };
+    let m = |radius, speed, damage| Missile {
+        radius,
+        speed,
+        damage,
+        splash: false,
+        homing: false,
+    };
     Some(match name {
         "DoomImpBall" => m(6.0, 10.0, 12.0),
         "CacodemonBall" => m(6.0, 10.0, 20.0),
         "BaronBall" => m(6.0, 15.0, 32.0),
         "ArachnotronPlasma" | "PlasmaBall" => m(13.0, 25.0, 20.0),
         "FatShot" => m(6.0, 20.0, 32.0),
-        "RevenantTracer" => Missile { homing: true, ..m(11.0, 10.0, 40.0) },
-        "Rocket" => Missile { splash: true, ..m(11.0, 20.0, 80.0) },
+        "RevenantTracer" => Missile {
+            homing: true,
+            ..m(11.0, 10.0, 40.0)
+        },
+        "Rocket" => Missile {
+            splash: true,
+            ..m(11.0, 20.0, 80.0)
+        },
         "BFGBall" => m(13.0, 25.0, 400.0),
         "SpawnShot" => m(6.0, 10.0, 0.0), // (the Icon of Sin's cubes)
         "LostSoul" => m(16.0, 20.0, 12.0), // (charging; it's a monster too)
@@ -152,7 +185,20 @@ pub struct Weapon {
 
 impl Weapon {
     const fn new(slot: i32, ammo_per_shot: i32, damage: f64, cycle: f64) -> Weapon {
-        Weapon { slot, ammo_per_shot, damage, cycle, spread: 0.0, rise: 0.0, hitscan: true, speed: 0.0, splash: 0.0, reach: 2048.0, keep: (0.0, 2048.0), pellets: 1.0 }
+        Weapon {
+            slot,
+            ammo_per_shot,
+            damage,
+            cycle,
+            spread: 0.0,
+            rise: 0.0,
+            hitscan: true,
+            speed: 0.0,
+            splash: 0.0,
+            reach: 2048.0,
+            keep: (0.0, 2048.0),
+            pellets: 1.0,
+        }
     }
 
     /// Damage a second, most of it hitting (what she can do with it, roughly).
@@ -184,7 +230,12 @@ impl Weapon {
             return across;
         }
         let a = (height / 2.0).atan2(d.max(1.0)).to_degrees();
-        across * if a >= self.rise { 1.0 } else { 1.0 - (1.0 - a / self.rise).powi(2) }
+        across
+            * if a >= self.rise {
+                1.0
+            } else {
+                1.0 - (1.0 - a / self.rise).powi(2)
+            }
     }
 
     /// The share of a shot's damage that lands on something this wide this far off.
@@ -192,7 +243,11 @@ impl Weapon {
         if !self.hitscan {
             // (it may step out of the way, the more so the longer it's in the air: twenty rockets
             // at cacodemons 1300 off, two hit)
-            return if d < 768.0 { 0.85 } else { 0.85 * (768.0 / d).powi(2) };
+            return if d < 768.0 {
+                0.85
+            } else {
+                0.85 * (768.0 / d).powi(2)
+            };
         }
         if self.spread == 0.0 {
             return 1.0;
@@ -211,29 +266,79 @@ pub fn weapon(slot: i32) -> Weapon {
     let w = Weapon::new;
     match slot {
         1 => weapon_const(1),
-        2 => Weapon { spread: 5.6, reach: 800.0, keep: (192.0, 640.0), ..w(2, 1, 10.0, 14.0) },
-        3 => Weapon { spread: 5.6, reach: 640.0, keep: (128.0, 448.0), pellets: 7.0, ..w(3, 1, 70.0, 37.0) },
-        4 => Weapon { spread: 5.6, reach: 1100.0, keep: (192.0, 768.0), ..w(4, 1, 10.0, 4.0) },
-        5 => Weapon { hitscan: false, speed: 20.0, splash: 160.0, keep: (320.0, 1024.0), pellets: 2.0, ..w(5, 1, 180.0, 20.0) },
-        6 => Weapon { hitscan: false, speed: 25.0, keep: (192.0, 768.0), ..w(6, 1, 22.0, 3.0) },
-        _ => Weapon { hitscan: false, speed: 25.0, keep: (320.0, 1024.0), ..w(7, 40, 700.0, 60.0) },
+        2 => Weapon {
+            spread: 5.6,
+            reach: 800.0,
+            keep: (192.0, 640.0),
+            ..w(2, 1, 10.0, 14.0)
+        },
+        3 => Weapon {
+            spread: 5.6,
+            reach: 640.0,
+            keep: (128.0, 448.0),
+            pellets: 7.0,
+            ..w(3, 1, 70.0, 37.0)
+        },
+        4 => Weapon {
+            spread: 5.6,
+            reach: 1100.0,
+            keep: (192.0, 768.0),
+            ..w(4, 1, 10.0, 4.0)
+        },
+        5 => Weapon {
+            hitscan: false,
+            speed: 20.0,
+            splash: 160.0,
+            keep: (320.0, 1024.0),
+            pellets: 2.0,
+            ..w(5, 1, 180.0, 20.0)
+        },
+        6 => Weapon {
+            hitscan: false,
+            speed: 25.0,
+            keep: (192.0, 768.0),
+            ..w(6, 1, 22.0, 3.0)
+        },
+        _ => Weapon {
+            hitscan: false,
+            speed: 25.0,
+            keep: (320.0, 1024.0),
+            ..w(7, 40, 700.0, 60.0)
+        },
     }
 }
 
-pub const SUPER_SHOTGUN: Weapon = Weapon { spread: 11.2, rise: 7.1, reach: 480.0, keep: (96.0, 320.0), pellets: 20.0, ..Weapon::new(3, 2, 200.0, 57.0) };
+pub const SUPER_SHOTGUN: Weapon = Weapon {
+    spread: 11.2,
+    rise: 7.1,
+    reach: 480.0,
+    keep: (96.0, 320.0),
+    pellets: 20.0,
+    ..Weapon::new(3, 2, 200.0, 57.0)
+};
 
 /// The fist berserk: A_Punch's 2-20 times ten.
-pub const BERSERK_FIST: Weapon = Weapon { damage: 110.0, ..weapon_const(1) };
+pub const BERSERK_FIST: Weapon = Weapon {
+    damage: 110.0,
+    ..weapon_const(1)
+};
 
 /// The chainsaw: A_Saw's 2-20 (berserk or not) a 4-tic frame, the trigger held.
-pub const CHAINSAW: Weapon = Weapon { cycle: 4.0, ..weapon_const(1) };
+pub const CHAINSAW: Weapon = Weapon {
+    cycle: 4.0,
+    ..weapon_const(1)
+};
 
 /// (the fist, as a constant to build the others on. Its reach is MELEERANGE from her centre to
 /// the target's: the punch's trace starts at her centre and meets a body on its diagonal, which
 /// runs through its centre (p_maputl.c PIT_AddThingIntercepts), so its radius adds nothing;
 /// A_Saw's is one more)
 const fn weapon_const(slot: i32) -> Weapon {
-    Weapon { reach: 64.0, keep: (0.0, 64.0), ..Weapon::new(slot, 0, 11.0, 22.0) }
+    Weapon {
+        reach: 64.0,
+        keep: (0.0, 64.0),
+        ..Weapon::new(slot, 0, 11.0, 22.0)
+    }
 }
 
 /// The most health a monster may have for her to go at it with her fists, berserk. A punch is
@@ -258,7 +363,8 @@ const SAW_HEALTH: i32 = 150;
 /// Is w a melee weapon she'd go up to t with (closing in, not keeping her distance): the fist
 /// berserk at what it'd punch, the chainsaw at what it'd keep flinching?
 pub fn melee_at(w: &Weapon, name: &str) -> bool {
-    (*w == BERSERK_FIST && punchable(name)) || (*w == CHAINSAW && monster(name).is_some_and(|m| !m.boss && m.health <= SAW_HEALTH))
+    (*w == BERSERK_FIST && punchable(name))
+        || (*w == CHAINSAW && monster(name).is_some_and(|m| !m.boss && m.health <= SAW_HEALTH))
 }
 
 /// What a slot brings up, as the game picks it for her (dsda/evil_api.c): slot 3 the super
@@ -276,9 +382,13 @@ pub fn weapon_in(slot: i32, obs: &crate::motor::Observation) -> Weapon {
 /// An item's category.
 pub fn item(name: &str) -> Option<&'static str> {
     Some(match name {
-        "Shotgun" | "SuperShotgun" | "Chaingun" | "RocketLauncher" | "PlasmaRifle" | "Chainsaw" | "BFG9000" => "Weapon",
-        "Clip" | "ClipBox" | "Shell" | "ShellBox" | "RocketAmmo" | "RocketBox" | "Cell" | "CellPack" | "Backpack" => "Ammo",
-        "Stimpack" | "Medikit" | "HealthBonus" | "Soulsphere" | "Megasphere" | "Berserk" => "Health",
+        "Shotgun" | "SuperShotgun" | "Chaingun" | "RocketLauncher" | "PlasmaRifle" | "Chainsaw"
+        | "BFG9000" => "Weapon",
+        "Clip" | "ClipBox" | "Shell" | "ShellBox" | "RocketAmmo" | "RocketBox" | "Cell"
+        | "CellPack" | "Backpack" => "Ammo",
+        "Stimpack" | "Medikit" | "HealthBonus" | "Soulsphere" | "Megasphere" | "Berserk" => {
+            "Health"
+        }
         "GreenArmor" | "BlueArmor" | "ArmorBonus" => "Armor",
         "InvulnerabilitySphere" | "BlurSphere" | "RadSuit" | "Allmap" | "Infrared" => "Powerup",
         "BlueCard" | "YellowCard" | "RedCard" | "BlueSkull" | "YellowSkull" | "RedSkull" => "Key",

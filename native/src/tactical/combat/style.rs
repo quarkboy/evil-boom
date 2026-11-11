@@ -63,7 +63,9 @@ impl Combat {
         if d < w.reach {
             return true;
         }
-        info.attack == Attack::Hitscan && w.slot != 1 && w.hits(info.radius, d) >= self.tune.engage.far_hits
+        info.attack == Attack::Hitscan
+            && w.slot != 1
+            && w.hits(info.radius, d) >= self.tune.engage.far_hits
     }
 
     /// Worth a shot at with w from here, whether or not it's near enough to fight: in its
@@ -89,6 +91,9 @@ impl Combat {
         // just not optimally?" MAP07: an arachnotron 655 off, 128 across, a little under half
         // the pellets on it from there; "out of reach" at the super shotgun's 480, dodged
         // before for 500 s with 76 shells and not a shot)
-        w.hitscan && w.spread > 0.0 && w.slot != 1 && w.lands(info.radius, info.height, d) >= w.lands(MAN.0, MAN.1, w.reach)
+        w.hitscan
+            && w.spread > 0.0
+            && w.slot != 1
+            && w.lands(info.radius, info.height, d) >= w.lands(MAN.0, MAN.1, w.reach)
     }
 }

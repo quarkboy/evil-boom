@@ -31,7 +31,12 @@ pub enum Legs {
 
 /// Who has her legs: `decision` the fight's this tic, `busy` in a jump or a timed crossing,
 /// `retreating` a retreat under way, `dodge_clear` the dodge's way is clear of the hit.
-pub fn arbitrate(decision: Option<&Decision>, busy: bool, retreating: bool, dodge_clear: bool) -> Legs {
+pub fn arbitrate(
+    decision: Option<&Decision>,
+    busy: bool,
+    retreating: bool,
+    dodge_clear: bool,
+) -> Legs {
     let wants = decision.is_some_and(|d| d.wants_legs(busy));
     match decision {
         Some(d) if retreating && d.kind == Move::Dodging => {

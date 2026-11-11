@@ -74,7 +74,11 @@ pub fn add_height(hs: &mut Vec<Heights>, h: Heights) {
 
 /// The highest of these heights, as Python's max() over (floor, ceiling) tuples.
 pub fn max_heights(hs: &[Heights]) -> Option<Heights> {
-    hs.iter().copied().max_by(|a, b| a.floor.total_cmp(&b.floor).then(a.ceiling.total_cmp(&b.ceiling)))
+    hs.iter().copied().max_by(|a, b| {
+        a.floor
+            .total_cmp(&b.floor)
+            .then(a.ceiling.total_cmp(&b.ceiling))
+    })
 }
 
 /// A line that sets something off, or something like one (a boss's death, an exit floor).
@@ -117,12 +121,16 @@ impl TriggerLine {
     /// Its moves stay put (floors, stairs, doors that stay open), unlike lifts, crushers and
     /// doors that close again: once fired, the old heights are gone.
     pub fn permanent(&self) -> bool {
-        !matches!(self.info.category, Category::Lift | Category::Crusher) && !self.info.description.contains("wait")
+        !matches!(self.info.category, Category::Lift | Category::Crusher)
+            && !self.info.description.contains("wait")
     }
 
     /// The heights it moves `s` to, if it moves it.
     pub fn effect(&self, s: usize) -> Option<&[Heights]> {
-        self.effects.iter().find(|(x, _)| *x == s).map(|(_, hs)| hs.as_slice())
+        self.effects
+            .iter()
+            .find(|(x, _)| *x == s)
+            .map(|(_, hs)| hs.as_slice())
     }
 }
 
@@ -185,7 +193,10 @@ impl Jump {
     /// Its identity (for caching checks).
     pub fn key(&self) -> String {
         let (r, t, d) = (self.runup, self.takeoff, self.dest);
-        format!("{:.0},{:.0}>{:.0},{:.0}>{:.0},{:.0}", r.0, r.1, t.0, t.1, d.0, d.1)
+        format!(
+            "{:.0},{:.0}>{:.0},{:.0}>{:.0},{:.0}",
+            r.0, r.1, t.0, t.1, d.0, d.1
+        )
     }
 }
 
@@ -261,14 +272,18 @@ pub struct Navigator {
 impl Navigator {
     /// Sight between two bodies with heights (a shot's: what's between, at the heights given).
     pub fn sight(&self) -> &crate::los::LineOfSight {
-        self.los.get_or_init(|| crate::los::LineOfSight::new(&self.map))
+        self.los
+            .get_or_init(|| crate::los::LineOfSight::new(&self.map))
     }
 
     /// The level's analysis (`keep_verified` then drops the jumps that don't come off; share
     /// it in an Arc after).
     pub fn new(map: Arc<MapData>, skill: i32) -> Result<Navigator, String> {
         if map.nodes.is_empty() && map.subsectors.len() > 1 {
-            return Err(format!("{}: no usable BSP nodes (extended node formats aren't supported)", map.name));
+            return Err(format!(
+                "{}: no usable BSP nodes (extended node formats aren't supported)",
+                map.name
+            ));
         }
         // Solid decorations are cut out of the mesh, grown by the player's half-width: the mesh
         // is where her centre can be. Barrels aren't cut: they can be shot away.
@@ -279,11 +294,17 @@ impl Navigator {
             .filter_map(|t| solid_radius(t.kind).map(|r| (t.x, t.y, r + PLAYER_RADIUS)))
             .collect();
         let mesh = Arc::new(Mesh::build(&map, &mesh_obstacles).map_err(|e| e.to_string())?);
-        let neighbors = (0..map.sectors.len()).map(|s| neighbors_of_sector(&map, s)).collect();
+        let neighbors = (0..map.sectors.len())
+            .map(|s| neighbors_of_sector(&map, s))
+            .collect();
         let mut movers = MoverModel::new(Arc::clone(&map), neighbors);
         let trenches = analysis::fill_trenches(&map, &mesh, &mut movers);
         let movers = Arc::new(movers);
-        let damage = map.sectors.iter().map(|s| classify_sector(s.special).damage).collect();
+        let damage = map
+            .sectors
+            .iter()
+            .map(|s| classify_sector(s.special).damage)
+            .collect();
         let obstacle_grid = widths::obstacle_grid(&map, skill, true);
         let mut a = analysis::Analysis::new(&map, &mesh, &movers, &obstacle_grid, skill);
         let mut triggers = a.find_triggers();
@@ -292,7 +313,11 @@ impl Navigator {
             t.effects = with_trenches(&movers, &trenches, &t.effects);
         }
         for t in &mut triggers {
-            if t.line < 0 || !crate::movers::depends_on_heights(t.info.special) || t.sectors.is_empty() || t.shift_from.is_some() {
+            if t.line < 0
+                || !crate::movers::depends_on_heights(t.info.special)
+                || t.sectors.is_empty()
+                || t.shift_from.is_some()
+            {
                 continue;
             }
             let mut relevant: BTreeSet<usize> = t.sectors.iter().copied().collect();
@@ -303,7 +328,13 @@ impl Navigator {
         }
         let teleports = analysis::find_teleports(&map, &mesh);
         let sight_grid = analysis::sight_blockers(&map, &movers);
-        let w = widths::Widths::new(&map, &mesh, &movers, &triggers, &widths::obstacle_grid(&map, skill, false));
+        let w = widths::Widths::new(
+            &map,
+            &mesh,
+            &movers,
+            &triggers,
+            &widths::obstacle_grid(&map, skill, false),
+        );
         let sinking = sinking_sectors(&map, &movers, &triggers);
         let jump_lab = Arc::new(JumpLab::new(
             Arc::clone(&map),
@@ -311,15 +342,30 @@ impl Navigator {
             crate::jumps::JumpFacts {
                 static_grid: w.static_wall_grid.clone(),
                 obstacle_grid: obstacle_grid.clone(),
-                initial: movers.initial.iter().map(|h| (h.floor, h.ceiling)).collect(),
+                initial: movers
+                    .initial
+                    .iter()
+                    .map(|h| (h.floor, h.ceiling))
+                    .collect(),
                 teleports: map
                     .linedefs
                     .iter()
-                    .filter(|l| crate::specials::classify_line(l.special).is_some_and(|i| i.category == Category::Teleport))
+                    .filter(|l| {
+                        crate::specials::classify_line(l.special)
+                            .is_some_and(|i| i.category == Category::Teleport)
+                    })
                     .map(|l| l.index)
                     .collect(),
-                start_angle: map.things.iter().find(|t| t.kind == 1).map_or(90.0, |t| f64::from(t.angle)),
-                permanent: triggers.iter().filter(|t| t.line >= 0 && t.permanent()).map(|t| t.effects.clone()).collect(),
+                start_angle: map
+                    .things
+                    .iter()
+                    .find(|t| t.kind == 1)
+                    .map_or(90.0, |t| f64::from(t.angle)),
+                permanent: triggers
+                    .iter()
+                    .filter(|t| t.line >= 0 && t.permanent())
+                    .map(|t| t.effects.clone())
+                    .collect(),
                 sinking: sinking.iter().copied().collect(),
             },
         ));
@@ -368,15 +414,31 @@ impl Navigator {
         // lift over the lift's own line; down it went under her, "stuck" on it twice, the lift,
         // the way on, not gone near again for four minutes)
         let undoes = |j: &Jump| {
-            let ends: Vec<usize> = j.src_polys.iter().copied().chain([j.dest_poly]).map(|p| self.mesh.poly(p).sector).collect();
+            let ends: Vec<usize> = j
+                .src_polys
+                .iter()
+                .copied()
+                .chain([j.dest_poly])
+                .map(|p| self.mesh.poly(p).sector)
+                .collect();
             self.triggers.iter().any(|t| {
-                t.info.trigger.walked() && t.sectors.iter().any(|s| ends.contains(s)) && t.linedef().is_some_and(|li| {
-                    let (a, b) = self.map.line_seg(li);
-                    crate::geom::segments_cross(j.runup, j.takeoff, a, b)
-                })
+                t.info.trigger.walked()
+                    && t.sectors.iter().any(|s| ends.contains(s))
+                    && t.linedef().is_some_and(|li| {
+                        let (a, b) = self.map.line_seg(li);
+                        crate::geom::segments_cross(j.runup, j.takeoff, a, b)
+                    })
             })
         };
-        self.jumps = jumps.into_iter().filter(|j| !j.requires.iter().any(|r| temporary.contains(&(r.0, r.1.key()))) && !undoes(j)).collect();
+        self.jumps = jumps
+            .into_iter()
+            .filter(|j| {
+                !j.requires
+                    .iter()
+                    .any(|r| temporary.contains(&(r.0, r.1.key())))
+                    && !undoes(j)
+            })
+            .collect();
         let mut tele_from: Vec<Vec<TeleEdge>> = vec![Vec::new(); self.mesh.polys.len()];
         for (i, tp) in self.teleports.iter().enumerate() {
             for &p in &tp.src_polys {
@@ -426,8 +488,12 @@ impl Navigator {
             TeleEdge::Jump(i) => self.jumps[i].usable(states),
             TeleEdge::Teleport(i) => {
                 let (f, b) = self.map.sides(self.teleports[i].line);
-                let (Some(f), Some(b)) = (f, b) else { return false };
-                states[f].iter().any(|&fh| states[b].iter().any(|&bh| can_cross(fh, bh)))
+                let (Some(f), Some(b)) = (f, b) else {
+                    return false;
+                };
+                states[f]
+                    .iter()
+                    .any(|&fh| states[b].iter().any(|&bh| can_cross(fh, bh)))
             }
         }
     }
@@ -450,13 +516,21 @@ impl Navigator {
                 && t.info.category.is_door()
                 && t.linedef().is_some_and(|li| {
                     let (f, b) = map.sides(li);
-                    [f, b].into_iter().flatten().any(|s| t.effects.iter().any(|(e, _)| *e == s))
+                    [f, b]
+                        .into_iter()
+                        .flatten()
+                        .any(|s| t.effects.iter().any(|(e, _)| *e == s))
                 });
-            if !(matches!(t.info.trigger, Trigger::DR | Trigger::D1) || face_switch) || !t.info.lock.satisfied(keys) {
+            if !(matches!(t.info.trigger, Trigger::DR | Trigger::D1) || face_switch)
+                || !t.info.lock.satisfied(keys)
+            {
                 continue;
             }
             for (s, hs) in &t.effects {
-                let door = out.entry(*s).or_insert_with(|| DoorOpening { heights: Vec::new(), users: Default::default() });
+                let door = out.entry(*s).or_insert_with(|| DoorOpening {
+                    heights: Vec::new(),
+                    users: Default::default(),
+                });
                 for &h in hs {
                     add_height(&mut door.heights, h);
                 }
@@ -477,12 +551,20 @@ impl Navigator {
     /// What a hit from sector s's floor does once trigger t has moved it (0: it doesn't hurt),
     /// if t changes its type: the type it takes is its model's, so its hit too.
     pub fn floor_hit_after(&self, t: &TriggerLine, s: usize) -> Option<i32> {
-        let special = if t.line >= 0 { Some(t.info.special) } else { None };
+        let special = if t.line >= 0 {
+            Some(t.info.special)
+        } else {
+            None
+        };
         match special {
             Some(37) => {
                 let around = self.movers.neighbors(s);
                 // (by the map's floors: a trench's initial height is its sides')
-                let model = around.iter().copied().min_by(|&a, &b| self.map.sectors[a].floor.total_cmp(&self.map.sectors[b].floor))?;
+                let model = around.iter().copied().min_by(|&a, &b| {
+                    self.map.sectors[a]
+                        .floor
+                        .total_cmp(&self.map.sectors[b].floor)
+                })?;
                 Some(self.damage[model])
             }
             Some(20 | 22 | 47 | 68) => Some(0),
@@ -497,12 +579,26 @@ impl Navigator {
 
     /// Trigger `id`'s effects with these (sector, heights) as they are now.
     pub fn effects_from_reps(&self, t: &TriggerLine, reps: &[(usize, Heights)]) -> Effects {
-        let key = (t.id, reps.iter().map(|(s, h)| (*s, h.floor.to_bits(), h.ceiling.to_bits())).collect::<Vec<_>>());
+        let key = (
+            t.id,
+            reps.iter()
+                .map(|(s, h)| (*s, h.floor.to_bits(), h.ceiling.to_bits()))
+                .collect::<Vec<_>>(),
+        );
         if let Some(e) = self.caches.borrow().dyn_effects.get(&key) {
             return e.clone();
         }
-        let out = effects_from_reps(&self.movers, &self.trenches, t.info.special, &t.sectors, reps);
-        self.caches.borrow_mut().dyn_effects.insert(key, out.clone());
+        let out = effects_from_reps(
+            &self.movers,
+            &self.trenches,
+            t.info.special,
+            &t.sectors,
+            reps,
+        );
+        self.caches
+            .borrow_mut()
+            .dyn_effects
+            .insert(key, out.clone());
         out
     }
 
@@ -510,7 +606,10 @@ impl Navigator {
     pub fn effects_now(&self, t: &TriggerLine, states: &States) -> Effects {
         if let Some(relevant) = &t.relevant {
             let init = &self.movers.initial;
-            let reps: Vec<(usize, Heights)> = relevant.iter().map(|&s| (s, rep(&states[s], init[s]))).collect();
+            let reps: Vec<(usize, Heights)> = relevant
+                .iter()
+                .map(|&s| (s, rep(&states[s], init[s])))
+                .collect();
             if reps.iter().all(|(s, h)| *h == init[*s]) {
                 return t.effects.clone();
             }
@@ -520,12 +619,31 @@ impl Navigator {
             }
             return out;
         }
-        let Some((s0, f0)) = t.shift_from else { return t.effects.clone() };
-        let shift = states[s0].iter().map(|h| h.floor).fold(f64::NEG_INFINITY, f64::max) - f0;
+        let Some((s0, f0)) = t.shift_from else {
+            return t.effects.clone();
+        };
+        let shift = states[s0]
+            .iter()
+            .map(|h| h.floor)
+            .fold(f64::NEG_INFINITY, f64::max)
+            - f0;
         if shift == 0.0 {
             return t.effects.clone();
         }
-        t.effects.iter().map(|(s, hs)| (*s, hs.iter().map(|h| Heights { floor: h.floor + shift, ceiling: h.ceiling }).collect())).collect()
+        t.effects
+            .iter()
+            .map(|(s, hs)| {
+                (
+                    *s,
+                    hs.iter()
+                        .map(|h| Heights {
+                            floor: h.floor + shift,
+                            ceiling: h.ceiling,
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
     }
 
     /// The heights the world can take after `t` fires: its targets added (lifts and timed
@@ -554,7 +672,9 @@ impl Navigator {
     /// be had from the floor beside them, even across a railing if close enough.
     pub fn pickup_spots(&self, x: f64, y: f64, states: &States) -> Vec<(usize, Point)> {
         let mesh = &self.mesh;
-        let Some(home) = mesh.poly_at((x, y)) else { return Vec::new() };
+        let Some(home) = mesh.poly_at((x, y)) else {
+            return Vec::new();
+        };
         let home_sector = mesh.poly(home).sector;
         let mut spots = vec![(home, (x, y))];
         let item_floors: Vec<f64> = states[home_sector].iter().map(|h| h.floor).collect();
@@ -568,18 +688,36 @@ impl Navigator {
                     continue;
                 }
                 let near = closest_on_portal((x, y), portal.p1, portal.p2);
-                if !item_floors.iter().any(|&fi| states[other_sector].iter().any(|ho| (-8.0..=PLAYER_HEIGHT).contains(&(fi - ho.floor)))) {
+                if !item_floors.iter().any(|&fi| {
+                    states[other_sector]
+                        .iter()
+                        .any(|ho| (-8.0..=PLAYER_HEIGHT).contains(&(fi - ho.floor)))
+                }) {
                     continue;
                 }
                 // stand far enough back for the box to fit on this side of the line (17 if the
                 // line blocks or the item's side is too high to step onto, else a little past)
-                let blocks = portal.linedef.is_some_and(|li| self.map.linedefs[li].flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0);
-                let steppable = states[other_sector].iter().any(|&ho| states[home_sector].iter().any(|&hh| can_cross(ho, hh)));
-                let back = if blocks || !steppable { PLAYER_RADIUS + 1.0 } else { 8.0 };
+                let blocks = portal.linedef.is_some_and(|li| {
+                    self.map.linedefs[li].flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0
+                });
+                let steppable = states[other_sector]
+                    .iter()
+                    .any(|&ho| states[home_sector].iter().any(|&hh| can_cross(ho, hh)));
+                let back = if blocks || !steppable {
+                    PLAYER_RADIUS + 1.0
+                } else {
+                    8.0
+                };
                 let c = mesh.poly(other).center;
                 let d = dist(near, c).max(1.0);
-                let spot = (near.0 + (c.0 - near.0) * back / d, near.1 + (c.1 - near.1) * back / d);
-                if (spot.0 - x).abs() < reach && (spot.1 - y).abs() < reach && mesh.poly_at(spot) == Some(other) {
+                let spot = (
+                    near.0 + (c.0 - near.0) * back / d,
+                    near.1 + (c.1 - near.1) * back / d,
+                );
+                if (spot.0 - x).abs() < reach
+                    && (spot.1 - y).abs() < reach
+                    && mesh.poly_at(spot) == Some(other)
+                {
                     spots.push((other, spot));
                 }
             }
@@ -609,7 +747,9 @@ impl Navigator {
         };
         let mut out: KeyItems = Vec::new();
         for t in &self.map.things {
-            let Some(k) = Key::from_thing(t.kind) else { continue };
+            let Some(k) = Key::from_thing(t.kind) else {
+                continue;
+            };
             if !t.in_skill(self.skill) {
                 continue;
             }
@@ -626,7 +766,9 @@ impl Navigator {
     pub fn key_positions(&self) -> Vec<(Key, Vec<Point>)> {
         let mut out: Vec<(Key, Vec<Point>)> = Vec::new();
         for t in &self.map.things {
-            let Some(k) = Key::from_thing(t.kind) else { continue };
+            let Some(k) = Key::from_thing(t.kind) else {
+                continue;
+            };
             if !t.in_skill(self.skill) {
                 continue;
             }
@@ -707,26 +849,53 @@ pub fn rep(hs: &[Heights], initial: Heights) -> Heights {
     }
 }
 
-fn trench_floor(movers: &MoverModel, trenches: &BTreeMap<usize, Vec<usize>>, t: usize, floor_of: impl Fn(usize) -> f64) -> f64 {
-    let low = trenches[&t].iter().map(|&o| floor_of(o)).fold(f64::INFINITY, f64::min);
+fn trench_floor(
+    movers: &MoverModel,
+    trenches: &BTreeMap<usize, Vec<usize>>,
+    t: usize,
+    floor_of: impl Fn(usize) -> f64,
+) -> f64 {
+    let low = trenches[&t]
+        .iter()
+        .map(|&o| floor_of(o))
+        .fold(f64::INFINITY, f64::min);
     movers.real[t].floor.max(low)
 }
 
 /// `effects` and what they do to the trenches beside the sectors they move.
-pub(crate) fn with_trenches(movers: &MoverModel, trenches: &BTreeMap<usize, Vec<usize>>, effects: &Effects) -> Effects {
+pub(crate) fn with_trenches(
+    movers: &MoverModel,
+    trenches: &BTreeMap<usize, Vec<usize>>,
+    effects: &Effects,
+) -> Effects {
     let mut out = effects.clone();
     for (&tr, around) in trenches {
-        let moving: Vec<usize> = around.iter().copied().filter(|o| effects.iter().any(|(s, _)| s == o)).collect();
+        let moving: Vec<usize> = around
+            .iter()
+            .copied()
+            .filter(|o| effects.iter().any(|(s, _)| s == o))
+            .collect();
         if moving.is_empty() {
             continue;
         }
         let ceil = movers.real[tr].ceiling;
         let mut hs: Vec<Heights> = Vec::new();
         for &n in &moving {
-            let Some((_, nhs)) = effects.iter().find(|(s, _)| *s == n) else { continue };
+            let Some((_, nhs)) = effects.iter().find(|(s, _)| *s == n) else {
+                continue;
+            };
             for h in nhs {
-                let f = trench_floor(movers, trenches, tr, |o| if o == n { h.floor } else { movers.initial[o].floor });
-                let new = Heights { floor: f, ceiling: ceil };
+                let f = trench_floor(movers, trenches, tr, |o| {
+                    if o == n {
+                        h.floor
+                    } else {
+                        movers.initial[o].floor
+                    }
+                });
+                let new = Heights {
+                    floor: f,
+                    ceiling: ceil,
+                };
                 if ceil - f >= PLAYER_HEIGHT && !hs.contains(&new) {
                     hs.push(new);
                 }
@@ -750,16 +919,30 @@ pub(crate) fn effects_from_reps(
     sectors: &[usize],
     reps: &[(usize, Heights)],
 ) -> Effects {
-    let now: Vec<(usize, Heights)> = reps.iter().copied().filter(|(s, h)| *h != movers.initial[*s]).collect();
+    let now: Vec<(usize, Heights)> = reps
+        .iter()
+        .copied()
+        .filter(|(s, h)| *h != movers.initial[*s])
+        .collect();
     let lookup = |s: usize| now.iter().find(|(x, _)| *x == s).map(|(_, h)| *h);
-    with_trenches(movers, trenches, &movers.effects(special, sectors, Some(&lookup)))
+    with_trenches(
+        movers,
+        trenches,
+        &movers.effects(special, sectors, Some(&lookup)),
+    )
 }
 
 /// (sector, heights) that only movers which come back (lifts, timed doors, crushers) produce:
 /// the sector won't stay like that.
-pub(crate) fn temporary_heights(triggers: &[TriggerLine], movers: &MoverModel) -> std::collections::BTreeSet<(usize, crate::nav::HeightsKey)> {
+pub(crate) fn temporary_heights(
+    triggers: &[TriggerLine],
+    movers: &MoverModel,
+) -> std::collections::BTreeSet<(usize, crate::nav::HeightsKey)> {
     let mut lasting = std::collections::BTreeSet::new();
-    for t in triggers.iter().filter(|t| t.permanent() || t.info.description.contains("perpetual")) {
+    for t in triggers
+        .iter()
+        .filter(|t| t.permanent() || t.info.description.contains("perpetual"))
+    {
         for (s, hs) in &t.effects {
             for h in hs {
                 lasting.insert((*s, h.key()));
@@ -791,7 +974,9 @@ fn sinking_sectors(m: &MapData, movers: &MoverModel, triggers: &[TriggerLine]) -
         }
         let (f, b) = m.sides(li);
         for sec in [f, b].into_iter().flatten() {
-            if t.effect(sec).is_some_and(|hs| hs.iter().any(|h| h.floor < movers.real[sec].floor)) {
+            if t.effect(sec)
+                .is_some_and(|hs| hs.iter().any(|h| h.floor < movers.real[sec].floor))
+            {
                 out.insert(sec);
             }
         }
@@ -832,7 +1017,10 @@ pub fn spot_in_poly(vertices: &[Point], center: Point, target: Point, inset: f64
     if d <= inset {
         return center;
     }
-    (best.0 + (center.0 - best.0) * inset / d, best.1 + (center.1 - best.1) * inset / d)
+    (
+        best.0 + (center.0 - best.0) * inset / d,
+        best.1 + (center.1 - best.1) * inset / d,
+    )
 }
 
 /// The point of the portal nearest p, kept PATH_CLEARANCE off its ends if it's wide enough.

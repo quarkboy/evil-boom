@@ -76,7 +76,13 @@ impl Default for Assessment {
             firepower: 0.0,
             guns_armed: false,
             short_of_ammo: false,
-            odds: Odds { unhurt: false, kill_secs: 0.0, last_secs: f64::INFINITY, fists: false, ammo_short: false },
+            odds: Odds {
+                unhurt: false,
+                kill_secs: 0.0,
+                last_secs: f64::INFINITY,
+                fists: false,
+                ammo_short: false,
+            },
             outmatched: false,
             surrounded: false,
             vile: false,
@@ -92,7 +98,13 @@ impl Assessment {
     pub fn summary(&self) -> serde_json::Value {
         let mut them: Vec<&Thing> = self.against_her.iter().collect();
         them.sort_by(|a, b| dist((a.x, a.y), self.pos).total_cmp(&dist((b.x, b.y), self.pos)));
-        let finite = |x: f64| if x.is_finite() { serde_json::json!((x * 10.0).round() / 10.0) } else { serde_json::Value::Null };
+        let finite = |x: f64| {
+            if x.is_finite() {
+                serde_json::json!((x * 10.0).round() / 10.0)
+            } else {
+                serde_json::Value::Null
+            }
+        };
         serde_json::json!({
             "health": self.health,
             "invulnerable": self.invulnerable,
@@ -120,7 +132,16 @@ impl Assessment {
     pub fn words(&self, armor: f64) -> String {
         let mut them: Vec<&Thing> = self.against_her.iter().collect();
         them.sort_by(|a, b| dist((a.x, a.y), self.pos).total_cmp(&dist((b.x, b.y), self.pos)));
-        let mut out = format!("Health {:.0}, armor {armor:.0}. Her best gun does {:.0} damage a second; {}.", self.health, self.firepower.max(0.0), if self.short_of_ammo { "nearly out of ammo" } else { "ammo enough" });
+        let mut out = format!(
+            "Health {:.0}, armor {armor:.0}. Her best gun does {:.0} damage a second; {}.",
+            self.health,
+            self.firepower.max(0.0),
+            if self.short_of_ammo {
+                "nearly out of ammo"
+            } else {
+                "ammo enough"
+            }
+        );
         if self.damage_rate > 0.0 {
             out += &format!(" Losing {:.0} health a second.", self.damage_rate);
         }
@@ -132,7 +153,13 @@ impl Assessment {
         }
         out += "\nAgainst her:";
         for t in them {
-            out += &format!(" m{} {}, {:.0} away{};", t.id, t.name, dist((t.x, t.y), self.pos), if t.attack >= 0 { ", attacking" } else { "" });
+            out += &format!(
+                " m{} {}, {:.0} away{};",
+                t.id,
+                t.name,
+                dist((t.x, t.y), self.pos),
+                if t.attack >= 0 { ", attacking" } else { "" }
+            );
         }
         out
     }
@@ -159,7 +186,16 @@ impl Combat {
         let against_her = self.seen_against_her();
         let remembered = self.remembered(obs);
         let about: Vec<Thing> = against_her.iter().chain(&remembered).cloned().collect();
-        let shooters = about.iter().filter(|t| matches!(mon(t.name).attack, Attack::Hitscan | Attack::Missile | Attack::Fire)).cloned().collect();
+        let shooters = about
+            .iter()
+            .filter(|t| {
+                matches!(
+                    mon(t.name).attack,
+                    Attack::Hitscan | Attack::Missile | Attack::Fire
+                )
+            })
+            .cloned()
+            .collect();
         let firepower = self.firepower(obs);
         let damage_rate = self.damage_rate(obs.tic);
         let health = obs.health.unwrap_or(100.0);
@@ -171,16 +207,25 @@ impl Combat {
             invulnerable: self.invulnerable(obs.tic),
             shooters,
             engaged: self.engaged(obs),
-            threat: against_her.iter().map(|t| mon(t.name).threat).sum::<f64>() + self.tune.senses.unseen_threat * remembered.iter().map(|t| mon(t.name).threat).sum::<f64>(),
+            threat: against_her.iter().map(|t| mon(t.name).threat).sum::<f64>()
+                + self.tune.senses.unseen_threat
+                    * remembered.iter().map(|t| mon(t.name).threat).sum::<f64>(),
             firepower,
             guns_armed: self.guns_armed(obs),
             short_of_ammo: self.short_of_ammo(obs),
             odds,
             outmatched: odds.too_much(self.tune.guns.outmatched),
             surrounded: self.surrounded(pos, &about),
-            vile: against_her.iter().any(|t| t.name == "Archvile" && f64::from(mon(t.name).health) / firepower > self.tune.retreat.vile_kill),
+            vile: against_her.iter().any(|t| {
+                t.name == "Archvile"
+                    && f64::from(mon(t.name).health) / firepower > self.tune.retreat.vile_kill
+            }),
             damage_rate,
-            time_to_death: if damage_rate <= 0.0 { f64::INFINITY } else { health / damage_rate },
+            time_to_death: if damage_rate <= 0.0 {
+                f64::INFINITY
+            } else {
+                health / damage_rate
+            },
             against_her,
             remembered,
             about,
@@ -190,7 +235,13 @@ impl Combat {
     /// Several monsters near her, and round her rather than all one side.
     fn surrounded(&self, pos: Point, against_her: &[Thing]) -> bool {
         let t = &self.tune.retreat;
-        let near: Vec<Point> = against_her.iter().filter(|m| dist((m.x, m.y), pos) < t.surrounded_near && mon(m.name).attack != Attack::None).map(|m| (m.x, m.y)).collect();
+        let near: Vec<Point> = against_her
+            .iter()
+            .filter(|m| {
+                dist((m.x, m.y), pos) < t.surrounded_near && mon(m.name).attack != Attack::None
+            })
+            .map(|m| (m.x, m.y))
+            .collect();
         near.len() >= t.surrounded_count && spread(pos, &near) > t.surrounded_spread
     }
 }

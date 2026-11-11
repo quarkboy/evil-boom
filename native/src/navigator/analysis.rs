@@ -2,10 +2,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{
-    box_hits_segment, spot_in_poly, TriggerLine, EXIT_FLOOR, MAX_STEP, MIN_SHOT_SPAN, PLAYER_HEIGHT, PLAYER_RADIUS, SHOT_HEIGHT, TELEPORTERS_FOR_MONSTERS, TELEPORTERS_FOR_PLAYERS, TELEPORT_DEST, USE_REACH,
-};
 use super::Teleport;
+use super::{
+    box_hits_segment, spot_in_poly, TriggerLine, EXIT_FLOOR, MAX_STEP, MIN_SHOT_SPAN,
+    PLAYER_HEIGHT, PLAYER_RADIUS, SHOT_HEIGHT, TELEPORTERS_FOR_MONSTERS, TELEPORTERS_FOR_PLAYERS,
+    TELEPORT_DEST, USE_REACH,
+};
 use crate::det::HashMap;
 use crate::geom::{cells, closest_point, dist, segment_distance, segments_cross, Cell, Point, Seg};
 use crate::map::{MapData, ML_BLOCKING, ML_BLOCKMONSTERS, ML_BLOCKPLAYERS, NO_SIDEDEF};
@@ -50,7 +52,10 @@ fn boss_rules(map: &str) -> Vec<(u16, u16, u16, Category)> {
         "E3M8" => vec![(SPIDER, 0, 0, Category::Exit)],
         "E4M6" => vec![(CYBERDEMON, 666, 109, Category::Door)],
         "E4M8" => vec![(SPIDER, 666, 38, Category::Floor)],
-        "MAP07" => vec![(MANCUBUS, 666, 38, Category::Floor), (ARACHNOTRON, 667, 30, Category::Floor)],
+        "MAP07" => vec![
+            (MANCUBUS, 666, 38, Category::Floor),
+            (ARACHNOTRON, 667, 30, Category::Floor),
+        ],
         _ => Vec::new(),
     }
 }
@@ -60,7 +65,11 @@ fn boss_rules(map: &str) -> Vec<(u16, u16, u16, Category)> {
 /// key room, taken for a pit; MAP08's nukage channel round the red key bridge). The planner
 /// sees it at its lowest neighbour's floor (and follows them as they move: with_trenches);
 /// the movers keep the real heights. Returns trench -> its neighbours.
-pub(super) fn fill_trenches(m: &MapData, mesh: &Mesh, movers: &mut MoverModel) -> BTreeMap<usize, Vec<usize>> {
+pub(super) fn fill_trenches(
+    m: &MapData,
+    mesh: &Mesh,
+    movers: &mut MoverModel,
+) -> BTreeMap<usize, Vec<usize>> {
     let mut moved: BTreeSet<usize> = BTreeSet::new();
     for l in m.linedefs.iter().filter(|l| l.special != 0) {
         moved.extend(m.tagged_sectors(l.tag));
@@ -87,29 +96,53 @@ pub(super) fn fill_trenches(m: &MapData, mesh: &Mesh, movers: &mut MoverModel) -
                 around.insert(o);
             }
         }
-        let Some(low) = around.iter().map(|&o| movers.real[o].floor).reduce(f64::min) else { continue };
+        let Some(low) = around
+            .iter()
+            .map(|&o| movers.real[o].floor)
+            .reduce(f64::min)
+        else {
+            continue;
+        };
         if low <= sec.floor || sec.ceiling - low < PLAYER_HEIGHT {
             continue;
         }
-        let fits = mesh.live_polys().filter(|(_, p)| p.sector == si).any(|(_, poly)| {
-            let (x0, x1) = poly.vertices.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(v.0), b.max(v.0)));
-            let (y0, y1) = poly.vertices.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| (a.min(v.1), b.max(v.1)));
-            let mut x = x0;
-            while x <= x1 {
-                let mut y = y0;
-                while y <= y1 {
-                    if inside(&poly.vertices, x, y) && !bounds.iter().any(|&e| box_hits_segment(x, y, r, e)) {
-                        return true;
+        let fits = mesh
+            .live_polys()
+            .filter(|(_, p)| p.sector == si)
+            .any(|(_, poly)| {
+                let (x0, x1) = poly
+                    .vertices
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+                        (a.min(v.0), b.max(v.0))
+                    });
+                let (y0, y1) = poly
+                    .vertices
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), v| {
+                        (a.min(v.1), b.max(v.1))
+                    });
+                let mut x = x0;
+                while x <= x1 {
+                    let mut y = y0;
+                    while y <= y1 {
+                        if inside(&poly.vertices, x, y)
+                            && !bounds.iter().any(|&e| box_hits_segment(x, y, r, e))
+                        {
+                            return true;
+                        }
+                        y += 4.0;
                     }
-                    y += 4.0;
+                    x += 4.0;
                 }
-                x += 4.0;
-            }
-            false
-        });
+                false
+            });
         if !fits {
             out.insert(si, around.iter().copied().collect());
-            movers.initial[si] = Heights { floor: low, ceiling: sec.ceiling };
+            movers.initial[si] = Heights {
+                floor: low,
+                ceiling: sec.ceiling,
+            };
         }
     }
     out
@@ -124,11 +157,24 @@ pub(super) fn find_teleports(m: &MapData, mesh: &Mesh) -> Vec<Teleport> {
         }
     }
     let mut out = Vec::new();
-    for line in m.linedefs.iter().filter(|l| TELEPORTERS_FOR_PLAYERS.contains(&l.special)) {
+    for line in m
+        .linedefs
+        .iter()
+        .filter(|l| TELEPORTERS_FOR_PLAYERS.contains(&l.special))
+    {
         for s in m.tagged_sectors(line.tag) {
             if let Some(&(poly, point)) = dests.get(&s) {
-                let src_polys = mesh.live_polys().filter(|(_, p)| p.lines_front.contains(&line.index)).map(|(i, _)| i).collect();
-                out.push(Teleport { line: line.index, src_polys, dest_poly: poly, dest: point });
+                let src_polys = mesh
+                    .live_polys()
+                    .filter(|(_, p)| p.lines_front.contains(&line.index))
+                    .map(|(i, _)| i)
+                    .collect();
+                out.push(Teleport {
+                    line: line.index,
+                    src_polys,
+                    dest_poly: poly,
+                    dest: point,
+                });
                 break;
             }
         }
@@ -137,13 +183,18 @@ pub(super) fn find_teleports(m: &MapData, mesh: &Mesh) -> Vec<Teleport> {
 }
 
 /// Lines that block sight and hitscans: one-sided, or shut at the start; by grid cell.
-pub(super) fn sight_blockers(m: &MapData, movers: &MoverModel) -> HashMap<Cell, Vec<(Point, Point, usize)>> {
+pub(super) fn sight_blockers(
+    m: &MapData,
+    movers: &MoverModel,
+) -> HashMap<Cell, Vec<(Point, Point, usize)>> {
     let init = &movers.initial;
     let mut out: HashMap<Cell, Vec<(Point, Point, usize)>> = HashMap::default();
     for (li, l) in m.linedefs.iter().enumerate() {
         let (f, b) = (m.front_sector(l), m.back_sector(l));
         let shut = match (f, b) {
-            (Some(f), Some(b)) => init[f].ceiling.min(init[b].ceiling) - init[f].floor.max(init[b].floor) <= 0.0,
+            (Some(f), Some(b)) => {
+                init[f].ceiling.min(init[b].ceiling) - init[f].floor.max(init[b].floor) <= 0.0
+            }
             _ => true,
         };
         if shut {
@@ -161,7 +212,11 @@ pub(super) fn sight_blockers(m: &MapData, movers: &MoverModel) -> HashMap<Cell, 
 type UseGates = (BTreeSet<usize>, BTreeSet<(usize, usize)>);
 
 /// Gates on presses found while working out the triggers.
-type Gates = (HashMap<(usize, usize), BTreeSet<usize>>, HashMap<(usize, usize), BTreeSet<(usize, usize)>>, HashMap<(usize, usize), (f64, f64)>);
+type Gates = (
+    HashMap<(usize, usize), BTreeSet<usize>>,
+    HashMap<(usize, usize), BTreeSet<(usize, usize)>>,
+    HashMap<(usize, usize), (f64, f64)>,
+);
 
 pub(super) struct Analysis<'a> {
     m: &'a MapData,
@@ -178,10 +233,23 @@ pub(super) struct Analysis<'a> {
 }
 
 impl<'a> Analysis<'a> {
-    pub(super) fn new(m: &'a MapData, mesh: &'a Mesh, movers: &'a MoverModel, obstacle_grid: &'a HashMap<Cell, Vec<Seg>>, skill: i32) -> Self {
-        let mut may_move: BTreeSet<usize> = m.sectors.iter().filter(|s| s.tag != 0).map(|s| s.index).collect();
+    pub(super) fn new(
+        m: &'a MapData,
+        mesh: &'a Mesh,
+        movers: &'a MoverModel,
+        obstacle_grid: &'a HashMap<Cell, Vec<Seg>>,
+        skill: i32,
+    ) -> Self {
+        let mut may_move: BTreeSet<usize> = m
+            .sectors
+            .iter()
+            .filter(|s| s.tag != 0)
+            .map(|s| s.index)
+            .collect();
         for l in &m.linedefs {
-            if classify_line(l.special).is_some_and(|i| matches!(i.trigger, Trigger::D1 | Trigger::DR)) {
+            if classify_line(l.special)
+                .is_some_and(|i| matches!(i.trigger, Trigger::D1 | Trigger::DR))
+            {
                 may_move.extend(m.back_sector(l));
             }
         }
@@ -200,7 +268,11 @@ impl<'a> Analysis<'a> {
     }
 
     pub(super) fn take_gates(&mut self) -> Gates {
-        (std::mem::take(&mut self.use_gates), std::mem::take(&mut self.use_line_gates), std::mem::take(&mut self.shot_floors))
+        (
+            std::mem::take(&mut self.use_gates),
+            std::mem::take(&mut self.use_line_gates),
+            std::mem::take(&mut self.shot_floors),
+        )
     }
 
     fn affected(&self, li: usize, info: &LineSpecial) -> Vec<usize> {
@@ -233,8 +305,16 @@ impl<'a> Analysis<'a> {
         let mut out: Vec<TriggerLine> = Vec::new();
         for line in &m.linedefs {
             let li = line.index;
-            let Some(info) = classify_line(line.special) else { continue };
-            if !info.players || info.trigger == Trigger::None || matches!(info.category, Category::Light | Category::Other | Category::Teleport) {
+            let Some(info) = classify_line(line.special) else {
+                continue;
+            };
+            if !info.players
+                || info.trigger == Trigger::None
+                || matches!(
+                    info.category,
+                    Category::Light | Category::Other | Category::Teleport
+                )
+            {
                 continue;
             }
             let activators: BTreeSet<usize> = match info.trigger {
@@ -251,24 +331,42 @@ impl<'a> Analysis<'a> {
                 _ => self.gun_activators(li, touching_any.get(&li).cloned().unwrap_or_default()),
             };
             let sectors = self.affected(li, &info);
-            let shift_from = (is_stairs(line.special) && sectors.len() == 1).then(|| (sectors[0], self.movers.initial[sectors[0]].floor));
+            let shift_from = (is_stairs(line.special) && sectors.len() == 1)
+                .then(|| (sectors[0], self.movers.initial[sectors[0]].floor));
             let effects = self.movers.effects(line.special, &sectors, None);
-            out.push(TriggerLine { id: 0, line: li as i64, info, sectors, effects, activators, shift_from, relevant: None, keep: None });
+            out.push(TriggerLine {
+                id: 0,
+                line: li as i64,
+                info,
+                sectors,
+                effects,
+                activators,
+                shift_from,
+                relevant: None,
+                keep: None,
+            });
         }
         // (a gun line shot only from where the floor can be at a height the shot hits it: MAP16's
         // flame panel, from the table at its top, never from the floor of the room round it)
         let mut floors: BTreeMap<usize, Vec<f64>> = BTreeMap::new();
         for t in &out {
             for (s, hs) in &t.effects {
-                floors.entry(*s).or_default().extend(hs.iter().map(|h| h.floor));
+                floors
+                    .entry(*s)
+                    .or_default()
+                    .extend(hs.iter().map(|h| h.floor));
             }
         }
         for t in out.iter_mut().filter(|t| t.info.trigger.shot()) {
             let li = t.line as usize;
             t.activators.retain(|&p| {
                 let s = mesh.poly(p).sector;
-                let Some(&(lo, hi)) = self.shot_floors.get(&(li, p)) else { return false };
-                std::iter::once(self.movers.initial[s].floor).chain(floors.get(&s).into_iter().flatten().copied()).any(|f| (lo..=hi).contains(&f))
+                let Some(&(lo, hi)) = self.shot_floors.get(&(li, p)) else {
+                    return false;
+                };
+                std::iter::once(self.movers.initial[s].floor)
+                    .chain(floors.get(&s).into_iter().flatten().copied())
+                    .any(|f| (lo..=hi).contains(&f))
             });
         }
         let bosses = self.boss_triggers(&out);
@@ -285,19 +383,34 @@ impl<'a> Analysis<'a> {
     /// away was 4 units wide).
     fn gun_activators(&mut self, li: usize, mut candidates: BTreeSet<usize>) -> BTreeSet<usize> {
         let (a, b) = self.m.line_seg(li);
-        let points: Vec<Point> = [0.25, 0.5, 0.75].iter().map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t)).collect();
+        let points: Vec<Point> = [0.25, 0.5, 0.75]
+            .iter()
+            .map(|t| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t))
+            .collect();
         for &p in &points {
             candidates.extend(self.line_of_sight_polys(p, 2048.0, Some(li)));
         }
         let mut out = BTreeSet::new();
         for pi in candidates {
             let c = self.mesh.poly(pi).center;
-            let span = (((a.1 - c.1).atan2(a.0 - c.0).to_degrees() - (b.1 - c.1).atan2(b.0 - c.0).to_degrees()) + 180.0).rem_euclid(360.0) - 180.0;
+            let span = (((a.1 - c.1).atan2(a.0 - c.0).to_degrees()
+                - (b.1 - c.1).atan2(b.0 - c.0).to_degrees())
+                + 180.0)
+                .rem_euclid(360.0)
+                - 180.0;
             if span.abs() < MIN_SHOT_SPAN {
                 continue;
             }
-            let ranges: Vec<(f64, f64)> = points.iter().filter_map(|&p| self.shot_floors_at(c, p, li)).collect();
-            if let Some(best) = ranges.iter().copied().reduce(|x, y| if y.1 - y.0 > x.1 - x.0 { y } else { x }) {
+            let ranges: Vec<(f64, f64)> = points
+                .iter()
+                .filter_map(|&p| self.shot_floors_at(c, p, li))
+                .collect();
+            if let Some(best) =
+                ranges
+                    .iter()
+                    .copied()
+                    .reduce(|x, y| if y.1 - y.0 > x.1 - x.0 { y } else { x })
+            {
                 out.insert(pi);
                 self.shot_floors.insert((li, pi), best);
             }
@@ -328,7 +441,12 @@ impl<'a> Analysis<'a> {
                 },
                 sectors: Vec::new(),
                 effects: Vec::new(),
-                activators: self.mesh.live_polys().filter(|(_, p)| p.sector == sec.index).map(|(i, _)| i).collect(),
+                activators: self
+                    .mesh
+                    .live_polys()
+                    .filter(|(_, p)| p.sector == sec.index)
+                    .map(|(i, _)| i)
+                    .collect(),
                 shift_from: None,
                 relevant: None,
                 keep: None,
@@ -343,9 +461,23 @@ impl<'a> Analysis<'a> {
         let (a, b) = self.m.line_seg(li);
         let mut out = BTreeSet::new();
         for (pi, poly) in self.mesh.live_polys() {
-            let (x0, x1) = poly.vertices.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v.0), hi.max(v.0)));
-            let (y0, y1) = poly.vertices.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v.1), hi.max(v.1)));
-            if x0 > a.0.max(b.0) + USE_REACH || x1 < a.0.min(b.0) - USE_REACH || y0 > a.1.max(b.1) + USE_REACH || y1 < a.1.min(b.1) - USE_REACH {
+            let (x0, x1) = poly
+                .vertices
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                    (lo.min(v.0), hi.max(v.0))
+                });
+            let (y0, y1) = poly
+                .vertices
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                    (lo.min(v.1), hi.max(v.1))
+                });
+            if x0 > a.0.max(b.0) + USE_REACH
+                || x1 < a.0.min(b.0) - USE_REACH
+                || y0 > a.1.max(b.1) + USE_REACH
+                || y1 < a.1.min(b.1) - USE_REACH
+            {
                 continue;
             }
             // the front is right of v1->v2: the poly's centre must be in front
@@ -371,8 +503,19 @@ impl<'a> Analysis<'a> {
             let f = 0.45f64.min(2.0 / length);
             let inner = (a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f);
             let inner2 = (b.0 + (a.0 - b.0) * f, b.1 + (a.1 - b.1) * f);
-            let gates: Vec<UseGates> = [near, c].iter().filter_map(|&p| self.use_gates_on(p, closest_point(p, inner, inner2), li)).collect();
-            let Some((sectors, pairs)) = gates.into_iter().reduce(|x, y| if y.0.len() + y.1.len() < x.0.len() + x.1.len() { y } else { x }) else { continue };
+            let gates: Vec<UseGates> = [near, c]
+                .iter()
+                .filter_map(|&p| self.use_gates_on(p, closest_point(p, inner, inner2), li))
+                .collect();
+            let Some((sectors, pairs)) = gates.into_iter().reduce(|x, y| {
+                if y.0.len() + y.1.len() < x.0.len() + x.1.len() {
+                    y
+                } else {
+                    x
+                }
+            }) else {
+                continue;
+            };
             out.insert(pi);
             if !sectors.is_empty() {
                 self.use_gates.insert((li, pi), sectors);
@@ -393,12 +536,25 @@ impl<'a> Analysis<'a> {
             let (p1, p2) = (vs[i], vs[(i + 1) % n]);
             for k in 0..9 {
                 let k = f64::from(k);
-                let e = (p1.0 + (p2.0 - p1.0) * k / 8.0, p1.1 + (p2.1 - p1.1) * k / 8.0);
+                let e = (
+                    p1.0 + (p2.0 - p1.0) * k / 8.0,
+                    p1.1 + (p2.1 - p1.1) * k / 8.0,
+                );
                 let d = dist(e, poly.center);
-                let f = if d > 1e-6 { 1.0f64.min((PLAYER_RADIUS + 1.0) / d) } else { 0.0 };
-                let q = (e.0 + (poly.center.0 - e.0) * f, e.1 + (poly.center.1 - e.1) * f);
+                let f = if d > 1e-6 {
+                    1.0f64.min((PLAYER_RADIUS + 1.0) / d)
+                } else {
+                    0.0
+                };
+                let q = (
+                    e.0 + (poly.center.0 - e.0) * f,
+                    e.1 + (poly.center.1 - e.1) * f,
+                );
                 // (the trace's whole 64)
-                if segment_distance(a, b, q, q) <= USE_REACH + 16.0 && self.mesh.poly_at(q) == Some(pi) && !self.box_on_wall(q) {
+                if segment_distance(a, b, q, q) <= USE_REACH + 16.0
+                    && self.mesh.poly_at(q) == Some(pi)
+                    && !self.box_on_wall(q)
+                {
                     return true;
                 }
             }
@@ -412,11 +568,19 @@ impl<'a> Analysis<'a> {
         for cell in cells(q.0 - r, q.1 - r, q.0 + r, q.1 + r) {
             for &li in self.mesh.line_grid.get(&cell).into_iter().flatten() {
                 let line = &self.m.linedefs[li];
-                if (line.back == NO_SIDEDEF || line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0) && box_hits_segment(q.0, q.1, r, self.m.line_seg(li)) {
+                if (line.back == NO_SIDEDEF || line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0)
+                    && box_hits_segment(q.0, q.1, r, self.m.line_seg(li))
+                {
                     return true;
                 }
             }
-            if self.obstacle_grid.get(&cell).into_iter().flatten().any(|&e| box_hits_segment(q.0, q.1, r, e)) {
+            if self
+                .obstacle_grid
+                .get(&cell)
+                .into_iter()
+                .flatten()
+                .any(|&e| box_hits_segment(q.0, q.1, r, e))
+            {
                 return true;
             }
         }
@@ -437,13 +601,17 @@ impl<'a> Analysis<'a> {
                 }
                 let (f, b) = m.sides(li);
                 let closed = match (f, b) {
-                    (Some(f), Some(b)) => init[f].ceiling.min(init[b].ceiling) - init[f].floor.max(init[b].floor) <= 0.0,
+                    (Some(f), Some(b)) => {
+                        init[f].ceiling.min(init[b].ceiling) - init[f].floor.max(init[b].floor)
+                            <= 0.0
+                    }
                     _ => true,
                 };
                 // The trace also stops at the first other line with any special (vanilla: a
                 // walk-over line too; E2M4's door, pressed from beyond a walk-over line, did
                 // nothing). Once-only switches lose their special once used.
-                let usable = classify_line(m.linedefs[li].special).is_some_and(|i| !matches!(i.trigger, Trigger::S1 | Trigger::D1));
+                let usable = classify_line(m.linedefs[li].special)
+                    .is_some_and(|i| !matches!(i.trigger, Trigger::S1 | Trigger::D1));
                 if !closed && !usable {
                     continue;
                 }
@@ -455,8 +623,15 @@ impl<'a> Analysis<'a> {
                 if usable {
                     return None;
                 }
-                let (Some(f), Some(b)) = (f, b) else { return None };
-                let movable: Vec<usize> = [f, b].into_iter().filter(|s| self.may_move.contains(s) && init[*s].ceiling - init[*s].floor <= 0.0).collect();
+                let (Some(f), Some(b)) = (f, b) else {
+                    return None;
+                };
+                let movable: Vec<usize> = [f, b]
+                    .into_iter()
+                    .filter(|s| {
+                        self.may_move.contains(s) && init[*s].ceiling - init[*s].floor <= 0.0
+                    })
+                    .collect();
                 if !movable.is_empty() {
                     gates.extend(movable);
                 } else if self.may_move.contains(&f) || self.may_move.contains(&b) {
@@ -478,7 +653,12 @@ impl<'a> Analysis<'a> {
         rules.push((KEEN, 666, 2, Category::Door)); // (Keens open tag 666 on any map)
         let mut out = Vec::new();
         for (i, (monster, tag, special, category)) in rules.into_iter().enumerate() {
-            let homes: Vec<Point> = m.things.iter().filter(|t| t.kind == monster && t.in_skill(self.skill)).map(|t| (t.x, t.y)).collect();
+            let homes: Vec<Point> = m
+                .things
+                .iter()
+                .filter(|t| t.kind == monster && t.in_skill(self.skill))
+                .map(|t| (t.x, t.y))
+                .collect();
             if homes.is_empty() {
                 continue;
             }
@@ -491,7 +671,11 @@ impl<'a> Analysis<'a> {
                 }
                 polys.extend(self.line_of_sight_polys(h, 2048.0, None));
             }
-            let sectors = if tag != 0 { m.tagged_sectors(tag) } else { Vec::new() };
+            let sectors = if tag != 0 {
+                m.tagged_sectors(tag)
+            } else {
+                Vec::new()
+            };
             let info = LineSpecial {
                 special,
                 trigger: Trigger::None,
@@ -502,8 +686,22 @@ impl<'a> Analysis<'a> {
                 players: true,
                 generalized: false,
             };
-            let effects = if sectors.is_empty() { Vec::new() } else { self.movers.effects(special, &sectors, None) };
-            out.push(TriggerLine { id: 0, line: -1 - i as i64, info, sectors, effects, activators: polys, shift_from: None, relevant: None, keep: None });
+            let effects = if sectors.is_empty() {
+                Vec::new()
+            } else {
+                self.movers.effects(special, &sectors, None)
+            };
+            out.push(TriggerLine {
+                id: 0,
+                line: -1 - i as i64,
+                info,
+                sectors,
+                effects,
+                activators: polys,
+                shift_from: None,
+                relevant: None,
+                keep: None,
+            });
         }
         out
     }
@@ -511,7 +709,12 @@ impl<'a> Analysis<'a> {
     /// Polys a monster can get to from `start`: steps of at most 24 both ways (monsters don't
     /// walk off ledges), its own height of headroom, not through impassable or block-monster
     /// lines, plus the teleporters monsters use; doors and lifts monsters set off taken as open.
-    fn monster_reach(&self, start: usize, height: f64, line_triggers: &[TriggerLine]) -> BTreeSet<usize> {
+    fn monster_reach(
+        &self,
+        start: usize,
+        height: f64,
+        line_triggers: &[TriggerLine],
+    ) -> BTreeSet<usize> {
         let (m, mesh) = (self.m, self.mesh);
         let mut states: Vec<Vec<Heights>> = self.movers.initial.iter().map(|&h| vec![h]).collect();
         for t in line_triggers.iter().filter(|t| t.info.monsters) {
@@ -528,15 +731,28 @@ impl<'a> Analysis<'a> {
             }
         }
         let mut tele: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-        for line in m.linedefs.iter().filter(|l| TELEPORTERS_FOR_MONSTERS.contains(&l.special)) {
-            let Some(dest) = m.tagged_sectors(line.tag).into_iter().find_map(|s| dests.get(&s).copied()) else { continue };
+        for line in m
+            .linedefs
+            .iter()
+            .filter(|l| TELEPORTERS_FOR_MONSTERS.contains(&l.special))
+        {
+            let Some(dest) = m
+                .tagged_sectors(line.tag)
+                .into_iter()
+                .find_map(|s| dests.get(&s).copied())
+            else {
+                continue;
+            };
             for (pi, p) in mesh.live_polys() {
                 if p.lines_front.contains(&line.index) {
                     tele.entry(pi).or_default().push(dest);
                 }
             }
         }
-        let ok = |a: Heights, b: Heights| (b.floor - a.floor).abs() <= MAX_STEP && a.ceiling.min(b.ceiling) - a.floor.max(b.floor) >= height;
+        let ok = |a: Heights, b: Heights| {
+            (b.floor - a.floor).abs() <= MAX_STEP
+                && a.ceiling.min(b.ceiling) - a.floor.max(b.floor) >= height
+        };
         let mut seen = BTreeSet::from([start]);
         let mut todo = vec![start];
         while let Some(poly) = todo.pop() {
@@ -544,11 +760,18 @@ impl<'a> Analysis<'a> {
             for &pi in &mesh.poly(poly).portals {
                 let portal = &mesh.portals[pi];
                 let o = portal.other(poly);
-                if portal.linedef.is_some_and(|li| m.linedefs[li].flags & (ML_BLOCKING | ML_BLOCKMONSTERS) != 0) {
+                if portal
+                    .linedef
+                    .is_some_and(|li| m.linedefs[li].flags & (ML_BLOCKING | ML_BLOCKMONSTERS) != 0)
+                {
                     continue;
                 }
                 let (sa, sb) = (mesh.poly(poly).sector, mesh.poly(o).sector);
-                if sa == sb || states[sa].iter().any(|&ha| states[sb].iter().any(|&hb| ok(ha, hb))) {
+                if sa == sb
+                    || states[sa]
+                        .iter()
+                        .any(|&ha| states[sb].iter().any(|&hb| ok(ha, hb)))
+                {
                     next.push(o);
                 }
             }
@@ -594,7 +817,9 @@ impl<'a> Analysis<'a> {
                 if !segments_cross(p, q, v1, v2) {
                     continue;
                 }
-                let (Some(f), Some(b)) = m.sides(li) else { return None };
+                let (Some(f), Some(b)) = m.sides(li) else {
+                    return None;
+                };
                 lo = lo.max(init[f].floor).max(init[b].floor);
                 hi = hi.min(init[f].ceiling).min(init[b].ceiling);
             }
@@ -608,10 +833,17 @@ impl<'a> Analysis<'a> {
             }
             Some(b) => {
                 // two-sided: only its upper or lower part is solid
-                let opening = (init[f].floor.max(init[b].floor), init[f].ceiling.min(init[b].ceiling));
+                let opening = (
+                    init[f].floor.max(init[b].floor),
+                    init[f].ceiling.min(init[b].ceiling),
+                );
                 let below = (lo, hi.min(opening.0));
                 let above = (lo.max(opening.1), hi);
-                (lo, hi) = if below.1 - below.0 >= above.1 - above.0 { below } else { above };
+                (lo, hi) = if below.1 - below.0 >= above.1 - above.0 {
+                    below
+                } else {
+                    above
+                };
             }
         }
         if hi - lo < 1.0 {
@@ -622,10 +854,17 @@ impl<'a> Analysis<'a> {
 
     /// Polys whose centre has a clear view of `target` within range (sight blocked by
     /// one-sided lines and sectors shut at the start, not ledges), but for line `ignore`.
-    fn line_of_sight_polys(&self, target: Point, max_range: f64, ignore: Option<usize>) -> BTreeSet<usize> {
+    fn line_of_sight_polys(
+        &self,
+        target: Point,
+        max_range: f64,
+        ignore: Option<usize>,
+    ) -> BTreeSet<usize> {
         self.mesh
             .live_polys()
-            .filter(|(_, p)| dist(p.center, target) <= max_range && self.clear_sight(p.center, target, ignore))
+            .filter(|(_, p)| {
+                dist(p.center, target) <= max_range && self.clear_sight(p.center, target, ignore)
+            })
             .map(|(i, _)| i)
             .collect()
     }

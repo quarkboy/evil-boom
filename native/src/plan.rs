@@ -11,11 +11,11 @@ mod world;
 pub use triggers::{Kind, PlanCaches, PlanFacts, Timing, Trigger};
 pub use world::World;
 
+use crate::det::{HashMap, HashSet};
 use crate::geom::{dist, midpoint, point_key, Point, PointKey};
 use crate::nav::{Doors, Found, NavCore};
 use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap};
-use crate::det::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -175,18 +175,30 @@ impl TimerSets {
     fn admit(&mut self, sig: &Signature, tm: &Rc<Timers>) -> bool {
         let others = self.0.get(sig).map(Vec::as_slice).unwrap_or_default();
         let beaten = others.iter().any(|o| outlasts(o, tm));
-        let crowded = others.len() >= TIMER_SETS && timer_total(tm) <= others.iter().map(|o| timer_total(o)).fold(f64::INFINITY, f64::min);
+        let crowded = others.len() >= TIMER_SETS
+            && timer_total(tm)
+                <= others
+                    .iter()
+                    .map(|o| timer_total(o))
+                    .fold(f64::INFINITY, f64::min);
         if beaten || crowded {
             return false;
         }
-        let mut keep: Vec<Rc<Timers>> = others.iter().filter(|o| !outlasts(tm, o)).cloned().collect();
+        let mut keep: Vec<Rc<Timers>> = others
+            .iter()
+            .filter(|o| !outlasts(tm, o))
+            .cloned()
+            .collect();
         keep.push(Rc::clone(tm));
         keep.sort_by(|a, b| timer_total(b).total_cmp(&timer_total(a)));
         let in_top = keep.iter().take(TIMER_SETS).any(|o| **o == **tm);
         let kept = if in_top {
             keep.into_iter().take(TIMER_SETS).collect()
         } else {
-            keep.into_iter().take(TIMER_SETS - 1).chain([Rc::clone(tm)]).collect()
+            keep.into_iter()
+                .take(TIMER_SETS - 1)
+                .chain([Rc::clone(tm)])
+                .collect()
         };
         self.0.insert(sig.clone(), kept);
         true
@@ -244,7 +256,13 @@ pub struct Planner<'a> {
 
 impl<'a> Planner<'a> {
     pub fn new(nav: &'a mut NavCore, facts: &'a PlanFacts, caches: &'a mut PlanCaches) -> Self {
-        Planner { nav, facts, caches, strict_fit: false, moving_off: HashSet::default() }
+        Planner {
+            nav,
+            facts,
+            caches,
+            strict_fit: false,
+            moving_off: HashSet::default(),
+        }
     }
 
     /// A route from `q.start` to one of `q.goals`, starting with the world at `states`.
@@ -266,15 +284,28 @@ impl<'a> Planner<'a> {
         }
         let goal_set: HashSet<usize> = goal_polys.iter().map(|(p, _)| *p).collect();
         let triggers = &self.facts.triggers;
-        let push = |heap: &mut BinaryHeap<Reverse<(Priority, usize)>>, nodes: &mut Vec<Option<Node>>, priority: Priority, node: Node| {
+        let push = |heap: &mut BinaryHeap<Reverse<(Priority, usize)>>,
+                    nodes: &mut Vec<Option<Node>>,
+                    priority: Priority,
+                    node: Node| {
             heap.push(Reverse((priority, nodes.len())));
             nodes.push(Some(node));
         };
         let actions: Vec<usize> = (0..triggers.len())
-            .filter(|&i| triggers[i].kind != Kind::DoorRepeat && !triggers[i].effects.is_empty() && q.useful_lines.as_ref().is_none_or(|u| u.contains(&triggers[i].line)))
+            .filter(|&i| {
+                triggers[i].kind != Kind::DoorRepeat
+                    && !triggers[i].effects.is_empty()
+                    && q.useful_lines
+                        .as_ref()
+                        .is_none_or(|u| u.contains(&triggers[i].line))
+            })
             .collect();
         // (only used stair switches tell worlds apart)
-        let stair_lines: HashSet<usize> = actions.iter().filter(|&&i| triggers[i].shift_from.is_some()).filter_map(|&i| triggers[i].line).collect();
+        let stair_lines: HashSet<usize> = actions
+            .iter()
+            .filter(|&&i| triggers[i].shift_from.is_some())
+            .filter_map(|&i| triggers[i].line)
+            .collect();
         let reach = self.reach_from(start_poly, &states, q.keys);
         let root = Node {
             pos: q.start,
@@ -293,7 +324,14 @@ impl<'a> Planner<'a> {
             fired: Rc::new(q.fired.clone()),
         };
         let mut nodes: Vec<Option<Node>> = vec![Some(root)];
-        let mut heap: BinaryHeap<Reverse<(Priority, usize)>> = BinaryHeap::from([Reverse((Priority { no_goal: false, squeezes: 0, rank: Rank::default() }, 0))]);
+        let mut heap: BinaryHeap<Reverse<(Priority, usize)>> = BinaryHeap::from([Reverse((
+            Priority {
+                no_goal: false,
+                squeezes: 0,
+                rank: Rank::default(),
+            },
+            0,
+        ))]);
         let mut seen = TimerSets::default();
         let mut expansions = 0usize;
         let mut fallback: Option<Fallback> = None;
@@ -303,9 +341,13 @@ impl<'a> Planner<'a> {
             if expansions >= q.max_expansions || Instant::now() >= deadline {
                 break;
             }
-            let Some(mut node) = nodes[id].take() else { continue };
+            let Some(mut node) = nodes[id].take() else {
+                continue;
+            };
             if let Some(fb) = &fallback {
-                if expansions - fb.expansions > FALLBACK_GRACE || fb.found_at.elapsed().as_secs_f64() > FALLBACK_SECONDS {
+                if expansions - fb.expansions > FALLBACK_GRACE
+                    || fb.found_at.elapsed().as_secs_f64() > FALLBACK_SECONDS
+                {
                     break;
                 }
                 if node.squeezes > 0 {
@@ -314,17 +356,29 @@ impl<'a> Planner<'a> {
             }
             // the same lasting world reached again: only with timers it doesn't beat
             let sig = Signature {
-                lasting: node.added.iter().copied().filter(|k| !node.timers.contains_key(k)).collect(),
+                lasting: node
+                    .added
+                    .iter()
+                    .copied()
+                    .filter(|k| !node.timers.contains_key(k))
+                    .collect(),
                 keys: node.keys,
                 world: sorted(&node.world),
-                stairs_fired: node.fired.iter().copied().filter(|l| stair_lines.contains(l)).collect(),
+                stairs_fired: node
+                    .fired
+                    .iter()
+                    .copied()
+                    .filter(|l| stair_lines.contains(l))
+                    .collect(),
             };
             let tm = Rc::clone(&node.timers);
             if !seen.admit(&sig, &tm) {
                 continue;
             }
             if let Some(pend) = node.pending.take() {
-                let Some((path, used)) = self.timed_path(pend.from, node.pos, &pend.states, pend.keys, &pend.timers) else {
+                let Some((path, used)) =
+                    self.timed_path(pend.from, node.pos, &pend.states, pend.keys, &pend.timers)
+                else {
                     if !pend.timers.is_empty() {
                         seen.forget(&sig, &tm);
                     }
@@ -332,13 +386,23 @@ impl<'a> Planner<'a> {
                 };
                 let squeezes = path.squeezes;
                 let mut legs = (*node.legs).clone();
-                legs.push(Rc::new(Leg { trigger: pend.trigger, key: pend.key, path: Rc::new(path), states: used, keys: pend.keys }));
+                legs.push(Rc::new(Leg {
+                    trigger: pend.trigger,
+                    key: pend.key,
+                    path: Rc::new(path),
+                    states: used,
+                    keys: pend.keys,
+                }));
                 node.legs = Rc::new(legs);
                 if squeezes > 0 {
                     // back in the queue, behind what isn't squeezed
                     node.squeezes += squeezes;
                     seen.forget(&sig, &tm);
-                    let priority = Priority { squeezes: node.squeezes, rank: node.rank, ..priority };
+                    let priority = Priority {
+                        squeezes: node.squeezes,
+                        rank: node.rank,
+                        ..priority
+                    };
                     push(&mut heap, &mut nodes, priority, node);
                     continue;
                 }
@@ -347,25 +411,58 @@ impl<'a> Planner<'a> {
 
             // goals
             let doors = self.doors_for(node.keys);
-            let mut gps: Vec<(usize, Point)> = goal_polys.iter().copied().filter(|(p, _)| node.reach.contains(p)).collect();
-            gps.sort_by(|a, b| dist(node.pos, a.1).total_cmp(&dist(node.pos, b.1)).then(a.0.cmp(&b.0)));
+            let mut gps: Vec<(usize, Point)> = goal_polys
+                .iter()
+                .copied()
+                .filter(|(p, _)| node.reach.contains(p))
+                .collect();
+            gps.sort_by(|a, b| {
+                dist(node.pos, a.1)
+                    .total_cmp(&dist(node.pos, b.1))
+                    .then(a.0.cmp(&b.0))
+            });
             for (gp, gpt) in gps {
                 if let Some(&gt) = q.goal_triggers.get(&point_key(gpt)) {
                     if !self.activators_now(gt, &node.states, None).contains(&gp) {
                         continue;
                     }
                 }
-                let Some((path, used)) = self.timed_path(node.pos, gpt, &node.states, node.keys, &node.timers) else { continue };
+                let Some((path, used)) =
+                    self.timed_path(node.pos, gpt, &node.states, node.keys, &node.timers)
+                else {
+                    continue;
+                };
                 let total = node.squeezes + path.squeezes;
                 let mut legs = (*node.legs).clone();
-                legs.push(Rc::new(Leg { trigger: None, key: None, path: Rc::new(path), states: used, keys: node.keys }));
-                let route = Route { legs, states: node.states.clone(), keys: node.keys, goal: gpt };
+                legs.push(Rc::new(Leg {
+                    trigger: None,
+                    key: None,
+                    path: Rc::new(path),
+                    states: used,
+                    keys: node.keys,
+                }));
+                let route = Route {
+                    legs,
+                    states: node.states.clone(),
+                    keys: node.keys,
+                    goal: gpt,
+                };
                 if total == 0 {
-                    crate::stats::search_done(crate::stats::Search { budget: q.max_expansions, expansions, ended: crate::stats::Ended::Found, secs: t0.elapsed().as_secs_f64() });
+                    crate::stats::search_done(crate::stats::Search {
+                        budget: q.max_expansions,
+                        expansions,
+                        ended: crate::stats::Ended::Found,
+                        secs: t0.elapsed().as_secs_f64(),
+                    });
                     return Some(route);
                 }
                 if fallback.as_ref().is_none_or(|f| total < f.squeezes) {
-                    fallback = Some(Fallback { squeezes: total, route, expansions, found_at: Instant::now() });
+                    fallback = Some(Fallback {
+                        squeezes: total,
+                        route,
+                        expansions,
+                        found_at: Instant::now(),
+                    });
                 }
             }
 
@@ -378,11 +475,25 @@ impl<'a> Planner<'a> {
             }
             for c in children {
                 let no_goal = !c.stable.iter().any(|p| goal_set.contains(p));
-                push(&mut heap, &mut nodes, Priority { no_goal, squeezes: c.squeezes, rank: c.rank }, c);
+                push(
+                    &mut heap,
+                    &mut nodes,
+                    Priority {
+                        no_goal,
+                        squeezes: c.squeezes,
+                        rank: c.rank,
+                    },
+                    c,
+                );
             }
         }
         if crate::stats::enabled() {
-            eprintln!("plan search: {expansions} expanded (of {}), {} still queued, {:.2}s", q.max_expansions, heap.len(), t0.elapsed().as_secs_f64());
+            eprintln!(
+                "plan search: {expansions} expanded (of {}), {} still queued, {:.2}s",
+                q.max_expansions,
+                heap.len(),
+                t0.elapsed().as_secs_f64()
+            );
         }
         let ended = if fallback.is_some() {
             crate::stats::Ended::Squeezed
@@ -391,7 +502,12 @@ impl<'a> Planner<'a> {
         } else {
             crate::stats::Ended::Budget
         };
-        crate::stats::search_done(crate::stats::Search { budget: q.max_expansions, expansions, ended, secs: t0.elapsed().as_secs_f64() });
+        crate::stats::search_done(crate::stats::Search {
+            budget: q.max_expansions,
+            expansions,
+            ended,
+            secs: t0.elapsed().as_secs_f64(),
+        });
         fallback.map(|f| f.route)
     }
 
@@ -402,11 +518,22 @@ impl<'a> Planner<'a> {
         let mut options: Vec<(BTreeSet<Pair>, Vec<Candidate>)> = Vec::new();
         for &ti in actions {
             let t = &facts.triggers[ti];
-            let mut usable: HashSet<usize> = self.activators_now(ti, &node.states, None).intersection(&node.reach).copied().collect();
+            let mut usable: HashSet<usize> = self
+                .activators_now(ti, &node.states, None)
+                .intersection(&node.reach)
+                .copied()
+                .collect();
             if usable.is_empty() {
-                usable = self.activators_now(ti, &node.states, Some(doors)).intersection(&node.reach).copied().collect();
+                usable = self
+                    .activators_now(ti, &node.states, Some(doors))
+                    .intersection(&node.reach)
+                    .copied()
+                    .collect();
             }
-            if usable.is_empty() || !t.usable_with(node.keys) || t.line.is_some_and(|l| node.fired.contains(&l)) {
+            if usable.is_empty()
+                || !t.usable_with(node.keys)
+                || t.line.is_some_and(|l| node.fired.contains(&l))
+            {
                 continue;
             }
             let new: BTreeSet<Pair> = self
@@ -419,7 +546,13 @@ impl<'a> Planner<'a> {
                 continue;
             }
             let target = self.activation_point(ti, node.pos, &usable);
-            let cand = Candidate { dist: dist(node.pos, target), line: t.line, trigger: ti, target, usable };
+            let cand = Candidate {
+                dist: dist(node.pos, target),
+                line: t.line,
+                trigger: ti,
+                target,
+                usable,
+            };
             match options.iter_mut().find(|o| o.0 == new) {
                 Some(o) => o.1.push(cand),
                 None => options.push((new, vec![cand])),
@@ -431,7 +564,13 @@ impl<'a> Planner<'a> {
             let mut reaches: Vec<Arc<HashSet<usize>>> = Vec::new();
             for cand in cands.into_iter().take(ALT_TRIGGERS) {
                 let (ti, target) = (cand.trigger, cand.target);
-                let (base, left, gone) = expire(&node.states, &node.timers, node.pos, target, &self.moving_off);
+                let (base, left, gone) = expire(
+                    &node.states,
+                    &node.timers,
+                    node.pos,
+                    target,
+                    &self.moving_off,
+                );
                 let effects = self.effects_now(ti, &base);
                 let t = &facts.triggers[ti];
                 let trial = apply_effects(&base, t.permanent, &effects);
@@ -442,7 +581,11 @@ impl<'a> Planner<'a> {
                 // where to fire it from: the point found, or a spot in the nearest activator of
                 // each sector round it, whichever leaves the most reachable
                 let mut ordered: Vec<usize> = cand.usable.iter().copied().collect();
-                ordered.sort_by(|&a, &b| dist(self.nav.mesh.center(a), target).total_cmp(&dist(self.nav.mesh.center(b), target)).then(a.cmp(&b)));
+                ordered.sort_by(|&a, &b| {
+                    dist(self.nav.mesh.center(a), target)
+                        .total_cmp(&dist(self.nav.mesh.center(b), target))
+                        .then(a.cmp(&b))
+                });
                 let mut by_sector: Vec<(usize, usize)> = Vec::new();
                 for p in ordered {
                     let s = self.nav.poly_sector[p];
@@ -456,13 +599,19 @@ impl<'a> Planner<'a> {
                 });
                 let mut spots = vec![target];
                 for &(_, p) in by_sector.iter().take(FIRING_SPOTS) {
-                    spots.push(if t.line.is_some() { self.spot_in_poly(p, near) } else { self.nav.mesh.center(p) });
+                    spots.push(if t.line.is_some() {
+                        self.spot_in_poly(p, near)
+                    } else {
+                        self.nav.mesh.center(p)
+                    });
                 }
                 let mut best = target;
                 let mut best_reach: Option<Arc<HashSet<usize>>> = None;
                 let mut covered: HashSet<usize> = HashSet::default();
                 for sp in spots {
-                    let Some(p) = self.nav.mesh.poly_at(sp) else { continue };
+                    let Some(p) = self.nav.mesh.poly_at(sp) else {
+                        continue;
+                    };
                     if covered.contains(&p) {
                         continue;
                     }
@@ -479,10 +628,25 @@ impl<'a> Planner<'a> {
                     }
                     reaches.push(Arc::clone(br));
                 }
-                let mut added: BTreeSet<Pair> = node.added.iter().copied().filter(|k| !gone.contains(k)).collect();
+                let mut added: BTreeSet<Pair> = node
+                    .added
+                    .iter()
+                    .copied()
+                    .filter(|k| !gone.contains(k))
+                    .collect();
                 added.extend(new.iter().copied());
                 let carried = left.keys().copied().collect();
-                steps.push(Step { target: best, states: trial, added, keys: node.keys, trigger: Some(ti), key: None, timers, reach: best_reach, carried });
+                steps.push(Step {
+                    target: best,
+                    states: trial,
+                    added,
+                    keys: node.keys,
+                    trigger: Some(ti),
+                    key: None,
+                    timers,
+                    reach: best_reach,
+                    carried,
+                });
             }
         }
         steps
@@ -497,30 +661,63 @@ impl<'a> Planner<'a> {
                 continue;
             }
             // (at the heights now, if it's known where the key is)
-            let spots: Vec<(usize, Point)> = match self.facts.key_positions.iter().find(|(b, _)| b == kbit) {
-                Some((_, at)) => at.iter().flat_map(|&(x, y)| self.pickup_spots(x, y, &node.states)).collect(),
-                None => item_spots.clone(),
-            };
+            let spots: Vec<(usize, Point)> =
+                match self.facts.key_positions.iter().find(|(b, _)| b == kbit) {
+                    Some((_, at)) => at
+                        .iter()
+                        .flat_map(|&(x, y)| self.pickup_spots(x, y, &node.states))
+                        .collect(),
+                    None => item_spots.clone(),
+                };
             let keys = node.keys.with(*kbit);
             let mut best: Option<((usize, f64), Point)> = None;
             for (p, pt) in spots.into_iter().filter(|(p, _)| node.reach.contains(p)) {
-                let score = (self.reach_from(p, &node.states, keys).len(), -dist(node.pos, pt));
+                let score = (
+                    self.reach_from(p, &node.states, keys).len(),
+                    -dist(node.pos, pt),
+                );
                 if best.is_none_or(|(b, _)| score.0 > b.0 || (score.0 == b.0 && score.1 > b.1)) {
                     best = Some((score, pt));
                 }
             }
             let Some((_, spot)) = best else { continue };
-            let (states, left, gone) = expire(&node.states, &node.timers, node.pos, spot, &self.moving_off);
-            let added = node.added.iter().copied().filter(|k| !gone.contains(k)).collect();
+            let (states, left, gone) =
+                expire(&node.states, &node.timers, node.pos, spot, &self.moving_off);
+            let added = node
+                .added
+                .iter()
+                .copied()
+                .filter(|k| !gone.contains(k))
+                .collect();
             let carried = left.keys().copied().collect();
-            steps.push(Step { target: spot, states, added, keys, trigger: None, key: Some(*kbit), timers: left, reach: None, carried });
+            steps.push(Step {
+                target: spot,
+                states,
+                added,
+                keys,
+                trigger: None,
+                key: Some(*kbit),
+                timers: left,
+                reach: None,
+                carried,
+            });
         }
         steps
     }
 
     /// The node a step from `node` leads to, its leg to be found when it comes up.
     fn make_child(&mut self, node: &Node, step: Step, q: &Query) -> Option<Node> {
-        let Step { target, mut states, mut added, keys, trigger, key, mut timers, reach, mut carried } = step;
+        let Step {
+            target,
+            mut states,
+            mut added,
+            keys,
+            trigger,
+            key,
+            mut timers,
+            reach,
+            mut carried,
+        } = step;
         let target_poly = self.nav.mesh.poly_at(target)?;
         let reach = match reach {
             Some(r) => r,
@@ -544,7 +741,9 @@ impl<'a> Planner<'a> {
             world = self.reach_from(target_poly, &plain, keys);
         }
         let progress = stable.iter().any(|p| !node.stable.contains(p)) || key.is_some();
-        let relevant = trigger.is_some_and(|i| q.relevant_lines.contains(&self.facts.triggers[i].line)) || key.is_some_and(|k| q.relevant_keys.has(k));
+        let relevant = trigger
+            .is_some_and(|i| q.relevant_lines.contains(&self.facts.triggers[i].line))
+            || key.is_some_and(|k| q.relevant_keys.has(k));
         let steps = node.steps + 1;
         let rank = Rank {
             // (needed keys held first)
@@ -576,7 +775,14 @@ impl<'a> Planner<'a> {
             stable,
             world,
             steps,
-            pending: Some(Pending { from: node.pos, states: node.states.clone(), keys: node.keys, trigger, key, timers: Rc::clone(&node.timers) }),
+            pending: Some(Pending {
+                from: node.pos,
+                states: node.states.clone(),
+                keys: node.keys,
+                trigger,
+                key,
+                timers: Rc::clone(&node.timers),
+            }),
             timers: Rc::new(timers),
             squeezes: node.squeezes,
             rank,
