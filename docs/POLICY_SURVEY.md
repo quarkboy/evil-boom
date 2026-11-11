@@ -196,9 +196,11 @@ Kind 2 (`secrets`, `ask`): scripted directed games, a level each, as for stages 
   isn't). The setting is only for the big ones, renamed **`powerups`: `need` (default) |
   `now`**, over soulspheres, megaspheres and invulnerability. Invulnerability is already kept
   for a fight that needs it; soulspheres and megaspheres are taken now whenever they'd add
-  anything, so `need` is new for them: left where they lie till she's hurt (a number to find,
-  about 60 health, or a hard fight in sight). Also a change to the bot alone: scored on the full
-  set.
+  anything, so `need` is new for them (the user's rule): a **megasphere** when it adds at least
+  100 effective health, (200 - health) + (200 - armor), the blue armor's points counted as what
+  they'll take for her; a **soulsphere** when it adds at least 50, under 150 health. Both tuning
+  numbers (`errands.mega_gain` 100, `errands.soul_gain` 50). Short of that they're left where
+  they lie, to come back for. Also a change to the bot alone: scored on the full set.
 - **`secrets`**: not a setting. `doom_explore` searches at 1 by default (the likeliest few
   walls; it was 0), and a command of its own, `doom_search area|direction [2|3]` (2 by
   default), for the thorough searches.
