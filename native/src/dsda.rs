@@ -503,8 +503,9 @@ impl Dsda {
         Some(String::from_utf8_lossy(&bytes).into_owned()).filter(|t| !t.is_empty())
     }
 
-    /// The finale's text while one shows it (an episode's end, Doom II's story between levels);
-    /// None without the call or with no finale up.
+    /// The finale's text while one shows it (an episode's end, Doom II's story between levels),
+    /// as much as it's typed out on screen yet; None without the call, with no finale up, or
+    /// none of it shown yet.
     pub fn finale_text(&self) -> Option<String> {
         let f = self.finale_text_fn?;
         let mut buf = vec![0 as c_char; 4096];

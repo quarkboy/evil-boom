@@ -2557,6 +2557,11 @@ those screens to pass it on. Her actions still wait for the next level (next lev
 stage 8). Headless runs have no screens: there, as before, a level's end is told going into
 the next.
 
+The text is typed out on screen (a character every 3 tics), so it's told as it is (the user's):
+the engine gives as much as is shown so far, and each sentence goes to her as it's finished
+typing, the rest once the text stops growing (`present::next_chunk`). On E1M8's ending: nine
+lines, 1 to 8 s apart.
+
 Checked: E1M8 in stream mode to Episode 1's end (its end line and its text). Doom II's
 stories go through the same finale screen; not seen in a test (MAP06 and MAP11 weren't left
 in the time given).

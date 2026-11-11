@@ -265,16 +265,24 @@ EVIL_API int evil_level_title(char *out, int max)
 }
 
 /* The finale's text while a finale shows it (Doom's episode endings, Doom II's stories between
- * levels), into out (max bytes, ended); its length. Empty otherwise. */
+ * levels), as much of it as is on screen yet (it's typed out, a character every TEXTSPEED tics
+ * from its tenth, as F_TextWrite has it), into out (max bytes, ended); its length. Empty
+ * otherwise. */
 EVIL_API int evil_finale_text(char *out, int max)
 {
+  int shown;
   if (max <= 0)
     return 0;
   out[0] = 0;
   if (gamestate == GS_FINALE && finaletext)
   {
-    strncpy(out, finaletext, (size_t)max - 1);
-    out[max - 1] = 0;
+    shown = (finalecount - 10) / 3 /* (TEXTSPEED) */;
+    if (shown < 0)
+      shown = 0;
+    if (shown > max - 1)
+      shown = max - 1;
+    strncpy(out, finaletext, (size_t)shown);
+    out[shown] = 0;
   }
   return (int)strlen(out);
 }

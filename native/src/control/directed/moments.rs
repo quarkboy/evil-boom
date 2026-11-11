@@ -56,11 +56,10 @@ pub(super) struct Moments {
 }
 
 impl Director {
-    /// What the game's screen says, between levels (a finale's story, an episode's end): told
-    /// as it is, its lines run together.
-    pub fn on_screen(&mut self, text: &str) {
+    /// What the game's screen says, between levels (a finale's story, an episode's end, a
+    /// sentence or a few at a time as it's typed out): told as it is, its lines run together.
+    pub fn on_screen(&mut self, tic: i64, text: &str) {
         let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-        let tic = self.moments.last_tic;
         self.reports.push(super::Report {
             tic,
             ok: true,

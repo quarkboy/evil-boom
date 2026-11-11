@@ -24,6 +24,8 @@ const DEATH_HOLD: i64 = 105;
 const TALLY_READ: i64 = 88;
 /// a Doom II finale's text, all shown, read this long before a press
 const TEXT_READ: i64 = 210;
+/// a finale's text not typed on for this long (tics) is all there (a character takes 3)
+const TEXT_DONE: i64 = 12;
 /// still waiting after a press (a finale's first press finishes its text): pressed again after this
 const PRESS_AGAIN: i64 = 45;
 
@@ -96,8 +98,10 @@ pub(super) enum Stage {
         waiting_since: Option<i64>,
         pressed: Option<i64>,
         last: bool,
-        /// the finale's text told
-        told_text: bool,
+        /// how much of the finale's text has been told (bytes), and how long it was and when it
+        /// last grew (it's typed out on screen: told a sentence at a time as each is)
+        told: usize,
+        grew: (usize, i64),
     },
     /// the run's over (game over: the title card); the screen as it is till it's begun again
     Over,
@@ -254,7 +258,8 @@ fn tic(
                     waiting_since: None,
                     pressed: None,
                     last,
-                    told_text: false,
+                    told: 0,
+                    grew: (0, 0),
                 };
                 // (the level's end told now, with the tally on screen: the last level has no
                 // next one to tell it from)
@@ -294,14 +299,22 @@ fn tic(
         Stage::Between {
             waiting_since,
             pressed,
-            told_text,
+            told,
+            grew,
             ..
         } => {
-            // (a finale's story: told her as it comes up)
-            if screen.state == 2 && !*told_text {
+            // (a finale's story, typed out on screen: told her a sentence at a time as each is)
+            if screen.state == 2 {
                 if let Some(text) = watch.engine.finale_text() {
-                    *told_text = true;
-                    watch.tell_screens(|d| d.on_screen(&text));
+                    if text.len() != grew.0 {
+                        *grew = (text.len(), p.clock);
+                    }
+                    let done = screen.waiting || p.clock - grew.1 >= TEXT_DONE;
+                    if let Some(chunk) = next_chunk(&text, *told, done) {
+                        *told += chunk.len();
+                        let tic = watch.engine.tic;
+                        watch.tell_screens(|d| d.on_screen(tic, chunk));
+                    }
                 }
             }
             if screen.held {
@@ -352,6 +365,21 @@ fn tic(
     Ok(watch)
 }
 
+/// What's next to tell of a finale's text typed out so far (`told` bytes told already): up to
+/// the end of its last whole sentence; all the rest once it's `done`. None: nothing yet.
+fn next_chunk(text: &str, told: usize, done: bool) -> Option<&str> {
+    let rest = text.get(told..)?;
+    let ends = rest.char_indices().zip(rest.chars().skip(1));
+    let cut = if done {
+        rest.len()
+    } else {
+        ends.filter(|((_, c), next)| matches!(c, '.' | '!' | '?') && next.is_whitespace())
+            .map(|((i, c), _)| i + c.len_utf8())
+            .last()?
+    };
+    Some(&rest[..cut]).filter(|c| !c.trim().is_empty())
+}
+
 /// The run's first level begun, from the title: the one loaded with the watcher as it is if it
 /// hasn't been played, else afresh (a new agent, the lives again).
 fn start_level(
@@ -376,4 +404,21 @@ fn start_level(
     }
     p.fresh = false;
     Ok(watch)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_chunk;
+
+    #[test]
+    fn finale_text_by_sentences() {
+        let typed = "Once you beat them. Aren't you? Aren't y";
+        assert_eq!(
+            next_chunk(typed, 0, false),
+            Some("Once you beat them. Aren't you?")
+        );
+        assert_eq!(next_chunk(typed, 31, false), None);
+        assert_eq!(next_chunk(typed, 31, true), Some(" Aren't y"));
+        assert_eq!(next_chunk("", 0, true), None);
+    }
 }

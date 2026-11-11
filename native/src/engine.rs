@@ -313,7 +313,7 @@ impl Engine {
         self.game.level_title()
     }
 
-    /// A finale's text while it's on screen (see `Dsda::finale_text`).
+    /// A finale's text, as much as is on screen yet (see `Dsda::finale_text`).
     pub fn finale_text(&self) -> Option<String> {
         self.game.finale_text()
     }
