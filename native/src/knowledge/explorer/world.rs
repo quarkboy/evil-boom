@@ -372,6 +372,13 @@ impl Explorer {
             && jumps.contains(key)
     }
 
+    /// The exits held back (nothing of them offered or planned through) or given back, from
+    /// now: whoever directs her says when she may leave.
+    pub fn hold_exits(&mut self, held: bool) {
+        self.exit_held_back = held;
+        self.exits_offered = !held;
+    }
+
     pub(super) fn set_jumps(&mut self, missed_jumps_in: bool) {
         self.missed_jumps_in = missed_jumps_in;
         self.view = None; // (it holds the old edges)

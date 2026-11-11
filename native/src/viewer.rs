@@ -512,7 +512,9 @@ fn first_watch(
         // (the level begun again, as the pass begins it: the same run, by its random numbers)
         engine.restart(true);
     }
-    let watch = level(&w, m, nav, engine, o)?;
+    let mut watch = level(&w, m, nav, engine, o)?;
+    watch.feed = o.directed.as_deref().map(Feed::new);
+    watch.neuro = o.neuro.as_deref().map(crate::neuro::session::Session::new);
     Ok((w, watch))
 }
 
@@ -857,9 +859,36 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
         let mut shown = 0;
         let (began, first) = (Instant::now(), watch.engine.tic);
         let _ = writeln!(log, "== {}", watch.map_name);
-        while !watch.engine.finished()
+        while (!watch.engine.finished() || (watch.engine.dead() && watch.lives_left > 0))
             && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE
         {
+            // (dead with lives left: the level again from its start, what she came in with and
+            // what she's learned of it kept, as the window's loop has it; whoever directs her
+            // told)
+            if watch.engine.dead() {
+                watch.lives_left -= 1;
+                let line = format!(
+                    "{}: died at {:.0}s, {} lives left",
+                    watch.map_name,
+                    (watch.engine.tic - start) as f64 / TICRATE,
+                    watch.lives_left
+                );
+                println!("{line}");
+                let _ = writeln!(log, "{line}");
+                let (tic, left) = (watch.engine.tic, watch.lives_left);
+                if let Some(f) = watch.feed.as_mut() {
+                    f.director.died(tic, left);
+                }
+                if let Some(n) = watch.neuro.as_mut() {
+                    n.director.died(tic, left);
+                }
+                watch.engine.restart(true);
+                watch.agent.restart();
+                watch.controls = None;
+                if o.directed.is_some() || o.neuro.is_some() {
+                    crate::control::directed::Director::take_over(&mut watch.agent);
+                }
+            }
             watch.tic();
             let lines = &watch.agent.x().log;
             let at = watch.engine.tic as f64 / TICRATE;
@@ -967,8 +996,6 @@ fn level(
         crate::control::directed::Director::take_over(&mut agent);
     }
     let mut watch = Watch::new(w, m, &map_name, engine, agent, o.focus, o.lives - 1);
-    watch.feed = o.directed.as_deref().map(Feed::new);
-    watch.neuro = o.neuro.as_deref().map(crate::neuro::session::Session::new);
     watch.hold = hold;
     watch.speed = o.speed;
     watch.show_all = o.show_all;
@@ -1016,6 +1043,16 @@ fn enter_level(
     let (sound, muted, sound_on) = (watch.sound, watch.muted, watch.sound_on);
     let (paused, mut console, present, stream) =
         (watch.paused, watch.console, watch.present, watch.stream);
+    // (whoever directs her goes on to the next level with her: the orders file read on from
+    // where it was, not from its start again; Neuro's link kept, not made afresh. What was
+    // said of the old map (names, orders, what's been told) is the old map's)
+    let (mut feed, mut neuro) = (watch.feed, watch.neuro);
+    if let Some(f) = feed.as_mut() {
+        f.director.new_map();
+    }
+    if let Some(n) = neuro.as_mut() {
+        n.director.new_map();
+    }
     let mut engine = watch.engine;
     engine.carry = carry.or_else(|| o.carry.clone());
     engine.goto(name)?;
@@ -1029,6 +1066,8 @@ fn enter_level(
     watch.console = console;
     watch.present = present;
     watch.stream = stream;
+    watch.feed = feed;
+    watch.neuro = neuro;
     Ok(watch)
 }
 

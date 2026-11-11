@@ -155,6 +155,8 @@ const AUTO_SAY_EVERY: i64 = 8 * 35;
 /// a fight's summary is worth a reaction when it cost this much health, or this many died
 const FIGHT_NOTABLE_HEALTH: f64 = 20.0;
 const FIGHT_NOTABLE_KILLS: i32 = 3;
+/// ...and worth a line at all when two or more died, or it cost this much health
+const FIGHT_WORTH_HEALTH: f64 = 5.0;
 
 /// Her say in the fight (`Director::fight`): each holds till its time's up, then the rules have
 /// it back, so one forgotten can't go on costing her.
@@ -310,6 +312,8 @@ pub struct Director {
     /// what she's last said she's doing by herself
     told_auto: String,
     told_auto_tic: Option<i64>,
+    /// on her own she found nothing more to do: not taken up again till an order's been given
+    auto_spent: bool,
     /// the fight she's in, for its summary when it's over; and what she had last tic (what a
     /// fight cost is the falls from tic to tic, so a medikit taken in the middle doesn't hide it)
     fight: Option<Fight>,
@@ -400,7 +404,13 @@ impl Director {
         self.queue.clear();
         self.resume = None;
         self.tactics = Tactics::default();
+        self.auto_spent = false;
         self.doing = None;
+        self.pressed = None;
+        self.idle_since = None;
+        self.taken.clear();
+        self.done_areas.clear();
+        self.had_keys = None;
         self.names.clear();
         self.places = None;
         self.told_exits.clear();
@@ -414,6 +424,45 @@ impl Director {
         self.was = None;
         self.health_lately.clear();
         self.told_secrets = None;
+    }
+
+    /// She's died, with lives left: told, with what she was fighting; her orders and her say in
+    /// the fight are the life before's. The level's the same one: names and what's been told
+    /// of it stand.
+    pub fn died(&mut self, tic: i64, lives_left: i32) {
+        let by = self.fight.as_ref().map_or(String::new(), |f| {
+            let them: Vec<String> = f
+                .against
+                .iter()
+                .map(|(name, n)| format!("{n} {name}"))
+                .collect();
+            if them.is_empty() {
+                String::new()
+            } else {
+                format!(" fighting {}", them.join(", "))
+            }
+        });
+        self.reports.push(Report {
+            tic,
+            ok: false,
+            text: format!(
+                "Died{by}. {lives_left} lives left: the level again from its start, with what she came in with."
+            ),
+            notable: true,
+        });
+        self.queue.clear();
+        self.resume = None;
+        self.tactics = Tactics::default();
+        self.auto_spent = false;
+        self.doing = None;
+        self.pressed = None;
+        self.idle_since = None;
+        self.taken.clear();
+        self.told_dead = false;
+        self.fight = None;
+        self.was = None;
+        self.health_lately.clear();
+        self.health_mark = None;
     }
 
     /// What she's doing on her orders, in a few words ("exploring area-0 +secrets 2, rushing").
@@ -907,8 +956,9 @@ impl Director {
                 }
                 let notable =
                     f.health_lost >= FIGHT_NOTABLE_HEALTH || killed >= FIGHT_NOTABLE_KILLS;
-                // (one that came to nothing, a monster seen and gone, isn't a fight to tell of)
-                if killed == 0 && cost.is_empty() {
+                // (one that came to little isn't a fight to tell of: a monster seen and gone, a
+                // zombie shot in passing)
+                if killed < 2 && f.health_lost < FIGHT_WORTH_HEALTH {
                     return;
                 }
                 self.event(
@@ -1243,13 +1293,14 @@ impl Director {
             self.idle_since = Some(obs.tic);
         }
         if let (Some(limit), Some(since)) = (self.idle_auto, self.idle_since) {
-            if obs.tic - since >= limit && obs.health.unwrap_or(0.0) > 0.0 {
+            // (not again once she's found nothing more to do by herself, till an order's come)
+            if obs.tic - since >= limit && obs.health.unwrap_or(0.0) > 0.0 && !self.auto_spent {
                 self.idle_since = None;
                 self.doing = Some(Doing::Auto);
                 self.told_auto.clear();
                 let x = agent.x_mut();
                 x.directed = false;
-                x.exit_held_back = true;
+                x.hold_exits(true);
                 x.out_of_options = None;
                 self.report(
                     obs,
@@ -1450,6 +1501,14 @@ impl Director {
                     weapon_name(slot, obs)
                 ))
             }
+            "retreat" | "cover" => {
+                agent
+                    .player_mut()
+                    .ok_or("no fight to retreat from")?
+                    .order_retreat(obs)
+                    .map_err(|why| format!("Not retreating: {why}. Still fighting."))?;
+                Ok("Falling back to cover.".into())
+            }
             "hold_fire" => {
                 let (secs, until) = hold(TACTIC_SECONDS, TACTIC_MOST);
                 self.tactics.hold_fire = Some(until);
@@ -1475,7 +1534,7 @@ impl Director {
             }
             other => {
                 let (name, over) = stance(other).ok_or(
-                    "fight: target REF, weapon NAME|auto, hold_fire, fire, bold, careful, steady, auto",
+                    "fight: target REF, weapon NAME|auto, retreat, hold_fire, fire, bold, careful, steady, auto",
                 )?;
                 let (secs, until) = hold(STANCE_SECONDS, STANCE_MOST);
                 agent
@@ -1563,6 +1622,7 @@ impl Director {
         if agent.x().out_of_options.is_some() {
             self.end_auto(agent);
             self.doing = None;
+            self.auto_spent = true;
             let exits = self.objectives_of(agent, obs, &[Kind::Exit]);
             self.report(
                 obs,
@@ -1603,7 +1663,7 @@ impl Director {
     fn end_auto(&mut self, agent: &mut Agent) {
         let x = agent.x_mut();
         x.directed = true;
-        x.exit_held_back = false;
+        x.hold_exits(false);
         x.current = None;
         x.follower = None;
         x.ended = None;
@@ -1614,6 +1674,7 @@ impl Director {
         // would be gone without a word. An errand in the middle of exploring is an errand: the
         // exploring goes on after it)
         let errand = matches!(o, Order::Go(..));
+        self.auto_spent = false;
         if matches!(self.doing, Some(Doing::Auto)) {
             self.end_auto(agent);
         }

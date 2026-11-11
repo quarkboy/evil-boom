@@ -409,6 +409,17 @@ pub struct Steer {
     pub reload_back: f64,
     /// still this long pushing one way: not that way for a while
     pub stuck_tics: i64,
+    /// a way taken is kept at least this long (tics) before she turns about (the other way, more
+    /// or less) for a way that's only a little better: darting to and fro is no player's
+    /// footwork (0: no such hold)
+    pub about_tics: i64,
+    /// ...unless the other way is better by this much (what gets her off a floor that hurts, or
+    /// out from under a crusher, is)
+    pub about_margin: f64,
+    /// the fight's legs: having turned about, she doesn't turn about again within this long
+    /// (tics): she stops a moment instead, then goes. Not when she's getting out of the way of
+    /// something. (0: no such pause)
+    pub dart_tics: i64,
 }
 
 impl Default for Steer {
@@ -438,6 +449,9 @@ impl Default for Steer {
             barrel_keep: 192.0,
             reload_back: 12.0,
             stuck_tics: 6,
+            about_tics: 0,
+            about_margin: 4.0,
+            dart_tics: 0,
         }
     }
 }

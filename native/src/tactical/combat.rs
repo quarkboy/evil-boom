@@ -168,6 +168,9 @@ impl Decision {
     }
 }
 
+/// a way taken this long (tics) after the last is a turn about from it, if it's against it
+const DART_GAP: i64 = 9;
+
 pub struct Combat {
     nav: Rc<Navigator>,
     /// the numbers she judges by (the player's, shared)
@@ -382,6 +385,9 @@ impl Combat {
                 tic: -1,
                 still: 0,
                 stuck: None,
+                turned_about: i64::MIN / 2,
+                legs_way: None,
+                legs_turned: i64::MIN / 2,
             },
             wanted_dead: BTreeSet::new(),
             cover: Cover {
@@ -2064,6 +2070,9 @@ impl Combat {
         let at = self.reckoned(&s, obs.tic);
         (ghost.x, ghost.y, ghost.z, ghost.vx, ghost.vy) = (at.0, at.1, s.z, 0.0, 0.0);
         let gun = self.preferred_gun(obs, &ghost);
+        // (stepped about as for one in sight, and that's kept: holding still for it, as a player
+        // waits at a corner, cost her on the score, -0.028 (2026-11-11): what comes back round
+        // the corner hits one who's standing)
         let moving = self.steer(obs, Some(&ghost), &gun);
         let why = format!("lost sight of {}: keeping at it", s.name);
         self.announce(obs, &why);
@@ -2127,7 +2136,31 @@ impl Combat {
                     ..Controls::default()
                 };
                 let facing = obs.angle - turn; // (thrust goes the way faced after this tic's turn)
-                if let Some(m) = d.moving {
+                                               // A turn about soon after the last one: she stops a moment instead, and goes
+                                               // when the moment's past. To and fro inside a second is a jitter no player's
+                                               // legs make; getting out of the way of something isn't held up for it.
+                let mag = d.moving.map_or(0.0, |m| m.0.hypot(m.1)).max(1e-6);
+                let way = d.moving.map(|m| (m.0 / mag, m.1 / mag));
+                // (against the way she last went: a turn about if that was just now, or if she's
+                // been held from it since)
+                let since_turn = obs.tic - self.steer.legs_turned;
+                let about = way.zip(self.steer.legs_way).is_some_and(|(m, (w, at))| {
+                    m.0 * w.0 + m.1 * w.1 < -0.5
+                        && (obs.tic - at <= DART_GAP || since_turn < self.tune.steer.dart_tics)
+                });
+                let held = about
+                    && !d.urgent
+                    && !d.kind.escaping()
+                    && since_turn < self.tune.steer.dart_tics;
+                if about && !held {
+                    self.steer.legs_turned = obs.tic;
+                }
+                if let Some(w) = way.filter(|_| !held) {
+                    self.steer.legs_way = Some((w, obs.tic));
+                }
+                if held {
+                    (c.forward, c.strafe) = crate::motor::brake(obs, facing);
+                } else if let Some(m) = d.moving {
                     let rel = norm(m.1.atan2(m.0).to_degrees() - facing).to_radians();
                     c.forward = 50.0 * rel.cos();
                     c.strafe = -50.0 * rel.sin();

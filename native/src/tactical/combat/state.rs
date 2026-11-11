@@ -77,6 +77,11 @@ pub struct Stepping {
     pub(super) still: i64,
     /// a way she got nowhere pushing, and till when it's left be
     pub(super) stuck: Option<(Point, i64)>,
+    /// when she last turned about (took a way more or less against the one she was on)
+    pub(super) turned_about: i64,
+    /// the way the fight's legs last went, and when; and when they last turned about
+    pub(super) legs_way: Option<(Point, i64)>,
+    pub(super) legs_turned: i64,
 }
 
 /// Getting out of fire there's no dodging: an arch-vile's, a hitscan shooter's.

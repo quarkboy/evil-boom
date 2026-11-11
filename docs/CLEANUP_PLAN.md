@@ -288,6 +288,32 @@ Each scored on the same 1088 runs against the set before it; kept if not signifi
 | Shots traced by where she faced before the turn | **checked, no bug**: `note_rounds_gone` reads the angle of the tic after the shot, which is the angle it left along (the game turns, then fires, in one tic); and it's a count, nothing decides by it | none | |
 | A dip in a floor that hurts reckoned a fraction of a hit | **checked, by design**: the fraction is the expected cost, used to weigh a way against others (`RISK_SHARE`); whether she'd live through it is judged by the hardest whole hit (`hardest_floor_hit`, the margin in `Refusal::ShortOfHealth`) | none | |
 
+### Jitter (the user's: fewer jittery, unhumanlike movements, where it doesn't cost much)
+
+Measured first. A **dart** is her going one way and, within a quarter second, back the other
+(by where she went, not what was pressed: braking is a press back too); a **quick dart** is
+one within 20 tics of the one before (to and fro inside a second; a turn about every second or
+two is a player's sidestepping). Over the score's 6844 game minutes: 23 darts a minute, **6.75
+quick darts a minute**; by what she was doing: the route's legs 1.34, lost sight 1.06,
+standing 0.79, backing off 0.78. Turn reversals are few already (6 a minute; four in a third
+of a second, 0.03 a minute). `EVIL_DEBUG_DARTS` logs each one and her legs tic by tic.
+
+What was tried, each for what it did to the darts and to the score:
+
+| Tried | Quick darts | Score |
+|---|---|---|
+| Holding still for a monster just out of sight (as a player waits at a corner) | lost sight's all but gone | **-0.028** (s.e. 0.0098), full set: what comes back round the corner hits one who's standing. Not kept |
+| `steer.about_tics` 24: a way kept that long before turning about for one only a little better | -18% | -0.028 (s.e. 0.019), quarter set |
+| `steer.dart_tics` 20: a second turn about inside that long is a pause instead | -31% | -0.020 (s.e. 0.018), quarter set |
+| `steer.side_span` 192, 256 (her steps to the side run further) | -15%, -8% | -0.021, -0.011 (s.e. 0.017-0.018) |
+
+None is significant on the quarter set, all lean the same way, and the one tried on the full
+set lost plainly: in this game keeping still, even for a third of a second, is what gets her
+hit. The two holds are in as tuning (`steer.about_tics`, `steer.dart_tics`), **off by
+default** (the build with them off plays the baseline to the tic: 1088 runs the same). For a
+stream where looks matter more than the score, `--tuning` with `dart_tics` 20 is the one to
+try: a third fewer quick darts for about 0.02.
+
 Left, and why: these are structure, with no failure in hand to trace, so no rule to score.
 Each is a refactor to do under parity when its area is next worked on.
 

@@ -591,6 +591,10 @@ pub fn run_map_in(
     let mut last_hit: Option<String> = None;
     let (mut turn_flips, mut last_jitter): (Vec<i64>, i64) = (Vec::new(), i64::MIN / 2);
     let (mut side_from, mut side_run): (Option<crate::geom::Point>, f64) = (None, 0.0);
+    let mut last_push: Option<(f64, i64)> = None;
+    let mut was_doing = String::new();
+    let mut last_dart = i64::MIN / 2;
+    let mut dart_from: Option<crate::geom::Point> = None;
     while ((e.tic - tic0) as f64) < until * TICRATE {
         if o.expert || o.secrets || o.stall_out {
             let now = progress(&e, agent.x());
@@ -795,6 +799,51 @@ pub fn run_map_in(
                     }
                     side_run = across.unwrap_or(0.0);
                 }
+            }
+            // (and her legs: going one way then, within a quarter second, going back the other
+            // (over 120 degrees round), each at more than a walk: a dart no player makes but to
+            // dodge. By where she went, not what was pressed: braking is a press back too. By
+            // whose legs and, the fight's, in which move)
+            let went = dart_from.map(|from: crate::geom::Point| (pos.0 - from.0, pos.1 - from.1));
+            if crate::debug::on().darts {
+                p.explorer.log.push(format!("tic {}: (legs) {legs:?} {:?} at ({:.0}, {:.0}) went {:?} pressed ({:.0}, {:.0}) facing {:.0}", ob.tic, p.combat().last_move, pos.0, pos.1, went.map(|d| (d.0.round(), d.1.round())), ctl.forward, ctl.strafe, ob.angle));
+            }
+            dart_from = Some(pos);
+            let push = went
+                .filter(|d| (3.0..64.0).contains(&d.0.hypot(d.1)))
+                .map(|d| d.1.atan2(d.0).to_degrees());
+            if let Some(way) = push {
+                if let Some((was_way, at)) = last_push {
+                    if ob.tic - at <= 9 && crate::motor::norm(way - was_way).abs() > 120.0 {
+                        let doing = match legs {
+                            crate::tactical::arbiter::Legs::Fight => p
+                                .combat()
+                                .last_move
+                                .map_or("no move".to_string(), |m| format!("{m:?}")),
+                            other => format!("{other:?} legs"),
+                        };
+                        if crate::debug::on().darts {
+                            p.explorer.log.push(format!("tic {}: (measuring) dart: going {was_way:.0} at tic {at} ({was_doing}), now {way:.0} ({doing}); target {:?}", ob.tic, p.combat().target));
+                        }
+                        p.combat_mut().count("darts", 1.0);
+                        p.combat_mut().count(&format!("darts: {doing}"), 1.0);
+                        // (one soon after another is the jitter: to and fro inside a second.
+                        // A turn about every second or two is a player's sidestepping)
+                        if ob.tic - last_dart <= 20 {
+                            p.combat_mut().count("quick darts", 1.0);
+                            p.combat_mut().count(&format!("quick darts: {doing}"), 1.0);
+                        }
+                        last_dart = ob.tic;
+                    }
+                }
+                last_push = Some((way, ob.tic));
+                was_doing = match legs {
+                    crate::tactical::arbiter::Legs::Fight => p
+                        .combat()
+                        .last_move
+                        .map_or("no move".to_string(), |m| format!("{m:?}")),
+                    other => format!("{other:?} legs"),
+                };
             }
             if now.abs() > 18.5 {
                 p.combat_mut().count("tics turning over 18 degrees", 1.0);

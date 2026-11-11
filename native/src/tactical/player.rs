@@ -552,6 +552,22 @@ impl Player {
         Ok(())
     }
 
+    /// A retreat to cover begun on someone's say (whoever directs her), as her own is: out of
+    /// the sight of what's shooting at her, by a way she knows. Err: nowhere to go.
+    pub fn order_retreat(&mut self, obs: &Observation) -> Result<(), String> {
+        let route = self
+            .find_cover(obs)
+            .ok_or("nowhere out of their sight that she knows a way to")?;
+        self.retreat = Some(Retreat {
+            kind: RetreatKind::Cover,
+            route,
+        });
+        self.retreat_tic = obs.tic;
+        self.tried_cover = true;
+        self.log(format!("tic {}: to cover, as ordered", obs.tic));
+        Ok(())
+    }
+
     /// A stance taken: its numbers over her tuning (any groups and fields, as a tuning file)
     /// till it's given up (`steady`). Whoever directs her says when.
     pub fn take_stance(&mut self, name: &str, over: &serde_json::Value) -> Result<(), String> {

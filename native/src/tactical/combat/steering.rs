@@ -29,6 +29,10 @@ const FIRE_HEIGHT: f64 = 16.0;
 /// she covers about this much a tic, running
 const RUN: f64 = 14.0;
 
+/// two ways are against each other when the cosine between them is under this (over about 107
+/// degrees apart)
+const ABOUT: f64 = -0.3;
+
 impl Combat {
     /// An arch-vile in sight winding up its fire: the way to the nearest place it can't see her
     /// that she can get to before it goes off (behind a pillar), as (its name, the way). None if
@@ -355,6 +359,8 @@ impl Combat {
                 (from, ((t.x - from.0) / far, (t.y - from.1) / far))
             });
         let mut best: Option<(f64, Point)> = None;
+        // (the way she's on, if it's still one she could take, and what it scores now)
+        let mut kept: Option<(f64, Point)> = None;
         for i in 0..WAYS {
             let a = 2.0 * std::f64::consts::PI * i as f64 / WAYS as f64;
             let d = (a.cos(), a.sin());
@@ -484,8 +490,26 @@ impl Combat {
                 s += self.tune.steer.w_toward * (d.0 * (to.0 - pos.0) + d.1 * (to.1 - pos.1))
                     / dist(to, pos);
             }
+            if self.steer.way.is_some_and(|k| d.0 * k.0 + d.1 * k.1 > 0.99) {
+                kept = Some((s, d));
+            }
             if best.is_none_or(|(bs, _)| s > bs) {
                 best = Some((s, d));
+            }
+        }
+        // Turning about (the best way more or less against the one she's on) so soon after the
+        // last time, for a way only a little better: she keeps the way she's on. A player's
+        // steps to the side run a while each way; the best of sixteen ways scored afresh every
+        // tic flips on a hair, and darts her to and fro.
+        if let (Some((bs, b)), Some((ks, k))) = (best, kept) {
+            if b.0 * k.0 + b.1 * k.1 < ABOUT {
+                if obs.tic - self.steer.turned_about < self.tune.steer.about_tics
+                    && bs - ks < self.tune.steer.about_margin
+                {
+                    best = kept;
+                } else {
+                    self.steer.turned_about = obs.tic;
+                }
             }
         }
         // Pushing a way and not moving: caught on something the floor doesn't show.
