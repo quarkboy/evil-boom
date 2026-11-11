@@ -46,6 +46,26 @@ const MAX_BUDGET_CUTS: u32 = 16;
 /// Distinct activator polygons tried before a trigger objective is considered unreachable.
 const ALTERNATE_ACTIVATORS: usize = 3;
 
+/// Why a way the planner found to an objective isn't taken (`Explorer::refusal`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Refusal {
+    /// Over floors that hurt it would cost more health than she has to spare: `cost` of her
+    /// `health`, leaving less than `margin`.
+    ShortOfHealth { cost: f64, health: f64, margin: f64 },
+    /// It drops her onto a floor that hurts (`sector`) that she has never got out of.
+    DropOntoHarm { sector: usize },
+    /// It costs more than a tenth of her health over floors that hurt (`damage`) while this
+    /// isn't the risky pass; or it's a wall tried over such a floor, which is the risky
+    /// pass's.
+    HarmWhileSafeLeft { damage: f64 },
+    /// It has a run-jump over somewhere she couldn't get back from if it fell short.
+    JumpOverNoWayBack,
+    /// It drops her somewhere with no way back and nothing there to try.
+    DeadEnd,
+    /// The lines it walks over would shut her in at its end.
+    ShutsHerIn,
+}
+
 impl Explorer {
     /// The stretches of a path down on floors she takes to hurt, in order: (sector, length).
     fn wades(&self, waypoints: &[Option<Point>], heights: &States) -> Vec<(usize, f64)> {
@@ -505,6 +525,32 @@ impl Explorer {
                 step(action, Some(t), None)
             }
         };
+        if let Some(refusal) = self.refusal(&route, obj, obs, &view, &states) {
+            if crate::debug::on().no_route {
+                self.log
+                    .push(format!("  no route for '{}': {refusal:?}", obj.label));
+            }
+            return None;
+        }
+        Some(steps_from_legs(
+            &view,
+            &route.legs,
+            Some(last),
+            Some(&states),
+        ))
+    }
+
+    /// Why a way the planner found isn't to be taken, if it isn't: the checks in the order they
+    /// are made, the first that fails.
+    fn refusal(
+        &mut self,
+        route: &Route,
+        obj: &Objective,
+        obs: &Observation,
+        view: &View,
+        states: &States,
+    ) -> Option<Refusal> {
+        let nav = Rc::clone(&self.nav);
         if self.knowledge.mortal && !self.on_hurting_floor(obs) {
             // Mortal: no way that costs more health than she has to spare, risky or not; noted, so
             // that healing or a suit is gone for. Not while she's down on a floor that hurts: staying
@@ -515,7 +561,7 @@ impl Explorer {
             // into somewhere she hasn't seen (the two ways a pit opens), only a way that would take all
             // she has is refused; for any other way, the margin is the most the game's clock can add,
             // one hit of its hardest floor.
-            let cost = self.expected_damage(&route.legs, obj, &states, obs);
+            let cost = self.expected_damage(&route.legs, obj, states, obs);
             let health = obs.health.unwrap_or(100.0);
             let way_on = obj.trigger.is_some() || obj.kind == Kind::Frontier;
             // Down to trying walls, a wall is weighed as with nothing else to do, because there is
@@ -524,15 +570,16 @@ impl Explorer {
             let walls = obj.kind == Kind::Wall && self.suspecting != super::Suspecting::No;
             let margin = match (self.harm_ok || walls, way_on) {
                 (true, true) => 0.0,
-                (true, false) => self.hardest_floor_hit(&route.legs, obj, &states),
+                (true, false) => self.hardest_floor_hit(&route.legs, obj, states),
                 (false, _) => HEALTH_MARGIN,
             };
             if cost > RISK_SHARE * health && health - cost < margin {
                 self.short_of_health = Some(obs.tic);
-                if crate::debug::on().no_route {
-                    self.log.push(format!("  no route for '{}': refusal 1: cost {cost:.0} (the way {:.0}) against health {health:.0}, armor {:?}, margin {margin:.0}, nothing else to do {}", obj.label, self.route_damage(&route.legs, &states, obs), obs.armor, self.harm_ok));
-                }
-                return None;
+                return Some(Refusal::ShortOfHealth {
+                    cost,
+                    health,
+                    margin,
+                });
             }
         }
         if obj.kind != Kind::Exit && !obj.risky && !self.knowledge.protected(obs.tic) {
@@ -555,16 +602,12 @@ impl Explorer {
                     }
                     if let Some(s) = n.rsplit(' ').next().and_then(|x| x.parse::<usize>().ok()) {
                         if k.damaging(s) && !escaped.contains(&s) {
-                            if crate::debug::on().no_route {
-                                self.log
-                                    .push(format!("  no route for '{}': refusal 2", obj.label));
-                            }
-                            return None;
+                            return Some(Refusal::DropOntoHarm { sector: s });
                         }
                     }
                 }
             }
-            let damage = self.expected_damage(&route.legs, obj, &states, obs);
+            let damage = self.expected_damage(&route.legs, obj, states, obs);
             // Not while shut in on floors that hurt, for a line to set off: staying costs all she has,
             // so a tenth of it is no measure, and a switch, a door or a line is the way a pit opens.
             // Not for walls or looking: lifted for every way, she wanders in it, which is worse.
@@ -580,11 +623,7 @@ impl Explorer {
             if (damage > RISK_SHARE * obs.health.unwrap_or(100.0) || wall_over_harm)
                 && !(shut_in && obj.trigger.is_some())
             {
-                if crate::debug::on().no_route {
-                    self.log
-                        .push(format!("  no route for '{}': refusal 3", obj.label));
-                }
-                return None;
+                return Some(Refusal::HarmWhileSafeLeft { damage });
             }
         }
         // Nor, with something safe still to do, by a run-jump over where she couldn't get back from
@@ -595,35 +634,18 @@ impl Explorer {
                 leg.path
                     .jumps
                     .iter()
-                    .any(|j| self.falls_for_good(j, &view, &route.states))
+                    .any(|j| self.falls_for_good(j, view, &route.states))
             })
         {
-            if crate::debug::on().no_route {
-                self.log
-                    .push(format!("  no route for '{}': refusal 4", obj.label));
-            }
-            return None;
+            return Some(Refusal::JumpOverNoWayBack);
         }
-        if obj.kind != Kind::Exit && self.dead_end(&route, obj, obs, &view) {
-            if crate::debug::on().no_route {
-                self.log
-                    .push(format!("  no route for '{}': refusal 5", obj.label));
-            }
-            return None;
+        if obj.kind != Kind::Exit && self.dead_end(route, obj, obs, view) {
+            return Some(Refusal::DeadEnd);
         }
-        if obj.kind != Kind::Exit && !obj.risky && self.shuts_in(&route, obj, obs, &view) {
-            if crate::debug::on().no_route {
-                self.log
-                    .push(format!("  no route for '{}': refusal 6", obj.label));
-            }
-            return None;
+        if obj.kind != Kind::Exit && !obj.risky && self.shuts_in(route, obj, obs, view) {
+            return Some(Refusal::ShutsHerIn);
         }
-        Some(steps_from_legs(
-            &view,
-            &route.legs,
-            Some(last),
-            Some(&states),
-        ))
+        None
     }
 
     /// Does the route count on something timed that will have lapsed by the time it's needed?
