@@ -124,6 +124,23 @@ needed pickup before a far keyed door). Open: A2-A5, B2-B4 (the fall back is bui
 (tracking a walker by its steps), D1-D4, D6, D7; the survey's map-side items (M2-M6) and live
 heights (O6); the three loops of DECISIONS.md's step 5; the advisor to be grown.
 
+## Since (2026-11-11)
+
+Score 0.460, 401 exits (`out/score/base.tsv`; run for run against it, as above). The cleanup
+(`docs/CLEANUP_PLAN.md`): comments, formatting, the fight's, explorer's and follower's
+structure done; its findings each scored (a table there: three kept, the pace one tried twice
+and lost, two checked and no bug); what's left is structure with no failing run.
+
+Next is Evil's control through the Neuro SDK: `docs/NEURO_SDK_PLAN.md` (every decision mapped
+by how long its answer's worth having; five grains of control; the bot's questions; what
+she's told; control of the game itself, cheats typed and never listed; notes from directing
+levels by hand, which reorder its stages). Built of it so far, in `control/directed.rs`: a
+replaced order says so and an errand resumes exploring; `then`; the idle fallback (`idle N`);
+fights told (fast loss, a summary, secrets); `fight` / `doom_fight` (a gun, a target, hold
+fire, a stance, each for a while). To direct a game by hand: `watch <wad> <map> --headless
+--speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
+`.out` twin (`me.txt` gives `me.out`).
+
 ## The stream console (2026-11-10)
 
 `evil-boom console` (a web page for the streamer; the game its child, `watch --control`, Doom's
