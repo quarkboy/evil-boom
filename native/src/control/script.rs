@@ -8,6 +8,9 @@
 //!                       an order (REF an id or a name; DIR n, ne, east, ...); `then` last: after
 //!                       the order in hand, not instead of it
 //!   check REF [risky]   could she go there now (as doom_go asks), and if not, why
+//!   fight target REF|KIND [SECONDS] | fight weapon NAME|auto [SECONDS] | fight hold_fire
+//!   [SECONDS] | fight fire | fight bold|careful [SECONDS] | fight steady | fight auto
+//!                       her say in the fight, each for a while (10 s, a stance 30)
 //!   idle SECONDS|wait   with no order that long she carries on by herself (not leaving the
 //!                       level); wait: she waits, as long as it takes
 //!   status              her health, armor, weapons, ammo, keys, what she's doing
@@ -99,6 +102,23 @@ pub fn command(
             };
             d.order_with(o, rush, then);
             Ok(Vec::new())
+        }
+        Some("fight") => {
+            // (the last word a number: for that many seconds)
+            let secs = w
+                .last()
+                .and_then(|v| v.parse::<f64>().ok())
+                .filter(|_| w.len() > 2);
+            let end = w.len() - usize::from(secs.is_some());
+            let r = (end > 2).then(|| w[2..end].join(" "));
+            d.fight(
+                agent,
+                obs,
+                w.get(1).copied().unwrap_or(""),
+                r.as_deref(),
+                secs,
+            )
+            .map(|said| vec![said])
         }
         Some("idle") => {
             // (with no order this many seconds she carries on by herself; `idle wait`: she waits)

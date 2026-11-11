@@ -438,6 +438,15 @@ impl Combat {
                 .remaining()
                 .iter()
                 .any(|m| m.id != t.id && mon(m.name).boss);
+        // A gun she's been told to use: that one, while it has a shot in it and (a launcher) its
+        // shot wouldn't go off by her.
+        if let Some(slot) = self.ordered_gun.filter(|s| held.contains(s)) {
+            let w = weapon_in(slot, obs);
+            let empty = w.ammo_per_shot > 0 && Self::ammo(obs, slot) < w.ammo_per_shot;
+            if !empty && !(slot == 5 && !self.rocket_safe(obs, t)) {
+                return slot;
+            }
+        }
         let (mut best, mut cost) = (obs.weapon.unwrap_or(2), f64::INFINITY);
         let mut blocked = None;
         // Others awake shooting at her from a distance, t aside.

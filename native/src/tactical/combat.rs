@@ -181,6 +181,11 @@ pub struct Combat {
     pub forced_target: Option<i32>,
     /// moves the tree isn't to make: a node giving one is passed over (forced likewise)
     pub barred: Vec<Move>,
+    /// the gun to fight with, whatever the rule would pick, while it has a shot in it (a choice
+    /// forced: whoever directs her)
+    pub ordered_gun: Option<i32>,
+    /// the trigger let go, whatever's in her sights (a choice forced likewise)
+    pub ordered_hold_fire: bool,
     pub los: LineOfSight,
     /// every monster seen, by id
     pub known: BTreeMap<i32, Seen>,
@@ -314,6 +319,8 @@ impl Combat {
             journal: Journal::default(),
             forced_target: None,
             barred: Vec::new(),
+            ordered_gun: None,
+            ordered_hold_fire: false,
             los: LineOfSight::new(&nav.map),
             known: BTreeMap::new(),
             senses: Senses {
@@ -1799,7 +1806,7 @@ impl Combat {
             }
         }
         let aim = act.aim.or(s.aim);
-        let fire = fire && !act.hold_fire && !self.baiting;
+        let fire = fire && !act.hold_fire && !self.baiting && !self.ordered_hold_fire;
         let why = act.why;
         let kind = act.kind;
         let urgent = !s.missiles.is_empty() || s.vile.is_some();

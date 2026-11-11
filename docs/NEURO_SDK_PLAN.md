@@ -522,6 +522,25 @@ the mancubi, the megasphere when it's low) get her through where the rules don't
 18. **"picking up nearby"** was her status through the whole fight. And ten backpacks were
     ten lines of the items list.
 
+**MAP07 again, with the first tactics built** (`fight weapon`, `fight target`, `fight
+hold_fire`, stances; each with its expiry). "fight weapon rocket 60" before pressing the
+switch: **the four mancubi dead in 19 s for 27 health** (without it, on the same level: 40 s,
+and into the arachnotrons at 57). So one order of the kind a player gives did change the
+fight. Then I lost her to the arachnotrons at 64 s all the same, and how is the lesson:
+
+19. **My own order killed her.** "fight weapon ssg 60" against arachnotrons took her in to
+    the super shotgun's range of plasma spiders, in the open. The bot did as told. It needs the
+    one honest line of 5.5 when a tactic's rated badly ("SSG on arachnotrons means closing to
+    100 in the open: I'd keep back"), and then to do it.
+20. **There's still no way to say "get behind something"**. The megasphere and the start room
+    were both "no known way" or not what I meant; `go AREA rush` isn't a retreat. A retreat
+    she can order (to cover, to a place) is the next seam; it's the one that would have
+    mattered here.
+21. **A turn of mine lost to a tooling slip was 25 s of her fighting unwatched**, and that's
+    how she died. For Evil the same will happen whenever she's talking to chat: the fight's
+    defaults have to carry her through a turn she misses. A tactic running out mid-fight goes
+    back to the rules (it did); a stance she set stays its time.
+
 What this changes in the stages: the idle fallback and order queueing move to the front
 (with the grammar: ids, "seen, no way yet", outcomes); rankings and the pick come with them
 rather than later; the events for moments (secrets, kills, the fight summary) are stage 1 as

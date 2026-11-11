@@ -156,6 +156,100 @@ const AUTO_SAY_EVERY: i64 = 8 * 35;
 const FIGHT_NOTABLE_HEALTH: f64 = 20.0;
 const FIGHT_NOTABLE_KILLS: i32 = 3;
 
+/// Her say in the fight (`Director::fight`): each holds till its time's up, then the rules have
+/// it back, so one forgotten can't go on costing her.
+#[derive(Default)]
+struct Tactics {
+    /// shot first: one monster (its id) or the nearest of a kind (its name); what it was called;
+    /// till when
+    target: Option<(Aim, String, i64)>,
+    /// the gun to use (its slot), till when
+    gun: Option<(i32, i64)>,
+    hold_fire: Option<i64>,
+    /// a stance taken (its name), till when
+    stance: Option<(&'static str, i64)>,
+}
+
+/// What a target order is of.
+enum Aim {
+    One(i32),
+    Kind(&'static str),
+}
+
+/// a tactic holds this long (seconds) unless she says, and at most this long
+const TACTIC_SECONDS: f64 = 10.0;
+const TACTIC_MOST: f64 = 60.0;
+/// a stance, longer
+const STANCE_SECONDS: f64 = 30.0;
+const STANCE_MOST: f64 = 180.0;
+
+/// The stances she can order, with what each puts over the tuning (the advisor's, as
+/// config/jev.json has them: a first guess, not tuned).
+fn stance(name: &str) -> Option<(&'static str, serde_json::Value)> {
+    Some(match name {
+        "bold" | "push" | "aggressive" => (
+            "bold",
+            serde_json::json!({ "engage": { "stand_threat": 3.0, "low_health": 25.0 }, "retreat": { "health": 30.0 }, "guns": { "outmatched": 45.0 } }),
+        ),
+        "careful" | "cautious" => (
+            "careful",
+            serde_json::json!({ "engage": { "stand_threat": 9.0, "low_health": 50.0 }, "retreat": { "health": 55.0 }, "guns": { "outmatched": 20.0 } }),
+        ),
+        _ => return None,
+    })
+}
+
+/// A monster's kind from what she'd call it ("mancubus", "imps", "the archvile").
+fn monster_kind(word: &str) -> Option<&'static str> {
+    let w: String = word
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphabetic())
+        .collect();
+    let w = w.strip_prefix("the").unwrap_or(&w);
+    let w = w.strip_suffix('s').unwrap_or(w);
+    Some(match w {
+        "zombieman" | "zombie" | "trooper" | "formerhuman" => "Zombieman",
+        "shotgunguy" | "shotgunner" | "sergeant" => "ShotgunGuy",
+        "chaingunguy" | "chaingunner" | "heavyweapondude" => "ChaingunGuy",
+        "doomimp" | "imp" => "DoomImp",
+        "demon" | "pinky" => "Demon",
+        "spectre" => "Spectre",
+        "lostsoul" | "soul" => "LostSoul",
+        "cacodemon" | "caco" => "Cacodemon",
+        "hellknight" | "knight" => "HellKnight",
+        "baronofhell" | "baron" => "BaronOfHell",
+        "arachnotron" | "spider" => "Arachnotron",
+        "painelemental" | "elemental" => "PainElemental",
+        "revenant" | "skeleton" => "Revenant",
+        "fatso" | "mancubu" | "mancubus" | "mancubi" => "Fatso",
+        "archvile" | "vile" => "Archvile",
+        "spidermastermind" | "mastermind" | "spiderdemon" => "SpiderMastermind",
+        "cyberdemon" | "cyber" => "Cyberdemon",
+        "wolfensteins" | "ss" | "nazi" => "WolfensteinSS",
+        _ => return None,
+    })
+}
+
+/// A gun's slot from what she'd call it.
+fn gun_slot(word: &str) -> Option<i32> {
+    let w: String = word
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect();
+    Some(match w.as_str() {
+        "fist" | "fists" | "chainsaw" | "saw" | "berserk" => 1,
+        "pistol" => 2,
+        "shotgun" | "supershotgun" | "ssg" | "sg" => 3,
+        "chaingun" | "cg" => 4,
+        "rocketlauncher" | "rocket" | "rockets" | "rl" | "launcher" => 5,
+        "plasmarifle" | "plasma" | "plasmagun" => 6,
+        "bfg" | "bfg9000" => 7,
+        _ => return None,
+    })
+}
+
 /// An order waiting its turn.
 struct Queued {
     order: Order,
@@ -207,6 +301,8 @@ pub struct Director {
     /// a switch pressed: its line, what it's called, and till when to watch for what it did (what
     /// it moves is learned seeing it move, a moment after)
     pressed: Option<(usize, String, i64)>,
+    /// her say in the fight, while each holds
+    tactics: Tactics,
     /// with no order this long (tics) she carries on by herself (None: she waits, as long as
     /// it takes); and since when she's had none
     pub idle_auto: Option<i64>,
@@ -303,6 +399,7 @@ impl Director {
     pub fn new_map(&mut self) {
         self.queue.clear();
         self.resume = None;
+        self.tactics = Tactics::default();
         self.doing = None;
         self.names.clear();
         self.places = None;
@@ -1084,6 +1181,7 @@ impl Director {
     /// order taken up.
     pub fn tick(&mut self, agent: &mut Agent, obs: &Observation) {
         self.events(agent, obs);
+        self.apply_tactics(agent, obs);
         agent.x_mut().spares = obs
             .things
             .iter()
@@ -1289,6 +1387,174 @@ impl Director {
             self.paused = false;
         }
         self.paused
+    }
+
+    /// A word on the fight (`what`: target, weapon, hold_fire, fire, bold, careful, steady, auto),
+    /// about `r` where it takes one, for `seconds` (its own default if None). What it says back;
+    /// or why not.
+    pub fn fight(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        what: &str,
+        r: Option<&str>,
+        seconds: Option<f64>,
+    ) -> Result<String, String> {
+        let hold = |default: f64, most: f64| {
+            let secs = seconds.unwrap_or(default).clamp(1.0, most);
+            (secs, obs.tic + (secs * 35.0) as i64)
+        };
+        let known = agent
+            .player()
+            .map(|p| p.known_monsters())
+            .unwrap_or_default();
+        match what {
+            "target" => {
+                let r = r.ok_or("target what: a monster's id or a kind (\"archvile\")")?;
+                let id = self.resolve(r);
+                let (aim, called) = if let Some(n) = id
+                    .strip_prefix("monster-")
+                    .and_then(|n| n.parse::<i32>().ok())
+                {
+                    let Some((_, name, ..)) = known.iter().find(|m| m.0 == n) else {
+                        return Err(format!("No {id} known (dead, or never seen)."));
+                    };
+                    (Aim::One(n), format!("{id} ({name})"))
+                } else if let Some(kind) = monster_kind(r) {
+                    if !known.iter().any(|m| m.1 == kind) {
+                        return Err(format!("No {kind} known of right now."));
+                    }
+                    (Aim::Kind(kind), kind.to_string())
+                } else {
+                    return Err(format!("\"{r}\" isn't a monster or a kind of one."));
+                };
+                let (secs, until) = hold(TACTIC_SECONDS, TACTIC_MOST);
+                let said = format!("Targeting {called} first, {secs:.0} s.");
+                self.tactics.target = Some((aim, called, until));
+                Ok(said)
+            }
+            "weapon" | "gun" => {
+                let r = r.ok_or("weapon which: a gun's name, or auto")?;
+                if r == "auto" {
+                    self.tactics.gun = None;
+                    return Ok("Her own choice of gun again.".into());
+                }
+                let slot = gun_slot(r).ok_or_else(|| format!("\"{r}\" isn't a gun."))?;
+                if !obs.weapons.as_ref().is_some_and(|w| w.contains(&slot)) {
+                    return Err(format!("She hasn't got the {r}."));
+                }
+                let (secs, until) = hold(TACTIC_SECONDS, TACTIC_MOST);
+                self.tactics.gun = Some((slot, until));
+                Ok(format!(
+                    "Using the {} while it has a shot, {secs:.0} s.",
+                    weapon_name(slot, obs)
+                ))
+            }
+            "hold_fire" => {
+                let (secs, until) = hold(TACTIC_SECONDS, TACTIC_MOST);
+                self.tactics.hold_fire = Some(until);
+                Ok(format!("Holding fire, {secs:.0} s."))
+            }
+            "fire" => {
+                self.tactics.hold_fire = None;
+                Ok("Firing as she sees fit.".into())
+            }
+            "steady" => {
+                self.tactics.stance = None;
+                if let Some(p) = agent.player_mut() {
+                    p.steady();
+                }
+                Ok("Fighting as usual.".into())
+            }
+            "auto" => {
+                self.tactics = Tactics::default();
+                if let Some(p) = agent.player_mut() {
+                    p.steady();
+                }
+                Ok("The fight's hers again.".into())
+            }
+            other => {
+                let (name, over) = stance(other).ok_or(
+                    "fight: target REF, weapon NAME|auto, hold_fire, fire, bold, careful, steady, auto",
+                )?;
+                let (secs, until) = hold(STANCE_SECONDS, STANCE_MOST);
+                agent
+                    .player_mut()
+                    .ok_or("no fight to take a stance in")?
+                    .take_stance(name, &over)?;
+                self.tactics.stance = Some((name, until));
+                Ok(format!("Fighting {name}, {secs:.0} s."))
+            }
+        }
+    }
+
+    /// Her say in the fight put to the fight each tic; each given up, and said so, when its time
+    /// is up or its subject's gone.
+    fn apply_tactics(&mut self, agent: &mut Agent, obs: &Observation) {
+        let pos = obs.pos();
+        let known = agent
+            .player()
+            .map(|p| p.known_monsters())
+            .unwrap_or_default();
+        let mut over = Vec::new();
+        let target = match &self.tactics.target {
+            Some((_, called, until)) if obs.tic >= *until => {
+                over.push(format!("targeting {called}"));
+                self.tactics.target = None;
+                None
+            }
+            Some((Aim::One(id), called, _)) => {
+                if known.iter().any(|m| m.0 == *id) {
+                    Some(*id)
+                } else {
+                    over.push(format!("targeting {called} (gone)"));
+                    self.tactics.target = None;
+                    None
+                }
+            }
+            Some((Aim::Kind(kind), called, _)) => {
+                let near = known
+                    .iter()
+                    .filter(|m| m.1 == *kind)
+                    .min_by(|a, b| dist(pos, a.2).total_cmp(&dist(pos, b.2)))
+                    .map(|m| m.0);
+                if near.is_none() {
+                    over.push(format!("targeting {called} (none left)"));
+                    self.tactics.target = None;
+                }
+                near
+            }
+            None => None,
+        };
+        if self.tactics.gun.is_some_and(|(_, until)| obs.tic >= until) {
+            over.push("the gun ordered".to_string());
+            self.tactics.gun = None;
+        }
+        if self.tactics.hold_fire.is_some_and(|until| obs.tic >= until) {
+            over.push("holding fire".to_string());
+            self.tactics.hold_fire = None;
+        }
+        let stance_over = self
+            .tactics
+            .stance
+            .is_some_and(|(_, until)| obs.tic >= until);
+        if stance_over {
+            if let Some((name, _)) = self.tactics.stance.take() {
+                over.push(format!("fighting {name}"));
+            }
+        }
+        if let Some(p) = agent.player_mut() {
+            if stance_over {
+                p.steady();
+            }
+            let c = p.combat_mut();
+            c.forced_target = target;
+            c.ordered_gun = self.tactics.gun.map(|(slot, _)| slot);
+            c.ordered_hold_fire = self.tactics.hold_fire.is_some();
+        }
+        if !over.is_empty() {
+            self.event(obs, false, format!("Over: {}.", over.join("; ")));
+        }
     }
 
     /// On her own for want of an order: what she's taken up is said (quietly) as it changes;

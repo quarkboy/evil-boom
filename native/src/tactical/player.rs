@@ -552,6 +552,23 @@ impl Player {
         Ok(())
     }
 
+    /// A stance taken: its numbers over her tuning (any groups and fields, as a tuning file)
+    /// till it's given up (`steady`). Whoever directs her says when.
+    pub fn take_stance(&mut self, name: &str, over: &serde_json::Value) -> Result<(), String> {
+        let t = Rc::new(self.base_tune.with(over)?);
+        self.fight.combat.tune = Rc::clone(&t);
+        self.fight.tune = t;
+        self.stance = (name.to_string(), i64::MAX);
+        Ok(())
+    }
+
+    /// Her own tuning again.
+    pub fn steady(&mut self) {
+        self.stance.0.clear();
+        self.fight.combat.tune = Rc::clone(&self.base_tune);
+        self.fight.tune = Rc::clone(&self.base_tune);
+    }
+
     /// Her target from now on, while it's in sight and after her, whatever the rule would pick
     /// (None: the rule's again).
     pub fn force_target(&mut self, id: Option<i32>) {
