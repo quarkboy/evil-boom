@@ -455,7 +455,7 @@ time, 23/41 kills, 8/42 items, 2/6 secrets, never under 94 health.** A score run
 this level takes about 4 minutes: most of the rest was her standing waiting on me. What I
 ran into, in the order it cost me:
 
-1. **She stood idle about half the time.** Every order done left her waiting till I'd read
+1. **She stood idle 486 of the 799 seconds** (from the reports: an order's end to the next one's start). Every order done left her waiting till I'd read
    it and thought. Nothing told me she was idle but the absence of news. The idle fallback
    (section 3) and the force are the first thing to have; nothing else matters as much.
 2. **A second order silently threw away the first.** "go shotgun" then "go switch": she
