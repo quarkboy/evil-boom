@@ -24,6 +24,7 @@ pub struct Session {
     /// connected now, and who to (the startup's acknowledgement)
     connected: bool,
     who: String,
+    character: Character,
     pub director: Director,
     /// a force out, not yet answered by an action
     forced: bool,
@@ -35,29 +36,52 @@ pub struct Session {
     briefed: bool,
 }
 
+/// Who's playing, by the `characterId` of the startup's acknowledgement.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Character {
+    /// not said yet (or a server that doesn't say)
+    Unknown,
+    Neuro,
+    Evil,
+    /// someone else, by the id given
+    Other(String),
+}
+
+impl Character {
+    pub fn of(id: &str) -> Character {
+        match id.trim().to_lowercase().as_str() {
+            "" => Character::Unknown,
+            "neuro" => Character::Neuro,
+            "evil" => Character::Evil,
+            other => Character::Other(other.to_string()),
+        }
+    }
+}
+
 /// The actions, as registered (descriptions and schemas Neuro reads as they are).
 pub fn actions() -> Vec<Value> {
     let s = |props: Value, required: &[&str]| json!({ "type": "object", "properties": props, "required": required });
     // (short: every word here is in Evil's context for the whole game)
     vec![
-        json!({ "name": "doom_look", "description": "What's round her: the room, what it leads to, monsters, items, doors and switches in sight, sounds, the bot's pick." }),
-        json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids, the bot's best first. Areas: only unexplored, current and named ones unless all; a/b/c walls to search: at secrets 1/2/3.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
+        json!({ "name": "doom_look", "description": "What's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds, a suggestion." }),
+        json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids, the likeliest first. Areas: only unexplored, current and named ones unless all; a/b/c walls to search: at secrets 1/2/3.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
         json!({ "name": "doom_press", "description": "Press a switch. Exploring never presses them. rush, then: as for doom_go.", "schema": s(json!({ "ref": { "type": "string" }, "rush": { "type": "boolean" }, "then": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_inspect", "description": "What something is and where.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
-        json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left. rush: keep going mid-fight, shooting and dodging on the way. then: after the current order, not instead (exploring resumes after a go anyway).", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" }, "rush": { "type": "boolean" }, "then": { "type": "boolean" } }), &["ref"]) }),
-        json!({ "name": "doom_explore", "description": "Explore an area or a direction (N, NE, ...); paused while she's fighting. secrets: also search its walls, 1 the likeliest few, 2 most, 3 every suspicious one (slow).", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "integer", "enum": [0, 1, 2, 3] }, "then": { "type": "boolean" } }), &["target"]) }),
+        json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left. rush: keep going mid-fight, shooting and dodging on the way. then: after the current action, not instead (exploring resumes after a go anyway).", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" }, "rush": { "type": "boolean" }, "then": { "type": "boolean" } }), &["ref"]) }),
+        json!({ "name": "doom_explore", "description": "Explore an area or a direction (N, NE, ...); paused while you're fighting. secrets: also search its walls, 1 the likeliest few, 2 most, 3 every suspicious one (slow).", "schema": s(json!({ "target": { "type": "string" }, "secrets": { "type": "integer", "enum": [0, 1, 2, 3] }, "then": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_name", "description": format!("Name something (up to {NAME_MAX} characters); the name then works as its id."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
-        json!({ "name": "doom_fight", "description": "Her fight, for a while (10 s unless seconds; then her own rules again). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / steady: how she fights. auto: all hers again.", "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
-        json!({ "name": "doom_policy", "description": "Standing settings. idle: seconds with no order before she carries on by herself, not leaving (0: she waits). hints: the bot's own pick, off, on_stall or always.", "schema": s(json!({ "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
+        json!({ "name": "doom_fight", "description": "Your fight, for a while (10 s unless seconds; then by reflex again). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / steady: how you fight. auto: all by reflex again.", "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
+        json!({ "name": "doom_policy", "description": "Standing settings. idle: seconds with no action before you carry on by instinct, not leaving (0: you wait). hints: suggestions of what to do next, off, on_stall or always.", "schema": s(json!({ "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
-        json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, current order, what she's fighting." }),
+        json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, what you're doing, what you're fighting." }),
     ]
 }
 
-/// The rules, told on connecting and at each level.
-const BRIEFING: &str = "You direct a Doom player. She moves, fights and takes spare health, armor and ammo herself; you choose where she goes. \
-Ids come from doom_list; your names work as ids. \"NE 400\": north-east, 400 units away. (tally): counts for the items %. She waits for orders when done.";
+/// The rules, told on connecting and at each level. Everything she's told is told to her as
+/// the one playing ("you found a secret"), never of a player she directs ("she found").
+const BRIEFING: &str = "You're playing Doom. Moving, fighting and taking spare health, armor and ammo you do by reflex; you choose where you go. \
+Ids come from doom_list; your names work as ids. \"NE 400\": north-east of you, 400 units away. (tally): counts for the items %. An action done, you wait for the next.";
 
 impl Session {
     pub fn new(url: &str) -> Session {
@@ -66,6 +90,7 @@ impl Session {
             url: url.to_string(),
             connected: false,
             who: String::new(),
+            character: Character::Unknown,
             director: Director::new(),
             forced: false,
             idle_since: 0,
@@ -98,6 +123,7 @@ impl Session {
                 Incoming::Hello { character, display } => {
                     log.push(format!("neuro: playing with {display} ({character})"));
                     self.who = format!("{display} ({character})");
+                    self.character = Character::of(&character);
                 }
                 Incoming::Lost(why) => {
                     self.connected = false;
@@ -145,7 +171,7 @@ impl Session {
             let state = self.state(agent, obs);
             self.link.force(
                 &state,
-                "She's waiting. Next order?",
+                "You're waiting. What next?",
                 &[
                     "doom_explore",
                     "doom_go",
@@ -170,6 +196,12 @@ impl Session {
         self.link = Link::start(&self.url, actions());
         self.connected = false;
         self.forced = false;
+    }
+
+    /// Which of the twins is playing, once the startup's been acknowledged: for what's worth
+    /// telling one differently from the other.
+    pub fn character(&self) -> &Character {
+        &self.character
     }
 
     /// (Neuro's address, connected, who's playing)
@@ -199,11 +231,11 @@ impl Session {
             if l.hidden > 0 {
                 s.push_str(&format!("- +{} explored\n", l.hidden));
             }
-            marked |= l.lines.iter().any(|e| e.contains("(my pick"));
+            marked |= l.lines.iter().any(|e| e.contains("(suggested"));
         }
         // (the bot's pick, if no line above was it)
         if let Some(p) = self.director.pick_line(agent, obs).filter(|_| !marked) {
-            s.push_str(&format!("\nMy pick: {p}.\n"));
+            s.push_str(&format!("\nSuggested: {p}.\n"));
         }
         s
     }
@@ -282,7 +314,7 @@ impl Session {
                     String::new()
                 };
                 if let Some(p) = &l.pick {
-                    more.push_str(&format!("\nMy pick: {p}."));
+                    more.push_str(&format!("\nSuggested: {p}."));
                 }
                 if l.lines.is_empty() {
                     return (true, format!("None known yet.{more}"));
@@ -308,12 +340,12 @@ impl Session {
                     self.director.hints = h;
                 }
                 let idle = match self.director.idle_auto {
-                    Some(t) => format!("carries on by herself after {} s with no order", t / 35),
-                    None => "waits for orders".to_string(),
+                    Some(t) => format!("carry on by instinct after {} s with no action", t / 35),
+                    None => "wait for the next action".to_string(),
                 };
                 (
                     true,
-                    format!("She {idle}; hints {}.", self.director.hints.name()),
+                    format!("You {idle}; hints {}.", self.director.hints.name()),
                 )
             }
             "doom_inspect" => {

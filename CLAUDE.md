@@ -139,7 +139,9 @@ replaced order says so and an errand resumes exploring; `then`; the idle fallbac
 fights told (fast loss, a summary, secrets); `fight` / `doom_fight` (a gun, a target, hold
 fire, a stance, each for a while); the bot's pick and lists in its order, `look` / `doom_look`,
 `hints` and `idle` as `doom_policy` (`control/directed/look.rs`: the pick is the explorer's
-next objective under the id it's ordered by; E1M2 finishes on the picks alone). To direct a game by hand: `watch <wad> <map> --headless
+next objective under the id it's ordered by; E1M2 finishes on the picks alone). What Evil
+reads is in the second person, hers ("You found a secret"; "by instinct", "Suggested:": no
+"she", no bot beside her); who's playing (`Character`) comes with the startup's acknowledgement. To direct a game by hand: `watch <wad> <map> --headless
 --speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
 `.out` twin (`me.txt` gives `me.out`).
 

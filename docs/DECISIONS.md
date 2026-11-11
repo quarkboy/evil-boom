@@ -2451,3 +2451,18 @@ The SDK plan's 5.5 and 4.1 (`docs/NEURO_SDK_PLAN.md`), in `control/directed/look
 Checked: E1M2 with every suggestion taken as an order and nothing else: 68 of 70 carried
 out, out by the exit at 738 s, 41/41 kills. Parity: 24 runs the same (none of it is in a
 headless run).
+
+## What Evil's told is told to her as the player (the user, 2026-11-11)
+
+Everything the API tells her is in the second person, as hers to have done: "You found a
+secret", "You died fighting 2 Demon", "You're waiting. What next?"; the actions' descriptions
+and the briefing too ("You're playing Doom. Moving, fighting ... you do by reflex; you choose
+where you go."). The bot isn't a second character in her context: going on without an order is
+"by instinct", the fight's own choices "by reflex", its pick "Suggested:". Considered:
+"autopilot" for those (a machine beside her again, the thing the change removes). The words
+the viewers and the streamer read stay in the third person. For the same reason what she
+does is an action, never an order ("No action for 8 s", "Dropped for the new action"); the
+code's `Order` and the script's `order go` keep their name, she never reads them.
+
+Who's playing comes with the startup's acknowledgement (`characterId`): kept as
+`neuro::session::Character` (Neuro, Evil, another, not said). Nothing differs by it yet.

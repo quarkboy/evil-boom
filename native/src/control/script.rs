@@ -51,7 +51,7 @@ pub fn command(
                     l.hidden
                 ));
             }
-            out.extend(l.pick.map(|p| format!("  my pick: {p}")));
+            out.extend(l.pick.map(|p| format!("  suggested: {p}")));
             Ok(out)
         }
         Some("name") => {
@@ -129,8 +129,8 @@ pub fn command(
                 .and_then(|v| v.parse::<f64>().ok())
                 .map(|secs| (secs * 35.0) as i64);
             Ok(vec![match d.idle_auto {
-                Some(t) => format!("with no order for {} s she carries on by herself", t / 35),
-                None => "with no order she waits".to_string(),
+                Some(t) => format!("with no action for {} s you carry on by instinct", t / 35),
+                None => "with no action you wait".to_string(),
             }])
         }
         Some("look") => Ok(d.look(agent, obs)),
@@ -155,7 +155,7 @@ pub fn command(
             let doing = x
                 .current
                 .as_ref()
-                .map_or("waiting for orders", |o| o.label.as_str());
+                .map_or("waiting", |o| o.label.as_str());
             Ok(vec![format!(
                 "at ({:.0}, {:.0}), facing {:.0}, health {:.0}, armor {:.0}, {:.1}s; doing: {doing}",
                 obs.x,

@@ -261,6 +261,9 @@ fn pump(
                     },
                     "startup" => {
                         say("STARTUP".into());
+                        if let Err(e) = ws.send(Message::text(super::mock::hello().to_string())) {
+                            return e.to_string();
+                        }
                         continue;
                     }
                     _ => continue,

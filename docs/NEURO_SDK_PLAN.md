@@ -318,6 +318,21 @@ about). Both are served by five channels, each with a budget, in one grammar.
 
 ### 5.1 The grammar (one vocabulary everywhere)
 
+- **Voice** (the user's, 2026-11-11): she's told everything as the one playing, in the second
+  person: "You found a secret (2/5).", "You're losing health fast", "You died", never "she
+  found". There's no bot beside her in what she reads: what she does without an order she
+  does "by instinct" (exploring on) or "by reflex" (the fight); the bot's pick is
+  "Suggested: ...". What the viewers and the streamer read (the stream's panel, the console,
+  the logs) keeps "she".
+  And she takes **actions**, she doesn't give **orders** (there's nobody to order): "No
+  action for 8 s: you carry on by instinct", "Dropped for the new action". (In the code and
+  in this plan an "order" is still the thing an action queues: `Order`, `order go` in a
+  script.)
+- **Who's playing**: the startup's acknowledgement gives `characterId` (`neuro`, `evil`);
+  `Session::character()` has it (`Character`), for telling one twin differently from the
+  other. Nothing is tailored by it yet. The stand-ins (`neuro-mock`, `neuro-gpt`) acknowledge
+  as Evil.
+
 - **Ids**: `kind-N` (`door-3`, `switch-7`, `area-2`, `monster-12`, `item-t41`, `exit-1`),
   stable for the map; her names replace them in everything said back.
 - **Where**: compass and distance from her, rounded: `NE 400`. Height when it matters:

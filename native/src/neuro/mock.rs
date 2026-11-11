@@ -49,6 +49,11 @@ pub fn serve(port: u16, actions: &Path) -> Result<(), String> {
                 match ws.read() {
                     Ok(Message::Text(t)) => {
                         let line = summary(t.as_str());
+                        // (the acknowledgement Neuro's server gives: who's playing)
+                        if line.starts_with("STARTUP") {
+                            ws.send(Message::text(hello().to_string()))
+                                .map_err(|e| e.to_string())?;
+                        }
                         if waiting.as_deref().is_some_and(|w| line.contains(w)) {
                             waiting = None;
                         }
@@ -101,6 +106,11 @@ pub fn serve(port: u16, actions: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The startup's acknowledgement, as Evil.
+pub fn hello() -> Value {
+    json!({ "command": "startup", "data": { "session": { "characterId": "evil", "displayName": "Evil Neuro" } } })
 }
 
 /// A message from the game, readable.

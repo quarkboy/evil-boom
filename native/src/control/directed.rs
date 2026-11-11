@@ -454,7 +454,7 @@ impl Director {
             tic,
             ok: false,
             text: format!(
-                "Died{by}. {lives_left} lives left: the level again from its start, with what she came in with."
+                "You died{by}. {lives_left} lives left: the level again from its start, with what you came in with."
             ),
             notable: true,
         });
@@ -499,7 +499,7 @@ impl Director {
             Some(Doing::Off) => "getting off a hurting floor".to_string(),
             Some(Doing::Pickup) => "picking up nearby".to_string(),
             Some(Doing::Auto) => format!(
-                "on her own (no order){}",
+                "by instinct{}",
                 agent
                     .x()
                     .current
@@ -630,7 +630,7 @@ impl Director {
         if health <= 0.0 {
             if !self.told_dead {
                 self.told_dead = true;
-                self.event(obs, true, "Died.".into());
+                self.event(obs, true, "You died.".into());
             }
             return;
         }
@@ -638,7 +638,7 @@ impl Director {
         let mark = [25, 50].into_iter().find(|&m| health < f64::from(m));
         if mark != self.health_mark {
             if mark.is_some_and(|m| self.health_mark.is_none_or(|h| m < h)) {
-                self.event(obs, true, format!("Health down to {health:.0}."));
+                self.event(obs, true, format!("Your health is down to {health:.0}."));
             }
             self.health_mark = mark;
         }
@@ -649,7 +649,7 @@ impl Director {
                 .filter(|k| self.had_keys.is_some_and(|h| !h.has(*k)))
                 .collect();
             for k in got {
-                self.event(obs, true, format!("Got the {}.", key_name(k)));
+                self.event(obs, true, format!("You got the {}.", key_name(k)));
             }
             self.had_keys = Some(keys);
         }
@@ -660,7 +660,7 @@ impl Director {
                 .filter(|w| self.had_weapons.as_ref().is_some_and(|h| !h.contains(w)))
                 .collect();
             for w in got {
-                self.event(obs, true, format!("Got the {}.", weapon_name(w, obs)));
+                self.event(obs, true, format!("You got the {}.", weapon_name(w, obs)));
             }
             self.had_weapons = Some(weapons.clone());
         }
@@ -876,7 +876,7 @@ impl Director {
             self.event(
                 obs,
                 true,
-                format!("Secret found ({secrets}/{}).", self.tally.secrets.1),
+                format!("You found a secret ({secrets}/{}).", self.tally.secrets.1),
             );
         }
         self.told_secrets = Some(secrets);
@@ -939,7 +939,7 @@ impl Director {
                 obs,
                 true,
                 format!(
-                    "Losing health fast: {:.0} in {} s{by}. Health {health:.0}.",
+                    "You're losing health fast: {:.0} in {} s{by}. Health {health:.0}.",
                     top - health,
                     HURT_WINDOW / 35
                 ),
@@ -1355,7 +1355,7 @@ impl Director {
                     obs,
                     true,
                     format!(
-                        "No order for {} s: carrying on by myself (not leaving the level) till you give one.",
+                        "No action for {} s: you carry on by instinct (not leaving the level) till your next.",
                         limit / 35
                     ),
                 );
@@ -1482,7 +1482,7 @@ impl Director {
                 self.report(
                     obs,
                     true,
-                    "Exploring paused while she's fighting; it goes on after.".into(),
+                    "Exploring paused while you're fighting; it goes on after.".into(),
                 );
             }
         }
@@ -1540,11 +1540,11 @@ impl Director {
                 let r = r.ok_or("weapon which: a gun's name, or auto")?;
                 if r == "auto" {
                     self.tactics.gun = None;
-                    return Ok("Her own choice of gun again.".into());
+                    return Ok("Your gun by reflex again.".into());
                 }
                 let slot = gun_slot(r).ok_or_else(|| format!("\"{r}\" isn't a gun."))?;
                 if !obs.weapons.as_ref().is_some_and(|w| w.contains(&slot)) {
-                    return Err(format!("She hasn't got the {r}."));
+                    return Err(format!("You haven't got the {r}."));
                 }
                 let (secs, until) = hold(TACTIC_SECONDS, TACTIC_MOST);
                 self.tactics.gun = Some((slot, until));
@@ -1568,7 +1568,7 @@ impl Director {
             }
             "fire" => {
                 self.tactics.hold_fire = None;
-                Ok("Firing as she sees fit.".into())
+                Ok("Firing at will.".into())
             }
             "steady" => {
                 self.tactics.stance = None;
@@ -1582,7 +1582,7 @@ impl Director {
                 if let Some(p) = agent.player_mut() {
                     p.steady();
                 }
-                Ok("The fight's hers again.".into())
+                Ok("The fight's all by reflex again.".into())
             }
             other => {
                 let (name, over) = stance(other).ok_or(
@@ -1638,7 +1638,7 @@ impl Director {
             None => None,
         };
         if self.tactics.gun.is_some_and(|(_, until)| obs.tic >= until) {
-            over.push("the gun ordered".to_string());
+            over.push("the gun chosen".to_string());
             self.tactics.gun = None;
         }
         if self.tactics.hold_fire.is_some_and(|until| obs.tic >= until) {
@@ -1684,12 +1684,11 @@ impl Director {
                 false,
                 match exits.first() {
                     Some(e) => format!(
-                        "Nothing more I can find to do here but search walls or leave ({}).",
+                        "Nothing more to do here that you know of but search walls or leave ({}).",
                         self.describe(e, obs)
                     ),
-                    None => {
-                        "Nothing more I can find to do here but search walls or leave.".to_string()
-                    }
+                    None => "Nothing more to do here that you know of but search walls or leave."
+                        .to_string(),
                 },
             );
             return;
@@ -1710,7 +1709,7 @@ impl Director {
                 .told_auto_tic
                 .is_none_or(|t| obs.tic - t >= AUTO_SAY_EVERY)
         {
-            self.event(obs, false, format!("On my own: {phrase}."));
+            self.event(obs, false, format!("By instinct: {phrase}."));
             self.told_auto = phrase;
             self.told_auto_tic = Some(obs.tic);
         }
@@ -1750,20 +1749,20 @@ impl Director {
                 );
             }
             Some(Doing::Once(_, what)) if !matches!(o, Order::Stop) => {
-                self.report(obs, false, format!("Dropped for the new order: {what}."));
+                self.report(obs, false, format!("Dropped for the new action: {what}."));
             }
             Some(Doing::Area(_, what, _)) if !matches!(o, Order::Stop) => {
                 self.report(
                     obs,
                     false,
-                    format!("Dropped for the new order: exploring {what}."),
+                    format!("Dropped for the new action: exploring {what}."),
                 );
             }
             Some(Doing::Way(b, _)) if !matches!(o, Order::Stop) => {
                 self.report(
                     obs,
                     false,
-                    format!("Dropped for the new order: exploring {}.", compass(b)),
+                    format!("Dropped for the new action: exploring {}.", compass(b)),
                 );
             }
             _ => {}
@@ -1905,7 +1904,7 @@ impl Director {
                 obs,
                 false,
                 format!(
-                    "On a hurting floor, no known way off (health {:.0}).",
+                    "You're on a hurting floor, no known way off (health {:.0}).",
                     obs.health.unwrap_or(0.0)
                 ),
             );

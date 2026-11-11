@@ -114,7 +114,7 @@ impl Director {
             None => open
                 .iter()
                 .find(|o| o.kind == Kind::Exit)
-                .map(|o| self.pick_of(agent, obs, o, "nothing else left I can get to".into())),
+                .map(|o| self.pick_of(agent, obs, o, "nothing else left in reach".into())),
         }
     }
 
@@ -191,7 +191,7 @@ impl Director {
                 match pick.as_ref().filter(|p| p.id == e.id) {
                     Some(p) => {
                         marked = true;
-                        format!("{line} (my pick: {})", p.why)
+                        format!("{line} (suggested: {})", p.why)
                     }
                     None => line,
                 }
@@ -242,7 +242,7 @@ impl Director {
             return String::new();
         };
         self.nudged = self.nudged.max(1); // (said: not suggested again the same moment)
-        format!(" My pick: {p}.")
+        format!(" Suggested: {p}.")
     }
 
     /// Waiting on an order for `idle` tics: the pick suggested, once quietly, once to be heard
@@ -325,7 +325,7 @@ impl Director {
                 Places::sketch(a),
                 explored(&a.id)
             ),
-            None => "Not on any floor she knows.".to_string(),
+            None => "Not on any floor you know.".to_string(),
         });
 
         // The fight, in the assessment's own words; and the bot's own choice in it, which
@@ -508,7 +508,7 @@ impl Director {
         }
         if let Some((_, _, at, _, _)) = about.first() {
             out.push(format!(
-                "Out of sight, seen lately: {} (nearest {}).",
+                "Out of your sight, seen lately: {} (nearest {}).",
                 about.len(),
                 way(*at)
             ));
@@ -602,7 +602,7 @@ impl Director {
         }
 
         if let Some(p) = self.pick_line(agent, obs).filter(|_| !fighting) {
-            out.push(format!("My pick: {p}."));
+            out.push(format!("Suggested: {p}."));
         }
         out
     }

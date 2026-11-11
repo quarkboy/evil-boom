@@ -191,3 +191,22 @@ fn parse(text: &str) -> Option<Incoming> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{parse, Incoming};
+    use crate::neuro::session::Character;
+
+    /// The startup's acknowledgement, as the stand-ins send it, says who's playing.
+    #[test]
+    fn startup_says_who() {
+        let hello = crate::neuro::mock::hello().to_string();
+        let Some(Incoming::Hello { character, display }) = parse(&hello) else {
+            panic!("not a hello: {hello}");
+        };
+        assert_eq!(display, "Evil Neuro");
+        assert_eq!(Character::of(&character), Character::Evil);
+        assert_eq!(Character::of("Neuro"), Character::Neuro);
+        assert_eq!(Character::of(""), Character::Unknown);
+    }
+}
