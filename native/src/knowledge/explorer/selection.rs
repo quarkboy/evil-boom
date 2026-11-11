@@ -47,12 +47,11 @@ impl Explorer {
     ) -> Vec<Objective> {
         let mut found = self.suspected(obs, reach, panic);
         if panic {
-            // (all of them: those with somewhere she can't get to behind first, nearest first;
-            // but before them those she can get to without a floor that hurts, unsuited: her
-            // reach runs on over such floors, but with the health it takes gone, routes there
-            // refuse them, and a round of far walls there left the walls of the dry floor she
-            // was stranded on, a hidden door among them, never tried. E4M6 UV: health 9, a dry
-            // ledge in a lava field, 12 far walls dropped "no route" every round for 300 s)
+            // All of them, those with somewhere she can't get to behind them first, nearest first. But
+            // before those, the ones she can get to without a floor that hurts (when unsuited): her
+            // reach runs on over such floors, but once the health it takes is gone the routes there
+            // are refused, and a round of far walls would leave the walls of the dry floor she stands
+            // on never tried.
             let dry = self.dry_reach(obs, reach);
             let mesh = &self.nav.mesh;
             let wet = |p: Point| !mesh.poly_at(p).is_some_and(|pi| dry.contains(&pi));
@@ -65,9 +64,9 @@ impl Explorer {
         }
         found
             .into_iter()
-            // (the ones with more to go on, then the nearest of them: not the nearest, then those
-            // with more to go on, none of a round of weak ones near her while E1M6's door 1119,
-            // further off, waited)
+            // The ones with more to go on, then the nearest of them: not the nearest first and then
+            // those with more to go on, or a round of weak walls near her comes before a strong one
+            // further off.
             .filter(|(score, _, stand, _)| {
                 !(self.strong_only && *score <= SUSPICION_MIN) && self.standable(*stand, false)
             })
@@ -101,14 +100,13 @@ impl Explorer {
         dry
     }
 
-    /// The walls worth a search for secrets asked for (Evil's explore with secrets): every one with
-    /// more to go on than one weak sign, not just the few best a round of the walls takes when
-    /// there's nothing else; pressed, and bumped and shot too only where the wall's face stands
-    /// out (as a mapper marks a switch or a gun line). Not every wall with a blank behind it,
-    /// pressed and shot: the user's, watching E1M1's start room searched wall by wall, sixteen of
-    /// them. Her reach as last brought up to date.
+    /// The walls worth pressing in a search for secrets that was asked for (an explore with
+    /// secrets): every one with more to go on than one weak sign, not just the few best that a
+    /// round of the walls takes when there's nothing else. Pressed; and bumped and shot too
+    /// only where the wall's face stands out, as a mapper marks a switch or a gun line. Not
+    /// every wall with a blank behind it. Her reach is as last brought up to date.
     /// At `thoroughness` 1-3 (0: none): pressed from a `secret_score` of THOROUGHNESS's first,
-    /// shot too (a round's) from its second; the objective's suspicion its secret score.
+    /// shot too (a round's) from its second; the objective's suspicion is its secret score.
     pub fn suspected_walls(&mut self, obs: &Observation, thoroughness: u8) -> Vec<Objective> {
         let Some(&(press, shoot)) = usize::from(thoroughness)
             .checked_sub(1)
@@ -127,10 +125,9 @@ impl Explorer {
             .collect()
     }
 
-    /// The walls a search for secrets might press, best first (one for each place behind): those
-    /// with a `secret_score` the most thorough search goes to (the survey's weights, not the
-    /// rounds' score: with the rounds' over 2, the same secrets with a quarter more walls). Her
-    /// reach as last brought up to date.
+    /// The walls a search for secrets might press, best first (one for each place behind):
+    /// those with a `secret_score` the most thorough search goes to. This is the survey's
+    /// score, not the rounds'. Her reach is as last brought up to date.
     fn secret_suspects(&mut self, obs: &Observation) -> Vec<(f64, usize, Point, Point)> {
         let reach = self.reach.clone();
         let known = self.knowledge.known_polys();
@@ -236,8 +233,8 @@ impl Explorer {
         let mesh = Arc::clone(&self.nav.mesh);
         let known = self.knowledge.known_polys();
         let unreached = self.unreached_items(obs, reach);
-        // (the same again while nothing it goes by has changed: asked for every list of what she
-        // could do, for the strong suspects by her, every wall of the level weighed each time)
+        // The same answer again while nothing it goes by has changed: it's asked for with every
+        // list of what she could do, and weighing every wall of the level each time is costly.
         let key = self.suspect_key(reach, &known, &unreached, panic);
         if let Some((_, found)) = self.suspects.as_ref().filter(|(k, _)| *k == key) {
             return found.clone();
@@ -273,7 +270,7 @@ impl Explorer {
         self.follower = None;
         let suited = self.knowledge.protected(obs.tic);
         if suited && !self.suited && self.short_of_health.is_some() {
-            // (a suit on: what cost too much a moment ago may not now, and its minute is short)
+            // A suit on: what cost too much a moment ago may not now, and its minute is short.
             self.log.push(format!(
                 "tic {}: suit on: what cost too much gets another go",
                 obs.tic
@@ -293,10 +290,8 @@ impl Explorer {
         self.from_dead_end = false;
         let mut found = self.try_objectives(obs, false, hooks);
         if !found && self.exit_last && self.exit_before_risks {
-            // (the exit held back for everything else, but not for what she mightn't come back
-            // from: nothing safe left, it's out. MAP18's pass: the exit seen and nothing
-            // untried, a wall of the nukage moat not seen yet, down into it to look, no way
-            // out of it, the exit never taken)
+            // The exit is held back for everything else, but not for what she mightn't come back from:
+            // with nothing safe left, it's out.
             self.exit_last = false;
             self.exits_open = true;
             self.log.push(format!(
@@ -307,7 +302,7 @@ impl Explorer {
         }
         found = found || self.try_objectives(obs, true, hooks);
         if !found && self.nav.jumps.iter().any(|j| j.strafe) {
-            // (nothing else: what a strafing run gets to, MAP03's well)
+            // Nothing else: what a strafing run gets to.
             self.strafe_ok = true;
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
             if found {
@@ -319,12 +314,10 @@ impl Explorer {
                 self.strafe_ok = false;
             }
         }
-        // (the places she got stuck, given another go: two goes can be bad luck, or a goal that
-        // was the trouble, not the way: E3M4's, MAP05's, MAP27's. Before the walls: a way she
-        // knows is a better bet than a guess at one. MAP06: stuck twice on its lift for a hop
-        // onto a pillar beside it, the lift, the way on, left till every wall in reach had been
-        // pressed, four minutes. Once till she knows something more: stuck there again, it's
-        // the walls' turn)
+        // The places she got stuck are given another go: two failures can be bad luck, or a goal
+        // that was the trouble rather than the way. Before the walls: a way she knows is a better
+        // bet than a guess at one. Once till she knows something more: stuck there again, it's the
+        // walls' turn.
         let stuck: Vec<usize> = self
             .knowledge
             .stuck_at
@@ -352,7 +345,7 @@ impl Explorer {
         }
         if !found && perceive && self.suspecting == Suspecting::No {
             self.out_of_options.get_or_insert(obs.tic);
-            // (nothing else: walls that might hide something, pressed in turn)
+            // Nothing else: walls that might hide something, pressed in turn.
             self.suspecting = Suspecting::Walls;
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
             if found {
@@ -365,11 +358,10 @@ impl Explorer {
             && !self.dropped.is_empty()
             && self.retried.as_deref() != Some(self.knowledge.known_summary().as_str())
         {
-            // (nothing else: what was given up on lately gets another go, its wait cut short,
-            // once till there's something else to do: dropped when the way was shut a while,
-            // E1M4's bonus behind the door a walk-over line opens, it waited out her whole life)
-            // (once till she knows something more: not each wall pressed that did nothing, which
-            // threw MAP15's and E4M9's goals out of reach back in, seconds of planning each)
+            // Nothing else: what was given up on lately gets another go with its wait cut short (it may
+            // have been dropped only because the way was shut a while). Once till she knows something
+            // more, not after each wall pressed that did nothing: that would throw goals out of reach
+            // back in every time, seconds of planning each.
             self.retried = Some(self.knowledge.known_summary());
             self.log.push(format!(
                 "tic {}: nothing else to do: the {} things given up on lately get another go",
@@ -380,18 +372,16 @@ impl Explorer {
             self.suspecting = Suspecting::No;
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
         }
-        // (with the exit there, held back for what's left: one round of the walls with little to
-        // go on, then out; a press that turns up something to do starts another. E2M5 went round
-        // every wall of the level)
+        // With the exit there, held back for what's left: one round of the walls with little to go
+        // on, then out. A press that turns up something to do starts another round.
         self.strong_only = self.exit_last && self.panic_tries >= PANIC_WALLS;
         if !found && perceive && (!self.exit_last || !self.exits_open) {
-            // (and nothing to try either: is there a way out of here at all? Every wall round,
-            // nearest first, as a player in a pit with no way out would)
+            // And nothing to try either: is there a way out of here at all? Every wall round her,
+            // nearest first, as a player in a pit with no way out would.
             self.suspecting = Suspecting::Panic;
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
             if found {
-                // (counted: walls with no more to go on than one weak sign; those with more are
-                // all pressed: E4M7's line 1283, E4M9's 1637)
+                // Counted: walls with no more to go on than one weak sign. Those with more are all pressed.
                 if self
                     .current
                     .as_ref()
@@ -416,9 +406,8 @@ impl Explorer {
             self.current = None;
             return;
         }
-        // (not out while a door she set off that shuts for a while and opens again by itself is
-        // still shut: what's past it is still to do, as a player waits for it; E1M6's door 37,
-        // shut on the way to a wall, the level left with a blur sphere behind it)
+        // Not out while a door she set off that shuts for a while and opens again by itself is
+        // still shut: what's past it is still to do, and a player waits for it.
         if !found && self.exit_last && self.reopens_soon(obs) {
             if self.current.is_some() || !self.waiting_reopen {
                 self.log.push(format!(
@@ -431,8 +420,8 @@ impl Explorer {
             return;
         }
         if !found && self.waiting_reopen {
-            // (open again: what was given up on while it was shut gets another go, the way
-            // through it back)
+            // Open again: what was given up on while it was shut gets another go, the way through it
+            // being back.
             self.waiting_reopen = false;
             self.retried = None;
             self.current = None;
@@ -459,27 +448,20 @@ impl Explorer {
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
         }
         if !found {
-            // (nothing at all else, walls and all: a switch pressed from a floor that hurts, the
-            // only way on left; shut in already, what it might shut is no worse than staying.
-            // MAP09's start, an island in a nukage pit, its lifts out switches on the pit's walls)
-            // What the passes before refused this very think gets the pass too: refused under
-            // the margin it lifts. (A dry island in a nukage pit at 28 health, the walk-over line
-            // that opens the pit's door a wade of 7 off, refused at 21 against 25 and so left
-            // out of this pass: stood there the hour)
-            // (only what had no route: not what was dropped as gone, the monster hunted "not
-            // there", taken up again the same tic, dropped, taken up again, every tic, each think
-            // routing every wall afresh: MAP22 HMP, 39 tics a second, 680 s of thinking)
+            // Nothing at all else, walls and all: a switch pressed from a floor that hurts is the only
+            // way on left, and shut in already, what it might shut is no worse than staying.
+            // What the passes before refused this very think gets this pass too: it was refused under
+            // the margin that this pass lifts. Only what had no route, though, not what was dropped as
+            // gone (a monster hunted and not there): that would be taken up and dropped again every
+            // tic, each think routing every wall afresh.
             let tic = obs.tic;
             let refused = std::mem::take(&mut self.refused_now.1);
             self.dropped
                 .retain(|id, &mut t| t != tic || !refused.contains(id));
             self.refused_now.1 = refused;
             self.harm_ok = true;
-            // (the walls too, every one round her: left out of this pass, one refused under the
-            // margin was never tried with it lifted. E2M4, 8 of 12 episodes ended there, an hour
-            // each: a ledge the only way off which is a secret door at the back of a lava
-            // alcove; the door's wall suspected, 47 of her 69 health reckoned for trying it, 22
-            // left against a margin of 25, refused; this pass had no walls in it)
+            // The walls too, every one round her: left out of this pass, a wall refused under the
+            // margin would never be tried with the margin lifted.
             if perceive {
                 self.suspecting = Suspecting::Panic;
             }
@@ -502,14 +484,14 @@ impl Explorer {
                     .push(format!("tic {}: nothing left to do", obs.tic));
             }
             self.current = None;
-            // (the exit out of reach too: where she can get from here is a trap, if it's where
-            // she's started again from; known for the next go)
+            // The exit out of reach too: where she can get from here is a trap, if it's where she has
+            // started again from. Known for the next go.
             self.trapped = Some(self.reach.clone());
         }
     }
 
     /// Take up the best objective there's a route to: of the nearest few as the crow flies, the
-    /// one nearest by the way there (teleporters and lifts make those very different: MAP24).
+    /// one nearest by the way there (teleporters and lifts make those very different).
     fn try_objectives(&mut self, obs: &Observation, risky: bool, hooks: &mut dyn Hooks) -> bool {
         for _ in 0..3 {
             let ranked = self.ranked(obs, risky, hooks);
@@ -527,11 +509,9 @@ impl Explorer {
                     ));
                 }
             }
-            // (the exit first of all, but for something she needs that's nearer by the way than
-            // it is: those compared with it too, by their ways. A level she knows the whole of
-            // is the exit from its first tic, a pistol's walk through everything in it: E2M5,
-            // looked round beforehand, out of ammo and dead two doors on, where she got through
-            // it blind on what the exploring picked up)
+            // The exit first of all, except for something she needs that's nearer by the way than it
+            // is: those are compared with it too, by their ways. A level she knows the whole of is
+            // otherwise the exit from its first tic, walked for with what she started with.
             let exit_first = ranked.first().is_some_and(|o| o.kind == Kind::Exit);
             let before_exit = |o: &Objective| o.kind == Kind::Item && (o.needed || o.urgent);
             let mut rest = ranked;
@@ -587,7 +567,7 @@ impl Explorer {
                                 .trim_end_matches(" right away")
                                 .to_string();
                         }
-                        // (a wall given up on before: as if twice as far for each time)
+                        // A wall given up on before counts as twice as far for each time.
                         let tries = obj.wall.map_or(1.0, |w| {
                             2f64.powi(self.wall_drops.get(&w).copied().unwrap_or(0))
                         });
@@ -609,11 +589,10 @@ impl Explorer {
                     .partial_cmp(&(b.1.priority(), b.0))
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
-            // (and on the way to anything that comes first for what it is (the exit, a gun, a
-            // keyed door), what she'd pick up that's nearer by the way than it: had first. Blind,
-            // she has what lies about by the time she knows of anything far; knowing the level,
-            // E3M3's shotgun 1900 off was the first thing she did, the clips by the start left,
-            // dead in 37 seconds with the pistol empty. Not before something urgent)
+            // And on the way to anything that comes first for what it is (the exit, a gun, a keyed
+            // door), what she'd pick up that's nearer by the way than it is had first. Blind, she has
+            // what lies about by the time she knows of anything far; knowing the level, she'd walk past
+            // it for the far thing. Not before something urgent.
             if routed[0].1.priority() < 2 && !routed[0].1.urgent {
                 let far = routed[0].0;
                 let pos = obs.pos();
@@ -655,11 +634,11 @@ impl Explorer {
         self.since = obs.tic;
         self.end_why = None;
         self.end_kind = EndKind::Plain;
-        // (time to do it: walking the route, and some)
+        // Time to do it: walking the route, and some.
         self.allowed = GIVE_UP_TICS.max((route_length(&steps) / ROUTE_SPEED) as i64 + ROUTE_SLACK);
         self.exits_seen = self.knowledge.exits().len();
         let n = steps.len();
-        // (how far it is, as the crow flies and along the way: for reading a run's ordering)
+        // How far it is, as the crow flies and along the way: for reading a run's ordering.
         let (along, straight) = (route_length(&steps), dist(obs.pos(), obj.goal));
         let states = self.states();
         let view = self.view();
@@ -672,7 +651,7 @@ impl Explorer {
             obs.tic,
         );
         follower.fired.extend(self.spent_once()); // (its replans: not by them either)
-                                                  // (the pass before a known level: nothing can hurt her, a barrel's blast neither)
+                                                  // The practice pass: nothing can hurt her, a barrel's blast neither.
         follower.mortal = self.knowledge.mortal && !self.knowledge.immune;
         self.follower = Some(follower);
         self.follower_seen = 0;

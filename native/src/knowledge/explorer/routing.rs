@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::time::Instant;
 
-/// a backstop only: the expansions decide (a clock limit made a run depend on the machine)
+/// a backstop only: the expansions decide (a clock limit would make a run depend on the machine)
 const PLAN_SECONDS: f64 = 600.0;
 
 /// Minimum health a route must leave her with in mortal runs.
@@ -142,14 +142,10 @@ impl Explorer {
             .map_or(0.0, f64::from)
     }
 
-    /// The health going to obj by these legs and doing it would cost her: the way there on floors
-    /// that hurt; ending on one, the way back off it too, and (but for picking something up) the
-    /// time there doing it. (MAP08's pit under the door, 20 a second, a door pressed from it the
-    /// last thing to do, dropped into at 54 health and died there, stuck, every time; E3M5, a wall
-    /// to look at in a room whose floor hurt, counted the way in only: in and off and in again,
-    /// each a tenth of her health or less, 47 s of it to death.) As she knows the floors: one
-    /// changed to one that hurts since (E3M1's way over the blood gone down into it) at the worst
-    /// floors' if the map has none for it.
+    /// The health that going to obj by these legs and doing it would cost her: the way there on
+    /// floors that hurt; and, ending on one, the way back off it too and (except for picking
+    /// something up) the time there doing it. As she knows the floors: one that has changed to
+    /// something that hurts since counts at the worst floors' rate if the map has none for it.
     fn expected_damage(
         &self,
         legs: &[crate::navigator::Leg],
@@ -158,18 +154,15 @@ impl Explorer {
         obs: &Observation,
     ) -> f64 {
         let way = self.route_damage(legs, states, obs);
-        // (the worst only for one the map doesn't say, and none of its look felt: 5 a hit counted
-        // as 20, E1M9's lip over the nukage at 68 health, every way on refused as costing too
-        // much, stood there)
+        // The worst rate only for a floor the map doesn't give one for and none of whose look she
+        // has felt: counting a mild floor as the worst refuses every way on over it.
         let end = self
             .nav
             .poly_at(obj.goal)
             .map(|p| self.nav.sector_of_poly(p))
             .filter(|&s| self.knowledge.damaging(s))
             .map_or(0, |s| self.knowledge.floor_hit(s, WORST_FLOOR));
-        // (through her armor, which takes its share of a floor's hits as of any: E2M4 HNTR, 80
-        // health and blue armor, a secret door pressed from the lava counted 70, 35 it'd cost;
-        // refused, nothing left to do)
+        // Through her armor, which takes its share of a floor's hits as of any other.
         if end == 0
             || obj.kind == Kind::Exit
             || self.knowledge.suit_until.is_some_and(|u| u >= obs.tic)
@@ -184,12 +177,11 @@ impl Explorer {
         obs.through_armor(2.0 * way + stay)
     }
 
-    /// (mortal) Ways into a crusher she knows across a line that sets it off, stopped where she
-    /// last saw it too low to get out from under once it starts (crush::trap): what getting
-    /// through costs, on a path, is the follower setting it off from the edge and waiting a
-    /// stroke for it to come up again; so much farther at her pace on a route. A way round
-    /// shorter than that is better, none: through it so. (E2M4's, stopped 9 over her head, the
-    /// way west across its own start line, walked in: set off, pinned, crushed.)
+    /// (mortal) Ways into a crusher she knows across a line that sets it off, where it stopped,
+    /// as she last saw it, too low to get out from under once it starts (`crush::trap`). Getting
+    /// through means the follower setting it off from the edge and waiting a stroke for it to
+    /// come up again, so on a route that way counts as so much farther at her pace. A way round
+    /// shorter than that is better; with none, it's through.
     fn crusher_entry_costs(&mut self, view: &View, states: &States, obs: &Observation) {
         let mut costs: HashMap<usize, (usize, f64)> = HashMap::default();
         if self.knowledge.mortal {
@@ -210,7 +202,7 @@ impl Explorer {
                     continue;
                 }
                 for s in sectors {
-                    // (where she last saw it, and it's not known to be on the move)
+                    // Where she last saw it, and it's not known to be on the move.
                     let [h] = states[s].as_slice() else { continue };
                     let out = *self
                         .crusher_out
@@ -230,10 +222,9 @@ impl Explorer {
     /// Steps to get to an objective and do it, through what's known (using switches she has
     /// learned on the way if need be).
     pub fn route_to(&mut self, obj: &Objective, obs: &Observation) -> Option<Vec<Step>> {
-        // (no way there last time, with nothing a plan goes by changed since: none now. What
-        // she's offered comes from a rougher reckoning than the planner's, and a goal it can't
-        // reach costs a whole search: E4M9's ledges and MAP15's secret exit ring, seconds each,
-        // were planned for again every think)
+        // No way there last time, with nothing a plan goes by changed since: none now. What she's
+        // offered comes from a rougher reckoning than the planner's, and a goal the planner can't
+        // reach costs a whole search each time.
         let goal = GoalKey {
             x_bits: obj.goal.0.to_bits(),
             y_bits: obj.goal.1.to_bits(),
@@ -250,9 +241,8 @@ impl Explorer {
             return None;
         }
         let t0 = Instant::now();
-        // (a search that uses up its budget: the next ones with half as much, down to a floor,
-        // till a while goes by with none that does; the user's. MAP15's few goals behind the
-        // block, thousands of steps each for none, every time she'd seen a little more)
+        // A search that uses up its budget: the next ones get half as much, down to a floor, till a
+        // while goes by with none that does.
         if obs.tic - self.maxed_tic > MAXED_RESET {
             self.budget_cuts = 0;
         }
@@ -285,9 +275,9 @@ impl Explorer {
     fn plan_signature(&mut self, obs: &Observation) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
-        // (what she knows of the level as the view has it, but where she's walked only as far as
-        // it's somewhere she knows no other way: the view takes the two together, and walking
-        // over floor she'd seen is no news to a plan)
+        // What she knows of the level as the view has it, but where she's walked only as far as it's
+        // somewhere she knows no other way: the view takes the two together, and walking over floor
+        // she had seen is no news to a plan.
         let view = self.view_key(false);
         (
             view.sectors,
@@ -304,10 +294,9 @@ impl Explorer {
         self.banned_jumps().hash(&mut h);
         obs.keys.unwrap_or_default().0.hash(&mut h);
         self.spent_once().hash(&mut h);
-        // (the heights as she has them: a sector's only where it's somewhere none of the triggers
-        // she knows of puts it, nor where it starts; a lift or door at an end a switch she knows
-        // gives is no news to a search that can press it. MAP15's goals behind the block,
-        // searched again each time a lift went by, ten and twenty times; the user's rule)
+        // The heights as she has them: a sector's only where it's somewhere that none of the
+        // triggers she knows puts it, nor where it starts. A lift or door at an end that a switch she
+        // knows gives is no news to a search that can press it, and must not start a new search.
         let states = self.states();
         let nav = &self.nav;
         let mut known: Vec<BTreeSet<crate::nav::HeightsKey>> = nav
@@ -357,11 +346,11 @@ impl Explorer {
                 }
             }
         }
-        // (the once-only lines she's used this life are spent: E3M4's door)
+        // The once-only lines she has used this life are spent.
         let fired = self.spent_once();
         let budget = (self.plan_expansions >> self.budget_cuts.min(MAX_BUDGET_CUTS))
             .max(MIN_EXPANSIONS.min(self.plan_expansions));
-        // (from the floor she's on: on a lip, not the drop her middle's over)
+        // From the floor she's on: on a lip, not the drop her middle is over.
         let start = self.standing_point(obs);
         let plan = |goal: Point| {
             view.plan(
@@ -379,7 +368,7 @@ impl Explorer {
             )
         };
         let mut route = plan(obj.goal);
-        // no way to the nearest spot to press it from: the next nearest (MAP08's exit door)
+        // No way to the nearest spot to press it from: the next nearest.
         let mut goal = obj.goal;
         let mut tried: BTreeSet<usize> = BTreeSet::new();
         while route.is_none()
@@ -402,14 +391,11 @@ impl Explorer {
             goal = nav.activation_point(t, obs.pos(), &rest);
             route = plan(goal);
         }
-        // (a plan sets its switches and lines off in the shortest order to walk them in, and
-        // has what each does stay done. What a timed one does doesn't: a lift down a few
-        // seconds, a door open a few. One that'll have lapsed before the plan gets to what
-        // needs it is no plan: planned again without the jump that came too late; with no
-        // jump in it to leave out, it's no route. MAP09's pass: a jump off a lift through a
-        // door a switch opens for four seconds, the lift's ride after the switch; and the
-        // lift's line crossed, then the switch, then back to the lift, long up again; ten
-        // minutes of both, the stairs to the same door never taken)
+        // A plan sets its switches and lines off in the shortest order to walk them in, and has
+        // what each does stay done. What a timed one does doesn't stay: a lift is down a few
+        // seconds, a door open a few. A plan that will have lapsed before it gets to what needs it
+        // is no plan: it's planned again without the jump that came too late, and with no jump in
+        // it to leave out, it's no route.
         if let Some(want) = std::env::var("EVIL_DEBUG_JUMPS_INTO")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
@@ -482,7 +468,7 @@ impl Explorer {
             self.log.push(format!("  no plan for '{}': from ({:.0}, {:.0}) {:?} to ({:.0}, {:.0}) {:?}; a path by itself: {:?}; believed heights there {:?}", obj.label, start.0, start.1, sec(start), obj.goal.0, obj.goal.1, sec(obj.goal), direct.map(|d| d.steps), sec(obj.goal).map(|(_, s)| states[s].clone())));
         }
         let Some(route) = route else {
-            // (only the planner's none: not a way she won't take, which the risky twin may)
+            // Only the planner's "none": not a way she won't take, which the risky twin may.
             self.no_route.insert(failed.0, (failed.1, obs.tic));
             return None;
         };
@@ -506,8 +492,8 @@ impl Explorer {
             | Kind::Wall
             | Kind::Secret => step(Action::Walk, None, None),
             Kind::Key => step(Action::Pickup, None, obj.key),
-            // (towards it; the follower takes it on at once, from the nearest place out of its
-            // chain's blasts)
+            // Towards it; the follower takes it on at once, from the nearest place out of its chain's
+            // blasts.
             Kind::Barrel => Step {
                 barrel: obj.look_at,
                 ..step(Action::Walk, None, None)
@@ -523,31 +509,21 @@ impl Explorer {
             }
         };
         if self.knowledge.mortal && !self.on_hurting_floor(obs) {
-            // (mortal: no way that costs more health than she has to spare, risky or not; noted,
-            // for healing or a suit to go for. Not while down on a floor that hurts: staying
-            // costs more than any way off it, the user's)
-            // A tenth of her health or less is no risk, short or not (the user's rule for any
-            // risk): nothing to wait for. (MAP12's caco closet, the fight that opened it leaving
-            // her 13 under a suit, every way back over the nukage, half a point, refused for good)
-            // Nothing else at all to do (`harm_ok`): the margin waits for healing or a suit
-            // there's no way to, for ever (health doesn't come back by itself); only a way that'd
-            // take all she has is refused: a line to set off (A nukage pit's island, health worn
-            // to 37 by the wading for walls, the lifts' switches a wade of 15 off, refused at 22
-            // against 25: stood there the hour), or a look into somewhere she hasn't seen, the
-            // other way a pit opens (as `dead_end` has it; a dry island in a nukage pit at 28
-            // health, the way on a room past a door the island's edge opens, a wade of 17 off,
-            // refused against 25: stood there the hour); any other way, by the most it can take,
-            // one hit of its hardest floor over the time's share. (E3M7 UV: at 18 after a fight,
-            // the blue key's alcove ringed by the floor its pickup lowered into blood, every way
-            // out 7 of it, the medikits 20: stood there the hour. HMP: at 41, a wade of 40 taken
-            // with nothing over: dead in it)
+            // Mortal: no way that costs more health than she has to spare, risky or not; noted, so
+            // that healing or a suit is gone for. Not while she's down on a floor that hurts: staying
+            // costs more than any way off it.
+            // A tenth of her health or less is no risk, short or not: nothing to wait for.
+            // With nothing else at all to do (`harm_ok`), waiting for healing or a suit there's no way
+            // to would be waiting for ever, so the margin is lifted: for a line to set off, or a look
+            // into somewhere she hasn't seen (the two ways a pit opens), only a way that would take all
+            // she has is refused; for any other way, the margin is the most the game's clock can add,
+            // one hit of its hardest floor.
             let cost = self.expected_damage(&route.legs, obj, &states, obs);
             let health = obs.health.unwrap_or(100.0);
             let way_on = obj.trigger.is_some() || obj.kind == Kind::Frontier;
-            // (down to trying walls, a wall's weighed as with nothing else to do: there isn't.
-            // E2M4: a ledge whose way off is a secret door at the back of a lava alcove; at 69
-            // its wall, her best suspect, was refused, 22 left against 25, and walls with less
-            // to go on over cheaper lava tried instead, down to 41, when it was refused for good)
+            // Down to trying walls, a wall is weighed as with nothing else to do, because there is
+            // nothing else. Otherwise her best suspect can be refused by a few points while weaker
+            // walls over cheaper floors are tried and wear her down past it.
             let walls = obj.kind == Kind::Wall && self.suspecting != super::Suspecting::No;
             let margin = match (self.harm_ok || walls, way_on) {
                 (true, true) => 0.0,
@@ -563,15 +539,12 @@ impl Explorer {
             }
         }
         if obj.kind != Kind::Exit && !obj.risky && !self.knowledge.protected(obs.tic) {
-            // (nukage and the like only for what it costs a tenth of her health or less (the
-            // user's: risk is the damage against what she has; E2M2's blue key, 385 of nukage,
-            // a hit or two of 5, waited for as risky over 100 s while far-off things went
-            // first), and never dropping into it; but where she's been down before and got out
-            // again is all right: MAP24's)
+            // Nukage and the like only for what costs a tenth of her health or less, and never
+            // dropping into it; but where she's been down before and got out again is all right.
             let k = &self.knowledge;
             let here = nav.poly_at(obs.pos()).map(|p| nav.sector_of_poly(p));
-            // (not one that's gone down into what hurts since: crossing it before, it was a
-            // walkway still, E3M1's, dropped into after to look at a wall, no way out)
+            // Not one that has gone down into what hurts since: crossing it before, it was a walkway
+            // still.
             let escaped: BTreeSet<usize> = k
                 .visited
                 .iter()
@@ -595,21 +568,17 @@ impl Explorer {
                 }
             }
             let damage = self.expected_damage(&route.legs, obj, &states, obs);
-            // (not while shut in on floors that hurt, for a line to set off: staying costs all
-            // she has, so a tenth of it is no measure, and a switch, a door, a line is the way a
-            // pit opens; E4M2, a lava pit at 32 health, the door's line out refused at 23 against
-            // 3.2, walls tried in the lava till dead. Not for walls or looking: lifted for every
-            // way, she fought and wandered in the lava, worse)
+            // Not while shut in on floors that hurt, for a line to set off: staying costs all she has,
+            // so a tenth of it is no measure, and a switch, a door or a line is the way a pit opens.
+            // Not for walls or looking: lifted for every way, she wanders in it, which is worse.
             let shut_in = self.on_hurting_floor(obs)
                 && self
                     .reach
                     .iter()
                     .all(|&p| self.knowledge.damaging(nav.sector_of_poly(p)));
-            // (a wall tried over any floor that hurts is the risky twin's: a dip is no hit or a
-            // whole one, and the walls with least to go on, a tenth of her health each as
-            // reckoned, came before the one she most suspected, which stood on the worst of it.
-            // E2M4 in an episode: 58 at the ledge, walls across the lava tried first, 41 by the
-            // time the secret door's own was weighed, 12 short; an hour there, 8 of 12 episodes)
+            // A wall tried over any floor that hurts is left to the risky twin. A dip is no hit or a
+            // whole one, never the fraction it's reckoned at, so walls that look cheap aren't; in the
+            // risky pass her best suspect goes first.
             let wall_over_harm = obj.kind == Kind::Wall && damage > 0.0;
             if (damage > RISK_SHARE * obs.health.unwrap_or(100.0) || wall_over_harm)
                 && !(shut_in && obj.trigger.is_some())
@@ -621,11 +590,8 @@ impl Explorer {
                 return None;
             }
         }
-        // (nor, with something safe still to do, by a run-jump over where she couldn't get back
-        // from if it fell short: a jump can be knocked short, and a way round may be a room
-        // off. MAP06: a shotgun across a lava trench, the bridge to it through a room not
-        // looked into yet; the jump taken, a lost soul in its run, down in the trench, banks
-        // of 72 all round, for good)
+        // Nor, with something safe still to do, by a run-jump over where she couldn't get back from
+        // if it fell short: a jump can be knocked short, and a way round may be a room off.
         if obj.kind != Kind::Exit
             && !obj.risky
             && route.legs.iter().any(|leg| {
@@ -672,13 +638,13 @@ impl Explorer {
     /// a jump's lining up, and the wait for a floor the jump takes off from that another of
     /// the timed effects has away.
     fn lapses(&self, route: &Route, view: &View, states: &States) -> Option<BTreeSet<String>> {
-        /// (units a tic, a run with its turns; tics to line a jump up; tics at a switch)
+        /// units a tic, a run with its turns; tics to line a jump up; tics at a switch
         const PACE: f64 = 10.0;
         const LINE_UP: f64 = 50.0;
         const PRESS: f64 = 18.0;
         let nav = &self.nav;
         let legs = &route.legs;
-        // (how far along a leg's way till a poly that fits, by the polys' middles)
+        // How far along a leg's way till a poly that fits, by the polys' middles.
         let along = |leg: &crate::navigator::Leg, fits: &dyn Fn(usize) -> bool| -> Option<f64> {
             let mut far = 0.0;
             let mut last: Option<Point> = None;
@@ -704,7 +670,7 @@ impl Explorer {
             let Some(id) = legs[i].trigger else { continue };
             let t = view.trigger(id).clone();
             let after = nav.apply_trigger(&running, &t);
-            // (sector, the height it's at a while, tics from the trigger till it's left it)
+            // (sector, the height it's at a while, tics from the trigger till it has left it)
             let timed: Vec<(usize, Heights, f64)> = nav
                 .effects_now(&t, &running)
                 .iter()
@@ -738,8 +704,8 @@ impl Explorer {
                         .collect::<BTreeSet<String>>()
                 };
                 for (s, h, window) in &timed {
-                    // (a jump that needs it as it is meanwhile: its takeoff, lined up, and the
-                    // wait for a floor it leaves from that's away meanwhile too)
+                    // A jump that needs it as it is meanwhile: its takeoff, lined up, and the wait for a floor
+                    // it leaves from that's away meanwhile too.
                     for jump in leg.path.jumps.iter().filter(|jump| {
                         jump.requires
                             .iter()
@@ -760,7 +726,7 @@ impl Explorer {
                             return Some(jumps());
                         }
                     }
-                    // (a walk into it a leg or more on: is there a way without it?)
+                    // A walk into it a leg or more on: is there a way without it?
                     if j > i + 1 {
                         if let Some(to) = along(leg, &|p| nav.sector_of_poly(p) == *s) {
                             let (Some(&a), Some(&b)) =
@@ -825,9 +791,8 @@ impl Explorer {
     }
 
     /// Does the route drop her somewhere she couldn't get back from, with nothing there to try
-    /// (no part of the map she hasn't seen beyond it, no switch or door she hasn't tried)? A pit,
-    /// risky or not: E3M3, everything else far off, the nearest a drop of 48 into a pool she'd
-    /// seen all round, walls on every side, its floor hurting after all, died in it pressing walls.
+    /// (no part of the map she hasn't seen beyond it, no switch or door she hasn't tried)? A
+    /// pit, risky or not.
     pub(super) fn dead_end(
         &mut self,
         route: &Route,
@@ -835,7 +800,7 @@ impl Explorer {
         obs: &Observation,
         view: &View,
     ) -> bool {
-        // (a teleporter is a way on of itself: MAP09's, refused as a pit it's the way out of)
+        // A teleporter is a way on of itself.
         if obj.kind == Kind::Teleporter
             || !route
                 .legs
@@ -848,9 +813,8 @@ impl Explorer {
         let (Some(end), Some(here)) = (nav.poly_at(obj.goal), nav.poly_at(obs.pos())) else {
             return false;
         };
-        // (with the key it's for in hand: on a level she knows, the door it opens is the way on
-        // from where it lies, and nothing unseen is left there to say so. MAP02 known
-        // beforehand: its blue key refused 23 times, the level's hour stood out)
+        // With the key it's for in hand: on a level she knows, the door it opens is the way on from
+        // where it lies, and nothing unseen is left there to say so.
         let keys = obj.key.map_or(route.keys, |kk| route.keys.with(kk));
         let doors = view.local_doors(keys);
         let mut states = route.states.clone();
@@ -869,7 +833,7 @@ impl Explorer {
             return false;
         }
         let k = &self.knowledge;
-        // (nor is it a dead end with a way out of the level from it)
+        // Nor is it a dead end with a way out of the level from it.
         if view.triggers.iter().any(|t| {
             t.linedef().is_some_and(|li| k.is_exit(li)) && !t.activators.is_disjoint(&after)
         }) {
@@ -897,7 +861,7 @@ impl Explorer {
         }) {
             return false;
         }
-        // (nor with a teleporter there: a way out)
+        // Nor with a teleporter there: a way out.
         if nav
             .teleports
             .iter()
@@ -905,17 +869,13 @@ impl Explorer {
         {
             return false;
         }
-        // (nor with walls round it she hasn't seen yet: any of them could be the switch out.
-        // E4M6's lava pit, seen from above all over, the lifts out of it worked by their sides
-        // down in it, never looked at: refused as a pit with nothing in it)
+        // Nor with walls round it she hasn't seen yet: any of them could be the switch out.
         let sectors: BTreeSet<usize> = after.iter().map(|&p| nav.sector_of_poly(p)).collect();
         if k.unseen_walls().iter().any(|(s, _)| sectors.contains(s)) {
             return false;
         }
-        // (nor when it's a wall well marked she's going down to try: that's what there is to
-        // try there. MAP21, on an islet in the nukage sea, everything else across it: the lifts
-        // out of the sea plain walls from below, marked as the one she'd found was, each
-        // refused as a drop with nothing to try; "nothing left to do" for the last 860 s)
+        // Nor when it's a well-marked wall she's going down to try: that is what there is to try
+        // there.
         if obj.kind == Kind::Wall && obj.suspicion >= super::objectives::NEAR_SUSPECT {
             return false;
         }
@@ -947,7 +907,7 @@ impl Explorer {
     }
 
     /// Would the walk-over lines the route goes over cut her off at its end, where she wouldn't
-    /// be without them? (MAP08: the line by the red skull drops the floor she'd come back over.)
+    /// be without them (a line that drops the floor she'd come back over)?
     pub(super) fn shuts_in(
         &mut self,
         route: &Route,
@@ -997,7 +957,7 @@ impl Explorer {
         if !changed {
             return false;
         }
-        // (doors gone through on the way: open on the way back too, as far as this goes)
+        // Doors gone through on the way: open on the way back too, as far as this goes.
         let opened = |st: &States| -> States {
             let mut out = st.clone();
             for (&d, o) in &doors {
@@ -1007,7 +967,7 @@ impl Explorer {
             }
             out
         };
-        // (with what she knows how to work from there: MAP08's switch by the red skull)
+        // With what she knows how to work from there.
         let actions: Vec<&TriggerLine> = view
             .triggers
             .iter()
@@ -1022,8 +982,7 @@ impl Explorer {
         if after.contains(&here) || after.len() as f64 >= KEEP_REACH * before.len() as f64 {
             return false;
         }
-        // (shut in with something left to try is the way on, maybe: unseen parts, switches not
-        // pressed; MAP08's sinking floors to the exit door)
+        // Shut in with something left to try may be the way on: unseen parts, switches not pressed.
         let known = k.known_polys();
         if after.iter().any(|&pi| {
             nav.mesh

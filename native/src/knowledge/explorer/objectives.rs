@@ -41,8 +41,7 @@ const EXIT_MARGIN: f64 = 64.0;
 /// there's nothing else to do)
 pub(super) const NEAR_SUSPECT: f64 = 6.0;
 
-/// (as she passes it, that is: a hall's width off, not only at her elbow. MAP32's marked
-/// doors down the sides of a hall 896 across, she down its middle; 128 it was)
+/// As she passes it, that is: a hall's width off, not only at her elbow.
 const NEAR_WALL: f64 = 448.0;
 
 /// a repeatable switch whose effect wasn't seen: another go after this
@@ -60,7 +59,7 @@ const URGENT_TICS: i64 = 6 * 35;
 /// how fast she's taken to get places while a door she opened holds (units a tic: below a run)
 const OPEN_SPEED: f64 = 10.0;
 
-/// (an objective that would cut her off from others: after them)
+/// an objective that would cut her off from others comes after them
 const LATER: &str = " (after what it cuts off)";
 
 /// a noise is worth walking towards if it gets her this much nearer
@@ -120,9 +119,8 @@ impl Explorer {
         let t0 = Instant::now();
         let mut out = self.list_objectives(obs, risky, hooks);
         if self.knowledge.mortal {
-            // (mortal: nowhere under a crusher to stop at just to look or walk round; what's to be
-            // picked up or pressed there, passed through. E4M7's walls of sectors 226 and 230,
-            // looked at from under them, crushed)
+            // Mortal: nowhere under a crusher to stop at just to look or walk round. What's to be
+            // picked up or pressed there is still done, passing through.
             let crushers = self.crusher_sectors();
             out.retain(|o| {
                 matches!(
@@ -154,13 +152,13 @@ impl Explorer {
         let nav = Rc::clone(&self.nav);
         let view = self.view();
         let pos = obs.pos();
-        // (from the floor she's on: on a lip, not the drop her middle's over)
+        // From the floor she's on: on a lip, not the drop her middle is over.
         let Some(here) = nav.poly_at(self.standing_point(obs)) else {
             return Vec::new();
         };
         let keys = obs.keys.unwrap_or_default();
         let states = self.states();
-        // (what she could get to using what she's learned: the planner works out how)
+        // What she could get to using what she has learned: the planner works out how.
         let spent = self.spent_once();
         let actions: Vec<&TriggerLine> = view
             .triggers
@@ -223,10 +221,9 @@ impl Explorer {
         }
         self.reach = reach.clone();
         self.reach_states = states_all.clone();
-        // (what she can get to only while a door or lift she's pressed open is open: go now, as a
-        // player goes through a door before it shuts, if near enough to make it: E2M1's door 44,
-        // whose only other switch is on the far side. Only somewhere she's never walked: back
-        // where she's been can wait, there'll be a way or she'll find one)
+        // What she can get to only while a door or lift she has pressed open is open: go now, as a
+        // player goes through a door before it shuts, if she's near enough to make it. Only for
+        // somewhere she's never walked: where she's been can wait.
         let open = self.open_for_now(obs.tic);
         let while_open: BTreeSet<usize> = if open.is_empty() {
             BTreeSet::new()
@@ -251,7 +248,7 @@ impl Explorer {
             .filter_map(|t| t.linedef().map(|li| (li, t)))
             .collect();
         let k = &self.knowledge;
-        // (where she can set off an exit from, as things are)
+        // Where she can set off an exit from, as things are.
         let exit_polys: BTreeSet<usize> = k
             .exits()
             .into_iter()
@@ -278,7 +275,7 @@ impl Explorer {
                     out.push(o);
                 }
             }
-            // (a floor she's had end the level under her: stood on again)
+            // A floor that has ended the level under her before: stood on again.
             for &sec in &k.exit_floors {
                 if let Some(t) = nav.triggers.iter().find(|t| {
                     t.line == EXIT_FLOOR - sec as i64 && !t.activators.is_disjoint(&reach)
@@ -313,8 +310,7 @@ impl Explorer {
                 out.push(o);
             }
         }
-        // (out of rounds to tap a wall or a gun line with: the ammo she's seen, as a player tops up;
-        // E2M4's late walls, shot at with an empty pistol, its door that reopens to a shot never)
+        // Out of rounds to tap a wall or a gun line with: the ammo she's seen, as a player tops up.
         let rounds = |slot: i32| crate::motor::follower::tap_rounds(obs, slot);
         if obs.ammo.is_some() && rounds(2).max(rounds(4)) < LOW_BULLETS && rounds(3) < LOW_SHELLS {
             let known = k.known_polys();
@@ -361,10 +357,9 @@ impl Explorer {
             o.trigger = Some((*t).clone());
             out.push(o);
         }
-        // repeatable switches pressed a while ago whose effect she never saw: worth another go
-        // once there's nothing else (E3M4); by what it works (MAP08's switch, pressed "again"
-        // every few seconds, set off the one in front each time); and those whose effect she's
-        // put down to them on timing alone, unsure: pressed again and watched, once a life
+        // Repeatable switches pressed a while ago whose effect she never saw are worth another go
+        // once there's nothing else, each by what it works; and those whose effect she has put down
+        // to them on timing alone, unsure, are pressed again and watched, once a life.
         let learned_lines: BTreeSet<i64> = k
             .learned
             .iter()
@@ -402,9 +397,8 @@ impl Explorer {
             {
                 continue;
             }
-            // (not again knowing no more than when last set out to press it: what was missed then
-            // is missed again; MAP19's lift switch at the bottom of a pit, pressed every minute,
-            // each time just before she'd have counted herself stranded there)
+            // Not again knowing no more than when she last set out to press it: what was missed then
+            // would be missed again.
             if !unsure
                 && self
                     .pressed_knowing
@@ -428,9 +422,8 @@ impl Explorer {
             let panic = self.suspecting == Suspecting::Panic;
             out.extend(self.walls(obs, &reach, panic));
         } else {
-            // (a wall she strongly suspects, right by her: tried there and then, as a player in
-            // front of it would, not left for when there's nothing else; MAP05's yellow door
-            // under the exit sign, passed by and left for a recheck round that never ended)
+            // A wall she strongly suspects, right by her, is tried there and then, as a player in front
+            // of it would, not left for when there's nothing else.
             let near: Vec<Objective> = self
                 .suspected(obs, &reach, false)
                 .into_iter()
@@ -463,15 +456,14 @@ impl Explorer {
                 o.label = format!("{}{WHILE_OPEN}", o.label);
             }
         }
-        // (not anywhere that would cut her off from most of what she can get to now, as far as
-        // she knows; the way back as it'll be: a door that closes again shut, unless something
-        // opens it for good, but for one she can open from where she'll be: MAP12's door 31; a
-        // lift the same, at rest unless she can call it from there: MAP27's lift 156, whose only
-        // switch is on it, over the room below)
+        // Not anywhere that would cut her off from most of what she can get to now, as far as she
+        // knows. The way back is taken as it will be: a door that closes again is shut, unless
+        // something opens it for good or she can open it from where she'll be; a lift likewise is
+        // at rest unless she can call it from there.
         let doors = view.local_doors(keys);
         let known_triggers = self.knowledge.known_triggers();
-        // (not where a door or lift that comes back was set off since one that stays: E2M4's
-        // door 48, open for good, pressed again from outside, shuts behind her)
+        // Not where a door or lift that comes back was set off since one that stays: pressed again
+        // from outside, a door open for good can shut behind her.
         let last_fired = |pred: &dyn Fn(&TriggerLine) -> bool, s: usize| -> i64 {
             let lines: BTreeSet<i64> = known_triggers
                 .iter()
@@ -512,8 +504,8 @@ impl Explorer {
             }
         }
         let way_back = |start: usize| -> BTreeSet<usize> {
-            // (opening on the way the doors she can from there: a switch or a walk-over line on
-            // the far side too: MAP19's door)
+            // Opening, on the way, the doors she can open from there: by a switch or a walk-over line
+            // on the far side too.
             let mut st = states_back.clone();
             loop {
                 let after = view.reachable(start, &st, Some(&doors));
@@ -539,13 +531,11 @@ impl Explorer {
                 }
             }
         };
-        // (what of where she can get to now she couldn't get back to from a poly)
+        // What of where she can get to now she couldn't get back to from a poly.
         let mut afters: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
-        // (and whether where she'd be left is still open to finding a way out: an edge onto
-        // somewhere she's never seen, or a sector there she's never set foot in but the goal's,
-        // where a walk-over line can be: no way out known isn't no way out. E1M4's nukage pit,
-        // its switch for the lift out in an alcove she'd not seen into; its room of bonuses, the
-        // lines round the pad in the middle opening its doors for good)
+        // And whether where she'd be left is still open to finding a way out: an edge onto
+        // somewhere she's never seen, or a sector there she's never set foot in other than the
+        // goal's, where a walk-over line can be. No way out known isn't no way out.
         let known_polys = self.knowledge.known_polys();
         let entered: BTreeSet<usize> = self
             .knowledge
@@ -553,8 +543,8 @@ impl Explorer {
             .iter()
             .map(|&q| nav.sector_of_poly(q))
             .collect();
-        // (lines she's pressed or set off, and sectors she believes shut: a door's face she's not
-        // tried is a way out to try, MAP04's hidden door shutting behind her)
+        // Lines she has pressed or set off, and sectors she believes shut: a door's face she hasn't
+        // tried is a way out to try.
         let pressed: BTreeSet<usize> = self
             .knowledge
             .fired
@@ -597,8 +587,7 @@ impl Explorer {
                     shut(other) && portal.linedef.is_some_and(|li| !pressed.contains(&li))
                 })
             });
-            // (or a switch or door not tried yet that she could press from there: E4M9's pit of
-            // bonuses, its lift out a face of plain support at the south end, as `shuts_in` has it)
+            // Or a switch or door not tried yet that she could press from there, as `shuts_in` has it.
             let untried_switch = untried.iter().any(|t| !t.activators.is_disjoint(after));
             (
                 reach.difference(after).copied().collect(),
@@ -606,9 +595,9 @@ impl Explorer {
             )
         };
         let tic = obs.tic;
-        // (an item the level put somewhere has a way back out from it, if not one she knows yet:
-        // nobody makes a pit with a prize and no way out; not one a monster dropped, which can
-        // fall anywhere. The user's rule, from E4M9's pit of bonuses)
+        // An item the level put somewhere has a way back out from it, if not one she knows yet:
+        // nobody makes a pit with a prize and no way out. Not one a monster dropped, which can fall
+        // anywhere.
         let placed = |o: &Objective| {
             o.kind == Kind::Item
                 && o.thing
@@ -620,17 +609,12 @@ impl Explorer {
                             .any(|m| (m.x - t.x).abs() < 1.0 && (m.y - t.y).abs() < 1.0)
                     })
         };
-        // (no switch pressed from a floor that hurts while there's floor that doesn't to get to:
-        // what a switch does is anyone's guess, and shut in there is dead, a suit on or not (it
-        // runs out). E2M2: seed 2, an 80 drop into a nukage pit for one; seed 1, waded in with a
-        // suit on; both presses raised the pit's one low way out, sealed in, dead. Shut in already,
-        // no floor that doesn't in reach, it's hers to try: E1M4's lift switch; and with nothing
-        // else at all to do, walls and all, as `harm_ok` has it)
-        // A floor that doesn't hurt only through a door that shuts again by itself, with nothing
-        // on her side to open it, is no way out either: shut in once it shuts, whatever she does
-        // (E1M9: a nukage room behind a door walk-over lines outside open for a few seconds,
-        // the lift out of it a switch inside, never pressed while the door stood open; once
-        // shut, too far a wade back in for her health)
+        // No switch is pressed from a floor that hurts while there's floor that doesn't to get to:
+        // what a switch does is anyone's guess, and shut in there is dead, suit or no suit (it runs
+        // out). Shut in already, with no floor that doesn't hurt in reach, it's hers to try; and
+        // with nothing else at all to do, walls and all, as `harm_ok` has it.
+        // A floor that doesn't hurt reached only through a door that shuts again by itself, with
+        // nothing on her side to open it, is no way out either: she's shut in once it shuts.
         let safe = |polys: &BTreeSet<usize>| {
             polys
                 .iter()
@@ -638,11 +622,8 @@ impl Explorer {
         };
         let stays_shut =
             self.knowledge.damaging(nav.sector_of_poly(here)) && !safe(&way_back(here));
-        // (nor is the dry floor she waded off from a dead end: there was nothing to do there,
-        // so a switch down here is hers to try, before going back to stand on it. E1M9 HMP: an
-        // island in a nukage pit, nothing left on it, waded through a door the island's lines
-        // open into the room with the lift out; straight back to the island, too low for the
-        // wade again, the lift's switch never pressed)
+        // Nor is the dry floor she waded off from a dead end: there was nothing to do there, so a
+        // switch down here is hers to try before she goes back to stand on it.
         let shut_in = self.harm_ok || self.waded_dead_end || stays_shut || !safe(&reach);
         let switch_in_harm = |this: &Self, o: &Objective| {
             o.kind == Kind::Switch
@@ -651,10 +632,9 @@ impl Explorer {
                     .poly_at(o.goal)
                     .is_some_and(|p| this.knowledge.damaging(nav.sector_of_poly(p)))
         };
-        // (down in a pit whose floor hurts, no floor that doesn't in reach: every second there
-        // costs health, so a switch or door she can see, a way out someone built, before a guess
-        // at a plain wall. E4M8: a missed jump into the lava, three walls tried by the lift's
-        // switch, dead on the way to it)
+        // Down in a pit whose floor hurts, with no floor that doesn't in reach: every second costs
+        // health, so a switch or a door she can see (a way out someone built) comes before a guess
+        // at a plain wall.
         let in_pit = self.knowledge.mortal
             && self.on_hurting_floor(obs)
             && (stays_shut || self.waded_dead_end || !safe(&reach));
@@ -672,20 +652,14 @@ impl Explorer {
                     objectives.retain(|o| o.kind != Kind::Wall);
                 }
                 if risky {
-                    // nothing safe left: anything, one-way drops and nukage and all; but not for what
-                    // little it's worth: a sound (MAP09: a noise far off took her down into a pit), a
-                    // place seen already looked at again, a monster gone from where it was last seen
-                    // (the health a way costs against what it's for, as a player weighs it: nothing new
-                    // to find there, the floor's hits for nothing); and never away from
-                    // every way out there is, as far as she knows (MAP24's secret ledge over the
-                    // nukage pit: the level given up for a look)
+                    // Nothing safe left: anything, one-way drops and nukage and all. But not for what's worth
+                    // little: a sound, a place seen already looked at again, a monster gone from where it was
+                    // last seen. The health a way costs is weighed against what it's for. And never away from
+                    // every way out there is, as far as she knows.
                     return objectives
                         .into_iter()
-                        // (but a sound just after she set something off, and she on a floor that
-                        // hurts already: what she set off is as like as not the way off it, and
-                        // going to see is no new risk. MAP09: a switch in a nukage pit, a lift down
-                        // behind a wall for three seconds, heard and never gone to look at, what
-                        // the switch does never learned, the pit never left)
+                        // But a sound just after she set something off, with her on a floor that hurts already:
+                        // what she set off is as like as not the way off it, and going to see is no new risk.
                         .filter(|o| {
                             !matches!(o.kind, Kind::Noise | Kind::Recheck | Kind::Hunt)
                                 || (o.kind == Kind::Noise && o.urgent && this.on_hurting_floor(obs))
@@ -707,10 +681,8 @@ impl Explorer {
                         .filter(|o| this.fresh(o, tic))
                         .collect::<Vec<_>>()
                         .into_iter()
-                        // (risky as to the way there, not as to what's there: MAP08's box of rockets in
-                        // the cyberdemon's room, the last thing to do, walked in for at 137 health)
-                        // (items only: they're to be had or not; the ways on, through it if need be:
-                        // MAP06's spider's hall)
+                        // Risky as to the way there, not as to what's there. Items only: they're to be had or not.
+                        // The ways on go through it if need be.
                         .filter(|o| o.kind != Kind::Item || !hooks.dangerous(obs, o))
                         .collect();
                 }
@@ -723,16 +695,13 @@ impl Explorer {
                     let cut = nav.poly_at(o.goal).map(&mut lost_from);
                     let open = cut.as_ref().is_none_or(|c| c.1) || placed(&o);
                     let gone = cut.map(|c| c.0);
-                    // (worth the risk, however far she can't get back from: the exit, a teleporter,
-                    // where it leads is the unknown; a key, it opens the way)
-                    // (and ammo or a gun the level put there when she's next to out of it: nothing she
-                    // can't get back to is worth much without, and there's a way out from where the
-                    // level put it. E2M5 on UV: six shots, the clips she'd seen past doors she knew no
-                    // way back through, left for walls by a baron she couldn't kill; cornered, dead)
+                    // Worth the risk, however far she can't get back from: the exit; a teleporter (where it
+                    // leads is the unknown); a key (it opens the way). And ammo or a gun the level put there
+                    // when she's next to out of it: nothing she can't get back to is worth much without, and
+                    // there's a way out from where the level put it.
                     let risk_it = matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Key)
                         || (placed(&o) && hooks.worth_cut_off(obs, &o));
-                    // (most of what she can get to, and never the way out, as far as she knows: MAP24's
-                    // nukage pit, where a wall was worth a one-way drop by the rest of it)
+                    // Most of what she can get to, and never the way out, as far as she knows.
                     let keeps = gone.as_ref().is_some_and(|g| {
                         (reach.len() - g.len()) as f64 >= KEEP_REACH * reach.len() as f64
                             && (exit_polys.is_empty() || open || !exit_polys.is_subset(g))
@@ -742,9 +711,8 @@ impl Explorer {
                         kept.push(o);
                     }
                 }
-                // what would cut her off from where there's more to do, as far as she knows, after
-                // that (as a player finishes a room before dropping out of it: E2M1's, with the
-                // teleporter in it, left by its door, whose switches are spent or inside)
+                // What would cut her off from where there's more to do, as far as she knows, comes after
+                // that: as a player finishes a room before dropping out of it.
                 let goals: Vec<Option<usize>> = kept.iter().map(|o| nav.poly_at(o.goal)).collect();
                 for (i, o) in kept.iter_mut().enumerate() {
                     if o.kind == Kind::Exit || lost[i].is_empty() {
@@ -759,10 +727,8 @@ impl Explorer {
                         o.label = format!("{}{LATER}", o.label);
                     }
                 }
-                // (something she needs now that would cut her off waits all the same while there's
-                // something she needs now that wouldn't: MAP24, out of ammo, the rockets down a 512
-                // drop into a corner of the pit gone for before a clip and a shotgun a little
-                // farther, and the level's doors and teleporters with them, left above for good)
+                // Something she needs now that would cut her off still waits while there's something she
+                // needs now that wouldn't.
                 if kept
                     .iter()
                     .any(|o| o.kind == Kind::Item && o.urgent && !o.later)
@@ -773,9 +739,8 @@ impl Explorer {
                 }
                 kept
             };
-        // with nothing else left, the ways between rooms never walked over (walk-over lines are
-        // thresholds: E4M7's), and last of all, those onto floors that hurt (E4M2's door opener
-        // is on lava)
+        // With nothing else left, the ways between rooms never walked over (walk-over lines are
+        // thresholds), and last of all those onto floors that hurt.
         let first = usable(self, hooks, out);
         if !first.is_empty() {
             return first;
@@ -820,8 +785,8 @@ impl Explorer {
                 }
                 let os = mesh.poly(other).sector;
                 unseen.entry(os).or_default().insert(other as i64);
-                // look from the way in, just this side of it (from the poly's middle it can be
-                // round a corner: E2M4)
+                // Look from the way in, just this side of it: from the poly's middle it can be round a
+                // corner.
                 let mid = (
                     (portal.p1.0 + portal.p2.0) / 2.0,
                     (portal.p1.1 + portal.p2.1) / 2.0,
@@ -867,7 +832,7 @@ impl Explorer {
     }
 
     /// Reachable polys she hasn't stood in across a line from ones she has: just over the line
-    /// (all a walk-over line needs; a strip's middle may have no room for the box: E4M7's).
+    /// (all a walk-over line needs; a strip's middle may have no room for the box).
     fn thresholds(&self, reach: &BTreeSet<usize>, hurting: bool) -> Vec<Objective> {
         let (k, mesh) = (&self.knowledge, &self.nav.mesh);
         let mut out = Vec::new();
@@ -910,9 +875,8 @@ impl Explorer {
 
     /// Lines she has stood on both sides of and never walked over, between sectors with nothing
     /// to tell them apart as she first saw them (floor, ceiling, flats, light: a split only a
-    /// trigger or a mover needs; one of them moved since, a ledge now, still one):
-    /// over each, to the side away from her. (MAP12: a W1 floor raise between two slime sectors,
-    /// each walked into across other lines, the way on)
+    /// trigger or a mover needs; one of them moved since, a ledge now, still counts): over each,
+    /// to the side away from her.
     fn seams(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let (k, mesh) = (&self.knowledge, &self.nav.mesh);
         let sectors = &self.nav.map.sectors;
@@ -946,7 +910,7 @@ impl Explorer {
                     (portal.p1.0 + portal.p2.0) / 2.0,
                     (portal.p1.1 + portal.p2.1) / 2.0,
                 );
-                // (the far side from her: from where she is, over it)
+                // The far side from her: from where she is, over it.
                 let far = [pi, other]
                     .into_iter()
                     .max_by(|&x, &y| {
@@ -957,7 +921,7 @@ impl Explorer {
                 if d < 1e-6 {
                     continue;
                 }
-                // (in far enough that getting there is going over: not done within arrival of it)
+                // In far enough that getting there is going over it: not done within arrival of it.
                 let c = mesh.poly(far).center;
                 let at = |depth: f64| {
                     (
@@ -975,9 +939,8 @@ impl Explorer {
                 done.insert(li);
                 let mut o = Objective::new(Kind::Visit, spot, format!("walk over line {li}"));
                 o.reveals = BTreeSet::from([far as i64]);
-                // (the line, tried once the trip's over, gone over or not: a spot over it can be
-                // got to round it, and from the far side the next one's spot back; E1M5, two of
-                // them in turn for the hour)
+                // The line is marked tried once the trip is over, gone over or not: a spot over it can be
+                // got to round it, and from the far side the next one's spot is back again, for ever.
                 o.wall = Some(li);
                 out.push(o);
             }
@@ -1034,8 +997,8 @@ impl Explorer {
                     .reduce(|x, y| if dist(y, mid) < dist(x, mid) { y } else { x })
                     .unwrap_or(spot);
             }
-            // (somewhere she fits first: not up against a torch in front of the pad, MAP11's,
-            // when another side of it is clear)
+            // Somewhere she fits first: not up against something standing in front of the pad when
+            // another side of it is clear.
             let fits = self.stands_at(spot, &heights);
             let Some(info) = classify_line(nav.map.linedefs[li].special) else {
                 continue;
@@ -1089,7 +1052,7 @@ impl Explorer {
             }) else {
                 continue;
             };
-            // (where the box can stand: MAP05's)
+            // Where the box can stand.
             let spot = self.stand_spot(mesh.poly(best).center, reach);
             if dist(spot, h.origin) > dist(pos, h.origin) - HEAR_NEARER {
                 continue;
@@ -1113,7 +1076,7 @@ impl Explorer {
     }
 
     /// A sound heard just after she set off a line she doesn't know the effect of: go and look
-    /// now, while it's still moving (MAP19's line 443).
+    /// now, while it's still moving.
     pub(super) fn urgent(&self, h: &Heard, tic: i64) -> bool {
         let k = &self.knowledge;
         if tic - h.tic >= URGENT_TICS || h.seen {
@@ -1160,7 +1123,7 @@ impl Explorer {
 
     /// Parts of known rooms she can get to but hasn't walked (walking round finds the walk-over
     /// lines nobody can see): per sector, the reachable poly furthest from anywhere she's stood,
-    /// if far enough to be worth it; and every room stepped into once (E1M4's door opener).
+    /// if far enough to be worth it; and every room stepped into once.
     fn unvisited(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         let (k, mesh) = (&self.knowledge, &self.nav.mesh);
         let stood: Vec<Point> = k.visited.iter().map(|&p| mesh.poly(p).center).collect();
@@ -1173,9 +1136,8 @@ impl Explorer {
                 continue; // (not wading through nukage just to look)
             }
             if !self.standable(poly.center, false) || self.by_trip_line(poly.center) {
-                // (an 8-wide strip by a shut door, E1M4; a strip the box's width beside a teleport
-                // pad, MAP26's, the box over the pad's edge there and no way to it but squeezed
-                // past that edge: a whole search, 20000 steps, for nothing, every life)
+                // Not a strip too narrow for the box (by a shut door, beside a teleport pad): no way to it
+                // but squeezed past the edge, and a whole search spent finding that out.
                 continue;
             }
             if !entered.contains(&poly.sector) {
@@ -1243,14 +1205,11 @@ impl Explorer {
             && !self.knowledge.protected(obs.tic)
     }
 
-    /// (mortal runs) Down on a floor that hurts: off it, to the nearest floor that doesn't she
-    /// can get to (the user's: "if you fall in, head for the nearest floor that doesn't hurt").
-    /// Waded in on purpose, for a risky objective there, she looks round where she waded to
-    /// before wading back: off it only as one of the risky options, by how far, while what
-    /// she has left after paying for the way back (as much again as it's cost her since) is
-    /// over the margin. (E1M9: through a door the nukage's walk-over lines open for a few
-    /// seconds, into a nukage room whose only way on is a lift's switch inside: the look she
-    /// went for done in the doorway, straight back out every time, the switch never seen)
+    /// (mortal runs) Down on a floor that hurts: off it, to the nearest floor that doesn't that
+    /// she can get to. Waded in on purpose for a risky objective there, she looks round where
+    /// she waded to before wading back: getting off is then only one of the risky options, by
+    /// how far, while what she has left after paying for the way back (as much again as it has
+    /// cost her since) is over the margin.
     fn get_off(&self, obs: &Observation, reach: &BTreeSet<usize>, risky: bool) -> Vec<Objective> {
         if !self.knowledge.mortal || !self.on_hurting_floor(obs) {
             return Vec::new();
@@ -1302,7 +1261,7 @@ impl Explorer {
         let known = self.knowledge.known_polys();
         let mut out = Vec::new();
         for t in obs.things.iter().flatten() {
-            // (what heals her past 100 counts as an item, had anyway: these only below it)
+            // What heals her past 100 counts as an item, had anyway: these only below it.
             let heals = matches!(t.name, "Stimpack" | "Medikit")
                 && health < 100.0
                 && (short || health < HEAL_BELOW);
@@ -1418,9 +1377,8 @@ impl Explorer {
         self.secrets_had.insert(s);
     }
 
-    /// The secrets run, the level again: back into the sectors she found secrets in before
-    /// (the tally starts again; knowing the place, nothing else sends her back: MAP19's room
-    /// behind door 558, opened in her first life, never stepped into in the one that got 8/9).
+    /// The secrets run, the level again: back into the sectors she found secrets in before.
+    /// The tally starts again from 0, and knowing the place, nothing else sends her back there.
     fn secrets_again(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         if !self.secrets_mode {
             return Vec::new();
@@ -1499,8 +1457,7 @@ impl Explorer {
         let mut options = self.objectives(obs, risky, hooks);
         let mesh = Arc::clone(&self.nav.mesh);
         if risky && !self.knowledge.traps.is_empty() {
-            // (not back into a trap she's been stuck in before: MAP18's moat; but in one already,
-            // it's all there is: MAP21's pit)
+            // Not back into a trap she's been stuck in before; but in one already, it's all there is.
             let here = mesh.poly_at(obs.pos());
             let traps: Vec<&BTreeSet<usize>> = self
                 .knowledge
@@ -1515,16 +1472,15 @@ impl Explorer {
             });
         }
         if !self.exits_open {
-            // (nor anywhere she'd slide over one getting there: MAP24's pad, 38 off a goal)
+            // Nor anywhere she'd slide over one getting there.
             let segs = self.pads.1.clone();
             options.retain(|o| {
                 segs.iter()
                     .all(|&(a, b)| segment_distance(a, b, o.goal, o.goal) >= EXIT_MARGIN)
             });
         }
-        // (near as she'd walk it, not as the crow flies: the user's, E2M2, a wall 224 off as the
-        // crow flies and 4287 along the way, taken first; a tenth of the objectives with ways four
-        // times their straight line or more, a quarter of all the walking)
+        // Near as she'd walk it, not as the crow flies: a goal close in a straight line can be many
+        // times that along the way.
         let travel = self.travel(obs);
         let mut weighed: Vec<(f64, Objective)> = options
             .into_iter()

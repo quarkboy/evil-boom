@@ -48,7 +48,7 @@ const ARRIVE_SLACK: f64 = 6.0;
 /// degrees a tic, turning to look at something
 const TURN_RATE: f64 = 20.0;
 
-/// (an objective to be had only while something she set off is open)
+/// an objective to be had only while something she set off is open
 const WHILE_OPEN: &str = " (while it's open)";
 
 /// an objective mustn't leave less than this share reachable
@@ -72,7 +72,7 @@ pub enum Kind {
     /// a sector she found a secret in, another life: back into it
     Secret,
     /// a barrel she's seen: shot from out of its chain's blasts, before a shot (hers or a
-    /// monster's) sets it off by her (the user's)
+    /// monster's) sets it off by her
     Barrel,
 }
 
@@ -184,8 +184,8 @@ impl Objective {
     }
 
     pub fn ident(&self) -> Ident {
-        // (a wall by its line: not every wall given up on with the one that had no way there,
-        // the walls of the floor she stood on with the far ones out of reach. E4M6 UV)
+        // A wall is itself by its line: a wall given up on for want of a way there doesn't take
+        // every other wall with it.
         let line = if self.pad.is_empty() {
             self.trigger
                 .as_ref()
@@ -391,7 +391,7 @@ pub struct Explorer {
     /// ...and how often (each time it waits twice as long to be offered again)
     drop_count: BTreeMap<Ident, i32>,
     /// walls given up on, by line, how often: the walls share one wait (that keeps the wall
-    /// tier paced), but which goes next counts each one's own failures (MAP14)
+    /// tier paced), but which goes next counts each one's own failures
     wall_drops: BTreeMap<usize, i32>,
     since: i64,
     exits_seen: usize,
@@ -414,9 +414,9 @@ pub struct Explorer {
     /// the pass before a level known beforehand
     pub exit_before_risks: bool,
     /// her waits to give something given up on another go, as a share of the usual (her run's
-    /// stall clock over 300 s: her own waits inside it, the user's)
+    /// stall clock over 300 s: her own waits fit inside it)
     pub patience: f64,
-    /// (for whoever runs the game: the level again, knowing what she knows)
+    /// for whoever runs the game: the level again, knowing what she knows
     pub restart_wanted: bool,
     /// (mortal runs) when a route last cost more health than she had to spare (floors that hurt:
     /// healing or a suit would do)
@@ -452,8 +452,8 @@ pub struct Explorer {
     /// where she could get to, with nothing at all to do
     trapped: Option<BTreeSet<usize>>,
     /// things whoever directs her wants picked up whenever it's safe (directed play's own
-    /// pickups: bonuses, health that won't go to waste, ammo with room for it; the user's): offered
-    /// as items, past the same checks as any (danger, cut off)
+    /// pickups: bonuses, health that won't go to waste, ammo with room for it): offered as
+    /// items, past the same checks as any (danger, cut off)
     pub spares: BTreeSet<i32>,
     /// when she first had nothing else to do but try walls (the survey's moment: everything
     /// explored but for what's hidden)
@@ -464,14 +464,13 @@ pub struct Explorer {
     /// opens a while, behind a lift's ride), left out of planning while she knows no more than
     /// she did (what she'd learned then: the count)
     pub lapsing_jumps: (BTreeSet<String>, usize),
-    /// directed: the objective in hand pressed on with mid-fight, shooting and dodging on the
-    /// way, not stopped for the fight (Evil's rush, the user's: MAP07's arena, a switch never got
-    /// to for the mancubi chased)
+    /// directed: the objective in hand is pressed on with mid-fight, shooting and dodging on
+    /// the way, not stopped for the fight (a rush)
     pub press_on: bool,
     suspecting: Suspecting,
     /// walls pressed round about since there was last anything else to do (the 100% runs)
     panic_tries: usize,
-    /// (that round done: only the walls with more to go on)
+    /// that round is done: only the walls with more to go on
     strong_only: bool,
     /// waiting for a door that opens again by itself before anything else (logged once)
     waiting_reopen: bool,
@@ -490,7 +489,7 @@ pub struct Explorer {
     /// when she last shot at a wall she was trying (single taps)
     wall_shot: i64,
     /// what she knew when what was given up on last had its other go: another once she knows
-    /// more (not merely when one of them is taken up again: E1M3 went round two for ever)
+    /// more, not merely when one of them is taken up again (two would go round for ever)
     retried: Option<String>,
     /// (for tracing: the tics, from EVIL_DEBUG_OBJECTIVES=from-to, whose choices are logged in full)
     debug_tics: Option<(i64, i64)>,
@@ -752,10 +751,8 @@ impl Explorer {
                 self.sector = Some(s);
             }
         }
-        // (no looking round in the middle of a jump: MAP08's; nor with any of her under something
-        // she hears moving: the route's crusher rules don't run while she looks, E3M4's ring of a
-        // slow crusher, stood still in it half a second to see what a line had done as it came
-        // down, pinned)
+        // No looking round in the middle of a jump; nor with any of her under something she hears
+        // moving: the route's crusher rules don't run while she stands and looks.
         let busy = self.follower.as_ref().is_some_and(RouteFollower::in_jump);
         let r = crate::navigator::PLAYER_RADIUS + 2.0;
         let under_mover = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
@@ -773,9 +770,8 @@ impl Explorer {
             }
         }
         if self.directed {
-            // (given objectives only: when the one in hand ends, how, and then nothing till the
-            // next is given; standing still where she is, facing as she is: not turning round and
-            // round, the user's)
+            // Given objectives only: when the one in hand ends, how it ended is kept, and then nothing
+            // till the next is given. She stands still where she is, facing as she is.
             if (self.current.is_some() || self.follower.is_some()) && self.need_new(obs, hooks) {
                 self.note_end(obs);
             }
@@ -804,7 +800,7 @@ impl Explorer {
             }; // (nothing to do: look round)
         };
         let out = f.act(obs);
-        // (what the follower had to say: jumps, waits, trouble)
+        // What the follower had to say: jumps, waits, trouble.
         for ev in &f.log.events[self.follower_seen.min(f.log.events.len())..] {
             self.log.push(format!("    {ev}"));
         }
@@ -829,11 +825,11 @@ impl Explorer {
         let pressed = self.end_why.is_some() && self.end_kind == EndKind::PressedNothing;
         let (ok, why) = match (&self.follower, self.end_why.take()) {
             (_, Some(e)) => e,
-            // (got there and done with it: arrived() lets the route go)
+            // Got there and done with it: arrived() lets the route go.
             (None, None) => (true, "done".to_string()),
             (Some(f), None) if f.done && !f.failed => (true, "done".to_string()),
             _ => {
-                // (not over: a plan anew wanted (a jump missed); the same again, if there's a way)
+                // Not over: a plan anew is wanted (a jump missed); the same again, if there's a way.
                 self.follower = None;
                 if self.take(obs, obj.clone()) {
                     return;
@@ -862,7 +858,7 @@ fn turn_to(obs: &Observation, bearing: Option<f64>) -> Controls {
             (-diff).clamp(-TURN_RATE, TURN_RATE)
         }
     };
-    // (standing still while she turns: no sliding on with what momentum she had)
+    // Standing still while she turns: no sliding on with what momentum she had.
     let (forward, strafe) = crate::motor::brake(obs, obs.angle - turn);
     Controls {
         turn,
@@ -885,7 +881,7 @@ pub fn route_length(steps: &[Step]) -> f64 {
 }
 
 /// The polys beyond walk-over exit lines (of the two sides of each, the sector more of whose
-/// edge is exit lines: MAP24's pad), and those lines.
+/// edge is exit lines), and those lines.
 fn exit_pads(nav: &Navigator) -> (BTreeSet<usize>, Vec<(Point, Point)>) {
     let m = &nav.map;
     let exit_lines: Vec<usize> = (0..m.linedefs.len())
