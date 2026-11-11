@@ -29,7 +29,7 @@ const SUIT_TICS: i64 = 60 * 35;
 const TICS_SAME_SOUND: i64 = 4;
 
 /// floors that look like they'd hurt (liquids): every frame of their animations, as the game
-/// cycles them (SLIME09-12 one animation: MAP15's pit floored with SLIME12, taken for dry ground)
+/// cycles them (a pit floored with a later frame is the same liquid)
 const HAZARD_FLATS: [&str; 7] = [
     "NUKAGE", "LAVA", "BLOOD", "SLIME0", "SLIME10", "SLIME11", "SLIME12",
 ];
@@ -82,7 +82,7 @@ impl Knowledge {
         }
         let mut in_view: BTreeSet<usize> = BTreeSet::new();
         for &li in &seen.through {
-            // (not on the automap, but the floor across it is in view)
+            // Not on the automap, but the floor across it is in view.
             let (f, b) = m.sides(li);
             for s in [f, b].into_iter().flatten() {
                 in_view.insert(s);
@@ -117,7 +117,7 @@ impl Knowledge {
             if dist(last.pos(), obs.pos()) > TELEPORT_JUMP {
                 self.teleported(&last, obs);
             } else {
-                // (the lines her middle went over)
+                // The lines her middle went over.
                 let (a, b) = (last.pos(), obs.pos());
                 let near = crate::geom::cells_around(a, b, 1.0)
                     .filter_map(|c| nav.mesh.line_grid.get(&c))
@@ -251,7 +251,7 @@ impl Knowledge {
                 obs.tic, obs.x, obs.y
             ));
         }
-        // (the rest of its pad goes there too)
+        // The rest of its pad goes there too.
         for other in self.teleport_pad(li) {
             self.teleports.insert(other, obs.pos());
         }
@@ -287,11 +287,9 @@ impl Knowledge {
                 _ => None,
             });
         if let Some(lost) = lost {
-            // (a floor hurts on the level's clock, every 32 tics, and the same each time: hurt
-            // again on the same floor a multiple of that later, by as much, it's the floor; once
-            // alone may be a monster's shot, and so may two: E1M7 UV, a zombieman's 15 and a
-            // shotgunner's 9 on a plain floor 96 tics apart, taken for the floor, and the room
-            // the whole level goes through refused)
+            // A floor hurts on the level's clock, every 32 tics, and the same each time. Hurt again on
+            // the same floor a multiple of that later, by as much: it's the floor. Once alone may be a
+            // monster's shot, and so may two that don't fit the clock.
             if let Some((ps, pt, pl)) = self.hurt_on {
                 let gap = obs.tic - pt;
                 if ps == s
@@ -305,8 +303,8 @@ impl Knowledge {
             }
             self.hurt_on = Some((s, obs.tic, lost));
         } else {
-            // (only time on it unprotected counts: under a suit no floor hurts, so the clock
-            // starts when the suit runs out, not when she stepped on)
+            // Only time on it unprotected counts: under a suit no floor hurts, so the clock starts when
+            // the suit runs out, not when she stepped on.
             let since = self
                 .standing
                 .map_or(obs.tic, |x| x.1)
@@ -368,7 +366,7 @@ impl Knowledge {
     /// Does she take sector s's floor to hurt: as found out by standing on it, else by its look.
     pub fn damaging(&self, s: usize) -> bool {
         if let Some(&hit) = self.changed_floor.get(&s) {
-            return hit != 0; // (seen changed since: MAP08's walkway gone to nukage)
+            return hit != 0; // seen to change since
         }
         self.felt
             .get(&s)
@@ -376,14 +374,10 @@ impl Knowledge {
             .unwrap_or_else(|| self.looks_damaging(s))
     }
 
-    /// What a hit from sector s's floor would do, as she'd reckon it: what the map says, but for
-    /// one it doesn't (one that only looks like it hurts) the most a floor of the same look has
-    /// done to her, `worst` if she's felt none. (E4M1 HMP: a door pressed from a nukage trench
-    /// that doesn't hurt, beside a pit of the same nukage she'd waded at 5 a hit, reckoned at 20
-    /// a hit, 27 at 37 health: refused, nothing else to do for the hour.)
-    /// One seen changed to a floor that hurts: its model's hit, as the map says. (E3M7 UV: the
-    /// blue key's alcove ringed by a floor gone down into the blood beside it, 10 a hit, reckoned
-    /// at 20 by its old look.)
+    /// What a hit from sector s's floor would do, as she'd reckon it: what the map says; but
+    /// for one the map doesn't give (one that only looks like it hurts), the most a floor of
+    /// the same look has done to her, or `worst` if she's felt none. One seen to change into a
+    /// floor that hurts: its model's hit, as the map says, not its old look's.
     pub fn floor_hit(&self, s: usize, worst: i32) -> i32 {
         if let Some(&hit) = self.changed_floor.get(&s).filter(|&&hit| hit > 0) {
             return hit;
@@ -403,9 +397,9 @@ impl Knowledge {
             .unwrap_or(worst)
     }
 
-    /// A sound from something she knows moves and set off a moment before (a door closing behind
-    /// her, a lift coming back), or from right beside her: nothing new. One she set off long
-    /// before moving again is news (E1M6's door that shut on her opened again 30 s later).
+    /// A sound from something she knows moves and set off a moment before (a door closing
+    /// behind her, a lift coming back), or from right beside her: nothing new. One she set off
+    /// long before, moving again, is news.
     pub fn expected(&self, h: &Heard) -> bool {
         if h.distance <= NEAR_SOUND {
             return true;

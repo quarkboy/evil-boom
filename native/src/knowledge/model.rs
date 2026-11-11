@@ -215,14 +215,13 @@ pub struct Knowledge {
     /// poly -> times a route failed stuck there
     pub stuck_at: BTreeMap<usize, i32>,
     /// walls she's pressed use on, suspecting them -> the keys she held then (with a key she
-    /// didn't have, worth another press: MAP05's blue door like the wall round it)
+    /// didn't have then, worth another press: a keyed door can look like the wall round it)
     pub tried_walls: BTreeMap<usize, Keys>,
     /// lines between her and a switch that did nothing
     pub in_the_way: BTreeSet<usize>,
     /// (trigger, tic it fired) -> what it did, worked out then: a floor raised "to the lowest
-    /// ceiling round it" goes by the ceilings as they were, not as they are later (E1M4: the
-    /// walkway rose to 104, the door beside it shut; opened since, worked out afresh it seemed
-    /// to have risen to 160, sealing the room)
+    /// ceiling round it" goes by the ceilings as they were, not as they are later (a door
+    /// beside it opened since would change the answer)
     pub fired_effects: BTreeMap<(usize, i64), Effects>,
     /// ...and where each sector it moves was when it went off, as she'd last seen it: where
     /// what comes back by itself (a lift, a timed door) comes back to
@@ -480,7 +479,7 @@ impl Knowledge {
 
     /// P_UseLines from `pos` facing `angle` (degrees): the first line along the use trace with
     /// a special she knows of, unless something shut is in the way first. A once-only line used
-    /// this life has no special any more: the trace goes past it (E2M7).
+    /// this life has no special any more, so the trace goes past it.
     pub fn use_hits(&self, pos: Point, angle: f64, heights: &[Heights]) -> Option<usize> {
         let a = angle.to_radians();
         let end = (pos.0 + USE_RANGE * a.cos(), pos.1 + USE_RANGE * a.sin());
@@ -551,8 +550,7 @@ impl Knowledge {
     // --- what she can tell -----------------------------------------------------------------
 
     /// Mapped lines she can tell are switches or use-doors (or gun targets), not used yet. A
-    /// gun target by its look, or by a face unlike the walls either side: MAP16's flame panel in
-    /// a notch in the bookcase.
+    /// gun target is told by its look, or by a face unlike the walls either side of it.
     pub fn interactables(&self) -> Vec<usize> {
         let used: BTreeSet<Mechanism> = self.fired.iter().map(|f| self.tried_key(f.line)).collect();
         self.mapped
@@ -602,7 +600,7 @@ impl Knowledge {
     }
 
     /// A switch or door pressed from `at` did nothing: what's in the way of the press (lines
-    /// along the way to it, near her) is worth a go itself (MAP19). The lines noted.
+    /// along the way to it, near her) is worth a go itself. The lines are noted.
     fn failed_press(&mut self, at: Point, li: usize) -> Vec<usize> {
         let (a, b) = self.nav.map.line_seg(li);
         let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
@@ -633,9 +631,9 @@ impl Knowledge {
         Mechanism::Line(li)
     }
 
-    /// What trying a line tries: its mechanism, but for a line whose every press adds on (a
-    /// stair built from where it is, a floor raised by so much) each is worth a press of its
-    /// own (MAP21's four switches each build its stair 16 higher).
+    /// What trying a line tries: its mechanism. But for a line whose every press adds on (a
+    /// stair built from where it is, a floor raised by so much), each line is worth a press of
+    /// its own.
     pub fn tried_key(&self, li: usize) -> Mechanism {
         if self
             .info
@@ -709,11 +707,11 @@ impl Knowledge {
     }
 
     /// The last tic a line was first fired whose effect hasn't been seen at all, if any (or
-    /// pressed or shot again: a lift's down only a while, and pressed to be watched, MAP21's
-    /// switch 172, its lift seen since the first press, never looked for after the next).
+    /// pressed or shot again: a lift is down only a while, and one pressed to be watched has to
+    /// be looked for after each press, not only the first).
     pub fn unexplained_since(&self) -> Option<i64> {
-        // (and a teleport she's been through does what it does: takes her there, nothing to look
-        // round for; MAP29's line 516, her first time through it setting off 25 rechecks)
+        // And a teleport she's been through does what it does, takes her there: nothing to look
+        // round for.
         let explained: BTreeSet<i64> = self
             .learned
             .iter()
@@ -737,8 +735,8 @@ impl Knowledge {
     }
 
     /// Known sectors not closed on the automap yet: sector -> its lines that would be drawn if
-    /// looked at (walls, steps, windows) but haven't been.
-    /// (In the order the sectors first come up, line by line.)
+    /// looked at (walls, steps, windows) but haven't been. In the order the sectors first come
+    /// up, line by line.
     pub fn unseen_walls(&self) -> Vec<(usize, Vec<usize>)> {
         let m = &self.nav.map;
         let mut out: Vec<(usize, Vec<usize>)> = Vec::new();
@@ -830,7 +828,7 @@ impl Knowledge {
         let mut out = Vec::new();
         for t in &self.nav.triggers {
             let Some(li) = t.linedef() else {
-                // (what the last of a kind dying moves, seen to)
+                // What the last of a kind dying moves, seen to.
                 if let Some(l) = self.learned.get(&t.id).filter(|l| !l.is_empty()) {
                     out.push((t.clone(), l.clone()));
                 }

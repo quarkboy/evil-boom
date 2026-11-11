@@ -10,9 +10,8 @@ use std::collections::{BTreeMap, BTreeSet};
 impl Knowledge {
     /// Something heard to start moving, out of her sight, just after she set a line off, in a
     /// place she knows: taken for what the line does, as a player takes a lift's clank after a
-    /// switch for the switch's lift. (MAP09: a switch in an alcove of a nukage pit brings a lift
-    /// down round the corner for three seconds; not to be seen from the switch, gone back up
-    /// before she's round to it; pressed twice, never learned, the pit never left.)
+    /// switch for the switch's lift. Some effects can't be seen from where they're set off and
+    /// are over before she could get round to look.
     pub(super) fn heard_move(&mut self, s: usize, tic: i64) {
         if !self.sectors.contains(&s) {
             return;
@@ -40,11 +39,8 @@ impl Knowledge {
     }
 
     /// A step of a stair seen or heard to rise for a line: the rest of that stair she's seen
-    /// goes with it, as a player takes it (a stair builds as one thing, a step after a step).
-    /// (E2M1, stuck three episodes of sixteen: a switch built a stair round the corner, five
-    /// of its steps heard and one seen, two neither; those two taken for still on the floor,
-    /// 48 under the steps after them, the stair no way up for her, the level's last switch
-    /// at its top.)
+    /// goes with it. A stair builds as one thing, a step after a step, and a step neither seen
+    /// nor heard would otherwise be taken for still on the floor, far under the steps after it.
     fn whole_stair(&mut self, ti: usize, t: &TriggerLine, tic: i64) {
         if t.info.category != Category::Stairs {
             return;
@@ -65,11 +61,11 @@ impl Knowledge {
     }
 
     /// Sector s is seen at new heights: put it down to the latest line fired before it started
-    /// moving that moves it, and moves it this way (a door seen closing is no open-for-good
-    /// switch's doing: MAP12's). Sure if it started moving right after the press, else in doubt.
+    /// moving that moves it, and moves it this way (a door seen closing isn't an open-for-good
+    /// switch's doing). Sure if it started moving right after the press, else in doubt.
     pub(super) fn saw_move(&mut self, s: usize, tic: i64, now: Heights) {
         let was = self.seen_heights.get(&s).copied();
-        // (when it started moving, by its sound; this tic, if it wasn't moving till now)
+        // When it started moving, by its sound; this tic, if it wasn't moving till now.
         let prev = self.live.get(s).copied();
         let fresh = !self.moving.contains(&s) && prev.is_some_and(|p| p != now);
         let started = if fresh {
@@ -128,9 +124,8 @@ impl Knowledge {
                 return;
             }
         }
-        // (nothing she set off moves it this way: what the last of a kind dying moves, if this
-        // is that. E1M8's walls down round the barons' yard: a level she's been through, all of
-        // it seen, the way on from the yard not known for one without this)
+        // Nothing she set off moves it this way: it's what the last of a kind dying moves, if this
+        // is that.
         for ti in 0..self.nav.triggers.len() {
             let t = self.trigger(ti).clone();
             if t.line < 0
@@ -246,9 +241,7 @@ impl Knowledge {
         let a = last.angle.to_radians();
         let heights = &obs.heights;
         if c.use_ {
-            // (the game turns her, then traces the use: by where she faces after the tic's turn.
-            // A press counted by where she faced before it, the turn taking her off the line:
-            // a once-only door taken for used, never pressed again)
+            // The game turns her, then traces the use: by where she faces after the tic's turn.
             let facing = last.angle - c.turn;
             if std::env::var_os("EVIL_DEBUG_USE").is_some() {
                 self.events.push(format!(
@@ -261,9 +254,9 @@ impl Knowledge {
                 ));
             }
             if let Some(li) = self.use_hits(last.pos(), facing, heights) {
-                // (any line with a special stops it, a walk-over one too: E2M4's door behind
-                // one; only one that's used goes off. A locked one without its key does nothing,
-                // and the game says so: something to come back to with the key)
+                // Any line with a special stops the trace, a walk-over one too; only one that's used goes
+                // off. A locked one without its key does nothing, and the game says so: something to come
+                // back to with the key.
                 let info = self.info[&li].clone();
                 if info.trigger.used() && self.front(li, last.x, last.y) {
                     if info.lock.satisfied(last.keys.unwrap_or_default()) {
@@ -329,8 +322,8 @@ impl Knowledge {
                 .flatten()
                 .any(|&ti| self.trigger(ti).permanent())
         {
-            // (Doom turns a switch down on a sector still busy; a repeatable one that would leave
-            // it so for good, taken to have, misleads the planner: MAP12's)
+            // Doom turns a switch down on a sector that's still busy. A repeatable one that would leave
+            // it so for good, wrongly taken to have worked, misleads the planner.
             let busy: Vec<usize> = self
                 .targets(li)
                 .into_iter()
@@ -352,7 +345,7 @@ impl Knowledge {
             life: self.lives,
         };
         self.fired.push(f);
-        // (what it does, by the heights as she knows them now)
+        // What it does, by the heights as she knows them now.
         let now: States = self
             .nav
             .movers
@@ -385,8 +378,8 @@ impl Knowledge {
             .filter(|(k, _)| *k == tk)
             .map(|(_, s)| *s)
             .collect();
-        // (watched to see if it does what it's in doubt of: once a life, and only pressed with
-        // what it acts on still a while; the go it gets either way: MAP27's lift switch)
+        // Watched to see if it does what it's in doubt of: once a life, and only pressed when what
+        // it acts on has been still a while. That's the go it gets either way.
         if !doubted.is_empty()
             && self.rechecked.insert((tk, self.lives))
             && self
@@ -450,15 +443,14 @@ impl Knowledge {
         m.back_sector(l).into_iter().collect()
     }
 
-    /// Once-only lines set off on sectors that were busy: if nothing's moved since, the game
-    /// turned them down (E3M4's door 152).
+    /// Once-only lines set off on sectors that were busy: if nothing has moved since, the game
+    /// turned them down.
     pub(super) fn took(&mut self, tic: i64) {
         let taking = std::mem::take(&mut self.taking);
         let mut still = Vec::new();
         for (f, targets, then) in taking {
-            // (from the tic it's seen pressed: a door moves in the tic of the press, seen in the same
-            // look as the press is; MAP19's door 464, opened for good, taken not to have, and
-            // pressed again for ever once line 443 had shut it on its timer)
+            // From the tic it's seen pressed: a door moves in the tic of the press, and is seen in the
+            // same look as the press is.
             if targets.iter().any(|&t| {
                 self.moved_at.get(&t).copied().unwrap_or(-1) >= f.tic
                     && self.moved_its_way(&f, t, then.get(&t))
@@ -485,10 +477,8 @@ impl Knowledge {
 
     /// Has sector s moved, since line f was set off, the way f moves it: nearer where f puts it
     /// than it was then (`then`)? A sector busy with another mover moves too, its own way: the
-    /// press, turned down by the game (EV_DoFloor skips a sector already moving), isn't used up
-    /// (E2M2's: a once-only switch to lower a lift's pillar, pressed as the lift rose under her,
-    /// taken as used, and her stranded on it in a shaft of the ceiling for the hour). Not known
-    /// where f puts it, or where s was: any move counts.
+    /// press was turned down by the game (EV_DoFloor skips a sector already moving) and isn't
+    /// used up. Where f puts it, or where s was, not known: any move counts.
     fn moved_its_way(&self, f: &Fired, s: usize, then: Option<&Heights>) -> bool {
         let (Some(&then), Some(&now)) = (then, self.seen_heights.get(&s)) else {
             return true;
@@ -517,8 +507,8 @@ impl Knowledge {
     }
 
     /// Was everything line f moves left where it is for good by the last line she set off that
-    /// moves it (E3M7)? Not if that was a door that closes again (E3M4's) or she doesn't know
-    /// what moved it; only for a line with a tag (MAP28's door line).
+    /// moves it? Not if that was a door that closes again, or she doesn't know what moved it;
+    /// and only for a line with a tag.
     fn already_so(&self, f: &Fired, targets: &BTreeSet<usize>) -> bool {
         if self.nav.map.linedefs[f.line].tag == 0 {
             return false;

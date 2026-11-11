@@ -89,7 +89,7 @@ impl Knowledge {
                 }
             }
         }
-        // (best first; ties in the order first found, as a stable sort of Python's dict has it)
+        // Best first; ties in the order first found.
         let mut out: Vec<(f64, usize, Point, Point)> = order.iter().map(|k| best[k]).collect();
         out.sort_by(|a, b| b.0.total_cmp(&a.0));
         out
@@ -124,7 +124,7 @@ impl Knowledge {
         let reach_sectors: BTreeSet<usize> = reach.iter().map(|&p| mesh.poly(p).sector).collect();
         let keys = self.last.as_ref().and_then(|l| l.keys).unwrap_or_default();
         let known = self.known_polys();
-        // (the exit signs she's seen: the middles of lines showing one)
+        // The exit signs she's seen: the middles of lines showing one.
         let signs: Vec<Point> = self
             .mapped
             .iter()
@@ -145,13 +145,13 @@ impl Knowledge {
                 ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)
             })
             .collect();
-        // (the heights as she last saw them)
+        // The heights as she last saw them.
         let heights: Vec<(f64, f64)> = (0..init.len())
             .map(|x| self.seen_heights.get(&x).copied().unwrap_or(init[x]))
             .map(|h| (h.floor, h.ceiling))
             .collect();
-        // (not a line pressed a moment ago, its work still going on: MAP10's door, pressed open as
-        // it shut, then tried "as a wall" and pressed shut again, and she with it in the closet)
+        // Not a line pressed a moment ago with its work still going on: tried again "as a wall", a
+        // door on its way open would be pressed shut.
         let now = self.last.as_ref().map_or(0, |l| l.tic);
         let lately: BTreeSet<usize> = self
             .fired
@@ -159,8 +159,8 @@ impl Knowledge {
             .filter(|f| now - f.tic < PRESSED_LATELY)
             .map(|f| f.line)
             .collect();
-        // (the torches she's seen, by colour: those not of the commonest; none where no one
-        // colour's the commonest)
+        // The torches she's seen, by colour: those not of the commonest; none where no one colour
+        // is the commonest.
         let torches: Vec<crate::map::Thing> = self
             .known_things()
             .into_iter()
@@ -231,14 +231,14 @@ impl Knowledge {
             return Wall::Skip("too short");
         }
         let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
-        // (the front is right of v1->v2; use only works from there)
+        // The front is right of v1->v2; use only works from there.
         let (nx, ny) = ((b.1 - a.1) / length, -(b.0 - a.0) / length);
         let (front, back) = m.sides(li);
         let Some(front) = front else {
             return Wall::Skip("no front side");
         };
-        // (something set into a two-sided wall, a grate or a panel: a thing to shoot, from
-        // further off: MAP19's)
+        // Something set into a two-sided wall (a grate, a panel) is a thing to shoot, from further
+        // off.
         let target = back.is_some()
             && !matches!(
                 m.sidedefs[usize::from(line.front)].middle.as_str(),
@@ -249,11 +249,9 @@ impl Knowledge {
         } else {
             &[40.0]
         };
-        // (in front of its middle; else, the box not fitting there, of another part of it:
-        // MAP11's secret door, a column of pillars in front of its middle; facing that part)
-        // (and on the floor she'd be on there, not up on something beside it the box overlaps:
-        // MAP15's lift crate, pressed from beside the crate next to it, picked a spot with the
-        // box over that one's top, 128 up, and was never offered)
+        // In front of its middle; or, where the box doesn't fit there, in front of another part of
+        // it, facing that part. And on the floor she'd be on there, not up on something beside it
+        // that the box overlaps.
         let fits = |q: Point| {
             mesh.poly_at(q).is_some_and(|p| {
                 reach.contains(&p) && {
@@ -295,17 +293,16 @@ impl Knowledge {
         let mut behind = back.map(Behind::Sector);
         let (odd, neighbours) = self.odd(li);
         if let Some(bk) = back {
-            // (as she last saw them: a stair since built makes a wall of what was floor)
+            // As she last saw them: a stair built since makes a wall of what was floor.
             let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
             let (fh, bh) = (h(front), h(bk));
-            // (a niche she can see into but not step into is a wall all the same: bump into it
-            // and it's plain; E4M4's niche with the torch, pressed, lowers the lift to a secret)
+            // A niche she can see into but not step into is a wall all the same.
             let closed = line.blocks_player()
                 || fh.ceiling.min(bh.ceiling) - fh.floor.max(bh.floor) < PLAYER_HEIGHT
                 || bh.floor - fh.floor > MAX_STEP;
             if !closed && odd {
-                // (a way through, but with a face above or below it unlike the walls round it,
-                // where a switch can be: MAP28's red-eyed skull): only that counts
+                // A way through, but with a face above or below it unlike the walls round it, where a
+                // switch can be: only that part counts.
                 behind = None;
             } else if !closed {
                 return Wall::Skip("a way through");
@@ -321,8 +318,8 @@ impl Knowledge {
         let far = (mid.0 - nx * 64.0, mid.1 - ny * 64.0);
         if unreached_items.iter().any(|&it| dist(far, it) < 160.0) {
             signs.item_behind = 2.0;
-            // (and a gap under it, or over it, the item seen through: a door left ajar, as
-            // good a sign as the automap's: E4M5's berserk, under a wall 8 off the floor)
+            // And a gap under it or over it with the item seen through: a door left ajar, as good a
+            // sign as the automap's.
             let h = |x: usize| self.seen_heights.get(&x).copied().unwrap_or(init[x]);
             if back.is_some_and(|bk| {
                 let (fh, bh) = (h(front), h(bk));
@@ -331,20 +328,17 @@ impl Knowledge {
                 signs.item_gap = 3.0;
             }
         }
-        // (somewhere she's seen and can't get to, just behind: the way there may be here)
+        // Somewhere she's seen and can't get to, just behind: the way there may be here.
         if unreached_places.is_some_and(|near| near(far, 128.0)) {
             signs.place_behind = 2.0;
         }
-        // (an exit sign hung in front of it: the way out's through here, as a player reads
-        // it; MAP05's yellow door, its face the walls' own TEKBRON2, the sign 50 in front)
+        // An exit sign hung in front of it: the way out is through here, as a player reads it.
         let ahead = (mid.0 + nx * 48.0, mid.1 + ny * 48.0);
         if ctx.signs.iter().any(|&q| dist(q, ahead) < EXIT_SIGN_NEAR) {
             signs.exit_sign = 3.0;
         }
-        // (a torch before it of another colour than most of the level's: a mapper's mark, as a
-        // player reads it. The user's: MAP32's secret doors, each with a blue torch by it
-        // where the rest are green, "some of the torches next to the walls are different
-        // colors than the others")
+        // A torch before it of another colour than most of the level's: a mapper's mark, as a
+        // player reads it.
         if ctx
             .marks
             .iter()
@@ -352,9 +346,8 @@ impl Knowledge {
         {
             signs.marked = 2.0;
         }
-        // (a blank on her map behind it, walled round by what she has mapped: room for
-        // somewhere she's never seen, as a player reads the automap: E1M6's secret room
-        // behind the south wall of the alcove)
+        // A blank on her map behind it, walled round by what she has mapped: room for somewhere
+        // she's never seen, as a player reads the automap.
         let deep = (mid.0 - nx * BLANK_DEPTH, mid.1 - ny * BLANK_DEPTH);
         if !mesh.poly_at(deep).is_some_and(|p| known.contains(&p)) && self.walled_round(deep) {
             signs.blank_behind = 2.0;
@@ -364,8 +357,8 @@ impl Knowledge {
             if length <= 96.0 {
                 signs.short = 0.5;
             }
-            // (one panel unlike the same panel either side of it: a mark, the way a mapper
-            // shows a switch: MAP28's symbol between two plain panels)
+            // One panel unlike the same panel either side of it: a mark, the way a mapper shows a
+            // switch.
             let faces: BTreeSet<String> = neighbours
                 .iter()
                 .map(|&n| self.face(&m.linedefs[n]))
@@ -395,8 +388,8 @@ impl Knowledge {
     }
 
     /// Does the line look like a door by its shape: in front of a sector shut flat, thin as a
-    /// door is, with a face unlike the walls either side (MAP14's exit door, wooden panels at the
-    /// back of a niche in stone, a texture no list of door textures has)?
+    /// door is, with a face unlike the walls either side? This catches a door whose texture is
+    /// on no list of door textures.
     pub fn door_shaped(&self, li: usize) -> bool {
         let m = &self.nav.map;
         let (Some(_), Some(b)) = m.sides(li) else {
@@ -421,9 +414,8 @@ impl Knowledge {
         let m = &self.nav.map;
         let line = &m.linedefs[li];
         let face = self.face(line);
-        // (a short jamb either side, the sides of a recess the wall's set back in: the walls past
-        // them instead, what the panel's set into; MAP19's grey door between two satyr faces in
-        // a brown wall, its jambs grey as the door)
+        // A short jamb either side (the sides of a recess the wall is set back in) may share the
+        // door's texture: compare with the walls past them instead, which the panel is set into.
         let neighbours: Vec<usize> = self
             .wall_neighbours(li)
             .into_iter()
@@ -441,8 +433,8 @@ impl Knowledge {
             .filter(|&n| !self.face(&m.linedefs[n]).is_empty())
             .collect();
         if neighbours.is_empty() && !face.is_empty() {
-            // (nothing joined to it on its side, only ways through either end: the walls round
-            // it instead; E2M4's mossy door at the end of a dark corridor of plain stone)
+            // Nothing joined to it on its side, only ways through at either end: the walls round it
+            // instead.
             let (a, b) = m.line_seg(li);
             let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
             let around: Vec<usize> = self
@@ -466,14 +458,13 @@ impl Knowledge {
         (odd, neighbours)
     }
 
-    /// Does `line`'s face sit at another height from `other`'s, the same texture (its rows not
-    /// lining up with those beside it)? A face is placed by where the game anchors it, and
-    /// its offset: a door's upper hangs from the door's own ceiling, the wall's from the room's
-    /// (E2M2's door in the round room of TEKWALL1, its panels out of line; MAP28's one red-eyed
-    /// skull of three, its offset another).
+    /// Does `line`'s face sit at another height from `other`'s, with the same texture (its rows
+    /// not lining up with those beside it)? A face is placed by where the game anchors it and
+    /// by its offset: a door's upper hangs from the door's own ceiling, the wall's from the
+    /// room's.
     fn misaligned(&self, line: &Linedef, other: &Linedef) -> bool {
-        // (only a door's face, shut: a plain wall's face set off from the next is too common a
-        // thing to go by, and a round of walls was spent on them before E1M6's that mattered)
+        // Only a door's face, shut: a plain wall's face set off from the next is too common a thing
+        // to go by.
         let h = |x: usize| {
             self.seen_heights
                 .get(&x)
@@ -491,7 +482,7 @@ impl Knowledge {
     }
 
     /// Does `line` show its texture shifted up or down from `other` beside it, both between the
-    /// same sectors (another part of it shown: MAP28's one red-eyed skull of three)?
+    /// same sectors (another part of the texture shown)?
     fn shifted(&self, line: &Linedef, other: &Linedef) -> bool {
         let m = &self.nav.map;
         if line.front == NO_SIDEDEF || other.front == NO_SIDEDEF {
@@ -539,7 +530,7 @@ impl Knowledge {
             }
             Some(back) => {
                 let shut = front.ceiling.min(back.ceiling) <= front.floor.max(back.floor);
-                // (the part she sees, as `face` picks it)
+                // The part she sees, as `face` picks it.
                 if (shut || !named(&sd.middle)) && named(&sd.upper) && back.ceiling < front.ceiling
                 {
                     let tex = height(&sd.upper)?;
@@ -576,9 +567,8 @@ impl Knowledge {
         }
         let m = &self.nav.map;
         let sd = &m.sidedefs[usize::from(line.front)];
-        // (a two-sided line shut, a door down: no opening for the middle texture to show in,
-        // only what's above and below it: MAP11's secret door, STONE5 over the opening,
-        // between walls of STONE4)
+        // A two-sided line shut, a door down: there's no opening for the middle texture to show
+        // in, only what's above and below it.
         let h = |x: usize| {
             self.seen_heights
                 .get(&x)
@@ -673,12 +663,13 @@ pub struct Signs {
     pub marked: f64,
 }
 
-/// A search for secrets asked for (Evil's explore with secrets 1-3): at each thoroughness, the
-/// `secret_score` a wall needs to be pressed, and to be shot too (a gun line is rarer than a hand
-/// one: higher). Over Doom E1-E3 and Doom II, every area searched once she'd explored all she
-/// could (`evil-boom secret-survey`): 1 presses 8-9 walls a map (2-2.5 shot) and gets to 64-70%
-/// of the secrets behind walls the rubric weighs; 2, 34-38 (8-9 shot), 86-90%, the gun secrets 5
-/// of 6; 3, 122-152 (31-35 shot), all of them. (The user's: 0 none, 3 everything suspicious.)
+/// A search for secrets asked for (an explore with secrets, thoroughness 1-3; 0 is none, 3
+/// everything suspicious): at each thoroughness, the `secret_score` a wall needs to be
+/// pressed, and to be shot too (a gun line is rarer than a hand one: higher). Measured over
+/// Doom E1-E3 and Doom II, every area searched once she'd explored all she could
+/// (`evil-boom secret-survey`): 1 presses 8-9 walls a map (2-2.5 shot) and gets to 64-70%
+/// of the secrets behind walls the rubric weighs; 2, 34-38 (8-9 shot), 86-90%, the gun
+/// secrets 5 of 6; 3, 122-152 (31-35 shot), all of them.
 pub const THOROUGHNESS: [(f64, f64); 3] = [(4.0, 7.0), (1.0, 4.0), (-1.5, 1.5)];
 
 impl Signs {
