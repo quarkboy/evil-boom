@@ -118,9 +118,9 @@ impl RouteFollower {
         let nav = Rc::clone(&self.view);
         let step = self.step().clone();
         // (the floor she's walking on going down when nothing she's doing means it to (no move
-        // she's waiting on, not the step's own line): the user's rule, for the nearest floor
-        // that stays put at once. E3M1: walked over the way over the blood, its first stone
-        // went down under her, walked on to the jump she'd planned, off its corner into the blood)
+        // she's waiting on, not the step's own line): off it to the nearest floor that stays
+        // put, at once. Walking on to what she'd planned from it, a jump say, is from a floor
+        // that's no longer where the plan had it)
         if let Some(s) = nav
             .nav
             .mesh
@@ -129,9 +129,8 @@ impl RouteFollower {
         {
             let on_floor = obs.z.is_none_or(|z| z <= obs.heights[s].floor + 0.5);
             // (going down now, lower than a tic ago: not just lower than it started. A floor gone
-            // down for good is a floor, nukage or not: E2M1's bridge over the nukage, lowered into
-            // it the first time across, "going down under her" each time after, run off twelve
-            // times, the door past it never got to; seeds 3 and 6 stuck)
+            // down for good is a floor, nukage or not: a bridge lowered into it the first time
+            // across is walked over after, not run off each time)
             let going_down = obs
                 .height(s)
                 .zip(self.prev_live.get(s))
@@ -141,7 +140,7 @@ impl RouteFollower {
             // (and only with somewhere to run to: down in the pit already, it's for the explorer
             // to find the way out)
             // (and only a floor going down into what hurts, as the triggers that move it have it:
-            // a lift going down under her is a lift, E1M2's, run off two thousand times)
+            // a lift going down under her is a lift)
             let into_harm = || {
                 nav.nav.triggers.iter().any(|t| {
                     t.info.trigger.walked()
@@ -170,7 +169,7 @@ impl RouteFollower {
         }) {
             if !self.cross_ready {
                 // A lift line to cross for its window: if the lift's away already (set off on the
-                // way, MAP09), crossing now does nothing and the window is shorter than planned.
+                // way), crossing now does nothing and the window is shorter than planned.
                 let init = &nav.nav.movers.initial;
                 let away: Vec<usize> = t
                     .effects
@@ -279,8 +278,8 @@ impl RouteFollower {
             && self.seg_i == self.segments.len() - 1
             && trig_line.is_some_and(|li| self.line_distance(pos, li) <= PRESS_RANGE)
         {
-            // can't get to the spot, but the switch is in reach from here (MAP27's, past a shut
-            // door the press opens first): press from here
+            // can't get to the spot, but the switch is in reach from here (past a shut door the
+            // press opens first, say): press from here
             self.reset_progress(obs.tic);
             self.phase = Phase::Act;
             return self.act_at_goal(obs);
@@ -291,9 +290,8 @@ impl RouteFollower {
         if obs.tic - self.progress_tic > STUCK_TICS {
             self.unsticks += 1;
             // (on a floor that hurts, a new way at once, no backing off first: each try costs her
-            // health, and the way the plan saw may have gone with a floor that moved under her;
-            // MAP15 HNTR, a ledge lowered into lava by the line she crossed, the walk planned from
-            // up there into the side of a stair, backed off twice, dead before the new path)
+            // health, and the way the plan saw may have gone with a floor that moved under her,
+            // a ledge lowered by the line she crossed)
             let burning = {
                 let nav = &self.view.nav;
                 nav.poly_at(pos).is_some_and(|p| {
@@ -303,8 +301,8 @@ impl RouteFollower {
                 })
             };
             if self.unsticks > UNSTICKS_BEFORE_REPLAN || burning {
-                // (with the heights as they are: the way the plan saw may be shut now; MAP23's
-                // squeezed past a timed door that had shut, re-pathed the same way for ever)
+                // (with the heights as they are: the way the plan saw may be shut now, a timed door
+                // closed, and the same path again is stuck again)
                 if !self.replan(obs, "stuck", true) {
                     return self.fail(obs, "stuck");
                 }
@@ -317,8 +315,8 @@ impl RouteFollower {
                 .copied()
                 .find(|&b| !self.barrel_run && dist(b, pos) < BARREL_IN_WAY)
             {
-                // wedged against a barrel (MAP23 has rows of them across corridors): blow it up
-                // from a safe distance, as a player would
+                // wedged against a barrel (they stand in rows across corridors): blow it up from a
+                // safe distance, as a player would
                 self.log.add(
                     obs.tic,
                     format!("barrel in the way at ({:.0}, {:.0}): shooting it", b.0, b.1),
@@ -353,8 +351,8 @@ impl RouteFollower {
         } else {
             roll_speed(&seg)
         };
-        // what's left of the track: off its end, as far as the end really is (MAP24: braked to a
-        // stop 25 past a run-up the track ended at, and stood there "arrived")
+        // what's left of the track: off its end, as far as the end really is (braked to a stop
+        // past the end, she isn't there)
         let rest = (track.length - self.s).max(dist(pos, end));
         let mut speed = FULL_SPEED
             .min(track.speed_limit(track.length - rest, end_speed))
@@ -363,8 +361,8 @@ impl RouteFollower {
             speed = speed.min(0.3 * to_end + 0.5);
             if self.by_a_drop(obs, end) {
                 // (stopping at the brink of a drop: in gently, slowly over the last stretch, as for
-                // a run-up; E1M3, a spot to look into a nukage pit from, run at off a step down,
-                // in the air where braking does nothing, onto the lip and over, no way back up)
+                // a run-up; run at off a step down she's in the air, where braking does nothing, and
+                // over the lip with no way back up)
                 speed =
                     speed
                         .min(0.06 * rest + 1.5)
@@ -373,8 +371,8 @@ impl RouteFollower {
         }
         if seg.end == SegEnd::Jump {
             // run-ups are often right at a ledge: in gently, slowly over the last stretch
-            // (braking does nothing between steps down: MAP17's run-up at the foot of a stair
-            // was overshot into the pit beyond)
+            // (braking does nothing between steps down: a run-up at the foot of a stair is
+            // overshot into what's beyond)
             if self.steps_down_to_end(obs, track) {
                 speed =
                     speed
@@ -399,8 +397,7 @@ impl RouteFollower {
     /// by a lane between them (`lanes::lane`) to the first of `on` (points further on her
     /// track) that's clear and has one, kept to till she's through; no lane, the sidestep
     /// (`round_barrel`). The mesh's way has no barrels in it; she plans round the ones she sees
-    /// as she sees them (the user's: "it's required to plan a route around the barrel
-    /// obstacles").
+    /// as she sees them.
     fn lane_carrot(&mut self, obs: &Observation, carrot: Point, on: &[Point]) -> Point {
         use super::lanes::{chord_clear_of, clear_of, lane};
         let pos = obs.pos();
@@ -454,9 +451,9 @@ impl RouteFollower {
     /// A barrel standing in the way to `carrot`: round it, or between it and the next (a row of
     /// them 64 apart leaves her 12 to spare: through the middle of a gap), by whichever such way
     /// is shortest with floor there and no other barrel in it; none, `carrot` as it was (wedged
-    /// against it, she shoots it). The user's: weaving between them, as a player does. (The
-    /// route's way goes by the mesh, which has no barrels in it: MAP23's field and its hall of
-    /// them, run into a row of them and stood there, a mancubus's fireballs setting the lot off.)
+    /// against it, she shoots it). Weaving between them, as a player does: the route's way goes
+    /// by the mesh, which has no barrels in it, and stood against a row of them she's there when
+    /// something sets the lot off.
     fn round_barrel(&self, obs: &Observation, carrot: Point) -> Point {
         /// her box and a barrel's side by side (16 and 10), and a little
         const ROOM: f64 = PLAYER_RADIUS + 10.0 + 1.0;
@@ -576,7 +573,7 @@ impl RouteFollower {
             }
         }
         if steps_down.len() < 2 {
-            return f64::INFINITY; // (one drop isn't a stair: MAP09's slowed for a 48 down missed a lift)
+            return f64::INFINITY; // (one drop isn't a stair: slowing for it can miss a lift)
         }
         (STAIRS_DOWN_SPEED * STAIRS_DOWN_SPEED + 2.0 * BRAKE * steps_down[0]).sqrt()
     }
@@ -620,8 +617,8 @@ impl RouteFollower {
     }
 
     /// Close enough that the boxes overlap, and at a height the game lets her have it from:
-    /// picked up, wherever the spot was. (Not from the floor 24 above E2M7's armor bonus in its
-    /// sunken strip, the boxes overlapping over the edge: the item more than 8 under her feet.)
+    /// picked up, wherever the spot was. (Not from a floor well above an item in a sunken strip,
+    /// the boxes overlapping over the edge: the game wants it no more than 8 under her feet.)
     fn touching_item(&self, pos: Point, obs: &Observation) -> bool {
         let Some(it) = self.item else { return false };
         if (pos.0 - it.0).abs().max((pos.1 - it.1).abs()) >= PLAYER_RADIUS + ITEM_RADIUS - 1.0 {
@@ -714,8 +711,8 @@ impl RouteFollower {
         self.look.unwrap_or(obs.angle)
     }
 
-    /// Which way to back off: away from the walls and ledges nearest (MAP29: backing off a stair
-    /// wall walked it off the other side into the pit), else backwards.
+    /// Which way to back off: away from the walls and ledges nearest (backing straight off a
+    /// stair's wall can walk her off its other side), else backwards.
     fn away_from_walls(&self, obs: &Observation) -> f64 {
         let pos = obs.pos();
         let (mut ax, mut ay) = (0.0, 0.0);
@@ -769,14 +766,14 @@ impl RouteFollower {
         floors.windows(2).any(|w| w[1] < w[0])
     }
 
-    /// A crossing just ahead that's become a one-way drop the plan didn't mean to take (MAP08:
-    /// walking to the red key goes over a line that sinks the bridge back into the nukage).
-    /// Stop and replan with the heights as they are: on if there's a way without such a drop;
-    /// else the objective goes back to be judged again, the ground as it is now (E2M4: a floor
-    /// raised on the way left the goal down in the blood pit, a drop into a trap).
+    /// A crossing just ahead that's become a one-way drop the plan didn't mean to take (a line
+    /// walked over on the way can sink the bridge she's on). Stop and replan with the heights as
+    /// they are: on if there's a way without such a drop; else the objective goes back to be
+    /// judged again, the ground as it is now (a floor raised on the way can leave the goal down
+    /// in a pit, a drop into a trap).
     /// A drop just ahead onto a landing that's narrow the way she's going (a ledge over a pit):
-    /// step off it slowly, as a falling player keeps her speed and slides on landing (MAP11's
-    /// ledge with the blur sphere, 136 down and 48 across: she'd gone straight over it).
+    /// step off it slowly, as a falling player keeps her speed and slides on landing, straight
+    /// over a ledge 48 across.
     fn creep_to_drop(&mut self, obs: &Observation) {
         let view = Rc::clone(&self.view);
         let mesh = &view.nav.mesh;
@@ -895,8 +892,8 @@ impl RouteFollower {
             {
                 continue; // (one-way in the plan as well)
             }
-            // (or the lift it'd drop off, on its way down to level: MAP05's, pressed to be ridden,
-            // its far side a drop till it's arrived)
+            // (or the lift it'd drop off, on its way down to level: pressed to be ridden, its far
+            // side is a drop till it's arrived)
             let coming = self
                 .watches
                 .iter()
@@ -913,8 +910,8 @@ impl RouteFollower {
                 })
                 .map(|w| w.expect.heights);
             if let Some(h) = coming {
-                // still on its way to where the plan has it (MAP29: a floor that takes half a
-                // minute to rise to the walkway): wait at the edge
+                // still on its way to where the plan has it (a floor can take half a minute to rise
+                // to a walkway): wait at the edge
                 if !self.edge_wait {
                     self.log.add(
                         obs.tic,
@@ -937,8 +934,8 @@ impl RouteFollower {
                     .iter()
                     .any(|x| (x.floor - h.floor).abs() < 1.0 && (x.ceiling - h.ceiling).abs() < 1.0)
             };
-            // (or one the plan is waiting to see move, caught on its way: MAP06's lift, pressed to
-            // be got onto, sinking under her as she stood by its switch)
+            // (or one the plan is waiting to see move, caught on its way: a lift pressed to be got
+            // onto, sinking under her as she stands by its switch)
             let on_its_way = |s: usize| {
                 self.watches
                     .iter()

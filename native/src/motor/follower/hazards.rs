@@ -57,8 +57,8 @@ const PINNED_WAIT: i64 = 10 * 35;
 
 impl RouteFollower {
     /// Under a ceiling too low for her over some of the box (a crusher coming down, a door
-    /// shutting on her): Doom won't move her till it's risen, so that's waiting, not being stuck
-    /// (E3M4's crusher room, the bonuses in it, a dozen lives given up there); up to PINNED_WAIT.
+    /// shutting on her): Doom won't move her till it's risen, so that's waiting, not being stuck;
+    /// up to PINNED_WAIT.
     pub(super) fn pinned_under_ceiling(&mut self, obs: &Observation) -> Option<Controls> {
         let mesh = &self.view.nav.mesh;
         let r = PLAYER_RADIUS - 1.0;
@@ -83,8 +83,8 @@ impl RouteFollower {
         }
         if self.mortal {
             // (mortal: a ceiling on her may be a crusher, known or not; waiting is dying. Out from
-            // under it to the nearest spot round her with room, straight there: E4M7's, waited
-            // under 53 times; E3M4's, a route just begun backed off to where she stood)
+            // under it to the nearest spot round her with room, straight there, whatever route she
+            // was on)
             self.pinned_since = None;
             self.progress_tic = obs.tic;
             let pos = obs.pos();
@@ -171,8 +171,8 @@ impl RouteFollower {
 
     /// Out from under sector s's ceiling coming down on her, `offset` the part of her under it:
     /// her middle under it, by the way out; only an edge of her, straight away from that edge
-    /// (E3M4's, waiting at the crusher's edge a corner over it, held there). Full speed whichever
-    /// way she's facing (backing out at a walk, caught).
+    /// (a wait at a crusher's edge with a corner of her over it holds her there otherwise). Full
+    /// speed whichever way she's facing: backing out at a walk is caught.
     fn escape_crusher(
         &mut self,
         obs: &Observation,
@@ -207,8 +207,7 @@ impl RouteFollower {
     /// from under it first. About to touch one (her box a step on): held where she is till it's
     /// going up. Under a ceiling lower than she's tall a player can't move at all (P_TryMove
     /// takes the lowest ceiling over her box), so going in on its way down is being pinned till
-    /// it rises (E3M5: a switch in a crusher's alcove, pulled out by the fight, walked back in to
-    /// press it on the ceiling's way down, pinned for 18 hits).
+    /// it rises: a switch in a crusher's alcove is walked up to on the ceiling's way up only.
     pub(super) fn crusher_guard(&mut self, obs: &Observation) -> Option<Controls> {
         if !self.mortal || self.prev_live.len() != obs.heights.len() {
             return None;
@@ -270,8 +269,8 @@ impl RouteFollower {
     fn crossing(&self, obs: &Observation, polys: &[usize], s: usize) -> Option<(f64, f64)> {
         let mesh = &self.view.nav.mesh;
         let pos = obs.pos();
-        // (the way's length portal to portal, not as the crow flies: E3M4's ring round a pillar,
-        // its way through half round it, judged a straight dash, pinned)
+        // (the way's length portal to portal, not as the crow flies: a way that goes half round a
+        // pillar under the crusher is no straight dash)
         let (mut at, mut along) = (pos, 0.0);
         let mut d_in = (mesh.poly_at(pos).map(|p| mesh.poly(p).sector) == Some(s)).then_some(0.0);
         for w in polys.windows(2) {
@@ -403,8 +402,8 @@ impl RouteFollower {
     }
 
     /// (mortal) A crusher just ahead on the way, coming down or too low to be under: wait at its
-    /// edge till it's on its way up with room, then through without stopping (E4M7's, on the way
-    /// to its teleporter: pinned under it, waiting for it to rise, killed 53 times).
+    /// edge till it's on its way up with room, then through without stopping (stopping under it
+    /// to wait for it to rise is being pinned).
     pub(super) fn crusher_ahead(&mut self, obs: &Observation) -> Option<Controls> {
         if !self.mortal || self.prev_live.len() != obs.heights.len() {
             return None;
@@ -413,8 +412,7 @@ impl RouteFollower {
             return Some(c);
         }
         let crushers = self.crushers();
-        // (MAP02's first door, a blazing one shutting as she came back to it: waited at it as at a
-        // crusher, eight seconds, every time)
+        // (a door shutting as she comes to it is no crusher, blazing or not: not waited at as one)
         let doors = self.doors();
         let nav = std::rc::Rc::clone(&self.view.nav);
         let mesh = &nav.mesh;
@@ -426,8 +424,8 @@ impl RouteFollower {
         let moving = |s: usize| {
             !doors.contains(&s) && (obs.heights[s].ceiling - self.prev_live[s].ceiling).abs() > 0.01
         };
-        // (under one already, any of her: no stopping there to wait for the next; E4M7's two side
-        // by side, waited at the second under the first)
+        // (under one already, any of her: no stopping there to wait for the next, of two side by
+        // side)
         let r = PLAYER_RADIUS + 2.0;
         let under = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
             .iter()
@@ -443,19 +441,17 @@ impl RouteFollower {
             .collect();
         if under {
             // (but with it coming down on her and not much room left, out from under it now, by
-            // the nearest way to a ceiling that isn't: E3M4's ring round the pillar, its slow
-            // crusher already on its way down, the way on round inside it, caught at head
-            // height, pinned there, Doom moving her nowhere, till dead)
+            // the nearest way to a ceiling that isn't: the way on may be a long one inside it, and
+            // caught at head height she's pinned, Doom moving her nowhere, till dead)
             let moving_down = |s: usize| {
                 obs.heights[s].ceiling < self.prev_live[s].ceiling - 0.01
                     && obs.heights[s].ceiling - obs.heights[s].floor - PLAYER_HEIGHT < CRUSH_ESCAPE
             };
             // (any of her under it: a crusher crushes whatever's even partly under it)
             // (on through, if she'll be out the far side with room over her all the way: back
-            // out of a fast one she's halfway under is caught as surely; E2M2's passage, 64
-            // across, its fast crusher open some 16 tics a time. Every one coming down on her, not
-            // the first found: MAP13's two side by side, through the one over her middle in time,
-            // on under the edge of the other, pinned)
+            // out of a fast one she's halfway under is caught as surely. Every one coming down on
+            // her, not the first found: of two side by side, through the one over her middle in
+            // time is still under the edge of the other)
             let pressing = [(0.0, 0.0), (-r, -r), (r, -r), (r, r), (-r, r)]
                 .iter()
                 .filter_map(|&(dx, dy)| {
@@ -467,10 +463,8 @@ impl RouteFollower {
                 });
             // (the way on out of where her middle is into a crusher she couldn't go into now (the
             // walking rule's, the one after it too): out from under all of them, not on into it,
-            // nor a wait at its edge under one; MAP13's fast crusher, a slow one beyond with the
-            // plasma rifle in it, walked into on its way down, pinned under its edge; and the fast
-            // one walked into on its way down, an edge of her under it already. A crossing begun
-            // is gone through)
+            // nor a wait at its edge under one, as with a fast crusher and a slow one beyond it. A
+            // crossing begun is gone through)
             let committed = |b: usize| {
                 self.crusher_cross
                     .is_some_and(|(c, since)| c == b && obs.tic - since < CROSS_COMMIT)
@@ -489,7 +483,7 @@ impl RouteFollower {
             self.crusher_wait = None;
             return None;
         }
-        // (by where the way goes into it, not its middle: E4M7's, its middle far off, run into)
+        // (by where the way goes into it, not its middle, which can be far off)
         let mut ahead = None;
         for w in polys.windows(2).take(15) {
             let (cur, nxt) = (w[0], w[1]);
@@ -513,8 +507,7 @@ impl RouteFollower {
             }
         }
         // (out from under it and none ahead: a crossing begun is over, the legs the fight's again;
-        // kept, the fight left her to the route for the rest of it, E3M8's door taken for one,
-        // stood at by the route as a cacodemon came up and bit her for 60)
+        // kept, the fight would leave her to the route with a monster at her)
         let Some((s, entry)) = ahead else {
             self.crusher_wait = None;
             self.crusher_cross = None;
@@ -532,14 +525,14 @@ impl RouteFollower {
         let room = now.ceiling - now.floor >= PLAYER_HEIGHT + CRUSH_ROOM;
         // (by time, where the way comes out of it: set off when she'd be under it only while it
         // leaves her room, from her front getting there to her back out of it, at her pace from
-        // where she is; rising with room wasn't enough for a fast one, open some 16 tics, 96 units
-        // to cross from a standstill, E2M2's, caught under it again and again. A way that ends in
-        // there, as before: in once it's rising with room)
+        // where she is; rising with room isn't enough for a fast one, open some 16 tics with 96
+        // units to cross from a standstill. A way that ends in there, as before: in once it's
+        // rising with room)
         // (and only while it's going up, or still with room: in on its way down, however the sums
-        // came out, was a dash to beat it, E3M4's slow one round the pillar, pinned)
+        // came out, is a dash to beat it, and a slow one on a long way through wins)
         // (stopped, and going in sets it off, with too little room to be through before it has her:
-        // set off from the edge, out again, and crossed when it comes up; E2M4's, stopped 9 over
-        // her head, its own start line its edge, walked in, set off, pinned, crushed)
+        // set off from the edge, out again, and crossed when it comes up; a crusher stopped just
+        // over her head, its own start line at its edge, crushes her otherwise)
         if still && obs.tic - self.moved_at.get(&s).copied().unwrap_or(i64::MIN / 2) > CRUSH_TURN {
             if let Some(c) = self.set_off_first(obs, &polys, s, entry) {
                 return Some(c);
@@ -547,15 +540,14 @@ impl RouteFollower {
         }
         let (go, timed) = self.crossable(obs, &polys, s, &crushers);
         // (and out of it into another she couldn't go into now: not in, a wait under the first is
-        // no wait, MAP13's fast crusher to a slow one, the second come down on her)
+        // no wait)
         let go = go
             && self
                 .crusher_after(obs, &polys, s, &crushers, &doors)
                 .is_none_or(|b| self.crossable(obs, &polys, b, &crushers).0);
         if go {
             // (committed to only a crossing that comes out the far side: one into an alcove under
-            // it is waited at again, pulled out of it as it came down, E3M5's switch, walked back
-            // into on the replan)
+            // it is waited at again when a replan sends her back in)
             self.crusher_cross = timed.is_some().then_some((s, obs.tic));
             self.crusher_wait = None;
             return None;
@@ -571,15 +563,15 @@ impl RouteFollower {
         }
         // (one that's stopped, too low to be under, isn't coming up: a crusher turns at each end at
         // once, so still for a while is stopped (a crusher-stop line). The way's no way while it's
-        // there; E2M4's, stopped low across the way, waited at for the hour)
+        // there, and waiting at it is waiting for good)
         if still
             && !room
             && obs.tic - self.moved_at.get(&s).copied().unwrap_or(i64::MIN / 2) > CRUSH_STOPPED
         {
             // (stopped with her height under it, if no more: it does nothing while it's stopped,
             // and the room to spare was for one coming down. Through, then; its start line
-            // crossed on the way out sets it going behind her. The user's: "you are supposed
-            // to eventually walk into the crusher". Lower than her height, there's no going in)
+            // crossed on the way out sets it going behind her. Lower than her height, there's no
+            // going in)
             let gap = now.ceiling - now.floor;
             if gap >= PLAYER_HEIGHT {
                 self.log.add(
@@ -641,10 +633,9 @@ impl RouteFollower {
     ) -> Option<Controls> {
         let nav = std::rc::Rc::clone(&self.view.nav);
         let mesh = &nav.mesh;
-        // (the last line on the way that sets it off, up to and over its edge: E3M4's, its start
-        // lines a ring 8 out from its edge; over one, the crusher set off with her a step from
-        // under it, on into it at a run, pinned, crushed. Where her middle crosses it, how far
-        // along, and the way over it)
+        // (the last line on the way that sets it off, up to and over its edge: start lines can
+        // ring a crusher a few units out from its edge, and over one at a run she's under it as
+        // it starts. Where her middle crosses it, how far along, and the way over it)
         let (mut at, mut along) = (obs.pos(), 0.0);
         let mut found = None;
         let mut entry_along = None;
@@ -743,9 +734,8 @@ impl RouteFollower {
 /// into the poly beyond.
 fn escape_heading(mesh: &Mesh, obs: &Observation, moving: &dyn Fn(usize) -> bool) -> Option<f64> {
     // (somewhere all of her is out from under: her box, at a poly's middle, every corner on floor
-    // with no ceiling moving over it; not her middle out with an edge still under, E2M2's
-    // crusher corridor, her west half under sector 23 as it came down, her middle on the floor
-    // beside it taken for out, slid along the wall there, pinned)
+    // with no ceiling moving over it; not her middle out with an edge still under, which a
+    // crusher beside a wall she slides along still catches)
     let r = PLAYER_RADIUS + 2.0;
     let clear = |c: Point| {
         [(-r, -r), (r, -r), (r, r), (-r, r)].iter().all(|(dx, dy)| {

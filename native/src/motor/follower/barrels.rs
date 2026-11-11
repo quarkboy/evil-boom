@@ -87,8 +87,8 @@ fn lit_chain_by(obs: &Observation, p: Point) -> Option<Point> {
 impl RouteFollower {
     /// Barrels going off that she didn't set off (a monster's shot, a blast): off out of their
     /// chain's blasts if they reach her, else no further on while they'd reach where she'll be
-    /// as they go (MAP23: walked on after a chain going off down the field ahead of her, into
-    /// it, 24 health). The chain burns out a barrel a blast (15 tics) at a time: then on.
+    /// as they go (walking on after a chain going off ahead of her is walking into it). The
+    /// chain burns out a barrel a blast (15 tics) at a time: then on.
     pub(super) fn keep_off_lit_chain(&mut self, obs: &Observation) -> Option<Controls> {
         let pos = obs.pos();
         let v = obs.velocity.unwrap_or((0.0, 0.0));
@@ -158,13 +158,10 @@ impl RouteFollower {
     }
 
     /// In the blasts of a chain of barrels going off: the way to run, to the nearest place out
-    /// of every barrel's blast (the user's: "find the shortest path to a room without barrels
-    /// and RUN"). The shortest way to one of the nearest such places; empty when there's none, or
-    /// her route's out of them as soon or nearly: then it's on along the route.
-    /// (Straight away from the nearest of them it was: MAP23 on the easiest skill, a mancubus's
-    /// fireballs into the field of barrels she'd started across; between two of them, away from
-    /// one towards the other, to and fro on the spot for 60 tics as the chain came down the
-    /// field, 100 health to none.)
+    /// of every barrel's blast. The shortest way to one of the nearest such places; empty when
+    /// there's none, or her route's out of them as soon or nearly: then it's on along the route.
+    /// (Not straight away from the nearest of them: between two, away from one is towards the
+    /// other, to and fro on the spot as the chain comes.)
     fn way_off_chain(&self, obs: &Observation) -> Vec<Point> {
         /// the nearest this many places out of the blasts tried for a way to them
         const PLACES: usize = 24;
@@ -248,8 +245,8 @@ impl RouteFollower {
         if crate::debug::on().barrels {
             eprintln!("tic {}: at ({:.0}, {:.0}), {} barrels: out of them by the route in {by_route:?}, by the shortest way in {:?} to {:?}", obs.tic, pos.0, pos.1, barrels.len(), best.as_ref().map(|b| b.0), best.as_ref().and_then(|b| b.1.last()));
         }
-        // (the route itself: nothing for her to follow but it, its presses and all; at the door
-        // at the far end of MAP23's field, walked to as a way and stood before, never pressed)
+        // (the route itself: nothing for her to follow but it, its presses and all; a door at
+        // the far end walked to as a way out is stood before, never pressed)
         match (by_route, best) {
             (Some(r), Some((d, _))) if r <= d * ROUTE_WITHIN => Vec::new(),
             (_, Some((_, way))) => way[1..].to_vec(),
@@ -273,8 +270,8 @@ impl RouteFollower {
             self.barrel_settle = Some((obs.barrels.as_ref().map_or(0, Vec::len), obs.tic));
         }
         if let Some((n, since)) = self.barrel_settle {
-            // (the rest of the chain going off, a blast a while after the last: MAP23's field,
-            // gone back into as it went on, five times)
+            // (the rest of the chain going off, a blast a while after the last: not gone back into
+            // as it goes on)
             let now = obs.barrels.as_ref().map_or(0, Vec::len);
             if now != n {
                 self.barrel_settle = Some((now, obs.tic));
@@ -282,7 +279,7 @@ impl RouteFollower {
             if obs.tic - self.barrel_settle.map_or(since, |x| x.1) < BARREL_SETTLE {
                 // (on away from the nearest barrel still there, while they go off; shot from out
                 // of every blast, where she is, as planned: away from one there would be towards
-                // another, E1M5's, back across the hall into the one going off)
+                // another, maybe the one going off)
                 self.progress_tic = obs.tic;
                 if self.barrel_stay {
                     return self.motion.hold(obs, (0.0, 0.0), None);
@@ -313,8 +310,8 @@ impl RouteFollower {
         } else {
             BARREL_GIVE_UP
         };
-        // (the same barrel, pushed by the shots at it: E1M1's, a pistol tap moving it 8 units,
-        // taken for gone, shot at again as another, 16 times)
+        // (the same barrel, pushed by the shots at it: a pistol tap moves it some 8 units, and
+        // it isn't gone, nor another to shoot afresh)
         let now = barrel_now(obs, was);
         let at = now.unwrap_or(was);
         self.barrel = Some((at, since));
@@ -336,10 +333,9 @@ impl RouteFollower {
         }
         self.progress_tic = obs.tic;
         let look = heading(pos, at);
-        // (nothing to shoot it with: not stood before it for the 20 s all the same, the trigger
-        // pulled on nothing; MAP23, her rounds gone on lost souls, a barrel before the switch,
-        // seven times over. Able to be hurt, the step fails, and what she's out of is what's
-        // gone for; not able to be, she walks up and punches it. The user's)
+        // (nothing to shoot it with: not stood before it all the same, the trigger pulled on
+        // nothing. Able to be hurt, the step fails, and what she's out of is what's gone for;
+        // not able to be, she walks up and punches it)
         if ![2, 3, 4].into_iter().any(|slot| tap_rounds(obs, slot) > 0) {
             if self.mortal {
                 self.barrel = None;
@@ -362,13 +358,13 @@ impl RouteFollower {
             return c;
         }
         // (mortal: outside the blast of every barrel it sets off in turn, however long backing off
-        // takes; E1M4's, shot from 70 away with a wall behind her, killed her. The user's: a
-        // barrel blown up sets off those beside it)
+        // takes; shot from 70 away with a wall behind her, it kills her. A barrel blown up sets
+        // off those beside it)
         if self.mortal {
             // (somewhere to shoot it from that she can see it from, and a way off from there she
             // can run along that keeps her out of each blast of the chain as it comes: back the way
-            // she came to it, then back along her route; the user's: the chain takes time, she
-            // runs as it goes. E3M4's, shot from 31 away, the run off it into a wall)
+            // she came to it, then back along her route; the chain takes time, she runs as it goes,
+            // and the run mustn't end at a wall)
             let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
             if self.barrel_post.is_none() {
                 let track = &self.segments[self.seg_i].track;
@@ -390,15 +386,14 @@ impl RouteFollower {
                 }
                 let states: States = obs.heights.iter().map(|h| vec![*h]).collect();
                 // (the barrel in the way, or any it sets off: shot from where one of those can be
-                // seen, the chain takes the rest; MAP02's corridor of them, the one in the way round
+                // seen, the chain takes the rest; in a corridor of them the one in the way can be round
                 // a corner from anywhere clear of the others)
                 let group: Vec<Point> = self
                     .barrel_chain(&barrels, at, at)
                     .into_iter()
                     .map(|(b, _)| b)
                     .collect();
-                // (not on a floor that hurts: she stays where she shoots from till the chain's done;
-                // E1M3, a post on nukage, the barrel not to be had from there, dead standing on it)
+                // (not on a floor that hurts: she stays where she shoots from till the chain's done)
                 let nav = &self.view.nav;
                 cands.retain(|&q| {
                     nav.poly_at(q).is_none_or(|p| {
@@ -408,8 +403,7 @@ impl RouteFollower {
                     })
                 });
                 // (and from where a shot would get to it, heights and all: a ledge, a step, a low
-                // ceiling between take the shot as surely as a wall; the user's, posts chosen the
-                // barrel couldn't be hit from, the shots into the floor or a lip)
+                // ceiling between take the shot as surely as a wall, into the floor or a lip)
                 let heights: Vec<(f64, f64)> =
                     obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
                 let floor_at = |p: Point| {
@@ -457,8 +451,7 @@ impl RouteFollower {
                         };
                         path.waypoints.iter().flatten().copied().collect()
                     };
-                    // (not a way past a barrel: E4M5's, a spot found beyond it, walked into it; nor
-                    // one under a crusher: E3M4's, gone under the one she'd just set off)
+                    // (not a way past a barrel, which would walk her into it; nor one under a crusher)
                     if way.windows(2).any(|w| {
                         barrels.iter().any(|&b| {
                             segment_distance(w[0], w[1], b, b) < PLAYER_RADIUS + BARREL_RADIUS
@@ -482,8 +475,7 @@ impl RouteFollower {
                         continue;
                     };
                     // (out of every blast where she shoots from: she stays there; the way back she
-                    // came may go back by the barrel, E1M5's, 27 off it when the post was chosen,
-                    // run back past it as it went off)
+                    // came may go back by the barrel as it goes off)
                     let flee = if stay { Vec::new() } else { flee };
                     let length: f64 = way.windows(2).map(|w| dist(w[0], w[1])).sum();
                     if best.as_ref().is_none_or(|b| length < b.length) {
@@ -590,7 +582,7 @@ impl RouteFollower {
 
     /// The barrels shooting the one at `at` from `pos` sets off, in turn: a shot hits the first
     /// barrel in its way, not the one aimed at, and each blast sets off those beside it that it
-    /// can see (MAP23's rows, through walls, were nearly all of its 208).
+    /// can see (rows of them, through walls, can be nearly all a level has).
     fn barrel_chain(&self, barrels: &[Point], at: Point, pos: Point) -> Vec<(Point, u32)> {
         // (each with how many blasts in turn it goes off after: one goes off a while after it's
         // hit, so the chain takes time to come her way)
@@ -623,9 +615,8 @@ impl RouteFollower {
     /// neither (None). A blast reaches only what it can see.
     fn flee_safe(&self, barrels: &[Point], at: Point, q: Point, flee: &[Point]) -> Option<bool> {
         let chain = self.barrel_chain(barrels, at, q);
-        // (shot from somewhere already out of every blast of it: no running needed; MAP02's
-        // barrels before the way to the exit, none of the spots with a run off safe, given up on
-        // for the hour)
+        // (shot from somewhere already out of every blast of it: no running needed, where none
+        // of the spots has a safe run off)
         if chain
             .iter()
             .all(|&(b, _)| self.use_walled(b, q) || blast_gap(q, b) >= BARREL_SAFE)

@@ -470,8 +470,8 @@ impl Motion {
 }
 
 /// (forward, strafe) that take away her momentum this tic, facing `facing` (degrees) after the
-/// tic's turn: turning on the spot is standing still while she turns, not sliding on (MAP24: a
-/// look round just after landing a jump, onto a small ledge, slid her off it).
+/// tic's turn: turning on the spot is standing still while she turns, not sliding on (a look
+/// round just after landing on a small ledge would slide her off it).
 pub fn brake(obs: &Observation, facing: f64) -> (f64, f64) {
     let Some((vx, vy)) = obs.velocity else {
         return (0.0, 0.0);

@@ -38,15 +38,15 @@ impl RouteFollower {
     /// At the run-up: settle on the exact spot facing the takeoff, then sprint.
     pub(super) fn line_up(&mut self, obs: &Observation, jump: &Jump) -> Controls {
         let hd = heading(jump.runup, jump.takeoff);
-        // (faced off the way for a strafing run: MAP03's well)
+        // (faced off the way for a strafing run)
         let face = jump.facing(hd);
         let diff = norm(face - obs.angle);
         // the heights the jump was found with must be there, and not still moving (if one has
         // stopped somewhere else it's not coming: jump from there anyway)
         for &(sector, h) in &jump.requires {
             let live = obs.height(sector);
-            // (a ceiling a little lower is fine: MAP09's door just starting to close as the
-            // lift brings her up for the jump through it)
+            // (a ceiling a little lower is fine: a door just starting to close as a lift brings her
+            // up for the jump through it)
             let off = live.is_none_or(|l| {
                 (l.floor - h.floor).abs() > 0.5
                     || l.ceiling > h.ceiling + 0.5
@@ -85,8 +85,8 @@ impl RouteFollower {
                 if let Some(here) = self.standing(obs).0 {
                     let poly = self.view.nav.mesh.poly(here);
                     if poly.sector == sector {
-                        // riding it (set off on the way to the run-up: MAP06): the middle, clear
-                        // of the edges, or it can't come back up with her
+                        // riding it (set off on the way to the run-up): the middle, clear of the
+                        // edges, or it can't come back up with her
                         spot = poly.center;
                     }
                 }
@@ -117,8 +117,8 @@ impl RouteFollower {
             && diff.abs() <= 0.75
             && self.motion.speed() < 0.3
             && self.motion.rate.abs() < 0.5;
-        // something the jump needs is about to go (MAP09: the door it goes through starts
-        // shutting a moment after the lift brings her up): no settling, go once facing
+        // something the jump needs is about to go (the door it goes through starts shutting
+        // a moment after the lift brings her up, say): no settling, go once facing
         let needs: BTreeSet<usize> = jump.requires.iter().map(|(s, _)| *s).collect();
         if self.watches.iter().any(|w| {
             needs.contains(&w.expect.sector)
@@ -163,10 +163,10 @@ impl RouteFollower {
         )
     }
 
-    /// Running over floors that sink once stepped on (MAP08's exit: platforms in nukage that go
-    /// down as she lands). No stopping to line up a jump: keep running, and every few tics pick
-    /// (with the movement simulator, from where she is and how fast she's going) the heading that
-    /// comes down on the floor nearest the goal. Over once on a floor that stays put.
+    /// Running over floors that sink once stepped on (platforms in nukage that go down as she
+    /// lands). No stopping to line up a jump: keep running, and every few tics pick (with the
+    /// movement simulator, from where she is and how fast she's going) the heading that comes
+    /// down on the floor nearest the goal. Over once on a floor that stays put.
     pub(super) fn run_step(&mut self, obs: &Observation) -> Controls {
         let mesh = Rc::clone(&self.view);
         let here = mesh.nav.mesh.poly_at(obs.pos());
@@ -187,9 +187,9 @@ impl RouteFollower {
                     here_sector.unwrap_or(0)
                 ),
             );
-            // (where she was going is forgotten, the user's rule: maybe gone down too, the way
-            // back to it surely; the explorer chooses again from here. E3M1: across to the far
-            // bank, then back for the old goal on the first stone, now in the blood, dropped in)
+            // (where she was going is forgotten: maybe gone down too, the way back to it surely;
+            // the explorer chooses again from here, not back for an old goal on a floor that's
+            // now in what hurts)
             return self.fail(
                 obs,
                 "ran off a floor going down: what she was going for is for choosing again",
@@ -220,8 +220,8 @@ impl RouteFollower {
                 return self.walk(obs);
             };
             // (on the heading she's on if it's still as good: turning about on every look
-            // loses the speed the next gap needs; MAP08's, swung from one platform to the next
-            // and back, off the edge between them)
+            // loses the speed the next gap needs, and swinging between two platforms ends off
+            // the edge between them)
             let keep = run.sector.map(|_| run.heading);
             match self.run_heading(obs, sector, keep) {
                 None => {
@@ -251,10 +251,9 @@ impl RouteFollower {
 
     /// The heading along the shortest way (string-pulled through the navmesh) to the nearest
     /// floor that stays put, over floors she can step onto as they are now (no hurting floors;
-    /// sinking ones not gone too low yet), and the sector it gets to. The user's rule: the
-    /// floor going down, where she was going is forgotten, for the nearest ground that holds.
-    /// (E3M1's way over the blood winds: a heading held for the fan's run went off a bend into
-    /// the blood, or braked her to a stop on a floor going down.)
+    /// sinking ones not gone too low yet), and the sector it gets to. The floor going down,
+    /// where she was going is forgotten, for the nearest ground that holds. (By the way, not a
+    /// heading held: a way over sinking floors winds, and a heading held goes off a bend.)
     pub(super) fn run_path(&self, obs: &Observation) -> Option<(f64, usize)> {
         let nav = &self.view.nav;
         let mesh = &nav.mesh;
@@ -332,8 +331,8 @@ impl RouteFollower {
         };
         // (the one she's making for while she still can, bends and all; else the nearest on
         // ahead of her, the way she was going (back is the way she came, a floor gone down
-        // behind her maybe, and on is the way on: E3M1's way over the blood, its trigger once
-        // only, back to where she'd started was the level lost); else the nearest)
+        // behind her maybe, and on is the way on: where the trigger works once only, back to
+        // where she started is the level lost); else the nearest)
         let d = self.motion.disp;
         let going = (d.0.hypot(d.1) > 2.0).then(|| d.1.atan2(d.0).to_degrees());
         let goal = found
@@ -354,8 +353,8 @@ impl RouteFollower {
     /// what keeps her on) whose simulated run lands, off this floor, on the nearest floor that
     /// stays put; else on the sinking floor nearest one, to run on from. Where she was going
     /// doesn't come into it: the floor going down under her, wherever it was is going too, maybe
-    /// (MAP08's: a look at a wall from the platform she was running over, every way off judged
-    /// by the way back to it, none, stood there and went down with it). The user's rule.
+    /// (judged by the way back to it, there may be no way off at all, and she goes down with
+    /// the floor she stands on).
     fn run_heading(
         &self,
         obs: &Observation,
@@ -401,8 +400,8 @@ impl RouteFollower {
         let moving = |s: usize| heights[s].0 < nav.movers.initial[s].floor - 0.5;
         let solid = |s: usize| nav.damage[s] == 0 && !self.sinking.contains(&s);
         // (footing that holds: solid ground, and a sinking floor not going down yet, which goes
-        // only once she's on it: a path of them is ground till she's along it, E3M1's way over
-        // the blood, the far bank further than a floor sinks in the time to run there)
+        // only once she's on it: a path of them is ground till she's along it, the far bank
+        // maybe further than a floor sinks in the time to run there)
         let holds = |s: usize| solid(s) || (s != sector && nav.damage[s] == 0 && !moving(s));
         // (the banks: the edges where footing that holds meets the nukage or a floor going down,
         // near enough to matter; a room behind the pit's wall is no nearer for being close)
@@ -432,9 +431,9 @@ impl RouteFollower {
                 .fold(f64::INFINITY, f64::min)
         };
         // (best first: the heading she's on while it still lands somewhere she'd get off from;
-        // else the one nearest straight on, her momentum kept (the user's: turning about loses
-        // the speed the gaps need, and a long run aimed at the far bank slid off the side of the
-        // platforms, MAP08); then solid ground, a floor not going down yet, one going down)
+        // else the one nearest straight on, her momentum kept (turning about loses the speed the
+        // gaps need, and a long run aimed at the far bank slides off the side of the platforms);
+        // then solid ground, a floor not going down yet, one going down)
         let mut best: Option<(bool, f64, u8, f64, f64, usize)> = None;
         for (off, landing) in offs.iter().zip(landings) {
             let Some((at, land)) = landing else { continue };
@@ -516,7 +515,7 @@ impl RouteFollower {
         let flown = (obs.x - jump.takeoff.0) * ux + (obs.y - jump.takeoff.1) * uy;
         let here = nav.nav.mesh.poly_at(obs.pos());
         // landed only on the sector the jump was checked to land on (a jump can skim another
-        // floor on the way: E4M2's)
+        // floor on the way)
         let landed = flown > 0.0
             && here.is_some_and(|h| {
                 let s = nav.nav.sector_of_poly(h);
@@ -559,10 +558,10 @@ impl RouteFollower {
             return self.walk(obs);
         }
         // stopped a quarter second into the sprint with a monster's body against her on the way
-        // (to the takeoff, or past it to the landing): in the way (MAP05, imps at the takeoff,
-        // clawing her for the four seconds of pushing at them). The jump's off; the route too, so
-        // the fight has the legs again. Only for a body there: knocked aside mid-sprint, stopped
-        // a moment, she runs on (MAP06, the plasma rifle's jump given up for it, stuck)
+        // (to the takeoff, or past it to the landing): in the way, and pushing at it is standing
+        // to be clawed. The jump's off; the route too, so the fight has the legs again. Only for
+        // a body there: knocked aside mid-sprint, stopped a moment, she runs on (a jump isn't
+        // given up for a knock)
         let pos = obs.pos();
         let to = heading(pos, if flown < 0.0 { jump.takeoff } else { jump.dest });
         let body_ahead = obs.things.iter().flatten().any(|t| {
@@ -578,8 +577,7 @@ impl RouteFollower {
         }
         // (short of the takeoff and well short of the speed the jump was checked with by here:
         // knocked, or held up by something in her run. It won't carry; stopped before the edge
-        // and lined up again. MAP06: a lost soul in the run of a jump over a lava trench, run on
-        // after it at half speed, off the edge and down, 120 out of the 314 across)
+        // and lined up again, not run on at half speed off the edge and down)
         if flown < 0.0 && obs.tic - since > 8 {
             let along = obs
                 .velocity
@@ -606,7 +604,7 @@ impl RouteFollower {
             } else {
                 dist(jump.takeoff, jump.dest) - 8.0
             };
-        // keep on the jump's line till takeoff (MAP27's clears a ledge corner by nothing)
+        // keep on the jump's line till takeoff (one can clear a ledge's corner by nothing)
         let mut strafe = 0.0;
         if flown < 0.0 {
             let side = (obs.x - jump.takeoff.0) * uy - (obs.y - jump.takeoff.1) * ux;

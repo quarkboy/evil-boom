@@ -2,10 +2,8 @@
 //! blown up), so a path by it runs straight through a row of them. For a run out of a field of
 //! barrels she needs the lanes there are between them: a search over a fine grid of the ground
 //! round the mesh's path, a cell free where her box clears every barrel and stands on floor.
-//! (The user's: "it's required to plan a route around the barrel obstacles for this". MAP23's
-//! first field: rows of them 64 apart, 12 to spare for her between two, the gaps of one row not
-//! in line with the next's; the mesh's path down its east side, 48 between a row's end and the
-//! side column, wedged there till the chain came.)
+//! (Rows of them 64 apart leave her 12 to spare between two, and the gaps of one row needn't be
+//! in line with the next's.)
 
 use crate::geom::{dist, Point};
 use std::cmp::Reverse;

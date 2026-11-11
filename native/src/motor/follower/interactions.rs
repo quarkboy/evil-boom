@@ -112,7 +112,7 @@ impl RouteFollower {
             let (cur, nxt) = (path.polys[j], path.polys[j + 1]);
             let (cs, ns) = (mesh.poly(cur).sector, mesh.poly(nxt).sector);
             // (a jump or a climb onto the poly beside: the jump's to do, not a walk the heights
-            // don't allow; MAP12's climb up the stair's side, waited at "for the mover" for good)
+            // don't allow, waited at "for the mover" for good)
             if path
                 .jumps
                 .iter()
@@ -324,8 +324,8 @@ impl RouteFollower {
             .get(&sector)
             .is_some_and(|d| use_point.is_some() || d.users.contains(&cur));
         // the part of the doorway in front of her, or the gate door's line; for a door, its use
-        // line (the face with the special: MAP12's diagonal blue door isn't the side the path
-        // goes in by)
+        // line (the face with the special: a door set aslant needn't have it on the side the
+        // path goes in by)
         let door_point = use_point
             .or_else(|| {
                 if opener {
@@ -355,9 +355,9 @@ impl RouteFollower {
             }
             let mut standoff = DOOR_STANDOFF;
             if self.use_intercepted(pos, door_point) || self.use_walled(pos, door_point) {
-                // another switch line between her and the door would take the press (E3M9), or a
-                // wall stop it (E3M4's exit door, set back in its frame, pressed from off to the
-                // side across the frame's corner): go right up to the door
+                // another switch line between her and the door would take the press, or a wall stop
+                // it (a door set back in its frame, pressed from off to the side across the frame's
+                // corner): go right up to the door
                 standoff = PLAYER_RADIUS + 2.0;
             }
             if d > standoff + 4.0 {
@@ -436,8 +436,8 @@ impl RouteFollower {
                 }
                 switch_nearby = true;
                 if waited > 3 * 35 && still {
-                    // the nearest bit of it (a long lift edge's middle can be out of use range:
-                    // MAP29), stepping up to it if need be
+                    // the nearest bit of it (a long lift edge's middle can be out of use range),
+                    // stepping up to it if need be
                     let Some(li) = t.linedef() else { break };
                     let (la, lb) = nav.map.line_seg(li);
                     let length = dist(la, lb).max(1e-6);
@@ -483,8 +483,8 @@ impl RouteFollower {
             }
         }
         if self.reopening {
-            // a "close, wait 30s, open" door she walked into the trigger of (E1M6): nothing to
-            // do but wait, as a player would; spin round lazily meanwhile
+            // a "close, wait 30s, open" door she walked into the trigger of: nothing to do but
+            // wait, as a player would; spin round lazily meanwhile
             if waited > 33 * 35 {
                 self.reopening = false;
                 if !self.replan(obs, &format!("sector {sector} not reopening"), false) {
@@ -499,9 +499,9 @@ impl RouteFollower {
                     .hold(obs, want, Some((obs.angle + 10.0).rem_euclid(360.0))),
             );
         }
-        // still on its way to where the plan has it (MAP29's floor that takes half a minute to
-        // rise to the walkway): nothing to replan, just wait; but not for one that's stopped or
-        // going the other way (still finishing the move before, so the trigger did nothing)
+        // still on its way to where the plan has it (a floor can take half a minute to rise to
+        // a walkway): nothing to replan, just wait; but not for one that's stopped or going the
+        // other way (still finishing the move before, so the trigger did nothing)
         let coming = self.watches.iter().any(|w| {
             w.expect.sector == sector
                 && w.reached.is_none()
@@ -534,10 +534,9 @@ impl RouteFollower {
             }
             // (no other way from here, and it's for a run-jump off that floor: the jump's not to
             // be had this way, as one fallen short of isn't; counted against it, and the step's
-            // over, for the explorer to choose again. MAP09's pass: a jump off a lift planned
-            // with the lift's line crossed two steps before, the lift long back up; waited
-            // under for 15 s, the way planned again as it was, ten minutes, the stairs to the
-            // same door never looked at)
+            // over, for the explorer to choose again. A jump off a lift planned with the lift's
+            // line crossed some steps before finds the lift long back up, and the same plan made
+            // again waits under it again)
             let off: Option<crate::navigator::Jump> = self.segments[self.seg_i..]
                 .iter()
                 .filter_map(|seg| seg.jump.clone())
@@ -793,7 +792,7 @@ impl RouteFollower {
         };
         let floor = obs.heights[nav.sector_of_poly(here)].floor;
         // (well in, and still: the shot goes a few tics after the trigger's pulled, and a lift
-        // rising through the bottom of the range has gone on by then: MAP16's table)
+        // rising through the bottom of the range has gone on by then)
         let still = self
             .shot_floor
             .replace(floor)
@@ -825,7 +824,7 @@ impl RouteFollower {
         let nav = &view.nav;
         if step.action == Action::Endure {
             // an exit floor: stand on it while it hurts her down to 10 health, which ends the
-            // level (E1M8)
+            // level
             self.step_tic = obs.tic;
             self.progress_tic = obs.tic;
             return self.motion.hold(obs, (0.0, 0.0), self.look);
@@ -911,8 +910,7 @@ impl RouteFollower {
             .min(0.5f64.max(1.0 - 8.0 / length));
         if step.action == Action::Shoot {
             // (a shot reaches: the middle, where it's widest to hit; else the part of it in
-            // sight: MAP10's door 296 from the step down the room, its middle behind the alcove's
-            // corner, shot at 18 times)
+            // sight, its middle behind a corner maybe)
             tt = SHOT_AIMS
                 .into_iter()
                 .find(|&t| {
@@ -961,7 +959,7 @@ impl RouteFollower {
         }
         if step.action == Action::Use && self.action_tic.is_none() {
             if let Some((s0, _)) = t.shift_from {
-                // stairs don't build while their first step is moving (MAP21: a lift as well):
+                // stairs don't build while their first step is moving (it can be a lift as well):
                 // wait till it's back up where the stairs left it
                 let top = self.states[s0]
                     .iter()
@@ -979,10 +977,10 @@ impl RouteFollower {
         if pressing {
             if let Some(relevant) = &t.relevant {
                 // where it takes things depends on what's round it when pressed: wait for the
-                // lifts and doors among those to be where the plan has them (MAP09)
+                // lifts and doors among those to be where the plan has them
                 let init = &nav.movers.initial;
-                // (not what it moves itself: off already if it's been pressed once, as MAP02's red
-                // bars were, a fight in between, and waited for ten seconds to go back)
+                // (not what it moves itself: that's off already if it's been pressed once, and isn't
+                // to be waited for to go back)
                 let moves: BTreeSet<usize> = t.effects.iter().map(|(s, _)| *s).collect();
                 let off: Vec<usize> = relevant
                     .iter()
@@ -1015,13 +1013,13 @@ impl RouteFollower {
         }
         if pressing && t.once() && t.shift_from.is_none() {
             // Doom ignores a switch on a sector that's busy (a door open on its timer), and a
-            // once-only one is still there to press then: wait till what it works is at rest
-            // (E3M4). What it works if she knows, and what's moving right by it, which she sees.
+            // once-only one is still there to press then: wait till what it works is at rest.
+            // What it works if she knows, and what's moving right by it, which she sees.
             let init = &nav.movers.initial;
             let mut cands: BTreeSet<usize> = t.effects.iter().map(|(s, _)| *s).collect();
             if cands.is_empty() {
-                // (what's moving right by it only while what it works isn't known: MAP02's red
-                // bars, pressed with the first door's timer running beside them, waited for)
+                // (what's moving right by it only while what it works isn't known: a door on its
+                // timer beside the switch isn't waited for once she knows it's not the switch's)
                 cands.extend(self.sectors_near(li));
             }
             let busy: Vec<usize> = cands
@@ -1039,8 +1037,7 @@ impl RouteFollower {
                 })
                 .collect();
             // (what it works on its way already where it sends it: pressed, a noise looked round
-            // at before the press was counted; again would do nothing, or turn a door back. E2M1's
-            // door 379: eight seconds waited for it to open, then pressed again)
+            // at before the press was counted; again would do nothing, or turn a door back)
             let toward = |x: usize| {
                 obs.height(x).is_some_and(|l| {
                     t.effects
@@ -1062,8 +1059,8 @@ impl RouteFollower {
                 self.next_step(obs.tic);
                 return controls;
             }
-            // (its own timer: MAP19's door switch, pressed with the lift set off on the way still
-            // running, did nothing, forty-odd times)
+            // (its own timer: a door switch pressed with a lift set off on the way still running
+            // does nothing)
             if !busy.is_empty() && self.rest_logged != self.step_i {
                 self.log.add(
                     obs.tic,
@@ -1090,8 +1087,8 @@ impl RouteFollower {
                 .filter(|nt| nt.info.trigger == Trigger::WR && !nt.permanent())
             {
                 // the next step crosses a lift line for its window: if that lift is away (set
-                // off on the way, MAP09), wait for it now, before this press starts a timer of
-                // its own the wait would use up
+                // off on the way), wait for it now, before this press starts a timer of its own
+                // the wait would use up
                 let init = &nav.movers.initial;
                 let away: Vec<usize> = nt
                     .effects
@@ -1117,8 +1114,8 @@ impl RouteFollower {
             && obs.weapon != Some(tap_gun(obs))
         {
             // a fist or chainsaw (picked up on the way: the game switches to it) doesn't set
-            // off a gun line (MAP19), nor anything that fires a missile; a shotgun's pellets
-            // spread (MAP16's flame panel, 3 degrees across): out with the pistol first
+            // off a gun line, nor anything that fires a missile; a shotgun's pellets spread
+            // (a panel can be 3 degrees across): out with the pistol first
             controls.weapon = tap_gun(obs);
             self.progress_tic = obs.tic;
             return controls;

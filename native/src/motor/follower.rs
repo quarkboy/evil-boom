@@ -42,15 +42,15 @@ fn along(pts: &[Point], d: f64) -> Point {
 }
 
 /// How far a blast at `a` takes `b` to be, as P_RadiusAttack has it: the greater of the gaps
-/// along x and along y, not the straight line (E1M4: backed off to 155 in a straight line, 122
-/// by this, inside the blast; 22 of her last health).
+/// along x and along y, not the straight line (155 off in a straight line can be 122 by this,
+/// inside the blast).
 pub fn blast_gap(a: Point, b: Point) -> f64 {
     (a.0 - b.0).abs().max((a.1 - b.1).abs())
 }
 
 /// What to shoot a barrel this far off with: the shotgun (or the super shotgun) when there are
 /// shells to spare and it's near enough for most of the pellets to land, one blast and it's gone
-/// (20 health, the user's: surer than taps); else the pistol, single taps.
+/// (a barrel has 20 health: surer than taps); else the pistol, single taps.
 pub fn barrel_gun(obs: &Observation, d: f64) -> i32 {
     if d < BARREL_SHOTGUN_RANGE
         && obs.weapons.as_ref().is_some_and(|w| w.contains(&3))
@@ -72,7 +72,7 @@ const BARREL_SHOTGUN_RANGE: f64 = 320.0;
 const BARREL_SHELLS: i32 = 12;
 
 /// What to shoot something with: the pistol (the shotgun if there's nothing for it), whatever's
-/// in hand: not the BFG with 20 cells of the 40 it needs (MAP23), nor a missile, which sets off no
+/// in hand: not the BFG with fewer cells than the 40 it needs, nor a missile, which sets off no
 /// gun line.
 pub fn tap_gun(obs: &Observation) -> i32 {
     TAP_GUNS
@@ -84,7 +84,7 @@ pub fn tap_gun(obs: &Observation) -> i32 {
 /// the guns that tap (hitscan), in the order taken up: pistol, chaingun, shotgun
 const TAP_GUNS: [i32; 3] = [2, 4, 3];
 
-/// Rounds for the gun in `slot`, if she has it (none if she hasn't: E2M4's twelve shells, no
+/// Rounds for the gun in `slot`, if she has it (none if she hasn't: shells are nothing with no
 /// shotgun to fire them; ammo is (weapon slot, rounds for it)).
 pub fn tap_rounds(obs: &Observation, slot: i32) -> i32 {
     if obs.weapons.as_ref().is_some_and(|w| !w.contains(&slot)) {
@@ -138,7 +138,7 @@ const MAX_TOTAL_REPLANS: i32 = 30;
 const GIVE_UP_TICS: i64 = 60 * 35;
 
 /// The actions she stops at the end of (the explorer's goto included: where it goes next is
-/// anyone's guess; E3M3 slid off a ledge it arrived at running).
+/// anyone's guess, and arriving at a ledge running is sliding off it).
 fn stops(a: Action) -> bool {
     matches!(
         a,
@@ -551,8 +551,8 @@ impl RouteFollower {
     }
 
     /// Off on a jump: sprinting for the takeoff or running over sinking floors. Not lining up at
-    /// the run-up: standing there is no jump yet, and the fight has the legs (MAP27 UV, at the
-    /// run-up turned to a spectre, never square on, stood still as it bit her to death).
+    /// the run-up: standing there is no jump yet, and the fight has the legs (else she stands
+    /// still at the run-up with a monster at her).
     pub fn jumping(&self) -> bool {
         self.sprint.is_some() || self.run.is_some()
     }
@@ -676,7 +676,6 @@ impl RouteFollower {
                 self.states = self.view.nav.apply_trigger(&self.states, t);
                 if t.permanent() {
                     // gone for good, risen or lowered: replans mustn't count on the old height
-                    // (MAP29: one routed over a floor where it had risen from a minute before)
                     for (sec, hs) in effects {
                         self.states[sec] = hs;
                     }
@@ -817,8 +816,8 @@ impl RouteFollower {
             if let Some(jump) = path.jumps.iter().find(|j| dist(p, j.runup) < 1.0) {
                 raw.push((std::mem::take(&mut cur), SegEnd::Jump, Some(jump.clone())));
                 // on from the landing, then the waypoints after the takeoff (one at the landing
-                // itself is dropped; a nearby one can be where the step ends: E4M6's switch is
-                // 26 past the landing, and a track of just that point is "already there")
+                // itself is dropped; a nearby one can be where the step ends, a switch a little
+                // past the landing, and a track of just that point is "already there")
                 cur = vec![jump.dest];
                 let land =
                     (i + 2..pts.len()).find(|&k| pts[k].is_some_and(|q| dist(q, jump.dest) < 32.0));
@@ -944,8 +943,8 @@ impl RouteFollower {
         if self.seen_heights.len() != obs.heights.len() {
             self.seen_heights = obs.heights.clone();
         }
-        // (a pace by the tics since she last looked: the fight had her in between, E3M4's slow
-        // crusher taken to move 23 units a tic)
+        // (a pace by the tics since she last looked: the fight may have had her in between, and
+        // a slow crusher isn't one that moved all that way in a tic)
         let since = self.seen_tic.map_or(1, |t| (obs.tic - t).max(1)) as f64;
         self.seen_tic = Some(obs.tic);
         for (sec, &h) in obs.heights.iter().enumerate() {
@@ -965,10 +964,9 @@ impl RouteFollower {
         let pos = obs.pos();
         if self.last_pos.is_some_and(|l| dist(pos, l) > 64.0) {
             // (to where the teleporter puts her, that is: a jump in where she is to anywhere else
-            // is the fight's doing, her legs its own for a while, not the teleporter's. MAP29's
-            // pass: a revenant closed in on by turns with the route, each turn back taken for
-            // the teleport ahead, the way on from it followed from where she stood, off course,
-            // planned again, till "replanned too often", 42 times)
+            // is the fight's doing, her legs its own for a while, not the teleporter's; taken for
+            // the teleport ahead, the way on from it is followed from where she stands, off
+            // course, and planned again and again)
             let lands = self
                 .segments
                 .get(self.seg_i + 1)
@@ -986,9 +984,8 @@ impl RouteFollower {
                 );
                 if matches!(self.phase, Phase::Act | Phase::Fetch) {
                     // (teleported off the spot she was acting from: a press from there is no
-                    // try, the use ray reaches 64. Walk back to it. MAP21: a dodge at a key bar
-                    // onto the teleporter beside it, the bar pressed from across the map three
-                    // times and given up as doing nothing)
+                    // try, the use ray reaches 64. Walk back to it: a dodge onto a teleporter
+                    // beside a switch isn't the switch doing nothing)
                     self.start_step(obs.tic);
                 }
                 self.settle_until = obs.tic; // (judge where she is straight away)
@@ -1017,8 +1014,8 @@ impl RouteFollower {
             self.keys = Keys(self.keys.0 | k.0);
         }
         if self.mortal && !self.segments.is_empty() {
-            // (mortal: out from under a ceiling coming down before anything, whatever she's at:
-            // a lift's window waited for under E4M7's crusher, 200 health crushed out of her)
+            // (mortal: out from under a ceiling coming down before anything, whatever she's at,
+            // a lift's window waited for included)
             if let Some(c) = self.pinned_under_ceiling(obs) {
                 return c;
             }
@@ -1054,7 +1051,7 @@ impl RouteFollower {
 
     /// (poly, point in it) of the floor she's really standing on. Doom holds the box up on the
     /// highest floor under any of it, so her centre can be out over a pit beside a walkway
-    /// narrower than the box (MAP24's) with nothing wrong.
+    /// narrower than the box with nothing wrong.
     fn standing(&self, obs: &Observation) -> (Option<usize>, Point) {
         let mesh = &self.view.nav.mesh;
         let here = mesh.poly_at(obs.pos());
@@ -1133,8 +1130,8 @@ impl RouteFollower {
     }
 
     /// Just landed a jump: the way on to the step's goal from where she is (the plan's path on
-    /// from a landing was smoothed across the jump and can wander: MAP22's swung back off the
-    /// ledge it lands on). Not a replan: the plan holds.
+    /// from a landing was smoothed across the jump and can wander back off the ledge it lands
+    /// on). Not a replan: the plan holds.
     fn path_on(&mut self, obs: &Observation) {
         let Some(goal) = self.step().path.as_ref().and_then(last_point) else {
             return;
