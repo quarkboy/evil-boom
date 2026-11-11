@@ -83,13 +83,14 @@ impl Act {
 type Node = fn(&mut Combat, &Observation, &Situation) -> Option<Act>;
 
 /// Before anything else: out of the way of what would kill her outright.
-const SURVIVE: [Node; 7] = [off_crusher, out_of_vile_sight, off_lit_barrel, ducking, dodging, bfg_hold, off_barrel];
+const SURVIVE: [Node; 8] = [off_crusher, out_of_vile_sight, through_barrels, off_lit_barrel, ducking, dodging, bfg_hold, off_barrel];
 /// In a jump, the route has the legs.
 const BUSY: [Node; 1] = [busy];
 /// The weapon she'd fight her target with fought up close.
 const MELEE: [Node; 1] = [melee];
 /// The fight itself.
-const FIGHT: [Node; 13] = [
+const FIGHT: [Node; 14] = [
+    setting_on,
     backing_off,
     sneaking,
     to_errand,
@@ -107,7 +108,15 @@ const FIGHT: [Node; 13] = [
 
 /// What she does, a target or a missile about: the first node that applies.
 pub(super) fn engage(c: &mut Combat, obs: &Observation, s: &Situation) -> Act {
-    SURVIVE.iter().chain(&BUSY).chain(&MELEE).chain(&FIGHT).find_map(|node| node(c, obs, s).filter(|a| !c.barred.contains(&a.kind))).unwrap_or_else(|| Act::new(Move::ShootingOnTheWay, None, "shooting on the way".into()))
+    let mut act =
+        SURVIVE.iter().chain(&BUSY).chain(&MELEE).chain(&FIGHT).find_map(|node| node(c, obs, s).filter(|a| !c.barred.contains(&a.kind))).unwrap_or_else(|| Act::new(Move::ShootingOnTheWay, None, "shooting on the way".into()));
+    // (no shot at either of two bosses she'd set on each other, whatever she's doing: a shot of
+    // hers turns it back on her. MAP20, 67 bullets into a cyberdemon at 4000 between dodges of its
+    // rockets. One dead, the other turned to her: the fight as it ever was; the user's)
+    if !act.hold_fire && s.target.as_ref().is_some_and(|t| mon(t.name).boss) && c.boss_pair(obs).is_some() {
+        act.hold_fire = true;
+    }
+    act
 }
 
 // --- survive -----------------------------------------------------------------------------------
@@ -179,6 +188,21 @@ fn off_crusher(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
 /// A barrel going off by her: its blast (up to 128) before any missile's dodge.
 fn off_lit_barrel(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
     s.barrel_lit.map(|away| Act::new(Move::OffLitBarrel, Some(away), "away from a barrel going off".into()))
+}
+
+/// In a field of barrels, something that shoots awake: no standing in it to fight, dodge or keep
+/// clear; on along her route flat out, the trigger let go (a shot of hers sets them off as surely
+/// as theirs). The user's, of MAP23's field and its hall: run for the far end, weaving between
+/// them, and don't fire. (16 runs of 16 on the easiest skill dead by barrels: kept clear of a
+/// mancubus and of hell knights from in among them, their fireballs into the barrels by her.)
+fn through_barrels(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
+    if !c.routed || c.now.shooters.is_empty() || Combat::barrel_field(obs) < c.tune.barrels.field {
+        return None;
+    }
+    let mut a = Act::new(Move::ThroughBarrels, None, "in a field of barrels: on through it".into());
+    a.route = true;
+    a.hold_fire = true;
+    Some(a)
 }
 
 /// (MAP23: a mancubus's fireball set off the barrels she stood by)
@@ -334,6 +358,19 @@ fn stepping_for_plasma(c: &mut Combat, obs: &Observation, s: &Situation) -> Opti
 /// on past, its bullets reach her all the same.
 fn fought(c: &Combat, obs: &Observation, t: &Thing) -> bool {
     c.takes_on(obs, t.name) || (c.now.outmatched && c.quick_hitscan(obs, t.name))
+}
+
+/// Two bosses about, one with a gun: set on each other (`Combat::set_on`). To where the other's
+/// between her and the gun, the trigger let go (a shot of hers turns them on her); the two at
+/// each other, left to it: on along the route, the trigger let go still.
+fn setting_on(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
+    let (gun, other, to) = c.set_on(obs)?;
+    let mut a = match to {
+        Some(way) => Act::new(Move::SettingOn, way, format!("getting the {} between her and the {}", other.name, gun.name)),
+        None => Act::new(Move::LeavingToIt, None, format!("leaving the {} and the {} to each other", gun.name, other.name)),
+    };
+    a.hold_fire = true;
+    Some(a)
 }
 
 /// Outmatched by something awake and after her: keep her distance, still shooting (the route

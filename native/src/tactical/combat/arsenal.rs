@@ -187,7 +187,11 @@ impl Combat {
 
     /// The same, by the monster's id and kind (one known of, not in sight).
     pub fn ammo_short_of_killing(&self, obs: &Observation, id: i32, name: &str) -> bool {
-        let hp = f64::from(mon(name).health) - self.put_in.get(&id).copied().unwrap_or(0.0);
+        // (or what she's seen it lose, to whatever: more than she's put in, another's been at it.
+        // MAP20, the cyberdemon left at 600-900 by the spider mastermind, held too much for her
+        // 63 bullets and 5 shells at its full 4000)
+        let lost = self.put_in.get(&id).copied().unwrap_or(0.0).max(self.seen_hurt.get(&id).copied().map_or(0.0, f64::from));
+        let hp = f64::from(mon(name).health) - lost;
         self.ammo_short_of(obs, &[name], hp.max(0.0), f64::INFINITY)
     }
 

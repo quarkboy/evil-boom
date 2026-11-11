@@ -74,8 +74,15 @@ impl RouteFollower {
         if self.barrel.is_some() {
             return self.shoot_barrel(obs);
         }
-        if let Some(c) = self.keep_off_lit_chain(obs) {
-            return c;
+        {
+            // (but for one she's against already: the way leads off from it)
+            let pos = obs.pos();
+            self.run_barrels = obs.barrels.iter().flatten().copied().filter(|&b| !((pos.0 - b.0).abs() < super::lanes::ROOM && (pos.1 - b.1).abs() < super::lanes::ROOM)).collect();
+        }
+        if !self.barrel_run {
+            if let Some(c) = self.keep_off_lit_chain(obs) {
+                return c;
+            }
         }
         // (a barrel to clear on this step: taken on at once, shot from the nearest place out of
         // every blast of its chain, then on)
@@ -234,7 +241,7 @@ impl RouteFollower {
                 }
                 return self.walk(obs);
             }
-            if let Some(b) = obs.barrels.iter().flatten().copied().find(|&b| dist(b, pos) < BARREL_IN_WAY) {
+            if let Some(b) = obs.barrels.iter().flatten().copied().find(|&b| !self.barrel_run && dist(b, pos) < BARREL_IN_WAY) {
                 // wedged against a barrel (MAP23 has rows of them across corridors): blow it up
                 // from a safe distance, as a player would
                 self.log.add(obs.tic, format!("barrel in the way at ({:.0}, {:.0}): shooting it", b.0, b.1));
@@ -252,6 +259,9 @@ impl RouteFollower {
         if seg.end == SegEnd::Teleport && to_end < REACHED {
             carrot = seg.look.pts[seg.look.pts.len() - 1]; // (keep going through the line)
         }
+        // (barrels standing in the track: by a lane between them to where it's clear again)
+        let on: Vec<Point> = [192.0, 320.0, 512.0, 96.0, 768.0].into_iter().map(|d| track.point_at((self.s + d).min(track.length))).collect();
+        carrot = self.lane_carrot(obs, carrot, &on);
         let end_speed = if stop {
             0.0
         } else if seg.end == SegEnd::Teleport {
@@ -283,11 +293,104 @@ impl RouteFollower {
             }
         }
         speed = speed.min(self.caution_speed(obs, track));
+        if std::env::var_os("EVIL_DEBUG_PACE").is_some() && obs.tic % 10 == 0 {
+            eprintln!("tic {}: at ({:.0}, {:.0}) speed {speed:.1} (cap {:.1}, track {:.1}, caution {:.1}, stop {stop}, rest {rest:.0}), carrot ({:.0}, {:.0}), going {:?}", obs.tic, pos.0, pos.1, self.speed_cap, track.speed_limit(track.length - rest, end_speed), self.caution_speed(obs, track), carrot.0, carrot.1, obs.velocity);
+        }
         let look = self.look_angle(obs, &seg);
         if dist(pos, carrot) < 1.0 {
             return self.motion.hold(obs, (0.0, 0.0), Some(look));
         }
         self.motion.go(obs, heading(pos, carrot), speed, Some(look))
+    }
+
+    /// Where to steer for with barrels about: `carrot` if the line to it is clear of them; else
+    /// by a lane between them (`lanes::lane`) to the first of `on` (points further on her
+    /// track) that's clear and has one, kept to till she's through; no lane, the sidestep
+    /// (`round_barrel`). The mesh's way has no barrels in it; she plans round the ones she sees
+    /// as she sees them (the user's: "it's required to plan a route around the barrel
+    /// obstacles").
+    fn lane_carrot(&mut self, obs: &Observation, carrot: Point, on: &[Point]) -> Point {
+        use super::lanes::{chord_clear_of, clear_of, lane};
+        let pos = obs.pos();
+        while self.detour.first().is_some_and(|&q| dist(pos, q) < 12.0) {
+            self.detour.remove(0);
+        }
+        if let Some(&q) = self.detour.first() {
+            if chord_clear_of(&self.run_barrels, pos, q) {
+                return q;
+            }
+            self.detour.clear(); // (one she hadn't seen, in the lane: again)
+        }
+        if chord_clear_of(&self.run_barrels, pos, carrot) {
+            return carrot;
+        }
+        if obs.tic - self.detour_tic >= 8 {
+            let nav = &self.view.nav;
+            let floor = |p: Point| {
+                let at = |q: Point| nav.poly_at(q).map(|i| nav.sector_of_poly(i)).filter(|&s| nav.damage.get(s).is_none_or(|&d| d == 0)).and_then(|s| obs.height(s)).filter(|h| h.ceiling - h.floor >= crate::navigator::PLAYER_HEIGHT);
+                let r = PLAYER_RADIUS + 1.0;
+                let mid = at(p)?.floor;
+                [(-r, -r), (r, -r), (r, r), (-r, r)].into_iter().all(|(dx, dy)| at((p.0 + dx, p.1 + dy)).is_some_and(|h| (h.floor - mid).abs() <= MAX_STEP)).then_some(mid)
+            };
+            let found = on.iter().copied().filter(|&q| dist(q, pos) > 32.0 && clear_of(&self.run_barrels, q)).find_map(|q| lane(pos, q, &[pos, q], &self.run_barrels, &floor, MAX_STEP));
+            match found {
+                Some(way) if !way.is_empty() => {
+                    self.detour = way;
+                    return self.detour[0];
+                }
+                _ => self.detour_tic = obs.tic,
+            }
+        }
+        self.round_barrel(obs, carrot)
+    }
+
+    /// A barrel standing in the way to `carrot`: round it, or between it and the next (a row of
+    /// them 64 apart leaves her 12 to spare: through the middle of a gap), by whichever such way
+    /// is shortest with floor there and no other barrel in it; none, `carrot` as it was (wedged
+    /// against it, she shoots it). The user's: weaving between them, as a player does. (The
+    /// route's way goes by the mesh, which has no barrels in it: MAP23's field and its hall of
+    /// them, run into a row of them and stood there, a mancubus's fireballs setting the lot off.)
+    fn round_barrel(&self, obs: &Observation, carrot: Point) -> Point {
+        /// her box and a barrel's side by side (16 and 10), and a little
+        const ROOM: f64 = PLAYER_RADIUS + 10.0 + 1.0;
+        /// how far out from a barrel's middle she passes it with nothing the other side
+        const PASS: f64 = ROOM + 10.0;
+        /// another barrel this near one makes a gap to go through the middle of
+        const ROW: f64 = 160.0;
+        let pos = obs.pos();
+        let d = dist(pos, carrot);
+        if d < 1.0 {
+            return carrot;
+        }
+        let u = ((carrot.0 - pos.0) / d, (carrot.1 - pos.1) / d);
+        let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
+        // (one she's beside already, or as good as, isn't in her way)
+        let ahead = |b: Point| (b.0 - pos.0) * u.0 + (b.1 - pos.1) * u.1 > 8.0;
+        // (a way's clear of a barrel that stays its room off it; or that she's against now
+        // and the way leads off from)
+        let passes = |q: Point, o: Point| segment_distance(pos, q, o, o) >= ROOM || (dist(pos, o) < ROOM + 4.0 && (q.0 - pos.0) * (o.0 - pos.0) + (q.1 - pos.1) * (o.1 - pos.1) <= 0.0);
+        let Some(&b) = barrels.iter().filter(|&&b| ahead(b) && segment_distance(pos, carrot, b, b) < ROOM).min_by(|x, y| dist(**x, pos).total_cmp(&dist(**y, pos))) else {
+            return carrot;
+        };
+        let n = (-u.1, u.0);
+        let sides = [1.0, -1.0].into_iter().map(|k| (b.0 + n.0 * PASS * k, b.1 + n.1 * PASS * k));
+        let gaps = barrels.iter().filter(|&&o| dist(o, b) > 2.0 * ROOM && dist(o, b) < ROW).map(|&o| ((b.0 + o.0) / 2.0, (b.1 + o.1) / 2.0));
+        let nav = &self.view.nav;
+        sides
+            .chain(gaps)
+            .filter(|&q| {
+                nav.poly_at(q).is_some_and(|p| nav.damage.get(nav.sector_of_poly(p)).is_none_or(|&h| h == 0))
+                    && dist(pos, q) > 16.0
+                    && self.chord_clear(pos, q)
+                    && barrels.iter().all(|&o| passes(q, o))
+            })
+            .min_by(|x, y| (dist(pos, *x) + dist(*x, carrot)).total_cmp(&(dist(pos, *y) + dist(*y, carrot))))
+            .unwrap_or_else(|| {
+                if std::env::var_os("EVIL_DEBUG_PACE").is_some() && obs.tic % 10 == 0 {
+                    eprintln!("  no way round the barrel at ({:.0}, {:.0}) from ({:.0}, {:.0})", b.0, b.1, pos.0, pos.1);
+                }
+                carrot
+            })
     }
 
     /// How fast to go for what's just ahead: down steps (braking does nothing dropping
@@ -388,7 +491,8 @@ impl RouteFollower {
             if dist(pos, q) < 0.6 * along {
                 continue;
             }
-            if dist(pos, q) < 1.0 || self.chord_clear(pos, q) {
+            // (no corner cut into a barrel)
+            if dist(pos, q) < 1.0 || (self.chord_clear(pos, q) && super::lanes::chord_clear_of(&self.run_barrels, pos, q)) {
                 return q;
             }
         }

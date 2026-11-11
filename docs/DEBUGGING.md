@@ -91,6 +91,12 @@ over. `Player::force_target` does the same for a target, from code.
   turn, as the game traces it), the line the model has it hit.
 - `EVIL_DEBUG_DEAD_END=1`: for a drop refused as a dead end: the sectors she'd have after it
   and what she has left to try, by where it's pressed from.
+- `EVIL_DEBUG_SET_ON=1`: two bosses about: where she, they and the spot to line them up from are.
+- `EVIL_DEBUG_BARRELS=1`: barrels going off: which, where she is, whose blast she's in; and
+  (stderr) the ways out of a chain weighed.
+- `EVIL_DEBUG_PACE=1` (stderr): every ten tics what limits the route's pace, the carrot, her
+  speed; the fight's controls beside the route's; every line of any follower's log (a
+  retreat's too, which the run's log doesn't show); the lanes planned between barrels.
   `EVIL_KNOWN_ONLY=map|monsters`: only that much known.
 - What her shots hit is in every run's STATS, by the game's own count (the engine patch):
   `shots, by the game's count`, `shots with no pellet on anything`, `pellets fired`, on a

@@ -1519,7 +1519,7 @@ impl Combat {
                 // (nothing to shoot with: aiming fires nothing, and the route's turn is what
                 // faces a shut door on her way to press it; MAP31, HMP, out of ammo and off for
                 // more, turned to the SS shooting her, 450 tics at a door she never pressed)
-                if d.aim.is_none() || !self.armed(obs) {
+                if d.aim.is_none() || !self.armed(obs) || d.kind.route_faces() {
                     c.turn = b.turn;
                 } else {
                     // (the route's way in the world, whichever way she's turned to aim)
@@ -1567,6 +1567,9 @@ impl Combat {
         }
         if d.weapon != 0 {
             c.weapon = d.weapon;
+        }
+        if std::env::var_os("EVIL_DEBUG_PACE").is_some() && obs.tic % 10 == 0 {
+            eprintln!("  fight tic {}: {:?} legs {legs}, base {:?}, out ({:.1}, {:.1}) turn {:.1}, facing {:.1}", obs.tic, d.kind, base.map(|b| (b.forward, b.strafe, b.turn)), c.forward, c.strafe, c.turn, obs.angle);
         }
         c
     }

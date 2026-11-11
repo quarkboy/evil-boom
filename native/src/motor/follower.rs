@@ -11,6 +11,7 @@ mod hazards;
 pub use hazards::nearest_heading;
 mod interactions;
 mod jumping;
+pub mod lanes;
 mod walking;
 
 use super::{heading, norm, Controls, Motion, Observation, Track, FULL_SPEED, RUN_TURN, TICRATE};
@@ -151,6 +152,9 @@ pub struct FollowerLog {
 
 impl FollowerLog {
     pub fn add(&mut self, tic: i64, msg: impl AsRef<str>) {
+        if std::env::var_os("EVIL_DEBUG_PACE").is_some() {
+            eprintln!("    follower tic {tic}: {}", msg.as_ref());
+        }
         self.events.push(format!("[{:6.1}s] {}", tic as f64 / TICRATE, msg.as_ref()));
     }
 }
@@ -236,6 +240,14 @@ pub struct RouteFollower {
     pub fired: BTreeSet<usize>,
     /// she can be hurt (a mortal run): no barrel shot inside its blast
     pub mortal: bool,
+    /// a run out of a field of barrels: no stopping for them (none shot, no waiting on a chain)
+    pub barrel_run: bool,
+    /// the barrels as last seen (her steering keeps its line clear of them)
+    run_barrels: Vec<Point>,
+    /// a way round barrels standing in her track: the points to go by, the next first
+    detour: Vec<Point>,
+    /// when a way round was last looked for and not found
+    detour_tic: i64,
     /// run-jumps that came down off their landing (for the explorer)
     pub missed: Vec<Jump>,
     /// (where, line) pressed from there to no effect (for the explorer)
@@ -276,6 +288,9 @@ pub struct RouteFollower {
     barrel_settle: Option<(usize, i64)>,
     /// kept off a chain of barrels going off that she didn't set off (logged once a wait)
     chain_wait: bool,
+    /// in a chain's blasts: the way out of them she's running (the next first), chosen when
+    chain_flee: Vec<Point>,
+    chain_flee_tic: i64,
     /// ...and the way there (its waypoints, the next first)
     barrel_way: Vec<Point>,
     /// ...and the nearest she's got to it, and when
@@ -374,6 +389,10 @@ impl RouteFollower {
             replans: 0,
             fired: BTreeSet::new(),
             mortal: false,
+            barrel_run: false,
+            run_barrels: Vec::new(),
+            detour: Vec::new(),
+            detour_tic: -1000,
             missed: Vec::new(),
             failed_presses: Vec::new(),
             drops_ok: BTreeSet::new(),
@@ -399,6 +418,8 @@ impl RouteFollower {
             barrel_step: None,
             barrel_settle: None,
             chain_wait: false,
+            chain_flee: Vec::new(),
+            chain_flee_tic: -1000,
             barrel_way: Vec::new(),
             barrel_best: None,
             barrel_shot: -1_000_000_000,

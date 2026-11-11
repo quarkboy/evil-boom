@@ -7,7 +7,7 @@
 
 use super::steering::WAYS;
 use super::{mon, Combat, Seen};
-use crate::geom::Point;
+use crate::geom::{dist, Point};
 use crate::los::Body;
 use crate::motor::{Observation, Thing};
 use crate::navigator::{PLAYER_HEIGHT, PLAYER_RADIUS};
@@ -78,6 +78,68 @@ impl Combat {
         };
         let h = crate::motor::follower::nearest_heading(&mesh, obs, &hidden, self.tune.hide.shake_far)?.to_radians();
         Some((h.cos(), h.sin()))
+    }
+
+    /// Two bosses awake and about her, of two kinds, one with a gun (a spider mastermind and a
+    /// cyberdemon): its bullets hit whatever's between it and her, and what's hit turns on what
+    /// hit it. Some((the one with the gun, the other, where to)): where to, None with the two at
+    /// each other already (neither turned to her); else Some(the way) to the nearest place in a
+    /// line with the two, one of them between her and the other, in the far one's sight but for
+    /// it (Some(None): there).
+    /// None: no two such, or no such place.
+    /// (MAP20 on the easiest skill, 16 runs of 16 dead in a minute at the start's porch: both
+    /// let loose on her, kept clear of in their sight, the rockets' blasts off the walls by her;
+    /// the two at 3500 of 4000 and 2800 of 3000 at her death, never set on each other. The
+    /// user's: the level's made for it.)
+    pub(super) fn set_on(&mut self, obs: &Observation) -> Option<(Thing, Thing, Option<Option<Point>>)> {
+        /// how far past the one between she'd stand, nearest first
+        const PAST: [f64; 5] = [256.0, 384.0, 512.0, 640.0, 768.0];
+        /// how far a way to there is looked for
+        const LOOK: f64 = 4096.0;
+        let pos = obs.pos();
+        let (gun, other) = self.boss_pair(obs)?;
+        if !gun.after_her && !other.after_her {
+            return Some((gun, other, None));
+        }
+        self.refresh_tic_cache(obs);
+        let z = self.z(obs);
+        // (in a line with the two, past either: past the other, the gun's bullets at her hit
+        // it; past the gun, what the other throws at her hits that)
+        let apart = dist((gun.x, gun.y), (other.x, other.y)).max(1.0);
+        let u = ((other.x - gun.x) / apart, (other.y - gun.y) / apart);
+        let thrower = matches!(mon(other.name).attack, super::Attack::Missile | super::Attack::Hitscan);
+        let past_other = PAST.iter().map(|k| (other.x + u.0 * k, other.y + u.1 * k)).map(|p| (p, eye(&gun)));
+        let past_gun = PAST.iter().filter(|_| thrower).map(|k| (gun.x - u.0 * k, gun.y - u.1 * k)).map(|p| (p, eye(&other)));
+        let spot = past_other
+            .chain(past_gun)
+            .filter(|&(p, far)| self.fits(obs, p) && self.sees(far, p, z, &self.heights_now))
+            .map(|(p, _)| p)
+            .min_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)))?;
+        if std::env::var_os("EVIL_DEBUG_SET_ON").is_some() && obs.tic % 35 == 0 {
+            self.log.push(format!("tic {}: (she's at ({:.0}, {:.0}, {:.0}); the {} at ({:.0}, {:.0}, {:.0}) after her {}, the {} at ({:.0}, {:.0}, {:.0}) after her {}; the spot ({:.0}, {:.0}), {:.0} off)", obs.tic, pos.0, pos.1, z, gun.name, gun.x, gun.y, gun.z, gun.after_her, other.name, other.x, other.y, other.z, other.after_her, spot.0, spot.1, dist(spot, pos)));
+        }
+        let mesh = std::sync::Arc::clone(&self.nav.mesh);
+        let (here, there) = (mesh.poly_at(pos), mesh.poly_at(spot)?);
+        let d = dist(spot, pos);
+        let way = if d < 16.0 {
+            None
+        } else if here == Some(there) {
+            Some(((spot.0 - pos.0) / d, (spot.1 - pos.1) / d))
+        } else {
+            let h = crate::motor::follower::nearest_heading(&mesh, obs, &|p| p == there, LOOK)?.to_radians();
+            Some((h.cos(), h.sin()))
+        };
+        Some((gun, other, Some(way)))
+    }
+
+    /// Two bosses awake and about her, of two kinds, one with a gun: (the one with the gun, the
+    /// other, the nearest such).
+    pub(super) fn boss_pair(&self, obs: &Observation) -> Option<(Thing, Thing)> {
+        let pos = obs.pos();
+        let bosses: Vec<&Thing> = self.now.about.iter().filter(|t| t.health > 0 && mon(t.name).boss && self.known.get(&t.id).is_some_and(|k| k.awake)).collect();
+        let gun = *bosses.iter().find(|t| mon(t.name).attack == super::Attack::Hitscan)?;
+        let other = *bosses.iter().filter(|t| t.name != gun.name).min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
+        Some((gun.clone(), other.clone()))
     }
 
     /// Out of the sight of a hitscan shooter she's no shot of hers to spend on: the way round a

@@ -2356,3 +2356,41 @@ by its lower texture's 16) goes up twice, 8 to 40: 32 above the yard, no climbin
 stuck forever. That would actually be hilarious during a stream." So: no rule to space the
 last kills, no giving up when she sees it. Not to be "fixed". (Seen with it and not asked to
 be left: she waits for the step at 24, the model's height, when she sees it at 40.)
+
+## Barrels are gone round, and run out of; two bosses are set on each other (the user, 2026-11-11)
+
+MAP20 and MAP23 on the easiest skill: 16 runs of 16 dead in under a minute on each.
+
+**Barrels (MAP23).** The mesh has no barrels in it (they can be blown up), so a route by it
+ran into a row of them and stood there. Now the follower plans a lane between the barrels she
+sees in her track (`motor/follower/lanes.rs`: a search over a 4-unit grid, her box against
+each barrel's as the game tests it), to where the track's clear again, and plans again as more
+come into sight; the sidestep (`round_barrel`) only where there's no lane. The user's: "it's
+required to plan a route around the barrel obstacles". And in the blasts of six or more
+chained barrels (`barrels.field`) she runs for the nearest place she knows with no barrel
+within 384, at once, something there to set them off or not, and nothing takes her legs or
+eyes till she's there (`RetreatKind::OutOfBarrels`; the user's: "find shortest path to a room
+without barrels and RUN", "cannot be interrupted by ANYTHING until she gets to safety", "it
+should start immediately"). With nothing to set them off, once only from about the same
+place (a way that lies through barrels would never be taken). No such place known and
+something that shoots awake: on along her route flat out, facing the way she runs, the
+trigger let go (`Move::ThroughBarrels`). A chain going off she isn't running from: the
+shortest way out of its blasts, or on along the route, never to and fro between two barrels.
+Tried and dropped: a timed model of the chain (which barrel goes when): too noisy to steer by.
+
+Found on the way and left: the route's legs go at a sixth of her pace while the fight has her
+turned to aim behind her (`Motion::go` slows a run sideways or backwards). Fixed for the
+barrel run only (`Move::route_faces`); everywhere else it's as it was, not measured.
+
+**Two bosses (MAP20).** A spider mastermind and a cyberdemon both awake (the only two the
+code calls bosses): she goes to the nearest place in a line with the two, one between her and
+the other, so what the far one fires at her hits the near one (`Combat::set_on`,
+`Move::SettingOn`); neither turned to her, they're left to it and the route goes on
+(`Move::LeavingToIt`). No shot at either while both live; one dead and the other turned to
+her, the fight as it ever was (the user's, in place of two rules of mine that held the
+trigger on anything she couldn't kill in every move and walked her past what outmatched her
+after 30 s: those two lost 0.0175 on the score and are gone). A monster's health is reckoned
+by what she's seen it lose to anything, not only by what she's put in.
+
+Easiest skill, 16 seeds: MAP23 0.03 -> 0.45 points (3 exits), MAP20 0.07 -> 0.21 (1 exit).
+Score: 0.460 -> 0.459, run for run -0.0009 (standard error 0.0049), exits 408 -> 403.

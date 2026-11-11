@@ -169,10 +169,13 @@ pub enum RetreatKind {
     /// monsters woken on ground she's never been on: back a little the way she came, to let
     /// them come to her
     FallBack,
+    /// in among barrels with something about to set them off: the shortest way to somewhere out
+    /// of every blast, run flat out, nothing else attended to till she's there
+    OutOfBarrels,
 }
 
 impl RetreatKind {
-    const ALL: [RetreatKind; 7] = [RetreatKind::Cover, RetreatKind::ForAmmo, RetreatKind::Back, RetreatKind::Out, RetreatKind::Bait, RetreatKind::Post, RetreatKind::FallBack];
+    const ALL: [RetreatKind; 8] = [RetreatKind::Cover, RetreatKind::ForAmmo, RetreatKind::Back, RetreatKind::Out, RetreatKind::Bait, RetreatKind::Post, RetreatKind::FallBack, RetreatKind::OutOfBarrels];
 
     fn name(self) -> &'static str {
         match self {
@@ -183,6 +186,7 @@ impl RetreatKind {
             RetreatKind::Bait => "bait",
             RetreatKind::Post => "post",
             RetreatKind::FallBack => "fall back",
+            RetreatKind::OutOfBarrels => "out of the barrels",
         }
     }
 }
@@ -198,6 +202,10 @@ pub struct Player {
     fight: Fight,
     retreat: Option<Retreat>,
     bait_tic: i64,
+    /// no way out of the barrels found: not looked for again till this tic
+    barrel_run_again: i64,
+    /// where she's begun a run out of barrels from
+    barrel_runs: Vec<Point>,
     /// when the last retreat started or found no cover
     retreat_tic: i64,
     /// the last retreat tried was for cover
@@ -252,6 +260,8 @@ impl Player {
             fight: Fight { combat: Combat::new(nav, Rc::clone(&tune)), tune: Rc::clone(&tune), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), hunted_spots: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false, gun_out_of_reach: false, toward_gun: BTreeSet::new() },
             retreat: None,
             bait_tic: -1_000_000_000,
+            barrel_run_again: 0,
+            barrel_runs: Vec::new(),
             retreat_tic: -1_000_000_000,
             tried_cover: false,
             walled_tic: -1_000_000_000,
@@ -612,6 +622,10 @@ impl Player {
         if retreating {
             self.explorer.hold(obs, last);
             let mut c = self.retreat.as_mut().map_or_else(Controls::default, |r| r.route.act(obs));
+            // (out of the barrels: her legs and her eyes the run's, whatever the fight says)
+            if self.retreat.as_ref().is_some_and(|r| r.kind == RetreatKind::OutOfBarrels) {
+                return c;
+            }
             if self.hold_at_edge(obs, &c) {
                 (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
             }
@@ -717,6 +731,18 @@ impl Player {
         if !self.fight.combat.now.shooters.is_empty() {
             self.shooters_tic = obs.tic;
         }
+        // (in among barrels, something about to set them off: out of them before anything else,
+        // whatever she was at, another retreat too)
+        if self.retreat.as_ref().is_none_or(|r| r.kind != RetreatKind::OutOfBarrels) && obs.tic >= self.barrel_run_again && self.barrel_run_due(obs) {
+            match self.out_of_barrels(obs) {
+                Some(route) => {
+                    self.barrel_runs.push(obs.pos());
+                    self.retreat = Some(Retreat { kind: RetreatKind::OutOfBarrels, route });
+                    self.retreat_tic = obs.tic;
+                }
+                None => self.barrel_run_again = obs.tic + 15,
+            }
+        }
         if let Some(r) = &self.retreat {
             let walled = r.kind == RetreatKind::ForAmmo && self.walled_off(obs, &r.route);
             if walled {
@@ -747,6 +773,106 @@ impl Player {
         self.retreat.is_some()
     }
 
+    /// In the blasts of a field of barrels (`barrels.field` of them or more in the chain she's
+    /// in): out of it at once, something there to set them off yet or not (the user's: "letting
+    /// her wander about is just going to get her in a bad position for no good reason"; what
+    /// sets them off is let out as she goes). With nothing to set them off (no monster that
+    /// shoots awake and about, none going off), once only from about the same place: her way
+    /// may lie through them, and run out of them every time she'd never take it.
+    fn barrel_run_due(&self, obs: &Observation) -> bool {
+        /// a run begun this near one before, nothing having come of the barrels: not again
+        const SAME_PLACE: f64 = 512.0;
+        let c = &self.fight.combat;
+        if c.now.invulnerable || crate::tactical::combat::Combat::barrel_field(obs) < self.fight.tune.barrels.field {
+            return false;
+        }
+        !c.now.shooters.is_empty() || !obs.barrels_lit.is_empty() || !self.barrel_runs.iter().any(|&p| dist(p, obs.pos()) < SAME_PLACE)
+    }
+
+    /// The shortest way to somewhere she knows of out of every barrel's blast (the user's:
+    /// "if surrounded by X or more barrels, find shortest path to a room without barrels and
+    /// RUN", and "this move cannot be interrupted by ANYTHING until she gets to safety"). MAP23
+    /// on the easiest skill, 16 runs of 16 dead by barrels: in its first field with a mancubus
+    /// let out behind her, and in its hall of them with hell knights, fought, dodged and kept
+    /// clear of from in among the barrels their fireballs set off.
+    fn out_of_barrels(&mut self, obs: &Observation) -> Option<RouteFollower> {
+        /// out of a blast (128, and her radius, and a little)
+        const CLEAR: f64 = 150.0;
+        /// somewhere without barrels: none this near it (a gap in a field of them is no such
+        /// place: run to one 150 clear of them all in MAP23's first field, stood in it, dead
+        /// there when the chain came by, the barrels thrown about by the blasts)
+        const AWAY: f64 = 384.0;
+        /// the nearest this many places tried for a way to them
+        const PLACES: usize = 24;
+        /// ...and no more than this many of them searched for lanes between the barrels
+        const LANES: usize = 4;
+        let pos = obs.pos();
+        let nav = Rc::clone(&self.explorer.nav);
+        let k = &self.explorer.knowledge;
+        let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
+        let mut places: Vec<Point> = k
+            .known_polys()
+            .into_iter()
+            .filter(|&p| !k.damaging(nav.sector_of_poly(p)))
+            .map(|p| nav.poly_center(p))
+            .filter(|&q| barrels.iter().all(|&b| crate::motor::follower::blast_gap(q, b) >= AWAY))
+            .collect();
+        places.sort_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)));
+        let hurting: Vec<bool> = (0..obs.heights.len()).map(|s| k.damaging(s)).collect();
+        let view = self.explorer.view();
+        let live: States = obs.heights.iter().map(|&h| vec![h]).collect();
+        // (where she can stand, for the lanes between the barrels: all her box on floor she can
+        // step between, with room overhead, none of it hurting)
+        let floor = |p: Point| {
+            let at = |q: Point| nav.poly_at(q).map(|i| nav.sector_of_poly(i)).filter(|&s| !hurting[s]).map(|s| obs.heights[s]).filter(|h| h.ceiling - h.floor >= crate::navigator::PLAYER_HEIGHT);
+            let r = crate::navigator::PLAYER_RADIUS + 1.0;
+            let mid = at(p)?.floor;
+            [(-r, -r), (r, -r), (r, r), (-r, r)].into_iter().all(|(dx, dy)| at((p.0 + dx, p.1 + dy)).is_some_and(|h| (h.floor - mid).abs() <= crate::navigator::MAX_STEP)).then_some(mid)
+        };
+        let length = |pts: &[Point]| pts.windows(2).map(|w| dist(w[0], w[1])).sum::<f64>();
+        let mut best: Option<(f64, crate::navigator::Path)> = None;
+        let mut tried = 0;
+        for q in places.into_iter().take(PLACES) {
+            if tried >= LANES || best.as_ref().is_some_and(|b| dist(q, pos) >= b.0) {
+                break; // (no shorter way to anywhere further off)
+            }
+            let Some(mut path) = view.find_path(pos, q, &live, None) else { continue };
+            if !path.jumps.is_empty() || path.waypoints.iter().any(Option::is_none) {
+                continue;
+            }
+            // (not a way back through the ones going off: run on ahead of the chain to 680 on,
+            // the nearest place she knew back at the start, 1300 off through it; dead in it)
+            if path.waypoints.windows(2).filter_map(|w| Some((w[0]?, w[1]?))).any(|(a, b)| obs.barrels_lit.iter().any(|&l| segment_point_distance(a, b, l) < CLEAR)) {
+                continue;
+            }
+            // (the mesh's way has no barrels in it: the lanes between them, round about it)
+            tried += 1;
+            let along: Vec<Point> = path.waypoints.iter().flatten().copied().collect();
+            let Some(lane) = crate::motor::follower::lanes::lane(pos, q, &along, &barrels, &floor, crate::navigator::MAX_STEP) else {
+                if std::env::var_os("EVIL_DEBUG_PACE").is_some() {
+                    eprintln!("tic {}: no lane from ({:.0}, {:.0}) to ({:.0}, {:.0}) among {} barrels (floor here {:?}, there {:?})", obs.tic, pos.0, pos.1, q.0, q.1, barrels.len(), floor(pos), floor(q));
+                }
+                continue;
+            };
+            let way: Vec<Point> = std::iter::once(pos).chain(lane).collect();
+            let l = length(&way);
+            if best.as_ref().is_none_or(|b| l < b.0) {
+                path.waypoints = way.into_iter().map(Some).collect();
+                best = Some((l, path));
+            }
+        }
+        let (length, path) = best?;
+        if std::env::var_os("EVIL_DEBUG_PACE").is_some() {
+            eprintln!("lane: {:?}", path.waypoints.iter().flatten().map(|p| (p.0.round(), p.1.round())).collect::<Vec<_>>());
+        }
+        let to = path.waypoints.iter().flatten().last().copied().unwrap_or(pos);
+        self.log(format!("tic {}: in among barrels: running for ({:.0}, {:.0}), {length:.0} off between them, out of their blasts", obs.tic, to.0, to.1));
+        let step = Step { path: Some(path), action: Action::Walk, trigger: None, key: None, barrel: None, label: "out of the barrels".to_string(), expects: Vec::new() };
+        let mut f = RouteFollower::new(view, vec![step], obs.keys.unwrap_or_default(), Some(live), false, obs.tic);
+        f.barrel_run = true;
+        Some(f)
+    }
+
     /// A retreat's own end: getting out and baiting after a while (baiting too once they're at
     /// each other: leave them to it); for ammo once armed again, or after a while; backing out
     /// once nothing's shot at her for a moment, or after a while; cover once nothing's shot at
@@ -762,6 +888,7 @@ impl Player {
             RetreatKind::Cover => calm,
             RetreatKind::Post => since > self.fight.tune.retreat.post_tics,
             RetreatKind::FallBack => since > self.fight.tune.retreat.back_tics,
+            RetreatKind::OutOfBarrels => false, // (till she's there: nothing ends it on the way)
         }
     }
 
@@ -1432,6 +1559,9 @@ impl Fight {
     fn barrels(&self, x: &Explorer, obs: &Observation, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
         if !self.combat.visible.is_empty() {
             return Vec::new(); // (in a fight, the fight's: shot by what they'd take with them)
+        }
+        if !obs.barrels_lit.is_empty() {
+            return Vec::new(); // (nor while any are going off: the chain's not done)
         }
         let ammo = |slot: i32| obs.ammo.iter().flatten().find(|(s, _)| *s == slot).map_or(0, |(_, n)| *n);
         let held = obs.weapons.clone().unwrap_or_default();

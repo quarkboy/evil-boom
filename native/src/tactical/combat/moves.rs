@@ -24,6 +24,8 @@ pub enum Move {
     OffLitBarrel,
     /// away from a barrel a shot could set off
     OffBarrel,
+    /// in a field of barrels with something shooting: on through it by the route
+    ThroughBarrels,
     // --- the fight
     /// closing in to fight up close
     MeleeClosing,
@@ -43,6 +45,10 @@ pub enum Move {
     OutOfReach,
     /// a step to where a shot gets to it
     SteppingForShot,
+    /// two bosses about, one with a gun: to where the other stands between her and it
+    SettingOn,
+    /// the two at each other: left to it, on along the route with the trigger let go
+    LeavingToIt,
     /// outmatched: keeping her distance
     KeepingClear,
     /// outmatched by a hitscanner: out of its sight
@@ -69,7 +75,7 @@ pub enum Move {
 }
 
 impl Move {
-    pub const ALL: [Move; 29] = [
+    pub const ALL: [Move; 32] = [
         Move::OutOfVileSight,
         Move::Ducking,
         Move::Ducked,
@@ -79,6 +85,7 @@ impl Move {
         Move::OffCrusher,
         Move::OffLitBarrel,
         Move::OffBarrel,
+        Move::ThroughBarrels,
         Move::MeleeClosing,
         Move::MeleeAt,
         Move::BackingOff,
@@ -88,6 +95,8 @@ impl Move {
         Move::ClosingOutOfReach,
         Move::OutOfReach,
         Move::SteppingForShot,
+        Move::SettingOn,
+        Move::LeavingToIt,
         Move::KeepingClear,
         Move::HidingFromOutmatcher,
         Move::GettingPast,
@@ -108,7 +117,13 @@ impl Move {
 
     /// The route keeps her legs through it (unless a missile's coming or an arch-vile's fire).
     pub fn route_goes_on(self) -> bool {
-        matches!(self, Move::ShootingOnTheWay | Move::ToErrand | Move::GettingPast | Move::OutOfVileSight | Move::OutOfReach | Move::Unarmed | Move::Sneaking | Move::RocketHeld | Move::Looking)
+        matches!(self, Move::ShootingOnTheWay | Move::ToErrand | Move::GettingPast | Move::LeavingToIt | Move::ThroughBarrels | Move::OutOfVileSight | Move::OutOfReach | Move::Unarmed | Move::Sneaking | Move::RocketHeld | Move::Looking)
+    }
+
+    /// The route has her eyes as well as her legs: she faces the way she runs, nothing aimed at.
+    /// (Turned to aim behind her, the route's legs go at a sixth of her pace: `Motion::go`.)
+    pub fn route_faces(self) -> bool {
+        matches!(self, Move::ThroughBarrels)
     }
 
     /// Out of the way of something: where it takes her isn't second-guessed at a ledge's edge.

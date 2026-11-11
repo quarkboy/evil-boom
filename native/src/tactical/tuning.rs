@@ -328,6 +328,9 @@ pub struct Barrels {
     /// ...with this much for the pistol, or this many shells for the shotgun
     pub bullets: i32,
     pub shells: i32,
+    /// this many barrels in the chain she's in the blasts of, something that shoots awake: a
+    /// field of them, run on through
+    pub field: usize,
 }
 
 impl Default for Barrels {
@@ -341,6 +344,7 @@ impl Default for Barrels {
             spot: 256.0,
             bullets: 10,
             shells: 12,
+            field: 6,
         }
     }
 }

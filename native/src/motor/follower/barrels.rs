@@ -95,6 +95,12 @@ impl RouteFollower {
                 let f = BARREL_DELAY * f64::from(k) / 4.0;
                 lit_chain_by(obs, (pos.0 + v.0 * f, pos.1 + v.1 * f)).is_some()
             });
+        if std::env::var_os("EVIL_DEBUG_BARRELS").is_some() && !obs.barrels_lit.is_empty() {
+            self.log.add(obs.tic, format!("lit {:?}; she's at ({:.0}, {:.0}) going ({:.1}, {:.1}); in the blast of the chain's {by:?}, ahead {ahead}; health {:?}", obs.barrels_lit, pos.0, pos.1, v.0, v.1, obs.health));
+        }
+        if by.is_none() {
+            self.chain_flee.clear();
+        }
         if by.is_none() && !ahead {
             self.chain_wait = false;
             return None;
@@ -103,14 +109,119 @@ impl RouteFollower {
             self.log.add(obs.tic, "barrels going off ahead: keeping out of their blasts till they're done");
             self.chain_wait = true;
         }
-        self.progress_tic = obs.tic;
         Some(match by {
             Some(b) => {
-                let h = heading(b, pos);
+                // (by a way out of all of them, kept to till she's out; none found, looked for
+                // again a blast on)
+                if self.chain_flee.is_empty() && obs.tic - self.chain_flee_tic >= BARREL_DELAY as i64 {
+                    self.chain_flee = self.way_off_chain(obs);
+                    self.chain_flee_tic = obs.tic;
+                    if let Some(&to) = self.chain_flee.last() {
+                        self.log.add(obs.tic, format!("off to ({:.0}, {:.0}), out of their blasts", to.0, to.1));
+                    }
+                }
+                while self.chain_flee.len() > 1 && dist(pos, self.chain_flee[0]) < 16.0 {
+                    self.chain_flee.remove(0);
+                }
+                // (no way found: on along her route, running, not stopped among them; with no
+                // route, straight away from the nearest of them)
+                let Some(&to) = self.chain_flee.first() else {
+                    if self.planned_path(None).is_empty() {
+                        self.progress_tic = obs.tic;
+                        let h = heading(b, pos);
+                        return Some(self.motion.go(obs, h, FULL_SPEED, Some(h)));
+                    }
+                    // (the route's own walking, and its own count of getting nowhere: wedged
+                    // against a barrel before a door, it's pressed from there)
+                    return None;
+                };
+                self.progress_tic = obs.tic;
+                let h = heading(pos, to);
                 self.motion.go(obs, h, FULL_SPEED, Some(h))
             }
-            None => self.motion.hold(obs, (0.0, 0.0), None),
+            None => {
+                self.progress_tic = obs.tic;
+                self.motion.hold(obs, (0.0, 0.0), None)
+            }
         })
+    }
+
+    /// In the blasts of a chain of barrels going off: the way to run, to the nearest place out
+    /// of every barrel's blast (the user's: "find the shortest path to a room without barrels
+    /// and RUN"). The shortest way to one of the nearest such places; empty when there's none, or
+    /// her route's out of them as soon or nearly: then it's on along the route.
+    /// (Straight away from the nearest of them it was: MAP23 on the easiest skill, a mancubus's
+    /// fireballs into the field of barrels she'd started across; between two of them, away from
+    /// one towards the other, to and fro on the spot for 60 tics as the chain came down the
+    /// field, 100 health to none.)
+    fn way_off_chain(&self, obs: &Observation) -> Vec<Point> {
+        /// the nearest this many places out of the blasts tried for a way to them
+        const PLACES: usize = 24;
+        /// the route's taken when it's out of them within this much of the shortest way out
+        const ROUTE_WITHIN: f64 = 1.5;
+        let pos = obs.pos();
+        // (the ones going off and every one they set off in turn)
+        let all: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
+        let mut barrels: Vec<Point> = obs.barrels_lit.clone();
+        let mut i = 0;
+        while i < barrels.len() {
+            let c = barrels[i];
+            for &x in &all {
+                if blast_gap(c, x) < BARREL_CHAIN && !barrels.iter().any(|&y| dist(x, y) < 1.0) && !self.use_walled(c, x) {
+                    barrels.push(x);
+                }
+            }
+            i += 1;
+        }
+        let clear = |p: Point| barrels.iter().all(|&b| self.use_walled(b, p) || blast_gap(p, b) >= BARREL_SAFE);
+        // (how far along a way till it's out of every blast, and stays out the next stretch)
+        let out_at = |way: &[Point]| {
+            let length: f64 = way.windows(2).map(|w| dist(w[0], w[1])).sum();
+            let mut d = 0.0;
+            while d <= length {
+                if clear(along(way, d)) && clear(along(way, (d + 64.0).min(length))) {
+                    return Some(d);
+                }
+                d += 16.0;
+            }
+            None
+        };
+        let route: Vec<Point> = std::iter::once(pos).chain(self.planned_path(None).into_iter().map_while(|p| p)).collect();
+        let by_route = if route.len() > 1 { out_at(&route) } else { None };
+        let nav = &self.view.nav;
+        let mesh = &nav.mesh;
+        let mut places: Vec<Point> = (0..mesh.polys.len())
+            .filter_map(|pi| mesh.polys[pi].as_ref().map(|poly| (pi, poly.center)))
+            .filter(|&(pi, q)| nav.damage.get(nav.sector_of_poly(pi)).is_none_or(|&d| d == 0) && clear(q))
+            .map(|(_, q)| q)
+            .collect();
+        places.sort_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)));
+        let states: States = obs.heights.iter().map(|h| vec![*h]).collect();
+        let mut best: Option<(f64, Vec<Point>)> = None;
+        for q in places.into_iter().take(PLACES) {
+            if best.as_ref().is_some_and(|b| dist(q, pos) >= b.0) {
+                break; // (no shorter way to anywhere further off)
+            }
+            let Some(path) = self.view.find_path(pos, q, &states, None) else { continue };
+            if !path.jumps.is_empty() {
+                continue;
+            }
+            let way: Vec<Point> = std::iter::once(pos).chain(path.waypoints.iter().flatten().copied()).collect();
+            let Some(d) = out_at(&way) else { continue };
+            if best.as_ref().is_none_or(|b| d < b.0) {
+                best = Some((d, way));
+            }
+        }
+        if std::env::var_os("EVIL_DEBUG_BARRELS").is_some() {
+            eprintln!("tic {}: at ({:.0}, {:.0}), {} barrels: out of them by the route in {by_route:?}, by the shortest way in {:?} to {:?}", obs.tic, pos.0, pos.1, barrels.len(), best.as_ref().map(|b| b.0), best.as_ref().and_then(|b| b.1.last()));
+        }
+        // (the route itself: nothing for her to follow but it, its presses and all; at the door
+        // at the far end of MAP23's field, walked to as a way and stood before, never pressed)
+        match (by_route, best) {
+            (Some(r), Some((d, _))) if r <= d * ROUTE_WITHIN => Vec::new(),
+            (_, Some((_, way))) => way[1..].to_vec(),
+            _ => Vec::new(),
+        }
     }
 
     /// Back out of its blast (128 units) and shoot the barrel in the way, then carry on.

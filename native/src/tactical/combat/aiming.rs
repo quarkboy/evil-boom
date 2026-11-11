@@ -494,6 +494,25 @@ impl Combat {
         chain.into_iter().filter(|&(b, _)| blast_gap(pos, b) < BARREL_SAFE).min_by(|a, b| a.1.cmp(&b.1).then(blast_gap(a.0, pos).total_cmp(&blast_gap(b.0, pos)))).map(|(b, _)| b)
     }
 
+    /// How many barrels are in the chain she's in the blasts of: those whose blast reaches her
+    /// and every one they'd set off in turn (0: none reaches her).
+    pub fn barrel_field(obs: &Observation) -> usize {
+        let pos = obs.pos();
+        let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
+        let mut chain: Vec<Point> = barrels.iter().copied().filter(|&b| blast_gap(pos, b) < BARREL_SAFE).collect();
+        let mut i = 0;
+        while i < chain.len() {
+            let c = chain[i];
+            for &x in &barrels {
+                if blast_gap(c, x) < BARREL_CHAIN && !chain.iter().any(|&y| dist(x, y) < 1.0) {
+                    chain.push(x);
+                }
+            }
+            i += 1;
+        }
+        chain.len()
+    }
+
     /// Would every barrel a blast at `b` sets off, in turn (each within a blast of the one
     /// before), go off clear of her? Not her distance from the one shot alone: E1M8's yard of
     /// barrels, shot from among them, all of it round her (walls not counted: rather a shot
