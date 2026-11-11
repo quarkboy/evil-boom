@@ -266,6 +266,23 @@ impl Explorer {
                 as i64
     }
 
+    /// Choose what to do next. The ordinary objectives first; then, with nothing found, one last
+    /// resort after another, in this order, each tried only if the ones before found nothing:
+    ///
+    /// 1. the ordinary objectives, the safe ones and then the risky ones (`ordinary`);
+    /// 2. what only a strafing run-jump gets to (`strafing_runs`);
+    /// 3. the places she got stuck, another go (`stuck_places_again`);
+    /// 4. walls that might hide something (`suspect_walls`);
+    /// 5. what was given up on lately, another go (`given_up_again`);
+    /// 6. every wall round her (`every_wall`);
+    /// 7. the level again, if whoever plays it would rather (`Hooks::before_exit`); a wait for
+    ///    a door that opens again by itself;
+    /// 8. the exit, where it was being held back (`held_back_exit`);
+    /// 9. the run-jumps missed once (`missed_jumps_again`);
+    /// 10. switches and walls from a floor that hurts, the health margin lifted
+    ///     (`with_harm_allowed`).
+    ///
+    /// With nothing at all, she stands, and where she can get to is noted as a trap.
     pub(super) fn next(&mut self, obs: &Observation, hooks: &mut dyn Hooks) {
         self.follower = None;
         let suited = self.knowledge.protected(obs.tic);
@@ -288,112 +305,27 @@ impl Explorer {
         self.strafe_ok = false;
         self.harm_ok = false;
         self.from_dead_end = false;
-        let mut found = self.try_objectives(obs, false, hooks);
-        if !found && self.exit_last && self.exit_before_risks {
-            // The exit is held back for everything else, but not for what she mightn't come back from:
-            // with nothing safe left, it's out.
-            self.exit_last = false;
-            self.exits_open = true;
-            self.log.push(format!(
-                "tic {}: nothing safe left to do: for the exit",
-                obs.tic
-            ));
-            found = self.try_objectives(obs, false, hooks);
+        let mut found = self.ordinary(obs, hooks);
+        if !found {
+            found = self.strafing_runs(obs, hooks);
         }
-        found = found || self.try_objectives(obs, true, hooks);
-        if !found && self.nav.jumps.iter().any(|j| j.strafe) {
-            // Nothing else: what a strafing run gets to.
-            self.strafe_ok = true;
-            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
-            if found {
-                self.log.push(format!(
-                    "tic {}: nothing else to do: strafing runs too",
-                    obs.tic
-                ));
-            } else {
-                self.strafe_ok = false;
-            }
-        }
-        // The places she got stuck are given another go: two failures can be bad luck, or a goal
-        // that was the trouble rather than the way. Before the walls: a way she knows is a better
-        // bet than a guess at one. Once till she knows something more: stuck there again, it's the
-        // walls' turn.
-        let stuck: Vec<usize> = self
-            .knowledge
-            .stuck_at
-            .iter()
-            .filter(|(_, &n)| n >= STUCK_TIMES)
-            .map(|(&p, _)| p)
-            .collect();
-        if !found
-            && !stuck.is_empty()
-            && self.stuck_retried.as_deref() != Some(self.knowledge.known_summary().as_str())
-        {
-            self.stuck_retried = Some(self.knowledge.known_summary());
-            self.log.push(format!(
-                "tic {}: nothing else to do: the {} places she got stuck get another go",
-                obs.tic,
-                stuck.len()
-            ));
-            for p in stuck {
-                self.knowledge.note(Note::Stuck(p, STUCK_TIMES - 1));
-            }
-            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        if !found {
+            found = self.stuck_places_again(obs, hooks);
         }
         if found {
             self.panic_tries = 0;
         }
         if !found && perceive && self.suspecting == Suspecting::No {
-            self.out_of_options.get_or_insert(obs.tic);
-            // Nothing else: walls that might hide something, pressed in turn.
-            self.suspecting = Suspecting::Walls;
-            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
-            if found {
-                self.panic_tries = 0;
-                self.log
-                    .push(format!("tic {}: nothing else to do: trying walls", obs.tic));
-            }
+            found = self.suspect_walls(obs, hooks);
         }
-        if !found
-            && !self.dropped.is_empty()
-            && self.retried.as_deref() != Some(self.knowledge.known_summary().as_str())
-        {
-            // Nothing else: what was given up on lately gets another go with its wait cut short (it may
-            // have been dropped only because the way was shut a while). Once till she knows something
-            // more, not after each wall pressed that did nothing: that would throw goals out of reach
-            // back in every time, seconds of planning each.
-            self.retried = Some(self.knowledge.known_summary());
-            self.log.push(format!(
-                "tic {}: nothing else to do: the {} things given up on lately get another go",
-                obs.tic,
-                self.dropped.len()
-            ));
-            self.dropped.clear();
-            self.suspecting = Suspecting::No;
-            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        if !found {
+            found = self.given_up_again(obs, hooks);
         }
         // With the exit there, held back for what's left: one round of the walls with little to go
         // on, then out. A press that turns up something to do starts another round.
         self.strong_only = self.exit_last && self.panic_tries >= PANIC_WALLS;
         if !found && perceive && (!self.exit_last || !self.exits_open) {
-            // And nothing to try either: is there a way out of here at all? Every wall round her,
-            // nearest first, as a player in a pit with no way out would.
-            self.suspecting = Suspecting::Panic;
-            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
-            if found {
-                // Counted: walls with no more to go on than one weak sign. Those with more are all pressed.
-                if self
-                    .current
-                    .as_ref()
-                    .is_some_and(|o| o.suspicion <= SUSPICION_MIN)
-                {
-                    self.panic_tries += 1;
-                }
-                self.log.push(format!(
-                    "tic {}: nothing at all to do: pressing every wall round here",
-                    obs.tic
-                ));
-            }
+            found = self.every_wall(obs, hooks);
         }
         self.suspecting = Suspecting::No;
         self.strong_only = false;
@@ -428,55 +360,13 @@ impl Explorer {
             return;
         }
         if !found && self.exit_last {
-            self.log
-                .push(format!("tic {}: nothing else to do: for the exit", obs.tic));
-            self.exits_open = true;
-            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
-        }
-        if !found
-            && self
-                .knowledge
-                .missed_jumps
-                .values()
-                .any(|&n| n < JUMP_MISSES)
-        {
-            self.log.push(format!(
-                "tic {}: nothing else to do: the jumps missed once get another go",
-                obs.tic
-            ));
-            self.set_jumps(true);
-            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+            found = self.held_back_exit(obs, hooks);
         }
         if !found {
-            // Nothing at all else, walls and all: a switch pressed from a floor that hurts is the only
-            // way on left, and shut in already, what it might shut is no worse than staying.
-            // What the passes before refused this very think gets this pass too: it was refused under
-            // the margin that this pass lifts. Only what had no route, though, not what was dropped as
-            // gone (a monster hunted and not there): that would be taken up and dropped again every
-            // tic, each think routing every wall afresh.
-            let tic = obs.tic;
-            let refused = std::mem::take(&mut self.refused_now.1);
-            self.dropped
-                .retain(|id, &mut t| t != tic || !refused.contains(id));
-            self.refused_now.1 = refused;
-            self.harm_ok = true;
-            // The walls too, every one round her: left out of this pass, a wall refused under the
-            // margin would never be tried with the margin lifted.
-            if perceive {
-                self.suspecting = Suspecting::Panic;
-            }
-            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
-            self.suspecting = Suspecting::No;
-            if found {
-                self.log.push(format!(
-                    "tic {}: nothing else to do: switches and walls from a floor that hurts",
-                    obs.tic
-                ));
-            }
-            self.from_dead_end = found;
-            if !found {
-                self.harm_ok = false;
-            }
+            found = self.missed_jumps_again(obs, hooks);
+        }
+        if !found {
+            found = self.with_harm_allowed(obs, hooks);
         }
         if !found {
             if self.current.is_some() {
@@ -488,6 +378,194 @@ impl Explorer {
             // started again from. Known for the next go.
             self.trapped = Some(self.reach.clone());
         }
+    }
+
+    /// The best objective of those offered now: of the safe ones, else of the risky ones.
+    fn safe_then_risky(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks)
+    }
+
+    /// The ordinary objectives: the safe ones; then, where the exit is being held back but not
+    /// for anything risky (`exit_before_risks`), the exit; then the risky ones.
+    fn ordinary(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        let mut found = self.try_objectives(obs, false, hooks);
+        if !found && self.exit_last && self.exit_before_risks {
+            // The exit is held back for everything else, but not for what she mightn't come back from:
+            // with nothing safe left, it's out.
+            self.exit_last = false;
+            self.exits_open = true;
+            self.log.push(format!(
+                "tic {}: nothing safe left to do: for the exit",
+                obs.tic
+            ));
+            found = self.try_objectives(obs, false, hooks);
+        }
+        found || self.try_objectives(obs, true, hooks)
+    }
+
+    /// Nothing else: what a strafing run-jump gets to, if the level has any.
+    fn strafing_runs(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if !self.nav.jumps.iter().any(|j| j.strafe) {
+            return false;
+        }
+        self.strafe_ok = true;
+        let found = self.safe_then_risky(obs, hooks);
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing else to do: strafing runs too",
+                obs.tic
+            ));
+        } else {
+            self.strafe_ok = false;
+        }
+        found
+    }
+
+    /// The places she got stuck are given another go: two failures can be bad luck, or a goal
+    /// that was the trouble rather than the way. Before the walls: a way she knows is a better
+    /// bet than a guess at one. Once till she knows something more: stuck there again, it's the
+    /// walls' turn.
+    fn stuck_places_again(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        let stuck: Vec<usize> = self
+            .knowledge
+            .stuck_at
+            .iter()
+            .filter(|(_, &n)| n >= STUCK_TIMES)
+            .map(|(&p, _)| p)
+            .collect();
+        if stuck.is_empty()
+            || self.stuck_retried.as_deref() == Some(self.knowledge.known_summary().as_str())
+        {
+            return false;
+        }
+        self.stuck_retried = Some(self.knowledge.known_summary());
+        self.log.push(format!(
+            "tic {}: nothing else to do: the {} places she got stuck get another go",
+            obs.tic,
+            stuck.len()
+        ));
+        for p in stuck {
+            self.knowledge.note(Note::Stuck(p, STUCK_TIMES - 1));
+        }
+        self.safe_then_risky(obs, hooks)
+    }
+
+    /// Nothing else: walls that might hide something, pressed in turn. Leaves `suspecting` at
+    /// `Walls` for the tiers after it, as `next` expects.
+    fn suspect_walls(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        self.out_of_options.get_or_insert(obs.tic);
+        self.suspecting = Suspecting::Walls;
+        let found = self.safe_then_risky(obs, hooks);
+        if found {
+            self.panic_tries = 0;
+            self.log
+                .push(format!("tic {}: nothing else to do: trying walls", obs.tic));
+        }
+        found
+    }
+
+    /// Nothing else: what was given up on lately gets another go with its wait cut short (it may
+    /// have been dropped only because the way was shut a while). Once till she knows something
+    /// more, not after each wall pressed that did nothing: that would throw goals out of reach
+    /// back in every time, seconds of planning each.
+    fn given_up_again(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if self.dropped.is_empty()
+            || self.retried.as_deref() == Some(self.knowledge.known_summary().as_str())
+        {
+            return false;
+        }
+        self.retried = Some(self.knowledge.known_summary());
+        self.log.push(format!(
+            "tic {}: nothing else to do: the {} things given up on lately get another go",
+            obs.tic,
+            self.dropped.len()
+        ));
+        self.dropped.clear();
+        self.suspecting = Suspecting::No;
+        self.safe_then_risky(obs, hooks)
+    }
+
+    /// And nothing to try either: is there a way out of here at all? Every wall round her,
+    /// nearest first, as a player in a pit with no way out would.
+    fn every_wall(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        self.suspecting = Suspecting::Panic;
+        let found = self.safe_then_risky(obs, hooks);
+        if found {
+            // Counted: walls with no more to go on than one weak sign. Those with more are all pressed.
+            if self
+                .current
+                .as_ref()
+                .is_some_and(|o| o.suspicion <= SUSPICION_MIN)
+            {
+                self.panic_tries += 1;
+            }
+            self.log.push(format!(
+                "tic {}: nothing at all to do: pressing every wall round here",
+                obs.tic
+            ));
+        }
+        found
+    }
+
+    /// The exit, which was being held back for everything else.
+    fn held_back_exit(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        self.log
+            .push(format!("tic {}: nothing else to do: for the exit", obs.tic));
+        self.exits_open = true;
+        self.safe_then_risky(obs, hooks)
+    }
+
+    /// The run-jumps missed once (left out since) get another go, if there are any.
+    fn missed_jumps_again(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if !self
+            .knowledge
+            .missed_jumps
+            .values()
+            .any(|&n| n < JUMP_MISSES)
+        {
+            return false;
+        }
+        self.log.push(format!(
+            "tic {}: nothing else to do: the jumps missed once get another go",
+            obs.tic
+        ));
+        self.set_jumps(true);
+        self.safe_then_risky(obs, hooks)
+    }
+
+    /// Nothing at all else, walls and all: a switch pressed from a floor that hurts is the only
+    /// way on left, and shut in already, what it might shut is no worse than staying. The health
+    /// margin is lifted for this pass (`harm_ok`).
+    ///
+    /// What the passes before refused this very think gets this pass too: it was refused under
+    /// the margin that this pass lifts. Only what had no route, though, not what was dropped as
+    /// gone (a monster hunted and not there): that would be taken up and dropped again every
+    /// tic, each think routing every wall afresh.
+    fn with_harm_allowed(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        let tic = obs.tic;
+        let refused = std::mem::take(&mut self.refused_now.1);
+        self.dropped
+            .retain(|id, &mut t| t != tic || !refused.contains(id));
+        self.refused_now.1 = refused;
+        self.harm_ok = true;
+        // The walls too, every one round her: left out of this pass, a wall refused under the
+        // margin would never be tried with the margin lifted.
+        if self.knowledge.perceive {
+            self.suspecting = Suspecting::Panic;
+        }
+        let found = self.safe_then_risky(obs, hooks);
+        self.suspecting = Suspecting::No;
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing else to do: switches and walls from a floor that hurts",
+                obs.tic
+            ));
+        }
+        self.from_dead_end = found;
+        if !found {
+            self.harm_ok = false;
+        }
+        found
     }
 
     /// Take up the best objective there's a route to: of the nearest few as the crow flies, the
