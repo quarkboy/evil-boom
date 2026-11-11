@@ -347,6 +347,31 @@ impl Engine {
     }
 
     /// The level's tally so far: items, kills, secrets, each (got, of).
+    /// The monsters lying dead in pieces, by id: killed by a hit that took them further below
+    /// nothing than their whole health (vanilla `P_KillMobj`), of the kinds that have the
+    /// frames for it. From the things as last observed.
+    pub fn gibbed(&self) -> Vec<i32> {
+        /// the monsters with an "extreme death" (`xdeathstate`)
+        const GIBS: [&str; 5] = [
+            "Zombieman",
+            "ShotgunGuy",
+            "ChaingunGuy",
+            "DoomImp",
+            "WolfensteinSS",
+        ];
+        self.mobjs
+            .iter()
+            .filter(|m| m.flags & dsda::MF_CORPSE != 0)
+            .filter(|m| {
+                dsda::type_name(m.kind)
+                    .filter(|n| GIBS.contains(n))
+                    .and_then(crate::tactical::bestiary::monster)
+                    .is_some_and(|i| m.health < -i.health)
+            })
+            .map(|m| m.id)
+            .collect()
+    }
+
     pub fn tally(&self) -> [(i32, i32); 3] {
         let s = self.game.status();
         [

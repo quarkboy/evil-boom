@@ -424,6 +424,8 @@ struct Watch {
     no_use: bool,
     /// secrets found so far (as the tally has them)
     secrets_seen: i32,
+    /// the hits on her last tic, for whoever's directing to be told of
+    hits: Vec<crate::dsda::Hit>,
     m: Arc<MapData>,
     map_name: String,
     engine: Engine,
@@ -1364,6 +1366,7 @@ impl Watch {
             neuro: None,
             no_use: false,
             secrets_seen: 0,
+            hits: Vec::new(),
             m,
             map_name: map_name.to_string(),
             engine,
@@ -1406,14 +1409,20 @@ impl Watch {
         self.secrets_seen = found;
         self.frame = self.engine.frame();
         let tally = crate::control::directed::Tally::of(self.engine.tally());
+        let gibbed = self.engine.gibbed();
+        let hits = std::mem::take(&mut self.hits);
         if let Some(feed) = &mut self.feed {
             feed.director.tally = tally;
+            feed.director.gibbed.clone_from(&gibbed);
+            feed.director.hits.clone_from(&hits);
             for l in feed.tic(&mut self.agent, &obs) {
                 self.agent.x_mut().log.push(l);
             }
         }
         if let Some(neuro) = &mut self.neuro {
             neuro.director.tally = tally;
+            neuro.director.gibbed = gibbed;
+            neuro.director.hits = hits;
             for l in neuro.tic(&mut self.agent, &obs) {
                 self.agent.x_mut().log.push(l);
             }
@@ -1430,7 +1439,9 @@ impl Watch {
             c.use_ = false;
         }
         self.engine.step(&c);
-        for h in self.engine.take_hits() {
+        let hits = self.engine.take_hits();
+        self.hits.clone_from(&hits);
+        for h in hits {
             let armor = if h.armor > 0 {
                 format!(" (and {} armor)", h.armor)
             } else {

@@ -382,6 +382,23 @@ Told **not silent** (worth a reaction), each with a cooldown so none floods:
 - **Death**: what killed her, where, how the fight had gone ("Killed by a revenant's missile
   at the red door, 3 s after two more teleported in behind").
 
+**Built of the kills and mishaps** (2026-11-11, `control/directed/kills.rs`; what happens
+together is one line, told when it's over):
+
+    The BaronOfHell is dead.                              (a boss, or 500 health and up)
+    2 killed at once: 2 Zombieman, all gibbed.             (deaths within 3 tics: one shot, one blast)
+    3 barrels went off in a chain (N 486): killed 1 DoomImp.
+    46 barrels went off in a chain (N 1579); it cost you 112 health.
+    Your own blast caught you: -26 health.                 (silent under 20)
+    Every monster on the level is dead (74/74).
+    Zombieman gibbed.                                      (one alone: silent)
+
+A death is one she knows of (seen, or heard and placed); gibbed (the game's rule: killed by
+more than its health again, for the five kinds with the frames) counts only for one in her
+sight as it died; a barrel is one near enough to hear (1200). One barrel that kills nothing
+and doesn't hurt her isn't told: that's her clearing barrels. Not built: a death dodged,
+telefrags, crushers, out of ammo mid-fight, a monster raised again.
+
 Told **silent** (to know, not to react to): doors and switches seen; ordinary items; an order
 begun; a pause for a fight and its end; routine waits.
 

@@ -1647,6 +1647,15 @@ impl Combat {
         }
     }
 
+    /// The monsters she knows are dead: (id, kind, where, when last in her sight).
+    pub fn known_deaths(&self) -> Vec<(i32, &'static str, Point, i64)> {
+        self.dead
+            .iter()
+            .filter_map(|i| self.known.get(i))
+            .map(|s| (s.id, s.name, s.pos(), s.sighted))
+            .collect()
+    }
+
     /// Monsters seen that are still about, as far as she knows, and where she last saw them (to
     /// hunt down, to keep clear of): not one she knows is dead, nor one she's seen isn't where
     /// she left it.

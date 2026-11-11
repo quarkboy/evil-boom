@@ -2466,3 +2466,18 @@ code's `Order` and the script's `order go` keep their name, she never reads them
 
 Who's playing comes with the startup's acknowledgement (`characterId`): kept as
 `neuro::session::Character` (Neuro, Evil, another, not said). Nothing differs by it yet.
+
+## Kills and blasts told as moments (the user, 2026-11-11)
+
+`control/directed/kills.rs`. She was told of kills only by a fight's summary and the tally,
+and nothing of barrels. Now: a big monster's death (a boss, or 500 health and up; first
+tried by threat, as sightings are, and five chaingunners each got a line; then from 400,
+and six cacodemons did); several dead
+within 3 tics as one line with how many gibbed; barrels going off gathered till the chain's
+over (none lit, none gone for 30 tics), with what died within a blast of them and what it
+cost her; her own blast; the level's last monster. One barrel that takes nothing with it is
+her clearing barrels by instinct and isn't told (the first try told each: thirty lines a
+level). Gibbed is the game's own rule (`P_KillMobj`: health below minus the spawn health,
+for the kinds with an extreme death), read off the corpses by the game's runner and counted
+only for a death in her sight. The hits on her (the engine's, with their cause) reach the
+director the same way, as the tally does. Headless runs have none of it: parity the same.

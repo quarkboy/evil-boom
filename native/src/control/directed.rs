@@ -17,6 +17,7 @@ use crate::knowledge::explorer::{Ident, Kind, Objective};
 use crate::motor::{heading, norm, Observation};
 use crate::play::Agent;
 
+mod kills;
 mod look;
 
 pub use look::{Hints, Listing, Pick};
@@ -322,6 +323,12 @@ pub struct Director {
     /// wait for an order
     pub hints: Hints,
     nudged: u8,
+    /// kills and blasts being gathered to tell (`kills.rs`); and what the game's runner gives
+    /// it each tic, as it gives the tally: the hits on her since the last, and the monsters
+    /// lying dead in pieces
+    kills: kills::Kills,
+    pub hits: Vec<crate::dsda::Hit>,
+    pub gibbed: Vec<i32>,
     /// the fight she's in, for its summary when it's over; and what she had last tic (what a
     /// fight cost is the falls from tic to tic, so a medikit taken in the middle doesn't hide it)
     fight: Option<Fight>,
@@ -432,6 +439,7 @@ impl Director {
         self.was = None;
         self.health_lately.clear();
         self.told_secrets = None;
+        self.kills = kills::Kills::default();
     }
 
     /// She's died, with lives left: told, with what she was fighting; her orders and her say in
@@ -471,6 +479,7 @@ impl Director {
         self.was = None;
         self.health_lately.clear();
         self.health_mark = None;
+        self.kills = kills::Kills::default();
     }
 
     /// What she's doing on her orders, in a few words ("exploring area-0 +secrets 2, rushing").
@@ -1279,6 +1288,7 @@ impl Director {
     /// order taken up.
     pub fn tick(&mut self, agent: &mut Agent, obs: &Observation) {
         self.events(agent, obs);
+        self.kills(agent, obs);
         self.apply_tactics(agent, obs);
         agent.x_mut().spares = obs
             .things
