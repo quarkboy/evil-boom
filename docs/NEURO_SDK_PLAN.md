@@ -436,7 +436,7 @@ reads is short.
 | 2 | The journal always on; `doom_why`; the trigger's one reason | every "why" asked at 50 random moments of a run has a true, short answer |
 | 3 | `doom_mode` / `idle` fallback; `doom_goal` | a level finished with three goals and no orders; no stretch over 25 s with her idle and the bot still |
 | 4 | Proposals: the type, class D confirmations from `Refusal` and the tiers, deadlines, `doom_answer` | scripted answers at 2, 8 and 30 s late: each either applied or refused as stale, never applied wrong |
-| 5 | Tactics: `doom_fight` and its seams, expiries | arenas: each tactic visibly changes the fight and never lowers survival below autopilot's by more than noise when left to expire |
+| 1b (was 5) | Tactics: `doom_fight` and its seams, expiries; hurt told by rate, death told with its cause | arenas: each tactic visibly changes the fight and never lowers survival below autopilot's by more than noise when left to expire |
 | 6 | Class T proposals (act now, override in time); the "close or high-stake" filter tuned | a hard level with the stand-in: questions per minute within budget, share answered in time, outcomes |
 | 7 | `doom_policy`; then `doom_style` through the classifier | each setting's effect measured on the score's quarter set; none outside its documented range |
 | 8 | The game itself: `doom_game`, `doom_cheat`, the console's switches for what she's allowed and its view of questions and policy | an episode on stream settings, unattended, through a death, a pistol restart, a skill change and each cheat; a disallowed action refused; a cheated level never in a measure |
@@ -489,13 +489,38 @@ ran into, in the order it cost me:
 10. **"Walls to search: 3/9/47"** means nothing unread; it's on every explore's end.
 11. **A new gun 186 away wasn't taken** till ordered (spare ammo and health are): a gun she
     hasn't got should be a pickup she takes by herself, by default.
-12. **The fight never needed me** on this level and skill, so tactics (4.3) are untested by
-    this; a harder level is the next drive (MAP07 or E1M8 on UV).
+12. **The fight never needed me** on this level and skill: see MAP07 below.
+
+**MAP07, HMP, with a full loadout (super shotgun, chaingun, rocket launcher), one life.**
+Dead in 112 seconds, 6 of 12 killed. This is the level where the fight is everything, and I
+had no say in it at all:
+
+13. **No order means anything in a fight.** Go, explore, press, exit: none of them is "fight
+    these", "fall back to the start room", "use the rockets". With no order she was "waiting",
+    which in an arena is standing in the open defending herself. Tactics (4.3) aren't a
+    refinement; on a level like this they're the whole of her play.
+14. **I learned she was dying too late to matter.** 100 to 57 in the first twenty seconds:
+    nothing told. The first word was "Health down to 33", then "13" four seconds on. By the
+    time a model has read "33" and answered, she's dead. The hurt has to be told on the way
+    down, by rate ("losing 20 a second to 3 mancubi"), and the bot's own retreat has to be
+    the default with her override, not the other way.
+15. **What I'd have ordered, in order**: back into the start room and fight from the door
+    (`retreat`); rockets on the mancubi (`weapon`); the megasphere when the arachnotrons came
+    (`doom_go item rush`, which failed: "no known way yet", though it was the one thing that
+    would have saved her and I couldn't tell why not).
+16. **The level's own event went untold**: the last mancubus dying lowered the walls and let
+    the arachnotrons out. What I got was four lines of "Monsters: 1 Arachnotron" at four
+    bearings. The moment is "the walls are coming down: arachnotrons, 4 of them, all round".
+17. **Her death wasn't reported to the orders' side at all** (the last line is "Health down
+    to 18"), and with one life the game ended there. Death needs its line (what, where, how
+    the fight had gone) and the restart question.
+18. **"picking up nearby"** was her status through the whole fight. And ten backpacks were
+    ten lines of the items list.
 
 What this changes in the stages: the idle fallback and order queueing move to the front
 (with the grammar: ids, "seen, no way yet", outcomes); rankings and the pick come with them
 rather than later; the events for moments (secrets, kills, the fight summary) are stage 1 as
-planned. Tactics and class T questions stay where they are, behind a drive of a harder level.
+planned. After MAP07: tactics move up to straight after 1a, with the telling of hurt by rate and of death; a level like that is unplayable for her without them, and class T questions (the bot retreats by default, she overrides) come with them rather than two stages later.
 
 ## 9. For the user to decide
 
