@@ -1,8 +1,8 @@
 //! Suspecting walls and choosing the next objective when ordinary exploration stalls.
 
 use super::{
-    route_length, EndKind, Explorer, Hooks, Kind, Objective, Spots, Suspecting, GIVE_UP_TICS,
-    JUMP_MISSES, STUCK_TIMES, WHILE_OPEN,
+    route_length, EndKind, Explorer, Hooks, Kind, Objective, Resort, Spots, Suspecting,
+    GIVE_UP_TICS, JUMP_MISSES, STUCK_TIMES, WHILE_OPEN,
 };
 use crate::geom::{dist, Point};
 use crate::knowledge::model::{Behind, Note, Wall, SUSPICION_MIN, THOROUGHNESS};
@@ -305,6 +305,7 @@ impl Explorer {
         self.strafing_allowed = false;
         self.harm_allowed = false;
         self.from_dead_end = false;
+        self.resort_wanted = None;
         let mut found = self.ordinary(obs, hooks);
         if !found {
             found = self.strafing_runs(obs, hooks);
@@ -380,6 +381,19 @@ impl Explorer {
         }
     }
 
+    /// May she take this last resort? (Held back: noted, the first this choice, for whoever
+    /// directs her to ask about.)
+    fn may(&mut self, r: Resort) -> bool {
+        let ok = self
+            .resorts
+            .as_ref()
+            .is_none_or(|allowed| allowed.contains(&r));
+        if !ok {
+            self.resort_wanted.get_or_insert(r);
+        }
+        ok
+    }
+
     /// The best objective of those offered now: of the safe ones, else of the risky ones.
     fn safe_then_risky(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
         self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks)
@@ -405,7 +419,7 @@ impl Explorer {
 
     /// Nothing else: what a strafing run-jump gets to, if the level has any.
     fn strafing_runs(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
-        if !self.nav.jumps.iter().any(|j| j.strafe) {
+        if !self.nav.jumps.iter().any(|j| j.strafe) || !self.may(Resort::Strafing) {
             return false;
         }
         self.strafing_allowed = true;
@@ -435,6 +449,7 @@ impl Explorer {
             .collect();
         if stuck.is_empty()
             || self.stuck_retried.as_deref() == Some(self.knowledge.known_summary().as_str())
+            || !self.may(Resort::StuckAgain)
         {
             return false;
         }
@@ -488,6 +503,9 @@ impl Explorer {
     /// And nothing to try either: is there a way out of here at all? Every wall round her,
     /// nearest first, as a player in a pit with no way out would.
     fn every_wall(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if !self.may(Resort::EveryWall) {
+            return false;
+        }
         self.suspecting = Suspecting::EveryWall;
         let found = self.safe_then_risky(obs, hooks);
         if found {
@@ -509,6 +527,10 @@ impl Explorer {
 
     /// The exit, which was being held back for everything else.
     fn held_back_exit(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        // (directed, held back only with a way out she knows: none known, nothing to ask about)
+        if self.resorts.is_some() && self.knowledge.exits().is_empty() || !self.may(Resort::Exit) {
+            return false;
+        }
         self.log
             .push(format!("tic {}: nothing else to do: for the exit", obs.tic));
         self.exits_offered = true;
@@ -522,6 +544,7 @@ impl Explorer {
             .missed_jumps
             .values()
             .any(|&n| n < JUMP_MISSES)
+            || !self.may(Resort::MissedJumps)
         {
             return false;
         }
@@ -542,6 +565,9 @@ impl Explorer {
     /// gone (a monster hunted and not there): that would be taken up and dropped again every
     /// tic, each think routing every wall afresh.
     fn with_harm_allowed(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if !self.may(Resort::Harm) {
+            return false;
+        }
         let tic = obs.tic;
         let refused = std::mem::take(&mut self.refused_now.1);
         self.dropped

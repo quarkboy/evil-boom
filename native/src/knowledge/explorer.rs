@@ -359,6 +359,23 @@ pub(crate) enum EndKind {
 const WAIT_LOOK_EVERY: i64 = 4 * 35;
 const WAIT_LOOK_TURN: f64 = 90.0;
 const WAIT_LOOK_TICS: i64 = 35;
+/// A last resort of `next`'s that whoever directs her may hold back (to ask her about first).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Resort {
+    /// what only a strafing run-jump gets to
+    Strafing,
+    /// the places she got stuck, another go
+    StuckAgain,
+    /// every wall round her pressed
+    EveryWall,
+    /// the exit, where it's being held back
+    Exit,
+    /// the run-jumps missed once, another go
+    MissedJumps,
+    /// switches and walls from a floor that hurts
+    Harm,
+}
+
 /// the run-jumps kept for whoever's directing
 const JUMPS_KEPT: usize = 8;
 
@@ -474,6 +491,10 @@ pub struct Explorer {
     /// when she first had nothing else to do but try walls (the survey's moment: everything
     /// explored but for what's hidden)
     pub out_of_options: Option<i64>,
+    /// the last resorts she may take (None: all, as playing alone; whoever directs her says
+    /// which), and the first she'd have taken this choice and mightn't
+    pub resorts: Option<BTreeSet<Resort>>,
+    pub resort_wanted: Option<Resort>,
     /// what she knew when the places she got stuck last got another go
     pub stuck_retried: Option<String>,
     /// run-jumps that came too late in a plan for something timed they need (a door a switch
@@ -625,6 +646,8 @@ impl Explorer {
             suspecting: Suspecting::No,
             spares: BTreeSet::new(),
             out_of_options: None,
+            resorts: None,
+            resort_wanted: None,
             stuck_retried: None,
             lapsing_jumps: (BTreeSet::new(), 0),
             press_on: false,

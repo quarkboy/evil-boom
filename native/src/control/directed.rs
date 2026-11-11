@@ -352,6 +352,8 @@ pub struct Director {
     /// (None: as long as it takes)
     asking: ask::Asking,
     pub answer_wait: Option<i64>,
+    /// the last resorts she's let her instinct take, this level
+    resorts: std::collections::BTreeSet<crate::knowledge::explorer::Resort>,
     progress: Option<((usize, [usize; 6]), i64)>,
     told_restart: bool,
     /// the fight she's in, for its summary when it's over; and what she had last tic (what a
@@ -449,6 +451,7 @@ impl Director {
     /// A new map: names, orders, places and what's been told are the old map's.
     pub fn new_map(&mut self) {
         self.overtaken("a new level");
+        self.resorts.clear();
         self.queue.clear();
         self.resume = None;
         self.tactics = Tactics::default();
@@ -1730,11 +1733,12 @@ impl Director {
             self.doing = None;
             self.auto_spent = true;
             let exits = self.objectives_of(agent, obs, &[Kind::Exit]);
-            let exit = exits.first().map(|e| self.describe(e, obs));
-            if let Some(e) = &exit {
-                if self.ask_done_here(obs, e.clone()) {
-                    return;
-                }
+            let known: Vec<(String, String)> = exits
+                .iter()
+                .map(|e| (e.id.clone(), self.describe(e, obs)))
+                .collect();
+            if !known.is_empty() && self.ask_done_here(obs, &known) {
+                return;
             }
             self.report(
                 obs,
@@ -1749,6 +1753,18 @@ impl Director {
                 },
             );
             return;
+        }
+        // (nothing ordinary left, a last resort held back: asked; meanwhile she waits)
+        if agent.x().current.is_none() && self.question().is_none() {
+            if let Some(r) = agent.x().resort_wanted {
+                let exit = self
+                    .objectives_of(agent, obs, &[Kind::Exit])
+                    .first()
+                    .map(|e| self.describe(e, obs));
+                if self.ask_resort(obs, r, exit) {
+                    return;
+                }
+            }
         }
         // (what she's taken up, in plain words, as it changes: not each pickup and barrel on
         // the way, and not more than a line every few seconds)
@@ -1779,6 +1795,8 @@ impl Director {
         self.told_auto.clear();
         let x = agent.x_mut();
         x.directed = false;
+        // (her last resorts only as she's let them: the first held back is asked about)
+        x.resorts = Some(self.resorts.clone());
         x.hold_exits(true);
         x.out_of_options = None;
     }

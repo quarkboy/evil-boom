@@ -25,6 +25,10 @@ pub enum Then {
     Instinct,
     /// the level again from its start
     Restart,
+    /// on instinct, this last resort hers to take from now on (this level)
+    Allow(crate::knowledge::explorer::Resort),
+    /// off instinct: she waits for her next action
+    Stay,
     /// nothing: as she was
     Nothing,
 }
@@ -227,6 +231,19 @@ impl Director {
             }),
             Then::Instinct => self.on_instinct(agent, obs),
             Then::Restart => self.restart_wanted = self.restart_allowed,
+            Then::Allow(r) => {
+                self.resorts.insert(r);
+                let x = agent.x_mut();
+                x.resorts = Some(self.resorts.clone());
+                x.resort_wanted = None; // (stale till she chooses again: not asked twice)
+            }
+            Then::Stay => {
+                if matches!(self.doing, Some(Doing::Auto)) {
+                    self.end_auto(agent);
+                    self.doing = None;
+                    self.auto_spent = true;
+                }
+            }
             Then::Nothing => {}
         }
     }
@@ -301,23 +318,77 @@ impl Director {
         }
     }
 
-    /// By instinct, nothing left but walls to search or the way out: asked (leave, or stay);
-    /// false if not asked (the caller tells it as before).
-    pub(super) fn ask_done_here(&mut self, obs: &Observation, exit: String) -> bool {
+    /// By instinct, nothing left but walls to search or the way out: asked (leave by each exit
+    /// she knows, or stay); false if not asked (the caller tells it as before).
+    pub(super) fn ask_done_here(&mut self, obs: &Observation, exits: &[(String, String)]) -> bool {
+        let mut choices: Vec<Choice> = exits
+            .iter()
+            .take(2)
+            .map(|(id, line)| Choice {
+                label: format!("leave by {line}"),
+                then: Then::Order(Order::Go(id.clone(), false)),
+            })
+            .collect();
+        choices.push(Choice {
+            label: "stay (doom_explore with secrets searches walls)".into(),
+            then: Then::Nothing,
+        });
+        let default = choices.len() - 1;
         self.ask(
             obs,
-            format!("Nothing more to do here that you know of but search walls ({exit}). Leave?"),
-            vec![
-                Choice {
-                    label: "leave".into(),
-                    then: Then::Order(Order::Exit),
-                },
-                Choice {
-                    label: "stay (doom_explore with secrets searches walls)".into(),
-                    then: Then::Nothing,
-                },
-            ],
-            1,
+            "Nothing more to do here that you know of but search walls. Leave?".into(),
+            choices,
+            default,
+            false,
+        )
+        .is_some()
+    }
+
+    /// On instinct, nothing ordinary left and a last resort held back (`r`): asked whether to
+    /// take it, leave (with an exit known), or stay (the default: off instinct, waiting for
+    /// her). False if not asked.
+    pub(super) fn ask_resort(
+        &mut self,
+        obs: &Observation,
+        r: crate::knowledge::explorer::Resort,
+        exit: Option<String>,
+    ) -> bool {
+        use crate::knowledge::explorer::Resort;
+        let (what, go) = match r {
+            Resort::Strafing => ("strafing run-jumps, the hard kind", "try them"),
+            Resort::StuckAgain => ("another go at the places you got stuck", "go back"),
+            Resort::EveryWall => ("pressing every wall round you for secrets", "press them"),
+            Resort::MissedJumps => ("the jumps you missed before, again", "try them"),
+            Resort::Harm => (
+                "switches and walls you'd reach over a floor that hurts",
+                "go, hurt and all",
+            ),
+            Resort::Exit => ("the way out", "leave"),
+        };
+        let mut choices = vec![Choice {
+            label: go.into(),
+            then: if r == Resort::Exit {
+                Then::Order(Order::Exit)
+            } else {
+                Then::Allow(r)
+            },
+        }];
+        if let Some(e) = exit.filter(|_| r != Resort::Exit) {
+            choices.push(Choice {
+                label: format!("leave ({e})"),
+                then: Then::Order(Order::Exit),
+            });
+        }
+        choices.push(Choice {
+            label: "stay".into(),
+            then: Then::Stay,
+        });
+        let default = choices.len() - 1;
+        self.ask(
+            obs,
+            format!("Nothing else to do here that you know of. Next would be {what}."),
+            choices,
+            default,
             false,
         )
         .is_some()

@@ -2691,3 +2691,27 @@ missed, harm allowed) aren't asked: on instinct they're the bot's, and she can s
 time. `Situation` and typed events weren't needed for these (a question closes on any action
 of hers instead of being checked against a snapshot); they're for class T (stage 6), where a
 question about a fight has to be judged against the fight as it stands.
+
+## Stage 4 finished: her instinct's last resorts asked first (2026-11-11)
+
+On instinct the bot went down `next`'s last resorts by itself. Now whoever directs her holds
+them back (`Explorer::resorts`: None, all of them, as playing alone and in every score run; on
+instinct, only those she's let it take this level) and the first held back with something to
+offer is noted (`resort_wanted`) and asked about: "Nothing else to do here that you know of.
+Next would be <it>. a) <take it> b) leave by <exit> (when she knows one) c) stay (default)".
+Taking it lets it for the rest of the level; staying ends instinct till her next action. The
+resorts: strafing run-jumps, the places she got stuck, every wall, the held-back exit, the jumps
+she missed, a floor that hurts (the plan's list; the suspect walls and what was given up lately
+are routine, and stay hers).
+
+Found testing, both fixed: allowing one asked it again at once (the explorer's note of it stale
+till it chose again: cleared on allowing); and "the way out" was held back with no exit known,
+so "leave" failed and she was asked again every 20 s for 15 minutes (held back only with an
+exit she knows, when directed; alone, the bot's as it was). The "nothing but walls, leave?"
+question now offers each exit she knows by name (E1M3 knew a secret exit and the normal one,
+and "leave" had taken the first ranked: the secret one).
+
+Checked: MAP09 (seed 19) on instinct: strafing runs asked at 108 s; answered each time, then
+every wall, then the hurting floor, each once; left unanswered, its default ended instinct.
+The walls question seen on E1M3 (1385 s), E2M4 (1381 s), MAP06 (1225 s). Parity: 24 runs
+the same.
