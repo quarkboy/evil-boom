@@ -158,17 +158,40 @@ impl Director {
                     {
                         continue;
                     }
-                    if let Some(line) = self.big_jump(agent, obs, &j) {
-                        m.jumps_told.insert(key, obs.tic);
-                        self.event(obs, true, line);
+                    if let Some((line, costly)) = self.big_jump(agent, obs, &j) {
+                        m.jumps_told.insert(key.clone(), obs.tic);
+                        // (a miss that costs: taken, unless she says not to in time)
+                        let asked = costly
+                            && self.ask_now(
+                                agent,
+                                obs,
+                                line.clone(),
+                                vec![
+                                    super::ask::Choice {
+                                        label: "jump".into(),
+                                        then: super::ask::Then::Nothing,
+                                    },
+                                    super::ask::Choice {
+                                        label: "don't".into(),
+                                        then: super::ask::Then::DontJump(Box::new(j.clone())),
+                                    },
+                                ],
+                                0,
+                                super::ask::About::Jump(key),
+                            );
+                        if !asked {
+                            self.event(obs, true, line);
+                        }
                     }
                 }
                 JumpNews::Made(j) => {
+                    self.jumped(&j.key());
                     if m.jumps_told.contains_key(&j.key()) {
                         self.event(obs, true, "Made the jump.".into());
                     }
                 }
                 JumpNews::Missed(j, sector) => {
+                    self.jumped(&j.key());
                     let nav = std::rc::Rc::clone(&agent.x().nav);
                     let want = nav.sector_of_poly(j.dest_poly);
                     let places = self.places(agent);
@@ -233,7 +256,8 @@ impl Director {
 
     /// A run-jump worth telling before she runs at it, as a line: far across, a long way down if
     /// it's missed, or onto a floor that hurts. None for a hop.
-    fn big_jump(&mut self, agent: &Agent, obs: &Observation, j: &Jump) -> Option<String> {
+    /// (And whether a miss costs: harm below, or a long way down.)
+    fn big_jump(&mut self, agent: &Agent, obs: &Observation, j: &Jump) -> Option<(String, bool)> {
         let nav = std::rc::Rc::clone(&agent.x().nav);
         let floor = |p: Point| {
             nav.mesh
@@ -270,9 +294,12 @@ impl Director {
         } else {
             ""
         };
-        Some(format!(
-            "Jumping for it: {across:.0} across to {to} ({}){under}{odds}.",
-            compass(heading(obs.pos(), j.dest))
+        Some((
+            format!(
+                "Jumping for it: {across:.0} across to {to} ({}){under}{odds}.",
+                compass(heading(obs.pos(), j.dest))
+            ),
+            hurts || drop >= BIG_DROP,
         ))
     }
 

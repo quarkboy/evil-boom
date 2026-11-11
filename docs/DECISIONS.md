@@ -2715,3 +2715,38 @@ Checked: MAP09 (seed 19) on instinct: strafing runs asked at 108 s; answered eac
 every wall, then the hurting floor, each once; left unanswered, its default ended instinct.
 The walls question seen on E1M3 (1385 s), E2M4 (1381 s), MAP06 (1225 s). Parity: 24 runs
 the same.
+
+## Stage 6: questions that can't wait (2026-11-11)
+
+The plan's class T (`control/directed/ask.rs`): the bot does its default at once and says so,
+`[ask q4] Outmatched: 1 demon, 3 imps, 2 hell knights (health 200). a) as it is (pushing on,
+shooting on the way) (doing it)  b) go bold. Open 3 s: doom_answer to switch.`; an answer in 3 s
+switches it; after, too late. Never forced (a force answered after the moment is worse than
+none). Asked:
+- **A fight turned bad**, once a fight, not when she's had her say in it: outmatched, an
+  arch-vile or a boss after her, or health under 25. Keep as it is (what the fight's doing, in
+  words: falling back, keeping clear, pushing on...), fall back to cover (offered only with
+  cover she knows a way to: offered without, it was refused), or go bold. Closed when the fight
+  ends as its summary has it (not when one goes out of sight a tic: the first try closed
+  within a tic).
+- **A run-jump whose miss costs** (a floor that hurts below, or a long drop): jump, or don't.
+  "Don't" leaves that leap out for good: every run-jump from that sector to that one (the first
+  try declined one run-up and the next was lined up at once, three questions in four seconds).
+  Closed once she's jumped.
+
+What settles a question: her say in the fight settles a fight question; an order of hers in
+place of what she's doing settles the others (where she goes, leaving, a jump). Not the bot's
+own going on (resuming an explore after an errand closed one: fixed), nor an order queued
+after (`then`), nor a go order for a fight question (the stand-in's go closed its fight
+question before its answer came: fixed).
+
+`Situation` (`situation.rs`): how things stand, worked out once a tic from the fight's
+assessment and move and her health; her status's gist, the look's danger line (with what the
+fight's doing) and the fight's questions read it.
+
+The gate, the GPT stand-in on MAP06 (skill 3, a loadout, 6 minutes at x1): 7 questions (1.2 a
+minute, under the 3); the class D one answered in time and applied; none of the 6 class T in
+3 s (the stand-in, reasoning, takes several seconds: Evil's 250 ms would; the default stood
+each time, as it's meant to). Checked by script: answered at once switches (go bold, fall back,
+don't jump), after 3 s refused; a go order then the answer still switches. Parity: 24 runs the
+same.

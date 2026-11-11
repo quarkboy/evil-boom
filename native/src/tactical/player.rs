@@ -554,6 +554,16 @@ impl Player {
 
     /// A retreat to cover begun on someone's say (whoever directs her), as her own is: out of
     /// the sight of what's shooting at her, by a way she knows. Err: nowhere to go.
+    /// Somewhere out of their sight she knows a way to (what a retreat to cover would take)?
+    pub fn has_cover(&mut self, obs: &Observation) -> bool {
+        self.find_cover(obs).is_some()
+    }
+
+    /// Falling back (a retreat under way).
+    pub fn falling_back(&self) -> bool {
+        self.retreat.is_some()
+    }
+
     pub fn order_retreat(&mut self, obs: &Observation) -> Result<(), String> {
         let route = self
             .find_cover(obs)

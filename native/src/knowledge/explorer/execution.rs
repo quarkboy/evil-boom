@@ -575,6 +575,27 @@ impl Explorer {
         true
     }
 
+    /// The objective under way given up because whoever directs her said not to take the jump
+    /// it was lining up for: that leap left out from now on, every run-jump from the sector it
+    /// leaves to the one it lands in (another run-up to the same leap is the same leap), as one
+    /// missed for good is.
+    pub fn decline(&mut self, obs: &Observation, jump: &crate::navigator::Jump) {
+        let nav = std::rc::Rc::clone(&self.nav);
+        let sector = |p: crate::geom::Point| nav.mesh.poly_at(p).map(|i| nav.sector_of_poly(i));
+        let (from, to) = (sector(jump.takeoff), nav.sector_of_poly(jump.dest_poly));
+        for j in &nav.jumps {
+            if sector(j.takeoff) == from && nav.sector_of_poly(j.dest_poly) == to {
+                self.knowledge
+                    .note(Note::MissedJump(j.key(), super::JUMP_MISSES));
+            }
+        }
+        self.view = None; // (its edges hold the jumps as they were)
+        if let Some(obj) = self.current.take() {
+            self.follower = None;
+            self.drop_objective(&obj, obs, Why::Declined);
+        }
+    }
+
     /// The objective under way given up from outside (a fight's finding), for a fresh choice.
     pub fn give_up(&mut self, obs: &Observation, why: &str) {
         if let Some(obj) = self.current.take() {

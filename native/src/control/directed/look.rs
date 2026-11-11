@@ -338,30 +338,31 @@ impl Director {
             .map(|p| &p.combat().now)
             .filter(|now| obs.tic - now.tic <= 1 && !now.about.is_empty())
         {
+            // (the snapshot's words, as her status and the fight's questions have them)
+            let sit = &self.now;
             let mut how = Vec::new();
             for (is, what) in [
-                (now.outmatched, "outmatched"),
-                (now.surrounded, "surrounded"),
-                (now.short_of_ammo, "short of ammo"),
-                (now.vile, "an arch-vile"),
+                (sit.outmatched, "outmatched"),
+                (sit.surrounded, "surrounded"),
+                (sit.short_of_ammo, "short of ammo"),
+                (sit.vile, "an arch-vile"),
             ] {
                 if is {
                     how.push(what);
                 }
             }
-            let word = if now.outmatched {
-                "deadly"
-            } else if !now.engaged.is_empty() {
-                "dangerous"
+            let word = sit.danger();
+            let doing = if sit.fighting() {
+                format!(" {}{}.", sit.doing()[..1].to_uppercase(), &sit.doing()[1..])
             } else {
-                "safe for now"
+                String::new()
             };
             let danger = if how.is_empty() {
-                format!("Danger: {word}.")
+                format!("Danger: {word}.{doing}")
             } else {
-                format!("Danger: {word} ({}).", how.join(", "))
+                format!("Danger: {word} ({}).{doing}", how.join(", "))
             };
-            fighting = !now.engaged.is_empty();
+            fighting = self.now.fighting();
             let on = agent
                 .player()
                 .and_then(|p| p.combat().target)

@@ -26,6 +26,8 @@ pub enum Why {
     Route(String, Trouble),
     /// given up from outside, by the fight
     Fight(String),
+    /// not taken: whoever directs her said not to (a jump)
+    Declined,
 }
 
 impl fmt::Display for Why {
@@ -48,6 +50,7 @@ impl fmt::Display for Why {
             Why::NoWayNow => "no way there now",
             Why::Route(line, _) => return write!(f, "failed: {line}"),
             Why::Fight(why) => why,
+            Why::Declined => "declined",
         };
         f.write_str(s)
     }
@@ -73,6 +76,7 @@ impl Why {
             Why::NoRoute | Why::NoWayNow => "no way there",
             Why::Route(_, t) => t.plain(),
             Why::Fight(_) => "a fight in the way",
+            Why::Declined => "you said not to",
         }
         .to_string()
     }

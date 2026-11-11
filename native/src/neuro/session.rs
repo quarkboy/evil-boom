@@ -169,8 +169,9 @@ impl Session {
             self.link.context(&self.director.status(agent, obs), true);
             self.told_status = (obs.tic, gist);
         }
-        // (a question unanswered a few seconds: a decision forced, the question its state)
-        if let Some(q) = self.director.question() {
+        // (a question unanswered a few seconds: a decision forced, the question its state; never
+        // one that can't wait, its moment gone by the time a force is answered)
+        if let Some(q) = self.director.question().filter(|q| !q.now) {
             if self.forced_question != Some(q.id) && obs.tic - q.opened >= ASK_FORCE {
                 self.forced_question = Some(q.id);
                 self.forced = true;

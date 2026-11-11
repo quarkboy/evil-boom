@@ -1,6 +1,7 @@
-//! Questions from the bot (the plan's 4.6, class D: ones that can wait): where the bot wants her
-//! say, one question with two or three options by letter, which is the default, and when the
-//! default's taken. At most one open, at most a few a minute; answered with `doom_answer`, or
+//! Questions from the bot (the plan's 4.6): where the bot wants her say, one question with two or
+//! three options by letter, which is the default, and when the default's taken. Class D (it can
+//! wait): she holds, the default taken at the deadline. Class T (it can't): the default done at
+//! once, her answer in 3 s switching it, never forced. At most one open, at most a few a minute; answered with `doom_answer`, or
 //! overtaken by any action of hers, or closed by a death, a restart or a new level. An answer
 //! to a question that's closed is told it's too late and what came of it, never applied.
 
@@ -15,6 +16,10 @@ const MINUTE: i64 = 60 * 35;
 pub const ANSWER_WAIT: i64 = 8 * 35;
 /// no progress this long (tics): asked whether she's stuck
 const STUCK: i64 = 180 * 35;
+/// a question that can't wait: open this long (tics) for her to switch from its default
+const NOW_OPEN: i64 = 3 * 35;
+/// a fight's turned bad below this health
+const LOW_HEALTH: f64 = 25.0;
 
 /// What an answer does.
 #[derive(Clone, Debug)]
@@ -29,6 +34,10 @@ pub enum Then {
     Allow(crate::knowledge::explorer::Resort),
     /// off instinct: she waits for her next action
     Stay,
+    /// her say in the fight (`Director::fight`'s: "retreat", "bold", ...)
+    Tactic(&'static str),
+    /// the run-jump lined up for not taken, nor that leap again
+    DontJump(Box<crate::navigator::Jump>),
     /// nothing: as she was
     Nothing,
 }
@@ -39,15 +48,41 @@ pub struct Choice {
     pub then: Then,
 }
 
+/// What a question's about, for whether it still applies.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum About {
+    /// for her to settle (it holds till then)
+    Settle,
+    /// the fight she's in: over with it
+    Fight,
+    /// the run-jump lined up for (its key): over once she's jumped
+    Jump(String),
+}
+
 #[derive(Clone, Debug)]
 pub struct Question {
     pub id: u32,
+    /// it can't wait: the default's done already, her answer switches it
+    pub now: bool,
+    pub about: About,
     pub text: String,
     pub choices: Vec<Choice>,
     pub default: usize,
     pub opened: i64,
     /// the default taken at this tic (None: she's waited for)
     pub deadline: Option<i64>,
+}
+
+/// A question about to be asked.
+struct Draft {
+    text: String,
+    choices: Vec<Choice>,
+    default: usize,
+    /// told her already (it's the answer to her action)
+    told: bool,
+    deadline: Option<i64>,
+    about: About,
+    now: bool,
 }
 
 /// A question as it ended, for an answer that comes too late.
@@ -75,6 +110,24 @@ impl Question {
     /// As she reads it: "[ask q3] Leave with 3 to explore? a) leave anyway b) stay (default, in
     /// 8 s). doom_answer."
     pub fn line(&self, tic: i64) -> String {
+        if self.now {
+            let opts: Vec<String> = self
+                .choices
+                .iter()
+                .enumerate()
+                .map(|(i, c)| {
+                    let doing = if i == self.default { " (doing it)" } else { "" };
+                    format!("{}) {}{doing}", key(i), c.label)
+                })
+                .collect();
+            return format!(
+                "[ask q{}] {} {}. Open {} s: doom_answer to switch.",
+                self.id,
+                self.text,
+                opts.join("  "),
+                NOW_OPEN / 35
+            );
+        }
         let opts: Vec<String> = self
             .choices
             .iter()
@@ -117,6 +170,54 @@ impl Director {
         default: usize,
         told: bool,
     ) -> Option<String> {
+        let deadline = self.answer_wait.map(|w| obs.tic + w);
+        self.open(
+            obs,
+            Draft {
+                text,
+                choices,
+                default,
+                told,
+                deadline,
+                about: About::Settle,
+                now: false,
+            },
+        )
+    }
+
+    /// Ask her about something that can't wait: its default done at once and said, her answer
+    /// in `NOW_OPEN` switching it. False if not asked (one open, the minute's spent).
+    pub(super) fn ask_now(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        text: String,
+        choices: Vec<Choice>,
+        default: usize,
+        about: About,
+    ) -> bool {
+        let then = choices[default].then.clone();
+        let opened = self.open(
+            obs,
+            Draft {
+                text,
+                choices,
+                default,
+                told: false,
+                deadline: Some(obs.tic + NOW_OPEN),
+                about,
+                now: true,
+            },
+        );
+        if opened.is_some() {
+            self.carry_out(agent, obs, then);
+        }
+        opened.is_some()
+    }
+
+    /// A question opened (`d`), its line given back and told her unless it's told already;
+    /// None if one's open or the minute's spent.
+    fn open(&mut self, obs: &Observation, d: Draft) -> Option<String> {
         let a = &mut self.asking;
         a.asked.retain(|&t| obs.tic - t < MINUTE);
         if a.open.is_some() || a.asked.len() >= QUESTIONS_A_MINUTE {
@@ -126,15 +227,17 @@ impl Director {
         a.next_id += 1;
         let q = Question {
             id: a.next_id,
-            text,
-            choices,
-            default,
+            now: d.now,
+            about: d.about,
+            text: d.text,
+            choices: d.choices,
+            default: d.default,
             opened: obs.tic,
-            deadline: self.answer_wait.map(|w| obs.tic + w),
+            deadline: d.deadline,
         };
         let line = q.line(obs.tic);
         self.asking.open = Some(q);
-        if !told {
+        if !d.told {
             self.reports.push(Report {
                 tic: obs.tic,
                 ok: true,
@@ -182,12 +285,26 @@ impl Director {
             })?;
         let label = q.choices[i].label.clone();
         self.close(format!("you answered: {label}"));
+        if q.now && i == q.default {
+            return Ok(format!("q{n}: {label}, as it was."));
+        }
         self.carry_out(agent, obs, q.choices[i].then.clone());
         Ok(format!("q{n}: {label}."))
     }
 
     /// Each tic: an open question's deadline (its default taken, and said); whether she's stuck.
     pub(super) fn questions(&mut self, agent: &mut Agent, obs: &Observation) {
+        // (one that couldn't wait: its default's done; closed quietly at its time, or when
+        // what it was about is over)
+        if let Some(q) = self.asking.open.clone().filter(|q| q.now) {
+            // (the fight as the summary has it: over after a moment with nothing after her,
+            // not each tic one's out of sight)
+            if q.about == About::Fight && self.fight.is_none() {
+                self.close("the fight's over".into());
+            } else if q.deadline.is_some_and(|d| obs.tic >= d) {
+                self.close(format!("no answer: {}", q.choices[q.default].label));
+            }
+        }
         if let Some(q) = self
             .asking
             .open
@@ -206,6 +323,74 @@ impl Director {
             self.carry_out(agent, obs, c.then);
         }
         self.ask_if_stuck(agent, obs);
+        self.ask_fight(agent, obs);
+    }
+
+    /// A run-jump come down (its key): a question about it closed.
+    pub(super) fn jumped(&mut self, key: &str) {
+        if self
+            .asking
+            .open
+            .as_ref()
+            .is_some_and(|q| q.about == About::Jump(key.to_string()))
+        {
+            self.close("jumped".into());
+        }
+    }
+
+    /// A fight turned bad (outmatched, an arch-vile or a boss after her, her health low), once a
+    /// fight and not when she's had her say in it: what the fight's doing told and kept, falling
+    /// back or going bold hers for 3 s.
+    fn ask_fight(&mut self, agent: &mut Agent, obs: &Observation) {
+        let sit = self.now.clone();
+        if !sit.fighting() || self.asking.open.is_some() || self.tactics.any(obs.tic) {
+            return;
+        }
+        let Some(f) = self.fight.as_mut().filter(|f| !f.asked) else {
+            return;
+        };
+        let them: Vec<String> = sit
+            .against
+            .iter()
+            .map(|(n, c)| super::some(*c, n))
+            .collect();
+        let why = if sit.vile {
+            "An arch-vile"
+        } else if sit.boss {
+            "A boss"
+        } else if sit.outmatched {
+            "Outmatched"
+        } else if sit.health < LOW_HEALTH {
+            "Health low"
+        } else {
+            return;
+        };
+        f.asked = true;
+        let doing = sit.doing();
+        let mut choices = vec![Choice {
+            label: format!("as it is ({doing})"),
+            then: Then::Nothing,
+        }];
+        // (falling back offered only with cover she knows a way to: else it'd be refused)
+        let cover = !sit.retreating && agent.player_mut().is_some_and(|p| p.has_cover(obs));
+        if cover {
+            choices.push(Choice {
+                label: "fall back to cover".into(),
+                then: Then::Tactic("retreat"),
+            });
+        }
+        choices.push(Choice {
+            label: "go bold".into(),
+            then: Then::Tactic("bold"),
+        });
+        self.ask_now(
+            agent,
+            obs,
+            format!("{why}: {} (health {:.0}).", them.join(", "), sit.health),
+            choices,
+            0,
+            About::Fight,
+        );
     }
 
     /// Closed (`how`): kept for an answer that comes after.
@@ -222,6 +407,31 @@ impl Director {
         self.close(format!("overtaken by {by}"));
     }
 
+    /// An order of hers in place of what she's doing: it settles what's asked about where she
+    /// goes (leaving, a way that costs, a jump), not how she fights.
+    pub(super) fn ordered(&mut self) {
+        if self
+            .asking
+            .open
+            .as_ref()
+            .is_some_and(|q| q.about != About::Fight)
+        {
+            self.overtaken("your action");
+        }
+    }
+
+    /// Her say in the fight: it settles what's asked about the fight.
+    pub(super) fn said_in_fight(&mut self) {
+        if self
+            .asking
+            .open
+            .as_ref()
+            .is_some_and(|q| q.about == About::Fight)
+        {
+            self.overtaken("your say in the fight");
+        }
+    }
+
     fn carry_out(&mut self, agent: &mut Agent, obs: &Observation, then: Then) {
         match then {
             Then::Order(o) => self.queue.push_back(super::Queued {
@@ -236,6 +446,16 @@ impl Director {
                 let x = agent.x_mut();
                 x.resorts = Some(self.resorts.clone());
                 x.resort_wanted = None; // (stale till she chooses again: not asked twice)
+            }
+            Then::Tactic(t) => {
+                let said = match self.fight(agent, obs, t, None, None) {
+                    Ok(said) | Err(said) => said,
+                };
+                self.event(obs, true, said);
+            }
+            Then::DontJump(j) => {
+                agent.x_mut().decline(obs, &j);
+                self.event(obs, true, "Not jumping.".into());
             }
             Then::Stay => {
                 if matches!(self.doing, Some(Doing::Auto)) {

@@ -23,10 +23,12 @@ mod kills;
 mod look;
 mod moments;
 mod restart;
+mod situation;
 
 pub use ask::{Question, ANSWER_WAIT};
 pub use look::{Hints, Listing, Pick};
 pub use moments::{skill_name, Level};
+pub use situation::Situation;
 
 /// a name at most this long (refused, not cut: a name she didn't choose is one she won't use)
 pub const NAME_MAX: usize = 32;
@@ -150,6 +152,8 @@ struct Fight {
     spent: [i32; 4],
     /// the most of each kind fighting her at once
     against: BTreeMap<&'static str, usize>,
+    /// asked her about it, once it turned bad
+    asked: bool,
 }
 
 /// What she had a tic ago.
@@ -187,6 +191,16 @@ struct Tactics {
     hold_fire: Option<i64>,
     /// a stance taken (its name), till when
     stance: Option<(&'static str, i64)>,
+}
+
+impl Tactics {
+    /// Any of her say in the fight still holding.
+    fn any(&self, tic: i64) -> bool {
+        self.target.as_ref().is_some_and(|t| t.2 > tic)
+            || self.gun.is_some_and(|g| g.1 > tic)
+            || self.hold_fire.is_some_and(|t| t > tic)
+            || self.stance.is_some_and(|s| s.1 > tic)
+    }
 }
 
 /// What a target order is of.
@@ -352,6 +366,8 @@ pub struct Director {
     /// (None: as long as it takes)
     asking: ask::Asking,
     pub answer_wait: Option<i64>,
+    /// how things stand this tic (`situation.rs`): what tells her reads it
+    pub now: Situation,
     /// the last resorts she's let her instinct take, this level
     resorts: std::collections::BTreeSet<crate::knowledge::explorer::Resort>,
     progress: Option<((usize, [usize; 6]), i64)>,
@@ -436,7 +452,11 @@ impl Director {
     /// An order, rushed or not; `then`: once the order in hand is done, not instead of it (an
     /// order given without it replaces the one in hand, which is said).
     pub fn order_with(&mut self, order: Order, rush: bool, then: bool) {
-        self.overtaken("your action");
+        // (an order in place of what she's doing settles what's asked; one queued after it
+        // doesn't)
+        if !then {
+            self.ordered();
+        }
         self.queue.push_back(Queued { order, rush, then });
     }
 
@@ -587,12 +607,12 @@ impl Director {
     pub fn status_gist(&self, agent: &Agent, obs: &Observation) -> String {
         format!(
             "{} {} {:?} {:?} {} {} {}",
-            (obs.health.unwrap_or(0.0) / 10.0).floor(),
-            (obs.armor.unwrap_or(0.0) / 10.0).floor(),
+            (self.now.health / 10.0).floor(),
+            (self.now.armor / 10.0).floor(),
             obs.weapons,
             obs.keys.unwrap_or_default().iter().count(),
             self.doing(agent),
-            engaged(agent, obs).is_empty(),
+            self.now.fighting(),
             self.tally.line()
         )
     }
@@ -930,6 +950,7 @@ impl Director {
                 armor_lost: 0.0,
                 spent: [0; 4],
                 against: BTreeMap::new(),
+                asked: false,
             });
         }
         if let (Some(f), Some(was)) = (self.fight.as_mut(), self.was.as_ref()) {
@@ -1328,6 +1349,7 @@ impl Director {
     /// Each tic: the order in hand carried on (its next objective, or its end reported); the next
     /// order taken up.
     pub fn tick(&mut self, agent: &mut Agent, obs: &Observation) {
+        self.take_stock(agent, obs);
         self.events(agent, obs);
         self.kills(agent, obs);
         self.more_moments(agent, obs);
@@ -1419,7 +1441,12 @@ impl Director {
         // (an errand done, or come to nothing: on with the exploring it broke into)
         if self.doing.is_none() && self.queue.is_empty() && self.pressed.is_none() {
             if let Some(order) = self.resume.take() {
-                self.order_with(order, false, false);
+                // (the bot's own going on, not hers: nothing asked is settled by it)
+                self.queue.push_back(Queued {
+                    order,
+                    rush: false,
+                    then: false,
+                });
                 return;
             }
         }
@@ -1557,6 +1584,7 @@ impl Director {
         r: Option<&str>,
         seconds: Option<f64>,
     ) -> Result<String, String> {
+        self.said_in_fight();
         let hold = |default: f64, most: f64| {
             let secs = seconds.unwrap_or(default).clamp(1.0, most);
             (secs, obs.tic + (secs * 35.0) as i64)

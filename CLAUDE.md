@@ -156,7 +156,9 @@ level, skill, one level or on through, from what the console offers (`control/ga
 the tally screen (30 s, else on by itself) and `doom_game restart` after 90 s with nothing new.
 Stage 4, the bot's questions (`control/directed/ask.rs`, `doom_answer`, 8 s then the default,
 forced at 3 s): leaving with things left, a costly way, nothing but walls left, stuck 3 min,
-and on instinct each last resort before it's taken (`Explorer::resorts`, None when alone). To direct a game by hand: `watch <wad> <map> --headless
+and on instinct each last resort before it's taken (`Explorer::resorts`, None when alone).
+Stage 6: questions that can't wait (default done at once, 3 s to switch): a fight turned bad,
+a costly run-jump; `Situation` (`situation.rs`), one snapshot a tic. To direct a game by hand: `watch <wad> <map> --headless
 --speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
 `.out` twin (`me.txt` gives `me.out`).
 
