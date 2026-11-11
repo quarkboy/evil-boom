@@ -2799,3 +2799,10 @@ her alive) and "Your invisibility's worn off."
 
 Checked on MAP08 by instinct: the soulsphere, invisibility, two suits (the second's time from
 its own pickup), each running out and worn off on time. Parity: 24 runs the same.
+
+And the other pickups (the user's: everything but health and armor bonuses, stimpacks, medikits,
+ammo, and a gun she has): green armor and megaarmor ("You got megaarmor: armor 200."), the
+backpack, and ammo only of a kind she had none of ("You picked up 4 shotgun shells: 4 shells,
+where you had none."). On E1M1 from a pistol start: the green armor, the first shells, the
+megaarmor, each told; the clips and the rest, not. Berserk: the bot knows it heals (to 100, as
+Doom's `P_GiveBody` does: `health_item`, read by the fight's and the explorer's pickups).

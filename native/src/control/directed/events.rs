@@ -63,6 +63,8 @@ pub enum Event {
     Lock,
     /// a powerup taken (what it is and does)
     Powerup,
+    /// armor or a backpack taken
+    Pickup,
     /// one that runs out about to (`vital`: one keeping her alive, invulnerability or the suit)
     PowerEnding {
         vital: bool,
@@ -146,6 +148,7 @@ impl Event {
             | E::Reachable { notable: true }
             | E::Lock
             | E::Powerup
+            | E::Pickup
             | E::PowerEnding { vital: false }
             | E::PowerOver
             | E::BigKill

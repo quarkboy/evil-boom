@@ -1,7 +1,10 @@
-//! Powerups as she takes them, by the game's own word for each ("Invulnerability!",
-//! "Supercharge!", ...): what it is and does, and for the ones that run out, a word before they
-//! do and when they have (Doom's own times: invulnerability 30 s, invisibility and the suit 60 s,
-//! the visor 120 s; another of the same starts its time again).
+//! Pickups as she takes them, by the game's own word for each ("Invulnerability!", "Picked up
+//! the armor.", ...): the powerups, armor, the backpack, and ammo of a kind she had none of
+//! (the user's: not health or armor bonuses, stimpacks, medikits, other ammo, nor a gun she has;
+//! a new gun has its own line). A powerup: what it is and does, and for the ones that run out, a
+//! word before they do and when they have (Doom's own times: invulnerability 30 s, invisibility
+//! and the suit 60 s, the visor 120 s; another of the same starts its time again). Armor and a
+//! backpack: what she has now.
 
 use super::{Director, Event};
 use crate::motor::Observation;
@@ -67,9 +70,64 @@ fn power(message: &str, obs: &Observation) -> Option<(&'static str, String, Opti
     })
 }
 
+/// The ammo pools by a gun's slot that uses each, and what its rounds are called.
+const POOLS: [(i32, &str); 4] = [(2, "bullets"), (3, "shells"), (5, "rockets"), (6, "cells")];
+
+/// How much of each pool she has.
+fn pools(obs: &Observation) -> [i32; 4] {
+    POOLS.map(|(slot, _)| {
+        obs.ammo
+            .iter()
+            .flatten()
+            .find(|(s, _)| *s == slot)
+            .map_or(0, |(_, n)| *n)
+    })
+}
+
+/// Armor, a backpack, or ammo of a kind she had none of (`had`, each pool before), taken (by the
+/// game's word), as she's told it.
+fn pickup(message: &str, obs: &Observation, had: [i32; 4]) -> Option<String> {
+    let m = message.to_lowercase();
+    let armor = obs.armor.unwrap_or(0.0);
+    let thing = m.strip_prefix("picked up ")?.trim_end_matches(['.', '!']);
+    Some(match thing {
+        "the armor" => format!("You got green armor: armor {armor:.0}."),
+        "the megaarmor" => format!("You got megaarmor: armor {armor:.0}."),
+        t if t.starts_with("a backpack") => {
+            "You got a backpack: you carry twice the ammo now.".to_string()
+        }
+        t => {
+            let pool = if t.contains("bullets") || t == "a clip" {
+                0
+            } else if t.contains("shell") {
+                1
+            } else if t.contains("rocket") {
+                2
+            } else if t.contains("cell") {
+                3
+            } else {
+                return None; // (health and armor bonuses, stimpacks, medikits, keys)
+            };
+            if had[pool] > 0 {
+                return None; // (more of what she had: not worth a word)
+            }
+            format!(
+                "You picked up {t}: {} {}, where you had none.",
+                pools(obs)[pool],
+                POOLS[pool].1
+            )
+        }
+    })
+}
+
 impl Director {
-    /// Each tic: a powerup taken told; one running out told before it does, and when it has.
+    /// Each tic: a pickup told; a power running out told before it does, and when it has.
     pub(super) fn powers(&mut self, obs: &Observation) {
+        let had = self.pools_had.unwrap_or_else(|| pools(obs));
+        self.pools_had = Some(pools(obs));
+        if let Some(said) = obs.message.as_deref().and_then(|m| pickup(m, obs, had)) {
+            self.tell(obs, Event::Pickup, said);
+        }
         if let Some((name, said, lasts)) = obs.message.as_deref().and_then(|m| power(m, obs)) {
             self.tell(obs, Event::Powerup, said);
             if let Some(t) = lasts {
@@ -94,6 +152,49 @@ impl Director {
         self.running.retain(|r| obs.tic < r.1);
         for (e, t) in told {
             self.tell(obs, e, t);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{pickup, power};
+    use crate::motor::Observation;
+
+    /// The game's pickup words: armor, the backpack, the powerups, and ammo she had none of told;
+    /// the rest left out.
+    #[test]
+    fn pickups_told() {
+        let obs = Observation {
+            armor: Some(100.0),
+            ammo: Some(vec![(2, 20), (3, 8)]),
+            ..Observation::default()
+        };
+        let (none, some) = ([0; 4], [10, 4, 0, 0]);
+        assert_eq!(
+            pickup("Picked up the armor.", &obs, some).as_deref(),
+            Some("You got green armor: armor 100.")
+        );
+        assert!(pickup("Picked up a backpack full of ammo!", &obs, some).is_some());
+        assert!(power("Berserk!", &obs).is_some());
+        assert_eq!(
+            pickup("Picked up 4 shotgun shells.", &obs, none).as_deref(),
+            Some("You picked up 4 shotgun shells: 8 shells, where you had none.")
+        );
+        for left in [
+            "Picked up a health bonus.",
+            "Picked up an armor bonus.",
+            "Picked up a stimpack.",
+            "Picked up a medikit that you REALLY need!",
+            "Picked up a medikit.",
+            "Picked up a clip.",
+            "Picked up a box of shotgun shells.",
+            "Picked up a blue keycard.",
+        ] {
+            assert!(
+                pickup(left, &obs, some).is_none() && power(left, &obs).is_none(),
+                "{left}"
+            );
         }
     }
 }

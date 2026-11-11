@@ -378,8 +378,9 @@ pub struct Director {
     /// (None: as long as it takes)
     asking: ask::Asking,
     pub answer_wait: Option<i64>,
-    /// powers running, (what, till when, told it's ending) (`powers.rs`)
+    /// powers running, (what, till when, told it's ending); each ammo pool last tic (`powers.rs`)
     running: Vec<(&'static str, i64, bool)>,
+    pools_had: Option<[i32; 4]>,
     /// what hurt her lately, (tic, what, health): her death's story (`death.rs`)
     hurt: VecDeque<(i64, String, i32)>,
     /// how things stand this tic (`situation.rs`): what tells her reads it
@@ -489,6 +490,7 @@ impl Director {
         self.overtaken("a new level");
         self.hurt.clear();
         self.running.clear();
+        self.pools_had = None;
         self.resorts.clear();
         self.queue.clear();
         self.resume = None;
@@ -526,6 +528,7 @@ impl Director {
         self.overtaken("the level begun again");
         self.hurt.clear();
         self.running.clear();
+        self.pools_had = None;
         self.queue.clear();
         self.resume = None;
         self.tactics = Tactics::default();
