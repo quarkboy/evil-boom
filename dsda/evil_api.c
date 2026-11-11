@@ -264,6 +264,21 @@ EVIL_API int evil_level_title(char *out, int max)
   return (int)strlen(out);
 }
 
+/* The finale's text while a finale shows it (Doom's episode endings, Doom II's stories between
+ * levels), into out (max bytes, ended); its length. Empty otherwise. */
+EVIL_API int evil_finale_text(char *out, int max)
+{
+  if (max <= 0)
+    return 0;
+  out[0] = 0;
+  if (gamestate == GS_FINALE && finaletext)
+  {
+    strncpy(out, finaletext, (size_t)max - 1);
+    out[max - 1] = 0;
+  }
+  return (int)strlen(out);
+}
+
 /* A tic of the melt, the game held (as Doom holds it); one begun if it's due. */
 EVIL_API void evil_wipe_tic(void)
 {

@@ -313,6 +313,11 @@ impl Engine {
         self.game.level_title()
     }
 
+    /// A finale's text while it's on screen (see `Dsda::finale_text`).
+    pub fn finale_text(&self) -> Option<String> {
+        self.game.finale_text()
+    }
+
     /// The screen as it stands (Doom's own screens); None from an engine without them.
     pub fn screen(&self) -> Option<crate::dsda::Screen> {
         self.game.screen()

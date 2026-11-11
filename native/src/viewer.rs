@@ -321,6 +321,23 @@ pub struct WatchOptions {
 }
 
 /// A watched game's orders, from a file added to as it plays.
+impl Watch {
+    /// The game's screens between levels told to whoever's directing (`f` on each director),
+    /// and passed on at once: no level's tics run then to pass them on.
+    pub(super) fn tell_screens(&mut self, f: impl Fn(&mut crate::control::directed::Director)) {
+        let mut lines = Vec::new();
+        if let Some(feed) = self.feed.as_mut() {
+            f(&mut feed.director);
+            lines.extend(feed.between());
+        }
+        if let Some(neuro) = self.neuro.as_mut() {
+            f(&mut neuro.director);
+            lines.extend(neuro.between(self.engine.tic));
+        }
+        self.agent.x_mut().log.extend(lines);
+    }
+}
+
 struct Feed {
     director: crate::control::directed::Director,
     input: std::path::PathBuf,
@@ -376,6 +393,19 @@ impl Feed {
             }
         }
         self.director.tick(agent, obs);
+        self.write_news(&mut lines);
+        lines
+    }
+
+    /// Between levels: what the director's been told of the screens, written out.
+    fn between(&mut self) -> Vec<String> {
+        let mut lines = Vec::new();
+        self.write_news(&mut lines);
+        lines
+    }
+
+    /// The reports since last time, added to `lines`, and `lines` written to the out file.
+    fn write_news(&mut self, lines: &mut Vec<String>) {
         for r in &self.director.reports[self.shown..] {
             lines.push(format!(
                 "<< [{:.1}s] {}{}{}",
@@ -389,12 +419,11 @@ impl Feed {
         if !lines.is_empty() {
             use std::io::Write;
             if let Ok(mut f) = std::fs::OpenOptions::new().append(true).open(&self.out) {
-                for l in &lines {
+                for l in lines.iter() {
                     let _ = writeln!(f, "{l}");
                 }
             }
         }
-        lines
     }
 }
 

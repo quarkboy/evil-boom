@@ -51,6 +51,36 @@ pub(super) struct Moments {
     /// her kit, as it stands (for the level's end, told after the last tic)
     kit: String,
     last_tic: i64,
+    /// the level's end told (it's told from wherever the level's left: once)
+    told_done: bool,
+}
+
+impl Director {
+    /// What the game's screen says, between levels (a finale's story, an episode's end): told
+    /// as it is, its lines run together.
+    pub fn on_screen(&mut self, text: &str) {
+        let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let tic = self.moments.last_tic;
+        self.reports.push(super::Report {
+            tic,
+            ok: true,
+            text: format!("On screen: \"{text}\""),
+            notable: true,
+            urgent: true,
+        });
+    }
+
+    /// The game over: no lives left.
+    pub fn game_over(&mut self) {
+        let tic = self.moments.last_tic;
+        self.reports.push(super::Report {
+            tic,
+            ok: true,
+            text: "Game over: no lives left.".into(),
+            notable: true,
+            urgent: true,
+        });
+    }
 }
 
 /// A skill as the game's menu has it.
@@ -239,10 +269,11 @@ impl Director {
     /// The level done (by its exit): told, with the time it took, the tally and what she
     /// leaves with. From the runner, before the next level's begun.
     pub fn level_done(&mut self) {
-        let m = &self.moments;
-        let Some(began) = m.began else {
+        let m = &mut self.moments;
+        let Some(began) = m.began.filter(|_| !m.told_done) else {
             return;
         };
+        m.told_done = true;
         let secs = (m.last_tic - began) / 35;
         let text = format!(
             "{} done in {}:{:02}: {}. You leave with: {}.",

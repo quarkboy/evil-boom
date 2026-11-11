@@ -154,26 +154,7 @@ impl Session {
             }
         }
         self.director.tick(agent, obs);
-        // (what's happened since: one message a tic, not silent if any of it's notable)
-        let news: Vec<_> = self.director.reports[self.shown..].to_vec();
-        self.shown = self.director.reports.len();
-        if !news.is_empty() {
-            let text: Vec<String> = news.iter().map(|r| r.text.clone()).collect();
-            while self.loud.front().is_some_and(|&t| obs.tic - t >= MINUTE) {
-                self.loud.pop_front();
-            }
-            // (a moment over the budget told quietly; one that's urgent, always)
-            let notable = news.iter().any(|r| r.notable && r.urgent)
-                || (news.iter().any(|r| r.notable) && self.loud.len() < MOMENTS_A_MINUTE);
-            if notable {
-                self.loud.push_back(obs.tic);
-            }
-            log.extend(
-                text.iter()
-                    .map(|t| format!("<< {}{t}", if notable { "(!) " } else { "" })),
-            );
-            self.link.context(&text.join("\n"), !notable);
-        }
+        self.tell_news(obs.tic, &mut log);
         let status = self.director.status(agent, obs);
         if status != self.told_status.1 && obs.tic - self.told_status.0 >= STATUS_EVERY {
             self.link.context(&status, true);
@@ -202,6 +183,38 @@ impl Session {
             self.forced = true;
             log.push("neuro: waiting on her: decision forced".into());
         }
+        log
+    }
+
+    /// What's happened since last told: one message, not silent if any of it's notable (and
+    /// the moments a minute not over).
+    fn tell_news(&mut self, tic: i64, log: &mut Vec<String>) {
+        let news: Vec<_> = self.director.reports[self.shown..].to_vec();
+        self.shown = self.director.reports.len();
+        if !news.is_empty() {
+            let text: Vec<String> = news.iter().map(|r| r.text.clone()).collect();
+            while self.loud.front().is_some_and(|&t| tic - t >= MINUTE) {
+                self.loud.pop_front();
+            }
+            // (a moment over the budget told quietly; one that's urgent, always)
+            let notable = news.iter().any(|r| r.notable && r.urgent)
+                || (news.iter().any(|r| r.notable) && self.loud.len() < MOMENTS_A_MINUTE);
+            if notable {
+                self.loud.push_back(tic);
+            }
+            log.extend(
+                text.iter()
+                    .map(|t| format!("<< {}{t}", if notable { "(!) " } else { "" })),
+            );
+            self.link.context(&text.join("\n"), !notable);
+        }
+    }
+
+    /// Between levels (the tally, a finale): what the director's been told of the screens,
+    /// passed on; the lines for the log. (Her actions wait for the next level.)
+    pub fn between(&mut self, tic: i64) -> Vec<String> {
+        let mut log = Vec::new();
+        self.tell_news(tic, &mut log);
         log
     }
 

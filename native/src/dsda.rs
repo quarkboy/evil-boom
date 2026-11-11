@@ -203,6 +203,8 @@ pub struct Dsda {
     screen_fn: Option<ScreenFn>,
     exit_fn: Option<PresentFn>,
     level_title_fn: Option<TitleFn>,
+    /// (none in a library from before it was added)
+    finale_text_fn: Option<TitleFn>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
     _argv: Vec<CString>,
     _argv_ptrs: Vec<*mut c_char>,
@@ -343,6 +345,9 @@ impl Dsda {
         let level_title_fn = sym(b"evil_level_title")
             .ok()
             .map(|p| unsafe { std::mem::transmute::<*const (), TitleFn>(p) });
+        let finale_text_fn = sym(b"evil_finale_text")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), TitleFn>(p) });
         let argv: Vec<CString> = std::iter::once("evil".to_string())
             .chain(args.iter().cloned())
             .map(CString::new)
@@ -386,6 +391,7 @@ impl Dsda {
             screen_fn,
             exit_fn,
             level_title_fn,
+            finale_text_fn,
             _argv: argv,
             _argv_ptrs: argv_ptrs,
             _lib: std::mem::ManuallyDrop::new(lib),
@@ -495,6 +501,21 @@ impl Dsda {
             .map(|&c| c as u8)
             .collect();
         Some(String::from_utf8_lossy(&bytes).into_owned()).filter(|t| !t.is_empty())
+    }
+
+    /// The finale's text while one shows it (an episode's end, Doom II's story between levels);
+    /// None without the call or with no finale up.
+    pub fn finale_text(&self) -> Option<String> {
+        let f = self.finale_text_fn?;
+        let mut buf = vec![0 as c_char; 4096];
+        // SAFETY: the buffer's size given; it writes at most that, ended; see `load`.
+        let n = unsafe { f(buf.as_mut_ptr(), buf.len() as c_int) };
+        let bytes: Vec<u8> = buf
+            .iter()
+            .take(usize::try_from(n).ok()?)
+            .map(|&c| c as u8)
+            .collect();
+        Some(String::from_utf8_lossy(&bytes).into_owned()).filter(|t| !t.trim().is_empty())
     }
 
     /// The screen as it stands; None without the call.

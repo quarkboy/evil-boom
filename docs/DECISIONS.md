@@ -2543,3 +2543,20 @@ For later stages: question deadlines 3 s (class T) and 8 s (class D), from her a
 250 ms on average and rarely 5 s; restart hers once she's made no progress for a while (90 s
 proposed); next level hers to give from the tally screen; no level choice; skill behind the
 console's switch; cheats held off; free-text style a plan of its own (a Jev-like model).
+
+## The screens between levels told to her (the user, 2026-11-11)
+
+In stream mode (`--present`, Doom's own screens) she heard nothing between levels, and the
+episode's last level got no end line (it was told only on the way into the next). Now: the
+level's end is told as the tally comes up (once: `level_done` is idempotent, and the next
+level's start doesn't tell it again); a finale's text is told as it comes up, as it reads
+("On screen: \"Once you beat the big badasses ...\""), Doom's episode endings and Doom II's
+stories between levels alike, from a new engine call (`evil_finale_text`); game over is
+told. Her link is passed what's told at once (`Session::between`): no level's tics run on
+those screens to pass it on. Her actions still wait for the next level (next level hers is
+stage 8). Headless runs have no screens: there, as before, a level's end is told going into
+the next.
+
+Checked: E1M8 in stream mode to Episode 1's end (its end line and its text). Doom II's
+stories go through the same finale screen; not seen in a test (MAP06 and MAP11 weren't left
+in the time given).

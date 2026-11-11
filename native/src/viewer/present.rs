@@ -96,6 +96,8 @@ pub(super) enum Stage {
         waiting_since: Option<i64>,
         pressed: Option<i64>,
         last: bool,
+        /// the finale's text told
+        told_text: bool,
     },
     /// the run's over (game over: the title card); the screen as it is till it's begun again
     Over,
@@ -252,7 +254,11 @@ fn tic(
                     waiting_since: None,
                     pressed: None,
                     last,
+                    told_text: false,
                 };
+                // (the level's end told now, with the tally on screen: the last level has no
+                // next one to tell it from)
+                watch.tell_screens(|d| d.level_done());
                 idle(&mut watch, false);
             } else {
                 // (a level again, asked for by a 100% run, as the window's loop gives it)
@@ -280,6 +286,7 @@ fn tic(
                 p.stage = Stage::Level;
             } else {
                 // (game over: the title card, till it's begun again)
+                watch.tell_screens(|d| d.game_over());
                 watch.engine.title();
                 p.stage = Stage::Over;
             }
@@ -287,8 +294,16 @@ fn tic(
         Stage::Between {
             waiting_since,
             pressed,
+            told_text,
             ..
         } => {
+            // (a finale's story: told her as it comes up)
+            if screen.state == 2 && !*told_text {
+                if let Some(text) = watch.engine.finale_text() {
+                    *told_text = true;
+                    watch.tell_screens(|d| d.on_screen(&text));
+                }
+            }
             if screen.held {
                 // (the game's moved on: the next level, started as an episode's is)
                 match game.filter(|(_, o)| o.episode) {
