@@ -56,10 +56,11 @@ impl RouteFollower {
                 continue;
             }
             if self
-                .jump_wait
+                .jump
+                .wait
                 .is_none_or(|(s, l, _)| (s, l) != (sector, live))
             {
-                if self.jump_wait.is_none_or(|(s, _, _)| s != sector) {
+                if self.jump.wait.is_none_or(|(s, _, _)| s != sector) {
                     self.log.add(
                         obs.tic,
                         format!(
@@ -69,7 +70,7 @@ impl RouteFollower {
                         ),
                     );
                 }
-                self.jump_wait = Some((sector, live, obs.tic));
+                self.jump.wait = Some((sector, live, obs.tic));
             }
             // still moving lately (a lift waits ~3s at the bottom before coming back)
             let still_for = if self.lift_sectors.contains(&sector) {
@@ -77,9 +78,9 @@ impl RouteFollower {
             } else {
                 35
             };
-            let since = self.jump_wait.map_or(obs.tic, |w| w.2);
+            let since = self.jump.wait.map_or(obs.tic, |w| w.2);
             if obs.tic - since < still_for {
-                self.lineup_tic = None;
+                self.jump.lineup_tic = None;
                 self.progress_tic = obs.tic;
                 let mut spot = jump.runup;
                 if let Some(here) = self.standing(obs).0 {
@@ -98,7 +99,7 @@ impl RouteFollower {
             }
             if live.is_none_or(|l| l.floor < h.floor - 0.5) {
                 // stopped lower than the jump needs: find another way with things as they are
-                self.jump_wait = None;
+                self.jump.wait = None;
                 if self.replan(
                     obs,
                     &format!(
@@ -132,7 +133,7 @@ impl RouteFollower {
         {
             settled = true;
         }
-        let lineup = *self.lineup_tic.get_or_insert(obs.tic);
+        let lineup = *self.jump.lineup_tic.get_or_insert(obs.tic);
         // (settling longer than a second: go anyway, if near enough on the spot; much longer:
         // from wherever)
         let near = dist(obs.pos(), jump.runup) < 6.0;
@@ -142,8 +143,8 @@ impl RouteFollower {
                 && self.motion.speed() < 0.5
                 && (near || obs.tic - lineup > 3 * 35))
         {
-            self.lineup_tic = None;
-            self.sprint = Some((jump.clone(), hd, obs.tic));
+            self.jump.lineup_tic = None;
+            self.jump.sprint = Some((jump.clone(), hd, obs.tic));
             self.log.add(
                 obs.tic,
                 format!(
@@ -175,9 +176,9 @@ impl RouteFollower {
             (Some(z), Some(s)) => z <= obs.heights[s].floor + 0.5,
             _ => true,
         };
-        if on_ground && here_sector.is_some_and(|s| !self.sinking.contains(&s)) {
-            self.run = None;
-            self.run_for = None;
+        if on_ground && here_sector.is_some_and(|s| !self.jump.sinking.contains(&s)) {
+            self.jump.run = None;
+            self.jump.run_for = None;
             self.log.add(
                 obs.tic,
                 format!(
@@ -195,18 +196,18 @@ impl RouteFollower {
                 "ran off a floor going down: what she was going for is for choosing again",
             );
         }
-        let Some(run) = self.run else {
+        let Some(run) = self.jump.run else {
             return self.walk(obs);
         };
         // (the way to the nearest floor that stays put, along the floors she can still step
         // onto, steered along every tic: a winding way of them is followed round its bends)
         if let (true, Some(sector)) = (on_ground, here_sector) {
             if let Some((h, target)) = self.run_path(obs) {
-                if self.run_for != Some(target) {
+                if self.jump.run_for != Some(target) {
                     self.log.add(obs.tic, format!("running off sector {sector} for sector {target}, the nearest floor that stays put"));
-                    self.run_for = Some(target);
+                    self.jump.run_for = Some(target);
                 }
-                self.run = Some(Run {
+                self.jump.run = Some(Run {
                     heading: h,
                     sector: Some(sector),
                     next: obs.tic + RUN_REAIM,
@@ -225,7 +226,7 @@ impl RouteFollower {
             let keep = run.sector.map(|_| run.heading);
             match self.run_heading(obs, sector, keep) {
                 None => {
-                    self.run = None;
+                    self.jump.run = None;
                     self.log
                         .add(obs.tic, "no heading off the sinking floor lands anywhere");
                     if !self.replan(obs, "sinking floor", true) {
@@ -234,10 +235,14 @@ impl RouteFollower {
                     return self.walk(obs);
                 }
                 Some((h, why, land)) => {
-                    if self.run.is_none_or(|r| norm(r.heading - h).abs() > 20.0) {
+                    if self
+                        .jump
+                        .run
+                        .is_none_or(|r| norm(r.heading - h).abs() > 20.0)
+                    {
                         self.log.add(obs.tic, format!("running at {h:.0} degrees off sector {sector}, for sector {land} ({why})"));
                     }
-                    self.run = Some(Run {
+                    self.jump.run = Some(Run {
                         heading: h,
                         sector: Some(sector),
                         next: obs.tic + RUN_REAIM,
@@ -246,7 +251,7 @@ impl RouteFollower {
             }
         }
         self.motion.rate = 0.0;
-        run_controls(obs.angle, self.run.map_or(obs.angle, |r| r.heading))
+        run_controls(obs.angle, self.jump.run.map_or(obs.angle, |r| r.heading))
     }
 
     /// The heading along the shortest way (string-pulled through the navmesh) to the nearest
@@ -264,7 +269,7 @@ impl RouteFollower {
                 |l| (l.floor, l.ceiling),
             )
         };
-        let solid = |s: usize| nav.damage[s] == 0 && !self.sinking.contains(&s);
+        let solid = |s: usize| nav.damage[s] == 0 && !self.jump.sinking.contains(&s);
         let n = mesh.polys.len();
         let mut cost = vec![f64::INFINITY; n];
         let mut entry = vec![obs.pos(); n];
@@ -338,7 +343,7 @@ impl RouteFollower {
         let goal = found
             .iter()
             .copied()
-            .find(|&g| Some(mesh.poly(g).sector) == self.run_for)
+            .find(|&g| Some(mesh.poly(g).sector) == self.jump.run_for)
             .or_else(|| {
                 found
                     .iter()
@@ -398,7 +403,7 @@ impl RouteFollower {
         // (one not yet going down holds a while once she's on it; one going down already is
         // lower every tic)
         let moving = |s: usize| heights[s].0 < nav.movers.initial[s].floor - 0.5;
-        let solid = |s: usize| nav.damage[s] == 0 && !self.sinking.contains(&s);
+        let solid = |s: usize| nav.damage[s] == 0 && !self.jump.sinking.contains(&s);
         // (footing that holds: solid ground, and a sinking floor not going down yet, which goes
         // only once she's on it: a path of them is ground till she's along it, the far bank
         // maybe further than a floor sinks in the time to run there)
@@ -473,7 +478,7 @@ impl RouteFollower {
 
     /// A run-jump done: once she's on a floor again, did it come down on its landing?
     pub(super) fn judge_landing(&mut self, obs: &Observation) {
-        let Some((jump, tic)) = self.touchdown.clone() else {
+        let Some((jump, tic)) = self.jump.touchdown.clone() else {
             return;
         };
         let nav = &self.view.nav;
@@ -484,11 +489,11 @@ impl RouteFollower {
         };
         if !on_floor {
             if obs.tic - tic > 2 * 35 {
-                self.touchdown = None; // (still falling, or off the map: no telling)
+                self.jump.touchdown = None; // (still falling, or off the map: no telling)
             }
             return;
         }
-        self.touchdown = None;
+        self.jump.touchdown = None;
         let want = nav.sector_of_poly(jump.dest_poly);
         let got = here.map_or(0, |h| nav.sector_of_poly(h));
         if got != want {
@@ -507,7 +512,7 @@ impl RouteFollower {
     /// (then coast: it lands slower, for narrow strips), else through the flight. Touching down
     /// on the landing's sector, stop sprinting so the landing is braked at once.
     pub(super) fn sprint_jump(&mut self, obs: &Observation) -> Controls {
-        let Some((jump, hd, since)) = self.sprint.clone() else {
+        let Some((jump, hd, since)) = self.jump.sprint.clone() else {
             return self.walk(obs);
         };
         let nav = Rc::clone(&self.view);
@@ -525,9 +530,9 @@ impl RouteFollower {
                         .is_some_and(|z| (z - obs.heights[s].floor).abs() < 1.0)
             });
         if landed || flown >= dist(jump.takeoff, jump.dest) - 8.0 || obs.tic - since > 4 * 35 {
-            self.sprint = None;
-            self.sprints_short = 0;
-            self.touchdown = Some((jump.clone(), obs.tic));
+            self.jump.sprint = None;
+            self.jump.sprints_short = 0;
+            self.jump.touchdown = Some((jump.clone(), obs.tic));
             let land = here.map(|h| nav.nav.sector_of_poly(h));
             self.log.add(
                 obs.tic,
@@ -541,11 +546,11 @@ impl RouteFollower {
             self.seg_i = (self.seg_i + 1).min(self.segments.len() - 1);
             self.enter_segment(obs.tic);
             self.look = Some(hd);
-            if let Some(s) = land.filter(|s| self.sinking.contains(s)) {
+            if let Some(s) = land.filter(|s| self.jump.sinking.contains(s)) {
                 // going down under her: no settling, run on across
                 self.log
                     .add(obs.tic, format!("sector {s} sinking: running on"));
-                self.run = Some(Run {
+                self.jump.run = Some(Run {
                     heading: hd,
                     sector: None,
                     next: obs.tic,
@@ -554,7 +559,7 @@ impl RouteFollower {
             }
             self.path_on(obs);
             // (landing spots can be small: shed the sprint's speed before going on)
-            self.brake_until = obs.tic + 2 * 35;
+            self.jump.brake_until = obs.tic + 2 * 35;
             return self.walk(obs);
         }
         // stopped a quarter second into the sprint with a monster's body against her on the way
@@ -572,7 +577,7 @@ impl RouteFollower {
                 && norm(heading(pos, (t.x, t.y)) - to).abs() < 90.0
         });
         if obs.tic - since > 8 && self.motion.speed() < 2.0 && body_ahead {
-            self.sprint = None;
+            self.jump.sprint = None;
             return self.fail(obs, "run-jump blocked by a monster");
         }
         // (short of the takeoff and well short of the speed the jump was checked with by here:
@@ -584,15 +589,15 @@ impl RouteFollower {
                 .map_or(self.motion.speed(), |v| v.0 * ux + v.1 * uy);
             let due = sprint_pace(dist(jump.runup, jump.takeoff), jump.speed, -flown);
             if along < SPRINT_SHORT * due {
-                self.sprint = None;
-                self.lineup_tic = None;
-                self.sprints_short += 1;
-                if self.sprints_short >= SPRINTS_SHORT {
-                    self.sprints_short = 0;
+                self.jump.sprint = None;
+                self.jump.lineup_tic = None;
+                self.jump.sprints_short += 1;
+                if self.jump.sprints_short >= SPRINTS_SHORT {
+                    self.jump.sprints_short = 0;
                     return self.fail(obs, "run-jump knocked short of its speed, time after time");
                 }
                 self.log.add(obs.tic, format!("too slow for the jump ({along:.1} a tic for {due:.1}, {:.0} short of the edge): lining up again", -flown));
-                self.brake_until = obs.tic + 35;
+                self.jump.brake_until = obs.tic + 35;
                 return self.motion.hold(obs, (0.0, 0.0), None);
             }
         }

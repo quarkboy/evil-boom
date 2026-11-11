@@ -339,9 +339,9 @@ impl RouteFollower {
             // how far to the door, along the path where it goes round corners
             let along = self.segments[self.seg_i]
                 .track
-                .project(door_point, self.s, DOOR_CHECK_DIST + 64.0)
+                .project(door_point, self.at.along, DOOR_CHECK_DIST + 64.0)
                 .1
-                - self.s;
+                - self.at.along;
             let d = dist(pos, door_point).max(along);
             let here = nav.mesh.poly_at(pos);
             // (use reaches 64: close enough to press, whatever the door's user polys say)
@@ -1025,7 +1025,7 @@ impl RouteFollower {
             let busy: Vec<usize> = cands
                 .into_iter()
                 .filter(|&x| {
-                    let Some(&m) = self.moved_at.get(&x) else {
+                    let Some(&m) = self.crusher.moved_at.get(&x) else {
                         return false;
                     };
                     obs.tic - m < BUSY_TICS

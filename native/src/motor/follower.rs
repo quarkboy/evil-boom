@@ -12,6 +12,7 @@ pub use hazards::nearest_heading;
 mod interactions;
 mod jumping;
 pub mod lanes;
+mod state;
 mod walking;
 
 use super::{heading, norm, Controls, Motion, Observation, Track, FULL_SPEED, RUN_TURN, TICRATE};
@@ -21,6 +22,7 @@ use crate::nav::{Doors, Heights};
 use crate::navigator::{Jump, Path, PathNote, States, View, MAX_STEP, PLAYER_RADIUS};
 use crate::specials::{Key, Keys};
 use crate::walkthrough::{plan_from, steps_from_legs, Action, Expect, Rest, Step};
+use state::{BarrelShot, Crushers, Jumping, LitChain, OnTrack, Unstick, Weave};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
@@ -278,12 +280,8 @@ pub struct RouteFollower {
     pub mortal: bool,
     /// a run out of a field of barrels: no stopping for them (none shot, no waiting on a chain)
     pub barrel_run: bool,
-    /// the barrels as last seen (her steering keeps its line clear of them)
-    run_barrels: Vec<Point>,
-    /// a way round barrels standing in her track: the points to go by, the next first
-    detour: Vec<Point>,
-    /// when a way round was last looked for and not found
-    detour_tic: i64,
+    /// steering between the barrels she sees, which the mesh's way knows nothing of
+    weave: Weave,
     /// run-jumps that came down off their landing (for the explorer)
     pub missed: Vec<Jump>,
     /// (where, line) pressed from there to no effect (for the explorer)
@@ -295,51 +293,15 @@ pub struct RouteFollower {
     cross_wait_logged: bool,
     goal_tic: i64,
     last_pos: Option<Point>,
-    /// (jump, heading, start tic) while sprinting
-    sprint: Option<(Jump, f64, i64)>,
-    /// sprints called off for want of speed, one after another
-    sprints_short: u32,
-    /// (jump, tic) a run-jump done: where does it come down?
-    touchdown: Option<(Jump, i64)>,
+    /// a run-jump or a run over sinking floors in hand
+    jump: Jumping,
     rest_logged: i64,
     rest_tic: i64,
     seen_heights: Vec<Heights>,
-    moved_at: BTreeMap<usize, i64>,
-    run: Option<Run>,
-    /// (where, since tic) a barrel in the way being shot
-    barrel: Option<(Point, i64)>,
-    /// (mortal) where to shoot it from: back along the way she came, outside every blast
-    barrel_post: Option<Point>,
-    /// shot: running off till this tic, this way
-    barrel_flee: Option<i64>,
-    /// ...along this way (the next first)
-    barrel_flee_way: Vec<Point>,
-    /// (mortal) the barrel's shot from somewhere out of every blast of its chain: she stays
-    /// there till it's over, no running off
-    barrel_stay: bool,
-    /// the step whose barrel (`Step::barrel`) she's taken on already
-    barrel_step: Option<i64>,
-    /// shot and gone: how many barrels there were, and since when (the chain going off: not back
-    /// till none has gone for a while)
-    barrel_settle: Option<(usize, i64)>,
-    /// kept off a chain of barrels going off that she didn't set off (logged once a wait)
-    chain_wait: bool,
-    /// in a chain's blasts: the way out of them she's running (the next first), chosen when
-    chain_flee: Vec<Point>,
-    chain_flee_tic: i64,
-    /// ...and the way there (its waypoints, the next first)
-    barrel_way: Vec<Point>,
-    /// ...and the nearest she's got to it, and when
-    barrel_best: Option<(f64, i64)>,
-    /// the tic of the last shot at it
-    barrel_shot: i64,
-    sinking: BTreeSet<usize>,
-    /// the floor that stays put a run over sinking floors is making for (logged when it changes)
-    run_for: Option<usize>,
-    lineup_tic: Option<i64>,
-    brake_until: i64,
-    /// (sector, live heights, since)
-    jump_wait: Option<(usize, Option<Heights>, i64)>,
+    /// a barrel in the way being shot: where from, the way there, the run off after
+    shot: BarrelShot,
+    /// a chain of barrels going off that she didn't set off: kept off it, or run out of it
+    chain: LitChain,
     reopening: bool,
     watches: Vec<Watch>,
     settle: Vec<Expect>,
@@ -355,8 +317,6 @@ pub struct RouteFollower {
     before: Option<Vec<(usize, Option<Heights>)>>,
     cross_tic: Option<i64>,
     height_wait: Option<i64>,
-    /// since when the box has been under a ceiling too low for her
-    pinned_since: Option<i64>,
     /// the floor under her last tic, waiting to shoot (still moving?)
     shot_floor: Option<f64>,
     segments: Vec<Segment>,
@@ -366,15 +326,11 @@ pub struct RouteFollower {
     path_polys: BTreeSet<usize>,
     crossing_lines: BTreeSet<usize>,
     off_since: Option<i64>,
-    unsticks: i32,
-    unstick_until: i64,
-    unstick_dir: f64,
-    // the segment
-    k: usize,
-    s: f64,
-    cross: f64,
+    /// backing off from where she got nowhere
+    unstick: Unstick,
+    /// where she is on the segment's track
+    at: OnTrack,
     settle_until: i64,
-    best_s: f64,
     progress_tic: i64,
     wait_tic: Option<i64>,
     action_tic: Option<i64>,
@@ -387,15 +343,8 @@ pub struct RouteFollower {
     live: Vec<Heights>,
     /// the heights the tic before (which way a ceiling's going)
     prev_live: Vec<Heights>,
-    /// (mortal) waiting at the edge of a crusher for it to come up, logged
-    crusher_wait: Option<usize>,
-    /// (mortal) a crusher's crossing timed and begun: its sector, and since when
-    crusher_cross: Option<(usize, i64)>,
-    /// (mortal) setting off a stopped crusher from its edge, to cross it when it comes up: its
-    /// sector, since when, and the spot just over its line she steps to
-    crusher_kick: Option<(usize, i64, Point)>,
-    /// sector -> how fast its ceiling was last seen moving (units a tic)
-    ceiling_pace: BTreeMap<usize, f64>,
+    /// ceilings coming down: what she's seen of them, and the wait or the crossing in hand
+    crusher: Crushers,
     /// when the heights were last looked at (the fight may have had her between)
     seen_tic: Option<i64>,
 }
@@ -438,9 +387,11 @@ impl RouteFollower {
             fired: BTreeSet::new(),
             mortal: false,
             barrel_run: false,
-            run_barrels: Vec::new(),
-            detour: Vec::new(),
-            detour_tic: -1000,
+            weave: Weave {
+                barrels: Vec::new(),
+                detour: Vec::new(),
+                detour_tic: -1000,
+            },
             missed: Vec::new(),
             failed_presses: Vec::new(),
             drops_ok: BTreeSet::new(),
@@ -450,32 +401,37 @@ impl RouteFollower {
             cross_wait_logged: false,
             goal_tic: 0,
             last_pos: None,
-            sprint: None,
-            sprints_short: 0,
-            touchdown: None,
+            jump: Jumping {
+                sprint: None,
+                sprints_short: 0,
+                touchdown: None,
+                run: None,
+                run_for: None,
+                lineup_tic: None,
+                brake_until: -1,
+                wait: None,
+                sinking,
+            },
             rest_logged: -1,
             rest_tic: 0,
             seen_heights: Vec::new(),
-            moved_at: BTreeMap::new(),
-            run: None,
-            barrel: None,
-            barrel_post: None,
-            barrel_flee: None,
-            barrel_flee_way: Vec::new(),
-            barrel_stay: false,
-            barrel_step: None,
-            barrel_settle: None,
-            chain_wait: false,
-            chain_flee: Vec::new(),
-            chain_flee_tic: -1000,
-            barrel_way: Vec::new(),
-            barrel_best: None,
-            barrel_shot: -1_000_000_000,
-            sinking,
-            run_for: None,
-            lineup_tic: None,
-            brake_until: -1,
-            jump_wait: None,
+            shot: BarrelShot {
+                target: None,
+                post: None,
+                way: Vec::new(),
+                best: None,
+                last_shot: -1_000_000_000,
+                flee_until: None,
+                flee_way: Vec::new(),
+                stay: false,
+                step: None,
+                settle: None,
+            },
+            chain: LitChain {
+                waiting: false,
+                flee: Vec::new(),
+                flee_tic: -1000,
+            },
             reopening: false,
             watches: Vec::new(),
             settle: Vec::new(),
@@ -490,7 +446,6 @@ impl RouteFollower {
             before: None,
             cross_tic: None,
             height_wait: None,
-            pinned_since: None,
             shot_floor: None,
             segments: Vec::new(),
             seg_i: 0,
@@ -499,14 +454,18 @@ impl RouteFollower {
             path_polys: BTreeSet::new(),
             crossing_lines: BTreeSet::new(),
             off_since: None,
-            unsticks: 0,
-            unstick_until: -1,
-            unstick_dir: 0.0,
-            k: 0,
-            s: 0.0,
-            cross: 0.0,
+            unstick: Unstick {
+                count: 0,
+                until: -1,
+                dir: 0.0,
+            },
+            at: OnTrack {
+                index: 0,
+                along: 0.0,
+                off: 0.0,
+                furthest: f64::NEG_INFINITY,
+            },
             settle_until: 0,
-            best_s: f64::NEG_INFINITY,
             progress_tic: 0,
             wait_tic: None,
             action_tic: None,
@@ -517,10 +476,14 @@ impl RouteFollower {
             speed_cap: f64::INFINITY,
             live: Vec::new(),
             prev_live: Vec::new(),
-            crusher_wait: None,
-            crusher_cross: None,
-            crusher_kick: None,
-            ceiling_pace: BTreeMap::new(),
+            crusher: Crushers {
+                wait: None,
+                cross: None,
+                kick: None,
+                ceiling_pace: BTreeMap::new(),
+                moved_at: BTreeMap::new(),
+                pinned_since: None,
+            },
             seen_tic: None,
         };
         f.next_step(tic);
@@ -543,31 +506,31 @@ impl RouteFollower {
     /// A crusher's crossing timed and begun, or one being set off from its edge: the route's to
     /// finish, not to be stopped part way.
     pub fn crossing_crusher(&self) -> bool {
-        self.crusher_cross.is_some() || self.crusher_kick.is_some()
+        self.crusher.cross.is_some() || self.crusher.kick.is_some()
     }
 
     pub fn in_jump(&self) -> bool {
-        self.sprint.is_some() || self.run.is_some() || self.lineup_tic.is_some()
+        self.jump.sprint.is_some() || self.jump.run.is_some() || self.jump.lineup_tic.is_some()
     }
 
     /// Off on a jump: sprinting for the takeoff or running over sinking floors. Not lining up at
     /// the run-up: standing there is no jump yet, and the fight has the legs (else she stands
     /// still at the run-up with a monster at her).
     pub fn jumping(&self) -> bool {
-        self.sprint.is_some() || self.run.is_some()
+        self.jump.sprint.is_some() || self.jump.run.is_some()
     }
 
     /// Running over (or off) floors going down under her: done only on a floor that stays put.
     pub fn running_off(&self) -> bool {
-        self.run.is_some()
+        self.jump.run.is_some()
     }
 
     /// Shooting something with the gun it picks for that (a barrel in the way, its blasts
     /// waited out; a switch to shoot): the gun's the route's for now.
     pub fn shooting(&self) -> bool {
-        self.barrel.is_some()
-            || self.barrel_flee.is_some()
-            || self.barrel_settle.is_some()
+        self.shot.target.is_some()
+            || self.shot.flee_until.is_some()
+            || self.shot.settle.is_some()
             || usize::try_from(self.step_i)
                 .ok()
                 .and_then(|i| self.steps.get(i))
@@ -635,7 +598,7 @@ impl RouteFollower {
         for i in self.seg_i..self.segments.len() {
             let pts = &self.segments[i].track.pts;
             let from = if i == self.seg_i {
-                (self.k + 1).min(pts.len())
+                (self.at.index + 1).min(pts.len())
             } else {
                 0
             };
@@ -776,15 +739,15 @@ impl RouteFollower {
             })
             .collect();
         self.off_since = None;
-        self.unsticks = 0;
-        self.unstick_until = -1;
+        self.unstick.count = 0;
+        self.unstick.until = -1;
         self.enter_segment(tic);
     }
 
     fn enter_segment(&mut self, tic: i64) {
-        self.k = 0;
-        self.s = 0.0;
-        self.cross = 0.0;
+        self.at.index = 0;
+        self.at.along = 0.0;
+        self.at.off = 0.0;
         self.settle_until = tic + OFF_COURSE_TICS;
         self.reset_progress(tic);
     }
@@ -900,11 +863,11 @@ impl RouteFollower {
     pub fn resume(&mut self, tic: i64) {
         self.reset_progress(tic);
         // (a line-up broken off starts again: its clock would send her off from wherever)
-        self.lineup_tic = None;
+        self.jump.lineup_tic = None;
     }
 
     fn reset_progress(&mut self, tic: i64) {
-        self.best_s = f64::NEG_INFINITY;
+        self.at.furthest = f64::NEG_INFINITY;
         self.progress_tic = tic;
         self.wait_tic = None;
         self.action_tic = None;
@@ -949,10 +912,10 @@ impl RouteFollower {
         self.seen_tic = Some(obs.tic);
         for (sec, &h) in obs.heights.iter().enumerate() {
             if self.seen_heights[sec] != h {
-                self.moved_at.insert(sec, obs.tic);
+                self.crusher.moved_at.insert(sec, obs.tic);
                 let moved = (h.ceiling - self.seen_heights[sec].ceiling).abs();
                 if moved > 0.01 {
-                    self.ceiling_pace.insert(sec, moved / since);
+                    self.crusher.ceiling_pace.insert(sec, moved / since);
                 }
             }
             self.seen_heights[sec] = h;
@@ -1090,13 +1053,13 @@ impl RouteFollower {
         }
         let mesh = &self.view.nav.mesh;
         let here = self.standing(obs).0;
-        let mut off = self.cross > OFF_COURSE;
+        let mut off = self.at.off > OFF_COURSE;
         if !off && here.is_none_or(|h| !self.path_polys.contains(&h)) {
-            if self.cross > STRAY {
+            if self.at.off > STRAY {
                 off = true;
             } else {
                 // beside the path, but somewhere she can't step back up from
-                let q = mesh.poly_at(self.segments[self.seg_i].track.point_at(self.s));
+                let q = mesh.poly_at(self.segments[self.seg_i].track.point_at(self.at.along));
                 if let (Some(h), Some(q)) = (here, q) {
                     let (hs, qs) = (mesh.poly(h).sector, mesh.poly(q).sector);
                     if hs != qs && obs.heights[hs].floor < obs.heights[qs].floor - MAX_STEP {
@@ -1242,7 +1205,7 @@ impl RouteFollower {
                 return false;
             }
         }
-        self.sprint = None;
+        self.jump.sprint = None;
         self.start_step(obs.tic);
         true
     }

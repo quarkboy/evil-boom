@@ -71,19 +71,19 @@ const UNSTICKS_BEFORE_REPLAN: i32 = 2;
 
 impl RouteFollower {
     pub(super) fn walk(&mut self, obs: &Observation) -> Controls {
-        if self.sprint.is_some() {
+        if self.jump.sprint.is_some() {
             return self.sprint_jump(obs);
         }
-        if self.run.is_some() {
+        if self.jump.run.is_some() {
             return self.run_step(obs);
         }
-        if self.barrel.is_some() {
+        if self.shot.target.is_some() {
             return self.shoot_barrel(obs);
         }
         {
             // (but for one she's against already: the way leads off from it)
             let pos = obs.pos();
-            self.run_barrels = obs
+            self.weave.barrels = obs
                 .barrels
                 .iter()
                 .flatten()
@@ -104,15 +104,15 @@ impl RouteFollower {
         if let Some(b) = self
             .step()
             .barrel
-            .filter(|_| self.barrel_step != Some(self.step_i))
+            .filter(|_| self.shot.step != Some(self.step_i))
             .and_then(|b| super::barrel_now(obs, b))
         {
-            self.barrel_step = Some(self.step_i);
+            self.shot.step = Some(self.step_i);
             self.log.add(
                 obs.tic,
                 format!("clearing the barrel at ({:.0}, {:.0})", b.0, b.1),
             );
-            self.barrel = Some((b, obs.tic));
+            self.shot.target = Some((b, obs.tic));
             return self.shoot_barrel(obs);
         }
         let nav = Rc::clone(&self.view);
@@ -150,13 +150,13 @@ impl RouteFollower {
             };
             if on_floor
                 && going_down
-                && self.sinking.contains(&s)
+                && self.jump.sinking.contains(&s)
                 && !expected
                 && into_harm()
                 && self.run_path(obs).is_some()
             {
                 self.log.add(obs.tic, format!("sector {s} going down under her: running for the nearest floor that stays put"));
-                self.run = Some(Run {
+                self.jump.run = Some(Run {
                     heading: obs.angle,
                     sector: None,
                     next: obs.tic,
@@ -191,18 +191,18 @@ impl RouteFollower {
                 self.cross_ready = true;
             }
         }
-        if obs.tic < self.brake_until {
+        if obs.tic < self.jump.brake_until {
             if self.motion.speed() > 1.0 {
                 // just landed a jump: stop first
                 self.progress_tic = obs.tic;
                 return self.motion.hold(obs, (0.0, 0.0), self.look);
             }
-            self.brake_until = -1;
+            self.jump.brake_until = -1;
         }
         let seg = self.segments[self.seg_i].clone();
         let track = &seg.track;
         let pos = obs.pos();
-        (self.k, self.s, self.cross) = track.project(pos, self.s, 64.0);
+        (self.at.index, self.at.along, self.at.off) = track.project(pos, self.at.along, 64.0);
         if self.lost(obs) {
             if !self.replan(obs, "off course", false) {
                 return self.fail(obs, "off course and no way back");
@@ -227,7 +227,7 @@ impl RouteFollower {
         let last = self.seg_i == self.segments.len() - 1;
         let stop = seg.end == SegEnd::Jump || (last && stops(step.action));
         // near the end only counts once she's come along the track (paths double back)
-        let to_end = if track.length - self.s < 48.0 {
+        let to_end = if track.length - self.at.along < 48.0 {
             dist(pos, end)
         } else {
             f64::INFINITY
@@ -262,14 +262,14 @@ impl RouteFollower {
             return self.act_at_goal(obs);
         }
         // progress, and getting unstuck
-        if self.s > self.best_s + 2.0 {
-            if self.best_s != f64::NEG_INFINITY {
-                self.unsticks = 0; // (got past whatever snagged her)
+        if self.at.along > self.at.furthest + 2.0 {
+            if self.at.furthest != f64::NEG_INFINITY {
+                self.unstick.count = 0; // (got past whatever snagged her)
             }
-            self.best_s = self.s;
+            self.at.furthest = self.at.along;
             self.progress_tic = obs.tic;
         }
-        if obs.tic < self.unstick_until {
+        if obs.tic < self.unstick.until {
             return self.unstick(obs);
         }
         let trig_line = step.trigger.as_ref().and_then(|t| t.linedef());
@@ -288,7 +288,7 @@ impl RouteFollower {
             return c;
         }
         if obs.tic - self.progress_tic > STUCK_TICS {
-            self.unsticks += 1;
+            self.unstick.count += 1;
             // (on a floor that hurts, a new way at once, no backing off first: each try costs her
             // health, and the way the plan saw may have gone with a floor that moved under her,
             // a ledge lowered by the line she crossed)
@@ -300,7 +300,7 @@ impl RouteFollower {
                         .is_some_and(|&d| d != 0)
                 })
             };
-            if self.unsticks > UNSTICKS_BEFORE_REPLAN || burning {
+            if self.unstick.count > UNSTICKS_BEFORE_REPLAN || burning {
                 // (with the heights as they are: the way the plan saw may be shut now, a timed door
                 // closed, and the same path again is stuck again)
                 if !self.replan(obs, "stuck", true) {
@@ -321,16 +321,16 @@ impl RouteFollower {
                     obs.tic,
                     format!("barrel in the way at ({:.0}, {:.0}): shooting it", b.0, b.1),
                 );
-                self.barrel = Some((b, obs.tic));
+                self.shot.target = Some((b, obs.tic));
                 return self.shoot_barrel(obs);
             }
             self.log.add(
                 obs.tic,
                 format!("stuck at ({:.0}, {:.0}), backing off", obs.x, obs.y),
             );
-            self.unstick_until = obs.tic + UNSTICK_TICS;
+            self.unstick.until = obs.tic + UNSTICK_TICS;
             self.progress_tic = obs.tic + UNSTICK_TICS;
-            self.unstick_dir = self.away_from_walls(obs);
+            self.unstick.dir = self.away_from_walls(obs);
             return self.unstick(obs);
         }
         // follow the track: steer for a point a little ahead, look further ahead
@@ -341,7 +341,7 @@ impl RouteFollower {
         // (barrels standing in the track: by a lane between them to where it's clear again)
         let on: Vec<Point> = [192.0, 320.0, 512.0, 96.0, 768.0]
             .into_iter()
-            .map(|d| track.point_at((self.s + d).min(track.length)))
+            .map(|d| track.point_at((self.at.along + d).min(track.length)))
             .collect();
         carrot = self.lane_carrot(obs, carrot, &on);
         let end_speed = if stop {
@@ -353,7 +353,7 @@ impl RouteFollower {
         };
         // what's left of the track: off its end, as far as the end really is (braked to a stop
         // past the end, she isn't there)
-        let rest = (track.length - self.s).max(dist(pos, end));
+        let rest = (track.length - self.at.along).max(dist(pos, end));
         let mut speed = FULL_SPEED
             .min(track.speed_limit(track.length - rest, end_speed))
             .min(self.speed_cap);
@@ -401,19 +401,24 @@ impl RouteFollower {
     fn lane_carrot(&mut self, obs: &Observation, carrot: Point, on: &[Point]) -> Point {
         use super::lanes::{chord_clear_of, clear_of, lane};
         let pos = obs.pos();
-        while self.detour.first().is_some_and(|&q| dist(pos, q) < 12.0) {
-            self.detour.remove(0);
+        while self
+            .weave
+            .detour
+            .first()
+            .is_some_and(|&q| dist(pos, q) < 12.0)
+        {
+            self.weave.detour.remove(0);
         }
-        if let Some(&q) = self.detour.first() {
-            if chord_clear_of(&self.run_barrels, pos, q) {
+        if let Some(&q) = self.weave.detour.first() {
+            if chord_clear_of(&self.weave.barrels, pos, q) {
                 return q;
             }
-            self.detour.clear(); // (one she hadn't seen, in the lane: again)
+            self.weave.detour.clear(); // (one she hadn't seen, in the lane: again)
         }
-        if chord_clear_of(&self.run_barrels, pos, carrot) {
+        if chord_clear_of(&self.weave.barrels, pos, carrot) {
             return carrot;
         }
-        if obs.tic - self.detour_tic >= 8 {
+        if obs.tic - self.weave.detour_tic >= 8 {
             let nav = &self.view.nav;
             let floor = |p: Point| {
                 let at = |q: Point| {
@@ -435,14 +440,14 @@ impl RouteFollower {
             let found = on
                 .iter()
                 .copied()
-                .filter(|&q| dist(q, pos) > 32.0 && clear_of(&self.run_barrels, q))
-                .find_map(|q| lane(pos, q, &[pos, q], &self.run_barrels, &floor, MAX_STEP));
+                .filter(|&q| dist(q, pos) > 32.0 && clear_of(&self.weave.barrels, q))
+                .find_map(|q| lane(pos, q, &[pos, q], &self.weave.barrels, &floor, MAX_STEP));
             match found {
                 Some(way) if !way.is_empty() => {
-                    self.detour = way;
-                    return self.detour[0];
+                    self.weave.detour = way;
+                    return self.weave.detour[0];
                 }
-                _ => self.detour_tic = obs.tic,
+                _ => self.weave.detour_tic = obs.tic,
             }
         }
         self.round_barrel(obs, carrot)
@@ -526,12 +531,12 @@ impl RouteFollower {
         let drops = nav.drop_lines();
         let mut steps_down: Vec<f64> = Vec::new();
         let mut prev: Option<f64> = None;
-        let ahead = CAUTION_AHEAD.min(track.length - self.s);
+        let ahead = CAUTION_AHEAD.min(track.length - self.at.along);
         let n = ((ahead / 16.0).floor() as i64).max(1);
         for i in 0..=n {
             let f = ahead * i as f64 / n as f64;
-            let q = track.point_at(self.s + f);
-            let t = track.point_at(self.s + f + 1.0);
+            let q = track.point_at(self.at.along + f);
+            let t = track.point_at(self.at.along + f + 1.0);
             let (dx, dy) = (t.0 - q.0, t.1 - q.1);
             let Some(poly) = mesh.poly_at(q) else {
                 continue;
@@ -636,21 +641,21 @@ impl RouteFollower {
     /// box clear (corners rounded where there's room), else the next waypoint exactly.
     fn carrot(&self, pos: Point, track: &Track) -> Point {
         for ahead in CARROT_STEPS {
-            let q = track.point_at(self.s + ahead);
+            let q = track.point_at(self.at.along + ahead);
             // (a path that doubles back can put a point far along it right next to her)
-            let along = ahead.min(track.length - self.s);
+            let along = ahead.min(track.length - self.at.along);
             if dist(pos, q) < 0.6 * along {
                 continue;
             }
             // (no corner cut into a barrel)
             if dist(pos, q) < 1.0
                 || (self.chord_clear(pos, q)
-                    && super::lanes::chord_clear_of(&self.run_barrels, pos, q))
+                    && super::lanes::chord_clear_of(&self.weave.barrels, pos, q))
             {
                 return q;
             }
         }
-        track.carrot(self.k, self.s, TRACK_AHEAD)
+        track.carrot(self.at.index, self.at.along, TRACK_AHEAD)
     }
 
     /// Can the box move straight from p to q without touching a wall, solid thing or
@@ -696,9 +701,9 @@ impl RouteFollower {
     fn look_angle(&mut self, obs: &Observation, seg: &Segment) -> f64 {
         let look = &seg.look;
         let s = if look.length > seg.track.length {
-            look.project(obs.pos(), self.s, 64.0).1
+            look.project(obs.pos(), self.at.along, 64.0).1
         } else {
-            self.s
+            self.at.along
         };
         let point = look.point_at(s + LOOK_AHEAD);
         if dist(obs.pos(), point) >= 40.0 || self.look.is_none() {
@@ -731,7 +736,7 @@ impl RouteFollower {
             }
         }
         let track = &self.segments[self.seg_i].track;
-        let back = heading(track.point_at(self.s + TRACK_AHEAD), pos);
+        let back = heading(track.point_at(self.at.along + TRACK_AHEAD), pos);
         if ax.hypot(ay) < 1e-6 {
             return back;
         }
@@ -750,7 +755,7 @@ impl RouteFollower {
     fn unstick(&mut self, obs: &Observation) -> Controls {
         let seg = self.segments[self.seg_i].clone();
         let look = self.look_angle(obs, &seg);
-        self.motion.go(obs, self.unstick_dir, 5.0, Some(look))
+        self.motion.go(obs, self.unstick.dir, 5.0, Some(look))
     }
 
     /// Does the last 128 units of the track go down any steps (live floors)?

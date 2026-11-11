@@ -78,14 +78,14 @@ impl RouteFollower {
             .map(|h| h.ceiling)
             .fold(f64::INFINITY, f64::min);
         if ceiling - floor >= PLAYER_HEIGHT {
-            self.pinned_since = None;
+            self.crusher.pinned_since = None;
             return None;
         }
         if self.mortal {
             // (mortal: a ceiling on her may be a crusher, known or not; waiting is dying. Out from
             // under it to the nearest spot round her with room, straight there, whatever route she
             // was on)
-            self.pinned_since = None;
+            self.crusher.pinned_since = None;
             self.progress_tic = obs.tic;
             let pos = obs.pos();
             let r = PLAYER_RADIUS + 1.0;
@@ -115,12 +115,12 @@ impl RouteFollower {
             let to = out.unwrap_or_else(|| {
                 self.segments[self.seg_i]
                     .track
-                    .point_at((self.s - 48.0).max(0.0))
+                    .point_at((self.at.along - 48.0).max(0.0))
             });
             let h = heading(pos, to);
             return Some(self.motion.go(obs, h, FULL_SPEED, None));
         }
-        let since = *self.pinned_since.get_or_insert_with(|| {
+        let since = *self.crusher.pinned_since.get_or_insert_with(|| {
             self.log.add(
                 obs.tic,
                 format!(
@@ -189,12 +189,12 @@ impl RouteFollower {
             })
             .or_else(|| (dx != 0.0 || dy != 0.0).then(|| heading((pos.0 + dx, pos.1 + dy), pos)));
         let h = way?;
-        if self.crusher_wait != Some(s) {
+        if self.crusher.wait != Some(s) {
             self.log.add(
                 obs.tic,
                 format!("the ceiling of sector {s} coming down on her: out from under it"),
             );
-            self.crusher_wait = Some(s);
+            self.crusher.wait = Some(s);
         }
         self.progress_tic = obs.tic;
         self.step_tic = obs.tic;
@@ -243,19 +243,19 @@ impl RouteFollower {
             }
         }
         let Some(s) = next else {
-            if self.crusher_wait.is_some() {
-                self.crusher_wait = None;
+            if self.crusher.wait.is_some() {
+                self.crusher.wait = None;
             }
             return None;
         };
-        if self.crusher_wait != Some(s) {
+        if self.crusher.wait != Some(s) {
             self.log.add(
                 obs.tic,
                 format!(
                     "the ceiling of sector {s} coming down beside her: waiting for it to go up"
                 ),
             );
-            self.crusher_wait = Some(s);
+            self.crusher.wait = Some(s);
         }
         self.progress_tic = obs.tic;
         self.step_tic = obs.tic;
@@ -303,7 +303,7 @@ impl RouteFollower {
         let need = now.floor + PLAYER_HEIGHT + CROSS_HEADROOM;
         let top = self.view.nav.movers.initial[s].ceiling.max(now.ceiling);
         let bottom = now.floor + 8.0;
-        let pace = self.ceiling_pace.get(&s).copied().unwrap_or(0.0);
+        let pace = self.crusher.ceiling_pace.get(&s).copied().unwrap_or(0.0);
         let mut dir = if now.ceiling > before.ceiling + 0.01 {
             1.0
         } else if now.ceiling < before.ceiling - 0.01 || top - now.ceiling < 0.5 {
@@ -466,7 +466,8 @@ impl RouteFollower {
             // nor a wait at its edge under one, as with a fast crusher and a slow one beyond it. A
             // crossing begun is gone through)
             let committed = |b: usize| {
-                self.crusher_cross
+                self.crusher
+                    .cross
                     .is_some_and(|(c, since)| c == b && obs.tic - since < CROSS_COMMIT)
             };
             let next_closed = here
@@ -475,12 +476,12 @@ impl RouteFollower {
             if let Some((s, offset)) =
                 pressing.or_else(|| here.zip(next_closed).map(|(h, _)| (h, (0.0, 0.0))))
             {
-                self.crusher_cross = None;
+                self.crusher.cross = None;
                 if let Some(c) = self.escape_crusher(obs, s, offset, &doors) {
                     return Some(c);
                 }
             }
-            self.crusher_wait = None;
+            self.crusher.wait = None;
             return None;
         }
         // (by where the way goes into it, not its middle, which can be far off)
@@ -509,13 +510,14 @@ impl RouteFollower {
         // (out from under it and none ahead: a crossing begun is over, the legs the fight's again;
         // kept, the fight would leave her to the route with a monster at her)
         let Some((s, entry)) = ahead else {
-            self.crusher_wait = None;
-            self.crusher_cross = None;
+            self.crusher.wait = None;
+            self.crusher.cross = None;
             return None;
         };
         // (a crossing timed and begun: gone through, not waited out halfway)
         if self
-            .crusher_cross
+            .crusher
+            .cross
             .is_some_and(|(c, since)| c == s && obs.tic - since < CROSS_COMMIT)
         {
             return None;
@@ -533,7 +535,16 @@ impl RouteFollower {
         // (stopped, and going in sets it off, with too little room to be through before it has her:
         // set off from the edge, out again, and crossed when it comes up; a crusher stopped just
         // over her head, its own start line at its edge, crushes her otherwise)
-        if still && obs.tic - self.moved_at.get(&s).copied().unwrap_or(i64::MIN / 2) > CRUSH_TURN {
+        if still
+            && obs.tic
+                - self
+                    .crusher
+                    .moved_at
+                    .get(&s)
+                    .copied()
+                    .unwrap_or(i64::MIN / 2)
+                > CRUSH_TURN
+        {
             if let Some(c) = self.set_off_first(obs, &polys, s, entry) {
                 return Some(c);
             }
@@ -548,25 +559,32 @@ impl RouteFollower {
         if go {
             // (committed to only a crossing that comes out the far side: one into an alcove under
             // it is waited at again when a replan sends her back in)
-            self.crusher_cross = timed.is_some().then_some((s, obs.tic));
-            self.crusher_wait = None;
+            self.crusher.cross = timed.is_some().then_some((s, obs.tic));
+            self.crusher.wait = None;
             return None;
         }
         // (waiting is no crossing)
-        self.crusher_cross = None;
-        if self.crusher_wait != Some(s) {
+        self.crusher.cross = None;
+        if self.crusher.wait != Some(s) {
             self.log.add(
                 obs.tic,
                 format!("waiting for the crusher (sector {s}) to come up"),
             );
-            self.crusher_wait = Some(s);
+            self.crusher.wait = Some(s);
         }
         // (one that's stopped, too low to be under, isn't coming up: a crusher turns at each end at
         // once, so still for a while is stopped (a crusher-stop line). The way's no way while it's
         // there, and waiting at it is waiting for good)
         if still
             && !room
-            && obs.tic - self.moved_at.get(&s).copied().unwrap_or(i64::MIN / 2) > CRUSH_STOPPED
+            && obs.tic
+                - self
+                    .crusher
+                    .moved_at
+                    .get(&s)
+                    .copied()
+                    .unwrap_or(i64::MIN / 2)
+                > CRUSH_STOPPED
         {
             // (stopped with her height under it, if no more: it does nothing while it's stopped,
             // and the room to spare was for one coming down. Through, then; its start line
@@ -578,8 +596,8 @@ impl RouteFollower {
                     obs.tic,
                     format!("the crusher (sector {s}) has stopped {gap:.0} up: through under it"),
                 );
-                self.crusher_cross = Some((s, obs.tic));
-                self.crusher_wait = None;
+                self.crusher.cross = Some((s, obs.tic));
+                self.crusher.wait = None;
                 return None;
             }
             return Some(self.fail(
@@ -597,7 +615,7 @@ impl RouteFollower {
         });
         if over {
             let track = &self.segments[self.seg_i].track;
-            let back = track.point_at((self.s - 32.0).max(0.0));
+            let back = track.point_at((self.at.along - 32.0).max(0.0));
             let h = heading(pos, back);
             return Some(self.motion.go(obs, h, 6.0, None));
         }
@@ -697,20 +715,20 @@ impl RouteFollower {
         }
         let spot = (at.0 + sign * nx * KICK_PAST, at.1 + sign * ny * KICK_PAST);
         self.log.add(obs.tic, format!("setting off the crusher (sector {s}) from its edge (line {li}), to cross it when it comes up"));
-        self.crusher_kick = Some((s, obs.tic, spot));
+        self.crusher.kick = Some((s, obs.tic, spot));
         self.kicking(obs)
     }
 
     /// (mortal) Setting off a crusher from its edge: on to the spot just over its line at a crawl
     /// till it moves; then it's for the crusher rules (out from under it, waited at, crossed).
     fn kicking(&mut self, obs: &Observation) -> Option<Controls> {
-        let (s, since, spot) = self.crusher_kick?;
+        let (s, since, spot) = self.crusher.kick?;
         if (obs.heights[s].ceiling - self.prev_live[s].ceiling).abs() > 0.01 {
-            self.crusher_kick = None;
+            self.crusher.kick = None;
             return None;
         }
         if obs.tic - since > KICK_TICS {
-            self.crusher_kick = None;
+            self.crusher.kick = None;
             return Some(self.fail(
                 obs,
                 &format!("the crusher (sector {s}) didn't start from its edge"),

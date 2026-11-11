@@ -102,41 +102,41 @@ impl RouteFollower {
             self.log.add(obs.tic, format!("lit {:?}; she's at ({:.0}, {:.0}) going ({:.1}, {:.1}); in the blast of the chain's {by:?}, ahead {ahead}; health {:?}", obs.barrels_lit, pos.0, pos.1, v.0, v.1, obs.health));
         }
         if by.is_none() {
-            self.chain_flee.clear();
+            self.chain.flee.clear();
         }
         if by.is_none() && !ahead {
-            self.chain_wait = false;
+            self.chain.waiting = false;
             return None;
         }
-        if !self.chain_wait {
+        if !self.chain.waiting {
             self.log.add(
                 obs.tic,
                 "barrels going off ahead: keeping out of their blasts till they're done",
             );
-            self.chain_wait = true;
+            self.chain.waiting = true;
         }
         Some(match by {
             Some(b) => {
                 // (by a way out of all of them, kept to till she's out; none found, looked for
                 // again a blast on)
-                if self.chain_flee.is_empty()
-                    && obs.tic - self.chain_flee_tic >= BARREL_DELAY as i64
+                if self.chain.flee.is_empty()
+                    && obs.tic - self.chain.flee_tic >= BARREL_DELAY as i64
                 {
-                    self.chain_flee = self.way_off_chain(obs);
-                    self.chain_flee_tic = obs.tic;
-                    if let Some(&to) = self.chain_flee.last() {
+                    self.chain.flee = self.way_off_chain(obs);
+                    self.chain.flee_tic = obs.tic;
+                    if let Some(&to) = self.chain.flee.last() {
                         self.log.add(
                             obs.tic,
                             format!("off to ({:.0}, {:.0}), out of their blasts", to.0, to.1),
                         );
                     }
                 }
-                while self.chain_flee.len() > 1 && dist(pos, self.chain_flee[0]) < 16.0 {
-                    self.chain_flee.remove(0);
+                while self.chain.flee.len() > 1 && dist(pos, self.chain.flee[0]) < 16.0 {
+                    self.chain.flee.remove(0);
                 }
                 // (no way found: on along her route, running, not stopped among them; with no
                 // route, straight away from the nearest of them)
-                let Some(&to) = self.chain_flee.first() else {
+                let Some(&to) = self.chain.flee.first() else {
                     if self.planned_path(None).is_empty() {
                         self.progress_tic = obs.tic;
                         let h = heading(b, pos);
@@ -256,32 +256,32 @@ impl RouteFollower {
 
     /// Back out of its blast (128 units) and shoot the barrel in the way, then carry on.
     pub(super) fn shoot_barrel(&mut self, obs: &Observation) -> Controls {
-        if let Some(until) = self.barrel_flee {
-            if obs.tic < until && !self.barrel_flee_way.is_empty() {
+        if let Some(until) = self.shot.flee_until {
+            if obs.tic < until && !self.shot.flee_way.is_empty() {
                 self.progress_tic = obs.tic;
                 let pos = obs.pos();
-                while self.barrel_flee_way.len() > 1 && dist(pos, self.barrel_flee_way[0]) < 16.0 {
-                    self.barrel_flee_way.remove(0);
+                while self.shot.flee_way.len() > 1 && dist(pos, self.shot.flee_way[0]) < 16.0 {
+                    self.shot.flee_way.remove(0);
                 }
-                let h = heading(pos, self.barrel_flee_way[0]);
+                let h = heading(pos, self.shot.flee_way[0]);
                 return self.motion.go(obs, h, FULL_SPEED, Some(h));
             }
-            self.barrel_flee = None;
-            self.barrel_settle = Some((obs.barrels.as_ref().map_or(0, Vec::len), obs.tic));
+            self.shot.flee_until = None;
+            self.shot.settle = Some((obs.barrels.as_ref().map_or(0, Vec::len), obs.tic));
         }
-        if let Some((n, since)) = self.barrel_settle {
+        if let Some((n, since)) = self.shot.settle {
             // (the rest of the chain going off, a blast a while after the last: not gone back into
             // as it goes on)
             let now = obs.barrels.as_ref().map_or(0, Vec::len);
             if now != n {
-                self.barrel_settle = Some((now, obs.tic));
+                self.shot.settle = Some((now, obs.tic));
             }
-            if obs.tic - self.barrel_settle.map_or(since, |x| x.1) < BARREL_SETTLE {
+            if obs.tic - self.shot.settle.map_or(since, |x| x.1) < BARREL_SETTLE {
                 // (on away from the nearest barrel still there, while they go off; shot from out
                 // of every blast, where she is, as planned: away from one there would be towards
                 // another, maybe the one going off)
                 self.progress_tic = obs.tic;
-                if self.barrel_stay {
+                if self.shot.stay {
                     return self.motion.hold(obs, (0.0, 0.0), None);
                 }
                 let pos = obs.pos();
@@ -298,9 +298,9 @@ impl RouteFollower {
                 }
                 return self.motion.hold(obs, (0.0, 0.0), None);
             }
-            self.barrel_settle = None;
+            self.shot.settle = None;
         }
-        let Some((was, since)) = self.barrel else {
+        let Some((was, since)) = self.shot.target else {
             return self.walk(obs);
         };
         let pos = obs.pos();
@@ -314,12 +314,12 @@ impl RouteFollower {
         // it isn't gone, nor another to shoot afresh)
         let now = barrel_now(obs, was);
         let at = now.unwrap_or(was);
-        self.barrel = Some((at, since));
+        self.shot.target = Some((at, since));
         if now.is_none() || obs.tic - since > give_up {
-            self.barrel = None;
-            self.barrel_post = None;
-            self.barrel_way.clear();
-            self.barrel_best = None;
+            self.shot.target = None;
+            self.shot.post = None;
+            self.shot.way.clear();
+            self.shot.best = None;
             self.reset_progress(obs.tic);
             self.log.add(
                 obs.tic,
@@ -338,10 +338,10 @@ impl RouteFollower {
         // not able to be, she walks up and punches it)
         if ![2, 3, 4].into_iter().any(|slot| tap_rounds(obs, slot) > 0) {
             if self.mortal {
-                self.barrel = None;
-                self.barrel_post = None;
-                self.barrel_way.clear();
-                self.barrel_best = None;
+                self.shot.target = None;
+                self.shot.post = None;
+                self.shot.way.clear();
+                self.shot.best = None;
                 return self.fail(obs, "a barrel in the way, and nothing to shoot it with");
             }
             /// (the fist's reach is 64 from her middle to its; a little inside it)
@@ -366,10 +366,10 @@ impl RouteFollower {
             // she came to it, then back along her route; the chain takes time, she runs as it goes,
             // and the run mustn't end at a wall)
             let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
-            if self.barrel_post.is_none() {
+            if self.shot.post.is_none() {
                 let track = &self.segments[self.seg_i].track;
                 let mut behind: Vec<Point> = Vec::new();
-                let mut back = self.s;
+                let mut back = self.at.along;
                 while back > 0.0 && behind.len() < BACKTRACK_POINTS {
                     behind.push(track.point_at(back));
                     back -= BACKTRACK_SPACING;
@@ -507,7 +507,7 @@ impl RouteFollower {
                         obs.tic,
                         format!("shooting it from ({:.0}, {:.0}), {then}", q.0, q.1),
                     );
-                    self.barrel_stay = stay;
+                    self.shot.stay = stay;
                     if dist(aim, at) > 1.0 {
                         // (another of them, the chain to take it)
                         self.log.add(
@@ -517,15 +517,15 @@ impl RouteFollower {
                                 aim.0, aim.1
                             ),
                         );
-                        self.barrel = self.barrel.map(|(_, since)| (aim, since));
+                        self.shot.target = self.shot.target.map(|(_, since)| (aim, since));
                     }
-                    self.barrel_post = Some(q);
-                    self.barrel_way = way;
-                    self.barrel_flee_way = flee;
+                    self.shot.post = Some(q);
+                    self.shot.way = way;
+                    self.shot.flee_way = flee;
                 }
             }
-            let Some(post) = self.barrel_post else {
-                self.barrel = None;
+            let Some(post) = self.shot.post else {
+                self.shot.target = None;
                 return self.fail(
                     obs,
                     "a barrel in the way, nowhere to shoot it from and run off out of the blasts",
@@ -534,25 +534,25 @@ impl RouteFollower {
             if dist(pos, post) > 8.0 {
                 // (getting no nearer for a while: give it up)
                 let d = dist(pos, post);
-                match self.barrel_best {
-                    Some((best, _)) if d < best - 2.0 => self.barrel_best = Some((d, obs.tic)),
+                match self.shot.best {
+                    Some((best, _)) if d < best - 2.0 => self.shot.best = Some((d, obs.tic)),
                     Some((_, at_tic)) if obs.tic - at_tic > BARREL_STALL => {
-                        self.barrel = None;
-                        self.barrel_post = None;
-                        self.barrel_way.clear();
-                        self.barrel_best = None;
+                        self.shot.target = None;
+                        self.shot.post = None;
+                        self.shot.way.clear();
+                        self.shot.best = None;
                         return self.fail(
                             obs,
                             "a barrel in the way, and no getting to somewhere to shoot it from",
                         );
                     }
-                    None => self.barrel_best = Some((d, obs.tic)),
+                    None => self.shot.best = Some((d, obs.tic)),
                     _ => {}
                 }
-                while self.barrel_way.len() > 1 && dist(pos, self.barrel_way[0]) < 12.0 {
-                    self.barrel_way.remove(0);
+                while self.shot.way.len() > 1 && dist(pos, self.shot.way[0]) < 12.0 {
+                    self.shot.way.remove(0);
                 }
-                let to = self.barrel_way.first().copied().unwrap_or(post);
+                let to = self.shot.way.first().copied().unwrap_or(post);
                 let h = heading(pos, to);
                 let v = 12.0f64.min(0.3 * dist(pos, post) + 2.0);
                 return self.motion.go(obs, h, v, Some(h));
@@ -569,12 +569,13 @@ impl RouteFollower {
         let gun = barrel_gun(obs, dist(pos, at));
         if obs.weapon != Some(gun) {
             c.weapon = gun;
-        } else if norm(look - obs.angle).abs() < 2.0 && obs.tic - self.barrel_shot >= BARREL_TAP {
+        } else if norm(look - obs.angle).abs() < 2.0 && obs.tic - self.shot.last_shot >= BARREL_TAP
+        {
             c.attack = true;
-            self.barrel_shot = obs.tic;
+            self.shot.last_shot = obs.tic;
             if self.mortal {
                 // (and off, the way worked out)
-                self.barrel_flee = Some(obs.tic + BARREL_FLEE_TICS);
+                self.shot.flee_until = Some(obs.tic + BARREL_FLEE_TICS);
             }
         }
         c
