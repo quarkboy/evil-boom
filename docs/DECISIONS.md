@@ -2506,3 +2506,29 @@ with no numbers in it, which `Ended::plain` carries to the director: "Couldn't g
 (green armor): the only way on is a drop you didn't mean to take." Considered: rewording the
 log line at the director by matching its text (a second copy of every message, broken by the
 first rewording of one).
+
+## Stage 1's moments finished: levels, jumps, teleports, crushers, the budget (the user, 2026-11-11)
+
+`control/directed/moments.rs` and `kills.rs`; the plan's 5.3 has the lines. What decided:
+
+- **A big jump** is told before she runs at it, from the jump the follower lines up for
+  (`JumpNews`, carried by the explorer, the last eight only: in a headless run nobody takes
+  them): 128 or more across, 64 or more to fall, or a hurting floor below. A hop isn't. How it
+  came down: after one told, and a miss always. A miss is the follower's (another sector than
+  planned) only when it's another area: off the spot in the same room is made (the first try
+  told "Missed the jump: came down in area-111", area-111 being where it was going).
+- **A level** is told begun once its title's to be had (the game's automap title), with the
+  skill and what she brings; done on its exit, before the next level's begun (the runner
+  calls `level_done` on leaving), with the time, the tally and what she leaves with.
+- **A teleport into a crowd**: moved more than 64 in a tic, then 3 or more fighting her within
+  a second. **Out of ammo** in a fight: the assessment's `guns_armed` gone with something
+  engaged. **A crusher**: the hits the engine gives with its cause, gathered as her own
+  blast's are. **Raised**: one she knew dead in her sight again.
+- **The budget**: 6 moments a minute, the plan's number; over it, what isn't urgent is told
+  silently. Urgent (`Report::urgent`): her death, health marks (now 50, 25, 10), losing health
+  fast, a crusher, a teleport into a crowd, out of ammo, a level's end, an action's answer.
+- Left for stage 4: the one `Situation` snapshot and typed events (the questions are what
+  need them; the status, the look and the lists already read the same helpers).
+
+Checked on MAP06 (jumps, a teleport), E1M1 to E1M2 (the level lines). Parity: 24 runs the
+same.

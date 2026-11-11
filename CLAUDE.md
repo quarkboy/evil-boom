@@ -143,7 +143,10 @@ next objective under the id it's ordered by; E1M2 finishes on the picks alone). 
 reads is in the second person, hers ("You found a secret"; "by instinct", "Suggested:": no
 "she", no bot beside her); who's playing (`Character`) comes with the startup's acknowledgement. Kills and blasts
 are told as moments (`control/directed/kills.rs`: a big monster dead, several at once and
-how many gibbed, barrel chains and what they took, her own blast, the last monster). To direct a game by hand: `watch <wad> <map> --headless
+how many gibbed, barrel chains and what they took, her own blast, the last monster); and levels begun and done, big jumps and how they came down, a teleport
+into a crowd, out of ammo, crushers, monsters raised, with at most 6 moments a minute past
+the urgent ones (`moments.rs`). Stage 1 of the SDK plan is done but for `Situation` and typed
+events, left for stage 4 (questions). To direct a game by hand: `watch <wad> <map> --headless
 --speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
 `.out` twin (`me.txt` gives `me.out`).
 

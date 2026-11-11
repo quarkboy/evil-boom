@@ -354,6 +354,9 @@ pub(crate) enum EndKind {
     PressedNothing,
 }
 
+/// the run-jumps kept for whoever's directing
+const JUMPS_KEPT: usize = 8;
+
 pub struct Explorer {
     pub nav: Rc<Navigator>,
     pub knowledge: Knowledge,
@@ -364,6 +367,9 @@ pub struct Explorer {
     pub directed: bool,
     /// (directed) the last objective's end, till it's taken
     pub ended: Option<Ended>,
+    /// the follower's run-jumps lately, for whoever's directing (the last few only: nobody may
+    /// be taking them)
+    pub jumps: Vec<crate::motor::follower::JumpNews>,
     /// why the objective in hand ended, as `ends` or `drop_objective` had it
     /// the tic her senses last took in (`sense`)
     sensed: Option<i64>,
@@ -560,6 +566,7 @@ impl Explorer {
             follower: None,
             directed: false,
             ended: None,
+            jumps: Vec::new(),
             sensed: None,
             end_why: None,
             end_kind: EndKind::Plain,
@@ -810,6 +817,9 @@ impl Explorer {
             self.log.push(format!("    {ev}"));
         }
         self.follower_seen = f.log.events.len();
+        self.jumps.append(&mut f.jumps);
+        let over = self.jumps.len().saturating_sub(JUMPS_KEPT);
+        self.jumps.drain(..over);
         out
     }
 }

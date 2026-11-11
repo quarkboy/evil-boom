@@ -20,8 +20,10 @@ use crate::play::Agent;
 
 mod kills;
 mod look;
+mod moments;
 
 pub use look::{Hints, Listing, Pick};
+pub use moments::Level;
 
 /// a name at most this long (refused, not cut: a name she didn't choose is one she won't use)
 pub const NAME_MAX: usize = 32;
@@ -108,6 +110,9 @@ pub struct Report {
     /// worth a reaction (a boss sighted, a key, nearly dead), not just to know (Neuro's
     /// `silent: false`)
     pub notable: bool,
+    /// to be told whatever else has been (her life in danger, an answer to her action): never
+    /// made silent to keep the moments a minute down
+    pub urgent: bool,
 }
 
 /// An order being carried out.
@@ -330,6 +335,9 @@ pub struct Director {
     kills: kills::Kills,
     pub hits: Vec<crate::dsda::Hit>,
     pub gibbed: Vec<i32>,
+    /// the level, from the runner; and the moments being kept track of (`moments.rs`)
+    pub level: Level,
+    moments: moments::Moments,
     /// the fight she's in, for its summary when it's over; and what she had last tic (what a
     /// fight cost is the falls from tic to tic, so a medikit taken in the middle doesn't hide it)
     fight: Option<Fight>,
@@ -441,6 +449,7 @@ impl Director {
         self.health_lately.clear();
         self.told_secrets = None;
         self.kills = kills::Kills::default();
+        self.moments = moments::Moments::default();
     }
 
     /// She's died, with lives left: told, with what she was fighting; her orders and her say in
@@ -462,6 +471,7 @@ impl Director {
                 "You died{by}. {lives_left} lives left: the level again from its start, with what you came in with."
             ),
             notable: true,
+            urgent: true,
         });
         self.queue.clear();
         self.resume = None;
@@ -524,31 +534,6 @@ impl Director {
 
     /// Her state in a line: health, armor, weapons, ammo, keys, what she's doing.
     pub fn status(&self, agent: &Agent, obs: &Observation) -> String {
-        let weapons: Vec<&str> = obs
-            .weapons
-            .iter()
-            .flatten()
-            .map(|&w| weapon_name(w, obs))
-            .collect();
-        let ammo = |slot: i32| {
-            obs.ammo
-                .iter()
-                .flatten()
-                .find(|(s, _)| *s == slot)
-                .map_or(0, |(_, n)| *n)
-        };
-        let mut pools = Vec::new();
-        for (slot, what) in [(2, "bullets"), (3, "shells"), (5, "rockets"), (6, "cells")] {
-            if ammo(slot) > 0 {
-                pools.push(format!("{} {what}", ammo(slot)));
-            }
-        }
-        let keys: Vec<String> = obs
-            .keys
-            .unwrap_or_default()
-            .iter()
-            .map(|k| key_name(k).to_string())
-            .collect();
         let doing = self.doing(agent);
         // (in a fight: what's in sight, the nearest; an order then is held up by it unless rushed)
         let doing = match fighting(&engaged(agent, obs), obs) {
@@ -556,27 +541,7 @@ impl Director {
             None => doing,
         };
         // (short: what Evil reads costs her context)
-        format!(
-            "Health {:.0}, armor {:.0}; {}; {}; {}; {}; {doing}",
-            obs.health.unwrap_or(0.0),
-            obs.armor.unwrap_or(0.0),
-            if weapons.is_empty() {
-                "no weapons".to_string()
-            } else {
-                weapons.join(", ")
-            },
-            if pools.is_empty() {
-                "no ammo".to_string()
-            } else {
-                pools.join(", ")
-            },
-            if keys.is_empty() {
-                "no keys".to_string()
-            } else {
-                keys.join(", ")
-            },
-            self.tally.line()
-        )
+        format!("{}; {}; {doing}", kit(obs), self.tally.line())
     }
 
     /// Leaving now: what she'd leave behind, as a question to be sure (None: nothing left, the
@@ -636,15 +601,15 @@ impl Director {
         if health <= 0.0 {
             if !self.told_dead {
                 self.told_dead = true;
-                self.event(obs, true, "You died.".into());
+                self.alarm(obs, "You died.".into());
             }
             return;
         }
         // (health falling past a mark, each told once till she's above it again)
-        let mark = [25, 50].into_iter().find(|&m| health < f64::from(m));
+        let mark = [10, 25, 50].into_iter().find(|&m| health < f64::from(m));
         if mark != self.health_mark {
             if mark.is_some_and(|m| self.health_mark.is_none_or(|h| m < h)) {
-                self.event(obs, true, format!("Your health is down to {health:.0}."));
+                self.alarm(obs, format!("Your health is down to {health:.0}."));
             }
             self.health_mark = mark;
         }
@@ -941,9 +906,8 @@ impl Director {
         if top - health >= HURT_FAST && self.told_hurt.is_none_or(|t| obs.tic - t >= HURT_AGAIN) {
             self.told_hurt = Some(obs.tic);
             let by = fighting(&against, obs).map_or(String::new(), |w| format!(" to {w}"));
-            self.event(
+            self.alarm(
                 obs,
-                true,
                 format!(
                     "You're losing health fast: {:.0} in {} s{by}. Health {health:.0}.",
                     top - health,
@@ -1006,6 +970,18 @@ impl Director {
             ok: true,
             text,
             notable,
+            urgent: false,
+        });
+    }
+
+    /// Something she's to hear of whatever else she's been told: her life in danger.
+    fn alarm(&mut self, obs: &Observation, text: String) {
+        self.reports.push(Report {
+            tic: obs.tic,
+            ok: true,
+            text,
+            notable: true,
+            urgent: true,
         });
     }
 
@@ -1286,6 +1262,7 @@ impl Director {
     pub fn tick(&mut self, agent: &mut Agent, obs: &Observation) {
         self.events(agent, obs);
         self.kills(agent, obs);
+        self.more_moments(agent, obs);
         self.apply_tactics(agent, obs);
         agent.x_mut().spares = obs
             .things
@@ -2205,8 +2182,50 @@ impl Director {
             ok,
             text,
             notable,
+            urgent: notable,
         });
     }
+}
+
+/// What she has: "Health 100, armor 0; fist, pistol; 50 bullets; no keys".
+fn kit(obs: &Observation) -> String {
+    let weapons: Vec<&str> = obs
+        .weapons
+        .iter()
+        .flatten()
+        .map(|&w| weapon_name(w, obs))
+        .collect();
+    let pools: Vec<String> = POOLS
+        .iter()
+        .filter_map(|&(slot, what)| {
+            let n = obs
+                .ammo
+                .iter()
+                .flatten()
+                .find(|(s, _)| *s == slot)
+                .map_or(0, |(_, n)| *n);
+            (n > 0).then(|| format!("{n} {what}"))
+        })
+        .collect();
+    let keys: Vec<&str> = obs.keys.unwrap_or_default().iter().map(key_name).collect();
+    let list = |v: Vec<String>, none: &str| {
+        if v.is_empty() {
+            none.to_string()
+        } else {
+            v.join(", ")
+        }
+    };
+    format!(
+        "Health {:.0}, armor {:.0}; {}; {}; {}",
+        obs.health.unwrap_or(0.0),
+        obs.armor.unwrap_or(0.0),
+        list(
+            weapons.iter().map(ToString::to_string).collect(),
+            "no weapons"
+        ),
+        list(pools, "no ammo"),
+        list(keys.iter().map(ToString::to_string).collect(), "no keys"),
+    )
 }
 
 /// The objectives of those kinds among `open`, as entries, in its order.

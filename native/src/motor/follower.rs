@@ -194,6 +194,17 @@ impl FollowerLog {
     }
 }
 
+/// A run-jump, as whoever's playing would want to hear of it.
+#[derive(Clone, Debug)]
+pub enum JumpNews {
+    /// lined up for it, about to run
+    Going(Jump),
+    /// came down where it was meant to
+    Made(Jump),
+    /// came down somewhere else (the sector)
+    Missed(Jump, usize),
+}
+
 /// What a drop ahead the plan didn't mean to take came to.
 enum Drop {
     None,
@@ -288,6 +299,9 @@ pub struct RouteFollower {
     weave: Weave,
     /// run-jumps that came down off their landing (for the explorer)
     pub missed: Vec<Jump>,
+    /// the run-jumps set off and how each came down, for whoever's to hear of them (taken by
+    /// the explorer each tic)
+    pub jumps: Vec<JumpNews>,
     /// (where, line) pressed from there to no effect (for the explorer)
     pub failed_presses: Vec<(Point, usize)>,
     drops_ok: BTreeSet<(usize, usize, [u64; 4])>,
@@ -398,6 +412,7 @@ impl RouteFollower {
                 detour_tic: -1000,
             },
             missed: Vec::new(),
+            jumps: Vec::new(),
             failed_presses: Vec::new(),
             drops_ok: BTreeSet::new(),
             edge_wait: false,

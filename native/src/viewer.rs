@@ -1048,11 +1048,19 @@ fn enter_level(
     // (whoever directs her goes on to the next level with her: the orders file read on from
     // where it was, not from its start again; Neuro's link kept, not made afresh. What was
     // said of the old map (names, orders, what's been told) is the old map's)
+    // (out by its exit: the level's end told first, before the next one's begun)
+    let exited = watch.engine.exited();
     let (mut feed, mut neuro) = (watch.feed, watch.neuro);
     if let Some(f) = feed.as_mut() {
+        if exited {
+            f.director.level_done();
+        }
         f.director.new_map();
     }
     if let Some(n) = neuro.as_mut() {
+        if exited {
+            n.director.level_done();
+        }
         n.director.new_map();
     }
     let mut engine = watch.engine;
@@ -1411,8 +1419,14 @@ impl Watch {
         let tally = crate::control::directed::Tally::of(self.engine.tally());
         let gibbed = self.engine.gibbed();
         let hits = std::mem::take(&mut self.hits);
+        let level = crate::control::directed::Level {
+            map: self.map_name.clone(),
+            title: self.engine.level_title(),
+            skill: self.engine.skill(),
+        };
         if let Some(feed) = &mut self.feed {
             feed.director.tally = tally;
+            feed.director.level = level.clone();
             feed.director.gibbed.clone_from(&gibbed);
             feed.director.hits.clone_from(&hits);
             for l in feed.tic(&mut self.agent, &obs) {
@@ -1421,6 +1435,7 @@ impl Watch {
         }
         if let Some(neuro) = &mut self.neuro {
             neuro.director.tally = tally;
+            neuro.director.level = level;
             neuro.director.gibbed = gibbed;
             neuro.director.hits = hits;
             for l in neuro.tic(&mut self.agent, &obs) {

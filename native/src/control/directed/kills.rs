@@ -46,8 +46,9 @@ pub(super) struct Kills {
     /// the barrels as they were last tic
     barrels: Option<Vec<Point>>,
     burst: Option<Burst>,
-    /// her own blast hurting her: (when last, health lost)
+    /// her own blast hurting her: (when last, health lost); a crusher, the same
     own: Option<(i64, i32)>,
+    crushed: Option<(i64, i32)>,
     told_all_dead: bool,
 }
 
@@ -98,6 +99,32 @@ impl Director {
             .player()
             .map(|p| p.combat().known_deaths())
             .unwrap_or_default();
+        // (one known dead, in her sight alive again: raised, an arch-vile's doing)
+        let in_sight: Vec<(i32, &'static str)> = agent
+            .player()
+            .map(|p| p.known_monsters())
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|m| m.3 == tic)
+            .map(|m| (m.0, m.1))
+            .collect();
+        let raised: Vec<&'static str> = in_sight
+            .iter()
+            .filter(|(i, _)| k.told.contains(i) && !deaths.iter().any(|d| d.0 == *i))
+            .map(|m| m.1)
+            .collect();
+        if !raised.is_empty() {
+            let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+            for n in &raised {
+                *counts.entry(n).or_insert(0) += 1;
+            }
+            let them: Vec<String> = counts.iter().map(|(n, c)| some(*c, n)).collect();
+            self.event(
+                obs,
+                true,
+                format!("Raised from the dead: {}.", them.join(", ")),
+            );
+        }
         k.told.retain(|i| deaths.iter().any(|d| d.0 == *i));
         for (id, name, at, sighted) in deaths {
             if !k.told.insert(id) {
@@ -136,6 +163,10 @@ impl Director {
         // What hurt her: a barrel's blast is the burst's; her own rocket's is told apart.
         let barrel = crate::dsda::type_of("ExplosiveBarrel");
         for h in std::mem::take(&mut self.hits) {
+            if h.cause == HitCause::Crusher {
+                let had = k.crushed.map_or(0, |o| o.1);
+                k.crushed = Some((tic, had + h.health));
+            }
             if h.cause != HitCause::Thing {
                 continue;
             }
@@ -195,6 +226,15 @@ impl Director {
                 1 => {}
                 n => self.event(obs, true, format!("{n} killed at once: {}.", tally(&rest))),
             }
+        }
+        if let Some((_, health)) = k.crushed.take_if(|o| tic - o.0 >= OWN_OVER) {
+            let now = obs.health.unwrap_or(0.0);
+            let text = if now > 0.0 {
+                format!("A crusher caught you: -{health} health. Health {now:.0}.")
+            } else {
+                format!("A crusher caught you: -{health} health.")
+            };
+            self.alarm(obs, text);
         }
         if let Some((_, health)) = k.own.take_if(|o| tic - o.0 >= OWN_OVER) {
             self.event(

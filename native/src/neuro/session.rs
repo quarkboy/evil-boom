@@ -16,6 +16,10 @@ const IDLE_FORCE: i64 = 6 * 35;
 const STATUS_EVERY: i64 = 20 * 35;
 /// a list in an answer: at most this many lines
 const LIST_MAX: usize = 15;
+/// at most this many moments (not silent) a minute: past it, what's not urgent is told
+/// silently (her context and her attention are what's being spent)
+const MOMENTS_A_MINUTE: usize = 6;
+const MINUTE: i64 = 60 * 35;
 
 pub struct Session {
     link: Link,
@@ -32,6 +36,8 @@ pub struct Session {
     idle_since: i64,
     told_status: (i64, String),
     shown: usize,
+    /// when the moments lately were told, for the budget
+    loud: std::collections::VecDeque<i64>,
     /// told the rules on connecting
     briefed: bool,
 }
@@ -96,6 +102,7 @@ impl Session {
             idle_since: 0,
             told_status: (i64::MIN / 2, String::new()),
             shown: 0,
+            loud: std::collections::VecDeque::new(),
             briefed: false,
         }
     }
@@ -152,7 +159,15 @@ impl Session {
         self.shown = self.director.reports.len();
         if !news.is_empty() {
             let text: Vec<String> = news.iter().map(|r| r.text.clone()).collect();
-            let notable = news.iter().any(|r| r.notable);
+            while self.loud.front().is_some_and(|&t| obs.tic - t >= MINUTE) {
+                self.loud.pop_front();
+            }
+            // (a moment over the budget told quietly; one that's urgent, always)
+            let notable = news.iter().any(|r| r.notable && r.urgent)
+                || (news.iter().any(|r| r.notable) && self.loud.len() < MOMENTS_A_MINUTE);
+            if notable {
+                self.loud.push_back(obs.tic);
+            }
             log.extend(
                 text.iter()
                     .map(|t| format!("<< {}{t}", if notable { "(!) " } else { "" })),

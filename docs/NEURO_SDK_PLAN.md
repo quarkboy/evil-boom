@@ -404,6 +404,28 @@ sight as it died; a barrel is one near enough to hear (1200). One barrel that ki
 and doesn't hurt her isn't told: that's her clearing barrels. Not built: a death dodged,
 telefrags, crushers, out of ammo mid-fight, a monster raised again.
 
+**Built of the rest** (2026-11-11, `control/directed/moments.rs`, `kills.rs`):
+
+    MAP06: The Crusher. Skill: Hurt me plenty. You come in with: Health 100, armor 0; ...
+    E1M1 done in 5:23: kills 6/6, items 37/37, secrets 3/3. You leave with: Health 95, ...
+    Jumping for it: 170 across to area-111 (NE), a 128 drop below.     (then:)
+    Made the jump.  /  Missed the jump: came down in area-9, the floor hurts.
+    Teleported right into 4 shotgun guys!
+    Out of ammo mid-fight: down to your fists.
+    A crusher caught you: -42 health. Health 31.
+    Raised from the dead: 2 imps.
+    Your health is down to 9.                                  (marks at 50, 25, 10)
+
+A jump is told before she runs at it when it's big: 128 or more across, a drop of 64 or more
+below, or a floor that hurts below ("a long shot" when the jump's checked to come off less
+than 80% of ways it could be made); how it came down is told after a told one, and a miss
+always (one off the planned spot but in the same area is made). A level's end is told on its
+exit, before the next level's start. Not built: a death dodged (a blast missed by little),
+par times.
+
+**The budget**: at most 6 moments a minute reach her as moments; past that, what's not urgent
+(her life in danger, a level's end, an action's answer) goes silent (`Report::urgent`).
+
 Told **silent** (to know, not to react to): doors and switches seen; ordinary items; an order
 begun; a pause for a fight and its end; routine waits.
 
@@ -516,7 +538,7 @@ reads is short.
 |---|---|---|
 | 0 | **Drive what exists by hand**: a level through `watch --headless --directed FILE` in real time, me as Evil, noting every moment I wanted to know or do something I couldn't | notes in this file (section 8); they reorder the stages below |
 | 1a | **First, from stage 0's notes**: the idle fallback (`idle` policy, announced); orders queue or say what they replaced, exploring goes on after an errand; short ids with a phrase; "seen, no way yet" as a state; an order's outcome says what came of it; a failure says what would work; lists ranked with a pick | E1M2 driven by hand again at the same pace: out in under 7 minutes, no order lost unsaid, idle under a fifth of the time |
-| 1 | `Situation`, typed `Event`, the grammar, the budgeter, the fight summary (built), `doom_look` (built) | a recorded level's whole context reads well cold; under the word budget; GPT stand-in's choices no worse |
+| 1 | The grammar, the budgeter, the fight summary, `doom_look`, the moments (built); `Situation` and typed `Event` (not: folded into stage 4, where the questions need the one snapshot) | a recorded level's whole context reads well cold; under the word budget; GPT stand-in's choices no worse |
 | 2 | The journal always on; `doom_why`; the trigger's one reason | every "why" asked at 50 random moments of a run has a true, short answer |
 | 3 | `doom_mode` / `idle` fallback; `doom_goal` | a level finished with three goals and no orders; no stretch over 25 s with her idle and the bot still |
 | 4 | Proposals: the type, class D confirmations from `Refusal` and the tiers, deadlines, `doom_answer` | scripted answers at 2, 8 and 30 s late: each either applied or refused as stale, never applied wrong |

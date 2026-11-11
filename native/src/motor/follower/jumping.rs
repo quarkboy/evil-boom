@@ -1,7 +1,7 @@
 //! Lining up, executing and judging jumps and runs over sinking floors.
 
 use super::Trouble;
-use super::{run_controls, RouteFollower, Run};
+use super::{run_controls, JumpNews, RouteFollower, Run};
 use crate::geom::{
     closest_on_portal, closest_point, dist, funnel, oriented, Point, Seg, PLAYER_HEIGHT,
     PLAYER_RADIUS,
@@ -133,6 +133,9 @@ impl RouteFollower {
             && diff.abs() <= 3.0
         {
             settled = true;
+        }
+        if self.jump.lineup_tic.is_none() {
+            self.jumps.push(JumpNews::Going(jump.clone()));
         }
         let lineup = *self.jump.lineup_tic.get_or_insert(obs.tic);
         // (settling longer than a second: go anyway, if near enough on the spot; much longer:
@@ -502,7 +505,10 @@ impl RouteFollower {
                     jump.takeoff.0, jump.takeoff.1
                 ),
             );
+            self.jumps.push(JumpNews::Missed(jump.clone(), got));
             self.missed.push(jump);
+        } else {
+            self.jumps.push(JumpNews::Made(jump));
         }
     }
 

@@ -372,6 +372,11 @@ impl Engine {
             .collect()
     }
 
+    /// The skill played, 1-5.
+    pub fn skill(&self) -> i32 {
+        self.skill
+    }
+
     pub fn tally(&self) -> [(i32, i32); 3] {
         let s = self.game.status();
         [
