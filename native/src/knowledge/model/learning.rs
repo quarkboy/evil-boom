@@ -8,6 +8,24 @@ use crate::specials::{Category, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 
 impl Knowledge {
+    /// Something heard to start moving, out of her sight, just after she set a line off, in a
+    /// place she knows: taken for what the line does, as a player takes a lift's clank after a
+    /// switch for the switch's lift. (MAP09: a switch in an alcove of a nukage pit brings a lift
+    /// down round the corner for three seconds; not to be seen from the switch, gone back up
+    /// before she's round to it; pressed twice, never learned, the pit never left.)
+    pub(super) fn heard_move(&mut self, s: usize, tic: i64) {
+        if !self.sectors.contains(&s) {
+            return;
+        }
+        let Some(f) = self.fired.iter().rev().find(|f| f.life == self.lives && f.tic <= tic).copied().filter(|f| tic - f.tic <= SURE_TICS) else { return };
+        for ti in self.by_line.get(&f.line).cloned().unwrap_or_default() {
+            let t = self.trigger(ti).clone();
+            if t.effect(s).is_some() && self.learned.entry(ti).or_default().insert(s) {
+                self.events.push(format!("tic {tic}: took what she heard for line {} ({}) moving sector {s}", f.line, t.info.description));
+            }
+        }
+    }
+
     /// Sector s is seen at new heights: put it down to the latest line fired before it started
     /// moving that moves it, and moves it this way (a door seen closing is no open-for-good
     /// switch's doing: MAP12's). Sure if it started moving right after the press, else in doubt.

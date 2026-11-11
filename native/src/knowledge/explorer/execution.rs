@@ -56,7 +56,10 @@ impl Explorer {
         }
         // (not standing on a floor that hurts: the look waits till she's off it, each second
         // there a hit. E1M5 HMP, the user watching: stopped in the nukage to look at a noise)
-        if self.on_hurting_floor(obs) {
+        // (unless the floor can't hurt her, in a suit or with nothing able to: MAP09's pass, a
+        // switch in a nukage pit that brings a lift down behind her for three seconds, pressed
+        // twice and never looked round from, what it does never learned, the pit never left)
+        if self.on_hurting_floor(obs) && !self.knowledge.immune && !self.knowledge.protected(obs.tic) {
             return None;
         }
         while self.heard_n < self.knowledge.heard.len() {

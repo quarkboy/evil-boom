@@ -167,6 +167,9 @@ impl Knowledge {
             self.heard.push(Heard { tic: obs.tic, bearing, distance, origin: est, seen });
             if !seen {
                 self.events.push(format!("tic {}: heard something move, bearing {bearing:.0}, about {distance:.0} away", obs.tic));
+                if moving {
+                    self.heard_move(s, obs.tic);
+                }
             }
         }
     }

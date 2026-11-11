@@ -444,6 +444,15 @@ Each line: the change, its score run for run against the build before on the sam
   for ten minutes; the user's "must be some issue with what it thinks a sector height is").
   +0.0006 ± 0.0029 (1007 / 22 / 21; exits 380 -> 382; stalled 54 -> 52); 0.447. The finder's
   part: 1083 of 1088 runs the same. Kept, for the passes.
+- **Learning by ear** (an allowance: an inference, not a thing seen). Something heard to
+  start moving out of her sight within 8 tics of her setting a line off, in a place she's
+  seen, is taken for what the line does, as a player takes a lift's clank after a switch for
+  the switch's lift. Only what the line does move. (MAP09: a switch in an alcove of a nukage
+  pit, its lift round the corner and down three seconds; pressed twice, never learned, the
+  pit never left.) With it: a look towards a sound from a floor that hurts when it can't
+  hurt her (a suit, the pass), and a sound she's just set off gone to from a floor that
+  hurts already. +0.0017 ± 0.0073 (438 / 159 / 171; HMP +0.018, UV -0.014; exits 382 -> 389;
+  never beaten 61 -> 55); 0.448. Kept.
 - **A3** (the wait at a lift), **A5** (the edge of her view), **B2, B3**: not done yet.
 
 ## A level she knows, and lives (the evaluation asked for 2026-11-10)
@@ -507,5 +516,12 @@ the jump and stuck rules, then MAP19, MAP15, MAP13 (above); still not: MAP09 (53
 lines, from 364: up the stairs and on, then nothing left to do, not traced) and the boss
 levels E3M8 and MAP30 (the boss not killed). In the pass her target's kept to 448 once
 hers (at 320 it was hers and not by the tic). `EVIL_DEBUG_JUMPS_INTO=<sector>` prints the
-planner's jumps into a sector and whether she believes the heights each needs. Out knowing under four fifths of the map, for leaving
+planner's jumps into a sector and whether she believes the heights each needs.
+
+MAP09's out by the exit with learning by ear (795 s, 597 of 640). The survey after it, one
+seed: 61 of 68. **One seed a level says where to look, not whether a change helped** (the
+user's): five levels that didn't finish on seed 5 after it, on four more seeds each, the
+build before against the one with it: MAP24 3 of 4 -> 4, MAP14 0 -> 3, E4M2 2 -> 3, MAP16 4
+-> 4, MAP28 3 -> 1; 12 of 20 -> 15. A pass's finishing is a rate. Not finishing on any seed
+yet: the boss levels E3M8 and MAP30. Out knowing under four fifths of the map, for leaving
 before the risky parts: E3M6, MAP24, E1M3, MAP20, MAP31, E3M5.

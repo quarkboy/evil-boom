@@ -448,7 +448,12 @@ impl Explorer {
                 // nukage pit: the level given up for a look)
                 return objectives
                     .into_iter()
-                    .filter(|o| !matches!(o.kind, Kind::Noise | Kind::Recheck | Kind::Hunt))
+                    // (but a sound just after she set something off, and she on a floor that
+                    // hurts already: what she set off is as like as not the way off it, and
+                    // going to see is no new risk. MAP09: a switch in a nukage pit, a lift down
+                    // behind a wall for three seconds, heard and never gone to look at, what
+                    // the switch does never learned, the pit never left)
+                    .filter(|o| !matches!(o.kind, Kind::Noise | Kind::Recheck | Kind::Hunt) || (o.kind == Kind::Noise && o.urgent && this.on_hurting_floor(obs)))
                     .filter(|o| {
                         exit_polys.is_empty()
                             || o.kind == Kind::Exit
