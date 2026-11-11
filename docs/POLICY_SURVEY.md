@@ -1,0 +1,169 @@
+# Stage 7: her standing settings (`doom_policy`), a survey before measuring
+
+The SDK plan's stage 7 (`NEURO_SDK_PLAN.md` 4.4): settings Evil sets once and that hold
+(across levels and deaths, till she changes them), as opposed to `doom_fight`'s say for a
+while and an order's for one thing. This is the survey before any scored run: what each
+setting would mean, what it would read on, educated guesses at its cost, and a plan to
+measure. Nothing here is built yet beyond the three that exist (`idle`, `hints`, `answers`).
+
+## What a setting is for
+
+Two reasons, and every setting should serve at least one:
+
+- **Play**: a real choice with a real trade (survive vs. kill; time vs. thoroughness; ammo
+  now vs. ammo for the boss) she can make well or badly.
+- **Stream**: something to declare and own ("I'm saving every rocket for the cyberdemon",
+  "we're going in bold"), and to be blamed or praised for when it goes wrong or right.
+
+A setting that serves neither (a number she can't judge, a choice with no visible effect) is
+context she pays for every message and shouldn't have.
+
+## Two kinds, measured differently
+
+1. **Settings that change how the bot plays** (the fight, the routes, the pickups). They can
+   be measured on the score: the bot alone, with the setting's numbers as a `--tuning` file,
+   on the quarter set (272 runs, ~4.5 min), then the full set for any that look more than
+   about 0.02 off. That's the plan's gate: "each setting's effect measured; none outside its
+   documented range".
+2. **Settings that change what she's asked or told** (questions, hints, idling). The bot alone
+   never asks or idles, so the score can't see them; they're checked with scripted directed
+   games, as stages 4 and 6 were.
+
+## The proposals
+
+Values in **bold** are the proposed defaults (as now).
+
+### 1. `stance`: **steady** | bold | careful | avoid  (kind 1)
+
+How readily she fights. `bold` and `careful` exist already as `doom_fight` stances for 30 s;
+this makes them standing.
+
+| value | numbers (over the tuning) | guess |
+|---|---|---|
+| bold | `engage.stand_threat` 3, `engage.low_health` 25, `retreat.health` 30, `guns.outmatched` 45 | kills faster, dies more: -0.02 to -0.05 |
+| **steady** | the defaults | 0 |
+| careful | `stand_threat` 9, `low_health` 50, `retreat.health` 55, `guns.outmatched` 20 | slower, fewer deaths: -0.01 to +0.01 |
+| avoid (new) | careful's, plus `engage.keep_clear` 1024 -> 1536, `errands.danger_near` 640 -> 1024, `engage.leave_be` 15 -> 8 | gets past rather than fights: kill share down, exits maybe up; -0.03 to +0.01 (most unsure) |
+
+Stream: the most legible setting there is. Strong yes.
+
+### 2. `retreat_at`: never | low | **normal** | early  (kind 1)
+
+`retreat.health`: never 0, low 25, normal 40, early 60. **Proposal: fold it into `stance`**
+rather than keep it. Every stance already sets `retreat.health`, so two settings would fight
+over one number, and "retreat early" is what `careful` means. One knob fewer in her context.
+
+### 3. `save`: none | **bosses** | heavies  (kind 1, a small code change)
+
+What the big guns' ammo (rockets, cells, BFG) is kept for. Now: with a boss seen and still
+about, using them on anything else costs ten times (`guns.boss_save`).
+
+| value | rule | guess |
+|---|---|---|
+| none | `guns.boss_save` 1: spend freely | rockets on imps: -0.01 to +0.01 |
+| **bosses** | as now | 0 |
+| heavies (new) | the same weighting whenever the target isn't a heavy (500+ health: hell knight and up), boss or not | kept for barons and mancubi; fodder with the shotgun: -0.02 to 0 |
+
+Stream: strong ("not wasting a rocket on you, imp"). Yes.
+
+### 4. `risk` (the plan's `hurt_floors` and `one_way`, merged): careful | **normal** | bold  (both kinds)
+
+How readily she takes a floor that hurts or a drop she can't come back from.
+
+- **Directed**: what's asked already does this (stage 4's "go anyway / don't"). `careful` would
+  ask even for cheap harm; `bold` would not ask for a floor that costs under, say, 20 health.
+- **On instinct and the bot**: two parts. `errands.floor_cost` (20: the health a pickup lying
+  on a floor that hurts is reckoned to cost) times 2 (careful) or 0.5 (bold), a tuning number.
+  And when the explorer's risky pass (one-way drops, floors that hurt) is let in: now only
+  with nothing safe left; `bold` would let it in once the safe options are only far ones,
+  `careful` only as the last resort after walls. That part is a little new code in `next`.
+
+Guess: a small effect either way, under 0.01; bold may lose a few runs to nukage and gain a
+few that were stuck. Stream: modest. Merging two settings into one saves context. Yes,
+merged; the tuning part first, the explorer part if it's worth it.
+
+### 5. `barrels`: **clear** | leave  (kind 1)
+
+Now (CLAUDE.md's rule) every barrel she's seen is shot from out of its blasts, with no monster
+in sight. `leave` stops going out of her way to clear them (still keeping clear of their
+blasts in a fight).
+
+Guess: leave is faster and saves ammo, and costs some deaths to a barrel a monster sets off by
+her: -0.01 to -0.02. Stream: weak; barrels are better as moments than as a setting. **Proposal:
+drop it**, unless you want it for the bit.
+
+### 6. `infighting`: **use** | ignore  (kind 1)
+
+Setting bosses on each other and baiting heavies (`SettingOn`, `retreat.bait_heavy` 8).
+`ignore` turns both off.
+
+Guess: ignore -0.005 to -0.02 (the maps with two bosses: MAP20, E2M8's area). Stream: good
+when it happens ("let them fight"), but she can already say it in the moment with `doom_fight`.
+**Proposal: drop it**; rare, and better as a moment.
+
+### 7. `pickups`: **all** | needed  (kind 1)
+
+Now she takes spare pickups when it's safe (bonuses, armor, health that won't be wasted, ammo
+with room). `needed` takes only what she needs (health when hurt, ammo when short, armor
+under 50).
+
+Bot alone: `errands.item_range` (1536) down to a few hundred for spares, needed ones as now.
+Guess: needed -0.01 to -0.03 (less armor going into fights), faster levels. Stream: modest
+("we don't need it, keep moving"). Keep, low priority.
+
+### 8. `secrets`: **0** | 1 | 2 | 3  (kind 2)
+
+The default for her `doom_explore` orders' `secrets` (now 0 unless she says), and whether
+instinct searches walls. Directed only, no score effect. Stream: good ("we're a completionist
+now"). Cheap. Yes.
+
+### 9. `ask`: everything | **irreversible** | nothing  (kind 2)
+
+Which of the bot's questions she's asked. `irreversible` is what's built (stages 4 and 6).
+`nothing` takes every default without asking: for when she'd rather talk to chat. `everything`
+adds questions on close calls (a costly jump, a fight turning bad: already in; plus a route
+with a monster on it, a powerup far off).
+
+Stream: real, it's how much she wants to be bothered. Yes, but `everything` only once there's
+more to ask.
+
+### 10. `switches`: ask | press  (kind 2)
+
+**Proposal: drop.** She presses switches herself (`doom_press`), and on instinct the bot does.
+A question per switch would be noise.
+
+### Existing: `idle`, `hints`, `answers`
+
+Already in `doom_policy`. `idle` is the plan's mode in all but name.
+
+## What it adds up to
+
+From the plan's 13 to 9: `stance`, `save`, `risk`, `pickups`, `secrets`, `ask`, plus the
+existing `idle`, `hints`, `answers`. Dropped: `retreat_at` (into stance), `barrels`,
+`infighting`, `switches`; `one_way` merged into `risk`.
+
+How she sees them: `doom_policy` with nothing given answers with all of them in one line
+("stance steady, save bosses, risk normal, pickups all, secrets 0, ask irreversible, idle
+wait, hints on_stall, answers 8 s"); the briefing names any not at its default; a change is
+told back and noted in the journal, so "why did I do that" can say "your policy: bold".
+
+## Measuring (kind 1), in order
+
+1. A tuning file per non-default value: stance bold, careful, avoid; save none, heavies (after
+   its code); risk careful, bold; pickups needed. Eight files.
+2. Each on the quarter set (`out/score/screen.py`), ~4.5 min each, ~36 min in all: run for
+   run against the defaults' quarter set.
+3. Any more than 0.02 off, or surprising: the full set (17 min each), asked first.
+4. What each costs is written beside it, in the schema's words if it's short ("bold: kills
+   faster, dies more"), so she chooses knowing.
+
+Kind 2 (`secrets`, `ask`): scripted directed games, a level each, as for stages 4 and 6.
+
+## For you to decide
+
+1. Fold `retreat_at` into `stance`? (Proposed: yes.)
+2. Drop `barrels`, `infighting` and `switches`? (Proposed: yes; `doom_fight` covers the
+   moments.)
+3. Build `stance avoid` and `save heavies` (each a little new code), or start with what's
+   there?
+4. Any setting you want for the stream that isn't here.
