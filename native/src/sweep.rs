@@ -365,6 +365,7 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     let start = e.tic;
     let log_from = agent.x().log.len();
     let held = std::mem::replace(&mut agent.x_mut().exit_last, true); // (everything first, then out)
+    agent.x_mut().exit_before_risks = true;
     let mut c: Option<crate::motor::Controls> = None;
     let (mut best, mut best_tic, mut lives) = (0usize, e.tic, 0);
     let mut on_ending = false;
@@ -395,6 +396,12 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
         if let Some(sec) = ending.filter(|_| e.exited()) {
             agent.x_mut().knowledge.exit_floors.insert(sec);
         }
+        // (everything first, then out: out when there's nothing left but walls to press, not
+        // after every wall of the level. MAP29's pass, all 205 sectors seen and nothing
+        // untried, pressed walls for its last half hour, its time up with the exit not taken)
+        if agent.x().exit_last && agent.x().out_of_options.is_some() {
+            agent.x_mut().exit_last = false;
+        }
         let k = &agent.x().knowledge;
         let known = k.mapped.len() + k.visited.len() + k.learned.len() + e.tally()[1].0.max(0) as usize;
         if known > best {
@@ -409,6 +416,7 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     }
     let x = agent.x_mut();
     x.exit_last = held;
+    x.exit_before_risks = false;
     x.knowledge.immune = false;
     x.left_alive();
     let summary = format!("--- the level played through beforehand (nothing able to hurt her; {ended}, {:.0} s): {}", (e.tic - start) as f64 / TICRATE, x.knowledge.summary());

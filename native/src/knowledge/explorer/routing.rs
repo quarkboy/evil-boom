@@ -419,6 +419,14 @@ impl Explorer {
                 return None;
             }
         }
+        // (nor, with something safe still to do, by a run-jump over where she couldn't get back
+        // from if it fell short: a jump can be knocked short, and a way round may be a room
+        // off. MAP06: a shotgun across a lava trench, the bridge to it through a room not
+        // looked into yet; the jump taken, a lost soul in its run, down in the trench, banks
+        // of 72 all round, for good)
+        if obj.kind != Kind::Exit && !obj.risky && route.legs.iter().any(|leg| leg.path.jumps.iter().any(|j| self.falls_for_good(j, &view, &route.states))) {
+            return None;
+        }
         if obj.kind != Kind::Exit && self.dead_end(&route, obj, obs, &view) {
             return None;
         }
@@ -426,6 +434,32 @@ impl Explorer {
             return None;
         }
         Some(steps_from_legs(&view, &route.legs, Some(last), Some(&states)))
+    }
+
+    /// A run-jump that, fallen short of, leaves her somewhere she knows no way back from to
+    /// either end of it: what's under its flight, lower than she could step back up from.
+    fn falls_for_good(&self, jump: &crate::navigator::Jump, view: &View, states: &States) -> bool {
+        const EVERY: f64 = 16.0;
+        let nav = &self.nav;
+        let Some(from) = nav.poly_at(jump.takeoff) else { return false };
+        let ends = [nav.sector_of_poly(from), nav.sector_of_poly(jump.dest_poly)];
+        let length = dist(jump.takeoff, jump.dest);
+        let mut under: BTreeMap<usize, usize> = BTreeMap::new();
+        let mut at = EVERY;
+        while at < length {
+            let p = (jump.takeoff.0 + (jump.dest.0 - jump.takeoff.0) * at / length, jump.takeoff.1 + (jump.dest.1 - jump.takeoff.1) * at / length);
+            if let Some(poly) = nav.poly_at(p) {
+                let sector = nav.sector_of_poly(poly);
+                if !ends.contains(&sector) {
+                    under.entry(sector).or_insert(poly);
+                }
+            }
+            at += EVERY;
+        }
+        under.values().any(|&poly| {
+            let back = view.reachable(poly, states, None);
+            !back.contains(&from) && !back.contains(&jump.dest_poly)
+        })
     }
 
     /// Does the route drop her somewhere she couldn't get back from, with nothing there to try

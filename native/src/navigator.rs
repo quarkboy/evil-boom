@@ -362,7 +362,21 @@ impl Navigator {
     /// timed door at a height it only passes through or waits at are left out.
     pub fn set_jumps(&mut self, jumps: Vec<Jump>) {
         let temporary = temporary_heights(&self.triggers, &self.movers);
-        self.jumps = jumps.into_iter().filter(|j| !j.requires.iter().any(|r| temporary.contains(&(r.0, r.1.key())))).collect();
+        // (nor a jump whose run crosses a line that, walked over, moves the floor it takes off
+        // from or the one it lands on: the run sets it going and the floor's away before she's
+        // at its edge. MAP06: a hop from a lift to a pillar beside it, its run begun off the
+        // lift over the lift's own line; down it went under her, "stuck" on it twice, the lift,
+        // the way on, not gone near again for four minutes)
+        let undoes = |j: &Jump| {
+            let ends: Vec<usize> = j.src_polys.iter().copied().chain([j.dest_poly]).map(|p| self.mesh.poly(p).sector).collect();
+            self.triggers.iter().any(|t| {
+                t.info.trigger.walked() && t.sectors.iter().any(|s| ends.contains(s)) && t.linedef().is_some_and(|li| {
+                    let (a, b) = self.map.line_seg(li);
+                    crate::geom::segments_cross(j.runup, j.takeoff, a, b)
+                })
+            })
+        };
+        self.jumps = jumps.into_iter().filter(|j| !j.requires.iter().any(|r| temporary.contains(&(r.0, r.1.key()))) && !undoes(j)).collect();
         let mut tele_from: Vec<Vec<TeleEdge>> = vec![Vec::new(); self.mesh.polys.len()];
         for (i, tp) in self.teleports.iter().enumerate() {
             for &p in &tp.src_polys {

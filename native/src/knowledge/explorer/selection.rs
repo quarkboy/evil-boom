@@ -221,7 +221,18 @@ impl Explorer {
         self.strafe_ok = false;
         self.harm_ok = false;
         self.from_dead_end = false;
-        let mut found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        let mut found = self.try_objectives(obs, false, hooks);
+        if !found && self.exit_last && self.exit_before_risks {
+            // (the exit held back for everything else, but not for what she mightn't come back
+            // from: nothing safe left, it's out. MAP18's pass: the exit seen and nothing
+            // untried, a wall of the nukage moat not seen yet, down into it to look, no way
+            // out of it, the exit never taken)
+            self.exit_last = false;
+            self.exits_open = true;
+            self.log.push(format!("tic {}: nothing safe left to do: for the exit", obs.tic));
+            found = self.try_objectives(obs, false, hooks);
+        }
+        found = found || self.try_objectives(obs, true, hooks);
         if !found && self.nav.jumps.iter().any(|j| j.strafe) {
             // (nothing else: what a strafing run gets to, MAP03's well)
             self.strafe_ok = true;
@@ -231,6 +242,21 @@ impl Explorer {
             } else {
                 self.strafe_ok = false;
             }
+        }
+        // (the places she got stuck, given another go: two goes can be bad luck, or a goal that
+        // was the trouble, not the way: E3M4's, MAP05's, MAP27's. Before the walls: a way she
+        // knows is a better bet than a guess at one. MAP06: stuck twice on its lift for a hop
+        // onto a pillar beside it, the lift, the way on, left till every wall in reach had been
+        // pressed, four minutes. Once till she knows something more: stuck there again, it's
+        // the walls' turn)
+        let stuck: Vec<usize> = self.knowledge.stuck_at.iter().filter(|(_, &n)| n >= STUCK_TIMES).map(|(&p, _)| p).collect();
+        if !found && !stuck.is_empty() && self.stuck_retried.as_deref() != Some(self.knowledge.known_summary().as_str()) {
+            self.stuck_retried = Some(self.knowledge.known_summary());
+            self.log.push(format!("tic {}: nothing else to do: the {} places she got stuck get another go", obs.tic, stuck.len()));
+            for p in stuck {
+                self.knowledge.note(Note::Stuck(p, STUCK_TIMES - 1));
+            }
+            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
         }
         if found {
             self.panic_tries = 0;
@@ -310,16 +336,6 @@ impl Explorer {
         if !found && self.knowledge.missed_jumps.values().any(|&n| n < JUMP_MISSES) {
             self.log.push(format!("tic {}: nothing else to do: the jumps missed once get another go", obs.tic));
             self.set_jumps(true);
-            found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
-        }
-        let stuck: Vec<usize> = self.knowledge.stuck_at.iter().filter(|(_, &n)| n >= STUCK_TIMES).map(|(&p, _)| p).collect();
-        if !found && !stuck.is_empty() {
-            // (the places she got stuck, given another go: two goes can be bad luck, or a goal that
-            // was the trouble, not the way: E3M4's, MAP05's, MAP27's)
-            self.log.push(format!("tic {}: nothing else to do: the {} places she got stuck get another go", obs.tic, stuck.len()));
-            for p in stuck {
-                self.knowledge.note(Note::Stuck(p, STUCK_TIMES - 1));
-            }
             found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
         }
         if !found {

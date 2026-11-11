@@ -1456,7 +1456,8 @@ impl Combat {
     /// shot at it (too steep) seen and lost by turns, kept at 1500 tics till the suit was out;
     /// E4M3 HMP, a cacodemon in and out of sight over the lava, held there 100 to 0).
     fn lost_sight(&mut self, obs: &Observation) -> Option<Decision> {
-        if self.on_hurting_floor(obs) {
+        // (nor when nothing can hurt her: one gone from sight is nothing to keep at)
+        if self.on_hurting_floor(obs) || self.immune {
             return None;
         }
         let pos = obs.pos();

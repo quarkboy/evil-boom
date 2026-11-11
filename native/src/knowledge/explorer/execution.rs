@@ -224,6 +224,9 @@ impl Explorer {
                     return Some(Controls { forward: push * a.cos(), strafe: -push * a.sin(), ..Controls::default() });
                 }
             }
+            if obj.kind == Kind::Hunt {
+                hooks.hunted_in_vain(&obj);
+            }
             self.drop_objective(&obj, obs, if obj.kind == Kind::Hunt { "not there" } else { "couldn't pick it up" });
         }
         // (a line to walk over: tried, whichever way the trip went)

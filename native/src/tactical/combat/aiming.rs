@@ -70,7 +70,16 @@ impl Combat {
     pub(super) fn pick_target(&mut self, obs: &Observation) -> Option<Thing> {
         let pos = obs.pos();
         let mut best: Option<(f64, Thing)> = None;
-        let against = self.now.against_her.clone();
+        let mut against = self.now.against_her.clone();
+        if self.immune {
+            // (nothing able to hurt her: only what's near enough to be in her way is the
+            // fight's; the rest is the route's to walk past, or to go to if it's to be killed.
+            // MAP29's pass: a revenant on a ledge 1400-2000 off, closed in on and lost by turns
+            // for the last 300 s of it; taken on only while a shot got to it, in and out of
+            // that by the tic, her legs and her aim the fight's every other one)
+            const NEAR: f64 = 320.0;
+            against.retain(|t| dist((t.x, t.y), pos) < NEAR);
+        }
         let hitscanners: Vec<i32> = against.iter().filter(|t| mon(t.name).attack == Attack::Hitscan).map(|t| t.id).collect();
         let mut weighed: Vec<(String, f64)> = Vec::new();
         for t in against {

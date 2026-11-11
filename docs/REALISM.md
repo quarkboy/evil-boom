@@ -418,6 +418,19 @@ Each line: the change, its score run for run against the build before on the sam
   each pull the charge "begun", held still for its spray for good. +0.0006 ± 0.0061 (580 /
   134 / 143; exits 374 -> 375); 0.439. Kept. The console's merge before it: all 1088 runs
   the same to the tic.
+- **The stucks of the passes before a known level** (MAP29, MAP18, MAP06, traced one by one
+  with the user), those of them that are ordinary play's too: closing in from the standing
+  node given up as the other closing-in is, and not stood at with no safe step towards what's
+  out of reach; a jump in where she is taken for the teleport ahead only when she's where it
+  puts her (the fight had moved her: the way on followed from the wrong place, 42 times); a
+  run-jump's sprint called off when it's under 0.7 of the speed it was checked with by where
+  she is (a lost soul in the run, off the edge at half speed into a lava trench); a run-jump
+  that, fallen short of, leaves her somewhere with no way back is risky; a hunt's spot that
+  came up empty isn't gone to again (eight imps on a ledge, 32 trips); the places she got
+  stuck get their second go before the walls, once till she knows more; a jump whose run
+  crosses a line that moves its own floor is left out. +0.0071 ± 0.0045 (738 / 118 / 87;
+  exits 375 -> 380; stalled 65 -> 54); 0.446. MAP05 8 of 16 -> 12, E3M3 10 -> 13, E4M8 5 ->
+  7; E4M5 12 -> 7 (not traced: the jumps it no longer takes, likely). Kept.
 - **A3** (the wait at a lift), **A5** (the edge of her view), **B2, B3**: not done yet.
 
 ## A level she knows, and lives (the evaluation asked for 2026-11-10)
@@ -471,3 +484,12 @@ with them 390 of 391, out by the exit. The pass's line in the log says why it en
 short: MAP29 (789 of 1152), MAP13, MAP08 (581 of 649). `evil-boom watch ... --known`
 shows the pass, tic for tic as a run's; `EVIL_DEBUG_REACH=<tic>` logs what she can get to
 then, its polygons and the portals out of it.
+
+Then, the pass only: it fights only what's within 320 of her (a revenant 1400-2000 off was
+closed in on and lost by turns, her legs never the route's) and keeps at nothing gone from
+sight; the exit's held back for everything safe but not for what's risky (MAP18: down into
+the nukage moat to look at a wall, no way out, the exit seen and never taken), and not for
+walls. Out by the exit on 57 of 68 (HMP, seed 5), then MAP06, E4M7, MAP08, MAP27, MAP28 with
+the jump and stuck rules; still not: MAP09, MAP13, MAP15, MAP19, and the boss levels E3M8
+and MAP30 (the boss not killed). Out knowing under four fifths of the map, for leaving
+before the risky parts: E3M6, MAP24, E1M3, MAP20, MAP31, E3M5.

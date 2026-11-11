@@ -738,6 +738,7 @@ fn level(w: &Wad, m: Arc<MapData>, nav: Rc<Navigator>, engine: Engine, o: &Watch
         // (as `sweep::scout` sets her up)
         agent.x_mut().knowledge.immune = true;
         agent.x_mut().exit_last = true;
+        agent.x_mut().exit_before_risks = true;
         if let Some(p) = agent.player_mut() {
             p.combat_mut().immune = true;
         }

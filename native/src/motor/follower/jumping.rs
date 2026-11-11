@@ -375,6 +375,7 @@ impl RouteFollower {
             });
         if landed || flown >= dist(jump.takeoff, jump.dest) - 8.0 || obs.tic - since > 4 * 35 {
             self.sprint = None;
+            self.sprints_short = 0;
             self.touchdown = Some((jump.clone(), obs.tic));
             let land = here.map(|h| nav.nav.sector_of_poly(h));
             self.log.add(obs.tic, format!("landed at ({:.0}, {:.0}) sector {}", obs.x, obs.y, land.map_or("None".to_string(), |s| s.to_string())));
@@ -410,6 +411,26 @@ impl RouteFollower {
             self.sprint = None;
             return self.fail(obs, "run-jump blocked by a monster");
         }
+        // (short of the takeoff and well short of the speed the jump was checked with by here:
+        // knocked, or held up by something in her run. It won't carry; stopped before the edge
+        // and lined up again. MAP06: a lost soul in the run of a jump over a lava trench, run on
+        // after it at half speed, off the edge and down, 120 out of the 314 across)
+        if flown < 0.0 && obs.tic - since > 8 {
+            let along = obs.velocity.map_or(self.motion.speed(), |v| v.0 * ux + v.1 * uy);
+            let due = sprint_pace(dist(jump.runup, jump.takeoff), jump.speed, -flown);
+            if along < SPRINT_SHORT * due {
+                self.sprint = None;
+                self.lineup_tic = None;
+                self.sprints_short += 1;
+                if self.sprints_short >= SPRINTS_SHORT {
+                    self.sprints_short = 0;
+                    return self.fail(obs, "run-jump knocked short of its speed, time after time");
+                }
+                self.log.add(obs.tic, format!("too slow for the jump ({along:.1} a tic for {due:.1}, {:.0} short of the edge): lining up again", -flown));
+                self.brake_until = obs.tic + 35;
+                return self.motion.hold(obs, (0.0, 0.0), None);
+            }
+        }
         let diff = norm(jump.facing(hd) - obs.angle);
         self.motion.rate = 0.0;
         let push = flown < if jump.soft { jump.release } else { dist(jump.takeoff, jump.dest) - 8.0 };
@@ -424,4 +445,39 @@ impl RouteFollower {
         }
         Controls { forward: if push { 50.0 } else { 0.0 }, strafe, turn: (-diff).clamp(-3.0, 3.0), ..Controls::default() }
     }
+}
+
+/// a sprint this share of the speed it should have by where she is, or less: it won't carry
+const SPRINT_SHORT: f64 = 0.7;
+/// ...and called off this many times running, the jump's given up
+const SPRINTS_SHORT: u32 = 3;
+
+/// The speed a run from standing has `left` short of its end, the run `length` long and
+/// `at_end` fast at its end: the game's own way of getting up speed (a push a tic, then
+/// friction), the push fitted to the speed the jump was checked with.
+fn sprint_pace(length: f64, at_end: f64, left: f64) -> f64 {
+    use crate::motor::FRICTION;
+    // (the speed at `to` along a run pushed `push` a tic)
+    let run = |push: f64, to: f64| {
+        let (mut x, mut v) = (0.0, 0.0);
+        for _ in 0..400 {
+            if x >= to {
+                break;
+            }
+            v += push;
+            x += v;
+            v *= FRICTION;
+        }
+        v
+    };
+    let (mut lo, mut hi) = (0.0, 8.0);
+    for _ in 0..24 {
+        let mid = (lo + hi) / 2.0;
+        if run(mid, length) < at_end {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    run(hi, (length - left).max(0.0))
 }

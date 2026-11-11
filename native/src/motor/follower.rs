@@ -249,6 +249,8 @@ pub struct RouteFollower {
     last_pos: Option<Point>,
     /// (jump, heading, start tic) while sprinting
     sprint: Option<(Jump, f64, i64)>,
+    /// sprints called off for want of speed, one after another
+    sprints_short: u32,
     /// (jump, tic) a run-jump done: where does it come down?
     touchdown: Option<(Jump, i64)>,
     rest_logged: i64,
@@ -382,6 +384,7 @@ impl RouteFollower {
             goal_tic: 0,
             last_pos: None,
             sprint: None,
+            sprints_short: 0,
             touchdown: None,
             rest_logged: -1,
             rest_tic: 0,
@@ -808,7 +811,13 @@ impl RouteFollower {
         self.live.clone_from(&obs.heights);
         let pos = obs.pos();
         if self.last_pos.is_some_and(|l| dist(pos, l) > 64.0) {
-            if self.seg_i + 1 < self.segments.len() && self.segments[self.seg_i].end == SegEnd::Teleport {
+            // (to where the teleporter puts her, that is: a jump in where she is to anywhere else
+            // is the fight's doing, her legs its own for a while, not the teleporter's. MAP29's
+            // pass: a revenant closed in on by turns with the route, each turn back taken for
+            // the teleport ahead, the way on from it followed from where she stood, off course,
+            // planned again, till "replanned too often", 42 times)
+            let lands = self.segments.get(self.seg_i + 1).map(|seg| seg.track.point_at(0.0));
+            if self.segments[self.seg_i].end == SegEnd::Teleport && lands.is_some_and(|at| dist(pos, at) <= 64.0) {
                 self.log.add(obs.tic, "teleported");
                 self.seg_i += 1;
                 self.enter_segment(obs.tic);

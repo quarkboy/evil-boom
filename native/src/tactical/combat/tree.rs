@@ -410,8 +410,21 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         let gun = c.preferred_gun(obs, t);
         let d = dist((t.x, t.y), s.pos);
         let mut moving = c.steer(obs, Some(t), &gun);
+        // (closed in on this long already without getting it where she wants it: left a while,
+        // as `closing_out_of_reach` leaves it. MAP29's pass: a revenant she'd no way to, closed
+        // in on for the last 300 s of it, not a round spent, the route's step taking too long)
+        if (!c.in_reach(&gun, t, d) || d > window(&gun, t).1) && !c.still_closing(obs, t.id) {
+            return None;
+        }
         if !c.in_reach(&gun, t, d) || d > window(&gun, t).1 {
             moving = moving.or_else(|| c.closing_in(obs, t, None));
+            // (out of reach and no step towards it that's safe: stood there she neither shoots
+            // nor closes; the route goes on, a shot taken on the way when there's one. MAP29:
+            // a revenant on a ledge 1400-2000 off, drops between; stood "closing in" by turns
+            // with losing it, her legs never the route's)
+            if moving.is_none() && !c.in_reach(&gun, t, d) {
+                return None;
+            }
             kind = Move::ClosingIn;
             why = format!("closing in on {}", t.name);
         }

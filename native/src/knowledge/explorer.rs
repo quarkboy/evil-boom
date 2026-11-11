@@ -196,6 +196,8 @@ impl Objective {
 /// Other things to do, from elsewhere (the fight: what to pick up, monsters to hunt down; the
 /// 100% runs: items, secrets).
 pub trait Hooks {
+    /// she's where a hunt took her, and what it was after is neither there nor dead
+    fn hunted_in_vain(&mut self, _obj: &Objective) {}
     /// offered with the rest
     fn wanted(&mut self, _x: &Explorer, _obs: &Observation, _reach: &BTreeSet<usize>, _pos: Point) -> Vec<Objective> {
         Vec::new()
@@ -344,6 +346,9 @@ pub struct Explorer {
     idle_since: i64,
     /// the exit only once there's nothing else to do (the 100% runs)
     pub exit_last: bool,
+    /// ...but before anything risky (a drop she mightn't come back from, a floor that hurts):
+    /// the pass before a level known beforehand
+    pub exit_before_risks: bool,
     /// her waits to give something given up on another go, as a share of the usual (her run's
     /// stall clock over 300 s: her own waits inside it, the user's)
     pub patience: f64,
@@ -389,6 +394,8 @@ pub struct Explorer {
     /// when she first had nothing else to do but try walls (the survey's moment: everything
     /// explored but for what's hidden)
     pub out_of_options: Option<i64>,
+    /// what she knew when the places she got stuck last got another go
+    pub stuck_retried: Option<String>,
     /// directed: the objective in hand pressed on with mid-fight, shooting and dodging on the
     /// way, not stopped for the fight (Evil's rush, the user's: MAP07's arena, a switch never got
     /// to for the mancubi chased)
@@ -511,6 +518,7 @@ impl Explorer {
             glance_at: None,
             idle_since: -1_000_000_000,
             exit_last: false,
+            exit_before_risks: false,
             patience: 1.0,
             restart_wanted: false,
             short_of_health: None,
@@ -533,6 +541,7 @@ impl Explorer {
             suspecting: Suspecting::No,
             spares: BTreeSet::new(),
             out_of_options: None,
+            stuck_retried: None,
             press_on: false,
             panic_tries: 0,
             strong_only: false,
@@ -585,6 +594,7 @@ impl Explorer {
         self.urgent_n = self.knowledge.heard.len();
         self.panic_tries = 0;
         self.retried = None;
+        self.stuck_retried = None;
     }
 
     /// Taking over a run played back to here (replay): what she's heard and set off so far is

@@ -68,6 +68,9 @@ struct Fight {
     /// better guns she's turned aside for already
     offered: BTreeSet<i32>,
     present: BTreeSet<i32>,
+    /// hunts that got her to where she was going with nothing to show for it: (the monster,
+    /// the spot, whole units). Not gone to again: it's somewhere she can't get at from there
+    hunted_spots: BTreeSet<(i32, i64, i64)>,
     /// --complete: every counted item too, and the level again for ones out of reach
     completion: Option<Completionist>,
     /// what she was doing each time she died (lives before this one)
@@ -246,7 +249,7 @@ impl Player {
     pub fn new(nav: Rc<Navigator>, knowledge: Knowledge, tune: Rc<Tuning>) -> Player {
         Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
-            fight: Fight { combat: Combat::new(nav, Rc::clone(&tune)), tune: Rc::clone(&tune), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false, gun_out_of_reach: false, toward_gun: BTreeSet::new() },
+            fight: Fight { combat: Combat::new(nav, Rc::clone(&tune)), tune: Rc::clone(&tune), pending_log: Vec::new(), offered: BTreeSet::new(), present: BTreeSet::new(), hunted_spots: BTreeSet::new(), completion: None, deaths: Vec::new(), rethink: false, gun_out_of_reach: false, toward_gun: BTreeSet::new() },
             retreat: None,
             bait_tic: -1_000_000_000,
             retreat_tic: -1_000_000_000,
@@ -491,6 +494,7 @@ impl Player {
         self.fight.combat.hold_fire = false;
         self.trail.clear();
         self.fallen_for.clear();
+        self.fight.hunted_spots.clear();
     }
 
     /// The level known beforehand: its monsters, where they stand at the start.
@@ -514,6 +518,7 @@ impl Player {
         self.fight.combat.hold_fire = false;
         self.trail.clear();
         self.fallen_for.clear();
+        self.fight.hunted_spots.clear();
     }
 
     /// The level begun again: of the things she remembers lying about, only what lies there at
@@ -1834,10 +1839,22 @@ impl Hooks for Fight {
                 }
             };
             let mut o = Objective::new(Kind::Hunt, x.stand_spot_for(goal, reach), format!("hunt {} {}", s.name, s.id));
+            // (been there for it once and it wasn't to be had from there: not again. MAP06: eight
+            // imps on a ledge out of her reach, the spot under each gone to in turn, 32 times,
+            // four minutes of the level, till a lift she'd missed got its second go)
+            if self.hunted_spots.contains(&(s.id, o.goal.0.round() as i64, o.goal.1.round() as i64)) {
+                continue;
+            }
             o.thing = Some(s.id);
             out.push(o);
         }
         out
+    }
+
+    fn hunted_in_vain(&mut self, obj: &Objective) {
+        if let Some(id) = obj.thing {
+            self.hunted_spots.insert((id, obj.goal.0.round() as i64, obj.goal.1.round() as i64));
+        }
     }
 
     fn gone(&mut self, obs: &Observation, obj: &Objective) -> bool {
