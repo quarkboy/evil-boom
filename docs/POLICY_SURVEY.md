@@ -183,7 +183,44 @@ told back and noted in the journal, so "why did I do that" can say "your policy:
 
 Kind 2 (`secrets`, `ask`): scripted directed games, a level each, as for stages 4 and 6.
 
-## For you to decide
+## Decided (the user, 2026-11-11)
+
+- **`retreat_at`**: dropped, folded into `stance`.
+- **`save`**: cells matter more than rockets; rockets can be used freely. So the default
+  changes: **rockets spent freely, cells and the BFG kept for bosses** (now both are kept once
+  a boss is seen). Values: `cells` (the new default), `none` (spend everything). This changes
+  the bot alone too, so it's scored on the full set against the baseline, as any change to how
+  she plays.
+- **`barrels`, `infighting`, `switches`**: dropped.
+- **`pickups`**: everything that isn't wasted is always picked up (as now: a stimpack at 99%
+  isn't). The setting is only for the big ones, renamed **`powerups`: `need` (default) |
+  `now`**, over soulspheres, megaspheres and invulnerability. Invulnerability is already kept
+  for a fight that needs it; soulspheres and megaspheres are taken now whenever they'd add
+  anything, so `need` is new for them: left where they lie till she's hurt (a number to find,
+  about 60 health, or a hard fight in sight). Also a change to the bot alone: scored on the full
+  set.
+- **`secrets`**: not a setting. `doom_explore` searches at 1 by default (the likeliest few
+  walls; it was 0), and a command of its own, `doom_search area|direction [2|3]` (2 by
+  default), for the thorough searches.
+- **`ask`**: not hers. Every question is asked, the frequency watched (at most 3 a minute as
+  now); if some kind comes too often, that kind's made rarer, not her switch.
+- **`stance`** and **`risk`**: not answered; kept as proposed.
+
+So her settings are **`stance`, `save`, `risk`, `powerups`**, with `idle`, `hints`, `answers`
+as they are, and the gun work of 3b. New command: `doom_search`.
+
+## Order of work
+
+1. The gun work (3b): the ordered launcher kept, the plain shotgun, the fist with berserk; a
+   standing `favour` if wanted. Traced in fights, not scored.
+2. `doom_search`, and explore's default of 1. Scripted directed games.
+3. The two default changes to the bot (`save cells`, `powerups need`): each on the full set,
+   run for run against `out/score/base.tsv`, kept if not worse.
+4. `stance` (bold, careful, avoid) and `risk` (careful, bold) as tuning files on the quarter
+   set; what each costs written into the schema's words.
+5. `doom_policy` taking them, telling them back, the briefing naming any not at its default.
+
+## What was asked of the user (answered above)
 
 1. Fold `retreat_at` into `stance`? (Proposed: yes.)
 2. Drop `barrels`, `infighting` and `switches`? (Proposed: yes; `doom_fight` covers the
