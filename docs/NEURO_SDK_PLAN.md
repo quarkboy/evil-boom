@@ -100,7 +100,7 @@ Control over the game, not the player in it: hers too, within what the streamer 
 | Change the skill (takes effect on a restart) | S | `doom_game skill N` | unchanged | `evil_new_game` |
 | Back to the title; end the session | S | `doom_game title` | the console's | `watch --present --title` (exists) |
 | Pause for the stream (a break, an ad) | S | the streamer's console only | | the console's (exists) |
-| **Cheats** | S | `doom_cheat` (4.7), only when the streamer's switched them on | off | below |
+| **Cheats** | S | `doom_cheat` (4.7), only when the streamer's switched them on; the codes are hers to know | off | below |
 | Who's playing: autopilot, directed, between | S | `doom_policy idle`, `ask` (section 3) | directed with a fallback | |
 
 Cheats, each mapped to what the bot can truly do with it (a cheat she can't use is refused
@@ -267,10 +267,20 @@ One shape for every time the bot wants her say:
   episode or a level), `title`. Anything that throws away a run in progress answers with a
   question first (a class D proposal: "Restart E2M5 from a pistol start? You're 6 minutes in
   with the red key."), as leaving with things left does now.
-- **`doom_cheat code`**: the codes of 2.4's table, by their Doom names (she'll know them; so
-  will chat). **Registered only while the streamer has cheats switched on** in the console,
-  and unregistered when they're off: with registration the SDK's own way of saying what's
-  possible, a cheat she isn't offered is one she can't be talked into by chat.
+- **`doom_cheat code`**: a code typed, as at the keyboard. **She isn't told what the codes
+  are** (the user's): the description says only "Type a cheat code.", the parameter is a free
+  string, not an enum, and nothing lists them. Whether she knows `iddqd` and `idkfa` is hers
+  to show, and chat's to tell her. What comes back is what the game would give: the code's own
+  message on one that works ("Degreelessness Mode On", "Very Happy Ammo Added"), and on
+  anything else just "Nothing happens.": no hint, no list, no "did you mean". A near miss
+  (`idfk`) is nothing, as in the game. Case and spaces don't matter; `idclev` and `idmus` take
+  their two digits, `idbehold` its letter, as typed.
+  - No-clip is the one that works in the game and not for her: "Nothing happens. (I can't walk
+    through walls.)"
+  - The streamer can drop a hint from the console (a line of `say`), if she's flailing.
+  - **Registered only while the streamer has cheats switched on** in the console, and
+    unregistered when they're off: registration is the SDK's own way of saying what's possible,
+    so a cheat she isn't offered is one she can't be talked into by chat.
 - **What the streamer allows** is a short list in the console, each a switch: change level,
   change skill, restart, cheats (all or named ones). Off, the action answers "not allowed
   right now" and nothing else changes. The streamer's own controls (start, stop, pause, goto,
