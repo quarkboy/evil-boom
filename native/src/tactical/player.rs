@@ -1130,7 +1130,7 @@ impl Player {
                 &floor,
                 crate::navigator::MAX_STEP,
             ) else {
-                if std::env::var_os("EVIL_DEBUG_PACE").is_some() {
+                if crate::debug::on().pace {
                     eprintln!("tic {}: no lane from ({:.0}, {:.0}) to ({:.0}, {:.0}) among {} barrels (floor here {:?}, there {:?})", obs.tic, pos.0, pos.1, q.0, q.1, barrels.len(), floor(pos), floor(q));
                 }
                 continue;
@@ -1143,7 +1143,7 @@ impl Player {
             }
         }
         let (length, path) = best?;
-        if std::env::var_os("EVIL_DEBUG_PACE").is_some() {
+        if crate::debug::on().pace {
             eprintln!(
                 "lane: {:?}",
                 path.waypoints

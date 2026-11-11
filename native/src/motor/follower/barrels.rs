@@ -98,7 +98,7 @@ impl RouteFollower {
                 let f = BARREL_DELAY * f64::from(k) / 4.0;
                 lit_chain_by(obs, (pos.0 + v.0 * f, pos.1 + v.1 * f)).is_some()
             });
-        if std::env::var_os("EVIL_DEBUG_BARRELS").is_some() && !obs.barrels_lit.is_empty() {
+        if crate::debug::on().barrels && !obs.barrels_lit.is_empty() {
             self.log.add(obs.tic, format!("lit {:?}; she's at ({:.0}, {:.0}) going ({:.1}, {:.1}); in the blast of the chain's {by:?}, ahead {ahead}; health {:?}", obs.barrels_lit, pos.0, pos.1, v.0, v.1, obs.health));
         }
         if by.is_none() {
@@ -245,7 +245,7 @@ impl RouteFollower {
                 best = Some((d, way));
             }
         }
-        if std::env::var_os("EVIL_DEBUG_BARRELS").is_some() {
+        if crate::debug::on().barrels {
             eprintln!("tic {}: at ({:.0}, {:.0}), {} barrels: out of them by the route in {by_route:?}, by the shortest way in {:?} to {:?}", obs.tic, pos.0, pos.1, barrels.len(), best.as_ref().map(|b| b.0), best.as_ref().and_then(|b| b.1.last()));
         }
         // (the route itself: nothing for her to follow but it, its presses and all; at the door

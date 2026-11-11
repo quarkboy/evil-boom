@@ -191,7 +191,7 @@ impl View {
             &actions,
             (&reach_all, &states_all, keys_all),
         );
-        if std::env::var_os("EVIL_DEBUG_RELAXED").is_some() {
+        if crate::debug::on().relaxed {
             eprintln!(
                 "relaxed: lines {:?} keys {:?}",
                 rel_t,

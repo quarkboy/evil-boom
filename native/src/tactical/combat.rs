@@ -530,7 +530,7 @@ impl Combat {
                         if s == 2 && !second {
                             self.burst_from = obs.tic;
                         }
-                        if std::env::var_os("EVIL_DEBUG_SHOT").is_some() {
+                        if crate::debug::on().shot {
                             let gap = self.shot_out.map_or(0, |(_, t)| obs.tic - t);
                             self.log.push(format!(
                                 "tic {}: a shot out, gun {:?}, {gap} tics after the last",
@@ -551,7 +551,7 @@ impl Combat {
                             .entry("shots (bullets, shells)".to_string())
                             .or_insert(0.0) += 1.0;
                         if !on {
-                            if std::env::var_os("EVIL_DEBUG_SHOT").is_some() {
+                            if crate::debug::on().shot {
                                 let what: Vec<String> = seen
                                     .iter()
                                     .map(|t| {
@@ -1768,7 +1768,7 @@ impl Combat {
             });
             self.mode = why.clone();
         }
-        if obs.tic % 175 == 0 && std::env::var_os("EVIL_DEBUG_SHOT").is_some() {
+        if obs.tic % 175 == 0 && crate::debug::on().shot {
             if let Some(t) = &s.target {
                 self.log.push(format!("tic {}: (she's at ({:.0}, {:.0}, {:.0}); {} {} at ({:.0}, {:.0}, {:.0}), {:.0} off; the move {kind:?}, going {:?}; gun {:?}, ammo {:?}, keys {:?})", obs.tic, obs.x, obs.y, self.z(obs), t.name, t.id, t.x, t.y, t.z, dist((t.x, t.y), obs.pos()), act.moving.map(|m| (m.0.round(), m.1.round())), obs.weapon, obs.ammo, obs.keys));
             }
@@ -2106,7 +2106,7 @@ impl Combat {
         if d.weapon != 0 {
             c.weapon = d.weapon;
         }
-        if std::env::var_os("EVIL_DEBUG_PACE").is_some() && obs.tic % 10 == 0 {
+        if crate::debug::on().pace && obs.tic % 10 == 0 {
             eprintln!("  fight tic {}: {:?} legs {legs}, base {:?}, out ({:.1}, {:.1}) turn {:.1}, facing {:.1}", obs.tic, d.kind, base.map(|b| (b.forward, b.strafe, b.turn)), c.forward, c.strafe, c.turn, obs.angle);
         }
         c

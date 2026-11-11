@@ -20,6 +20,7 @@ pub mod config;
 pub mod console;
 pub mod control;
 pub mod crush;
+pub mod debug;
 pub mod decisions;
 mod det;
 pub mod drive;

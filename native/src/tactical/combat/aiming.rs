@@ -244,7 +244,7 @@ impl Combat {
                     t.id,
                     h.label()
                 ));
-                if std::env::var_os("EVIL_DEBUG_SHOT").is_some() {
+                if crate::debug::on().shot {
                     let z = self.z(obs);
                     self.log.push(format!("    (she's at ({:.0}, {:.0}, {z:.0}), it's at ({:.0}, {:.0}, {:.0}); sectors {:?} {:?})", pos.0, pos.1, t.x, t.y, t.z, self.sector_at(pos), self.sector_at((t.x, t.y))));
                 }

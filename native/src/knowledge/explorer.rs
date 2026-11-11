@@ -810,9 +810,7 @@ impl Explorer {
 }
 
 fn debug_tics() -> Option<(i64, i64)> {
-    let v = std::env::var("EVIL_DEBUG_OBJECTIVES").ok()?;
-    let (a, b) = v.split_once('-')?;
-    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+    crate::debug::on().objectives
 }
 
 impl Explorer {

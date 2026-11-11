@@ -385,7 +385,7 @@ impl RouteFollower {
             }
         }
         speed = speed.min(self.caution_speed(obs, track));
-        if std::env::var_os("EVIL_DEBUG_PACE").is_some() && obs.tic % 10 == 0 {
+        if crate::debug::on().pace && obs.tic % 10 == 0 {
             eprintln!("tic {}: at ({:.0}, {:.0}) speed {speed:.1} (cap {:.1}, track {:.1}, caution {:.1}, stop {stop}, rest {rest:.0}), carrot ({:.0}, {:.0}), going {:?}", obs.tic, pos.0, pos.1, self.speed_cap, track.speed_limit(track.length - rest, end_speed), self.caution_speed(obs, track), carrot.0, carrot.1, obs.velocity);
         }
         let look = self.look_angle(obs, &seg);
@@ -511,7 +511,7 @@ impl RouteFollower {
                 (dist(pos, *x) + dist(*x, carrot)).total_cmp(&(dist(pos, *y) + dist(*y, carrot)))
             })
             .unwrap_or_else(|| {
-                if std::env::var_os("EVIL_DEBUG_PACE").is_some() && obs.tic % 10 == 0 {
+                if crate::debug::on().pace && obs.tic % 10 == 0 {
                     eprintln!(
                         "  no way round the barrel at ({:.0}, {:.0}) from ({:.0}, {:.0})",
                         b.0, b.1, pos.0, pos.1

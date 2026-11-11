@@ -257,7 +257,7 @@ impl Engine {
         }
         if let Some(l) = &self.carry {
             self.game.give(l);
-            if std::env::var_os("EVIL_DEBUG_CARRY").is_some() {
+            if crate::debug::on().carry {
                 eprintln!(
                     "carried in: {l:?}; in her hands now, the game's weapon {}",
                     self.game.player().readyweapon

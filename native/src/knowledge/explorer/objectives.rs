@@ -168,9 +168,7 @@ impl Explorer {
         let t_sat = Instant::now();
         let (reach, states_all, _) = view.saturate(here, &states, keys, &[], &actions);
         self.stats.saturate_secs += t_sat.elapsed().as_secs_f64();
-        if std::env::var_os("EVIL_DEBUG_REACH")
-            .is_some_and(|v| v.to_str().and_then(|t| t.parse::<i64>().ok()) == Some(obs.tic))
-        {
+        if crate::debug::on().reach == Some(obs.tic) {
             let sectors: BTreeSet<usize> = reach.iter().map(|&p| nav.sector_of_poly(p)).collect();
             self.log.push(format!(
                 "tic {}: reach from poly {here} (sector {}): {} polys, sectors {sectors:?}",
@@ -178,19 +176,14 @@ impl Explorer {
                 nav.sector_of_poly(here),
                 reach.len()
             ));
-            if let Ok(want) = std::env::var("EVIL_DEBUG_HEIGHTS") {
-                for s in want
-                    .split(',')
-                    .filter_map(|x| x.trim().parse::<usize>().ok())
-                {
-                    self.log.push(format!(
-                        "  sector {s}: really at {:?}, last seen at {:?} (tic {:?}), believed {:?}",
-                        obs.heights.get(s),
-                        self.knowledge.seen_heights.get(&s),
-                        self.knowledge.seen_tic.get(&s),
-                        states.get(s)
-                    ));
-                }
+            for &s in &crate::debug::on().heights {
+                self.log.push(format!(
+                    "  sector {s}: really at {:?}, last seen at {:?} (tic {:?}), believed {:?}",
+                    obs.heights.get(s),
+                    self.knowledge.seen_heights.get(&s),
+                    self.knowledge.seen_tic.get(&s),
+                    states.get(s)
+                ));
             }
             for &p in &reach {
                 let poly = nav.mesh.poly(p);

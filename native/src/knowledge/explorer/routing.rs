@@ -396,10 +396,7 @@ impl Explorer {
         // seconds, a door open a few. A plan that will have lapsed before it gets to what needs it
         // is no plan: it's planned again without the jump that came too late, and with no jump in
         // it to leave out, it's no route.
-        if let Some(want) = std::env::var("EVIL_DEBUG_JUMPS_INTO")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-        {
+        if let Some(want) = crate::debug::on().jumps_into {
             let banned = self.banned_jumps();
             for (ji, j) in nav
                 .jumps
@@ -462,7 +459,7 @@ impl Explorer {
                 },
             );
         }
-        if route.is_none() && std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+        if route.is_none() && crate::debug::on().no_route {
             let sec = |p: Point| nav.poly_at(p).map(|q| (q, nav.sector_of_poly(q)));
             let direct = view.find_path(start, obj.goal, &states, None);
             self.log.push(format!("  no plan for '{}': from ({:.0}, {:.0}) {:?} to ({:.0}, {:.0}) {:?}; a path by itself: {:?}; believed heights there {:?}", obj.label, start.0, start.1, sec(start), obj.goal.0, obj.goal.1, sec(obj.goal), direct.map(|d| d.steps), sec(obj.goal).map(|(_, s)| states[s].clone())));
@@ -532,7 +529,7 @@ impl Explorer {
             };
             if cost > RISK_SHARE * health && health - cost < margin {
                 self.short_of_health = Some(obs.tic);
-                if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+                if crate::debug::on().no_route {
                     self.log.push(format!("  no route for '{}': refusal 1: cost {cost:.0} (the way {:.0}) against health {health:.0}, armor {:?}, margin {margin:.0}, nothing else to do {}", obj.label, self.route_damage(&route.legs, &states, obs), obs.armor, self.harm_ok));
                 }
                 return None;
@@ -558,7 +555,7 @@ impl Explorer {
                     }
                     if let Some(s) = n.rsplit(' ').next().and_then(|x| x.parse::<usize>().ok()) {
                         if k.damaging(s) && !escaped.contains(&s) {
-                            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+                            if crate::debug::on().no_route {
                                 self.log
                                     .push(format!("  no route for '{}': refusal 2", obj.label));
                             }
@@ -583,7 +580,7 @@ impl Explorer {
             if (damage > RISK_SHARE * obs.health.unwrap_or(100.0) || wall_over_harm)
                 && !(shut_in && obj.trigger.is_some())
             {
-                if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+                if crate::debug::on().no_route {
                     self.log
                         .push(format!("  no route for '{}': refusal 3", obj.label));
                 }
@@ -601,21 +598,21 @@ impl Explorer {
                     .any(|j| self.falls_for_good(j, &view, &route.states))
             })
         {
-            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+            if crate::debug::on().no_route {
                 self.log
                     .push(format!("  no route for '{}': refusal 4", obj.label));
             }
             return None;
         }
         if obj.kind != Kind::Exit && self.dead_end(&route, obj, obs, &view) {
-            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+            if crate::debug::on().no_route {
                 self.log
                     .push(format!("  no route for '{}': refusal 5", obj.label));
             }
             return None;
         }
         if obj.kind != Kind::Exit && !obj.risky && self.shuts_in(&route, obj, obs, &view) {
-            if std::env::var_os("EVIL_DEBUG_NO_ROUTE").is_some() {
+            if crate::debug::on().no_route {
                 self.log
                     .push(format!("  no route for '{}': refusal 6", obj.label));
             }
@@ -879,7 +876,7 @@ impl Explorer {
         if obj.kind == Kind::Wall && obj.suspicion >= super::objectives::NEAR_SUSPECT {
             return false;
         }
-        if std::env::var_os("EVIL_DEBUG_DEAD_END").is_some() {
+        if crate::debug::on().dead_end {
             let inter: Vec<String> = k
                 .interactables()
                 .iter()

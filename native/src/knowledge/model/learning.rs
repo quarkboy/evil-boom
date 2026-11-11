@@ -243,7 +243,7 @@ impl Knowledge {
         if c.use_ {
             // The game turns her, then traces the use: by where she faces after the tic's turn.
             let facing = last.angle - c.turn;
-            if std::env::var_os("EVIL_DEBUG_USE").is_some() {
+            if crate::debug::on().use_press {
                 self.events.push(format!(
                     "tic {}: use at ({:.0}, {:.0}) facing {facing:.1} (turned {:.1}): hits {:?}",
                     obs.tic,

@@ -153,7 +153,7 @@ impl Combat {
             .filter(|&(p, far)| self.fits(obs, p) && self.sees(far, p, z, &self.heights_now))
             .map(|(p, _)| p)
             .min_by(|a, b| dist(*a, pos).total_cmp(&dist(*b, pos)))?;
-        if std::env::var_os("EVIL_DEBUG_SET_ON").is_some() && obs.tic % 35 == 0 {
+        if crate::debug::on().set_on && obs.tic % 35 == 0 {
             self.log.push(format!("tic {}: (she's at ({:.0}, {:.0}, {:.0}); the {} at ({:.0}, {:.0}, {:.0}) after her {}, the {} at ({:.0}, {:.0}, {:.0}) after her {}; the spot ({:.0}, {:.0}), {:.0} off)", obs.tic, pos.0, pos.1, z, gun.name, gun.x, gun.y, gun.z, gun.after_her, other.name, other.x, other.y, other.z, other.after_her, spot.0, spot.1, dist(spot, pos)));
         }
         let mesh = std::sync::Arc::clone(&self.nav.mesh);

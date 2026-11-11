@@ -483,7 +483,7 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
         (e.tic - start) as f64 / TICRATE,
         x.knowledge.summary()
     );
-    if std::env::var_os("EVIL_DEBUG_SCOUT").is_none() {
+    if !crate::debug::on().scout {
         x.log.truncate(log_from);
     }
     x.log.push(summary);
@@ -541,7 +541,7 @@ pub fn run_map_in(
     if o.known {
         // (for measuring what each half of knowing a level is worth, EVIL_KNOWN_ONLY: "map",
         // the level without its monsters; "monsters", them without the level)
-        let only = std::env::var("EVIL_KNOWN_ONLY").ok();
+        let only = crate::debug::on().known_only.clone();
         if only.as_deref() == Some("monsters") {
             let first = e.observe();
             if let Some(p) = agent.player_mut() {

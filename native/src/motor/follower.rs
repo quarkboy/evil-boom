@@ -182,7 +182,7 @@ pub struct FollowerLog {
 
 impl FollowerLog {
     pub fn add(&mut self, tic: i64, msg: impl AsRef<str>) {
-        if std::env::var_os("EVIL_DEBUG_PACE").is_some() {
+        if crate::debug::on().pace {
             eprintln!("    follower tic {tic}: {}", msg.as_ref());
         }
         self.events
