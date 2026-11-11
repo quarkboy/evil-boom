@@ -85,14 +85,40 @@ way in that the code doesn't have yet (section 6).
 | Back off when stuck, plan another way, give the step up | `walking.rs` `stuck` | T | told on giving up | as now |
 | Shoot a barrel in the way, from where | `barrels.rs` | T | policy `barrels` | as now |
 
-### 2.4 The game itself
+### 2.4 The game itself (meta control)
 
-| Decision | Class | Hers through | Default |
-|---|---|---|---|
-| Start, the WAD, the level, the skill | S | `doom_start` (the streamer's console too) | the console's |
-| After a death: again (what she learned kept), or again from a pistol start, or skip | D | `doom_restart mode` | again, after the death's shown |
-| Next level; keep what she carries | D | `doom_next` | next, carrying |
-| How she plays overall: autopilot, directed, somewhere between | S | `doom_mode` (section 3) | directed with a fallback |
+Control over the game, not the player in it: hers too, within what the streamer allows
+(4.7). All class S or D: none has a clock, and those that throw a run away ask first.
+
+| Decision | Class | Hers through | Default | Engine |
+|---|---|---|---|---|
+| Start a game: the WAD, the episode, the level, the skill | S | `doom_game new` | the console's | `evil_new_game` (exists) |
+| The level again, mid-level or dead: what she learned kept, what she came in with restored | D | `doom_game restart` | dead: again, once the death's been shown | lives (`episode --lives`, exists) |
+| The level again from a pistol start (when she arrived with nothing: E2M5's lesson) | D | `doom_game restart pistol` | not unless asked | `evil_new_game` |
+| The level again as new: what she learned forgotten too | D | `doom_game restart fresh` | not unless asked | a new `Knowledge` |
+| Next level; skip this level; go to a level by name | D | `doom_game next` / `level NAME` | next at the tally, carrying | `Engine::goto` (exists) |
+| Change the skill (takes effect on a restart) | S | `doom_game skill N` | unchanged | `evil_new_game` |
+| Back to the title; end the session | S | `doom_game title` | the console's | `watch --present --title` (exists) |
+| Pause for the stream (a break, an ad) | S | the streamer's console only | | the console's (exists) |
+| **Cheats** | S | `doom_cheat` (4.7), only when the streamer's switched them on | off | below |
+| Who's playing: autopilot, directed, between | S | `doom_policy idle`, `ask` (section 3) | directed with a fallback | |
+
+Cheats, each mapped to what the bot can truly do with it (a cheat she can't use is refused
+with the reason, not faked):
+
+| Cheat | Does | The bot's side |
+|---|---|---|
+| `iddqd` god mode | nothing hurts her | `evil_god` and `Combat::immune` (exist: the scouting pass plays so): the fight stops dodging and retreating, floors that hurt are floors |
+| `idkfa` / `idfa` everything / no keys | all guns, full ammo, keys | `evil_give` (exists); she sees it in what she carries; keyed doors open to her |
+| `idbehold` a powerup | berserk, invulnerability, the suit, the map, light, invisibility | `evil_give` extended; each is something she already understands as a pickup |
+| `iddt` / the computer map | the whole map known | her knowledge filled in, as `--peek` runs have it (exists): the one place the automap rule is hers to break |
+| `idclev` warp | another level | `Engine::goto` (the same as `doom_game level`) |
+| `idmus` music | changes the track | the engine's; nothing to the bot. A stream toy |
+| `idclip` no clipping | walks through walls | **refused**: her planning is the walls. Said so ("I can't walk through walls even when I'm allowed to") |
+| `idchoppers` | a chainsaw | `evil_give` |
+
+A cheated level is marked so, in her status, in the tally she's told at the end and on the
+stream's column ("cheated: god mode from 2:14"), and never counts in anything measured.
 
 ## 3. Grain: five levels, hers to mix
 
@@ -135,7 +161,7 @@ what can't be undone`, so dead air never lasts and she's never shut out.
 
 ## 4. The actions
 
-Fourteen, registered for the whole game (descriptions as terse as today's: every word is in
+Sixteen at most, registered for the whole game but for `doom_cheat` (descriptions as terse as today's: every word is in
 her context throughout). The nine that exist keep their shape.
 
 ### 4.1 Looking (exist; two added)
@@ -203,8 +229,7 @@ One action, so the fight costs one description:
 
 - **`doom_answer id choice`**: the reply to a confirmation or a proposal (4.6). `choice` is
   one of the options given, by its key.
-- `doom_restart [pistol]`, `doom_next`: lifecycle (registered only when dead or at the tally:
-  the one place registration changes, as the earlier plan has it).
+- The game itself is 4.7.
 
 ### 4.6 Questions from the bot: proposals with a default and a clock
 
@@ -234,6 +259,24 @@ One shape for every time the bot wants her say:
   boss, the last of an ammo). Everything else is done and, if notable, told.
 - Asked by the fast classifier instead when one's configured and the class is T: same
   question, same options, same journal (the advisor seam). Evil's answer outranks it.
+
+### 4.7 The game itself (new)
+
+- **`doom_game do [value]`**, `do` one of `restart` (value `pistol` or `fresh`, else as she
+  came in), `next`, `level` (value a level's name), `skill` (value 1 to 5), `new` (value an
+  episode or a level), `title`. Anything that throws away a run in progress answers with a
+  question first (a class D proposal: "Restart E2M5 from a pistol start? You're 6 minutes in
+  with the red key."), as leaving with things left does now.
+- **`doom_cheat code`**: the codes of 2.4's table, by their Doom names (she'll know them; so
+  will chat). **Registered only while the streamer has cheats switched on** in the console,
+  and unregistered when they're off: with registration the SDK's own way of saying what's
+  possible, a cheat she isn't offered is one she can't be talked into by chat.
+- **What the streamer allows** is a short list in the console, each a switch: change level,
+  change skill, restart, cheats (all or named ones). Off, the action answers "not allowed
+  right now" and nothing else changes. The streamer's own controls (start, stop, pause, goto,
+  say, act for her) stay as they are and outrank hers.
+- Told, not silent, when any of it happens, hers or the streamer's: "Restarting E2M5 from a
+  pistol start." "God mode on (cheat)." A cheat's a moment; so is refusing one.
 
 ## 5. What she's told
 
@@ -328,7 +371,7 @@ The cleanup left typed pieces for this; the layer is built on them, in one modul
 | Policy | `Tuning` (9 groups, ~200 numbers), `--tuning FILE`, the advisor's stances | `Policy`: the fixed settings of 4.4, each mapped onto `Tuning` fields and explorer flags in one table; applied at a tic boundary |
 | Events | `Director::event`/`report` (strings, `notable`) | typed `Event` (kind, importance, cooldown key, cause) rendered by one function; the budgeter; the fight summary; the ring for before-and-after |
 | The link | `neuro/link.rs`, `session.rs` (context, force, result, reconnect) | deadlines; one open question; answers checked for staleness |
-| Lifecycle | the console's (`watch --control`), `episode --lives` | `doom_restart [pistol]`, `doom_next` |
+| The game itself | the console's commands (`watch --control`: start, stop, goto, pause), `episode --lives`, `evil_new_game`, `evil_god`, `evil_give`, `Engine::goto`, `Combat::immune`, `--peek` | `doom_game`, `doom_cheat`; the console's switches for what she's allowed; `evil_give` for powerups; a level marked cheated; `restart fresh` |
 
 Ground rules carried over: headless runs and the score never touch any of this (parity with
 the layer off is line for line); nothing omniscient crosses the boundary; everything she
@@ -346,7 +389,7 @@ reads is short.
 | 5 | Tactics: `doom_fight` and its seams, expiries | arenas: each tactic visibly changes the fight and never lowers survival below autopilot's by more than noise when left to expire |
 | 6 | Class T proposals (act now, override in time); the "close or high-stake" filter tuned | a hard level with the stand-in: questions per minute within budget, share answered in time, outcomes |
 | 7 | `doom_policy`; then `doom_style` through the classifier | each setting's effect measured on the score's quarter set; none outside its documented range |
-| 8 | Lifecycle (`doom_restart pistol`, `doom_next`), the console showing questions and policy | an episode on stream settings, unattended, through a death and a restart |
+| 8 | The game itself: `doom_game`, `doom_cheat`, the console's switches for what she's allowed and its view of questions and policy | an episode on stream settings, unattended, through a death, a pistol restart, a skill change and each cheat; a disallowed action refused; a cheated level never in a measure |
 | 9 | Latency rehearsal: the mock delaying and dropping her answers; Tony and Randy for malformed and random input | no hang, no stale action, context volume steady over an hour |
 
 Measures throughout (the earlier plan's, plus): seconds she's idle; questions asked, answered
@@ -363,7 +406,10 @@ To be filled in as I play.
    proposal), or waiting for her as now?
 2. **How long she takes to answer** in practice (think plus speech): the deadlines (6 s for
    class T, 15 s for D) are guesses until measured with her.
-3. **Fourteen actions**: is that too much standing context for her? The cut, if so: fold
+3. **Sixteen actions**: is that too much standing context for her? The cut, if so: fold
    `doom_look` into `doom_status`, and `doom_goal` into `doom_explore`.
+5. **Meta control**: which of restart, level, skill and cheats is hers by default, and which
+   only when you switch it on? My proposal: restart and next hers always; level, skill and
+   cheats behind the console's switches, off to begin with.
 4. **`doom_style` free text**: wanted for the stream's sake ("play like a coward" is a bit),
    or are the fixed settings enough to begin with?
