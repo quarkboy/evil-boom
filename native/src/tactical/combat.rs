@@ -513,7 +513,39 @@ impl Combat {
         self.reckon_put_in(obs, &ammo);
         self.ammo_was = ammo;
         self.note_health_lost(obs);
-        // Ceilings coming down: crushers, where a fight's moves don't go.
+        self.watch_movers(obs);
+        self.note_hurt(obs);
+        self.note_deaths(obs);
+        self.hear(obs);
+        self.refresh_tic_cache(obs);
+        let me = Body {
+            x: obs.x,
+            y: obs.y,
+            z: self.z(obs),
+            height: PLAYER_HEIGHT,
+        };
+        self.see_monsters(obs, me);
+        self.see_missiles(obs, me);
+        self.see_barrels(obs, me);
+        self.heed(obs);
+        self.watch_infighting(obs);
+        self.now = self.assess(obs);
+        self.watch_reach(obs);
+        self.note_ground_and_view(obs);
+        self.check(obs);
+        let what = if !self.now.against_her.is_empty() {
+            "tics with something in view"
+        } else if !self.now.remembered.is_empty() {
+            "tics with only remembered"
+        } else {
+            "tics with nothing about"
+        };
+        self.count(what, 1.0);
+    }
+
+    /// Ceilings coming down and floors coming up, by sector, and when: what the crusher tests go
+    /// by. Crushers are where a fight's moves don't go.
+    fn watch_movers(&mut self, obs: &Observation) {
         if self.ceilings.len() != obs.heights.len() {
             self.ceilings = obs.heights.iter().map(|h| h.ceiling).collect();
             self.ceiling_down = vec![i64::MIN / 2; obs.heights.len()];
@@ -542,6 +574,12 @@ impl Combat {
                     .insert(s, crate::crush::out_tics(&self.nav, &obs.heights, s));
             }
         }
+    }
+
+    /// Health lost since last tic: kept (for the rate she's losing it at) and logged with what
+    /// was by her when it went.
+    fn note_hurt(&mut self, obs: &Observation) {
+        let pos = obs.pos();
         if let Some(h) = obs.health {
             if let Some(before) = self.health.filter(|&before| h < before) {
                 self.damage.push((obs.tic, before - h));
@@ -569,6 +607,12 @@ impl Combat {
             }
             self.health = Some(h);
         }
+    }
+
+    /// A monster gone from the game is dead. It is hers to know if she saw it go; else by its
+    /// cry, if she hears it and can tell whose it was (`hear`); else it's still about, for all
+    /// she knows, where she last saw it.
+    fn note_deaths(&mut self, obs: &Observation) {
         let monsters: BTreeMap<i32, Thing> = obs
             .things
             .iter()
@@ -576,9 +620,6 @@ impl Combat {
             .filter(|t| monster(t.name).is_some())
             .map(|t| (t.id, t.clone()))
             .collect();
-        // Gone: dead. It is hers to know if she saw it go; else by its cry, if she hears it and can
-        // tell whose it was (`hear`); else it's still about, for all she knows, where she last saw
-        // it.
         let was_visible: BTreeSet<i32> = self.visible.iter().map(|t| t.id).collect();
         for i in self.truth.keys() {
             if monsters.contains_key(i) || self.dead.contains(i) || !was_visible.contains(i) {
@@ -594,14 +635,12 @@ impl Combat {
             }
         }
         self.truth = monsters;
-        self.hear(obs);
-        self.refresh_tic_cache(obs);
-        let me = Body {
-            x: obs.x,
-            y: obs.y,
-            z: self.z(obs),
-            height: PLAYER_HEIGHT,
-        };
+    }
+
+    /// The monsters in her sight this tic (`visible`), and what she keeps of each: where and
+    /// how she last saw it, whether it's awake, whom it's after, its health as she reckons it.
+    fn see_monsters(&mut self, obs: &Observation, me: Body) {
+        let pos = obs.pos();
         self.visible.clear();
         for t in self.truth.values() {
             let d = dist((t.x, t.y), pos);
@@ -761,9 +800,13 @@ impl Combat {
                 *self.tally.entry("lost".to_string()).or_insert(0.0) += 1.0;
             }
         }
-        // Missiles: noticed in her view with nothing in the way, then followed while they fly. A
-        // missile in flight makes no sound, only its launch, which turns her to look. Her own she
-        // knows of.
+    }
+
+    /// Missiles: noticed in her view with nothing in the way, then followed while they fly. A
+    /// missile in flight makes no sound, only its launch, which turns her to look. Her own she
+    /// knows of.
+    fn see_missiles(&mut self, obs: &Observation, me: Body) {
+        let pos = obs.pos();
         let flying: BTreeMap<i32, &Thing> = obs
             .things
             .iter()
@@ -794,8 +837,12 @@ impl Combat {
                 self.missiles_seen.insert(id);
             }
         }
-        // Barrels are seen as monsters are: in her view (or near), nothing in the way; kept while
-        // they're there.
+    }
+
+    /// Barrels are seen as monsters are: in her view (or near), nothing in the way; kept while
+    /// they're there.
+    fn see_barrels(&mut self, obs: &Observation, me: Body) {
+        let pos = obs.pos();
         let barrels: Vec<Point> = obs.barrels.iter().flatten().copied().collect();
         // The same barrel pushed by shots is still the one she saw.
         self.barrels_seen = self
@@ -832,11 +879,12 @@ impl Combat {
                 self.barrels_seen.push(b);
             }
         }
-        self.heed(obs);
-        self.watch_infighting(obs);
-        self.now = self.assess(obs);
-        // What only claws or charges, awake and in her sight, is watched for whether it gets any
-        // nearer while she stays put; the watch begins again when she moves off.
+    }
+
+    /// What only claws or charges, awake and in her sight, is watched for whether it gets any
+    /// nearer while she stays put (`cant_reach`); the watch begins again when she moves off.
+    fn watch_reach(&mut self, obs: &Observation) {
+        let pos = obs.pos();
         let watched: Vec<(i32, f64)> = self
             .visible
             .iter()
@@ -851,7 +899,12 @@ impl Combat {
         for (id, d) in watched {
             self.reach_watch.entry(id).or_insert((obs.tic, d, pos));
         }
-        // The ground she's on counts as been on, from now.
+    }
+
+    /// The ground she's on counts as been on, from now; and the ways round her that are in her
+    /// view this tic are noted as looked along.
+    fn note_ground_and_view(&mut self, obs: &Observation) {
+        let pos = obs.pos();
         if self.been.is_empty() {
             self.been = vec![false; self.nav.mesh.polys.len()];
         }
@@ -864,15 +917,6 @@ impl Combat {
                 *at = obs.tic;
             }
         }
-        self.check(obs);
-        let what = if !self.now.against_her.is_empty() {
-            "tics with something in view"
-        } else if !self.now.remembered.is_empty() {
-            "tics with only remembered"
-        } else {
-            "tics with nothing about"
-        };
-        self.count(what, 1.0);
     }
 
     /// The rounds gone from her guns since last tic. A bullet or a shell gone is a shot out:
