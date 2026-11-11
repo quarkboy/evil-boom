@@ -19,6 +19,7 @@ use crate::motor::{heading, norm, Observation};
 use crate::play::Agent;
 
 mod ask;
+mod death;
 mod events;
 mod kills;
 mod look;
@@ -376,6 +377,8 @@ pub struct Director {
     /// (None: as long as it takes)
     asking: ask::Asking,
     pub answer_wait: Option<i64>,
+    /// what hurt her lately, (tic, what, health): her death's story (`death.rs`)
+    hurt: VecDeque<(i64, String, i32)>,
     /// how things stand this tic (`situation.rs`): what tells her reads it
     pub now: Situation,
     /// the last resorts she's let her instinct take, this level
@@ -481,6 +484,7 @@ impl Director {
     /// A new map: names, orders, places and what's been told are the old map's.
     pub fn new_map(&mut self) {
         self.overtaken("a new level");
+        self.hurt.clear();
         self.resorts.clear();
         self.queue.clear();
         self.resume = None;
@@ -512,33 +516,11 @@ impl Director {
         self.restart_wanted = false;
     }
 
-    /// She's died, with lives left: told, with what she was fighting; her orders and her say in
-    /// the fight are the life before's. The level's the same one: names and what's been told
-    /// of it stand.
-    pub fn died(&mut self, tic: i64, lives_left: i32) {
-        let by = self.fight.as_ref().map_or(String::new(), |f| {
-            let them: Vec<String> = f.against.iter().map(|(name, n)| some(*n, name)).collect();
-            if them.is_empty() {
-                String::new()
-            } else {
-                format!(" fighting {}", them.join(", "))
-            }
-        });
-        self.reports.push(Report {
-            tic,
-            ok: false,
-            text: format!(
-                "You died{by}. {lives_left} lives left: the level again from its start, with what you came in with."
-            ),
-            event: Event::DiedLivesLeft,
-        });
-        self.new_life();
-    }
-
     /// The level again from its start (a death, a restart): her orders and her say in the fight
     /// are the attempt before's; the fight, her health's marks and what's killed start afresh.
     fn new_life(&mut self) {
         self.overtaken("the level begun again");
+        self.hurt.clear();
         self.queue.clear();
         self.resume = None;
         self.tactics = Tactics::default();
@@ -681,7 +663,8 @@ impl Director {
         if health <= 0.0 {
             if !self.told_dead {
                 self.told_dead = true;
-                self.tell(obs, Event::Died, "You died.".into());
+                let story = self.death_story();
+                self.tell(obs, Event::Died, story);
             }
             return;
         }
@@ -1361,6 +1344,8 @@ impl Director {
     /// Each tic: the order in hand carried on (its next objective, or its end reported); the next
     /// order taken up.
     pub fn tick(&mut self, agent: &mut Agent, obs: &Observation) {
+        let hits = self.hits.clone();
+        self.remember_hits(obs.tic, &hits);
         self.take_stock(agent, obs);
         self.events(agent, obs);
         self.kills(agent, obs);

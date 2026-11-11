@@ -4,7 +4,7 @@
 //! tables that judge by kind are keyed by that.
 
 /// (class name, what it's called, several of them)
-const NAMES: [(&str, &str, &str); 61] = [
+const NAMES: [(&str, &str, &str); 69] = [
     ("Zombieman", "zombieman", "zombiemen"),
     ("ShotgunGuy", "shotgun guy", "shotgun guys"),
     ("ChaingunGuy", "chaingunner", "chaingunners"),
@@ -79,6 +79,14 @@ const NAMES: [(&str, &str, &str); 61] = [
     ("PlasmaRifle", "plasma rifle", "plasma rifles"),
     ("BFG9000", "BFG9000", "BFG9000s"),
     ("Rocket", "rocket", "rockets"),
+    ("DoomImpBall", "fireball", "fireballs"),
+    ("CacodemonBall", "lightning ball", "lightning balls"),
+    ("BaronBall", "fireball", "fireballs"),
+    ("FatShot", "fireball", "fireballs"),
+    ("ArachnotronPlasma", "plasma", "plasma"),
+    ("RevenantTracer", "homing rocket", "homing rockets"),
+    ("ArchvileFire", "fire", "fire"),
+    ("SpawnShot", "spawn cube", "spawn cubes"),
     ("PlasmaBall", "plasma", "plasma"),
     ("BFGBall", "BFG blast", "BFG blasts"),
     ("DoomPlayer", "you", "you"),

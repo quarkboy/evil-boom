@@ -2762,3 +2762,25 @@ that place knows). Each kind's weight is what its telling had before: a directed
 whole report file the same, line for line (111 lines), on the build before and after. What it
 opens: a budget that drops the least of the moments first, a stream panel or console that
 wants only some kinds.
+
+## Her death told as it came (the user, 2026-11-11)
+
+She was told "You died." (and, with lives left, what she'd been fighting), never what killed
+her: a rocket of her own in her face read the same as anything else. Now
+(`control/directed/death.rs`) the last blow and what hurt her in the half minute before it,
+each by what it was, from the engine's own record of every hit (its inflictor, its source, her
+own or not, a barrel and who set it off, the floor, a crusher): "You died: a mancubus's fireball
+(-36). Before it, in 30 s: a mancubus's fireball x3 (-64)." "Your own rocket", "a barrel an imp
+set off", "a shotgun guy" (a hitscanner or a claw: the monster itself). Missiles have plain
+names now (fireball, lightning ball, homing rocket, plasma, fire).
+
+And a death reached her from every runner, through one path (`Watch::tell_death`): before,
+only a headless game told one (stream mode and the window told none but game over, and the
+last life's in a headless game wasn't told either). The killing blow's hit, which the game
+passes on a tic after she's seen dead, goes with it; what's told is passed on at once. Whether
+the level begins again is said, not guessed from the lives left (with 2 lives the first death
+left "0" and was taken for the end).
+
+Checked: MAP07 from a pistol start at UV with 2 and 3 lives: each death told, the lives
+counted ("1 life left after this one", "Your last life"), the last told. Not seen in a game:
+a death by her own rocket (the wording's in a test). Parity: 24 runs the same.
