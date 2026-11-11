@@ -1,12 +1,12 @@
 //! Against the real IWADs (skipped when they aren't installed): reading them, the movement
 //! rules, the navmesh, planning, and the movement simulator against the engine.
 
-use evildoom::config::resolve_wad;
-use evildoom::nav::{can_cross, Heights};
-use evildoom::navigator::{Navigator, Plan};
-use evildoom::specials::{classify_line, classify_sector, Category, Key, Keys};
-use evildoom::wad::{load_map, Wad};
-use evildoom::walkthrough::{action_for, Action};
+use evilboom::config::resolve_wad;
+use evilboom::nav::{can_cross, Heights};
+use evilboom::navigator::{Navigator, Plan};
+use evilboom::specials::{classify_line, classify_sector, Category, Key, Keys};
+use evilboom::wad::{load_map, Wad};
+use evilboom::walkthrough::{action_for, Action};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -144,7 +144,7 @@ fn e1m1_needs_no_keys_and_starts_with_doors_closed() {
         .path
         .notes
         .iter()
-        .any(|n| matches!(n, evildoom::navigator::PathNote::OpenDoor { .. }))));
+        .any(|n| matches!(n, evilboom::navigator::PathNote::OpenDoor { .. }))));
     assert_eq!(action_for(exit_t), Action::Use);
 }
 
@@ -200,8 +200,8 @@ fn e1m3_exit_is_behind_the_blue_door() {
 
 #[test]
 fn jumps_match_the_engine() {
-    use evildoom::engine::{library, Engine, Options};
-    use evildoom::motor::Controls;
+    use evilboom::engine::{library, Engine, Options};
+    use evilboom::motor::Controls;
 
     let Some(w) = wad("doom2") else { return };
     if !library().exists() {
@@ -233,7 +233,7 @@ fn jumps_match_the_engine() {
         let heights: Vec<_> = start.heights.iter().map(|h| h.tuple()).collect();
         let sim_controls: Vec<_> = controls
             .iter()
-            .map(|c| evildoom::jumps::Controls {
+            .map(|c| evilboom::jumps::Controls {
                 forward: c.forward,
                 strafe: c.strafe,
                 turn: c.turn,

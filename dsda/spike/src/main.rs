@@ -1,6 +1,6 @@
 //! Spike: DSDA-Doom in-process, a tic at a time, its state read straight from memory.
 //! How fast does E1M3 (monsters, Hurt Me Plenty) go, reading everything Evil would each tic?
-use evildoom::dsda::{Mobj, PlayerState, Status};
+use evilboom::dsda::{Mobj, PlayerState, Status};
 use libloading::{Library, Symbol};
 use std::ffi::{c_char, c_int, CString};
 use std::mem::MaybeUninit;

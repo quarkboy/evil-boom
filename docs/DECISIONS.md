@@ -1,4 +1,4 @@
-# Evil DOOM — Decision Log
+# Evil BOOM — Decision Log
 
 Integration for Evil Neuro (and Neuro-sama) to play DOOM on stream via the
 [Neuro SDK](https://github.com/VedalAI/neuro-sdk).
@@ -2587,3 +2587,14 @@ Checked in a window: at the title, E1M9 refused (not offered), "E1M1 4" refused 
 continuous not said, both offered), "E1M1 4 single" started at Ultra-Violence (28 monsters
 where Hurt Me Plenty has 6); out by its exit, offered again at the title; "E1M2 3 continuous"
 started. Parity: 24 runs the same.
+
+## Evil BOOM throughout (the user, 2026-11-11)
+
+The binary became `evil-boom` on 2026-11-08 and the rest kept the old name; now all of it is
+Evil BOOM: the package and library `evilboom`; the console page, the windows' titles ("Evil
+BOOM" for the stream's, the one OBS finds: its window source to be chosen again), the README,
+the docs' titles; the environment variables `EVILBOOM_DOOM_DIR`, `EVILBOOM_ROOT`,
+`EVILBOOM_NATIVE_STATS` (`config::env`, the `EVILDOOM_` names still read); the Linux WAD
+folder `~/.local/share/evilboom`, the old `evildoom` one used while there's no new one (the
+user's files aren't moved); the engine patch's comments. Left: the names of the Python code
+this once was, in the record and in two comments that cite it.

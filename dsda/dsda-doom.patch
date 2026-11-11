@@ -1,5 +1,5 @@
 diff --git a/prboom2/src/CMakeLists.txt b/prboom2/src/CMakeLists.txt
-index cb9a3d7..68c9952 100644
+index cb9a3d7..c20e4c7 100644
 --- a/prboom2/src/CMakeLists.txt
 +++ b/prboom2/src/CMakeLists.txt
 @@ -602,3 +602,20 @@ function(AddGameExecutable TARGET SOURCES)
@@ -7,7 +7,7 @@ index cb9a3d7..68c9952 100644
  
  AddGameExecutable(dsda-doom "${DSDA_SOURCES}")
 +
-+# Evil (evil-doom): the game as a library, run a tic at a time from outside.
++# Evil (evil-boom): the game as a library, run a tic at a time from outside.
 +add_library(dsda-evil SHARED ${DSDA_SOURCES}
 +    gl_clipper.c gl_drawinfo.c gl_fbo.c gl_light.c gl_main.c gl_map.c gl_missingtexture.c
 +    gl_opengl.c gl_preprocess.c gl_progress.c gl_shader.c gl_sky.c gl_texture.c gl_vertex.c
@@ -53,14 +53,14 @@ index 28a9cdc..47980cc 100644
      // Has been char instead of short.
      // if (dl > 127) *leftout = 127;
 diff --git a/prboom2/src/SDL/i_system.c b/prboom2/src/SDL/i_system.c
-index 1fec088..bea19e8 100644
+index 1fec088..e8dfc4a 100644
 --- a/prboom2/src/SDL/i_system.c
 +++ b/prboom2/src/SDL/i_system.c
 @@ -155,8 +155,14 @@ fixed_t I_GetTimeFrac (void)
   *
   * CPhipps - extracted from G_ReloadDefaults because it is O/S based
   */
-+// Evil (evil-doom): when set, this seed instead of the clock (the same game every run)
++// Evil (evil-boom): when set, this seed instead of the clock (the same game every run)
 +int evil_fixed_seed;
 +unsigned long evil_seed_value;
 +
@@ -72,14 +72,14 @@ index 1fec088..bea19e8 100644
  }
  
 diff --git a/prboom2/src/d_main.c b/prboom2/src/d_main.c
-index 4e6abe4..82ddb3e 100644
+index 4e6abe4..b479a44 100644
 --- a/prboom2/src/d_main.c
 +++ b/prboom2/src/d_main.c
 @@ -2297,9 +2297,21 @@ static void D_DoomMainSetup(void)
  // D_DoomMain
  //
  
-+// Evil (evil-doom): the setup without the main loop; she runs the tics herself.
++// Evil (evil-boom): the setup without the main loop; she runs the tics herself.
 +void D_DoomMainSetupForEvil(void)
 +{
 +  D_DoomMainSetup();
@@ -98,14 +98,14 @@ index 4e6abe4..82ddb3e 100644
 +  D_PageDrawer();
 +}
 diff --git a/prboom2/src/dsda/messenger.c b/prboom2/src/dsda/messenger.c
-index bbdfdb6..9721b2e 100644
+index bbdfdb6..f71ed9b 100644
 --- a/prboom2/src/dsda/messenger.c
 +++ b/prboom2/src/dsda/messenger.c
 @@ -106,7 +106,16 @@ void dsda_AddAlert(const char* str) {
    dsda_QueueMessage(str, message_alert);
  }
  
-+// Evil (evil-doom): the last message the game gave the player and when, shown or not
++// Evil (evil-boom): the last message the game gave the player and when, shown or not
 +// ("You need a blue key to open this door": a player knows what she pressed was locked)
 +const char* evil_message;
 +int evil_message_tic = -1;
@@ -119,14 +119,14 @@ index bbdfdb6..9721b2e 100644
      dsda_QueueMessage(str, message_normal);
  }
 diff --git a/prboom2/src/p_inter.c b/prboom2/src/p_inter.c
-index c941fd6..d5e07db 100644
+index c941fd6..b834048 100644
 --- a/prboom2/src/p_inter.c
 +++ b/prboom2/src/p_inter.c
 @@ -1226,7 +1226,62 @@ static dboolean P_InfightingImmune(mobj_t *target, mobj_t *source)
  
  static dboolean P_MorphMonster(mobj_t * actor);
  
-+// Evil (evil-doom): every hit on the player kept, what it took and where it came from.
++// Evil (evil-boom): every hit on the player kept, what it took and where it came from.
 +evil_hit_t evil_hits[EVIL_HITS];
 +int evil_hit_count;
 +
@@ -186,7 +186,7 @@ index c941fd6..d5e07db 100644
    player_t *player;
    dboolean justhit = false;          /* killough 11/98 */
 diff --git a/prboom2/src/p_inter.h b/prboom2/src/p_inter.h
-index 3ec7d91..bc28c91 100644
+index 3ec7d91..5c8a141 100644
 --- a/prboom2/src/p_inter.h
 +++ b/prboom2/src/p_inter.h
 @@ -48,6 +48,20 @@
@@ -194,7 +194,7 @@ index 3ec7d91..bc28c91 100644
  void P_TouchSpecialThing(mobj_t *special, mobj_t *toucher);
  void P_DamageMobj(mobj_t *target,mobj_t *inflictor,mobj_t *source,int damage);
 +
-+// Evil (evil-doom): the hits on the player, the last EVIL_HITS of them (evil_hit_count in all)
++// Evil (evil-boom): the hits on the player, the last EVIL_HITS of them (evil_hit_count in all)
 +typedef struct
 +{
 +  int health, armor;     // what it took
@@ -211,14 +211,14 @@ index 3ec7d91..bc28c91 100644
  int P_PlayerHealthIncrease(int value);
  
 diff --git a/prboom2/src/p_map.c b/prboom2/src/p_map.c
-index 2b511c4..2429504 100644
+index 2b511c4..635ca31 100644
 --- a/prboom2/src/p_map.c
 +++ b/prboom2/src/p_map.c
 @@ -2196,6 +2196,20 @@ fixed_t   shootz;
  int       la_damage;
  fixed_t   attackrange;
  
-+// Evil (evil-doom): the player's bullets and pellets (a trace of MISSILERANGE with damage, one
++// Evil (evil-boom): the player's bullets and pellets (a trace of MISSILERANGE with damage, one
 +// a pellet), counted: all of them, those that hit a thing that can be shot, those of them a
 +// barrel, and those that hit nothing in a tic one of them had killed in (the rest of a shell
 +// through where its target stood: not shots into a wall). For measuring what her shots hit;
@@ -239,7 +239,7 @@ index 2b511c4..2429504 100644
    // hit thing
    // position a bit closer
  
-+  evil_pellet_hit = th->type == MT_BARREL ? 2 : 1;  // Evil (evil-doom)
++  evil_pellet_hit = th->type == MT_BARREL ? 2 : 1;  // Evil (evil-boom)
 +
    frac = in->frac - FixedDiv (10*FRACUNIT,attackrange);
  
@@ -249,7 +249,7 @@ index 2b511c4..2429504 100644
        P_DamageMobj(th, shootthing, shootthing, la_damage);
      }
 +    if (th->health <= 0)
-+      evil_kill_tic = gametic;  // Evil (evil-doom)
++      evil_kill_tic = gametic;  // Evil (evil-boom)
    }
  
    // don't go any farther
@@ -258,7 +258,7 @@ index 2b511c4..2429504 100644
    aimslope = slope;
  
 -  if (P_PathTraverse(t1->x,t1->y,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_ShootTraverse))
-+  evil_pellet_hit = 0;  // Evil (evil-doom)
++  evil_pellet_hit = 0;  // Evil (evil-boom)
 +  {
 +    dboolean evil_missed = P_PathTraverse(t1->x,t1->y,x2,y2,PT_ADDLINES|PT_ADDTHINGS,PTR_ShootTraverse);
 +    if (t1->player && damage && distance == MISSILERANGE)
@@ -292,14 +292,14 @@ index 2b511c4..2429504 100644
      if (hexen)
      {
 diff --git a/prboom2/src/p_mobj.c b/prboom2/src/p_mobj.c
-index 9c2a92c..bca1d02 100644
+index 9c2a92c..8401332 100644
 --- a/prboom2/src/p_mobj.c
 +++ b/prboom2/src/p_mobj.c
 @@ -1721,6 +1721,8 @@ int P_MobjSpawnHealth(const mobj_t* mobj)
  //
  // P_SpawnMobj
  //
-+int evil_spawned;  // Evil (evil-doom): things spawned so far (each one's evil_id)
++int evil_spawned;  // Evil (evil-boom): things spawned so far (each one's evil_id)
 +
  mobj_t* P_SpawnMobj(fixed_t x,fixed_t y,fixed_t z,mobjtype_t type)
  {
@@ -308,32 +308,32 @@ index 9c2a92c..bca1d02 100644
  
    mobj = Z_MallocLevel (sizeof(*mobj));
    memset (mobj, 0, sizeof (*mobj));
-+  mobj->evil_id = ++evil_spawned;  // Evil (evil-doom)
++  mobj->evil_id = ++evil_spawned;  // Evil (evil-boom)
    info = &mobjinfo[type];
    mobj->type = type;
    mobj->info = info;
 diff --git a/prboom2/src/p_mobj.h b/prboom2/src/p_mobj.h
-index 65eb56a..8e8be54 100644
+index 65eb56a..f9efdff 100644
 --- a/prboom2/src/p_mobj.h
 +++ b/prboom2/src/p_mobj.h
 @@ -391,6 +391,8 @@ typedef struct mobj_s
  
      int iden_nums;		// hi word stores thing num, low word identifier num
  
-+    int evil_id;  // Evil (evil-doom): a number of its own, from its spawning on
++    int evil_id;  // Evil (evil-boom): a number of its own, from its spawning on
 +
      // heretic
      int damage;                 // For missiles
      uint64_t flags2;           // Heretic & MBF21 flags
 diff --git a/prboom2/src/s_sound.c b/prboom2/src/s_sound.c
-index a12136e..2351f71 100644
+index a12136e..3f19306 100644
 --- a/prboom2/src/s_sound.c
 +++ b/prboom2/src/s_sound.c
 @@ -320,6 +320,76 @@ void S_ResetAdjustments(void) {
    adjust_volume = 0;
  }
  
-+// Evil (evil-doom): a sound noted as the listener would hear it, by vanilla's rule (heard within
++// Evil (evil-boom): a sound noted as the listener would hear it, by vanilla's rule (heard within
 +// 1200 whatever's between, full within 160; its side by the sine of its bearing), whether
 +// sound's on or not and whether a channel's found for it or not.
 +evil_sound_t evil_sounds[EVIL_SOUNDS];
@@ -410,13 +410,13 @@ index a12136e..2351f71 100644
    origin = (mobj_t *) origin_p;
    listener = GetSoundListener();
  
-+  Evil_NoteSound(origin, listener, sfx_id);  // Evil (evil-doom)
++  Evil_NoteSound(origin, listener, sfx_id);  // Evil (evil-boom)
 +
    //jff 1/22/98 return if sound is not enabled
    if (nosfxparm)
      return;
 diff --git a/prboom2/src/s_sound.h b/prboom2/src/s_sound.h
-index 633f674..87d4574 100644
+index 633f674..1779bfc 100644
 --- a/prboom2/src/s_sound.h
 +++ b/prboom2/src/s_sound.h
 @@ -62,6 +62,24 @@ void S_Start(void);
@@ -424,7 +424,7 @@ index 633f674..87d4574 100644
  //
  void S_StartSound(void *origin, int sound_id);
 +
-+// Evil (evil-doom): the sounds the game starts, as the listener would hear them, the last
++// Evil (evil-boom): the sounds the game starts, as the listener would hear them, the last
 +// EVIL_SOUNDS of them (evil_sound_count in all). Kept whether sound's on or not.
 +typedef struct
 +{

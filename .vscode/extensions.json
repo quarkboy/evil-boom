@@ -1,5 +1,5 @@
 {
-  // Recommended extensions for working on Evil DOOM, set up for VS Code on Windows connected to
+  // Recommended extensions for working on Evil BOOM, set up for VS Code on Windows connected to
   // WSL (Fedora). "Remote - WSL" runs on the Windows side; the rest run in WSL, and VS Code offers
   // to install them there when the repo is opened through the WSL connection.
   "recommendations": [

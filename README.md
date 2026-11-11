@@ -1,4 +1,4 @@
-# Evil DOOM
+# Evil BOOM
 
 A DOOM integration for Evil Neuro (and Neuro-sama) using the
 [Neuro SDK](https://github.com/VedalAI/neuro-sdk). Evil gives the orders; a fast classifier and
@@ -8,7 +8,7 @@ See [docs/DECISIONS.md](docs/DECISIONS.md) for the architecture and decision log
 
 ## Layout
 
-Evil is one Rust crate, `native/` (package `evildoom`: a library and the `evil-boom` binary), running
+Evil is one Rust crate, `native/` (package `evilboom`: a library and the `evil-boom` binary), running
 DSDA-Doom in-process.
 
 ```
@@ -77,12 +77,12 @@ Tests: `cargo test --release --target-dir ../out/build` from `native/`. More on 
 WADs are not included. Evil looks for Steam's layout (`base/DOOM.WAD`, `base/doom2/DOOM2.WAD`,
 `base/tnt/TNT.WAD`, `base/plutonia/PLUTONIA.WAD`):
 
-- Linux: in `~/.local/share/evildoom`. Copy Steam's `base/` folder there (under WSL, from
+- Linux: in `~/.local/share/evilboom` (or `~/.local/share/evildoom`, its old name). Copy Steam's `base/` folder there (under WSL, from
   `/mnt/c/Program Files (x86)/Steam/steamapps/common/Ultimate Doom/base`: reading WADs through
   `/mnt/c` is slow).
 - Windows: in the Steam install, `C:\Program Files (x86)\Steam\steamapps\common\Ultimate Doom`.
 
-`EVILDOOM_DOOM_DIR` overrides the folder on either.
+`EVILBOOM_DOOM_DIR` overrides the folder on either (`EVILDOOM_DOOM_DIR` still works).
 
 ## Running
 
@@ -110,7 +110,7 @@ seconds with nothing new), `--fight SKILL` (monsters in), `--mortal` (no god mod
 
 ## License
 
-Evil DOOM is free software, licensed under the **GNU General Public License, version 3 or (at
+Evil BOOM is free software, licensed under the **GNU General Public License, version 3 or (at
 your option) any later version** (GPL-3.0-or-later); see [LICENSE](LICENSE). The engine it is
 built on and with is GPL-2.0-or-later, which allows its use under version 3:
 

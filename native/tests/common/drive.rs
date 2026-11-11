@@ -3,13 +3,13 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use evildoom::config::resolve_wad;
-use evildoom::engine::{library, Engine, Options};
-use evildoom::motor::follower::RouteFollower;
-use evildoom::motor::Controls;
-use evildoom::navigator::Navigator;
-use evildoom::wad::{load_map, Wad};
-use evildoom::walkthrough::plan_level;
+use evilboom::config::resolve_wad;
+use evilboom::engine::{library, Engine, Options};
+use evilboom::motor::follower::RouteFollower;
+use evilboom::motor::Controls;
+use evilboom::navigator::Navigator;
+use evilboom::wad::{load_map, Wad};
+use evilboom::walkthrough::plan_level;
 
 /// a side room off E1M1's route
 const KNOCKED_TO: (f64, f64) = (2160.0, -2432.0);

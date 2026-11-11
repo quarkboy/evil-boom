@@ -61,7 +61,7 @@ def main():
     args = parser.parse_args()
     if args.repeats < 1 or args.seconds < 1:
         parser.error("repeats and seconds must be positive")
-    root = Path(os.environ.get("EVILDOOM_ROOT", Path(__file__).resolve().parents[1])).resolve()
+    root = Path(os.environ.get("EVILBOOM_ROOT") or os.environ.get("EVILDOOM_ROOT") or Path(__file__).resolve().parents[1]).resolve()
     builds = {"baseline": args.baseline.resolve(), "candidate": args.candidate.resolve()}
     if not all(p.is_file() for p in builds.values()):
         parser.error("both executables must exist")

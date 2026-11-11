@@ -142,7 +142,7 @@ WAD, map); after that:
    window for streaming itself ... the game isn't natively 16:9, so there is room on the sides
    ... figure out something interesting to add in there"): `watch --stream [right|left]`, the
    console's settings "Window: for the stream" (the default) and "Column: right/left" (moved live
-   when saved). 1920x1080, titled "Evil DOOM" for OBS: the game's frame at 4:3 (1440x1080, its
+   when saved). 1920x1080, titled "Evil BOOM" for OBS: the game's frame at 4:3 (1440x1080, its
    pixels scaled as they are) and a 480 column for the viewers (`viewer/stream.rs`): the map and
    the level's name (the automap's title: `evil_level_title`), skill and level time; a map of what
    she's seen following her (the watcher's own map drawing, now drawn into any box:

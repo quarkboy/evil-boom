@@ -7,4 +7,4 @@ publish = false
 
 [dependencies]
 libloading = "0.8"
-evildoom = { path = "../../native", default-features = false }
+evilboom = { path = "../../native", default-features = false }

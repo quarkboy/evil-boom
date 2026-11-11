@@ -623,7 +623,7 @@ pub fn watch(wad: &str, map_name: &str, o: &WatchOptions) -> Result<(), String> 
     if o.headless {
         return headless(watch, &w, o);
     }
-    let title = format!("evil-doom explorer: {}", watch.map_name);
+    let title = format!("evil-boom explorer: {}", watch.map_name);
     show(watch, &title, Some((&w, o)))
 }
 
@@ -1258,7 +1258,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
     let mut opts = given.map(|(_, o)| o.clone());
     // (the stream's window its own size, and a plain title to find it by in OBS)
     let (ww, wh, title) = if watch.stream.is_some() {
-        (stream::SW, stream::SH, "Evil DOOM")
+        (stream::SW, stream::SH, "Evil BOOM")
     } else {
         (W, H, title)
     };
@@ -1319,7 +1319,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             console::Frame::Quit => return Ok(()), // (the console's asked the game to close)
             console::Frame::Goto { map, carry } => {
                 watch = console::goto(watch, game, &map, carry)?;
-                window.set_title(&format!("evil-doom explorer: {}", watch.map_name));
+                window.set_title(&format!("evil-boom explorer: {}", watch.map_name));
             }
         }
         // (the sound only at the game's own speed: faster or slower it'd pile up or lag)
@@ -1344,7 +1344,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             let was = watch.map_name.clone();
             watch = present::run(watch, game, &mut owed)?;
             if watch.map_name != was {
-                window.set_title(&format!("evil-doom explorer: {}", watch.map_name));
+                window.set_title(&format!("evil-boom explorer: {}", watch.map_name));
             }
             if watch.paused {
                 owed = 0.0;
@@ -1388,7 +1388,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
                         carried.rocket
                     );
                     window.set_title(&format!(
-                        "evil-doom explorer: {} (from {name}: health {} armor {})",
+                        "evil-boom explorer: {} (from {name}: health {} armor {})",
                         watch.map_name, carried.health, carried.armor
                     ));
                 }

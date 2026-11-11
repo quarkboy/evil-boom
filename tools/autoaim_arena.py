@@ -4,7 +4,7 @@ search of Doom / Doom II (a ledge over a pit at least 64 lower; a thin raised ra
 open floors); per site, her by the edge (or a little back from the railing) facing across, five
 imps placed at random beyond, the rocket launcher. Seeded: the same file every run."""
 import struct, random, math, os, zlib
-BASE = os.path.expanduser(os.environ.get('EVILDOOM_DOOM_DIR', '~/.local/share/evildoom'))
+BASE = os.path.expanduser(os.environ.get('EVILBOOM_DOOM_DIR') or os.environ.get('EVILDOOM_DOOM_DIR') or ('~/.local/share/evilboom' if os.path.isdir(os.path.expanduser('~/.local/share/evilboom')) else '~/.local/share/evildoom'))
 WADS = {'doom': BASE + '/base/DOOM.WAD', 'doom2': BASE + '/base/doom2/DOOM2.WAD'}
 # (wad, map, the sector she stands on, the sector the monsters are in, rail sector or None)
 SITES = [

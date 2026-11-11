@@ -1,6 +1,6 @@
 # Notes for Claude sessions on this repo
 
-Evil DOOM: a bot that plays DOOM / DOOM II for Evil Neuro, live on stream (Neuro SDK
+Evil BOOM: a bot that plays DOOM / DOOM II for Evil Neuro, live on stream (Neuro SDK
 integration later). Evil is all Rust (`native/`, the `evil-boom` binary) running DSDA-Doom
 in-process (`dsda/`: the patch and `evil_api.c`; the DSDA source itself is fetched into
 `third_party/`, not committed). Decisions and their reasons: `docs/DECISIONS.md` (keep it
@@ -48,7 +48,8 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   ../out/build` from `native/`. Engine: `tools/build-engine.sh` (Linux, or MSYS2 MINGW64). On
   Windows the running exe can't be overwritten: rename it aside first
   (`evil-boom.old.<time>.exe`). On Linux don't rebuild while a sweep or episode runs: they
-  start the binary again for each map. WADs: `~/.local/share/evildoom/base/...` (Steam layout).
+  start the binary again for each map. WADs: `~/.local/share/evilboom/base/...` (Steam layout; the old
+  `evildoom` folder is still found if there's no `evilboom` one).
 - **Seeds:** real play uses random seeds; a fixed seed (`--seed N`, default 0) is for testing.
   Try several seeds wherever RNG matters (any fight; shot barrels). No-monster, no-barrel runs are
   seed-independent: one run per code version is enough.

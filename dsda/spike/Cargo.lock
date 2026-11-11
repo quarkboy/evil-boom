@@ -50,12 +50,12 @@ dependencies = [
 name = "dsda-spike"
 version = "0.1.0"
 dependencies = [
- "evildoom",
+ "evilboom",
  "libloading",
 ]
 
 [[package]]
-name = "evildoom"
+name = "evilboom"
 version = "0.1.0"
 dependencies = [
  "libloading",

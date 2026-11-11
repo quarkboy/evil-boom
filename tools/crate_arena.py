@@ -1,7 +1,7 @@
 """Write arenas/crates.txt: E2M7's crate hall, 10 variations (start, facing, imps placed at random
 among the crates, seeded), the player with the rocket launcher."""
 import struct, random, math
-d=open(__import__('os').path.expanduser(__import__('os').environ.get('EVILDOOM_DOOM_DIR','~/.local/share/evildoom'))+'/base/DOOM.WAD','rb').read()
+d=open(__import__('os').path.expanduser((__import__('os').environ.get('EVILBOOM_DOOM_DIR') or __import__('os').environ.get('EVILDOOM_DOOM_DIR') or ('~/.local/share/evilboom' if __import__('os').path.isdir(__import__('os').path.expanduser('~/.local/share/evilboom')) else '~/.local/share/evildoom')))+'/base/DOOM.WAD','rb').read()
 n,off=struct.unpack('<ii',d[4:12])
 dirs=[struct.unpack('<ii8s',d[off+16*i:off+16*i+16]) for i in range(n)]
 names=[x[2].rstrip(b'\0').decode() for x in dirs]

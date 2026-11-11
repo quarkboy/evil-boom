@@ -19,18 +19,33 @@ pub fn iwad_names() -> impl Iterator<Item = &'static str> {
 }
 
 pub fn doom_dir() -> PathBuf {
-    std::env::var_os("EVILDOOM_DOOM_DIR").map_or_else(default_doom_dir, PathBuf::from)
+    env("DOOM_DIR").map_or_else(default_doom_dir, PathBuf::from)
 }
 
-/// Windows: Steam's own folder. Linux: ~/.local/share/evildoom, the Steam folder's base/ copied
-/// there (under WSL, reading through /mnt/c is slow).
+/// A setting from the environment: EVILBOOM_<name>, or EVILDOOM_<name> as it was called before
+/// the project was Evil BOOM.
+pub fn env(name: &str) -> Option<std::ffi::OsString> {
+    std::env::var_os(format!("EVILBOOM_{name}"))
+        .or_else(|| std::env::var_os(format!("EVILDOOM_{name}")))
+}
+
+/// Windows: Steam's own folder. Linux: ~/.local/share/evilboom, the Steam folder's base/ copied
+/// there (under WSL, reading through /mnt/c is slow); ~/.local/share/evildoom, the folder's old
+/// name, if that's the one there is.
 fn default_doom_dir() -> PathBuf {
     if cfg!(windows) {
         return Path::new(r"C:\Program Files (x86)\Steam").join(STEAM_DOOM);
     }
-    std::env::var_os("HOME")
+    let share = std::env::var_os("HOME")
         .map_or_else(|| PathBuf::from("."), PathBuf::from)
-        .join(".local/share/evildoom")
+        .join(".local/share");
+    let new = share.join("evilboom");
+    let old = share.join("evildoom");
+    if !new.exists() && old.exists() {
+        old
+    } else {
+        new
+    }
 }
 
 /// A short IWAD name ("doom2") or a path, absolute or from the Doom folder.
@@ -46,9 +61,9 @@ pub fn resolve_wad(name_or_path: &str) -> PathBuf {
     doom_dir().join(path)
 }
 
-/// The project folder (EVILDOOM_ROOT, else the folder above the one this was built in).
+/// The project folder (EVILBOOM_ROOT, else the folder above the one this was built in).
 pub fn root() -> PathBuf {
-    std::env::var_os("EVILDOOM_ROOT").map_or_else(
+    env("ROOT").map_or_else(
         || {
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .parent()

@@ -147,7 +147,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "evildoom"
+name = "evilboom"
 version = "0.1.0"
 dependencies = [
  "font8x8",

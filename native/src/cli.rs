@@ -1,6 +1,6 @@
 //! Parsing run options and forwarding them to sweep subprocesses.
 
-use evildoom::sweep::RunOptions;
+use evilboom::sweep::RunOptions;
 
 /// The run options among `args`: (options, jobs, the rest as they were).
 pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<String>), String> {
@@ -93,7 +93,7 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
 
 /// A loadout as `--carry` gives it: weapons (a bit each, by the game's numbering), clip, shell,
 /// cell, rocket, backpack (0/1), health, armor, armor type.
-pub(crate) fn parse_carry(v: &str) -> Result<evildoom::dsda::Loadout, String> {
+pub(crate) fn parse_carry(v: &str) -> Result<evilboom::dsda::Loadout, String> {
     let n: Vec<i32> = v
         .split(',')
         .map(|x| x.trim().parse().map_err(|_| format!("--carry: {v}")))
@@ -107,7 +107,7 @@ pub(crate) fn parse_carry(v: &str) -> Result<evildoom::dsda::Loadout, String> {
     else {
         return Err(format!("--carry: nine numbers (or ten), not {v}"));
     };
-    Ok(evildoom::dsda::Loadout {
+    Ok(evilboom::dsda::Loadout {
         weapons: *weapons,
         clip: *clip,
         shell: *shell,
@@ -122,7 +122,7 @@ pub(crate) fn parse_carry(v: &str) -> Result<evildoom::dsda::Loadout, String> {
 }
 
 /// A loadout as `--carry` takes it.
-pub(crate) fn carry_arg(l: &evildoom::dsda::Loadout) -> String {
+pub(crate) fn carry_arg(l: &evilboom::dsda::Loadout) -> String {
     let nine = format!(
         "{},{},{},{},{},{},{},{},{}",
         l.weapons,

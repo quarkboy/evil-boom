@@ -1,5 +1,5 @@
 //! Where a plan search's time goes: counts and seconds per phase, reported on stderr when
-//! EVILDOOM_NATIVE_STATS is set.
+//! EVILBOOM_NATIVE_STATS is set.
 
 use std::cell::{Cell, RefCell};
 use std::time::Instant;
@@ -113,7 +113,7 @@ pub fn take_searches() -> Vec<Search> {
 }
 
 pub fn enabled() -> bool {
-    std::env::var_os("EVILDOOM_NATIVE_STATS").is_some()
+    crate::config::env("NATIVE_STATS").is_some()
 }
 
 /// One line on the search so far, which took `total` seconds.

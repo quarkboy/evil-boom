@@ -71,12 +71,12 @@
 
 mod cli;
 use cli::{option_args, run_options};
-use evildoom::config::resolve_wad;
-use evildoom::navigator::Navigator;
-use evildoom::specials::classify_line;
+use evilboom::config::resolve_wad;
+use evilboom::navigator::Navigator;
+use evilboom::specials::classify_line;
 #[cfg(feature = "viewer")]
-use evildoom::sweep::run_map;
-use evildoom::wad::{load_map, Wad};
+use evilboom::sweep::run_map;
+use evilboom::wad::{load_map, Wad};
 use std::collections::{BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, ExitCode, Stdio};
@@ -141,7 +141,7 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
     let reach = view.reachable(sp, &nav.initial_states(), None);
     println!("reach from start {}", reach.len());
     let t0 = std::time::Instant::now();
-    let plan = evildoom::walkthrough::plan_level(&view, start, 60.0, 20000);
+    let plan = evilboom::walkthrough::plan_level(&view, start, 60.0, 20000);
     eprintln!("planned in {:.2}s", t0.elapsed().as_secs_f64());
     println!("plan complete={} problem={:?}", plan.complete, plan.problem);
     for (i, st) in plan.steps.iter().enumerate() {
@@ -157,7 +157,7 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
     let m = load_map(&w, map, &[])?;
     let nav = Navigator::new(Arc::new(m), 3)?;
     let m = &nav.map;
-    let places = evildoom::control::places::Places::build(&nav);
+    let places = evilboom::control::places::Places::build(&nav);
     for arg in sectors {
         let si: usize = arg.parse().map_err(|_| format!("not a sector: {arg}"))?;
         let s = m.sectors.get(si).ok_or_else(|| format!("no sector {si}"))?;
@@ -169,7 +169,7 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
         println!(
             "  in {} ({}, {:.0} square units): sectors {:?}",
             area.id,
-            evildoom::control::places::Places::sketch(area),
+            evilboom::control::places::Places::sketch(area),
             area.size,
             area.sectors
         );
@@ -244,7 +244,7 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
             }
         }
         // (the run-jumps found landing here, and what the movement check makes of them)
-        let into: Vec<&evildoom::navigator::Jump> = nav
+        let into: Vec<&evilboom::navigator::Jump> = nav
             .jumps
             .iter()
             .filter(|j| {
@@ -253,9 +253,9 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
                     .is_some_and(|q| q.sector == si)
             })
             .collect();
-        let lab: Vec<evildoom::jumps::Jump> = into
+        let lab: Vec<evilboom::jumps::Jump> = into
             .iter()
-            .map(|j| evildoom::jumps::Jump {
+            .map(|j| evilboom::jumps::Jump {
                 src_polys: j.src_polys.iter().copied().collect(),
                 dest_poly: j.dest_poly,
                 dest: j.dest,
@@ -283,8 +283,8 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
 
 /// Plan the level from the start and follow the plan in the game (seed 0): the follower's log.
 fn follow(wad: &str, map: &str) -> Result<(), String> {
-    use evildoom::engine::{Engine, Options};
-    use evildoom::motor::follower::RouteFollower;
+    use evilboom::engine::{Engine, Options};
+    use evilboom::motor::follower::RouteFollower;
     let iwad = resolve_wad(wad);
     let w = Wad::open(&iwad)?;
     let m = Arc::new(load_map(&w, map, &[])?);
@@ -298,7 +298,7 @@ fn follow(wad: &str, map: &str) -> Result<(), String> {
         .find(|t| t.kind == 1)
         .map(|t| (t.x, t.y))
         .ok_or("no player start")?;
-    let plan = evildoom::walkthrough::plan_level(&view, start, 60.0, 20000);
+    let plan = evilboom::walkthrough::plan_level(&view, start, 60.0, 20000);
     if !plan.complete {
         return Err(plan.problem);
     }
@@ -330,7 +330,7 @@ fn run_one(args: &[String]) -> Result<(), String> {
     let [wad, map] = rest.as_slice() else {
         return Err("usage: evil-boom run-map <wad> <map> [options]".into());
     };
-    let r = evildoom::sweep::run_map_full(wad, map, &o)?;
+    let r = evilboom::sweep::run_map_full(wad, map, &o)?;
     // (what she got out with, for the next level of an episode; the secret exit taken)
     if let Some(l) = &r.carry {
         println!(
@@ -421,7 +421,7 @@ fn episode_chain(
     me: &std::path::Path,
     wad: &str,
     first: &str,
-    o: &evildoom::sweep::RunOptions,
+    o: &evilboom::sweep::RunOptions,
 ) -> (usize, String) {
     let seed = o.seed.unwrap_or(0);
     let Ok(mut child) = Command::new(me)
@@ -480,7 +480,7 @@ fn episode_one(args: &[String]) -> Result<(), String> {
     let mut levels = 0;
     while let Some(m) = map.take() {
         o.lives = left;
-        let r = evildoom::sweep::run_map_in(wad, &m, &o, engine.take())?;
+        let r = evilboom::sweep::run_map_in(wad, &m, &o, engine.take())?;
         left -= r.deaths;
         let lost = if r.deaths > 0 {
             format!(" | {} lives lost, {left} left", r.deaths)
@@ -511,7 +511,7 @@ fn episode_one(args: &[String]) -> Result<(), String> {
         );
         o.carry = Some(l);
         engine = r.engine;
-        map = evildoom::sweep::next_map(&m, r.secret);
+        map = evilboom::sweep::next_map(&m, r.secret);
     }
     println!("END {levels} the episode through");
     Ok(())
@@ -532,7 +532,7 @@ fn drive(args: &[String]) -> Result<(), String> {
     let ([wad, map], Some(script)) = (names.as_slice(), script) else {
         return Err("usage: evil-boom drive <wad> <map> --script FILE [run options]".into());
     };
-    evildoom::drive::drive(wad, map, &o, std::path::Path::new(&script))
+    evilboom::drive::drive(wad, map, &o, std::path::Path::new(&script))
 }
 
 fn sweep(args: &[String]) -> Result<(), String> {
@@ -642,7 +642,7 @@ fn watch(args: &[String]) -> Result<(), String> {
     };
     if let Some(config) = &w.gpt {
         // (the stand-in in this program, on a port of its own: one program to run)
-        w.neuro = Some(evildoom::neuro::gpt::start(config)?);
+        w.neuro = Some(evilboom::neuro::gpt::start(config)?);
     }
     if o.snapshot.is_some() {
         // (a picture: the run as a sweep plays it, nothing drawn till then)
@@ -655,14 +655,14 @@ fn watch(args: &[String]) -> Result<(), String> {
         // to the shell, they stop it)
         std::env::set_var("SDL_NO_SIGNAL_HANDLERS", "1");
     }
-    evildoom::viewer::watch(wad, map, &w)
+    evilboom::viewer::watch(wad, map, &w)
 }
 
 /// A run watched into an MP4 (see `viewer::record`): evil-boom record <wad> <map> <out.mp4>
 /// [--view game|full|hud] [--size WxH] [--speed N] [--ffmpeg PATH] [--episode] [run options].
 #[cfg(feature = "viewer")]
 fn record(args: &[String]) -> Result<(), String> {
-    use evildoom::viewer::{RecordOptions, RecordView};
+    use evilboom::viewer::{RecordOptions, RecordView};
     let (mut view, mut size, mut every, mut ffmpeg) = (RecordView::Hud, None, 1u32, None);
     let (mut crf, mut preset) = (20u32, "veryfast".to_string());
     let mut rest = Vec::new();
@@ -717,12 +717,12 @@ fn record(args: &[String]) -> Result<(), String> {
     w.capture_sound = every == 1;
     if let Some(config) = &w.gpt {
         // (the stand-in in this program, as watch has it; directed, it plays in real time)
-        w.neuro = Some(evildoom::neuro::gpt::start(config)?);
+        w.neuro = Some(evilboom::neuro::gpt::start(config)?);
     }
     let ffmpeg = ffmpeg
-        .or_else(evildoom::viewer::find_ffmpeg)
+        .or_else(evilboom::viewer::find_ffmpeg)
         .ok_or("no ffmpeg found (on the path, or winget's on Windows): --ffmpeg PATH")?;
-    evildoom::viewer::record(
+    evilboom::viewer::record(
         wad,
         map,
         &w,
@@ -744,14 +744,14 @@ fn watch_options(
     args: &[String],
 ) -> Result<
     (
-        evildoom::viewer::WatchOptions,
+        evilboom::viewer::WatchOptions,
         Vec<String>,
-        evildoom::sweep::RunOptions,
+        evilboom::sweep::RunOptions,
     ),
     String,
 > {
     let (o, _, rest) = run_options(args)?;
-    let mut w = evildoom::viewer::WatchOptions {
+    let mut w = evilboom::viewer::WatchOptions {
         speed: 1.0,
         show_all: false,
         mortal: o.mortal,
@@ -816,7 +816,7 @@ fn watch_options(
                 }
                 w.gpt = Some(named.map_or_else(
                     || {
-                        evildoom::config::root()
+                        evilboom::config::root()
                             .join("config")
                             .join("neuro-gpt.json")
                     },
@@ -834,11 +834,11 @@ fn watch_options(
                 let named = it
                     .as_slice()
                     .first()
-                    .and_then(|a| evildoom::viewer::StreamSide::parse(a));
+                    .and_then(|a| evilboom::viewer::StreamSide::parse(a));
                 if named.is_some() {
                     it.next();
                 }
-                w.stream = Some(named.unwrap_or(evildoom::viewer::StreamSide::Right));
+                w.stream = Some(named.unwrap_or(evilboom::viewer::StreamSide::Right));
             }
             "--present" => w.present = true,
             "--choices" => {
@@ -893,17 +893,17 @@ fn arena_one(args: &[String]) -> Result<(), String> {
         return Err("usage: evil-boom arena-one FILE NAME [--seed N]".into());
     };
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
-    let scenarios = evildoom::arena::parse(&text)?;
+    let scenarios = evilboom::arena::parse(&text)?;
     let s = scenarios
         .iter()
         .find(|s| &s.name == *name)
         .ok_or_else(|| format!("{name}: not in {file}"))?;
     let mut log = Vec::new();
-    let o = evildoom::arena::run(s, seed, &mut log)?;
-    let dir = evildoom::config::out_dir().join("arena");
+    let o = evilboom::arena::run(s, seed, &mut log)?;
+    let dir = evilboom::config::out_dir().join("arena");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let tag = seed.map_or("random".to_string(), |s| s.to_string());
-    evildoom::config::write_log(&dir.join(format!("{name}_{tag}.txt")), "", &log.join("\n"))
+    evilboom::config::write_log(&dir.join(format!("{name}_{tag}.txt")), "", &log.join("\n"))
         .map_err(|e| e.to_string())?;
     println!(
         "RESULT {} {:.0}s health {} armor {} kills {}/{}",
@@ -952,13 +952,13 @@ fn arena_watch(args: &[String]) -> Result<(), String> {
         );
     };
     let text = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
-    let scenarios = evildoom::arena::parse(&text)?;
+    let scenarios = evilboom::arena::parse(&text)?;
     let s = scenarios
         .iter()
         .find(|s| &s.name == *name)
         .ok_or_else(|| format!("{name}: not in {file}"))?;
-    let p = evildoom::arena::prepare(s, seed, true, sound)?;
-    evildoom::viewer::watch_prepared(p, &s.map, speed, sound, &format!("evil-doom arena: {name}"))
+    let p = evilboom::arena::prepare(s, seed, true, sound)?;
+    evilboom::viewer::watch_prepared(p, &s.map, speed, sound, &format!("evil-boom arena: {name}"))
 }
 
 /// The arena's scenarios (those named, else all), each `seeds` times, `jobs` at a time.
@@ -993,7 +993,7 @@ fn arena(args: &[String]) -> Result<(), String> {
         .ok_or("usage: evil-boom arena FILE [names...] [--jobs N] [--seeds K]")?
         .clone();
     let text = std::fs::read_to_string(&file).map_err(|e| format!("{file}: {e}"))?;
-    let names: Vec<String> = evildoom::arena::parse(&text)?
+    let names: Vec<String> = evilboom::arena::parse(&text)?
         .into_iter()
         .map(|s| s.name)
         .filter(|n| rest.len() < 2 || rest[1..].contains(n))
@@ -1116,24 +1116,24 @@ fn main() -> ExitCode {
             let jobs = args.iter().position(|a| a == "--jobs").and_then(|i| args.get(i + 1)).and_then(|j| j.parse().ok()).unwrap_or(12);
             let words: Vec<String> = args[1..].iter().filter(|a| !a.starts_with("--")).filter(|a| a.parse::<usize>().is_err()).cloned().collect();
             match (words.split_first(), one) {
-                (Some((wad, maps)), true) if maps.len() == 1 => evildoom::survey::survey_map(wad, &maps[0]),
-                (Some((wad, maps)), false) if !maps.is_empty() => evildoom::survey::survey(wad, maps, jobs),
+                (Some((wad, maps)), true) if maps.len() == 1 => evilboom::survey::survey_map(wad, &maps[0]),
+                (Some((wad, maps)), false) if !maps.is_empty() => evilboom::survey::survey(wad, maps, jobs),
                 _ => Err("usage: evil-boom secret-survey <wad> <map>... [--jobs N]".into()),
             }
         }
         Some("neuro-gpt") => {
             let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);
-            let config = args.iter().position(|a| a == "--config").and_then(|i| args.get(i + 1)).map_or_else(|| evildoom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from);
-            evildoom::neuro::gpt::serve(port, &config)
+            let config = args.iter().position(|a| a == "--config").and_then(|i| args.get(i + 1)).map_or_else(|| evilboom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from);
+            evilboom::neuro::gpt::serve(port, &config)
         }
         Some("console") => {
             let bind = args.iter().position(|a| a == "--bind").and_then(|i| args.get(i + 1)).map_or("0.0.0.0:7878", String::as_str);
-            evildoom::console::server::serve(bind, args.iter().any(|a| a == "--new-token"))
+            evilboom::console::server::serve(bind, args.iter().any(|a| a == "--new-token"))
         }
         Some("neuro-mock") => {
             let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);
             let file = args.iter().skip(1).rfind(|a| !a.starts_with("--") && a.parse::<u16>().is_err()).cloned().unwrap_or_else(|| "out/neuro/actions.txt".into());
-            evildoom::neuro::mock::serve(port, std::path::Path::new(&file))
+            evilboom::neuro::mock::serve(port, std::path::Path::new(&file))
         }
         Some("follow") if args.len() == 3 => follow(&args[1], &args[2]),
         Some("sector") if args.len() >= 4 => sector(&args[1], &args[2], &args[3..]),
@@ -1144,14 +1144,14 @@ fn main() -> ExitCode {
         Some("episode-one") => episode_one(&args[1..]),
         Some("drive") => drive(&args[1..]),
         Some("sweep") => sweep(&args[1..]),
-        Some("score") => evildoom::score::run(&args[1..]),
+        Some("score") => evilboom::score::run(&args[1..]),
         Some("tuning") => {
-            println!("{}", evildoom::tactical::tuning::Tuning::default().json());
+            println!("{}", evilboom::tactical::tuning::Tuning::default().json());
             Ok(())
         }
-        Some("score-report") if args.len() >= 2 => evildoom::score::report_files(&args[1..]),
+        Some("score-report") if args.len() >= 2 => evilboom::score::report_files(&args[1..]),
         #[cfg(feature = "viewer")]
-        Some("score-watch") => evildoom::score::watch(&args[1..]),
+        Some("score-watch") => evilboom::score::watch(&args[1..]),
         Some("watch") => watch(&args[1..]),
         Some("arena") => arena(&args[1..]),
         Some("arena-one") => arena_one(&args[1..]),
