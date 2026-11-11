@@ -238,9 +238,13 @@ follower and the explorer's tiers are the two I'd do most carefully.
 | 3 | names, first pass (fight and explorer): a flag says what it means (`baiting`, `urgent`, `route_keeps_legs`, `exit_held_back`, `harm_allowed`, ...); `tools/rename.py` does a rename by the compiler's errors | f50c90f |
 | 3 | the fight's state by what it's for: 44 of `Combat`'s 97 fields are seven parts of it (`combat/state.rs`: movers, trigger, dodge, steer, cover, off_barrels, senses) | 5bb0266 |
 | 3 | sifting the list of things to do is its own module (`explorer/cut_off.rs`): the way back from a place a type (`WayBack`), what a list is sifted by another (`Sift`), out of 300 lines of closures in `list_objectives` (467 lines to 190) | 91e2aca |
+| 1 | comments: the follower, navigation, jumps, the planner and the rest of the crate (about 235); nothing left names the level a rule came from | 72b99a9, 724def0 |
+| 3 | the follower's state by what it's for: 38 fields are seven parts (`follower/state.rs`: shot, chain, weave, crusher, jump, unstick, at) | ce40c98 |
+| 3 | the follower at a goal and walking: each wait and each thing that comes first a function with a name (`act_at_goal` 367 lines to about 110, `walk` 328 to about 180) | a6646c2, 91a75ca |
 
-Still to do of step 1: the follower (about 110 comments naming a level) and the navigation,
-planning and jump code (about 90), after stock is taken.
+Step 1 is done. Still long in the follower, and not split: `shoot_barrel` (328 lines),
+`check_blocked` (258), `crusher_ahead` (203); each is one rule's cases in order, and wants
+reading with the same care as the fight's before it's cut up.
 
 ## Findings (step 2), as they come
 
