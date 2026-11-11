@@ -1,7 +1,7 @@
-//! Evil playing with monsters about: the explorer finds the way, the fight (Combat) takes the
-//! controls when it needs them, and between them she goes for what she needs to keep fighting
-//! (weapons, ammo, health, armour she has seen) and, once there's nothing else, hunts down the
-//! monsters she knows are left (some maps open only when they're dead: E1M8's barons).
+//! Evil playing with monsters about: the explorer finds the way, the fight (`Combat`) takes
+//! the controls when it needs them, and between them she goes for what she needs to keep
+//! fighting (weapons, ammo, health, armour she has seen) and, once there's nothing else, hunts
+//! down the monsters she knows are left (some maps open only when they're dead).
 
 use std::collections::BTreeSet;
 use std::rc::Rc;
@@ -49,7 +49,7 @@ const RUN_SPEED: f64 = 400.0;
 const TRAIL_STEP: f64 = 48.0;
 const TRAIL_LEN: usize = 96;
 
-/// (barons' and knights' fireballs don't hurt each other)
+/// barons' and knights' fireballs don't hurt each other
 fn species(name: &str) -> &str {
     if name == "HellKnight" {
         "BaronOfHell"
@@ -342,9 +342,9 @@ impl Player {
     }
 
     /// The things lying about that have come into her view: on a floor in view this tic (her
-    /// eyes': the explorer's, `Knowledge::seen_tic`). Once seen it's known
-    /// to be there till she sees it isn't. What a monster drops dying round a corner, she finds
-    /// when she looks.
+    /// eyes': the explorer's, `Knowledge::seen_tic`). Once seen, a thing is known to be there
+    /// till she sees it isn't. What a monster drops dying round a corner she finds when she
+    /// looks.
     fn notice_things(&mut self, obs: &Observation) {
         let (k, nav) = (&self.explorer.knowledge, &self.explorer.nav);
         for t in obs.things.iter().flatten().filter(|t| Self::lies_about(t)) {
@@ -369,14 +369,14 @@ impl Player {
     /// missiles she's noticed (the fight's senses, `Combat::observe`).
     fn percept(&self, obs: &Observation) -> Observation {
         let mut seen = obs.clone();
-        // (a sound as heard: what it is, how loud, which side; not what made it or where)
+        // A sound as heard: what it is, how loud, which side. Not what made it or where.
         for s in &mut seen.sounds {
             s.from = None;
             s.at = (0.0, 0.0);
         }
         if let Some(things) = &mut seen.things {
             let c = &self.fight.combat;
-            // (a monster in her sight as her senses have it: its health her reckoning)
+            // A monster in her sight as her senses have it: its health is her reckoning.
             for t in things.iter_mut() {
                 if let Some(v) = c.visible.iter().find(|v| v.id == t.id) {
                     *t = v.clone();
@@ -642,9 +642,8 @@ impl Player {
     }
 
     pub fn restart(&mut self) {
-        // (dead with something on: noted, so as not to walk into it again the same way; MAP29's
-        // green armor down in the nukage under fire, five lives running. A level again asked for
-        // for what's left has nothing on)
+        // Dead with something on: noted, so as not to walk into it again the same way. A level
+        // begun again for what's left has nothing on.
         if let Some(cur) = &self.explorer.current {
             let d = Death {
                 at: self.last_pos,
@@ -683,11 +682,11 @@ impl Player {
         });
     }
 
-    /// What she does this tic: whoever decides it (`decide`), and then her hand: one hand turns
-    /// her, whoever's asking, no faster than a hand turns and with no jerk from one tic to the
-    /// next (the fight's aim, a route's turn and a look each had a limit of its own, and the
-    /// three taking turns made a jitter none of them made alone). She walks the way that was
-    /// meant, whatever she ends up facing.
+    /// What she does this tic: whoever decides it (`decide`), and then her hand. One hand turns
+    /// her, whoever is asking, no faster than a hand turns and with no jerk from one tic to the
+    /// next: the fight's aim, a route's turn and a look each have a limit of their own, and
+    /// taking turns they would make a jitter none of them makes alone. She walks the way that
+    /// was meant, whatever she ends up facing.
     pub fn act(&mut self, obs: &Observation, last: Option<&Controls>) -> Controls {
         let mut c = self.decide(obs, last);
         let (most, accel) = (
@@ -697,8 +696,8 @@ impl Player {
         if accel > 0.0 {
             let was = last.map_or(0.0, |l| l.turn);
             let turn = c.turn.clamp(-most, most).clamp(was - accel, was + accel);
-            // (the legs' way in the world kept: forward and strafe are by where she faces
-            // after the turn, which is now another way)
+            // The legs' way in the world is kept: forward and strafe are by where she faces after the
+            // turn, which is now another way.
             let by = (c.turn - turn).to_radians();
             let (f, s) = (c.forward, c.strafe);
             c.forward = f * by.cos() - s * by.sin();
@@ -712,9 +711,9 @@ impl Player {
         self.file_decisions();
         self.last_pos = obs.pos();
         self.fight.present = obs.things.iter().flatten().map(|t| t.id).collect();
-        // (her senses take the game as it is; everything after goes by what they made of it)
+        // Her senses take the game as it is; everything after goes by what they made of it.
         self.fight.combat.observe(obs);
-        // (pushing and not moving, where the map has room: a bump, something to look at)
+        // Pushing and not moving, where the map has room: a bump, something to look at.
         let pushed = last.filter(|c| c.forward.hypot(c.strafe) > 10.0);
         let still = obs.velocity.is_some_and(|v| v.0.hypot(v.1) < 1.0);
         self.pushing_still = if pushed.is_some() && still {
@@ -738,8 +737,8 @@ impl Player {
             self.explorer.log.push(format!("  [fight] {line}"));
         }
         self.keep_out_of_sight(obs);
-        // (in a jump, or crossing a crusher it's timed: the route keeps the legs, the fight shoots;
-        // E2M2 seed 7, a crossing begun, an imp seen 2000 off, the fight's steering under it)
+        // In a jump, or crossing a crusher it has timed, the route keeps the legs and the fight
+        // only shoots.
         let busy = self
             .explorer
             .follower
@@ -752,9 +751,8 @@ impl Player {
                 .errand(&self.explorer, obs)
                 .map_or((String::new(), None), |(e, at)| (e, Some(at)))
         };
-        // (falling back, the retreat's way is the way she's going: a dodge as clear along it
-        // takes it, not the errand's. Its errand the key she stood on, she dodged back and forth
-        // over it under fire from all round, the way back out never taken)
+        // Falling back, the retreat's way is the way she's going: a dodge that's as clear along it
+        // takes it, not the errand's.
         let back = self.retreat.as_ref().and_then(|r| {
             r.route
                 .planned_path(Some(obs.pos()))
@@ -768,9 +766,9 @@ impl Player {
             .follower
             .as_ref()
             .is_some_and(|f| !f.done && !f.failed);
-        // (what she knows of floors gone to something that hurts, for where the fight takes her)
+        // What she knows of floors gone to something that hurts, for where the fight takes her.
         self.fight.combat.hazards = self.explorer.knowledge.hazards(obs.tic);
-        // (and the crushers she knows of, for where they could have her if they start again)
+        // And the crushers she knows of, for where they could have her if they start again.
         self.fight.combat.crushers = self.explorer.knowledge.crusher_sectors();
         let d = self.fight.combat.decide(obs, busy, &errand);
         let retreating = !busy && self.retreating(obs);
@@ -780,9 +778,8 @@ impl Player {
             retreating,
             self.fight.combat.dodge_clear(),
         );
-        // (moved a long way by the fight or a retreat: what she was going for thought again, as
-        // the route takes her legs back. MAP07, the user watching: dodged away from the switch
-        // she was going for, others nearer by then, the first never changed)
+        // Moved a long way by the fight or a retreat: what she was going for is thought again as
+        // the route takes her legs back, since something else may be nearer by now.
         if legs == Legs::Route {
             let moved = self
                 .left_route_at
@@ -809,7 +806,7 @@ impl Player {
                 .retreat
                 .as_mut()
                 .map_or_else(Controls::default, |r| r.route.act(obs));
-            // (out of the barrels: her legs and her eyes the run's, whatever the fight says)
+            // Out of the barrels: her legs and her eyes are the run's, whatever the fight says.
             if self
                 .retreat
                 .as_ref()
@@ -821,12 +818,12 @@ impl Player {
                 (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
             }
             return match d {
-                // (a missile about to hit still comes first, when there's a way clear of it)
+                // A missile about to hit still comes first, when there's a way clear of it.
                 Some(d) if d.kind == Move::Dodging && legs == Legs::Fight => {
                     self.fight.combat.controls(obs, &d, None, true)
                 }
-                // (the retreat's legs, the fight aiming over them; or the fight's move, the
-                // retreat's way where its steering leans)
+                // The retreat's legs with the fight aiming over them; or the fight's move, with the
+                // retreat's way where its steering leans.
                 Some(d) => {
                     let pressing = self
                         .retreat
@@ -846,15 +843,15 @@ impl Player {
         if let Some(d) = d.as_ref().filter(|_| legs == Legs::Fight) {
             self.explorer.hold(obs, last);
             let mut c = self.fight.combat.controls(obs, d, None, true);
-            // (the fight's own way too, unless it's out of the way of something: keeping clear
-            // took her out into the spider mastermind's sight as surely as a route)
+            // The fight's own way is held at the edge of a sniper's sight too, unless the move is out
+            // of the way of something: keeping clear can take her into its sight as surely as a route.
             if !d.kind.escaping() && self.hold_at_edge(obs, &c) {
                 (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
             }
             return c;
         }
-        // (fallen back, none of them in sight yet: waited for where she is, facing where the
-        // nearest was, not walked back in to them)
+        // Fallen back, none of them in sight yet: she waits where she is, facing where the nearest
+        // was, and doesn't walk back in to them.
         if d.is_none() && obs.tic < self.wait_until && self.fight.combat.now.against_her.is_empty()
         {
             let pos = obs.pos();
@@ -891,7 +888,7 @@ impl Player {
             self.fight.combat.route_walks(obs, &c);
         }
         if d.is_none() && c.weapon == 0 && !shooting {
-            // (no fight: the gun for the next one up, the fight's call)
+            // No fight: the gun for the next one is brought up, the fight's call.
             if let Some(slot) = self.fight.combat.ready_gun(obs) {
                 c.weapon = slot;
                 self.fight.combat.readied(obs);
@@ -921,11 +918,9 @@ impl Player {
         }
     }
 
-    /// The fight's controls over a route's (`route`): turned the route's way while the route's
-    /// waiting to press a door or switch and nothing's fired this tic. Use goes where she faces;
-    /// turned to aim at what she isn't shooting, the press never came (E4M5 UV: falling back to
-    /// cover behind a shut door, 3 shells, an imp 1100 off out of reach aimed at, 6000 tics at
-    /// the door, never pressed).
+    /// The fight's controls over a route's (`route`): turned the route's way while the route is
+    /// waiting to press a door or a switch and nothing is fired this tic. Use goes where she
+    /// faces, so turned to aim at something she isn't shooting, the press would never come.
     fn press_turn(mut c: Controls, route: &Controls, pressing: bool) -> Controls {
         if pressing && !c.attack {
             c.turn = route.turn;
@@ -969,8 +964,8 @@ impl Player {
         if !self.fight.combat.now.shooters.is_empty() {
             self.shooters_tic = obs.tic;
         }
-        // (in among barrels, something about to set them off: out of them before anything else,
-        // whatever she was at, another retreat too)
+        // In among barrels with something about to set them off: out of them before anything else,
+        // whatever she was at, another retreat included.
         if self
             .retreat
             .as_ref()
@@ -1014,9 +1009,7 @@ impl Player {
             }
             return self.retreat.is_some();
         }
-        // (a try at some other retreat that found no way doesn't hold off cover when it's due:
-        // MAP04 UV, a way back tried and not found at full health, cover due 105 tics later at
-        // 28, too late)
+        // A try at some other retreat that found no way doesn't hold off cover when it's due.
         if obs.tic - self.retreat_tic < self.fight.tune.retreat.again
             && (self.tried_cover || !self.cover_due())
         {
@@ -1027,13 +1020,12 @@ impl Player {
     }
 
     /// In the blasts of a field of barrels (`barrels.field` of them or more in the chain she's
-    /// in): out of it at once, something there to set them off yet or not (the user's: "letting
-    /// her wander about is just going to get her in a bad position for no good reason"; what
-    /// sets them off is let out as she goes). With nothing to set them off (no monster that
-    /// shoots awake and about, none going off), once only from about the same place: her way
-    /// may lie through them, and run out of them every time she'd never take it.
+    /// in): out of it at once, whether or not something is there to set them off yet. With
+    /// nothing to set them off (no monster that shoots awake and about, none going off), once
+    /// only from about the same place: her way may lie through them, and run out of them every
+    /// time she would never take it.
     fn barrel_run_due(&self, obs: &Observation) -> bool {
-        /// a run begun this near one before, nothing having come of the barrels: not again
+        /// a run begun this near here before, with nothing having come of the barrels: not again
         const SAME_PLACE: f64 = 512.0;
         let c = &self.fight.combat;
         if c.now.invulnerable
@@ -1049,18 +1041,14 @@ impl Player {
                 .any(|&p| dist(p, obs.pos()) < SAME_PLACE)
     }
 
-    /// The shortest way to somewhere she knows of out of every barrel's blast (the user's:
-    /// "if surrounded by X or more barrels, find shortest path to a room without barrels and
-    /// RUN", and "this move cannot be interrupted by ANYTHING until she gets to safety"). MAP23
-    /// on the easiest skill, 16 runs of 16 dead by barrels: in its first field with a mancubus
-    /// let out behind her, and in its hall of them with hell knights, fought, dodged and kept
-    /// clear of from in among the barrels their fireballs set off.
+    /// The shortest way to somewhere she knows of that is out of every barrel's blast, by the
+    /// lanes between the barrels (`lanes::lane`). The run it makes has her legs and her eyes
+    /// till she's there: nothing interrupts it.
     fn out_of_barrels(&mut self, obs: &Observation) -> Option<RouteFollower> {
         /// out of a blast (128, and her radius, and a little)
         const CLEAR: f64 = 150.0;
-        /// somewhere without barrels: none this near it (a gap in a field of them is no such
-        /// place: run to one 150 clear of them all in MAP23's first field, stood in it, dead
-        /// there when the chain came by, the barrels thrown about by the blasts)
+        /// somewhere without barrels has none this near it: a gap in a field of them is no such
+        /// place (the chain reaches it, and blasts throw barrels about)
         const AWAY: f64 = 384.0;
         /// the nearest this many places tried for a way to them
         const PLACES: usize = 24;
@@ -1085,8 +1073,8 @@ impl Player {
         let hurting: Vec<bool> = (0..obs.heights.len()).map(|s| k.damaging(s)).collect();
         let view = self.explorer.view();
         let live: States = obs.heights.iter().map(|&h| vec![h]).collect();
-        // (where she can stand, for the lanes between the barrels: all her box on floor she can
-        // step between, with room overhead, none of it hurting)
+        // Where she can stand, for the lanes between the barrels: all her box on floor she can step
+        // between, with room overhead, none of it hurting.
         let floor = |p: Point| {
             let at = |q: Point| {
                 nav.poly_at(q)
@@ -1118,8 +1106,7 @@ impl Player {
             if !path.jumps.is_empty() || path.waypoints.iter().any(Option::is_none) {
                 continue;
             }
-            // (not a way back through the ones going off: run on ahead of the chain to 680 on,
-            // the nearest place she knew back at the start, 1300 off through it; dead in it)
+            // Not a way back through the ones going off, however near the place.
             if path
                 .waypoints
                 .windows(2)
@@ -1132,7 +1119,7 @@ impl Player {
             {
                 continue;
             }
-            // (the mesh's way has no barrels in it: the lanes between them, round about it)
+            // The mesh's way has no barrels in it: the lanes between them, round about it.
             tried += 1;
             let along: Vec<Point> = path.waypoints.iter().flatten().copied().collect();
             let Some(lane) = crate::motor::follower::lanes::lane(
@@ -1224,12 +1211,9 @@ impl Player {
         }
     }
 
-    /// Unarmed, the rest of her way runs into one of them: it's moved onto her way since she
-    /// chose it, and nothing moves it off (E2M5 on UV: a demon between her and the clip she was
-    /// off for, pushed against, bitten from 96 health to 29). One beside her already walls off
-    /// only a way that takes her nearer it, as `for_ammo` chose: a way leading off from beside it
-    /// isn't into it (MAP19 ITYTD: two spectres on her, the way away dropped the tic after it was
-    /// chosen, every time, bitten to death where she stood).
+    /// Unarmed, the rest of her way runs into one of them: it has moved onto her way since she
+    /// chose it, and nothing moves it off. One beside her already walls off only a way that
+    /// takes her nearer it, as `for_ammo` chose: a way leading off from beside it isn't into it.
     fn walled_off(&self, obs: &Observation, route: &RouteFollower) -> bool {
         let pos = obs.pos();
         let path = route.planned_path(Some(pos));
@@ -1246,8 +1230,7 @@ impl Player {
     /// counts as a try: not again for a while):
     /// - cover: hurt, with something that shoots in sight, or an arch-vile;
     /// - for ammo: nothing to shoot with and something after her (away, for ammo, not fists at
-    ///   it; the user's. E3M1 on UV: out of bullets, a cacodemon on her, "getting past" on to a
-    ///   door, chased round till its fireballs had her);
+    ///   it);
     /// - back: ambushed in a bad place (out of the middle of them instead, surrounded, with no
     ///   way back);
     /// - out: surrounded;
@@ -1263,14 +1246,10 @@ impl Player {
             (RetreatKind::Cover, self.find_cover(obs))
         } else if self.cover_due() {
             self.retreat_tic = obs.tic;
-            // (unarmed, cover doesn't end it: nothing she does from there kills what's after her,
-            // and the cover's end is when they stop shooting. The ammo first, cover if there's no
-            // way off for it. E1M5 UV: fists out at 13 health, an imp's fireballs, a demon on her;
-            // hid from the imp 190 tics, the demon followed, dead as the cover ended)
-            // (and a way off for ammo just called off, one of them on it, is that tried: cover,
-            // not the next way off past them, called off the tic after. MAP18 HNTR: out of
-            // shells, cacodemons on her, a way off chosen and called off every tic for 30 tics
-            // under their fireballs)
+            // Unarmed, cover doesn't end it: nothing she does from there kills what's after her, and
+            // the cover's end is when they stop shooting. So the ammo first, and cover if there's no way
+            // off for it. A way off for ammo that was just called off (one of them on it) counts as
+            // tried: then cover, not the next way off past them.
             let walled = obs.tic - self.walled_tic < self.fight.tune.retreat.again;
             match (unarmed && !walled)
                 .then(|| self.for_ammo(obs, on_way, false))
@@ -1321,10 +1300,9 @@ impl Player {
         route.map(|route| Retreat { kind, route })
     }
 
-    /// Hurt, with something shooting at her in sight: under RETREAT_HEALTH, or as low as that by
-    /// the time she'd get to cover as far off as it's looked for, at the rate she's losing health
-    /// (MAP04 UV: a pack of hitscanners raking her in the open, 67 to 28 in 8 tics, the cover 600
-    /// back; gone for at 28, dead on the way).
+    /// Hurt, with something shooting at her in sight: under `retreat.health`, or as low as that
+    /// by the time she'd get to cover as far off as it's looked for, at the rate she's losing
+    /// health.
     fn cover_due(&mut self) -> bool {
         let (health, rate) = (
             self.fight.combat.now.health,
@@ -1369,7 +1347,7 @@ impl Player {
         let pos = obs.pos();
         let nav = Rc::clone(&self.explorer.nav);
         let k = &self.explorer.knowledge;
-        // (the nearest place on her trail that far back, not on a floor that hurts)
+        // The nearest place on her trail that far back, not on a floor that hurts.
         let spot = self.trail.iter().rev().copied().find(|&p| {
             dist(p, pos) >= back
                 && nav
@@ -1391,8 +1369,8 @@ impl Player {
     }
 
     /// Caught in a bad place: in a fight that's going badly (losing health fast, or several
-    /// awake close by) where she can't fight well (walls close round her, a floor that hurts,
-    /// them on more than one side). Why, if so (MAP29's ambushes in tight spaces: out, or kill
+    /// them on more than one side). Why, if so. In a tight ambush the choices are out, or kill
+    /// fast.
     /// fast, the user's).
     fn ambushed(&mut self, obs: &Observation) -> Option<String> {
         // (a trap sprung, or a room walked in on: several of them seen all at once)
@@ -1458,8 +1436,8 @@ impl Player {
         let pos = obs.pos();
         let nav = Rc::clone(&self.explorer.nav);
         let heights = self.fight.combat.heights(obs).to_vec();
-        // (not back onto a floor that hurts now: the way she came may have gone down into it,
-        // E3M1's way over the blood, backed out down it into the blood from imps on the far bank)
+        // Not back onto a floor that hurts now: the way she came may since have gone down into
+        // what was under it.
         let k = &self.explorer.knowledge;
         let trail: Vec<Point> = self
             .trail
@@ -1571,11 +1549,11 @@ impl Player {
         None
     }
 
-    /// Out of ammo with something after her: to the nearest ammo or gun she knows of that she
-    /// can use, by a way not past them; else to the spot she's been that's furthest from them.
-    /// Through doors if need be (E3M1: the doors shut behind her, every way off through one).
-    /// No plain way to ammo but on her way for some already (`on_way`): on with that, not away.
-    /// No way to ammo at all, not hurt (`keep_on`), and her way on clear of them: on with it.
+    /// Out of ammo with something after her: to the nearest ammo or gun she knows of that she can
+    /// use, by a way not past them; else to the spot she's been that's furthest from them.
+    /// Through doors if need be. With no plain way to ammo but on her way for some already
+    /// (`on_way`): on with that, not away. With no way to ammo at all, not hurt (`keep_on`), and
+    /// her way on clear of them: on with it.
     fn for_ammo(
         &mut self,
         obs: &Observation,
@@ -1584,8 +1562,8 @@ impl Player {
     ) -> Option<RouteFollower> {
         let them = self.fight.combat.now.about.clone();
         let pos = obs.pos();
-        // (no nearer to any of them than she is: one on her already, every way off starts by
-        // it, and away is still away)
+        // No nearer to any of them than she is: with one on her already every way off starts by
+        // it, and away is still away.
         let nearest = them
             .iter()
             .map(|m| dist((m.x, m.y), pos))
@@ -1600,8 +1578,8 @@ impl Player {
         let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
         let known = self.explorer.knowledge.known_polys();
         let nav = Rc::clone(&self.explorer.nav);
-        // (to the thing itself, not the middle of the floor it's on: a big floor's middle can be
-        // further off it than she reaches, and she'd stop there none the richer, again and again)
+        // To the thing itself, not the middle of the floor it's on: a big floor's middle can be
+        // further from the thing than her reach, and she'd stop there none the richer.
         let mut ammo: Vec<(f64, Point, &'static str, i32)> = obs
             .things
             .iter()
@@ -1623,10 +1601,9 @@ impl Player {
             }
             refused.push(id);
         }
-        // (and the errand for one of those given up: unarmed, with no way to it clear of them,
-        // it'd only take her back into them once she's away, again and again. E4M9 UV: a rocket
-        // launcher behind a door that opened on an imp and a baron, 8 rockets in hand, 1200 tics
-        // of off and back in until the route gave up; chosen afresh, with them known)
+        // And the errand for one of those is given up: unarmed, with no way to it clear of them, it
+        // would only take her back into them once she's away. It is chosen afresh later, with them
+        // known.
         if self
             .explorer
             .current
@@ -1643,15 +1620,11 @@ impl Player {
             ));
             return None;
         }
-        // (no way to ammo clear of them, and her own way on keeps clear of them: on with it, not
-        // away. Away finds no ammo; her way on is where new ammo turns up, and every away drags
-        // her off it, a lift's window missed each time. MAP06 HMP: out of shells at 198 health, a
-        // demon 300-700 off and imps across the map; the way on a lift pressed and ridden in 5 s,
-        // away every 3 s, 20 game minutes of it). Clear by the full margin, not the nearer one
-        // `clear` allows: with one on her, away gains distance her way on doesn't (MAP06 HMP: two
-        // imps 45 off clawing her while she waited on a lift, 120 health to 19). And none of them
-        // a hitscanner: no way is clear of its shots (MAP06 HMP: a chaingunner and a sergeant
-        // raking her on her way across their room, dead)
+        // No way to ammo clear of them, and her own way on keeps clear of them: on with it, not
+        // away. Away finds no ammo; her way on is where new ammo turns up, and every flight drags
+        // her off it. Clear by the full margin, not the nearer one `clear` allows: with one on her,
+        // away gains distance that her way on doesn't. And none of them a hitscanner: no way is
+        // clear of its shots.
         let hitscan = them
             .iter()
             .any(|t| monster(t.name).is_some_and(|m| matches!(m.attack, Attack::Hitscan)));
@@ -1675,8 +1648,7 @@ impl Player {
             })
             .collect();
         spots.sort_by(|a, b| b.0.total_cmp(&a.0));
-        // (all of them, furthest first: the furthest may be beyond a lift, no way there for a
-        // plain way; E3M1's start, back down the lift from the cacodemon's room)
+        // All of them, furthest first: the furthest may be beyond a lift, with no plain way there.
         for (_, pi) in spots {
             if let Some(f) = self.go_to_clear(obs, pi, &them, "for ammo", clear, true) {
                 self.log(format!(
@@ -1693,13 +1665,11 @@ impl Player {
         None
     }
 
-    /// Unarmed, the explorer's already on her way to ammo or a gun she can use, by a way not past
-    /// them: when `for_ammo` finds no plain way to any (on the heights as they are: no lifts,
-    /// drops or jumps), that's the way off for ammo. Neither away nor to cover then: nothing she
-    /// does there kills what's after her, and the route takes her back the way she came (E4M7 UV:
-    /// out of ammo at 39 health, an imp 400 off; the way to the ammo by a door, a drop and a
-    /// run-jump; away through the door out of its sight, back through it on the route, 600 s of
-    /// it, every errand dropped).
+    /// Unarmed, the explorer is already on her way to ammo or a gun she can use, by a way not
+    /// past them. When `for_ammo` finds no plain way to any (on the heights as they are: no
+    /// lifts, drops or jumps), that route is the way off for ammo. Neither away nor to cover
+    /// then: nothing she does there kills what's after her, and the route would only take her
+    /// back the way she came.
     fn on_for_ammo(&self, obs: &Observation) -> bool {
         let Some(cur) = self
             .explorer
@@ -1910,10 +1880,8 @@ impl Player {
 
     /// On her way, hidden, about to step into the sight of a sniper that's firing (heard: its
     /// guns; at her, as far as she knows, unless she can see it's at something else): not yet.
-    /// Once it stops, it winds up again before its next burst (the spider mastermind's 20 tics of
-    /// turning to her, after a chase step or two), time to get across to the next cover. The
-    /// user's: a player hears when its attack's over. E3M8: the way to a post taken into its
-    /// bursts at 600, dead in a second.
+    /// Once it stops, it winds up again before its next burst, which is the time to get across
+    /// to the next cover. A player hears when its attack is over.
     fn hold_at_edge(&mut self, obs: &Observation, c: &Controls) -> bool {
         if c.forward.hypot(c.strafe) < 1.0 || self.fight.combat.now.invulnerable {
             return false;
@@ -1957,11 +1925,10 @@ impl Player {
         false
     }
 
-    /// Ways across ground a hitscan shooter she can't take on would see her on (from where she
-    /// last saw it) count for `EXPOSED` times their length: round the back of what's between them
-    /// rather than across the open. The user's, for E3M8: staying on the other side of the
-    /// building from the spider mastermind; every hit she took was on her way to a box of rockets
-    /// or a door, across the ring in its sight. Worked out again once one's moved, or a while on.
+    /// Ways across ground that a hitscan shooter she can't take on would see her on (from where
+    /// she last saw it) count for `EXPOSED` times their length: she goes round the back of
+    /// what's between them rather than across the open. Worked out again once one has moved, or
+    /// after a while.
     fn keep_out_of_sight(&mut self, obs: &Observation) {
         let unhurt = self.fight.combat.now.invulnerable;
         let them: Vec<Seen> = self
@@ -1970,9 +1937,9 @@ impl Player {
             .remaining()
             .into_iter()
             .filter(|s| !unhurt && s.awake && self.fight.combat.sniper(obs, s.name))
-            // (not one she can see fighting something else: it won't shoot her till it's done
-            // or she hurts it, the time to cross; out of sight, taken to be after her. A monster
-            // sees all round once awake (A_Chase): its target's what counts, not its facing)
+            // Not one she can see fighting something else: it won't shoot her till it's done or she
+            // hurts it, which is the time to cross. One out of sight is taken to be after her. A
+            // monster sees all round once awake (A_Chase): its target is what counts, not its facing.
             .filter(|s| {
                 self.fight
                     .combat
@@ -2021,7 +1988,7 @@ impl Player {
                 }
             })
             .collect();
-        // (first seen: the way she's on was chosen without it; again)
+        // First seen: the way she's on was chosen without it, so it's chosen again.
         self.fight.rethink |= self.exposure.is_none();
         self.explorer.view().set_exposure(exposure);
         self.exposure = Some((obs.tic, at));
@@ -2029,9 +1996,8 @@ impl Player {
 
     /// Out in the open in a long fight with a hitscan shooter: to the nearest place she knows of
     /// (seen or been) that none of them can see, with somewhere near it they can (a corner to
-    /// step out from and back behind), by a way that doesn't go through them. The user's, for
-    /// E3M8: the building in the middle, across the open to get to it, rather than standing in
-    /// the open with the spider mastermind's bursts.
+    /// step out from and back behind), by a way that doesn't go through them. Crossing the open
+    /// to get there beats standing in it under the bursts.
     fn find_post(&mut self, obs: &Observation) -> Option<RouteFollower> {
         let shooters = self.fight.combat.now.shooters.clone();
         if shooters.is_empty() {
@@ -2041,8 +2007,8 @@ impl Player {
         let known = self.explorer.knowledge.known_polys();
         let heights = self.fight.combat.heights(obs).to_vec();
         let pos = obs.pos();
-        // (places on a grid, not the nav's polys: a hall's a few big ones, the shadow behind a
-        // pillar inside one whose middle's in plain sight; E3M8, 27 polys in reach, 2 hidden)
+        // Places on a grid, not the nav's polys: a hall is a few big polys, and the shadow behind a
+        // pillar lies inside one whose middle is in plain sight.
         let on_known = |p: Point| -> Option<f64> {
             let pi = nav.poly_in(p)?;
             let s = nav.sector_of_poly(pi);
@@ -2100,9 +2066,8 @@ impl Player {
                 })
             });
             if peek {
-                // (the far side of something, the further from them the better, not only the
-                // nearest: the user's, E3M8's building between her and the spider mastermind,
-                // 500 off with it 1500 away; its bullets spread, the further the fewer land)
+                // The far side of something, and the further from them the better, not only the nearest:
+                // bullets spread, so the further off, the fewer land.
                 posts.push((d - self.fight.tune.retreat.post_far * from_them(p), p));
             }
         }
@@ -2147,8 +2112,7 @@ impl Player {
             return None;
         }
         let seen = self.seen_from(obs, &spots, &shooters, false);
-        // (not in a door shut now: hidden only while it's shut, and open with her in it; MAP20,
-        // fallen back to the door out of a cyberdemon's lane, rockets on her waiting at it)
+        // Not in a door that's shut now: hidden only while it's shut, and it opens with her in it.
         let open = |pi: usize| {
             obs.heights
                 .get(self.explorer.nav.sector_of_poly(pi))
@@ -2166,10 +2130,8 @@ impl Player {
         }
         let view = self.explorer.view();
         let live: States = obs.heights.iter().map(|&h| vec![h]).collect();
-        // (open now first; else through a door she can open: the one she came in by may have
-        // shut behind her. MAP04 UV: out of the start room through a door that closes again,
-        // into the chaingunners' yard; at 28 health the only cover was back behind it, not
-        // found shut, shot down where she stood)
+        // Open now first; else through a door she can open: the one she came in by may have shut
+        // behind her.
         let doors = view.local_doors(obs.keys.unwrap_or_default());
         let hidden: Vec<usize> = hidden.into_iter().take(4).collect();
         let found = [None, Some(&doors)].into_iter().find_map(|d| {
@@ -2210,9 +2172,9 @@ impl Player {
 }
 
 impl Fight {
-    /// The way to p (as the crow flies) not past anything about she can't take on: the run for
-    /// the invulnerability not straight through what it's for (E3M9's, behind the cyberdemon:
-    /// run at past it, one rocket, dead at full health). Till it's moved off the line, kept clear.
+    /// The way to p (as the crow flies) isn't past anything about that she can't take on: a run
+    /// for the invulnerability doesn't go straight through what it's for. Till it has moved off
+    /// the line, she keeps clear.
     fn clear_way_to(&self, obs: &Observation, p: Point) -> bool {
         let pos = obs.pos();
         self.combat
@@ -2230,10 +2192,9 @@ impl Fight {
             })
     }
 
-    /// The way to the ammo or gun at p, armed with it (obs): clear as above, and all of what's
+    /// The way to the ammo or gun at p, armed with it (`obs`): clear as above, and all of what's
     /// awake by it together not more than it and what she has would kill. Each alone may be
-    /// nothing (MAP05 UV: three imps round a box of four shells, no ammo left; the way clear of
-    /// every one of them, gone down to it with the fist and clawed to death with it in hand).
+    /// nothing and the lot too much.
     fn clear_way_armed(&self, obs: &Observation, p: Point) -> bool {
         let pos = obs.pos();
         let by: Vec<&str> = self
@@ -2253,9 +2214,8 @@ impl Fight {
     /// Something about she can't take on (awake, known), or what's about her too much together
     /// (outmatched, or round her on several sides): invulnerability's for that.
     fn needs_invulnerability(&self, obs: &Observation) -> bool {
-        // (one of them too much for her, or all that's about her together: a ring of imps and
-        // zombiemen is each nothing and together what the sphere's for; E3M6's trap, the user
-        // watching: weak ones spawned all round her, the sphere beside her never gone back for)
+        // One of them too much for her, or all that's about her together: a ring of weak ones is
+        // each nothing and together what the sphere is for.
         self.combat.now.outmatched
             || self.combat.now.surrounded
             || self.combat.remaining().iter().any(|s| {
@@ -2266,9 +2226,9 @@ impl Fight {
             })
     }
 
-    /// Barrels she's seen, near, with nothing in sight and the ammo for it: each to be shot from out
-    /// of its chain's blasts (the follower's), before a shot sets it off by her, hers at something
-    /// beside it or a monster's at her (the user's: barrels are dangerous wherever they are).
+    /// Barrels she's seen, near, with nothing in sight and the ammo for it: each to be shot from
+    /// out of its chain's blasts (the follower's job), before a shot sets it off by her, hers
+    /// at something beside it or a monster's at her.
     fn barrels(
         &self,
         x: &Explorer,
@@ -2290,7 +2250,7 @@ impl Fight {
                 .map_or(0, |(_, n)| *n)
         };
         let held = obs.weapons.clone().unwrap_or_default();
-        // (the barrel rule: the shotgun with 12 shells and more, else single pistol taps)
+        // The barrel rule: the shotgun with enough shells, else single pistol taps.
         if !(held.contains(&2) && ammo(2) >= self.tune.barrels.bullets)
             && !(held.contains(&3) && ammo(3) >= self.tune.barrels.shells)
         {
@@ -2318,7 +2278,7 @@ impl Fight {
                 format!("clear the barrel at ({:.0}, {:.0})", b.0, b.1),
             );
             o.look_at = Some(b);
-            // (one objective a barrel, by where it is: given up on as any other is)
+            // One objective a barrel, by where it is: given up on as any other is.
             o.reveals =
                 std::iter::once(((b.0.round() as i64) << 32) | (b.1.round() as i64 & 0xffff_ffff))
                     .collect();
@@ -2383,10 +2343,8 @@ impl Fight {
 
     /// Would that gun do more than the best she has (worth dropping what she's doing for)?
     fn better_gun(&self, obs: &Observation, name: &str) -> bool {
-        // (judged on a boss she knows of still about, if any: what the level's fight comes down
-        // to, and it takes no rocket's blast. E3M8 from a pistol start: the plasma rifle 246 off
-        // "no better" than the launcher, so not gone for first; the spider mastermind wandered
-        // into sight of it, it was left, and she was shot down with the rockets spent)
+        // Judged on a boss she knows of still about, if any: that is what the level's fight comes
+        // down to, and it takes no rocket's blast.
         let boss = self
             .combat
             .remaining()
@@ -2404,8 +2362,8 @@ impl Fight {
     fn gun_worth(&self, obs: &Observation, name: &str) -> f64 {
         let w = Self::gun(obs, name);
         let now = self.combat.now.firepower;
-        // (what she's met this life: with a level known beforehand that'd be everything in it,
-        // and every gun in it worth any walk: MAP13's BFG 4400 off the first thing she did)
+        // What she's met this life. With a level known beforehand "still about" would be everything
+        // in it, and every gun in it worth any walk.
         let hp: f64 = self
             .combat
             .remaining()
@@ -2416,17 +2374,12 @@ impl Fight {
         self.tune.errands.gun_worth + (hp / now - hp / w.dps().max(now)).max(0.0)
     }
 
-    /// What she's going for to fight with (and where it is), if that's what the route's for; or, mid-fight, with
-    /// only the pistol or next to no ammo, something to fight with she hasn't turned aside for
-    /// yet (MAP09's hot start, the shotgun across the room).
+    /// What she's going for to fight with (and where it is), if that's what the route is for;
+    /// or, mid-fight, with only the pistol or next to no ammo, something to fight with that she
+    /// hasn't turned aside for yet.
     fn errand(&self, x: &Explorer, obs: &Observation) -> Option<(String, Point)> {
-        // (only what's near: a level known beforehand, the chaingun 1700 off the first thing
-        // she goes for, walked for through a yard of imps and demons shooting on the way, dead
-        // in 9 seconds, E2M3; MAP04's super shotgun four doors off, into the middle of the
-        // shotgun guys she stands and fights from the start when she doesn't know of it)
-        // (near by the way there, where it's what her route's for: E3M3's shotgun, 640 off and
-        // 1570 by the way round to the switch that lowers it, gone for through thirteen at
-        // once with the pistol, dead in 37 seconds)
+        // Only what's near: a gun far off isn't walked for through a fight. Near by the way there,
+        // where it's what her route is for: one close as the crow flies can be a long way round.
         let reach = self.tune.errands.press_reach;
         let far = |at: Point| {
             let straight = dist(at, obs.pos());
@@ -2440,26 +2393,21 @@ impl Fight {
     }
 
     fn errand_any(&self, x: &Explorer, obs: &Observation) -> Option<(String, Point)> {
-        // (an order to press on with, mid-fight: the objective in hand is the errand)
+        // An order to press on with, mid-fight: the objective in hand is the errand.
         if let Some(cur) = x.current.as_ref().filter(|_| x.press_on) {
             return Some((cur.label.clone(), cur.goal));
         }
         if let Some(cur) = x.current.as_ref().filter(|c| c.kind == Kind::Item) {
-            // (the item's class name, before what the label adds: "pick up Medikit (to heal)")
+            // The item's class name, before what the label adds ("pick up Medikit (to heal)").
             let name = cur.label.strip_prefix("pick up ").unwrap_or(&cur.label);
             let name = name.split(' ').next().unwrap_or(name);
-            // (health she's on her way to and can use, close by: on to it, shooting on the way.
-            // The user's: a cacodemon on her, the medikit the explorer was going for in the
-            // room, fought where she stood and never picked up. Not one far off, low or not:
-            // MAP10 UV, at 38 a stimpack 1100 off across a yard of imps and zombiemen, walked
-            // on into them shooting, down to 3 and dead; the fight's own retreats and cover
-            // are what keep her alive there, and its 10 don't pay for the way)
+            // Health she's on her way to and can use, close by: on to it, shooting on the way. Not one
+            // far off, however low she is: the fight's own retreats and cover are what keep her alive
+            // there, and a small pickup doesn't pay for the way.
             let heals = health_item(name).is_some_and(|(amount, cap)| {
                 amount >= 10 && self.combat.now.health < f64::from(cap)
             });
-            // (ammo, urgent, only within the reach ammo is turned aside for mid-fight: HMP, six
-            // rockets too near four cacodemons to fire, a rocket box 3900 off the errand, backed
-            // off "towards" it into them from 180 health to dead)
+            // Ammo, urgent, only within the reach that ammo is turned aside for mid-fight.
             let near = dist(cur.goal, obs.pos()) < self.tune.errands.item_range;
             if cur.urgent && health_item(name).is_none() && (near || ammo_item(name).is_none()) {
                 return Some((name.to_string(), cur.goal));
@@ -2491,7 +2439,7 @@ impl Fight {
             .filter(|t| !self.offered.contains(&t.id))
             .filter(|t| {
                 if t.name == "InvulnerabilitySphere" {
-                    // (in the middle of a fight she can't win as she is: what wins it)
+                    // In the middle of a fight she can't win as she is: what wins it.
                     return dist((t.x, t.y), pos) < 2.0 * self.tune.errands.item_range
                         && self.needs_invulnerability(obs)
                         && self.clear_way_to(obs, (t.x, t.y));
@@ -2499,7 +2447,7 @@ impl Fight {
                 if let Some(slot) = weapon_item(t.name)
                     .filter(|&s| s != 1 && held.contains(&s) && !Self::new_gun(obs, t.name))
                 {
-                    // (one she has: its ammo)
+                    // One she has: its ammo.
                     short
                         && held.contains(&slot)
                         && dist((t.x, t.y), pos) < self.tune.errands.item_range
@@ -2545,14 +2493,12 @@ impl Fight {
                     .map_or(0, |(_, n)| *n),
             )
         };
-        // (then ammo and guns before anything else. Not sooner for having died for want of it:
-        // made urgent, past the dangers, MAP12's start, the ammo there walked into for half the
-        // map)
+        // Then ammo and guns before anything else. Not sooner for having died for want of it: made
+        // urgent, it's walked for past the dangers.
         let short = self.combat.now.short_of_ammo;
         let mut out = Vec::new();
-        // (a better gun than she has that something she knows of carries: killing it is the gun,
-        // and nearer than one lying about, the one to go for. The user's: with a pistol, a
-        // shotgun guy by the start, and the level's shotgun 1900 off the first thing she did)
+        // A better gun than she has that something she knows of carries: killing it is the gun,
+        // and when it's nearer than one lying about, it's the one to go for.
         let mut carried: Vec<(&'static str, Seen)> = Vec::new();
         for s in self.combat.remaining() {
             let Some(gun) =
@@ -2581,7 +2527,7 @@ impl Fight {
                 format!("hunt {} {} (for its {gun})", s.name, s.id),
             );
             o.thing = Some(s.id);
-            // (as a better gun lying about is: first, and for all that's by it)
+            // As a better gun lying about is: first, and for all that's by it.
             o.needed = true;
             o.urgent = true;
             out.push(o);
@@ -2594,11 +2540,11 @@ impl Fight {
                 continue;
             }
             let d = dist((t.x, t.y), pos);
-            // (the same gun carried by something nearer: this one in its turn)
+            // The same gun carried by something nearer: this one in its turn.
             let carried_nearer = carried
                 .iter()
                 .any(|(gun, s)| *gun == t.name && dist(s.pos(), pos) < d);
-            // how much it's needed (0: not at all, 1: badly)
+            // How much it's needed (0: not at all, 1: badly).
             let mut need = 0.0;
             let invulnerability = t.name == "InvulnerabilitySphere"
                 && self.needs_invulnerability(obs)
@@ -2606,8 +2552,7 @@ impl Fight {
             if invulnerability || (weapon_item(t.name).is_some() && Self::new_gun(obs, t.name)) {
                 need = 1.0;
             } else if let Some(slot) = weapon_item(t.name).filter(|&s| s != 1) {
-                // (a gun she has already is its ammo: a shotgun guy's dropped one, 4 shells; left
-                // lying about, MAP04's shells gone by the end and MAP05 begun without any)
+                // A gun she has already is its ammo (a dropped shotgun is 4 shells): not left lying about.
                 need = (1.0 - ammo(slot) / ammo_max(slot) * 1.5).max(0.0);
             } else if let Some((slots, _)) = ammo_item(t.name) {
                 let fill: Vec<f64> = slots
@@ -2625,9 +2570,9 @@ impl Fight {
                     need = ((f64::from(cap) - health) / 60.0).min(1.0);
                 }
             }
-            // (armor, and what brings armor with it: by what it adds to how much she can take.
-            // A megaarmor on no armor is as much again as her health; a green over a few blue
-            // points is less than nothing)
+            // Armor, and what brings armor with it, by what it adds to how much she can take. A
+            // megaarmor on no armor is as much again as her health; a green over a few blue points is
+            // less than nothing.
             if armor_item(t.name).is_some() {
                 need = need.max((Combat::pickup_gain(obs, t.name) / 100.0).min(1.0));
             }
@@ -2639,16 +2584,13 @@ impl Fight {
             };
             let mut why = "";
             if invulnerability {
-                // (E3M9's, behind the cyberdemon, spotted mid-fight and left for the blue key, a
-                // wall, a noise; killed at full health by one of its rockets)
+                // Invulnerability with something about she can't take on: gone for at once.
                 why = " (something about she can't take on)";
             } else if (weapon_item(t.name).is_some() || ammo_item(t.name).is_some())
                 && !self.clear_way_armed(&Self::armed_with(obs, t.name), (t.x, t.y))
             {
-                // (something to fight with, but on the way something she couldn't take on even
-                // with it: not worth dropping everything for. MAP20, a rocket launcher by the
-                // cyberdemon, no ammo left, gone for again and again under its rockets for the
-                // two it holds)
+                // Something to fight with, but on the way to it something she couldn't take on even with
+                // it: not worth dropping everything for.
             } else if carried_nearer {
             } else if weapon_item(t.name).is_some() && need > 0.0 && self.better_gun(obs, t.name) {
                 why = " (a better gun)";
@@ -2662,7 +2604,7 @@ impl Fight {
                 && health_item(t.name).is_some_and(|(a, _)| a >= 10)
                 && self.combat.now.time_to_death < self.tune.errands.survive_secs
             {
-                // (losing health fast, not yet down to the rest: off for it now, while she can)
+                // Losing health fast, not yet down to the rest: off for it now, while she can.
                 why = " (to survive)";
             }
             let worth = (why == " (a better gun)").then(|| self.gun_worth(obs, t.name) * RUN_SPEED);
@@ -2686,17 +2628,15 @@ impl Fight {
         self.deaths
             .iter()
             .filter(|d| d.why != Cause::Unarmed)
-            // (by place: a level again spawns everything afresh, new ids; MAP12's clips by the
-            // start, died going for 130 times)
+            // By place: a level begun again spawns everything afresh, with new ids.
             .filter(|d| d.kind == obj.kind && dist(d.goal, obj.goal) < self.tune.deaths.same_goal)
             .count()
     }
 
     /// Would going for item obj likely cost more than it's worth: the damage from what's awake
     /// and can see the way there and back, for as long as that takes, against what it gives
-    /// (health she'd get, armour; ammo or a gun when she's short)? And with nothing to shoot
-    /// with, anything but ammo or a gun while something's about (MAP29: a green armor down a
-    /// pit, under fire, no ammo).
+    /// (health she'd get, armour; ammo or a gun when she's short)? And, with nothing to shoot
+    /// with, anything but ammo or a gun while something is about.
     fn not_worth_it(&mut self, obs: &Observation, obj: &Objective) -> bool {
         let Some(t) = obj
             .thing
@@ -2740,8 +2680,7 @@ impl Fight {
                         < self.tune.errands.exposed_near
             })
             .collect();
-        // (lying on a floor that hurts: a hit or two to fetch it. E1M5, the user watching: back
-        // and forth across the nukage for clips, each trip more health than the clip's worth)
+        // Lying on a floor that hurts: a hit or two to fetch it, set against what it's worth.
         let on_harm = self
             .combat
             .sector_at(obj.goal)
@@ -2824,7 +2763,7 @@ impl Hooks for Fight {
         out
     }
 
-    /// (--complete: rather the level again than out without items she could get from its start)
+    /// --complete: rather the level again than out without items she could get from its start.
     fn before_exit(&mut self, x: &Explorer, obs: &Observation) -> bool {
         self.completion
             .as_mut()
@@ -2870,9 +2809,7 @@ impl Hooks for Fight {
                 x.stand_spot_for(goal, reach),
                 format!("hunt {} {}", s.name, s.id),
             );
-            // (been there for it once and it wasn't to be had from there: not again. MAP06: eight
-            // imps on a ledge out of her reach, the spot under each gone to in turn, 32 times,
-            // four minutes of the level, till a lift she'd missed got its second go)
+            // Been there for it once and it wasn't to be had from there: not again.
             if self
                 .hunted_spots
                 .contains(&(s.id, o.goal.0.round() as i64, o.goal.1.round() as i64))
@@ -2911,8 +2848,8 @@ impl Hooks for Fight {
         if matches!(obj.kind, Kind::Exit | Kind::Key) {
             return false; // (worth it whatever: the way on)
         }
-        // (invulnerability kept for a fight that needs it: not picked up in passing, its thirty
-        // seconds spent on nothing; with something about she can't take on, it's what she goes for)
+        // Invulnerability is kept for a fight that needs it: not picked up in passing, its thirty
+        // seconds spent on nothing. With something about she can't take on, it's what she goes for.
         if obj
             .thing
             .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
@@ -2923,9 +2860,8 @@ impl Hooks for Fight {
         if self.combat.now.invulnerable {
             return false; // (nothing can hurt her: the risky ones now)
         }
-        // (died going for it: not first again; twice, not at all. And a place she's died at again
-        // and again, whatever for: MAP04's corner, five lives for the shotgun, the chaingun,
-        // a wall, the key there)
+        // Died going for it: not first again; twice, not at all. Likewise a place she has died at
+        // again and again, whatever for.
         let died = self.died_for(obj);
         let here = self
             .deaths
@@ -2943,9 +2879,7 @@ impl Hooks for Fight {
         if died > 0 || here >= self.tune.deaths.death_zone_count {
             return true;
         }
-        // (and a hitscan shooter that'd see her there, however far: E3M8 from a pistol start, rocket
-        // boxes picked up in the spider mastermind's sight, 0/16, the building with the plasma
-        // rifle and the blue armor left shut)
+        // And a hitscan shooter that would see her there, however far.
         let known = self.combat.remaining();
         let near: Vec<&str> = known
             .iter()
@@ -2961,25 +2895,17 @@ impl Hooks for Fight {
         obj.kind == Kind::Item && self.not_worth_it(obs, obj)
     }
 
-    /// Ammo for the guns she has, with a monster she knows of about that she can't take on: as if
-    /// twice as far (unless she's short). More of the same won't change that; what might is
-    /// somewhere not yet seen, a door not yet tried (another gun, armor, cover). E3M8 from a
-    /// pistol start: boxes of rockets picked up in the open, the spider mastermind wandering into
-    /// sight of each, the building with the plasma rifle and the blue armor never opened (8/16
-    /// got them with this, 0/16 without; at half as far, 0/16).
+    /// Ammo for the guns she has, with a monster she knows of about that she can't take on: as
+    /// if twice as far (unless she's short). More of the same won't change the odds; what might
+    /// is somewhere not yet seen, or a door not yet tried (another gun, armor, cover).
     fn weigh(&mut self, obs: &Observation, obj: &Objective) -> f64 {
-        // (a better gun in sight she can't get to: a switch, what changes the floors and opens
-        // the doors, is the likeliest way there; pressed before the rest. E3M3 from a pistol
-        // start, HMP and UV: the shotgun up on a floor a switch lowers, seen at the start, the
-        // switch left for the walls, the level played out with the pistol, dead out of ammo)
+        // A better gun in sight that she can't get to: a switch, which changes floors and opens
+        // doors, is the likeliest way there, so it's pressed before the rest.
         if obj.kind == Kind::Switch && self.gun_out_of_reach {
             return self.tune.errands.switch_for_gun;
         }
-        // (and a look into the unseen part of the ground it lies on: the likeliest way to it on
-        // foot. E3M4 from a pistol start: the shotgun guy's dropped shotgun and a chaingun seen
-        // on ground she hadn't found the way onto, 20 shells in hand; with only ways past
-        // monsters left, the nearest taken, two cacodemons over a hurting floor with the pistol,
-        // the ammo gone, bitten to death)
+        // And a look into the unseen part of the ground it lies on: the likeliest way to it on
+        // foot.
         if obj.kind == Kind::Frontier && !obj.reveals.is_disjoint(&self.toward_gun) {
             return self.tune.errands.switch_for_gun;
         }

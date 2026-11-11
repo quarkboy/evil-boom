@@ -118,8 +118,8 @@ pub struct Senses {
     /// a monster out of her sight is still in her mind, where she last saw it, for this long
     /// (tics): counted in the threat, kept clear of, not something to shoot
     pub memory_tics: i64,
-    /// one she knows is about and can't see counts this many times its threat (the user's: one
-    /// you know is round you and don't know where is the bigger threat)
+    /// one she knows is about and can't see counts this many times its threat: one known to be
+    /// round her, she doesn't know where, is the bigger threat
     pub unseen_threat: f64,
     /// a shot fired, a cry on seeing her or an attack is looked round for if it's this loud or
     /// louder (1-127: 127 within 160 units, 100 at about 380, 64 at about 680, 1 at 1200)
@@ -127,9 +127,9 @@ pub struct Senses {
     /// ...and a monster's wandering noise, this loud or louder (128: never; there's always one
     /// somewhere, but one this loud is close)
     pub heed_active_volume: i32,
-    /// instinct (the user's allowance: "cheating a little, but our goal is good streaming
-    /// content"): a monster she was looking at is still known where it is, as it is, for this
-    /// long after something comes between them (tics; 0: not at all)
+    /// instinct, an allowance beyond what she strictly sees: a monster she was looking at is
+    /// still known where it is, as it is, for this long after something comes between them
+    /// (tics; 0: not at all)
     pub instinct_tics: i64,
     /// a monster gone from her sight is taken to have gone on the way it was going for this
     /// long (tics; 0: taken to be where she last saw it): where she looks for it and what she
@@ -137,7 +137,7 @@ pub struct Senses {
     pub reckon_tics: i64,
     /// a monster she remembers, out of her sight, is looked round for this often (tics; 0:
     /// never): where she last saw it, the nearest first; there, it's seen again; gone, she knows
-    /// it's moved (the user's: knowing isn't enough, she has to look)
+    /// it's moved (knowing of it isn't enough: she has to look)
     pub check_every: i64,
     /// ...one within this of her
     pub check_within: f64,
@@ -231,9 +231,8 @@ pub struct Engage {
     /// ...one that only claws or bites
     pub engaged_melee: f64,
     /// punching or sawing: this much inside the weapon's reach, centre to centre, she stops closing
-    /// in (it steps about). Not more: up against a demon she's 46 off. (MAP22 HNTR: berserk, stood
-    /// 68-77 off a chaingunner, inside the old 64-past-her-front-plus-its-radius, every punch short
-    /// of its centre, 16 of its bullets to 10 health)
+    /// in (it steps about). Not more: up against a demon she's 46 off, and stopped further out
+    /// every punch falls short of its centre.
     pub melee_slack: f64,
     /// closing in to hit it in melee, no nearer by this much (units)...
     pub melee_gain: f64,
@@ -247,8 +246,8 @@ pub struct Engage {
     /// how far past touching a monster still stands in her way
     pub errand_contact: f64,
     /// with something to shoot from where she is, and her route about to take her onto ground
-    /// she's never been on: she stands and fights it from here (the user's: fight from the
-    /// corridor she knows, not out in the room)
+    /// she's never been on: she stands and fights it from here, from the ground she knows, not
+    /// out in the room
     pub hold_known: bool,
     /// something that shoots back from anywhere: shot at past a gun's reach while this much lands
     pub far_hits: f64,
@@ -324,7 +323,7 @@ pub struct Barrels {
     pub by_monster: f64,
     /// getting clear of barrels: at most this long at a time...
     pub clear_tics: i64,
-    /// ...then not again for this long (E1M7: pressed against a wall for ever)
+    /// ...then not again for this long (else she presses against a wall for ever)
     pub clear_rest: i64,
     /// barrels this near her (as the crow flies) are cleared...
     pub clear_within: f64,
@@ -389,19 +388,19 @@ pub struct Steer {
     /// towards an errand (health, a gun, ammo)
     pub w_toward: f64,
     /// a way that takes her onto ground she's never been on, in a fight (0: not counted): the
-    /// user's, from watching: she dodges and backs off into rooms she's never been in and wakes
-    /// what's in them; where she's been is safe
+    /// reason: dodging and backing off into rooms she's never been in wakes what's in them;
+    /// where she's been is safe
     pub w_new_ground: f64,
     /// a way she isn't looking along and hasn't looked along for `unlooked_tics`: she doesn't
     /// know what's there (0: not counted)
     pub w_unlooked: f64,
     pub unlooked_tics: i64,
     /// what she knows is about and would have out of her view from there, facing her target
-    /// (by threat; 0: not counted): the user's, keep as many in sight as she can
+    /// (by threat; 0: not counted): she keeps as many in sight as she can
     pub w_out_of_view: f64,
     /// her steps to the side of a target that shoots keep within this far either side of where
     /// she took it on (0: as far as there's room), a step beyond it counting this much against
-    /// a way for every `look` of it: the user's, only as far as needed, further wakes more
+    /// a way for every `look` of it: only as far as needed, since further wakes more
     pub side_span: f64,
     pub w_span: f64,
     /// with anything shooting in sight, kept this far from a barrel's middle (its blast and a margin)
@@ -461,8 +460,7 @@ pub struct Hide {
     /// ducking from a hitscan shooter only in a fight longer than this (s)...
     pub duck_fight: f64,
     /// ...with this many tics to get out of its sight, once it's firing (it fires on for as long as
-    /// it sees her: any way out of its sight shortens the burst; 8, E3M8, nowhere in 84, a burst of
-    /// 120 tics stood in)...
+    /// it sees her, so any way out of its sight shortens the burst)...
     pub duck_firing: f64,
     /// ...off to the spot with this many tics to spare before its first shot...
     pub duck_late: f64,
@@ -499,7 +497,7 @@ pub struct Aim {
     /// a tic (degrees)...
     pub hand_turn: f64,
     /// ...and its rate changed by no more than this from one tic to the next (0: no limit): no
-    /// turn one way and back the next tic (the user's: a jitter no hand makes)
+    /// turn one way and back the next tic (a jitter no hand makes)
     pub hand_accel: f64,
     /// a biter seen this lately near her rules out rockets
     pub rocket_wary: i64,
@@ -725,8 +723,8 @@ pub struct Retreat {
     /// ...or they're spread round her this far (degrees)
     pub sides: f64,
     /// monsters woken on ground she's never been on: back this far the way she came, onto
-    /// ground she knows, and let them come to her (0: not at all). The user's: standing at
-    /// the edge still leaves her sides open
+    /// ground she knows, and let them come to her (0: not at all). Standing at the edge would
+    /// still leave her sides open.
     pub fall_back: f64,
     /// ...and waited there for them this long, none in sight (tics)
     pub fall_back_wait: i64,
