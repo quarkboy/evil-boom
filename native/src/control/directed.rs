@@ -2284,9 +2284,11 @@ impl Director {
             .find(|o| id_of(o) == id)
             .or(current)
             .ok_or_else(|| {
-                self.no_longer(agent, obs, id).unwrap_or_else(|| {
-                    format!("Nothing \"{id}\" to go to (done, gone or unknown).")
-                })
+                self.no_longer(agent, obs, id)
+                    .or_else(|| place_not_id(id))
+                    .unwrap_or_else(|| {
+                        format!("Nothing \"{id}\" to go to (done, gone or unknown).")
+                    })
             })
     }
 
@@ -2312,6 +2314,12 @@ impl Director {
             let there = obs.things.iter().flatten().any(|t| t.id == n);
             return (!there).then(|| format!("{id}: taken already."));
         }
+        // (one of the explorer's spots, suggested once: done since, or out of reach now)
+        if id.starts_with("spot-") {
+            return Some(format!(
+                "{id}: nothing there to do now (done, or out of reach)."
+            ));
+        }
         if !self.told_exits.contains(id) {
             return None;
         }
@@ -2328,10 +2336,37 @@ impl Director {
         })
     }
 
+    /// A place as lists give it, a way and a distance from her ("SW 305"), read as what's
+    /// listed nearest there (within a quarter of the distance, or 96): its id. None if it isn't
+    /// one, or nothing's near it.
+    pub fn at_position(&mut self, agent: &mut Agent, obs: &Observation, r: &str) -> Option<String> {
+        let (way, d) = r.trim().rsplit_once(' ')?;
+        let d: f64 = d.parse().ok()?;
+        let a = bearing(way)?.to_radians();
+        let pos = obs.pos();
+        let spot = (pos.0 + d * a.cos(), pos.1 + d * a.sin());
+        let near = (d / 4.0).max(96.0);
+        [
+            Topic::Doors,
+            Topic::Switches,
+            Topic::Items,
+            Topic::Exits,
+            Topic::Monsters,
+            Topic::Areas,
+        ]
+        .into_iter()
+        .flat_map(|t| self.list(agent, obs, t))
+        .map(|e| (dist(e.at, spot), e.id))
+        .filter(|(off, _)| *off <= near)
+        .min_by(|x, y| x.0.total_cmp(&y.0))
+        .map(|(_, id)| id)
+    }
+
     /// Her reference found nothing listed: what became of it if she was told of it, else that
     /// it's not known.
     pub fn not_found(&self, agent: &Agent, obs: &Observation, r: &str) -> String {
         self.no_longer(agent, obs, &self.resolve(r))
+            .or_else(|| place_not_id(r))
             .unwrap_or_else(|| format!("Nothing known as \"{r}\"."))
     }
 
@@ -2694,7 +2729,12 @@ pub fn compass(h: f64) -> &'static str {
 
 /// A compass point (n, ne, east, south-west, ...) as a heading.
 pub fn bearing(s: &str) -> Option<f64> {
-    let s = s.to_lowercase().replace(['-', ' ', '_'], "");
+    // (a way as lists give it, its distance after: "SE 160" is that way)
+    let s = s
+        .trim()
+        .trim_end_matches(|c: char| c.is_ascii_digit() || c == '.')
+        .to_lowercase()
+        .replace(['-', ' ', '_'], "");
     Some(match s.as_str() {
         "e" | "east" => 0.0,
         "ne" | "northeast" => 45.0,
@@ -2705,6 +2745,13 @@ pub fn bearing(s: &str) -> Option<f64> {
         "s" | "south" => 270.0,
         "se" | "southeast" => 315.0,
         _ => return None,
+    })
+}
+
+/// A way (and a distance) given where an id was wanted: said so.
+fn place_not_id(r: &str) -> Option<String> {
+    bearing(r).map(|_| {
+        format!("\"{r}\" is a way, not an id: nothing listed there; ids come from doom_list.")
     })
 }
 

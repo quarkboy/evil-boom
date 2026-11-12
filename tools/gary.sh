@@ -45,7 +45,10 @@ if ! up http://127.0.0.1:8000/mcp 1; then
   # (no FUSE under WSL: extract and run; X11, WSLg's Wayland windows having no decorations;
   # WebKit's DMA-BUF renderer fails under WSL)
   APPIMAGE_EXTRACT_AND_RUN=1 GDK_BACKEND=x11 WEBKIT_DISABLE_DMABUF_RENDERER=1 \
-    nohup "$GARY_APPIMAGE" --start-server > "$(dirname "$GARY_APPIMAGE")/gary.log" 2>&1 &
+    # (the last session's log kept, by when it ended: a run read after Gary's closed)
+    glog="$(dirname "$GARY_APPIMAGE")/gary.log"
+    [ -f "$glog" ] && mv "$glog" "${glog%.log}.$(date -r "$glog" +%Y%m%d-%H%M%S).log"
+    nohup "$GARY_APPIMAGE" --start-server > "$glog" 2>&1 &
   up http://127.0.0.1:8000/mcp 40 || { echo "Gary's server didn't come up"; exit 1; }
 fi
 echo "Gary: ws://127.0.0.1:8000, MCP http://127.0.0.1:8000/mcp"

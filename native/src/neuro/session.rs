@@ -54,6 +54,8 @@ pub struct Session {
     /// when the rules were last told, and the characters told her since (context and results)
     briefed_at: i64,
     told_chars: usize,
+    /// her status, a second old at most: what doom_status answers off a level
+    last_status: String,
 }
 
 /// Who's playing, by the `characterId` of the startup's acknowledgement.
@@ -124,6 +126,7 @@ impl Session {
             briefed: false,
             briefed_at: 0,
             told_chars: 0,
+            last_status: String::new(),
         }
     }
 
@@ -204,6 +207,9 @@ impl Session {
             self.brief(obs.tic);
         }
         self.director.tick(agent, obs);
+        if obs.tic % 35 == 0 {
+            self.last_status = self.director.status(agent, obs);
+        }
         self.tell_news(obs.tic, &mut log);
         // (her status again when what she'd act on has changed: not a shell spent, nor a
         // monster's bearing)
@@ -338,6 +344,10 @@ impl Session {
                     let (ok, msg) = if name == "doom_game" {
                         let (ok, msg) = act(&args);
                         (ok, noted(msg, &notes))
+                    } else if name == "doom_status" && !self.last_status.is_empty() {
+                        // (her status still stands off a level: asked, given, with why there's
+                        // nothing to do)
+                        (true, format!("{idle} Last: {}", self.last_status))
                     } else {
                         (false, idle.to_string())
                     };
@@ -463,7 +473,14 @@ impl Session {
             Some(Ok(v)) => v,
             Some(Err(_)) => return (false, "The action's data wasn't valid JSON.".into()),
         };
-        let (args, notes) = mend(name, args);
+        let (mut args, mut notes) = mend(name, args);
+        // (a place as lists give it, "SW 305", for an id: what's listed nearest there)
+        if let Some(r) = args.get("ref").and_then(Value::as_str).map(str::to_string) {
+            if let Some(id) = self.director.at_position(agent, obs, &r) {
+                notes.push(format!("{r} read as {id}"));
+                args["ref"] = Value::String(id);
+            }
+        }
         let (ok, msg) = self.act(agent, obs, name, &args);
         (ok, noted(msg, &notes))
     }
