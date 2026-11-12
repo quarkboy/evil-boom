@@ -132,7 +132,7 @@ cargo test --release --offline --manifest-path native/Cargo.toml
 cargo test --release --offline --no-default-features --manifest-path native/Cargo.toml
 cargo clippy --offline --all-targets --manifest-path native/Cargo.toml -- -D warnings
 cargo clippy --offline --all-targets --no-default-features --manifest-path native/Cargo.toml -- -D warnings
-python tools/compare-runs.py BASELINE_EXE CANDIDATE_EXE --output out/comparison --repeats 3
+python tools/dev/compare-runs.py BASELINE_EXE CANDIDATE_EXE --output out/comparison --repeats 3
 ```
 
 The comparison uses seed 0, at most two lives and 600 game seconds per scenario. It

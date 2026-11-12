@@ -3,7 +3,7 @@
 """Compare deterministic gameplay and elapsed time between two release builds.
 
 Run from the project root, without other sweeps/builds running:
-    python tools/compare-runs.py BASELINE_EXE CANDIDATE_EXE --output out/comparison
+    python tools/dev/compare-runs.py BASELINE_EXE CANDIDATE_EXE --output out/comparison
 
 Uses the normal engine/WAD configuration and navcache. Existing run/log files for the
 selected maps are overwritten by evil; copies of every trial are kept under --output.
@@ -63,7 +63,7 @@ def main():
     args = parser.parse_args()
     if args.repeats < 1 or args.seconds < 1:
         parser.error("repeats and seconds must be positive")
-    root = Path(os.environ.get("EVILBOOM_ROOT") or os.environ.get("EVILDOOM_ROOT") or Path(__file__).resolve().parents[1]).resolve()
+    root = Path(os.environ.get("EVILBOOM_ROOT") or os.environ.get("EVILDOOM_ROOT") or Path(__file__).resolve().parents[2]).resolve()
     builds = {"baseline": args.baseline.resolve(), "candidate": args.candidate.resolve()}
     if not all(p.is_file() for p in builds.values()):
         parser.error("both executables must exist")

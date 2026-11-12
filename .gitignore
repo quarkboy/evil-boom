@@ -1,43 +1,33 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-.pytest_cache/
-build/
-dist/
-
-# Game data — never commit commercial WADs
+# Game data: never commit WADs (the IWADs are commercial; PWADs belong to their authors)
 *.wad
 *.WAD
 *.pk3
 *.pk7
+wads/
 
-# ViZDoom writes its config into the working directory
-_vizdoom.ini
-_vizdoom/
-
-# Spike / tool output
+# Everything the runs, builds and tests write (logs, score sets, recordings, builds)
 out/
 
-# Editors / OS
+# The engine's source, fetched and patched by tools/build-engine.sh
+third_party/
+
+# Rust build output (builds normally go to out/build: see docs/BUILDING.md)
+native/target/
+
+# Local settings with API keys (config/*.json are the committed defaults)
+config/*.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Editors, OS
 .vscode/*
 !.vscode/extensions.json
 .idea/
 Thumbs.db
 .DS_Store
 
-# Rust build output
-native/target/
-native/target-dev/
-third_party/
-dsda/spike/target/
-
 # git worktrees kept inside the checkout
 .worktrees/
-
-# agent worktrees (Claude Code)
 .claude/worktrees/
-
-# (the GPT stand-in's local settings: the API key)
-config/*.local.json

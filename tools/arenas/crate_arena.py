@@ -65,5 +65,5 @@ for v in range(10):
     out+=['spawn %s %d %d 0'%(rnd.choice(['TallGreenColumn','TallRedColumn','TechPillar']),x,y) for x,y in cols]
     out+=['spawn DoomImp %d %d %d'%(x,y,(math.degrees(math.atan2(sy-y,sx-x))%360)) for x,y in imps]
     out+=['seconds 90','']
-open(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','arenas','crates.txt'),'w').write('\n'.join(out))
+open(__import__('os').path.join(__import__('os').path.dirname(__file__),'..','..','arenas','crates.txt'),'w').write('\n'.join(out))
 print(len(boxes),'blocks'); print('\n'.join(out[:14]))

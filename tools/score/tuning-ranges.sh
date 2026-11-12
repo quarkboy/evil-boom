@@ -4,7 +4,7 @@
 # tuning-ranges.sh [PHASE...]: how far each judgement number can move before she plays worse.
 #
 # One number at a time, each pushed to values well past what any stance or setting uses, every
-# value played on two quarter sets (out/score/quarter.tsv and quarter-b.tsv: 272 runs each, two
+# value played on two quarter sets (tools/score/quarter.tsv and quarter-b.tsv: 272 runs each, two
 # seeds a level-skill, the second set two others; ~4.5 min each) with the current build,
 # compared run for run with the defaults on the same runs. Two, because the defaults' runs on
 # one set can be lucky (careful's are, on the first: 0.472 there, 0.447 on the full set's other
@@ -18,7 +18,7 @@
 # Phases (see docs/TUNING_RANGES.md): A the stances' numbers, B avoid's, C pickups and routes,
 # D guns and cover. No phase given: all of them, A first.
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 B=out/build/release/evil-boom
 D=out/score/ranges
 mkdir -p "$D"
@@ -26,7 +26,7 @@ for S in "$D/summary.tsv" "$D/summary.b.tsv"; do
   [ -f "$S" ] || printf 'phase\tnumber\tvalue\tdefault\tscore\tchange\tse\texits\tlost_per_min\n' > "$S"
 done
 # the two sets: suffix:runs
-SETS=(":out/score/quarter.tsv" ".b:out/score/quarter-b.tsv")
+SETS=(":tools/score/quarter.tsv" ".b:tools/score/quarter-b.tsv")
 
 # phase number default values...
 read -r -d '' PLAN <<'EOF'

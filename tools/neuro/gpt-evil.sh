@@ -10,10 +10,10 @@
 #   out/watch/live.log  the game: her orders, the reports, the bot's own log, with game time
 #   e.g.  tail -f out/neuro/gpt.log out/watch/live.log
 #
-# usage: tools/gpt-evil.sh [WAD MAP [watch options...]]
-#   default: doom E1M1 --fight 2 --mortal; e.g. tools/gpt-evil.sh doom E1M1 --fight 2 --mortal --episode
+# usage: tools/neuro/gpt-evil.sh [WAD MAP [watch options...]]
+#   default: doom E1M1 --fight 2 --mortal; e.g. tools/neuro/gpt-evil.sh doom E1M1 --fight 2 --mortal --episode
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 wad=${1:-doom}
 map=${2:-E1M1}
 shift $(($# < 2 ? $# : 2))

@@ -50,7 +50,7 @@ The state each layer carries, by fields of its main struct: `RouteFollower` 101,
 
 ## Step 0: the safety net
 
-- **Comment-only check (done):** `tools/code_only.py --check` strips comments and whitespace
+- **Comment-only check (done):** `tools/dev/code_only.py --check` strips comments and whitespace
   from every changed `.rs` file and compares with the last commit. A comment pass must pass
   it; then it cannot have changed anything.
 - **Parity set (done):** `tools/parity.sh`: 24 fixed-seed `run-map`s chosen to cover the
@@ -235,7 +235,7 @@ follower and the explorer's tiers are the two I'd do most carefully.
 | 3 | `Combat::observe` is the list of what she takes in each tic; the counts are three functions | ba0d76a, 44b7982 |
 | 3 | a decision with nothing in her sights is built and logged in one place | f62467b |
 | 3 | five kinds of objective have a function each | ae51a13 |
-| 3 | names, first pass (fight and explorer): a flag says what it means (`baiting`, `urgent`, `route_keeps_legs`, `exit_held_back`, `harm_allowed`, ...); `tools/rename.py` does a rename by the compiler's errors | f50c90f |
+| 3 | names, first pass (fight and explorer): a flag says what it means (`baiting`, `urgent`, `route_keeps_legs`, `exit_held_back`, `harm_allowed`, ...); `tools/dev/rename.py` does a rename by the compiler's errors | f50c90f |
 | 3 | the fight's state by what it's for: 44 of `Combat`'s 97 fields are seven parts of it (`combat/state.rs`: movers, trigger, dodge, steer, cover, off_barrels, senses) | 5bb0266 |
 | 3 | sifting the list of things to do is its own module (`explorer/cut_off.rs`): the way back from a place a type (`WayBack`), what a list is sifted by another (`Sift`), out of 300 lines of closures in `list_objectives` (467 lines to 190) | 91e2aca |
 | 1 | comments: the follower, navigation, jumps, the planner and the rest of the crate (about 235); nothing left names the level a rule came from | 72b99a9, 724def0 |

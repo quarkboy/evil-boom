@@ -957,7 +957,7 @@ tilting it to that one. `autoaim` predicts it (to the monster's middle: the game
 of it, above a railing higher, so the middle is the nearer of the two to what's in between); the
 lane and the last resort judge that way too.
 
-Arena: arenas/autoaim.txt (tools/autoaim_arena.py): ledges over pits found in Doom/Doom II
+Arena: arenas/autoaim.txt (tools/arenas/autoaim_arena.py): ledges over pits found in Doom/Doom II
 (E1M6, MAP03, MAP08, MAP09, MAP20) and MAP14's railings, the imps where a shot down reaches them
 (autoaim's 100/160 slope); a spawn that doesn't fit is put at the nearest spot round it.
 

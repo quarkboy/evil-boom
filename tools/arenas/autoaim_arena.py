@@ -53,7 +53,7 @@ def spot(rnd, segs, s, clear, near=None, within=None):
 out = ['# Rockets down into pits and over low railings (evil-boom arena arenas/autoaim.txt):',
        '# Doom\'s autoaim tilts a rocket down at what\'s below, into the ledge\'s lip or the railing.',
        '# Her by the edge (a little back from a railing) facing across, five imps beyond, the rocket',
-       '# launcher; two placements a site (tools/autoaim_arena.py).', '']
+       '# launcher; two placements a site (tools/arenas/autoaim_arena.py).', '']
 for wad, mp, stand, pit, rail in SITES:
     segs, secs = load(WADS[wad], mp)
     edge = {(stand, pit), (pit, stand)} if rail is None else {(stand, rail), (rail, stand)}
@@ -79,5 +79,5 @@ for wad, mp, stand, pit, rail in SITES:
                 f'map {wad} {mp}', f'at {me[0]:.0f} {me[1]:.0f} {ang:.0f}', 'give rocket rocket=40']
         out += [f'spawn DoomImp {x:.0f} {y:.0f} {math.degrees(math.atan2(me[1]-y, me[0]-x)) % 360:.0f}' for x, y in imps]
         out += ['seconds 90', '']
-open(os.path.join(os.path.dirname(__file__), '..', 'arenas', 'autoaim.txt'), 'w').write('\n'.join(out))
+open(os.path.join(os.path.dirname(__file__), '..', '..', 'arenas', 'autoaim.txt'), 'w').write('\n'.join(out))
 print(sum(1 for l in out if l.startswith('arena')), 'scenarios')

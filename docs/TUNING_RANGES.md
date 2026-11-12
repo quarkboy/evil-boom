@@ -6,8 +6,8 @@ at a time, pushed well past what any stance or setting uses, where does she star
 clearly worse? That says how much room each setting has, which numbers matter at all, and
 whether any default sits on a slope.
 
-Run with `tools/tuning-ranges.sh [A B C D]` (the main build, `out/build`: nothing else built
-under it while it runs). Each value is played on two quarter sets (`out/score/quarter.tsv` and
+Run with `tools/score/tuning-ranges.sh [A B C D]` (the main build, `out/build`: nothing else built
+under it while it runs). Each value is played on two quarter sets (`tools/score/quarter.tsv` and
 `quarter-b.tsv`: 272 runs each, two seeds a level-skill, the second two others; about 4.5
 minutes each at 12 jobs), compared run for run with the defaults on the same runs; the results
 gather in `out/score/ranges/summary.tsv` and `summary.b.tsv`, and a stopped sweep picks up

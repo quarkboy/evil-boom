@@ -38,7 +38,7 @@ updated). How to trace a failed run: `docs/DEBUGGING.md` (read it before debuggi
   `cargo fmt --check` clean.
 - **A refactor changes nothing she does**, and that's checked: `tools/parity.sh save` with the
   build before, `tools/parity.sh check [BINARY]` with the build after (24 fixed-seed runs, half
-  a minute); a comment pass, `tools/code_only.py --check`. The cleanup under way:
+  a minute); a comment pass, `tools/dev/code_only.py --check`. The cleanup under way:
   `docs/CLEANUP_PLAN.md`.
 - **Commit to `main`** when a change is tested and no worse. Commit messages say what failed,
   why, what the rule is, and the before/after numbers.
@@ -108,7 +108,7 @@ every change's score, what the user saw watching twelve runs, and the work list 
 
 How changes are measured now: `score --like out/score/base.tsv` (the same 1088 runs) and
 `score-report base new` run for run; each run's counts beside it (FILE.stats.jsonl: what hurt
-her and what she knew of it, turns, alerts); `out/score/screen.py` and `out/score/quarter.tsv`
+her and what she knew of it, turns, alerts); `tools/score/screen.py` and `tools/score/quarter.tsv`
 (two seeds a level-skill, 4.5 min) for screening tuning files. A change that moves most runs
 when its rule should touch few has a timing shift in it.
 
@@ -163,7 +163,7 @@ her guns (the very gun ordered, the plain shotgun, the fist with berserk, an ord
 kept), `doom_search`, cells-only saving and the big spheres when they'd add enough (both
 defaults, scored), her settings in `doom_policy` (stance incl. avoid and yolo, save, risk,
 powerups), each value's cost on the quarter set in its description. Careful is the default stance now
-(the user's); baseline 0.453, 399 exits, 26 level-skills beaten every run. Testing with real models: Gary (`docs/GARY.md`, `tools/gary.sh`; its MCP is
+(the user's); baseline 0.453, 399 exits, 26 level-skills beaten every run. Testing with real models: Gary (`docs/GARY.md`, `tools/neuro/gary.sh`; its MCP is
 registered as `gary`). To direct a game by hand: `watch <wad> <map> --headless
 --speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
 `.out` twin (`me.txt` gives `me.out`).

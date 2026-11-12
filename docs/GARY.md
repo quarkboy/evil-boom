@@ -15,7 +15,7 @@ context, send actions. Registered for this project (local scope):
 
 ## Running it
 
-`tools/gary.sh [--local] [--watch|--stream] [WAD MAP [watch options]]` starts Gary (and with
+`tools/neuro/gary.sh [--local] [--watch|--stream] [WAD MAP [watch options]]` starts Gary (and with
 `--local`, the local model's server), then the game at real speed connected to it: headless, or
 in the watch window (`--watch`), or in the stream's window with Doom's own screens (`--stream`).
 Each writes its log to `out/watch/live.log`. Gary runs inside WSL:
@@ -56,7 +56,7 @@ localhost, and its MCP endpoint only takes connections from its own machine.
   API, and on it these models refuse what Gary sends (`max_tokens`; function tools with a
   reasoning effort, which take the Responses API; strict schemas with optional fields). Rather
   than fork and build Gary (a Tauri app: Node, Rust and WebKit's development libraries),
-  `tools/openai-relay.py` (127.0.0.1:8090; Gary's OpenAI engine's server URL
+  `tools/neuro/openai-relay.py` (127.0.0.1:8090; Gary's OpenAI engine's server URL
   `http://127.0.0.1:8090/v1`) takes Gary's chat completions and sends them as Responses API
   requests, giving the answers back as chat completions: tool calling and structured output
   both work, at any reasoning effort. The key in the header is passed on as it is, never

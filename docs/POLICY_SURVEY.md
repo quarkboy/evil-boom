@@ -175,7 +175,7 @@ told back and noted in the journal, so "why did I do that" can say "your policy:
 
 1. A tuning file per non-default value: stance bold, careful, avoid; save none, heavies (after
    its code); risk careful, bold; pickups needed. Eight files.
-2. Each on the quarter set (`out/score/screen.py`), ~4.5 min each, ~36 min in all: run for
+2. Each on the quarter set (`tools/score/screen.py`), ~4.5 min each, ~36 min in all: run for
    run against the defaults' quarter set.
 3. Any more than 0.02 off, or surprising: the full set (17 min each), asked first.
 4. What each costs is written beside it, in the schema's words if it's short ("bold: kills

@@ -16,7 +16,7 @@
 #
 # Machine paths (defaults are this laptop's): GARY_APPIMAGE, LLAMA_SERVER, LLAMA_MODEL.
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 GARY_APPIMAGE=${GARY_APPIMAGE:-$HOME/opt/gary/Gary-1.0.4_linux-amd64.AppImage}
 LLAMA_SERVER=${LLAMA_SERVER:-$HOME/src/llama.cpp/build/bin/llama-server}
 LLAMA_MODEL=${LLAMA_MODEL:-$HOME/models/Qwen3-8B-Q4_K_M.gguf}
