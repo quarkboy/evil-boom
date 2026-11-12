@@ -52,10 +52,13 @@ localhost, and its MCP endpoint only takes connections from its own machine.
   what the game says and forces: a test of whether our own prompts keep her playing.
 - The model's context is trimmed to fit (8k for the local model): `read_events` keeps more
   (the newest 1,000 events), `get_context` is what the model has now.
-- **OpenAI's newer models through Gary** (gpt-6.1-sol): Gary sends `max_tokens`, which they
-  refuse; `tools/openai-relay.py` (127.0.0.1:8090, Gary's OpenAI engine's server URL
-  `http://127.0.0.1:8090/v1`) renames it to `max_completion_tokens` and passes the rest on (the
-  key in the header passed as it is, never logged). And they take function tools with a
-  reasoning effort only through the Responses API, which Gary doesn't use: reasoning effort
-  `auto` (sends none) with tool calling, or structured output with `low`. Gary's OpenAI engine
-  also needs the model's context window set by hand (32000 kept it trimmed like hers).
+- **OpenAI's newer models through Gary** (gpt-6.1-sol): Gary speaks only the Chat Completions
+  API, and on it these models refuse what Gary sends (`max_tokens`; function tools with a
+  reasoning effort, which take the Responses API; strict schemas with optional fields). Rather
+  than fork and build Gary (a Tauri app: Node, Rust and WebKit's development libraries),
+  `tools/openai-relay.py` (127.0.0.1:8090; Gary's OpenAI engine's server URL
+  `http://127.0.0.1:8090/v1`) takes Gary's chat completions and sends them as Responses API
+  requests, giving the answers back as chat completions: tool calling and structured output
+  both work, at any reasoning effort. The key in the header is passed on as it is, never
+  logged. Gary's OpenAI engine also needs the model's context window set by hand (32000 kept it
+  trimmed like hers). The three are worth reporting to Gary's author.
