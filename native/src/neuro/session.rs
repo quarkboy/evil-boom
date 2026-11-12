@@ -560,7 +560,7 @@ impl Session {
                 };
                 match self.director.find(agent, obs, r) {
                     Some(e) => (true, self.director.describe(&e, obs)),
-                    None => (false, self.director.not_found(agent, r)),
+                    None => (false, self.director.not_found(agent, obs, r)),
                 }
             }
             "doom_go" => {
@@ -622,6 +622,13 @@ impl Session {
                         then,
                     );
                     (true, "OK.".into())
+                } else if self.director.resolve(t).starts_with("spot-")
+                    && self.director.check_go(agent, obs, t, false).is_ok()
+                {
+                    // (a spot, as suggested: somewhere to go, not an area to explore)
+                    self.director
+                        .order_with(Order::Go(t.to_string(), false), rush, then);
+                    (true, format!("OK: going to {t} (a spot, not an area)."))
                 } else {
                     (false, format!("\"{t}\" isn't an area or a direction."))
                 }
@@ -631,7 +638,7 @@ impl Session {
                     return (false, "Give ref and name.".into());
                 };
                 let Some(e) = self.director.find(agent, obs, r) else {
-                    return (false, self.director.not_found(agent, r));
+                    return (false, self.director.not_found(agent, obs, r));
                 };
                 match self.director.name(&e.id, n) {
                     Ok(()) => (true, format!("{} is \"{n}\" now.", e.id)),

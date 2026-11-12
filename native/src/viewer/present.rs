@@ -189,7 +189,18 @@ pub(super) fn run(
             break;
         };
         p.clock += 1;
+        // (what she asks on a screen that isn't hers to act on: answered at once that it's not
+        // now, and why; a screen that takes her word answers first, in its tic)
+        let wait = match &p.stage {
+            Stage::Level | Stage::Title(None) | Stage::Over => None,
+            Stage::Title(Some(_)) => Some("The game's starting: a moment."),
+            Stage::Dead { .. } => Some("You died: the level starts again in a moment."),
+            Stage::Between { .. } => Some("Between levels: wait for the next."),
+        };
         watch = tic(watch, &mut p, game)?;
+        if let Some(why) = wait {
+            watch.serve_wait(why);
+        }
         if watch.present.is_none() {
             watch.present = Some(p);
         }

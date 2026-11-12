@@ -355,18 +355,25 @@ impl Watch {
     /// begun by the window's loop (`start_wanted`); the next level, by the tally screen's
     /// (`next_wanted`).
     pub(super) fn serve_game(&mut self, start: bool, next: bool) {
-        self.serve_off_level(start, next, false);
+        self.serve_off_level(start, next, None);
     }
 
     /// The window's own game over (a level or episode done, or lives out, without the game's
     /// screens): what she asks answered that it's over (Neuro waits on an answer to every
     /// action: unanswered, each hung till its timeout).
     pub(super) fn serve_over(&mut self) {
-        self.serve_off_level(false, false, true);
+        self.serve_off_level(false, false, Some("The game's over: nothing more to play."));
     }
 
-    /// `serve_game`'s work; `over`: the game's over for good, nothing to offer.
-    fn serve_off_level(&mut self, start: bool, next: bool, over: bool) {
+    /// A screen that isn't hers to act on (the tally counting, a death, the menu walked to a
+    /// game): what she asks answered that it's not now, `why`.
+    pub(super) fn serve_wait(&mut self, why: &str) {
+        self.serve_off_level(false, false, Some(why));
+    }
+
+    /// `serve_game`'s work; `not_now`: why nothing's hers to do now (else, that there's no
+    /// level, and a game's hers to start if it is).
+    fn serve_off_level(&mut self, start: bool, next: bool, not_now: Option<&str>) {
         use crate::control::game::GameAct;
         let choices = self.choices.clone();
         let (mut wanted, mut go_on) = (None, false);
@@ -394,10 +401,12 @@ impl Watch {
                 go_on = true;
                 (true, "On to the next level.".to_string())
             }
-            GameAct::Start { .. } if over => {
-                (false, "The game's over: nothing more to play.".to_string())
-            }
-            GameAct::Start { .. } => (false, "Not now: this game's still on.".to_string()),
+            GameAct::Start { .. } => (
+                false,
+                not_now
+                    .unwrap_or("Not now: this game's still on.")
+                    .to_string(),
+            ),
             GameAct::Next => (false, "Not now: no level to go on to.".to_string()),
             GameAct::Restart => (false, "Not in a level now.".to_string()),
         };
@@ -407,11 +416,12 @@ impl Watch {
         }
         if let Some(neuro) = self.neuro.as_mut() {
             let tic = self.engine.tic;
-            let idle = if over {
-                "The game's over: nothing more to play."
-            } else {
+            // (told to start a game only when one's hers to start)
+            let idle = not_now.unwrap_or(if start && choices.start {
                 "Not in a level now: start a game first (doom_game)."
-            };
+            } else {
+                "Not in a level now."
+            });
             lines.extend(
                 neuro.off_level(tic, idle, |args| match GameAct::of_json(args) {
                     Ok(act) => take(act),
@@ -1289,6 +1299,43 @@ pub fn watch_prepared(
     show(watch, title, None)
 }
 
+/// A watch window's log, written as it plays (out/watch/live.log, as a headless watch's).
+struct LiveLog {
+    log: crate::config::Log,
+    /// the lines of the agent's log written so far, and the level they're of
+    shown: usize,
+    map: String,
+}
+
+impl LiveLog {
+    fn create(seed: Option<u32>) -> Result<LiveLog, String> {
+        let live = out_dir().join("watch").join("live.log");
+        let tag = seed.map_or_else(String::new, |s| format!("s{s}"));
+        Ok(LiveLog {
+            log: crate::config::Log::create(&live, &tag).map_err(|e| e.to_string())?,
+            shown: 0,
+            map: String::new(),
+        })
+    }
+
+    /// What's been added to her log since, written.
+    fn write(&mut self, watch: &Watch) {
+        use std::io::Write;
+        // (a level begun is a new agent, its log new)
+        if watch.map_name != self.map {
+            let _ = writeln!(self.log, "== {}", watch.map_name);
+            self.map.clone_from(&watch.map_name);
+            self.shown = 0;
+        }
+        let lines = &watch.agent.x().log;
+        let at = watch.engine.tic as f64 / TICRATE;
+        for l in &lines[self.shown.min(lines.len())..] {
+            let _ = writeln!(self.log, "[{at:7.1}s] {l}");
+        }
+        self.shown = lines.len();
+    }
+}
+
 /// The window, till it's shut or Esc: space pauses, N (or the right arrow) steps a tic while
 /// paused, +/- the speed, A the whole map, F follow, the wheel zooms.
 fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> Result<(), String> {
@@ -1325,14 +1372,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
     let mut last = Instant::now();
     let mut owed = 0.0;
     // (her log written as it plays, as a headless watch's is: a watched run read afterwards)
-    let live = out_dir().join("watch").join("live.log");
-    std::fs::create_dir_all(live.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-    let tag = opts
-        .as_ref()
-        .and_then(|o| o.seed)
-        .map_or_else(String::new, |s| format!("s{s}"));
-    let mut log = crate::config::Log::create(&live, &tag).map_err(|e| e.to_string())?;
-    let (mut shown, mut logged_map) = (0usize, String::new());
+    let mut live = LiveLog::create(opts.as_ref().and_then(|o| o.seed))?;
     while window.is_open() && !window.is_key_down(K::Escape) {
         for key in window.get_keys_pressed(KeyRepeat::No) {
             match key {
@@ -1392,6 +1432,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             // episode's going on with them; see present)
             let was = watch.map_name.clone();
             watch = present::run(watch, game, &mut owed)?;
+            live.write(&watch);
             if watch.map_name != was {
                 window.set_title(&format!("evil-boom explorer: {}", watch.map_name));
             }
@@ -1453,21 +1494,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
         if watch.engine.finished() && watch.present.is_none() {
             watch.serve_over();
         }
-        {
-            use std::io::Write;
-            // (a level begun is a new agent, its log new)
-            if watch.map_name != logged_map {
-                let _ = writeln!(log, "== {}", watch.map_name);
-                logged_map.clone_from(&watch.map_name);
-                shown = 0;
-            }
-            let lines = &watch.agent.x().log;
-            let at = watch.engine.tic as f64 / TICRATE;
-            for l in &lines[shown.min(lines.len())..] {
-                let _ = writeln!(log, "[{at:7.1}s] {l}");
-            }
-            shown = lines.len();
-        }
+        live.write(&watch);
         if watch.paused {
             owed = 0.0;
         }

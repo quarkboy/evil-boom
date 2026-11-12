@@ -376,6 +376,10 @@ struct Queued {
     then: bool,
 }
 
+/// a go to an area whose middle she has no way to: at most this many of its unexplored spots,
+/// and this many of its other known spots, tried for one she has
+const AREA_TRIES: usize = 6;
+
 #[derive(Default)]
 pub struct Director {
     /// orders to carry out
@@ -1352,6 +1356,17 @@ impl Director {
         ]
         .into_iter()
         .find_map(|t| self.list(agent, obs, t).into_iter().find(|e| e.id == id))
+        .or_else(|| {
+            // (or one of the explorer's spots, as suggested: somewhere to look again, a noise)
+            self.open_objectives(agent, obs)
+                .into_iter()
+                .find(|o| id_of(o) == id)
+                .map(|o| Entry {
+                    id: id.clone(),
+                    what: look::why(&o),
+                    at: o.goal,
+                })
+        })
     }
 
     /// Is something listed under that id or name an area?
@@ -2203,13 +2218,43 @@ impl Director {
         // (the explorer's options, which also brings what she can get to up to date)
         let open = self.open_objectives(agent, obs);
         if let Some(a) = self.places(agent).by_id(id).cloned() {
+            // (its middle; else somewhere in it she has a way to: what's unexplored in it first
+            // (what it was suggested for), then the rest of it she knows. The middle can be a
+            // ledge, a pillar's top or a pit's floor with the area's ways in all round it.)
+            let what = format!("go to {}", Places::sketch(&a));
             let x = agent.x();
-            let at = x.stand_spot_for(a.center, &x.reach);
-            return Ok(Objective::new(
-                Kind::Visit,
-                at,
-                format!("go to {}", Places::sketch(&a)),
-            ));
+            let nav = std::rc::Rc::clone(&x.nav);
+            let in_area = |p: Point| {
+                nav.poly_at(p)
+                    .is_some_and(|q| a.sectors.contains(&nav.sector_of_poly(q)))
+            };
+            let mut spots = vec![x.stand_spot_for(a.center, &x.reach)];
+            spots.extend(
+                open.iter()
+                    .filter(|o| explores(o) && in_area(o.goal))
+                    .take(AREA_TRIES)
+                    .map(|o| o.goal),
+            );
+            let mut polys: Vec<Point> = x
+                .knowledge
+                .known_polys()
+                .into_iter()
+                .filter(|&q| a.sectors.contains(&nav.sector_of_poly(q)))
+                .map(|q| nav.poly_center(q))
+                .collect();
+            polys.sort_by(|p, q| dist(*p, a.center).total_cmp(&dist(*q, a.center)));
+            spots.extend(
+                polys
+                    .into_iter()
+                    .take(AREA_TRIES)
+                    .map(|p| x.stand_spot_for(p, &x.reach)),
+            );
+            let first = Objective::new(Kind::Visit, spots[0], what.clone());
+            return Ok(spots
+                .into_iter()
+                .map(|at| Objective::new(Kind::Visit, at, what.clone()))
+                .find(|o| agent.x_mut().route_to(o, obs).is_some())
+                .unwrap_or(first));
         }
         if let Some(t) = id
             .split_once("-t")
@@ -2233,7 +2278,7 @@ impl Director {
             .find(|o| id_of(o) == id)
             .or(current)
             .ok_or_else(|| {
-                self.no_longer(agent, id).unwrap_or_else(|| {
+                self.no_longer(agent, obs, id).unwrap_or_else(|| {
                     format!("Nothing \"{id}\" to go to (done, gone or unknown).")
                 })
             })
@@ -2251,7 +2296,16 @@ impl Director {
     /// What became of a door, switch or exit she was told of that's no longer listed: worked
     /// already (the bot opened the door on its way, as often as not), or out of her reach from
     /// here. None if she was never told of it (the caller says it's unknown).
-    pub fn no_longer(&self, agent: &Agent, id: &str) -> Option<String> {
+    pub fn no_longer(&self, agent: &Agent, obs: &Observation, id: &str) -> Option<String> {
+        // (a thing gone from the map was picked up: nothing else takes one away)
+        if let Some(n) = id
+            .strip_prefix("item-t")
+            .or_else(|| id.strip_prefix("key-t"))
+            .and_then(|n| n.parse::<i32>().ok())
+        {
+            let there = obs.things.iter().flatten().any(|t| t.id == n);
+            return (!there).then(|| format!("{id}: taken already."));
+        }
         if !self.told_exits.contains(id) {
             return None;
         }
@@ -2270,8 +2324,8 @@ impl Director {
 
     /// Her reference found nothing listed: what became of it if she was told of it, else that
     /// it's not known.
-    pub fn not_found(&self, agent: &Agent, r: &str) -> String {
-        self.no_longer(agent, &self.resolve(r))
+    pub fn not_found(&self, agent: &Agent, obs: &Observation, r: &str) -> String {
+        self.no_longer(agent, obs, &self.resolve(r))
             .unwrap_or_else(|| format!("Nothing known as \"{r}\"."))
     }
 

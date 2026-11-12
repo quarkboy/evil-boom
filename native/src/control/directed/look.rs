@@ -111,7 +111,11 @@ impl Director {
             .filter(|o| o.thing.is_none_or(|t| !spares.contains(&t)))
             .take(PICK_TRIES)
             .find(|o| agent.x_mut().route_to(o, obs).is_some());
+        // (another look somewhere is the least of what's left: a way out she knows comes first)
+        let exit = open.iter().find(|o| o.kind == Kind::Exit);
         match choice {
+            Some(o) if o.kind == Kind::Recheck && exit.is_some() => exit
+                .map(|e| self.pick_of(agent, obs, e, "the way out: only another look left".into())),
             Some(o) => Some(self.pick_of(agent, obs, o, why(o))),
             // (nothing else she has a way to: the way out, if she knows one)
             None => open
@@ -639,7 +643,7 @@ impl Director {
 }
 
 /// Why the explorer would do an objective, in a few words.
-fn why(o: &Objective) -> String {
+pub(super) fn why(o: &Objective) -> String {
     let lock = o.trigger.as_ref().and_then(|t| lock_name(t.info.lock));
     match o.kind {
         Kind::Exit => "the way out".into(),
