@@ -2883,3 +2883,7 @@ careful and save none no change; risk bold 0.458, yolo 0.458, bold 0.444, avoid 
 value's cost is in her description of it; `avoid` is also a `doom_fight` stance for a while
 (the user's: avoid left on all the time won't make progress; it's for getting past a fight).
 The level's start names any setting not at its default.
+
+Careful as the default, on the full set: -0.0059 (s.e. 0.0095), 399 exits against 402, 26
+level-skills beaten every run against 20, 55 never against 58. Within noise on the score,
+more consistent; the default left as it is pending the user's call.

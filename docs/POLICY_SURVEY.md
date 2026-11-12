@@ -255,3 +255,8 @@ it); in directed play it's what she's asked about a costly way that matters, so 
 mostly for the explorer part not yet built (when the risky pass is let in). `save none` moved
 two runs: bosses are rare in the quarter set. Every value stays hers (the user's: options aren't
 kept or dropped by the score).
+
+**Careful as the default, the full set** (the user asked): -0.0059 (s.e. 0.0095), 0.453 against
+0.459, 399 levels finished against 402, but more consistent: 26 level-skills beaten on every
+run against 20, 55 never against 58; 929 of 1088 runs moved (264 better, 300 worse). No
+difference in score beyond noise; the quarter set's +0.008 was noise too. Left to the user.
