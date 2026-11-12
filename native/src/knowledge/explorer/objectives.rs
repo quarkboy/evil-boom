@@ -1,7 +1,7 @@
 //! Listing and ranking objectives in the currently reachable world.
 
 use super::cut_off::Reach;
-use super::{compass, Explorer, Hooks, Kind, Objective, Suspecting, WHILE_OPEN};
+use super::{compass, Explorer, GoingBack, Hooks, Kind, Objective, Suspecting, WHILE_OPEN};
 use crate::geom::{dist, segment_distance, Point};
 use crate::knowledge::model::Heard;
 use crate::motor::Observation;
@@ -1288,7 +1288,7 @@ impl Explorer {
         // for secrets, another look, a hunt, a spare pickup more than a short walk off) waits till
         // there's nothing new left. On a stream that's her wandering finished rooms; alone, the
         // run's own order stands.
-        if !self.directed && self.resorts.is_some() {
+        if !self.directed && self.resorts.is_some() && self.going_back != GoingBack::AsItComes {
             let back_over = |o: &Objective| {
                 !o.urgent
                     && !o.needed
@@ -1298,7 +1298,9 @@ impl Explorer {
                         _ => false,
                     }
             };
-            if weighed
+            if self.going_back == GoingBack::Never {
+                weighed.retain(|(_, o)| !back_over(o));
+            } else if weighed
                 .iter()
                 .any(|(_, o)| o.kind != Kind::Exit && !back_over(o))
             {

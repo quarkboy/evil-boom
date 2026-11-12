@@ -40,6 +40,9 @@ pub struct Policy {
     /// soulspheres, megaspheres, invulnerability: "need" (when they'd add enough, or a fight
     /// needs it), "now" (as they come)
     pub powerups: &'static str,
+    /// exploring on instinct, and her explore orders: "new" (new ground first, going back over
+    /// what's done after), "thorough" (everything as it comes), "quick" (new ground only)
+    pub explore: &'static str,
 }
 
 impl Default for Policy {
@@ -49,6 +52,7 @@ impl Default for Policy {
             save: "cells",
             risk: "normal",
             powerups: "need",
+            explore: "new",
         }
     }
 }
@@ -61,6 +65,7 @@ pub fn value(setting: &str, v: &str) -> Option<&'static str> {
         "save" => &["cells", "none"],
         "risk" => &["careful", "normal", "bold"],
         "powerups" => &["need", "now"],
+        "explore" => &["new", "thorough", "quick"],
         _ => return None,
     };
     of.iter().copied().find(|o| *o == v)
@@ -72,9 +77,44 @@ pub fn help() -> &'static str {
     SETTINGS_HELP
 }
 
-pub const SETTINGS_HELP: &str = "stance: careful (the default: backs off sooner); steady (stands and fights more); bold (fights more still, finishes fewer levels); avoid (keeps clear of fights: to get past one, not to leave on); yolo (fights everything head on; asked first). save: cells (plasma and BFG kept for bosses), none. risk: careful, normal, bold (floors that hurt). powerups: need (spheres and invulnerability when they'd help), now (as they come).";
+/// One setting's line of `SETTINGS_HELP` ("explore: new (...), thorough (...), quick (...).").
+pub fn help_for(setting: &str) -> &'static str {
+    const SETTINGS: [&str; 5] = ["stance", "save", "risk", "powerups", "explore"];
+    let Some(start) = SETTINGS_HELP.find(&format!("{setting}: ")) else {
+        return SETTINGS_HELP;
+    };
+    let rest = &SETTINGS_HELP[start..];
+    let end = SETTINGS
+        .iter()
+        .filter_map(|o| rest[1..].find(&format!(". {o}: ")).map(|i| i + 2))
+        .min()
+        .unwrap_or(rest.len());
+    rest[..end].trim()
+}
+
+pub const SETTINGS_HELP: &str = "stance: careful (the default: backs off sooner); steady (stands and fights more); bold (fights more still, finishes fewer levels); avoid (keeps clear of fights: to get past one, not to leave on); yolo (fights everything head on; asked first). save: cells (plasma and BFG kept for bosses), none. risk: careful, normal, bold (floors that hurt). powerups: need (spheres and invulnerability when they'd help), now (as they come). explore: new (new ground first, back over what's done after), thorough (everything as it comes, secrets too), quick (new ground only, never back).";
 
 impl Policy {
+    /// Going back over what's done, on instinct, as `explore` has it.
+    pub fn going_back(&self) -> crate::knowledge::explorer::GoingBack {
+        use crate::knowledge::explorer::GoingBack;
+        match self.explore {
+            "thorough" => GoingBack::AsItComes,
+            "quick" => GoingBack::Never,
+            _ => GoingBack::After,
+        }
+    }
+
+    /// How many walls exploring searches as it goes, as `explore` has it (`doom_search` for
+    /// more).
+    pub fn explore_secrets(&self) -> u8 {
+        match self.explore {
+            "thorough" => 2,
+            "quick" => 0,
+            _ => 1,
+        }
+    }
+
     /// The numbers over the run's tuning these settings come to.
     pub fn tuning(&self) -> Value {
         let mut all: Map<String, Value> = Map::new();
@@ -109,8 +149,8 @@ impl Policy {
     /// In a line, as she's told it.
     pub fn line(&self) -> String {
         format!(
-            "stance {}, save {}, risk {}, powerups {}",
-            self.stance, self.save, self.risk, self.powerups
+            "stance {}, save {}, risk {}, powerups {}, explore {}",
+            self.stance, self.save, self.risk, self.powerups, self.explore
         )
     }
 
@@ -123,6 +163,7 @@ impl Policy {
             ("save", self.save, d.save),
             ("risk", self.risk, d.risk),
             ("powerups", self.powerups, d.powerups),
+            ("explore", self.explore, d.explore),
         ] {
             if now != was {
                 out.push(format!("{name} {now}"));
@@ -151,6 +192,7 @@ mod tests {
                     save,
                     risk,
                     powerups,
+                    explore: "new",
                 };
                 Tuning::default()
                     .with(&p.tuning())
@@ -161,5 +203,7 @@ mod tests {
         assert_eq!(value("stance", "YOLO"), Some("yolo"));
         assert_eq!(value("save", "rockets"), None);
         assert_eq!(Policy::default().changed(), "");
+        assert!(super::help_for("explore").starts_with("explore: new"));
+        assert!(super::help_for("save").ends_with("none."));
     }
 }

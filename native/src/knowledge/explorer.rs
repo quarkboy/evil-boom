@@ -359,6 +359,20 @@ pub(crate) enum EndKind {
 const WAIT_LOOK_EVERY: i64 = 4 * 35;
 const WAIT_LOOK_TURN: f64 = 90.0;
 const WAIT_LOOK_TICS: i64 = 35;
+/// On instinct for whoever directs her: going back over what she's done (a walk across floor
+/// she's seen, walls pressed for secrets, another look, a hunt, a spare pickup a way off), and
+/// when (her `explore` setting).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GoingBack {
+    /// once there's no new ground left ("new")
+    #[default]
+    After,
+    /// as it comes, in the run's own order ("thorough")
+    AsItComes,
+    /// never: new ground only ("quick")
+    Never,
+}
+
 /// A last resort of `next`'s that whoever directs her may hold back (to ask her about first).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Resort {
@@ -494,6 +508,8 @@ pub struct Explorer {
     /// the last resorts she may take (None: all, as playing alone; whoever directs her says
     /// which), and the first she'd have taken this choice and mightn't
     pub resorts: Option<BTreeSet<Resort>>,
+    /// on instinct for whoever directs her, going back over what she's done: when
+    pub going_back: GoingBack,
     pub resort_wanted: Option<Resort>,
     /// what she knew when the places she got stuck last got another go
     pub stuck_retried: Option<String>,
@@ -647,6 +663,7 @@ impl Explorer {
             spares: BTreeSet::new(),
             out_of_options: None,
             resorts: None,
+            going_back: GoingBack::After,
             resort_wanted: None,
             stuck_retried: None,
             lapsing_jumps: (BTreeSet::new(), 0),

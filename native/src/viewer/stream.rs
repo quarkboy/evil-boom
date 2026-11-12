@@ -285,6 +285,20 @@ impl Watch {
             y = say(c, &line, (x, y), 18.0, TEXT);
         }
         y += 10;
+        // her calls: how she's fighting, what she's said that still holds
+        let calls = self
+            .neuro
+            .as_ref()
+            .map(|n| &n.director)
+            .or(self.feed.as_ref().map(|f| &f.director))
+            .map(|d| d.calls(self.engine.tic));
+        if let Some(calls) = calls {
+            y = heading(c, "EVIL'S CALLS", (x, y));
+            for line in calls.iter().take(4) {
+                y = say(c, line, (x, y), 15.0, EVIL);
+            }
+            y += 10;
+        }
         // what Evil said
         if !st.said.is_empty() {
             y = heading(c, "EVIL SAYS", (x, y));

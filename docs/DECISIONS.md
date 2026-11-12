@@ -2931,3 +2931,24 @@ the stronger nudge, and no prompt keeps the bot moving while she's thinking or t
 `Director::new` sets `idle_auto` to 6 s (`IDLE_AUTO`): with no action for 6 s she carries on by
 instinct, announced, exits held back; any action takes over; `doom_policy idle 0` has her wait.
 The briefing says so. Section 9's first answer is changed with it.
+
+## Her calls on the stream, `explore` as her setting, idle 3 s (the user, 2026-11-11)
+
+- **Instinct for her: new ground first** (built first, then made a setting): the second Gary run
+  on E1M2 had the bot on instinct spend 31% of its time on pickups, 11% walking across floor it
+  had seen, 10% pressing walls: her wandering finished rooms. On instinct for whoever directs her
+  (the explorer's `resorts` given: never when playing alone, so the scored bot is untouched),
+  going back over what's done (a walk across, a wall to press, another look, a hunt, a spare
+  pickup more than 512 along the way) waits till there's no new ground.
+- **`explore`, her fifth setting** (`doom_policy explore`): `new` (that, the default),
+  `thorough` (everything as it comes, the run's own order; her explore orders search the most
+  suspicious walls too), `quick` (new ground only, never back; no wall searching). Not
+  measured: the scored bot never plays on instinct for anyone.
+- **Idle 3 s** (was 6): the bot still stood a while after her short orders. The notice ("No
+  action for 3 s: on by instinct till your next.") is urgent, so it prompts her as a poke would;
+  separate pokes weren't added. Gary's own "act every" timer is the tester's to set.
+- **Her calls in the stream's column** (EVIL'S CALLS): her stance, or one taken for a while with
+  what's left of it; a target, gun or holding fire that still holds; any setting not at its
+  default.
+- A wrong setting value is answered with that setting's help alone (`policy::help_for`), not
+  all five.

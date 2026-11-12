@@ -310,7 +310,7 @@ impl Director {
         value: &str,
     ) -> Result<String, String> {
         let v = policy::value(setting, value)
-            .ok_or_else(|| format!("{setting}: no \"{value}\". {}", policy::SETTINGS_HELP))?;
+            .ok_or_else(|| format!("{setting}: no \"{value}\". {}", policy::help_for(setting)))?;
         if setting == "stance" && v == "yolo" && self.policy.stance != "yolo" {
             let asked = self.ask(
                 obs,
@@ -339,6 +339,7 @@ impl Director {
             "stance" => self.policy.stance = v,
             "save" => self.policy.save = v,
             "risk" => self.policy.risk = v,
+            "explore" => self.policy.explore = v,
             _ => self.policy.powerups = v,
         }
         self.policy_due = true;
@@ -346,6 +347,37 @@ impl Director {
     }
 
     /// The gun in her hands, as she'd call it.
+    /// Her calls for the viewers (the stream's column): her stance (one taken for a while, with
+    /// what's left of it), what she's said in the fight that still holds, and any setting not at
+    /// its default.
+    pub fn calls(&self, tic: i64) -> Vec<String> {
+        let left = |until: i64| format!("{} s", ((until - tic).max(0) + 34) / 35);
+        let mut out = vec![match self.tactics.stance {
+            Some((name, until)) if until > tic => format!("Stance: {name} ({})", left(until)),
+            _ => format!("Stance: {}", self.policy.stance),
+        }];
+        if let Some((_, name, until)) = self.tactics.target.as_ref().filter(|t| t.2 > tic) {
+            out.push(format!("Target: {name} ({})", left(*until)));
+        }
+        if let Some((gun, until)) = self.tactics.gun.filter(|g| g.1 > tic) {
+            out.push(format!("Gun: {} ({})", gun_called(gun), left(until)));
+        }
+        if let Some(until) = self.tactics.hold_fire.filter(|&t| t > tic) {
+            out.push(format!("Holding fire ({})", left(until)));
+        }
+        let changed: Vec<String> = self
+            .policy
+            .changed()
+            .split(", ")
+            .filter(|c| !c.is_empty() && !c.starts_with("stance"))
+            .map(str::to_string)
+            .collect();
+        if !changed.is_empty() {
+            out.push(changed.join(" · "));
+        }
+        out
+    }
+
     pub fn holding(&self, obs: &Observation) -> &'static str {
         obs.ready.map_or("?", gun_called)
     }
@@ -377,9 +409,10 @@ struct Queued {
 }
 
 /// with no action from her this long (tics), she carries on by instinct (the user's, 2026-11-11:
-/// a bot standing still waiting on her looks dead on stream; by her own latency, 6 s with no
-/// word is her busy talking or away; `doom_policy idle 0` has her wait)
-pub const IDLE_AUTO: i64 = 6 * 35;
+/// a bot standing still waiting on her looks dead on stream; 6 s at first, then 3: an action
+/// of hers takes over at once, and the notice of it prompts her; `doom_policy idle 0` has her
+/// wait)
+pub const IDLE_AUTO: i64 = 3 * 35;
 
 /// a go to an area whose middle she has no way to: at most this many of its unexplored spots,
 /// and this many of its other known spots, tried for one she has
@@ -1454,6 +1487,8 @@ impl Director {
         let hits = self.hits.clone();
         self.remember_hits(obs.tic, &hits);
         self.take_stock(agent, obs);
+        // (her exploring style, for when she's on instinct)
+        agent.x_mut().going_back = self.policy.going_back();
         // (her policy on her numbers: on a change, and on each new level's player)
         if self.policy_due {
             if let Some(p) = agent.player_mut() {
@@ -1540,10 +1575,15 @@ impl Director {
             // (not again once she's found nothing more to do by herself, till an order's come)
             if obs.tic - since >= limit && obs.health.unwrap_or(0.0) > 0.0 && !self.auto_spent {
                 self.go_instinct(agent);
-                self.report(obs, true, Event::OnInstinct, format!(
-                        "No action for {} s: you carry on by instinct (not leaving the level) till your next.",
+                self.report(
+                    obs,
+                    true,
+                    Event::OnInstinct,
+                    format!(
+                        "No action for {} s: on by instinct till your next.",
                         limit / 35
-                    ),);
+                    ),
+                );
                 return;
             }
         }

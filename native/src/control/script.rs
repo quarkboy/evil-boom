@@ -15,7 +15,7 @@
 //!   idle SECONDS|wait   with no order that long she carries on by herself (not leaving the
 //!                       level); wait: she waits, as long as it takes
 //!   policy [SETTING VALUE]
-//!                       her standing settings (stance, save, risk, powerups); none: as they are
+//!                       her standing settings (stance, save, risk, powerups, explore); none: as they are
 //!   look                what's round her: the room, what it leads to, what's in sight and heard,
 //!                       the bot's pick
 //!   hints off|on_stall|always
@@ -122,7 +122,7 @@ pub fn command(
                     let at = w.iter().rposition(|x| *x == "secrets").filter(|&i| i > 2);
                     let searching = w.get(1) == Some(&"search");
                     let said = w.last().and_then(|n| n.parse::<u8>().ok()).filter(|_| searching && w.len() > 3);
-                    let secrets = at.map_or(said.unwrap_or(if searching { 2 } else { 1 }), |i| w.get(i + 1).and_then(|n| n.parse::<u8>().ok()).unwrap_or(2).min(3));
+                    let secrets = at.map_or(said.unwrap_or(if searching { 2 } else { d.policy.explore_secrets() }), |i| w.get(i + 1).and_then(|n| n.parse::<u8>().ok()).unwrap_or(2).min(3));
                     let end = at.unwrap_or(if said.is_some() { w.len() - 1 } else { w.len() });
                     let r = w[2..end].join(" ");
                     bearing(&r).map_or(Order::ExploreArea(r, secrets), |b| Order::ExploreWay(b, secrets))
