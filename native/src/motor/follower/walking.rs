@@ -966,18 +966,20 @@ impl RouteFollower {
                 self.step_tic = obs.tic;
                 return Drop::None;
             }
-            // (or a lift on its way round, whoever set it off: a walk-over one she crossed
-            // stepping about in a fight takes the floor down behind her, and it comes back up to
-            // where the plan has it. Moving, or stopped no longer than a lift waits at the
-            // bottom: wait at the edge; still for longer, it's not coming)
+            // (or a lift on its way round that the route didn't set going: a walk-over one she
+            // crossed stepping about in a fight takes the floor down behind her, and it comes back
+            // up to where the plan has it. Moving, or stopped no longer than a lift waits at the
+            // bottom: wait at the edge; still for longer, it's not coming. One the route pressed
+            // is the route's: got onto on its way down, in its window)
             let level = |s: usize, other: Heights| {
                 self.states[s]
                     .iter()
                     .any(|&h| can_cross(h, other) && can_cross(other, h))
             };
-            let lift = [(ns, a), (cs, b)]
-                .into_iter()
-                .find(|&(s, other)| self.lift_sectors.contains(&s) && level(s, other));
+            let routes = |s: usize| self.watches.iter().any(|w| w.expect.sector == s);
+            let lift = [(ns, a), (cs, b)].into_iter().find(|&(s, other)| {
+                self.lift_sectors.contains(&s) && level(s, other) && !routes(s)
+            });
             if let Some((s, _)) = lift {
                 let live = obs.heights[s];
                 if self
