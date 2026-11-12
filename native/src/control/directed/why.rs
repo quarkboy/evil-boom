@@ -71,7 +71,7 @@ impl Director {
                 (self.now.outmatched, "outmatched"),
                 (self.now.surrounded, "surrounded"),
                 (self.now.short_of_ammo, "short of ammo"),
-                (self.now.vile, "an arch-vile"),
+                (self.now.vile, "up against an arch-vile"),
             ] {
                 if is {
                     how.push(what);
@@ -93,6 +93,8 @@ impl Director {
             }
             out.push(format!("{line}."));
             if let Some(why) = agent.player().and_then(|p| p.combat().holding_fire()) {
+                // (the fight's own words, said to her)
+                let why = why.replace("by her", "near you");
                 out.push(format!("You're not shooting: {why}."));
             }
         }
