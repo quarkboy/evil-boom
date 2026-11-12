@@ -3017,3 +3017,15 @@ such a key (fading by 1024). Alone on E2M2 it barely moved (the way there opens 
 1,400 off, by walk-over lines), and scored run for run -0.0047 (s.e. 0.0025), 16 better, 31
 worse, exits 382 against 387: dropped. For her, the hint does it instead ("Explore toward it:
 nearest unseen", 365bbfa).
+
+## On instinct for her: new ground the risky way before going back over (2026-11-12)
+
+E2M2 (GPT through Gary): the far corner and the blue key past it were reachable only through a
+corridor of crushers she'd stopped low by walking over their stop line (1518, on a path she
+crossed eight times); a stopped-low crusher is the risky pass's (started from its edge, a stroke
+timed), and the risky pass came only with nothing else left, which walls to search kept from
+happening for minutes, till she set risk bold. Now, on instinct for whoever directs her (exploring
+`new` or `quick`), the explorer tries new ground the safe way, then new ground the risky way,
+before going back over what's done (`new_ground_first`). Never when she plays alone (parity: all
+24 the same). Replayed alone on instinct the corridor never stopped low, and both builds went the
+same to the tic.

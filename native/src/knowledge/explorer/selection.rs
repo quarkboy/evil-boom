@@ -396,12 +396,32 @@ impl Explorer {
 
     /// The best objective of those offered now: of the safe ones, else of the risky ones.
     fn safe_then_risky(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
-        self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks)
+        self.new_ground_first(obs, hooks)
+            || self.try_objectives(obs, false, hooks)
+            || self.try_objectives(obs, true, hooks)
+    }
+
+    /// On instinct for whoever directs her (exploring `new`, the default): new ground, safe or
+    /// risky (a crusher's stroke timed, a floor that hurts more), before going back over what
+    /// she's done. On E2M2 a corridor of crushers stopped low was the only way on, risky; walls
+    /// to search, every one of them, came first, for minutes. Never when she plays alone.
+    fn new_ground_first(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if self.directed || self.resorts.is_none() || self.going_back == super::GoingBack::AsItComes
+        {
+            return false;
+        }
+        self.new_ground_only = true;
+        let found = self.try_objectives(obs, false, hooks) || self.try_objectives(obs, true, hooks);
+        self.new_ground_only = false;
+        found
     }
 
     /// The ordinary objectives: the safe ones; then, where the exit is being held back but not
     /// for anything risky (`exit_before_risks`), the exit; then the risky ones.
     fn ordinary(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if self.new_ground_first(obs, hooks) {
+            return true;
+        }
         let mut found = self.try_objectives(obs, false, hooks);
         if !found && self.exit_held_back && self.exit_before_risks {
             // The exit is held back for everything else, but not for what she mightn't come back from:

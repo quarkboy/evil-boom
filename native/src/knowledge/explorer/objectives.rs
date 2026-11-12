@@ -1302,7 +1302,7 @@ impl Explorer {
                         _ => false,
                     }
             };
-            if self.going_back == GoingBack::Never {
+            if self.going_back == GoingBack::Never || self.new_ground_only {
                 weighed.retain(|(_, o)| !back_over(o));
             } else if weighed
                 .iter()
