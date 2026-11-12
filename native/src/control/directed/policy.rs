@@ -68,7 +68,7 @@ pub fn help() -> &'static str {
     SETTINGS_HELP
 }
 
-pub const SETTINGS_HELP: &str = "stance: steady, bold (fights more, dies more), careful (backs off sooner), avoid (keeps clear, fights less), yolo (fights everything head on; asked first). save: cells (plasma and BFG kept for bosses), none. risk: careful, normal, bold (floors that hurt). powerups: need (spheres and invulnerability when they'd help), now (as they come).";
+pub const SETTINGS_HELP: &str = "stance: steady; bold (fights more, finishes fewer levels); careful (backs off sooner, as good or better); avoid (keeps clear of fights: to get past one, not to leave on); yolo (fights everything head on; asked first). save: cells (plasma and BFG kept for bosses), none. risk: careful, normal, bold (floors that hurt). powerups: need (spheres and invulnerability when they'd help), now (as they come).";
 
 impl Policy {
     /// The numbers over the run's tuning these settings come to.

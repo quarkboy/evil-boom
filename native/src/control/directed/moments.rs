@@ -131,11 +131,18 @@ impl Director {
             if title.is_some() || obs.tic - began >= TITLE_WAIT {
                 m.told_start = true;
                 let name = title.map_or(String::new(), |t| format!(": {}", title_of(&t)));
+                // (her settings, where they're not as they'd be: a reminder, the level begun)
+                let changed = self.policy.changed();
+                let policy = if changed.is_empty() {
+                    String::new()
+                } else {
+                    format!(" Your policy: {changed}.")
+                };
                 self.tell(
                     obs,
                     Event::LevelStart,
                     format!(
-                        "{}{name}. Skill: {}. You come in with: {}.",
+                        "{}{name}. Skill: {}. You come in with: {}.{policy}",
                         self.level.map,
                         skill_name(self.level.skill),
                         m.kit

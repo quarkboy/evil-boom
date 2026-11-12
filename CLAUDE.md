@@ -158,7 +158,11 @@ Stage 4, the bot's questions (`control/directed/ask.rs`, `doom_answer`, 8 s then
 forced at 3 s): leaving with things left, a costly way, nothing but walls left, stuck 3 min,
 and on instinct each last resort before it's taken (`Explorer::resorts`, None when alone).
 Stage 6: questions that can't wait (default done at once, 3 s to switch): a fight turned bad,
-a costly run-jump; `Situation` (`situation.rs`), one snapshot a tic. To direct a game by hand: `watch <wad> <map> --headless
+a costly run-jump; `Situation` (`situation.rs`), one snapshot a tic. Stage 7 (`docs/POLICY_SURVEY.md`):
+her guns (the very gun ordered, the plain shotgun, the fist with berserk, an ordered launcher
+kept), `doom_search`, cells-only saving and the big spheres when they'd add enough (both
+defaults, scored), her settings in `doom_policy` (stance incl. avoid and yolo, save, risk,
+powerups), each value's cost on the quarter set in its description. Baseline 0.459, 402 exits. To direct a game by hand: `watch <wad> <map> --headless
 --speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
 `.out` twin (`me.txt` gives `me.out`).
 

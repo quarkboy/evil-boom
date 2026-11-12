@@ -230,3 +230,28 @@ as they are, and the gun work of 3b. New command: `doom_search`.
 3. Build `stance avoid` and `save heavies` (each a little new code), or start with what's
    there?
 4. Any setting you want for the stream that isn't here.
+
+## Measured (2026-11-11): each value on the quarter set, the bot alone
+
+272 runs (two seeds a level-skill), the defaults 0.464 (102 levels finished). The quarter set's
+own noise is about 0.01-0.02 on a broad change; a value that moves few runs reads more exactly.
+
+| value | score | finished | runs moved | told her as |
+|---|---|---|---|---|
+| stance careful | 0.472 (+0.008, s.e. 0.018) | 108 | 238 | backs off sooner, as good or better |
+| powerups now | 0.465 (+0.001, s.e. 0.006) | 104 | 35 | as they come |
+| risk careful | 0.464 (0) | 102 | 1 | |
+| save none | 0.464 (0) | 102 | 2 | |
+| risk bold | 0.458 (-0.007, s.e. 0.004) | 99 | 35 | |
+| stance yolo | 0.458 (-0.006, s.e. 0.018) | 98 | 249 | fights everything head on; asked first |
+| stance bold | 0.444 (-0.020) | 95 | | fights more, finishes fewer levels |
+| stance avoid | 0.421 (-0.043, s.e. 0.019) | 90 | 255 | to get past a fight, not to leave on |
+
+What it says: the stances are real choices with real costs; `avoid` left on all the time costs
+most (the user's: it's for a hard room, not a whole level; so it's a `doom_fight` stance for a
+while too); `careful` may be as good as the default or better, worth a full set as a default
+on its own. `risk` hardly touches the bot alone (only a pickup on a floor that hurts goes by
+it); in directed play it's what she's asked about a costly way that matters, so `risk` is
+mostly for the explorer part not yet built (when the risky pass is let in). `save none` moved
+two runs: bosses are rare in the quarter set. Every value stays hers (the user's: options aren't
+kept or dropped by the score).

@@ -237,6 +237,8 @@ fn stance(name: &str) -> Option<(&'static str, serde_json::Value)> {
     let name = match name {
         "bold" | "push" | "aggressive" => "bold",
         "careful" | "cautious" => "careful",
+        // (to get past a fight: a while, not a standing choice)
+        "avoid" | "sneak" | "past" => "avoid",
         _ => return None,
     };
     Some((name, policy::stance_tuning(name)?))
@@ -1768,7 +1770,7 @@ impl Director {
             }
             other => {
                 let (name, over) = stance(other).ok_or(
-                    "fight: target REF, weapon NAME|auto, retreat, hold_fire, fire, bold, careful, steady, auto",
+                    "fight: target REF, weapon NAME|auto, retreat, hold_fire, fire, bold, careful, avoid, steady, auto",
                 )?;
                 let (secs, until) = hold(STANCE_SECONDS, STANCE_MOST);
                 agent

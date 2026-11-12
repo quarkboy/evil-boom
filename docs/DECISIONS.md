@@ -2876,3 +2876,10 @@ REF|DIR [2|3]`. What she's told says the thoroughness only when it's a search ("
   default. `powerups now` takes invulnerability as it comes (`errands.invulnerability_now`).
   Which settings exist isn't up to the score (the user's): each value's cost is measured and
   written into her description, not used to keep or drop it.
+
+Her settings measured on the quarter set (the bot alone, each value's tuning file; the table in
+`POLICY_SURVEY.md`): careful 0.472 and powerups now 0.465 against the defaults' 0.464; risk
+careful and save none no change; risk bold 0.458, yolo 0.458, bold 0.444, avoid 0.421. Each
+value's cost is in her description of it; `avoid` is also a `doom_fight` stance for a while
+(the user's: avoid left on all the time won't make progress; it's for getting past a fight).
+The level's start names any setting not at its default.
