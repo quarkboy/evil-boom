@@ -5,8 +5,10 @@ Date: 2026-11-12.
 > **Status:** in progress. Decided (section 2): keep the history, its author emails rewritten
 > before publishing; copyright "Quarkboy"; Evil Neuro's name stays, an unofficial fan project;
 > CLAUDE.md trimmed; the design notes organised and trimmed; binary releases for Windows and
-> Linux from GitHub's CI. Done: licensing, privacy, cleanup, the docs (steps 2-5). Left:
-> Windows, CI and releases, the final checks (steps 6-8).
+> Linux from GitHub's CI. Done: licensing, privacy, cleanup, the docs, the release layout, the
+> CI and release workflows (steps 2-5, 7). Left: the Windows build checked on a real machine or
+> CI's first run (step 6), the trimmed CLAUDE.md approved, the author emails rewritten, and the
+> final checks (step 8).
 
 The goal: a public GitHub repository under GPL-3.0-or-later that a stranger can read, build on
 Linux or Windows, test, and contribute to, with nothing in it we don't want public.
