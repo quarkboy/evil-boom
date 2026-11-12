@@ -108,6 +108,8 @@ pub enum Event {
     LevelComplete,
     /// her goal met, or nothing more to do for it
     GoalDone,
+    /// an action of hers dropped for a newer one (told as an outcome is)
+    Replaced,
     /// the bot's pick suggested (`loud`: the second time)
     Suggestion {
         loud: bool,
@@ -169,6 +171,7 @@ impl Event {
             | E::RestartOpen
             | E::LevelStart => Weight::Moment,
             E::Outcome
+            | E::Replaced
             | E::Asked
             | E::Defaulted
             | E::Died

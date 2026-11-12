@@ -18,7 +18,21 @@ header h1 b { color: var(--accent); }
 .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; background: var(--line); color: var(--dim); }
 .badge.ok { background: #1f3b29; color: var(--ok); } .badge.warn { background: #3d3119; color: var(--warn); } .badge.bad { background: #432020; color: var(--bad); }
 main { display: grid; gap: 12px; padding: 12px 16px 24px; grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 980px) { main { grid-template-columns: 360px minmax(0, 1fr); } #viewcard { grid-column: 2; grid-row: 1 / span 2; } #logcard { grid-column: 2; grid-row: 3 / span 4; } }
+@media (min-width: 980px) { main { grid-template-columns: 360px minmax(0, 1fr); } #viewcard { grid-column: 2; grid-row: 1 / span 2; } #evilcard { grid-column: 2; grid-row: 3 / span 3; } #logcard { grid-column: 2; grid-row: 6 / span 3; } }
+.ev-top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 10px; font-size: 13px; }
+.ev-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1200px) { .ev-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.ev-box { background: #17171e; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 0; }
+.ev-box h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin: 0 0 6px; font-weight: 600; }
+.ev-box ul { margin: 0; padding-left: 16px; } .ev-box li { margin: 1px 0; }
+.ev-sets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 6px; }
+.ev-q { border-color: #5a3f7a; } .ev-q .qtext { margin: 0 0 8px; color: var(--evil); }
+.ev-q button.def { border-color: var(--evil); }
+.qbar { height: 4px; background: #2a2a34; border-radius: 2px; margin-top: 6px; overflow: hidden; } .qbar div { height: 100%; background: var(--evil); width: 0; transition: width .4s linear; }
+.feed { height: 30vh; overflow-y: auto; background: #0e0e12; border-radius: 6px; padding: 6px 8px; font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.feed .loud { color: var(--text); } .feed .quiet { color: var(--dim); } .feed .t { color: #5d5d68; } .feed .fail { color: var(--bad); } .feed .st { color: var(--info); } .feed .act { color: var(--evil); }
+#ev-reply { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Consolas, monospace; max-height: 22vh; overflow-y: auto; }
+.danger-safe { color: var(--ok); } .danger-dangerous { color: var(--warn); } .danger-deadly { color: var(--bad); }
 .views { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
 .views figure { margin: 0; flex: 1 1 320px; min-width: 0; }
 .views img { width: 100%; height: auto; display: block; background: #000; border-radius: 4px; image-rendering: auto; }
@@ -104,20 +118,21 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   </section>
 
   <section>
-    <h2>Evil <span class="dim" style="text-transform:none;letter-spacing:0">(directed by Neuro or the GPT stand-in)</span></h2>
+    <h2>Talk to Evil <span class="dim" style="text-transform:none;letter-spacing:0">(directed by Neuro or the GPT stand-in)</span></h2>
     <div class="row">
       <input id="e-say" maxlength="300" placeholder="a line to her, sent as context">
       <button id="e-saysend">Tell her</button>
     </div>
     <div class="row">
       <select id="e-action" style="width:auto">
-        <option>doom_go</option><option>doom_explore</option><option>doom_press</option><option>doom_exit</option><option>doom_stop</option>
-        <option>doom_list</option><option>doom_inspect</option><option>doom_status</option><option>doom_name</option>
+        <option>doom_go</option><option>doom_explore</option><option>doom_search</option><option>doom_press</option><option>doom_exit</option><option>doom_stop</option>
+        <option>doom_list</option><option>doom_inspect</option><option>doom_look</option><option>doom_status</option><option>doom_why</option><option>doom_name</option>
+        <option>doom_goal</option><option>doom_policy</option><option>doom_fight</option><option>doom_answer</option><option>doom_game</option>
       </select>
       <input id="e-data" placeholder='{"ref": "door-3"}' style="flex:1;min-width:10em">
       <button id="e-order">Order as hers</button>
     </div>
-    <p class="dim" style="margin:0;font-size:12px">An order goes through her own checks; she's told it was the streamer's. Answers in the log.</p>
+    <p class="dim" style="margin:0;font-size:12px">An action goes through her own checks; she's told it was the streamer's. Its answer shows in the Evil card.</p>
   </section>
 
   <section>
@@ -163,6 +178,82 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <figure id="fig-map"><img id="img-map" alt="the map as she knows it, her route and objectives"><figcaption>Map as she knows it, route, objectives</figcaption></figure>
       <figure id="fig-game" hidden><img id="img-game" alt="the game's view"><figcaption>Game</figcaption></figure>
       <figure id="fig-stream" hidden style="flex-basis:100%"><img id="img-stream" alt="the stream's window, as OBS captures it"><figcaption>The stream's window (half size)</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="evilcard">
+    <h2>Evil <span class="dim" style="text-transform:none;letter-spacing:0">(her side: what she's set, asked, told and done; acting here goes in as hers, said to be the streamer's)</span></h2>
+    <div class="ev-top">
+      <span id="ev-link" class="badge">not directing</span>
+      <span>danger: <b id="ev-danger">-</b></span>
+      <span class="dim" id="ev-idle"></span>
+      <span class="dim" id="ev-rate"></span>
+    </div>
+    <div class="ev-grid">
+      <div class="ev-col">
+        <div class="ev-box">
+          <h3>Goal</h3>
+          <div class="row" style="align-items:center"><b id="ev-goal" style="flex:1">none</b></div>
+          <div class="row">
+            <select id="ev-goalsel" style="width:auto">
+              <option value="out">out</option><option value="everything">everything</option><option value="key">key</option>
+              <option value="kills">kills</option><option value="supplies">supplies</option><option value="secrets">secrets</option>
+            </select>
+            <input id="ev-goalref" placeholder="colour (key)" style="width:9em">
+            <button id="ev-goalset">Set</button><button id="ev-goaldrop">Drop</button>
+          </div>
+        </div>
+        <div class="ev-box" style="margin-top:10px">
+          <h3>Settings</h3>
+          <div class="ev-sets">
+            <label>stance<select data-p="stance"><option>careful</option><option>steady</option><option>bold</option><option>avoid</option><option>yolo</option></select></label>
+            <label>explore<select data-p="explore"><option>new</option><option>thorough</option><option>quick</option></select></label>
+            <label>risk<select data-p="risk"><option>careful</option><option>normal</option><option>bold</option></select></label>
+            <label>save<select data-p="save"><option>cells</option><option>none</option></select></label>
+            <label>powerups<select data-p="powerups"><option>need</option><option>now</option></select></label>
+            <label>idle (s)<input type="number" min="0" max="60" data-p="idle"></label>
+          </div>
+          <div class="row"><button id="ev-setapply">Apply as hers</button><span class="dim" id="ev-policy" style="font-size:12px;align-self:center"></span></div>
+        </div>
+        <div class="ev-box" style="margin-top:10px">
+          <h3>Her calls</h3>
+          <ul id="ev-calls"></ul>
+        </div>
+        <div class="ev-box" style="margin-top:10px">
+          <h3>Ask the game, as hers</h3>
+          <div class="row">
+            <button data-q="doom_look">Look</button><button data-q="doom_status">Status</button><button data-q="doom_why">Why</button>
+            <button data-q="doom_list" data-d='{"what":"areas"}'>Areas</button><button data-q="doom_list" data-d='{"what":"doors"}'>Doors</button>
+            <button data-q="doom_list" data-d='{"what":"items"}'>Items</button><button data-q="doom_list" data-d='{"what":"exits"}'>Exits</button>
+          </div>
+          <div class="row">
+            <button data-q="doom_fight" data-d='{"do":"hold_fire"}'>Hold fire</button><button data-q="doom_fight" data-d='{"do":"fire"}'>Fire</button>
+            <button data-q="doom_fight" data-d='{"do":"retreat"}'>Retreat</button><button data-q="doom_fight" data-d='{"do":"auto"}'>Fight by reflex</button>
+            <button data-q="doom_stop">Stop</button>
+          </div>
+        </div>
+      </div>
+      <div class="ev-col">
+        <div class="ev-box ev-q" id="ev-qbox" hidden>
+          <h3>Her question <span id="ev-qid"></span></h3>
+          <p class="qtext" id="ev-qtext"></p>
+          <div class="row" id="ev-qchoices"></div>
+          <div class="qbar"><div id="ev-qbar"></div></div>
+          <div class="dim" id="ev-qleft" style="font-size:12px;margin-top:4px"></div>
+        </div>
+        <div class="ev-box" style="margin-top:10px">
+          <h3>Why</h3>
+          <ul id="ev-why"></ul>
+        </div>
+        <div class="ev-box" style="margin-top:10px">
+          <h3>Answer to the console's last <span id="ev-replyname"></span></h3>
+          <div id="ev-reply" class="dim">-</div>
+        </div>
+      </div>
+    </div>
+    <div class="ev-grid" style="margin-top:12px">
+      <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Told her <span style="text-transform:none">(bright: to be heard)</span></h3><div class="feed" id="ev-told"></div></div>
+      <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Her actions <span style="text-transform:none">(blue: the streamer's)</span></h3><div class="feed" id="ev-acts"></div></div>
     </div>
   </section>
 
@@ -271,8 +362,78 @@ function render(p) {
   }
   if (!formDirty) fillForm(p.settings);
   for (const name of ["map", "game", "stream"]) showView(name, (p.views || {})[name]);
+  renderEvil(p.connected && st && st.evil, n);
   addLog(p.log);
 }
+let evilTold = "", evilActs = "", replySeen = 0, qShown = null;
+function li(text) { const e = document.createElement("li"); e.textContent = text; return e; }
+function feedLine(cls, t, text) {
+  const d = document.createElement("div"); d.className = cls;
+  const ts = document.createElement("span"); ts.className = "t"; ts.textContent = fmtTime(t) + " ";
+  d.append(ts, document.createTextNode(text)); return d;
+}
+function setFeed(el, nodes, key, prev) {
+  if (key === prev) return prev;
+  const atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+  el.replaceChildren(...nodes);
+  if (atEnd) el.scrollTop = el.scrollHeight;
+  return key;
+}
+function renderEvil(e, n) {
+  const on = !!e;
+  $("evilcard").classList.toggle("dim", !on);
+  for (const b of $("evilcard").querySelectorAll("button, select, input")) b.disabled = !(on && n);
+  if (!on) { badge($("ev-link"), "not directing", ""); return; }
+  badge($("ev-link"), n ? (n.connected ? (n.who || "connected") : "Neuro not connected") : "orders file", n && n.connected ? "ok" : (n ? "bad" : ""));
+  const d = e.danger || "-";
+  $("ev-danger").textContent = d; $("ev-danger").className = "danger-" + d.split(" ")[0];
+  $("ev-idle").textContent = "no action: " + e.idle;
+  $("ev-rate").textContent = "a minute: " + e.per_minute[0] + " actions, " + e.per_minute[1] + " words told, " + e.per_minute[2] + " moments";
+  $("ev-goal").textContent = e.goal || "none";
+  $("ev-policy").textContent = e.policy;
+  // (her settings into the selects, unless the streamer's choosing)
+  const pol = {};
+  for (const part of (e.policy || "").split(", ")) { const [k, v] = part.split(" "); pol[k] = v; }
+  const idle = /after (\d+) s/.exec(e.idle || ""); pol.idle = idle ? idle[1] : "0";
+  for (const el of $("evilcard").querySelectorAll("[data-p]")) if (!setsDirty && document.activeElement !== el && pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
+  $("ev-calls").replaceChildren(...(e.calls || []).map(li));
+  $("ev-why").replaceChildren(...((e.why && e.why.length) ? e.why : ["-"]).map(li));
+  const q = e.question;
+  $("ev-qbox").hidden = !q;
+  if (q) {
+    $("ev-qid").textContent = "q" + q.id + (q.now ? " (being done: switch)" : "");
+    $("ev-qtext").textContent = q.text;
+    const key = q.id + "|" + q.choices.join("|");
+    if (qShown !== key) {
+      qShown = key;
+      $("ev-qchoices").replaceChildren(...q.choices.map((c, i) => {
+        const b = document.createElement("button");
+        const letter = String.fromCharCode(97 + i);
+        b.textContent = letter + ") " + c + (i === q.default ? " (default)" : "");
+        if (i === q.default) b.className = "def";
+        b.onclick = () => order("doom_answer", { id: "q" + q.id, choice: letter });
+        return b;
+      }));
+    }
+    const full = q.now ? 3 : 8;
+    $("ev-qbar").style.width = q.left == null ? "100%" : Math.max(0, Math.min(100, 100 * q.left / full)) + "%";
+    $("ev-qleft").textContent = q.left == null ? "waits for her answer" : q.left.toFixed(1) + " s till the default";
+  } else qShown = null;
+  if (e.reply && e.reply[0] !== replySeen) {
+    replySeen = e.reply[0];
+    $("ev-replyname").textContent = e.reply[1];
+    $("ev-reply").textContent = (e.reply[2] ? "" : "FAILED: ") + e.reply[3];
+    $("ev-reply").className = e.reply[2] ? "" : "err";
+  }
+  const told = e.told || [], acts = e.actions || [];
+  evilTold = setFeed($("ev-told"), told.map((t) => feedLine(t.loud ? "loud" : "quiet", t.seconds, t.text)),
+    told.length + "|" + (told.length ? told[told.length - 1].seconds + told[told.length - 1].text : ""), evilTold);
+  evilActs = setFeed($("ev-acts"), acts.map((a) => feedLine(a.streamer ? "st" : (a.ok ? "act" : "fail"), a.seconds,
+    (a.streamer ? "(streamer) " : "") + a.name + (a.data ? " " + a.data : "") + "\n   -> " + (a.ok ? "" : "FAILED: ") + a.reply.split("\n")[0])),
+    acts.length + "|" + (acts.length ? acts[acts.length - 1].seconds + acts[acts.length - 1].name : ""), evilActs);
+}
+let setsDirty = false;
+function order(action, data) { return cmd({ cmd: "order", action, data: data == null ? null : JSON.stringify(data) }); }
 const viewOn = { map: true, game: false, stream: false }, viewShown = {}, viewLoading = {};
 try { Object.assign(viewOn, JSON.parse(localStorage.getItem("evil-console-views") || "{}")); } catch (e) { /* (the default) */ }
 function showView(name, n) {
@@ -376,6 +537,18 @@ $("e-order").onclick = () => {
   const data = $("e-data").value.trim();
   if (data) { try { JSON.parse(data); } catch (e) { say("The data isn't JSON: " + e.message); return; } }
   cmd({ cmd: "order", action: $("e-action").value, data: data || null });
+};
+for (const b of $("evilcard").querySelectorAll("[data-q]")) b.onclick = () => order(b.dataset.q, b.dataset.d ? JSON.parse(b.dataset.d) : null);
+$("ev-goalset").onclick = () => {
+  const g = $("ev-goalsel").value, r = $("ev-goalref").value.trim();
+  order("doom_goal", r && g === "key" ? { goal: g, ref: r } : { goal: g });
+};
+$("ev-goaldrop").onclick = () => order("doom_goal", { goal: "none" });
+for (const el of $("evilcard").querySelectorAll("[data-p]")) el.addEventListener("change", () => { setsDirty = true; });
+$("ev-setapply").onclick = async () => {
+  const data = {};
+  for (const el of $("evilcard").querySelectorAll("[data-p]")) data[el.dataset.p] = el.dataset.p === "idle" ? Number(el.value) : el.value;
+  if (await order("doom_policy", data)) setsDirty = false;
 };
 function gotoMap(map) {
   if (!map || !confirm("Go to " + map + (($("l-carry").checked) ? ", carrying what she has?" : " from a pistol start?"))) return;

@@ -239,3 +239,16 @@ nothing new).
 The Lives setting and the Set-lives control are gone (the user's: lives were for benchmarking;
 on stream it's the original game, again and again till it's turned off). The console starts
 its game with `--lives unlimited`.
+
+## Evil's side on the console (2026-11-12)
+
+The game's state carries `evil` (protocol 4) whenever Neuro or a file directs her: her goal, her
+settings in a line and what she does with no action, the stream column's calls, her open question
+(its choices, its default, the seconds till it, whether it's one being done), `doom_why` (fresh
+with each state), the danger, the last 40 lines told her (marked if told to be heard), her last 40
+actions with their answers (the streamer's marked), a minute's actions, words told and moments,
+and the streamer's last action's answer in full. The page's Evil card shows it all and acts on it
+as hers (said to be the streamer's): a button for each of the question's choices, her goal set or
+dropped, her settings applied, Look, Status, Why and the lists, the fight's hold fire, fire,
+retreat and back to reflex, stop. The small card beside it keeps the line to her and any action
+by hand.

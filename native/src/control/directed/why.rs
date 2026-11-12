@@ -3,7 +3,7 @@
 //! the fight, what it's doing and what pushed it; why she isn't shooting; the last action that
 //! didn't work. In plain words, as everything she reads.
 
-use super::{engaged, explores, fighting, id_of, plain, Director, Doing, Entry};
+use super::{engaged, explores, fighting, id_of, plain, Director, Doing, Entry, Event};
 use crate::knowledge::explorer::{Kind, Objective};
 use crate::motor::Observation;
 use crate::play::Agent;
@@ -106,7 +106,7 @@ impl Director {
             .reports
             .iter()
             .rev()
-            .find(|r| !r.ok && obs.tic - r.tic <= FAILED_LATELY)
+            .find(|r| !r.ok && r.event != Event::Replaced && obs.tic - r.tic <= FAILED_LATELY)
         {
             out.push(format!(
                 "The last that didn't work ({} s ago): {}",

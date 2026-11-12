@@ -9,7 +9,7 @@ pub mod server;
 use serde::{Deserialize, Serialize};
 
 /// The protocol's version, in the game's hello: a supervisor and a game built apart may not agree.
-pub const PROTOCOL: u32 = 3;
+pub const PROTOCOL: u32 = 4;
 
 /// What the console asks of the running game, applied by it at the top of a frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -100,7 +100,7 @@ pub enum FromGame {
         maps: Vec<String>,
     },
     /// how things stand, a few times a second
-    State(GameState),
+    State(Box<GameState>),
     /// the log's new lines
     Log { lines: Vec<String> },
     /// something that happened: "died", "exited", "level MAP02", ...
@@ -179,6 +179,67 @@ pub struct GameState {
     /// what she's doing, in a few words
     pub doing: String,
     pub neuro: Option<NeuroState>,
+    /// Evil, if she's directing
+    #[serde(default)]
+    pub evil: Option<EvilState>,
+}
+
+/// Evil as the console shows her (directed by Neuro or a file): her standing settings and goal,
+/// her open question, why the bot's doing what it's doing, what she's been told and what she's
+/// done lately, how much of it a minute; the streamer's last action's answer in full.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct EvilState {
+    pub goal: Option<String>,
+    /// her settings in a line ("stance careful, save cells, ...")
+    pub policy: String,
+    /// with no action: "on by instinct after 3 s", or "waits"
+    pub idle: String,
+    /// the stream column's lines (stance, what she's said in the fight, a goal)
+    pub calls: Vec<String>,
+    pub question: Option<QuestionState>,
+    /// `doom_why`, a second old at most
+    pub why: Vec<String>,
+    /// how dangerous it is now ("safe for now", "dangerous", "deadly")
+    pub danger: String,
+    /// what she's been told lately, newest last
+    pub told: Vec<ToldLine>,
+    /// her actions lately and what came back, newest last
+    pub actions: Vec<ActionLine>,
+    /// a minute's worth: her actions, words told her, moments (not silent)
+    pub per_minute: [u32; 3],
+    /// the streamer's last action's answer: (its number, the action, done, the answer)
+    pub reply: Option<(u64, String, bool, String)>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct QuestionState {
+    pub id: u32,
+    pub text: String,
+    pub choices: Vec<String>,
+    pub default: usize,
+    /// seconds till the default (None: it waits for her)
+    pub left: Option<f64>,
+    /// one that can't wait: the default's already being done
+    pub now: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ToldLine {
+    pub seconds: f64,
+    pub text: String,
+    /// told to be heard (not silent)
+    pub loud: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ActionLine {
+    pub seconds: f64,
+    pub name: String,
+    pub data: String,
+    pub ok: bool,
+    pub reply: String,
+    /// the streamer's, given as hers
+    pub streamer: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -230,11 +291,11 @@ mod tests {
 
     #[test]
     fn game_lines_read_back() {
-        let line = serde_json::to_string(&FromGame::State(GameState {
+        let line = serde_json::to_string(&FromGame::State(Box::new(GameState {
             map: "MAP01".into(),
             health: 100,
             ..GameState::default()
-        }))
+        })))
         .unwrap_or_default();
         match serde_json::from_str::<FromGame>(&line) {
             Ok(FromGame::State(s)) => assert_eq!((s.map.as_str(), s.health), ("MAP01", 100)),

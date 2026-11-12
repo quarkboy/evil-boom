@@ -522,7 +522,7 @@ fn read_game(stream: TcpStream, hub: &Hub) {
             }
             _ if !ours => return,
             FromGame::State(st) => {
-                s.state = Some(st);
+                s.state = Some(*st);
                 s.heard = Some(Instant::now());
             }
             FromGame::Log { lines } => lines.into_iter().for_each(|l| s.push(l)),

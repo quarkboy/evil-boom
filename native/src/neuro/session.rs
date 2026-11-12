@@ -53,7 +53,26 @@ pub struct Session {
     told_chars: usize,
     /// her status, a second old at most: what doom_status answers off a level
     last_status: String,
+    /// for the stream console: what she's been told lately (tic, text, not silent), her actions
+    /// lately, the streamer's last answer (its number); the tic last seen
+    told_lines: std::collections::VecDeque<(i64, String, bool)>,
+    exchanges: std::collections::VecDeque<Exchange>,
+    reply: Option<(u64, String, bool, String)>,
+    now_tic: i64,
 }
+
+/// An action and what came back, for the stream console.
+struct Exchange {
+    tic: i64,
+    name: String,
+    data: String,
+    ok: bool,
+    reply: String,
+    streamer: bool,
+}
+
+/// lines told and actions kept for the stream console
+const KEPT_LINES: usize = 40;
 
 /// Who's playing, by the `characterId` of the startup's acknowledgement.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -126,13 +145,82 @@ impl Session {
             briefed_at: 0,
             told_chars: 0,
             last_status: String::new(),
+            told_lines: std::collections::VecDeque::new(),
+            exchanges: std::collections::VecDeque::new(),
+            reply: None,
+            now_tic: 0,
         }
     }
 
-    /// Told her (context): counted, for telling the rules again.
+    /// Told her (context): counted, for telling the rules again; kept for the stream console.
     fn tell(&mut self, text: &str, silent: bool) {
         self.told_chars += text.len();
         self.link.context(text, silent);
+        self.told_lines
+            .push_back((self.now_tic, text.to_string(), !silent));
+        while self.told_lines.len() > KEPT_LINES {
+            self.told_lines.pop_front();
+        }
+    }
+
+    /// An action and its answer, kept for the stream console.
+    fn keep(&mut self, name: &str, data: Option<&str>, ok: bool, reply: &str, streamer: bool) {
+        self.exchanges.push_back(Exchange {
+            tic: self.now_tic,
+            name: name.to_string(),
+            data: data.unwrap_or("").to_string(),
+            ok,
+            reply: reply.to_string(),
+            streamer,
+        });
+        while self.exchanges.len() > KEPT_LINES {
+            self.exchanges.pop_front();
+        }
+    }
+
+    /// For the stream console: what she's been told lately, her actions lately, a minute's
+    /// worth (her actions, words told, moments), the streamer's last answer.
+    pub fn console_lines(&self) -> crate::console::EvilState {
+        use crate::console::{ActionLine, EvilState, ToldLine};
+        let secs = |tic: i64| tic as f64 / 35.0;
+        let lately = |tic: i64| self.now_tic - tic <= MINUTE;
+        EvilState {
+            told: self
+                .told_lines
+                .iter()
+                .map(|(tic, text, loud)| ToldLine {
+                    seconds: secs(*tic),
+                    text: text.clone(),
+                    loud: *loud,
+                })
+                .collect(),
+            actions: self
+                .exchanges
+                .iter()
+                .map(|e| ActionLine {
+                    seconds: secs(e.tic),
+                    name: e.name.clone(),
+                    data: e.data.clone(),
+                    ok: e.ok,
+                    reply: e.reply.clone(),
+                    streamer: e.streamer,
+                })
+                .collect(),
+            per_minute: [
+                self.exchanges
+                    .iter()
+                    .filter(|e| !e.streamer && lately(e.tic))
+                    .count() as u32,
+                self.told_lines
+                    .iter()
+                    .filter(|(tic, _, _)| lately(*tic))
+                    .map(|(_, t, _)| t.split_whitespace().count() as u32)
+                    .sum(),
+                self.loud.len() as u32,
+            ],
+            reply: self.reply.clone(),
+            ..EvilState::default()
+        }
     }
 
     /// The rules told her (silently), and the count since started again.
@@ -152,6 +240,7 @@ impl Session {
     /// A tic: what's come in handled; what's happened told; a decision forced if she's waited.
     /// The lines for the log.
     pub fn tic(&mut self, agent: &mut Agent, obs: &Observation) -> Vec<String> {
+        self.now_tic = obs.tic;
         let mut log = Vec::new();
         while let Ok(i) = self.link.incoming.try_recv() {
             match i {
@@ -196,6 +285,7 @@ impl Session {
                         if ok { "" } else { "FAILED: " },
                         msg.lines().next().unwrap_or("")
                     ));
+                    self.keep(&name, data.as_deref(), ok, &msg, false);
                     self.answer(&id, ok, &msg);
                 }
             }
@@ -311,6 +401,7 @@ impl Session {
         idle: &str,
         mut act: impl FnMut(&Value) -> (bool, String),
     ) -> Vec<String> {
+        self.now_tic = tic;
         let mut log = Vec::new();
         while let Ok(i) = self.link.incoming.try_recv() {
             match i {
@@ -352,6 +443,7 @@ impl Session {
                     };
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
                     log.push(format!("<< {}{msg}", if ok { "" } else { "FAILED: " }));
+                    self.keep(&name, data.as_deref(), ok, &msg, false);
                     self.answer(&id, ok, &msg);
                 }
             }
@@ -368,6 +460,7 @@ impl Session {
     /// Between levels (the tally, a finale): what the director's been told of the screens,
     /// passed on; the lines for the log. (Her actions wait for the next level.)
     pub fn between(&mut self, tic: i64) -> Vec<String> {
+        self.now_tic = tic;
         let mut log = Vec::new();
         self.tell_news(tic, &mut log);
         log
@@ -440,7 +533,11 @@ impl Session {
         name: &str,
         data: Option<&str>,
     ) -> (bool, String) {
+        self.now_tic = obs.tic;
         let (ok, msg) = self.action(agent, obs, name, data);
+        self.keep(name, data, ok, &msg, true);
+        let n = self.reply.as_ref().map_or(1, |r| r.0 + 1);
+        self.reply = Some((n, name.to_string(), ok, msg.clone()));
         if !matches!(
             name,
             "doom_list" | "doom_look" | "doom_inspect" | "doom_status" | "doom_why"

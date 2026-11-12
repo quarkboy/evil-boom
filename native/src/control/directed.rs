@@ -29,6 +29,7 @@ mod policy;
 mod powers;
 mod restart;
 mod situation;
+mod view;
 mod why;
 
 pub use ask::{Question, ANSWER_WAIT};
@@ -2113,7 +2114,7 @@ impl Director {
                 self.report(
                     obs,
                     false,
-                    Event::Outcome,
+                    Event::Replaced,
                     format!("Dropped for the new action: {what}."),
                 );
             }
@@ -2121,7 +2122,7 @@ impl Director {
                 self.report(
                     obs,
                     false,
-                    Event::Outcome,
+                    Event::Replaced,
                     format!("Dropped for the new action: exploring {what}."),
                 );
             }
@@ -2129,7 +2130,7 @@ impl Director {
                 self.report(
                     obs,
                     false,
-                    Event::Outcome,
+                    Event::Replaced,
                     format!("Dropped for the new action: exploring {}.", compass(b)),
                 );
             }

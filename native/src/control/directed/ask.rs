@@ -18,7 +18,7 @@ pub const ANSWER_WAIT: i64 = 8 * 35;
 /// no progress this long (tics): asked whether she's stuck
 const STUCK: i64 = 180 * 35;
 /// a question that can't wait: open this long (tics) for her to switch from its default
-const NOW_OPEN: i64 = 3 * 35;
+pub(super) const NOW_OPEN: i64 = 3 * 35;
 /// a fight's turned bad below this health
 const LOW_HEALTH: f64 = 25.0;
 

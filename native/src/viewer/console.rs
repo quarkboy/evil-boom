@@ -427,13 +427,13 @@ impl Watch {
         }
         c.told = now;
         if c.link.state_due() {
-            c.link.send(FromGame::State(self.console_state()));
+            c.link.send(FromGame::State(Box::new(self.console_state())));
         }
         self.console = Some(c);
         frame
     }
 
-    fn console_state(&self) -> GameState {
+    fn console_state(&mut self) -> GameState {
         let t = self.engine.tally();
         let mut s = GameState {
             map: self.map_name.clone(),
@@ -497,6 +497,18 @@ impl Watch {
                     .map_or_else(|| "-".into(), |o| o.label.clone()),
             )
         };
+        // (Evil's side: her settings, question, why, what she's been told and done)
+        if let Some(obs) = self.obs.clone() {
+            if let Some(n) = self.neuro.as_mut() {
+                let mut e = n.console_lines();
+                n.director.console_view(&mut self.agent, &obs, true, &mut e);
+                s.evil = Some(e);
+            } else if let Some(f) = self.feed.as_mut() {
+                let mut e = crate::console::EvilState::default();
+                f.director.console_view(&mut self.agent, &obs, true, &mut e);
+                s.evil = Some(e);
+            }
+        }
         s
     }
 }
