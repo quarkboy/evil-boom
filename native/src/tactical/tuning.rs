@@ -207,6 +207,11 @@ pub struct Engage {
     pub close_give_up: i64,
     /// ...for this long
     pub given_up_tics: i64,
+    /// closing in on something out of reach this long (tics) getting no nearer to it by
+    /// `close_gain` (map units): left too (bars, a pit, a ledge between: no way to it there; one
+    /// coming at her, or a way to it, is getting nearer)
+    pub close_stall: i64,
+    pub close_gain: f64,
     /// an awake monster out of sight this long is still fought (where it was)
     pub lost_tics: i64,
     /// ...once it's been out of sight this long (tics: a moment, not one tic)
@@ -257,6 +262,8 @@ impl Default for Engage {
     fn default() -> Self {
         Engage {
             close_give_up: 20 * 35,
+            close_stall: 3 * 35,
+            close_gain: 48.0,
             given_up_tics: 30 * 35,
             lost_tics: 3 * 35,
             lost_after: 9,

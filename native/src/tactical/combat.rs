@@ -2094,7 +2094,20 @@ impl Combat {
         if self.given_up_on(obs, id) {
             return false;
         }
+        // (getting no nearer for a while: no way to it from here, whatever's between)
+        let near = self
+            .known
+            .get(&id)
+            .map(|k| dist(k.pos(), obs.pos()))
+            .unwrap_or(f64::INFINITY);
         if self.patience.spent(
+            Effort::ClosingStall,
+            id,
+            obs.tic,
+            self.tune.engage.close_stall,
+            Some((near, self.tune.engage.close_gain)),
+            None,
+        ) || self.patience.spent(
             Effort::Closing,
             id,
             obs.tic,
@@ -2102,6 +2115,8 @@ impl Combat {
             None,
             None,
         ) {
+            self.patience.rest(Effort::ClosingStall, id);
+            self.patience.rest(Effort::Closing, id);
             self.give_up(obs, id);
             return false;
         }

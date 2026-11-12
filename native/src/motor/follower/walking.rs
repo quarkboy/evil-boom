@@ -3,7 +3,7 @@
 use super::Trouble;
 use super::{
     last_point, roll_speed, stops, Drop, Phase, RouteFollower, Run, SegEnd, Segment,
-    CROSS_REST_WAIT, PRESS_RANGE,
+    CROSS_REST_WAIT, LIFT_STILL, PRESS_RANGE,
 };
 use crate::geom::{cells, closest_point, dist, segment_distance, Point};
 use crate::motor::{heading, Controls, Observation, Track, BRAKE, FULL_SPEED, TICRATE};
@@ -965,6 +965,45 @@ impl RouteFollower {
                 self.progress_tic = obs.tic;
                 self.step_tic = obs.tic;
                 return Drop::None;
+            }
+            // (or a lift on its way round, whoever set it off: a walk-over one she crossed
+            // stepping about in a fight takes the floor down behind her, and it comes back up to
+            // where the plan has it. Moving, or stopped no longer than a lift waits at the
+            // bottom: wait at the edge; still for longer, it's not coming)
+            let level = |s: usize, other: Heights| {
+                self.states[s]
+                    .iter()
+                    .any(|&h| can_cross(h, other) && can_cross(other, h))
+            };
+            let lift = [(ns, a), (cs, b)]
+                .into_iter()
+                .find(|&(s, other)| self.lift_sectors.contains(&s) && level(s, other));
+            if let Some((s, _)) = lift {
+                let live = obs.heights[s];
+                if self
+                    .lift_back
+                    .is_none_or(|(ls, lh, _)| (ls, lh) != (s, live))
+                {
+                    if self.lift_back.is_none_or(|(ls, _, _)| ls != s) {
+                        self.log.add(
+                            obs.tic,
+                            format!(
+                                "waiting for lift sector {s} to come back (now {})",
+                                fmt_heights(live)
+                            ),
+                        );
+                    }
+                    self.lift_back = Some((s, live, obs.tic));
+                }
+                if self
+                    .lift_back
+                    .is_some_and(|(_, _, since)| obs.tic - since < LIFT_STILL)
+                {
+                    self.speed_cap = 0.0;
+                    self.progress_tic = obs.tic;
+                    self.step_tic = obs.tic;
+                    return Drop::None;
+                }
             }
             self.drops_ok.insert(key);
             let why = format!("unexpected drop into sector {ns}");

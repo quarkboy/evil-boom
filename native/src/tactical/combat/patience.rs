@@ -12,6 +12,8 @@ use std::collections::BTreeMap;
 pub enum Effort {
     /// closing in on it, out of the gun's reach
     Closing,
+    /// ...and how near she's got: the measure
+    ClosingStall,
     /// standing to fight it with no shot at it
     NoShot,
     /// at it in melee: its health is the measure

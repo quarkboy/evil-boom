@@ -119,6 +119,9 @@ pub fn barrel_now(obs: &Observation, at: Point) -> Option<Point> {
 
 /// the longest wait for a lift to come back before crossing its line
 const CROSS_REST_WAIT: i64 = 8 * 35;
+/// a lift still this long isn't on its way anywhere (vanilla's waits 3 s at the bottom before
+/// coming back)
+const LIFT_STILL: i64 = 5 * 35;
 
 /// tics between use presses waiting at a door
 const USE_EVERY: i64 = 15;
@@ -310,6 +313,8 @@ pub struct RouteFollower {
     pub failed_presses: Vec<(Point, usize)>,
     drops_ok: BTreeSet<(usize, usize, [u64; 4])>,
     edge_wait: bool,
+    /// a lift on its way round across her path: which, as last seen, and since when
+    lift_back: Option<(usize, Heights, i64)>,
     settle_logged: i64,
     cross_ready: bool,
     cross_wait_logged: bool,
@@ -421,6 +426,7 @@ impl RouteFollower {
             failed_presses: Vec::new(),
             drops_ok: BTreeSet::new(),
             edge_wait: false,
+            lift_back: None,
             settle_logged: -1,
             cross_ready: false,
             cross_wait_logged: false,

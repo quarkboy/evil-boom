@@ -1,7 +1,7 @@
 //! Lining up, executing and judging jumps and runs over sinking floors.
 
 use super::Trouble;
-use super::{run_controls, JumpNews, RouteFollower, Run};
+use super::{run_controls, JumpNews, RouteFollower, Run, LIFT_STILL};
 use crate::geom::{
     closest_on_portal, closest_point, dist, funnel, oriented, Point, Seg, PLAYER_HEIGHT,
     PLAYER_RADIUS,
@@ -75,7 +75,7 @@ impl RouteFollower {
             }
             // still moving lately (a lift waits ~3s at the bottom before coming back)
             let still_for = if self.lift_sectors.contains(&sector) {
-                5 * 35
+                LIFT_STILL
             } else {
                 35
             };
