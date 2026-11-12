@@ -1,7 +1,7 @@
 //! Listing and ranking objectives in the currently reachable world.
 
 use super::cut_off::Reach;
-use super::{compass, Explorer, GoingBack, Hooks, Kind, Objective, Suspecting, WHILE_OPEN};
+use super::{compass, Explorer, Focus, GoingBack, Hooks, Kind, Objective, Suspecting, WHILE_OPEN};
 use crate::geom::{dist, segment_distance, Point};
 use crate::knowledge::model::Heard;
 use crate::motor::Observation;
@@ -1311,6 +1311,11 @@ impl Explorer {
                 // (stable: each part in its own order)
                 weighed.sort_by_key(|(_, o)| back_over(o));
             }
+        }
+        // (a goal of whoever directs her: what it's after first, on instinct for them)
+        if !self.directed && self.resorts.is_some() && self.focus != Focus::None {
+            let focus = self.focus;
+            weighed.sort_by_key(|(_, o)| !focus.wants(o));
         }
         if self
             .debug_tics

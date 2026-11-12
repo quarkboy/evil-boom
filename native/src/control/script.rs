@@ -27,6 +27,7 @@
 //!   game start|next|restart ...
 //!                       the game itself, when it's hers (see control::game)
 //!   status              her health, armor, weapons, ammo, keys, what she's doing
+//!   goal G [ref]        a standing aim: out, everything, key [colour], kills, supplies, secrets, none
 //!   why                 why she's doing it: the aim and what it was chosen over, the fight,
 //!                       why she's not shooting, the last action that failed
 //!   where               where she is, her health, what she's doing
@@ -202,6 +203,10 @@ pub fn command(
         },
         Some("status") => Ok(vec![d.status(agent, obs)]),
         Some("why") => Ok(d.why(agent, obs).lines().map(str::to_string).collect()),
+        Some("goal") => match w.get(1) {
+            Some(g) => d.set_goal(agent, obs, g, w.get(2).copied()).map(|s| vec![s]),
+            None => Err("goal out|everything|key [colour]|kills|supplies|secrets|none".into()),
+        },
         Some("check") => {
             let risky = w.last() == Some(&"risky");
             let r = w[1..w.len() - usize::from(risky)].join(" ");

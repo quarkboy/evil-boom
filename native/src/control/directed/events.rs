@@ -106,6 +106,8 @@ pub enum Event {
     OnInstinct,
     /// every kill, item and secret the level counts: done
     LevelComplete,
+    /// her goal met, or nothing more to do for it
+    GoalDone,
     /// the bot's pick suggested (`loud`: the second time)
     Suggestion {
         loud: bool,
@@ -181,6 +183,7 @@ impl Event {
             | E::Sighting { dangerous: true }
             | E::OnInstinct
             | E::LevelComplete
+            | E::GoalDone
             | E::LevelDone
             | E::OnScreen
             | E::GameOffer

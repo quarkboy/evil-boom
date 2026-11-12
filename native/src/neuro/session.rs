@@ -97,6 +97,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
         json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, what you're doing, what you're fighting." }),
+        json!({ "name": "doom_goal", "description": "A standing aim, worked toward whenever no action of yours is in hand, till met: out, everything (100% then out), key (ref: a colour or key id), kills, supplies, secrets; none to drop it.", "schema": s(json!({ "goal": { "type": "string", "enum": ["out", "everything", "key", "kills", "supplies", "secrets", "none"] }, "ref": { "type": "string" } }), &["goal"]) }),
         json!({ "name": "doom_why", "description": "Why you're doing what you're doing: the aim and what it was chosen over, the fight, why you're not shooting, the last action that failed." }),
     ]
 }
@@ -709,6 +710,18 @@ impl Session {
             }
             "doom_status" => (true, self.director.status(agent, obs)),
             "doom_why" => (true, self.director.why(agent, obs)),
+            "doom_goal" => {
+                let Some(g) = arg("goal") else {
+                    return (
+                        false,
+                        "goal: out, everything, key, kills, supplies, secrets or none.".into(),
+                    );
+                };
+                match self.director.set_goal(agent, obs, g, arg("ref")) {
+                    Ok(said) => (true, said),
+                    Err(why) => (false, why),
+                }
+            }
             "doom_answer" => {
                 let (Some(id), Some(choice)) = (arg("id"), arg("choice")) else {
                     return (false, "Give id and choice.".into());

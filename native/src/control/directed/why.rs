@@ -17,6 +17,9 @@ impl Director {
         let mut out = Vec::new();
         // (what she ordered she knows: only what the bot chose by itself is said, the objective
         // it's on, on instinct or inside an explore of hers; and that she's waiting, if she is)
+        if let Some(g) = self.goal_label() {
+            out.push(format!("Your goal: {g}."));
+        }
         match &self.doing {
             None if self.auto_spent => {
                 out.push("Nothing more to do here by yourself: it's yours to say.".to_string());

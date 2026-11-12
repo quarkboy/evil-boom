@@ -373,6 +373,34 @@ pub enum GoingBack {
     Never,
 }
 
+/// On instinct for whoever directs her, a goal of theirs: which objectives come first.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Focus {
+    #[default]
+    None,
+    /// keys, the one wanted or any
+    Keys,
+    /// what's left alive
+    Kills,
+    /// walls to search
+    Secrets,
+    /// things to pick up
+    Supplies,
+}
+
+impl Focus {
+    /// Is o what the goal's after?
+    pub fn wants(self, o: &Objective) -> bool {
+        match self {
+            Focus::None => false,
+            Focus::Keys => o.kind == Kind::Key,
+            Focus::Kills => o.kind == Kind::Hunt,
+            Focus::Secrets => matches!(o.kind, Kind::Wall | Kind::Secret),
+            Focus::Supplies => o.kind == Kind::Item,
+        }
+    }
+}
+
 /// A last resort of `next`'s that whoever directs her may hold back (to ask her about first).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Resort {
@@ -513,6 +541,8 @@ pub struct Explorer {
     /// every secret the level counts found (whoever directs her says, from the tally): on
     /// instinct for them, no walls pressed for more
     pub secrets_done: bool,
+    /// on instinct for whoever directs her, what a goal of theirs puts first
+    pub focus: Focus,
     /// (while choosing, on instinct for whoever directs her) only new ground offered: going back
     /// over what she's done left out, so new ground the risky way comes before it
     new_ground_only: bool,
@@ -672,6 +702,7 @@ impl Explorer {
             going_back: GoingBack::After,
             secrets_done: false,
             new_ground_only: false,
+            focus: Focus::None,
             resort_wanted: None,
             stuck_retried: None,
             lapsing_jumps: (BTreeSet::new(), 0),

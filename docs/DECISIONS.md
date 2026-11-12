@@ -3029,3 +3029,15 @@ happening for minutes, till she set risk bold. Now, on instinct for whoever dire
 before going back over what's done (`new_ground_first`). Never when she plays alone (parity: all
 24 the same). Replayed alone on instinct the corridor never stopped low, and both builds went the
 same to the tic.
+
+## doom_goal: a standing aim (2026-11-12)
+
+The SDK plan's stage 3: `doom_goal out | everything | key [ref] | kills | supplies | secrets |
+none`. With no action of hers in hand the bot works toward it at once (no idle wait), on
+instinct for her with what the goal needs: what it's after first (`Explorer::focus`: keys, hunts,
+walls, pickups), everything as it comes and last resorts let go of for the thorough ones
+(everything, kills, secrets), the exit given back for out (everything turns into out at 100%). Her
+actions come first; the goal goes on after; setting one clears her queue. Met, or with nothing
+more she knows of to do for it, it's said ("Goal done: you have the blue key.") and ended. A key
+goal ends with its level; the rest stand across levels. Shown in her status ("for your goal"),
+doom_why and the stream's column. Not in scored play (parity).

@@ -21,6 +21,7 @@ use crate::play::Agent;
 mod ask;
 mod death;
 mod events;
+mod goal;
 mod kills;
 mod look;
 mod moments;
@@ -353,10 +354,15 @@ impl Director {
     /// its default.
     pub fn calls(&self, tic: i64) -> Vec<String> {
         let left = |until: i64| format!("{} s", ((until - tic).max(0) + 34) / 35);
-        let mut out = vec![match self.tactics.stance {
+        let mut out: Vec<String> = self
+            .goal_label()
+            .map(|g| format!("Goal: {g}"))
+            .into_iter()
+            .collect();
+        out.push(match self.tactics.stance {
             Some((name, until)) if until > tic => format!("Stance: {name} ({})", left(until)),
             _ => format!("Stance: {}", self.policy.stance),
-        }];
+        });
         if let Some((_, name, until)) = self.tactics.target.as_ref().filter(|t| t.2 > tic) {
             out.push(format!("Target: {name} ({})", left(*until)));
         }
@@ -471,6 +477,8 @@ pub struct Director {
     told_auto: String,
     /// the level's 100% told her
     told_complete: bool,
+    /// her standing aim, if she's set one (`doom_goal`)
+    goal: Option<goal::Goal>,
     told_auto_tic: Option<i64>,
     /// on her own she found nothing more to do: not taken up again till an order's been given
     auto_spent: bool,
@@ -610,6 +618,7 @@ impl Director {
 
     /// A new map: names, orders, places and what's been told are the old map's.
     pub fn new_map(&mut self) {
+        self.goal_new_map();
         self.overtaken("a new level");
         self.policy_due = true;
         self.hurt.clear();
@@ -696,7 +705,11 @@ impl Director {
             Some(Doing::Off) => "getting off a hurting floor".to_string(),
             Some(Doing::Pickup) => "picking up nearby".to_string(),
             Some(Doing::Auto) => format!(
-                "by instinct{}",
+                "{}{}",
+                self.goal_label().map_or_else(
+                    || "by instinct".to_string(),
+                    |g| format!("for your goal ({g})")
+                ),
                 agent
                     .x()
                     .current
@@ -1559,6 +1572,9 @@ impl Director {
         if self.explore_paused(agent, obs) {
             return;
         }
+        if self.goal_tick(agent, obs) {
+            return;
+        }
         if matches!(self.doing, Some(Doing::Auto)) {
             self.auto(agent, obs);
             return;
@@ -1946,7 +1962,11 @@ impl Director {
             Event::LevelComplete,
             format!("Level 100%: every kill, item and secret. Exit: {line}."),
         );
-        if matches!(self.doing, Some(Doing::Auto)) && self.question().is_none() {
+        // (a goal of hers says what's next itself: everything's turns into leaving)
+        if matches!(self.doing, Some(Doing::Auto))
+            && self.question().is_none()
+            && self.goal.is_none()
+        {
             let known: Vec<(String, String)> = exits
                 .iter()
                 .map(|e| (e.id.clone(), self.describe(e, obs)))
