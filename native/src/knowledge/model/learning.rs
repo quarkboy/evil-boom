@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Attributing sector movement to triggers and learning whether activations took effect.
 
 use super::{needs_key, Fired, How, Knowledge, BUSY_TICS, SHOT_RANGE, SURE_TICS, TAKE_TICS};

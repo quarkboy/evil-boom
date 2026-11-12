@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Who plays a level: the explorer alone, the explorer after every item (the expert's run), or
 //! the player with monsters about (the fight).
 

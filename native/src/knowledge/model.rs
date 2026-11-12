@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! What Evil knows about the level: only what she has seen and what she has learned by doing.
 //!
 //! Seeing follows the automap: a linedef is mapped once the renderer draws any part of it

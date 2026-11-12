@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! `doom_goal`: a standing aim of hers (the SDK plan's 4.2): the bot works toward it by itself
 //! whenever no action of hers is in hand, at once rather than after the idle wait, till it's met,
 //! nothing more is known to do for it, or she says `none`. An action of hers comes first; the

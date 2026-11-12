@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Listing and ranking objectives in the currently reachable world.
 
 use super::cut_off::Reach;

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Legs of a plan timed against the temporary heights they rely on: a lift that will have
 //! gone back up by the time the player gets there can't be used.
 

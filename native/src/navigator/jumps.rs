@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Run-off jumps: found across the map's gaps once (cached in out/navcache), then checked in
 //! the movement simulator; the ones that don't come off are dropped.
 

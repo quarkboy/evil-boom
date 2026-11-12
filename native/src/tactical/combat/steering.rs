@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Where to move while fighting: every way round scored for room to run, being at the right
 //! distance from each monster (her target's window, the others' standoffs), going across their
 //! line of fire, not ending up between them, and keeping on the way she's going.

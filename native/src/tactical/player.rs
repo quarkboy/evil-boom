@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Evil playing with monsters about: the explorer finds the way, the fight (`Combat`) takes
 //! the controls when it needs them, and between them she goes for what she needs to keep
 //! fighting (weapons, ammo, health, armour she has seen) and, once there's nothing else, hunts

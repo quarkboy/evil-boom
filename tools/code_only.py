@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
 """code_only.py [--check [REV]] [FILE...]: Rust source with its comments taken out.
 
 With FILEs: prints each one's code alone (comments gone, runs of whitespace as one space).

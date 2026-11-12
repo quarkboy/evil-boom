@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The game's end of the console's link (`watch --control ADDR`): connected to the supervisor
 //! once, at the start; a thread reading its commands, one writing what the game says. The game
 //! never waits on either, and plays on if the console goes (the stream isn't the console's).

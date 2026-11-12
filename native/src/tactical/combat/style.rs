@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! How to fight with it: the style a weapon's fought with at a monster (up close or from a
 //! distance), the distance she'd fight it from (its window), and how far the weapon reaches.
 

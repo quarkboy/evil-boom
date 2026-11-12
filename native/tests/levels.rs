@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Against the real IWADs (skipped when they aren't installed): reading them, the movement
 //! rules, the navmesh, planning, and the movement simulator against the engine.
 

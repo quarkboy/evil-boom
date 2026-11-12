@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Path-finding: A* over the navmesh's polys, then the path smoothed and fitted to the
 //! player's box (`fit`), searched again round the polys where the box got squeezed.
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The level's analysis for getting about, and the questions asked of it.
 //!
 //! Heights are kept apart from the mesh. A world (`States`) is, per sector, the heights it can

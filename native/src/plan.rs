@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The plan search: best-first over worlds (the heights possible, keys held, where the player
 //! stands), stepping by firing a trigger or picking up a key. Temporary heights (lifts down,
 //! doors open for a while) carry timers, compared by dominance, and legs are timed against

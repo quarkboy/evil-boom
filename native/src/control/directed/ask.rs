@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Questions from the bot (the plan's 4.6): where the bot wants her say, one question with two or
 //! three options by letter, which is the default, and when the default's taken. Class D (it can
 //! wait): she holds, the default taken at the deadline. Class T (it can't): the default done at

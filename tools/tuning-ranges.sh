@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
 # tuning-ranges.sh [PHASE...]: how far each judgement number can move before she plays worse.
 #
 # One number at a time, each pushed to values well past what any stance or setting uses, every

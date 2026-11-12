@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Her side of the game as the stream console shows it (`console::EvilState`): her settings and
 //! goal, the stream column's calls, her open question with the time it has left, the danger, and
 //! (when asked for: it costs a look at what's open) why the bot's doing what it's doing.

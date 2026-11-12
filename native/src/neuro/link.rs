@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The WebSocket to Neuro, on its own thread: connecting (and reconnecting), `startup` and the
 //! actions registered each time, messages in and out over channels. The game never waits on it.
 

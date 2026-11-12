@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Recognizing interactive surfaces and ranking suspicious walls from visible evidence.
 
 use super::{Behind, Knowledge, LOOKS_INTERACTIVE, SUSPICION_MIN};

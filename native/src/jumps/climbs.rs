@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Climbs: up a face more than a step high, by way of something lower beside it that the box
 //! stands on as it goes (the player stands on the highest floor under the box, so a crate a
 //! step up, off to one side of a taller one, is a stair to it). The navmesh joins only sectors

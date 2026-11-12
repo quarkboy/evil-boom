@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Directed play's commands as text, one a line: what a scripted commander (a `drive` script, or
 //! someone typing into the file a watched game reads) says, and what comes back.
 //!

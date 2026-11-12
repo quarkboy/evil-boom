@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The bot's score: every level from a pistol start on one life (mortal), on the chosen skills
 //! (HMP and UV unless told), each K times on random seeds; a row a run, kept as a TSV, then the
 //! report (a run with nothing new for 5 game minutes is over: STALLED, as good as stuck). A run

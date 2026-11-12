@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Playing a level on what Evil knows: the objectives open to her now, and an explorer that
 //! picks one, plans a way there through the known map, and follows it.
 //!

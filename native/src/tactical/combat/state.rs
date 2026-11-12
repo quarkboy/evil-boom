@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! What the fight keeps from tic to tic, by what it's for: each a part of `Combat`.
 
 use super::super::sound::Hearing;

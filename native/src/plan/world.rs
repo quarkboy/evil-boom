@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The plan search's worlds: per sector, the heights it can be at, shared between nodes
 //! (only the sectors a step changes are copied).
 

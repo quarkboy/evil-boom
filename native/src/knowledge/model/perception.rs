@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Updating visible geometry, hearing movers and feeling damaging floors.
 
 use super::{

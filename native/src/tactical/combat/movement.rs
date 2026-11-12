@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Missile avoidance, strafing and checking safe escape directions.
 
 use super::{clearance, hit_clearance, miss_by, Combat};

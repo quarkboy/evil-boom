@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! A journal of what she decided and on what: a record a decision (which target, which move of
 //! the fight's, a retreat begun, which objective), with the options weighed where the rule had
 //! any, and how things stood (the fight's assessment of that tic). For looking at why she did

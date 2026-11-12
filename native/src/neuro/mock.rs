@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! A stand-in Neuro server (`evil-boom neuro-mock`): the game connects to it as it would to Neuro.
 //! What the game sends (registrations, context, forces with their state, results) is written to a
 //! log, readable; actions are sent from a file as lines are added to it, one a line:

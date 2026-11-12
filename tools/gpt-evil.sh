@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
 # GPT-Evil playing with no window, at x1: `evil-boom watch --headless --speed 1 --gpt`, the
 # language-model stand-in for Evil (config/neuro-gpt.json and its .local.json for the key) run in
 # the same program as the game. (Drop --headless for the window: `evil-boom watch doom E1M1 --gpt`.)

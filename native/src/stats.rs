@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Where a plan search's time goes: counts and seconds per phase, reported on stderr when
 //! EVILBOOM_NATIVE_STATS is set.
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Map loading, agent initialization and replaying recorded input to a branch point.
 
 use super::{hold_exit, RunOptions};

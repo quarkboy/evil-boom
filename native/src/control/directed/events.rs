@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! What she's told, by kind: every piece of news carries what it is, and how much it matters
 //! (`weight`) is this one table's, not each telling's. The words stay with whoever tells it
 //! (they need what only it knows); the kind is for what decides by it: what's a moment, what's

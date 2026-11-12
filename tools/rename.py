@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
 """rename.py OLD NEW [--in FILE]: rename a field, method or function the compiler's way.
 
 There's no IDE here to rename with, and a name like `pressed` or `mode` belongs to several

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! A way between barrels. The mesh knows walls and solid decorations, not barrels (they can be
 //! blown up), so a path by it runs straight through a row of them. For a run out of a field of
 //! barrels she needs the lanes there are between them: a search over a fine grid of the ground

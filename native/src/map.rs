@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! A Doom-format map, as `wad::load_map` reads it.
 
 use std::collections::BTreeMap;

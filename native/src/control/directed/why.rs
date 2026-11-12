@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! `doom_why`: why she's doing what she's doing, from what the bot has worked out this tic (the
 //! SDK plan's 4.1): her action in hand, or on instinct the objective and what it was chosen over;
 //! the fight, what it's doing and what pushed it; why she isn't shooting; the last action that

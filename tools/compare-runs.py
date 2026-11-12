@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
 """Compare deterministic gameplay and elapsed time between two release builds.
 
 Run from the project root, without other sweeps/builds running:

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Running the explorer through a level (knowing only what she has seen) and reporting how it
 //! went; `evil-boom sweep` runs many at once, a process a map (the game is one a process).
 

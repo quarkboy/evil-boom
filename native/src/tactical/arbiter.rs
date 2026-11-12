@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Who has her legs this tic. Three would walk her: the explorer's route, a retreat's route, and
 //! the fight's move; only one does, and the others go on over it where they can (the fight
 //! still aims and fires over a route's legs). This is the one place that says which.

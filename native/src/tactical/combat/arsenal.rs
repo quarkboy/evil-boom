@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Which weapon: what she has to fight with (each slot as the game brings it up, the ammo for
 //! it), whether she's armed, what she can do with it all (firepower, outmatched), and the gun
 //! she'd fight a monster with, every rule for choosing it in `best_gun`.

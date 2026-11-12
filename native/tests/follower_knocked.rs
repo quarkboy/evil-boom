@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The follower must notice it's off the route (warped into a side room 6 s in, as if blasted
 //! there), plan again from where it is, and still exit. (A process of its own: the game is one
 //! a process.)

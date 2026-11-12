@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! What she knows of the level (the polys she can go into, the teleports she knows, the
 //! triggers as far as she's learned them, where she's seen keys), and the questions asked
 //! through it: where she can get to, a path, a plan through triggers and keys.

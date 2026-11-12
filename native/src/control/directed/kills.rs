@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Kills and blasts worth telling: a heavy monster dead, several dead at once (and how many of
 //! them in pieces), barrels going off and what they took with them, her own blast catching her,
 //! the level's last monster.

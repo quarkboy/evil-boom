@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! How things stand this tic, as she'd be told it: worked out once a tic and read by everything
 //! that tells her (her status's gist, the look's danger line, the fight's questions), so they
 //! can't disagree. From the fight's own assessment (`Combat::now`) and its move, and her health.

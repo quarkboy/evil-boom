@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! A language model as Evil (`evil-boom neuro-gpt`): a stand-in Neuro server the game connects to
 //! as it would to Neuro, with an OpenAI model choosing the actions through the Responses API.
 //!

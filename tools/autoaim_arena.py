@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
 """Write arenas/autoaim.txt: rockets fired down off ledges into pits and over low railings, where
 Doom's autoaim tilts the rocket down into the ledge's lip or the railing (the user's). Sites from a
 search of Doom / Doom II (a ledge over a pit at least 64 lower; a thin raised railing between two

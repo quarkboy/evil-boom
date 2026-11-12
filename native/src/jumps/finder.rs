@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Finding run-off jumps across gaps. For every ledge edge (a drop of more than a step), take
 //! the straight run-up behind it, the speed that run-up gives (vanilla thrust and friction),
 //! and fly it: no air friction, gravity 1/tic^2, blocked by walls, by ledge faces more than a

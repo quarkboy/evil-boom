@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Linedef and sector specials in the terms navigation cares about.
 //!
 //! Sources: the vanilla linedef type table (1-141), the Boom reference for generalized linedef

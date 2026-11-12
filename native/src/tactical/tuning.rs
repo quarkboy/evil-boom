@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Every number in the tactical layer that's a judgement (how near is too near, how long before
 //! giving up, what a thing's worth) rather than a fact about the game, in one place: a `Tuning`,
 //! owned by the player and read through `tune` wherever a rule needs one. The defaults are the

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The bot's own opinion, and her eyes.
 //!
 //! The pick: what she'd do next left to herself (the explorer's best objective she has a way

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Carrying out a planned route a tic at a time.
 //!
 //! Each tic the follower gets an Observation (where she is, which way she faces, the live

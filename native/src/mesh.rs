@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The navigation mesh: one convex polygon per subsector (from the BSP), cut around solid
 //! things, joined by portals where polygons share an edge.
 

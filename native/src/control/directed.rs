@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Orders and options for directed play.
 //!
 //! What a commander can talk about (`list`): areas (`places`), doors and switches not yet tried,

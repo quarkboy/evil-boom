@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Following objectives, looking around, and recording arrival or failure.
 
 use super::Why;

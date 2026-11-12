@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The navigator core over a navmesh: which sector heights let the player across which
 //! portals, and the flood fill of where they can get to. Path-finding is in `path`, path
 //! smoothing and fitting the player's box along it in `fit`.

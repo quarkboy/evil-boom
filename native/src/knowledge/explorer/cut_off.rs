@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Sifting a list of things to do down to those she'd go for now: nowhere that would cut her
 //! off from most of what she can get to, as far as she knows; no switch on a floor that hurts
 //! while there's floor that doesn't; and with nothing safe left (`risky`), nearly anything.

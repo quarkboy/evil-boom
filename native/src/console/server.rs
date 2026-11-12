@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! `evil-boom console`: the supervisor. Serves the page (`page.html`, baked in) and its API over
 //! HTTP; keeps the settings; starts the game (`evil-boom watch ... --control ADDR`) as a child,
 //! stops and restarts it; relays the page's commands to it and its state and log to the page.

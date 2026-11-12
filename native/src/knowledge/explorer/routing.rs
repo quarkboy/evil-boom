@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Planning objectives, caching failed searches and checking route risk.
 
 use super::{Explorer, GoalKey, Kind, Objective, KEEP_REACH};

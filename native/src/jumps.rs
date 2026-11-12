@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Run-off jumps: finding them across the map's gaps (`finder`), and the climbs up faces too
 //! high to step by something lower beside them (`climbs`), and checking them in a
-//! player-movement simulator that follows ZDoom's own fixed-point physics (`physics`,
-//! `check`).
+//! player-movement simulator that follows the ZDoom family's fixed-point physics (`physics`,
+//! `check`; written from GZDoom's, GPL-3.0).
 
 mod check;
 mod climbs;

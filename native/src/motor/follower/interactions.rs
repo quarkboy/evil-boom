@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Using doors and switches, shooting lines, and observing their effects.
 
 use super::Trouble;

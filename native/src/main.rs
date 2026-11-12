@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! `evil-boom`: Evil from the command line.
 //!
 //!   evil-boom sweep <wad> [maps...] [<wad> [maps...]] [--jobs N] [run options]

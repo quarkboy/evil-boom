@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Where the plan search has the player stand: to fire a trigger, to pick up a key.
 
 use super::world::World;

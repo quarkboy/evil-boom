@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The game itself, as hers: which level to start, at which skill, and whether just that level
 //! or on through its episode (Doom II: through the game), offered at the title and again once
 //! what she chose is over; on through, the next level when she says so at the tally screen; the

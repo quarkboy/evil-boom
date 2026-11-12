@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! How things stand this tic, worked out once (`Combat::observe`'s last step) and read from
 //! `Combat::now` by whatever decides anything after: the fight's tree, the retreats, the errands,
 //! the explorer's hooks. One answer a tic to "is she outmatched", "what shoots at her", "is she

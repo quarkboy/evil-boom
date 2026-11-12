@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Constructing the navigable world from learned heights, triggers and exclusions.
 
 use super::{Explorer, ViewKey, JUMP_MISSES, STUCK_TIMES};

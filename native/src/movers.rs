@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The heights a special can move sectors to, and how long it takes.
 //!
 //! Targets follow the vanilla source (p_doors.c, p_plats.c, p_floor.c, p_ceilng.c), worked

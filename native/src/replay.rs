@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! A run as its inputs: every tic's controls, the restarts, and what the explorer put down in
 //! the knowledge itself (the journal). Game and bot are deterministic, so a run played back from
 //! these comes to the same state at any tic, the game and what she knows of it, without her

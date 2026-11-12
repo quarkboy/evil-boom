@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Checking jumps in the simulator: stand at the run-up facing the takeoff, sprint (as the
 //! follower does), brake on touchdown, and see whether the player stops on the landing sector
 //! ("stuck"), touches it and slides off ("slid"), or misses it. A soft sprint (full speed only

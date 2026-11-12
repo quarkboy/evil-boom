@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! What things are called, to her: the names a Doom player knows them by ("mancubus", "box of
 //! shells", "partial invisibility"), for everything written for her to read. Inside, a thing
 //! goes by its class name (`dsda::type_name`: "Fatso", "ShellBox", "BlurSphere"), and the

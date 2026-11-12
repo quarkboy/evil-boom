@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Finding standable and reachable pickup positions at believed sector heights.
 
 use super::{Explorer, ARRIVE_SLACK};

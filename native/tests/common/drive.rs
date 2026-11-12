@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Plan E1M1 and follow the plan in the game (seed 0).
 
 use std::rc::Rc;

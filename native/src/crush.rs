@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! What a crusher does to her, by DSDA's p_ceilng.c and p_map.c: it comes down to 8 over its
 //! floor and back up, and while its ceiling is lower than she's tall anywhere over her box she
 //! can't move at all (P_TryMove takes the lowest ceiling over the box) and takes 10 every fourth

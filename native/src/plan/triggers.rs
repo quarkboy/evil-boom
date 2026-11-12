@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The plan search's triggers: what firing each does with the world as it is, from where it
 //! can be fired, and how long what it does lasts.
 

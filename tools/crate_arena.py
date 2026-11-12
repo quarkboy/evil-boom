@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
 """Write arenas/crates.txt: E2M7's crate hall, 10 variations (start, facing, imps placed at random
 among the crates, seeded), the player with the rocket launcher."""
 import struct, random, math

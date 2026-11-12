@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Plane geometry: points and segments, the player's dimensions, the line grid, and the
 //! helpers path smoothing is built from (the funnel, portal clamping, the swept-box test).
 

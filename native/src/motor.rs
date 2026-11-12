@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Moving the player: what she observes and the controls she gives a tic, the path geometry
 //! she follows, and the low-level controller that turns a wanted movement into controls the
 //! way a person playing would (smooth turns, no straferun, working against momentum).

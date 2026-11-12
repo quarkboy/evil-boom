@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Waiting for crushers and escaping a ceiling that pins the player.
 
 use super::Trouble;

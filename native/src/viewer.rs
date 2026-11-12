@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Watching Evil play a map in real time, with what she knows beside the game.
 //!
 //! Left: the game as the player sees it, and the explorer's log. Right: the map as she knows it

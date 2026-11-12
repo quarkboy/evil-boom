@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Driving her by hand, from a script (`evil-boom drive`): to try things out in a level as it is at
 //! some moment of a run (played back with --from), and see what the game does and what she makes
 //! of it. Her knowledge goes on taking in what she sees the whole time.

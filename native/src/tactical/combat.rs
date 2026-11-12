@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Fighting: which monsters Evil knows are there, which to shoot at and with what, getting out
 //! of the way of what's flying at her, and backing off from what would claw her.
 //!

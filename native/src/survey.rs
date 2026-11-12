@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The survey of a WAD's secrets (`evil-boom secret-survey`), for the wall rubric:
 //! which lines must be pressed or shot to get into each secret sector, and how the rubric scores
 //! them, and every other wall she's mapped, as she sees them once she's explored all she can

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Evil: a Doom bot that explores levels knowing only what a player could know, and finishes
 //! them, playing DSDA-Doom in-process.
 //!

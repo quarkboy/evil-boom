@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
 # parity.sh save|check [BINARY]: do the same runs come out the same?
 #
 # A set of fixed-seed runs (a run is the same every time on its seed), each one's outcome and

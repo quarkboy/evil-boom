@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
 # Build the engine: DSDA-Doom at the pinned commit, dsda/dsda-doom.patch applied, as the
 # dsda-evil shared library (and dsda-doom.wad beside it) in
 # third_party/dsda-doom/prboom2/build/.

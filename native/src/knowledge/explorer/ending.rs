@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Why an objective ended short of done (or done some other way than doing it): as the log has
 //! always said it, and plainly for whoever's playing.
 

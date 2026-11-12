@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! What the fight decided, as a type: the tree's node (or what stands in for one with nothing in
 //! sight). The label a decision logs is for reading; what the rest of her does about a decision
 //! goes by its `Move`.

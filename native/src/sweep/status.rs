@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Optional live timing and planner-search diagnostics.
 
 use crate::knowledge::explorer::Explorer;

@@ -4,6 +4,11 @@ version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Evil: a Doom bot that explores and finishes levels, playing DSDA-Doom in-process"
+authors = ["Quarkboy"]
+repository = "https://github.com/quarkboy/evil-boom"
+readme = "../README.md"
+keywords = ["doom", "bot", "game-ai", "neuro-sama"]
+publish = false
 
 [lib]
 name = "evilboom"

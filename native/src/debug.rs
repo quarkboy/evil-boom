@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The debug switches: environment variables a run can be given to have more written to its
 //! log (or to stderr) while tracing one. Read once, when first asked for: a switch tested
 //! every tic costs a field read, not a walk through the environment.

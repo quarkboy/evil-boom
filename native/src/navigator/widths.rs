@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! What the player's box fits through, and the walls that never move.
 
 use std::cell::RefCell;

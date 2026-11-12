@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The level as places a commander can talk about: areas (rooms, halls, corridors) made of sectors.
 //!
 //! Doom maps have no room names, and a sector is often just a step or a patch of light. An area is

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Why a route was given up: the follower's own account (exactly as its log has it, for
 //! whoever traces a run) and the same in a few plain words for whoever's playing, with no
 //! sectors, lines or coordinates in it.

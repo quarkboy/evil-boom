@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Her action's data, mended where its meaning is plain (the SDK's best practices: validate
 //! everything, never assume the data matches the schema): a field under another common name, a
 //! number or a yes as a string, an enum's value in capitals, the whole object sent as a JSON

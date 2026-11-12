@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! How long she keeps at a monster she's getting nowhere with: one ledger for every such clock.
 //! An effort (closing in on what's out of reach, standing with no shot, hitting it and not
 //! hurting it, walking at it and getting no nearer) is kept at for so long, the clock set back

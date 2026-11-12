@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The commit the binary's built from (EVIL_COMMIT: the short hash, "-dirty" with changes not yet
 //! committed), for the logs' names: each run's kept, not written over (the user's).
 

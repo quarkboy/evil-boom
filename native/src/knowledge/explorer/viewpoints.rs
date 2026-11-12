@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Choosing reachable viewpoints for walls the explorer has yet to see.
 use super::{Explorer, Kind, Objective};
 use crate::geom::{dist, midpoint, Point};

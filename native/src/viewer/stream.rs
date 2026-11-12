@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The watcher's window for the stream (`watch --stream [right|left]`): 16:9, 1920x1080. The game
 //! at its own 4:3 fills 1440x1080 on one side; the 480 left over is a column for the viewers: the
 //! level and its name, a map of what she's seen that follows her (her route, her objectives), what

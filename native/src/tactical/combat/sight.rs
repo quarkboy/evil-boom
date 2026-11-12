@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Who can see her where: the one question behind every way she has of getting out of something's
 //! sight (an arch-vile's fire, a hitscanner's burst, a homing missile, what outmatches her; cover,
 //! a post, backing out, the ground a sniper watches). `sees` is the question; `shadow_spot` and

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The expert's run: every item that counts towards the tally picked up, then the exit (no
 //! monsters). The explorer's own way round, with the exit held back till nothing else is left
 //! and the items she has seen and can get to offered as things to do. In vanilla a second

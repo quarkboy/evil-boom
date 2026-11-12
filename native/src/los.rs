@@ -1,4 +1,8 @@
-//! Line of sight between two things, as ZDoom's P_CheckSight works it out: a trace from the
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
+//! Line of sight between two things, as Doom's P_CheckSight works it out (id's, GPL: DSDA-Doom's
+//! p_sight.c, GZDoom's p_sight.cpp): a trace from the
 //! looker's eyes to the target. A one-sided line blocks, and each two-sided one narrows
 //! the window of heights the target can be seen through (its opening
 //! seen from the eyes, as slopes over the distance along the trace). The REJECT table is
@@ -54,7 +58,7 @@ impl LineOfSight {
     }
 
     /// Can `from` see `to`, with the sectors at `heights` [(floor, ceiling)]? (From its eyes,
-    /// three quarters of the way up, as ZDoom's sightzstart.)
+    /// three quarters of the way up, as Doom's sightzstart.)
     pub fn clear(&self, from: Body, to: Body, heights: &[(f64, f64)]) -> bool {
         let eye = from.z + from.height * 0.75;
         // the window the target is seen through, as height per whole trace length

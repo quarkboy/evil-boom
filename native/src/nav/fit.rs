@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Path smoothing: the funnel through the portals A* found, then the waypoints pushed off
 //! corners and walls, checked (and detoured) so the player's box fits between them, and
 //! straightened where it can go direct.

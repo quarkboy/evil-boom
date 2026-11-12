@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The rest of the moments: a level begun and done; a big jump ahead, and how it came down; a
 //! teleport into a crowd; out of ammo in a fight.
 

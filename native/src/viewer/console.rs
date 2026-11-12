@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The watcher under the stream console (`watch --control ADDR`, docs/CONSOLE_PLAN.md): the
 //! console's commands applied at the top of a frame, as the window's own keys are; the game's
 //! state, log and events sent back. A child of the viewer for `Watch`'s insides.

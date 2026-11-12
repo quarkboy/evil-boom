@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The level's triggers and from where each can be set off; teleports; trenches.
 
 use std::collections::{BTreeMap, BTreeSet};

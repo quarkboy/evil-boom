@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! What the follower keeps from tic to tic, by what it's for: each a part of `RouteFollower`.
 
 use super::Run;

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
 # gary.sh [--local] [--watch|--stream] [WAD MAP [watch options...]]: Evil's integration tested against Gary
 # (github.com/Govorunb/gary), a stand-in Neuro server with real LLM engines and an MCP endpoint
 # (docs/GARY.md).

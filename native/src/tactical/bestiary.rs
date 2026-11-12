@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! What's what among the things in a level, by ZDoom class name: monsters (how big, how
 //! tough, how they hurt you), missiles in flight (how fast, how wide), the player's weapons
 //! and the items lying about.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The game's side of the Neuro integration, a tic at a time: her actions checked, answered at
 //! once (before they're carried out: Neuro waits for the answer) and turned into orders; what
 //! happens told as context (notable things not silent); her state now and then; and, when the bot's

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Where a shot is heard: Doom's P_NoiseAlert. The noise floods out from the shooter's sector
 //! through every two-sided line with an opening (a shut door stops it), and through at most one
 //! line marked to block sound (it stops at the second). A monster in a sector it reached wakes

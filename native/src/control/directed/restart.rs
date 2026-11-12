@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The level again from its start, hers once she's made no progress for a while: progress as
 //! the score counts it (something collected or killed, a sector seen, an effect learned, a wall
 //! tried, a line mapped or set off, a place walked). What she came in with is what she has

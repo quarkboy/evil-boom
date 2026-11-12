@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The Neuro integration (docs/NEURO_INTEGRATION_PLAN.md): Evil directs the bot through the Neuro
 //! games SDK's WebSocket protocol. `link`: the connection; `session`: the game's side of it;
 //! `repair`: her action's data mended where its meaning is plain; `mock`: a stand-in Neuro server for testing (actions sent from a file, everything shown);

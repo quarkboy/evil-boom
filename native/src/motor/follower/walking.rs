@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Path tracking, landing caution, pickup approach and recovery from obstacles.
 
 use super::Trouble;

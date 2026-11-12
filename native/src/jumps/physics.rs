@@ -1,7 +1,12 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! A player-movement simulator on the level geometry, for checking jumps without the game.
 //!
-//! It follows ZDoom 2.8.1 per tic, in its 16.16 fixed point, function by function (the names
-//! are ZDoom's), but for the push off the ground, which is vanilla's (DSDA-Doom, Evil's engine):
+//! Our own Rust, written to follow the ZDoom family's player movement per tic, in its 16.16 fixed
+//! point, function by function (the names are those of GZDoom 3.0, GPL-3.0, unchanged in these
+//! since ZDoom 2.8.1; the functions are id Software's, GPL, with ZDoom's changes), but for the
+//! push off the ground, which is vanilla's (DSDA-Doom, Evil's engine):
 //!   input: moves and the turn rounded to the nearest step, as the DSDA-Doom adapter's ticcmd;
 //!     the turn in 1/32768ths of a half turn, moves clamped to 50 and shifted up 8.
 //!   P_MovePlayer: turn, then thrust along the new facing (P_ForwardThrust/P_SideThrust,

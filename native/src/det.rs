@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Hash maps and sets that go round in the same order every run. The standard ones are seeded
 //! at random in each process, and where a choice falls to the order they go round in (a tie),
 //! the same map played the same way comes out differently from one run to the next. Same

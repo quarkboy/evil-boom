@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Target selection, aiming and the trigger, line of fire and blast safety (the weapon choice:
 //! `arsenal`).
 

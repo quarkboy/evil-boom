@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Suspecting walls and choosing the next objective when ordinary exploration stalls.
 
 use super::{

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Lining up, executing and judging jumps and runs over sinking floors.
 
 use super::Trouble;

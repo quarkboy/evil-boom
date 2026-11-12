@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Spike: DSDA-Doom in-process, a tic at a time, its state read straight from memory.
 //! How fast does E1M3 (monsters, Hurt Me Plenty) go, reading everything Evil would each tic?
 use evilboom::dsda::{Mobj, PlayerState, Status};

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! A decision model's say in what she does: small questions put to it as she plays (which of
 //! these to shoot first; what stance to fight in), answered a moment later, the rules deciding
 //! meanwhile and whenever it has nothing sure to say. The model is a classifier of TypeSafe's

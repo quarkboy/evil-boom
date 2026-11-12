@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! WAD files: the lump directory, a map's lumps read into `MapData`, wall texture heights.
 //! Doom-format maps only (Hexen-format and UDMF ones are refused).
 

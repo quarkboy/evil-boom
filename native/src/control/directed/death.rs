@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Her death, told as it came: the blow that killed her, and what had hurt her in the half
 //! minute before it, each by what it was (a monster, its missile, her own rocket, a barrel and
 //! who set it off, the floor, a crusher), as the game has every hit on her.

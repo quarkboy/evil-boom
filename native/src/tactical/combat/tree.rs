@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! The fight as a tree, each tic: the first node that applies says what she does.
 //!
 //! ```text

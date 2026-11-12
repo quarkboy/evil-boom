@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! DSDA-Doom, in-process: the game's own C code built as a library (`dsda/evil_api.c` and
 //! DSDA-Doom's sources; see `dsda/README.md`), run a tic at a time, its state read straight
 //! out of memory. One game a process (the engine is all globals).

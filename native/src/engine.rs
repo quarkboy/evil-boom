@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! DSDA-Doom as Evil's engine: the game in-process (`dsda`), a tic at a time, its state read
 //! into Observations. One game a process: DSDA-Doom is all globals, so sweeps give each map a
 //! process of its own.

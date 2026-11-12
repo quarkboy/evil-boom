@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Pickups as she takes them, by the game's own word for each ("Invulnerability!", "Picked up
 //! the armor.", ...): the powerups, armor, the backpack, and ammo of a kind she had none of
 //! (the user's: not health or armor bonuses, stimpacks, medikits, other ammo, nor a gun she has;

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Preparing planner facts and queries from a restricted view.
 
 use super::{key_bit, states_of, world, Leg, LowVariant, Plan, Route, Step, View};

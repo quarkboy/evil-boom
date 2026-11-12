@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Quarkboy
+
 //! Arenas: a fight set up where wanted, to see how she does in it. A map with its own monsters
 //! left out (its items left in), her put somewhere with a loadout (weapons, ammo, health,
 //! armor), the monsters of the scenario spawned where it says; then the fighting bot plays till
