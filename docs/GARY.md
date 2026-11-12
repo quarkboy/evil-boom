@@ -15,8 +15,10 @@ context, send actions. Registered for this project (local scope):
 
 ## Running it
 
-`tools/gary.sh [--local] [WAD MAP [watch options]]` starts Gary (and with `--local`, the local
-model's server), then the game headless at real speed connected to it. Gary runs inside WSL:
+`tools/gary.sh [--local] [--watch|--stream] [WAD MAP [watch options]]` starts Gary (and with
+`--local`, the local model's server), then the game at real speed connected to it: headless, or
+in the watch window (`--watch`), or in the stream's window with Doom's own screens (`--stream`).
+Each writes its log to `out/watch/live.log`. Gary runs inside WSL:
 WSL's networking here is NAT, so Gary on the Windows side couldn't be reached by the game at
 localhost, and its MCP endpoint only takes connections from its own machine.
 
@@ -36,3 +38,17 @@ localhost, and its MCP endpoint only takes connections from its own machine.
   OpenAI-compatible at `http://127.0.0.1:8080/v1`, model `local`, for the local model. Response
   method: tool calling (structured output the fallback).
 - Its system prompt names the model Gary, and says games may call it Evil.
+
+## What it found, and what's left as it is
+
+- **Gary's diagnostics** (`get_diagnostics`): it wants `additionalProperties: false` on every
+  schema; the SDK's specification lists `additionalProperties` among the keywords Neuro
+  probably doesn't handle well, so ours follow the specification (a field she gives that isn't
+  in the schema is mended to its own name if it's a known alias, else dropped:
+  `neuro/repair.rs`). Its action-result timeouts found a real gap: the watch window, its game
+  over, answered nothing (fixed: answered that the game's over).
+- **Auto-act** (`set_auto_act`): on, the engine is prompted after a few idle seconds as well as on
+  non-silent context and forces: closest to Neuro, acting at her own pace. Off, it acts only on
+  what the game says and forces: a test of whether our own prompts keep her playing.
+- The model's context is trimmed to fit (8k for the local model): `read_events` keeps more
+  (the newest 1,000 events), `get_context` is what the model has now.

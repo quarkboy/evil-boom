@@ -355,6 +355,18 @@ impl Watch {
     /// begun by the window's loop (`start_wanted`); the next level, by the tally screen's
     /// (`next_wanted`).
     pub(super) fn serve_game(&mut self, start: bool, next: bool) {
+        self.serve_off_level(start, next, false);
+    }
+
+    /// The window's own game over (a level or episode done, or lives out, without the game's
+    /// screens): what she asks answered that it's over (Neuro waits on an answer to every
+    /// action: unanswered, each hung till its timeout).
+    pub(super) fn serve_over(&mut self) {
+        self.serve_off_level(false, false, true);
+    }
+
+    /// `serve_game`'s work; `over`: the game's over for good, nothing to offer.
+    fn serve_off_level(&mut self, start: bool, next: bool, over: bool) {
         use crate::control::game::GameAct;
         let choices = self.choices.clone();
         let (mut wanted, mut go_on) = (None, false);
@@ -382,6 +394,9 @@ impl Watch {
                 go_on = true;
                 (true, "On to the next level.".to_string())
             }
+            GameAct::Start { .. } if over => {
+                (false, "The game's over: nothing more to play.".to_string())
+            }
             GameAct::Start { .. } => (false, "Not now: this game's still on.".to_string()),
             GameAct::Next => (false, "Not now: no level to go on to.".to_string()),
             GameAct::Restart => (false, "Not in a level now.".to_string()),
@@ -392,10 +407,17 @@ impl Watch {
         }
         if let Some(neuro) = self.neuro.as_mut() {
             let tic = self.engine.tic;
-            lines.extend(neuro.off_level(tic, |args| match GameAct::of_json(args) {
-                Ok(act) => take(act),
-                Err(e) => (false, e),
-            }));
+            let idle = if over {
+                "The game's over: nothing more to play."
+            } else {
+                "Not in a level now: start a game first (doom_game)."
+            };
+            lines.extend(
+                neuro.off_level(tic, idle, |args| match GameAct::of_json(args) {
+                    Ok(act) => take(act),
+                    Err(e) => (false, e),
+                }),
+            );
         }
         self.agent.x_mut().log.extend(lines);
         // (offered again once what she's chosen is over: a level begun is a Watch afresh, with
@@ -1302,6 +1324,15 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
     let mut aside: Option<Canvas> = None;
     let mut last = Instant::now();
     let mut owed = 0.0;
+    // (her log written as it plays, as a headless watch's is: a watched run read afterwards)
+    let live = out_dir().join("watch").join("live.log");
+    std::fs::create_dir_all(live.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
+    let tag = opts
+        .as_ref()
+        .and_then(|o| o.seed)
+        .map_or_else(String::new, |s| format!("s{s}"));
+    let mut log = crate::config::Log::create(&live, &tag).map_err(|e| e.to_string())?;
+    let (mut shown, mut logged_map) = (0usize, String::new());
     while window.is_open() && !window.is_key_down(K::Escape) {
         for key in window.get_keys_pressed(KeyRepeat::No) {
             match key {
@@ -1417,6 +1448,25 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
                 }
                 None => return Ok(()), // (the episode's over)
             }
+        }
+        // (over, with no game screens to serve her: what she asks still answered)
+        if watch.engine.finished() && watch.present.is_none() {
+            watch.serve_over();
+        }
+        {
+            use std::io::Write;
+            // (a level begun is a new agent, its log new)
+            if watch.map_name != logged_map {
+                let _ = writeln!(log, "== {}", watch.map_name);
+                logged_map.clone_from(&watch.map_name);
+                shown = 0;
+            }
+            let lines = &watch.agent.x().log;
+            let at = watch.engine.tic as f64 / TICRATE;
+            for l in &lines[shown.min(lines.len())..] {
+                let _ = writeln!(log, "[{at:7.1}s] {l}");
+            }
+            shown = lines.len();
         }
         if watch.paused {
             owed = 0.0;

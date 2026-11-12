@@ -298,11 +298,12 @@ impl Session {
 
     /// Off a level (the title, a game over, the end of what she chose, the tally screen): what
     /// comes in handled, `doom_game` by `act` (checked: (success, message));
-    /// any other action answered that there's no level to do it in. What's been told since,
-    /// passed on. The lines for the log.
+    /// any other action answered `idle`: why there's no level to do it in. What's been told
+    /// since, passed on. The lines for the log.
     pub fn off_level(
         &mut self,
         tic: i64,
+        idle: &str,
         mut act: impl FnMut(&Value) -> (bool, String),
     ) -> Vec<String> {
         let mut log = Vec::new();
@@ -338,10 +339,7 @@ impl Session {
                         let (ok, msg) = act(&args);
                         (ok, noted(msg, &notes))
                     } else {
-                        (
-                            false,
-                            "Not in a level now: start a game first (doom_game).".into(),
-                        )
+                        (false, idle.to_string())
                     };
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
                     log.push(format!("<< {}{msg}", if ok { "" } else { "FAILED: " }));

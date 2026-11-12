@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gary.sh [--local] [--watch] [WAD MAP [watch options...]]: Evil's integration tested against Gary
+# gary.sh [--local] [--watch|--stream] [WAD MAP [watch options...]]: Evil's integration tested against Gary
 # (github.com/Govorunb/gary), a stand-in Neuro server with real LLM engines and an MCP endpoint
 # (docs/GARY.md).
 #
@@ -8,7 +8,9 @@
 # Gary's "OpenAI-compatible" engine); then, given a WAD and map, the game at real speed connected
 # to Gary (`watch WAD MAP --headless --speed 1 --neuro ws://127.0.0.1:8000`), its log in
 # out/watch/live.log; with --watch, in the viewer's window instead of headless (to watch it
-# play; close the window to stop). Gary and the model server stay up.
+# play; close the window to stop); with --stream, in the stream's window with Doom's own screens
+# (the tally, the next level, the game offered at the end: as on stream). Gary and the model
+# server stay up.
 #
 # Machine paths (defaults are this laptop's): GARY_APPIMAGE, LLAMA_SERVER, LLAMA_MODEL.
 set -u
@@ -23,6 +25,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --local) local_model=true ;;
     --watch) headless="" ;;
+    --stream) headless="--stream --present" ;;
     *) break ;;
   esac
   shift
