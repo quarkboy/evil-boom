@@ -476,6 +476,10 @@ impl Director {
     /// Leaving with things left: asked (leave anyway, or stay), the question's line given back;
     /// None when there's nothing left to ask about (or no asking now: then the old answer).
     pub fn ask_leave(&mut self, agent: &mut Agent, obs: &Observation) -> Option<String> {
+        // (on her way out already, by her own say: not asked again)
+        if self.leaving() {
+            return None;
+        }
         let left = self.exit_check(agent, obs)?;
         Some(
             self.ask(

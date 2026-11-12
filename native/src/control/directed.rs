@@ -2232,7 +2232,47 @@ impl Director {
         open.into_iter()
             .find(|o| id_of(o) == id)
             .or(current)
-            .ok_or_else(|| format!("Nothing \"{id}\" to go to (done, gone or unknown)."))
+            .ok_or_else(|| {
+                self.no_longer(agent, id).unwrap_or_else(|| {
+                    format!("Nothing \"{id}\" to go to (done, gone or unknown).")
+                })
+            })
+    }
+
+    /// On her way to an exit by an order (or one waiting its turn)?
+    pub fn leaving(&self) -> bool {
+        matches!(&self.doing, Some(Doing::Once(id, _)) if id.starts_with("exit-"))
+            || self.queue.iter().any(|q| {
+                matches!(&q.order, Order::Exit)
+                    || matches!(&q.order, Order::Go(r, _) if self.resolve(r).starts_with("exit-"))
+            })
+    }
+
+    /// What became of a door, switch or exit she was told of that's no longer listed: worked
+    /// already (the bot opened the door on its way, as often as not), or out of her reach from
+    /// here. None if she was never told of it (the caller says it's unknown).
+    pub fn no_longer(&self, agent: &Agent, id: &str) -> Option<String> {
+        if !self.told_exits.contains(id) {
+            return None;
+        }
+        let line = id
+            .split_once("-l")
+            .and_then(|(_, l)| l.parse::<usize>().ok());
+        let worked = line.is_some_and(|l| agent.x().knowledge.tried(l));
+        Some(if worked && id.starts_with("door-") {
+            format!("{id}: opened already.")
+        } else if worked {
+            format!("{id}: pressed already.")
+        } else {
+            format!("{id}: no way to it from where you are now.")
+        })
+    }
+
+    /// Her reference found nothing listed: what became of it if she was told of it, else that
+    /// it's not known.
+    pub fn not_found(&self, agent: &Agent, r: &str) -> String {
+        self.no_longer(agent, &self.resolve(r))
+            .unwrap_or_else(|| format!("Nothing known as \"{r}\"."))
     }
 
     /// Could she go to `r` now (risky: past what she'd rather not, if it won't kill her)? What

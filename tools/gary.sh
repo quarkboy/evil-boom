@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# gary.sh [--local] [WAD MAP [watch options...]]: Evil's integration tested against Gary
+# gary.sh [--local] [--watch] [WAD MAP [watch options...]]: Evil's integration tested against Gary
 # (github.com/Govorunb/gary), a stand-in Neuro server with real LLM engines and an MCP endpoint
 # (docs/GARY.md).
 #
 # Starts Gary with its server on (127.0.0.1:8000, MCP at /mcp) if it isn't running; with
 # --local, llama.cpp's server for a local model too (127.0.0.1:8080, OpenAI-compatible, for
-# Gary's "OpenAI-compatible" engine); then, given a WAD and map, the game headless at real speed
-# connected to Gary (`watch WAD MAP --headless --speed 1 --neuro ws://127.0.0.1:8000`), its log
-# in out/watch/live.log. Stop the game with Ctrl-C; Gary and the model server stay up.
+# Gary's "OpenAI-compatible" engine); then, given a WAD and map, the game at real speed connected
+# to Gary (`watch WAD MAP --headless --speed 1 --neuro ws://127.0.0.1:8000`), its log in
+# out/watch/live.log; with --watch, in the viewer's window instead of headless (to watch it
+# play; close the window to stop). Gary and the model server stay up.
 #
 # Machine paths (defaults are this laptop's): GARY_APPIMAGE, LLAMA_SERVER, LLAMA_MODEL.
 set -u
@@ -17,10 +18,15 @@ LLAMA_SERVER=${LLAMA_SERVER:-$HOME/src/llama.cpp/build/bin/llama-server}
 LLAMA_MODEL=${LLAMA_MODEL:-$HOME/models/Qwen3-8B-Q4_K_M.gguf}
 
 local_model=false
-if [ "${1:-}" = "--local" ]; then
-  local_model=true
+headless=--headless
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --local) local_model=true ;;
+    --watch) headless="" ;;
+    *) break ;;
+  esac
   shift
-fi
+done
 
 # Wait up to $2 tries for a URL to answer (any HTTP status).
 up() {
@@ -54,4 +60,5 @@ if $local_model; then
 fi
 
 [ $# -ge 2 ] || exit 0
-exec out/build/release/evil-boom watch "$1" "$2" --headless --speed 1 --neuro ws://127.0.0.1:8000 "${@:3}"
+# shellcheck disable=SC2086
+exec out/build/release/evil-boom watch "$1" "$2" $headless --speed 1 --neuro ws://127.0.0.1:8000 "${@:3}"

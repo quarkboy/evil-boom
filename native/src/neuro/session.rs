@@ -562,7 +562,7 @@ impl Session {
                 };
                 match self.director.find(agent, obs, r) {
                     Some(e) => (true, self.director.describe(&e, obs)),
-                    None => (false, format!("Nothing known as \"{r}\".")),
+                    None => (false, self.director.not_found(agent, r)),
                 }
             }
             "doom_go" => {
@@ -633,7 +633,7 @@ impl Session {
                     return (false, "Give ref and name.".into());
                 };
                 let Some(e) = self.director.find(agent, obs, r) else {
-                    return (false, format!("Nothing known as \"{r}\"."));
+                    return (false, self.director.not_found(agent, r));
                 };
                 match self.director.name(&e.id, n) {
                     Ok(()) => (true, format!("{} is \"{n}\" now.", e.id)),

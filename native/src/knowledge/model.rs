@@ -645,6 +645,12 @@ impl Knowledge {
         self.mechanism(li)
     }
 
+    /// Has she worked that line, or one that works the same (`tried_key`)?
+    pub fn tried(&self, li: usize) -> bool {
+        let key = self.tried_key(li);
+        self.fired.iter().any(|f| self.tried_key(f.line) == key)
+    }
+
     /// Exit lines she can tell are there: mapped ones, or walk-over ones in a sector she has
     /// seen (they're seldom drawn themselves; the exit room is).
     pub fn exits(&self) -> Vec<usize> {
