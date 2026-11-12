@@ -102,3 +102,27 @@ within five of the full set's rate (about 100 a quarter). What it says:
 For her settings: the stances' spans are all inside what holds (careful 9/50/55/20, steady
 6/35/40/30, bold 3/25/30/45) but for bold's and yolo's `stand_threat`, which is where their cost
 comes from: as their descriptions say.
+
+### Does a flat number change how she plays? `engage.low_health` counted (2026-11-11)
+
+The flattest of phase A's numbers, counted where it decides (`Combat::decided`, a
+measurement only: the defaults' 272 runs played the same to the tic with it). Its three
+checks: standing to fight where she is when hurt (even with little threat in sight), backing
+off from a clawing monster when hurt (even unarmed), and no saw or berserk fist when hurt with a
+gun to hand. "Decided": its clause true and nothing else in the check would have done it; an
+occasion, a stretch of that a second or more from the last. The quarter set, about 200 minutes
+of fighting:
+
+| | 0 | 50 (default) | 90 |
+|---|---|---|---|
+| standing: decided | never | 288 s (2.4% of the check's time), 201 occasions in 54 runs | 1688 s (13%), 1481 occasions in 166 runs |
+| backing off: decided | never | 99 s, 86 occasions in 32 runs | 470 s, 289 occasions in 61 runs |
+| no saw or fist: decided | never | 1 s, 2 occasions | 32 s, 64 occasions in 33 runs |
+| health lost (all runs) | 38,721 | 38,459 | 38,715 |
+| change in score | -0.025 (s.e. 0.009) | | -0.021 (s.e. 0.015) |
+
+So it does show: at 90 she plants herself to fight because she's hurt in three runs of five,
+about nine times a run there, and backs off from claws three times as often; at 0 never. And
+yet the score and the health lost hardly move: standing to fight while hurt and walking on
+while hurt come out about even, so the number is hers to set for how the play looks, not for
+how it goes (`retreat.health` stays the one that keeps her alive).

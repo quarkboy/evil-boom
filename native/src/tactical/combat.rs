@@ -171,6 +171,43 @@ impl Decision {
 /// a way taken this long (tics) after the last is a turn about from it, if it's against it
 const DART_GAP: i64 = 9;
 
+/// A judgement check's counts (`Combat::decided`), for measuring a run.
+#[derive(Clone, Copy, Debug, Default)]
+struct Check {
+    asked: f64,
+    held: f64,
+    decided: f64,
+    occasions: f64,
+    /// the tic being counted, and what came of it so far
+    tic: Option<i64>,
+    now_held: bool,
+    now_decided: bool,
+    /// the last tic it decided
+    last_decided: Option<i64>,
+}
+
+impl Check {
+    /// The tic being counted, added in.
+    fn close_tic(&mut self) {
+        let Some(tic) = self.tic else {
+            return;
+        };
+        self.asked += 1.0;
+        if self.now_held {
+            self.held += 1.0;
+        }
+        if self.now_decided {
+            self.decided += 1.0;
+            if self.last_decided.is_none_or(|t| tic - t > 35) {
+                self.occasions += 1.0;
+            }
+            self.last_decided = Some(tic);
+        }
+        self.now_held = false;
+        self.now_decided = false;
+    }
+}
+
 pub struct Combat {
     nav: Rc<Navigator>,
     /// the numbers she judges by (the player's, shared)
@@ -216,6 +253,8 @@ pub struct Combat {
     pub last_move: Option<Move>,
     /// counts for measuring a run (`STATS`): nothing decides by them
     pub tally: BTreeMap<String, f64>,
+    /// judgement checks, for measuring a run (`decided`): nothing decides by them
+    checks: std::cell::RefCell<BTreeMap<&'static str, Check>>,
     /// monsters she can see now
     pub visible: Vec<Thing>,
     /// barrels she's seen that are still there
@@ -352,6 +391,7 @@ impl Combat {
             nav,
             last_move: None,
             tally: BTreeMap::new(),
+            checks: std::cell::RefCell::new(BTreeMap::new()),
             visible: Vec::new(),
             barrels_seen: Vec::new(),
             route_under_way: false,
@@ -1556,6 +1596,42 @@ impl Combat {
     /// For measuring a run: add `by` to the count called `key`.
     pub fn count(&mut self, key: &str, by: f64) {
         *self.tally.entry(key.to_string()).or_insert(0.0) += by;
+    }
+
+    /// For measuring a run, never for deciding: a judgement number's check, evaluated at `tic`,
+    /// `this` its own clause and `others` the rest of the check (what would decide the same
+    /// without it). A tic counts once however many times the check's asked in it (a target at a
+    /// time, a gun at a time): held if the clause was true at any asking, decided if it was true
+    /// and the rest false at one.
+    pub fn decided(&self, key: &'static str, tic: i64, this: bool, others: bool) {
+        let mut checks = self.checks.borrow_mut();
+        let c = checks.entry(key).or_default();
+        if c.tic != Some(tic) {
+            c.close_tic();
+            c.tic = Some(tic);
+        }
+        c.now_held |= this;
+        c.now_decided |= this && !others;
+    }
+
+    /// The judgement checks' counts (`decided`), as `STATS` lines: for each, the tics it was
+    /// asked, held and decided in, and the occasions it decided (a second or more apart).
+    pub fn check_counts(&self) -> Vec<(String, f64)> {
+        let mut checks = self.checks.borrow_mut();
+        let mut out = Vec::new();
+        for (key, c) in checks.iter_mut() {
+            c.close_tic();
+            c.tic = None;
+            for (what, n) in [
+                ("tics asked", c.asked),
+                ("tics held", c.held),
+                ("tics decided", c.decided),
+                ("occasions decided", c.occasions),
+            ] {
+                out.push((format!("check {key}: {what}"), n));
+            }
+        }
+        out
     }
 
     /// For measuring a run, never for deciding: what she knew of the monster with that id when

@@ -545,12 +545,18 @@ impl Combat {
             } else {
                 1.0
             };
-            if slot == 1
-                && ((w == CHAINSAW && !melee_at(&w, t.name))
-                    || (health < self.tune.engage.low_health && w != weapon(1))
-                    || claws * claw_max(t.name) >= health)
-                && self.guns_armed(obs)
-            {
+            let hurt = health < self.tune.engage.low_health && w != weapon(1);
+            let other =
+                (w == CHAINSAW && !melee_at(&w, t.name)) || claws * claw_max(t.name) >= health;
+            if slot == 1 && self.guns_armed(obs) {
+                self.decided(
+                    "engage.low_health: no saw or berserk fist",
+                    obs.tic,
+                    hurt,
+                    other,
+                );
+            }
+            if slot == 1 && (other || hurt) && self.guns_armed(obs) {
                 // Not the saw at what it won't keep flinching, with a gun to hand: those claws and bites
                 // come through it. Nor the saw or the berserk fist at anything while she's hurt. Nor any
                 // fist at what one claw of could kill her.

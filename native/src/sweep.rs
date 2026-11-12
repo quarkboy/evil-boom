@@ -1102,6 +1102,7 @@ pub fn run_map_in(
             // (what her bullets and pellets hit, by the game's own count: shots into walls, a pellet
             // at a time, a kill by one of seven not hiding the rest)
             let mut tally = p.combat().tally.clone();
+            tally.extend(p.combat().check_counts());
             if let (Some(a), Some(b)) = (pellets_before, e.pellets()) {
                 let [fired, hit, barrel, after, shots, wide, held] =
                     [0, 1, 2, 3, 4, 5, 6].map(|i| f64::from(b[i] - a[i]));

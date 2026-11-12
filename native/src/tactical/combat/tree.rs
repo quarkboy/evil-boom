@@ -361,7 +361,10 @@ fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         .close
         .iter()
         .filter(|t| {
-            armed || c.now.health < c.tune.engage.low_health || claw_max(t.name) >= c.now.health
+            let low = c.now.health < c.tune.engage.low_health;
+            let others = armed || claw_max(t.name) >= c.now.health;
+            c.decided("engage.low_health: backing off", obs.tic, low, others);
+            others || low
         })
         .min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
     let t = nearest.clone();
@@ -646,12 +649,13 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let hold = c.tune.engage.hold_known
         && c.route_into_new(obs)
         && s.target.as_ref().is_some_and(|t| c.reachable(obs, t));
-    if !(c.now.threat >= c.tune.engage.stand_threat
-        || c.now.health < c.tune.engage.low_health
+    let low = c.now.health < c.tune.engage.low_health;
+    let others = c.now.threat >= c.tune.engage.stand_threat
         || duel
         || hold
-        || c.blocking(obs, s.target.as_ref()))
-    {
+        || c.blocking(obs, s.target.as_ref());
+    c.decided("engage.low_health: standing", obs.tic, low, others);
+    if !(others || low) {
         return None;
     }
     // Not for one she's had no shot at for a long while (`no_shot_long`), in front of her or
