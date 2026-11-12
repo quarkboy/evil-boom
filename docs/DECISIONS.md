@@ -2895,3 +2895,28 @@ middle (6, 35, 40, 30). Careful's numbers are still given out in full for it as 
 that over another standing stance, for a while, it's careful. The new defaults play the old
 build-with-careful's runs exactly (three checked to the hash); the baseline is that full set
 (0.453, 399 exits, 26 level-skills beaten every run). Parity re-saved.
+
+## Three things from the Skyrim integration (the user, 2026-11-11)
+
+Read for comparison: vituha230/Neuro-Skyrim-Integration (an SKSE plugin, C++, Neuro the player
+and the code her legs: menus as forced choices, the game paused for a fight's choice, actions
+registered as they apply, much written per quest). Its per-situation registration was the SDK's
+older advice; the best practices (20 August 2026) say keep the set stable, so ours stays as it
+is. Three of its habits taken, the user's choice:
+
+- **Her data mended where its meaning is plain** (`neuro/repair.rs`, read against each action's
+  own registered schema): a field under a common other name (`id` for `ref`, `area` for
+  `target`, `answer` for `choice`; never over a field she gave under its own name), a number or
+  a yes as a string, a float for an integer, an enum's value in other case or with spaces, the
+  whole object sent as a JSON string. A field taken under another name is noted in the result
+  ("(id read as ref)"), so she gives it right next time. What isn't plain is left for the
+  action's check to refuse, as before (the SDK: validate, never assume the schema).
+- **The rules told again** (silently) every 10 minutes, or after 30,000 characters told her
+  (context and results), whichever first: her context rolls. (Skyrim's: 10 minutes or 50,000.)
+  A self-played E1M3 under the mock: told again once at 10 minutes, 11,400 characters in 11.5.
+- **An open question asked again on reconnecting**: what was waiting to go out when the link
+  dropped is gone, so its line is told again (not silent) and it's forced again when due. And
+  no force while the link's down (one went out stale on reconnecting, ahead of everything).
+
+The mock: a dropped connection with a question open told it again and forced it; parity: all
+24 runs the same (the session isn't in a scored run).

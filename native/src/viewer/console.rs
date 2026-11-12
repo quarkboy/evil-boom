@@ -290,7 +290,7 @@ impl Watch {
                 }
                 Command::Say { text } => {
                     let text: String = text.trim().chars().take(SAY_MAX).collect();
-                    let line = match self.neuro.as_ref() {
+                    let line = match self.neuro.as_mut() {
                         Some(n) if !text.is_empty() => {
                             n.say(&text);
                             format!("streamer to Evil: {text}")

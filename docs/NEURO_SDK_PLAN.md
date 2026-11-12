@@ -546,7 +546,7 @@ reads is short.
 | 6 | **Built** (2026-11-11): class T questions (the default done at once, 3 s to switch, never forced): a fight turned bad (outmatched, an arch-vile, a boss, health under 25; once a fight), a run-jump whose miss costs. `Situation`, one snapshot a tic (status, look, questions). Gate run with the stand-in (DECISIONS.md). Typed events built after it (`events.rs`) |
 | 7 | `doom_policy`; then `doom_style` through the classifier | each setting's effect measured on the score's quarter set; none outside its documented range |
 | 8 | The game itself: `doom_game`, `doom_cheat`, the console's switches for what she's allowed and its view of questions and policy | an episode on stream settings, unattended, through a death, a pistol restart, a skill change and each cheat; a disallowed action refused; a cheated level never in a measure |
-| 9 | Latency rehearsal: the mock delaying and dropping her answers; Tony and Randy for malformed and random input | no hang, no stale action, context volume steady over an hour |
+| 9 | Latency rehearsal: the mock delaying and dropping her answers; Tony and Randy for malformed and random input. **Begun** (2026-11-11, from the Skyrim integration's comparison): her data mended where plain (`neuro/repair.rs`), the rules told again every 10 min or 30,000 characters, an open question asked again on reconnecting, no force while the link's down | no hang, no stale action, context volume steady over an hour |
 
 Measures throughout (the earlier plan's, plus): seconds she's idle; questions asked, answered
 in time, defaulted; overrides refused as stale; words of context a minute by channel; notable

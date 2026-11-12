@@ -25,6 +25,10 @@ const MOMENTS_A_MINUTE: usize = 6;
 const MINUTE: i64 = 60 * 35;
 /// a question unanswered this long (tics): a decision forced
 const ASK_FORCE: i64 = 3 * 35;
+/// the rules told again (silently) this often, or after this many characters told her since,
+/// whichever comes first: her context rolls, and the rules shouldn't roll out of it
+const BRIEF_EVERY: i64 = 10 * MINUTE;
+const BRIEF_CHARS: usize = 30_000;
 
 pub struct Session {
     link: Link,
@@ -47,6 +51,9 @@ pub struct Session {
     loud: std::collections::VecDeque<i64>,
     /// told the rules on connecting
     briefed: bool,
+    /// when the rules were last told, and the characters told her since (context and results)
+    briefed_at: i64,
+    told_chars: usize,
 }
 
 /// Who's playing, by the `characterId` of the startup's acknowledgement.
@@ -115,7 +122,29 @@ impl Session {
             shown: 0,
             loud: std::collections::VecDeque::new(),
             briefed: false,
+            briefed_at: 0,
+            told_chars: 0,
         }
+    }
+
+    /// Told her (context): counted, for telling the rules again.
+    fn tell(&mut self, text: &str, silent: bool) {
+        self.told_chars += text.len();
+        self.link.context(text, silent);
+    }
+
+    /// The rules told her (silently), and the count since started again.
+    fn brief(&mut self, tic: i64) {
+        self.link.context(BRIEFING, true);
+        self.briefed = true;
+        self.briefed_at = tic;
+        self.told_chars = 0;
+    }
+
+    /// An action's result sent: counted as what's told her.
+    fn answer(&mut self, id: &str, ok: bool, msg: &str) {
+        self.told_chars += msg.len();
+        self.link.result(id, ok, msg);
     }
 
     /// A tic: what's come in handled; what's happened told; a decision forced if she's waited.
@@ -130,13 +159,18 @@ impl Session {
                     self.forced = false;
                     self.idle_since = obs.tic;
                     if !self.briefed {
-                        self.link.context(BRIEFING, true);
-                        self.briefed = true;
+                        self.brief(obs.tic);
                     }
                     // (her context survives a reconnect: a short status, not everything again)
                     let status = self.director.status(agent, obs);
-                    self.link.context(&status, true);
+                    self.tell(&status, true);
                     self.told_status = (obs.tic, self.director.status_gist(agent, obs));
+                    // (a question open: asked again, what went out before may not have reached
+                    // her; forced again when it's due)
+                    if let Some(line) = self.director.question().map(|q| q.line(obs.tic)) {
+                        self.tell(&line, false);
+                        self.forced_question = None;
+                    }
                 }
                 Incoming::Hello { character, display } => {
                     log.push(format!("neuro: playing with {display} ({character})"));
@@ -160,9 +194,14 @@ impl Session {
                         if ok { "" } else { "FAILED: " },
                         msg.lines().next().unwrap_or("")
                     ));
-                    self.link.result(&id, ok, &msg);
+                    self.answer(&id, ok, &msg);
                 }
             }
+        }
+        if self.connected
+            && (obs.tic - self.briefed_at >= BRIEF_EVERY || self.told_chars >= BRIEF_CHARS)
+        {
+            self.brief(obs.tic);
         }
         self.director.tick(agent, obs);
         self.tell_news(obs.tic, &mut log);
@@ -170,12 +209,19 @@ impl Session {
         // monster's bearing)
         let gist = self.director.status_gist(agent, obs);
         if gist != self.told_status.1 && obs.tic - self.told_status.0 >= STATUS_EVERY {
-            self.link.context(&self.director.status(agent, obs), true);
+            let status = self.director.status(agent, obs);
+            self.tell(&status, true);
             self.told_status = (obs.tic, gist);
         }
         // (a question unanswered a few seconds: a decision forced, the question its state; never
         // one that can't wait, its moment gone by the time a force is answered)
-        if let Some(q) = self.director.question().filter(|q| !q.now) {
+        // (no force while the link's down: it'd go out stale when it's back, and a reconnect
+        // asks again anyway)
+        if let Some(q) = self
+            .director
+            .question()
+            .filter(|q| !q.now && self.connected)
+        {
             if self.forced_question != Some(q.id) && obs.tic - q.opened >= ASK_FORCE {
                 self.forced_question = Some(q.id);
                 self.forced = true;
@@ -197,7 +243,7 @@ impl Session {
         // (waiting on her: after a while, a decision forced; one at a time)
         if !self.director.idle(agent) {
             self.idle_since = obs.tic;
-        } else if !self.forced && obs.tic - self.idle_since >= IDLE_FORCE {
+        } else if self.connected && !self.forced && obs.tic - self.idle_since >= IDLE_FORCE {
             let state = self.state(agent, obs);
             self.link.force(
                 &state,
@@ -246,7 +292,7 @@ impl Session {
                 text.iter()
                     .map(|t| format!("<< {}{t}", if notable { "(!) " } else { "" })),
             );
-            self.link.context(&text.join("\n"), !notable);
+            self.tell(&text.join("\n"), !notable);
         }
     }
 
@@ -267,8 +313,7 @@ impl Session {
                     self.connected = true;
                     self.forced = false;
                     if !self.briefed {
-                        self.link.context(BRIEFING, true);
-                        self.briefed = true;
+                        self.brief(tic);
                     }
                 }
                 Incoming::Hello { character, display } => {
@@ -288,8 +333,10 @@ impl Session {
                         .as_deref()
                         .and_then(|d| serde_json::from_str(d).ok())
                         .unwrap_or(Value::Null);
+                    let (args, notes) = mend(&name, args);
                     let (ok, msg) = if name == "doom_game" {
-                        act(&args)
+                        let (ok, msg) = act(&args);
+                        (ok, noted(msg, &notes))
                     } else {
                         (
                             false,
@@ -298,9 +345,14 @@ impl Session {
                     };
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
                     log.push(format!("<< {}{msg}", if ok { "" } else { "FAILED: " }));
-                    self.link.result(&id, ok, &msg);
+                    self.answer(&id, ok, &msg);
                 }
             }
+        }
+        if self.connected
+            && (tic - self.briefed_at >= BRIEF_EVERY || self.told_chars >= BRIEF_CHARS)
+        {
+            self.brief(tic);
         }
         self.tell_news(tic, &mut log);
         log
@@ -366,8 +418,8 @@ impl Session {
 
     /// A line from the streamer (the stream console's), told her as it is: not silent, it's for her
     /// to hear.
-    pub fn say(&self, text: &str) {
-        self.link.context(&format!("The streamer: {text}"), false);
+    pub fn say(&mut self, text: &str) {
+        self.tell(&format!("The streamer: {text}"), false);
     }
 
     /// An action of hers given by the streamer (the stream console's, for when she's stuck):
@@ -387,7 +439,7 @@ impl Session {
             "doom_list" | "doom_look" | "doom_inspect" | "doom_status"
         ) {
             let first = msg.lines().next().unwrap_or("");
-            self.link.context(
+            self.tell(
                 &format!(
                     "The streamer did {name} {}: {}{first}",
                     data.unwrap_or(""),
@@ -413,6 +465,19 @@ impl Session {
             Some(Ok(v)) => v,
             Some(Err(_)) => return (false, "The action's data wasn't valid JSON.".into()),
         };
+        let (args, notes) = mend(name, args);
+        let (ok, msg) = self.act(agent, obs, name, &args);
+        (ok, noted(msg, &notes))
+    }
+
+    /// An action, its data mended, carried out: (success, message).
+    fn act(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        name: &str,
+        args: &Value,
+    ) -> (bool, String) {
         let arg = |k: &str| {
             args.get(k)
                 .and_then(Value::as_str)
@@ -618,7 +683,7 @@ impl Session {
                     Err(why) => (false, why),
                 }
             }
-            "doom_game" => match crate::control::game::GameAct::of_json(&args) {
+            "doom_game" => match crate::control::game::GameAct::of_json(args) {
                 Ok(crate::control::game::GameAct::Restart) => {
                     match self.director.ask_restart(obs.tic) {
                         Ok(said) => (true, said),
@@ -633,5 +698,24 @@ impl Session {
             },
             _ => (false, format!("No action \"{name}\".")),
         }
+    }
+}
+
+/// An action's data mended against its registered schema (`repair`), and the notes of fields
+/// taken under another name.
+fn mend(name: &str, args: Value) -> (Value, Vec<String>) {
+    let schema = actions()
+        .into_iter()
+        .find(|a| a["name"] == name)
+        .and_then(|a| a.get("schema").cloned());
+    super::repair::repair(args, schema.as_ref())
+}
+
+/// A result's message with what was mended in her data, so she gives it right next time.
+fn noted(msg: String, notes: &[String]) -> String {
+    if notes.is_empty() {
+        msg
+    } else {
+        format!("{msg} ({})", notes.join(", "))
     }
 }
