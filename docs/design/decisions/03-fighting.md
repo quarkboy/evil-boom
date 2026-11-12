@@ -1191,7 +1191,7 @@ Round J: MAP20, MAP21, MAP22, MAP23.
 - **No squeeze past shut sectors** (MAP21: hundreds of "stuck" at a gap exactly the box's 32 wide,
   between a wall and a bar's end or two bars' corners 24 apart both ways; the engine lets her
   through only at the exact unit moving exactly along it, which the follower never hits):
-  `fits_truly_near` (a smaller box fitting within 8 of each squeeze point, ad0e9fe) is gone, a
+  `fits_truly_near` (a smaller box fitting within 8 of each squeeze point, 401d947) is gone, a
   squeeze past shut sectors she can't open is no way, and an objective's stand spot must fit the
   box with half a unit of play (`with_play`). MAP21 no monsters seed 0 stuck -> exits (61/61
   sectors); with monsters, deaths in the gap become stucks further on (a run-jump way not found).

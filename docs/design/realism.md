@@ -504,9 +504,9 @@ run knowing the map and where every monster starts), blind / 8 lives and known /
 | | blind / 1 | known / 1 | blind / 8 | known / 8 |
 |---|---|---|---|---|
 | at the first measuring | 0.399 | 0.328 | 0.534 | 0.503 |
-| at 5e6cf6a | 0.412 | 0.381 | 0.555 | 0.553 |
+| at 01fbc35 | 0.412 | 0.381 | 0.555 | 0.553 |
 
-Out by life at 5e6cf6a, blind / 8: 0.316, 0.383, 0.421, 0.443, 0.458, 0.472, 0.483, 0.489
+Out by life at 01fbc35, blind / 8: 0.316, 0.383, 0.421, 0.443, 0.458, 0.472, 0.483, 0.489
 (known: 0.288, 0.374, 0.417, 0.450, 0.460, 0.475, 0.481, 0.492; sets `cat4-blind8`,
 `cat4-known8`).
 

@@ -27,7 +27,7 @@ How to find out why a run went wrong, from the evidence the runs leave, before c
 
 Every `run-map` writes its whole log here, overwriting it (the latest), and keeps a copy named by
 the seed, the commit and the time it started (UTC):
-`out/explore/DOOM2_MAP08.s3.e1fed91-20261109-051726.txt` (`-dirty` after the commit: built with
+`out/explore/DOOM2_MAP08.s3.d8999a4-20261109-051726.txt` (`-dirty` after the commit: built with
 changes not committed). So runs in parallel, or one after another, each leave their own; the
 same for the arenas' logs (out/arena), the headless watcher's live log (out/watch/live.log) and
 the GPT stand-in's (out/neuro/gpt.log).

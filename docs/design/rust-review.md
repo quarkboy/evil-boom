@@ -2,7 +2,7 @@
 
 > **Status:** done (November 2026). Its module map is the base of [../ARCHITECTURE.md](../ARCHITECTURE.md).
 
-The review baseline is `dd07421`, which includes the pre-existing uncommitted gameplay
+The review baseline is `7673190`, which includes the pre-existing uncommitted gameplay
 improvements. The refactor keeps decision ordering, thresholds, floating-point operations,
 and recorded controls intact. It does not retune the bot.
 

@@ -701,7 +701,7 @@ later. Tried: ground to explore, doors, switches and teleporters counted up to h
 such a key (fading by 1024). Alone on E2M2 it barely moved (the way there opens from a room
 1,400 off, by walk-over lines), and scored run for run -0.0047 (s.e. 0.0025), 16 better, 31
 worse, exits 382 against 387: dropped. For her, the hint does it instead ("Explore toward it:
-nearest unseen", 365bbfa).
+nearest unseen", e6fc4fe).
 
 ## On instinct for her: new ground the risky way before going back over (2026-11-12)
 

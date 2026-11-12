@@ -10,7 +10,7 @@ likely bugs; unclear sections rewritten; data structures made to match the code'
 This is the plan. Nothing in it changes what she does except where a step says so, and those
 steps are scored on their own.
 
-## What the survey found (commit 2d2f5ef)
+## What the survey found (commit 4170c16)
 
 | | |
 |---|---|
@@ -227,22 +227,22 @@ follower and the explorer's tiers are the two I'd do most carefully.
 
 | step | what | commit |
 |---|---|---|
-| 0 | the comment-only check and the parity set | 50e5e1d |
-| - | rustfmt over the crate | 930ecb2 |
-| 1 | comments: all of tactical, all of knowledge | 4d0d3b3 to 5a57a7d |
-| 3 | the debug switches read once (`debug.rs`) | b784191 |
-| 3 | a route refused is refused for a typed reason (`Refusal`) | fbea79c |
-| 3 | a path's notes are a type (`PathNote`), not strings to search | 4d54088 |
-| 3 | the explorer's last resorts are a list of tiers, a function each | d44a1dd |
-| 3 | `Combat::observe` is the list of what she takes in each tic; the counts are three functions | ba0d76a, 44b7982 |
-| 3 | a decision with nothing in her sights is built and logged in one place | f62467b |
-| 3 | five kinds of objective have a function each | ae51a13 |
-| 3 | names, first pass (fight and explorer): a flag says what it means (`baiting`, `urgent`, `route_keeps_legs`, `exit_held_back`, `harm_allowed`, ...); `tools/dev/rename.py` does a rename by the compiler's errors | f50c90f |
-| 3 | the fight's state by what it's for: 44 of `Combat`'s 97 fields are seven parts of it (`combat/state.rs`: movers, trigger, dodge, steer, cover, off_barrels, senses) | 5bb0266 |
-| 3 | sifting the list of things to do is its own module (`explorer/cut_off.rs`): the way back from a place a type (`WayBack`), what a list is sifted by another (`Sift`), out of 300 lines of closures in `list_objectives` (467 lines to 190) | 91e2aca |
-| 1 | comments: the follower, navigation, jumps, the planner and the rest of the crate (about 235); nothing left names the level a rule came from | 72b99a9, 724def0 |
-| 3 | the follower's state by what it's for: 38 fields are seven parts (`follower/state.rs`: shot, chain, weave, crusher, jump, unstick, at) | ce40c98 |
-| 3 | the follower at a goal and walking: each wait and each thing that comes first a function with a name (`act_at_goal` 367 lines to about 110, `walk` 328 to about 180) | a6646c2, 91a75ca |
+| 0 | the comment-only check and the parity set | 8c46187 |
+| - | rustfmt over the crate | c2a32e7 |
+| 1 | comments: all of tactical, all of knowledge | 336b648 to 7d0abee |
+| 3 | the debug switches read once (`debug.rs`) | 68fb28a |
+| 3 | a route refused is refused for a typed reason (`Refusal`) | f138bc5 |
+| 3 | a path's notes are a type (`PathNote`), not strings to search | 54133a9 |
+| 3 | the explorer's last resorts are a list of tiers, a function each | 9c3d3d1 |
+| 3 | `Combat::observe` is the list of what she takes in each tic; the counts are three functions | c2e9ac7, a852e7b |
+| 3 | a decision with nothing in her sights is built and logged in one place | 0ea8c37 |
+| 3 | five kinds of objective have a function each | 7745453 |
+| 3 | names, first pass (fight and explorer): a flag says what it means (`baiting`, `urgent`, `route_keeps_legs`, `exit_held_back`, `harm_allowed`, ...); `tools/dev/rename.py` does a rename by the compiler's errors | 92e234f |
+| 3 | the fight's state by what it's for: 44 of `Combat`'s 97 fields are seven parts of it (`combat/state.rs`: movers, trigger, dodge, steer, cover, off_barrels, senses) | 40d93e3 |
+| 3 | sifting the list of things to do is its own module (`explorer/cut_off.rs`): the way back from a place a type (`WayBack`), what a list is sifted by another (`Sift`), out of 300 lines of closures in `list_objectives` (467 lines to 190) | 2906154 |
+| 1 | comments: the follower, navigation, jumps, the planner and the rest of the crate (about 235); nothing left names the level a rule came from | cb61d33, 1cb158d |
+| 3 | the follower's state by what it's for: 38 fields are seven parts (`follower/state.rs`: shot, chain, weave, crusher, jump, unstick, at) | 4da13fa |
+| 3 | the follower at a goal and walking: each wait and each thing that comes first a function with a name (`act_at_goal` 367 lines to about 110, `walk` 328 to about 180) | 5766bc7, c87980b |
 
 Step 1 is done. Still long in the follower, and not split: `shoot_barrel` (328 lines),
 `check_blocked` (258), `crusher_ahead` (203); each is one rule's cases in order, and wants
@@ -283,9 +283,9 @@ Each scored on the same 1088 runs against the set before it; kept if not signifi
 
 | Finding | What was done | Score (difference, standard error; runs touched) | Commit |
 |---|---|---|---|
-| Pistol taps at a barrel slow | a tap that lit nothing is followed by the next tap, not a run and a wait | -0.0039, 0.0033; 219 | 1f84e43 |
+| Pistol taps at a barrel slow | a tap that lit nothing is followed by the next tap, not a run and a wait | -0.0039, 0.0033; 219 | f2c9f5b |
 | Tapping where no shot can land; the shotgun at a barrel behind a lip | the shot checked by the gun's own line, again at the trigger; the shotgun only with the whole barrel in its view | -0.0009, 0.0023; 87 | see log |
-| The no-shot clock ran for monsters she wasn't standing for | asked only once she'd stand | -0.0006, 0.0011; 16 | ea8a914 |
+| The no-shot clock ran for monsters she wasn't standing for | asked only once she'd stand | -0.0006, 0.0011; 16 | db24a71 |
 | Her pace collapses with the fight's aim behind her | **tried twice, lost twice, not kept.** The route keeping its pace whenever the fight has her eyes: -0.0166 (s.e. 0.0094; exits 401 to 379; health lost a minute 22.8 to 24.3). The same for a retreat's route only: -0.0160 (s.e. 0.0075; UV -0.035). The slow pace with her eyes elsewhere works as a caution: at full pace she's in front of more of them sooner. Left as it is; the note in the code says it's meant | see left | none |
 | Shots traced by where she faced before the turn | **checked, no bug**: `note_rounds_gone` reads the angle of the tic after the shot, which is the angle it left along (the game turns, then fires, in one tic); and it's a count, nothing decides by it | none | |
 | A dip in a floor that hurts reckoned a fraction of a hit | **checked, by design**: the fraction is the expected cost, used to weigh a way against others (`RISK_SHARE`); whether she'd live through it is judged by the hardest whole hit (`hardest_floor_hit`, the margin in `Refusal::ShortOfHealth`) | none | |

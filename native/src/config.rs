@@ -194,7 +194,7 @@ fn utc_now() -> String {
 }
 
 /// A log's kept name: `path` with the run's stamp (and `extra`, a seed, if any) before its
-/// extension: out/explore/DOOM_E1M1.txt -> out/explore/DOOM_E1M1.s3.81d5352-20261108-231500.txt.
+/// extension: out/explore/DOOM_E1M1.txt -> out/explore/DOOM_E1M1.s3.704a9a3-20261108-231500.txt.
 pub fn stamped(path: &Path, extra: &str) -> PathBuf {
     let stem = path
         .file_stem()
