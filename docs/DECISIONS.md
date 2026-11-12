@@ -2981,3 +2981,23 @@ and not chosen again for that barrel.
 Scored, run for run: -0.0006 (s.e. 0.0007), 1072 of 1088 the same, 1 better 1 worse, exits 398
 against 399 (E1M5 UV, one seed: died in a fight after clearing three barrels, within a level's
 seed noise). Kept; the baseline is that set. Parity re-saved.
+
+## Too near: a monster's own reach, not the gun's (the user's, 2026-11-12)
+
+Watched: against imps and cacodemons she backed away the whole fight, round corners, the route
+walking her back after: a yo-yo. Each gun has a nearest to fight from (`keep.0`: the pistol,
+chaingun and plasma rifle 192, the shotgun 128, the launcher and BFG 320), and the fight's
+steering counted any spot nearer a monster than that (or than its own standoff, an imp's 128)
+against it; an imp walking at her is inside 192 the whole fight. The gun's nearest is for a
+blast that reaches her (the launcher, the BFG); for the rest, too near is the monster's own
+reach (`standoff`). Now so by default (`steer.near_by_gun` false; true is the old way, parity
+with it on: all 24 the same as before).
+
+Scored, run for run: -0.0058 (s.e. 0.0093), 125 of 1088 the same, 294 better, 294 worse; exits
+387 against 398; levels beaten every run 23 against 26. Within noise; the user watched both (an
+arena of 50 imps, E2M1 on UV) and liked it better. The baseline is that set. (A first try,
+clawing monsters circled near where she met them, `melee_span`: -0.0042, 9 exits fewer, and it
+missed imps and cacodemons; dropped.)
+
+Cacodemons with only a pistol: she keeps clear at 1024 (`engage.keep_clear`), outmatched (over
+20 s to kill one, `guns.outmatched`): the long retreat the user saw, by design.

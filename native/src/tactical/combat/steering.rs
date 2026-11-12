@@ -413,7 +413,7 @@ impl Combat {
                 let w = (info.threat + 1.0).sqrt();
                 let at = dist(ahead, (m.x, m.y));
                 let (near, far) = if Some(m.id) == target.map(|t| t.id) {
-                    window(gun, m)
+                    window(gun, m, self.tune.steer.near_by_gun)
                 } else {
                     (standoff(m.name), f64::INFINITY)
                 };

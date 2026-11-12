@@ -403,6 +403,11 @@ pub struct Steer {
     /// a way for every `look` of it: only as far as needed, since further wakes more
     pub side_span: f64,
     pub w_span: f64,
+    /// a gun's own nearest (the chaingun's 192) kept as too near for every gun, not only one whose
+    /// blast reaches her (the launcher, the BFG): on, she backs away from every imp walking at
+    /// her; off (2026-11-12, the user's: watched, better), a monster's own reach is too near.
+    /// Off scored -0.0058 (s.e. 0.0093), 11 exits fewer of 1088
+    pub near_by_gun: bool,
     /// with anything shooting in sight, kept this far from a barrel's middle (its blast and a margin)
     pub barrel_keep: f64,
     /// tics before a shotgun's ready that she comes back out for the shot
@@ -446,6 +451,7 @@ impl Default for Steer {
             w_out_of_view: 0.0,
             side_span: 128.0,
             w_span: 4.0,
+            near_by_gun: false,
             barrel_keep: 192.0,
             reload_back: 12.0,
             stuck_tics: 6,

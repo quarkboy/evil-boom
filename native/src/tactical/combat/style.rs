@@ -28,13 +28,23 @@ impl Style {
 
 /// How near to t she'd fight it from with w, and how far: the gun's own (its spread, its blast)
 /// and what t does up close (claws, bites; a cyberdemon's rockets too quick to dodge). Up close
-/// (`Style::Melee`): right up to it, whatever its claws.
-pub fn window(w: &Weapon, t: &Thing) -> (f64, f64) {
+/// (`Style::Melee`): right up to it, whatever its claws. `by_gun`: the gun's own nearest kept for
+/// every gun (`steer.near_by_gun`), not only one whose blast reaches her.
+pub fn window(w: &Weapon, t: &Thing, by_gun: bool) -> (f64, f64) {
     if Style::of(w, t) == Style::Melee {
         return w.keep;
     }
     let s = standoff(t.name);
-    (w.keep.0.max(s), w.keep.1.max(s + 256.0))
+    // (nearer than its own standoff, the monster's reach, is too near with any gun; a gun's own
+    // nearest is kept only for one whose blast reaches her (the launcher, the BFG). Kept for all,
+    // the chaingun's 192 had her backing away from every imp walking at her, the whole fight,
+    // round corners, and the route walking her back after)
+    let near = if by_gun || w.splash > 0.0 {
+        w.keep.0.max(s)
+    } else {
+        s
+    };
+    (near, w.keep.1.max(s + 256.0))
 }
 
 /// The nearest she'd fight a monster from, whatever the gun.

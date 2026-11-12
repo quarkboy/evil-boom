@@ -423,7 +423,7 @@ impl Combat {
     pub(super) fn preferred_gun(&self, obs: &Observation, t: &Thing) -> Weapon {
         let d = dist((t.x, t.y), obs.pos());
         let slot = self.best_gun(obs, t, |w| {
-            let (near, far) = window(w, t);
+            let (near, far) = window(w, t, self.tune.steer.near_by_gun);
             d.clamp(near, far)
         });
         weapon_in(slot, obs)

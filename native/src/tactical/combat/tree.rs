@@ -601,7 +601,8 @@ fn keeping_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         .as_ref()
         .filter(|t| {
             mon(t.name).attack != Attack::None
-                && dist((t.x, t.y), pos) < window(&c.preferred_gun(obs, t), t).0
+                && dist((t.x, t.y), pos)
+                    < window(&c.preferred_gun(obs, t), t, c.tune.steer.near_by_gun).0
         })
         .and_then(|t| {
             let gun = c.preferred_gun(obs, t);
@@ -673,10 +674,12 @@ fn standing(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         let mut moving = c.steer(obs, Some(t), &gun);
         // Closed in on this long already without getting it where she wants it: left a while,
         // as `closing_out_of_reach` leaves it.
-        if (!c.in_reach(&gun, t, d) || d > window(&gun, t).1) && !c.still_closing(obs, t.id) {
+        if (!c.in_reach(&gun, t, d) || d > window(&gun, t, c.tune.steer.near_by_gun).1)
+            && !c.still_closing(obs, t.id)
+        {
             return None;
         }
-        if !c.in_reach(&gun, t, d) || d > window(&gun, t).1 {
+        if !c.in_reach(&gun, t, d) || d > window(&gun, t, c.tune.steer.near_by_gun).1 {
             // Out of reach, closing in has to go nearer. The steering keeps to ground she's
             // been on and to the side, so a step of its that isn't towards the target is no
             // closing, and isn't taken for one.
