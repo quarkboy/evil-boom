@@ -233,23 +233,37 @@ impl Director {
             return String::new();
         }
         let open = self.open_objectives(agent, obs);
-        let near = open
-            .iter()
-            .filter(|o| !matches!(o.kind, Kind::Exit | Kind::Barrel | Kind::Item))
-            .filter(|o| dist(o.goal, at) > 1.0)
-            .min_by(|a, b| dist(a.goal, at).total_cmp(&dist(b.goal, at)));
-        match near {
-            Some(o) => {
-                let p = self.pick_of(agent, obs, o, String::new());
-                let e = Entry {
-                    id: p.id,
-                    what: String::new(),
-                    at: p.at,
-                };
-                format!(" Nearest untried to it: {}.", self.describe(&e, obs))
-            }
-            None => String::new(),
-        }
+        let nearest = |f: &dyn Fn(&Objective) -> bool| {
+            open.iter()
+                .filter(|o| dist(o.goal, at) > 1.0 && f(o))
+                .min_by(|a, b| dist(a.goal, at).total_cmp(&dist(b.goal, at)))
+        };
+        // (what would show her a way there: ground she hasn't seen, a door or switch not tried;
+        // nearest it first. Else whatever's untried nearest it: walls to search, another look)
+        let (o, what) = match nearest(&|o| {
+            matches!(
+                o.kind,
+                Kind::Frontier | Kind::Room | Kind::Door | Kind::Switch | Kind::Teleporter
+            )
+        }) {
+            Some(o) => (o, "Explore toward it: nearest unseen"),
+            None => match nearest(&|o| !matches!(o.kind, Kind::Exit | Kind::Barrel | Kind::Item)) {
+                Some(o) => (o, "Nearest untried to it"),
+                None => return String::new(),
+            },
+        };
+        let p = self.pick_of(agent, obs, o, String::new());
+        let e = Entry {
+            id: p.id,
+            what: String::new(),
+            at: p.at,
+        };
+        let what = if what.ends_with("unseen") && matches!(o.kind, Kind::Door | Kind::Switch) {
+            "Explore toward it: nearest untried"
+        } else {
+            what
+        };
+        format!(" {what}: {}.", self.describe(&e, obs))
     }
 
     /// An order that found nothing to do: the pick, as a sentence ("" if none).
