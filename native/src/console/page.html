@@ -18,7 +18,14 @@ header h1 b { color: var(--accent); }
 .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; background: var(--line); color: var(--dim); }
 .badge.ok { background: #1f3b29; color: var(--ok); } .badge.warn { background: #3d3119; color: var(--warn); } .badge.bad { background: #432020; color: var(--bad); }
 main { display: grid; gap: 12px; padding: 12px 16px 24px; grid-template-columns: minmax(0, 1fr); align-items: start; }
-@media (min-width: 980px) { main { grid-template-columns: 360px minmax(0, 1fr); } }
+#col-split { display: none; }
+@media (min-width: 980px) {
+  main { grid-template-columns: var(--left, 360px) 10px minmax(0, 1fr); column-gap: 2px; }
+  #col-split { display: block; align-self: stretch; cursor: col-resize; border-radius: 4px; min-height: 200px; }
+  #col-split::after { content: ""; display: block; width: 2px; height: 100%; margin: 0 auto; background: var(--line); border-radius: 1px; }
+  #col-split:hover::after, #col-split.moving::after { background: var(--evil); }
+}
+body.resizing { cursor: col-resize; user-select: none; }
 .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 48px; }
 section h2 { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
 section h2 .chev { width: 1em; color: var(--dim); flex: none; }
@@ -39,6 +46,7 @@ section.popped h2 .pop { display: none; }
 section.popped h2::after { content: "in its own window"; font-size: 11px; color: var(--evil); text-transform: none; letter-spacing: 0; }
 body.popout header { display: none; }
 body.popout main { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+body.popout #col-split { display: none; }
 body.popout .col > section:not(.only), body.popout .col:empty { display: none; }
 body.popout section h2 .grip, body.popout section h2 .pop, body.popout section h2 .chev { display: none; }
 body.popout section h2 { cursor: default; }
@@ -193,6 +201,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   </section>
 
   </div>
+ <div id="col-split" title="Drag to widen or narrow the columns"></div>
  <div class="col" id="col-b">
   <section id="viewcard">
     <h2>View <span class="dim" style="text-transform:none;letter-spacing:0">(twice a second; the watcher's own drawing)</span></h2>
@@ -686,7 +695,26 @@ for (const col of document.querySelectorAll("main .col")) {
     clearDrop(); saveLayout();
   });
 }
-$("layout-reset").onclick = () => { try { localStorage.removeItem(LAYOUT_KEY); } catch (e) { /* (none) */ } location.reload(); };
+// The line between the columns, dragged: the left one's width (kept with the layout).
+const SPLIT_KEY = "evil-console-left";
+function setLeft(px) { document.querySelector("main").style.setProperty("--left", px + "px"); }
+try { const w = Number(localStorage.getItem(SPLIT_KEY)); if (w > 0) setLeft(w); } catch (e) { /* (none) */ }
+$("col-split").addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  const main = document.querySelector("main"), box = main.getBoundingClientRect();
+  const pad = parseFloat(getComputedStyle(main).paddingLeft) || 0;
+  let w = null;
+  $("col-split").classList.add("moving"); document.body.classList.add("resizing");
+  const move = (m) => { w = Math.round(Math.max(240, Math.min(box.width - 360, m.clientX - box.left - pad))); setLeft(w); };
+  const up = () => {
+    window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up);
+    $("col-split").classList.remove("moving"); document.body.classList.remove("resizing");
+    if (w) try { localStorage.setItem(SPLIT_KEY, String(w)); } catch (e) { /* (not kept) */ }
+  };
+  window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
+});
+$("col-split").addEventListener("dblclick", () => { setLeft(360); try { localStorage.removeItem(SPLIT_KEY); } catch (e) { /* (none) */ } });
+$("layout-reset").onclick = () => { try { localStorage.removeItem(LAYOUT_KEY); localStorage.removeItem(SPLIT_KEY); } catch (e) { /* (none) */ } location.reload(); };
 if (only && $(only)) {
   // (the one section, unfolded; the window titled by it; the layout's the main page's to keep)
   document.body.classList.add("popout");
