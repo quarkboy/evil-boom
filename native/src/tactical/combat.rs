@@ -241,6 +241,8 @@ pub struct Combat {
     dead: BTreeSet<i32>,
     /// each monster as she last saw it
     last_seen: BTreeMap<i32, Thing>,
+    /// waiting out a crusher on that one, since then
+    crush_wait: Option<(i32, i64)>,
     /// the missiles in flight she's noticed (seen as monsters are; her own always)
     pub missiles_seen: BTreeSet<i32>,
     /// monsters that only claw or charge, in her sight: since when, how far off then, and where
@@ -261,6 +263,8 @@ pub struct Combat {
     pub barrels_seen: Vec<Point>,
     /// a route under way (the player's): its follower has its own crusher rules
     pub route_under_way: bool,
+    /// the route's way on from where she is, as far as it goes unbroken (empty: none)
+    pub route_ahead: Vec<Point>,
     pub target: Option<i32>,
     pub kills: i32,
     pub log: Vec<String>,
@@ -385,6 +389,7 @@ impl Combat {
             },
             dead: BTreeSet::new(),
             last_seen: BTreeMap::new(),
+            crush_wait: None,
             missiles_seen: BTreeSet::new(),
             reach_watch: BTreeMap::new(),
             been: Vec::new(),
@@ -395,6 +400,7 @@ impl Combat {
             visible: Vec::new(),
             barrels_seen: Vec::new(),
             route_under_way: false,
+            route_ahead: Vec::new(),
             target: None,
             kills: 0,
             log: Vec::new(),
@@ -2146,6 +2152,44 @@ impl Combat {
         false
     }
 
+    /// What outmatches her that a crusher she knows of is at work on, as she last saw it: standing
+    /// in one of her crusher sectors whose ceiling has come down within `engage.crush_wait`. It
+    /// dies where it stands, given time, and she has only to keep out of its sight till it has
+    /// (for `engage.crush_hold` at most: out of its sight she can't tell it's still under it).
+    pub(super) fn being_crushed(&mut self, obs: &Observation) -> Option<Thing> {
+        let t = self
+            .last_seen
+            .values()
+            .filter(|t| !self.dead.contains(&t.id) && t.health > 0)
+            .filter(|t| self.too_much(obs, &[t.name], self.tune.guns.outmatched))
+            .find(|t| {
+                self.nav
+                    .poly_at((t.x, t.y))
+                    .map(|q| self.nav.sector_of_poly(q))
+                    .is_some_and(|s| {
+                        self.movers.crushers.contains_key(&s)
+                            && self
+                                .movers
+                                .ceiling_down
+                                .get(s)
+                                .is_some_and(|&at| obs.tic - at < self.tune.engage.crush_wait)
+                    })
+            })
+            .cloned();
+        let Some(t) = t else {
+            self.crush_wait = None;
+            return None;
+        };
+        let since = match self.crush_wait {
+            Some((id, since)) if id == t.id => since,
+            _ => {
+                self.crush_wait = Some((t.id, obs.tic));
+                obs.tic
+            }
+        };
+        (obs.tic - since < self.tune.engage.crush_hold).then_some(t)
+    }
+
     /// An awake monster that was after her and went out of sight a moment ago (behind a pillar,
     /// round a corner): she keeps fighting it, aimed where it was and keeping her distance,
     /// rather than going about her business and walking up to it. Not on a floor that hurts (or
@@ -2652,7 +2696,7 @@ impl Combat {
         }
         let floor = self.floor_at(obs, p);
         let heights = self.heights(obs).to_vec();
-        self.sees(eye_of(s), p, floor, &heights)
+        self.sees_her(eye_of(s), p, floor, &heights)
     }
 
     /// Invulnerable, with time enough left to make something of it (the last seconds counted out:

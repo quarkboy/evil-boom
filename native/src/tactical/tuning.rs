@@ -218,6 +218,18 @@ pub struct Engage {
     pub lost_after: i64,
     /// outmatched by an awake monster this near: keeping clear of it, not getting past
     pub keep_clear: f64,
+    /// ...but a run for it along the route, under a hitscanner's fire, when the route takes her
+    /// out of its sight (or to where she's going) within this many tics at a run...
+    pub dash_tics: i64,
+    /// ...and what it'd take off her on the way (its `threat`, a second's damage) is no more
+    /// than this share of her health
+    pub dash_share: f64,
+    /// what outmatches her stands in a crusher sector she knows of whose ceiling came down
+    /// within this many tics (its stroke back up is slower than this): out of its sight till
+    /// it's dead...
+    pub crush_wait: i64,
+    /// ...for this long at most (out of its sight she can't tell it's still under it)
+    pub crush_hold: i64,
     /// no shooting at anything further
     pub range: f64,
     /// a clawing monster nearer than this: back off from it
@@ -268,6 +280,10 @@ impl Default for Engage {
             lost_tics: 3 * 35,
             lost_after: 9,
             keep_clear: 1024.0,
+            dash_tics: 2 * 35,
+            dash_share: 0.5,
+            crush_wait: 10 * 35,
+            crush_hold: 90 * 35,
             range: 2048.0,
             close: 160.0,
             stand_threat: 9.0,

@@ -9,7 +9,7 @@ use super::steering::WAYS;
 use super::{mon, Combat, Seen};
 use crate::geom::{dist, Point};
 use crate::los::Body;
-use crate::motor::{Observation, Thing};
+use crate::motor::{Observation, Thing, FULL_SPEED, TICRATE};
 use crate::navigator::{PLAYER_HEIGHT, PLAYER_RADIUS};
 
 /// Where a monster sees from: all of it.
@@ -49,6 +49,22 @@ impl Combat {
         self.los.clear(eye, standing(p, z), heights)
     }
 
+    /// Would something seeing from `eye` see any of her standing at p, on a floor at z: her middle
+    /// or either side of her across its line of sight? A thin post's shadow (a row of bars) hides
+    /// her middle, not her; hidden is all of her hidden.
+    pub fn sees_her(&self, eye: Body, p: Point, z: f64, heights: &[(f64, f64)]) -> bool {
+        let (dx, dy) = (p.0 - eye.x, p.1 - eye.y);
+        let len = dx.hypot(dy).max(1.0);
+        let side = (-dy / len * PLAYER_RADIUS, dx / len * PLAYER_RADIUS);
+        [
+            p,
+            (p.0 + side.0, p.1 + side.1),
+            (p.0 - side.0, p.1 - side.1),
+        ]
+        .into_iter()
+        .any(|q| self.sees(eye, q, z, heights))
+    }
+
     /// The nearest place, `reach` or less away along one of the ways round, that something seeing
     /// from `eye` can't see her (well into its shadow: the spot half `SHADOW` past where it loses
     /// her, and all of `SHADOW` past still hidden), as (how far till hidden, the spot).
@@ -60,7 +76,6 @@ impl Combat {
     ) -> Option<(f64, Point)> {
         let pos = obs.pos();
         self.refresh_tic_cache(obs);
-        let z = self.z(obs);
         let mut best: Option<(f64, Point)> = None;
         for i in 0..WAYS {
             let a = 2.0 * std::f64::consts::PI * i as f64 / WAYS as f64;
@@ -70,18 +85,19 @@ impl Combat {
             let mut far = 16.0;
             while far <= room && best.is_none_or(|(bf, _)| far < bf) {
                 let p = (pos.0 + d.0 * far, pos.1 + d.1 * far);
-                let hidden = |c: &Self, q: Point| !c.sees(eye, q, z, &c.heights_now);
-                if self.fits(obs, p) && hidden(self, p) {
-                    // Well into its shadow, not on the edge of it: just past a corner it still sees her.
-                    let deep = far + self.tune.hide.shadow;
-                    if deep <= room && hidden(self, (pos.0 + d.0 * deep, pos.1 + d.1 * deep)) {
-                        best = Some((
-                            far,
-                            (
-                                pos.0 + d.0 * (far + self.tune.hide.shadow / 2.0),
-                                pos.1 + d.1 * (far + self.tune.hide.shadow / 2.0),
-                            ),
-                        ));
+                let at = |k: f64| (pos.0 + d.0 * k, pos.1 + d.1 * k);
+                if self.fits(obs, p) && self.hidden_from(obs, eye, p) {
+                    // Well into its shadow, not on the edge of it: just past a corner it still sees
+                    // her. The spot and all of `SHADOW` past it hidden, not a sliver behind a post.
+                    let (mid, deep) = (
+                        far + self.tune.hide.shadow / 2.0,
+                        far + self.tune.hide.shadow,
+                    );
+                    if deep <= room
+                        && self.hidden_from(obs, eye, at(mid))
+                        && self.hidden_from(obs, eye, at(deep))
+                    {
+                        best = Some((far, at(mid)));
                         break;
                     }
                 }
@@ -91,20 +107,79 @@ impl Combat {
         best
     }
 
+    /// Is all of her out of the sight of something seeing from `eye`, standing at p (on the floor
+    /// there: a lift's, a stair's, a ledge's, not the one she's on now)?
+    pub(super) fn hidden_from(&self, obs: &Observation, eye: Body, p: Point) -> bool {
+        !self.sees_her(eye, p, self.floor_at(obs, p), &self.heights_now)
+    }
+
     /// The way round a corner by the mesh, `SHAKE_FAR` or less along it, to the nearest place
-    /// whose middle something seeing from `eye` can't see.
+    /// whose middle something seeing from `eye` can't see her at (all of her: `hidden_from`).
     pub(super) fn hidden_way(&mut self, obs: &Observation, eye: Body) -> Option<Point> {
         self.refresh_tic_cache(obs);
-        let z = self.z(obs);
         let mesh = std::sync::Arc::clone(&self.nav.mesh);
         let hidden = |p: usize| {
             let c = mesh.poly(p).center;
-            self.fits(obs, c) && !self.sees(eye, c, z, &self.heights_now)
+            self.fits(obs, c) && self.hidden_from(obs, eye, c)
         };
         let h =
             crate::motor::follower::nearest_heading(&mesh, obs, &hidden, self.tune.hide.shake_far)?
                 .to_radians();
         Some((h.cos(), h.sin()))
+    }
+
+    /// A run for it along the route past `t`, under its fire: its fire for the run no more than
+    /// `engage.dash_share` of her health (its `threat` is about a second's damage), the run no
+    /// longer than `engage.dash_tics`. The run: along the route's way on till it's out of its
+    /// sight; or, the way ending in its sight (a switch to press), there and back the same way.
+    pub(super) fn dash_past(&mut self, obs: &Observation, t: &Thing) -> bool {
+        if self.route_ahead.len() < 2 {
+            return false;
+        }
+        let way = std::mem::take(&mut self.route_ahead);
+        let reach = self.tune.engage.dash_tics as f64 * FULL_SPEED;
+        let run = self.in_sight_along(obs, eye(t), &way, reach);
+        self.route_ahead = way;
+        run.is_some_and(|(run, lost)| {
+            let run = if lost { run } else { 2.0 * run };
+            let secs = run / FULL_SPEED / TICRATE;
+            run <= reach
+                && mon(t.name).threat * secs <= self.tune.engage.dash_share * self.now.health
+        })
+    }
+
+    /// How far along `way` (from where she is) she'd go in the sight of something seeing from
+    /// `eye`, and whether it loses her there (else that's the way's end, still in its sight);
+    /// None if that's further than `reach`. Each spot on the floor it's over, as it is this tic.
+    pub(super) fn in_sight_along(
+        &mut self,
+        obs: &Observation,
+        eye: Body,
+        way: &[Point],
+        reach: f64,
+    ) -> Option<(f64, bool)> {
+        self.refresh_tic_cache(obs);
+        let mut run = 0.0;
+        for w in way.windows(2) {
+            let len = dist(w[0], w[1]);
+            let mut along = 0.0;
+            while along < len {
+                if run + along > reach {
+                    return None;
+                }
+                let t = along / len;
+                let p = (
+                    w[0].0 + (w[1].0 - w[0].0) * t,
+                    w[0].1 + (w[1].1 - w[0].1) * t,
+                );
+                if self.hidden_from(obs, eye, p) {
+                    return Some((run + along, true));
+                }
+                along += 16.0;
+            }
+            run += len;
+        }
+        (run <= reach).then_some((run, false))
     }
 
     /// Two bosses awake and about her, of two kinds, one of them with a gun. A hitscanner's

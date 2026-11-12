@@ -4,7 +4,7 @@
 //! decide
 //! ├─ nothing in sight, nothing flying at her
 //! │    out from under a crusher · out of a vile's sight · ducked: waiting out its fire ·
-//! │    lost sight of it: keeping at it ·
+//! │    waiting out the crusher on it · lost sight of it: keeping at it ·
 //! │    the fight over
 //! └─ a target, or a missile on its way
 //!    ├─ survive        out from under a crusher · out of a vile's sight · through a field
@@ -14,10 +14,11 @@
 //!    ├─ melee          (the weapon she'd fight it with, up close: `Style::Melee`) closing in
 //!    │                 · at it
 //!    └─ fight          setting two bosses on each other · backing off from what claws ·
-//!                      sneaking past · shooting on the way to an errand · out of ammo:
-//!                      getting past · closing in (out of reach) · out of reach: going on ·
-//!                      stepping for a shot · outmatched: keeping clear · getting past ·
-//!                      keeping off · standing and fighting · shooting on the way
+//!                      waiting out the crusher on it · sneaking past · shooting on the way
+//!                      to an errand · out of ammo: getting past · closing in (out of reach) ·
+//!                      out of reach: going on · stepping for a shot · outmatched: keeping
+//!                      clear (or making a run for it) · getting past · keeping off ·
+//!                      standing and fighting · shooting on the way
 //! ```
 //!
 //! The nodes are tried in that order and the first to give an `Act` wins. A node may look,
@@ -105,9 +106,10 @@ const BUSY: [Node; 1] = [busy];
 /// The weapon she'd fight her target with fought up close.
 const MELEE: [Node; 1] = [melee];
 /// The fight itself.
-const FIGHT: [Node; 14] = [
+const FIGHT: [Node; 15] = [
     setting_on,
     backing_off,
+    waiting_out_crusher,
     sneaking,
     to_errand,
     unarmed,
@@ -557,7 +559,16 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
         a.hold_fire = true;
         a.why = format!("outmatched: keeping clear of {} (ammo kept)", t.name);
         // A hitscanner's bullets reach her at any range, so with no shot to take she goes out of
-        // its sight, not further off in it.
+        // its sight, not further off in it: unless the route's way on takes her out of it soon
+        // anyway, or to where she's going, for what she can take of its fire on the way. Hiding
+        // from one that holds its ground over the way on is never getting there (a spider
+        // mastermind watching the only way to a switch): a run for it, as a player makes one.
+        if mon(t.name).attack == Attack::Hitscan && c.dash_past(obs, t) {
+            a.moving = None;
+            a.route_keeps_legs = true;
+            a.why = format!("outmatched: making a run for it past {}", t.name);
+            return Some(a);
+        }
         if mon(t.name).attack == Attack::Hitscan {
             if let Some(way) = c.out_of_sight_of(obs, t) {
                 a.moving = Some(way);
@@ -576,6 +587,31 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
         a.route_keeps_legs = true;
         a.why.push_str(": on along the route, away");
     }
+    Some(a)
+}
+
+/// What outmatches her is under a crusher she knows is at work on it (`Combat::being_crushed`):
+/// out of its sight (with nothing in sight she's held there till it's dead), her distance kept
+/// if there's nowhere. Its sight is all there is to keep out of: the crusher does the rest, and
+/// what she has to shoot is kept for what she can kill.
+fn waiting_out_crusher(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    let t = s.target.as_ref()?;
+    if c.being_crushed(obs)?.id != t.id {
+        return None;
+    }
+    let moving = match c.out_of_sight_of(obs, t) {
+        Some(way) => Some(way),
+        None => {
+            let gun = c.preferred_gun(obs, t);
+            c.steer(obs, Some(t), &gun)
+        }
+    };
+    let mut a = Act::new(
+        Move::WaitingOutCrusher,
+        moving,
+        format!("waiting out the crusher on {}", t.name),
+    );
+    a.hold_fire = c.ammo_short_against(obs, t);
     Some(a)
 }
 
@@ -754,6 +790,18 @@ impl Combat {
                 let why = "ducked: waiting out its fire".to_string();
                 self.announce(obs, &why);
                 return Some(Decision::without_shot(Move::Ducked, None, way, why));
+            }
+            // Out of its sight, with a crusher at work on what outmatches her: held there till it's
+            // dead, not off about her business into its sight again.
+            if let Some(t) = self.being_crushed(obs) {
+                let why = format!("waiting out the crusher on {}", t.name);
+                self.announce(obs, &why);
+                return Some(Decision::without_shot(
+                    Move::WaitingOutCrusher,
+                    None,
+                    None,
+                    why,
+                ));
             }
             // Hit from where she isn't looking: she turns to that before going after a monster
             // she has lost sight of.

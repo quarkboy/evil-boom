@@ -828,6 +828,15 @@ impl Player {
             .follower
             .as_ref()
             .is_some_and(|f| !f.done && !f.failed);
+        // (the way the explorer's route goes on, for a run along it: none while a retreat has her)
+        self.fight.combat.route_ahead = match (&self.retreat, &self.explorer.follower) {
+            (None, Some(f)) => f
+                .planned_path(Some(obs.pos()))
+                .into_iter()
+                .map_while(|p| p)
+                .collect(),
+            _ => Vec::new(),
+        };
         // What she knows of floors gone to something that hurts, for where the fight takes her.
         self.fight.combat.hazards = self.explorer.knowledge.hazards(obs.tic);
         // And the crushers she knows of, for where they could have her if they start again.
@@ -1524,7 +1533,7 @@ impl Player {
             let z = heights[nav.sector_of_poly(pi)].0;
             let seen = them
                 .iter()
-                .any(|t| self.fight.combat.sees(eye(t), p, z, &heights));
+                .any(|t| self.fight.combat.sees_her(eye(t), p, z, &heights));
             let clear = them
                 .iter()
                 .all(|t| dist((t.x, t.y), p) > self.fight.tune.retreat.back_clear);
@@ -1879,7 +1888,7 @@ impl Player {
         for t in them {
             let Some(m) = monster(t.name) else { continue };
             for (i, &(p, z)) in places.iter().enumerate() {
-                if self.fight.combat.sees(eye(t), p, z, &heights) {
+                if self.fight.combat.sees_her(eye(t), p, z, &heights) {
                     seen[i] += if weigh { m.threat } else { 1.0 };
                 }
             }
@@ -2047,7 +2056,7 @@ impl Player {
                 let z = heights.get(nav.sector_of_poly(pi)).map_or(0.0, |h| h.0);
                 let seen = them.iter().any(|s| {
                     dist(c, s.pos()) < self.fight.tune.retreat.exposure_range
-                        && combat.sees(eye_of(s), c, z, &heights)
+                        && combat.sees_her(eye_of(s), c, z, &heights)
                 });
                 if seen {
                     self.fight.tune.retreat.exposed
@@ -2109,7 +2118,11 @@ impl Player {
             .collect();
         grid.sort_by(|a, b| a.0.total_cmp(&b.0));
         let combat = &self.fight.combat;
-        let seen = |p: Point, z: f64| shooters.iter().any(|t| combat.sees(eye(t), p, z, &heights));
+        let seen = |p: Point, z: f64| {
+            shooters
+                .iter()
+                .any(|t| combat.sees_her(eye(t), p, z, &heights))
+        };
         let from_them = |p: Point| {
             shooters
                 .iter()

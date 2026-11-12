@@ -55,6 +55,9 @@ pub enum Move {
     HidingFromOutmatcher,
     /// outmatched: on along the route, shooting on the way
     GettingPast,
+    /// what outmatches her under a crusher at work on it: out of its sight, held there till
+    /// it's dead
+    WaitingOutCrusher,
     /// too near for the gun, or for them to miss
     KeepingOff,
     /// the route waits: standing and fighting
@@ -75,7 +78,7 @@ pub enum Move {
 }
 
 impl Move {
-    pub const ALL: [Move; 32] = [
+    pub const ALL: [Move; 33] = [
         Move::OutOfVileSight,
         Move::Ducking,
         Move::Ducked,
@@ -100,6 +103,7 @@ impl Move {
         Move::KeepingClear,
         Move::HidingFromOutmatcher,
         Move::GettingPast,
+        Move::WaitingOutCrusher,
         Move::KeepingOff,
         Move::Standing,
         Move::ClosingIn,
