@@ -57,11 +57,27 @@ impl Director {
     /// The level begun again on her asking (by the runner): told; her orders and her say in the
     /// fight are the attempt before's; names and what's been told of the level stand.
     pub fn restarted(&mut self, tic: i64) {
+        self.begun_again(
+            tic,
+            "The level again from its start, with what you came in with.",
+        );
+    }
+
+    /// The level begun again by the streamer (the console's): told her as theirs; the rest as
+    /// when she asks.
+    pub fn streamer_restarted(&mut self, tic: i64) {
+        self.begun_again(
+            tic,
+            "The streamer started the level again, with what you came in with.",
+        );
+    }
+
+    fn begun_again(&mut self, tic: i64, said: &str) {
         self.restart_wanted = false;
         self.reports.push(Report {
             tic,
             ok: true,
-            text: "The level again from its start, with what you came in with.".into(),
+            text: said.into(),
             event: super::Event::Restarted,
         });
         self.new_life();

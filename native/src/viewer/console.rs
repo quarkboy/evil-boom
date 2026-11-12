@@ -254,10 +254,21 @@ impl Watch {
                 Command::Speed { x } => self.speed = x.clamp(0.25, 16.0),
                 Command::Mute { on } => self.muted = on,
                 Command::RestartLevel => {
-                    // (as a death restarts it, but no life spent: the streamer's call)
+                    // (as she'd ask for it, no life spent: the streamer's call, told her as
+                    // theirs; from any screen, the level's again, Doom's own screens with it)
                     self.engine.restart(true);
-                    self.agent.restart();
+                    self.agent.start_over();
                     self.controls = None;
+                    if let Some(p) = self.present.as_mut() {
+                        p.stage = super::present::Stage::Level;
+                    }
+                    let tic = self.engine.tic;
+                    if let Some(f) = self.feed.as_mut() {
+                        f.director.streamer_restarted(tic);
+                    }
+                    if let Some(n) = self.neuro.as_mut() {
+                        n.director.streamer_restarted(tic);
+                    }
                     self.agent
                         .x_mut()
                         .log
