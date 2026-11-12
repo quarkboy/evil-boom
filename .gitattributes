@@ -1,0 +1,5 @@
+# LF everywhere, on every platform: the bash scripts run in MSYS2 on Windows, and the engine
+# patch must apply byte for byte.
+* text=auto eol=lf
+*.patch text eol=lf
+*.tsv text eol=lf

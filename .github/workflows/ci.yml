@@ -1,0 +1,105 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
+#
+# The checks on every push and pull request: the engine builds, the code is formatted and lints
+# clean, the unit tests pass. Linux always; Windows when the repository is public (its runner
+# minutes count double against a private repository's allowance), or when started by hand.
+# No IWADs here: the integration tests skip themselves (docs/TESTING.md).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config \
+            libsdl2-dev libsdl2-mixer-dev libsndfile1-dev libzip-dev zlib1g-dev \
+            libgl-dev libglu1-mesa-dev
+
+      - name: Engine cache
+        uses: actions/cache@v4
+        with:
+          path: third_party/dsda-doom
+          key: engine-linux-${{ hashFiles('dsda/**', 'tools/build-engine.sh') }}
+
+      - name: Engine
+        run: tools/build-engine.sh
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - name: Format
+        working-directory: native
+        run: cargo fmt --check
+
+      - name: Lint
+        working-directory: native
+        run: cargo clippy --release --all-targets -- -D warnings
+
+      - name: Tests
+        working-directory: native
+        run: cargo test --release
+
+  windows:
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git zip
+            mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_mixer mingw-w64-x86_64-libsndfile
+            mingw-w64-x86_64-libzip mingw-w64-x86_64-zlib mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc
+
+      - name: Engine cache
+        uses: actions/cache@v4
+        with:
+          path: third_party/dsda-doom
+          key: engine-windows-${{ hashFiles('dsda/**', 'tools/build-engine.sh') }}
+
+      - name: Engine
+        shell: msys2 {0}
+        run: tools/build-engine.sh
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - name: Format
+        working-directory: native
+        run: cargo fmt --check
+
+      - name: Lint
+        working-directory: native
+        run: cargo clippy --release --all-targets -- -D warnings
+
+      - name: Tests
+        working-directory: native
+        run: cargo test --release

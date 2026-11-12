@@ -24,8 +24,8 @@ sudo dnf install gcc gcc-c++ cmake ninja-build git SDL2-devel SDL2_mixer-devel \
 Debian / Ubuntu:
 
 ```sh
-sudo apt install build-essential cmake ninja-build git libsdl2-dev libsdl2-mixer-dev \
-  libsndfile1-dev libzip-dev zlib1g-dev pkg-config
+sudo apt install build-essential cmake ninja-build git pkg-config libsdl2-dev \
+  libsdl2-mixer-dev libsndfile1-dev libzip-dev zlib1g-dev libgl-dev libglu1-mesa-dev
 ```
 
 Rust, if you don't have it: <https://rustup.rs> (`curl --proto '=https' --tlsv1.2 -sSf
@@ -130,6 +130,26 @@ top with `--pwad FILE` (see [USAGE.md](USAGE.md)).
 | `EVILBOOM_PWADS` | PWADs over the IWAD (set by `--pwad`; passed on to child runs) |
 | `EVIL_DEBUG_*` | tracing switches: see [DEBUGGING.md](DEBUGGING.md) |
 | `OPENAI_API_KEY`, `JEV_API_KEY` | keys for the GPT stand-in and the advisor (or their `config/*.local.json`) |
+
+## Making a release
+
+Pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`. It builds the Linux and Windows
+packages, and the engine's source archive that the GPL asks a binary release to offer, and
+publishes them as a GitHub release. Started by hand (Actions, *Release*, a version), it makes a
+draft instead.
+
+The packaging scripts also run locally, after building the engine and Evil:
+
+- `tools/release/package-linux.sh VERSION` makes a folder and `.tar.gz` with the program, the
+  engine and the engine's libraries in `lib/` (SDL2, SDL2_mixer, libsndfile, libzip, ...), found
+  through the engine's RUNPATH. It needs `patchelf`. The C and C++ runtimes and the graphics stack
+  stay the system's. Build on an older distribution (CI uses Ubuntu 22.04) for the widest reach.
+- `tools/release/package-windows.sh VERSION` (in MSYS2's MINGW64 shell) makes a `.zip` with
+  the program, the engine, the MinGW-w64 DLLs it loads, and their licenses.
+- `tools/release/engine-source.sh VERSION` archives the patched engine source.
+
+A release runs from wherever it's unpacked: when the engine library is beside the program,
+that folder is its root (`config/`, and `out/` for its logs).
 
 ## Troubleshooting
 

@@ -1,0 +1,110 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Quarkboy
+#
+# A release: pushing a tag v* (or started by hand with a version) builds Linux and Windows
+# packages (tools/release/), the engine's source archive the GPL asks a binary release to
+# offer, and publishes them as a GitHub release (a draft when started by hand).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  VERSION: ${{ github.event.inputs.version || github.ref_name }}
+
+jobs:
+  linux:
+    # (22.04: built against an older glibc, the release runs on newer distributions too)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config patchelf \
+            libsdl2-dev libsdl2-mixer-dev libsndfile1-dev libzip-dev zlib1g-dev \
+            libgl-dev libglu1-mesa-dev
+
+      - name: Engine
+        run: tools/build-engine.sh --clean
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Evil
+        working-directory: native
+        run: cargo build --release --locked --target-dir ../out/build
+
+      - name: Package
+        run: |
+          tools/release/package-linux.sh "${VERSION#v}"
+          tools/release/engine-source.sh "${VERSION#v}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            out/release/*.tar.gz
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git zip
+            mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_mixer mingw-w64-x86_64-libsndfile
+            mingw-w64-x86_64-libzip mingw-w64-x86_64-zlib mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc
+
+      - name: Engine
+        shell: msys2 {0}
+        run: tools/build-engine.sh --clean
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Evil
+        working-directory: native
+        # (the C runtime linked in: no Visual C++ redistributable needed)
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: cargo build --release --locked --target-dir ../out/build
+
+      - name: Package
+        shell: msys2 {0}
+        run: tools/release/package-windows.sh "${VERSION#v}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: out/release/*.zip
+
+  publish:
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || github.ref_name }}
+          draft: ${{ github.event_name == 'workflow_dispatch' }}
+          generate_release_notes: true
+          files: dist/*
