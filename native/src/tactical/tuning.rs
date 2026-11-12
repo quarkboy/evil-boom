@@ -556,6 +556,9 @@ pub struct Guns {
     pub blocked_keep: i64,
     /// the big guns' ammo this much dearer, kept for a boss about
     pub boss_save: f64,
+    /// the big guns that are: those of this slot and up (6: the plasma rifle and the BFG, cells;
+    /// 5 the rocket launcher too; 8 none)
+    pub save_from: i32,
     /// killing what's in sight would take longer than this (s), or more ammo than she has:
     /// outmatched (got past, kept clear of)
     pub outmatched: f64,
@@ -584,6 +587,7 @@ impl Default for Guns {
             blocked_rocket_worse: 3.0,
             blocked_keep: 70,
             boss_save: 10.0,
+            save_from: 6,
             outmatched: 30.0,
             ammo_lands: 0.9,
             short_by: 0.8,
@@ -644,6 +648,13 @@ pub struct Errands {
     pub cost_floor: f64,
     /// seconds a better gun is worth going for anyway (the fights to come)
     pub gun_worth: f64,
+    /// a megasphere gone for when it adds this much to how much she can take (health and armor,
+    /// `Combat::pickup_gain`); short of it, left to come back for
+    pub mega_gain: f64,
+    /// a soulsphere when it adds this much health (200 less this: under 150)
+    pub soul_gain: f64,
+    /// invulnerability taken whenever it's to hand, not kept for a fight that needs it
+    pub invulnerability_now: bool,
 }
 
 impl Default for Errands {
@@ -669,6 +680,9 @@ impl Default for Errands {
             hits: 0.5,
             cost_floor: 10.0,
             gun_worth: 10.0,
+            mega_gain: 100.0,
+            soul_gain: 50.0,
+            invulnerability_now: false,
         }
     }
 }

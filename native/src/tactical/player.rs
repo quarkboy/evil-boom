@@ -261,6 +261,8 @@ pub struct Player {
     advisor: Option<Advisor>,
     /// the tuning she plays by with no stance over it
     base_tune: Rc<Tuning>,
+    /// the run's own numbers, under any policy (`set_policy`)
+    run_tune: Rc<Tuning>,
     /// the stance she's in by the advisor's word ("" none), and till when
     stance: (String, i64),
     /// the advisor's target holds till then
@@ -314,6 +316,7 @@ impl Player {
             things_seen: BTreeSet::new(),
             advisor: None,
             base_tune: Rc::clone(&tune),
+            run_tune: Rc::clone(&tune),
             stance: (String::new(), 0),
             target_until: 0,
             asked: (i64::MIN / 2, i64::MIN / 2),
@@ -519,8 +522,24 @@ impl Player {
         }
     }
 
+    /// Her standing numbers (whoever directs her: her policy, `over` the run's own tuning), from
+    /// now on; a stance taken for a while ends with it.
+    pub fn set_policy(&mut self, over: &serde_json::Value) -> Result<(), String> {
+        let t = Rc::new(self.run_tune.with(over)?);
+        self.stance.0.clear();
+        self.set_tuning_only(t);
+        Ok(())
+    }
+
+    fn set_tuning_only(&mut self, tune: Rc<Tuning>) {
+        self.base_tune = Rc::clone(&tune);
+        self.fight.combat.tune = Rc::clone(&tune);
+        self.fight.tune = tune;
+    }
+
     /// Other numbers to judge by, from now on (a decision model's choice of stance).
     pub fn set_tuning(&mut self, tune: Rc<Tuning>) {
+        self.run_tune = Rc::clone(&tune);
         self.base_tune = Rc::clone(&tune);
         self.fight.combat.tune = Rc::clone(&tune);
         self.fight.tune = tune;
@@ -2254,6 +2273,12 @@ impl Fight {
         self.clear_way_to(obs, p) && !self.combat.ammo_short_for_each(obs, &by)
     }
 
+    /// Invulnerability worth taking now: a fight that needs it, or her policy taking it as it
+    /// comes (`errands.invulnerability_now`).
+    fn wants_invulnerability(&self, obs: &Observation) -> bool {
+        self.tune.errands.invulnerability_now || self.needs_invulnerability(obs)
+    }
+
     /// Something about she can't take on (awake, known), or what's about her too much together
     /// (outmatched, or round her on several sides): invulnerability's for that.
     fn needs_invulnerability(&self, obs: &Observation) -> bool {
@@ -2484,7 +2509,7 @@ impl Fight {
                 if t.name == "InvulnerabilitySphere" {
                     // In the middle of a fight she can't win as she is: what wins it.
                     return dist((t.x, t.y), pos) < 2.0 * self.tune.errands.item_range
-                        && self.needs_invulnerability(obs)
+                        && self.wants_invulnerability(obs)
                         && self.clear_way_to(obs, (t.x, t.y));
                 }
                 if let Some(slot) = weapon_item(t.name)
@@ -2587,10 +2612,18 @@ impl Fight {
             let carried_nearer = carried
                 .iter()
                 .any(|(gun, s)| *gun == t.name && dist(s.pos(), pos) < d);
+            // The big spheres only when they'd add enough (the user's: a megasphere 100 to what she
+            // can take, a soulsphere 50 health); short of that, left where they lie to come back for.
+            if (t.name == "Soulsphere" && health > 200.0 - self.tune.errands.soul_gain)
+                || (t.name == "Megasphere"
+                    && Combat::pickup_gain(obs, "Megasphere") < self.tune.errands.mega_gain)
+            {
+                continue;
+            }
             // How much it's needed (0: not at all, 1: badly).
             let mut need = 0.0;
             let invulnerability = t.name == "InvulnerabilitySphere"
-                && self.needs_invulnerability(obs)
+                && self.wants_invulnerability(obs)
                 && self.clear_way_to(obs, (t.x, t.y));
             if invulnerability || (weapon_item(t.name).is_some() && Self::new_gun(obs, t.name)) {
                 need = 1.0;
@@ -2898,7 +2931,7 @@ impl Hooks for Fight {
             .and_then(|id| obs.things.iter().flatten().find(|t| t.id == id))
             .is_some_and(|t| t.name == "InvulnerabilitySphere")
         {
-            return !self.needs_invulnerability(obs);
+            return !self.wants_invulnerability(obs);
         }
         if self.combat.now.invulnerable {
             return false; // (nothing can hurt her: the risky ones now)

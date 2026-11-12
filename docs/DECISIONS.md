@@ -2856,3 +2856,23 @@ default) is the thorough search, most suspicious walls or every one. In a script
 REF|DIR [2|3]`. What she's told says the thoroughness only when it's a search ("Exploring N
 +secrets 3."), 1 being every exploring's. Checked on E1M1 by orders file. Parity: 24 the same
 (directed play only).
+
+## Stage 7, step 3: two defaults changed, and her settings (the user, 2026-11-11)
+
+- **Cells kept for bosses, rockets spent freely** (the user's: cells matter more). With a boss
+  seen and about, only the plasma rifle's and the BFG's ammo is kept dear (`guns.save_from` 6;
+  it was 5, the launcher too). Scored: +0.0017 (s.e. 0.0017), 1065 of 1088 runs the same; kept.
+- **The big spheres when they'd add enough** (the user's rule): a megasphere when it adds 100
+  to what she can take (`Combat::pickup_gain`, armor by what it'll take for her; `errands.
+  mega_gain`), a soulsphere when it adds 50 health (`errands.soul_gain`); short of it, left
+  to come back for. Scored: +0.0000, 15 runs moved in time and none in points; kept. The
+  baseline is that set (0.459, 402 exits).
+- **Her settings** (`control/directed/policy.rs`, `doom_policy`, a script's `policy SETTING
+  VALUE`): `stance` steady | bold | careful | avoid | yolo, `save` cells | none, `risk` careful
+  | normal | bold, `powerups` need | now; numbers over the run's tuning (`Player::set_policy`,
+  applied on a change and on each level's new player; a `doom_fight` stance for a while goes on
+  top and ends with a change). Yolo (the user's: all in, for fun) is asked first: "Yolo: you
+  fight everything head on, never fall back, never keep clear of anything. Sure?", no by
+  default. `powerups now` takes invulnerability as it comes (`errands.invulnerability_now`).
+  Which settings exist isn't up to the score (the user's): each value's cost is measured and
+  written into her description, not used to keep or drop it.

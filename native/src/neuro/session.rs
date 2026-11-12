@@ -86,7 +86,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_name", "description": format!("Name something (up to {NAME_MAX} characters); the name then works as its id."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": "Your fight, for a while (10 s unless seconds; then by reflex again). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / steady: how you fight. auto: all by reflex again.", "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
-        json!({ "name": "doom_policy", "description": "Standing settings. idle: seconds with no action before you carry on by instinct, not leaving (0: you wait). hints: suggestions of what to do next, off, on_stall or always. answers: seconds a question waits before its default (0: till you answer).", "schema": s(json!({ "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] }, "answers": { "type": "integer" } }), &[]) }),
+        json!({ "name": "doom_policy", "description": format!("Standing settings; give any, or none to hear them. {} idle: seconds with no action before you carry on by instinct (0: you wait). hints: suggestions, off, on_stall or always. answers: seconds a question waits before its default (0: till you answer).", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["steady", "bold", "careful", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] }, "answers": { "type": "integer" } }), &[]) }),
         json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map, skill 1-5, play single or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer" }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
@@ -455,8 +455,15 @@ impl Session {
                     Some(h) => h,
                     None => None,
                 };
-                if idle.is_none() && hints.is_none() && answers.is_none() {
-                    return (false, "Give idle, hints or answers.".into());
+                // (her settings first: one refused, or yolo asked about, is answered at once)
+                for setting in ["stance", "save", "risk", "powerups"] {
+                    if let Some(v) = arg(setting) {
+                        match self.director.set_policy(obs, setting, v) {
+                            Ok(s) if s.starts_with("[ask") => return (true, s),
+                            Ok(_) => {}
+                            Err(why) => return (false, why),
+                        }
+                    }
                 }
                 if let Some(secs) = answers {
                     self.director.answer_wait = (secs > 0.0).then_some((secs * 35.0) as i64);
@@ -478,7 +485,8 @@ impl Session {
                 (
                     true,
                     format!(
-                        "You {idle}; hints {}; {answers}.",
+                        "Your policy: {}. You {idle}; hints {}; {answers}.",
+                        self.director.policy.line(),
                         self.director.hints.name()
                     ),
                 )

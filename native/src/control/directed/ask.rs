@@ -37,6 +37,8 @@ pub enum Then {
     Stay,
     /// her say in the fight (`Director::fight`'s: "retreat", "bold", ...)
     Tactic(&'static str),
+    /// one of her settings taken (`policy.rs`)
+    Policy(&'static str, &'static str),
     /// the run-jump lined up for not taken, nor that leap again
     DontJump(Box<crate::navigator::Jump>),
     /// nothing: as she was
@@ -445,6 +447,10 @@ impl Director {
                 let x = agent.x_mut();
                 x.resorts = Some(self.resorts.clone());
                 x.resort_wanted = None; // (stale till she chooses again: not asked twice)
+            }
+            Then::Policy(setting, v) => {
+                let said = self.policy_to(setting, v);
+                self.tell(obs, Event::Tactic, said);
             }
             Then::Tactic(t) => {
                 let said = match self.fight(agent, obs, t, None, None) {

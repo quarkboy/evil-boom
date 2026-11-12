@@ -14,6 +14,8 @@
 //!                       her say in the fight, each for a while (10 s, a stance 30)
 //!   idle SECONDS|wait   with no order that long she carries on by herself (not leaving the
 //!                       level); wait: she waits, as long as it takes
+//!   policy [SETTING VALUE]
+//!                       her standing settings (stance, save, risk, powerups); none: as they are
 //!   look                what's round her: the room, what it leads to, what's in sight and heard,
 //!                       the bot's pick
 //!   hints off|on_stall|always
@@ -161,6 +163,10 @@ pub fn command(
             }])
         }
         Some("look") => Ok(d.look(agent, obs)),
+        Some("policy") => match (w.get(1), w.get(2)) {
+            (Some(setting), Some(v)) => d.set_policy(obs, setting, v).map(|s| vec![s]),
+            _ => Ok(vec![format!("Your policy: {}.", d.policy.line())]),
+        },
         Some("answer") => {
             let id = w
                 .get(1)

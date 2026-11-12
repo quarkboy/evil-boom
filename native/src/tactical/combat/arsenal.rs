@@ -572,7 +572,7 @@ impl Combat {
                     / (w.damage_on(&info) * w.hits(info.radius, d)).max(1.0))
                 .max(1.0);
                 let (per, low) = ammo_cost(slot);
-                let kept = if saving && slot >= 5 {
+                let kept = if saving && slot >= self.tune.guns.save_from {
                     self.tune.guns.boss_save
                 } else {
                     1.0

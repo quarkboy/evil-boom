@@ -24,6 +24,7 @@ mod events;
 mod kills;
 mod look;
 mod moments;
+mod policy;
 mod powers;
 mod restart;
 mod situation;
@@ -32,6 +33,7 @@ pub use ask::{Question, ANSWER_WAIT};
 pub use events::{Event, Weight};
 pub use look::{Hints, Listing, Pick};
 pub use moments::{skill_name, Level};
+pub use policy::{help as policy_help, Policy};
 pub use situation::Situation;
 
 /// a name at most this long (refused, not cut: a name she didn't choose is one she won't use)
@@ -231,17 +233,13 @@ const STANCE_MOST: f64 = 180.0;
 /// The stances she can order, with what each puts over the tuning (the advisor's, as
 /// config/jev.json has them: a first guess, not tuned).
 fn stance(name: &str) -> Option<(&'static str, serde_json::Value)> {
-    Some(match name {
-        "bold" | "push" | "aggressive" => (
-            "bold",
-            serde_json::json!({ "engage": { "stand_threat": 3.0, "low_health": 25.0 }, "retreat": { "health": 30.0 }, "guns": { "outmatched": 45.0 } }),
-        ),
-        "careful" | "cautious" => (
-            "careful",
-            serde_json::json!({ "engage": { "stand_threat": 9.0, "low_health": 50.0 }, "retreat": { "health": 55.0 }, "guns": { "outmatched": 20.0 } }),
-        ),
+    // (for a while, with `doom_fight`: bold or careful; standing ones are her policy's)
+    let name = match name {
+        "bold" | "push" | "aggressive" => "bold",
+        "careful" | "cautious" => "careful",
         _ => return None,
-    })
+    };
+    Some((name, policy::stance_tuning(name)?))
 }
 
 /// A monster's kind from what she'd call it ("mancubus", "imps", "the archvile").
@@ -300,6 +298,51 @@ fn gun_named(word: &str) -> Option<i32> {
 }
 
 impl Director {
+    /// One of her settings changed (`setting`, `value` by name): applied from the next tic, and
+    /// what she's told; yolo asked first (a question: she's sure, or not). Err: no such setting
+    /// or value.
+    pub fn set_policy(
+        &mut self,
+        obs: &Observation,
+        setting: &str,
+        value: &str,
+    ) -> Result<String, String> {
+        let v = policy::value(setting, value)
+            .ok_or_else(|| format!("{setting}: no \"{value}\". {}", policy::SETTINGS_HELP))?;
+        if setting == "stance" && v == "yolo" && self.policy.stance != "yolo" {
+            let asked = self.ask(
+                obs,
+                "Yolo: you fight everything head on, never fall back, never keep clear of anything. Sure?".into(),
+                vec![
+                    ask::Choice {
+                        label: "yes, yolo".into(),
+                        then: ask::Then::Policy("stance", "yolo"),
+                    },
+                    ask::Choice {
+                        label: "no".into(),
+                        then: ask::Then::Nothing,
+                    },
+                ],
+                1,
+                true,
+            );
+            return asked.ok_or_else(|| "Not now: answer what's asked first.".into());
+        }
+        Ok(self.policy_to(setting, v))
+    }
+
+    /// A setting taken (already checked), to be applied; what she's told.
+    pub(super) fn policy_to(&mut self, setting: &str, v: &'static str) -> String {
+        match setting {
+            "stance" => self.policy.stance = v,
+            "save" => self.policy.save = v,
+            "risk" => self.policy.risk = v,
+            _ => self.policy.powerups = v,
+        }
+        self.policy_due = true;
+        format!("Your policy: {}.", self.policy.line())
+    }
+
     /// The gun in her hands, as she'd call it.
     pub fn holding(&self, obs: &Observation) -> &'static str {
         obs.ready.map_or("?", gun_called)
@@ -412,6 +455,10 @@ pub struct Director {
     hurt: VecDeque<(i64, String, i32)>,
     /// how things stand this tic (`situation.rs`): what tells her reads it
     pub now: Situation,
+    /// her standing settings (`policy.rs`), and whether they're yet to be applied (a change, a
+    /// new level: a new player)
+    pub policy: Policy,
+    policy_due: bool,
     /// the last resorts she's let her instinct take, this level
     resorts: std::collections::BTreeSet<crate::knowledge::explorer::Resort>,
     progress: Option<((usize, [usize; 6]), i64)>,
@@ -471,6 +518,7 @@ impl Director {
     pub fn new() -> Director {
         Director {
             answer_wait: Some(ask::ANSWER_WAIT),
+            policy_due: true,
             ..Director::default()
         }
     }
@@ -515,6 +563,7 @@ impl Director {
     /// A new map: names, orders, places and what's been told are the old map's.
     pub fn new_map(&mut self) {
         self.overtaken("a new level");
+        self.policy_due = true;
         self.hurt.clear();
         self.running.clear();
         self.pools_had = None;
@@ -1382,6 +1431,19 @@ impl Director {
         let hits = self.hits.clone();
         self.remember_hits(obs.tic, &hits);
         self.take_stock(agent, obs);
+        // (her policy on her numbers: on a change, and on each new level's player)
+        if self.policy_due {
+            if let Some(p) = agent.player_mut() {
+                self.policy_due = false;
+                if let Err(e) = p.set_policy(&self.policy.tuning()) {
+                    self.tell(
+                        obs,
+                        Event::Outcome,
+                        format!("Your policy couldn't be applied: {e}."),
+                    );
+                }
+            }
+        }
         self.events(agent, obs);
         self.kills(agent, obs);
         self.more_moments(agent, obs);
