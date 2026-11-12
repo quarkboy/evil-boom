@@ -9,11 +9,15 @@ use serde_json::{json, Map, Value};
 /// How she fights, as numbers over the tuning (None: not a stance).
 pub fn stance_tuning(name: &str) -> Option<Value> {
     Some(match name {
-        "steady" => json!({}),
-        "bold" => json!({ "engage": { "stand_threat": 3.0, "low_health": 25.0 },
-            "retreat": { "health": 30.0 }, "guns": { "outmatched": 45.0 } }),
+        // (careful is the default since 2026-11-11, the user's: its numbers are the tuning's
+        // own, given all the same, so that over another standing stance, for a while, it's
+        // careful; steady the old middle)
         "careful" => json!({ "engage": { "stand_threat": 9.0, "low_health": 50.0 },
             "retreat": { "health": 55.0 }, "guns": { "outmatched": 20.0 } }),
+        "steady" => json!({ "engage": { "stand_threat": 6.0, "low_health": 35.0 },
+            "retreat": { "health": 40.0 }, "guns": { "outmatched": 30.0 } }),
+        "bold" => json!({ "engage": { "stand_threat": 3.0, "low_health": 25.0 },
+            "retreat": { "health": 30.0 }, "guns": { "outmatched": 45.0 } }),
         "avoid" => json!({ "engage": { "stand_threat": 9.0, "low_health": 50.0,
             "keep_clear": 1536.0, "leave_be": 8.0 }, "retreat": { "health": 55.0 },
             "guns": { "outmatched": 20.0 }, "errands": { "danger_near": 1024.0 } }),
@@ -41,7 +45,7 @@ pub struct Policy {
 impl Default for Policy {
     fn default() -> Policy {
         Policy {
-            stance: "steady",
+            stance: "careful",
             save: "cells",
             risk: "normal",
             powerups: "need",
@@ -53,7 +57,7 @@ impl Default for Policy {
 pub fn value(setting: &str, v: &str) -> Option<&'static str> {
     let v = v.trim().to_lowercase();
     let of: &[&'static str] = match setting {
-        "stance" => &["steady", "bold", "careful", "avoid", "yolo"],
+        "stance" => &["careful", "steady", "bold", "avoid", "yolo"],
         "save" => &["cells", "none"],
         "risk" => &["careful", "normal", "bold"],
         "powerups" => &["need", "now"],
@@ -68,7 +72,7 @@ pub fn help() -> &'static str {
     SETTINGS_HELP
 }
 
-pub const SETTINGS_HELP: &str = "stance: steady; bold (fights more, finishes fewer levels); careful (backs off sooner, as good or better); avoid (keeps clear of fights: to get past one, not to leave on); yolo (fights everything head on; asked first). save: cells (plasma and BFG kept for bosses), none. risk: careful, normal, bold (floors that hurt). powerups: need (spheres and invulnerability when they'd help), now (as they come).";
+pub const SETTINGS_HELP: &str = "stance: careful (the default: backs off sooner); steady (stands and fights more); bold (fights more still, finishes fewer levels); avoid (keeps clear of fights: to get past one, not to leave on); yolo (fights everything head on; asked first). save: cells (plasma and BFG kept for bosses), none. risk: careful, normal, bold (floors that hurt). powerups: need (spheres and invulnerability when they'd help), now (as they come).";
 
 impl Policy {
     /// The numbers over the run's tuning these settings come to.

@@ -162,7 +162,8 @@ a costly run-jump; `Situation` (`situation.rs`), one snapshot a tic. Stage 7 (`d
 her guns (the very gun ordered, the plain shotgun, the fist with berserk, an ordered launcher
 kept), `doom_search`, cells-only saving and the big spheres when they'd add enough (both
 defaults, scored), her settings in `doom_policy` (stance incl. avoid and yolo, save, risk,
-powerups), each value's cost on the quarter set in its description. Baseline 0.459, 402 exits. To direct a game by hand: `watch <wad> <map> --headless
+powerups), each value's cost on the quarter set in its description. Careful is the default stance now
+(the user's); baseline 0.453, 399 exits, 26 level-skills beaten every run. To direct a game by hand: `watch <wad> <map> --headless
 --speed 1 --directed FILE`, orders appended to FILE (`control/script.rs`), reports in FILE's
 `.out` twin (`me.txt` gives `me.out`).
 

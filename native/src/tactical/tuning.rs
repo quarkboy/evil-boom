@@ -263,9 +263,9 @@ impl Default for Engage {
             keep_clear: 1024.0,
             range: 2048.0,
             close: 160.0,
-            stand_threat: 6.0,
+            stand_threat: 9.0,
             leave_be: 15.0,
-            low_health: 35.0,
+            low_health: 50.0,
             engaged_ranged: 1536.0,
             engaged_charge: 768.0,
             engaged_melee: 384.0,
@@ -588,7 +588,7 @@ impl Default for Guns {
             blocked_keep: 70,
             boss_save: 10.0,
             save_from: 6,
-            outmatched: 30.0,
+            outmatched: 20.0,
             ammo_lands: 0.9,
             short_by: 0.8,
             short_of_ammo: 15,
@@ -770,7 +770,7 @@ pub struct Retreat {
 impl Default for Retreat {
     fn default() -> Self {
         Retreat {
-            health: 40.0,
+            health: 55.0,
             cover_range: 768.0,
             clear_tics: 35,
             edge_look: 48.0,

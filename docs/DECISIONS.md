@@ -2887,3 +2887,11 @@ The level's start names any setting not at its default.
 Careful as the default, on the full set: -0.0059 (s.e. 0.0095), 399 exits against 402, 26
 level-skills beaten every run against 20, 55 never against 58. Within noise on the score,
 more consistent; the default left as it is pending the user's call.
+
+**Careful is the default** (the user's, 2026-11-11, on the full set's result above): its numbers
+are the tuning's own now (`engage.stand_threat` 9, `engage.low_health` 50, `retreat.health` 55,
+`guns.outmatched` 20); the policy's default stance is `careful`, and `steady` names the old
+middle (6, 35, 40, 30). Careful's numbers are still given out in full for it as a stance, so
+that over another standing stance, for a while, it's careful. The new defaults play the old
+build-with-careful's runs exactly (three checked to the hash); the baseline is that full set
+(0.453, 399 exits, 26 level-skills beaten every run). Parity re-saved.
