@@ -198,7 +198,7 @@ struct Tactics {
     /// shot first: one monster (its id) or the nearest of a kind (its name); what it was called;
     /// till when
     target: Option<(Aim, String, i64)>,
-    /// the gun to use (its slot), till when
+    /// the gun to use (the game's number: `gun_named`), till when
     gun: Option<(i32, i64)>,
     hold_fire: Option<i64>,
     /// a stance taken (its name), till when
@@ -277,22 +277,49 @@ fn monster_kind(word: &str) -> Option<&'static str> {
 }
 
 /// A gun's slot from what she'd call it.
-fn gun_slot(word: &str) -> Option<i32> {
+fn gun_named(word: &str) -> Option<i32> {
     let w: String = word
         .to_lowercase()
         .chars()
         .filter(|c| c.is_ascii_alphanumeric())
         .collect();
+    // (the game's numbers: the plain shotgun and the super are two guns, the fist and the
+    // chainsaw two)
     Some(match w.as_str() {
-        "fist" | "fists" | "chainsaw" | "saw" | "berserk" => 1,
-        "pistol" => 2,
-        "shotgun" | "supershotgun" | "ssg" | "sg" => 3,
-        "chaingun" | "cg" => 4,
-        "rocketlauncher" | "rocket" | "rockets" | "rl" | "launcher" => 5,
-        "plasmarifle" | "plasma" | "plasmagun" => 6,
-        "bfg" | "bfg9000" => 7,
+        "fist" | "fists" | "berserk" | "punch" => 0,
+        "chainsaw" | "saw" => 7,
+        "pistol" => 1,
+        "shotgun" | "sg" => 2,
+        "supershotgun" | "ssg" | "super" | "doublebarrel" => 8,
+        "chaingun" | "cg" => 3,
+        "rocketlauncher" | "rocket" | "rockets" | "rl" | "launcher" => 4,
+        "plasmarifle" | "plasma" | "plasmagun" => 5,
+        "bfg" | "bfg9000" => 6,
         _ => return None,
     })
+}
+
+impl Director {
+    /// The gun in her hands, as she'd call it.
+    pub fn holding(&self, obs: &Observation) -> &'static str {
+        obs.ready.map_or("?", gun_called)
+    }
+}
+
+/// A gun by the game's number, as she'd call it.
+fn gun_called(weapon: i32) -> &'static str {
+    match weapon {
+        0 => "fist",
+        1 => "pistol",
+        2 => "shotgun",
+        3 => "chaingun",
+        4 => "rocket launcher",
+        5 => "plasma rifle",
+        6 => "BFG",
+        7 => "chainsaw",
+        8 => "super shotgun",
+        _ => "?",
+    }
 }
 
 /// An order waiting its turn.
@@ -1631,15 +1658,19 @@ impl Director {
                     self.tactics.gun = None;
                     return Ok("Your gun by reflex again.".into());
                 }
-                let slot = gun_slot(r).ok_or_else(|| format!("\"{r}\" isn't a gun."))?;
-                if !obs.weapons.as_ref().is_some_and(|w| w.contains(&slot)) {
-                    return Err(format!("You haven't got the {r}."));
+                let gun = gun_named(r).ok_or_else(|| format!("\"{r}\" isn't a gun."))?;
+                // (the fist only with a berserk pack this level: without, no gun worth the name)
+                if gun == 0 && obs.berserk != Some(true) {
+                    return Err("Not the fist without a berserk pack this level.".into());
+                }
+                if gun != 0 && !obs.owned.as_ref().is_some_and(|o| o.contains(&gun)) {
+                    return Err(format!("You haven't got the {}.", gun_called(gun)));
                 }
                 let (secs, until) = hold(TACTIC_SECONDS, TACTIC_MOST);
-                self.tactics.gun = Some((slot, until));
+                self.tactics.gun = Some((gun, until));
                 Ok(format!(
                     "Using the {} while it has a shot, {secs:.0} s.",
-                    weapon_name(slot, obs)
+                    gun_called(gun)
                 ))
             }
             "retreat" | "cover" => {
@@ -1749,7 +1780,11 @@ impl Director {
             }
             let c = p.combat_mut();
             c.forced_target = target;
-            c.ordered_gun = self.tactics.gun.map(|(slot, _)| slot);
+            c.ordered_gun = self
+                .tactics
+                .gun
+                .map(|(gun, _)| crate::dsda::weapon_slot(gun));
+            c.ordered_weapon = self.tactics.gun.map(|(gun, _)| gun);
             c.ordered_hold_fire = self.tactics.hold_fire.is_some();
         }
         if !over.is_empty() {
@@ -2364,12 +2399,16 @@ impl Director {
 
 /// What she has: "Health 100, armor 0; fist, pistol; 50 bullets; no keys".
 fn kit(obs: &Observation) -> String {
-    let weapons: Vec<&str> = obs
-        .weapons
-        .iter()
-        .flatten()
-        .map(|&w| weapon_name(w, obs))
-        .collect();
+    // (every gun she has, the plain shotgun and the super apart; the fist only as a berserk's)
+    let mut weapons: Vec<&str> = Vec::new();
+    if obs.berserk == Some(true) {
+        weapons.push("berserk fist");
+    }
+    for gun in [7, 1, 2, 8, 3, 4, 5, 6] {
+        if obs.owned.as_ref().is_some_and(|o| o.contains(&gun)) {
+            weapons.push(gun_called(gun));
+        }
+    }
     let pools: Vec<String> = POOLS
         .iter()
         .filter_map(|&(slot, what)| {
@@ -2455,7 +2494,7 @@ fn id_of(o: &Objective) -> String {
     }
 }
 
-/// A weapon slot by name (as she has it: the super shotgun, the chainsaw).
+/// A gun by name, as the game numbers them (`dsda::weapon_slot` gives its slot).
 fn weapon_name(slot: i32, obs: &Observation) -> &'static str {
     match slot {
         1 if obs.chainsaw == Some(true) => "chainsaw",

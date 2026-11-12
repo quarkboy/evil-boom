@@ -540,6 +540,8 @@ impl Engine {
             keys: Some(keys),
             z: Some(p.z),
             weapon: Some(dsda::weapon_slot(p.readyweapon)),
+            ready: Some(p.readyweapon),
+            owned: Some((0..9).filter(|&w| p.weaponowned[w as usize] != 0).collect()),
             barrels: Some(barrels),
             barrels_lit,
             health: Some(f64::from(p.health)),
@@ -578,6 +580,7 @@ impl Engine {
             attack: c.attack,
             use_: c.use_,
             weapon: c.weapon,
+            exact: c.exact,
         });
         self.tic += 1;
         let hits = self.game.hits();

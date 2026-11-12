@@ -92,6 +92,10 @@ pub struct Status {
     pub total_secrets: c_int,
 }
 
+/// (`evil_tic`'s: a weapon press for the very gun its number says, not turned into the slot's
+/// best one)
+const EVIL_EXACT: i32 = 0x100;
+
 /// A tic's command for the player, as a ticcmd has it.
 #[derive(Clone, Copy, Default, Debug)]
 pub struct TicCmd {
@@ -105,6 +109,8 @@ pub struct TicCmd {
     pub use_: bool,
     /// switch to this weapon slot (1-7), 0 for none
     pub weapon: i32,
+    /// the very gun the press is for (`Controls::exact`)
+    pub exact: Option<i32>,
 }
 
 const BT_ATTACK: i32 = 1;
@@ -726,7 +732,9 @@ impl Dsda {
         if cmd.use_ {
             buttons |= BT_USE;
         }
-        if (1..=7).contains(&cmd.weapon) {
+        if let Some(gun) = cmd.exact.filter(|g| (0..=8).contains(g)) {
+            buttons |= BT_CHANGE | EVIL_EXACT | (gun << BT_WEAPONSHIFT);
+        } else if (1..=7).contains(&cmd.weapon) {
             buttons |= BT_CHANGE | ((cmd.weapon - 1) << BT_WEAPONSHIFT);
         }
         // SAFETY: as above.

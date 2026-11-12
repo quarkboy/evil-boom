@@ -203,12 +203,13 @@ pub fn command(
                 .as_ref()
                 .map_or("waiting", |o| o.label.as_str());
             Ok(vec![format!(
-                "at ({:.0}, {:.0}), facing {:.0}, health {:.0}, armor {:.0}, {:.1}s; doing: {doing}",
+                "at ({:.0}, {:.0}), facing {:.0}, health {:.0}, armor {:.0}, holding {}, {:.1}s; doing: {doing}",
                 obs.x,
                 obs.y,
                 obs.angle,
                 obs.health.unwrap_or(0.0),
                 obs.armor.unwrap_or(0.0),
+                d.holding(obs),
                 obs.tic as f64 / 35.0
             )])
         }

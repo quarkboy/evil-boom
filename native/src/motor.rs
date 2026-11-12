@@ -141,6 +141,12 @@ pub struct Observation {
     pub z: Option<f64>,
     /// the weapon slot held
     pub weapon: Option<i32>,
+    /// the weapon held, as the game numbers them (0 fist, 1 pistol, 2 shotgun, 3 chaingun,
+    /// 4 rocket launcher, 5 plasma rifle, 6 BFG, 7 chainsaw, 8 super shotgun): two share a slot
+    /// twice over, and which of them is up only this says
+    pub ready: Option<i32>,
+    /// the weapons she has, as the game numbers them
+    pub owned: Option<Vec<i32>>,
     /// where explosive barrels are now
     pub barrels: Option<Vec<Point>>,
     /// those of them going off: hit, blowing up in their death frames (15 tics), still there
@@ -213,6 +219,9 @@ pub struct Controls {
     pub run: bool,
     /// switch to the weapon in this slot (1-7; 0: don't)
     pub weapon: i32,
+    /// the very gun the press is for (the game's number: the plain shotgun 2, the super 8, the
+    /// fist 0, the chainsaw 7), not the slot's best one
+    pub exact: Option<i32>,
 }
 
 impl Default for Controls {
@@ -225,6 +234,7 @@ impl Default for Controls {
             attack: false,
             run: true,
             weapon: 0,
+            exact: None,
         }
     }
 }

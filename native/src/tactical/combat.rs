@@ -185,8 +185,13 @@ pub struct Combat {
     /// moves the tree isn't to make: a node giving one is passed over (forced likewise)
     pub barred: Vec<Move>,
     /// the gun to fight with, whatever the rule would pick, while it has a shot in it (a choice
-    /// forced: whoever directs her)
+    /// forced: whoever directs her): its slot, and which gun of the slot (the game's number:
+    /// the plain shotgun or the super, the fist or the chainsaw)
     pub ordered_gun: Option<i32>,
+    pub ordered_weapon: Option<i32>,
+    /// switched away from the ordered gun (something on her, hits coming): not back to it before
+    /// this tic, and only once it'd fire (i64::MIN: not switched away)
+    pub(super) ordered_away_until: std::cell::Cell<i64>,
     /// the trigger let go, whatever's in her sights (a choice forced likewise)
     pub ordered_hold_fire: bool,
     pub los: LineOfSight,
@@ -324,6 +329,8 @@ impl Combat {
             forced_target: None,
             barred: Vec::new(),
             ordered_gun: None,
+            ordered_weapon: None,
+            ordered_away_until: std::cell::Cell::new(i64::MIN),
             ordered_hold_fire: false,
             los: LineOfSight::new(&nav.map),
             known: BTreeMap::new(),
@@ -2205,6 +2212,20 @@ impl Combat {
         }
         if d.weapon != 0 {
             c.weapon = d.weapon;
+        }
+        // (the ordered one of a slot's two, the plain shotgun or the super, the fist or the saw:
+        // asked for by its own number)
+        if let Some(want) = self.ordered_weapon {
+            let slot = crate::dsda::weapon_slot(want);
+            let chosen = if d.weapon != 0 {
+                d.weapon
+            } else {
+                obs.weapon.unwrap_or(0)
+            };
+            if chosen == slot && obs.ready.is_some_and(|r| r != want) {
+                c.weapon = slot;
+                c.exact = Some(want);
+            }
         }
         if crate::debug::on().pace && obs.tic % 10 == 0 {
             eprintln!("  fight tic {}: {:?} legs {legs}, base {:?}, out ({:.1}, {:.1}) turn {:.1}, facing {:.1}", obs.tic, d.kind, base.map(|b| (b.forward, b.strafe, b.turn)), c.forward, c.strafe, c.turn, obs.angle);

@@ -53,6 +53,12 @@ pub struct Odds {
     pub ammo_short: bool,
 }
 
+/// an ordered launcher switched away from when she's been hit this lately (tics)...
+const ORDERED_HIT_RECENT: i64 = 35;
+/// ...and not gone back to for this long (tics), nor till a rocket would fire: a switch costs
+/// her a second's shooting
+const ORDERED_AWAY: i64 = 70;
+
 impl Odds {
     /// Longer than `secs` to kill, or longer than she'd last at it, or more than her ammo's
     /// worth?
@@ -380,7 +386,17 @@ impl Combat {
     /// the shotgun, the chaingun, plasma, whichever first has a few shots in it; the pistol only
     /// for want of any. Not the rocket launcher or the BFG (round a corner into something
     /// close), nor the fist. `None`: what she has up will do.
-    pub fn ready_gun(&self, obs: &Observation) -> Option<i32> {
+    pub fn ready_gun(&self, obs: &Observation) -> Option<(i32, Option<i32>)> {
+        let waited = obs.tic - self.switch_tic > self.tune.aim.switch_wait;
+        // The gun she's been told to use, up between fights too (the very one of its slot's two),
+        // while it has a shot.
+        if let Some(want) = self.ordered_weapon {
+            let slot = crate::dsda::weapon_slot(want);
+            let w = weapon_in(slot, obs);
+            if Self::held(obs).contains(&slot) && Self::ammo(obs, slot) >= w.ammo_per_shot {
+                return (obs.ready != Some(want) && waited).then_some((slot, Some(want)));
+            }
+        }
         // Not with something awake she knows of still about: the next fight is with it, and the gun
         // up is the one she was fighting it with. Otherwise she'd swap guns each time it went out of
         // sight and back, a second without a shot each time.
@@ -398,8 +414,7 @@ impl Combat {
                 let w = weapon_in(slot, obs);
                 held.contains(&slot) && Self::ammo(obs, slot) >= w.ammo_per_shot * shots
             })?;
-        (obs.weapon != Some(want.0) && obs.tic - self.switch_tic > self.tune.aim.switch_wait)
-            .then_some(want.0)
+        (obs.weapon != Some(want.0) && waited).then_some((want.0, None))
     }
 
     /// The gun she'd rather fight t with, wherever she stood: each gun judged from the nearest
@@ -438,8 +453,10 @@ impl Combat {
                 .remaining()
                 .iter()
                 .any(|m| m.id != t.id && mon(m.name).boss);
-        // A gun she's been told to use: that one, while it has a shot in it and (a launcher) its
-        // shot wouldn't go off by her.
+        // A gun she's been told to use: that one, while it has a shot in it. A launcher whose shot
+        // would go off by her is kept in hand all the same (she keeps to its distance, holding
+        // fire, as with a launcher of her own choosing) unless something's on her or hitting
+        // her: then another, and that one kept a while, not flipped back and forth.
         if let Some(slot) = self.ordered_gun.filter(|s| held.contains(s)) {
             let w = weapon_in(slot, obs);
             let empty = w.ammo_per_shot > 0 && Self::ammo(obs, slot) < w.ammo_per_shot;
@@ -453,8 +470,28 @@ impl Combat {
                     .about
                     .iter()
                     .any(|m| dist((m.x, m.y), me) < Self::rocket_clear() + mon(m.name).radius);
-            if !empty && !crowded && !(slot == 5 && !self.rocket_safe(obs, t)) {
+            let fires = !empty && !crowded && !(slot == 5 && !self.rocket_safe(obs, t));
+            // Switched away from it: back only once it'd fire and the while's up.
+            let away = self.ordered_away_until.get() > i64::MIN;
+            if away {
+                if fires && obs.tic >= self.ordered_away_until.get() {
+                    self.ordered_away_until.set(i64::MIN);
+                    return slot;
+                }
+            } else if fires {
                 return slot;
+            } else if slot == 5 && !empty {
+                let on_her =
+                    self.now.engaged.iter().any(|m| {
+                        dist((m.x, m.y), me) < self.tune.engage.close + mon(m.name).radius
+                    });
+                let hit = self
+                    .last_hit()
+                    .is_some_and(|(tic, _)| obs.tic - tic < ORDERED_HIT_RECENT);
+                if !on_her && !hit {
+                    return slot; // (kept in hand: she keeps to its distance, holding fire)
+                }
+                self.ordered_away_until.set(obs.tic + ORDERED_AWAY);
             }
         }
         let (mut best, mut cost) = (obs.weapon.unwrap_or(2), f64::INFINITY);

@@ -2818,3 +2818,32 @@ from its one-life default). `--lives N` stays for tests and the score.
 
 Checked: MAP07 at UV with `--lives unlimited`: four deaths, each told without a count, the game
 going on. Parity: 24 runs the same.
+
+## Stage 7, step 1: her guns (the user, 2026-11-11)
+
+- **The gun up, by the game's number.** She saw a slot (the plain shotgun and the super were
+  both "3", the fist and the chainsaw both "1"); now `Observation::ready` and `owned` give the
+  game's own numbers. And the bot's model of slot 3 follows what's in her hands: it took the
+  super shotgun to be up whenever she had one, but the game brings the plain one up itself
+  (shells down to one; Doom 1 with a carried super shotgun). A fix to how she plays: scored on
+  the full set, -0.0018 (s.e. 0.0017), 1038 of 1088 runs the same to the tic, kept; the new
+  baseline is that set (0.457, 398 exits).
+- **A gun she orders is that very gun.** The engine API turned a slot-3 press into the super
+  shotgun once she had it, and a slot-1 press into the chainsaw (the slot's best gun, as the
+  game's key binding does); a press can now carry the gun's own number (`Controls::exact`,
+  `evil_tic`'s 0x100), which the game takes as it is. So "shotgun" brings the plain one (better
+  at range: the super's pellets spread up and down), "ssg" the super, "fist" the fist (only
+  with a berserk pack this level: "Not the fist without a berserk pack this level"), "chainsaw"
+  the saw. Brought up between fights too, not only in one. Her status lists every gun she has,
+  the two shotguns apart. Every press the bot makes by itself is as before.
+- **An ordered launcher kept, not flipped.** A rocket that'd go off by her: the launcher kept
+  in hand (she keeps to its distance, holding fire, as with one of her own choosing) unless
+  something's on her or she's been hit in the last second; then another gun, kept at least 2 s
+  and till a rocket would fire again. The first version went back after 2 s whatever: on MAP02
+  with shotgun guys close it switched every few seconds; now three switches in 45 s, each
+  with one on her and hitting.
+
+Checked by hand in directed games (MAP06: shotgun, ssg, rocket, shotgun, chaingun, ssg,
+shotgun, each up as ordered; fist and chainsaw refused as they should be; MAP02 with the
+launcher ordered). Parity re-saved with the new build (four runs moved by the slot-3 fix,
+those of the scored set).

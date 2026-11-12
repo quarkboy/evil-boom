@@ -36,14 +36,16 @@ impl Recording {
             let _ = match e {
                 Entry::Tic(t, c) => writeln!(
                     out,
-                    "c {t} {:?} {:?} {:?} {} {} {} {}",
+                    "c {t} {:?} {:?} {:?} {} {} {} {}{}",
                     c.forward,
                     c.strafe,
                     c.turn,
                     u8::from(c.use_),
                     u8::from(c.attack),
                     u8::from(c.run),
-                    c.weapon
+                    c.weapon,
+                    // (an exact press only where there was one: recordings before it read alike)
+                    c.exact.map_or(String::new(), |g| format!(" {g}"))
                 ),
                 Entry::Restart(t, why) => writeln!(out, "r {t} {why}"),
                 Entry::Note(t, n) => match n {
@@ -100,6 +102,7 @@ impl Recording {
                         attack: flag(6)?,
                         run: flag(7)?,
                         weapon: int(8)?,
+                        exact: w.get(9).and_then(|v| v.parse().ok()),
                     },
                 ),
                 "r" => Entry::Restart(tic, w[2..].join(" ")),

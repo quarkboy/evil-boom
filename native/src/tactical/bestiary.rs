@@ -372,7 +372,8 @@ pub fn melee_at(w: &Weapon, name: &str) -> bool {
 /// it.
 pub fn weapon_in(slot: i32, obs: &crate::motor::Observation) -> Weapon {
     match slot {
-        3 if obs.super_shotgun == Some(true) => SUPER_SHOTGUN,
+        // (the plain shotgun up, the super had: slot 3 is the one in her hands)
+        3 if obs.super_shotgun == Some(true) && obs.ready != Some(2) => SUPER_SHOTGUN,
         1 if obs.berserk == Some(true) => BERSERK_FIST,
         1 if obs.chainsaw == Some(true) => CHAINSAW,
         _ => weapon(slot),

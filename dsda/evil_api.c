@@ -494,7 +494,8 @@ EVIL_API int evil_warp(double x, double y, double angle)
 
 /* One tic, with this command for the player (forwardmove/sidemove as in a ticcmd: a run is
  * 50 forward, 40 sideways; turn: angleturn, <<16 for the angle, positive to the left;
- * buttons: BT_ATTACK 1, BT_USE 2, BT_CHANGE 4 with the weapon in bits 3-5). */
+ * buttons: BT_ATTACK 1, BT_USE 2, BT_CHANGE 4 with the weapon in bits 3-6; 0x100 a weapon press
+ * for the very gun its number says). */
 EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
 {
   ticcmd_t *cmd;
@@ -514,17 +515,21 @@ EVIL_API void evil_tic(int forward, int side, int turn, int buttons)
   cmd->forwardmove = (signed char)forward;
   cmd->sidemove = (signed char)side;
   cmd->angleturn = (signed short)turn;
-  /* (the slot's weapon, as G_BuildTiccmd picks it outside demo compatibility: slot 3 the super
-   * shotgun once she has it; without, a slot-3 press asked for a shotgun she hadn't) */
-  if ((buttons & BT_CHANGE) && gamemode == commercial &&
-      ((buttons & BT_WEAPONMASK) >> BT_WEAPONSHIFT) == wp_shotgun &&
-      players[consoleplayer].weaponowned[wp_supershotgun])
-    buttons = (buttons & ~BT_WEAPONMASK) | (wp_supershotgun << BT_WEAPONSHIFT);
-  /* (slot 1 likewise: the chainsaw once she has it, but the fist while she's berserk, a punch
-   * then outdoing the saw; without, a slot-1 press always brought up the fist) */
-  if ((buttons & BT_CHANGE) && ((buttons & BT_WEAPONMASK) >> BT_WEAPONSHIFT) == wp_fist &&
-      players[consoleplayer].weaponowned[wp_chainsaw] && !players[consoleplayer].powers[pw_strength])
-    buttons = (buttons & ~BT_WEAPONMASK) | (wp_chainsaw << BT_WEAPONSHIFT);
+  /* (a press as G_BuildTiccmd picks a slot's weapon outside demo compatibility: slot 3 the
+   * super shotgun once she has it, slot 1 the chainsaw but the fist while she's berserk (a punch
+   * then outdoing the saw); without, a slot-3 press asked for a shotgun she hadn't. An exact
+   * press, 0x100, is for the very gun its number says (the plain shotgun 2, the super 8, the fist
+   * 0, the chainsaw 7): as it is) */
+  if (!(buttons & 0x100) && (buttons & BT_CHANGE))
+  {
+    if (gamemode == commercial &&
+        ((buttons & BT_WEAPONMASK) >> BT_WEAPONSHIFT) == wp_shotgun &&
+        players[consoleplayer].weaponowned[wp_supershotgun])
+      buttons = (buttons & ~BT_WEAPONMASK) | (wp_supershotgun << BT_WEAPONSHIFT);
+    if (((buttons & BT_WEAPONMASK) >> BT_WEAPONSHIFT) == wp_fist &&
+        players[consoleplayer].weaponowned[wp_chainsaw] && !players[consoleplayer].powers[pw_strength])
+      buttons = (buttons & ~BT_WEAPONMASK) | (wp_chainsaw << BT_WEAPONSHIFT);
+  }
   cmd->buttons = (byte)buttons;
   /* (presenting: the move on to the next level held for the caller, the screen as it is) */
   if (evil_presenting && gameaction == ga_worlddone)

@@ -932,8 +932,9 @@ impl Player {
         }
         if d.is_none() && c.weapon == 0 && !shooting {
             // No fight: the gun for the next one is brought up, the fight's call.
-            if let Some(slot) = self.fight.combat.ready_gun(obs) {
+            if let Some((slot, exact)) = self.fight.combat.ready_gun(obs) {
                 c.weapon = slot;
+                c.exact = exact;
                 self.fight.combat.readied(obs);
             }
         }
