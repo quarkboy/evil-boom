@@ -1,7 +1,12 @@
 # Open-sourcing Evil BOOM: survey and cleanup plan
 
-Date: 2026-11-12. Status: a plan for review. Nothing in it has been done yet; section 2 lists the
-decisions that are yours to make before the work starts.
+Date: 2026-11-12.
+
+> **Status:** in progress. Decided (section 2): keep the history, its author emails rewritten
+> before publishing; copyright "Quarkboy"; Evil Neuro's name stays, an unofficial fan project;
+> CLAUDE.md trimmed; the design notes organised and trimmed; binary releases for Windows and
+> Linux from GitHub's CI. Done: licensing, privacy, cleanup, the docs (steps 2-5). Left:
+> Windows, CI and releases, the final checks (steps 6-8).
 
 The goal: a public GitHub repository under GPL-3.0-or-later that a stranger can read, build on
 Linux or Windows, test, and contribute to, with nothing in it we don't want public.
@@ -14,7 +19,7 @@ Linux or Windows, test, and contribute to, with nothing in it we don't want publ
   test files), the engine patch `dsda/` (patch, `evil_api.c`, an old spike crate), 12 docs, 11
   tools, 7 arena files, 2 configs, `README.md`, `LICENSE` (GPL-3.0 text), `CLAUDE.md`.
 - History: 540 commits, 43 MB, no large binaries. The biggest blobs are the many versions of
-  `docs/DECISIONS.md` (243 KB now). The earlier Python implementation (`src/evildoom`, ViZDoom
+  `docs/design/decisions/` (243 KB now). The earlier Python implementation (`src/evildoom`, ViZDoom
   spikes, Python tests) is deleted from the tree but still in the history.
 - `out/` (75 GB of builds, logs, recordings, score sets) is ignored. So are `third_party/`
   (the DSDA-Doom checkout), `wads/`, `.worktrees/`, `.claude/worktrees/` and
@@ -29,10 +34,10 @@ Linux or Windows, test, and contribute to, with nothing in it we don't want publ
 - **Names and emails:** `dsda/evil_api.c` carries "Copyright (C) 2026 Samuel Pinansky". The commits
   have two author emails: a personal Gmail address (317 commits) and a J-Novel Club work address
   (223 commits). Both become public with the history.
-- **Stream operations:** `docs/CONSOLE_PLAN.md` mentioned how the stream's other consoles are
+- **Stream operations:** `docs/design/console-plan.md` mentioned how the stream's other consoles are
   reached from the web. That's about someone else's setup and should go (done).
 - **Small personal asides:** "this laptop" (CLAUDE.md); provenance notes in code comments ("the
-  user's", 10 places in 9 files); dated session notes throughout the docs.
+  maintainer's", 10 places in 9 files); dated session notes throughout the docs.
 
 ### Licenses
 
@@ -80,18 +85,18 @@ Linux or Windows, test, and contribute to, with nothing in it we don't want publ
 
 | file | size | what it is |
 |---|---|---|
-| `docs/DECISIONS.md` | 243 KB | the full dated decision log since the start |
-| `docs/NEURO_SDK_PLAN.md` | 57 KB | the Neuro control layer: plan, stages, notes |
-| `docs/REALISM.md` | 47 KB | survey of omniscient shortcuts, the realism work list |
-| `docs/CLEANUP_PLAN.md` | 21 KB | the previous cleanup, with its scores |
-| `docs/CONSOLE_PLAN.md` | 19 KB | the stream console plan |
+| `docs/design/decisions/` | 243 KB | the full dated decision log since the start |
+| `docs/design/neuro-sdk-plan.md` | 57 KB | the Neuro control layer: plan, stages, notes |
+| `docs/design/realism.md` | 47 KB | survey of omniscient shortcuts, the realism work list |
+| `docs/design/cleanup-2026-11.md` | 21 KB | the previous cleanup, with its scores |
+| `docs/design/console-plan.md` | 19 KB | the stream console plan |
 | `CLAUDE.md` | 15 KB | working rules plus "where things stand" session status |
-| `docs/POLICY_SURVEY.md` | 15 KB | stage 7 settings survey |
-| `docs/NEURO_INTEGRATION_PLAN.md` | 15 KB | the first integration plan (superseded) |
-| `docs/RUST_REVIEW.md` + `rust-review-results.json` | 24 KB | a code review and its raw output |
+| `docs/design/policy-survey.md` | 15 KB | stage 7 settings survey |
+| `docs/design/neuro-integration-plan.md` | 15 KB | the first integration plan (superseded) |
+| `docs/design/rust-review.md` + `rust-review-results.json` | 24 KB | a code review and its raw output |
 | `docs/DEBUGGING.md` | 12 KB | how to trace a failed run (useful to anyone) |
-| `docs/TUNING_RANGES.md` | 8 KB | a tuning sweep's results |
-| `docs/GARY.md` | 4 KB | testing against Gary |
+| `docs/design/tuning-ranges.md` | 8 KB | a tuning sweep's results |
+| `docs/NEURO.md` | 4 KB | testing against Gary |
 
 They're valuable but written as a working diary: dated, in session order, with plans and status
 mixed. A newcomer has no entry point besides the README.
@@ -147,13 +152,13 @@ docs/
   USAGE.md               the commands (sweep, run-map, watch, episode, score, record, drive,
                          --pwad ...) and their options, moved out of main.rs's header
   NEURO.md               the Neuro SDK integration: actions, what Evil is told, policies,
-                         testing with Gary / neuro-mock / the GPT stand-in (GARY.md folds in)
+                         testing with Gary / neuro-mock / the GPT stand-in (../NEURO.md folds in)
   CONSOLE.md             running the stream console (how to use it; the plan's design part
                          goes to design/)
   DEBUGGING.md           as now, tidied (paths, current flags)
   design/
     README.md            an index: what each note is, when it was written, if superseded
-    decisions.md         the decision log (DECISIONS.md), as is or condensed
+    decisions.md         the decision log (the decision log), as is or condensed
     realism.md, neuro-sdk-plan.md, neuro-integration-plan.md (superseded), console-plan.md,
     cleanup-2026-11.md, policy-survey.md, tuning-ranges.md, rust-review.md
 tools/
@@ -194,8 +199,8 @@ runs, same results) and `tools/code_only.py --check` where it's comments only.
   licenses (SDL2 zlib, libsndfile LGPL) go with them, with source pointers for the LGPL ones.
 
 **Step 3. Privacy.**
-- `docs/CONSOLE_PLAN.md`: remove the stream-infrastructure details.
-- Code comments: "the user's" becomes the reason it was chosen ("watched: ...", "chosen for the
+- `docs/design/console-plan.md`: remove the stream-infrastructure details.
+- Code comments: "the maintainer's" becomes the reason it was chosen ("watched: ...", "chosen for the
   stream: ..."). Comments only, checked as above.
 - "this laptop" and similar go with the CLAUDE.md trim.
 - If chosen: the history's author emails rewritten (`git filter-repo --mailmap`), done last

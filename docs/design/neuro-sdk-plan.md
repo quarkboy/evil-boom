@@ -1,9 +1,11 @@
 # Evil's control of the game: the full Neuro SDK layer
 
-Date: 2026-11-11. Status: a plan, for the user to cut down or redirect; stage 0 (driving the
+> **Status:** built through stage 7 (2026-11-12); what exists is described in [../NEURO.md](../NEURO.md). Kept as the design, with the notes from directing levels by hand.
+
+Date: 2026-11-11. Status: a plan, for the maintainer to cut down or redirect; stage 0 (driving the
 existing layer by hand to find what's missing) is under way.
 
-This builds on `docs/NEURO_INTEGRATION_PLAN.md` (2026-11-08), whose first slice exists:
+This builds on `docs/design/neuro-integration-plan.md` (2026-11-08), whose first slice exists:
 `control/directed.rs` (the `Director`: lists, orders, reports), `neuro/session.rs` (nine
 actions, status, events, a forced decision when she's idle), `neuro/gpt.rs` (a GPT stand-in),
 `advisor.rs` (a fast classifier's say in target and stance). What that slice gives her is
@@ -290,7 +292,7 @@ One shape for every time the bot wants her say:
   question first (a class D proposal: "Restart E2M5 from a pistol start? You're 6 minutes in
   with the red key."), as leaving with things left does now.
 - **`doom_cheat code`**: a code typed, as at the keyboard. **She isn't told what the codes
-  are** (the user's): the description says only "Type a cheat code.", the parameter is a free
+  are** (the maintainer's): the description says only "Type a cheat code.", the parameter is a free
   string, not an enum, and nothing lists them. Whether she knows `iddqd` and `idkfa` is hers
   to show, and chat's to tell her. What comes back is what the game would give: the code's own
   message on one that works ("Degreelessness Mode On", "Very Happy Ammo Added"), and on
@@ -318,7 +320,7 @@ about). Both are served by five channels, each with a budget, in one grammar.
 
 ### 5.1 The grammar (one vocabulary everywhere)
 
-- **Voice** (the user's, 2026-11-11): she's told everything as the one playing, in the second
+- **Voice** (the maintainer's, 2026-11-11): she's told everything as the one playing, in the second
   person: "You found a secret (2/5).", "You're losing health fast", "You died", never "she
   found". There's no bot beside her in what she reads: what she does without an order she
   does "by instinct" (exploring on) or "by reflex" (the fight); the bot's pick is
@@ -522,7 +524,7 @@ The cleanup left typed pieces for this; the layer is built on them, in one modul
 | Objectives as data | `Objective`, `Kind`, `Ident`; `Refusal`; `PathNote` | `Refusal` and the tiers of `next` surfaced as confirmations (a `Proposal` type: id, options, default, deadline, class, validity check) |
 | Her orders | `Order` (go, explore area/way, exit, stop), `rush`, `risky`, `sure` | `Goal`; idle fallback (`auto` after N s) |
 | Her say in the fight | `Combat::forced_target`, `Combat::barred` (moves the tree isn't to make), `Tuning::with` (stances), `press_on` | **new seams**: a forced gun (a rule at the top of `best_gun`); a requested retreat (a `RetreatKind` begun from outside, to a place); `hold` and `push` as stances over `Tuning` plus `barred`; `ignore` (a set like `wanted_dead`, the other way); each with an expiry |
-| Why the trigger's held | three sources (the node, `baiting`, `HeldFire`), one logged | one `HeldFire` with all the reasons, hers included (`ByOrder`): the open finding in CLEANUP_PLAN.md, done here |
+| Why the trigger's held | three sources (the node, `baiting`, `HeldFire`), one logged | one `HeldFire` with all the reasons, hers included (`ByOrder`): the open finding in cleanup-2026-11.md, done here |
 | Policy | `Tuning` (9 groups, ~200 numbers), `--tuning FILE`, the advisor's stances | `Policy`: the fixed settings of 4.4, each mapped onto `Tuning` fields and explorer flags in one table; applied at a tic boundary |
 | Events | `Director::event`/`report` (strings, `notable`) | typed `Event` (kind, importance, cooldown key, cause) rendered by one function; the budgeter; the fight summary; the ring for before-and-after |
 | The link | `neuro/link.rs`, `session.rs` (context, force, result, reconnect) | deadlines; one open question; answers checked for staleness |
@@ -538,12 +540,12 @@ reads is short.
 |---|---|---|
 | 0 | **Drive what exists by hand**: a level through `watch --headless --directed FILE` in real time, me as Evil, noting every moment I wanted to know or do something I couldn't | notes in this file (section 8); they reorder the stages below |
 | 1a | **First, from stage 0's notes**: the idle fallback (`idle` policy, announced); orders queue or say what they replaced, exploring goes on after an errand; short ids with a phrase; "seen, no way yet" as a state; an order's outcome says what came of it; a failure says what would work; lists ranked with a pick | E1M2 driven by hand again at the same pace: out in under 7 minutes, no order lost unsaid, idle under a fifth of the time |
-| 1 | **Done** (2026-11-11): the grammar, the budgeter, the fight summary, `doom_look`, the moments, locks; its gate run (the GPT stand-in on MAP07, its whole context read cold, words counted: DECISIONS.md). `Situation` and typed `Event` moved to stage 4 | a recorded level's whole context reads well cold; under the word budget; GPT stand-in's choices no worse |
+| 1 | **Done** (2026-11-11): the grammar, the budgeter, the fight summary, `doom_look`, the moments, locks; its gate run (the GPT stand-in on MAP07, its whole context read cold, words counted: the decision log). `Situation` and typed `Event` moved to stage 4 | a recorded level's whole context reads well cold; under the word budget; GPT stand-in's choices no worse |
 | 2 | **`doom_why` built** (2026-11-12, from what the bot has worked out that tic, not a journal: `control/directed/why.rs`): the bot's own choice in the second person with its reason and what it was chosen over, the fight and what pushed it, why she isn't shooting, the last action that failed. The journal always on: not needed for it | every "why" asked at 50 random moments of a run has a true, short answer |
 | 3 | **Done** (2026-11-12): the idle fallback (on by default, 3 s); `doom_goal` (`control/directed/goal.rs`): out, everything (100% then out), key [colour or id], kills, supplies, secrets, none; worked toward at once with nothing of hers in hand, an action of hers first and the goal after; met or with nothing more to do for it, said and ended; a key goal ends with its level. E1M2: `goal key` met at 55 s, `goal out` out at 166 s; E1M1: `goal everything` 100% at 209 s, out at 216 s. `doom_mode`: not needed (her settings and the fallback cover it) | a level finished with three goals and no orders; no stretch over 25 s with her idle and the bot still |
-| 4 | **Built** (2026-11-11, class D): questions (`control/directed/ask.rs`), `doom_answer`, deadlines (8 s, `doom_policy answers`), the force at 3 s; asked: leaving with things left, a way that costs (a hurting floor, a one-way drop), nothing but walls left on instinct, stuck 3 minutes, and on instinct each last resort before it's taken (strafing runs, stuck places, every wall, missed jumps, a hurting floor, the held-back exit). Gate passed (DECISIONS.md). `Situation` and typed events: stage 6 | scripted answers at 2, 8 and 30 s late: each either applied or refused as stale, never applied wrong |
+| 4 | **Built** (2026-11-11, class D): questions (`control/directed/ask.rs`), `doom_answer`, deadlines (8 s, `doom_policy answers`), the force at 3 s; asked: leaving with things left, a way that costs (a hurting floor, a one-way drop), nothing but walls left on instinct, stuck 3 minutes, and on instinct each last resort before it's taken (strafing runs, stuck places, every wall, missed jumps, a hurting floor, the held-back exit). Gate passed (the decision log). `Situation` and typed events: stage 6 | scripted answers at 2, 8 and 30 s late: each either applied or refused as stale, never applied wrong |
 | 1b (was 5) | Tactics: `doom_fight` and its seams, expiries; hurt told by rate, death told with its cause | arenas: each tactic visibly changes the fight and never lowers survival below autopilot's by more than noise when left to expire; MAP07 with the loadout, directed by hand: out alive at least once in six where the bot alone is 0 of 6 |
-| 6 | **Built** (2026-11-11): class T questions (the default done at once, 3 s to switch, never forced): a fight turned bad (outmatched, an arch-vile, a boss, health under 25; once a fight), a run-jump whose miss costs. `Situation`, one snapshot a tic (status, look, questions). Gate run with the stand-in (DECISIONS.md). Typed events built after it (`events.rs`) |
+| 6 | **Built** (2026-11-11): class T questions (the default done at once, 3 s to switch, never forced): a fight turned bad (outmatched, an arch-vile, a boss, health under 25; once a fight), a run-jump whose miss costs. `Situation`, one snapshot a tic (status, look, questions). Gate run with the stand-in (the decision log). Typed events built after it (`events.rs`) |
 | 7 | `doom_policy`; then `doom_style` through the classifier | each setting's effect measured on the score's quarter set; none outside its documented range |
 | 8 | The game itself: `doom_game`, `doom_cheat`, the console's switches for what she's allowed and its view of questions and policy | an episode on stream settings, unattended, through a death, a pistol restart, a skill change and each cheat; a disallowed action refused; a cheated level never in a measure |
 | 9 | Latency rehearsal: the mock delaying and dropping her answers; Tony and Randy for malformed and random input. **Done** (2026-11-12): her data mended where plain (`neuro/repair.rs`), the rules told again every 10 min or 30,000 characters, an open question asked again on reconnecting, no force while the link's down; every action answered on every screen (Gary's timeouts found the gaps); Randy through Gary, 4 minutes on E1M1: 103 random actions, all answered, no crash, 58 refused each with its reason. Delayed and dropped answers not rehearsed apart: a late answer is refused as stale (stage 4's gate), and she's on instinct after 3 s | no hang, no stale action, context volume steady over an hour |
@@ -694,13 +696,13 @@ What this changes in the stages: the idle fallback and order queueing move to th
 rather than later; the events for moments (secrets, kills, the fight summary) are stage 1 as
 planned. After MAP07: tactics move up to straight after 1a, with the telling of hurt by rate and of death; a level like that is unplayable for her without them, and class T questions (the bot retreats by default, she overrides) come with them rather than two stages later.
 
-## 9. Decided by the user (2026-11-11)
+## 9. Decided by the maintainer (2026-11-11)
 
 1. **With no action from her she waits**: stays where she is, looks round now and then, fights
    what comes at her, and doesn't go anywhere. Not `auto` by default (`doom_policy idle` is
    still hers to set). Built: a quarter turn one way every 4 s, the next the other way; the
    pickups she takes waiting only within 256 along the way (was 1024).
-   **Changed (the user's, 2026-11-11, after watching a model play through Gary):** with no
+   **Changed (the maintainer's, 2026-11-11, after watching a model play through Gary):** with no
    action for **6 s** she carries on by instinct (`idle 6` the default, announced; any action
    of hers takes over; `idle 0` has her wait as above). The bot stood still 10-20 s at a time
    while a model looked things up between short orders: dead air on stream.
@@ -721,7 +723,7 @@ planned. After MAP07: tactics move up to straight after 1a, with the telling of 
      she says `doom_game next`, as a player presses a key there (she's told the tally there).
      **Built** (stream mode, playing on through): held for her word, on by itself after 30 s
      so the stream's never left there.
-   - **choose a level** (changed, the user's): yes. She starts the game: the level, the skill,
+   - **choose a level** (changed, the maintainer's): yes. She starts the game: the level, the skill,
      and single (just that level) or continuous (on through its episode; Doom II: through
      the game). Offered at the title card and again once what she chose is over (the level,
      or the episode's end, its story told). What's on offer is the console's: by default only

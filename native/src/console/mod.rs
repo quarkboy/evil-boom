@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Quarkboy
 
-//! The stream console (docs/CONSOLE_PLAN.md): the streamer's controls in a web page. `server`:
+//! The stream console (docs/CONSOLE.md): the streamer's controls in a web page. `server`:
 //! `evil-boom console`, the supervisor (the page, the settings, the game as a child process);
 //! `game`: the game's end of the link (`watch --control ADDR`). Between them, JSON a line over a
 //! local TCP connection: `FromGame` up, `Command` down.

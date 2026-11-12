@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Quarkboy
-"""openai-relay.py [PORT]: a local relay to OpenAI's API for Gary (docs/GARY.md).
+"""openai-relay.py [PORT]: a local relay to OpenAI's API for Gary (docs/NEURO.md).
 
 Gary speaks OpenAI's Chat Completions API; OpenAI's newer models want the Responses API for
 much of what Gary asks (function tools with a reasoning effort; `max_completion_tokens` for

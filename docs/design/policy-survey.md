@@ -1,6 +1,8 @@
 # Stage 7: her standing settings (`doom_policy`), a survey before measuring
 
-The SDK plan's stage 7 (`NEURO_SDK_PLAN.md` 4.4): settings Evil sets once and that hold
+> **Status:** done: the settings are built (`doom_policy`), each value's cost measured.
+
+The SDK plan's stage 7 (`neuro-sdk-plan.md` 4.4): settings Evil sets once and that hold
 (across levels and deaths, till she changes them), as opposed to `doom_fight`'s say for a
 while and an order's for one thing. This is the survey before any scored run: what each
 setting would mean, what it would read on, educated guesses at its cost, and a plan to
@@ -66,7 +68,7 @@ about, using them on anything else costs ten times (`guns.boss_save`).
 
 Stream: strong ("not wasting a rocket on you, imp"). Yes.
 
-### 3b. Guns: her choice of weapon, done properly (the user's, 2026-11-11)
+### 3b. Guns: her choice of weapon, done properly (the maintainer's, 2026-11-11)
 
 Now: `doom_fight weapon NAME` for 10 s (at most 60), used while it has a shot; otherwise the
 bot's pick that tic. Built with the gun settings, as one piece:
@@ -183,7 +185,7 @@ told back and noted in the journal, so "why did I do that" can say "your policy:
 
 Kind 2 (`secrets`, `ask`): scripted directed games, a level each, as for stages 4 and 6.
 
-## Decided (the user, 2026-11-11)
+## Decided (the maintainer, 2026-11-11)
 
 - **`retreat_at`**: dropped, folded into `stance`.
 - **`save`**: cells matter more than rockets; rockets can be used freely. So the default
@@ -196,7 +198,7 @@ Kind 2 (`secrets`, `ask`): scripted directed games, a level each, as for stages 
   isn't). The setting is only for the big ones, renamed **`powerups`: `need` (default) |
   `now`**, over soulspheres, megaspheres and invulnerability. Invulnerability is already kept
   for a fight that needs it; soulspheres and megaspheres are taken now whenever they'd add
-  anything, so `need` is new for them (the user's rule): a **megasphere** when it adds at least
+  anything, so `need` is new for them (the maintainer's rule): a **megasphere** when it adds at least
   100 effective health, (200 - health) + (200 - armor), the blue armor's points counted as what
   they'll take for her; a **soulsphere** when it adds at least 50, under 150 health. Both tuning
   numbers (`errands.mega_gain` 100, `errands.soul_gain` 50). Short of that they're left where
@@ -222,7 +224,7 @@ as they are, and the gun work of 3b. New command: `doom_search`.
    set; what each costs written into the schema's words.
 5. `doom_policy` taking them, telling them back, the briefing naming any not at its default.
 
-## What was asked of the user (answered above)
+## What was asked of the maintainer (answered above)
 
 1. Fold `retreat_at` into `stance`? (Proposed: yes.)
 2. Drop `barrels`, `infighting` and `switches`? (Proposed: yes; `doom_fight` covers the
@@ -248,15 +250,15 @@ own noise is about 0.01-0.02 on a broad change; a value that moves few runs read
 | stance avoid | 0.421 (-0.043, s.e. 0.019) | 90 | 255 | to get past a fight, not to leave on |
 
 What it says: the stances are real choices with real costs; `avoid` left on all the time costs
-most (the user's: it's for a hard room, not a whole level; so it's a `doom_fight` stance for a
+most (the maintainer's: it's for a hard room, not a whole level; so it's a `doom_fight` stance for a
 while too); `careful` may be as good as the default or better, worth a full set as a default
 on its own. `risk` hardly touches the bot alone (only a pickup on a floor that hurts goes by
 it); in directed play it's what she's asked about a costly way that matters, so `risk` is
 mostly for the explorer part not yet built (when the risky pass is let in). `save none` moved
-two runs: bosses are rare in the quarter set. Every value stays hers (the user's: options aren't
+two runs: bosses are rare in the quarter set. Every value stays hers (the maintainer's: options aren't
 kept or dropped by the score).
 
-**Careful as the default, the full set** (the user asked): -0.0059 (s.e. 0.0095), 0.453 against
+**Careful as the default, the full set** (the maintainer asked): -0.0059 (s.e. 0.0095), 0.453 against
 0.459, 399 levels finished against 402, but more consistent: 26 level-skills beaten on every
 run against 20, 55 never against 58; 929 of 1088 runs moved (264 better, 300 worse). No
-difference in score beyond noise; the quarter set's +0.008 was noise too. Left to the user.
+difference in score beyond noise; the quarter set's +0.008 was noise too. Left to the maintainer.

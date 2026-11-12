@@ -1,5 +1,7 @@
 # Neuro-controlled Doom: architecture and implementation plan
 
+> **Status:** superseded by [neuro-sdk-plan.md](neuro-sdk-plan.md) (2026-11-11). Kept for the first slice's reasoning.
+
 Date: 2026-11-08 (revised from the 2026-11-07 draft)
 
 Status: agreed direction; implementation not begun. The classifier and style design (section 5)

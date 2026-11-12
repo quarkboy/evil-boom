@@ -1,5 +1,7 @@
 # Rust structure and performance review — November 2026
 
+> **Status:** done (November 2026). Its module map is the base of [../ARCHITECTURE.md](../ARCHITECTURE.md).
+
 The review baseline is `dd07421`, which includes the pre-existing uncommitted gameplay
 improvements. The refactor keeps decision ordering, thresholds, floating-point operations,
 and recorded controls intact. It does not retune the bot.
@@ -151,8 +153,8 @@ map, seed, or machine; planner wall-clock deadlines still exist.
 Windows release builds, Rust 1.99.1, default features, the repository's unchanged release
 profile, installed classic IWADs, and the same DSDA DLL and warm navigation cache.
 Each cell is the median of three sequential runs. Positive percentages mean less wall
-time. [All samples, recording hashes, and control counts](rust-review-results.json) are
-retained alongside this report.
+time. (The raw samples, recording hashes and control counts are in the repository's history,
+`docs/rust-review-results.json`, removed in the open-source cleanup.)
 
 | Scenario | Baseline seconds | Refactor seconds | Time reduction |
 | --- | ---: | ---: | ---: |

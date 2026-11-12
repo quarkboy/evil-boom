@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Quarkboy
 
-//! Her standing settings (`doom_policy`; the SDK plan's stage 7, `docs/POLICY_SURVEY.md`): how
+//! Her standing settings (`doom_policy`; the SDK plan's stage 7, `docs/design/policy-survey.md`): how
 //! she fights (`stance`), what ammo she keeps for bosses (`save`), how readily she takes a
 //! floor that hurts (`risk`), when the big powerups are taken (`powerups`). Each is numbers over
 //! the run's own tuning, applied as her standing numbers; a stance taken for a while with

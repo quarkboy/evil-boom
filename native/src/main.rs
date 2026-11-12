@@ -32,7 +32,7 @@
 //!   evil-boom neuro-gpt [--port N] [--config FILE]   a language model as Evil (config/neuro-gpt.json, and
 //!                                               config/neuro-gpt.local.json for the key): log in
 //!                                               out/neuro/gpt.log
-//!   evil-boom console [--bind HOST:PORT] [--new-token]   the stream console (docs/CONSOLE_PLAN.md): a
+//!   evil-boom console [--bind HOST:PORT] [--new-token]   the stream console (docs/CONSOLE.md): a
 //!                                               web page (0.0.0.0:7878, its token printed) to start,
 //!                                               stop and steer the game, started as a `watch` child;
 //!                                               --new-token: the old one stops working

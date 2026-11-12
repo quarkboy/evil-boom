@@ -1,7 +1,9 @@
 # Realism: where she still goes by the level's truth
 
+> **Status:** in progress. The survey and its work list; the table records what each change scored.
+
 A survey (2026-11-09) of every place Evil decides by something a player at the screen couldn't
-know. The rule (the user's, 2026-11-09): the fight goes by what she has seen, heard and learned,
+know. The rule (the maintainer's, 2026-11-09): the fight goes by what she has seen, heard and learned,
 as the exploring does. Each item below is to be made realistic one at a time, after the
 restructuring, and scored; a very large drop means look for a bug in the change first.
 
@@ -16,7 +18,7 @@ restructuring, and scored; a very large drop means look for a bug in the change 
   lists things for whoever is ordering her about.
 - **By design, left alone:** the planner underneath is omniscient and knowledge filters it
   (CLAUDE.md); what monsters and guns do (`bestiary`) is a player's knowledge of the game; the
-  Icon of Sin's brain (the user's: she may know of it); the kill, item and secret totals (the
+  Icon of Sin's brain (the maintainer's: she may know of it); the kill, item and secret totals (the
   automap's).
 
 ## The two ways truth gets in
@@ -109,15 +111,15 @@ before any of them: 0.445.
 | Near taken out for monsters (seen only in her view) | 0.375 | -0.0566 ± 0.0104 | 50 / 292 / 414 | very large: traced, see below |
 | ...with the looking's two faults fixed | 0.382 | -0.0497 ± 0.0106 against before near came out | 32 / 299 / 411 | E1M7 UV -0.44, E3M2 HMP -0.43, E2M2 UV -0.38 |
 | Memory: monsters seen lately kept in mind, counted 1.5 times | 0.370 | -0.0112 ± 0.0099 (-0.0609 ± 0.0102 against before near came out) | 27 / 374 / 377 | E2M8 HMP -0.62, E3M6 HMP -0.51, E1M1 UV -0.42 |
-| A hit from the side turned to with missiles in the air and before a monster lost from sight (the user's watching of E1M6) | 0.390 | +0.0201 ± 0.0066 | 558 / 192 / 130 | exits 290 to 318; health lost to close attackers out of view 31.3 a run to 28.1 |
-| No stopping to look at a noise on a floor that hurts (the user's watching of E1M5) | 0.386 | -0.0037 ± 0.0021 | 1006 / 16 / 23 | 82 runs touched; kept as the sounder rule, though it scores a shade under |
+| A hit from the side turned to with missiles in the air and before a monster lost from sight (the maintainer's watching of E1M6) | 0.390 | +0.0201 ± 0.0066 | 558 / 192 / 130 | exits 290 to 318; health lost to close attackers out of view 31.3 a run to 28.1 |
+| No stopping to look at a noise on a floor that hurts (the maintainer's watching of E1M5) | 0.386 | -0.0037 ± 0.0021 | 1006 / 16 / 23 | 82 runs touched; kept as the sounder rule, though it scores a shade under |
 | A monster's footsteps not taken for attacks (work list A1) | 0.383 | -0.0032 ± 0.0028 | 935 / 35 / 48 | a correction; nothing's done with a footstep yet |
-| One hand turns her: no faster than 18 degrees a tic, its rate changed by at most 10 a tic (the user's: a jitter tracking an enemy near cover) | 0.399 | +0.0164 ± 0.0101 | 19 / 381 / 347 | jitters 0.29 a game minute to 0.16; at 6 a tic: 0.08, score -0.0105 ± 0.0101 |
-| Instinct: a monster known where it is for half a second after something comes between (the user's allowance; work list C1) | 0.398 | -0.0019 ± 0.0100 | 27 / 332 / 368 | nothing either way; a full second: +0.0021 ± 0.0100. Kept at half a second |
-| The fight's movement keeps off ground she's never been on (work list B1; the user's watching of E3M3) | 0.397 | -0.0012 ± 0.0100 | 18 / 357 / 365 | health lost to close attackers out of view 5.37 a game minute to 3.51, all health lost 27.4 to 23.8; she dies as often (724 to 723) but later (179 s to 221 s) |
-| Armor valued by what it adds to how much she can take, by the game's replacement rule (the user's; work list D5) | 0.396 | -0.0006 ± 0.0018 | 1032 / 10 / 13 | 56 runs touched: the valuation wasn't what kept her from MAP02's megaarmor (see the next line) |
+| One hand turns her: no faster than 18 degrees a tic, its rate changed by at most 10 a tic (the maintainer's: a jitter tracking an enemy near cover) | 0.399 | +0.0164 ± 0.0101 | 19 / 381 / 347 | jitters 0.29 a game minute to 0.16; at 6 a tic: 0.08, score -0.0105 ± 0.0101 |
+| Instinct: a monster known where it is for half a second after something comes between (the maintainer's allowance; work list C1) | 0.398 | -0.0019 ± 0.0100 | 27 / 332 / 368 | nothing either way; a full second: +0.0021 ± 0.0100. Kept at half a second |
+| The fight's movement keeps off ground she's never been on (work list B1; the maintainer's watching of E3M3) | 0.397 | -0.0012 ± 0.0100 | 18 / 357 / 365 | health lost to close attackers out of view 5.37 a game minute to 3.51, all health lost 27.4 to 23.8; she dies as often (724 to 723) but later (179 s to 221 s) |
+| Armor valued by what it adds to how much she can take, by the game's replacement rule (the maintainer's; work list D5) | 0.396 | -0.0006 ± 0.0018 | 1032 / 10 / 13 | 56 runs touched: the valuation wasn't what kept her from MAP02's megaarmor (see the next line) |
 | Something badly needed ranks with keyed doors, not after them (MAP02's megaarmor left for a red door across the level) | 0.400 | +0.0036 ± 0.0078 | 301 / 236 / 231 | HMP +0.020, UV -0.013; E1M9 HMP +0.39, E2M2 UV -0.31 |
-| The fall back from monsters woken on ground she's never been on (the user's), 256 units and a 6 s wait: off by default | | -0.0011 ± 0.0091 | 183 / 272 / 306 | all health lost 23.9 a game minute to 22.5; a matter of how it plays |
+| The fall back from monsters woken on ground she's never been on (the maintainer's), 256 units and a 6 s wait: off by default | | -0.0011 ± 0.0091 | 183 / 272 / 306 | all health lost 23.9 a game minute to 22.5; a matter of how it plays |
 
 O8's first score was -0.0157 ± 0.0077 with 664 runs changed and MAP03 down 0.4 on both skills.
 Traced: not the rule. Things were noticed from her view as it was the tic before (the explorer's
@@ -137,7 +139,7 @@ most fights: this cost is the rule's own.
 
 ## Hearing and feeling: bearings, then the shortcuts out (the plan, 2026-11-09)
 
-Found after the survey (the user's questions): three shortcuts stand in for senses she didn't
+Found after the survey (the maintainer's questions): three shortcuts stand in for senses she didn't
 have. Hurt, she noticed everything in line of sight all round for two seconds. A monster or a
 missile within 384 units with nothing between counted as seen whichever way she faced ("near":
 written as "heard", but Doom has no sound of a missile in flight, and a monster standing still
@@ -167,7 +169,7 @@ of it back. The rest is what near had been besides: her memory. Everything she r
 fight came from what's in her view now, and a second after; a monster she saw two seconds ago
 and turned from was gone from the threat, from outmatched and surrounded, from the ways her
 steering keeps clear of. Next: monsters seen lately kept in mind where she last saw them (the
-user's: and counted for more than one in sight; one you know is round you and can't place is
+maintainer's: and counted for more than one in sight; one you know is round you and can't place is
 the bigger threat).
 
 Memory didn't bring it back: -0.011 ± 0.010 on its own (about nothing), -0.061 in all against
@@ -176,7 +178,7 @@ E1M1 UV (-0.42) traced: not memory. A shotgun guy 1600 off through a gap, in her
 on one tic and out of it the next as her legs moved her a unit either way: "shooting on the
 way" (the route's legs) and "lost sight: keeping at it" (the fight's) by turns for a thousand
 tics, 44 rounds spent for 5 damage, then out of ammo for the rest of the level. One of the
-loops of DECISIONS.md's step 5 (a decision undoing its own condition), there before; with
+loops of the decision log's step 5 (a decision undoing its own condition), there before; with
 nearly every run played differently now (27 of 1088 the same), which runs meet it is chance.
 What near's 0.05 is made of isn't known yet.
 
@@ -207,14 +209,14 @@ hears one that's close: a wandering monster's noise was left out of what turns h
 always one somewhere), but a loud one is a close one. `senses.heed_active_volume` and
 `senses.heed_volume` are the loudness a sound needs to turn her, to be tried by tuning file.
 
-## Watched runs: the user's verdicts (2026-11-10)
+## Watched runs: the maintainer's verdicts (2026-11-10)
 
-The user watching the runs that die from close attackers out of view (the list above), one at a
+The maintainer watching the runs that die from close attackers out of view (the list above), one at a
 time. To act on once the watching's done, not before.
 
 - **MAP04 HMP, seed 180954446** (dies at 48 s). The first corridor: a room full of shotgun guys
   behind a "window" that goes up and down, so they come in and out of sight over and over (and
-  it makes noise). Dangerous in itself. The user's idea: a little **instinct**: she goes on
+  it makes noise). Dangerous in itself. The maintainer's idea: a little **instinct**: she goes on
   knowing where an enemy is, as it is, till it's been truly out of sight for about half a second
   (17 tics or so). "It's cheating a little bit but our goal is good streaming content."
 - **E1M1 UV, seed 1861030831** (dies at 50 s). Ran into a room and let herself be flanked on
@@ -228,7 +230,7 @@ time. To act on once the watching's done, not before.
   rooms, where she at least has a wall at her back.
 - **E2M3 UV, seed 574408264** (dies at 55 s). She chose to fight a baron with a pistol rather
   than try the risky but necessary run past it. A demon helped trap her too, but it was mostly in
-  view (the user's, pretty sure).
+  view (the maintainer's, pretty sure).
 - **E3M3 HMP, seed 2075529707** (dies at 62 s). She kept backing up to dodge or keep off
   enemies, waking more of them in the rooms behind her, which then came up behind and hit her.
   She needs a strong pull to stand her ground and fight closer to the enemies, and to dodge
@@ -245,13 +247,13 @@ time. To act on once the watching's done, not before.
   invulnerability sphere you all but land on: she jumped over it, the monsters swarmed her, and
   she died before getting to it. The monsters were all low-level ones, just spawned all round
   her.
-- **Seen across the runs, on how she fights** (the user's, with E3M6): breaking line of sight
+- **Seen across the runs, on how she fights** (the maintainer's, with E3M6): breaking line of sight
   behind a doorway, stepping left and right, she goes very far to each side, much further than
   it takes. Tighten it to only as far as needed: again so as not to wake more enemies.
 - **E1M6 UV, seed 499438419** (dies at 124 s). Strange: it looks as if something goes wrong.
   At about 90 s she waits in front of a lift, trying to pick up a medikit and failing; then,
   giving up, she backs into a shotgun guy and never turns round, even hit point blank several
-  times. The user's: deserves a careful trace.
+  times. The maintainer's: deserves a careful trace.
   Traced. Two things. (1) The medikit is on a lift she'd sent off herself, crossing its line as
   she backed away from a spectre; she then waited 20 s "at the mover" for a lift that doesn't
   come back by itself, and only afterwards tried its switch. A wait for a lift that has no
@@ -275,14 +277,14 @@ time. To act on once the watching's done, not before.
   cyberdemon stuck in that same room; the objective's never changed (as with MAP07's switch),
   so she ends up squeezing into the room with it, "and that goes about as well as you'd
   expect".
-- **The user's, on monsters heard walking**: the cyberdemon's steps are a sound of their own,
+- **The maintainer's, on monsters heard walking**: the cyberdemon's steps are a sound of their own,
   constant, heard all the time. Worth having in the logic for any enemy with a walking sound
   like that (see the engine): she should have a much better sense of where it is, and hunt it
   more proactively than she does.
 
 ## The work list from the watching (2026-11-10)
 
-Twelve runs watched by the user; their verdicts above. Grouped, in the order to do them. Each
+Twelve runs watched by the maintainer; their verdicts above. Grouped, in the order to do them. Each
 is its own change, scored against the build before on the same runs.
 
 **A. Things that are broken** (concrete, cheap)
@@ -305,7 +307,7 @@ is its own change, scored against the build before on the same runs.
 4. Stepping out of sight at a doorway: only as far as it takes.
 
 **C. What she knows**
-1. Instinct (the user's allowance): an enemy is known where it is till it's been truly out of
+1. Instinct (the maintainer's allowance): an enemy is known where it is till it's been truly out of
    sight about half a second.
 2. A monster heard walking is kept track of by its steps (side and loudness each step), and
    hunted on her terms.
@@ -321,7 +323,7 @@ is its own change, scored against the build before on the same runs.
 6. The rocket launcher left a long while (E2M8: to trace).
 7. Small pickups across a floor that hurts, and fighting on one (E1M5).
 
-## The work list, worked through (the user away, 2026-11-10)
+## The work list, worked through (the maintainer away, 2026-11-10)
 
 Each line: the change, its score run for run against the build before on the same 1088 runs
 (mean difference ± its standard error; runs the same / better / worse), and the score after.
@@ -334,7 +336,7 @@ Each line: the change, its score run for run against the build before on the sam
   (969 / 40 / 47; HMP -0.010, UV +0.003). Kept, on the watching (MAP11's lost souls behind
   bars); a shade under, to look at if it shows again.
 - **A2** her objective thought again when the fight's taken her 256 or more from where the
-  route had her: -0.0007 ± 0.0087 (124 / 278 / 324; HMP -0.021, UV +0.020). Kept (the user's:
+  route had her: -0.0007 ± 0.0087 (124 / 278 / 324; HMP -0.021, UV +0.020). Kept (the maintainer's:
   "especially the case when an objective becomes significantly farther away").
 - The three together: -0.0038 ± 0.0087; 0.395.
 - **D2** (a baron fought with a pistol), **D6** (the rocket launcher left a long while): not
@@ -367,18 +369,18 @@ Each line: the change, its score run for run against the build before on the sam
   way (known -0.003, blind -0.001); left at 10.
 - What a monster drops is forgotten between lives (only what the map placed is remembered
   by where it is).
-- **A shot's line kept till it's out** (the user's, watching: "often the movement back to
+- **A shot's line kept till it's out** (the maintainer's, watching: "often the movement back to
   cover is too quick and the shots hit the wall instead of the enemy", "with the shotgun
   even", "this still happens while moving on stairs"). A bullet leaves the pistol 4 tics
   after the trigger, a shell 3, from where she is then: the fight looked at the line only at
   the press. Now the trigger isn't pulled when the speed she has would have her out of the
   line by then, and she slows for it (else it's out and back round a corner with never a
-  shot; the user's); once pulled, her legs wait for the shot if they'd take her out of the
+  shot; the maintainer's); once pulled, her legs wait for the shot if they'd take her out of the
   line; the chaingun, two bullets a press, lets go and waits out its burst. Between shots her
   legs are her own. +0.0302 ± 0.0096 (88 / 365 / 282; exits 327 -> 369; 0.430): for the same
   rounds, 6% more damage; shots with no pellet on anything 18.8% -> 14.8% (the game's own
-  count, in the engine patch: the user's "count pellets that hit a non enemy").
-- **The trigger let go between shots at what's far** (the user's "advanced trigger
+  count, in the engine patch: the maintainer's "count pellets that hit a non enemy").
+- **The trigger let go between shots at what's far** (the maintainer's "advanced trigger
   control"): a bullet's dead straight unless the trigger's been held since the last, so the
   pistol and the chaingun are tapped when holding would land less of its bullets than the
   slower cycle costs (the pistol's 19 tics for 14, the chaingun's 10 for 8: an imp from
@@ -399,7 +401,7 @@ Each line: the change, its score run for run against the build before on the sam
   the hour).
 - The three without the shot's line: -0.0120 ± 0.0094 against 0.412, not accounted for by
   any one of them (the step -0.005, the eyes +0.005).
-- **The mesh, a subsector cut by its lines and not by its segs' ends** (the user's, from the
+- **The mesh, a subsector cut by its lines and not by its segs' ends** (the maintainer's, from the
   watcher: "she can definitely get out. the passage on the bottom is open"). Where the node
   builder split a line the new end is rounded to a whole unit; a seg 6 units long on a wall
   sloping 1 in 20, carried out along a long thin subsector, cut a wedge of MAP24's pit away
@@ -408,7 +410,7 @@ Each line: the change, its score run for run against the build before on the sam
   barrel in the way with nothing to shoot it with failing at once** (it was 20 s stood before
   it): -0.0009 ± 0.0066 (497 / 154 / 139; exits 377 -> 374); 0.438; level-skills never
   beaten 65 -> 57 (first exits on MAP11, E3M4, MAP27, MAP19), E3M9 6 of 16 -> 2, E3M3 15 ->
-  12 (not traced; E3M9 is a level of much chance, the user's). Kept.
+  12 (not traced; E3M9 is a level of much chance, the maintainer's). Kept.
 - **The chaingun's burst and her legs by turns; a trigger pulled on an empty gun begins no
   shot** (both from MAP23's pass, each a stand of minutes with nothing in the log). The
   first was the shot's line rule's own: a line to it, her legs wanting where there's none,
@@ -419,7 +421,7 @@ Each line: the change, its score run for run against the build before on the sam
   134 / 143; exits 374 -> 375); 0.439. Kept. The console's merge before it: all 1088 runs
   the same to the tic.
 - **The stucks of the passes before a known level** (MAP29, MAP18, MAP06, traced one by one
-  with the user), those of them that are ordinary play's too: closing in from the standing
+  with the maintainer), those of them that are ordinary play's too: closing in from the standing
   node given up as the other closing-in is, and not stood at with no safe step towards what's
   out of reach; a jump in where she is taken for the teleport ahead only when she's where it
   puts her (the fight had moved her: the way on followed from the wrong place, 42 times); a
@@ -441,7 +443,7 @@ Each line: the change, its score run for run against the build before on the sam
   the next was fixed); and **the jump finder gives what one line moves heights from the one
   state** (it had a run off the top of three steps a line builds needing the top step built
   and the one below not: the stairs to a door never usable, the door jumped at from a lift
-  for ten minutes; the user's "must be some issue with what it thinks a sector height is").
+  for ten minutes; the maintainer's "must be some issue with what it thinks a sector height is").
   +0.0006 ± 0.0029 (1007 / 22 / 21; exits 380 -> 382; stalled 54 -> 52); 0.447. The finder's
   part: 1083 of 1088 runs the same. Kept, for the passes.
 - **Learning by ear** (an allowance: an inference, not a thing seen). Something heard to
@@ -453,7 +455,7 @@ Each line: the change, its score run for run against the build before on the sam
   hurt her (a suit, the pass), and a sound she's just set off gone to from a floor that
   hurts already. +0.0017 ± 0.0073 (438 / 159 / 171; HMP +0.018, UV -0.014; exits 382 -> 389;
   never beaten 61 -> 55); 0.448. Kept.
-- **Closing in is going nearer** (the user's: "I don't understand how they can stall, the
+- **Closing in is going nearer** (the maintainer's: "I don't understand how they can stall, the
   enemies are right in her face"). Out of her gun's reach, the standing node's "closing in"
   took the steering's step, which keeps to ground she's been on and to the side: MAP07 on
   the easiest skill, a mancubus 600 off across the yard, the super shotgun's reach 480, to
@@ -462,20 +464,20 @@ Each line: the change, its score run for run against the build before on the sam
   70 degrees of the way to it; else straight at it if that's safe; else the route goes on.
   The same 16 seeds on skill 1: MAP07 3 exits -> 11 (stalled 12 -> 4), MAP25 3 -> 5. HMP and
   UV: +0.0011 ± 0.0064 (544 / 144 / 143; exits 389 -> 393); 0.449. Kept.
-- **The two easiest skills** (the user's, to see what she can't beat at all; `out/score/
+- **The two easiest skills** (the maintainer's, to see what she can't beat at all; `out/score/
   easy.tsv`, 8 seeds, and `easy-hard16.tsv`, 16 seeds of the worst eleven on skill 1):
   skill 1 0.826 (427 of 544 out), skill 2 0.720 (357). Never out on skill 1 in 16: MAP21
   (all stalled), MAP20 and MAP23 (dead in 40 s), E4M6 and MAP29 (dead or stalled late), and
   the boss levels E3M8 and MAP30.
 - **A torch of another colour is a mark; a well-marked wall is tried as she passes** (the
-  user's: MAP32's secrets, "some of the torches next to the walls are different colors than
+  maintainer's: MAP32's secrets, "some of the torches next to the walls are different colors than
   the others", and "the player is expected to find them before she encounters the
   cyberdemon"). Of the torches she's seen, those not of the commonest colour mark the wall
   each stands before (`marked`, 2 points: not from the survey the other signs' points are
   from); a wall suspected 6 or more is tried when she's within 448 of where she'd press it
   (a hall's width; it was 128). MAP32, the same 16 seeds on the easiest skill: 5 exits ->
   16, the cyberdemon killed in 14; the baseline's seeds: HMP 1 of 8 -> 6, UV 3 -> 7.
-- **A gun's reach by how wide the target is, for the trigger** (the user's: "doesn't the SSG
+- **A gun's reach by how wide the target is, for the trigger** (the maintainer's: "doesn't the SSG
   reach at that distance, just not optimally?"). Past its reach a gun's still worth a shot
   at what's wide enough that as much lands as on a man at its reach (the super shotgun's
   spread up and down counted): an arachnotron from about 950 with it, a mancubus 800. For
@@ -537,7 +539,7 @@ off for an invulnerability across the level: MAP13's first street for 300 s): th
 it, as an invulnerability does (MAP06 386 -> 1007 lines, MAP14 781 -> 1629, MAP15 1357 ->
 1625, MAP28 453 -> 736). The mesh (above): MAP24 249 -> 1070, MAP19 694 -> 1236, E4M2 411 ->
 656, MAP13 551 -> 774. MAP23: her rounds gone on lost souls, a barrel before the switch: not
-able to be hurt, she punches it (the user's); 115 -> 168, then a chaingunner seen and not to
+able to be hurt, she punches it (the maintainer's); 115 -> 168, then a chaingunner seen and not to
 be shot, closed in on and lost by turns: the chaingun's deadlock and the empty BFG (above);
 with them 390 of 391, out by the exit. The pass's line in the log says why it ended. Still
 short: MAP29 (789 of 1152), MAP13, MAP08 (581 of 649). `evil-boom watch ... --known`
@@ -557,7 +559,7 @@ planner's jumps into a sector and whether she believes the heights each needs.
 
 MAP09's out by the exit with learning by ear (795 s, 597 of 640). The survey after it, one
 seed: 61 of 68. **One seed a level says where to look, not whether a change helped** (the
-user's): five levels that didn't finish on seed 5 after it, on four more seeds each, the
+maintainer's): five levels that didn't finish on seed 5 after it, on four more seeds each, the
 build before against the one with it: MAP24 3 of 4 -> 4, MAP14 0 -> 3, E4M2 2 -> 3, MAP16 4
 -> 4, MAP28 3 -> 1; 12 of 20 -> 15. A pass's finishing is a rate. Not finishing on any seed
 yet: the boss levels E3M8 and MAP30. Out knowing under four fifths of the map, for leaving

@@ -21,7 +21,7 @@ How to find out why a run went wrong, from the evidence the runs leave, before c
   shotgun, chaingun, launcher, SSG). Armortype is 1 (green) or 2 (blue).
 - **Several seeds, one at a time** (see "the log" below for why not in parallel). Once the fix
   holds with a loadout, check that level from a pistol start or in an episode.
-- No full sweeps without the user's go-ahead; up to 8 chosen levels or seeds per test is fine.
+- No full sweeps without the maintainer's go-ahead; up to 8 chosen levels or seeds per test is fine.
 
 ## The log: out/explore/\<IWAD\>_\<MAP\>.txt
 
@@ -166,7 +166,7 @@ Useful spots:
 
 ## Before calling something unreachable or broken
 
-Look it up (DoomWiki, secrets lists). DoomWiki and Fandom refuse automated fetches; ask the user
+Look it up (DoomWiki, secrets lists). DoomWiki and Fandom refuse automated fetches; ask the maintainer
 to paste the page text, they're happy to. Then confirm with `drive` or a snapshot.
 
 ## Worked example: MAP08 deaths with a good loadout (2026-11-07)
@@ -183,5 +183,5 @@ to paste the page text, they're happy to. Then confirm with `drive` or a snapsho
 3. The pit: per-tic positions showed her crossing the sinking platforms at full speed as meant.
    The route then ended on a platform (a look-at-wall goal), she stopped there, and it sank. The
    sinking-floor run judged every way off by the path back to that goal, which was going down
-   too. Fix (the user's rule): once the floor's going down, make for the nearest solid ground she
+   too. Fix (the maintainer's rule): once the floor's going down, make for the nearest solid ground she
    can reach (the pit's banks, not rooms behind its walls), keeping her momentum.

@@ -1,6 +1,8 @@
 # How far her judgement numbers can move: a range sweep
 
-The stage 7 screen (`POLICY_SURVEY.md`) moved a few numbers at once and found every setting but
+> **Status:** done (2026-11-12).
+
+The stage 7 screen (`policy-survey.md`) moved a few numbers at once and found every setting but
 `avoid` within a few hundredths of the defaults. This sweep asks the next question: one number
 at a time, pushed well past what any stance or setting uses, where does she start playing
 clearly worse? That says how much room each setting has, which numbers matter at all, and
@@ -50,7 +52,7 @@ second after: below.)
   none.
 - A value beyond the defaults that's clearly better is a candidate default: the full set
   decides, run for run, as before.
-- Whatever it shows, no option of hers is dropped for its score (the user's); what it shows is
+- Whatever it shows, no option of hers is dropped for its score (the maintainer's); what it shows is
   how far each can go, and what's written into her descriptions.
 
 ## Results

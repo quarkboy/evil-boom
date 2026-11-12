@@ -3,7 +3,7 @@
 # Copyright (C) 2026 Quarkboy
 # gary.sh [--local] [--watch|--stream] [WAD MAP [watch options...]]: Evil's integration tested against Gary
 # (github.com/Govorunb/gary), a stand-in Neuro server with real LLM engines and an MCP endpoint
-# (docs/GARY.md).
+# (docs/NEURO.md).
 #
 # Starts Gary with its server on (127.0.0.1:8000, MCP at /mcp) if it isn't running; with
 # --local, llama.cpp's server for a local model too (127.0.0.1:8080, OpenAI-compatible, for
@@ -14,7 +14,8 @@
 # (the tally, the next level, the game offered at the end: as on stream). Gary and the model
 # server stay up.
 #
-# Machine paths (defaults are this laptop's): GARY_APPIMAGE, LLAMA_SERVER, LLAMA_MODEL.
+# Where things are on this machine (set them; the defaults are under $HOME): GARY_APPIMAGE,
+# LLAMA_SERVER, LLAMA_MODEL.
 set -u
 cd "$(dirname "$0")/../.."
 GARY_APPIMAGE=${GARY_APPIMAGE:-$HOME/opt/gary/Gary-1.0.4_linux-amd64.AppImage}

@@ -1,16 +1,18 @@
 # The stream console: plan
 
+> **Status:** built (2026-11-10 to 11-12); the branch it mentions was merged. How to use the console: [../CONSOLE.md](../CONSOLE.md).
+
 Date: 2026-11-10. Branch `console` (kept apart from the bot's work on `main`).
 
 The streamer's controls for a live show: start and stop the game, restart a level, change the
 WAD, map, skill and who's directing her, reconnect to Neuro, see what's happening, step in. Not
 Evil-facing and not on stream (an overlay page for OBS may come later, from the same server).
-NEURO_INTEGRATION_PLAN.md section 7 put it in its own stage; its rules carried over from there:
+neuro-integration-plan.md section 7 put it in its own stage; its rules carried over from there:
 the console never changes the engine directly (commands are applied by the game at a tic
 boundary), it binds safely and keeps its credentials server-side, and a developer's ground-truth
 view never reaches anything model-facing.
 
-## Decisions (the user's, 2026-11-10)
+## Decisions (the maintainer's, 2026-11-10)
 
 | Question | Choice | Why |
 |---|---|---|
@@ -76,7 +78,7 @@ WAD, map); after that:
 | `restart_level` | the level again from the start (memory of the life before kept, as a death keeps it) |
 | `goto_map` map, carry | another level of the WAD in the same process (built): made ready first, so a level that isn't there leaves her playing on, told why; a pistol start unless `carry`; one a frame, the commands after it the next frame's. The game's hello lists the WAD's levels for the page's picker ("Next level" is the next in that list) |
 | `neuro_reconnect` | drop the link and connect again (the director, her orders and names, kept) |
-| `say` text | context to Evil from the streamer (later: with the user's wording rules) |
+| `say` text | context to Evil from the streamer (later: with the maintainer's wording rules) |
 | `order` action, data | an action as if from Evil (an override for when she's stuck; logged as the streamer's) |
 | `quit` | close cleanly |
 
@@ -92,7 +94,7 @@ WAD, map); after that:
    live; a line to Evil (context, not silent, "The streamer: ..."); an order as hers (through her
    own checks; she's told quietly of an order, not of a look); the traffic with Neuro is the
    log's "Evil and Neuro" filter; the WAD only by its short name (never a path). Sound (the
-   user's): master, SFX and music, each a remote control. SFX and music are DSDA's own settings
+   maintainer's): master, SFX and music, each a remote control. SFX and music are DSDA's own settings
    (0-15, its Sound menu's, not saved to its config file); DSDA has no master, so the engine
    patch adds one, a gain on the final mix in its audio callback (music and SFX are in it by
    then), 0-100. The levels are kept in the console's settings and given to each game as it
@@ -108,7 +110,7 @@ WAD, map); after that:
    `out/console/<commit>-<time>.log`. Tested: kill -9 at MAP05 (back at MAP05, a new pid); three
    in a row (the third left); SIGSTOP (killed as hung after 45 s, restarted). Left: the console's
    own restart finding a game still running (today a restarted console starts a new one).
-4. **Doom's own screens** (built, 2026-11-10; the user's: "we might need to port more of the
+4. **Doom's own screens** (built, 2026-11-10; the maintainer's: "we might need to port more of the
    engine, like the normal menu screen", then "skip the demo loop: stay on the title card").
    `watch --present` (`--title`: held at the title card till the console's Begin); the console's
    settings "Doom's own screens" and "Wait at the title card" (both on). The engine patch
@@ -135,10 +137,10 @@ WAD, map); after that:
    Presented games aren't the same games as unpresented ones on a fixed seed (a new game seeds
    its dice with the game's tic count, `rngseed += I_GetRandomTimeSeed() + gametic`, and the title
    card and the menu add tics), but they're the same as each other (seed 3, three times: the
-   same death at tic 6290). The user's: fine, streams play random seeds. Unpresented play is
+   same death at tic 6290). The maintainer's: fine, streams play random seeds. Unpresented play is
    unchanged by the patch: one binary on the old engine and the new, three levels, the same
    results to the second.
-   **The window for the stream** (built, 2026-11-10; the user's: "a new mode for the watcher
+   **The window for the stream** (built, 2026-11-10; the maintainer's: "a new mode for the watcher
    window for streaming itself ... the game isn't natively 16:9, so there is room on the sides
    ... figure out something interesting to add in there"): `watch --stream [right|left]`, the
    console's settings "Window: for the stream" (the default) and "Column: right/left" (moved live
@@ -156,7 +158,7 @@ WAD, map); after that:
    mid-fight ("Fighting a Shotgun Guy" with him on screen).
    On a 1080-line monitor the window's scaled down to fit, and OBS captures it at that size
    (scaled up again in OBS); a monitor with more lines, or a smaller stream size, if that shows.
-   **The console's View** (the user's: "the minimap view with current objectives, like the
+   **The console's View** (the maintainer's: "the minimap view with current objectives, like the
    watcher"): the game sends the watcher's own drawing twice a second, the right side of its
    window (the map as she knows it, her route, the objectives, the panel under it) and the
    game's frame (an indexed PNG of the engine's frame, ~70 KB), made into PNGs on a thread of
@@ -236,7 +238,7 @@ nothing new).
 
 ## No lives (2026-11-11)
 
-The Lives setting and the Set-lives control are gone (the user's: lives were for benchmarking;
+The Lives setting and the Set-lives control are gone (the maintainer's: lives were for benchmarking;
 on stream it's the original game, again and again till it's turned off). The console starts
 its game with `--lives unlimited`.
 

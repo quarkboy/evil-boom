@@ -15,7 +15,7 @@
 # out/score/ranges/<number>=<value>[.b].tsv. Values already in a summary are skipped, so a
 # stopped sweep picks up where it was.
 #
-# Phases (see docs/TUNING_RANGES.md): A the stances' numbers, B avoid's, C pickups and routes,
+# Phases (see docs/design/tuning-ranges.md): A the stances' numbers, B avoid's, C pickups and routes,
 # D guns and cover. No phase given: all of them, A first.
 set -u
 cd "$(dirname "$0")/../.."

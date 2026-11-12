@@ -369,7 +369,7 @@ impl Player {
     }
 
     /// The game as she perceives it: the observation with what she couldn't know taken out
-    /// (docs/REALISM.md). What decides anything is given this, not the game's own. So far: only
+    /// (docs/design/realism.md). What decides anything is given this, not the game's own. So far: only
     /// the barrels she's seen (where they are now: pushed about, they're the ones she saw), the
     /// things lying about that she's seen (`notice_things`), the monsters in her sight and the
     /// missiles she's noticed (the fight's senses, `Combat::observe`).

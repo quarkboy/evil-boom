@@ -1,5 +1,7 @@
 # The cleanup before the Neuro SDK work: plan
 
+> **Status:** done (2026-11-11). Kept for its findings and what each scored.
+
 Asked for 2026-11-11: the bot plays well enough; before it's adapted to the Neuro SDK's control,
 the code is to be made fit to work in. Comments that tell the story of a level instead of the
 rule; a full survey of the fight's tree, the exploring, the knowledge and the tactical layer for
@@ -64,7 +66,7 @@ The state each layer carries, by fields of its main struct: `RouteFollower` 101,
 What a comment is for after this pass: **what the code does and why, by the game's mechanics
 and what she can know.** Not where it was found.
 
-- Out: level names, seeds, run counts, health figures from a traced run, "the user's", the
+- Out: level names, seeds, run counts, health figures from a traced run, "the maintainer's", the
   story of the failure, the history of what the code used to do.
 - In: the rule, the mechanic that makes it right (a blast reaches 128; a hitscanner turns to
   her before it fires; a once-only line loses its special), what it interacts with, the
@@ -73,7 +75,7 @@ and what she can know.** Not where it was found.
   sentences; no parenthesised asides as the default form.
 - Module headers brought up to date with what's in the module (the tree's diagram was two
   nodes behind).
-- A decision stays in `docs/DECISIONS.md`; the story of a failure is in the git history.
+- A decision stays in `docs/design/decisions/`; the story of a failure is in the git history.
 
 **Pilot (done): `tactical/combat/tree.rs`.** All 40 of its comments rewritten
 to this, a doc comment that had drifted onto the wrong item put back, six nodes that had
@@ -108,7 +110,7 @@ Suspects already in hand from this week's traces, to start the list:
 - **Stale beliefs about heights.** Two cases this week (a stair's unseen steps; an exit step
   believed lower than seen). The model's heights against what she last saw need one rule.
 - **The arbiter's own header says its order is "not yet a considered rule".** Three loops
-  between the fight and the route were noted in DECISIONS.md step 5 and left.
+  between the fight and the route were noted in the decision log step 5 and left.
 - **A dip in a floor that hurts is reckoned a fraction of a hit.** It is none or a whole
   one. The wall rules now work round this; the estimate itself is still used elsewhere.
 - **`episode` and `watch --episode` and `record` are three loops over the same thing**, and
@@ -185,16 +187,16 @@ What directed play needs from the bot, and what's missing today:
 - **The agent's surface** (`play::Agent`) as the one thing the control layer talks to; today
   it reaches into `Explorer` and `Player` fields directly.
 
-`docs/NEURO_INTEGRATION_PLAN.md` is the plan for the integration itself; this step only
+`docs/design/neuro-integration-plan.md` is the plan for the integration itself; this step only
 makes the bot's side of that boundary clean.
 
 ## Step 5: the documents
 
 - `CLAUDE.md`'s "Where things stand" (it says 0.400; the score is 0.464).
-- `docs/DECISIONS.md` is 2,400 lines of history in order of writing; a short current-state
+- `docs/design/decisions/` is 2,400 lines of history in order of writing; a short current-state
   summary at its head, the history kept below.
 - `docs/DEBUGGING.md` against the switches as they'll be after step 3.
-- `docs/REALISM.md`: the infighting, the barrel run, the walk-between test.
+- `docs/design/realism.md`: the infighting, the barrel run, the walk-between test.
 
 ## Order and size
 
@@ -211,7 +213,7 @@ makes the bot's side of that boundary clean.
 Steps 1 and 2 go together (the same reading does both). Step 3 is where the risk is; the
 follower and the explorer's tiers are the two I'd do most carefully.
 
-## Decided (the user, 2026-11-11)
+## Decided (the maintainer, 2026-11-11)
 
 1. **The comment style** is the pilot's. And a pass on the names themselves (functions,
    fields, moves, variables), so each says the rule it is: part of step 3, area by area,
@@ -268,7 +270,7 @@ above stand; these are from reading the code since:
   the player for a retreat), and `aim_and_fire`'s own reasons (`HeldFire`); then `look`
   holds it too. Only the last is logged.
 
-- **Pistol taps at a barrel come slower than they need to** (the user's, watching;
+- **Pistol taps at a barrel come slower than they need to** (the maintainer's, watching;
   2026-11-11). `shoot_barrel` waits `BARREL_TAP` tics between taps (`follower/barrels.rs`),
   and only fires within 2 degrees of the barrel. To look at when it's fixed: how soon after
   a shot the pistol's next one is still its accurate first shot (the engine's refire), and
@@ -288,7 +290,7 @@ Each scored on the same 1088 runs against the set before it; kept if not signifi
 | Shots traced by where she faced before the turn | **checked, no bug**: `note_rounds_gone` reads the angle of the tic after the shot, which is the angle it left along (the game turns, then fires, in one tic); and it's a count, nothing decides by it | none | |
 | A dip in a floor that hurts reckoned a fraction of a hit | **checked, by design**: the fraction is the expected cost, used to weigh a way against others (`RISK_SHARE`); whether she'd live through it is judged by the hardest whole hit (`hardest_floor_hit`, the margin in `Refusal::ShortOfHealth`) | none | |
 
-### Jitter (the user's: fewer jittery, unhumanlike movements, where it doesn't cost much)
+### Jitter (the maintainer's: fewer jittery, unhumanlike movements, where it doesn't cost much)
 
 Measured first. A **dart** is her going one way and, within a quarter second, back the other
 (by where she went, not what was pressed: braking is a press back too); a **quick dart** is
@@ -321,9 +323,9 @@ Each is a refactor to do under parity when its area is next worked on.
 - Two ways to set monsters on each other (`RetreatKind::Bait`, `setting_on`).
 - The barrel chain worked out in six places; what `Observation::barrels` means by reader.
 - Stale beliefs about heights: wants one rule, and a failing run to write it from.
-- The arbiter's order and the three loops of DECISIONS.md's step 5.
+- The arbiter's order and the three loops of the decision log's step 5.
 - Three loops over an episode (`episode`, `watch --episode`, `record`).
-- Three sources for the trigger: goes with the SDK layer (`docs/NEURO_SDK_PLAN.md`, section
+- Three sources for the trigger: goes with the SDK layer (`docs/design/neuro-sdk-plan.md`, section
   6), where "why isn't she shooting" has to be one answer.
 - `shoot_barrel`, `check_blocked`, `crusher_ahead` still long.
 
