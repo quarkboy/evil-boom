@@ -18,19 +18,11 @@ pub const WARMUP_TICS: i64 = 8;
 
 /// Where the game's library and its own WAD are built.
 pub fn build_dir() -> PathBuf {
-    config::root()
-        .join("third_party")
-        .join("dsda-doom")
-        .join("prboom2")
-        .join("build")
+    config::engine_dir()
 }
 
 pub fn library() -> PathBuf {
-    build_dir().join(if cfg!(windows) {
-        "libdsda-evil.dll"
-    } else {
-        "libdsda-evil.so"
-    })
+    build_dir().join(config::ENGINE_LIBRARY)
 }
 
 /// (episode, map) from a map name: E1M1 or MAP01.

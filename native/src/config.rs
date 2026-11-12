@@ -106,15 +106,51 @@ pub fn resolve_wad(name_or_path: &str) -> PathBuf {
     doom_dir().join(path)
 }
 
-/// The project folder (EVILBOOM_ROOT, else the folder above the one this was built in).
+/// The engine library's file name on this platform.
+pub const ENGINE_LIBRARY: &str = if cfg!(windows) {
+    "libdsda-evil.dll"
+} else {
+    "libdsda-evil.so"
+};
+
+/// The program's own folder when it's a release: the engine library beside it (a release is
+/// unpacked anywhere, its `config/` and `out/` with it). None in a source checkout, where the
+/// program is built into `out/` and the engine into `third_party/`.
+fn release_dir() -> Option<&'static Path> {
+    static DIR: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+        dir.join(ENGINE_LIBRARY).is_file().then_some(dir)
+    })
+    .as_deref()
+}
+
+/// The project folder: EVILBOOM_ROOT; else a release's own folder; else the checkout this was
+/// built from (the folder above `native/`).
 pub fn root() -> PathBuf {
-    env("ROOT").map_or_else(
+    if let Some(r) = env("ROOT") {
+        return PathBuf::from(r);
+    }
+    if let Some(dir) = release_dir() {
+        return dir.to_path_buf();
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+}
+
+/// Where the engine library and its `dsda-doom.wad` are: beside the program in a release, else
+/// the engine's build folder in the checkout (`tools/build-engine.sh`).
+pub fn engine_dir() -> PathBuf {
+    release_dir().map_or_else(
         || {
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
+            root()
+                .join("third_party")
+                .join("dsda-doom")
+                .join("prboom2")
+                .join("build")
         },
-        PathBuf::from,
+        Path::to_path_buf,
     )
 }
 
