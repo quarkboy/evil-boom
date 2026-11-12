@@ -4,7 +4,8 @@
 //!   list TOPIC [all] [N] what she knows of: areas (those explored only with all), doors, items,
 //!                       monsters, exits
 //!   name ID NAME...     a name for something listed (refused when too long or taken)
-//!   order go REF [risky] | order explore REF|DIR | order exit | order stop
+//!   order go REF [risky] | order explore REF|DIR | order search REF|DIR [2|3] | order exit |
+//!   order stop
 //!                       an order (REF an id or a name; DIR n, ne, east, ...); `then` last: after
 //!                       the order in hand, not instead of it
 //!   check REF [risky]   could she go there now (as doom_go asks), and if not, why
@@ -113,16 +114,20 @@ pub fn command(
                     Some(&"risky") => Order::Go(w[2..w.len() - 1].join(" "), true),
                     _ => Order::Go(w[2..].join(" "), false),
                 },
-                Some("explore") => {
-                    // (secrets N: the walls searched that thoroughly, 1-3; secrets alone, 2)
+                Some("explore" | "search") => {
+                    // (exploring searches the likeliest walls as it goes, 1; a search 2, or 3 if
+                    // said; `secrets N` still says how hard, either way)
                     let at = w.iter().rposition(|x| *x == "secrets").filter(|&i| i > 2);
-                    let secrets = at.map_or(0, |i| w.get(i + 1).and_then(|n| n.parse::<u8>().ok()).unwrap_or(2).min(3));
-                    let r = w[2..at.unwrap_or(w.len())].join(" ");
+                    let searching = w.get(1) == Some(&"search");
+                    let said = w.last().and_then(|n| n.parse::<u8>().ok()).filter(|_| searching && w.len() > 3);
+                    let secrets = at.map_or(said.unwrap_or(if searching { 2 } else { 1 }), |i| w.get(i + 1).and_then(|n| n.parse::<u8>().ok()).unwrap_or(2).min(3));
+                    let end = at.unwrap_or(if said.is_some() { w.len() - 1 } else { w.len() });
+                    let r = w[2..end].join(" ");
                     bearing(&r).map_or(Order::ExploreArea(r, secrets), |b| Order::ExploreWay(b, secrets))
                 }
                 Some("exit") => Order::Exit,
                 Some("stop") => Order::Stop,
-                _ => return Err("order go REF [risky] [sure] [rush] | explore REF|DIR [secrets 1-3] | exit [sure] | stop".into()),
+                _ => return Err("order go REF [risky] [sure] [rush] | explore REF|DIR | search REF|DIR [2|3] | exit [sure] | stop".into()),
             };
             d.order_with(o, rush, then);
             Ok(Vec::new())

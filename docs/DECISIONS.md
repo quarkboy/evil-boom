@@ -2847,3 +2847,12 @@ Checked by hand in directed games (MAP06: shotgun, ssg, rocket, shotgun, chaingu
 shotgun, each up as ordered; fist and chainsaw refused as they should be; MAP02 with the
 launcher ordered). Parity re-saved with the new build (four runs moved by the slot-3 fix,
 those of the scored set).
+
+## Stage 7, step 2: searching, a command of its own (the user, 2026-11-11)
+
+Exploring searches the likeliest few walls as it goes (thoroughness 1; it was 0 unless said),
+and `doom_explore` has no `secrets` any more; `doom_search area|direction [thorough 2|3]` (2 by
+default) is the thorough search, most suspicious walls or every one. In a script, `order search
+REF|DIR [2|3]`. What she's told says the thoroughness only when it's a search ("Exploring N
++secrets 3."), 1 being every exploring's. Checked on E1M1 by orders file. Parity: 24 the same
+(directed play only).

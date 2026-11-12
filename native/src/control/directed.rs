@@ -2570,7 +2570,8 @@ fn by_thoroughness<'a>(walls: impl Iterator<Item = &'a Objective>) -> [usize; 3]
 
 /// An exploring order's end, its search said: ", secrets 2 too".
 fn searched(secrets: u8) -> String {
-    if secrets > 0 {
+    // (1 is what every exploring does: not said)
+    if secrets > 1 {
         format!(", secrets {secrets} too")
     } else {
         String::new()
@@ -2583,7 +2584,7 @@ fn is_search(o: &Objective) -> bool {
 }
 
 fn with_secrets(secrets: u8) -> String {
-    if secrets > 0 {
+    if secrets > 1 {
         format!(" +secrets {secrets}")
     } else {
         String::new()
