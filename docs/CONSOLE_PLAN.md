@@ -252,3 +252,11 @@ as hers (said to be the streamer's): a button for each of the question's choices
 dropped, her settings applied, Look, Status, Why and the lists, the fight's hold fire, fire,
 retreat and back to reflex, stop. The small card beside it keeps the line to her and any action
 by hand.
+
+## The page's layout (2026-11-12)
+
+Two columns of sections (one on a narrow screen). Each section folds to its title (a click on it),
+moves within its column or to the other (its grip, dragged), and opens in a window of its own
+(its button: the page with `only=<section>`, live as the main page is; in the main page it folds
+to its title, back when the window's closed or by "Bring back"). The arrangement and what's folded
+are kept in the browser; "Reset layout" in the header puts them back.

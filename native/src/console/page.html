@@ -17,8 +17,31 @@ header h1 { font-size: 16px; margin: 0; letter-spacing: .02em; }
 header h1 b { color: var(--accent); }
 .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; background: var(--line); color: var(--dim); }
 .badge.ok { background: #1f3b29; color: var(--ok); } .badge.warn { background: #3d3119; color: var(--warn); } .badge.bad { background: #432020; color: var(--bad); }
-main { display: grid; gap: 12px; padding: 12px 16px 24px; grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 980px) { main { grid-template-columns: 360px minmax(0, 1fr); } #viewcard { grid-column: 2; grid-row: 1 / span 2; } #evilcard { grid-column: 2; grid-row: 3 / span 3; } #logcard { grid-column: 2; grid-row: 6 / span 3; } }
+main { display: grid; gap: 12px; padding: 12px 16px 24px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 980px) { main { grid-template-columns: 360px minmax(0, 1fr); } }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 48px; }
+section h2 { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+section h2 .chev { width: 1em; color: var(--dim); flex: none; }
+section h2 .grip { margin-left: auto; cursor: grab; color: var(--dim); padding: 0 4px; letter-spacing: -2px; flex: none; }
+section h2 .grip:hover { color: var(--text); }
+section.collapsed > :not(h2) { display: none !important; }
+section.collapsed h2 { margin: 0; }
+section.dragging { opacity: .4; }
+.drop-line { height: 3px; background: var(--evil); border-radius: 2px; flex: none; }
+section h2 .pop, section h2 .back { padding: 0 6px; font-size: 12px; line-height: 1.4; flex: none; }
+section h2 .grip { margin-left: 0; }
+section h2 .pop { margin-left: auto; }
+section h2 .back { display: none; }
+section.popped > :not(h2) { display: none !important; }
+section.popped h2 { margin: 0; }
+section.popped h2 .back { display: inline-block; }
+section.popped h2 .pop { display: none; }
+section.popped h2::after { content: "in its own window"; font-size: 11px; color: var(--evil); text-transform: none; letter-spacing: 0; }
+body.popout header { display: none; }
+body.popout main { grid-template-columns: minmax(0, 1fr); padding: 8px; }
+body.popout .col > section:not(.only), body.popout .col:empty { display: none; }
+body.popout section h2 .grip, body.popout section h2 .pop, body.popout section h2 .chev { display: none; }
+body.popout section h2 { cursor: default; }
 .ev-top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 10px; font-size: 13px; }
 .ev-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1200px) { .ev-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
@@ -71,15 +94,17 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   <span id="b-console" class="badge">console ?</span>
   <span id="b-game" class="badge">game ?</span>
   <span id="b-neuro" class="badge">neuro -</span>
+  <button id="layout-reset" style="margin-left:auto;padding:3px 10px;font-size:12px" title="Every section back where it was, unfolded">Reset layout</button>
 </header>
 <main>
+ <div class="col" id="col-a">
   <section id="tokenbox">
     <h2>Token</h2>
     <p class="dim">The console printed its address with a token (<code>?t=...</code>) when it started. Paste the token here.</p>
     <div class="row"><input id="tokenin" placeholder="token"><button id="tokenset">Use</button></div>
   </section>
 
-  <section>
+  <section id="sec-game">
     <h2>Game</h2>
     <div class="row">
       <button class="primary" id="g-start">Start</button>
@@ -109,7 +134,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <dl id="state"></dl>
   </section>
 
-  <section>
+  <section id="sec-sound">
     <h2>Sound <span class="dim" style="text-transform:none;letter-spacing:0">(the game's own volumes; kept for the next game)</span></h2>
     <div class="vol"><label for="v-master">Master</label><input type="range" id="v-master" min="0" max="100" data-k="master"><output id="v-master-n"></output></div>
     <div class="vol"><label for="v-sfx">SFX</label><input type="range" id="v-sfx" min="0" max="15" data-k="sfx"><output id="v-sfx-n"></output></div>
@@ -117,7 +142,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <p class="dim" id="v-note" style="margin:0;font-size:12px"></p>
   </section>
 
-  <section>
+  <section id="sec-talk">
     <h2>Talk to Evil <span class="dim" style="text-transform:none;letter-spacing:0">(directed by Neuro or the GPT stand-in)</span></h2>
     <div class="row">
       <input id="e-say" maxlength="300" placeholder="a line to her, sent as context">
@@ -135,7 +160,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <p class="dim" style="margin:0;font-size:12px">An action goes through her own checks; she's told it was the streamer's. Its answer shows in the Evil card.</p>
   </section>
 
-  <section>
+  <section id="sec-settings">
     <h2>Settings <span class="dim" style="text-transform:none;letter-spacing:0">(used when the game starts)</span></h2>
     <form class="form" id="settings" onsubmit="return false">
       <label>WAD <select name="wad"><option value="doom2">Doom II</option><option value="doom">Doom</option><option value="tnt">TNT: Evilution</option><option value="plutonia">The Plutonia Experiment</option></select></label>
@@ -167,6 +192,8 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     </form>
   </section>
 
+  </div>
+ <div class="col" id="col-b">
   <section id="viewcard">
     <h2>View <span class="dim" style="text-transform:none;letter-spacing:0">(twice a second; the watcher's own drawing)</span></h2>
     <div class="row">
@@ -270,6 +297,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     </div>
     <div id="log"></div>
   </section>
+ </div>
 </main>
 <script>
 "use strict";
@@ -588,6 +616,85 @@ $("tokenset").onclick = () => {
   try { localStorage.setItem("evil-console-token", token); } catch (e) { /* (not kept) */ }
   $("tokenbox").style.display = "none"; seq = 0; $("log").replaceChildren();
 };
+// The layout: each section folded or not by its title, and moved by its grip within its column
+// or to the other; kept in this browser.
+const LAYOUT_KEY = "evil-console-layout";
+const movable = () => [...document.querySelectorAll("main .col > section")].filter((s) => s.id !== "tokenbox");
+function saveLayout() {
+  if (only) return;
+  const l = { cols: {}, collapsed: movable().filter((s) => s.classList.contains("collapsed")).map((s) => s.id) };
+  for (const c of document.querySelectorAll("main .col")) l.cols[c.id] = [...c.children].filter((e) => e.tagName === "SECTION").map((e) => e.id);
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(l)); } catch (e) { /* (not kept) */ }
+}
+function loadLayout() {
+  let l = null;
+  try { l = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "null"); } catch (e) { /* (none) */ }
+  if (!l) return;
+  for (const [cid, ids] of Object.entries(l.cols || {})) {
+    const c = $(cid);
+    if (c) for (const id of ids) { const sec = $(id); if (sec && sec.id !== "tokenbox") c.append(sec); }
+  }
+  for (const id of l.collapsed || []) { const sec = $(id); if (sec) sec.classList.add("collapsed"); }
+}
+function chevron(sec) { sec.querySelector("h2 .chev").textContent = sec.classList.contains("collapsed") ? "\u25b8" : "\u25be"; }
+let dropLine = null;
+function clearDrop() { if (dropLine) { dropLine.remove(); dropLine = null; } }
+// A section in its own window: this page with only it shown (`only`), live as the main one is;
+// in the main page it folds to its title, back when that window's closed.
+const only = new URLSearchParams(location.search).get("only");
+const popped = {};
+function popOut(sec) {
+  const url = location.pathname + "?t=" + encodeURIComponent(token) + "&only=" + encodeURIComponent(sec.id);
+  const r = sec.getBoundingClientRect();
+  const w = window.open(url, "evil-" + sec.id, "popup,width=" + Math.max(420, Math.round(r.width) + 40) + ",height=" + Math.max(360, Math.min(1000, Math.round(r.height) + 60)));
+  if (!w) { say("The browser blocked the window: allow pop-ups for the console."); return; }
+  popped[sec.id] = w; sec.classList.add("popped");
+}
+setInterval(() => {
+  for (const [id, w] of Object.entries(popped)) if (w.closed) { delete popped[id]; const sec = $(id); if (sec) sec.classList.remove("popped"); }
+}, 700);
+for (const sec of movable()) {
+  const h = sec.querySelector("h2");
+  const chev = document.createElement("span"); chev.className = "chev";
+  const grip = document.createElement("span"); grip.className = "grip"; grip.textContent = "\u22ee\u22ee"; grip.title = "Drag to move";
+  const pop = document.createElement("button"); pop.className = "pop"; pop.textContent = "\u29c9"; pop.title = "In its own window";
+  const back = document.createElement("button"); back.className = "back"; back.textContent = "Bring back";
+  pop.onclick = (e) => { e.stopPropagation(); popOut(sec); };
+  back.onclick = (e) => { e.stopPropagation(); const w = popped[sec.id]; if (w) w.close(); delete popped[sec.id]; sec.classList.remove("popped"); };
+  h.prepend(chev); h.append(pop, back, grip);
+  h.addEventListener("click", (e) => {
+    if (only || sec.classList.contains("popped")) return;
+    if (e.target === grip || e.target.closest("button, input, select, a")) return;
+    sec.classList.toggle("collapsed"); chevron(sec); saveLayout();
+  });
+  grip.addEventListener("mousedown", () => { sec.draggable = true; });
+  sec.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", sec.id); e.dataTransfer.effectAllowed = "move"; sec.classList.add("dragging"); });
+  sec.addEventListener("dragend", () => { sec.draggable = false; sec.classList.remove("dragging"); clearDrop(); saveLayout(); });
+}
+for (const col of document.querySelectorAll("main .col")) {
+  col.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    const before = [...col.children].filter((c) => c.tagName === "SECTION" && !c.classList.contains("dragging") && c.id !== "tokenbox")
+      .find((c) => { const r = c.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
+    if (!dropLine) { dropLine = document.createElement("div"); dropLine.className = "drop-line"; }
+    if (before) col.insertBefore(dropLine, before); else col.append(dropLine);
+  });
+  col.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const sec = $(e.dataTransfer.getData("text/plain"));
+    if (sec && dropLine && dropLine.parentNode === col) col.insertBefore(sec, dropLine);
+    clearDrop(); saveLayout();
+  });
+}
+$("layout-reset").onclick = () => { try { localStorage.removeItem(LAYOUT_KEY); } catch (e) { /* (none) */ } location.reload(); };
+if (only && $(only)) {
+  // (the one section, unfolded; the window titled by it; the layout's the main page's to keep)
+  document.body.classList.add("popout");
+  const sec = $(only); sec.classList.add("only"); sec.classList.remove("collapsed");
+  const t = [...sec.querySelector("h2").childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+  if (t) document.title = t.textContent.trim() + " \u00b7 Evil BOOM";
+} else loadLayout();
+for (const sec of movable()) chevron(sec);
 poll();
 </script>
 </body>
