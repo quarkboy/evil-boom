@@ -112,7 +112,7 @@ impl Director {
         // (not a pickup she takes by herself on the way or while she waits: nothing to choose;
         // nor a wall to search with every secret found)
         let spares = agent.x().spares.clone();
-        let secrets_done = self.tally.secrets.0 >= self.tally.secrets.1;
+        let secrets_done = self.secrets_done();
         let choice = open
             .iter()
             .filter(|o| !matches!(o.kind, Kind::Exit | Kind::Barrel))

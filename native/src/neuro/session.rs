@@ -616,6 +616,14 @@ impl Session {
                 let Some(t) = arg("target") else {
                     return (false, "target: an area or a direction (N, NE, ...).".into());
                 };
+                // (every secret found: nothing behind a wall to search for)
+                if name == "doom_search" && self.director.secrets_done() {
+                    let (got, of) = self.director.tally.secrets;
+                    return (
+                        true,
+                        format!("Every secret here is found ({got}/{of}): no walls to search."),
+                    );
+                }
                 // (exploring searches the likeliest few walls as it goes; a search, most of them
                 // or every one)
                 let secrets = if name == "doom_search" {

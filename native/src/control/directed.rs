@@ -1217,7 +1217,7 @@ impl Director {
         };
         let mut out: Vec<Entry> = match topic {
             Topic::Areas => {
-                let walls = agent.x_mut().suspected_walls(obs, 3);
+                let walls = self.walls_to_search(agent, obs, 3);
                 let known = agent.x().knowledge.known_polys();
                 let nav = std::rc::Rc::clone(&agent.x().nav);
                 let here = nav.poly_at(pos).map(|p| nav.sector_of_poly(p));
@@ -1493,7 +1493,7 @@ impl Director {
         // (her exploring style, for when she's on instinct; and whether there's a secret left
         // to press walls for)
         agent.x_mut().going_back = self.policy.going_back();
-        agent.x_mut().secrets_done = self.tally.secrets.0 >= self.tally.secrets.1;
+        agent.x_mut().secrets_done = self.secrets_done();
         self.check_complete(agent, obs);
         // (her policy on her numbers: on a change, and on each new level's player)
         if self.policy_due {
@@ -2546,7 +2546,7 @@ impl Director {
         fits: impl Fn(&Self, &Agent, &Objective) -> bool,
     ) -> String {
         let mut out = self.switches_found(agent, obs, &fits);
-        let walls = agent.x_mut().suspected_walls(obs, 3);
+        let walls = self.walls_to_search(agent, obs, 3);
         let [a, b, c] = by_thoroughness(walls.iter().filter(|o| fits(self, agent, o)));
         if c > 0 {
             out.push_str(&format!(" Walls to search: {a}/{b}/{c}."));
@@ -2630,6 +2630,20 @@ impl Director {
             .is_some_and(|q| places.area_of(nav.sector_of_poly(q)).id == id)
     }
 
+    /// Walls worth pressing for a secret, this thoroughly: none once every secret the level
+    /// counts is found (whatever she's asked for: there's none left behind one).
+    fn walls_to_search(&self, agent: &mut Agent, obs: &Observation, how: u8) -> Vec<Objective> {
+        if self.secrets_done() {
+            return Vec::new();
+        }
+        agent.x_mut().suspected_walls(obs, how)
+    }
+
+    /// Every secret the level counts found (the tally, as the automap's: hers to know).
+    pub fn secrets_done(&self) -> bool {
+        self.tally.secrets.0 >= self.tally.secrets.1
+    }
+
     /// The best of the explorer's objectives that `fits` (and an exploring one: not out by an exit,
     /// not off through a teleporter), taken up. False if there's none (or no way to any).
     fn next_in(
@@ -2642,7 +2656,7 @@ impl Director {
         let open = self.open_objectives(agent, obs);
         // (the walls searched that thoroughly, not the strong ones by her the explorer offers;
         // after the rest, as a player does: what's in plain sight first)
-        let walls = agent.x_mut().suspected_walls(obs, secrets);
+        let walls = self.walls_to_search(agent, obs, secrets);
         let options: Vec<Objective> = open
             .into_iter()
             .filter(explores)
