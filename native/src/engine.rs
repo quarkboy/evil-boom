@@ -140,6 +140,11 @@ impl Engine {
         .iter()
         .map(|s| s.to_string())
         .collect();
+        let pwads = crate::config::pwads();
+        if !pwads.is_empty() {
+            args.push("-file".into());
+            args.extend(pwads.iter().map(|p| p.to_string_lossy().to_string()));
+        }
         if o.capture {
             args.push("-evilsoundcap".into()); // (a dummy device: mixed for her, not played)
         } else if !o.sound {

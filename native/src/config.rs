@@ -48,6 +48,48 @@ fn default_doom_dir() -> PathBuf {
     }
 }
 
+/// The PWADs loaded over the IWAD, in order (`EVILBOOM_PWADS`, paths joined as PATH is; set from
+/// `--pwad FILE` by `take_pwads`, and so passed on to the runs a sweep or an episode starts).
+pub fn pwads() -> Vec<PathBuf> {
+    env("PWADS").map_or_else(Vec::new, |v| std::env::split_paths(&v).collect())
+}
+
+/// `args` less each `--pwad FILE`, the files (each a path, or a name in the Doom folder) added to
+/// `pwads()` for this run and every run it starts.
+pub fn take_pwads(args: Vec<String>) -> Result<Vec<String>, String> {
+    let mut rest = Vec::new();
+    let mut files = pwads();
+    let mut it = args.into_iter();
+    while let Some(a) = it.next() {
+        if a != "--pwad" {
+            rest.push(a);
+            continue;
+        }
+        let name = it.next().ok_or("--pwad needs a file")?;
+        let path = resolve_wad(&name);
+        if !path.exists() {
+            return Err(format!("--pwad {name}: no such file"));
+        }
+        files.push(std::fs::canonicalize(&path).unwrap_or(path));
+    }
+    if !files.is_empty() {
+        let joined = std::env::join_paths(&files).map_err(|e| format!("--pwad: {e}"))?;
+        // (before anything else runs: the process is one thread still)
+        std::env::set_var("EVILBOOM_PWADS", joined);
+    }
+    Ok(rest)
+}
+
+/// What a run's logs are named by: the first PWAD's name (the maps, as a rule; music and the
+/// like after), else the IWAD's (`DOOM2`, `MM`).
+pub fn wad_tag(iwad: &Path) -> String {
+    pwads()
+        .first()
+        .map_or(iwad, PathBuf::as_path)
+        .file_stem()
+        .map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase())
+}
+
 /// A short IWAD name ("doom2") or a path, absolute or from the Doom folder.
 pub fn resolve_wad(name_or_path: &str) -> PathBuf {
     let lower = name_or_path.to_lowercase();

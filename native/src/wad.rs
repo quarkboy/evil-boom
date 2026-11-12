@@ -188,6 +188,21 @@ fn blockmap(data: &[u8]) -> Option<Blockmap> {
     })
 }
 
+/// Load a level as the game will play it, with the PWADs (`config::pwads`) over the IWAD: the map
+/// from the last of them that has it, else the IWAD's; texture heights from the IWAD and the
+/// PWADs before it, then its own.
+pub fn load_level(iwad: &Wad, map_name: &str) -> Result<MapData, String> {
+    let pwads = crate::config::pwads()
+        .iter()
+        .map(|p| Wad::open(p))
+        .collect::<Result<Vec<Wad>, String>>()?;
+    let Some(i) = pwads.iter().rposition(|w| w.map_lumps(map_name).is_ok()) else {
+        return load_map(iwad, map_name, &[]);
+    };
+    let textures: Vec<&Wad> = std::iter::once(iwad).chain(&pwads[..i]).collect();
+    load_map(&pwads[i], map_name, &textures)
+}
+
 /// Load a map. Texture heights come from `texture_wads` (the IWAD when the map is in a PWAD)
 /// and then the map's own WAD, later ones overriding earlier ones.
 pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapData, String> {

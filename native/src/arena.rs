@@ -28,7 +28,7 @@ use crate::map::MapData;
 use crate::motor::{Controls, TICRATE};
 use crate::navigator::Navigator;
 use crate::play::Agent;
-use crate::wad::{load_map, Wad};
+use crate::wad::{load_level, Wad};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -191,7 +191,7 @@ pub fn prepare(
 ) -> Result<Prepared, String> {
     let iwad = resolve_wad(&s.wad);
     let w = Wad::open(&iwad)?;
-    let m = Arc::new(load_map(&w, &s.map, &[])?);
+    let m = Arc::new(load_level(&w, &s.map)?);
     let mut nav = Navigator::new(Arc::clone(&m), s.skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);

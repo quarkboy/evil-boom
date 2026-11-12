@@ -11,7 +11,7 @@ use crate::navigator::Navigator;
 use crate::play::Agent;
 use crate::replay::{Entry, Recording};
 use crate::tactical::tuning::Tuning;
-use crate::wad::{load_map, Wad};
+use crate::wad::{load_level, Wad};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -60,7 +60,7 @@ pub fn setup(
     let iwad = resolve_wad(wad);
     let w = Wad::open(&iwad)?;
     let map_name = map_name.to_uppercase();
-    let m = Arc::new(load_map(&w, &map_name, &[])?);
+    let m = Arc::new(load_level(&w, &map_name)?);
     let skill = if o.fight > 0 { o.fight } else { 3 };
     let mut nav = Navigator::new(Arc::clone(&m), skill)?;
     nav.keep_verified();

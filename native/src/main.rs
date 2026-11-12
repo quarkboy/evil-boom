@@ -60,6 +60,9 @@
 //!       or evil-boom neuro-mock). --gpt [CONFIG]: directed by the GPT stand-in, run in this
 //!       program (config/neuro-gpt.json unless named; its log out/neuro/gpt.log)
 //!
+//! Any command: --pwad FILE (repeatable): PWADs over the IWAD, as the game's -file (a path, or a
+//! name in the Doom folder); a map from the last that has it; logs named by the first (MM_MAP01).
+//!
 //! Run options: --lives N (unlimited), --max-seconds S (3600, all lives together), --seed N|random (0), --peek, --secrets,
 //! --expert, --fight SKILL, --mortal, --complete (every kill, item and secret, then out: --fight 4
 //! --expert --secrets together, the exit held while any tally's short), --stall S (the 100% runs: over after S game seconds, 300
@@ -76,7 +79,7 @@ use evilboom::navigator::Navigator;
 use evilboom::specials::classify_line;
 #[cfg(feature = "viewer")]
 use evilboom::sweep::run_map;
-use evilboom::wad::{load_map, Wad};
+use evilboom::wad::{load_level, Wad};
 use std::collections::{BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, ExitCode, Stdio};
@@ -85,7 +88,7 @@ use std::sync::Arc;
 
 fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
     let wad = Wad::open(&resolve_wad(wad))?;
-    let m = Arc::new(load_map(&wad, map, &[])?);
+    let m = Arc::new(load_level(&wad, map)?);
     let mut nav = Navigator::new(Arc::clone(&m), 3)?;
     println!("jumps found {}", nav.jumps.len());
     let checks = nav.keep_verified();
@@ -154,7 +157,7 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
 /// what's on the other side), the lines whose tag moves them, and the things in them.
 fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
     let w = Wad::open(&resolve_wad(wad))?;
-    let m = load_map(&w, map, &[])?;
+    let m = load_level(&w, map)?;
     let nav = Navigator::new(Arc::new(m), 3)?;
     let m = &nav.map;
     let places = evilboom::control::places::Places::build(&nav);
@@ -287,7 +290,7 @@ fn follow(wad: &str, map: &str) -> Result<(), String> {
     use evilboom::motor::follower::RouteFollower;
     let iwad = resolve_wad(wad);
     let w = Wad::open(&iwad)?;
-    let m = Arc::new(load_map(&w, map, &[])?);
+    let m = Arc::new(load_level(&w, map)?);
     let mut nav = Navigator::new(Arc::clone(&m), 3)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
@@ -1107,7 +1110,13 @@ fn arena(args: &[String]) -> Result<(), String> {
 }
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args = match evilboom::config::take_pwads(std::env::args().skip(1).collect()) {
+        Ok(args) => args,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
     let result = match args.first().map(String::as_str) {
         Some("dump-nav") if args.len() == 3 => dump_nav(&args[1], &args[2]),
         Some("secret-survey") => {

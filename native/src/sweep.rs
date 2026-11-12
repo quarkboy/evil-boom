@@ -578,12 +578,7 @@ pub fn run_map_in(
     let t0 = Instant::now();
     let mut idle_since: Option<i64> = None;
     let (mut t_engine, mut t_observe, mut t_think) = (0.0, 0.0, 0.0);
-    let mut status = Status::open(
-        &iwad
-            .file_stem()
-            .map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase()),
-        &map_name,
-    );
+    let mut status = Status::open(&crate::config::wad_tag(&iwad), &map_name);
     let mut journal_n = agent.x().knowledge.journal.len();
     let until = o.snapshot.map_or(o.max_seconds, |s| s.min(o.max_seconds));
     // (the 100% runs: the count she's after and what she knows of the level, and when either
@@ -1126,9 +1121,7 @@ pub fn run_map_in(
     lines.push(format!("RESULT {outcome} {detail}"));
     let dir = log_dir();
     let _ = std::fs::create_dir_all(&dir);
-    let stem = iwad
-        .file_stem()
-        .map_or_else(|| "WAD".to_string(), |s| s.to_string_lossy().to_uppercase());
+    let stem = crate::config::wad_tag(&iwad);
     // (and kept, by the commit, the time and the seed: not written over by the next run)
     let _ = crate::config::write_log(
         &dir.join(format!("{stem}_{map_name}.txt")),
