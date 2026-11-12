@@ -32,6 +32,9 @@ pub struct BarrelShot {
     /// shot and gone: how many barrels there were, and since when (the chain going off: not back
     /// till none has gone for a while)
     pub(super) settle: Option<(usize, i64)>,
+    /// (mortal) spots chosen to shoot this barrel from that turned out to have no shot (a line
+    /// grazing a corner): not chosen again for it
+    pub(super) failed_posts: Vec<Point>,
 }
 
 /// A chain of barrels going off that she didn't set off: kept off it, or run out of it.

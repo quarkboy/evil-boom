@@ -48,6 +48,8 @@ const BARREL_LOOK: f64 = 1024.0;
 /// ...the nearest this many of them, by the way there
 const BARREL_POSTS: usize = 12;
 
+/// a spot this near one she had no shot from isn't chosen again for that barrel
+const FAILED_POST_NEAR: f64 = 16.0;
 /// a barrel's radius (a shot at another that passes this near it hits it instead)
 const BARREL_RADIUS: f64 = 10.0;
 /// a barrel's height (what a shot at it has to get to)
@@ -338,6 +340,7 @@ impl RouteFollower {
         let at = now.unwrap_or(was);
         self.shot.target = Some((at, since));
         if now.is_none() || obs.tic - since > give_up {
+            self.shot.failed_posts.clear();
             self.shot.target = None;
             self.shot.post = None;
             self.shot.way.clear();
@@ -415,7 +418,10 @@ impl RouteFollower {
                     .into_iter()
                     .map(|(b, _)| b)
                     .collect();
-                // (not on a floor that hurts: she stays where she shoots from till the chain's done)
+                // (not where she's had no shot from already; nor on a floor that hurts: she stays
+                // where she shoots from till the chain's done)
+                let failed = &self.shot.failed_posts;
+                cands.retain(|&q| failed.iter().all(|&f| dist(f, q) > FAILED_POST_NEAR));
                 let nav = &self.view.nav;
                 cands.retain(|&q| {
                     nav.poly_at(q).is_none_or(|p| {
@@ -474,6 +480,11 @@ impl RouteFollower {
                     let Some(stay) = self.flee_safe(&barrels, aim, q, &flee) else {
                         continue;
                     };
+                    // (a monster about that shoots: from out of every blast or not at all; shot
+                    // from beside the barrel to run after, its shot can set it off first)
+                    if self.shooters_about && !stay {
+                        continue;
+                    }
                     // (out of every blast where she shoots from: she stays there; the way back she
                     // came may go back by the barrel as it goes off)
                     let flee = if stay { Vec::new() } else { flee };
@@ -588,6 +599,7 @@ impl RouteFollower {
                     obs.tic,
                     "no shot at the barrel from here now: somewhere else to shoot it from",
                 );
+                self.shot.failed_posts.push(post);
                 self.shot.post = None;
                 self.shot.way.clear();
                 self.shot.best = None;

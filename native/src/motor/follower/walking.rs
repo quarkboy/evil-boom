@@ -288,6 +288,7 @@ impl RouteFollower {
             format!("clearing the barrel at ({:.0}, {:.0})", b.0, b.1),
         );
         self.shot.target = Some((b, obs.tic));
+        self.shot.failed_posts.clear();
         Some(self.shoot_barrel(obs))
     }
 
@@ -416,6 +417,7 @@ impl RouteFollower {
                 format!("barrel in the way at ({:.0}, {:.0}): shooting it", b.0, b.1),
             );
             self.shot.target = Some((b, obs.tic));
+            self.shot.failed_posts.clear();
             return self.shoot_barrel(obs);
         }
         self.log.add(

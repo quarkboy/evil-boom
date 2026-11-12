@@ -52,3 +52,10 @@ localhost, and its MCP endpoint only takes connections from its own machine.
   what the game says and forces: a test of whether our own prompts keep her playing.
 - The model's context is trimmed to fit (8k for the local model): `read_events` keeps more
   (the newest 1,000 events), `get_context` is what the model has now.
+- **OpenAI's newer models through Gary** (gpt-6.1-sol): Gary sends `max_tokens`, which they
+  refuse; `tools/openai-relay.py` (127.0.0.1:8090, Gary's OpenAI engine's server URL
+  `http://127.0.0.1:8090/v1`) renames it to `max_completion_tokens` and passes the rest on (the
+  key in the header passed as it is, never logged). And they take function tools with a
+  reasoning effort only through the Responses API, which Gary doesn't use: reasoning effort
+  `auto` (sends none) with tool calling, or structured output with `low`. Gary's OpenAI engine
+  also needs the model's context window set by hand (32000 kept it trimmed like hers).

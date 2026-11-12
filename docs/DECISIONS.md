@@ -2965,3 +2965,19 @@ stops and asks "Everything's done here (100%). Leave?", leaving the default (not
 counts; staying is one answer). The suggestion at 100% is the exit; with every secret found,
 walls to search aren't suggested, and on instinct no wall is pressed for one
 (`Explorer::secrets_done`, set from the tally). The scored bot is unchanged (parity).
+
+## Barrels in the way: not shot from beside them with a shooter about; a spot with no shot not chosen again (2026-11-11)
+
+Two failures watched on E1M2 (through Gary). (1) 48 health lost: the follower's barrel in the
+way, shot from 33 units off to run after (its plan "then off back the way she came", the shorter
+walk than a spot out of every blast); a zombieman shooting at her set it off while she stood
+there. With a monster about that shoots, as far as she knows (`Combat::now.shooters`, passed to
+the follower each tic as `shooters_about`), only spots out of every blast; shoot-and-run only
+with none about. (2) Stood 8 s, twice: at the spot chosen to shoot from, the check from where
+she stood (within 1.5 of it) found no shot, a line grazing a corner; the spot was dropped, the
+same one chosen again, 282 times. A spot found to have no shot is kept (`failed_posts`, 16 near)
+and not chosen again for that barrel.
+
+Scored, run for run: -0.0006 (s.e. 0.0007), 1072 of 1088 the same, 1 better 1 worse, exits 398
+against 399 (E1M5 UV, one seed: died in a fight after clearing three barrels, within a level's
+seed noise). Kept; the baseline is that set. Parity re-saved.

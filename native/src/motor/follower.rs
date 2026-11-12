@@ -295,6 +295,10 @@ pub struct RouteFollower {
     pub mortal: bool,
     /// a run out of a field of barrels: no stopping for them (none shot, no waiting on a chain)
     pub barrel_run: bool,
+    /// a monster about that shoots, as far as she knows (the fight's `shooters`): a barrel in
+    /// the way shot only from out of every blast, never from beside it to run after (its shot
+    /// can set it off while she's there)
+    pub shooters_about: bool,
     /// steering between the barrels she sees, which the mesh's way knows nothing of
     weave: Weave,
     /// run-jumps that came down off their landing (for the explorer)
@@ -406,6 +410,7 @@ impl RouteFollower {
             fired: BTreeSet::new(),
             mortal: false,
             barrel_run: false,
+            shooters_about: false,
             weave: Weave {
                 barrels: Vec::new(),
                 detour: Vec::new(),
@@ -447,6 +452,7 @@ impl RouteFollower {
                 stay: false,
                 step: None,
                 settle: None,
+                failed_posts: Vec::new(),
             },
             chain: LitChain {
                 waiting: false,

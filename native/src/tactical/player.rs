@@ -937,6 +937,12 @@ impl Player {
                 };
             }
         }
+        // (a monster about that shoots, as far as she knows: no barrel in the way shot from
+        // beside it)
+        let shooters = !self.fight.combat.now.shooters.is_empty();
+        if let Some(f) = self.explorer.follower.as_mut() {
+            f.shooters_about = shooters;
+        }
         let mut c = self.explorer.act(obs, last, &mut self.fight);
         for line in std::mem::take(&mut self.fight.pending_log) {
             self.explorer.log.push(format!("  [fight] {line}"));
