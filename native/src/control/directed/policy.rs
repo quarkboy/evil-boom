@@ -13,18 +13,24 @@ pub fn stance_tuning(name: &str) -> Option<Value> {
         // own, given all the same, so that over another standing stance, for a while, it's
         // careful; steady the old middle)
         "careful" => json!({ "engage": { "stand_threat": 9.0, "low_health": 50.0 },
-            "retreat": { "health": 55.0 }, "guns": { "outmatched": 20.0 } }),
+            "retreat": { "health": 55.0 }, "guns": { "outmatched": 20.0 },
+            "steer": { "near_by_gun": false } }),
         "steady" => json!({ "engage": { "stand_threat": 6.0, "low_health": 35.0 },
-            "retreat": { "health": 40.0 }, "guns": { "outmatched": 30.0 } }),
+            "retreat": { "health": 40.0 }, "guns": { "outmatched": 30.0 },
+            "steer": { "near_by_gun": false } }),
         "bold" => json!({ "engage": { "stand_threat": 3.0, "low_health": 25.0 },
-            "retreat": { "health": 30.0 }, "guns": { "outmatched": 45.0 } }),
+            "retreat": { "health": 30.0 }, "guns": { "outmatched": 45.0 },
+            "steer": { "near_by_gun": false } }),
+        // (avoid keeps each gun's own nearest too, backing away from what walks at her: the
+        // others stand their ground at a monster's reach)
         "avoid" => json!({ "engage": { "stand_threat": 9.0, "low_health": 50.0,
             "keep_clear": 1536.0, "leave_be": 8.0 }, "retreat": { "health": 55.0 },
-            "guns": { "outmatched": 20.0 }, "errands": { "danger_near": 1024.0 } }),
+            "guns": { "outmatched": 20.0 }, "errands": { "danger_near": 1024.0 },
+            "steer": { "near_by_gun": true } }),
         // (everything fought, head on, never fallen back from: dodging stays, a reflex)
         "yolo" => json!({ "engage": { "stand_threat": 0.0, "low_health": 0.0,
             "leave_be": 1000.0 }, "retreat": { "health": 0.0 },
-            "guns": { "outmatched": 1000.0 } }),
+            "guns": { "outmatched": 1000.0 }, "steer": { "near_by_gun": false } }),
         _ => return None,
     })
 }
@@ -92,7 +98,7 @@ pub fn help_for(setting: &str) -> &'static str {
     rest[..end].trim()
 }
 
-pub const SETTINGS_HELP: &str = "stance: careful (the default: backs off sooner); steady (stands and fights more); bold (fights more still, finishes fewer levels); avoid (keeps clear of fights: to get past one, not to leave on); yolo (fights everything head on; asked first). save: cells (plasma and BFG kept for bosses), none. risk: careful, normal, bold (floors that hurt). powerups: need (spheres and invulnerability when they'd help), now (as they come). explore: new (new ground first, back over what's done after), thorough (everything as it comes, secrets too), quick (new ground only, never back).";
+pub const SETTINGS_HELP: &str = "stance: careful (the default: backs off sooner); steady (stands and fights more); bold (fights more still, finishes fewer levels); avoid (keeps clear of fights, backing away from what comes close: to get past one, not to leave on); yolo (fights everything head on; asked first). save: cells (plasma and BFG kept for bosses), none. risk: careful, normal, bold (floors that hurt). powerups: need (spheres and invulnerability when they'd help), now (as they come). explore: new (new ground first, back over what's done after), thorough (everything as it comes, secrets too), quick (new ground only, never back).";
 
 impl Policy {
     /// Going back over what's done, on instinct, as `explore` has it.

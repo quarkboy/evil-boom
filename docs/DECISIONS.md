@@ -3001,3 +3001,10 @@ missed imps and cacodemons; dropped.)
 
 Cacodemons with only a pistol: she keeps clear at 1024 (`engage.keep_clear`), outmatched (over
 20 s to kill one, `guns.outmatched`): the long retreat the user saw, by design.
+
+Stances (the user's, 2026-11-12): `avoid` keeps each gun's own nearest too (`steer.near_by_gun`
+on), backing away from what comes close; careful, steady, bold and yolo stand at a monster's
+standoff (each states it, so a stance taken for a while over avoid stands its ground). "A
+monster's reach" is `standoff` (style.rs): an imp's 128, a cacodemon's 160, about twice a claw's
+reach (a melee hit lands under about 60 between their middles), more for what fires too fast
+to dodge up close (a mancubus 400, a cyberdemon 640); none for hitscan zombies.
