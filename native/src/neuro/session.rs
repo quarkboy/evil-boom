@@ -528,6 +528,12 @@ impl Session {
             "doom_policy" => {
                 let idle = args.get("idle").and_then(Value::as_f64);
                 let answers = args.get("answers").and_then(Value::as_f64);
+                // (seconds, none of them less than none: 0 is "off", said as such)
+                for (name, v) in [("idle", idle), ("answers", answers)] {
+                    if v.is_some_and(|v| v < 0.0 || !v.is_finite()) {
+                        return (false, format!("{name}: seconds, 0 or more (0: off)."));
+                    }
+                }
                 let hints = match arg("hints").map(Hints::parse) {
                     Some(None) => return (false, "hints: off, on_stall or always.".into()),
                     Some(h) => h,
