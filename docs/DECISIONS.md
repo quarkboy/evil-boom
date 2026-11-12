@@ -3008,3 +3008,12 @@ standoff (each states it, so a stance taken for a while over avoid stands its gr
 monster's reach" is `standoff` (style.rs): an imp's 128, a cacodemon's 160, about twice a claw's
 reach (a melee hit lands under about 60 between their middles), more for what fires too fast
 to dodge up close (a mancubus 400, a cyberdemon 640); none for hitscan zombies.
+
+## Tried and dropped: a key seen with no way to it pulls exploring toward it (2026-11-12)
+
+E2M2 (GPT through Gary, and the bot alone): the blue key seen early, its way found 13 minutes
+later. Tried: ground to explore, doors, switches and teleporters counted up to half as near by
+such a key (fading by 1024). Alone on E2M2 it barely moved (the way there opens from a room
+1,400 off, by walk-over lines), and scored run for run -0.0047 (s.e. 0.0025), 16 better, 31
+worse, exits 382 against 387: dropped. For her, the hint does it instead ("Explore toward it:
+nearest unseen", 365bbfa).
