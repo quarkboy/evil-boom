@@ -700,6 +700,10 @@ planned. After MAP07: tactics move up to straight after 1a, with the telling of 
    what comes at her, and doesn't go anywhere. Not `auto` by default (`doom_policy idle` is
    still hers to set). Built: a quarter turn one way every 4 s, the next the other way; the
    pickups she takes waiting only within 256 along the way (was 1024).
+   **Changed (the user's, 2026-11-11, after watching a model play through Gary):** with no
+   action for **6 s** she carries on by instinct (`idle 6` the default, announced; any action
+   of hers takes over; `idle 0` has her wait as above). The bot stood still 10-20 s at a time
+   while a model looked things up between short orders: dead air on stream.
 2. **She's fast**: 100-150 ms at best, 250 ms on average; 2-3 s when busy or thinking, rarely
    5. So the deadlines (4.6) are: **class T, 3 s** (the bot's default acts first and an answer
    in 3 s overrides it); **class D, 8 s** (covers all but the rare slow answer; the default

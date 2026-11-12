@@ -104,7 +104,7 @@ pub fn actions() -> Vec<Value> {
 /// The rules, told on connecting and at each level. Everything she's told is told to her as
 /// the one playing ("you found a secret"), never of a player she directs ("she found").
 const BRIEFING: &str = "You're playing Doom. Moving, fighting and taking spare health, armor and ammo you do by reflex; you choose where you go. \
-Ids come from doom_list; your names work as ids. \"NE 400\": north-east of you, 400 units away. (tally): counts for the items %. An action done, you wait for the next.";
+Ids come from doom_list; your names work as ids. \"NE 400\": north-east of you, 400 units away. (tally): counts for the items %. An action done, you wait for the next; with none for 6 s, you carry on by instinct (doom_policy idle).";
 
 impl Session {
     pub fn new(url: &str) -> Session {

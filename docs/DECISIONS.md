@@ -2920,3 +2920,14 @@ is. Three of its habits taken, the user's choice:
 
 The mock: a dropped connection with a question open told it again and forced it; parity: all
 24 runs the same (the session isn't in a scored run).
+
+## The idle fallback on by default (the user, 2026-11-11)
+
+Watching a local model play E1M2 through Gary: her orders are often short (an area explored in
+half a second), then she looks things up (status, inspect), and the bot stood still 10-20 s at a
+time till Gary's idle prompt and our forced choice got her to act again. Pokes were considered
+(the Skyrim integration's "[Do something]") and not taken: our forced choice at 6 s is already
+the stronger nudge, and no prompt keeps the bot moving while she's thinking or talking. Now
+`Director::new` sets `idle_auto` to 6 s (`IDLE_AUTO`): with no action for 6 s she carries on by
+instinct, announced, exits held back; any action takes over; `doom_policy idle 0` has her wait.
+The briefing says so. Section 9's first answer is changed with it.

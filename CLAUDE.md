@@ -149,7 +149,7 @@ into a crowd, out of ammo, crushers, monsters raised, with at most 6 moments a m
 the urgent ones (`moments.rs`). Stage 1 of the SDK plan is done (its gate run: the GPT
 stand-in on MAP07, 56 words a minute told her); `Situation` and typed events moved to stage 4
 (questions). A directed explore pauses only while the fight has her legs. The plan's five questions are answered (its section 9):
-with no action she waits and looks round; deadlines 3 s / 8 s; restart unlocked by no
+with no action for 6 s she carries on by instinct (`idle 6`, the default since watching a model play through Gary; it was: waits and looks round); deadlines 3 s / 8 s; restart unlocked by no
 progress; next level hers from the tally screen; cheats held off. And (changed) she starts the game:
 level, skill, one level or on through, from what the console offers (`control/game.rs`,
 `doom_game start`; offered at the title and when what she chose is over); `doom_game next` from

@@ -376,6 +376,11 @@ struct Queued {
     then: bool,
 }
 
+/// with no action from her this long (tics), she carries on by instinct (the user's, 2026-11-11:
+/// a bot standing still waiting on her looks dead on stream; by her own latency, 6 s with no
+/// word is her busy talking or away; `doom_policy idle 0` has her wait)
+pub const IDLE_AUTO: i64 = 6 * 35;
+
 /// a go to an area whose middle she has no way to: at most this many of its unexplored spots,
 /// and this many of its other known spots, tried for one she has
 const AREA_TRIES: usize = 6;
@@ -524,6 +529,7 @@ impl Director {
     pub fn new() -> Director {
         Director {
             answer_wait: Some(ask::ANSWER_WAIT),
+            idle_auto: Some(IDLE_AUTO),
             policy_due: true,
             ..Director::default()
         }
