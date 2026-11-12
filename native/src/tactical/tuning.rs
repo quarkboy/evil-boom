@@ -431,7 +431,7 @@ pub struct Steer {
     pub w_span: f64,
     /// a gun's own nearest (the chaingun's 192) kept as too near for every gun, not only one whose
     /// blast reaches her (the launcher, the BFG): on, she backs away from every imp walking at
-    /// her; off (2026-11-12, the user's: watched, better), a monster's own reach is too near.
+    /// her; off (2026-11-12: watched, better), a monster's own reach is too near.
     /// Off scored -0.0058 (s.e. 0.0093), 11 exits fewer of 1088
     pub near_by_gun: bool,
     /// with anything shooting in sight, kept this far from a barrel's middle (its blast and a margin)

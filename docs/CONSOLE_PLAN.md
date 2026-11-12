@@ -17,7 +17,7 @@ view never reaches anything model-facing.
 | The page | plain HTML/CSS/JS, one file baked into the binary (`include_str!`), no build step | The browser side can't be Rust without a WASM toolchain; everything with logic stays in Rust |
 | Where it runs | a **supervisor process**, `evil-boom console`, which starts the game as a child | DSDA is one game a process: a WAD change (Doom to Doom II) or an engine crash needs a new process, and the console stays up through both |
 | Who reaches it | the LAN too, with a token | the streamer's phone or second PC |
-| Across the web | nothing in the repo: added to the tunnels Vedal already has for his other consoles; the console made to sit behind one (section below) | a trusted assistant running the stream remotely (the user's, 2026-11-10) |
+| Across the web | nothing in the repo: put behind a tunnel or reverse proxy of the stream's own; the console made to sit behind one (section below) | someone running the stream remotely |
 | Doom's own screens | all of them: tally and finale, title and demo loop, the menu driven on screen, the melt | the show should look like Doom, not a bot harness |
 
 ## Shape
@@ -168,9 +168,9 @@ WAD, map); after that:
 
 ## Across the web: a trusted assistant running the stream remotely
 
-The user asked (2026-11-10) for the console to be reachable from anywhere. Settled the same day:
-nothing for it in the repo. Vedal already has tunnels for his other consoles; this one is added
-to them. What the console does to sit behind someone else's tunnel or proxy:
+The console can be reachable from anywhere, but nothing for that is in the repo: it goes behind
+a tunnel or reverse proxy the stream already runs. What the console does to sit behind someone
+else's tunnel or proxy:
 
 - It serves at a hostname's root or under a path of theirs (`https://.../doom/`): the page
   calls the API by paths relative to itself, the server takes what's from `/api/` on as the

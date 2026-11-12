@@ -3,7 +3,7 @@
 
 //! Pickups as she takes them, by the game's own word for each ("Invulnerability!", "Picked up
 //! the armor.", ...): the powerups, armor, the backpack, and ammo of a kind she had none of
-//! (the user's: not health or armor bonuses, stimpacks, medikits, other ammo, nor a gun she has;
+//! (not health or armor bonuses, stimpacks, medikits, other ammo, nor a gun she has;
 //! a new gun has its own line). A powerup: what it is and does, and for the ones that run out, a
 //! word before they do and when they have (Doom's own times: invulnerability 30 s, invisibility
 //! and the suit 60 s, the visor 120 s; another of the same starts its time again). Armor and a

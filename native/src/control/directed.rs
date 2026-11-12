@@ -56,7 +56,7 @@ const OFF_AGAIN: i64 = 35;
 /// how long nothing's fought her before a paused explore order goes on (tics)
 const RESUME_CALM: i64 = 2 * 35;
 /// how far (along the way there) she goes for a pickup by herself, waiting: about the room
-/// she's in (the user's: waiting, she doesn't really go anywhere)
+/// she's in (waiting, she doesn't really go anywhere)
 const PICKUP_RANGE: f64 = 256.0;
 /// the nearest pickups tried for a way there, waiting
 const PICKUP_TRIES: usize = 4;
@@ -419,7 +419,7 @@ struct Queued {
     then: bool,
 }
 
-/// with no action from her this long (tics), she carries on by instinct (the user's, 2026-11-11:
+/// with no action from her this long (tics), she carries on by instinct (2026-11-11:
 /// a bot standing still waiting on her looks dead on stream; 6 s at first, then 3: an action
 /// of hers takes over at once, and the notice of it prompts her; `doom_policy idle 0` has her
 /// wait)

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Quarkboy
 
 //! The commit the binary's built from (EVIL_COMMIT: the short hash, "-dirty" with changes not yet
-//! committed), for the logs' names: each run's kept, not written over (the user's).
+//! committed), for the logs' names: each run's kept, not written over.
 
 use std::process::Command;
 

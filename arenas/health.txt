@@ -1,5 +1,5 @@
 # Health mid-fight (evil-boom arena arenas/health.txt): hurt, something on her, health close by.
-# E3M8's open centre (see combat.txt). The user's: 1% health, a cacodemon on her, the medikit in
+# E3M8's open centre (see combat.txt). The case: 1% health, a cacodemon on her, the medikit in
 # the room never gone for.
 
 arena caco-medikit

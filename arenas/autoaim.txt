@@ -1,4 +1,4 @@
-# Rockets down into pits and over low railings (evil-boom arena arenas/autoaim.txt; the user's):
+# Rockets down into pits and over low railings (evil-boom arena arenas/autoaim.txt):
 # Doom's autoaim tilts a rocket down at what's below, into the ledge's lip or the railing.
 # Her by the edge (a little back from a railing) facing across, five imps beyond, the rocket
 # launcher; two placements a site (tools/autoaim_arena.py).

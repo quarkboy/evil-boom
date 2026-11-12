@@ -41,7 +41,7 @@ for g in groups+list(others.values()):
 def clear(x,y,m):
     if not (X0+m<x<X1-m and Y0+m<y<Y1-m): return False
     return all(not (b[0]-m<x<b[2]+m and b[1]-m<y<b[3]+m) for b in boxes)
-out=['# Rockets and moving among crates and columns (evil-boom arena arenas/crates.txt; the user\'s:',
+out=['# Rockets and moving among crates and columns (evil-boom arena arenas/crates.txt;',
      '# a stress test for her rockets and movement): E2M7\'s crate hall (x 2624..3840, y 992..2112;',
      '# crates 64 high and full height scattered through it), eight solid columns put about it at',
      '# random (not in her map knowledge; a missile goes over them, 16 high to it), six imps among',

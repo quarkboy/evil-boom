@@ -29,9 +29,8 @@ Linux or Windows, test, and contribute to, with nothing in it we don't want publ
 - **Names and emails:** `dsda/evil_api.c` carries "Copyright (C) 2026 Samuel Pinansky". The commits
   have two author emails: a personal Gmail address (317 commits) and a J-Novel Club work address
   (223 commits). Both become public with the history.
-- **Stream operations:** `docs/CONSOLE_PLAN.md` mentions how the stream's consoles are reached
-  ("the tunnels Vedal already has for his other consoles"). That's about someone else's setup and
-  should go.
+- **Stream operations:** `docs/CONSOLE_PLAN.md` mentioned how the stream's other consoles are
+  reached from the web. That's about someone else's setup and should go (done).
 - **Small personal asides:** "this laptop" (CLAUDE.md); provenance notes in code comments ("the
   user's", 10 places in 9 files); dated session notes throughout the docs.
 

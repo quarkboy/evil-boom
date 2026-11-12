@@ -2634,7 +2634,7 @@ impl Fight {
             let carried_nearer = carried
                 .iter()
                 .any(|(gun, s)| *gun == t.name && dist(s.pos(), pos) < d);
-            // The big spheres only when they'd add enough (the user's: a megasphere 100 to what she
+            // The big spheres only when they'd add enough (a megasphere 100 to what she
             // can take, a soulsphere 50 health); short of that, left where they lie to come back for.
             if (t.name == "Soulsphere" && health > 200.0 - self.tune.errands.soul_gain)
                 || (t.name == "Megasphere"

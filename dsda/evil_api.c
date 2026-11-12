@@ -218,7 +218,7 @@ EVIL_API void evil_present(int on)
   }
 }
 
-/* The title card, held there (no demos after it: the user's), with its music. What's on
+/* The title card, held there (no demos after it: a stream shows the card), with its music. What's on
  * before it (a level) is left as it is underneath; a new game starts from it. */
 EVIL_API void evil_title(void)
 {

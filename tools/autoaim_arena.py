@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Quarkboy
 """Write arenas/autoaim.txt: rockets fired down off ledges into pits and over low railings, where
-Doom's autoaim tilts the rocket down into the ledge's lip or the railing (the user's). Sites from a
+Doom's autoaim tilts the rocket down into the ledge's lip or the railing. Sites from a
 search of Doom / Doom II (a ledge over a pit at least 64 lower; a thin raised railing between two
 open floors); per site, her by the edge (or a little back from the railing) facing across, five
 imps placed at random beyond, the rocket launcher. Seeded: the same file every run."""
@@ -50,7 +50,7 @@ def spot(rnd, segs, s, clear, near=None, within=None):
         if within and min(segd(p, a, b) for a, b, f, k in segs if (f, k) in within) > within_d: continue
         return p
     return None
-out = ['# Rockets down into pits and over low railings (evil-boom arena arenas/autoaim.txt; the user\'s):',
+out = ['# Rockets down into pits and over low railings (evil-boom arena arenas/autoaim.txt):',
        '# Doom\'s autoaim tilts a rocket down at what\'s below, into the ledge\'s lip or the railing.',
        '# Her by the edge (a little back from a railing) facing across, five imps beyond, the rocket',
        '# launcher; two placements a site (tools/autoaim_arena.py).', '']

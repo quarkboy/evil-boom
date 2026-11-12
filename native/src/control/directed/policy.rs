@@ -12,7 +12,7 @@ use serde_json::{json, Map, Value};
 /// How she fights, as numbers over the tuning (None: not a stance).
 pub fn stance_tuning(name: &str) -> Option<Value> {
     Some(match name {
-        // (careful is the default since 2026-11-11, the user's: its numbers are the tuning's
+        // (careful is the default since 2026-11-11: its numbers are the tuning's
         // own, given all the same, so that over another standing stance, for a while, it's
         // careful; steady the old middle)
         "careful" => json!({ "engage": { "stand_threat": 9.0, "low_health": 50.0 },
@@ -80,7 +80,7 @@ pub fn value(setting: &str, v: &str) -> Option<&'static str> {
     of.iter().copied().find(|o| *o == v)
 }
 
-/// Each value's line in the schema: what it is, and what it cost in the score (the user's: the
+/// Each value's line in the schema: what it is, and what it cost in the score (the
 /// cost told, the choice hers).
 pub fn help() -> &'static str {
     SETTINGS_HELP

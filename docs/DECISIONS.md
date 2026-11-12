@@ -17,7 +17,7 @@ Classifier access goes through a SystemOne-style interface (`state` + `questions
 (Jev) and local models (e.g. Julia-1, Laya) are swappable via config.
 
 ### Perception: engine data only
-Never rely on Evil's vision (Vedal controls whether it's on). State comes from engine data,
+Never rely on Evil's vision (whether it's on isn't ours to control). State comes from engine data,
 narrated to text. Knowledge base / fog of war: items, doors, switches become available to her
 context only after she has "seen" them, and context is pruned to what's relevant.
 

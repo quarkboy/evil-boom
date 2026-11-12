@@ -1,4 +1,4 @@
-# Plasma down into pits and over low railings (evil-boom arena arenas/autoaim-plasma.txt; the user's):
+# Plasma down into pits and over low railings (evil-boom arena arenas/autoaim-plasma.txt):
 # arenas/autoaim.txt with the plasma rifle instead of the launcher: autoaim tips a ball into the
 # ledge's lip below, or (aimed up) into the floor in front of what's up on a ledge.
 
