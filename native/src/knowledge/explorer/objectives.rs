@@ -1283,6 +1283,29 @@ impl Explorer {
                 .partial_cmp(&(b.1.priority(), b.0))
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+        // On instinct for whoever directs her (`resorts` given: never playing alone), new ground
+        // first: going back over what she's done (a walk across floor she's seen, walls pressed
+        // for secrets, another look, a hunt, a spare pickup more than a short walk off) waits till
+        // there's nothing new left. On a stream that's her wandering finished rooms; alone, the
+        // run's own order stands.
+        if !self.directed && self.resorts.is_some() {
+            let back_over = |o: &Objective| {
+                !o.urgent
+                    && !o.needed
+                    && match o.kind {
+                        Kind::Visit | Kind::Wall | Kind::Recheck | Kind::Hunt => true,
+                        Kind::Item => travel(o.goal) > INSTINCT_PICKUP_NEAR,
+                        _ => false,
+                    }
+            };
+            if weighed
+                .iter()
+                .any(|(_, o)| o.kind != Kind::Exit && !back_over(o))
+            {
+                // (stable: each part in its own order)
+                weighed.sort_by_key(|(_, o)| back_over(o));
+            }
+        }
         if self
             .debug_tics
             .is_some_and(|(a, b)| (a..=b).contains(&obs.tic))
@@ -1300,6 +1323,10 @@ impl Explorer {
         weighed.into_iter().map(|(_, o)| o).collect()
     }
 }
+
+/// on instinct for whoever directs her, a spare pickup this far off along the way or less is
+/// taken with the new ground; further, it waits till there's no new ground left
+const INSTINCT_PICKUP_NEAR: f64 = 512.0;
 
 /// a point her reach gets to by no walk the travel field knows (a teleporter, a jump): counted
 /// this many times its straight line
