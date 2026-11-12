@@ -468,6 +468,8 @@ pub struct Director {
     idle_since: Option<i64>,
     /// what she's last said she's doing by herself
     told_auto: String,
+    /// the level's 100% told her
+    told_complete: bool,
     told_auto_tic: Option<i64>,
     /// on her own she found nothing more to do: not taken up again till an order's been given
     auto_spent: bool,
@@ -626,6 +628,7 @@ impl Director {
         self.names.clear();
         self.places = None;
         self.told_exits.clear();
+        self.told_complete = false;
         self.told_items.clear();
         self.out_of_reach.clear();
         self.told_reachable.clear();
@@ -1487,8 +1490,11 @@ impl Director {
         let hits = self.hits.clone();
         self.remember_hits(obs.tic, &hits);
         self.take_stock(agent, obs);
-        // (her exploring style, for when she's on instinct)
+        // (her exploring style, for when she's on instinct; and whether there's a secret left
+        // to press walls for)
         agent.x_mut().going_back = self.policy.going_back();
+        agent.x_mut().secrets_done = self.tally.secrets.0 >= self.tally.secrets.1;
+        self.check_complete(agent, obs);
         // (her policy on her numbers: on a change, and on each new level's player)
         if self.policy_due {
             if let Some(p) = agent.player_mut() {
@@ -1918,6 +1924,36 @@ impl Director {
                 Event::TacticsOver,
                 format!("Over: {}.", over.join("; ")),
             );
+        }
+    }
+
+    /// Everything the level counts done (every kill, item and secret), with a way out known:
+    /// told her once, and asked to leave if she's on instinct (leaving the default: there's
+    /// nothing left that counts).
+    fn check_complete(&mut self, agent: &mut Agent, obs: &Observation) {
+        if self.told_complete || !self.tally.complete() {
+            return;
+        }
+        let exits = self.objectives_of(agent, obs, &[Kind::Exit]);
+        let Some(first) = exits.first() else {
+            return;
+        };
+        self.told_complete = true;
+        let line = self.describe(first, obs);
+        self.tell(
+            obs,
+            Event::LevelComplete,
+            format!("Level 100%: every kill, item and secret. Exit: {line}."),
+        );
+        if matches!(self.doing, Some(Doing::Auto)) && self.question().is_none() {
+            let known: Vec<(String, String)> = exits
+                .iter()
+                .map(|e| (e.id.clone(), self.describe(e, obs)))
+                .collect();
+            self.end_auto(agent);
+            self.doing = None;
+            self.auto_spent = true;
+            self.ask_complete(obs, &known);
         }
     }
 

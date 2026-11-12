@@ -1288,6 +1288,10 @@ impl Explorer {
         // for secrets, another look, a hunt, a spare pickup more than a short walk off) waits till
         // there's nothing new left. On a stream that's her wandering finished rooms; alone, the
         // run's own order stands.
+        if !self.directed && self.resorts.is_some() && self.secrets_done {
+            // (all the secrets found: no wall's worth pressing for one)
+            weighed.retain(|(_, o)| o.kind != Kind::Wall);
+        }
         if !self.directed && self.resorts.is_some() && self.going_back != GoingBack::AsItComes {
             let back_over = |o: &Objective| {
                 !o.urgent

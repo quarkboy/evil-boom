@@ -2952,3 +2952,16 @@ The briefing says so. Section 9's first answer is changed with it.
   default.
 - A wrong setting value is answered with that setting's help alone (`policy::help_for`), not
   all five.
+
+## At 100%, told and asked to leave (2026-11-11)
+
+The third Gary run on E1M2 reached 100% (kills 41/41, items 42/42, secrets 6/6) at 906 s and
+left at 1188 s. Nothing told her the level was done (her status showed the numbers; the model
+didn't draw the line), the suggestions went on offering walls to search and another look with
+every secret found, and on instinct the bot pressed walls and re-looked across the map, its
+exit held back for her. Now, for directed play: at 100% with an exit known she's told once,
+urgently ("Level 100%: every kill, item and secret. Exit: ..."), and if she's on instinct the bot
+stops and asks "Everything's done here (100%). Leave?", leaving the default (nothing left
+counts; staying is one answer). The suggestion at 100% is the exit; with every secret found,
+walls to search aren't suggested, and on instinct no wall is pressed for one
+(`Explorer::secrets_done`, set from the tally). The scored bot is unchanged (parity).

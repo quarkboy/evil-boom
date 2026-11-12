@@ -103,11 +103,20 @@ impl Director {
             return None;
         }
         let open = self.open_unheld(agent, obs);
-        // (not a pickup she takes by herself on the way or while she waits: nothing to choose)
+        // (everything the level counts done: the way out first)
+        if self.tally.complete() {
+            if let Some(e) = open.iter().find(|o| o.kind == Kind::Exit) {
+                return Some(self.pick_of(agent, obs, e, "everything's done: the way out".into()));
+            }
+        }
+        // (not a pickup she takes by herself on the way or while she waits: nothing to choose;
+        // nor a wall to search with every secret found)
         let spares = agent.x().spares.clone();
+        let secrets_done = self.tally.secrets.0 >= self.tally.secrets.1;
         let choice = open
             .iter()
             .filter(|o| !matches!(o.kind, Kind::Exit | Kind::Barrel))
+            .filter(|o| !(secrets_done && matches!(o.kind, Kind::Wall | Kind::Secret)))
             .filter(|o| o.thing.is_none_or(|t| !spares.contains(&t)))
             .take(PICK_TRIES)
             .find(|o| agent.x_mut().route_to(o, obs).is_some());

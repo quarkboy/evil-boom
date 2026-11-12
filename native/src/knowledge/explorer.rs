@@ -510,6 +510,9 @@ pub struct Explorer {
     pub resorts: Option<BTreeSet<Resort>>,
     /// on instinct for whoever directs her, going back over what she's done: when
     pub going_back: GoingBack,
+    /// every secret the level counts found (whoever directs her says, from the tally): on
+    /// instinct for them, no walls pressed for more
+    pub secrets_done: bool,
     pub resort_wanted: Option<Resort>,
     /// what she knew when the places she got stuck last got another go
     pub stuck_retried: Option<String>,
@@ -664,6 +667,7 @@ impl Explorer {
             out_of_options: None,
             resorts: None,
             going_back: GoingBack::After,
+            secrets_done: false,
             resort_wanted: None,
             stuck_retried: None,
             lapsing_jumps: (BTreeSet::new(), 0),

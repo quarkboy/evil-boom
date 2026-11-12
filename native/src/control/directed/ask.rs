@@ -573,6 +573,30 @@ impl Director {
         .is_some()
     }
 
+    /// On instinct, the level at 100%: asked to leave by each exit she knows (the first the
+    /// default: nothing's left that counts), or stay.
+    pub(super) fn ask_complete(&mut self, obs: &Observation, exits: &[(String, String)]) {
+        let mut choices: Vec<Choice> = exits
+            .iter()
+            .take(2)
+            .map(|(id, line)| Choice {
+                label: format!("leave by {line}"),
+                then: Then::Order(Order::Go(id.clone(), false)),
+            })
+            .collect();
+        choices.push(Choice {
+            label: "stay".into(),
+            then: Then::Nothing,
+        });
+        let _ = self.ask(
+            obs,
+            "Everything's done here (100%). Leave?".into(),
+            choices,
+            0,
+            false,
+        );
+    }
+
     /// On instinct, nothing ordinary left and a last resort held back (`r`): asked whether to
     /// take it, leave (with an exit known), or stay (the default: off instinct, waiting for
     /// her). False if not asked.
