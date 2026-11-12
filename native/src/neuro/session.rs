@@ -97,6 +97,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
         json!({ "name": "doom_stop", "description": "Stop and wait." }),
         json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, what you're doing, what you're fighting." }),
+        json!({ "name": "doom_why", "description": "Why you're doing what you're doing: the aim and what it was chosen over, the fight, why you're not shooting, the last action that failed." }),
     ]
 }
 
@@ -441,7 +442,7 @@ impl Session {
         let (ok, msg) = self.action(agent, obs, name, data);
         if !matches!(
             name,
-            "doom_list" | "doom_look" | "doom_inspect" | "doom_status"
+            "doom_list" | "doom_look" | "doom_inspect" | "doom_status" | "doom_why"
         ) {
             let first = msg.lines().next().unwrap_or("");
             self.tell(
@@ -701,6 +702,7 @@ impl Session {
                 (true, "OK.".into())
             }
             "doom_status" => (true, self.director.status(agent, obs)),
+            "doom_why" => (true, self.director.why(agent, obs)),
             "doom_answer" => {
                 let (Some(id), Some(choice)) = (arg("id"), arg("choice")) else {
                     return (false, "Give id and choice.".into());

@@ -2053,6 +2053,11 @@ impl Combat {
         }
     }
 
+    /// Why the trigger's held with a target in her sights, in plain words (None: it isn't).
+    pub fn holding_fire(&self) -> Option<&'static str> {
+        self.trigger.held_fire.map(|h| h.label())
+    }
+
     /// Has she given up on getting at id a while?
     pub(super) fn given_up_on(&self, obs: &Observation, id: i32) -> bool {
         self.patience.given_up(id, obs.tic)

@@ -27,6 +27,8 @@
 //!   game start|next|restart ...
 //!                       the game itself, when it's hers (see control::game)
 //!   status              her health, armor, weapons, ammo, keys, what she's doing
+//!   why                 why she's doing it: the aim and what it was chosen over, the fight,
+//!                       why she's not shooting, the last action that failed
 //!   where               where she is, her health, what she's doing
 //!   log [N]             her log's last N lines (40), as the watcher shows it
 
@@ -199,6 +201,7 @@ pub fn command(
             _ => Err("in a level: a new game, or the next level, when it's over".into()),
         },
         Some("status") => Ok(vec![d.status(agent, obs)]),
+        Some("why") => Ok(d.why(agent, obs).lines().map(str::to_string).collect()),
         Some("check") => {
             let risky = w.last() == Some(&"risky");
             let r = w[1..w.len() - usize::from(risky)].join(" ");

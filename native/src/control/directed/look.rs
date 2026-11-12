@@ -136,7 +136,13 @@ impl Director {
 
     /// An objective as a pick, under the id it's listed by: something to explore by its area,
     /// a key by the key lying there, the rest by its own id.
-    fn pick_of(&mut self, agent: &Agent, obs: &Observation, o: &Objective, why: String) -> Pick {
+    pub(super) fn pick_of(
+        &mut self,
+        agent: &Agent,
+        obs: &Observation,
+        o: &Objective,
+        why: String,
+    ) -> Pick {
         let area = (explores(o) && o.kind != Kind::Key && o.thing.is_none() && o.trigger.is_none())
             .then(|| self.area_at(agent, o.goal))
             .flatten();

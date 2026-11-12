@@ -1274,9 +1274,47 @@ impl Explorer {
         // Near as she'd walk it, not as the crow flies: a goal close in a straight line can be many
         // times that along the way.
         let travel = self.travel(obs);
+        // Keys she has seen and has no way to yet: the way to one is likeliest near it, as a
+        // player who's seen a key looks round where it is. Ground to explore, and doors, switches
+        // and teleporters to try, count as nearer the nearer they are to such a key.
+        let held = obs.keys.unwrap_or_default();
+        let wanted: Vec<Point> = self
+            .knowledge
+            .known_things()
+            .into_iter()
+            .filter_map(|th| {
+                let kk = Key::from_thing(th.kind).filter(|kk| !held.has(*kk))?;
+                (!options.iter().any(|o| o.key == Some(kk))).then_some((th.x, th.y))
+            })
+            .collect();
+        let pull = |o: &Objective| {
+            if wanted.is_empty()
+                || !matches!(
+                    o.kind,
+                    Kind::Frontier
+                        | Kind::Room
+                        | Kind::Visit
+                        | Kind::Door
+                        | Kind::Switch
+                        | Kind::Teleporter
+                )
+            {
+                return 1.0;
+            }
+            let d = wanted
+                .iter()
+                .map(|&k| dist(k, o.goal))
+                .fold(f64::INFINITY, f64::min);
+            1.0 - KEY_PULL * (1.0 - d / KEY_PULL_RANGE).max(0.0)
+        };
         let mut weighed: Vec<(f64, Objective)> = options
             .into_iter()
-            .map(|o| (travel(o.goal) * o.kind.weight() * hooks.weigh(obs, &o), o))
+            .map(|o| {
+                (
+                    travel(o.goal) * o.kind.weight() * pull(&o) * hooks.weigh(obs, &o),
+                    o,
+                )
+            })
             .collect();
         weighed.sort_by(|a, b| {
             (a.1.priority(), a.0)
@@ -1329,6 +1367,12 @@ impl Explorer {
         weighed.into_iter().map(|(_, o)| o).collect()
     }
 }
+
+/// a key seen with no way to it yet: what could show the way counts as up to this much nearer
+/// (a half) right by it...
+const KEY_PULL: f64 = 0.5;
+/// ...and none from this far from it
+const KEY_PULL_RANGE: f64 = 1024.0;
 
 /// on instinct for whoever directs her, a spare pickup this far off along the way or less is
 /// taken with the new ground; further, it waits till there's no new ground left
