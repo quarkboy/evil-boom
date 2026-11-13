@@ -113,7 +113,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
  <div class="col" id="col-a">
   <section id="tokenbox">
     <h2>Token</h2>
-    <p class="dim">The console printed its address with a token (<code>?t=...</code>) when it started. Paste the token here.</p>
+    <p class="dim">The console printed its address with a token (<code>?t=...</code>) when it started. Paste that address, or the token, here.</p>
     <div class="row"><input id="tokenin" placeholder="token"><button id="tokenset">Use</button></div>
   </section>
 
@@ -340,15 +340,33 @@ const $ = (id) => document.getElementById(id);
 let token = new URLSearchParams(location.search).get("t") || "";
 try { if (token) localStorage.setItem("evil-console-token", token); else token = localStorage.getItem("evil-console-token") || ""; } catch (e) { /* (storage off: the URL's token only) */ }
 let urlsShown = null, volSentAt = 0, volTimer = null, volPending = {};
-let fontsShown = null;
+let fontsShown = null, tokenRefused = false;
+// (the token the page goes by in the address bar too: a reload or a bookmark keeps it)
+function showToken() {
+  try {
+    const u = new URL(location.href);
+    if (token && u.searchParams.get("t") !== token) { u.searchParams.set("t", token); history.replaceState(null, "", u); }
+  } catch (e) { /* (the address as it was) */ }
+}
+showToken();
 let seq = 0, last = null, follow = true, formDirty = false, failures = 0, mapsShown = "", mapPicked = false;
 const LOG_MAX = 4000;
 
 async function api(path, body) {
   const sep = path.includes("?") ? "&" : "?";
-  const r = await fetch(path + sep + "t=" + encodeURIComponent(token), body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  let r;
+  try {
+    r = await fetch(path + sep + "t=" + encodeURIComponent(token), body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  } catch (e) {
+    tokenRefused = false; // (no answer at all: the console's not there, whatever the token)
+    throw e;
+  }
   const j = await r.json().catch(() => ({ error: "bad answer (" + r.status + ")" }));
-  if (r.status === 401) { $("tokenbox").style.display = "block"; }
+  // (a token refused: the box to give the right one, and the badge saying so, the console
+  // being there; any answer after, the box gone: one that worked once mustn't stay up)
+  tokenRefused = r.status === 401;
+  $("tokenbox").style.display = tokenRefused ? "block" : "none";
+  if (tokenRefused) badge($("b-console"), "wrong token", "bad");
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
 }
@@ -633,7 +651,7 @@ async function poll() {
     failures = 0;
   } catch (e) {
     failures++;
-    badge($("b-console"), failures > 2 ? "console unreachable" : "console ?", failures > 2 ? "bad" : "warn");
+    if (!tokenRefused) badge($("b-console"), failures > 2 ? "console unreachable" : "console ?", failures > 2 ? "bad" : "warn");
   }
   setTimeout(poll, 400);
 }
@@ -719,8 +737,13 @@ $("logfilter").onchange = () => { for (const d of $("log").children) d.hidden = 
 $("logfollow").onclick = () => { follow = !follow; $("logfollow").classList.toggle("on", follow); };
 $("logclear").onclick = () => $("log").replaceChildren();
 $("tokenset").onclick = () => {
-  token = $("tokenin").value.trim();
+  // (the token, or the whole address the console printed with it)
+  const v = $("tokenin").value.trim();
+  let t = v;
+  try { t = new URL(v).searchParams.get("t") || v; } catch (e) { /* (a token, not an address) */ }
+  token = t;
   try { localStorage.setItem("evil-console-token", token); } catch (e) { /* (not kept) */ }
+  showToken();
   $("tokenbox").style.display = "none"; seq = 0; $("log").replaceChildren();
 };
 // The layout: each section folded or not by its title, and moved by its grip within its column
