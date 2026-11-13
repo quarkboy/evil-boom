@@ -36,9 +36,9 @@ jobs:
             libsdl2-dev libsdl2-mixer-dev libsndfile1-dev libzip-dev zlib1g-dev \
             libgl-dev libglu1-mesa-dev libglib2.0-dev libvorbis-dev
 
-      # (FluidSynth from its source: 22.04's is 2.2, and GeneralUser GS 2 needs 2.3's modulators;
-      # and only the synth: the engine plays what it renders, so none of its own audio drivers,
-      # which would bring JACK, PipeWire and the rest into the package)
+      # (FluidSynth from its source, only the synth: the engine plays what it renders, so none of
+      # its own audio drivers, which would bring JACK, PipeWire and the rest into the package;
+      # and newer than 22.04's 2.2, which lacks SoundFont modulators some banks use)
       - name: FluidSynth
         run: |
           git clone -q --depth 1 --branch v2.6.2 https://github.com/FluidSynth/fluidsynth.git /tmp/fluidsynth
@@ -64,7 +64,6 @@ jobs:
 
       - name: Package
         run: |
-          tools/soundfonts.sh
           tools/release/package-linux.sh "${VERSION#v}"
           tools/release/engine-source.sh "${VERSION#v}"
 
@@ -105,9 +104,7 @@ jobs:
 
       - name: Package
         shell: msys2 {0}
-        run: |
-          tools/soundfonts.sh
-          tools/release/package-windows.sh "${VERSION#v}"
+        run: tools/release/package-windows.sh "${VERSION#v}"
 
       - uses: actions/upload-artifact@v4
         with:

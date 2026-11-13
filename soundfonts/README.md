@@ -1,16 +1,20 @@
 # SoundFonts
 
-The game's music is MIDI. Played as Doom first played it, through the OPL synth (a Sound Blaster's
-FM), it needs nothing here. A SoundFont plays it with sampled instruments instead, through
-FluidSynth: chosen with `watch --soundfont NAME`, or in the console's settings.
+Doom's music is MIDI. With nothing here it plays through the OPL synth, as a Sound Blaster
+played it. A SoundFont plays it with sampled instruments instead (through FluidSynth); the one
+to have is a Roland SC-55's, the module the music was written on.
 
-`tools/soundfonts.sh` fetches two, free to redistribute, and checks them:
+## The SC-55 SoundFont (the default when it's here)
 
-| file | | license |
-|---|---|---|
-| `GeneralUser-GS.sf2` | GeneralUser GS v2.0.3 by S. Christian Collins: a General MIDI and GS bank, well liked for game music | its own, permissive ([licenses/GeneralUser-GS.txt](licenses/GeneralUser-GS.txt)) |
-| `MuseScore_General.sf3` | MuseScore General v0.2: Fluid R3 by Frank Wen, adapted by Michael Cowgill and S. Christian Collins | MIT ([licenses/MuseScore_General.md](licenses/MuseScore_General.md)) |
+1. Search the web for **"Patch93's SC-55 SoundFont"** and download it (a `.sf2` file; it's made
+   from Roland's samples, so it isn't ours to include).
+2. Put the `.sf2` in this folder named **`SC-55.sf2`**.
 
-Any other `.sf2` or `.sf3` put in this folder is offered too (a Roland Sound Canvas one, say).
-Those are yours: nothing here but the two above, and their licenses, goes into git or a
-release.
+That's all: from then on the MIDI plays through it unless told otherwise (`watch --soundfont
+opl` for OPL; the console's MIDI synth setting).
+
+Any other `.sf2` or `.sf3` put here can be chosen by its file name (`--soundfont NAME`, or from
+the console's list). Nothing in this folder but this README goes into git or a release.
+
+The recorded soundtrack from the Steam re-release (`--music sc55`) is better still where it has
+a song: see [docs/USAGE.md](../docs/USAGE.md#music).

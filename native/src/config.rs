@@ -159,8 +159,7 @@ pub fn out_dir() -> PathBuf {
     root().join("out")
 }
 
-/// Where the SoundFonts for the game's music are (soundfonts/: tools/soundfonts.sh's, and any
-/// put there).
+/// Where the SoundFonts for the game's music are (soundfonts/: the player's own).
 pub fn soundfonts_dir() -> PathBuf {
     root().join("soundfonts")
 }
@@ -179,6 +178,15 @@ pub fn soundfonts() -> Vec<String> {
         .collect();
     names.sort();
     names
+}
+
+/// The SoundFont the MIDI plays with unless another's asked for (or OPL): soundfonts/SC-55.sf2, if
+/// it's there (Patch93's SC-55 SoundFont, put there by the player: see soundfonts/README.md).
+pub const DEFAULT_SOUNDFONT: &str = "SC-55.sf2";
+
+/// The default SoundFont, if it's there; none: the OPL synth.
+pub fn default_soundfont() -> Option<PathBuf> {
+    Some(soundfonts_dir().join(DEFAULT_SOUNDFONT)).filter(|p| p.is_file())
 }
 
 /// A SoundFont by its name in soundfonts/, or by its path.

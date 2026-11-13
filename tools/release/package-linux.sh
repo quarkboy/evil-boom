@@ -20,10 +20,9 @@ bin=${BIN:-out/build/release/evil-boom}
 engine=third_party/dsda-doom/prboom2/build
 rm -rf "$dir"
 mkdir -p "$dir/lib" "$dir/config"
-# (the SoundFonts tools/soundfonts.sh fetched, with their licenses; none of anyone's own)
+# (the folder for a SoundFont of the player's own, and how to get one: none is included)
 mkdir -p "$dir/soundfonts"
-cp -r soundfonts/README.md soundfonts/licenses "$dir/soundfonts/"
-cp soundfonts/GeneralUser-GS.sf2 soundfonts/MuseScore_General.sf3 "$dir/soundfonts/"
+cp soundfonts/README.md "$dir/soundfonts/"
 cp "$bin" "$dir/evil-boom"
 cp "$engine/libdsda-evil.so" "$engine/dsda-doom.wad" "$dir/"
 for f in config/*.json; do

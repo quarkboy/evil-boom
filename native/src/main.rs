@@ -62,7 +62,8 @@
 //!       --window-size WxH: the window that size, the picture scaled to it; --no-vsync;
 //!       --fullscreen (the desktop's resolution, borderless). --render WxH: the game drawn at
 //!       that size (640x480 unless told; 1440x1080 fills the stream's game 1:1). --soundfont
-//!       NAME|FILE: the music with that SoundFont (soundfonts/), not the OPL synth. --music
+//!       NAME|FILE|opl: the MIDI with that SoundFont (soundfonts/), or the OPL synth (soundfonts/
+//!       SC-55.sf2 unless told, if it's there, else OPL). --music
 //!       sc55|idkfa: the songs as recorded (the Steam re-release's: the SC-55 or IDKFA), the
 //!       rest through the MIDI synth.
 //!       --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
@@ -814,7 +815,7 @@ fn watch_options(
         choices: None,
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
-        soundfont: None,
+        soundfont: evilboom::config::default_soundfont(),
         music: None,
     };
     let mut names = Vec::new();
@@ -850,9 +851,12 @@ fn watch_options(
                 };
             }
             "--soundfont" => {
-                w.soundfont = Some(evilboom::config::resolve_soundfont(
-                    it.next().ok_or("--soundfont NAME (in soundfonts/) or FILE")?,
-                )?);
+                let name = it.next().ok_or("--soundfont NAME (in soundfonts/), FILE, or opl")?;
+                w.soundfont = if name == "opl" {
+                    None
+                } else {
+                    Some(evilboom::config::resolve_soundfont(name)?)
+                };
             }
             "--render" => {
                 w.render = Some(evilboom::dsda::WindowSpec::parse_size(

@@ -16,11 +16,16 @@ beside the program; settings are in `config/`.
 
 ## Music
 
-Doom's music plays through the OPL synth, as a Sound Blaster played it, unless a SoundFont is
-chosen: `--soundfont GeneralUser-GS.sf2` (or `MuseScore_General.sf3`, or any `.sf2` you put in
-`soundfonts/`), or the console's MIDI synth setting. With the DOOM + DOOM II re-release on Steam,
-`--music sc55` plays the original soundtrack as recorded on a Roland SC-55 instead (`idkfa`:
-Andrew Hulshult's), read from your own copy.
+The music plays through the OPL synth, as a Sound Blaster played it, unless you add one of these
+from your own copies:
+
+- the DOOM + DOOM II re-release on Steam: `--music sc55` plays its recordings of the original
+  soundtrack on a Roland SC-55 (`idkfa`: Andrew Hulshult's). Evil finds it in Steam's folder;
+  elsewhere, set `EVILBOOM_RERELEASE_DIR` to the folder holding its `extras.wad`.
+- Patch93's SC-55 SoundFont (search the web for it), saved as `soundfonts/SC-55.sf2`: the
+  default MIDI synth from then on, for every song not recorded.
+
+The console has both as settings (Music, MIDI synth).
 
 ## Try it
 

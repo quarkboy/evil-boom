@@ -24,18 +24,6 @@ zlib (zlib), FluidSynth (LGPL-2.1-or-later; the Linux release's built from its s
 unmodified, without its own audio drivers), GLib (LGPL-2.1-or-later), and libogg and libvorbis
 (BSD-3-Clause).
 
-## SoundFonts
-
-Not in this repository: `tools/soundfonts.sh` fetches them into `soundfonts/`, and a binary
-release includes them, with their licenses (`soundfonts/licenses/`).
-
-- **GeneralUser GS** v2.0.3, by S. Christian Collins
-  (<https://github.com/mrbumpy409/GeneralUser-GS>, <https://www.schristiancollins.com>): its own
-  license, free for any use, in software projects too.
-- **MuseScore General** v0.2 (<https://musescore.org>): Fluid (R3) by Frank Wen, the mono version
-  by Michael Cowgill, adapted by S. Christian Collins; Temple Blocks by Ethan Winer, Drumline
-  Cymbals by Michael Schorsch. MIT.
-
 ## Code written from other ports' behaviour
 
 These are our own Rust, written to behave like the functions named. No code text was copied.
@@ -80,6 +68,8 @@ other platforms), by license:
 
 ## Not included
 
+- No SoundFont: `soundfonts/` is for the player's own (Patch93's SC-55 SoundFont, say, which is
+  made from Roland's samples).
 - The recorded music (`--music sc55|idkfa`) is read from the player's own copy of the DOOM +
   DOOM II re-release (its `rerelease/extras.wad`) into `out/music/` at run time; none of it is
   in this repository or a release.

@@ -100,20 +100,27 @@ To change the patch: edit in `third_party/dsda-doom`, then from there
 `git diff --abbrev=7 > ../../dsda/dsda-doom.patch`. Write the patch out before running the build
 script again: it takes a modified tree for an unpatched one and fails to apply the patch over it.
 
-## SoundFonts
+## Music (optional)
 
-The music plays through the OPL synth (a Sound Blaster's FM) unless a SoundFont is chosen
-(`watch --soundfont NAME`, or the console's Music setting), which plays it through FluidSynth.
-`tools/soundfonts.sh` fetches the two Evil offers, GeneralUser GS and MuseScore General, into
-`soundfonts/`, checking each one's hash; any other `.sf2` or `.sf3` put there is offered too.
-GeneralUser GS 2 needs FluidSynth 2.3 or newer (Ubuntu 22.04's is 2.2: the release builds its
-own). See [soundfonts/README.md](../soundfonts/README.md).
+Two things make the music sound like the original, both from your own copies:
 
-With the DOOM + DOOM II re-release on Steam, its recordings can play instead (`--music sc55` for
-the original soundtrack on a Roland SC-55, `--music idkfa` for Andrew Hulshult's): Evil finds
-`rerelease/extras.wad` beside the WADs' `base/`, in Steam's own folder, or where
-`EVILBOOM_RERELEASE_DIR` says, and makes a music WAD of them in `out/music/` (the engine plays
-Ogg Vorbis). Nothing of the re-release goes anywhere else.
+- **The recordings** from the DOOM + DOOM II re-release on Steam (the original soundtrack
+  recorded on a Roland SC-55, and Andrew Hulshult's IDKFA), played with `--music sc55` or the
+  console's Music setting. Evil reads them from the re-release's `rerelease/extras.wad`, found
+  where Steam installed it: on Windows `C:\Program Files (x86)\Steam\steamapps\common\Ultimate
+  Doom\rerelease\`; on Linux `~/.local/share/Steam/steamapps/common/Ultimate Doom/rerelease/`;
+  under WSL, Windows' Steam folder through `/mnt/c`. Installed elsewhere (another Steam library,
+  say), copy `extras.wad` into a `rerelease/` folder beside the WADs' `base/` (on Linux
+  `~/.local/share/evilboom/rerelease/extras.wad`), or set `EVILBOOM_RERELEASE_DIR` to the folder
+  holding it. The first game with them makes a music WAD of the IWAD's songs in `out/music/`
+  (about a second); nothing of the re-release goes anywhere else.
+- **An SC-55 SoundFont** for every song the recordings don't have (a PWAD's own, TNT's own): see
+  [soundfonts/README.md](../soundfonts/README.md) (search for "Patch93's SC-55 SoundFont" and
+  save it as `soundfonts/SC-55.sf2`; it's then the default).
+
+Without either, the music plays through the OPL synth, as a Sound Blaster played it. The engine
+plays SoundFonts through FluidSynth and the recordings through Ogg Vorbis, both built in by
+`tools/build-engine.sh`.
 
 ## Build options
 

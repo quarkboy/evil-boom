@@ -789,3 +789,13 @@ II's MAP14 and MAP22 Dave D. Taylor Blues, its MAP08's (re-arranged, taken as th
 the maintainer's word); TNT's own songs by the map that first plays them (O_TNT01...). Of the
 songs: DOOM 31 of 32 (not INTROA, unused), DOOM II 35 of 35, Plutonia 35 of 35, TNT 24 of 35
 (eleven of TNT's own have no recording).
+
+## Music: no bundled SoundFonts; the SC-55 one the default (2026-11-12)
+
+Listened to side by side, GeneralUser GS and MuseScore General fell short of the SC-55 sound, and
+the maintainer had them dropped: no SoundFont is fetched or shipped, `tools/soundfonts.sh` is gone,
+and `soundfonts/` is for the player's own. The one to have is Patch93's SC-55 SoundFont (made from
+Roland's samples, so not ours to ship): the docs say to search for it and save it as
+`soundfonts/SC-55.sf2`, and when it's there it's the default MIDI synth (`--soundfont opl` for
+OPL; the console's MIDI synth "Default"). With the re-release's recordings (`--music sc55`) it
+plays only what they don't have.

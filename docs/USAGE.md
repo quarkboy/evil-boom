@@ -29,13 +29,26 @@ speed (off while paused or sped up).
 | `--window-size WxH` | the window's size (`1280x720`); the picture, 1920x1080 for the stream, is scaled to fit |
 | `--render WxH` | the game drawn at that size (640x480 unless given); the stream's game is 1440x1080, so that draws it pixel for pixel |
 | `--music sc55\|idkfa` | the songs as recorded, from your own Steam copy of the DOOM + DOOM II re-release (its `rerelease/extras.wad`; `EVILBOOM_RERELEASE_DIR` if it's somewhere unusual): the original soundtrack on a Roland SC-55, or Andrew Hulshult's IDKFA. Songs it hasn't recorded (a PWAD's own) play as MIDI |
-| `--soundfont NAME` | the music through FluidSynth with that SoundFont (a file in `soundfonts/`, or a path), not the OPL synth |
+| `--soundfont NAME` | the MIDI through that SoundFont (a file in `soundfonts/`, or a path), or `opl` for the OPL synth; `soundfonts/SC-55.sf2` unless told, if it's there |
 | `--no-vsync` | frames shown when ready rather than at the screen's refresh (kept to it by the clock) |
 | `--fullscreen` | the whole screen, at the desktop's resolution, borderless |
 | `--headless` | no window at all |
 | `--directed FILE` | directed play: orders read from FILE as lines are added (see [NEURO.md](NEURO.md)) |
 | `--neuro URL` | directed by Neuro over its WebSocket (`ws://127.0.0.1:8000`) |
 | `--gpt [CONFIG]` | directed by the language-model stand-in (`config/neuro-gpt.json`) |
+
+## Music
+
+| | |
+|---|---|
+| `--music sc55` | the songs as the Steam re-release recorded them on a Roland SC-55 (your own copy: [BUILDING.md](BUILDING.md#music-optional) says where it's looked for) |
+| `--music idkfa` | Andrew Hulshult's IDKFA, from the same |
+| `--soundfont NAME` | the MIDI synth for everything not recorded: a SoundFont in `soundfonts/`, or `opl` |
+
+A song the recordings don't have (a PWAD's own, some of TNT's) plays through the MIDI synth. The
+MIDI synth is `soundfonts/SC-55.sf2` if you've put Patch93's SC-55 SoundFont there
+([soundfonts/README.md](../soundfonts/README.md)), else the OPL synth. The console has both as
+settings (Music, MIDI synth).
 
 ## Run options
 

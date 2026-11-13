@@ -90,7 +90,8 @@ pub struct Settings {
     pub render_size: String,
     /// the songs as recorded: "sc55" or "idkfa" (the Steam re-release's), "": all as MIDI
     pub music: String,
-    /// the MIDI played with this SoundFont, by its name in soundfonts/; "": by the OPL synth
+    /// the MIDI played with this SoundFont, by its name in soundfonts/; "opl": by the OPL synth;
+    /// "": the default (soundfonts/SC-55.sf2 if it's there, else OPL)
     pub soundfont: String,
     /// frames shown at the screen's refresh
     pub vsync: bool,
@@ -176,9 +177,11 @@ impl Settings {
             return Err("music: sc55, idkfa, or empty (MIDI)".into());
         }
         // (a name in soundfonts/, never a path: the page can't reach for files on the PC)
-        if !self.soundfont.is_empty() && !crate::config::soundfonts().contains(&self.soundfont) {
+        if !["", "opl"].contains(&self.soundfont.as_str())
+            && !crate::config::soundfonts().contains(&self.soundfont)
+        {
             return Err(format!(
-                "soundfont: one of {}, or empty (the OPL synth)",
+                "soundfont: one of {}, opl, or empty (the default)",
                 crate::config::soundfonts().join(", ")
             ));
         }
@@ -1074,6 +1077,8 @@ mod tests {
         s.music = "cd".into();
         assert!(s.check().is_err(), "music: unknown");
         s.music = String::new();
+        s.soundfont = "opl".into();
+        assert!(s.check().is_ok() && has(&s, "--soundfont"), "opl");
         for path in ["../../etc/passwd", "/tmp/x.sf2", "nothing-here.sf2"] {
             s.soundfont = path.into();
             assert!(s.check().is_err(), "{path}");
