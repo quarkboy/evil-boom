@@ -6,7 +6,7 @@
 //! stops and restarts it; relays the page's commands to it and its state and log to the page.
 //!
 //! Every API call carries the token (`?t=`), from this machine too: without it any web page open
-//! in the streamer's browser could post to the console. It's made once and kept, with the
+//! in the browser of whoever runs the console could post to the console. It's made once and kept, with the
 //! settings, in config/console.local.json (not committed). The page polls (`/api/poll`) a few
 //! times a second: one or two pages, on a LAN, need nothing cleverer.
 
@@ -46,7 +46,7 @@ const VIEWS_RETELL: Duration = Duration::from_secs(1);
 const HELLO_WAIT: Duration = Duration::from_secs(90);
 /// a crashed game is started again after this long...
 const RESTART_DELAY: Duration = Duration::from_secs(2);
-/// ...unless it's crashed this many times in this long: then it's left for the streamer
+/// ...unless it's crashed this many times in this long: then it's left to whoever runs the console
 const CRASH_LIMIT: usize = 3;
 const CRASH_WINDOW: Duration = Duration::from_secs(120);
 
@@ -69,6 +69,8 @@ pub struct Settings {
     /// who directs her: "bot" (on her own), "neuro" (Neuro at `neuro_url`), "gpt" (the GPT stand-in)
     pub mode: String,
     pub neuro_url: String,
+    /// who's at the console, as Evil's told of what's done and said from it
+    pub console_name: String,
     /// the game's sound muted at the start (and unmutable from the page: the sound's still there)
     pub muted: bool,
     /// the loudness each game's given as it starts: sfx, music (0-15), master (0-100); none: as
@@ -130,6 +132,7 @@ impl Default for Settings {
             episode: true,
             mode: "bot".into(),
             neuro_url: "ws://127.0.0.1:8000".into(),
+            console_name: crate::control::directed::CONSOLE_NAME.into(),
             muted: false,
             sfx_volume: None,
             music_volume: None,
@@ -215,6 +218,10 @@ impl Settings {
         }
         if self.mode == "neuro" && !self.neuro_url.starts_with("ws://") {
             return Err("neuro_url: ws://host:port".into());
+        }
+        let name = self.console_name.trim();
+        if name.is_empty() || name.chars().count() > 32 || name.chars().any(char::is_control) {
+            return Err("console_name: a name, at most 32 characters".into());
         }
         Ok(())
     }
@@ -447,7 +454,7 @@ pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
         .join("config")
         .join("console.local.json");
     let saved: Saved = match std::fs::read_to_string(&saved_path) {
-        // (a file that's there but can't be read isn't written over: it's the streamer's)
+        // (a file that's there but can't be read isn't written over: it's theirs)
         Ok(t) => serde_json::from_str(&t).map_err(|e| format!("{}: {e}", saved_path.display()))?,
         Err(_) => Saved::default(),
     };
@@ -605,6 +612,8 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 if sfx.is_some() || music.is_some() || master.is_some() {
                     let _ = s.send(&Command::Volume { sfx, music, master });
                 }
+                let name = s.settings.console_name.trim().to_string();
+                let _ = s.send(&Command::ConsoleName { name });
                 let (idle, ask) = (s.settings.force_idle, s.settings.force_ask);
                 if idle.is_some() || ask.is_some() {
                     let _ = s.send(&Command::Forcing { idle, ask });

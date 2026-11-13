@@ -66,13 +66,14 @@ impl Director {
         );
     }
 
-    /// The level begun again by the streamer (the console's): told her as theirs; the rest as
+    /// The level begun again from the stream console: told her as theirs, by name; the rest as
     /// when she asks.
-    pub fn streamer_restarted(&mut self, tic: i64) {
-        self.begun_again(
-            tic,
-            "The streamer started the level again, with what you came in with.",
+    pub fn console_restarted(&mut self, tic: i64) {
+        let said = format!(
+            "{} started the level again, with what you came in with.",
+            self.console_name
         );
+        self.begun_again(tic, &said);
     }
 
     fn begun_again(&mut self, tic: i64, said: &str) {

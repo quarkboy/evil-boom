@@ -186,6 +186,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <fieldset class="group wide"><legend>Who directs her</legend>
         <label>Directed by <select name="mode"><option value="bot">the bot alone</option><option value="neuro">Neuro</option><option value="gpt">the GPT stand-in</option></select></label>
         <label data-when="neuro">Neuro URL <select name="neuro_url"></select></label>
+        <label data-when="directed">Your name, as she's told it <input name="console_name" placeholder="Vedal" maxlength="32"></label>
         <label data-when="evilchooses">Levels she may start <input name="evil_maps" placeholder="the level above; all; E1M1, E2M1"></label>
         <label data-when="evilchooses">Skills she may choose <input name="evil_skills" placeholder="the skill above; 3, 4"></label>
         <label class="wide" data-when="evilchooses">Play she may choose <select name="evil_play"><option value="">as "Go on through the episode" above</option><option value="single">one level</option><option value="continuous">on through the episode</option><option value="both">either</option></select></label>
@@ -232,7 +233,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   </section>
 
   <section id="evilcard">
-    <h2>Evil <span class="dim" style="text-transform:none;letter-spacing:0">(her side: what she's set, asked, told and done; acting here goes in as hers, said to be the streamer's)</span></h2>
+    <h2>Evil <span class="dim" style="text-transform:none;letter-spacing:0">(her side: what she's set, asked, told and done; acting here goes in as hers, said to be yours, by your name in Settings)</span></h2>
     <div class="ev-top">
       <span id="ev-link" class="badge">not directing</span>
       <span>danger: <b id="ev-danger">-</b></span>
@@ -297,7 +298,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
             <input id="e-data" placeholder='{"ref": "door-3"}' style="flex:1;min-width:10em">
             <button id="e-order">Send</button>
           </div>
-          <p class="dim" style="margin:0;font-size:12px">Any of her actions, its data as JSON (docs/NEURO.md): it goes through her own checks, and she's told it was the streamer's.</p>
+          <p class="dim" style="margin:0;font-size:12px">Any of her actions, its data as JSON (docs/NEURO.md): it goes through her own checks, and she's told it was yours.</p>
         </div>
       </div>
       <div class="ev-col">
@@ -320,7 +321,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     </div>
     <div class="ev-grid" style="margin-top:12px">
       <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Told her <span style="text-transform:none">(bright: to be heard)</span></h3><div class="feed" id="ev-told"></div></div>
-      <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Her actions <span style="text-transform:none">(blue: the streamer's)</span></h3><div class="feed" id="ev-acts"></div></div>
+      <div><h3 class="dim" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 4px">Her actions <span style="text-transform:none">(blue: yours)</span></h3><div class="feed" id="ev-acts"></div></div>
     </div>
   </section>
 
@@ -490,12 +491,12 @@ function renderEvil(e, n) {
   $("ev-rate").textContent = "a minute: " + e.per_minute[0] + " actions, " + e.per_minute[1] + " words told, " + e.per_minute[2] + " moments";
   $("ev-goal").textContent = e.goal || "none";
   $("ev-policy").textContent = e.policy;
-  // (her settings into the selects, unless the streamer's choosing)
+  // (her settings into the selects, unless they're being chosen here)
   const pol = {};
   for (const part of (e.policy || "").split(", ")) { const [k, v] = part.split(" "); pol[k] = v; }
   const idle = /after (\d+) s/.exec(e.idle || ""); pol.idle = idle ? idle[1] : "0";
   for (const el of $("evilcard").querySelectorAll("[data-p]")) if (!setsDirty && document.activeElement !== el && pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
-  // (how soon she's pushed, as the game has it, unless the streamer's changing it)
+  // (how soon she's pushed, as the game has it, unless it's being changed here)
   [["ev-fidle", 0], ["ev-fask", 1]].forEach(([id, i]) => { if (!forceDirty && document.activeElement !== $(id) && e.forcing) $(id).value = Math.round(e.forcing[i] * 10) / 10; });
   $("ev-calls").replaceChildren(...(e.calls || []).map(li));
   $("ev-why").replaceChildren(...((e.why && e.why.length) ? e.why : ["-"]).map(li));
@@ -529,8 +530,8 @@ function renderEvil(e, n) {
   const told = e.told || [], acts = e.actions || [];
   evilTold = setFeed($("ev-told"), told.map((t) => feedLine(t.loud ? "loud" : "quiet", t.seconds, t.text)),
     told.length + "|" + (told.length ? told[told.length - 1].seconds + told[told.length - 1].text : ""), evilTold);
-  evilActs = setFeed($("ev-acts"), acts.map((a) => feedLine(a.streamer ? "st" : (a.ok ? "act" : "fail"), a.seconds,
-    (a.streamer ? "(streamer) " : "") + a.name + (a.data ? " " + a.data : "") + "\n   -> " + (a.ok ? "" : "FAILED: ") + a.reply.split("\n")[0])),
+  evilActs = setFeed($("ev-acts"), acts.map((a) => feedLine(a.by_console ? "st" : (a.ok ? "act" : "fail"), a.seconds,
+    (a.by_console ? "(" + ((last && last.settings && last.settings.console_name) || "console") + ") " : "") + a.name + (a.data ? " " + a.data : "") + "\n   -> " + (a.ok ? "" : "FAILED: ") + a.reply.split("\n")[0])),
     acts.length + "|" + (acts.length ? acts[acts.length - 1].seconds + acts[acts.length - 1].name : ""), evilActs);
 }
 let setsDirty = false, forceDirty = false;

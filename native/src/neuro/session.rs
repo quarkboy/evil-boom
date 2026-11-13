@@ -60,7 +60,7 @@ pub struct Session {
     /// her status, a second old at most: what doom_status answers off a level
     last_status: String,
     /// for the stream console: what she's been told lately (tic, text, not silent), her actions
-    /// lately, the streamer's last answer (its number); the tic last seen
+    /// lately, the console's last answer (its number); the tic last seen
     told_lines: std::collections::VecDeque<(i64, String, bool)>,
     exchanges: std::collections::VecDeque<Exchange>,
     reply: Option<(u64, String, bool, String)>,
@@ -127,7 +127,8 @@ struct Exchange {
     data: String,
     ok: bool,
     reply: String,
-    streamer: bool,
+    /// given from the stream console, as hers
+    by_console: bool,
 }
 
 /// lines told and actions kept for the stream console
@@ -227,14 +228,14 @@ impl Session {
     }
 
     /// An action and its answer, kept for the stream console.
-    fn keep(&mut self, name: &str, data: Option<&str>, ok: bool, reply: &str, streamer: bool) {
+    fn keep(&mut self, name: &str, data: Option<&str>, ok: bool, reply: &str, by_console: bool) {
         self.exchanges.push_back(Exchange {
             tic: self.now_tic,
             name: name.to_string(),
             data: data.unwrap_or("").to_string(),
             ok,
             reply: reply.to_string(),
-            streamer,
+            by_console,
         });
         while self.exchanges.len() > KEPT_LINES {
             self.exchanges.pop_front();
@@ -242,7 +243,7 @@ impl Session {
     }
 
     /// For the stream console: what she's been told lately, her actions lately, a minute's
-    /// worth (her actions, words told, moments), the streamer's last answer.
+    /// worth (her actions, words told, moments), the console's last answer.
     pub fn console_lines(&self) -> crate::console::EvilState {
         use crate::console::{ActionLine, EvilState, ToldLine};
         let secs = |tic: i64| tic as f64 / 35.0;
@@ -266,13 +267,13 @@ impl Session {
                     data: e.data.clone(),
                     ok: e.ok,
                     reply: e.reply.clone(),
-                    streamer: e.streamer,
+                    by_console: e.by_console,
                 })
                 .collect(),
             per_minute: [
                 self.exchanges
                     .iter()
-                    .filter(|e| !e.streamer && lately(e.tic))
+                    .filter(|e| !e.by_console && lately(e.tic))
                     .count() as u32,
                 self.told_lines
                     .iter()
@@ -696,17 +697,18 @@ impl Session {
         s
     }
 
-    /// A line from the streamer (the stream console's), told her as it is: not silent, it's for her
-    /// to hear.
+    /// A line from whoever's at the stream console, told her as it is, by their name: not
+    /// silent, it's for her to hear.
     pub fn say(&mut self, text: &str) {
-        self.tell(&format!("The streamer: {text}"), false);
+        let line = format!("{}: {text}", self.director.console_name);
+        self.tell(&line, false);
     }
 
-    /// An action of hers given by the streamer (the stream console's, for when she's stuck):
-    /// checked and carried out as hers is, the answer back to the streamer. An order (not a look:
-    /// a list, an inspection, her status) she's told of, quietly, with what came of it: her orders
-    /// may have changed under her.
-    pub fn streamer_action(
+    /// An action of hers given from the stream console (for when she's stuck): checked and
+    /// carried out as hers is, the answer back to the console. An order (not a look: a list, an
+    /// inspection, her status) she's told of, quietly, by who gave it, with what came of it: her
+    /// orders may have changed under her.
+    pub fn console_action(
         &mut self,
         agent: &mut Agent,
         obs: &Observation,
@@ -725,7 +727,8 @@ impl Session {
             let first = msg.lines().next().unwrap_or("");
             self.tell(
                 &format!(
-                    "The streamer did {name} {}: {}{first}",
+                    "{} did {name} {}: {}{first}",
+                    self.director.console_name,
                     data.unwrap_or(""),
                     if ok { "" } else { "failed: " }
                 ),

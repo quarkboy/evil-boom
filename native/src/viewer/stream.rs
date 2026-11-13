@@ -6,7 +6,7 @@
 //! level and its name, a map of what she's seen that follows her (her route, her objectives), what
 //! she's doing, what Evil said, the tally, the run so far, what's happened lately. What the game's
 //! own status bar shows (health, ammo, keys) isn't said again. Which side the column's on is the
-//! streamer's (the console's, live).
+//! console's to set, live.
 
 use std::collections::VecDeque;
 

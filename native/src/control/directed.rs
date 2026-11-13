@@ -423,6 +423,8 @@ struct Queued {
 /// of hers takes over at once, and the notice of it prompts her; `doom_policy idle 0` has her
 /// wait)
 pub const IDLE_AUTO: i64 = 3 * 35;
+/// who's at the stream console, unless it says
+pub const CONSOLE_NAME: &str = "Vedal";
 
 /// a go to an area whose middle she has no way to: at most this many of its unexplored spots,
 /// and this many of its other known spots, tried for one she has
@@ -475,6 +477,8 @@ pub struct Director {
     /// with no order this long (tics) she carries on by herself (None: she waits, as long as
     /// it takes); and since when she's had none
     pub idle_auto: Option<i64>,
+    /// who's at the stream console, as she's told of what they do (`console_name`)
+    pub console_name: String,
     idle_since: Option<i64>,
     /// what she's last said she's doing by herself
     told_auto: String,
@@ -577,6 +581,7 @@ impl Director {
         Director {
             answer_wait: Some(ask::ANSWER_WAIT),
             idle_auto: Some(IDLE_AUTO),
+            console_name: CONSOLE_NAME.into(),
             policy_due: true,
             ..Director::default()
         }

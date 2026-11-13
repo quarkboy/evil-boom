@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Quarkboy
 
-//! The stream console (docs/CONSOLE.md): the streamer's controls in a web page. `server`:
+//! The stream console (docs/CONSOLE.md): the controls for whoever runs the stream, in a web page. `server`:
 //! `evil-boom console`, the supervisor (the page, the settings, the game as a child process);
 //! `game`: the game's end of the link (`watch --control ADDR`). Between them, JSON a line over a
 //! local TCP connection: `FromGame` up, `Command` down.
@@ -12,7 +12,7 @@ pub mod server;
 use serde::{Deserialize, Serialize};
 
 /// The protocol's version, in the game's hello: a supervisor and a game built apart may not agree.
-pub const PROTOCOL: u32 = 6;
+pub const PROTOCOL: u32 = 7;
 
 /// What the console asks of the running game, applied by it at the top of a frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -47,6 +47,10 @@ pub enum Command {
         #[serde(default)]
         ask: Option<f64>,
     },
+    /// who's at the console, as Evil's told of what they do and say
+    ConsoleName {
+        name: String,
+    },
     /// the sound's loudness: the game's own sfx and music volumes (0-15) and a master over the
     /// mix (0-100); one left out is left as it is
     Volume {
@@ -61,7 +65,7 @@ pub enum Command {
     God {
         on: bool,
     },
-    /// a line from the streamer to Evil (Neuro's context; directed by Neuro only)
+    /// a line from whoever's at the console to Evil (Neuro's context; directed by Neuro only)
     Say {
         text: String,
     },
@@ -166,7 +170,7 @@ pub fn unbase64(text: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// The game as the console shows it (what the streamer needs, not what the bot knows).
+/// The game as the console shows it (what whoever runs it needs, not what the bot knows).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct GameState {
     pub map: String,
@@ -203,7 +207,7 @@ pub struct GameState {
 
 /// Evil as the console shows her (directed by Neuro or a file): her standing settings and goal,
 /// her open question, why the bot's doing what it's doing, what she's been told and what she's
-/// done lately, how much of it a minute; the streamer's last action's answer in full.
+/// done lately, how much of it a minute; the console's last action's answer in full.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EvilState {
     pub goal: Option<String>,
@@ -228,7 +232,7 @@ pub struct EvilState {
     /// unanswered (0: never)
     #[serde(default)]
     pub forcing: [f64; 2],
-    /// the streamer's last action's answer: (its number, the action, done, the answer)
+    /// the console's last action's answer: (its number, the action, done, the answer)
     pub reply: Option<(u64, String, bool, String)>,
 }
 
@@ -259,8 +263,8 @@ pub struct ActionLine {
     pub data: String,
     pub ok: bool,
     pub reply: String,
-    /// the streamer's, given as hers
-    pub streamer: bool,
+    /// given from the console, as hers
+    pub by_console: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

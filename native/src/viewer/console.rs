@@ -13,7 +13,7 @@ use crate::console::game::Link;
 use crate::console::{Command, FromGame, GameState, NeuroState};
 use crate::wad::Wad;
 
-/// a streamer's line to Evil: at most this long (her context is precious)
+/// a line to Evil from the console: at most this long (her context is precious)
 const SAY_MAX: usize = 300;
 
 /// the window's pictures sent this often
@@ -276,7 +276,7 @@ impl Watch {
                 Command::Speed { x } => self.speed = x.clamp(0.25, 16.0),
                 Command::Mute { on } => self.muted = on,
                 Command::RestartLevel => {
-                    // (as she'd ask for it, no life spent: the streamer's call, told her as
+                    // (as she'd ask for it, no life spent: the console's call, told her as
                     // theirs; from any screen, the level's again, Doom's own screens with it)
                     self.engine.restart(true);
                     self.agent.start_over();
@@ -286,10 +286,10 @@ impl Watch {
                     }
                     let tic = self.engine.tic;
                     if let Some(f) = self.feed.as_mut() {
-                        f.director.streamer_restarted(tic);
+                        f.director.console_restarted(tic);
                     }
                     if let Some(n) = self.neuro.as_mut() {
-                        n.director.streamer_restarted(tic);
+                        n.director.console_restarted(tic);
                     }
                     self.agent
                         .x_mut()
@@ -314,6 +314,14 @@ impl Watch {
                 Command::Volume { sfx, music, master } => {
                     self.engine.set_volume(sfx, music, master)
                 }
+                Command::ConsoleName { name } => {
+                    if let Some(f) = self.feed.as_mut() {
+                        f.director.console_name.clone_from(&name);
+                    }
+                    if let Some(n) = self.neuro.as_mut() {
+                        n.director.console_name = name;
+                    }
+                }
                 Command::Forcing { idle, ask } => match self.neuro.as_mut() {
                     Some(n) => n.set_forcing(idle, ask),
                     None => self
@@ -334,7 +342,7 @@ impl Watch {
                     let line = match self.neuro.as_mut() {
                         Some(n) if !text.is_empty() => {
                             n.say(&text);
-                            format!("streamer to Evil: {text}")
+                            format!("console to Evil: {text}")
                         }
                         Some(_) => "console: nothing to say".into(),
                         None => "console: not directed by Neuro: no one to tell".into(),
@@ -345,9 +353,13 @@ impl Watch {
                     let lines = match (self.neuro.as_mut(), self.obs.as_ref()) {
                         (Some(n), Some(obs)) => {
                             let (ok, msg) =
-                                n.streamer_action(&mut self.agent, obs, &action, data.as_deref());
+                                n.console_action(&mut self.agent, obs, &action, data.as_deref());
                             vec![
-                                format!(">> (streamer) {action} {}", data.as_deref().unwrap_or("")),
+                                format!(
+                                    ">> ({}) {action} {}",
+                                    n.director.console_name,
+                                    data.as_deref().unwrap_or("")
+                                ),
                                 format!(
                                     "<< {}{}",
                                     if ok { "" } else { "FAILED: " },

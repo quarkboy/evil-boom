@@ -1,6 +1,6 @@
 # The stream console
 
-`evil-boom console` is a web page for whoever runs the stream: start and stop the game, choose
+`evil-boom console` is a web page for whoever runs the stream (Vedal, say, or a trusted mod; Evil is the streamer): start and stop the game, choose
 the level and who's playing, pause, change speed and volume, restart a level, and see and act
 on what Evil is doing. The game runs as its child process, in the window the stream captures.
 
@@ -11,7 +11,7 @@ evil-boom console --new-token           # a new token; the old one stops working
 ```
 
 Open the printed URL (it carries `?t=TOKEN`). Every request needs the token, from this machine
-too: otherwise any web page open in the streamer's browser could control the game.
+too: otherwise any web page open in that person's browser could control the game.
 
 ## How it's put together
 
@@ -46,6 +46,7 @@ form's changes first).
 | **Title card:** Doom's own screens | `present` | the title card, the menu, the melt, the tally, the finales |
 | At the title card | `title_wait`, `evil_starts` | go straight in through the menu; wait for Begin; or Evil chooses the game (Neuro or GPT directing), Begin still starting it |
 | **Who directs her:** Directed by, Neuro URL | `mode`, `neuro_url` | `bot`, `neuro` (at `neuro_url`), `gpt` (the stand-in) |
+| Your name, as she's told it | `console_name` | who she's told says or does what comes from the page ("Vedal: ...", "Vedal did doom_go ..."); Vedal by default |
 | Levels, Skills, Play she may choose | `evil_maps`, `evil_skills`, `evil_play` | what Evil's offered when she chooses the game (skills 1-4: never Nightmare) |
 | She goes on to the next level herself; She may restart a level | `evil_next`, `evil_restart` | hers while she directs: from the tally (else it goes on after 30 s); after 90 s with nothing new |
 | **Window:** Layout, Column | `layout`, `panel_side` | `stream` (16:9, the game and a viewers' column, on the right or left) or `watcher` (the game, the map and her log) |
@@ -67,7 +68,7 @@ Two columns of sections (one on a narrow screen): the game and its controls, the
 sound, the log, and Evil's card. Evil's card shows her goal, her settings, an open question with
 its choices and countdown, `doom_why`, the last lines told her and her last actions. It can act
 for her: answer the question, set a goal, change a setting, look, ask why, take over the fight.
-Actions from the page are marked as the streamer's. Below her settings, the stream's own: how
+Actions from the page are marked as yours, and she's told of them by the name in Settings (`console_name`, Vedal by default). Below her settings, the stream's own: how
 soon a decision's forced on her when she's waited with nothing to do (6 s) or left a question
 unanswered (3 s), 0 for never; kept in `config/console.local.json` (`force_idle`, `force_ask`)
 for the next game.
