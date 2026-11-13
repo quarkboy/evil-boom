@@ -289,6 +289,25 @@ fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// `console`'s options: `--bind ADDR` (0.0.0.0:7878 unless given) and `--new-token`; anything
+/// else refused (a misspelt `--bind` had been passed over, the page served to the whole LAN).
+fn console_args(args: &[String]) -> Result<(String, bool), String> {
+    let (mut bind, mut new_token) = ("0.0.0.0:7878".to_string(), false);
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--bind" => bind = it.next().ok_or("--bind ADDRESS:PORT")?.clone(),
+            "--new-token" => new_token = true,
+            other => {
+                return Err(format!(
+                    "console: {other:?} isn't an option (--bind ADDRESS:PORT, --new-token)"
+                ))
+            }
+        }
+    }
+    Ok((bind, new_token))
+}
+
 /// Plan the level from the start and follow the plan in the game (seed 0): the follower's log.
 fn follow(wad: &str, map: &str) -> Result<(), String> {
     use evilboom::engine::{Engine, Options};
@@ -1148,10 +1167,8 @@ fn main() -> ExitCode {
             let config = args.iter().position(|a| a == "--config").and_then(|i| args.get(i + 1)).map_or_else(|| evilboom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from);
             evilboom::neuro::gpt::serve(port, &config)
         }
-        Some("console") => {
-            let bind = args.iter().position(|a| a == "--bind").and_then(|i| args.get(i + 1)).map_or("0.0.0.0:7878", String::as_str);
-            evilboom::console::server::serve(bind, args.iter().any(|a| a == "--new-token"))
-        }
+        Some("console") => console_args(&args[1..])
+            .and_then(|(bind, new_token)| evilboom::console::server::serve(&bind, new_token)),
         Some("neuro-mock") => {
             let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);
             let file = args.iter().skip(1).rfind(|a| !a.starts_with("--") && a.parse::<u16>().is_err()).cloned().unwrap_or_else(|| "out/neuro/actions.txt".into());
