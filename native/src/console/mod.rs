@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 pub const PROTOCOL: u32 = 7;
 
 /// The stream window's column's items, top to bottom, as the console names them to hide them.
-pub const COLUMN_ITEMS: [&str; 8] = [
-    "level", "map", "now", "calls", "says", "tally", "run", "lately",
+pub const COLUMN_ITEMS: [&str; 10] = [
+    "chat", "level", "map", "now", "calls", "asked", "says", "tally", "run", "lately",
 ];
 
 /// What the console asks of the running game, applied by it at the top of a frame.
@@ -100,6 +100,12 @@ pub enum Command {
     /// the stream window's column without these of its items (`COLUMN_ITEMS`)
     Column {
         hide: Vec<String>,
+    },
+    /// the column's sizes in the 1920x1080 picture: its box for chat (an overlay of OBS's, at
+    /// its top), and its map
+    Sizes {
+        chat: u32,
+        map: u32,
     },
     /// the games hers to start (`control::game::Choices::parse`'s words, every part given);
     /// none: none
@@ -212,6 +218,10 @@ pub struct GameState {
     /// Evil, if she's directing
     #[serde(default)]
     pub evil: Option<EvilState>,
+    /// the stream column's box for chat, if it's shown: x, y, width, height in the 1920x1080
+    /// picture
+    #[serde(default)]
+    pub chat_box: Option<[usize; 4]>,
 }
 
 /// Evil as the console shows her (directed by Neuro or a file): her standing settings and goal,

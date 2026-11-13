@@ -385,6 +385,12 @@ impl Watch {
                     };
                     self.agent.x_mut().log.push(line);
                 }
+                Command::Sizes { chat, map } => {
+                    if let Some(st) = self.stream.as_mut() {
+                        st.chat_height = usize::try_from(chat).unwrap_or(0);
+                        st.map_height = usize::try_from(map).unwrap_or(0);
+                    }
+                }
                 Command::Column { hide } => match self.stream.as_mut() {
                     Some(st) => st.hidden = hide,
                     None => self
@@ -518,6 +524,11 @@ impl Watch {
                 None => "level".into(),
             },
             volume: self.engine.volume(),
+            chat_box: self
+                .stream
+                .as_ref()
+                .and_then(super::stream::Stream::chat_box)
+                .map(|(x, y, w, h)| [x, y, w, h]),
             ..GameState::default()
         };
         if let Some(o) = &self.obs {

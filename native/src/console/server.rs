@@ -95,6 +95,10 @@ pub struct Settings {
     pub panel_side: String,
     /// the column's items not shown (`COLUMN_ITEMS`); changed from the page as it plays
     pub column_hide: Vec<String>,
+    /// the column's box for chat's height in the 1920x1080 picture, and its map's; changed
+    /// from the page as it plays
+    pub chat_height: u32,
+    pub map_height: u32,
     /// the game's window that size ("1280x720"), the picture scaled to it; "": the picture's
     /// own (1920x1080 for the stream)
     pub window_size: String,
@@ -147,6 +151,8 @@ impl Default for Settings {
             layout: "stream".into(),
             panel_side: "right".into(),
             column_hide: Vec::new(),
+            chat_height: 400,
+            map_height: 444,
             window_size: String::new(),
             render_size: String::new(),
             music: String::new(),
@@ -231,6 +237,12 @@ impl Settings {
                 "column_hide: no \"{h}\" ({})",
                 super::COLUMN_ITEMS.join(", ")
             ));
+        }
+        if !(60..=800).contains(&self.chat_height) {
+            return Err("chat_height: 60 to 800".into());
+        }
+        if !(120..=444).contains(&self.map_height) {
+            return Err("map_height: 120 to 444".into());
         }
         let name = self.console_name.trim();
         if name.is_empty() || name.chars().count() > 32 || name.chars().any(char::is_control) {
@@ -629,6 +641,8 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 let _ = s.send(&Command::ConsoleName { name });
                 let hide = s.settings.column_hide.clone();
                 let _ = s.send(&Command::Column { hide });
+                let (chat, map) = (s.settings.chat_height, s.settings.map_height);
+                let _ = s.send(&Command::Sizes { chat, map });
                 let (idle, ask) = (s.settings.force_idle, s.settings.force_ask);
                 if idle.is_some() || ask.is_some() {
                     let _ = s.send(&Command::Forcing { idle, ask });
@@ -1009,12 +1023,18 @@ fn handle(hub: &Hub, mut req: Request) {
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))
-                } else if matches!(c, Command::Column { .. } | Command::Panel { .. }) {
+                } else if matches!(
+                    c,
+                    Command::Column { .. } | Command::Panel { .. } | Command::Sizes { .. }
+                ) {
                     // (the stream's column: shown at once, kept for the next game as well)
                     let mut st = s.settings.clone();
                     match &c {
                         Command::Column { hide } => st.column_hide.clone_from(hide),
                         Command::Panel { side } => st.panel_side.clone_from(side),
+                        Command::Sizes { chat, map } => {
+                            (st.chat_height, st.map_height) = (*chat, *map);
+                        }
                         _ => {}
                     }
                     match st.check() {
@@ -1058,6 +1078,13 @@ fn handle(hub: &Hub, mut req: Request) {
                     if s.settings.column_hide != new.column_hide && s.to_game.is_some() {
                         let _ = s.send(&Command::Column { hide: new.column_hide.clone() });
                     }
+                    if (s.settings.chat_height, s.settings.map_height)
+                        != (new.chat_height, new.map_height)
+                        && s.to_game.is_some()
+                    {
+                        let (chat, map) = (new.chat_height, new.map_height);
+                        let _ = s.send(&Command::Sizes { chat, map });
+                    }
                     if s.settings.console_name != new.console_name && s.to_game.is_some() {
                         let name = new.console_name.trim().to_string();
                         let _ = s.send(&Command::ConsoleName { name });
@@ -1069,6 +1096,8 @@ fn handle(hub: &Hub, mut req: Request) {
                     let unchanged = Settings {
                         panel_side: new.panel_side.clone(),
                         column_hide: new.column_hide.clone(),
+                        chat_height: new.chat_height,
+                        map_height: new.map_height,
                         console_name: new.console_name.clone(),
                         evil_starts: new.evil_starts,
                         evil_maps: new.evil_maps.clone(),

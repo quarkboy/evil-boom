@@ -24,6 +24,14 @@ const GW: usize = SH * 4 / 3;
 /// the column's width, and its margin
 const PW: usize = SW - GW;
 const PAD: usize = 18;
+/// the box for chat's height unless the console says, and the most it may be
+pub const CHAT_HEIGHT: usize = 400;
+pub const CHAT_MOST: usize = 800;
+/// the chat box's heading, above it
+const CHAT_HEAD: usize = 24;
+/// the column's map's height unless the console says (its width: square), and the least
+pub const MAP_HEIGHT: usize = PW - 2 * PAD;
+const MAP_LEAST: usize = 120;
 /// map units across the column's map (it follows her)
 const MAP_SPAN: f64 = 1800.0;
 /// what's happened lately: this many kept
@@ -58,6 +66,9 @@ pub(super) struct Stream {
     pub(super) side: Side,
     /// the column's items not shown (`console::COLUMN_ITEMS`; the console's, live)
     pub(super) hidden: Vec<String>,
+    /// the box for chat's height, and the map's
+    pub(super) chat_height: usize,
+    pub(super) map_height: usize,
     /// the skill's name
     skill: &'static str,
     /// this level's title ("Dead Simple"), and the map it's for
@@ -78,6 +89,19 @@ pub(super) struct Stream {
 }
 
 impl Stream {
+    /// The column's box for chat, if it's shown: x, y, width, height in the picture.
+    pub(super) fn chat_box(&self) -> Option<Rect> {
+        if self.hidden.iter().any(|h| h == "chat") {
+            return None;
+        }
+        let x = match self.side {
+            Side::Right => GW,
+            Side::Left => 0,
+        };
+        let h = self.chat_height.clamp(60, CHAT_MOST);
+        Some((x + PAD, PAD + CHAT_HEAD, PW - 2 * PAD, h))
+    }
+
     pub(super) fn new(side: Side, fight: i32) -> Stream {
         let skill = match fight {
             0 => "no monsters",
@@ -90,6 +114,8 @@ impl Stream {
         Stream {
             side,
             hidden: Vec::new(),
+            chat_height: CHAT_HEIGHT,
+            map_height: MAP_HEIGHT,
             skill,
             title: (String::new(), String::new()),
             events: VecDeque::new(),
@@ -250,12 +276,25 @@ impl Watch {
         c.fill((edge, 0, 3, r.3), (90, 16, 16));
         let (x, inner) = (r.0 + PAD, r.2 - 2 * PAD);
         let shows = |item: &str| !st.hidden.iter().any(|h| h == item);
+        // (the box for chat first, at the top, so it never moves as what's below it wraps or
+        // empties: OBS lays the chat over it; nothing past the column's foot)
+        let clip = c.clip;
+        c.clip = (r.0, 0, r.2, r.3 - PAD);
         let mut y = PAD;
+        if let Some(b) = st.chat_box() {
+            heading(c, "CHAT", (b.0, b.1 - CHAT_HEAD + 4));
+            c.fill(b, (8, 8, 10));
+            outline(c, b, (90, 16, 16));
+            y = b.1 + b.3 + 14;
+        }
+        let director = self
+            .neuro
+            .as_ref()
+            .map(|n| &n.director)
+            .or(self.feed.as_ref().map(|f| &f.director));
         if shows("level") {
             y = say(c, &self.map_name, (x, y), 30.0, RED);
-            for line in wrap(&st.title.0, inner / 20).into_iter().take(2) {
-                y = say(c, &line, (x, y), 20.0, TEXT);
-            }
+            y = lines(c, (x, y), &wrap(&st.title.0, inner / 20), 2, 20.0, TEXT);
             let level_time = clock(self.engine.tic);
             y = say(
                 c,
@@ -266,7 +305,7 @@ impl Watch {
             ) + 10;
         }
         // the map of what she's seen, following her
-        let bx: Rect = (x, y, inner, inner);
+        let bx: Rect = (x, y, inner, st.map_height.clamp(MAP_LEAST, inner));
         match &self.obs {
             _ if !shows("map") => {}
             Some(o)
@@ -289,42 +328,58 @@ impl Watch {
         }
         if shows("map") {
             outline(c, bx, (52, 52, 64));
-            y += inner + 16;
+            y += bx.3 + 16;
         }
         // what she's doing
         if shows("now") {
             y = heading(c, "NOW", (x, y));
-            for line in wrap(&self.doing_now(), inner / 18).into_iter().take(3) {
-                y = say(c, &line, (x, y), 18.0, TEXT);
-            }
-            y += 10;
+            y = lines(
+                c,
+                (x, y),
+                &wrap(&self.doing_now(), inner / 18),
+                3,
+                18.0,
+                TEXT,
+            ) + 10;
         }
         // her calls: how she's fighting, what she's said that still holds
-        let calls = self
-            .neuro
-            .as_ref()
-            .map(|n| &n.director)
-            .or(self.feed.as_ref().map(|f| &f.director))
+        let calls = director
             .map(|d| d.calls(self.engine.tic))
             .filter(|_| shows("calls"));
         if let Some(calls) = calls {
             y = heading(c, "EVIL'S CALLS", (x, y));
-            for line in calls.iter().take(4) {
-                y = say(c, line, (x, y), 15.0, EVIL);
+            y = lines(c, (x, y), &calls, 4, 15.0, EVIL) + 10;
+        }
+        // what she's been asked, its choices and its clock
+        if let Some(q) = director
+            .and_then(|d| d.question())
+            .filter(|_| shows("asked"))
+        {
+            y = heading(c, "ASKED", (x, y));
+            y = lines(c, (x, y), &wrap(&q.text, inner / 16), 3, 16.0, EVIL);
+            let mut choices = Vec::new();
+            for (i, ch) in q.choices.iter().enumerate() {
+                let mark = match (i == q.default, q.now, q.deadline) {
+                    (true, true, _) => " (doing it)".to_string(),
+                    (true, false, Some(d)) => {
+                        format!(" (default, {} s)", ((d - self.engine.tic).max(0) + 34) / 35)
+                    }
+                    (true, false, None) => " (default)".to_string(),
+                    _ => String::new(),
+                };
+                let letter = char::from(b'a' + u8::try_from(i.min(25)).unwrap_or(0));
+                choices.extend(wrap(&format!("{letter}) {}{mark}", ch.label), inner / 15));
             }
-            y += 10;
+            y = lines(c, (x, y), &choices, 4, 15.0, TEXT) + 10;
         }
         // what Evil said
         if !st.said.is_empty() && shows("says") {
             y = heading(c, "EVIL SAYS", (x, y));
-            let mut lines: Vec<String> = Vec::new();
+            let mut said: Vec<String> = Vec::new();
             for s in st.said.iter().rev().take(2) {
-                lines.extend(wrap(&format!("\"{s}\""), inner / 15));
+                said.extend(wrap(&format!("\"{s}\""), inner / 15));
             }
-            for line in lines.iter().take(6) {
-                y = say(c, line, (x, y), 15.0, EVIL);
-            }
-            y += 10;
+            y = lines(c, (x, y), &said, 4, 15.0, EVIL) + 10;
         }
         // the tally
         let t = self.engine.tally();
@@ -372,30 +427,34 @@ impl Watch {
                 TEXT,
             ) + 10;
         }
+        let bottom = r.3 - PAD;
         // lately, newest first, till the column's full
-        if !shows("lately") {
-            return;
-        }
-        y = heading(c, "LATELY", (x, y));
-        for (i, (text, colour, n)) in st.events.iter().rev().enumerate() {
-            let text = if *n > 1 {
-                format!("{text} x{n}")
-            } else {
-                text.clone()
-            };
-            let fade = 1.0 - (i as f64 * 0.07).min(0.6);
-            let col = (
-                (f64::from(colour.0) * fade) as u8,
-                (f64::from(colour.1) * fade) as u8,
-                (f64::from(colour.2) * fade) as u8,
-            );
-            for line in wrap(&text, inner / 14) {
-                if y + 16 > r.3 - PAD {
-                    return;
+        'lately: {
+            if !shows("lately") {
+                break 'lately;
+            }
+            y = heading(c, "LATELY", (x, y));
+            for (i, (text, colour, n)) in st.events.iter().rev().enumerate() {
+                let text = if *n > 1 {
+                    format!("{text} x{n}")
+                } else {
+                    text.clone()
+                };
+                let fade = 1.0 - (i as f64 * 0.07).min(0.6);
+                let col = (
+                    (f64::from(colour.0) * fade) as u8,
+                    (f64::from(colour.1) * fade) as u8,
+                    (f64::from(colour.2) * fade) as u8,
+                );
+                for line in wrap(&text, inner / 14) {
+                    if y + 16 > bottom {
+                        break 'lately;
+                    }
+                    y = say(c, &line, (x, y), 14.0, col);
                 }
-                y = say(c, &line, (x, y), 14.0, col);
             }
         }
+        c.clip = clip;
     }
 
     /// What she's doing, for the viewers: the screen if it's not a level; her order (directed);
@@ -450,6 +509,14 @@ impl Watch {
                 .as_ref()
                 .map_or_else(|| "exploring".into(), |o| plain(o.kind, &o.label))
         };
+        // (on her own or for her goal: what she's doing, no more; "your goal" is said to her,
+        // not the viewers)
+        let own = |how: &str| how == "by instinct" || how.starts_with("for your goal");
+        let doing = match doing.split_once(": ") {
+            Some((how, what)) if own(how) => what.to_string(),
+            _ if own(&doing) => "exploring".to_string(),
+            _ => doing,
+        };
         let mut chars = doing.chars();
         chars.next().map_or(doing.clone(), |first| {
             first.to_uppercase().chain(chars).collect()
@@ -485,6 +552,21 @@ fn say(c: &mut Canvas, s: &str, at: (usize, usize), px: f64, colour: Rgb) -> usi
     let y = c.text(s, at, colour, 1);
     c.text_scale = kept;
     y
+}
+
+/// Up to `most` of `texts` from `at`, one a line; where they end.
+fn lines(
+    c: &mut Canvas,
+    at: (usize, usize),
+    texts: &[String],
+    most: usize,
+    px: f64,
+    colour: Rgb,
+) -> usize {
+    texts
+        .iter()
+        .take(most)
+        .fold(at.1, |y, t| say(c, t, (at.0, y), px, colour))
 }
 
 fn heading(c: &mut Canvas, s: &str, at: (usize, usize)) -> usize {

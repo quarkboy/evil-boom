@@ -156,15 +156,21 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <h2>Stream column <span class="dim" style="text-transform:none;letter-spacing:0">(the stream window's: changes at once, kept for the next game)</span></h2>
     <div class="row"><label>Side <select id="col-side"><option value="right">on the right</option><option value="left">on the left</option></select></label></div>
     <div class="row" style="flex-wrap:wrap;gap:4px 14px">
+          <span class="check" style="display:inline-flex"><input type="checkbox" data-col="chat" id="c-chat" checked><label for="c-chat" class="check">Chat box (top)</label></span>
           <span class="check" style="display:inline-flex"><input type="checkbox" data-col="level" id="c-level" checked><label for="c-level" class="check">Level</label></span>
           <span class="check" style="display:inline-flex"><input type="checkbox" data-col="map" id="c-map" checked><label for="c-map" class="check">Map</label></span>
           <span class="check" style="display:inline-flex"><input type="checkbox" data-col="now" id="c-now" checked><label for="c-now" class="check">Now</label></span>
           <span class="check" style="display:inline-flex"><input type="checkbox" data-col="calls" id="c-calls" checked><label for="c-calls" class="check">Evil's calls</label></span>
+          <span class="check" style="display:inline-flex"><input type="checkbox" data-col="asked" id="c-asked" checked><label for="c-asked" class="check">Asked</label></span>
           <span class="check" style="display:inline-flex"><input type="checkbox" data-col="says" id="c-says" checked><label for="c-says" class="check">Evil says</label></span>
           <span class="check" style="display:inline-flex"><input type="checkbox" data-col="tally" id="c-tally" checked><label for="c-tally" class="check">Tally</label></span>
           <span class="check" style="display:inline-flex"><input type="checkbox" data-col="run" id="c-run" checked><label for="c-run" class="check">Run</label></span>
           <span class="check" style="display:inline-flex"><input type="checkbox" data-col="lately" id="c-lately" checked><label for="c-lately" class="check">Lately</label></span>
     </div>
+    <div class="row"><label title="In the 1920x1080 picture, at the column's top: OBS lays the chat over it">Chat box height <input id="col-chath" type="number" min="60" max="800" step="10" style="width:6em"></label>
+      <label title="Its width is the column's (444); shorter, the same scale, still centred on her">Map height <input id="col-maph" type="number" min="120" max="444" step="10" style="width:6em"></label>
+</div>
+    <p class="dim" id="col-chatbox" style="margin:0;font-size:12px"></p>
     <p class="dim" id="col-note" style="margin:0;font-size:12px" hidden>Only in the stream layout (Settings, Window).</p>
   </section>
 
@@ -402,11 +408,20 @@ const cmd = (c) => act("api/cmd", c);
 const columnHidden = () => [...document.querySelectorAll("[data-col]")].filter((c) => !c.checked).map((c) => c.dataset.col);
 for (const c of document.querySelectorAll("[data-col]")) c.onchange = () => cmd({ cmd: "column", hide: columnHidden() });
 $("col-side").onchange = () => cmd({ cmd: "panel", side: $("col-side").value });
+const sizes = () => ({ chat: Math.max(60, Math.min(800, Number($("col-chath").value) || 400)), map: Math.max(120, Math.min(444, Number($("col-maph").value) || 444)) });
+$("col-chath").onchange = $("col-maph").onchange = () => cmd(Object.assign({ cmd: "sizes" }, sizes()));
 function fillColumn(s) {
   if ($("sec-column").contains(document.activeElement)) return; // (being changed here)
   $("col-side").value = s.panel_side || "right";
   for (const c of document.querySelectorAll("[data-col]")) c.checked = !(s.column_hide || []).includes(c.dataset.col);
   $("col-note").hidden = s.layout === "stream";
+  $("col-chath").value = s.chat_height || 400;
+  $("col-maph").value = s.map_height || 444;
+}
+// (where the chat box is, for placing the OBS source over it; the window scales the picture)
+function showChatBox(st) {
+  const b = st && st.chat_box;
+  $("col-chatbox").textContent = b ? `Chat box: x ${b[0]}, y ${b[1]}, ${b[2]}x${b[3]} of the 1920x1080 picture (scaled with the window).` : "";
 }
 
 function badge(el, text, cls) { el.textContent = text; el.className = "badge " + (cls || ""); }
@@ -488,6 +503,7 @@ function render(p) {
   for (const o of $("settings").elements.music.options) if (o.value) o.disabled = !p.rerelease;
   if (!formDirty) fillForm(p.settings);
   fillColumn(p.settings);
+  showChatBox(p.state);
   for (const name of ["map", "game", "stream"]) showView(name, (p.views || {})[name]);
   renderEvil(p.connected && st && st.evil, n);
   addLog(p.log);
@@ -677,6 +693,7 @@ function readForm() {
   }
   s.column_hide = columnHidden();
   s.panel_side = $("col-side").value;
+  ({ chat: s.chat_height, map: s.map_height } = sizes());
   // (the title card's choice, kept as it always was: waiting there, and Evil's to start)
   const tc = $("s-titlecard").value;
   s.title_wait = tc !== "go";
