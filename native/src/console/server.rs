@@ -720,6 +720,16 @@ fn start_at(hub: &Hub, map: Option<String>) -> Result<(), String> {
     if let Some(m) = map {
         settings.map = m;
     }
+    // (a SoundFont since taken out of soundfonts/: the default, not no game at all)
+    if !["", "opl"].contains(&settings.soundfont.as_str())
+        && !crate::config::soundfonts().contains(&settings.soundfont)
+    {
+        s.push(format!(
+            "[console] the SoundFont {} isn't in soundfonts/ any more: the default MIDI synth",
+            settings.soundfont
+        ));
+        settings.soundfont.clear();
+    }
     settings.check()?;
     let args = settings.args(&s.control_addr);
     let exe = s.exe.clone();
