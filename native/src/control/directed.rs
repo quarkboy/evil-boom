@@ -1258,14 +1258,18 @@ impl Director {
                         let hiding = by_thoroughness(walls.iter().filter(inside));
                         let mut what = Places::sketch(a);
                         let in_it = here.is_some_and(|s| a.sectors.contains(&s));
+                        // (walls a search would press as it's asked for by default, thorough 2:
+                        // whether it's worth one, not how many; one of every wall, 3, there is
+                        // everywhere)
+                        let unsearched = hiding[1] > 0;
                         if in_it {
                             what.push_str(", here");
-                        } else if left == 0 {
+                        } else if left == 0 && !unsearched {
                             done.insert(a.id.clone());
                         }
-                        what.push_str(&match (left, hiding) {
-                            (0, [0, 0, 0]) => ", explored, no walls to search".to_string(),
-                            (0, [a, b, c]) => format!(", explored, {a}/{b}/{c} walls to search"),
+                        what.push_str(&match (left, unsearched) {
+                            (0, true) => ", explored, not searched for secrets".to_string(),
+                            (0, false) => ", explored".to_string(),
                             (n, _) => format!(", {n} to explore"),
                         });
                         Entry {
