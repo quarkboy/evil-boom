@@ -181,8 +181,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <label>Seed <input name="seed" placeholder="random"></label>
       <label>Window <select name="layout"><option value="stream">for the stream (16:9)</option><option value="watcher">the watcher (map and log)</option></select></label>
       <label>Column <select name="panel_side"><option value="right">on the right</option><option value="left">on the left</option></select></label>
-      <label>Window size <input name="window_size" list="window-sizes" placeholder="its own (stream: 1920x1080)"></label>
-      <datalist id="window-sizes"><option value="1280x720"><option value="1600x900"><option value="1920x1080"><option value="2560x1440"><option value="3840x2160"></datalist>
+      <label>Window size <select name="window_size"><option value="">its own (stream: 1920x1080)</option><option>1280x720</option><option>1366x768</option><option>1600x900</option><option>1920x1080</option><option>2560x1440</option><option>3840x2160</option></select></label>
       <label>Directed by <select name="mode"><option value="bot">the bot alone</option><option value="neuro">Neuro</option><option value="gpt">the GPT stand-in</option></select></label>
       <label class="wide">Neuro URL <select name="neuro_url"></select></label>
       <span class="check"><input type="checkbox" name="mortal" id="s-mortal"><label for="s-mortal" class="check">Mortal</label></span>
@@ -530,7 +529,16 @@ function fillForm(s) {
   for (const el of f.elements) {
     if (!el.name || !(el.name in s)) continue;
     if (el.type === "checkbox") el.checked = !!s[el.name];
-    else el.value = s[el.name] == null ? "" : String(s[el.name]);
+    else {
+      const v = s[el.name] == null ? "" : String(s[el.name]);
+      // (a window size not in the list, set some other way: added, so it shows as it is)
+      if (el.name === "window_size" && v && ![...el.options].some((o) => o.value === v)) {
+        const o = document.createElement("option");
+        o.value = o.textContent = v;
+        el.append(o);
+      }
+      el.value = v;
+    }
   }
 }
 function readForm() {
