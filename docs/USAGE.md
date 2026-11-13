@@ -26,6 +26,9 @@ speed (off while paused or sped up).
 | `--mute` | no sound for the whole run |
 | `--present` | Doom's own screens: the title, the menu, the melt, the tally, the finales, death |
 | `--stream [right\|left]` | the 16:9 window for a stream: the game on one side, a column for the viewers on the other |
+| `--window-size WxH` | the window's size (`1280x720`); the picture, 1920x1080 for the stream, is scaled to fit |
+| `--no-vsync` | frames shown when ready rather than at the screen's refresh (kept to it by the clock) |
+| `--fullscreen` | the whole screen, at the desktop's resolution, borderless |
 | `--headless` | no window at all |
 | `--directed FILE` | directed play: orders read from FILE as lines are added (see [NEURO.md](NEURO.md)) |
 | `--neuro URL` | directed by Neuro over its WebSocket (`ws://127.0.0.1:8000`) |

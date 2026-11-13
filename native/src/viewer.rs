@@ -326,6 +326,8 @@ pub struct WatchOptions {
     pub stream: Option<StreamSide>,
     /// the games hers to start (`control::game::Choices::parse`'s words); none: none
     pub choices: Option<String>,
+    /// the window's size, vsync, full screen
+    pub window: crate::dsda::WindowSpec,
 }
 
 impl Watch {
@@ -1359,7 +1361,8 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
         (W, H, title)
     };
     let mut frames = frames::Frames::from_env();
-    let mut window = window::Window::open(&watch.engine.game, title, ww, wh)?;
+    let spec = opts.as_ref().map(|o| o.window).unwrap_or_default();
+    let mut window = window::Window::open(&watch.engine.game, title, (ww, wh), spec)?;
     if frames.is_some() {
         println!("window: {}", window.describe());
     }

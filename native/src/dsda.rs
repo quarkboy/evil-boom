@@ -159,11 +159,50 @@ type DrawAtFn = unsafe extern "C" fn(*mut u8, c_int, f64) -> c_int;
 
 /// The watcher's window, the game's SDL's (evil_window_*): none in a library from before it.
 struct WindowFns {
-    open: unsafe extern "C" fn(*const c_char, c_int, c_int, *mut c_int) -> c_int,
+    open:
+        unsafe extern "C" fn(*const c_char, c_int, c_int, c_int, c_int, c_int, *mut c_int) -> c_int,
     show: unsafe extern "C" fn(*const u32, c_int, c_int),
     events: unsafe extern "C" fn(*mut c_int, c_int) -> c_int,
     title: unsafe extern "C" fn(*const c_char),
     close: unsafe extern "C" fn(),
+}
+
+/// The watcher's window as it's asked for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowSpec {
+    /// its size (width, height); none: the picture's own
+    pub size: Option<(usize, usize)>,
+    /// a frame shown at the screen's refresh (else when it's ready, kept to the refresh by the
+    /// clock)
+    pub vsync: bool,
+    /// the whole screen, the desktop's resolution, borderless
+    pub fullscreen: bool,
+}
+
+impl Default for WindowSpec {
+    fn default() -> WindowSpec {
+        WindowSpec {
+            size: None,
+            vsync: true,
+            fullscreen: false,
+        }
+    }
+}
+
+impl WindowSpec {
+    /// "1280x720" read.
+    pub fn parse_size(s: &str) -> Result<(usize, usize), String> {
+        let bad = || format!("a window size: WIDTHxHEIGHT, 320x200 to 7680x4320 ({s:?})");
+        let (w, h) = s.trim().split_once(['x', 'X']).ok_or_else(bad)?;
+        let (w, h): (usize, usize) = (
+            w.trim().parse().map_err(|_| bad())?,
+            h.trim().parse().map_err(|_| bad())?,
+        );
+        if !(320..=7680).contains(&w) || !(200..=4320).contains(&h) {
+            return Err(bad());
+        }
+        Ok((w, h))
+    }
 }
 
 /// The watcher's window as it opened.
@@ -408,7 +447,15 @@ impl Dsda {
                 WindowFns {
                     open: std::mem::transmute::<
                         *const (),
-                        unsafe extern "C" fn(*const c_char, c_int, c_int, *mut c_int) -> c_int,
+                        unsafe extern "C" fn(
+                            *const c_char,
+                            c_int,
+                            c_int,
+                            c_int,
+                            c_int,
+                            c_int,
+                            *mut c_int,
+                        ) -> c_int,
                     >(sym(b"evil_window_open")?),
                     show: std::mem::transmute::<
                         *const (),
@@ -858,8 +905,14 @@ impl Dsda {
         Some((w, h, buf[..w * h].to_vec()))
     }
 
-    /// The watcher's window opened, `w` by `h`.
-    pub fn window_open(&self, title: &str, w: usize, h: usize) -> Result<WindowInfo, String> {
+    /// The watcher's window opened for a picture `w` by `h`, as `spec` asks.
+    pub fn window_open(
+        &self,
+        title: &str,
+        w: usize,
+        h: usize,
+        spec: WindowSpec,
+    ) -> Result<WindowInfo, String> {
         let f = self
             .window_fns
             .as_ref()
@@ -867,7 +920,19 @@ impl Dsda {
         let title = CString::new(title).map_err(|e| e.to_string())?;
         let mut out = [0 as c_int; 2];
         // SAFETY: a string the call only reads, and room for the two values it writes.
-        let ok = unsafe { (f.open)(title.as_ptr(), w as c_int, h as c_int, out.as_mut_ptr()) };
+        let (ww, wh) = spec.size.unwrap_or((0, 0));
+        let flags = c_int::from(spec.vsync) | (c_int::from(spec.fullscreen) << 1);
+        let ok = unsafe {
+            (f.open)(
+                title.as_ptr(),
+                w as c_int,
+                h as c_int,
+                ww as c_int,
+                wh as c_int,
+                flags,
+                out.as_mut_ptr(),
+            )
+        };
         if ok == 0 {
             return Err("the window didn't open (see the game's log)".into());
         }

@@ -59,6 +59,8 @@
 //!       melt, the tally, the finales, death as the game shows it); --title: those, held at the
 //!       title card till the console begins it. --stream [right|left]: the window for the stream,
 //!       16:9, the game on one side, a column for the viewers on the other (right unless told).
+//!       --window-size WxH: the window that size, the picture scaled to it; --no-vsync;
+//!       --fullscreen (the desktop's resolution, borderless).
 //!       --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
 //!       or evil-boom neuro-mock). --gpt [CONFIG]: directed by the GPT stand-in, run in this
 //!       program (config/neuro-gpt.json unless named; its log out/neuro/gpt.log)
@@ -787,6 +789,7 @@ fn watch_options(
         title_wait: false,
         stream: None,
         choices: None,
+        window: evilboom::dsda::WindowSpec::default(),
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -803,6 +806,13 @@ fn watch_options(
             "--episode" => w.episode = true,
             "--headless" => w.headless = true,
             "--mute" => w.sound = false,
+            "--window-size" => {
+                w.window.size = Some(evilboom::dsda::WindowSpec::parse_size(
+                    it.next().ok_or("--window-size WIDTHxHEIGHT")?,
+                )?);
+            }
+            "--no-vsync" => w.window.vsync = false,
+            "--fullscreen" => w.window.fullscreen = true,
             "--neuro" => {
                 w.neuro = Some(
                     it.next()

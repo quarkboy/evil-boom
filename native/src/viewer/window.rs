@@ -6,7 +6,7 @@
 
 use std::time::{Duration, Instant};
 
-use crate::dsda::{Dsda, WindowEvent};
+use crate::dsda::{Dsda, WindowEvent, WindowSpec};
 
 /// The keys the window answers to, as SDL's keycodes have them.
 pub(super) mod key {
@@ -29,12 +29,19 @@ pub(super) struct Window {
     /// the screen's refresh
     period: Duration,
     vsync: bool,
+    /// when the last frame was shown (by the clock: when it was due)
     last: Instant,
 }
 
 impl Window {
-    pub(super) fn open(game: &Dsda, title: &str, w: usize, h: usize) -> Result<Window, String> {
-        let info = game.window_open(title, w, h)?;
+    /// Opened for a picture `w` by `h`.
+    pub(super) fn open(
+        game: &Dsda,
+        title: &str,
+        (w, h): (usize, usize),
+        spec: WindowSpec,
+    ) -> Result<Window, String> {
+        let info = game.window_open(title, w, h, spec)?;
         let hz = if info.refresh > 0 { info.refresh } else { 60 };
         Ok(Window {
             period: Duration::from_secs_f64(1.0 / f64::from(hz)),
@@ -60,16 +67,22 @@ impl Window {
     /// wait: some drivers, a window minimised) a frame's kept to the refresh by the clock.
     pub(super) fn show(&mut self, game: &Dsda, px: &[u32], w: usize, h: usize) {
         game.window_show(px, w, h);
-        let soonest = if self.vsync {
-            self.period / 2
+        // (by the clock: each frame due a refresh after the last was due, not after it was
+        // shown, so that a sleep's running over doesn't add up into a slower rate; behind by
+        // more than a frame, due from now)
+        let now = Instant::now();
+        let paced = !self.vsync || now - self.last < self.period / 2;
+        self.last = if paced {
+            let due = self.last + self.period;
+            if due > now {
+                std::thread::sleep(due - now);
+                due
+            } else {
+                now
+            }
         } else {
-            self.period
+            now
         };
-        let since = self.last.elapsed();
-        if since < soonest {
-            std::thread::sleep(self.period - since);
-        }
-        self.last = Instant::now();
     }
 
     pub(super) fn events(game: &Dsda) -> Vec<WindowEvent> {

@@ -795,29 +795,33 @@ static int SDLCALL evil_event_filter(void *data, SDL_Event *e)
   return id != evil_window_id;
 }
 
-/* The window opened, `w` by `h` (the picture's size; it can be resized, the picture scaled to
- * fit). out[0]: 1 if showing a frame waits for the screen's refresh; out[1]: the screen's rate
- * (Hz, 0 unknown). Returns 1 if it's open. */
-EVIL_API int evil_window_open(const char *title, int w, int h, int *out)
+/* The window opened for a picture `w` by `h`, the window `window_w` by `window_h` (0: the
+ * picture's size; it can be resized, the picture scaled to fit). flags: 1 vsync, 2 full screen
+ * (the desktop's, borderless). out[0]: 1 if showing a frame waits for the screen's refresh;
+ * out[1]: the screen's rate (Hz, 0 unknown). Returns 1 if it's open. */
+EVIL_API int evil_window_open(const char *title, int w, int h, int window_w, int window_h,
+                              int flags, int *out)
 {
   SDL_RendererInfo info;
   SDL_DisplayMode mode;
+  Uint32 vsync = (flags & 1) ? SDL_RENDERER_PRESENTVSYNC : 0;
   if (evil_window)
     return 1;
   if (nodrawers || !SDL_WasInit(SDL_INIT_VIDEO))
     return 0;
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-  evil_window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h,
-                                 SDL_WINDOW_RESIZABLE);
+  evil_window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                 window_w > 0 ? window_w : w, window_h > 0 ? window_h : h,
+                                 SDL_WINDOW_RESIZABLE |
+                                     ((flags & 2) ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0));
   if (!evil_window)
   {
     lprintf(LO_WARN, "evil_window_open: %s\n", SDL_GetError());
     return 0;
   }
-  evil_renderer = SDL_CreateRenderer(evil_window, -1,
-                                     SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+  evil_renderer = SDL_CreateRenderer(evil_window, -1, SDL_RENDERER_ACCELERATED | vsync);
   if (!evil_renderer)
-    evil_renderer = SDL_CreateRenderer(evil_window, -1, SDL_RENDERER_PRESENTVSYNC);
+    evil_renderer = SDL_CreateRenderer(evil_window, -1, vsync);
   if (!evil_renderer)
     evil_renderer = SDL_CreateRenderer(evil_window, -1, 0);
   if (!evil_renderer)

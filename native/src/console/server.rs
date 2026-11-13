@@ -83,6 +83,13 @@ pub struct Settings {
     pub layout: String,
     /// the stream window's column: "right" or "left"
     pub panel_side: String,
+    /// the game's window that size ("1280x720"), the picture scaled to it; "": the picture's
+    /// own (1920x1080 for the stream)
+    pub window_size: String,
+    /// frames shown at the screen's refresh
+    pub vsync: bool,
+    /// the window the whole screen (the desktop's resolution, borderless)
+    pub fullscreen: bool,
     /// a game hers to start (Neuro's): at the title card, and when what she chose is over
     pub evil_starts: bool,
     /// the levels she may start at: "" the map above, "all", or a list ("E1M1, E2M1")
@@ -117,6 +124,9 @@ impl Default for Settings {
             title_wait: true,
             layout: "stream".into(),
             panel_side: "right".into(),
+            window_size: String::new(),
+            vsync: true,
+            fullscreen: false,
             evil_starts: true,
             evil_maps: String::new(),
             evil_skills: String::new(),
@@ -144,6 +154,10 @@ impl Settings {
             || !["right", "left"].contains(&self.panel_side.as_str())
         {
             return Err("layout: stream or watcher; panel_side: right or left".into());
+        }
+        if !self.window_size.trim().is_empty() {
+            crate::dsda::WindowSpec::parse_size(&self.window_size)
+                .map_err(|e| format!("window_size: {e}, or empty"))?;
         }
         if !["", "single", "continuous", "both"].contains(&self.evil_play.trim()) {
             return Err("evil_play: single, continuous, both, or empty (as Whole episode)".into());
@@ -196,6 +210,15 @@ impl Settings {
         }
         if self.layout == "stream" {
             a.extend(["--stream".into(), self.panel_side.clone()]);
+        }
+        if !self.window_size.trim().is_empty() {
+            a.extend(["--window-size".into(), self.window_size.trim().to_string()]);
+        }
+        if !self.vsync {
+            a.push("--no-vsync".into());
+        }
+        if self.fullscreen {
+            a.push("--fullscreen".into());
         }
         match self.mode.as_str() {
             "neuro" => a.extend(["--neuro".into(), self.neuro_url.clone()]),
@@ -985,6 +1008,27 @@ fn same(a: &str, b: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    /// The window's size, vsync and full screen: checked, and passed to the game.
+    #[test]
+    fn window_settings() {
+        let has = |s: &super::Settings, a: &str| s.args("x").iter().any(|x| x == a);
+        let mut s = super::Settings::default();
+        assert!(s.check().is_ok());
+        assert!(!has(&s, "--window-size") && !has(&s, "--no-vsync") && !has(&s, "--fullscreen"));
+        s.window_size = "1280x720".into();
+        s.vsync = false;
+        s.fullscreen = true;
+        assert!(s.check().is_ok());
+        let a = s.args("x");
+        let i = a.iter().position(|x| x == "--window-size").unwrap_or(0);
+        assert_eq!(a.get(i + 1).map(String::as_str), Some("1280x720"));
+        assert!(has(&s, "--no-vsync") && has(&s, "--fullscreen"));
+        for bad in ["1280", "big", "100x100", "9000x5000"] {
+            s.window_size = bad.into();
+            assert!(s.check().is_err(), "{bad}");
+        }
+    }
 
     /// What's hers to start: the console's own map, skill and play unless she's given more.
     #[test]
