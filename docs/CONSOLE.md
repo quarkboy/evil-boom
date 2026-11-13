@@ -74,7 +74,7 @@ unanswered (3 s), 0 for never; kept in `config/console.local.json` (`force_idle`
 for the next game.
 
 The Stream column section sets the stream window's column: its side, which of its items it
-shows (a box for chat, the level, the map, now, Evil's calls, a question she's been asked with
+shows (the logo and a box for chat at the top, the level, the map, now, Evil's calls, a question she's been asked with
 its choices and clock, Evil says, the tally, the run, lately; those left shown move up), and
 how tall the chat box and the map are. The chat box is at the top, so it never moves: lay OBS's
 chat over it, where the panel says it is (x, y, width, height in the 1920x1080 picture, scaled

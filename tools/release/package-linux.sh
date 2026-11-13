@@ -41,6 +41,8 @@ for f in "$dir"/lib/*; do
   patchelf --set-rpath '$ORIGIN' "$f"
 done
 cp LICENSE THIRD_PARTY.md README.md "$dir/"
+mkdir -p "$dir/licenses"
+cp native/assets/fonts/OFL.txt "$dir/licenses/BarlowCondensed-OFL.txt"
 cp tools/release/RELEASE.md "$dir/"
 tar -C "$out" -czf "$out/$name.tar.gz" "$name"
 echo "$out/$name.tar.gz: $(ls "$dir/lib" | wc -l) libraries bundled"

@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 pub const PROTOCOL: u32 = 7;
 
 /// The stream window's column's items, top to bottom, as the console names them to hide them.
-pub const COLUMN_ITEMS: [&str; 10] = [
-    "chat", "level", "map", "now", "calls", "asked", "says", "tally", "run", "lately",
+pub const COLUMN_ITEMS: [&str; 11] = [
+    "logo", "chat", "level", "map", "now", "calls", "asked", "says", "tally", "run", "lately",
 ];
 
 /// What the console asks of the running game, applied by it at the top of a frame.

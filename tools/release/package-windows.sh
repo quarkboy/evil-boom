@@ -36,6 +36,8 @@ ldd "$engine/libdsda-evil.dll" | awk '$3 ~ /^\/mingw64\// {print $3}' | sort -u 
   fi
 done
 cp LICENSE THIRD_PARTY.md README.md "$dir/"
+mkdir -p "$dir/licenses"
+cp native/assets/fonts/OFL.txt "$dir/licenses/BarlowCondensed-OFL.txt"
 cp tools/release/RELEASE.md "$dir/"
 (cd "$out" && rm -f "$name.zip" && zip -qr "$name.zip" "$name")
 echo "$out/$name.zip: $(ls "$dir"/*.dll | wc -l) DLLs"

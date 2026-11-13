@@ -2,13 +2,15 @@
 // Copyright (C) 2026 Quarkboy
 
 //! The watcher's window for the stream (`watch --stream [right|left]`): 16:9, 1920x1080. The game
-//! at its own 4:3 fills 1440x1080 on one side; the 480 left over is a column for the viewers: the
-//! level and its name, a map of what she's seen that follows her (her route, her objectives), what
+//! at its own 4:3 fills 1440x1080 on one side; the 480 left over is a column for the viewers (in
+//! Barlow Condensed, assets/fonts): the logo, a box for OBS's chat, the level and its name, a map of what she's seen that follows her (her route, her objectives), what
 //! she's doing, what Evil said, the tally, the run so far, what's happened lately. What the game's
 //! own status bar shows (health, ammo, keys) isn't said again. Which side the column's on is the
 //! console's to set, live.
 
-use std::collections::VecDeque;
+use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
+use std::sync::OnceLock;
 
 use std::collections::BTreeMap;
 
@@ -99,7 +101,20 @@ impl Stream {
             Side::Left => 0,
         };
         let h = self.chat_height.clamp(60, CHAT_MOST);
-        Some((x + PAD, PAD + CHAT_HEAD, PW - 2 * PAD, h))
+        Some((
+            x + PAD,
+            PAD + self.logo_height() + CHAT_HEAD,
+            PW - 2 * PAD,
+            h,
+        ))
+    }
+
+    /// The room the logo takes at the column's top (none if it's hidden).
+    fn logo_height(&self) -> usize {
+        match logo() {
+            Some(l) if !self.hidden.iter().any(|h| h == "logo") => l.1 + 12,
+            _ => 0,
+        }
     }
 
     pub(super) fn new(side: Side, fight: i32) -> Stream {
@@ -281,6 +296,13 @@ impl Watch {
         let clip = c.clip;
         c.clip = (r.0, 0, r.2, r.3 - PAD);
         let mut y = PAD;
+        if let Some((w, h, px)) = logo().filter(|_| shows("logo")) {
+            for (i, &p) in px.iter().enumerate() {
+                let (lx, ly) = (x + (inner.saturating_sub(*w)) / 2 + i % w, y + i / w);
+                c.put(lx as i64, ly as i64, p);
+            }
+            y += h + 12;
+        }
         if let Some(b) = st.chat_box() {
             heading(c, "CHAT", (b.0, b.1 - CHAT_HEAD + 4));
             c.fill(b, (8, 8, 10));
@@ -292,17 +314,16 @@ impl Watch {
             .as_ref()
             .map(|n| &n.director)
             .or(self.feed.as_ref().map(|f| &f.director));
+        // the level, its name and its time, on one line (the name cut short to fit)
         if shows("level") {
-            y = say(c, &self.map_name, (x, y), 30.0, RED);
-            y = lines(c, (x, y), &wrap(&st.title.0, inner / 20), 2, 20.0, TEXT);
-            let level_time = clock(self.engine.tic);
-            y = say(
-                c,
-                &format!("{}  ·  {level_time}", st.skill),
-                (x, y + 2),
-                14.0,
-                DIM,
-            ) + 10;
+            say(c, &self.map_name, (x, y), 30.0, RED);
+            let time = clock(self.engine.tic);
+            let time_w = text_w(&time, 18.0);
+            say(c, &time, (x + inner - time_w, y + 12), 18.0, DIM);
+            let from = x + text_w(&self.map_name, 30.0) + 12;
+            let room = (x + inner).saturating_sub(time_w + 14 + from);
+            say(c, &fit(&st.title.0, room, 20.0), (from, y + 10), 20.0, TEXT);
+            y += line_h(30.0) + 8;
         }
         // the map of what she's seen, following her
         let bx: Rect = (x, y, inner, st.map_height.clamp(MAP_LEAST, inner));
@@ -336,7 +357,7 @@ impl Watch {
             y = lines(
                 c,
                 (x, y),
-                &wrap(&self.doing_now(), inner / 18),
+                &wrap_px(&self.doing_now(), inner, 18.0),
                 3,
                 18.0,
                 TEXT,
@@ -356,7 +377,7 @@ impl Watch {
             .filter(|_| shows("asked"))
         {
             y = heading(c, "ASKED", (x, y));
-            y = lines(c, (x, y), &wrap(&q.text, inner / 16), 3, 16.0, EVIL);
+            y = lines(c, (x, y), &wrap_px(&q.text, inner, 16.0), 3, 16.0, EVIL);
             let mut choices = Vec::new();
             for (i, ch) in q.choices.iter().enumerate() {
                 let mark = match (i == q.default, q.now, q.deadline) {
@@ -368,7 +389,11 @@ impl Watch {
                     _ => String::new(),
                 };
                 let letter = char::from(b'a' + u8::try_from(i.min(25)).unwrap_or(0));
-                choices.extend(wrap(&format!("{letter}) {}{mark}", ch.label), inner / 15));
+                choices.extend(wrap_px(
+                    &format!("{letter}) {}{mark}", ch.label),
+                    inner,
+                    15.0,
+                ));
             }
             y = lines(c, (x, y), &choices, 4, 15.0, TEXT) + 10;
         }
@@ -377,39 +402,38 @@ impl Watch {
             y = heading(c, "EVIL SAYS", (x, y));
             let mut said: Vec<String> = Vec::new();
             for s in st.said.iter().rev().take(2) {
-                said.extend(wrap(&format!("\"{s}\""), inner / 15));
+                said.extend(wrap_px(&format!("\"{s}\""), inner, 15.0));
             }
             y = lines(c, (x, y), &said, 4, 15.0, EVIL) + 10;
         }
-        // the tally
-        let t = self.engine.tally();
+        // the tally: kills, items and secrets side by side, each with its bar
         if shows("tally") {
             y = heading(c, "TALLY", (x, y));
-        }
-        for (name, (got, of), colour) in [
-            ("Kills", t[1], (200, 64, 52)),
-            ("Items", t[0], (72, 160, 224)),
-            ("Secrets", t[2], (232, 200, 64)),
-        ]
-        .into_iter()
-        .filter(|_| shows("tally"))
-        {
-            say(c, name, (x, y), 15.0, TEXT);
-            let n = format!("{got}/{of}");
-            say(c, &n, (x + inner - n.len() * 15, y), 15.0, TEXT);
-            y += 19;
-            c.fill((x, y, inner, 7), (40, 40, 48));
-            let filled = if of > 0 {
-                inner * usize::try_from(got.clamp(0, of)).unwrap_or(0)
-                    / usize::try_from(of).unwrap_or(1)
-            } else {
-                0
-            };
-            c.fill((x, y, filled, 7), colour);
-            y += 15;
-        }
-        if shows("tally") {
-            y += 6;
+            let t = self.engine.tally();
+            let gap = 14;
+            let w = (inner - 2 * gap) / 3;
+            for (k, (name, (got, of), colour)) in [
+                ("Kills", t[1], (200, 64, 52)),
+                ("Items", t[0], (72, 160, 224)),
+                ("Secrets", t[2], (232, 200, 64)),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let cx = x + k * (w + gap);
+                say(c, name, (cx, y), 15.0, TEXT);
+                let n = format!("{got}/{of}");
+                say(c, &n, (cx + w - text_w(&n, 15.0), y), 15.0, TEXT);
+                c.fill((cx, y + 19, w, 7), (40, 40, 48));
+                let filled = if of > 0 {
+                    w * usize::try_from(got.clamp(0, of)).unwrap_or(0)
+                        / usize::try_from(of).unwrap_or(1)
+                } else {
+                    0
+                };
+                c.fill((cx, y + 19, filled, 7), colour);
+            }
+            y += 19 + 7 + 14;
         }
         // the run
         if shows("run") {
@@ -417,7 +441,8 @@ impl Watch {
             y = say(
                 c,
                 &format!(
-                    "levels {}  ·  deaths {}  ·  {}",
+                    "{}  ·  levels {}  ·  deaths {}  ·  {}",
+                    st.skill,
                     st.levels,
                     st.deaths,
                     clock(st.run_tics)
@@ -446,7 +471,7 @@ impl Watch {
                     (f64::from(colour.1) * fade) as u8,
                     (f64::from(colour.2) * fade) as u8,
                 );
-                for line in wrap(&text, inner / 14) {
+                for line in wrap_px(&text, inner, 14.0) {
                     if y + 16 > bottom {
                         break 'lately;
                     }
@@ -546,12 +571,123 @@ fn monster(class: &str) -> (String, String) {
 }
 
 /// Text at `px` pixels a character; the next line's y.
+/// `s` at `at` (its top), `px` tall as the old 8x8 cell was, in the column's typeface; where
+/// the next line starts.
 fn say(c: &mut Canvas, s: &str, at: (usize, usize), px: f64, colour: Rgb) -> usize {
-    let kept = c.text_scale;
-    c.text_scale = px / 8.0;
-    let y = c.text(s, at, colour, 1);
-    c.text_scale = kept;
-    y
+    let em = em_of(px);
+    let base = at.1 as i64 + px.round() as i64;
+    let mut x = at.0 as f64;
+    let mut before = None;
+    for ch in s.chars() {
+        if let Some(b) = before {
+            x += f64::from(face().horizontal_kern(b, ch, em).unwrap_or(0.0));
+        }
+        with_glyph(ch, em, |m, cover| {
+            let top = base - (m.height as i64 + i64::from(m.ymin));
+            let left = x.round() as i64 + i64::from(m.xmin);
+            for (k, &a) in cover.iter().enumerate() {
+                let (gx, gy) = ((k % m.width.max(1)) as i64, (k / m.width.max(1)) as i64);
+                c.blend(left + gx, top + gy, colour, a);
+            }
+            x += f64::from(m.advance_width);
+        });
+        before = Some(ch);
+    }
+    at.1 + line_h(px)
+}
+
+/// The column's typeface: Barlow Condensed SemiBold (SIL Open Font License, assets/fonts).
+fn face() -> &'static fontdue::Font {
+    static FACE: OnceLock<fontdue::Font> = OnceLock::new();
+    FACE.get_or_init(|| {
+        let bytes: &[u8] = include_bytes!("../../assets/fonts/BarlowCondensed-SemiBold.ttf");
+        fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default())
+            .expect("the column's typeface")
+    })
+}
+
+/// A text's size (the old cell's height) as the typeface's em: its capitals about that tall.
+fn em_of(px: f64) -> f32 {
+    (px * 1.4) as f32
+}
+
+/// A line's height at `px`, as the old font stepped it (the layout's heights unchanged).
+fn line_h(px: f64) -> usize {
+    px.round() as usize + (3.0 * px / 8.0).round() as usize
+}
+
+/// A glyph as drawn: its metrics and coverage.
+type Glyph = (fontdue::Metrics, Vec<u8>);
+
+thread_local! {
+    /// glyphs drawn already, by character and size (sixteenths of a pixel)
+    static GLYPHS: RefCell<HashMap<(char, u32), Glyph>> = RefCell::new(HashMap::new());
+}
+
+/// `f` with `ch`'s glyph at `em`: its metrics and coverage, rasterized once.
+fn with_glyph<R>(ch: char, em: f32, f: impl FnOnce(&fontdue::Metrics, &[u8]) -> R) -> R {
+    GLYPHS.with(|g| {
+        let mut g = g.borrow_mut();
+        let (m, cover) = g
+            .entry((ch, (em * 16.0) as u32))
+            .or_insert_with(|| face().rasterize(ch, em));
+        f(m, cover)
+    })
+}
+
+/// `s` cut short with an ellipsis to fit `width` at `px` (as it is if it fits).
+fn fit(s: &str, width: usize, px: f64) -> String {
+    if text_w(s, px) <= width {
+        return s.to_string();
+    }
+    let mut out: String = s.to_string();
+    while !out.is_empty() && text_w(&format!("{out}…"), px) > width {
+        out.pop();
+    }
+    if out.is_empty() {
+        String::new()
+    } else {
+        format!("{}…", out.trim_end())
+    }
+}
+
+/// How wide `s` is at `px`.
+fn text_w(s: &str, px: f64) -> usize {
+    let em = em_of(px);
+    let mut w = 0.0;
+    let mut before = None;
+    for ch in s.chars() {
+        if let Some(b) = before {
+            w += face().horizontal_kern(b, ch, em).unwrap_or(0.0);
+        }
+        w += face().metrics(ch, em).advance_width;
+        before = Some(ch);
+    }
+    w.ceil() as usize
+}
+
+/// The logo (assets/logo.png, made by tools/logo/make.py): its width, height and pixels.
+fn logo() -> Option<&'static (usize, usize, Vec<Rgb>)> {
+    static LOGO: OnceLock<Option<(usize, usize, Vec<Rgb>)>> = OnceLock::new();
+    LOGO.get_or_init(|| {
+        let bytes: &[u8] = include_bytes!("../../assets/logo.png");
+        let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
+            .read_info()
+            .ok()?;
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).ok()?;
+        let step = match info.color_type {
+            png::ColorType::Rgb => 3,
+            png::ColorType::Rgba => 4,
+            _ => return None,
+        };
+        let px = buf[..info.buffer_size()]
+            .chunks(step)
+            .map(|p| (p[0], p[1], p[2]))
+            .collect();
+        Some((info.width as usize, info.height as usize, px))
+    })
+    .as_ref()
 }
 
 /// Up to `most` of `texts` from `at`, one a line; where they end.
@@ -603,27 +739,55 @@ fn title_case(s: &str) -> String {
 }
 
 /// Words into lines of at most `width` characters (a longer word cut).
+/// `s` in lines of at most `width` characters (a word longer than that broken).
+#[cfg(test)]
 fn wrap(s: &str, width: usize) -> Vec<String> {
     let width = width.max(4);
+    wrap_by(s, |t| t.chars().count() <= width)
+}
+
+/// `s` in lines at most `width` pixels wide at `px`.
+fn wrap_px(s: &str, width: usize, px: f64) -> Vec<String> {
+    wrap_by(s, |t| text_w(t, px) <= width)
+}
+
+/// `s` in lines that each `fit` (a word too long for one broken, as much of it as fits).
+fn wrap_by(s: &str, fits: impl Fn(&str) -> bool) -> Vec<String> {
     let mut lines = Vec::new();
     let mut line = String::new();
     for word in s.split_whitespace() {
         let mut word = word.to_string();
-        while word.chars().count() > width {
-            let head: String = word.chars().take(width).collect();
-            word = word.chars().skip(width).collect();
+        while !fits(&word) {
+            let mut head = String::new();
+            for ch in word.chars() {
+                head.push(ch);
+                if !fits(&head) {
+                    head.pop();
+                    break;
+                }
+            }
+            if head.is_empty() {
+                head = word.chars().take(1).collect();
+            }
+            word = word[head.len()..].to_string();
             if !line.is_empty() {
                 lines.push(std::mem::take(&mut line));
             }
             lines.push(head);
         }
-        if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > width {
-            lines.push(std::mem::take(&mut line));
+        if word.is_empty() {
+            continue;
         }
-        if !line.is_empty() {
-            line.push(' ');
+        let joined = if line.is_empty() {
+            word.clone()
+        } else {
+            format!("{line} {word}")
+        };
+        if !line.is_empty() && !fits(&joined) {
+            lines.push(std::mem::replace(&mut line, word));
+        } else {
+            line = joined;
         }
-        line.push_str(&word);
     }
     if !line.is_empty() {
         lines.push(line);

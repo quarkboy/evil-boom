@@ -162,6 +162,26 @@ impl Canvas {
             (u32::from(c.0) << 16) | (u32::from(c.1) << 8) | u32::from(c.2);
     }
 
+    /// `c` over what's there by `a` (0-255), within the clip.
+    fn blend(&mut self, x: i64, y: i64, c: Rgb, a: u8) {
+        let (cx, cy, cw, ch) = self.clip;
+        if a == 0
+            || x < cx as i64
+            || y < cy as i64
+            || x >= (cx + cw) as i64
+            || y >= (cy + ch) as i64
+        {
+            return;
+        }
+        let i = y as usize * self.width + x as usize;
+        let was = self.px[i];
+        let mix = |new: u8, shift: u32| {
+            let old = (was >> shift) & 0xff;
+            (u32::from(new) * u32::from(a) + old * (255 - u32::from(a))) / 255
+        };
+        self.px[i] = (mix(c.0, 16) << 16) | (mix(c.1, 8) << 8) | mix(c.2, 0);
+    }
+
     fn fill(&mut self, r: Rect, c: Rgb) {
         for y in r.1..r.1 + r.3 {
             for x in r.0..r.0 + r.2 {
