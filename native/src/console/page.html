@@ -84,6 +84,9 @@ dt { color: var(--dim); } dd { margin: 0; overflow-wrap: anywhere; }
 label { display: grid; gap: 3px; font-size: 12px; color: var(--dim); }
 .form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
 .form .wide { grid-column: 1 / -1; }
+.form .group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px 10px; margin: 0; min-width: 0; }
+.form .group legend { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); padding: 0 4px; }
+.form [hidden] { display: none !important; }
 .check { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
 input, select { background: #15151b; color: var(--text); border: 1px solid #3a3a46; border-radius: 5px; padding: 6px 8px; font: inherit; width: 100%; }
 input[type=checkbox] { width: auto; }
@@ -117,18 +120,17 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   <section id="sec-game">
     <h2>Game</h2>
     <div class="row">
-      <button class="primary" id="g-start">Start</button>
+      <button class="primary" id="g-start" title="The game started with the saved settings (changes saved first); running, started again">Start game</button>
       <button id="g-stop">Stop</button>
-      <button id="g-restart">Restart game</button>
-      <button class="primary" id="g-begin" title="From the title card through the menu to the first level">Begin</button>
+      <button class="primary" id="g-begin" title="At the title card: on through the menu to the first level. Later: the run again from the title card">Begin</button>
     </div>
     <div class="row">
       <button id="c-pause">Pause</button>
-      <button id="c-restart">Restart level</button>
-      <button id="c-mute">Mute</button>
-      <button id="c-neuro">Reconnect Neuro</button>
+      <button id="c-restart" title="The level again from its start, no life spent">Restart level</button>
+      <button id="c-god" title="Nothing hurts her while it's on (the setting She can die is how a game starts)">God mode</button>
       <button id="c-exit" title="Out by the level's exit: the tally, then on">Exit level</button>
       <button id="c-secret" title="Out by the secret exit">Secret exit</button>
+      <button id="c-neuro" title="The link to Neuro dropped and made again (her orders and names kept)">Reconnect Neuro</button>
     </div>
     <div class="row" id="speeds"></div>
     <div class="row">
@@ -136,9 +138,6 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <button id="l-go">Go to level</button>
       <button id="l-next">Next level</button>
       <span class="check"><input type="checkbox" id="l-carry"><label for="l-carry" class="check">carry what she has</label></span>
-    </div>
-    <div class="row">
-      <button id="c-god">God mode</button>
     </div>
     <div class="msg" id="msg"></div>
     <dl id="state"></dl>
@@ -149,6 +148,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <div class="vol"><label for="v-master">Master</label><input type="range" id="v-master" min="0" max="100" data-k="master"><output id="v-master-n"></output></div>
     <div class="vol"><label for="v-sfx">SFX</label><input type="range" id="v-sfx" min="0" max="15" data-k="sfx"><output id="v-sfx-n"></output></div>
     <div class="vol"><label for="v-music">Music</label><input type="range" id="v-music" min="0" max="15" data-k="music"><output id="v-music-n"></output></div>
+    <div class="row" style="margin-top:6px"><button id="c-mute">Mute</button></div>
     <p class="dim" id="v-note" style="margin:0;font-size:12px"></p>
   </section>
 
@@ -158,50 +158,53 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <input id="e-say" maxlength="300" placeholder="a line to her, sent as context">
       <button id="e-saysend">Tell her</button>
     </div>
-    <div class="row">
-      <select id="e-action" style="width:auto">
-        <option>doom_go</option><option>doom_explore</option><option>doom_search</option><option>doom_press</option><option>doom_exit</option><option>doom_stop</option>
-        <option>doom_list</option><option>doom_inspect</option><option>doom_look</option><option>doom_status</option><option>doom_why</option><option>doom_name</option>
-        <option>doom_goal</option><option>doom_policy</option><option>doom_fight</option><option>doom_answer</option><option>doom_game</option>
-      </select>
-      <input id="e-data" placeholder='{"ref": "door-3"}' style="flex:1;min-width:10em">
-      <button id="e-order">Order as hers</button>
-    </div>
-    <p class="dim" style="margin:0;font-size:12px">An action goes through her own checks; she's told it was the streamer's. Its answer shows in the Evil card.</p>
+    <p class="dim" id="e-note" style="margin:0;font-size:12px"></p>
   </section>
 
   <section id="sec-settings">
     <h2>Settings <span class="dim" style="text-transform:none;letter-spacing:0">(used when the game starts)</span></h2>
     <p class="dim" style="margin:0 0 6px;font-size:12px">You must save changes before they will take effect.</p>
     <form class="form" id="settings" onsubmit="return false">
-      <label>WAD <select name="wad"><option value="doom2">Doom II</option><option value="doom">Doom</option><option value="tnt">TNT: Evilution</option><option value="plutonia">The Plutonia Experiment</option></select></label>
-      <label>Map <input name="map" placeholder="MAP01 / E1M1"></label>
-      <label>Skill <select name="skill">
-        <option value="0">No monsters</option><option value="1">I'm too young to die</option><option value="2">Hey, not too rough</option>
-        <option value="3">Hurt me plenty</option><option value="4">Ultra-Violence</option><option value="5">Nightmare!</option></select></label>
-      <label>Seed <input name="seed" placeholder="random"></label>
-      <label>Window <select name="layout"><option value="stream">for the stream (16:9)</option><option value="watcher">the watcher (map and log)</option></select></label>
-      <label>Column <select name="panel_side"><option value="right">on the right</option><option value="left">on the left</option></select></label>
-      <label>Window resolution <select name="window_size"><option value="">its own (stream: 1920x1080)</option><option>1280x720</option><option>1366x768</option><option>1600x900</option><option>1920x1080</option><option>2560x1440</option><option>3840x2160</option></select></label>
-      <label title="The size the game itself is drawn at, 4:3. The stream's game fills 1440x1080 of its picture, the watcher's 800x600: bigger is scaled down again">Game rendering resolution <select name="render_size"><option value="320x200">320x200 (1994)</option><option>320x240</option><option>400x300</option><option>512x384</option><option value="">640x480 (its own)</option><option>800x600</option><option>960x720</option><option>1280x960</option><option>1440x1080</option></select></label>
-      <label title="The songs as recorded, from your own Steam copy of the DOOM + DOOM II re-release (rerelease/extras.wad); the songs it hasn't recorded play through the MIDI synth">Music <select name="music"><option value="">MIDI</option><option value="sc55">Roland SC-55 recordings (Steam re-release)</option><option value="idkfa">IDKFA, Andrew Hulshult (Steam re-release)</option></select></label>
-      <label title="The MIDI: the OPL synth as a Sound Blaster played it, or sampled instruments from a SoundFont in soundfonts/">MIDI synth <select name="soundfont"><option value="">Default (SC-55.sf2 if it's in soundfonts/, else OPL)</option><option value="opl">OPL synth (Sound Blaster FM)</option></select></label>
-      <label>Directed by <select name="mode"><option value="bot">the bot alone</option><option value="neuro">Neuro</option><option value="gpt">the GPT stand-in</option></select></label>
-      <label class="wide">Neuro URL <select name="neuro_url"></select></label>
-      <span class="check"><input type="checkbox" name="mortal" id="s-mortal"><label for="s-mortal" class="check">Mortal</label></span>
-      <span class="check"><input type="checkbox" name="episode" id="s-episode"><label for="s-episode" class="check">Whole episode</label></span>
-      <span class="check"><input type="checkbox" name="muted" id="s-muted"><label for="s-muted" class="check">Start muted</label></span>
-      <span class="check"><input type="checkbox" name="auto_restart" id="s-auto"><label for="s-auto" class="check">Restart it if it crashes</label></span>
-      <span class="check"><input type="checkbox" name="vsync" id="s-vsync"><label for="s-vsync" class="check" title="Frames shown at the screen's refresh: steady; off, as soon as they're ready">Vsync</label></span>
-      <span class="check"><input type="checkbox" name="fullscreen" id="s-fullscreen"><label for="s-fullscreen" class="check" title="The whole screen, at the desktop's resolution, borderless">Full screen</label></span>
-      <span class="check"><input type="checkbox" name="present" id="s-present"><label for="s-present" class="check">Doom's own screens</label></span>
-      <span class="check"><input type="checkbox" name="title_wait" id="s-title"><label for="s-title" class="check">Wait at the title card</label></span>
-      <span class="check wide"><input type="checkbox" name="evil_starts" id="s-evil-starts"><label for="s-evil-starts" class="check">Evil starts the game (at the title card, and when what she chose is over)</label></span>
-      <label>Levels she may start <input name="evil_maps" placeholder="the map above; all; E1M1, E2M1"></label>
-      <label>Skills she may choose <input name="evil_skills" placeholder="the skill above; 3, 4"></label>
-      <span class="check"><input type="checkbox" name="evil_next" id="s-evil-next"><label for="s-evil-next" class="check">Evil goes on to the next level (from the tally; 30 s, else by itself)</label></span>
-      <span class="check"><input type="checkbox" name="evil_restart" id="s-evil-restart"><label for="s-evil-restart" class="check">Evil may restart a level (after 90 s with nothing new)</label></span>
-      <label>Play she may choose <select name="evil_play"><option value="">as Whole episode above</option><option value="single">one level</option><option value="continuous">on through the episode</option><option value="both">either</option></select></label>
+      <fieldset class="group wide"><legend>Game</legend>
+        <label>WAD <select name="wad"><option value="doom2">Doom II</option><option value="doom">Doom</option><option value="tnt">TNT: Evilution</option><option value="plutonia">The Plutonia Experiment</option></select></label>
+        <label>Level <select name="map"></select></label>
+        <label>Skill <select name="skill">
+          <option value="0">No monsters</option><option value="1">I'm too young to die</option><option value="2">Hey, not too rough</option>
+          <option value="3">Hurt me plenty</option><option value="4">Ultra-Violence</option><option value="5">Nightmare!</option></select></label>
+        <label title="For testing: a run on the same seed plays out the same. Empty: a new one each start, as real play has it">Seed (testing) <input name="seed" placeholder="empty: random"></label>
+        <span class="check" title="Off: nothing hurts her from the start (god mode). The Game card's God mode switches it while she plays"><input type="checkbox" name="mortal" id="s-mortal"><label for="s-mortal" class="check">She can die</label></span>
+        <span class="check" title="Out by an exit, on to the next level with what she has; off, the game's over at the exit"><input type="checkbox" name="episode" id="s-episode"><label for="s-episode" class="check">Go on through the episode</label></span>
+        <span class="check wide"><input type="checkbox" name="auto_restart" id="s-auto"><label for="s-auto" class="check">Restart the game if it crashes or hangs (at the level she was on)</label></span>
+      </fieldset>
+      <fieldset class="group wide"><legend>Title card</legend>
+        <span class="check wide"><input type="checkbox" name="present" id="s-present"><label for="s-present" class="check">Doom's own screens: the title card, the menu, the melt, the tally between levels, the finales</label></span>
+        <label class="wide" data-when="present">At the title card <select id="s-titlecard">
+          <option value="go">go straight into the game, through the menu</option>
+          <option value="begin">wait there until Begin is pressed (the Game card)</option>
+          <option value="evil">Evil chooses the game (or Begin is pressed)</option></select></label>
+      </fieldset>
+      <fieldset class="group wide"><legend>Who directs her</legend>
+        <label>Directed by <select name="mode"><option value="bot">the bot alone</option><option value="neuro">Neuro</option><option value="gpt">the GPT stand-in</option></select></label>
+        <label data-when="neuro">Neuro URL <select name="neuro_url"></select></label>
+        <label data-when="evilchooses">Levels she may start <input name="evil_maps" placeholder="the level above; all; E1M1, E2M1"></label>
+        <label data-when="evilchooses">Skills she may choose <input name="evil_skills" placeholder="the skill above; 3, 4"></label>
+        <label class="wide" data-when="evilchooses">Play she may choose <select name="evil_play"><option value="">as "Go on through the episode" above</option><option value="single">one level</option><option value="continuous">on through the episode</option><option value="both">either</option></select></label>
+        <span class="check wide" data-when="directed"><input type="checkbox" name="evil_next" id="s-evil-next"><label for="s-evil-next" class="check">She goes on to the next level herself, from the tally (else it goes on after 30 s)</label></span>
+        <span class="check wide" data-when="directed"><input type="checkbox" name="evil_restart" id="s-evil-restart"><label for="s-evil-restart" class="check">She may restart a level (after 90 s with nothing new)</label></span>
+      </fieldset>
+      <fieldset class="group wide"><legend>Window</legend>
+        <label>Layout <select name="layout"><option value="stream">for the stream (16:9)</option><option value="watcher">the watcher (map and log)</option></select></label>
+        <label data-when="stream">Column <select name="panel_side"><option value="right">on the right</option><option value="left">on the left</option></select></label>
+        <label>Window resolution <select name="window_size"><option value="">its own (stream: 1920x1080)</option><option>1280x720</option><option>1366x768</option><option>1600x900</option><option>1920x1080</option><option>2560x1440</option><option>3840x2160</option></select></label>
+        <label title="The size the game itself is drawn at, 4:3. The stream's game fills 1440x1080 of its picture, the watcher's 800x600: bigger is scaled down again">Game rendering resolution <select name="render_size"><option value="320x200">320x200 (1994)</option><option>320x240</option><option>400x300</option><option>512x384</option><option value="">640x480 (its own)</option><option>800x600</option><option>960x720</option><option>1280x960</option><option>1440x1080</option></select></label>
+        <span class="check"><input type="checkbox" name="vsync" id="s-vsync"><label for="s-vsync" class="check" title="Frames shown at the screen's refresh: steady; off, as soon as they're ready">Vsync</label></span>
+        <span class="check"><input type="checkbox" name="fullscreen" id="s-fullscreen"><label for="s-fullscreen" class="check" title="The whole screen, at the desktop's resolution, borderless">Full screen</label></span>
+      </fieldset>
+      <fieldset class="group wide"><legend>Sound</legend>
+        <label title="The songs as recorded, from your own Steam copy of the DOOM + DOOM II re-release (rerelease/extras.wad); the songs it hasn't recorded play through the MIDI synth">Music <select name="music"><option value="">MIDI</option><option value="sc55">Roland SC-55 recordings (Steam re-release)</option><option value="idkfa">IDKFA, Andrew Hulshult (Steam re-release)</option></select></label>
+        <label title="The MIDI: the OPL synth as a Sound Blaster played it, or sampled instruments from a SoundFont in soundfonts/">MIDI synth <select name="soundfont"><option value="">Default (SC-55.sf2 if it's in soundfonts/, else OPL)</option><option value="opl">OPL synth (Sound Blaster FM)</option></select></label>
+        <span class="check wide"><input type="checkbox" name="muted" id="s-muted"><label for="s-muted" class="check">Start muted</label></span>
+      </fieldset>
       <div class="row wide">
         <button id="s-save">Save</button>
         <span id="s-dirty" class="dim" style="font-size:12px" hidden>Changed, not saved yet (Start saves them first)</span>
@@ -214,7 +217,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
  <div id="col-split" title="Drag to widen or narrow the columns"></div>
  <div class="col" id="col-b">
   <section id="viewcard">
-    <h2>View <span class="dim" style="text-transform:none;letter-spacing:0">(twice a second; the watcher's own drawing)</span></h2>
+    <h2>View <span class="dim" style="text-transform:none;letter-spacing:0">(twice a second, made only while shown here; the watcher's own drawing)</span></h2>
     <div class="row">
       <button id="vw-map" class="on">Map</button>
       <button id="vw-game">Game</button>
@@ -250,7 +253,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
           </div>
         </div>
         <div class="ev-box" style="margin-top:10px">
-          <h3>Settings</h3>
+          <h3>Her settings</h3>
           <div class="ev-sets">
             <label>stance<select data-p="stance"><option>careful</option><option>steady</option><option>bold</option><option>avoid</option><option>yolo</option></select></label>
             <label>explore<select data-p="explore"><option>new</option><option>thorough</option><option>quick</option></select></label>
@@ -277,6 +280,19 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
             <button data-q="doom_fight" data-d='{"do":"retreat"}'>Retreat</button><button data-q="doom_fight" data-d='{"do":"auto"}'>Fight by reflex</button>
             <button data-q="doom_stop">Stop</button>
           </div>
+        </div>
+        <div class="ev-box" style="margin-top:10px">
+          <h3>Raw action, as hers</h3>
+          <div class="row">
+            <select id="e-action" style="width:auto">
+              <option>doom_go</option><option>doom_explore</option><option>doom_search</option><option>doom_press</option><option>doom_exit</option><option>doom_stop</option>
+              <option>doom_list</option><option>doom_inspect</option><option>doom_look</option><option>doom_status</option><option>doom_why</option><option>doom_name</option>
+              <option>doom_goal</option><option>doom_policy</option><option>doom_fight</option><option>doom_answer</option><option>doom_game</option>
+            </select>
+            <input id="e-data" placeholder='{"ref": "door-3"}' style="flex:1;min-width:10em">
+            <button id="e-order">Send</button>
+          </div>
+          <p class="dim" style="margin:0;font-size:12px">Any of her actions, its data as JSON (docs/NEURO.md): it goes through her own checks, and she's told it was the streamer's.</p>
         </div>
       </div>
       <div class="ev-col">
@@ -353,13 +369,17 @@ function render(p) {
   const n = st && st.neuro;
   if (n) badge($("b-neuro"), n.connected ? "neuro: " + (n.who || "connected") : "neuro: not connected", n.connected ? "ok" : "bad");
   else badge($("b-neuro"), "neuro -", "");
-  $("g-start").disabled = g.running;
+  $("g-start").textContent = g.running ? "Restart game" : "Start game";
   $("g-stop").disabled = !g.running;
+  // (what doesn't apply, not shown: Begin without Doom's own screens, Reconnect without Neuro)
+  $("g-begin").hidden = !p.settings.present && !(st && st.screen);
+  $("c-neuro").hidden = !n;
   $("g-begin").disabled = !p.connected || !st || !/^(title|over|between|dead|level)/.test(st.screen || "") || st.screen === "title (starting)";
   $("g-begin").classList.toggle("on", !!st && st.screen === "title");
   for (const id of ["c-pause", "c-restart", "c-mute", "c-god"]) $(id).disabled = !p.connected;
   for (const id of ["c-exit", "c-secret"]) $(id).disabled = !p.connected || !st || st.screen !== "level" || st.exited || st.dead;
   for (const id of ["e-say", "e-saysend", "e-action", "e-data", "e-order"]) $(id).disabled = !(p.connected && n);
+  $("e-note").textContent = p.connected && n ? "" : "Only while Neuro or the GPT stand-in directs her (Settings: Directed by).";
   $("c-god").textContent = st && st.god ? "God mode: on" : "God mode";
   $("c-god").classList.toggle("on", !!(st && st.god));
   $("c-neuro").disabled = !(p.connected && n);
@@ -545,13 +565,40 @@ function addLog(lines) {
   if (follow) box.scrollTop = box.scrollHeight;
 }
 
+// (the Level list: the WAD's own levels, the one saved kept in it if it's not one of them)
+function fillLevels(wad, keep) {
+  const sel = $("settings").elements.map, maps = ((last && last.wad_maps) || {})[wad] || [];
+  const list = keep && !maps.includes(keep) ? [keep, ...maps] : maps;
+  sel.replaceChildren(...list.map((m) => { const o = document.createElement("option"); o.value = o.textContent = m; return o; }));
+  if (keep && list.includes(keep)) sel.value = keep;
+}
+// (the settings that apply under others shown only then)
+function applyWhen() {
+  const f = $("settings").elements, tc = $("s-titlecard");
+  const directed = f.mode.value !== "bot";
+  tc.querySelector('option[value="evil"]').disabled = !directed;
+  if (!directed && tc.value === "evil") tc.value = "begin";
+  const on = {
+    present: f.present.checked,
+    neuro: f.mode.value === "neuro",
+    directed,
+    evilchooses: directed && f.present.checked && tc.value === "evil",
+    stream: f.layout.value === "stream",
+  };
+  for (const el of document.querySelectorAll("#settings [data-when]")) el.hidden = !on[el.dataset.when];
+}
 function fillForm(s) {
   const f = $("settings");
+  fillLevels(s.wad, String(s.map || "").toUpperCase());
+  $("s-titlecard").value = !s.title_wait ? "go" : s.evil_starts ? "evil" : "begin";
   for (const el of f.elements) {
     if (!el.name || !(el.name in s)) continue;
     if (el.type === "checkbox") el.checked = !!s[el.name];
     else {
-      const v = s[el.name] == null ? "" : String(s[el.name]);
+      let v = s[el.name] == null ? "" : String(s[el.name]);
+      if (el.name === "map") v = v.toUpperCase();
+      // (a SoundFont since taken out of soundfonts/: the default, as a start then has it)
+      if (el.name === "soundfont" && ![...el.options].some((o) => o.value === v)) v = "";
       // (a size not in the list, set some other way: added, so it shows as it is)
       if ((el.name === "window_size" || el.name === "render_size") && v && ![...el.options].some((o) => o.value === v)) {
         const o = document.createElement("option");
@@ -561,6 +608,7 @@ function fillForm(s) {
       el.value = v;
     }
   }
+  applyWhen();
 }
 function readForm() {
   // (from the settings as they are: the form hasn't all of them, the volumes for one)
@@ -572,6 +620,10 @@ function readForm() {
     else if (el.name === "seed") s.seed = el.value.trim() === "" ? null : Number(el.value);
     else s[el.name] = el.value.trim();
   }
+  // (the title card's choice, kept as it always was: waiting there, and Evil's to start)
+  const tc = $("s-titlecard").value;
+  s.title_wait = tc !== "go";
+  s.evil_starts = tc === "evil";
   return s;
 }
 
@@ -589,13 +641,16 @@ async function poll() {
 // (settings changed and not yet saved: saved first, so that the game started is the one they
 // say; Start had started it with the old ones, the new left unsaved in the form)
 async function savePending() { return formDirty ? !!(await save()) : true; }
-$("g-start").onclick = async () => { if (await savePending()) act("api/game/start", {}, "Starting..."); };
+$("g-start").onclick = async () => {
+  const running = !!(last && last.game.running);
+  if (running && !confirm("Start the game again, with the saved settings?")) return;
+  if (await savePending()) act(running ? "api/game/restart" : "api/game/start", {}, running ? "Restarting..." : "Starting...");
+};
 $("g-stop").onclick = () => confirm("Stop the game?") && act("api/game/stop", {}, "Stopping...");
 $("g-begin").onclick = () => {
   const s = last && last.state && last.state.screen;
   if (s === "title" || confirm("Start the run again from the title card?")) cmd({ cmd: "begin" });
 };
-$("g-restart").onclick = async () => { if (confirm("Restart the game process?") && await savePending()) act("api/game/restart", {}, "Restarting..."); };
 $("c-pause").onclick = () => cmd({ cmd: last && last.state && last.state.paused ? "resume" : "pause" });
 $("c-mute").onclick = () => cmd({ cmd: "mute", on: !(last && last.state && last.state.muted) });
 $("c-restart").onclick = () => confirm("Restart the level from its start?") && cmd({ cmd: "restart_level" });
@@ -651,7 +706,12 @@ for (const x of [0.5, 1, 2, 4, 8]) {
   const b = document.createElement("button"); b.textContent = "x" + x; b.dataset.x = x;
   b.onclick = () => cmd({ cmd: "speed", x }); $("speeds").append(b);
 }
-$("settings").addEventListener("input", () => { formDirty = true; $("s-dirty").hidden = false; });
+$("settings").addEventListener("input", (e) => {
+  formDirty = true;
+  $("s-dirty").hidden = false;
+  if (e.target.name === "wad") fillLevels(e.target.value, null);
+  applyWhen();
+});
 async function save() { const j = await act("api/settings", readForm(), "Saved."); if (j) { formDirty = false; $("s-dirty").hidden = true; } return j; }
 $("s-save").onclick = async () => { const j = await save(); if (j && j.restart_needed) say("Saved: restart the game to use them."); };
 $("s-apply").onclick = async () => { if (await save()) act(last && last.game.running ? "api/game/restart" : "api/game/start", {}, "Saved; (re)starting..."); };

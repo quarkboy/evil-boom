@@ -48,6 +48,21 @@ fn name8(raw: &[u8]) -> String {
 }
 
 impl Wad {
+    /// Its levels that a game can start at (named as E1M1 or MAP01 are), in the order it has
+    /// them, each once.
+    pub fn level_names(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for l in &self.lumps {
+            let n = l.name.to_uppercase();
+            let shaped = (n.len() == 4 && n.starts_with('E') && n.as_bytes()[2] == b'M')
+                || (n.len() == 5 && n.starts_with("MAP"));
+            if shaped && crate::engine::episode_map(&n).is_ok() && !out.contains(&n) {
+                out.push(n);
+            }
+        }
+        out
+    }
+
     pub fn open(path: &Path) -> Result<Self, String> {
         let data = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
         let bad = || format!("{} is not a WAD", path.display());

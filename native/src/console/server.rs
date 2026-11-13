@@ -384,6 +384,8 @@ struct Shared {
     /// (and when): it's told again while pages go on asking
     views_asked: BTreeMap<String, Instant>,
     views_told: (Vec<String>, Option<Instant>),
+    /// each IWAD that's there, and its levels (the settings' Map list)
+    wad_maps: BTreeMap<String, Vec<String>>,
     began: Instant,
 }
 
@@ -469,6 +471,12 @@ pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
         views: BTreeMap::new(),
         views_asked: BTreeMap::new(),
         views_told: (Vec::new(), None),
+        wad_maps: crate::config::iwad_names()
+            .filter_map(|n| {
+                let w = crate::wad::Wad::open(&crate::config::resolve_wad(n)).ok()?;
+                Some((n.to_string(), w.level_names()))
+            })
+            .collect(),
         began: Instant::now(),
     }));
     lock(&hub).save()?;
@@ -1055,6 +1063,7 @@ fn poll(hub: &Hub, since: u64, views: &str) -> Value {
         "settings": s.settings,
         "neuro_urls": s.neuro_urls,
         "soundfonts": crate::config::soundfonts(),
+        "wad_maps": s.wad_maps,
         "rerelease": crate::music::rerelease_dir().is_some(),
         "views": s.views.iter().map(|(k, v)| (k.clone(), v.0)).collect::<BTreeMap<String, u64>>(),
         "game": s.game,

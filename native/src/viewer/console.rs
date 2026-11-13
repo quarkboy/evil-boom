@@ -210,16 +210,7 @@ fn png(w: usize, h: usize, px: &[u8], palette: Option<&[u8]>) -> Option<Vec<u8>>
 
 /// The WAD's levels, in its order (E1M1 ..., MAP01 ...).
 pub(super) fn maps(w: &Wad) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for l in &w.lumps {
-        let n = l.name.to_uppercase();
-        let shaped = (n.len() == 4 && n.starts_with('E') && n.as_bytes()[2] == b'M')
-            || (n.len() == 5 && n.starts_with("MAP"));
-        if shaped && crate::engine::episode_map(&n).is_ok() && !out.contains(&n) {
-            out.push(n);
-        }
-    }
-    out
+    w.level_names()
 }
 
 /// The console's other level, in the same game process: the map made ready first, so one that
