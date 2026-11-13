@@ -21,7 +21,7 @@ and stepped a tic at a time from Rust.
   second-person lines. Optionally, with no orders for a few seconds it carries on by instinct.
 - **Runs a stream:** a 16:9 stream window with Doom's own screens and a customizable HUD, and a web console for whoever
   runs the stream to start, steer and stop the game.
-  **Debugging and testing** there are numerous tools and scripts developed for testing new code effectiveness, Neuro SDK behavior, and setting up quality comparisons, and a special watch screen for debugging and recording play sessions.
+- **Debugging and testing** there are numerous tools and scripts developed for testing new code effectiveness, Neuro SDK behavior, and setting up quality comparisons, and a special watch screen for debugging and recording play sessions.
 
 ## Quick start
 

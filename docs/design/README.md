@@ -36,6 +36,9 @@ New decisions go at the end of the latest chapter.
 | [cleanup-2026-11.md](cleanup-2026-11.md) | done | the code cleanup before the Neuro work: findings and their scores |
 | [rust-review.md](rust-review.md) | done | a structure and performance review of the Rust code |
 | [open-source-plan.md](open-source-plan.md) | in progress | preparing the repository for publication |
+| [multiplayer-plan.md](multiplayer-plan.md) | proposed | two players, Evil and Neuro, co-op or deathmatch: what each layer needs, in stages |
+| [human-player-plan.md](human-player-plan.md) | proposed | a person in the game with Evil, co-op or deathmatch: a second process in step with the host; shares its first stages with the two-players plan |
+| [mbf21-plan.md](mbf21-plan.md) | proposed | MBF21, UDMF and community WADs: the engine plays them already; what the bot must learn to understand them |
 
 ## Where things stand (2026-11-12)
 
