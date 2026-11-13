@@ -88,6 +88,8 @@ pub struct Settings {
     pub window_size: String,
     /// the game drawn at this size ("1440x1080"); "": its own (640x480)
     pub render_size: String,
+    /// the music played with this SoundFont, by its name in soundfonts/; "": by the OPL synth
+    pub soundfont: String,
     /// frames shown at the screen's refresh
     pub vsync: bool,
     /// the window the whole screen (the desktop's resolution, borderless)
@@ -128,6 +130,7 @@ impl Default for Settings {
             panel_side: "right".into(),
             window_size: String::new(),
             render_size: String::new(),
+            soundfont: String::new(),
             vsync: true,
             fullscreen: false,
             evil_starts: true,
@@ -165,6 +168,13 @@ impl Settings {
         if !self.render_size.trim().is_empty() {
             crate::dsda::WindowSpec::parse_size(&self.render_size, crate::dsda::MAX_RENDER)
                 .map_err(|e| format!("render_size: {e}, or empty"))?;
+        }
+        // (a name in soundfonts/, never a path: the page can't reach for files on the PC)
+        if !self.soundfont.is_empty() && !crate::config::soundfonts().contains(&self.soundfont) {
+            return Err(format!(
+                "soundfont: one of {}, or empty (the OPL synth)",
+                crate::config::soundfonts().join(", ")
+            ));
         }
         if !["", "single", "continuous", "both"].contains(&self.evil_play.trim()) {
             return Err("evil_play: single, continuous, both, or empty (as Whole episode)".into());
@@ -223,6 +233,9 @@ impl Settings {
         }
         if !self.render_size.trim().is_empty() {
             a.extend(["--render".into(), self.render_size.trim().to_string()]);
+        }
+        if !self.soundfont.is_empty() {
+            a.extend(["--soundfont".into(), self.soundfont.clone()]);
         }
         if !self.vsync {
             a.push("--no-vsync".into());
@@ -976,6 +989,7 @@ fn poll(hub: &Hub, since: u64) -> Value {
     json!({
         "settings": s.settings,
         "neuro_urls": s.neuro_urls,
+        "soundfonts": crate::config::soundfonts(),
         "views": s.views.iter().map(|(k, v)| (k.clone(), v.0)).collect::<BTreeMap<String, u64>>(),
         "game": s.game,
         "uptime": s.game.started.map(|t| t.elapsed().as_secs()),
@@ -1044,6 +1058,11 @@ mod tests {
         s.window_size = String::new();
         s.render_size = "7680x4320".into();
         assert!(s.check().is_err(), "a render bigger than there's room for");
+        s.render_size = String::new();
+        for path in ["../../etc/passwd", "/tmp/x.sf2", "nothing-here.sf2"] {
+            s.soundfont = path.into();
+            assert!(s.check().is_err(), "{path}");
+        }
     }
 
     /// What's hers to start: the console's own map, skill and play unless she's given more.

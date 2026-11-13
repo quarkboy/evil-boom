@@ -45,6 +45,7 @@ Kept in `config/console.local.json` (git-ignored; made on first start), edited f
 | `present`, `title_wait` | Doom's own screens; the game waits at the title card until begun from the page |
 | `layout`, `panel_side` | `stream` (16:9, the game and a viewers' column) or `watcher` (the game, the map and her log) |
 | `window_size`, `vsync`, `fullscreen` | the game's window: its size (`1280x720`; empty: the picture's own, 1920x1080 for the stream, scaled to fit), frames at the screen's refresh, the whole screen (borderless) |
+| `soundfont` | the music: empty for the OPL synth (as a Sound Blaster played it), or a SoundFont in `soundfonts/` by name |
 | `render_size` | the size the game itself is drawn at (empty: 640x480; 320x200 as in 1994, stretched to 4:3 as its screens were); the stream's game is 1440x1080 of its picture |
 | `evil_starts`, `evil_maps`, `evil_skills`, ... | a game hers to start: which levels and skills she's offered |
 | `auto_restart` | restart a game that crashes or hangs |

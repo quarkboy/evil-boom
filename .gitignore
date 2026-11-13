@@ -5,6 +5,11 @@
 *.pk7
 wads/
 
+# SoundFonts: fetched by tools/soundfonts.sh, or your own (their licenses are kept here)
+soundfonts/*
+!soundfonts/README.md
+!soundfonts/licenses/
+
 # Everything the runs, builds and tests write (logs, score sets, recordings, builds)
 out/
 

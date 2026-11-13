@@ -750,3 +750,25 @@ frame late in 43 s; of the frames that played no tic, 88% showed a picture moved
 Play unchanged: headless watches (drawn a tic at a time) on five levels gave the same logs as
 before; window runs at x4 (drawn between tics throughout) gave the same logs as the headless
 ones; parity: all 24 the same. The score's small window stays on `minifb`.
+
+## Music: SoundFonts through FluidSynth (2026-11-12)
+
+The engine was built without FluidSynth, so Doom's MIDI played only through the OPL synth (a
+Sound Blaster's FM), which the maintainer found unlike the Roland sound the music was written
+on. Now FluidSynth is built in, and `--soundfont NAME` (the console's Music) plays it with a
+SoundFont from `soundfonts/`; without one it's OPL as before (the engine's default player would
+have been FluidSynth, so the player is set each start). FluidSynth's reverb and chorus are on: the
+songs ask for them. The player is set before the game starts without its change callback, which
+restarts the music and crashed with the sound not yet up.
+
+Two SoundFonts free to redistribute, fetched by `tools/soundfonts.sh` (pinned, hashes checked)
+and in a release, never in git: GeneralUser GS 2.0.3 (its own permissive license) and MuseScore
+General 0.2 (MIT, from Fluid R3). Listened to on E1M1, the maintainer found GeneralUser GS the
+most like the original. Others (an SC-55 one, say) are anyone's own to add. GeneralUser GS 2
+needs FluidSynth 2.3; the Linux release builds 2.6.2 without its own audio drivers (the distro
+one brings JACK, PipeWire and readline).
+
+Found while choosing them: the Steam re-release's `rerelease/extras.wad` has the original
+soundtrack recorded on a Roland SC-55 Mk2 (`O_` lumps, Ogg Vorbis, 87 tracks) and Andrew
+Hulshult's IDKFA (`H_`). Usable from the player's own install (never copied into the
+repository or a release); not yet done.

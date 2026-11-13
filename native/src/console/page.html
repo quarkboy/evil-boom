@@ -183,6 +183,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <label>Column <select name="panel_side"><option value="right">on the right</option><option value="left">on the left</option></select></label>
       <label>Window resolution <select name="window_size"><option value="">its own (stream: 1920x1080)</option><option>1280x720</option><option>1366x768</option><option>1600x900</option><option>1920x1080</option><option>2560x1440</option><option>3840x2160</option></select></label>
       <label title="The size the game itself is drawn at, 4:3. The stream's game fills 1440x1080 of its picture, the watcher's 800x600: bigger is scaled down again">Game rendering resolution <select name="render_size"><option value="320x200">320x200 (1994)</option><option>320x240</option><option>400x300</option><option>512x384</option><option value="">640x480 (its own)</option><option>800x600</option><option>960x720</option><option>1280x960</option><option>1440x1080</option></select></label>
+      <label title="The music: the OPL synth as a Sound Blaster played it, or sampled instruments from a SoundFont in soundfonts/">Music <select name="soundfont"><option value="">OPL synth (Sound Blaster FM)</option></select></label>
       <label>Directed by <select name="mode"><option value="bot">the bot alone</option><option value="neuro">Neuro</option><option value="gpt">the GPT stand-in</option></select></label>
       <label class="wide">Neuro URL <select name="neuro_url"></select></label>
       <span class="check"><input type="checkbox" name="mortal" id="s-mortal"><label for="s-mortal" class="check">Mortal</label></span>
@@ -320,6 +321,7 @@ const $ = (id) => document.getElementById(id);
 let token = new URLSearchParams(location.search).get("t") || "";
 try { if (token) localStorage.setItem("evil-console-token", token); else token = localStorage.getItem("evil-console-token") || ""; } catch (e) { /* (storage off: the URL's token only) */ }
 let urlsShown = null, volSentAt = 0, volTimer = null, volPending = {};
+let fontsShown = null;
 let seq = 0, last = null, follow = true, formDirty = false, failures = 0, mapsShown = "", mapPicked = false;
 const LOG_MAX = 4000;
 
@@ -402,6 +404,12 @@ function render(p) {
   if (urls !== urlsShown) {
     urlsShown = urls;
     $("settings").elements.neuro_url.replaceChildren(...(p.neuro_urls || []).map((u) => { const o = document.createElement("option"); o.value = o.textContent = u; return o; }));
+  }
+  const fonts = (p.soundfonts || []).join("\n");
+  if (fonts !== fontsShown) {
+    fontsShown = fonts;
+    const sel = $("settings").elements.soundfont, opl = sel.options[0];
+    sel.replaceChildren(opl, ...(p.soundfonts || []).map((f) => { const o = document.createElement("option"); o.value = f; o.textContent = f.replace(/\.sf[23]$/i, "").replace(/[_-]/g, " ") + " (SoundFont)"; return o; }));
   }
   if (!formDirty) fillForm(p.settings);
   for (const name of ["map", "game", "stream"]) showView(name, (p.views || {})[name]);

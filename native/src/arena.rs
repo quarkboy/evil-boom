@@ -210,6 +210,7 @@ pub fn prepare(
             capture: false,
             seed,
             resolution: None,
+            soundfont: None,
         },
     )?;
     e.start();

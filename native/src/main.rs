@@ -61,7 +61,8 @@
 //!       16:9, the game on one side, a column for the viewers on the other (right unless told).
 //!       --window-size WxH: the window that size, the picture scaled to it; --no-vsync;
 //!       --fullscreen (the desktop's resolution, borderless). --render WxH: the game drawn at
-//!       that size (640x480 unless told; 1440x1080 fills the stream's game 1:1).
+//!       that size (640x480 unless told; 1440x1080 fills the stream's game 1:1). --soundfont
+//!       NAME|FILE: the music with that SoundFont (soundfonts/), not the OPL synth.
 //!       --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
 //!       or evil-boom neuro-mock). --gpt [CONFIG]: directed by the GPT stand-in, run in this
 //!       program (config/neuro-gpt.json unless named; its log out/neuro/gpt.log)
@@ -811,6 +812,7 @@ fn watch_options(
         choices: None,
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
+        soundfont: None,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -834,6 +836,11 @@ fn watch_options(
                 )?);
             }
             "--no-vsync" => w.window.vsync = false,
+            "--soundfont" => {
+                w.soundfont = Some(evilboom::config::resolve_soundfont(
+                    it.next().ok_or("--soundfont NAME (in soundfonts/) or FILE")?,
+                )?);
+            }
             "--render" => {
                 w.render = Some(evilboom::dsda::WindowSpec::parse_size(
                     it.next().ok_or("--render WIDTHxHEIGHT")?,

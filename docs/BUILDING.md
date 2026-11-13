@@ -18,14 +18,15 @@ Fedora:
 
 ```sh
 sudo dnf install gcc gcc-c++ cmake ninja-build git SDL2-devel SDL2_mixer-devel \
-  libsndfile-devel libzip-devel zlib-ng-compat-devel
+  libsndfile-devel libzip-devel zlib-ng-compat-devel fluidsynth-devel
 ```
 
 Debian / Ubuntu:
 
 ```sh
 sudo apt install build-essential cmake ninja-build git pkg-config libsdl2-dev \
-  libsdl2-mixer-dev libsndfile1-dev libzip-dev zlib1g-dev libgl-dev libglu1-mesa-dev
+  libsdl2-mixer-dev libsndfile1-dev libzip-dev zlib1g-dev libgl-dev libglu1-mesa-dev \
+  libfluidsynth-dev
 ```
 
 Rust, if you don't have it: <https://rustup.rs> (`curl --proto '=https' --tlsv1.2 -sSf
@@ -54,7 +55,7 @@ The engine is built with MSYS2's MinGW-w64 toolchain; Evil with ordinary Rust (r
    CLANG64):
 
    ```sh
-   pacman -S --needed git mingw-w64-x86_64-{SDL2,SDL2_mixer,libsndfile,libzip,zlib,cmake,ninja,gcc}
+   pacman -S --needed git mingw-w64-x86_64-{SDL2,SDL2_mixer,libsndfile,libzip,zlib,cmake,ninja,gcc,fluidsynth}
    cd /c/path/to/evil-boom
    tools/build-engine.sh                  # -> third_party\dsda-doom\prboom2\build\libdsda-evil.dll
    ```
@@ -81,7 +82,7 @@ What `tools/build-engine.sh` does (it also takes `--clean`, to start from a fres
 git clone https://github.com/kraflab/dsda-doom.git third_party/dsda-doom
 cd third_party/dsda-doom && git checkout eb8eb98 && git apply ../../dsda/dsda-doom.patch
 cmake -S prboom2 -B prboom2/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_PACKAGING=OFF \
-  -DWITH_FLUIDSYNTH=OFF -DWITH_IMAGE=OFF -DWITH_MAD=OFF -DWITH_PORTMIDI=OFF \
+  -DWITH_FLUIDSYNTH=ON -DWITH_IMAGE=OFF -DWITH_MAD=OFF -DWITH_PORTMIDI=OFF \
   -DWITH_VORBISFILE=OFF -DWITH_XMP=OFF \
   -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=OFF      # Linux only
 cmake --build prboom2/build --target dsda-evil
@@ -98,6 +99,15 @@ the boundary: running a tic, reading the game's state, sending controls.
 To change the patch: edit in `third_party/dsda-doom`, then from there
 `git diff --abbrev=7 > ../../dsda/dsda-doom.patch`. Write the patch out before running the build
 script again: it takes a modified tree for an unpatched one and fails to apply the patch over it.
+
+## SoundFonts
+
+The music plays through the OPL synth (a Sound Blaster's FM) unless a SoundFont is chosen
+(`watch --soundfont NAME`, or the console's Music setting), which plays it through FluidSynth.
+`tools/soundfonts.sh` fetches the two Evil offers, GeneralUser GS and MuseScore General, into
+`soundfonts/`, checking each one's hash; any other `.sf2` or `.sf3` put there is offered too.
+GeneralUser GS 2 needs FluidSynth 2.3 or newer (Ubuntu 22.04's is 2.2: the release builds its
+own). See [soundfonts/README.md](../soundfonts/README.md).
 
 ## Build options
 

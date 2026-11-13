@@ -60,6 +60,8 @@ pub struct Options {
     pub seed: Option<u32>,
     /// drawn at this size (width, height); None: the game's own setting (640x480)
     pub resolution: Option<(usize, usize)>,
+    /// the music played by FluidSynth with this SoundFont; None: by the OPL synth
+    pub soundfont: Option<PathBuf>,
 }
 
 impl Default for Options {
@@ -73,6 +75,7 @@ impl Default for Options {
             capture: false,
             seed: None,
             resolution: None,
+            soundfont: None,
         }
     }
 }
@@ -142,6 +145,12 @@ impl Engine {
         if !pwads.is_empty() {
             args.push("-file".into());
             args.extend(pwads.iter().map(|p| p.to_string_lossy().to_string()));
+        }
+        if let Some(sf) = o.soundfont.as_ref().filter(|_| o.sound || o.capture) {
+            args.extend([
+                "-evilsoundfont".to_string(),
+                sf.to_string_lossy().to_string(),
+            ]);
         }
         if o.capture {
             args.push("-evilsoundcap".into()); // (a dummy device: mixed for her, not played)

@@ -14,6 +14,12 @@ beside the program; settings are in `config/`.
 - Linux: a desktop (X11 or Wayland) with OpenGL. The other libraries the engine needs are in
   `lib/`.
 
+## Music
+
+Doom's music plays through the OPL synth, as a Sound Blaster played it, unless a SoundFont is
+chosen: `--soundfont GeneralUser-GS.sf2` (or `MuseScore_General.sf3`, or any `.sf2` you put in
+`soundfonts/`), or the console's Music setting.
+
 ## Try it
 
 ```sh
@@ -37,7 +43,8 @@ Evil BOOM is free software under the GNU General Public License, version 3 or la
 - DSDA-Doom at the pinned commit with Evil's patch applied (the release's
   `engine-source` archive);
 - the libraries bundled here (`lib/` on Linux; the DLLs on Windows, with their licenses in
-  `licenses/`), unmodified, from Ubuntu's and MSYS2's packages. Their sources are available from
+  `licenses/`), unmodified, from Ubuntu's and MSYS2's packages (FluidSynth on Linux from its own
+  source, v2.6.2). Their sources are available from
   those projects, and on request from the maintainer for three years from the release.
 
 `THIRD_PARTY.md` lists every component and its license. DOOM is a trademark of id Software; this

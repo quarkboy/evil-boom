@@ -83,6 +83,7 @@ pub fn setup(
                 capture: false,
                 seed: o.seed,
                 resolution: None,
+                soundfont: None,
             },
         )?,
     };

@@ -145,22 +145,40 @@ extern const char *finaletext;
 static double fx(fixed_t v) { return v / 65536.0; }
 static double degrees(angle_t a) { return a * (360.0 / 4294967296.0); }
 
-/* argv as for dsda-doom.exe (-iwad, -skill, -warp, -nodraw, ...), and one of ours: -evilsoundcap,
- * the sound mixed for the caller (evil_grab_sound) instead of played, as DSDA's video dump has it
- * (taken out before the game sees the arguments). Returns 0 when ready. */
+/* argv as for dsda-doom.exe (-iwad, -skill, -warp, -nodraw, ...), and two of ours (taken out
+ * before the game sees the arguments): -evilsoundcap, the sound mixed for the caller
+ * (evil_grab_sound) instead of played, as DSDA's video dump has it; -evilsoundfont FILE, the
+ * music played by FluidSynth with that SoundFont (else by the OPL synth, a Sound Blaster's).
+ * Returns 0 when ready. */
 EVIL_API int evil_init(int argc, char **argv)
 {
   int i, kept = 0;
+  const char *soundfont = NULL;
   for (i = 0; i < argc; i++)
   {
     if (!strcmp(argv[i], "-evilsoundcap"))
       I_SetSoundCap();
+    else if (!strcmp(argv[i], "-evilsoundfont") && i + 1 < argc)
+      soundfont = argv[++i];
     else
       argv[kept++] = argv[i];
   }
   argc = kept;
   dsda_ParseCommandLineArgs(argc, argv);
   M_LoadDefaults();
+  /* (the music's player said each time, not left to the game's saved settings: with none
+   * asked for, OPL as before FluidSynth was built in. A SoundFont that won't load falls back to
+   * OPL too. FluidSynth's reverb and chorus on: the songs ask for them, as the Sound Canvas
+   * played them) */
+  /* (set without the change's callback, which stops and restarts the music: the sound isn't
+   * up yet, and that crashed. The menu's setting up reads it, as from the saved settings) */
+  dsda_HackStringConfig(dsda_config_snd_midiplayer, soundfont ? "fluidsynth" : "opl", false);
+  if (soundfont)
+  {
+    dsda_HackStringConfig(dsda_config_snd_soundfont, soundfont, false);
+    dsda_UpdateIntConfig(dsda_config_mus_fluidsynth_reverb, 1, false);
+    dsda_UpdateIntConfig(dsda_config_mus_fluidsynth_chorus, 1, false);
+  }
   I_PreInitGraphics();
   D_DoomMainSetupForEvil();
   singletics = true;

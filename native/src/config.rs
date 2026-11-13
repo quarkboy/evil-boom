@@ -159,6 +159,47 @@ pub fn out_dir() -> PathBuf {
     root().join("out")
 }
 
+/// Where the SoundFonts for the game's music are (soundfonts/: tools/soundfonts.sh's, and any
+/// put there).
+pub fn soundfonts_dir() -> PathBuf {
+    root().join("soundfonts")
+}
+
+/// The SoundFonts there (.sf2, .sf3), by file name, sorted.
+pub fn soundfonts() -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(soundfonts_dir())
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| {
+            let l = n.to_ascii_lowercase();
+            l.ends_with(".sf2") || l.ends_with(".sf3")
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+/// A SoundFont by its name in soundfonts/, or by its path.
+pub fn resolve_soundfont(name_or_path: &str) -> Result<PathBuf, String> {
+    let here = soundfonts_dir().join(name_or_path);
+    let path = if here.is_file() {
+        here
+    } else {
+        PathBuf::from(name_or_path)
+    };
+    if path.is_file() {
+        Ok(path)
+    } else {
+        Err(format!(
+            "no SoundFont {name_or_path:?} (in {}: {})",
+            soundfonts_dir().display(),
+            soundfonts().join(", ")
+        ))
+    }
+}
+
 /// The commit this was built from ("-dirty": with changes not yet committed).
 pub const COMMIT: &str = env!("EVIL_COMMIT");
 

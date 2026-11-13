@@ -20,7 +20,20 @@ with, under which licenses. All of them are compatible with GPL-3.0.
 
 The engine links these libraries at run time (they're part of a binary release, not this
 repository): SDL2 and SDL2_mixer (zlib), libsndfile (LGPL-2.1-or-later), libzip (BSD-3-Clause),
-zlib (zlib).
+zlib (zlib), FluidSynth (LGPL-2.1-or-later; the Linux release's built from its source, v2.6.2,
+unmodified, without its own audio drivers) and GLib (LGPL-2.1-or-later).
+
+## SoundFonts
+
+Not in this repository: `tools/soundfonts.sh` fetches them into `soundfonts/`, and a binary
+release includes them, with their licenses (`soundfonts/licenses/`).
+
+- **GeneralUser GS** v2.0.3, by S. Christian Collins
+  (<https://github.com/mrbumpy409/GeneralUser-GS>, <https://www.schristiancollins.com>): its own
+  license, free for any use, in software projects too.
+- **MuseScore General** v0.2 (<https://musescore.org>): Fluid (R3) by Frank Wen, the mono version
+  by Michael Cowgill, adapted by S. Christian Collins; Temple Blocks by Ethan Winer, Drumline
+  Cymbals by Michael Schorsch. MIT.
 
 ## Code written from other ports' behaviour
 

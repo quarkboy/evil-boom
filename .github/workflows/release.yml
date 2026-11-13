@@ -34,7 +34,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build pkg-config patchelf \
             libsdl2-dev libsdl2-mixer-dev libsndfile1-dev libzip-dev zlib1g-dev \
-            libgl-dev libglu1-mesa-dev
+            libgl-dev libglu1-mesa-dev libglib2.0-dev
+
+      # (FluidSynth from its source: 22.04's is 2.2, and GeneralUser GS 2 needs 2.3's modulators;
+      # and only the synth: the engine plays what it renders, so none of its own audio drivers,
+      # which would bring JACK, PipeWire and the rest into the package)
+      - name: FluidSynth
+        run: |
+          git clone -q --depth 1 --branch v2.6.2 https://github.com/FluidSynth/fluidsynth.git /tmp/fluidsynth
+          cmake -S /tmp/fluidsynth -B /tmp/fluidsynth/build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr/local -Denable-libsndfile=ON \
+            -Denable-alsa=OFF -Denable-jack=OFF -Denable-pulseaudio=OFF -Denable-pipewire=OFF \
+            -Denable-oss=OFF -Denable-portaudio=OFF -Denable-sdl2=OFF -Denable-sdl3=OFF \
+            -Denable-readline=OFF -Denable-dbus=OFF -Denable-systemd=OFF -Denable-ladspa=OFF \
+            -Denable-libinstpatch=OFF -Denable-lash=OFF -Denable-midishare=OFF \
+            -Denable-network=OFF -Denable-openmp=OFF
+          cmake --build /tmp/fluidsynth/build
+          sudo cmake --install /tmp/fluidsynth/build
+          sudo ldconfig
 
       - name: Engine
         run: tools/build-engine.sh --clean
@@ -47,6 +64,7 @@ jobs:
 
       - name: Package
         run: |
+          tools/soundfonts.sh
           tools/release/package-linux.sh "${VERSION#v}"
           tools/release/engine-source.sh "${VERSION#v}"
 
@@ -69,7 +87,7 @@ jobs:
             git zip
             mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_mixer mingw-w64-x86_64-libsndfile
             mingw-w64-x86_64-libzip mingw-w64-x86_64-zlib mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc mingw-w64-x86_64-fluidsynth
 
       - name: Engine
         shell: msys2 {0}
@@ -86,7 +104,9 @@ jobs:
 
       - name: Package
         shell: msys2 {0}
-        run: tools/release/package-windows.sh "${VERSION#v}"
+        run: |
+          tools/soundfonts.sh
+          tools/release/package-windows.sh "${VERSION#v}"
 
       - uses: actions/upload-artifact@v4
         with:

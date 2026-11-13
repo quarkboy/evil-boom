@@ -330,6 +330,8 @@ pub struct WatchOptions {
     pub window: crate::dsda::WindowSpec,
     /// the game drawn at this size (width, height); none: its own (640x480)
     pub render: Option<(usize, usize)>,
+    /// the music played with this SoundFont (FluidSynth); none: by the OPL synth
+    pub soundfont: Option<std::path::PathBuf>,
 }
 
 impl Watch {
@@ -710,6 +712,7 @@ fn first_watch(
             capture: o.capture_sound,
             seed: o.seed,
             resolution: o.render,
+            soundfont: o.soundfont.clone(),
         },
     )?;
     engine.carry.clone_from(&o.carry);
