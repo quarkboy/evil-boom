@@ -166,13 +166,6 @@ mod tests {
             schema("doom_answer").as_ref(),
         );
         assert_eq!(v, json!({ "id": "q3", "choice": "b" }));
-        // (doom_name's ref and name both its own)
-        let (v, notes) = repair(
-            json!({ "ref": "area-2", "name": "pit" }),
-            schema("doom_name").as_ref(),
-        );
-        assert_eq!(v, json!({ "ref": "area-2", "name": "pit" }));
-        assert!(notes.is_empty());
         // (numbers as strings; an enum in capitals; the whole object as a string)
         let (v, _) = repair(
             Value::String(r#"{"target": "N", "thorough": "3"}"#.into()),

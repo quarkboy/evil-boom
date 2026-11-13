@@ -840,3 +840,13 @@ a pillar) took it up again, never asking about reach. Now `lost_sight` keeps at 
 she'd bring up reaches where it's reckoned to be, the same test as in sight. On MAP07 HMP, 8 seeds,
 the cycles went from 63 to 0. Score, run for run on the baseline's runs: +0.0093 (s.e. 0.0083),
 249 better, 192 worse; 0.450 against 0.440, exits 389 against 382.
+
+## doom_name dropped (2026-11-13)
+
+`doom_name` (name a place or thing, the name then usable as its id) came in with the first slice
+and was never judged by use. In every GPT stand-in log (12 runs: 132 `doom_go`, 106
+`doom_explore`) it was called not once; the only call on record was a hand-written mock line.
+It cost an action in her context all game and a choice in every "What next?" force, where a weak
+model could waste a turn on it. Removed from her actions and the console's raw actions; the
+naming itself stays, for directed scripts (`name`). Back in if Neuro on stream would name rooms
+for the fun of it.

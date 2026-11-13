@@ -9,7 +9,7 @@
 use serde_json::{json, Value};
 
 use super::link::{Incoming, Link};
-use crate::control::directed::{bearing, Director, Hints, Order, Topic, NAME_MAX};
+use crate::control::directed::{bearing, Director, Hints, Order, Topic};
 use crate::motor::Observation;
 use crate::play::Agent;
 
@@ -81,7 +81,6 @@ const ALL_ACTIONS: &[&str] = &[
     "doom_go",
     "doom_explore",
     "doom_search",
-    "doom_name",
     "doom_exit",
     "doom_fight",
     "doom_policy",
@@ -150,7 +149,6 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left. rush: keep going mid-fight, shooting and dodging on the way. queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" }, "rush": { "type": "boolean" }, "queue_up": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_explore", "description": "Explore an area or a compass direction, the likeliest secret walls too; paused while you're fighting. queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "queue_up": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_search", "description": "Search an area or a compass direction for secrets: thorough 2 (most suspicious walls, default) or 3 (every one, slow). queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "thorough": { "type": "integer", "enum": [2, 3] }, "queue_up": { "type": "boolean" } }), &["target"]) }),
-        json!({ "name": "doom_name", "description": format!("Name something (up to {NAME_MAX} characters); the name then works as its id."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": "Your fight, for a while (10 s unless seconds; then by reflex again). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / avoid (keep clear: to get past) / steady: how you fight. auto: all by reflex again.", "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "avoid", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
         json!({ "name": "doom_policy", "description": format!("Standing settings; give any, or none to hear them. {} idle: seconds with no action before you carry on by instinct (0: you wait). hints: suggestions, off, on_stall or always. answers: seconds a question waits before its default (0: till you answer).", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["new", "thorough", "quick"] }, "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] }, "answers": { "type": "integer" } }), &[]) }),
@@ -418,7 +416,6 @@ impl Session {
                     "doom_look",
                     "doom_list",
                     "doom_inspect",
-                    "doom_name",
                     "doom_status",
                 ],
                 "medium",
@@ -897,18 +894,6 @@ impl Session {
                     (true, format!("OK: going to {t} (a spot, not an area)."))
                 } else {
                     (false, format!("\"{t}\" isn't an area or a direction."))
-                }
-            }
-            "doom_name" => {
-                let (Some(r), Some(n)) = (arg("ref"), arg("name")) else {
-                    return (false, "Give ref and name.".into());
-                };
-                let Some(e) = self.director.find(agent, obs, r) else {
-                    return (false, self.director.not_found(agent, obs, r));
-                };
-                match self.director.name(&e.id, n) {
-                    Ok(()) => (true, format!("{} is \"{n}\" now.", e.id)),
-                    Err(why) => (false, format!("Not named: {why}.")),
                 }
             }
             "doom_exit" => {

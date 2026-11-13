@@ -43,7 +43,7 @@ pub use policy::{help as policy_help, Policy};
 pub use situation::Situation;
 
 /// a name at most this long (refused, not cut: a name she didn't choose is one she won't use)
-pub const NAME_MAX: usize = 32;
+const NAME_MAX: usize = 32;
 
 /// exploring a way: what's this far either side of it
 const EXPLORE_CONE: f64 = 50.0;
