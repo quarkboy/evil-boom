@@ -598,6 +598,12 @@ impl Engine {
     pub fn frame(&self) -> Option<(usize, usize, Vec<u8>)> {
         self.game.draw()
     }
+
+    /// The frame drawn `between` (0 to 1) the tic before and this one (a watcher's window, at
+    /// the screen's rate: things where they'd be between two tics).
+    pub fn frame_at(&self, between: f64) -> Option<(usize, usize, Vec<u8>)> {
+        self.game.draw_at(between)
+    }
 }
 
 fn set_env_default(var: &str, value: &Path) {

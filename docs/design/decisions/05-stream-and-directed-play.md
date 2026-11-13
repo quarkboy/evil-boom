@@ -726,3 +726,27 @@ actions come first; the goal goes on after; setting one clears her queue. Met, o
 more she knows of to do for it, it's said ("Goal done: you have the blue key.") and ended. A key
 goal ends with its level; the rest stand across levels. Shown in her status ("for your goal"),
 doom_why and the stream's column. Not in scored play (parity).
+
+## The watch window: the engine's SDL, frames between tics (2026-11-12)
+
+For the stream: steady frames and sound in step. Measured (`EVIL_DEBUG_FRAMES`, the stream
+layout, WSLg, E1M1 HMP and MAP07 UV, 40 s each), the `minifb` window kept to its own sleep timer:
+59.4 frames a second against a 60 Hz screen, which slips a frame about every 1.7 s, and Doom's
+35 tics on 60 frames showed each tic for one frame or two (41% of frames showed nothing new):
+judder. Her thinking wasn't the trouble: the slowest frame's stepping took 7 ms.
+
+Now the window is the engine's own SDL (`evil_window_*`, `viewer/window.rs`): a texture scaled on
+the graphics card, shown at the refresh with vsync (paced by the clock where there's none),
+native on X11, Wayland and Windows. Its events are taken out by an event filter as they come in:
+drawing polls SDL's events (NetUpdate), and the game took keys for its menu and Alt-F4 for
+quitting. And each frame is drawn between the tic before and the last (`evil_draw_at`, DSDA's
+own interpolation, `movement_smooth`, given how far between by our clock, not its). What that
+changes is only the drawing: the previous positions and view the game keeps a tic back, and
+moving floors set between for the drawing and put back before anything reads them; the weapon's
+own smoothing needs `I_StartDisplay` (its "first frame since a tic"), without which the gun
+jumped about. After: 59.9 frames a second, the gap 16.7 ms at the median and 16.8 at p95, no
+frame late in 43 s; of the frames that played no tic, 88% showed a picture moved on.
+
+Play unchanged: headless watches (drawn a tic at a time) on five levels gave the same logs as
+before; window runs at x4 (drawn between tics throughout) gave the same logs as the headless
+ones; parity: all 24 the same. The score's small window stays on `minifb`.

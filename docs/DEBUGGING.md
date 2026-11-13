@@ -102,6 +102,9 @@ over. `Player::force_target` does the same for a target, from code.
   speed; the fight's controls beside the route's; every line of any follower's log (a
   retreat's too, which the run's log doesn't show); the lanes planned between barrels.
   `EVIL_KNOWN_ONLY=map|monsters`: only that much known.
+- `EVIL_DEBUG_FRAMES=S` (watch window): S seconds of how steadily it shows the game, then it
+  shuts: whether it has vsync, each frame's gap, the tics it played, the time stepping, painting
+  and presenting took, and how many frames between tics moved; out/watch/frames.tsv.
 - What her shots hit is in every run's STATS, by the game's own count (the engine patch):
   `shots, by the game's count`, `shots with no pellet on anything`, `pellets fired`, on a
   monster, on a barrel, after the kill in the same shot, on nothing, and fired with the

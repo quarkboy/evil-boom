@@ -209,7 +209,7 @@ pub(super) fn run(
         }
         ticked = true;
     }
-    if ticked {
+    if ticked && watch.frame_per_tic {
         watch.frame = watch.engine.frame();
     }
     Ok(watch)

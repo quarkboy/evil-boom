@@ -17,8 +17,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::dsda::WindowEvent;
 use font8x8::legacy::BASIC_LEGACY;
-use minifb::{Key as K, KeyRepeat, Scale, ScaleMode, Window, WindowOptions};
 
 use crate::config::{out_dir, resolve_wad};
 use crate::engine::{Engine, Options};
@@ -36,8 +36,10 @@ use crate::tactical::tuning::Tuning;
 use crate::things::{pickup, PickupKind};
 
 mod console;
+mod frames;
 mod present;
 mod stream;
+mod window;
 
 use crate::wad::Wad;
 pub use stream::Side as StreamSide;
@@ -624,6 +626,8 @@ struct Watch {
     agent: Agent,
     palette: Vec<u32>,
     frame: Option<(usize, usize, Vec<u8>)>,
+    /// the frame drawn as each tic's played (a window draws its own, between tics, instead)
+    frame_per_tic: bool,
     obs: Option<Observation>,
     controls: Option<Controls>,
     options: Vec<Objective>,
@@ -1245,6 +1249,7 @@ fn enter_level(
     carry: Option<crate::dsda::Loadout>,
 ) -> Result<Watch, String> {
     let (speed, show_all, follow) = (watch.speed, watch.show_all, watch.follow);
+    let frame_per_tic = watch.frame_per_tic;
     let (sound, muted, sound_on) = (watch.sound, watch.muted, watch.sound_on);
     let (paused, mut console, present, stream) =
         (watch.paused, watch.console, watch.present, watch.stream);
@@ -1272,6 +1277,7 @@ fn enter_level(
     engine.goto(name)?;
     let mut watch = level(w, m, nav, engine, o)?;
     (watch.speed, watch.show_all, watch.follow) = (speed, show_all, follow);
+    watch.frame_per_tic = frame_per_tic;
     (watch.sound, watch.muted, watch.sound_on) = (sound, muted, sound_on);
     watch.paused = paused;
     if let Some(c) = console.as_mut() {
@@ -1352,19 +1358,20 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
     } else {
         (W, H, title)
     };
-    let mut window = Window::new(
-        title,
-        ww,
-        wh,
-        WindowOptions {
-            resize: true,
-            scale: Scale::FitScreen,
-            scale_mode: ScaleMode::AspectRatioStretch,
-            ..WindowOptions::default()
-        },
-    )
-    .map_err(|e| e.to_string())?;
-    window.set_target_fps(60);
+    let mut frames = frames::Frames::from_env();
+    let mut window = window::Window::open(&watch.engine.game, title, ww, wh)?;
+    if frames.is_some() {
+        println!("window: {}", window.describe());
+    }
+    // (the stream's title kept, for OBS to find the window by)
+    let fixed_title = watch.stream.is_some();
+    let retitle = |watch: &Watch, title: &str| {
+        if !fixed_title {
+            window::Window::set_title(&watch.engine.game, title);
+        }
+    };
+    // (the game drawn each frame, between its tics, rather than once a tic)
+    watch.frame_per_tic = false;
     let mut canvas = Canvas {
         px: vec![0; ww * wh],
         width: ww,
@@ -1376,18 +1383,28 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
     let mut owed = 0.0;
     // (her log written as it plays, as a headless watch's is: a watched run read afterwards)
     let mut live = LiveLog::create(opts.as_ref().and_then(|o| o.seed))?;
-    while window.is_open() && !window.is_key_down(K::Escape) {
-        for key in window.get_keys_pressed(KeyRepeat::No) {
-            match key {
-                K::Space => watch.paused = !watch.paused,
-                K::N | K::Right if watch.paused && !watch.engine.finished() => watch.tic(),
-                K::Equal | K::NumPadPlus => watch.speed = (watch.speed * 2.0).min(16.0),
-                K::Minus | K::NumPadMinus => watch.speed = (watch.speed / 2.0).max(0.25),
-                K::A => watch.show_all = !watch.show_all,
-                K::F => watch.follow = !watch.follow,
-                K::L => watch.evil_log = !watch.evil_log,
-                K::T => watch.text_size = (watch.text_size + 1) % TEXT_SIZES.len(),
-                K::M => watch.muted = !watch.muted,
+    'frames: loop {
+        for event in window::Window::events(&watch.engine.game) {
+            use window::key;
+            let k = match event {
+                WindowEvent::Close => break 'frames,
+                WindowEvent::Wheel(dy) => {
+                    watch.zoom = (watch.zoom * if dy > 0 { 1.25 } else { 0.8 }).clamp(1.0, 20.0);
+                    continue;
+                }
+                WindowEvent::Key(k) => k,
+            };
+            match k {
+                key::ESCAPE => break 'frames,
+                key::SPACE => watch.paused = !watch.paused,
+                key::N | key::RIGHT if watch.paused && !watch.engine.finished() => watch.tic(),
+                key::EQUALS | key::KP_PLUS => watch.speed = (watch.speed * 2.0).min(16.0),
+                key::MINUS | key::KP_MINUS => watch.speed = (watch.speed / 2.0).max(0.25),
+                key::A => watch.show_all = !watch.show_all,
+                key::F => watch.follow = !watch.follow,
+                key::L => watch.evil_log = !watch.evil_log,
+                key::T => watch.text_size = (watch.text_size + 1) % TEXT_SIZES.len(),
+                key::M => watch.muted = !watch.muted,
                 _ => {}
             }
         }
@@ -1411,7 +1428,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             console::Frame::Quit => return Ok(()), // (the console's asked the game to close)
             console::Frame::Goto { map, carry } => {
                 watch = console::goto(watch, game, &map, carry)?;
-                window.set_title(&format!("evil-boom explorer: {}", watch.map_name));
+                retitle(&watch, &format!("evil-boom explorer: {}", watch.map_name));
             }
         }
         // (the sound only at the game's own speed: faster or slower it'd pile up or lag)
@@ -1421,12 +1438,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             watch.engine.sound(sound);
             watch.sound_on = sound;
         }
-        if let Some((_, dy)) = window.get_scroll_wheel() {
-            if dy != 0.0 {
-                watch.zoom = (watch.zoom * if dy > 0.0 { 1.25 } else { 0.8 }).clamp(1.0, 20.0);
-            }
-        }
-        let now = Instant::now();
+        let (now, tic0) = (Instant::now(), watch.engine.tic);
         owed += (now - last).as_secs_f64() * TICRATE * watch.speed;
         last = now;
         owed = f64::min(owed, 8.0); // (don't race to catch up after a slow plan)
@@ -1435,76 +1447,88 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             // episode's going on with them; see present)
             let was = watch.map_name.clone();
             watch = present::run(watch, game, &mut owed)?;
-            live.write(&watch);
             if watch.map_name != was {
-                window.set_title(&format!("evil-boom explorer: {}", watch.map_name));
+                retitle(&watch, &format!("evil-boom explorer: {}", watch.map_name));
             }
-            if watch.paused {
-                owed = 0.0;
+        } else {
+            let wanted = watch.agent.x().restart_wanted;
+            if wanted && watch.lives_left <= 0 {
+                watch.agent.x_mut().restart_wanted = false; // (out with what she has)
             }
-            paint(&mut watch, &mut canvas, &mut aside);
-            window
-                .update_with_buffer(&canvas.px, ww, wh)
-                .map_err(|e| e.to_string())?;
-            continue;
-        }
-        let wanted = watch.agent.x().restart_wanted;
-        if wanted && watch.lives_left <= 0 {
-            watch.agent.x_mut().restart_wanted = false; // (out with what she has)
-        }
-        // (dead: told whoever directs her, once, as it came)
-        if watch.engine.dead() {
-            let again = watch.lives_left > 0;
-            watch.tell_death(again);
-        }
-        if (watch.engine.dead() || wanted) && watch.lives_left > 0 && !watch.paused {
-            watch.agent.x_mut().restart_wanted = false;
-            watch.lives_left -= 1;
-            watch.engine.restart(true);
-            watch.agent.restart();
-            watch.controls = None;
-        }
-        while owed >= 1.0 && !watch.paused && !watch.engine.finished() {
-            watch.tic();
-            owed -= 1.0;
-        }
-        if let Some((w, o)) = game.filter(|(_, o)| o.episode && watch.engine.exited()) {
-            // (out: on to the next level, what she got out with carried)
-            let name = watch.map_name.clone();
-            let carried = watch.engine.loadout();
-            match next_level(watch, w, o)? {
-                Some(next) => {
-                    watch = next;
-                    println!(
-                        "{name} done: on to {} with health {} armor {}, ammo {}/{}/{}/{}",
-                        watch.map_name,
-                        carried.health,
-                        carried.armor,
-                        carried.clip,
-                        carried.shell,
-                        carried.cell,
-                        carried.rocket
-                    );
-                    window.set_title(&format!(
-                        "evil-boom explorer: {} (from {name}: health {} armor {})",
-                        watch.map_name, carried.health, carried.armor
-                    ));
+            // (dead: told whoever directs her, once, as it came)
+            if watch.engine.dead() {
+                let again = watch.lives_left > 0;
+                watch.tell_death(again);
+            }
+            if (watch.engine.dead() || wanted) && watch.lives_left > 0 && !watch.paused {
+                watch.agent.x_mut().restart_wanted = false;
+                watch.lives_left -= 1;
+                watch.engine.restart(true);
+                watch.agent.restart();
+                watch.controls = None;
+            }
+            while owed >= 1.0 && !watch.paused && !watch.engine.finished() {
+                watch.tic();
+                owed -= 1.0;
+            }
+            if let Some((w, o)) = game.filter(|(_, o)| o.episode && watch.engine.exited()) {
+                // (out: on to the next level, what she got out with carried)
+                let name = watch.map_name.clone();
+                let carried = watch.engine.loadout();
+                match next_level(watch, w, o)? {
+                    Some(next) => {
+                        watch = next;
+                        println!(
+                            "{name} done: on to {} with health {} armor {}, ammo {}/{}/{}/{}",
+                            watch.map_name,
+                            carried.health,
+                            carried.armor,
+                            carried.clip,
+                            carried.shell,
+                            carried.cell,
+                            carried.rocket
+                        );
+                        retitle(
+                            &watch,
+                            &format!(
+                                "evil-boom explorer: {} (from {name}: health {} armor {})",
+                                watch.map_name, carried.health, carried.armor
+                            ),
+                        );
+                    }
+                    None => return Ok(()), // (the episode's over)
                 }
-                None => return Ok(()), // (the episode's over)
             }
-        }
-        // (over, with no game screens to serve her: what she asks still answered)
-        if watch.engine.finished() && watch.present.is_none() {
-            watch.serve_over();
+            // (over, with no game screens to serve her: what she asks still answered)
+            if watch.engine.finished() && watch.present.is_none() {
+                watch.serve_over();
+            }
         }
         live.write(&watch);
         if watch.paused {
             owed = 0.0;
         }
+        // (the game as it is between the tic just played and the next, so that what moves moves
+        // at the screen's rate: drawn as far on from the tic before as the time owed says)
+        let between = if watch.paused {
+            1.0
+        } else {
+            owed.clamp(0.0, 1.0)
+        };
+        if watch.engine.tic != tic0 || !watch.paused || watch.frame.is_none() {
+            watch.frame = watch.engine.frame_at(between);
+        }
+        let stepped = Instant::now();
         paint(&mut watch, &mut canvas, &mut aside);
-        window
-            .update_with_buffer(&canvas.px, ww, wh)
-            .map_err(|e| e.to_string())?;
+        let painted = Instant::now();
+        window.show(&watch.engine.game, &canvas.px, ww, wh);
+        if let Some(f) = frames.as_mut() {
+            let picture = watch.frame.as_ref().map_or(&[][..], |f| &f.2[..]);
+            f.frame(now, stepped, painted, watch.engine.tic - tic0, picture);
+            if f.done() {
+                break;
+            }
+        }
     }
     Ok(())
 }
@@ -1660,6 +1684,7 @@ impl Watch {
             agent,
             palette: palette(w),
             frame: None,
+            frame_per_tic: true,
             obs: None,
             controls: None,
             options: Vec::new(),
@@ -1719,7 +1744,9 @@ impl Watch {
             }
         }
         self.secrets_seen = found;
-        self.frame = self.engine.frame();
+        if self.frame_per_tic {
+            self.frame = self.engine.frame();
+        }
         let tally = crate::control::directed::Tally::of(self.engine.tally());
         let gibbed = self.engine.gibbed();
         let hits = std::mem::take(&mut self.hits);

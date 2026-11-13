@@ -155,6 +155,36 @@ type PlainFn = unsafe extern "C" fn();
 type MenuFn = unsafe extern "C" fn(c_int, c_int);
 type ScreenFn = unsafe extern "C" fn(*mut c_int);
 type TitleFn = unsafe extern "C" fn(*mut c_char, c_int) -> c_int;
+type DrawAtFn = unsafe extern "C" fn(*mut u8, c_int, f64) -> c_int;
+
+/// The watcher's window, the game's SDL's (evil_window_*): none in a library from before it.
+struct WindowFns {
+    open: unsafe extern "C" fn(*const c_char, c_int, c_int, *mut c_int) -> c_int,
+    show: unsafe extern "C" fn(*const u32, c_int, c_int),
+    events: unsafe extern "C" fn(*mut c_int, c_int) -> c_int,
+    title: unsafe extern "C" fn(*const c_char),
+    close: unsafe extern "C" fn(),
+}
+
+/// The watcher's window as it opened.
+#[derive(Clone, Copy, Debug)]
+pub struct WindowInfo {
+    /// showing a frame waits for the screen's refresh
+    pub vsync: bool,
+    /// the screen's rate (Hz), 0 unknown
+    pub refresh: i32,
+}
+
+/// What happened at the watcher's window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WindowEvent {
+    /// a key pressed: its SDL keycode
+    Key(i32),
+    /// the wheel turned, up positive
+    Wheel(i32),
+    /// shut, or the program asked to quit
+    Close,
+}
 
 /// The screen as the game has it (evil_screen): Doom's own screens, the stream's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -214,6 +244,10 @@ pub struct Dsda {
     level_title_fn: Option<TitleFn>,
     /// (none in a library from before it was added)
     finale_text_fn: Option<TitleFn>,
+    draw_at_fn: Option<DrawAtFn>,
+    window_fns: Option<WindowFns>,
+    /// what a frame's drawn into, kept across frames
+    draw_buffer: RefCell<Vec<u8>>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
     _argv: Vec<CString>,
     _argv_ptrs: Vec<*mut c_char>,
@@ -223,6 +257,13 @@ pub struct Dsda {
     /// the video still being closed: the sound thread's next call was into nothing, a segfault,
     /// the sound never put with the video)
     _lib: std::mem::ManuallyDrop<Library>,
+}
+
+impl Drop for Dsda {
+    fn drop(&mut self) {
+        // (the watcher's window, if one's open, shut with the game it shows)
+        self.window_close();
+    }
 }
 
 impl Dsda {
@@ -357,6 +398,36 @@ impl Dsda {
         let finale_text_fn = sym(b"evil_finale_text")
             .ok()
             .map(|p| unsafe { std::mem::transmute::<*const (), TitleFn>(p) });
+        // SAFETY: as above, evil_draw_at's signature; optional.
+        let draw_at_fn = sym(b"evil_draw_at")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), DrawAtFn>(p) });
+        // SAFETY: as above, the evil_window_* functions' signatures, all or none; optional.
+        let window_fns = (|| -> Result<WindowFns, String> {
+            Ok(unsafe {
+                WindowFns {
+                    open: std::mem::transmute::<
+                        *const (),
+                        unsafe extern "C" fn(*const c_char, c_int, c_int, *mut c_int) -> c_int,
+                    >(sym(b"evil_window_open")?),
+                    show: std::mem::transmute::<
+                        *const (),
+                        unsafe extern "C" fn(*const u32, c_int, c_int),
+                    >(sym(b"evil_window_show")?),
+                    events: std::mem::transmute::<
+                        *const (),
+                        unsafe extern "C" fn(*mut c_int, c_int) -> c_int,
+                    >(sym(b"evil_window_events")?),
+                    title: std::mem::transmute::<*const (), unsafe extern "C" fn(*const c_char)>(
+                        sym(b"evil_window_title")?,
+                    ),
+                    close: std::mem::transmute::<*const (), unsafe extern "C" fn()>(sym(
+                        b"evil_window_close",
+                    )?),
+                }
+            })
+        })()
+        .ok();
         let argv: Vec<CString> = std::iter::once("evil".to_string())
             .chain(args.iter().cloned())
             .map(CString::new)
@@ -401,6 +472,9 @@ impl Dsda {
             exit_fn,
             level_title_fn,
             finale_text_fn,
+            draw_at_fn,
+            window_fns,
+            draw_buffer: RefCell::new(Vec::new()),
             _argv: argv,
             _argv_ptrs: argv_ptrs,
             _lib: std::mem::ManuallyDrop::new(lib),
@@ -761,15 +835,90 @@ impl Dsda {
     /// Draw the frame as the game would and get it as palette indices, a row at a time:
     /// (width, height, pixels); None when drawing is off (-nodraw).
     pub fn draw(&self) -> Option<(usize, usize, Vec<u8>)> {
-        let mut buf = vec![0u8; 3840 * 2160];
+        self.draw_at(1.0)
+    }
+
+    /// The frame drawn `between` (0 to 1) the tic before and this one, 1 the tic as it is (a
+    /// library without evil_draw_at: as it is).
+    pub fn draw_at(&self, between: f64) -> Option<(usize, usize, Vec<u8>)> {
+        let mut buf = self.draw_buffer.borrow_mut();
+        buf.resize(3840 * 2160, 0);
+        let (out, max) = (buf.as_mut_ptr(), buf.len() as c_int);
         // SAFETY: the game writes at most `max` bytes into the buffer it's given.
-        let wh = unsafe { (self.draw_fn)(buf.as_mut_ptr(), buf.len() as c_int) };
+        let wh = unsafe {
+            match self.draw_at_fn {
+                Some(f) => f(out, max, between),
+                None => (self.draw_fn)(out, max),
+            }
+        };
         if wh <= 0 {
             return None;
         }
         let (w, h) = ((wh >> 16) as usize, (wh & 0xFFFF) as usize);
-        buf.truncate(w * h);
-        Some((w, h, buf))
+        Some((w, h, buf[..w * h].to_vec()))
+    }
+
+    /// The watcher's window opened, `w` by `h`.
+    pub fn window_open(&self, title: &str, w: usize, h: usize) -> Result<WindowInfo, String> {
+        let f = self
+            .window_fns
+            .as_ref()
+            .ok_or("this engine has no window of its own (rebuild it: tools/build-engine.sh)")?;
+        let title = CString::new(title).map_err(|e| e.to_string())?;
+        let mut out = [0 as c_int; 2];
+        // SAFETY: a string the call only reads, and room for the two values it writes.
+        let ok = unsafe { (f.open)(title.as_ptr(), w as c_int, h as c_int, out.as_mut_ptr()) };
+        if ok == 0 {
+            return Err("the window didn't open (see the game's log)".into());
+        }
+        Ok(WindowInfo {
+            vsync: out[0] != 0,
+            refresh: out[1],
+        })
+    }
+
+    /// A picture shown in the window (0RGB, `w` by `h`): it waits for the screen's refresh
+    /// where the window has vsync.
+    pub fn window_show(&self, px: &[u32], w: usize, h: usize) {
+        if let Some(f) = &self.window_fns {
+            if px.len() >= w * h {
+                // SAFETY: the call reads `w * h` pixels, which `px` has.
+                unsafe { (f.show)(px.as_ptr(), w as c_int, h as c_int) };
+            }
+        }
+    }
+
+    /// What's happened at the window since the last call.
+    pub fn window_events(&self) -> Vec<WindowEvent> {
+        let Some(f) = &self.window_fns else {
+            return Vec::new();
+        };
+        let mut out = [0 as c_int; 128];
+        // SAFETY: room for 64 pairs, as many as it's told it may write.
+        let n = unsafe { (f.events)(out.as_mut_ptr(), 64) }.clamp(0, 64) as usize;
+        out[..2 * n]
+            .chunks(2)
+            .filter_map(|e| match e[0] {
+                1 => Some(WindowEvent::Key(e[1])),
+                2 => Some(WindowEvent::Wheel(e[1])),
+                3 => Some(WindowEvent::Close),
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub fn window_title(&self, title: &str) {
+        if let (Some(f), Ok(t)) = (&self.window_fns, CString::new(title)) {
+            // SAFETY: a string the call only reads.
+            unsafe { (f.title)(t.as_ptr()) };
+        }
+    }
+
+    pub fn window_close(&self) {
+        if let Some(f) = &self.window_fns {
+            // SAFETY: no arguments; closing a window that isn't open does nothing.
+            unsafe { (f.close)() };
+        }
     }
 
     pub fn status(&self) -> Status {

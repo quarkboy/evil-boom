@@ -20,7 +20,8 @@ path = "src/main.rs"
 
 [features]
 default = ["viewer"]
-# the `evil-boom watch` window (minifb: Windows, X11); off for a headless build
+# the `evil-boom watch` window (the engine's SDL) and the score's (minifb: Windows, X11); off
+# for a headless build
 viewer = ["dep:minifb", "dep:font8x8", "dep:png"]
 
 [dependencies]
@@ -32,7 +33,7 @@ tungstenite = { version = "0.24", default-features = false, features = ["handsha
 # (the GPT stand-in for Evil: an OpenAI-compatible chat API over HTTPS)
 ureq = { version = "2", features = ["json"] }
 sha2 = "0.10"
-# (X11 only: its Wayland window has no decorations where the compositor gives none, WSLg among
+# (the score's window. X11 only: its Wayland window has no decorations where the compositor gives none, WSLg among
 # them; X11 windows get them there and on Wayland desktops through XWayland)
 minifb = { version = "0.28", optional = true, default-features = false, features = ["x11"] }
 font8x8 = { version = "0.3", optional = true }

@@ -129,7 +129,7 @@ static int evil_held;
 /* a frame's been drawn: there's something to melt from */
 static int evil_drawn_once;
 
-static void evil_render(void);
+static void evil_render(fixed_t frac);
 static int evil_wipe_begin(void);
 static void evil_wipe_step(int ticks);
 void D_EvilPageDrawer(void);  /* (d_main.c, patched) */
@@ -166,9 +166,14 @@ EVIL_API int evil_init(int argc, char **argv)
   singletics = true;
   /* (no screen melt between levels: it runs on the clock, and while it ran some of her
    * commands went nowhere, a different number each time; and nothing interpolated between
-   * tics, which runs on the clock too) */
+   * tics by the clock, which the game's own loop does) */
   dsda_UpdateIntConfig(dsda_config_render_wipescreen, 0, false);
   dsda_UpdateIntConfig(dsda_config_uncapped_framerate, 0, false);
+  /* (drawn: a frame between two tics drawn as things are between them, as far between as the
+   * caller says (evil_draw_at), for a window at the screen's own rate. Only the drawing
+   * changes: the game keeps where things were a tic back, and the heights of moving floors are
+   * set between for the drawing and put back after it, before anything reads them) */
+  movement_smooth = !nodrawers;
   if (!nodrawers && sdl_window)
   {
     /* (its frames are shown by whoever's watching: evil_draw; and the mouse is theirs: the
@@ -608,22 +613,24 @@ EVIL_API int evil_sound_rate(void)
   return snd_samplerate;
 }
 
-/* Draw the frame as the game would (the player's view, the status bar) and copy it out as
- * palette indices, a row at a time (out: width * height bytes). Returns width << 16 | height,
- * or 0 if there's no room or nothing's drawn (-nodraw). For watching a run. */
 extern dboolean setsizeneeded;
 void R_ExecuteSetViewSize(void);
 
 /* The screen as it is into screens[0], as D_Display draws it (no melt): a level's view and
  * status bar (presenting, its messages too), or the tally, the finale, the title card; the menu
  * over any of them while it's up (presenting). Not presenting, a level's only. */
-static void evil_render(void)
+static void evil_render(fixed_t frac)
 {
+  /* (as D_Display has it: the frame's the first since a tic was played or not, which the
+   * weapon's own smoothing goes by. Without, it drew the weapon from where it was when it last
+   * changed, and between tics the gun jumped about) */
+  if (!I_StartDisplay())
+    return;
   if (setsizeneeded)
     R_ExecuteSetViewSize();  /* (the view's size and buffers: D_Display does this first) */
   if (gamestate == GS_LEVEL)
   {
-    R_InterpolateView(&players[displayplayer], FRACUNIT);
+    R_InterpolateView(&players[displayplayer], frac);
     R_RenderPlayerView(&players[displayplayer]);
     R_RestoreInterpolations();
     ST_Drawer(true);
@@ -649,6 +656,7 @@ static void evil_render(void)
     V_EndMenuDraw();
     M_Drawer();
   }
+  I_EndDisplay();
 }
 
 /* A step of the melt. The play's random numbers kept as they were: the melt takes some (its
@@ -676,27 +684,32 @@ static int evil_wipe_begin(void)
     return 0;
   }
   wipe_StartScreen();  /* (screens[0]: the last frame drawn) */
-  evil_render();
+  evil_render(FRACUNIT);
   wipe_EndScreen();    /* (and screens[0] back to the last frame, till the first step) */
   wipegamestate = gamestate;
   evil_wipe_on = 1;
   return 1;
 }
 
-EVIL_API int evil_draw(unsigned char *out, int max)
+/* Draw the frame as the game would (the player's view, the status bar) and copy it out as
+ * palette indices, a row at a time (out: width * height bytes): `between` (0 to 1) how far from
+ * the tic before to this one, 1 the tic as it is. Returns width << 16 | height, or 0 if there's
+ * no room or nothing's drawn (-nodraw). For watching a run. */
+EVIL_API int evil_draw_at(unsigned char *out, int max, double between)
 {
   int y, w, h;
+  fixed_t frac = between <= 0 ? 0 : between >= 1 ? FRACUNIT : (fixed_t)(between * FRACUNIT);
   if (nodrawers)
     return 0;
   if (!evil_presenting)
   {
-    /* (the view and the status bar, the tic as it is: no menus, wipes or other screens) */
+    /* (the view and the status bar: no menus, wipes or other screens) */
     if (gamestate != GS_LEVEL)
       return 0;
-    evil_render();
+    evil_render(frac);
   }
   else if (!evil_wipe_begin())
-    evil_render();
+    evil_render(frac);
   w = screens[0].width;
   h = screens[0].height;
   if (!screens[0].data || w * h > max)
@@ -705,6 +718,184 @@ EVIL_API int evil_draw(unsigned char *out, int max)
     memcpy(out + y * w, screens[0].data + y * screens[0].pitch, w);
   evil_drawn_once = 1;
   return (w << 16) | h;
+}
+
+/* evil_draw_at the tic as it is. */
+EVIL_API int evil_draw(unsigned char *out, int max)
+{
+  return evil_draw_at(out, max, 1);
+}
+
+/* The watcher's window (evil-boom watch): the picture the caller paints, shown at the screen's
+ * own rate (vsync where there is one), scaled to fit. Its keys, wheel and closing are the
+ * caller's, kept from the game: drawing a frame polls the events (NetUpdate), and the game would
+ * take them for its own (keys to its menu, Alt-F4 quitting it outright). */
+static SDL_Window *evil_window;
+static SDL_Renderer *evil_renderer;
+static SDL_Texture *evil_texture;
+static int evil_texture_w, evil_texture_h;
+static Uint32 evil_window_id;
+#define EVIL_EVENTS 64
+static int evil_events[EVIL_EVENTS * 2];
+static int evil_event_count;
+
+static void evil_event(int kind, int value)
+{
+  if (evil_event_count < EVIL_EVENTS)
+  {
+    evil_events[evil_event_count * 2] = kind;
+    evil_events[evil_event_count * 2 + 1] = value;
+    evil_event_count++;
+  }
+}
+
+/* (each event as it comes in, before anyone polls: the window's kept for the caller (1 a key
+ * pressed, its SDL keycode; 2 the wheel, up positive; 3 closed or quit) and taken out) */
+static int SDLCALL evil_event_filter(void *data, SDL_Event *e)
+{
+  Uint32 id = 0;
+  (void)data;
+  switch (e->type)
+  {
+    case SDL_QUIT:
+      evil_event(3, 0);
+      return 0;
+    case SDL_KEYDOWN:
+    case SDL_KEYUP:
+      id = e->key.windowID;
+      if (id == evil_window_id && e->type == SDL_KEYDOWN && !e->key.repeat)
+        evil_event(1, e->key.keysym.sym);
+      break;
+    case SDL_TEXTINPUT:
+      id = e->text.windowID;
+      break;
+    case SDL_TEXTEDITING:
+      id = e->edit.windowID;
+      break;
+    case SDL_MOUSEMOTION:
+      id = e->motion.windowID;
+      break;
+    case SDL_MOUSEBUTTONDOWN:
+    case SDL_MOUSEBUTTONUP:
+      id = e->button.windowID;
+      break;
+    case SDL_MOUSEWHEEL:
+      id = e->wheel.windowID;
+      if (id == evil_window_id && e->wheel.y)
+        evil_event(2, e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -e->wheel.y : e->wheel.y);
+      break;
+    case SDL_WINDOWEVENT:
+      id = e->window.windowID;
+      if (id == evil_window_id && e->window.event == SDL_WINDOWEVENT_CLOSE)
+        evil_event(3, 0);
+      break;
+    default:
+      return 1;
+  }
+  return id != evil_window_id;
+}
+
+/* The window opened, `w` by `h` (the picture's size; it can be resized, the picture scaled to
+ * fit). out[0]: 1 if showing a frame waits for the screen's refresh; out[1]: the screen's rate
+ * (Hz, 0 unknown). Returns 1 if it's open. */
+EVIL_API int evil_window_open(const char *title, int w, int h, int *out)
+{
+  SDL_RendererInfo info;
+  SDL_DisplayMode mode;
+  if (evil_window)
+    return 1;
+  if (nodrawers || !SDL_WasInit(SDL_INIT_VIDEO))
+    return 0;
+  SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+  evil_window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w, h,
+                                 SDL_WINDOW_RESIZABLE);
+  if (!evil_window)
+  {
+    lprintf(LO_WARN, "evil_window_open: %s\n", SDL_GetError());
+    return 0;
+  }
+  evil_renderer = SDL_CreateRenderer(evil_window, -1,
+                                     SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+  if (!evil_renderer)
+    evil_renderer = SDL_CreateRenderer(evil_window, -1, SDL_RENDERER_PRESENTVSYNC);
+  if (!evil_renderer)
+    evil_renderer = SDL_CreateRenderer(evil_window, -1, 0);
+  if (!evil_renderer)
+  {
+    lprintf(LO_WARN, "evil_window_open: %s\n", SDL_GetError());
+    SDL_DestroyWindow(evil_window);
+    evil_window = NULL;
+    return 0;
+  }
+  SDL_RenderSetLogicalSize(evil_renderer, w, h);
+  evil_window_id = SDL_GetWindowID(evil_window);
+  evil_event_count = 0;
+  SDL_SetEventFilter(evil_event_filter, NULL);
+  out[0] = SDL_GetRendererInfo(evil_renderer, &info) == 0 &&
+           (info.flags & SDL_RENDERER_PRESENTVSYNC) != 0;
+  out[1] = SDL_GetCurrentDisplayMode(SDL_GetWindowDisplayIndex(evil_window), &mode) == 0
+               ? mode.refresh_rate
+               : 0;
+  return 1;
+}
+
+/* A picture shown (0RGB, a row of `w` after another): it waits for the screen's refresh where
+ * the window has vsync. */
+EVIL_API void evil_window_show(const unsigned int *px, int w, int h)
+{
+  if (!evil_renderer)
+    return;
+  if (!evil_texture || w != evil_texture_w || h != evil_texture_h)
+  {
+    if (evil_texture)
+      SDL_DestroyTexture(evil_texture);
+    evil_texture = SDL_CreateTexture(evil_renderer, SDL_PIXELFORMAT_RGB888,
+                                     SDL_TEXTUREACCESS_STREAMING, w, h);
+    evil_texture_w = w;
+    evil_texture_h = h;
+    SDL_RenderSetLogicalSize(evil_renderer, w, h);
+  }
+  if (!evil_texture)
+    return;
+  SDL_UpdateTexture(evil_texture, NULL, px, w * 4);
+  SDL_SetRenderDrawColor(evil_renderer, 0, 0, 0, 255);
+  SDL_RenderClear(evil_renderer);
+  SDL_RenderCopy(evil_renderer, evil_texture, NULL, NULL);
+  SDL_RenderPresent(evil_renderer);
+}
+
+/* The window's events since the last call, as pairs (kind, value: see evil_event_filter); how
+ * many pairs. */
+EVIL_API int evil_window_events(int *out, int max)
+{
+  int i, n;
+  SDL_PumpEvents();
+  n = evil_event_count < max ? evil_event_count : max;
+  for (i = 0; i < n * 2; i++)
+    out[i] = evil_events[i];
+  evil_event_count = 0;
+  return n;
+}
+
+EVIL_API void evil_window_title(const char *title)
+{
+  if (evil_window)
+    SDL_SetWindowTitle(evil_window, title);
+}
+
+EVIL_API void evil_window_close(void)
+{
+  SDL_SetEventFilter(NULL, NULL);
+  if (evil_texture)
+    SDL_DestroyTexture(evil_texture);
+  if (evil_renderer)
+    SDL_DestroyRenderer(evil_renderer);
+  if (evil_window)
+    SDL_DestroyWindow(evil_window);
+  evil_texture = NULL;
+  evil_renderer = NULL;
+  evil_window = NULL;
+  evil_window_id = 0;
 }
 
 EVIL_API void evil_get_status(evil_status *out)

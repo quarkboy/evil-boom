@@ -38,8 +38,9 @@ tools/build-engine.sh                                    # -> third_party/dsda-d
 cd native && cargo build --release --target-dir ../out/build   # -> out/build/release/evil-boom
 ```
 
-The watch window (`evil-boom watch`) uses X11; it works on Wayland desktops through XWayland and
-under WSLg. `evil-boom record` needs `ffmpeg` on the path.
+The watch window (`evil-boom watch`) is the engine's own SDL window: native on X11, Wayland and
+Windows, kept to the screen's refresh. The score's small progress window (`score-watch`) uses X11
+(XWayland on Wayland desktops). `evil-boom record` needs `ffmpeg` on the path.
 
 **WSL:** works as on Linux. Keep the WADs inside the Linux file system (reading them through
 `/mnt/c` is slow). The console page is reachable from the LAN only with WSL's mirrored networking

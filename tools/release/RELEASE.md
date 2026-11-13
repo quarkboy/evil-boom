@@ -11,8 +11,8 @@ beside the program; settings are in `config/`.
   - Windows: Steam's install folder (`C:\Program Files (x86)\Steam\steamapps\common\Ultimate Doom`);
   - Linux: `~/.local/share/evilboom/` (copy Steam's `base/` folder there);
   - anywhere: set `EVILBOOM_DOOM_DIR` to the folder holding `base/`.
-- Linux: a desktop with OpenGL and X11 (or XWayland). The other libraries the engine needs are
-  in `lib/`.
+- Linux: a desktop (X11 or Wayland) with OpenGL. The other libraries the engine needs are in
+  `lib/`.
 
 ## Try it
 
