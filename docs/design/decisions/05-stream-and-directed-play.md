@@ -850,3 +850,13 @@ It cost an action in her context all game and a choice in every "What next?" for
 model could waste a turn on it. Removed from her actions and the console's raw actions; the
 naming itself stays, for directed scripts (`name`). Back in if Neuro on stream would name rooms
 for the fun of it.
+
+## doom_stop is doom_pause (2026-11-13)
+
+`doom_stop` dropped what she was doing, and 3 s later instinct took over again: "stop and wait"
+in name only, and never called in any log. Now `doom_pause` pauses the game, as a player
+stepping away: Doom's menu up (on its own screens), the game held, no instinct, nothing told
+her and no decision forced, till she plays on (`on: false`), or the watcher or the console
+does. No limit to it: nothing happens in a paused game. Meanwhile only what doesn't move her is
+registered (look, list, inspect, status, why, answer, policy, goal, pause), and anything else is
+refused, the console's as well. The directed scripts' `stop` stays as it was.

@@ -72,6 +72,9 @@ pub struct Session {
     /// a decision's forced on her (0: never); the console's to change
     idle_force: i64,
     ask_force: i64,
+    /// the game paused by her (as the watch has it), and her asking for it on or off
+    pub paused: bool,
+    pause_wanted: Option<bool>,
 }
 
 /// Every action's name, as `actions` has them.
@@ -88,7 +91,7 @@ const ALL_ACTIONS: &[&str] = &[
     "doom_policy",
     "doom_game",
     "doom_answer",
-    "doom_stop",
+    "doom_pause",
     "doom_status",
     "doom_goal",
     "doom_why",
@@ -100,6 +103,19 @@ const OFF_LEVEL: &[&str] = &[
     "doom_game",
     "doom_answer",
     "doom_status",
+    "doom_policy",
+    "doom_goal",
+];
+
+/// The game paused by her: what doesn't move her (asking, answering, settings) and playing on.
+const PAUSED: &[&str] = &[
+    "doom_pause",
+    "doom_look",
+    "doom_list",
+    "doom_inspect",
+    "doom_status",
+    "doom_why",
+    "doom_answer",
     "doom_policy",
     "doom_goal",
 ];
@@ -156,7 +172,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_policy", "description": format!("Your settings, kept till you change them. Give any to change them; none to hear them all. {} idle: seconds without an action from you before you play on by instinct (0: you wait for one). hints: when you get suggestions: off, on_stall (when you're stuck) or always. answers: seconds a question waits for your answer before its default is taken (0: no limit).", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["new", "thorough", "quick"] }, "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] }, "answers": { "type": "integer" } }), &[]) }),
         json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map; skill 1 easiest to 4 hardest; play single level or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer", "enum": [1, 2, 3, 4] }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
-        json!({ "name": "doom_stop", "description": "Stop and wait." }),
+        json!({ "name": "doom_pause", "description": "Pause the game, as stepping away from it: the menu comes up and nothing moves till you play on (on: false). on: true by default.", "schema": s(json!({ "on": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, what you're doing, what you're fighting." }),
         json!({ "name": "doom_goal", "description": "A standing aim, worked toward whenever no action of yours is in hand, till met: out, everything (100% then out), key (ref: a colour or key id), kills, supplies, secrets; none to drop it.", "schema": s(json!({ "goal": { "type": "string", "enum": ["out", "everything", "key", "kills", "supplies", "secrets", "none"] }, "ref": { "type": "string" } }), &["goal"]) }),
         json!({ "name": "doom_why", "description": "Why you're doing what you're doing: the aim and what it was chosen over, the fight, why you're not shooting, the last action that failed." }),
@@ -194,6 +210,8 @@ impl Session {
             registered: std::collections::BTreeSet::new(),
             idle_force: IDLE_FORCE,
             ask_force: ASK_FORCE,
+            paused: false,
+            pause_wanted: None,
         }
     }
 
@@ -296,10 +314,8 @@ impl Session {
     }
 
     /// A tic: what's come in handled; what's happened told; a decision forced if she's waited.
-    /// The lines for the log.
-    pub fn tic(&mut self, agent: &mut Agent, obs: &Observation) -> Vec<String> {
-        self.now_tic = obs.tic;
-        let mut log = Vec::new();
+    /// What's come from Neuro: connections, actions (done, and answered).
+    fn receive(&mut self, agent: &mut Agent, obs: &Observation, log: &mut Vec<String>) {
         while let Ok(i) = self.link.incoming.try_recv() {
             match i {
                 Incoming::Connected => {
@@ -350,6 +366,38 @@ impl Session {
                 }
             }
         }
+    }
+
+    /// The game paused by her: what she sends answered, nothing else (no tic of the director,
+    /// nothing told her, no decision forced on her).
+    pub fn tic_paused(&mut self, agent: &mut Agent, obs: &Observation) -> Vec<String> {
+        let mut log = Vec::new();
+        self.receive(agent, obs, &mut log);
+        let wanted = self.level_actions(agent);
+        self.sync_actions(wanted, &mut log);
+        log
+    }
+
+    /// Her asking for the game paused (true) or played on, once.
+    pub fn take_pause(&mut self) -> Option<bool> {
+        self.pause_wanted.take()
+    }
+
+    /// The game paused by her or not, as it now is (played on: her wait for an action starts
+    /// afresh).
+    pub fn set_paused(&mut self, on: bool, tic: i64) {
+        if self.paused && !on {
+            self.idle_since = tic;
+            self.forced = false;
+        }
+        self.paused = on;
+    }
+
+    /// The lines for the log.
+    pub fn tic(&mut self, agent: &mut Agent, obs: &Observation) -> Vec<String> {
+        self.now_tic = obs.tic;
+        let mut log = Vec::new();
+        self.receive(agent, obs, &mut log);
         if self.connected
             && (obs.tic - self.briefed_at >= BRIEF_EVERY || self.told_chars >= BRIEF_CHARS)
         {
@@ -386,13 +434,7 @@ impl Session {
                 self.force(
                     &q.line(obs.tic),
                     &format!("Answer q{}?", q.id),
-                    &[
-                        "doom_answer",
-                        "doom_go",
-                        "doom_explore",
-                        "doom_exit",
-                        "doom_stop",
-                    ],
+                    &["doom_answer", "doom_go", "doom_explore", "doom_exit"],
                     "high",
                 );
                 log.push(format!("neuro: q{} unanswered: decision forced", q.id));
@@ -433,6 +475,9 @@ impl Session {
     /// In a level: every action but the game's own (only where she may restart the level), and
     /// leaving only once she's seen an exit in this life (as stocking up waits for).
     fn level_actions(&self, agent: &Agent) -> std::collections::BTreeSet<&'static str> {
+        if self.paused {
+            return PAUSED.iter().copied().collect();
+        }
         let exit = agent.x().exit_seen_this_life();
         ALL_ACTIONS
             .iter()
@@ -730,6 +775,9 @@ impl Session {
                 .map(str::trim)
                 .filter(|v| !v.is_empty())
         };
+        if self.paused && !PAUSED.contains(&name) {
+            return (false, "Paused: doom_pause on: false first.".into());
+        }
         let sure = args.get("sure").and_then(Value::as_bool).unwrap_or(false);
         let rush = args.get("rush").and_then(Value::as_bool).unwrap_or(false);
         let then = args
@@ -927,9 +975,24 @@ impl Session {
                     Err(why) => (false, why),
                 }
             }
-            "doom_stop" => {
-                self.director.order(Order::Stop);
-                (true, "OK.".into())
+            "doom_pause" => {
+                let on = args.get("on").and_then(Value::as_bool).unwrap_or(true);
+                if on == self.paused {
+                    return (
+                        true,
+                        if on { "Paused already." } else { "Not paused." }.into(),
+                    );
+                }
+                self.pause_wanted = Some(on);
+                (
+                    true,
+                    if on {
+                        "Paused. doom_pause on: false to play on."
+                    } else {
+                        "Playing on."
+                    }
+                    .into(),
+                )
             }
             "doom_status" => (true, self.director.status(agent, obs)),
             "doom_why" => (true, self.director.why(agent, obs)),

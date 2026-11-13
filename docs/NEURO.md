@@ -45,7 +45,7 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_search` | search an area or a direction for secrets (thorough 2 or 3) |
 | `doom_press` | press a switch |
 | `doom_exit` | leave the level; with things left she's asked first (`sure: true` doesn't ask). Going on to another level with health, armor or ammo she's seen and could still take with her, the question names them and its default is to stock up first (the supplies goal) |
-| `doom_stop` | stop and wait |
+| `doom_pause` | pause the game, as stepping away (Doom's menu up on its own screens), till `on: false`; meanwhile only what doesn't move her is registered |
 | `doom_fight` | your say in the fight for a while: a target, a weapon, hold fire, a stance |
 | `doom_goal` | a standing aim worked toward whenever no action is in hand: out, everything, a key, kills, supplies, secrets |
 | `doom_policy` | standing settings: stance, save, risk, powerups, explore, idle, hints, answers |
