@@ -202,6 +202,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       <label>Play she may choose <select name="evil_play"><option value="">as Whole episode above</option><option value="single">one level</option><option value="continuous">on through the episode</option><option value="both">either</option></select></label>
       <div class="row wide">
         <button id="s-save">Save</button>
+        <span id="s-dirty" class="dim" style="font-size:12px" hidden>Changed, not saved yet (Start saves them first)</span>
         <button class="primary" id="s-apply">Save and restart game</button>
       </div>
     </form>
@@ -574,13 +575,16 @@ async function poll() {
   setTimeout(poll, 400);
 }
 
-$("g-start").onclick = () => act("api/game/start", {}, "Starting...");
+// (settings changed and not yet saved: saved first, so that the game started is the one they
+// say; Start had started it with the old ones, the new left unsaved in the form)
+async function savePending() { return formDirty ? !!(await save()) : true; }
+$("g-start").onclick = async () => { if (await savePending()) act("api/game/start", {}, "Starting..."); };
 $("g-stop").onclick = () => confirm("Stop the game?") && act("api/game/stop", {}, "Stopping...");
 $("g-begin").onclick = () => {
   const s = last && last.state && last.state.screen;
   if (s === "title" || confirm("Start the run again from the title card?")) cmd({ cmd: "begin" });
 };
-$("g-restart").onclick = () => confirm("Restart the game process?") && act("api/game/restart", {}, "Restarting...");
+$("g-restart").onclick = async () => { if (confirm("Restart the game process?") && await savePending()) act("api/game/restart", {}, "Restarting..."); };
 $("c-pause").onclick = () => cmd({ cmd: last && last.state && last.state.paused ? "resume" : "pause" });
 $("c-mute").onclick = () => cmd({ cmd: "mute", on: !(last && last.state && last.state.muted) });
 $("c-restart").onclick = () => confirm("Restart the level from its start?") && cmd({ cmd: "restart_level" });
@@ -636,8 +640,8 @@ for (const x of [0.5, 1, 2, 4, 8]) {
   const b = document.createElement("button"); b.textContent = "x" + x; b.dataset.x = x;
   b.onclick = () => cmd({ cmd: "speed", x }); $("speeds").append(b);
 }
-$("settings").addEventListener("input", () => { formDirty = true; });
-async function save() { const j = await act("api/settings", readForm(), "Saved."); if (j) formDirty = false; return j; }
+$("settings").addEventListener("input", () => { formDirty = true; $("s-dirty").hidden = false; });
+async function save() { const j = await act("api/settings", readForm(), "Saved."); if (j) { formDirty = false; $("s-dirty").hidden = true; } return j; }
 $("s-save").onclick = async () => { const j = await save(); if (j && j.restart_needed) say("Saved: restart the game to use them."); };
 $("s-apply").onclick = async () => { if (await save()) act(last && last.game.running ? "api/game/restart" : "api/game/start", {}, "Saved; (re)starting..."); };
 $("logfilter").onchange = () => { for (const d of $("log").children) d.hidden = !shown(d.dataset.k); $("log").scrollTop = $("log").scrollHeight; };
