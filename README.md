@@ -40,7 +40,7 @@ for both platforms, the packages to install and where the WADs go.
 
 For the original's sound, from your own copies: with the DOOM + DOOM II re-release on Steam,
 `--music sc55` (or the console's Music setting) plays its recordings of the soundtrack on a
-Roland SC-55; and Patch93's SC-55 SoundFont, saved as `soundfonts/SC-55.sf2`, plays the songs
+Roland SC-55; and Patch93's SC-55 SoundFont (Not included due to ambiguous licensing, google for it), saved as `soundfonts/SC-55.sf2`, plays the songs
 those don't have. [docs/BUILDING.md](docs/BUILDING.md#music-optional) says where each goes.
 Without them it's the OPL synth, as a Sound Blaster played it.
 
