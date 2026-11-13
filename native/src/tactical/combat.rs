@@ -2225,10 +2225,19 @@ impl Combat {
             .filter(|s| !self.patience.given_up(s.id, obs.tic))
             // Not after one she can't take on: out of its sight is where she wants to be.
             .filter(|s| !self.too_much(obs, &[s.name], self.tune.guns.outmatched))
-            .max_by(|a, b| mon(a.name).threat.total_cmp(&mon(b.name).threat))?;
-        let mut ghost = self.last_seen.get(&s.id)?.clone();
-        let at = self.reckoned(&s, obs.tic);
-        (ghost.x, ghost.y, ghost.z, ghost.vx, ghost.vy) = (at.0, at.1, s.z, 0.0, 0.0);
+            // Nor one out of reach of every gun she'd bring up, where it's reckoned to be: in
+            // sight, that one's passed by (`out_of_reach`), and gone from sight it's no more to
+            // keep at. (Kept at, a mancubus on a far ledge in and out of view as she walked on
+            // took her back into the fight and out again every second and a half, a minute
+            // long, MAP07.)
+            .filter_map(|s| {
+                let mut ghost = self.last_seen.get(&s.id)?.clone();
+                let at = self.reckoned(&s, obs.tic);
+                (ghost.x, ghost.y, ghost.z, ghost.vx, ghost.vy) = (at.0, at.1, s.z, 0.0, 0.0);
+                self.reachable(obs, &ghost).then_some((s, ghost, at))
+            })
+            .max_by(|a, b| mon(a.0.name).threat.total_cmp(&mon(b.0.name).threat));
+        let (s, ghost, at) = s?;
         let gun = self.preferred_gun(obs, &ghost);
         // (stepped about as for one in sight, and that's kept: holding still for it, as a player
         // waits at a corner, cost her on the score, -0.028 (2026-11-11): what comes back round

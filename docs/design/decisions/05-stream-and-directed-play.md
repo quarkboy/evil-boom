@@ -828,3 +828,15 @@ came first in 68 of 226 (20 of 229 without), and she left with on average 2.7 mo
 more armor, 40 more bullets and 13 more shells, 42 s later. No death came while stocking up (the
 deaths that differ are earlier in later levels, the run gone another way). E3M4 kills her about
 half the time either way.
+
+## Out of reach, out of mind (2026-11-13)
+
+Seen on stream, MAP07: the stream's "now" going between fighting the mancubi and pressing a
+switch for a minute, the mancubi not firing. Her log: every 1.4 s "fight over", "lost sight of
+Fatso: keeping at it", "out of reach: going on", and round again. A mancubus on a far ledge came
+in and out of view as she walked to the switch: in sight, `out_of_reach` judged it beyond every
+gun she'd bring up and sent her on; out of sight, `lost_sight` (meant for one that went behind
+a pillar) took it up again, never asking about reach. Now `lost_sight` keeps at one only if a gun
+she'd bring up reaches where it's reckoned to be, the same test as in sight. On MAP07 HMP, 8 seeds,
+the cycles went from 63 to 0. Score, run for run on the baseline's runs: +0.0093 (s.e. 0.0083),
+249 better, 192 worse; 0.450 against 0.440, exits 389 against 382.
