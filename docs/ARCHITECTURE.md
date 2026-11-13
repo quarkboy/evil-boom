@@ -47,8 +47,7 @@ Planning starts from the WAD itself, not from the engine:
 - `navigator`: the level's analysis (triggers, teleporters, jumps, what fits where) and the
   questions asked of it: where can she get to, and by which route.
 - `plan`, `walkthrough`: the search for a route to a goal through triggers, keys, lifts and
-  timed doors. The planner knows the whole map. What keeps her honest is that she only plans with
-  what she knows.
+  timed doors. The planner knows the whole map but limits the planning to only what evil knows at the time.
 
 ## What she knows
 
@@ -57,12 +56,12 @@ Planning starts from the WAD itself, not from the engine:
 - `sight` decides which lines she sees from where, as Doom's renderer would, so the automap she
   plans on is the one a player would have.
 - `knowledge/model` keeps what she's seen, heard, set off and learned: which switch moved which
-  sector, which floor hurts, which walls looked suspicious. It also keeps what she's sure of and
-  what she isn't.
+  sector, which floor hurts, which walls looked suspicious (this suspicion metric is somewhat hand tailored to the original DOOM and DOOM 2 maps.  It may give poorer results for custom PWADS.). It also keeps what she's sure of and what she isn't.
 - `knowledge/explorer` chooses objectives from that: unexplored ground, items, keys, doors and
   switches to try, walls that may hide a secret, the exit. They're ranked by kind and distance,
   safe ones before risky ones. The omniscient planner answers "how do I get there", but only
   through what she knows.
+- Note: the planner is not perfect.  Some secrets that involve jumping off a platform while in the middle of moving cannot be planned.  Other secrets involving a series of timed doors or waypoints may not be plannable under current logic (for example, the megasphere secret in MAP15 of DOOM II).  Future work to calculate these is on the roadmap.  It's an open question where "reverse search" from every secret sector would fall within the parameters of realism.  Evil, on her own, is not able to plan a movement sequence across multiple waypoints through the Neuro SDK: she can move to any sector, wall, or switch, and the pathfinding will do whatever it takes to get her there, but she can't say, for example "move to this coordinate, then this coordinate, then this coordinate, within 4 seconds".
 
 ## The fight
 
@@ -78,7 +77,7 @@ Planning starts from the WAD itself, not from the engine:
   place. `evil-boom tuning` prints them; `--tuning FILE` changes them for a run.
 - `tactical/player.rs`: the fight and the explorer together. It decides who has her legs and
   runs retreats (to cover, back the way she came, out of a crowd).
-- `tactical/bestiary.rs`: monsters, missiles, weapons and items by their numbers.
+- `tactical/bestiary.rs`: monsters, missiles, weapons and items by their numbers.  Evil is assumed to know the basics of the enemies in the game, she does not need to "learn" what the monsters and guns do, only the level layouts.
 
 ## Getting there
 
@@ -106,7 +105,7 @@ and replanning when the world doesn't match the plan.
 - `console/`: the stream console, a web page that supervises a `watch` child process
   ([CONSOLE.md](CONSOLE.md)).
 - `arena`, `drive`, `survey`: fights set up for development, driving by hand, the secret survey.
-- `advisor`: an optional decision model asked during play (TypeSafe's System One kind).
+- `advisor`: an optional decision model asked during play (TypeSafe's System One kind).  TODO item, not yet implemented.  Designed to make faster, more common decisions but non deterministically.
 
 ## Determinism
 

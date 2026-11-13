@@ -18,9 +18,10 @@ and stepped a tic at a time from Rust.
   and a distance for each monster, clears barrels, and knows when to run.
 - **Takes orders** from an AI through the Neuro SDK, or from a script: go there, explore,
   search for secrets, fight that, hold fire, set a goal. It tells the AI what happened in short,
-  second-person lines. With no orders for a few seconds it carries on by instinct.
-- **Runs a stream:** a 16:9 stream window with Doom's own screens, and a web console for whoever
+  second-person lines. Optionally, with no orders for a few seconds it carries on by instinct.
+- **Runs a stream:** a 16:9 stream window with Doom's own screens and a customizable HUD, and a web console for whoever
   runs the stream to start, steer and stop the game.
+  **Debugging and testing** there are numerous tools and scripts developed for testing new code effectiveness, Neuro SDK behavior, and setting up quality comparisons, and a special watch screen for debugging and recording play sessions.
 
 ## Quick start
 
@@ -54,8 +55,12 @@ Without them it's the OPL synth, as a Sound Blaster played it.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | how it works, and where things are in the code |
 | [docs/TESTING.md](docs/TESTING.md) | tests, parity checks, and the score that judges every change |
 | [docs/DEBUGGING.md](docs/DEBUGGING.md) | tracing a failed run back to its cause |
-| [docs/design/](docs/design/README.md) | the design history: decisions, plans, what was tried |
+| [docs/design/](docs/design/README.md) | the design history: decisions, plans, what was tried <- WARNING! very vibey> |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | how changes are made and judged |
+
+## Use of AI in the development of this project
+
+AI coding assistants were used heavily in the development of this project, from planning, testing, and writing and cleaning up code.  The primary code was written by Claude Opus 5.5 (medium), and later by Fable 5.2 (medium).  Care was taken to cleanup comments, maintain logical code structure, and multiple cleanup and refactoring rounds have made a sprawling codebase somewhat nice, ultimately.  All development direction and manual testing was done by humans with a good knowledge of DOOM.  AI Agents were used to attempt to debug stuck issues in multiple levels at once, but ultimately the vast majority was vibe coded old school style:  ask for a feature plan, evaluate the plan with the human, ask for changes, develop a smoke test, develop the full feature, run multiple scoring evaluations (or test in strea mode), and continue to iterate.  This has resulted in a pretty clean, straightforward codebase that is not overly engineered (except maybe the optional logging).
 
 ## License
 

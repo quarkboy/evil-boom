@@ -14,8 +14,7 @@ code; [docs/TESTING.md](docs/TESTING.md) has the commands.
   she has seen and heard, not by the game's state. The omniscient planner stays underneath for
   "how do I get there", filtered through what she knows. Don't add new omniscient shortcuts. A
   little is tolerated where it plays clearly better on stream, and it's documented when it is.
-- **No rules that depend on lives left.** Lives are a test setting; the goal is everything on
-  one life.
+- **No rules that depend on lives left.** Lives is a setting created for testing that is more accurate called "max retries", because of dooms RNG and the concept of increasing knowledge of the map, it was thought useful to test how far she can get in hard maps if she tries again and again.  But for live play, her restarts should only be limited by streaming time.  
 
 ## How changes are made
 
@@ -23,19 +22,19 @@ code; [docs/TESTING.md](docs/TESTING.md) has the commands.
   the decision that caused it ([docs/DEBUGGING.md](docs/DEBUGGING.md)). Work out the game
   mechanics involved: check the engine's source and the map's lines with `evil-boom sector`.
   Then find the narrowest rule that covers the failure, and check everything else that rule
-  touches. Guessed fixes and first-idea heuristics tend to cost more than they save.
+  touches. Guessed fixes and first-idea heuristics tend to cost more than they save.  If you are a human, watching the exact seed play the level can usually give you a good sense of what went wrong, though sometimes mistakes early in a map will cascase.  
 - **General, never level-specific.** Every rule comes from the game's mechanics and what she can
   observe, so it holds on any map or WAD. No map names, sector or line numbers, or coordinates
-  in a rule. The failing map is only the test case.
-- **Look it up** (the Doom Wiki, secret lists) before calling something unreachable or broken.
+  in a rule. The failing map is only the test case.  Some gimmick maps (barrel's o fun, tricks and traps) are really hard without level specific logic, but resist the temptation.
+- **Look it up** (the Doom Wiki, secret lists) before calling something unreachable or broken.  Literally everything in this game is known and on the internet somewhere (maybe an ftp from the 1990s, but it's somewhere)
 - **Measured by the score.** A change to how she plays is scored on the baseline's very runs
   (`tools/score/step.sh`) and kept if it's no worse within the noise. A change meant to change
   nothing is checked with `tools/parity.sh`, or `tools/dev/code_only.py --check` for comments.
-  See [docs/TESTING.md](docs/TESTING.md).
+  See [docs/TESTING.md](docs/TESTING.md).  The score is quite random.  A change that fixes one bit of stuck issue can lower score because it causes the bot to take a different route with a lower survivability rate in other levels, even if it's the "correct" choice.
 - **Several seeds** wherever randomness matters: any fight, shot barrels. Runs without monsters
   or barrels don't depend on the seed.
 - **TNT and Plutonia are held out.** Develop and tune on DOOM and DOOM II only; the other two
-  check that it generalises.
+  check that it generalises.  Note, this is an internal rule, so you can test how you want, but I have been leaving those two wads as kind of "final exams" and not scoring them on purpose until I had something I was satisfied with.
 
 ## Code
 
@@ -61,6 +60,7 @@ code; [docs/TESTING.md](docs/TESTING.md) has the commands.
 - The message says what failed, why, what the rule is, and the before and after numbers (the
   score, run for run, with its standard error).
 - Design decisions worth keeping go in [docs/design/](docs/design/README.md).
+- Pull requests for compatibility with custom PWADS are lower priority than official releases. Full MBF21 compatibility is on a later roadmap.
 
 ## The engine
 
