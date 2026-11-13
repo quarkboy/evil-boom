@@ -14,6 +14,11 @@ use serde::{Deserialize, Serialize};
 /// The protocol's version, in the game's hello: a supervisor and a game built apart may not agree.
 pub const PROTOCOL: u32 = 7;
 
+/// The stream window's column's items, top to bottom, as the console names them to hide them.
+pub const COLUMN_ITEMS: [&str; 8] = [
+    "level", "map", "now", "calls", "says", "tally", "run", "lately",
+];
+
 /// What the console asks of the running game, applied by it at the top of a frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
@@ -91,6 +96,10 @@ pub enum Command {
     /// the stream window's column to this side ("left", "right")
     Panel {
         side: String,
+    },
+    /// the stream window's column without these of its items (`COLUMN_ITEMS`)
+    Column {
+        hide: Vec<String>,
     },
     /// the games hers to start (`control::game::Choices::parse`'s words, every part given);
     /// none: none

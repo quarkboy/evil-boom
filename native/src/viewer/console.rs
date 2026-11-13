@@ -385,6 +385,14 @@ impl Watch {
                     };
                     self.agent.x_mut().log.push(line);
                 }
+                Command::Column { hide } => match self.stream.as_mut() {
+                    Some(st) => st.hidden = hide,
+                    None => self
+                        .agent
+                        .x_mut()
+                        .log
+                        .push("console: not the stream's window: no column".into()),
+                },
                 Command::Panel { side } => {
                     match (self.stream.as_mut(), super::StreamSide::parse(&side)) {
                         (Some(st), Some(s)) => st.side = s,

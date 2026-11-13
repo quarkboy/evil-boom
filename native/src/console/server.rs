@@ -93,6 +93,8 @@ pub struct Settings {
     pub layout: String,
     /// the stream window's column: "right" or "left"
     pub panel_side: String,
+    /// the column's items not shown (`COLUMN_ITEMS`); changed from the page as it plays
+    pub column_hide: Vec<String>,
     /// the game's window that size ("1280x720"), the picture scaled to it; "": the picture's
     /// own (1920x1080 for the stream)
     pub window_size: String,
@@ -144,6 +146,7 @@ impl Default for Settings {
             title_wait: true,
             layout: "stream".into(),
             panel_side: "right".into(),
+            column_hide: Vec::new(),
             window_size: String::new(),
             render_size: String::new(),
             music: String::new(),
@@ -218,6 +221,16 @@ impl Settings {
         }
         if self.mode == "neuro" && !self.neuro_url.starts_with("ws://") {
             return Err("neuro_url: ws://host:port".into());
+        }
+        if let Some(h) = self
+            .column_hide
+            .iter()
+            .find(|h| !super::COLUMN_ITEMS.contains(&h.as_str()))
+        {
+            return Err(format!(
+                "column_hide: no \"{h}\" ({})",
+                super::COLUMN_ITEMS.join(", ")
+            ));
         }
         let name = self.console_name.trim();
         if name.is_empty() || name.chars().count() > 32 || name.chars().any(char::is_control) {
@@ -614,6 +627,8 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 }
                 let name = s.settings.console_name.trim().to_string();
                 let _ = s.send(&Command::ConsoleName { name });
+                let hide = s.settings.column_hide.clone();
+                let _ = s.send(&Command::Column { hide });
                 let (idle, ask) = (s.settings.force_idle, s.settings.force_ask);
                 if idle.is_some() || ask.is_some() {
                     let _ = s.send(&Command::Forcing { idle, ask });
@@ -994,6 +1009,23 @@ fn handle(hub: &Hub, mut req: Request) {
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))
+                } else if matches!(c, Command::Column { .. } | Command::Panel { .. }) {
+                    // (the stream's column: shown at once, kept for the next game as well)
+                    let mut st = s.settings.clone();
+                    match &c {
+                        Command::Column { hide } => st.column_hide.clone_from(hide),
+                        Command::Panel { side } => st.panel_side.clone_from(side),
+                        _ => {}
+                    }
+                    match st.check() {
+                        Ok(()) => {
+                            s.settings = st;
+                            let saved = s.save();
+                            let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
+                            done(saved.and(sent))
+                        }
+                        Err(e) => (400, json!({ "error": e })),
+                    }
                 } else if let Command::Forcing { idle, ask } = c {
                     // (kept for the next game as well)
                     let st = &mut s.settings;
@@ -1018,9 +1050,17 @@ fn handle(hub: &Hub, mut req: Request) {
             }) {
                 Ok(()) => {
                     let mut s = lock(hub);
-                    // (the column's side moves now; the rest is for the next game)
+                    // (the column's side and items change now, and who's at the console; the
+                    // rest is for the next game)
                     if s.settings.panel_side != new.panel_side && s.to_game.is_some() {
                         let _ = s.send(&Command::Panel { side: new.panel_side.clone() });
+                    }
+                    if s.settings.column_hide != new.column_hide && s.to_game.is_some() {
+                        let _ = s.send(&Command::Column { hide: new.column_hide.clone() });
+                    }
+                    if s.settings.console_name != new.console_name && s.to_game.is_some() {
+                        let name = new.console_name.trim().to_string();
+                        let _ = s.send(&Command::ConsoleName { name });
                     }
                     // (and what's hers to start: at once too)
                     if s.settings.choices() != new.choices() && s.to_game.is_some() {
@@ -1028,6 +1068,8 @@ fn handle(hub: &Hub, mut req: Request) {
                     }
                     let unchanged = Settings {
                         panel_side: new.panel_side.clone(),
+                        column_hide: new.column_hide.clone(),
+                        console_name: new.console_name.clone(),
                         evil_starts: new.evil_starts,
                         evil_maps: new.evil_maps.clone(),
                         evil_skills: new.evil_skills.clone(),

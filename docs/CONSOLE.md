@@ -49,7 +49,7 @@ form's changes first).
 | Your name, as she's told it | `console_name` | who she's told says or does what comes from the page ("Vedal: ...", "Vedal did doom_go ..."); Vedal by default |
 | Levels, Skills, Play she may choose | `evil_maps`, `evil_skills`, `evil_play` | what Evil's offered when she chooses the game (skills 1-4: never Nightmare) |
 | She goes on to the next level herself; She may restart a level | `evil_next`, `evil_restart` | hers while she directs: from the tally (else it goes on after 30 s); after 90 s with nothing new |
-| **Window:** Layout, Column | `layout`, `panel_side` | `stream` (16:9, the game and a viewers' column, on the right or left) or `watcher` (the game, the map and her log) |
+| **Window:** Layout | `layout` | `stream` (16:9, the game and a viewers' column) or `watcher` (the game, the map and her log) |
 | Window resolution, Vsync, Full screen | `window_size`, `vsync`, `fullscreen` | the window's size (empty: the picture's own, 1920x1080 for the stream, scaled to fit), frames at the screen's refresh, the whole screen (borderless) |
 | Game rendering resolution | `render_size` | the size the game itself is drawn at (empty: 640x480; 320x200 as in 1994, stretched to 4:3 as its screens were); the stream's game is 1440x1080 of its picture |
 | **Sound:** Music | `music` | the songs as recorded, from your own Steam copy of the DOOM + DOOM II re-release: `sc55` (the original soundtrack on a Roland SC-55) or `idkfa` (Andrew Hulshult's); empty: all as MIDI |
@@ -72,6 +72,11 @@ Actions from the page are marked as yours, and she's told of them by the name in
 soon a decision's forced on her when she's waited with nothing to do (6 s) or left a question
 unanswered (3 s), 0 for never; kept in `config/console.local.json` (`force_idle`, `force_ask`)
 for the next game.
+
+The Stream column section sets the stream window's column: its side, and which of its items it
+shows (the level, the map, now, Evil's calls, Evil says, the tally, the run, lately; those left
+shown move up). Each change shows at once, no Save needed, and is kept for the next game
+(`panel_side`, `column_hide`).
 
 The View section's pictures (the map as she knows it, the game, the stream's window) are made
 by the game only while a page shows them: its View section unfolded and the page in sight. OBS

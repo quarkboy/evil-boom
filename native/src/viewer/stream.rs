@@ -56,6 +56,8 @@ impl Side {
 /// The column's memory: the run so far and what's happened, across the levels.
 pub(super) struct Stream {
     pub(super) side: Side,
+    /// the column's items not shown (`console::COLUMN_ITEMS`; the console's, live)
+    pub(super) hidden: Vec<String>,
     /// the skill's name
     skill: &'static str,
     /// this level's title ("Dead Simple"), and the map it's for
@@ -87,6 +89,7 @@ impl Stream {
         };
         Stream {
             side,
+            hidden: Vec::new(),
             skill,
             title: (String::new(), String::new()),
             events: VecDeque::new(),
@@ -246,22 +249,26 @@ impl Watch {
         let edge = if r.0 == 0 { r.0 + r.2 - 3 } else { r.0 };
         c.fill((edge, 0, 3, r.3), (90, 16, 16));
         let (x, inner) = (r.0 + PAD, r.2 - 2 * PAD);
+        let shows = |item: &str| !st.hidden.iter().any(|h| h == item);
         let mut y = PAD;
-        y = say(c, &self.map_name, (x, y), 30.0, RED);
-        for line in wrap(&st.title.0, inner / 20).into_iter().take(2) {
-            y = say(c, &line, (x, y), 20.0, TEXT);
+        if shows("level") {
+            y = say(c, &self.map_name, (x, y), 30.0, RED);
+            for line in wrap(&st.title.0, inner / 20).into_iter().take(2) {
+                y = say(c, &line, (x, y), 20.0, TEXT);
+            }
+            let level_time = clock(self.engine.tic);
+            y = say(
+                c,
+                &format!("{}  ·  {level_time}", st.skill),
+                (x, y + 2),
+                14.0,
+                DIM,
+            ) + 10;
         }
-        let level_time = clock(self.engine.tic);
-        y = say(
-            c,
-            &format!("{}  ·  {level_time}", st.skill),
-            (x, y + 2),
-            14.0,
-            DIM,
-        ) + 10;
         // the map of what she's seen, following her
         let bx: Rect = (x, y, inner, inner);
         match &self.obs {
+            _ if !shows("map") => {}
             Some(o)
                 if self
                     .present
@@ -280,21 +287,26 @@ impl Watch {
             }
             _ => c.fill(bx, (8, 8, 10)),
         }
-        outline(c, bx, (52, 52, 64));
-        y += inner + 16;
-        // what she's doing
-        y = heading(c, "NOW", (x, y));
-        for line in wrap(&self.doing_now(), inner / 18).into_iter().take(3) {
-            y = say(c, &line, (x, y), 18.0, TEXT);
+        if shows("map") {
+            outline(c, bx, (52, 52, 64));
+            y += inner + 16;
         }
-        y += 10;
+        // what she's doing
+        if shows("now") {
+            y = heading(c, "NOW", (x, y));
+            for line in wrap(&self.doing_now(), inner / 18).into_iter().take(3) {
+                y = say(c, &line, (x, y), 18.0, TEXT);
+            }
+            y += 10;
+        }
         // her calls: how she's fighting, what she's said that still holds
         let calls = self
             .neuro
             .as_ref()
             .map(|n| &n.director)
             .or(self.feed.as_ref().map(|f| &f.director))
-            .map(|d| d.calls(self.engine.tic));
+            .map(|d| d.calls(self.engine.tic))
+            .filter(|_| shows("calls"));
         if let Some(calls) = calls {
             y = heading(c, "EVIL'S CALLS", (x, y));
             for line in calls.iter().take(4) {
@@ -303,7 +315,7 @@ impl Watch {
             y += 10;
         }
         // what Evil said
-        if !st.said.is_empty() {
+        if !st.said.is_empty() && shows("says") {
             y = heading(c, "EVIL SAYS", (x, y));
             let mut lines: Vec<String> = Vec::new();
             for s in st.said.iter().rev().take(2) {
@@ -315,13 +327,18 @@ impl Watch {
             y += 10;
         }
         // the tally
-        y = heading(c, "TALLY", (x, y));
         let t = self.engine.tally();
+        if shows("tally") {
+            y = heading(c, "TALLY", (x, y));
+        }
         for (name, (got, of), colour) in [
             ("Kills", t[1], (200, 64, 52)),
             ("Items", t[0], (72, 160, 224)),
             ("Secrets", t[2], (232, 200, 64)),
-        ] {
+        ]
+        .into_iter()
+        .filter(|_| shows("tally"))
+        {
             say(c, name, (x, y), 15.0, TEXT);
             let n = format!("{got}/{of}");
             say(c, &n, (x + inner - n.len() * 15, y), 15.0, TEXT);
@@ -336,22 +353,29 @@ impl Watch {
             c.fill((x, y, filled, 7), colour);
             y += 15;
         }
-        y += 6;
+        if shows("tally") {
+            y += 6;
+        }
         // the run
-        y = heading(c, "RUN", (x, y));
-        y = say(
-            c,
-            &format!(
-                "levels {}  ·  deaths {}  ·  {}",
-                st.levels,
-                st.deaths,
-                clock(st.run_tics)
-            ),
-            (x, y),
-            15.0,
-            TEXT,
-        ) + 10;
+        if shows("run") {
+            y = heading(c, "RUN", (x, y));
+            y = say(
+                c,
+                &format!(
+                    "levels {}  ·  deaths {}  ·  {}",
+                    st.levels,
+                    st.deaths,
+                    clock(st.run_tics)
+                ),
+                (x, y),
+                15.0,
+                TEXT,
+            ) + 10;
+        }
         // lately, newest first, till the column's full
+        if !shows("lately") {
+            return;
+        }
         y = heading(c, "LATELY", (x, y));
         for (i, (text, colour, n)) in st.events.iter().rev().enumerate() {
             let text = if *n > 1 {

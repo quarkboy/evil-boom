@@ -152,6 +152,22 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
     <p class="dim" id="v-note" style="margin:0;font-size:12px"></p>
   </section>
 
+  <section id="sec-column">
+    <h2>Stream column <span class="dim" style="text-transform:none;letter-spacing:0">(the stream window's: changes at once, kept for the next game)</span></h2>
+    <div class="row"><label>Side <select id="col-side"><option value="right">on the right</option><option value="left">on the left</option></select></label></div>
+    <div class="row" style="flex-wrap:wrap;gap:4px 14px">
+          <span class="check" style="display:inline-flex"><input type="checkbox" data-col="level" id="c-level" checked><label for="c-level" class="check">Level</label></span>
+          <span class="check" style="display:inline-flex"><input type="checkbox" data-col="map" id="c-map" checked><label for="c-map" class="check">Map</label></span>
+          <span class="check" style="display:inline-flex"><input type="checkbox" data-col="now" id="c-now" checked><label for="c-now" class="check">Now</label></span>
+          <span class="check" style="display:inline-flex"><input type="checkbox" data-col="calls" id="c-calls" checked><label for="c-calls" class="check">Evil's calls</label></span>
+          <span class="check" style="display:inline-flex"><input type="checkbox" data-col="says" id="c-says" checked><label for="c-says" class="check">Evil says</label></span>
+          <span class="check" style="display:inline-flex"><input type="checkbox" data-col="tally" id="c-tally" checked><label for="c-tally" class="check">Tally</label></span>
+          <span class="check" style="display:inline-flex"><input type="checkbox" data-col="run" id="c-run" checked><label for="c-run" class="check">Run</label></span>
+          <span class="check" style="display:inline-flex"><input type="checkbox" data-col="lately" id="c-lately" checked><label for="c-lately" class="check">Lately</label></span>
+    </div>
+    <p class="dim" id="col-note" style="margin:0;font-size:12px" hidden>Only in the stream layout (Settings, Window).</p>
+  </section>
+
   <section id="sec-talk">
     <h2>Talk to Evil <span class="dim" style="text-transform:none;letter-spacing:0">(directed by Neuro or the GPT stand-in)</span></h2>
     <div class="row">
@@ -195,7 +211,6 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
       </fieldset>
       <fieldset class="group wide"><legend>Window</legend>
         <label>Layout <select name="layout"><option value="stream">for the stream (16:9)</option><option value="watcher">the watcher (map and log)</option></select></label>
-        <label data-when="stream">Column <select name="panel_side"><option value="right">on the right</option><option value="left">on the left</option></select></label>
         <label>Window resolution <select name="window_size"><option value="">its own (stream: 1920x1080)</option><option>1280x720</option><option>1366x768</option><option>1600x900</option><option>1920x1080</option><option>2560x1440</option><option>3840x2160</option></select></label>
         <label title="The size the game itself is drawn at, 4:3. The stream's game fills 1440x1080 of its picture, the watcher's 800x600: bigger is scaled down again">Game rendering resolution <select name="render_size"><option value="320x200">320x200 (1994)</option><option>320x240</option><option>400x300</option><option>512x384</option><option value="">640x480 (its own)</option><option>800x600</option><option>960x720</option><option>1280x960</option><option>1440x1080</option></select></label>
         <span class="check"><input type="checkbox" name="vsync" id="s-vsync"><label for="s-vsync" class="check" title="Frames shown at the screen's refresh: steady; off, as soon as they're ready">Vsync</label></span>
@@ -383,6 +398,17 @@ async function act(path, body, okText) {
 }
 const cmd = (c) => act("api/cmd", c);
 
+// (the stream's column: its side and what it hides; each change sent at once, and kept)
+const columnHidden = () => [...document.querySelectorAll("[data-col]")].filter((c) => !c.checked).map((c) => c.dataset.col);
+for (const c of document.querySelectorAll("[data-col]")) c.onchange = () => cmd({ cmd: "column", hide: columnHidden() });
+$("col-side").onchange = () => cmd({ cmd: "panel", side: $("col-side").value });
+function fillColumn(s) {
+  if ($("sec-column").contains(document.activeElement)) return; // (being changed here)
+  $("col-side").value = s.panel_side || "right";
+  for (const c of document.querySelectorAll("[data-col]")) c.checked = !(s.column_hide || []).includes(c.dataset.col);
+  $("col-note").hidden = s.layout === "stream";
+}
+
 function badge(el, text, cls) { el.textContent = text; el.className = "badge " + (cls || ""); }
 
 function render(p) {
@@ -461,6 +487,7 @@ function render(p) {
   // (the recordings offered only with a re-release to make them from)
   for (const o of $("settings").elements.music.options) if (o.value) o.disabled = !p.rerelease;
   if (!formDirty) fillForm(p.settings);
+  fillColumn(p.settings);
   for (const name of ["map", "game", "stream"]) showView(name, (p.views || {})[name]);
   renderEvil(p.connected && st && st.evil, n);
   addLog(p.log);
@@ -648,6 +675,8 @@ function readForm() {
     else if (el.name === "seed") s.seed = el.value.trim() === "" ? null : Number(el.value);
     else s[el.name] = el.value.trim();
   }
+  s.column_hide = columnHidden();
+  s.panel_side = $("col-side").value;
   // (the title card's choice, kept as it always was: waiting there, and Evil's to start)
   const tc = $("s-titlecard").value;
   s.title_wait = tc !== "go";
