@@ -230,10 +230,10 @@ enum Aim {
 }
 
 /// a tactic holds this long (seconds) unless she says, and at most this long
-const TACTIC_SECONDS: f64 = 10.0;
+pub const TACTIC_SECONDS: f64 = 10.0;
 const TACTIC_MOST: f64 = 60.0;
 /// a stance, longer
-const STANCE_SECONDS: f64 = 30.0;
+pub const STANCE_SECONDS: f64 = 30.0;
 const STANCE_MOST: f64 = 180.0;
 
 /// The stances she can order, with what each puts over the tuning (the advisor's, as
