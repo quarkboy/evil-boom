@@ -152,6 +152,12 @@ pub struct Objective {
     pub worth: Option<f64>,
     /// it would cut her off from where other objectives are, as far as she knows: those first
     pub later: bool,
+    /// going on to another level: something she'd take with her (health, armor, ammo she'd
+    /// start the next one short of), had before the exit (`Hooks::stocking`)
+    pub stock: bool,
+    /// and wanted only for that: not one of her choices otherwise, only weighed when the exit's
+    /// what she'd do next
+    pub stock_only: bool,
 }
 
 /// An objective's identity, for dropping it a while.
@@ -186,6 +192,8 @@ impl Objective {
             later: false,
             suspicion: 0.0,
             round: false,
+            stock: false,
+            stock_only: false,
         }
     }
 
@@ -282,6 +290,11 @@ pub trait Hooks {
         false
     }
     /// rather the level again than out (asks restart_wanted)
+    /// Going on to another level after this one: what she'd take with her had before the exit,
+    /// all of it she can get to (`Objective::stock`).
+    fn stocking(&self) -> bool {
+        false
+    }
     fn before_exit(&mut self, _x: &Explorer, _obs: &Observation) -> bool {
         false
     }
@@ -428,6 +441,15 @@ pub struct Explorer {
     pub nav: Rc<Navigator>,
     pub knowledge: Knowledge,
     pub current: Option<Objective>,
+    /// (for measuring the stocking up before an exit) when the exit first came first of what
+    /// she'd do, and what she was sent for before it, going on (`Hooks::stocking`)
+    pub exit_first: Option<i64>,
+    pub stock_chosen: Vec<String>,
+    /// what `list_objectives` set aside as wanted only to take on to another level
+    stock_aside: Vec<Objective>,
+    /// when this life began (the level's start, or since she died): stocking up waits for the
+    /// exit seen in it
+    life_began: Option<i64>,
     pub follower: Option<RouteFollower>,
     /// directed play: she doesn't choose objectives herself; she's given them (`take`), and when
     /// one ends, how is kept in `ended` for whoever gave it, and she waits for the next
@@ -644,6 +666,10 @@ impl Explorer {
             nav,
             knowledge,
             current: None,
+            exit_first: None,
+            stock_chosen: Vec::new(),
+            stock_aside: Vec::new(),
+            life_began: None,
             follower: None,
             directed: false,
             ended: None,
@@ -738,6 +764,22 @@ impl Explorer {
         self.trapped = None;
     }
 
+    /// An exit she knows of seen in this life: a sector by one of its lines (or a floor that
+    /// ended the level) in her view since the level began or she last died. Known only from a
+    /// life before, it isn't yet: she's not done with the level till she's found her way to it
+    /// again.
+    pub fn exit_seen_this_life(&self) -> bool {
+        let began = self.life_began.unwrap_or(0);
+        let k = &self.knowledge;
+        let seen = |s: usize| k.seen_tic.get(&s).is_some_and(|&t| t >= began);
+        let map = &self.nav.map;
+        k.exits().into_iter().any(|li| {
+            map.linedefs.get(li).is_some_and(|l| {
+                map.front_sector(l).is_some_and(seen) || map.back_sector(l).is_some_and(seen)
+            })
+        }) || k.exit_floors.iter().any(|&s| seen(s))
+    }
+
     pub fn restart(&mut self) {
         if let Some(t) = self.trapped.take() {
             self.log.push(format!(
@@ -752,6 +794,7 @@ impl Explorer {
             .push(format!("--- died: life {}", self.knowledge.lives));
         self.current = None;
         self.follower = None;
+        self.life_began = None;
         self.dropped.clear();
         self.drop_count.clear();
         self.secrets_had.clear();
@@ -808,6 +851,7 @@ impl Explorer {
         last: Option<&Controls>,
         hooks: &mut dyn Hooks,
     ) -> Controls {
+        self.life_began.get_or_insert(obs.tic);
         if let Some(h) = self.held_since.take() {
             self.since += obs.tic - h;
             if let Some(f) = &mut self.follower {

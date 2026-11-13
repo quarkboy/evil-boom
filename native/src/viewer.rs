@@ -1194,6 +1194,14 @@ fn level(
         o.lives,
         Tuning::from(o.tuning.as_deref())?,
     );
+    // (on through the episode, a level after this one: what she'd take with her had first)
+    if let Some(p) = agent.player_mut() {
+        p.set_going_on(
+            o.episode
+                && (crate::sweep::next_map(&map_name, false).is_some()
+                    || crate::sweep::next_map(&map_name, true).is_some()),
+        );
+    }
     // (a 100% run as a sweep plays it: the exit held back while what it's after is short, given
     // up on after a stall)
     let hold = (o.expert || o.secrets || o.complete).then(|| {

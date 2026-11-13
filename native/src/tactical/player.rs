@@ -81,6 +81,9 @@ fn mhealth(name: &str) -> f64 {
 /// What the player's hooks into the explorer need: the fight's state.
 struct Fight {
     combat: Combat,
+    /// the game goes on to another level after this one (an episode played through): what
+    /// she'd take with her is had before the exit (`stock`)
+    going_on: bool,
     /// the numbers she judges by (the fight's are the same)
     tune: Rc<Tuning>,
     /// what the hooks had to say (logged once the explorer's done)
@@ -290,6 +293,7 @@ impl Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
             fight: Fight {
                 combat: Combat::new(nav, Rc::clone(&tune)),
+                going_on: false,
                 tune: Rc::clone(&tune),
                 pending_log: Vec::new(),
                 offered: BTreeSet::new(),
@@ -403,6 +407,42 @@ impl Player {
         seen.barrels_lit
             .retain(|&l| barrels.iter().any(|&b| dist(b, l) < 1.0));
         seen
+    }
+
+    /// The game goes on to another level after this one (or doesn't): what she'd take with her
+    /// is had before the exit.
+    pub fn set_going_on(&mut self, on: bool) {
+        self.fight.going_on = on;
+    }
+
+    pub fn going_on(&self) -> bool {
+        self.fight.going_on
+    }
+
+    /// What she'd take with her into the next level, of what she's seen lying about and could
+    /// get to (going on: `Objective::stock`), by name, nearest first; empty if she's not going on.
+    pub fn stock_left(&mut self, obs: &Observation) -> Vec<String> {
+        if !self.fight.going_on {
+            return Vec::new();
+        }
+        let seen = self.percept(obs);
+        let pos = obs.pos();
+        let mut out: Vec<(f64, String)> = self
+            .explorer
+            .ranked(&seen, false, &mut self.fight)
+            .into_iter()
+            .filter(|o| o.stock)
+            .filter_map(|o| {
+                let t = seen
+                    .things
+                    .iter()
+                    .flatten()
+                    .find(|t| Some(t.id) == o.thing)?;
+                Some((dist((t.x, t.y), pos), t.name.to_string()))
+            })
+            .collect();
+        out.sort_by(|a, b| a.0.total_cmp(&b.0));
+        out.into_iter().map(|(_, n)| n).collect()
     }
 
     /// A decision model to ask (see `crate::advisor`).
@@ -2563,6 +2603,54 @@ impl Fight {
 }
 
 impl Fight {
+    /// What a pickup would add to what she starts the next level with, as a share: health (of
+    /// 100), armor (of 100), a gun's ammo she has (of what it can be), a backpack's room; 0 once
+    /// she's no need of it (full health, that ammo full, armor no better than hers). None of the
+    /// bonuses (a point each), nor the powers (they don't last into the next level), nor guns she
+    /// hasn't (had as they are).
+    fn stock_gain(&self, obs: &Observation, name: &str, health: f64, held: &[i32]) -> f64 {
+        if matches!(name, "HealthBonus" | "ArmorBonus") {
+            return 0.0;
+        }
+        if let Some((amount, cap)) = health_item(name) {
+            return (f64::from(amount).min(f64::from(cap) - health) / 100.0).max(0.0);
+        }
+        if armor_item(name).is_some() {
+            return (Combat::pickup_gain(obs, name) / 100.0).max(0.0);
+        }
+        // (a backpack doubles what she can carry: the first is all room; another, its ammo)
+        let packed = obs.backpack == Some(true);
+        if name == "Backpack" && !packed {
+            return 1.0;
+        }
+        let most = |s: i32| ammo_max(s) * if packed { 2.0 } else { 1.0 };
+        let have = |s: i32| {
+            f64::from(
+                obs.ammo
+                    .iter()
+                    .flatten()
+                    .find(|(x, _)| *x == s)
+                    .map_or(0, |(_, n)| *n),
+            )
+        };
+        let gain = |s: i32, amount: f64| (amount.min(most(s) - have(s)) / most(s)).max(0.0);
+        if let Some((slots, n)) = ammo_item(name) {
+            return slots
+                .iter()
+                .filter(|s| held.contains(s))
+                .map(|&s| gain(s, f64::from(n)))
+                .fold(0.0, f64::max);
+        }
+        // (a gun she has already is the ammo it comes with)
+        match weapon_item(name).filter(|s| held.contains(s)) {
+            Some(3) => gain(3, 8.0),
+            Some(4) => gain(4, 20.0),
+            Some(5) => gain(5, 2.0),
+            Some(s @ (6 | 7)) => gain(s, 40.0),
+            _ => 0.0,
+        }
+    }
+
     /// Items she has seen that she could use now.
     fn supplies(
         &mut self,
@@ -2634,12 +2722,18 @@ impl Fight {
             let carried_nearer = carried
                 .iter()
                 .any(|(gun, s)| *gun == t.name && dist(s.pos(), pos) < d);
+            // Going on to another level: what she'd start it short of, had before she leaves
+            // (and only by a way clear of what she knows is about).
+            let stock = self.going_on
+                && self.stock_gain(obs, t.name, health, &held) > 0.0
+                && self.clear_way_to(obs, (t.x, t.y));
             // The big spheres only when they'd add enough (a megasphere 100 to what she
             // can take, a soulsphere 50 health); short of that, left where they lie to come back for.
-            if (t.name == "Soulsphere" && health > 200.0 - self.tune.errands.soul_gain)
+            let sphere_later = (t.name == "Soulsphere"
+                && health > 200.0 - self.tune.errands.soul_gain)
                 || (t.name == "Megasphere"
-                    && Combat::pickup_gain(obs, "Megasphere") < self.tune.errands.mega_gain)
-            {
+                    && Combat::pickup_gain(obs, "Megasphere") < self.tune.errands.mega_gain);
+            if sphere_later && !stock {
                 continue;
             }
             // How much it's needed (0: not at all, 1: badly).
@@ -2674,7 +2768,8 @@ impl Fight {
             if armor_item(t.name).is_some() {
                 need = need.max((Combat::pickup_gain(obs, t.name) / 100.0).min(1.0));
             }
-            if need <= 0.1 || (d > self.tune.errands.item_range && need < 0.8) {
+            let not_now = need <= 0.1 || (d > self.tune.errands.item_range && need < 0.8);
+            if not_now && !stock {
                 continue;
             }
             let Some(goal) = x.touch_spot((t.x, t.y), reach) else {
@@ -2709,8 +2804,19 @@ impl Fight {
             if worth.is_some_and(|w| d > w) {
                 why = ""; // (too far to drop everything for, as the crow flies even)
             }
-            let mut o = Objective::new(Kind::Item, goal, format!("pick up {}{why}", t.name));
+            let to_take = if stock && why.is_empty() {
+                " (to take on)"
+            } else {
+                ""
+            };
+            let mut o = Objective::new(
+                Kind::Item,
+                goal,
+                format!("pick up {}{why}{to_take}", t.name),
+            );
             o.thing = Some(t.id);
+            o.stock = stock;
+            o.stock_only = stock && (sphere_later || not_now);
             o.urgent = !why.is_empty();
             o.needed = need >= self.tune.errands.needed && !carried_nearer;
             o.worth = if why.is_empty() { None } else { worth };
@@ -2807,6 +2913,10 @@ impl Fight {
 }
 
 impl Hooks for Fight {
+    fn stocking(&self) -> bool {
+        self.going_on
+    }
+
     /// Ammo or a gun she's off for because she's short of ammo.
     fn worth_cut_off(&mut self, obs: &Observation, obj: &Objective) -> bool {
         let Some(t) = obj

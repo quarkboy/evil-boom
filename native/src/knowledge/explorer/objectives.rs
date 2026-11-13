@@ -118,6 +118,13 @@ impl Explorer {
     ) -> Vec<Objective> {
         let t0 = Instant::now();
         let mut out = self.list_objectives(obs, risky, hooks);
+        // (and what she'd take on to another level, weighed against the exit when it's next)
+        let tic = obs.tic;
+        for o in std::mem::take(&mut self.stock_aside) {
+            if self.fresh(&o, tic) && !hooks.dangerous(obs, &o) {
+                out.push(o);
+            }
+        }
         if self.knowledge.mortal {
             // Mortal: nowhere under a crusher to stop at just to look or walk round. What's to be
             // picked up or pressed there is still done, passing through.
@@ -309,6 +316,12 @@ impl Explorer {
         let mut sift = self.sift(obs, risky, back, exit_polys);
         // With nothing else left, the ways between rooms never walked over (walk-over lines are
         // thresholds), and last of all those onto floors that hurt.
+        // (what's wanted only to take on to another level, set aside: what's to do now, and what
+        // comes when there's nothing, as they'd be without it; given back after, `objectives`)
+        let supplies = self.focus == super::Focus::Supplies;
+        let (aside, out): (Vec<Objective>, Vec<Objective>) =
+            out.into_iter().partition(|o| o.stock_only && !supplies);
+        self.stock_aside = aside;
         let first = self.usable(obs, hooks, &mut sift, out);
         if !first.is_empty() {
             return first;

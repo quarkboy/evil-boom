@@ -57,7 +57,7 @@ way in that the code doesn't have yet (section 6).
 | Search walls for secrets, and how hard | `Suspecting`, the tiers of `next` | S / D | `secrets` 0 to 3 on explore; policy `secrets` | off |
 | Clear barrels before they're a danger | `Kind::Barrel` | S | policy `barrels: clear / leave / ask` | clear when no monster's in sight |
 | Go and see what made a noise; hunt a monster heard | `Kind::Noise`, `Kind::Hunt` | D | `doom_go monster-N`; goal `hunt` | autopilot does; directed tells her |
-| Leave by the exit, with things left | `Order::Exit`, `exit_check` | D | `doom_exit`, `sure` | asks if things are left |
+| Leave by the exit, with things left | `Order::Exit`, `exit_check` | D | `doom_exit`, `sure` | asks if things are left; going on to another level with what she'd take with her left, names it, stocking up the default |
 | Give an objective up (took too long, failed) | `selection.rs` drop rules | D | told; she can order it again | given up, told why |
 | The last resorts (strafing runs, stuck places again, every wall, the held-back exit, jumps missed before, harm allowed) | the ten tiers of `next` | D | each tier she hasn't allowed is a **confirmation** ("nothing left but walking through the lava: 40 health") | autopilot: as now. Directed: asked |
 

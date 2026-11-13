@@ -394,6 +394,8 @@ fn episode_chain(
         for line in BufReader::new(out).lines().map_while(Result::ok) {
             if let Some(l) = line.strip_prefix("LEVEL ") {
                 println!("seed {seed} {l}");
+            } else if let Some(l) = line.strip_prefix("STOCK ") {
+                println!("seed {seed} stock {l}");
             } else if let Some(l) = line.strip_prefix("DAMAGE ") {
                 println!("    damage taken: {l}");
             } else if let Some(l) = line.strip_prefix("WATCH ") {
@@ -434,6 +436,9 @@ fn episode_one(args: &[String]) -> Result<(), String> {
     let mut levels = 0;
     while let Some(m) = map.take() {
         o.lives = left;
+        // (a level with one after it: what she'd take with her had before she leaves)
+        o.going_on = evilboom::sweep::next_map(&m, false).is_some()
+            || evilboom::sweep::next_map(&m, true).is_some();
         let r = evilboom::sweep::run_map_in(wad, &m, &o, engine.take())?;
         left -= r.deaths;
         let lost = if r.deaths > 0 {
@@ -448,6 +453,9 @@ fn episode_one(args: &[String]) -> Result<(), String> {
         );
         let Some(l) = r.carry else {
             println!("LEVEL {line}");
+            if !r.stock.is_empty() {
+                println!("STOCK {m}: {}", r.stock);
+            }
             println!("DAMAGE {}", r.damage);
             let mut os = o.clone();
             os.carry = None;
@@ -463,6 +471,9 @@ fn episode_one(args: &[String]) -> Result<(), String> {
             "LEVEL {line} | out with health {} armor {}, ammo {}/{}/{}/{}",
             l.health, l.armor, l.clip, l.shell, l.cell, l.rocket
         );
+        if !r.stock.is_empty() {
+            println!("STOCK {m}: {}", r.stock);
+        }
         o.carry = Some(l);
         engine = r.engine;
         map = evilboom::sweep::next_map(&m, r.secret);

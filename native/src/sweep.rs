@@ -91,6 +91,9 @@ pub struct RunOptions {
     /// no monsters in it (what she learns of the map, its doors and switches, where things
     /// lie), then plays it knowing that and where every monster stands at the start
     pub known: bool,
+    /// the game goes on to another level after this one (an episode's, with one after it): what
+    /// she'd take with her had before the exit
+    pub going_on: bool,
 }
 
 impl Default for RunOptions {
@@ -118,6 +121,7 @@ impl Default for RunOptions {
             bar: None,
             advisor: None,
             known: false,
+            going_on: false,
         }
     }
 }
@@ -386,6 +390,9 @@ pub struct MapRun {
     pub engine: Option<Engine>,
     /// lives lost in it (each the level begun again, what she'd learned of it kept)
     pub deaths: i32,
+    /// what she had when the exit first came first of what she'd do and when she left, and what
+    /// she was sent for before it (an episode's levels; "" if she didn't leave)
+    pub stock: String,
 }
 
 /// The damage she took by where it came from, most first, with the tics of the hits (the
@@ -606,6 +613,8 @@ pub fn run_map_in(
     let mut damage: BTreeMap<String, (i32, i32, Vec<i64>)> = BTreeMap::new();
     let mut last_hit: Option<String> = None;
     let (mut turn_flips, mut last_jitter): (Vec<i64>, i64) = (Vec::new(), i64::MIN / 2);
+    // (when the exit first came first, and what she had then: the stocking up measured)
+    let mut exit_first_had: Option<(i64, crate::dsda::Loadout)> = None;
     let (mut side_from, mut side_run): (Option<crate::geom::Point>, f64) = (None, 0.0);
     let mut last_push: Option<(f64, i64)> = None;
     let mut was_doing = String::new();
@@ -752,6 +761,9 @@ pub fn run_map_in(
         let t2 = Instant::now();
         let log_n = agent.x().log.len();
         let ctl = agent.act(&ob, c.as_ref());
+        if exit_first_had.is_none() && agent.x().exit_first.is_some() {
+            exit_first_had = Some((ob.tic, e.loadout()));
+        }
         // (for measuring: how she turns. A turn one way then the other on the next tic, both
         // more than a couple of degrees, is a jitter no hand makes; and how fast she turns at
         // the most, and how sharply the rate changes)
@@ -1154,6 +1166,44 @@ pub fn run_map_in(
     )?;
     let carry = exited.then(|| e.loadout());
     let secret = exited && e.secret_exit();
+    let kit = |l: &crate::dsda::Loadout| {
+        format!(
+            "health {} armor {} ammo {}/{}/{}/{}",
+            l.health, l.armor, l.clip, l.shell, l.cell, l.rocket
+        )
+    };
+    let sent = if agent.x().stock_chosen.is_empty() {
+        "nothing".to_string()
+    } else {
+        agent
+            .x()
+            .stock_chosen
+            .iter()
+            .map(|l| {
+                l.trim_start_matches("pick up ")
+                    .trim_end_matches(" (to take on)")
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let stock = match (&exit_first_had, &carry) {
+        (Some((tic, at)), Some(out)) => format!(
+            "exit first at {}s: {}; out at {}s: {}; sent for: {sent}",
+            tic / 35,
+            kit(at),
+            e.tic / 35,
+            kit(out),
+        ),
+        // (over another way, dead or stuck, after the exit came first)
+        (Some((tic, at)), None) => format!(
+            "exit first at {}s: {}; {} at {}s; sent for: {sent}",
+            tic / 35,
+            kit(at),
+            outcome.to_lowercase(),
+            e.tic / 35,
+        ),
+        _ => String::new(),
+    };
     if o.snapshot.is_some() {
         snapshot(&w, m, &map_name, e, agent, o.focus)?;
         return Ok(MapRun {
@@ -1165,6 +1215,7 @@ pub fn run_map_in(
             stats,
             engine: None,
             deaths,
+            stock,
         });
     }
     Ok(MapRun {
@@ -1176,6 +1227,7 @@ pub fn run_map_in(
         stats,
         engine: Some(e),
         deaths,
+        stock,
     })
 }
 

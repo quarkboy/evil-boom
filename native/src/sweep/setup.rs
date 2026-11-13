@@ -121,6 +121,11 @@ pub fn setup(
     if let (Some(names), Some(p)) = (&o.bar, agent.player_mut()) {
         p.bar(names)?;
     }
+    if let Some(p) = agent.player_mut() {
+        // (EVIL_DEBUG_STOCK=off: going on, no stocking up before the exit, to measure it by)
+        let off = std::env::var("EVIL_DEBUG_STOCK").is_ok_and(|v| v == "off");
+        p.set_going_on(o.going_on && !off);
+    }
     let secrets_short = broken_secrets(&map_name);
     if o.secrets {
         agent.x_mut().exit_held_back = true;

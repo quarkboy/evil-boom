@@ -42,6 +42,8 @@ pub enum Then {
     Tactic(&'static str),
     /// one of her settings taken (`policy.rs`)
     Policy(&'static str, &'static str),
+    /// a goal set, as doom_goal sets it ("supplies")
+    Goal(&'static str),
     /// the run-jump lined up for not taken, nor that leap again
     DontJump(Box<crate::navigator::Jump>),
     /// nothing: as she was
@@ -444,6 +446,10 @@ impl Director {
                 then: false,
             }),
             Then::Instinct => self.on_instinct(agent, obs),
+            Then::Goal(what) => {
+                let line = self.set_goal(agent, obs, what, None).unwrap_or_else(|e| e);
+                self.tell(obs, Event::Outcome, line);
+            }
             Then::Restart => self.restart_wanted = self.restart_allowed,
             Then::Allow(r) => {
                 self.resorts.insert(r);
@@ -482,6 +488,57 @@ impl Director {
         // (on her way out already, by her own say: not asked again)
         if self.leaving() {
             return None;
+        }
+        // Going on to another level with what she'd take into it still lying about: that put
+        // first, and stocking up the answer unless she says otherwise.
+        let stock = agent
+            .player_mut()
+            .map(|p| p.stock_left(obs))
+            .unwrap_or_default();
+        if !stock.is_empty() {
+            let mut counted: Vec<(String, usize)> = Vec::new();
+            for name in stock {
+                match counted.iter_mut().find(|(n, _)| *n == name) {
+                    Some((_, k)) => *k += 1,
+                    None => counted.push((name, 1)),
+                }
+            }
+            let what: Vec<String> = counted
+                .iter()
+                .map(|(n, k)| crate::control::names::some(*k, n))
+                .collect();
+            let rest = self
+                .exit_check(agent, obs)
+                .map(|l| format!(" {l}"))
+                .unwrap_or_default();
+            let text = format!(
+                "You go on to the next level from here, with {:.0} health and {:.0} armor. \
+                 Seen and still here, to take with you: {}.{rest} Stock up first?",
+                obs.health.unwrap_or(0.0),
+                obs.armor.unwrap_or(0.0),
+                what.join(", ")
+            );
+            return Some(
+                self.ask(
+                    obs,
+                    text.clone(),
+                    vec![
+                        Choice {
+                            label: "stock up first".into(),
+                            then: Then::Goal("supplies"),
+                        },
+                        Choice {
+                            label: "leave anyway".into(),
+                            then: Then::Order(Order::Exit),
+                        },
+                    ],
+                    0,
+                    true,
+                )
+                .unwrap_or_else(|| {
+                    format!("{text} (doom_goal supplies; or resend with sure: true.)")
+                }),
+            );
         }
         let left = self.exit_check(agent, obs)?;
         Some(

@@ -20,6 +20,9 @@ use std::sync::Arc;
 const COMPARED: usize = 4;
 /// pickups nearer than a first-priority objective that are routed to see if they come first
 const ON_THE_WAY: usize = 4;
+/// going on to another level: of what she'd take with her, the nearest by her way is chosen
+/// from this many with ways there (the nearest as the crow flies, down the list)
+const STOCK_TRIES: usize = 4;
 
 /// a "close, wait 30s, open" door's wait, and a little (tics)
 const REOPEN_TICS: i64 = 32 * 35;
@@ -636,6 +639,11 @@ impl Explorer {
                     ));
                 }
             }
+            // (what's wanted only to take on to another level: not a choice of hers till the
+            // exit's first, then weighed against it; unless supplies are what she's after)
+            let supplies = self.focus == super::Focus::Supplies;
+            let (stock_pool, ranked): (Vec<Objective>, Vec<Objective>) =
+                ranked.into_iter().partition(|o| o.stock_only && !supplies);
             // The exit first of all, except for something she needs that's nearer by the way than it
             // is: those are compared with it too, by their ways. A level she knows the whole of is
             // otherwise the exit from its first tic, walked for with what she started with.
@@ -739,6 +747,52 @@ impl Explorer {
                     .filter(|&i| routed[i].1.kind == Kind::Item && routed[i].0 < far)
                     .min_by(|&a, &b| routed[a].0.total_cmp(&routed[b].0))
                 {
+                    routed.swap(0, i);
+                }
+            }
+            // Going on to another level: before the exit, everything she'd take with her that she
+            // can get to, the nearest by her way each time, then the exit. (The nearest few as the
+            // crow flies are routed, down the list till a few have ways: the nearest by her way is
+            // among them. An exit she's sent to isn't chosen here: it's taken as it's given.)
+            if routed[0].1.kind == Kind::Exit && self.exit_first.is_none() {
+                self.exit_first = Some(obs.tic);
+            }
+            // (her done with the level but for leaving: the exit her choice, and seen in this life,
+            // not only known from one before)
+            if hooks.stocking() && routed[0].1.kind == Kind::Exit && self.exit_seen_this_life() {
+                let pos = obs.pos();
+                let mut stock: Vec<&Objective> = rest
+                    .iter()
+                    .filter(|o| o.stock)
+                    .chain(stock_pool.iter())
+                    .collect();
+                stock.sort_by(|a, b| dist(a.goal, pos).total_cmp(&dist(b.goal, pos)));
+                let stock: Vec<Objective> = stock.into_iter().cloned().collect();
+                let mut ways = routed.iter().filter(|r| r.1.stock).count();
+                // (at most so many tried for a way, those with none dropped as any is)
+                for obj in stock.into_iter().take(2 * STOCK_TRIES) {
+                    if ways >= STOCK_TRIES {
+                        break;
+                    }
+                    if let Some(steps) = self.route_to(&obj, obs).filter(|st| !st.is_empty()) {
+                        let weighed =
+                            route_length(&steps) * obj.kind.weight() * hooks.weigh(obs, &obj);
+                        routed.push((weighed, obj, steps));
+                        ways += 1;
+                    }
+                }
+                if let Some(i) =
+                    (1..routed.len())
+                        .filter(|&i| routed[i].1.stock)
+                        .min_by(|&a, &b| {
+                            route_length(&routed[a].2).total_cmp(&route_length(&routed[b].2))
+                        })
+                {
+                    self.log.push(format!(
+                        "tic {}: going on: '{}' before the exit",
+                        obs.tic, routed[i].1.label
+                    ));
+                    self.stock_chosen.push(routed[i].1.label.clone());
                     routed.swap(0, i);
                 }
             }

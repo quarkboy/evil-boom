@@ -799,3 +799,32 @@ Roland's samples, so not ours to ship): the docs say to search for it and save i
 `soundfonts/SC-55.sf2`, and when it's there it's the default MIDI synth (`--soundfont opl` for
 OPL; the console's MIDI synth "Default"). With the re-release's recordings (`--music sc55`) it
 plays only what they don't have.
+
+## Stocking up before going on (2026-11-13)
+
+Played through (an episode, the console's "Go on through the episode", Evil's continuous play),
+she left a level with the exit as soon as she knew a way to it, and what she'd seen lying about
+and not needed this moment stayed there: the next level began short of it. Now, going on
+(`Hooks::stocking`, the run's `going_on`): once she's seen the exit in this life (the level's
+start or since she last died: `Explorer::exit_seen_this_life`, a sector by a known exit line in
+her view since) and it's her choice, what she'd take with her is had first, the nearest by her way
+each time, until nothing she knows of would add anything: health to 100 (more from the spheres),
+armor better than hers, ammo for her guns short of full (a backpack's room counted), a backpack.
+Not the bonuses; not the powers. Only by a way clear of what she knows is awake and too much
+for her. Those items are set aside from her other choices till then (`stock_only`, kept out
+before `list_objectives`' cascade: kept in, they masked its fallbacks, and she chose differently
+long before the exit; one run ran its planning out of time chasing far ones, 96 s of thinking on
+E2M4, and stuck). Single levels never go on: the score is unchanged (parity).
+
+Evil, going on: `doom_exit` with those left asks first, naming them and what she has, the
+default to stock up (the supplies goal, which may choose them), `sure` as before to leave as
+she is. Tested through neuro-mock: from 74 health, 106 armor, 41 bullets, 7 shells to 101, 200,
+91, 50 before the goal was done.
+
+Measured, `episode` on one life, the four DOOM episodes and DOOM II from MAP01, 8 seeds each
+and E3 on 8 more (`EVIL_DEBUG_STOCK=off` for the other side): 5.04 levels an episode against
+5.08, 16 of 48 through against 15. On the levels she left, her health rose after the exit first
+came first in 68 of 226 (20 of 229 without), and she left with on average 2.7 more health, 2
+more armor, 40 more bullets and 13 more shells, 42 s later. No death came while stocking up (the
+deaths that differ are earlier in later levels, the run gone another way). E3M4 kills her about
+half the time either way.
