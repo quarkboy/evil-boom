@@ -404,14 +404,13 @@ impl RouteFollower {
                 }
                 let mut cands: Vec<Point> = behind.clone();
                 let mesh = &self.view.nav.mesh;
-                for pi in 0..mesh.polys.len() {
-                    let Some(poly) = mesh.polys[pi].as_ref() else {
-                        continue;
-                    };
-                    if dist(poly.center, at) < BARREL_LOOK {
-                        cands.push(poly.center);
-                    }
-                }
+                cands.extend(
+                    mesh.polys
+                        .iter()
+                        .flatten()
+                        .map(|poly| poly.center)
+                        .filter(|&c| dist(c, at) < BARREL_LOOK),
+                );
                 let states: States = obs.heights.iter().map(|h| vec![*h]).collect();
                 // (the barrel in the way, or any it sets off: shot from where one of those can be
                 // seen, the chain takes the rest; in a corridor of them the one in the way can be round
