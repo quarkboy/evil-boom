@@ -1990,6 +1990,8 @@ impl Watch {
         // (each panel's text kept inside it, however big)
         c.clip = LOG;
         self.draw_log(c);
+        // (the map's box is cut to the clip it's drawn under: its own here, not the log's)
+        c.clip = MAP;
         self.draw_map(c);
         c.clip = PANEL;
         self.draw_panel(c);
