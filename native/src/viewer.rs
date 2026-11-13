@@ -153,27 +153,29 @@ impl MapView {
 const TEXT_SIZES: [f64; 4] = [1.0, 1.25, 1.5, 2.0];
 
 impl Canvas {
-    fn put(&mut self, x: i64, y: i64, c: Rgb) {
+    /// The pixel at (x, y), if it's inside the clip and the canvas (a clip that runs past the
+    /// canvas is cut to it).
+    fn at(&self, x: i64, y: i64) -> Option<usize> {
         let (cx, cy, cw, ch) = self.clip;
-        if x < cx as i64 || y < cy as i64 || x >= (cx + cw) as i64 || y >= (cy + ch) as i64 {
-            return;
+        let height = self.px.len() / self.width.max(1);
+        let inside = x >= cx as i64
+            && y >= cy as i64
+            && x < ((cx + cw).min(self.width)) as i64
+            && y < ((cy + ch).min(height)) as i64;
+        inside.then(|| y as usize * self.width + x as usize)
+    }
+
+    fn put(&mut self, x: i64, y: i64, c: Rgb) {
+        if let Some(i) = self.at(x, y) {
+            self.px[i] = (u32::from(c.0) << 16) | (u32::from(c.1) << 8) | u32::from(c.2);
         }
-        self.px[y as usize * self.width + x as usize] =
-            (u32::from(c.0) << 16) | (u32::from(c.1) << 8) | u32::from(c.2);
     }
 
     /// `c` over what's there by `a` (0-255), within the clip.
     fn blend(&mut self, x: i64, y: i64, c: Rgb, a: u8) {
-        let (cx, cy, cw, ch) = self.clip;
-        if a == 0
-            || x < cx as i64
-            || y < cy as i64
-            || x >= (cx + cw) as i64
-            || y >= (cy + ch) as i64
-        {
+        let Some(i) = self.at(x, y).filter(|_| a > 0) else {
             return;
-        }
-        let i = y as usize * self.width + x as usize;
+        };
         let was = self.px[i];
         let mix = |new: u8, shift: u32| {
             let old = (was >> shift) & 0xff;
@@ -2333,8 +2335,13 @@ impl Watch {
     /// the route, her; `labelled`: its title in the corner.
     fn draw_map_in(&self, c: &mut Canvas, v: MapView, labelled: bool) {
         c.fill(v.r, (8, 8, 10));
+        // (within the box, and within what was clipped already: a box past a column's foot cut
+        // there)
         let clip = c.clip;
-        c.clip = v.r;
+        let (x0, y0) = (v.r.0.max(clip.0), v.r.1.max(clip.1));
+        let x1 = (v.r.0 + v.r.2).min(clip.0 + clip.2);
+        let y1 = (v.r.1 + v.r.3).min(clip.1 + clip.3);
+        c.clip = (x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0));
         let m = &self.m;
         let x = self.agent.x();
         let k = &x.knowledge;
