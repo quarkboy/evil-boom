@@ -20,7 +20,7 @@ jobs:
   linux:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Packages
         run: |
@@ -30,7 +30,7 @@ jobs:
             libgl-dev libglu1-mesa-dev libfluidsynth-dev libvorbis-dev
 
       - name: Engine cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: third_party/dsda-doom
           key: engine-linux-${{ hashFiles('dsda/**', 'tools/build-engine.sh') }}
@@ -64,7 +64,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: msys2/setup-msys2@v2
         with:
@@ -78,7 +78,7 @@ jobs:
             mingw-w64-x86_64-libvorbis
 
       - name: Engine cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: third_party/dsda-doom
           key: engine-windows-${{ hashFiles('dsda/**', 'tools/build-engine.sh') }}
