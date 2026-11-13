@@ -145,11 +145,11 @@ pub fn actions() -> Vec<Value> {
     vec![
         json!({ "name": "doom_look", "description": "What's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds, a suggestion." }),
         json!({ "name": "doom_list", "description": "List known areas, doors, switches, items, monsters or exits, with ids, in the order you'd best take them. Areas: those left to explore or search for secrets, where you are, and named ones; all: every one.", "schema": s(json!({ "what": { "type": "string", "enum": ["areas", "doors", "switches", "items", "monsters", "exits"] }, "all": { "type": "boolean" } }), &["what"]) }),
-        json!({ "name": "doom_press", "description": "Press a switch. Exploring never presses them. rush, then: as for doom_go.", "schema": s(json!({ "ref": { "type": "string" }, "rush": { "type": "boolean" }, "then": { "type": "boolean" } }), &["ref"]) }),
+        json!({ "name": "doom_press", "description": "Press a switch. rush: keep going mid-fight, shooting and dodging on the way. queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "ref": { "type": "string" }, "rush": { "type": "boolean" }, "queue_up": { "type": "boolean" } }), &["ref"]) }),
         json!({ "name": "doom_inspect", "description": "What something is and where.", "schema": s(json!({ "ref": { "type": "string" } }), &["ref"]) }),
-        json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left. rush: keep going mid-fight, shooting and dodging on the way. then: after the current action, not instead (exploring resumes after a go anyway).", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" }, "rush": { "type": "boolean" }, "then": { "type": "boolean" } }), &["ref"]) }),
-        json!({ "name": "doom_explore", "description": "Explore an area or a direction (N, NE, ...), the likeliest secret walls too; paused while you're fighting.", "schema": s(json!({ "target": { "type": "string" }, "then": { "type": "boolean" } }), &["target"]) }),
-        json!({ "name": "doom_search", "description": "Search an area or a direction for secrets: thorough 2 (most suspicious walls, default) or 3 (every one, slow).", "schema": s(json!({ "target": { "type": "string" }, "thorough": { "type": "integer", "enum": [2, 3] }, "then": { "type": "boolean" } }), &["target"]) }),
+        json!({ "name": "doom_go", "description": "Go to an area, item, door, switch or exit. risky: cross hurting floors if survivable. sure: exit even with things left. rush: keep going mid-fight, shooting and dodging on the way. queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "ref": { "type": "string" }, "risky": { "type": "boolean" }, "sure": { "type": "boolean" }, "rush": { "type": "boolean" }, "queue_up": { "type": "boolean" } }), &["ref"]) }),
+        json!({ "name": "doom_explore", "description": "Explore an area or a direction (N, NE, ...), the likeliest secret walls too; paused while you're fighting. queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "queue_up": { "type": "boolean" } }), &["target"]) }),
+        json!({ "name": "doom_search", "description": "Search an area or a direction for secrets: thorough 2 (most suspicious walls, default) or 3 (every one, slow). queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "thorough": { "type": "integer", "enum": [2, 3] }, "queue_up": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_name", "description": format!("Name something (up to {NAME_MAX} characters); the name then works as its id."), "schema": s(json!({ "ref": { "type": "string" }, "name": { "type": "string" } }), &["ref", "name"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": "Your fight, for a while (10 s unless seconds; then by reflex again). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / avoid (keep clear: to get past) / steady: how you fight. auto: all by reflex again.", "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "avoid", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
@@ -377,7 +377,10 @@ impl Session {
             .question()
             .filter(|q| !q.now && self.connected)
         {
-            if self.forced_question != Some(q.id) && self.ask_force > 0 && obs.tic - q.opened >= self.ask_force {
+            if self.forced_question != Some(q.id)
+                && self.ask_force > 0
+                && obs.tic - q.opened >= self.ask_force
+            {
                 self.forced_question = Some(q.id);
                 self.forced = true;
                 self.force(
@@ -398,7 +401,9 @@ impl Session {
         // (waiting on her: after a while, a decision forced; one at a time)
         if !self.director.idle(agent) {
             self.idle_since = obs.tic;
-        } else if self.connected && !self.forced && self.idle_force > 0
+        } else if self.connected
+            && !self.forced
+            && self.idle_force > 0
             && obs.tic - self.idle_since >= self.idle_force
         {
             let state = self.state(agent, obs);
@@ -728,7 +733,10 @@ impl Session {
         };
         let sure = args.get("sure").and_then(Value::as_bool).unwrap_or(false);
         let rush = args.get("rush").and_then(Value::as_bool).unwrap_or(false);
-        let then = args.get("then").and_then(Value::as_bool).unwrap_or(false);
+        let then = args
+            .get("queue_up")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         match name {
             "doom_list" => {
                 let Some(topic) = arg("what").and_then(Topic::parse) else {

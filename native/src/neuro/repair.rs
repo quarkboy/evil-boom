@@ -38,6 +38,8 @@ const ALIASES: &[(&str, &[&str])] = &[
     ("question", &["id"]),
     ("question_id", &["id"]),
     ("level", &["map"]),
+    ("then", &["queue_up"]),
+    ("queue", &["queue_up"]),
     ("difficulty", &["skill"]),
     ("thoroughness", &["thorough"]),
     ("secs", &["seconds"]),

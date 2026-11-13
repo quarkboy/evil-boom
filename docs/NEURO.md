@@ -40,7 +40,7 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_inspect` | what something is and where |
 | `doom_status` | health, armor, weapons, ammo, keys, the tally, what you're doing and fighting |
 | `doom_why` | why you're doing what you're doing: the aim and what it was chosen over, the fight, why you're not shooting, the last action that failed |
-| `doom_go` | go to an area, item, door, switch or exit (`risky`, `sure`, `rush`, `then`) |
+| `doom_go` | go to an area, item, door, switch or exit (`risky`, `sure`, `rush`, `queue_up`) |
 | `doom_explore` | explore an area or a direction |
 | `doom_search` | search an area or a direction for secrets (thorough 2 or 3) |
 | `doom_press` | press a switch |
