@@ -1,0 +1,6 @@
+# The Rust Evil's built and checked with, here and in CI (.github/workflows: kept the same).
+# A newer one is moved to on purpose: its clippy can find what this one doesn't, and the parity
+# check says whether she plays the same (docs/TESTING.md).
+[toolchain]
+channel = "1.100.0"
+components = ["clippy", "rustfmt"]

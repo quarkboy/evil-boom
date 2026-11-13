@@ -56,7 +56,10 @@ jobs:
       - name: Engine
         run: tools/build-engine.sh --clean
 
-      - uses: dtolnay/rust-toolchain@stable
+      # (the version native/rust-toolchain.toml pins)
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.100.0
 
       - name: Evil
         working-directory: native
@@ -93,7 +96,10 @@ jobs:
         shell: msys2 {0}
         run: tools/build-engine.sh --clean
 
-      - uses: dtolnay/rust-toolchain@stable
+      # (the version native/rust-toolchain.toml pins)
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.100.0
 
       - name: Evil
         working-directory: native

@@ -30,7 +30,8 @@ sudo apt install build-essential cmake ninja-build git pkg-config libsdl2-dev \
 ```
 
 Rust, if you don't have it: <https://rustup.rs> (`curl --proto '=https' --tlsv1.2 -sSf
-https://sh.rustup.rs | sh`).
+https://sh.rustup.rs | sh`). The version is pinned in `native/rust-toolchain.toml` (rustup fetches
+it the first time); CI uses the same one.
 
 Then, from the repository's root:
 

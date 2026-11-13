@@ -38,8 +38,10 @@ jobs:
       - name: Engine
         run: tools/build-engine.sh
 
-      - uses: dtolnay/rust-toolchain@stable
+      # (the version native/rust-toolchain.toml pins)
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.100.0
           components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
@@ -85,8 +87,10 @@ jobs:
         shell: msys2 {0}
         run: tools/build-engine.sh
 
-      - uses: dtolnay/rust-toolchain@stable
+      # (the version native/rust-toolchain.toml pins)
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.100.0
           components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
