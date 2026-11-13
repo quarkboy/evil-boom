@@ -219,12 +219,13 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
   <section id="viewcard">
     <h2>View <span class="dim" style="text-transform:none;letter-spacing:0">(twice a second, made only while shown here; the watcher's own drawing)</span></h2>
     <div class="row">
-      <button id="vw-map" class="on">Map</button>
+      <button id="vw-map">Map</button>
       <button id="vw-game">Game</button>
       <button id="vw-stream">Stream</button>
     </div>
+    <p class="dim" id="vw-none" style="margin:4px 0 0;font-size:12px">None shown: pick Map, Game or Stream to see it here.</p>
     <div class="views">
-      <figure id="fig-map"><img id="img-map" alt="the map as she knows it, her route and objectives"><figcaption>Map as she knows it, route, objectives</figcaption></figure>
+      <figure id="fig-map" hidden><img id="img-map" alt="the map as she knows it, her route and objectives"><figcaption>Map as she knows it, route, objectives</figcaption></figure>
       <figure id="fig-game" hidden><img id="img-game" alt="the game's view"><figcaption>Game</figcaption></figure>
       <figure id="fig-stream" hidden style="flex-basis:100%"><img id="img-stream" alt="the stream's window, as OBS captures it"><figcaption>The stream's window (half size)</figcaption></figure>
     </div>
@@ -528,7 +529,8 @@ function renderEvil(e, n) {
 }
 let setsDirty = false;
 function order(action, data) { return cmd({ cmd: "order", action, data: data == null ? null : JSON.stringify(data) }); }
-const viewOn = { map: true, game: false, stream: false }, viewShown = {}, viewLoading = {};
+// (none shown unless picked: each costs the game a little while it's shown; OBS has its own)
+const viewOn = { map: false, game: false, stream: false }, viewShown = {}, viewLoading = {};
 try { Object.assign(viewOn, JSON.parse(localStorage.getItem("evil-console-views") || "{}")); } catch (e) { /* (the default) */ }
 // (the pictures this page is showing: the View card there, unfolded, the page in sight; the
 // game makes only those, and none once no page asks)
@@ -538,6 +540,7 @@ function viewsWanted() {
   return ["map", "game", "stream"].filter((n) => viewOn[n]).join(",");
 }
 function showView(name, n) {
+  $("vw-none").hidden = Object.values(viewOn).some(Boolean);
   $("fig-" + name).hidden = !viewOn[name];
   $("vw-" + name).classList.toggle("on", viewOn[name]);
   // (a picture fetched only when it's shown, it's changed, and the last one's in)
