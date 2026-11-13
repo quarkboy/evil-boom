@@ -86,6 +86,8 @@ pub struct Settings {
     /// the game's window that size ("1280x720"), the picture scaled to it; "": the picture's
     /// own (1920x1080 for the stream)
     pub window_size: String,
+    /// the game drawn at this size ("1440x1080"); "": its own (640x480)
+    pub render_size: String,
     /// frames shown at the screen's refresh
     pub vsync: bool,
     /// the window the whole screen (the desktop's resolution, borderless)
@@ -125,6 +127,7 @@ impl Default for Settings {
             layout: "stream".into(),
             panel_side: "right".into(),
             window_size: String::new(),
+            render_size: String::new(),
             vsync: true,
             fullscreen: false,
             evil_starts: true,
@@ -156,8 +159,12 @@ impl Settings {
             return Err("layout: stream or watcher; panel_side: right or left".into());
         }
         if !self.window_size.trim().is_empty() {
-            crate::dsda::WindowSpec::parse_size(&self.window_size)
+            crate::dsda::WindowSpec::parse_size(&self.window_size, crate::dsda::MAX_WINDOW)
                 .map_err(|e| format!("window_size: {e}, or empty"))?;
+        }
+        if !self.render_size.trim().is_empty() {
+            crate::dsda::WindowSpec::parse_size(&self.render_size, crate::dsda::MAX_RENDER)
+                .map_err(|e| format!("render_size: {e}, or empty"))?;
         }
         if !["", "single", "continuous", "both"].contains(&self.evil_play.trim()) {
             return Err("evil_play: single, continuous, both, or empty (as Whole episode)".into());
@@ -213,6 +220,9 @@ impl Settings {
         }
         if !self.window_size.trim().is_empty() {
             a.extend(["--window-size".into(), self.window_size.trim().to_string()]);
+        }
+        if !self.render_size.trim().is_empty() {
+            a.extend(["--render".into(), self.render_size.trim().to_string()]);
         }
         if !self.vsync {
             a.push("--no-vsync".into());
@@ -1017,6 +1027,7 @@ mod tests {
         assert!(s.check().is_ok());
         assert!(!has(&s, "--window-size") && !has(&s, "--no-vsync") && !has(&s, "--fullscreen"));
         s.window_size = "1280x720".into();
+        s.render_size = "1440x1080".into();
         s.vsync = false;
         s.fullscreen = true;
         assert!(s.check().is_ok());
@@ -1024,10 +1035,15 @@ mod tests {
         let i = a.iter().position(|x| x == "--window-size").unwrap_or(0);
         assert_eq!(a.get(i + 1).map(String::as_str), Some("1280x720"));
         assert!(has(&s, "--no-vsync") && has(&s, "--fullscreen"));
+        let i = a.iter().position(|x| x == "--render").unwrap_or(0);
+        assert_eq!(a.get(i + 1).map(String::as_str), Some("1440x1080"));
         for bad in ["1280", "big", "100x100", "9000x5000"] {
             s.window_size = bad.into();
             assert!(s.check().is_err(), "{bad}");
         }
+        s.window_size = String::new();
+        s.render_size = "7680x4320".into();
+        assert!(s.check().is_err(), "a render bigger than there's room for");
     }
 
     /// What's hers to start: the console's own map, skill and play unless she's given more.

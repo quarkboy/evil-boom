@@ -209,6 +209,7 @@ pub fn prepare(
             sound,
             capture: false,
             seed,
+            resolution: None,
         },
     )?;
     e.start();

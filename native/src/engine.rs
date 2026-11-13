@@ -58,6 +58,8 @@ pub struct Options {
     pub capture: bool,
     /// the game's random numbers from this (testing); None: the clock, as in a real game
     pub seed: Option<u32>,
+    /// drawn at this size (width, height); None: the game's own setting (640x480)
+    pub resolution: Option<(usize, usize)>,
 }
 
 impl Default for Options {
@@ -70,6 +72,7 @@ impl Default for Options {
             sound: false,
             capture: false,
             seed: None,
+            resolution: None,
         }
     }
 }
@@ -147,6 +150,9 @@ impl Engine {
         }
         if !o.drawn {
             args.push("-nodraw".into());
+        } else if let Some((w, h)) = o.resolution {
+            // (w: windowed, the game's own window that nobody sees)
+            args.extend(["-geom".to_string(), format!("{w}x{h}w")]);
         }
         args.push("-warp".into());
         args.extend(warp);

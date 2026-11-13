@@ -189,16 +189,26 @@ impl Default for WindowSpec {
     }
 }
 
+/// The largest window.
+pub const MAX_WINDOW: (usize, usize) = (7680, 4320);
+/// The largest the game's drawn (what `draw_at` has room for).
+pub const MAX_RENDER: (usize, usize) = (3840, 2880);
+
 impl WindowSpec {
-    /// "1280x720" read.
-    pub fn parse_size(s: &str) -> Result<(usize, usize), String> {
-        let bad = || format!("a window size: WIDTHxHEIGHT, 320x200 to 7680x4320 ({s:?})");
+    /// "1280x720" read, 320x200 at the least and `max` at the most.
+    pub fn parse_size(s: &str, max: (usize, usize)) -> Result<(usize, usize), String> {
+        let bad = || {
+            format!(
+                "a size: WIDTHxHEIGHT, 320x200 to {}x{} ({s:?})",
+                max.0, max.1
+            )
+        };
         let (w, h) = s.trim().split_once(['x', 'X']).ok_or_else(bad)?;
         let (w, h): (usize, usize) = (
             w.trim().parse().map_err(|_| bad())?,
             h.trim().parse().map_err(|_| bad())?,
         );
-        if !(320..=7680).contains(&w) || !(200..=4320).contains(&h) {
+        if !(320..=max.0).contains(&w) || !(200..=max.1).contains(&h) {
             return Err(bad());
         }
         Ok((w, h))
@@ -889,7 +899,7 @@ impl Dsda {
     /// library without evil_draw_at: as it is).
     pub fn draw_at(&self, between: f64) -> Option<(usize, usize, Vec<u8>)> {
         let mut buf = self.draw_buffer.borrow_mut();
-        buf.resize(3840 * 2160, 0);
+        buf.resize(MAX_RENDER.0 * MAX_RENDER.1, 0);
         let (out, max) = (buf.as_mut_ptr(), buf.len() as c_int);
         // SAFETY: the game writes at most `max` bytes into the buffer it's given.
         let wh = unsafe {

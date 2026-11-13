@@ -60,7 +60,8 @@
 //!       title card till the console begins it. --stream [right|left]: the window for the stream,
 //!       16:9, the game on one side, a column for the viewers on the other (right unless told).
 //!       --window-size WxH: the window that size, the picture scaled to it; --no-vsync;
-//!       --fullscreen (the desktop's resolution, borderless).
+//!       --fullscreen (the desktop's resolution, borderless). --render WxH: the game drawn at
+//!       that size (640x480 unless told; 1440x1080 fills the stream's game 1:1).
 //!       --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
 //!       or evil-boom neuro-mock). --gpt [CONFIG]: directed by the GPT stand-in, run in this
 //!       program (config/neuro-gpt.json unless named; its log out/neuro/gpt.log)
@@ -809,6 +810,7 @@ fn watch_options(
         stream: None,
         choices: None,
         window: evilboom::dsda::WindowSpec::default(),
+        render: None,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -828,9 +830,16 @@ fn watch_options(
             "--window-size" => {
                 w.window.size = Some(evilboom::dsda::WindowSpec::parse_size(
                     it.next().ok_or("--window-size WIDTHxHEIGHT")?,
+                    evilboom::dsda::MAX_WINDOW,
                 )?);
             }
             "--no-vsync" => w.window.vsync = false,
+            "--render" => {
+                w.render = Some(evilboom::dsda::WindowSpec::parse_size(
+                    it.next().ok_or("--render WIDTHxHEIGHT")?,
+                    evilboom::dsda::MAX_RENDER,
+                )?);
+            }
             "--fullscreen" => w.window.fullscreen = true,
             "--neuro" => {
                 w.neuro = Some(

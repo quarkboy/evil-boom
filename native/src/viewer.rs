@@ -328,6 +328,8 @@ pub struct WatchOptions {
     pub choices: Option<String>,
     /// the window's size, vsync, full screen
     pub window: crate::dsda::WindowSpec,
+    /// the game drawn at this size (width, height); none: its own (640x480)
+    pub render: Option<(usize, usize)>,
 }
 
 impl Watch {
@@ -707,6 +709,7 @@ fn first_watch(
             sound,
             capture: o.capture_sound,
             seed: o.seed,
+            resolution: o.render,
         },
     )?;
     engine.carry.clone_from(&o.carry);
