@@ -1762,7 +1762,7 @@ impl Player {
         let Some(f) = self.explorer.follower.as_ref() else {
             return false;
         };
-        let name = cur.label.strip_prefix("pick up ").unwrap_or(&cur.label);
+        let name = cur.label.trim_prefix("pick up ");
         let name = name.split(' ').next().unwrap_or(name);
         let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
         if !(weapon_item(name).is_some_and(|s| s != 1 && s != 8)
@@ -2489,7 +2489,7 @@ impl Fight {
         }
         if let Some(cur) = x.current.as_ref().filter(|c| c.kind == Kind::Item) {
             // The item's class name, before what the label adds ("pick up Medikit (to heal)").
-            let name = cur.label.strip_prefix("pick up ").unwrap_or(&cur.label);
+            let name = cur.label.trim_prefix("pick up ");
             let name = name.split(' ').next().unwrap_or(name);
             // Health she's on her way to and can use, close by: on to it, shooting on the way. Not one
             // far off, however low she is: the fight's own retreats and cover are what keep her alive

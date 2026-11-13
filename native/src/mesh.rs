@@ -550,7 +550,7 @@ impl Mesh {
             let len = (b.0 - a.0).hypot(b.1 - a.1).max(1e-9);
             ((b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0)) / len
         };
-        let sides: Vec<f64> = (0..n).map(side).collect();
+        let sides: Vec<f64> = Vec::from_fn(n, side);
         let inside = sides.iter().all(|&d| d >= -1.0) || sides.iter().all(|&d| d <= 1.0);
         inside.then_some(i)
     }

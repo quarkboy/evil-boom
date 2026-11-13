@@ -228,7 +228,7 @@ impl Watch {
             say(c, "starting...", (r.0 + 40, r.1 + 40), 24.0, TEXT);
             return;
         };
-        let xs: Vec<usize> = (0..r.2).map(|x| x * fw / r.2).collect();
+        let xs: Vec<usize> = Vec::from_fn(r.2, |x| x * fw / r.2);
         for y in 0..r.3 {
             let row = (y * fh / r.3) * fw;
             let out = (r.1 + y) * c.width + r.0;

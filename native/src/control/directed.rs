@@ -257,8 +257,7 @@ fn monster_kind(word: &str) -> Option<&'static str> {
         .chars()
         .filter(|c| c.is_ascii_alphabetic())
         .collect();
-    let w = w.strip_prefix("the").unwrap_or(&w);
-    let w = w.strip_suffix('s').unwrap_or(w);
+    let w = w.trim_prefix("the").trim_suffix('s');
     Some(match w {
         "zombieman" | "zombie" | "trooper" | "formerhuman" => "Zombieman",
         "shotgunguy" | "shotgunner" | "sergeant" => "ShotgunGuy",

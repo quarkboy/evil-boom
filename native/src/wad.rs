@@ -167,7 +167,7 @@ fn blockmap(data: &[u8]) -> Option<Blockmap> {
     if words < 4 + count {
         return None;
     }
-    let raw: Vec<u16> = (0..words).map(|i| u16_at(data, 2 * i)).collect();
+    let raw: Vec<u16> = Vec::from_fn(words, |i| u16_at(data, 2 * i));
     let mut blocks = Vec::with_capacity(count);
     for &offset in &raw[4..4 + count] {
         // (as ZDoom reads it: each list's first entry skipped, to the 0xFFFF)

@@ -1424,15 +1424,15 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             };
             match k {
                 key::ESCAPE => break 'frames,
-                key::SPACE => watch.paused = !watch.paused,
+                key::SPACE => watch.paused.toggle(),
                 key::N | key::RIGHT if watch.paused && !watch.engine.finished() => watch.tic(),
                 key::EQUALS | key::KP_PLUS => watch.speed = (watch.speed * 2.0).min(16.0),
                 key::MINUS | key::KP_MINUS => watch.speed = (watch.speed / 2.0).max(0.25),
-                key::A => watch.show_all = !watch.show_all,
-                key::F => watch.follow = !watch.follow,
-                key::L => watch.evil_log = !watch.evil_log,
+                key::A => watch.show_all.toggle(),
+                key::F => watch.follow.toggle(),
+                key::L => watch.evil_log.toggle(),
                 key::T => watch.text_size = (watch.text_size + 1) % TEXT_SIZES.len(),
-                key::M => watch.muted = !watch.muted,
+                key::M => watch.muted.toggle(),
                 _ => {}
             }
         }

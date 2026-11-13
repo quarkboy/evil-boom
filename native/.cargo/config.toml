@@ -1,0 +1,5 @@
+# A crate version is taken by `cargo update` only once it's been published this long: a
+# malicious release is usually found and pulled within days (Rust 1.100's dependency cooldown).
+# For one needed sooner: CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update NAME --precise V
+[registry]
+global-min-publish-age = "3 days"
