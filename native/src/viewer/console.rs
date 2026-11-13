@@ -18,6 +18,8 @@ const SAY_MAX: usize = 300;
 
 /// the window's pictures sent this often
 const VIEW_EVERY: Duration = Duration::from_millis(500);
+/// a page's asking for pictures holds this long (the console says again while it goes on)
+const VIEWS_HOLD: Duration = Duration::from_secs(3);
 
 /// A picture to send, by name.
 enum Picture {
@@ -33,6 +35,9 @@ pub(super) struct Console {
     /// to the thread that makes the pictures PNGs (not the window's: it'd stall a frame)
     pictures: Sender<Picture>,
     last_view: Option<Instant>,
+    /// the pictures a page is showing, and till when they're wanted (`Command::Views`)
+    wanted: Vec<String>,
+    wanted_until: Option<Instant>,
     /// her log's lines sent so far
     shown: usize,
     /// (map, dead, exited) as last told: what's changed is an event
@@ -69,6 +74,8 @@ impl Console {
             link,
             pictures,
             last_view: None,
+            wanted: Vec::new(),
+            wanted_until: None,
             shown: 0,
             told: (String::new(), false, false),
         })
@@ -95,9 +102,21 @@ impl Console {
         let _ = self.pictures.send(Picture::Rgb("stream", hw, hh, rgb));
     }
 
-    /// The pictures are due again.
+    /// The pictures sent: due again in VIEW_EVERY.
+    pub(super) fn viewed(&mut self) {
+        self.last_view = Some(Instant::now());
+    }
+
+    /// Whether a page is showing this picture.
+    pub(super) fn wants(&self, name: &str) -> bool {
+        self.wanted_until.is_some_and(|t| Instant::now() < t)
+            && self.wanted.iter().any(|w| w == name)
+    }
+
+    /// The pictures are due again, and a page is showing one.
     pub(super) fn views_due(&self) -> bool {
-        self.last_view.is_none_or(|t| t.elapsed() >= VIEW_EVERY)
+        ["map", "game", "stream"].iter().any(|n| self.wants(n))
+            && self.last_view.is_none_or(|t| t.elapsed() >= VIEW_EVERY)
     }
 
     /// The window as drawn (`px`, the whole of it) and the game's frame (palette indices, and
@@ -112,12 +131,17 @@ impl Console {
         if !self.views_due() {
             return;
         }
-        self.last_view = Some(Instant::now());
+        self.viewed();
         // (the map as she knows it and the panel under it: the window's right side)
-        let right: Rect = (MAP.0, 0, W - MAP.0, H);
-        let _ = self
-            .pictures
-            .send(Picture::Rgb("map", right.2, right.3, crop(px, right)));
+        if self.wants("map") {
+            let right: Rect = (MAP.0, 0, W - MAP.0, H);
+            let _ = self
+                .pictures
+                .send(Picture::Rgb("map", right.2, right.3, crop(px, right)));
+        }
+        if !self.wants("game") {
+            return;
+        }
         let game = match frame {
             Some((w, h, f)) => Picture::Indexed(
                 "game",
@@ -253,6 +277,10 @@ impl Watch {
             let Some(cmd) = c.link.command() else { break };
             match cmd {
                 Command::Pause => self.paused = true,
+                Command::Views { names } => {
+                    c.wanted = names;
+                    c.wanted_until = Some(Instant::now() + VIEWS_HOLD);
+                }
                 Command::Resume => self.paused = false,
                 Command::Speed { x } => self.speed = x.clamp(0.25, 16.0),
                 Command::Mute { on } => self.muted = on,

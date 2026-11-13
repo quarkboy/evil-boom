@@ -12,7 +12,7 @@ pub mod server;
 use serde::{Deserialize, Serialize};
 
 /// The protocol's version, in the game's hello: a supervisor and a game built apart may not agree.
-pub const PROTOCOL: u32 = 4;
+pub const PROTOCOL: u32 = 5;
 
 /// What the console asks of the running game, applied by it at the top of a frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -69,6 +69,12 @@ pub enum Command {
     ExitLevel {
         #[serde(default)]
         secret: bool,
+    },
+    /// the pictures a page is showing ("map", "game", "stream"), made for the next few seconds
+    /// only: the console says again while a page goes on asking (none made otherwise, their
+    /// drawing costing the window's frames)
+    Views {
+        names: Vec<String>,
     },
     /// the stream window's column to this side ("left", "right")
     Panel {

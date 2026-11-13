@@ -1577,8 +1577,19 @@ fn paint(watch: &mut Watch, canvas: &mut Canvas, aside: &mut Option<Canvas>) {
             .as_ref()
             .is_some_and(console::Console::views_due)
         {
-            if let Some(c) = watch.console.as_mut() {
+            // (only what a page is showing: drawn on the window's own time)
+            let (map, game) = watch
+                .console
+                .as_ref()
+                .map_or((false, false), |c| (c.wants("map"), c.wants("game")));
+            if let Some(c) = watch.console.as_mut().filter(|c| c.wants("stream")) {
                 c.stream_view(&canvas.px, canvas.width, canvas.px.len() / canvas.width);
+            }
+            if !(map || game) {
+                if let Some(c) = watch.console.as_mut() {
+                    c.viewed();
+                }
+                return;
             }
             let a = aside.get_or_insert_with(|| Canvas {
                 px: vec![0; W * H],

@@ -492,6 +492,13 @@ let setsDirty = false;
 function order(action, data) { return cmd({ cmd: "order", action, data: data == null ? null : JSON.stringify(data) }); }
 const viewOn = { map: true, game: false, stream: false }, viewShown = {}, viewLoading = {};
 try { Object.assign(viewOn, JSON.parse(localStorage.getItem("evil-console-views") || "{}")); } catch (e) { /* (the default) */ }
+// (the pictures this page is showing: the View card there, unfolded, the page in sight; the
+// game makes only those, and none once no page asks)
+function viewsWanted() {
+  const card = $("viewcard");
+  if (document.visibilityState !== "visible" || !card || card.offsetParent === null || card.classList.contains("collapsed")) return "";
+  return ["map", "game", "stream"].filter((n) => viewOn[n]).join(",");
+}
 function showView(name, n) {
   $("fig-" + name).hidden = !viewOn[name];
   $("vw-" + name).classList.toggle("on", viewOn[name]);
@@ -570,7 +577,7 @@ function readForm() {
 
 async function poll() {
   try {
-    render(await api("api/poll?since=" + seq));
+    render(await api("api/poll?since=" + seq + "&views=" + viewsWanted()));
     failures = 0;
   } catch (e) {
     failures++;

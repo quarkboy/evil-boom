@@ -39,6 +39,10 @@ const QUIT_WAIT: Duration = Duration::from_secs(3);
 const HANG: Duration = Duration::from_secs(45);
 /// a game not connected this long after it was started: hung too (the first level's analysis,
 /// and DSDA's start, come first)
+/// a page's asking for a picture holds this long (it asks with each poll, 2.5 a second)
+const VIEWS_ASKED: Duration = Duration::from_secs(2);
+/// the game's told again this often while pages want pictures (it lets them go after 3 s)
+const VIEWS_RETELL: Duration = Duration::from_secs(1);
 const HELLO_WAIT: Duration = Duration::from_secs(90);
 /// a crashed game is started again after this long...
 const RESTART_DELAY: Duration = Duration::from_secs(2);
@@ -376,6 +380,10 @@ struct Shared {
     /// the game's latest pictures (PNG) by name ("map", "game"), each with its number (the page
     /// fetches one when it's changed)
     views: BTreeMap<String, (u64, Vec<u8>)>,
+    /// when a page last asked for each picture, and what the game was last told is wanted
+    /// (and when): it's told again while pages go on asking
+    views_asked: BTreeMap<String, Instant>,
+    views_told: (Vec<String>, Option<Instant>),
     began: Instant,
 }
 
@@ -459,6 +467,8 @@ pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
         crashes: VecDeque::new(),
         file: session_log(),
         views: BTreeMap::new(),
+        views_asked: BTreeMap::new(),
+        views_told: (Vec::new(), None),
         began: Instant::now(),
     }));
     lock(&hub).save()?;
@@ -578,6 +588,8 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 if sfx.is_some() || music.is_some() || master.is_some() {
                     let _ = s.send(&Command::Volume { sfx, music, master });
                 }
+                // (the pictures pages want told it on their next ask)
+                s.views_told = (Vec::new(), None);
                 let spec = s.settings.choices();
                 let _ = s.send(&Command::Choices { spec });
             }
@@ -916,7 +928,14 @@ fn handle(hub: &Hub, mut req: Request) {
         return;
     }
     let (code, answer) = match (method, path) {
-        (Method::Get, "/api/poll") => (200, poll(hub, param("since").and_then(|v| v.parse().ok()).unwrap_or(0))),
+        (Method::Get, "/api/poll") => (
+            200,
+            poll(
+                hub,
+                param("since").and_then(|v| v.parse().ok()).unwrap_or(0),
+                &param("views").unwrap_or_default(),
+            ),
+        ),
         (Method::Post, "/api/game/start") => done(start(hub)),
         (Method::Post, "/api/game/stop") => {
             let hub = Arc::clone(hub);
@@ -996,9 +1015,33 @@ fn handle(hub: &Hub, mut req: Request) {
     let _ = req.respond(json_response(code, &answer));
 }
 
-/// How things stand, and the log after line `since`.
-fn poll(hub: &Hub, since: u64) -> Value {
-    let s = lock(hub);
+/// How things stand, and the log after line `since`; `views`: the pictures the page is showing
+/// ("map,stream"), which the game's told it's to make (only those, only while a page asks).
+fn poll(hub: &Hub, since: u64, views: &str) -> Value {
+    let mut s = lock(hub);
+    let now = Instant::now();
+    for v in views
+        .split(',')
+        .filter(|v| matches!(*v, "map" | "game" | "stream"))
+    {
+        s.views_asked.insert(v.to_string(), now);
+    }
+    let wanted: Vec<String> = s
+        .views_asked
+        .iter()
+        .filter(|(_, t)| now.duration_since(**t) < VIEWS_ASKED)
+        .map(|(v, _)| v.clone())
+        .collect();
+    let stale = s
+        .views_told
+        .1
+        .is_none_or(|t| now.duration_since(t) >= VIEWS_RETELL);
+    if s.to_game.is_some() && (wanted != s.views_told.0 || (!wanted.is_empty() && stale)) {
+        let _ = s.send(&Command::Views {
+            names: wanted.clone(),
+        });
+        s.views_told = (wanted, Some(now));
+    }
     // (a page from before the console was restarted: everything kept, from the start)
     let since = if since > s.seq { 0 } else { since };
     let log: Vec<&(u64, String)> = s
