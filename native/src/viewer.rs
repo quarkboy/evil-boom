@@ -451,6 +451,7 @@ impl Watch {
         }
         if let Some(neuro) = self.neuro.as_mut() {
             let tic = self.engine.tic;
+            neuro.set_choices(&choices);
             // (told to start a game only when one's hers to start)
             let idle = not_now.unwrap_or(if start && choices.start {
                 "Not in a level now: start a game first (doom_game)."
@@ -1894,6 +1895,7 @@ impl Watch {
             }
         }
         if let Some(neuro) = &mut self.neuro {
+            neuro.set_choices(&self.choices);
             neuro.director.tally = tally;
             neuro.director.level = level;
             neuro.director.restart_allowed = self.choices.restart;

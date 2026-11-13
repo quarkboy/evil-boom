@@ -50,7 +50,7 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_goal` | a standing aim worked toward whenever no action is in hand: out, everything, a key, kills, supplies, secrets |
 | `doom_policy` | standing settings: stance, save, risk, powerups, explore, idle, hints, answers |
 | `doom_answer` | answer one of the bot's questions |
-| `doom_game` | the game itself: start, next level, restart |
+| `doom_game` | the game itself: start, next level, restart; only the moves hers, and the levels, skills and play on offer, in its schema (registered again when the console changes them) |
 
 Each action's full schema and description are in `native/src/neuro/session.rs`. What each one
 does is in `native/src/control/directed/`.

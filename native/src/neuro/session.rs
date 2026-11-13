@@ -12,6 +12,7 @@ use super::link::{Incoming, Link};
 use crate::control::directed::{
     bearing, Director, Hints, Order, Topic, STANCE_SECONDS, TACTIC_SECONDS,
 };
+use crate::control::game::Choices;
 use crate::motor::Observation;
 use crate::play::Agent;
 
@@ -72,6 +73,10 @@ pub struct Session {
     /// a decision's forced on her (0: never); the console's to change
     idle_force: i64,
     ask_force: i64,
+    /// the games hers to start and what of the game is hers (the watch's; doom_game's schema
+    /// made from them), and doom_game registered with older ones
+    choices: Option<Choices>,
+    game_stale: bool,
     /// the game paused by her (as the watch has it), and her asking for it on or off
     pub paused: bool,
     pause_wanted: Option<bool>,
@@ -211,6 +216,8 @@ impl Session {
             registered: std::collections::BTreeSet::new(),
             idle_force: IDLE_FORCE,
             ask_force: ASK_FORCE,
+            choices: None,
+            game_stale: false,
             paused: false,
             pause_wanted: None,
         }
@@ -324,6 +331,7 @@ impl Session {
                     self.connected = true;
                     // (a new connection has nothing registered: what fits now, below)
                     self.registered.clear();
+                    self.game_stale = false;
                     self.forced = false;
                     self.idle_since = obs.tic;
                     if !self.briefed {
@@ -491,6 +499,38 @@ impl Session {
             .collect()
     }
 
+    /// Her actions, `doom_game` as what's offered her has it.
+    fn actions(&self) -> Vec<Value> {
+        let mut all = actions();
+        if let (Some(c), Some(g)) = (
+            &self.choices,
+            all.iter_mut().find(|a| a["name"] == "doom_game"),
+        ) {
+            *g = game_action(c);
+        }
+        all
+    }
+
+    /// An action's data mended against its registered schema (`repair`), and the notes of
+    /// fields taken under another name.
+    fn mend(&self, name: &str, args: Value) -> (Value, Vec<String>) {
+        let schema = self
+            .actions()
+            .into_iter()
+            .find(|a| a["name"] == name)
+            .and_then(|a| a.get("schema").cloned());
+        super::repair::repair(args, schema.as_ref())
+    }
+
+    /// What's hers of the game, as the watch has it now (changed: `doom_game` registered
+    /// again with its new schema).
+    pub fn set_choices(&mut self, c: &Choices) {
+        if self.choices.as_ref() != Some(c) {
+            self.choices = Some(c.clone());
+            self.game_stale = true;
+        }
+    }
+
     /// The actions registered with Neuro made `wanted`: those no longer wanted unregistered, the
     /// new ones registered (a change slows her answers a moment: only when where she is changes).
     fn sync_actions(
@@ -498,11 +538,22 @@ impl Session {
         wanted: std::collections::BTreeSet<&'static str>,
         log: &mut Vec<String>,
     ) {
-        if !self.connected || wanted == self.registered {
+        if !self.connected {
+            return;
+        }
+        // (what's hers of the game changed: doom_game again, with its new schema)
+        if std::mem::take(&mut self.game_stale) && self.registered.remove("doom_game") {
+            self.link.send(
+                "actions/unregister",
+                Some(json!({ "action_names": ["doom_game"] })),
+            );
+        }
+        if wanted == self.registered {
             return;
         }
         let gone: Vec<&str> = self.registered.difference(&wanted).copied().collect();
-        let new: Vec<Value> = actions()
+        let new: Vec<Value> = self
+            .actions()
             .into_iter()
             .filter(|a| {
                 a["name"]
@@ -584,6 +635,7 @@ impl Session {
                     self.connected = true;
                     // (a new connection has nothing registered: what fits now, below)
                     self.registered.clear();
+                    self.game_stale = false;
                     self.forced = false;
                     if !self.briefed {
                         self.brief(tic);
@@ -606,7 +658,7 @@ impl Session {
                         .as_deref()
                         .and_then(|d| serde_json::from_str(d).ok())
                         .unwrap_or(Value::Null);
-                    let (args, notes) = mend(&name, args);
+                    let (args, notes) = self.mend(&name, args);
                     let (ok, msg) = if name == "doom_game" {
                         let (ok, msg) = act(&args);
                         (ok, noted(msg, &notes))
@@ -752,7 +804,7 @@ impl Session {
             Some(Ok(v)) => v,
             Some(Err(_)) => return (false, "The action's data wasn't valid JSON.".into()),
         };
-        let (mut args, mut notes) = mend(name, args);
+        let (mut args, mut notes) = self.mend(name, args);
         // (a place as lists give it, "SW 305", for an id: what's listed nearest there)
         if let Some(r) = args.get("ref").and_then(Value::as_str).map(str::to_string) {
             if let Some(id) = self.director.at_position(agent, obs, &r) {
@@ -1038,14 +1090,73 @@ impl Session {
     }
 }
 
-/// An action's data mended against its registered schema (`repair`), and the notes of fields
-/// taken under another name.
-fn mend(name: &str, args: Value) -> (Value, Vec<String>) {
-    let schema = actions()
+/// `doom_game` as `c` has it: only the moves hers, the levels (by name, up to a dozen), skills
+/// and play on offer, in its schema and its description.
+fn game_action(c: &Choices) -> Value {
+    let skill_names: Vec<String> = c
+        .skills
+        .iter()
+        .map(|&k| format!("{k} ({})", crate::control::directed::skill_name(k)))
+        .collect();
+    let plays: Vec<&str> = [("single", c.single), ("continuous", c.continuous)]
         .into_iter()
-        .find(|a| a["name"] == name)
-        .and_then(|a| a.get("schema").cloned());
-    super::repair::repair(args, schema.as_ref())
+        .filter_map(|(p, on)| on.then_some(p))
+        .collect();
+    let mut moves: Vec<&str> = Vec::new();
+    let mut said: Vec<String> = Vec::new();
+    if c.offered() {
+        moves.push("start");
+        let play = match (c.single, c.continuous) {
+            (true, true) => "play single level or continuous",
+            (true, false) => "play single level",
+            _ => "play continuous (on through the episode)",
+        };
+        let map = if c.maps.len() == 1 {
+            format!("map {}", c.maps[0])
+        } else {
+            "map".to_string()
+        };
+        said.push(format!(
+            "start: a game, when you're offered one ({map}; skill {}; {play}).",
+            skill_names.join(" or ")
+        ));
+    }
+    if c.next {
+        moves.push("next");
+        said.push("next: on to the next level from the tally screen.".into());
+    }
+    if c.restart {
+        moves.push("restart");
+        said.push("restart: this level from its start, after a while with nothing new.".into());
+    }
+    if moves.is_empty() {
+        moves = vec!["start", "next", "restart"];
+    }
+    let map = if (1..=12).contains(&c.maps.len()) {
+        json!({ "type": "string", "enum": c.maps })
+    } else {
+        json!({ "type": "string" })
+    };
+    let skill = if c.skills.is_empty() {
+        json!({ "type": "integer", "enum": [1, 2, 3, 4] })
+    } else {
+        json!({ "type": "integer", "enum": c.skills })
+    };
+    let play = if plays.is_empty() {
+        json!({ "type": "string", "enum": ["single", "continuous"] })
+    } else {
+        json!({ "type": "string", "enum": plays })
+    };
+    let description = format!("The game itself, when it's yours. {}", said.join(" "));
+    json!({
+        "name": "doom_game",
+        "description": description.trim_end(),
+        "schema": {
+            "type": "object",
+            "properties": { "do": { "type": "string", "enum": moves }, "map": map, "skill": skill, "play": play },
+            "required": ["do"],
+        },
+    })
 }
 
 /// A result's message with what was mended in her data, so she gives it right next time.
@@ -1070,5 +1181,41 @@ mod tests {
         assert_eq!(had.len(), named.len());
         assert!(had.iter().all(|n| named.contains(n.as_str())));
         assert!(super::OFF_LEVEL.iter().all(|n| named.contains(n)));
+    }
+
+    #[test]
+    fn game_action_as_offered() {
+        use crate::control::game::Choices;
+        use serde_json::json;
+        // (two levels, two skills, one level at a time, no restarting)
+        let c = Choices {
+            maps: vec!["E1M1".into(), "E1M2".into()],
+            skills: vec![3, 4],
+            single: true,
+            continuous: false,
+            start: true,
+            next: true,
+            restart: false,
+        };
+        let g = super::game_action(&c);
+        let p = &g["schema"]["properties"];
+        assert_eq!(p["do"]["enum"], json!(["start", "next"]));
+        assert_eq!(p["map"]["enum"], json!(["E1M1", "E1M2"]));
+        assert_eq!(p["skill"]["enum"], json!([3, 4]));
+        assert_eq!(p["play"]["enum"], json!(["single"]));
+        let d = g["description"].as_str().unwrap_or("");
+        assert!(
+            d.contains("skill 3 (Hurt me plenty) or 4 (Ultra-Violence)"),
+            "{d}"
+        );
+        assert!(!d.contains("restart"), "{d}");
+        // (a whole IWAD's levels: named in the offer, not listed in the schema)
+        let all = Choices {
+            maps: (1..=32).map(|n| format!("MAP{n:02}")).collect(),
+            ..c
+        };
+        assert!(super::game_action(&all)["schema"]["properties"]["map"]
+            .get("enum")
+            .is_none());
     }
 }
