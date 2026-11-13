@@ -148,9 +148,9 @@ impl Choices {
                 "skills" => {
                     c.skills = list
                         .iter()
-                        .map(|v| v.parse::<i32>().ok().filter(|n| (1..=5).contains(n)))
+                        .map(|v| v.parse::<i32>().ok().filter(|n| (1..=4).contains(n)))
                         .collect::<Option<Vec<i32>>>()
-                        .ok_or("--choices: skills are 1-5")?;
+                        .ok_or("--choices: skills are 1-4 (nightmare is never hers)")?;
                 }
                 "start" | "next" | "restart" => {
                     let on = match list.as_slice() {

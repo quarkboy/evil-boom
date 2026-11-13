@@ -203,9 +203,12 @@ impl Settings {
             .split(',')
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .any(|s| !matches!(s, "1" | "2" | "3" | "4" | "5"))
+            .any(|s| !matches!(s, "1" | "2" | "3" | "4"))
         {
-            return Err("evil_skills: a list of 1-5, or empty (the skill above)".into());
+            return Err(
+                "evil_skills: a list of 1-4 (nightmare is never hers), or empty (the skill above)"
+                    .into(),
+            );
         }
         if !["bot", "neuro", "gpt"].contains(&self.mode.as_str()) {
             return Err("mode: bot, neuro or gpt".into());
@@ -303,7 +306,7 @@ impl Settings {
             m => m.replace(' ', ""),
         };
         let skills = match self.evil_skills.trim() {
-            "" => self.skill.clamp(1, 5).to_string(),
+            "" => self.skill.clamp(1, 4).to_string(),
             s => s.replace(' ', ""),
         };
         let play = match self.evil_play.trim() {

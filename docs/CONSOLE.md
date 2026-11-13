@@ -46,7 +46,7 @@ form's changes first).
 | **Title card:** Doom's own screens | `present` | the title card, the menu, the melt, the tally, the finales |
 | At the title card | `title_wait`, `evil_starts` | go straight in through the menu; wait for Begin; or Evil chooses the game (Neuro or GPT directing), Begin still starting it |
 | **Who directs her:** Directed by, Neuro URL | `mode`, `neuro_url` | `bot`, `neuro` (at `neuro_url`), `gpt` (the stand-in) |
-| Levels, Skills, Play she may choose | `evil_maps`, `evil_skills`, `evil_play` | what Evil's offered when she chooses the game |
+| Levels, Skills, Play she may choose | `evil_maps`, `evil_skills`, `evil_play` | what Evil's offered when she chooses the game (skills 1-4: never Nightmare) |
 | She goes on to the next level herself; She may restart a level | `evil_next`, `evil_restart` | hers while she directs: from the tally (else it goes on after 30 s); after 90 s with nothing new |
 | **Window:** Layout, Column | `layout`, `panel_side` | `stream` (16:9, the game and a viewers' column, on the right or left) or `watcher` (the game, the map and her log) |
 | Window resolution, Vsync, Full screen | `window_size`, `vsync`, `fullscreen` | the window's size (empty: the picture's own, 1920x1080 for the stream, scaled to fit), frames at the screen's refresh, the whole screen (borderless) |

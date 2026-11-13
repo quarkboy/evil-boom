@@ -124,13 +124,16 @@ fn typed(v: Value, prop: &Value) -> Value {
         (Some("string"), Value::Bool(b)) => Value::String(b.to_string()),
         (_, v) => v,
     };
-    // (an enum's value in another case, or with spaces round it)
+    // (an enum's value in another case, or with spaces round it; or with words after it, as
+    // "single level" for single)
     match (prop.get("enum").and_then(Value::as_array), &v) {
         (Some(options), Value::String(s)) => {
             let want = s.trim().to_lowercase().replace([' ', '-'], "_");
+            let first = want.split('_').next().unwrap_or("");
             options
                 .iter()
                 .find(|o| o.as_str() == Some(want.as_str()))
+                .or_else(|| options.iter().find(|o| o.as_str() == Some(first)))
                 .cloned()
                 .unwrap_or(v)
         }
@@ -166,6 +169,12 @@ mod tests {
             schema("doom_answer").as_ref(),
         );
         assert_eq!(v, json!({ "id": "q3", "choice": "b" }));
+        // (an enum's value with words after it)
+        let (v, _) = repair(
+            json!({ "do": "start", "play": "Single level" }),
+            schema("doom_game").as_ref(),
+        );
+        assert_eq!(v, json!({ "do": "start", "play": "single" }));
         // (numbers as strings; an enum in capitals; the whole object as a string)
         let (v, _) = repair(
             Value::String(r#"{"target": "N", "thorough": "3"}"#.into()),
