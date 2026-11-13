@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 /// Steam's Ultimate Doom folder (base/ holds the IWADs), inside Steam's library.
-const STEAM_DOOM: &str = "steamapps/common/Ultimate Doom";
+pub const STEAM_DOOM: &str = "steamapps/common/Ultimate Doom";
 
 /// The classic v1.9 IWADs inside the Steam install, by short name.
 const IWADS: [(&str, &str); 4] = [

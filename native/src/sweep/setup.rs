@@ -84,6 +84,7 @@ pub fn setup(
                 seed: o.seed,
                 resolution: None,
                 soundfont: None,
+                music_wad: None,
             },
         )?,
     };

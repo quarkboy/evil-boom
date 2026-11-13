@@ -18,7 +18,7 @@ Fedora:
 
 ```sh
 sudo dnf install gcc gcc-c++ cmake ninja-build git SDL2-devel SDL2_mixer-devel \
-  libsndfile-devel libzip-devel zlib-ng-compat-devel fluidsynth-devel
+  libsndfile-devel libzip-devel zlib-ng-compat-devel fluidsynth-devel libvorbis-devel
 ```
 
 Debian / Ubuntu:
@@ -26,7 +26,7 @@ Debian / Ubuntu:
 ```sh
 sudo apt install build-essential cmake ninja-build git pkg-config libsdl2-dev \
   libsdl2-mixer-dev libsndfile1-dev libzip-dev zlib1g-dev libgl-dev libglu1-mesa-dev \
-  libfluidsynth-dev
+  libfluidsynth-dev libvorbis-dev
 ```
 
 Rust, if you don't have it: <https://rustup.rs> (`curl --proto '=https' --tlsv1.2 -sSf
@@ -55,7 +55,7 @@ The engine is built with MSYS2's MinGW-w64 toolchain; Evil with ordinary Rust (r
    CLANG64):
 
    ```sh
-   pacman -S --needed git mingw-w64-x86_64-{SDL2,SDL2_mixer,libsndfile,libzip,zlib,cmake,ninja,gcc,fluidsynth}
+   pacman -S --needed git mingw-w64-x86_64-{SDL2,SDL2_mixer,libsndfile,libzip,zlib,cmake,ninja,gcc,fluidsynth,libvorbis}
    cd /c/path/to/evil-boom
    tools/build-engine.sh                  # -> third_party\dsda-doom\prboom2\build\libdsda-evil.dll
    ```
@@ -83,7 +83,7 @@ git clone https://github.com/kraflab/dsda-doom.git third_party/dsda-doom
 cd third_party/dsda-doom && git checkout eb8eb98 && git apply ../../dsda/dsda-doom.patch
 cmake -S prboom2 -B prboom2/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_PACKAGING=OFF \
   -DWITH_FLUIDSYNTH=ON -DWITH_IMAGE=OFF -DWITH_MAD=OFF -DWITH_PORTMIDI=OFF \
-  -DWITH_VORBISFILE=OFF -DWITH_XMP=OFF \
+  -DWITH_VORBISFILE=ON -DWITH_XMP=OFF \
   -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=OFF      # Linux only
 cmake --build prboom2/build --target dsda-evil
 ```
@@ -108,6 +108,12 @@ The music plays through the OPL synth (a Sound Blaster's FM) unless a SoundFont 
 `soundfonts/`, checking each one's hash; any other `.sf2` or `.sf3` put there is offered too.
 GeneralUser GS 2 needs FluidSynth 2.3 or newer (Ubuntu 22.04's is 2.2: the release builds its
 own). See [soundfonts/README.md](../soundfonts/README.md).
+
+With the DOOM + DOOM II re-release on Steam, its recordings can play instead (`--music sc55` for
+the original soundtrack on a Roland SC-55, `--music idkfa` for Andrew Hulshult's): Evil finds
+`rerelease/extras.wad` beside the WADs' `base/`, in Steam's own folder, or where
+`EVILBOOM_RERELEASE_DIR` says, and makes a music WAD of them in `out/music/` (the engine plays
+Ogg Vorbis). Nothing of the re-release goes anywhere else.
 
 ## Build options
 

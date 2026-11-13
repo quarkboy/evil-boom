@@ -21,7 +21,8 @@ with, under which licenses. All of them are compatible with GPL-3.0.
 The engine links these libraries at run time (they're part of a binary release, not this
 repository): SDL2 and SDL2_mixer (zlib), libsndfile (LGPL-2.1-or-later), libzip (BSD-3-Clause),
 zlib (zlib), FluidSynth (LGPL-2.1-or-later; the Linux release's built from its source, v2.6.2,
-unmodified, without its own audio drivers) and GLib (LGPL-2.1-or-later).
+unmodified, without its own audio drivers), GLib (LGPL-2.1-or-later), and libogg and libvorbis
+(BSD-3-Clause).
 
 ## SoundFonts
 
@@ -79,6 +80,9 @@ other platforms), by license:
 
 ## Not included
 
+- The recorded music (`--music sc55|idkfa`) is read from the player's own copy of the DOOM +
+  DOOM II re-release (its `rerelease/extras.wad`) into `out/music/` at run time; none of it is
+  in this repository or a release.
 - No game data. You need your own DOOM / DOOM II IWADs. DOOM is a trademark of id Software; this
   project isn't affiliated with or endorsed by id Software, ZeniMax Media or Bethesda.
 - The Neuro SDK (<https://github.com/VedalAI/neuro-sdk>): Evil BOOM speaks its WebSocket protocol

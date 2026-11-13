@@ -211,6 +211,7 @@ pub fn prepare(
             seed,
             resolution: None,
             soundfont: None,
+            music_wad: None,
         },
     )?;
     e.start();

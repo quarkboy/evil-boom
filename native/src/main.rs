@@ -62,7 +62,9 @@
 //!       --window-size WxH: the window that size, the picture scaled to it; --no-vsync;
 //!       --fullscreen (the desktop's resolution, borderless). --render WxH: the game drawn at
 //!       that size (640x480 unless told; 1440x1080 fills the stream's game 1:1). --soundfont
-//!       NAME|FILE: the music with that SoundFont (soundfonts/), not the OPL synth.
+//!       NAME|FILE: the music with that SoundFont (soundfonts/), not the OPL synth. --music
+//!       sc55|idkfa: the songs as recorded (the Steam re-release's: the SC-55 or IDKFA), the
+//!       rest through the MIDI synth.
 //!       --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
 //!       or evil-boom neuro-mock). --gpt [CONFIG]: directed by the GPT stand-in, run in this
 //!       program (config/neuro-gpt.json unless named; its log out/neuro/gpt.log)
@@ -813,6 +815,7 @@ fn watch_options(
         window: evilboom::dsda::WindowSpec::default(),
         render: None,
         soundfont: None,
+        music: None,
     };
     let mut names = Vec::new();
     let mut it = rest.iter();
@@ -836,6 +839,16 @@ fn watch_options(
                 )?);
             }
             "--no-vsync" => w.window.vsync = false,
+            "--music" => {
+                let m = it.next().ok_or("--music sc55|idkfa|midi")?;
+                w.music = match m.as_str() {
+                    "midi" => None,
+                    _ => Some(
+                        evilboom::music::Recordings::parse(m)
+                            .ok_or("--music: sc55, idkfa or midi")?,
+                    ),
+                };
+            }
             "--soundfont" => {
                 w.soundfont = Some(evilboom::config::resolve_soundfont(
                     it.next().ok_or("--soundfont NAME (in soundfonts/) or FILE")?,

@@ -47,7 +47,7 @@ fi
 
 cmake_args=(-S prboom2 -B prboom2/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_PACKAGING=OFF
   -DWITH_FLUIDSYNTH=ON -DWITH_IMAGE=OFF -DWITH_MAD=OFF -DWITH_PORTMIDI=OFF
-  -DWITH_VORBISFILE=OFF -DWITH_XMP=OFF)
+  -DWITH_VORBISFILE=ON -DWITH_XMP=OFF)
 if [[ $platform == linux ]]; then
   # (DSDA prefers package configs; Fedora's zlib-ng one names a libz.a that isn't installed)
   cmake_args+=(-DCMAKE_FIND_PACKAGE_PREFER_CONFIG=OFF)

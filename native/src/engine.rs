@@ -62,6 +62,8 @@ pub struct Options {
     pub resolution: Option<(usize, usize)>,
     /// the music played by FluidSynth with this SoundFont; None: by the OPL synth
     pub soundfont: Option<PathBuf>,
+    /// the songs recorded (crate::music's WAD of them); the rest played as MIDI
+    pub music_wad: Option<PathBuf>,
 }
 
 impl Default for Options {
@@ -76,6 +78,7 @@ impl Default for Options {
             seed: None,
             resolution: None,
             soundfont: None,
+            music_wad: None,
         }
     }
 }
@@ -141,10 +144,12 @@ impl Engine {
         .iter()
         .map(|s| s.to_string())
         .collect();
-        let pwads = crate::config::pwads();
-        if !pwads.is_empty() {
+        // (the recorded music's WAD first: a PWAD's own songs stay its own)
+        let music = o.music_wad.iter().filter(|_| o.sound || o.capture);
+        let files: Vec<PathBuf> = music.cloned().chain(crate::config::pwads()).collect();
+        if !files.is_empty() {
             args.push("-file".into());
-            args.extend(pwads.iter().map(|p| p.to_string_lossy().to_string()));
+            args.extend(files.iter().map(|p| p.to_string_lossy().to_string()));
         }
         if let Some(sf) = o.soundfont.as_ref().filter(|_| o.sound || o.capture) {
             args.extend([

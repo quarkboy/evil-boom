@@ -37,6 +37,7 @@ pub mod map;
 pub mod mesh;
 pub mod motor;
 pub mod movers;
+pub mod music;
 pub mod nav;
 pub mod navigator;
 pub mod neuro;

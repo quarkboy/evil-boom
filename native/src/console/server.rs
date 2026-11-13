@@ -88,7 +88,9 @@ pub struct Settings {
     pub window_size: String,
     /// the game drawn at this size ("1440x1080"); "": its own (640x480)
     pub render_size: String,
-    /// the music played with this SoundFont, by its name in soundfonts/; "": by the OPL synth
+    /// the songs as recorded: "sc55" or "idkfa" (the Steam re-release's), "": all as MIDI
+    pub music: String,
+    /// the MIDI played with this SoundFont, by its name in soundfonts/; "": by the OPL synth
     pub soundfont: String,
     /// frames shown at the screen's refresh
     pub vsync: bool,
@@ -130,6 +132,7 @@ impl Default for Settings {
             panel_side: "right".into(),
             window_size: String::new(),
             render_size: String::new(),
+            music: String::new(),
             soundfont: String::new(),
             vsync: true,
             fullscreen: false,
@@ -168,6 +171,9 @@ impl Settings {
         if !self.render_size.trim().is_empty() {
             crate::dsda::WindowSpec::parse_size(&self.render_size, crate::dsda::MAX_RENDER)
                 .map_err(|e| format!("render_size: {e}, or empty"))?;
+        }
+        if !self.music.is_empty() && crate::music::Recordings::parse(&self.music).is_none() {
+            return Err("music: sc55, idkfa, or empty (MIDI)".into());
         }
         // (a name in soundfonts/, never a path: the page can't reach for files on the PC)
         if !self.soundfont.is_empty() && !crate::config::soundfonts().contains(&self.soundfont) {
@@ -233,6 +239,9 @@ impl Settings {
         }
         if !self.render_size.trim().is_empty() {
             a.extend(["--render".into(), self.render_size.trim().to_string()]);
+        }
+        if !self.music.is_empty() {
+            a.extend(["--music".into(), self.music.clone()]);
         }
         if !self.soundfont.is_empty() {
             a.extend(["--soundfont".into(), self.soundfont.clone()]);
@@ -990,6 +999,7 @@ fn poll(hub: &Hub, since: u64) -> Value {
         "settings": s.settings,
         "neuro_urls": s.neuro_urls,
         "soundfonts": crate::config::soundfonts(),
+        "rerelease": crate::music::rerelease_dir().is_some(),
         "views": s.views.iter().map(|(k, v)| (k.clone(), v.0)).collect::<BTreeMap<String, u64>>(),
         "game": s.game,
         "uptime": s.game.started.map(|t| t.elapsed().as_secs()),
@@ -1059,6 +1069,11 @@ mod tests {
         s.render_size = "7680x4320".into();
         assert!(s.check().is_err(), "a render bigger than there's room for");
         s.render_size = String::new();
+        s.music = "sc55".into();
+        assert!(s.check().is_ok() && has(&s, "--music"));
+        s.music = "cd".into();
+        assert!(s.check().is_err(), "music: unknown");
+        s.music = String::new();
         for path in ["../../etc/passwd", "/tmp/x.sf2", "nothing-here.sf2"] {
             s.soundfont = path.into();
             assert!(s.check().is_err(), "{path}");

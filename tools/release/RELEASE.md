@@ -18,7 +18,9 @@ beside the program; settings are in `config/`.
 
 Doom's music plays through the OPL synth, as a Sound Blaster played it, unless a SoundFont is
 chosen: `--soundfont GeneralUser-GS.sf2` (or `MuseScore_General.sf3`, or any `.sf2` you put in
-`soundfonts/`), or the console's Music setting.
+`soundfonts/`), or the console's MIDI synth setting. With the DOOM + DOOM II re-release on Steam,
+`--music sc55` plays the original soundtrack as recorded on a Roland SC-55 instead (`idkfa`:
+Andrew Hulshult's), read from your own copy.
 
 ## Try it
 

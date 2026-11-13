@@ -332,6 +332,8 @@ pub struct WatchOptions {
     pub render: Option<(usize, usize)>,
     /// the music played with this SoundFont (FluidSynth); none: by the OPL synth
     pub soundfont: Option<std::path::PathBuf>,
+    /// the songs played as recorded (the Steam re-release's), the rest as MIDI
+    pub music: Option<crate::music::Recordings>,
 }
 
 impl Watch {
@@ -700,6 +702,22 @@ fn first_watch(
     let mut nav = Navigator::new(Arc::clone(&m), skill)?;
     nav.keep_verified();
     let nav = Rc::new(nav);
+    // (the songs as recorded, if asked for and the re-release is there: made once, in out/music)
+    let music_wad = match o.music.filter(|_| sound || o.capture_sound) {
+        Some(kind) => {
+            let made = crate::music::music_wad(&iwad, kind)?;
+            if made.is_none() {
+                println!(
+                    "music: no {} recordings for {} (the Steam re-release's rerelease/extras.wad \
+                     not found, or not this IWAD's): MIDI",
+                    kind.name(),
+                    iwad.display()
+                );
+            }
+            made
+        }
+        None => None,
+    };
     let mut engine = Engine::new(
         &iwad,
         &map_name,
@@ -713,6 +731,7 @@ fn first_watch(
             seed: o.seed,
             resolution: o.render,
             soundfont: o.soundfont.clone(),
+            music_wad,
         },
     )?;
     engine.carry.clone_from(&o.carry);

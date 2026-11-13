@@ -770,5 +770,22 @@ one brings JACK, PipeWire and readline).
 
 Found while choosing them: the Steam re-release's `rerelease/extras.wad` has the original
 soundtrack recorded on a Roland SC-55 Mk2 (`O_` lumps, Ogg Vorbis, 87 tracks) and Andrew
-Hulshult's IDKFA (`H_`). Usable from the player's own install (never copied into the
-repository or a release); not yet done.
+Hulshult's IDKFA (`H_`): see the next entry.
+
+## Music: the re-release's recordings (2026-11-12)
+
+`--music sc55|idkfa` (the console's Music) plays the songs as the Steam re-release recorded them.
+`crate::music` finds `rerelease/extras.wad` (beside `base/`, Steam's folders, or
+`EVILBOOM_RERELEASE_DIR`) and makes a music WAD in out/music/ for the IWAD: each song lump
+(`D_E1M1`) the recording's Ogg data, the WAD loaded before any PWAD so a PWAD's own songs stay
+its own, and the engine built with Vorbis. Songs not recorded play through the MIDI synth.
+Nothing of the re-release is copied elsewhere.
+
+Which recording is which song is a table (`music_songs.rs`), derived once from the four IWADs
+and checked against extras.wad by a test: the same name; the same score under another name
+(E2M5 is E1M7's); the same score but for a few timings (DOOM's intermission is E2M3's, the
+score 99.98% alike; E3M5, E3M6, E3M7, E3M9 are E1M7, E1M6, E2M7, E1M9's, 99.93% or more); DOOM
+II's MAP14 and MAP22 Dave D. Taylor Blues, its MAP08's (re-arranged, taken as the same song on
+the maintainer's word); TNT's own songs by the map that first plays them (O_TNT01...). Of the
+songs: DOOM 31 of 32 (not INTROA, unused), DOOM II 35 of 35, Plutonia 35 of 35, TNT 24 of 35
+(eleven of TNT's own have no recording).

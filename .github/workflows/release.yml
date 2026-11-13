@@ -34,7 +34,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake ninja-build pkg-config patchelf \
             libsdl2-dev libsdl2-mixer-dev libsndfile1-dev libzip-dev zlib1g-dev \
-            libgl-dev libglu1-mesa-dev libglib2.0-dev
+            libgl-dev libglu1-mesa-dev libglib2.0-dev libvorbis-dev
 
       # (FluidSynth from its source: 22.04's is 2.2, and GeneralUser GS 2 needs 2.3's modulators;
       # and only the synth: the engine plays what it renders, so none of its own audio drivers,
@@ -88,6 +88,7 @@ jobs:
             mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_mixer mingw-w64-x86_64-libsndfile
             mingw-w64-x86_64-libzip mingw-w64-x86_64-zlib mingw-w64-x86_64-cmake
             mingw-w64-x86_64-ninja mingw-w64-x86_64-gcc mingw-w64-x86_64-fluidsynth
+            mingw-w64-x86_64-libvorbis
 
       - name: Engine
         shell: msys2 {0}

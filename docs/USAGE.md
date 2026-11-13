@@ -28,6 +28,7 @@ speed (off while paused or sped up).
 | `--stream [right\|left]` | the 16:9 window for a stream: the game on one side, a column for the viewers on the other |
 | `--window-size WxH` | the window's size (`1280x720`); the picture, 1920x1080 for the stream, is scaled to fit |
 | `--render WxH` | the game drawn at that size (640x480 unless given); the stream's game is 1440x1080, so that draws it pixel for pixel |
+| `--music sc55\|idkfa` | the songs as recorded, from your own Steam copy of the DOOM + DOOM II re-release (its `rerelease/extras.wad`; `EVILBOOM_RERELEASE_DIR` if it's somewhere unusual): the original soundtrack on a Roland SC-55, or Andrew Hulshult's IDKFA. Songs it hasn't recorded (a PWAD's own) play as MIDI |
 | `--soundfont NAME` | the music through FluidSynth with that SoundFont (a file in `soundfonts/`, or a path), not the OPL synth |
 | `--no-vsync` | frames shown when ready rather than at the screen's refresh (kept to it by the clock) |
 | `--fullscreen` | the whole screen, at the desktop's resolution, borderless |
