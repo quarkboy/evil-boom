@@ -1,86 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Quarkboy
 
-//! `evil-boom`: Evil from the command line.
-//!
-//!   evil-boom sweep <wad> [maps...] [<wad> [maps...]] [--jobs N] [run options]
-//!       many maps at once, a process a map; a line each as they finish, then a summary
-//!   evil-boom run-map <wad> <map> [run options]      one map; its log goes to out/explore
-//!   evil-boom episode <wad> <first map> [--seeds K] [run options]   an episode on one life from that
-//!                                               map, what she has carried level to level; K seeds
-//!                                               (8) side by side, --jobs at a time. --lives N: N
-//!                                               lives for the episode; dead, the level again with
-//!                                               what she came into it with, what she's learned kept
-//!   evil-boom score [doom|doom2 [maps...]]... [--skills 3,4] [--seeds K] [--jobs N] [--out FILE]
-//!       the bot's score: every level, pistol start, one life, K random seeds a skill (HMP and
-//!       UV, 8); a row a run (out/score/), then the report (see score.rs)
-//!       --like FILE: the very runs of an earlier set (its levels, skills and seeds); --tuning FILE
-//!       and --bar NAMES go to every run
-//!   evil-boom score-report FILE...                   the report of score TSVs (more: how far apart;
-//!                                               two of the same runs: run for run)
-//!   evil-boom score-watch FILE [--total N]           a score's progress in a small window (`score`
-//!                                               opens one unless --no-window)
-//!   evil-boom tuning                                 the numbers she judges a fight by, as JSON: a file
-//!                                               to change and give a run with --tuning FILE
-//!   evil-boom dump-nav <wad> <map>                   the level's analysis (for comparing)
-//!   evil-boom neuro-mock [--port N] [FILE]           a stand-in Neuro server (port 8000): actions sent
-//!                                               from FILE (out/neuro/actions.txt) as lines are added,
-//!                                               everything the game sends shown and in FILE.log
-//!   evil-boom secret-survey <wad> <map>... [--jobs N]   the maps' secrets: the lines pressed or shot
-//!       to reveal each, and how the wall rubric scores them and every other wall once she's
-//!       explored all she can (out/survey/<WAD>.tsv, .txt)
-//!   evil-boom neuro-gpt [--port N] [--config FILE]   a language model as Evil (config/neuro-gpt.json, and
-//!                                               config/neuro-gpt.local.json for the key): log in
-//!                                               out/neuro/gpt.log
-//!   evil-boom console [--bind HOST:PORT] [--new-token]   the stream console (docs/CONSOLE.md): a
-//!                                               web page (0.0.0.0:7878, its token printed) to start,
-//!                                               stop and steer the game, started as a `watch` child;
-//!                                               --new-token: the old one stops working
-//!   evil-boom follow <wad> <map>                     plan the level, follow the plan (seed 0)
-//!   evil-boom drive <wad> <map> --script FILE [run options]   drive her by hand (see drive.rs)
-//!   evil-boom sector <wad> <map> <sector>...         sectors as the map has them: heights, lines, things,
-//!                                               the run-jumps landing there (and their check)
-//!   evil-boom arena FILE [names...] [--jobs N] [--seeds K]
-//!       the fights set up in FILE (see arena.rs), each K times (seeds 0..K), a process a go;
-//!       a line each, then how each scenario went: won, lost, drawn
-//!   evil-boom arena-one FILE NAME [--seed N]         one of them, once; its log to out/arena/NAME.txt
-//!   evil-boom arena-watch FILE NAME [--seed N] [--speed X] [--mute]   one of them, watched (space
-//!                                               pause, N a tic at a time, +/- speed, M mute)
-//!   evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode]
-//!       [--crf N] [--preset P] [--ffmpeg PATH] [--gpt [CONFIG]] [--neuro URL] [run options]   a watch
-//!       played as fast as it goes into an MP4 (ffmpeg, H.264: CRF 20, veryfast unless told);
-//!       directed (--gpt, --neuro, --directed), in real time; at x1, with the game's sound
-//!   evil-boom watch <wad> <map> [--speed X] [--all] [--episode] [--mute] [--directed FILE] [--neuro URL] [--gpt [CONFIG]] [--headless] [run options]
-//!       watch her play, with what she knows beside the game, the game's sound on (space pause,
-//!       +/- speed, A the whole map, F follow, M mute, L Evil's log, T text size, wheel zoom, Esc quit; the sound off while
-//!       paused or not at x1). --directed FILE: directed play, orders read from FILE as lines are
-//!       added to it (list, name, order: see control::script), what comes back in the log and in
-//!       FILE.out. --present: Doom's own screens (the title card, the menu walked to the game, the
-//!       melt, the tally, the finales, death as the game shows it); --title: those, held at the
-//!       title card till the console begins it. --stream [right|left]: the window for the stream,
-//!       16:9, the game on one side, a column for the viewers on the other (right unless told).
-//!       --window-size WxH: the window that size, the picture scaled to it; --no-vsync;
-//!       --fullscreen (the desktop's resolution, borderless). --render WxH: the game drawn at
-//!       that size (640x480 unless told; 1440x1080 fills the stream's game 1:1). --soundfont
-//!       NAME|FILE|opl: the MIDI with that SoundFont (soundfonts/), or the OPL synth (soundfonts/
-//!       SC-55.sf2 unless told, if it's there, else OPL). --music
-//!       sc55|idkfa: the songs as recorded (the Steam re-release's: the SC-55 or IDKFA), the
-//!       rest through the MIDI synth.
-//!       --neuro URL: directed by Neuro over its WebSocket (ws://127.0.0.1:8000: Neuro,
-//!       or evil-boom neuro-mock). --gpt [CONFIG]: directed by the GPT stand-in, run in this
-//!       program (config/neuro-gpt.json unless named; its log out/neuro/gpt.log)
-//!
-//! Any command: --pwad FILE (repeatable): PWADs over the IWAD, as the game's -file (a path, or a
-//! name in the Doom folder); a map from the last that has it; logs named by the first (MM_MAP01).
-//!
-//! Run options: --lives N (unlimited), --max-seconds S (3600, all lives together), --seed N|random (0), --peek, --secrets,
-//! --expert, --fight SKILL, --mortal, --complete (every kill, item and secret, then out: --fight 4
-//! --expert --secrets together, the exit held while any tally's short), --stall S (the 100% runs: over after S game seconds, 300
-//! unless told, with nothing more collected or learned); --snapshot S (stop after S game seconds and draw the
-//! viewer's window to out/watch.png; nothing's drawn till then) and --focus X,Y,ZOOM (its map
-//! centred there); --from FILE@S (play back the run recorded in FILE, out/runs/<IWAD>_<MAP>.run,
-//! which every run-map writes (_expert etc. by the kind of run), to S game seconds, then the bot as it is now: the run from there
-//! goes to <IWAD>_<MAP>_branch.run).
+//! `evil-boom`: Evil from the command line. The commands, their arguments and options are in
+//! help.rs (`evil-boom help`), and at more length in docs/USAGE.md.
 
 mod cli;
 use cli::{option_args, run_options};
@@ -1174,6 +1096,20 @@ fn arena(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// `evil-boom help TOPIC`: a command's or a topic's help.
+fn help_on(topic: &str) -> ExitCode {
+    match evilboom::help::topic(topic) {
+        Some(text) => {
+            print!("{text}");
+            ExitCode::SUCCESS
+        }
+        None => {
+            eprintln!("evil-boom: no help on {topic:?} (evil-boom help lists the commands)");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let args = match evilboom::config::take_pwads(std::env::args().skip(1).collect()) {
         Ok(args) => args,
@@ -1182,29 +1118,89 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let result = match args.first().map(String::as_str) {
+    // (the help, and the version: before anything's started)
+    let first = args.first().map(String::as_str);
+    let asked = |a: &String| a == "--help" || a == "-h";
+    match first {
+        None | Some("help" | "--help" | "-h") => {
+            return match args.get(1).map(String::as_str) {
+                None => {
+                    print!("{}", evilboom::help::overview());
+                    ExitCode::SUCCESS
+                }
+                Some(t) => help_on(t),
+            };
+        }
+        Some("--version" | "-V" | "version") => {
+            println!("{}", evilboom::help::version());
+            return ExitCode::SUCCESS;
+        }
+        Some(cmd) if args[1..].iter().any(asked) => return help_on(cmd),
+        _ => {}
+    }
+    let result = match first {
         Some("dump-nav") if args.len() == 3 => dump_nav(&args[1], &args[2]),
         Some("secret-survey") => {
             // (one map in this process, its rows out: the survey's children)
             let one = args.iter().any(|a| a == "--one");
-            let jobs = args.iter().position(|a| a == "--jobs").and_then(|i| args.get(i + 1)).and_then(|j| j.parse().ok()).unwrap_or(12);
-            let words: Vec<String> = args[1..].iter().filter(|a| !a.starts_with("--")).filter(|a| a.parse::<usize>().is_err()).cloned().collect();
+            let jobs = args
+                .iter()
+                .position(|a| a == "--jobs")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|j| j.parse().ok())
+                .unwrap_or(12);
+            let words: Vec<String> = args[1..]
+                .iter()
+                .filter(|a| !a.starts_with("--"))
+                .filter(|a| a.parse::<usize>().is_err())
+                .cloned()
+                .collect();
             match (words.split_first(), one) {
-                (Some((wad, maps)), true) if maps.len() == 1 => evilboom::survey::survey_map(wad, &maps[0]),
-                (Some((wad, maps)), false) if !maps.is_empty() => evilboom::survey::survey(wad, maps, jobs),
+                (Some((wad, maps)), true) if maps.len() == 1 => {
+                    evilboom::survey::survey_map(wad, &maps[0])
+                }
+                (Some((wad, maps)), false) if !maps.is_empty() => {
+                    evilboom::survey::survey(wad, maps, jobs)
+                }
                 _ => Err("usage: evil-boom secret-survey <wad> <map>... [--jobs N]".into()),
             }
         }
         Some("neuro-gpt") => {
-            let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);
-            let config = args.iter().position(|a| a == "--config").and_then(|i| args.get(i + 1)).map_or_else(|| evilboom::config::root().join("config").join("neuro-gpt.json"), std::path::PathBuf::from);
+            let port = args
+                .iter()
+                .position(|a| a == "--port")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(8000);
+            let config = args
+                .iter()
+                .position(|a| a == "--config")
+                .and_then(|i| args.get(i + 1))
+                .map_or_else(
+                    || {
+                        evilboom::config::root()
+                            .join("config")
+                            .join("neuro-gpt.json")
+                    },
+                    std::path::PathBuf::from,
+                );
             evilboom::neuro::gpt::serve(port, &config)
         }
         Some("console") => console_args(&args[1..])
             .and_then(|(bind, new_token)| evilboom::console::server::serve(&bind, new_token)),
         Some("neuro-mock") => {
-            let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(8000);
-            let file = args.iter().skip(1).rfind(|a| !a.starts_with("--") && a.parse::<u16>().is_err()).cloned().unwrap_or_else(|| "out/neuro/actions.txt".into());
+            let port = args
+                .iter()
+                .position(|a| a == "--port")
+                .and_then(|i| args.get(i + 1))
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(8000);
+            let file = args
+                .iter()
+                .skip(1)
+                .rfind(|a| !a.starts_with("--") && a.parse::<u16>().is_err())
+                .cloned()
+                .unwrap_or_else(|| "out/neuro/actions.txt".into());
             evilboom::neuro::mock::serve(port, std::path::Path::new(&file))
         }
         Some("follow") if args.len() == 3 => follow(&args[1], &args[2]),
@@ -1229,7 +1225,13 @@ fn main() -> ExitCode {
         Some("arena-one") => arena_one(&args[1..]),
         #[cfg(feature = "viewer")]
         Some("arena-watch") => arena_watch(&args[1..]),
-        _ => Err("usage: evil-boom sweep|run-map|watch|drive|dump-nav|follow|sector ... (see the source's header)".into()),
+        Some(cmd) if evilboom::help::topic(cmd).is_some() => Err(format!(
+            "evil-boom {cmd}: not as given (evil-boom help {cmd})"
+        )),
+        Some(cmd) => Err(format!(
+            "evil-boom: no command {cmd:?} (evil-boom help lists them)"
+        )),
+        None => Ok(()),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

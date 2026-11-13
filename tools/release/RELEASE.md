@@ -33,6 +33,7 @@ The console has both as settings (Music, MIDI synth).
 evil-boom watch doom E1M1 --fight 3 --mortal        # watch her play E1M1 on Hurt Me Plenty
 evil-boom watch doom2 MAP01 --fight 2 --episode     # DOOM II from MAP01, on through
 evil-boom console                                    # the stream console (open the URL it prints)
+evil-boom help                                       # every command; evil-boom help watch, ...
 ```
 
 (On Windows, `evil-boom.exe` from a command prompt in this folder; on Linux, `./evil-boom`.)

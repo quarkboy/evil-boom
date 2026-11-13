@@ -30,6 +30,7 @@ pub mod drive;
 pub mod dsda;
 pub mod engine;
 pub mod geom;
+pub mod help;
 pub mod jumps;
 pub mod knowledge;
 pub mod los;

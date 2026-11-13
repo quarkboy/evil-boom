@@ -2,7 +2,8 @@
 
 `evil-boom` is one program with many commands. Run it from the repository's root (its logs go to
 `out/`). A WAD is given by short name (`doom`, `doom2`, `tnt`, `plutonia`) or by path, a map as
-`E1M1` or `MAP01`.
+`E1M1` or `MAP01`. `evil-boom help` lists the commands; `evil-boom help COMMAND` (or `COMMAND
+--help`) gives one's arguments and options, `evil-boom help options` the options most take.
 
 ## Watching her play
 
