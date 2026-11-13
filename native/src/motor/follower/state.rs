@@ -21,6 +21,8 @@ pub struct BarrelShot {
     pub(super) best: Option<(f64, i64)>,
     /// the tic of the last shot at it
     pub(super) last_shot: i64,
+    /// the tic she last stood to shoot it (where it's shot from, turning to it or tapping)
+    pub(super) stood: i64,
     /// a tap not yet seen to have set anything off: the barrels there were then, and when
     pub(super) tapped: Option<(usize, i64)>,
     /// shot: running off till this tic, this way

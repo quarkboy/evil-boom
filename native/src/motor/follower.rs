@@ -455,6 +455,7 @@ impl RouteFollower {
                 way: Vec::new(),
                 best: None,
                 last_shot: -1_000_000_000,
+                stood: -1_000_000_000,
                 tapped: None,
                 flee_until: None,
                 flee_way: Vec::new(),
@@ -559,6 +560,12 @@ impl RouteFollower {
     /// Running over (or off) floors going down under her: done only on a floor that stays put.
     pub fn running_off(&self) -> bool {
         self.jump.run.is_some()
+    }
+
+    /// Stood to shoot a barrel this tic (where it's shot from, turning to it or tapping): the
+    /// trigger and the way she faces are what the route is waiting on.
+    pub fn stood_to_shoot(&self, tic: i64) -> bool {
+        self.shot.stood == tic
     }
 
     /// Shooting something with the gun it picks for that (a barrel in the way, its blasts

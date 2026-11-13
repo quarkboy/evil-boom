@@ -528,7 +528,9 @@ impl Combat {
         let gun = self.z(obs) + SHOT_HEIGHT;
         let d = dist(at, from).max(1.0);
         let (mut lo, mut hi) = (z.max(gun - AUTOAIM * d), (z + h).min(gun + AUTOAIM * d));
-        if hi <= lo {
+        // (further off than autoaim looks, the game doesn't tip the shot at it: it goes out level,
+        // into a ledge or a step that hides the height the gun's at, whatever she sees over it)
+        if hi <= lo || d > AUTOAIM_RANGE {
             if !(z < gun && gun < z + h) {
                 return false;
             }

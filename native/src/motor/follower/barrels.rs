@@ -309,6 +309,11 @@ impl RouteFollower {
                 // another, maybe the one going off)
                 self.progress_tic = obs.tic;
                 if self.shot.stay {
+                    // (the tap not yet out of the gun, or not yet seen to land: still stood to it,
+                    // facing it; the pistol lets go some tics after the trigger)
+                    if self.shot.tapped.is_some() {
+                        self.shot.stood = obs.tic;
+                    }
                     return self.motion.hold(obs, (0.0, 0.0), None);
                 }
                 let pos = obs.pos();
@@ -571,6 +576,7 @@ impl RouteFollower {
                 .hold(obs, (away.cos() * 8.0, away.sin() * 8.0), Some(look));
         }
         let mut c = self.motion.hold(obs, (0.0, 0.0), Some(look));
+        self.shot.stood = obs.tic;
         // (single taps, the trigger let go between: the first shot of a burst goes straight,
         // only held ones spread)
         // (the shotgun only with all of the barrel in the gun's view: its pellets spread up and

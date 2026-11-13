@@ -1018,7 +1018,19 @@ impl Player {
         if d.is_none() && self.hold_at_edge(obs, &c) {
             (c.forward, c.strafe) = crate::motor::brake(obs, obs.angle - c.turn);
         }
+        // The route stood to shoot a barrel, and the fight's move no more than a shot as the route
+        // goes on: the gun's the route's too. The shot is how the route goes on; the fight aiming
+        // elsewhere, she'd stand there for as long as the barrel's given.
+        let stood = self
+            .explorer
+            .follower
+            .as_ref()
+            .is_some_and(|f| f.stood_to_shoot(obs.tic));
         match d {
+            Some(d) if stood && d.kind == Move::ShootingOnTheWay => {
+                self.fight.combat.route_walks(obs, &c);
+                c
+            }
             Some(d) => {
                 let pressing = self
                     .explorer

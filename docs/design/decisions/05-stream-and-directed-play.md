@@ -860,3 +860,30 @@ her and no decision forced, till she plays on (`on: false`), or the watcher or t
 does. No limit to it: nothing happens in a paused game. Meanwhile only what doesn't move her is
 registered (look, list, inspect, status, why, answer, policy, goal, pause), and anything else is
 refused, the console's as well. The directed scripts' `stop` stays as it was.
+
+## A far shot goes out level; a barrel's tap is the route's (2026-11-13)
+
+Seen recording a demo, E1M1 on Ultra-Violence, Evil's goal "everything": she walked to a spot to
+shoot a barrel from, a barrel went off, and she stood there firing till her pistol was empty (42
+rounds for 25 damage). Two things, traced in her log and replayed through `neuro-mock`:
+
+- The barrel that went off wasn't hers. A shotgun guy came into sight 1,098 off as she got to
+  her post, and the fight took the trigger ("shooting on the way"); the first shots at him hit a
+  second barrel on that line. The rest went into the side of the pedestal he stands behind (48
+  high, all but his top 8 hidden): within 1,024 autoaim tips a bullet up at what shows of him,
+  further off it doesn't look (`dsda_PlayerAimBad`, `16*64`) and the bullet goes out level. Her
+  shot check had autoaim at any distance. Now, past autoaim's range, a shot is clear only level.
+- She stood there because "shooting on the way" leaves the legs to the route, and the route's
+  next thing was the tap at its barrel, which wants the trigger and the facing the fight had.
+  Neither got done for the 20 s a barrel is given. Now, the route stood to shoot a barrel and the
+  fight's move no more than shooting on the way, the gun and the facing are the route's, till
+  the tap has landed (the pistol lets go some tics after the trigger). Any other move of the
+  fight's still has her.
+
+Not done: autoaim takes a barrel for a target as it does a monster, and her model of it counts
+monsters only.
+
+The same start after: the barrel gone in 3 taps, no shot at the shotgun guy from the post, four
+shotgun guys dead for 14 rounds by 13 s. Score, run for run on the baseline's runs: +0.0115
+(s.e. 0.0060), 196 better, 143 worse, 544 the same; HMP +0.0129, UV +0.0100; 0.461 against 0.450,
+exits 399 against 389.
