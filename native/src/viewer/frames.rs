@@ -4,7 +4,7 @@
 //! How steadily the window shows the game (`EVIL_DEBUG_FRAMES=S`: S seconds of it, then the window
 //! shuts): each frame's gap from the one before, the tics it moved on, and where its time went
 //! (the game and her, the picture, putting it on the screen). Written to out/watch/frames.tsv,
-//! summed up on stdout.
+//! summed up on stdout; the last picture in out/watch/frames.png.
 
 use std::time::Instant;
 

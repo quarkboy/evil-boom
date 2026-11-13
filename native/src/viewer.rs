@@ -1532,6 +1532,11 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             let picture = watch.frame.as_ref().map_or(&[][..], |f| &f.2[..]);
             f.frame(now, stepped, painted, watch.engine.tic - tic0, picture);
             if f.done() {
+                // (and the picture as it was last, to see what it looked like)
+                let png = out_dir().join("watch").join("frames.png");
+                if let Err(e) = save_png_sized(&png, &canvas.px, ww, wh) {
+                    println!("{}: {e}", png.display());
+                }
                 break;
             }
         }
@@ -1639,8 +1644,13 @@ fn palette(w: &Wad) -> Vec<u32> {
 }
 
 fn save_png(path: &Path, px: &[u32]) -> Result<(), String> {
+    save_png_sized(path, px, W, H)
+}
+
+/// A picture `w` by `h` (0RGB) into a PNG.
+fn save_png_sized(path: &Path, px: &[u32], w: usize, h: usize) -> Result<(), String> {
     let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
-    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), W as u32, H as u32);
+    let mut enc = png::Encoder::new(std::io::BufWriter::new(file), w as u32, h as u32);
     enc.set_color(png::ColorType::Rgb);
     enc.set_depth(png::BitDepth::Eight);
     let mut writer = enc.write_header().map_err(|e| e.to_string())?;
