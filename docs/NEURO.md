@@ -53,7 +53,13 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_game` | the game itself: start, next level, restart |
 
 Each action's full schema and description are in `native/src/neuro/session.rs`. What each one
-does is in `native/src/control/directed/`. Arguments a model gets slightly wrong (a field's alias,
+does is in `native/src/control/directed/`.
+
+Only the actions that make sense where she is are registered (each change slows her next answers
+a moment, so it changes only when where she is does): in a level, every one but `doom_game`
+(that only where she may restart the level), and `doom_exit` once she's seen an exit in this
+life; off a level (the title card, the tally, a finale, game over), `doom_game`, `doom_answer`,
+`doom_status`, `doom_policy` and `doom_goal`. A decision forced on her names only registered ones. Arguments a model gets slightly wrong (a field's alias,
 a stray field) are mended against the schema (`neuro/repair.rs`).
 
 ### Settings (`doom_policy`)

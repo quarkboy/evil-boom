@@ -67,7 +67,10 @@ Two columns of sections (one on a narrow screen): the game and its controls, the
 sound, the log, and Evil's card. Evil's card shows her goal, her settings, an open question with
 its choices and countdown, `doom_why`, the last lines told her and her last actions. It can act
 for her: answer the question, set a goal, change a setting, look, ask why, take over the fight.
-Actions from the page are marked as the streamer's.
+Actions from the page are marked as the streamer's. Below her settings, the stream's own: how
+soon a decision's forced on her when she's waited with nothing to do (6 s) or left a question
+unanswered (3 s), 0 for never; kept in `config/console.local.json` (`force_idle`, `force_ask`)
+for the next game.
 
 The View section's pictures (the map as she knows it, the game, the stream's window) are made
 by the game only while a page shows them: its View section unfolded and the page in sight. OBS

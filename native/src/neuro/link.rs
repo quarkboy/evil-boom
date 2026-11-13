@@ -18,7 +18,8 @@ pub const GAME: &str = "Doom";
 /// What comes in from the link.
 #[derive(Debug)]
 pub enum Incoming {
-    /// connected (again): startup sent, the actions registered; the session sends what it should
+    /// connected (again): startup sent; the session registers the actions that fit and sends
+    /// what it should
     Connected,
     /// the startup acknowledgement: who's playing ("evil", "Evil Neuro")
     Hello { character: String, display: String },
@@ -38,13 +39,12 @@ pub struct Link {
 }
 
 impl Link {
-    /// Connect to `url` (ws://host:port) on a thread of its own; `actions` registered on each
-    /// connect.
-    pub fn start(url: &str, actions: Vec<Value>) -> Link {
+    /// Connect to `url` (ws://host:port) on a thread of its own (again whenever it's lost).
+    pub fn start(url: &str) -> Link {
         let (out, out_rx) = channel::<Value>();
         let (in_tx, incoming) = channel::<Incoming>();
         let url = url.to_string();
-        thread::spawn(move || run(&url, &actions, &out_rx, &in_tx));
+        thread::spawn(move || run(&url, &out_rx, &in_tx));
         Link { out, incoming }
     }
 
@@ -76,17 +76,12 @@ impl Link {
     }
 }
 
-fn run(url: &str, actions: &[Value], out: &Receiver<Value>, incoming: &Sender<Incoming>) {
+fn run(url: &str, out: &Receiver<Value>, incoming: &Sender<Incoming>) {
     loop {
         match connect(url) {
             Ok(mut ws) => {
-                let hello = [
-                    json!({ "command": "startup", "game": GAME }),
-                    json!({ "command": "actions/register", "game": GAME, "data": { "actions": actions } }),
-                ];
-                if hello
-                    .iter()
-                    .all(|m| ws.send(Message::text(m.to_string())).is_ok())
+                let hello = json!({ "command": "startup", "game": GAME });
+                if ws.send(Message::text(hello.to_string())).is_ok()
                     && incoming.send(Incoming::Connected).is_ok()
                 {
                     let why = serve(&mut ws, out, incoming);

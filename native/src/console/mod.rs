@@ -12,7 +12,7 @@ pub mod server;
 use serde::{Deserialize, Serialize};
 
 /// The protocol's version, in the game's hello: a supervisor and a game built apart may not agree.
-pub const PROTOCOL: u32 = 5;
+pub const PROTOCOL: u32 = 6;
 
 /// What the console asks of the running game, applied by it at the top of a frame.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -38,6 +38,14 @@ pub enum Command {
         map: String,
         #[serde(default)]
         carry: bool,
+    },
+    /// how soon a decision's forced on her (Neuro's), in seconds: waiting with nothing to do
+    /// (`idle`), a question unanswered (`ask`); 0 never; one left out is left as it is
+    Forcing {
+        #[serde(default)]
+        idle: Option<f64>,
+        #[serde(default)]
+        ask: Option<f64>,
     },
     /// the sound's loudness: the game's own sfx and music volumes (0-15) and a master over the
     /// mix (0-100); one left out is left as it is
@@ -216,6 +224,10 @@ pub struct EvilState {
     pub actions: Vec<ActionLine>,
     /// a minute's worth: her actions, words told her, moments (not silent)
     pub per_minute: [u32; 3],
+    /// how soon a decision's forced on her, in seconds: waiting with nothing to do, a question
+    /// unanswered (0: never)
+    #[serde(default)]
+    pub forcing: [f64; 2],
     /// the streamer's last action's answer: (its number, the action, done, the answer)
     pub reply: Option<(u64, String, bool, String)>,
 }

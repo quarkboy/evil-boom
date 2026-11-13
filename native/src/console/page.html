@@ -264,6 +264,11 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
             <label>idle (s)<input type="number" min="0" max="60" data-p="idle"></label>
           </div>
           <div class="row"><button id="ev-setapply">Apply as hers</button><span class="dim" id="ev-policy" style="font-size:12px;align-self:center"></span></div>
+          <div class="ev-sets" style="margin-top:8px" title="The stream's, not hers: how soon a decision's pushed on her, in seconds (0: never). Kept for the next game.">
+            <label>push her, waiting (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fidle"></label>
+            <label>push her, a question (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fask"></label>
+          </div>
+          <div class="row"><button id="ev-forceapply">Apply</button><span class="dim" style="font-size:12px;align-self:center">the stream's: a decision forced after she's waited, or left a question, this long</span></div>
         </div>
         <div class="ev-box" style="margin-top:10px">
           <h3>Her calls</h3>
@@ -491,6 +496,8 @@ function renderEvil(e, n) {
   for (const part of (e.policy || "").split(", ")) { const [k, v] = part.split(" "); pol[k] = v; }
   const idle = /after (\d+) s/.exec(e.idle || ""); pol.idle = idle ? idle[1] : "0";
   for (const el of $("evilcard").querySelectorAll("[data-p]")) if (!setsDirty && document.activeElement !== el && pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
+  // (how soon she's pushed, as the game has it, unless the streamer's changing it)
+  [["ev-fidle", 0], ["ev-fask", 1]].forEach(([id, i]) => { if (!forceDirty && document.activeElement !== $(id) && e.forcing) $(id).value = Math.round(e.forcing[i] * 10) / 10; });
   $("ev-calls").replaceChildren(...(e.calls || []).map(li));
   $("ev-why").replaceChildren(...((e.why && e.why.length) ? e.why : ["-"]).map(li));
   const q = e.question;
@@ -527,7 +534,7 @@ function renderEvil(e, n) {
     (a.streamer ? "(streamer) " : "") + a.name + (a.data ? " " + a.data : "") + "\n   -> " + (a.ok ? "" : "FAILED: ") + a.reply.split("\n")[0])),
     acts.length + "|" + (acts.length ? acts[acts.length - 1].seconds + acts[acts.length - 1].name : ""), evilActs);
 }
-let setsDirty = false;
+let setsDirty = false, forceDirty = false;
 function order(action, data) { return cmd({ cmd: "order", action, data: data == null ? null : JSON.stringify(data) }); }
 // (none shown unless picked: each costs the game a little while it's shown; OBS has its own)
 const viewOn = { map: false, game: false, stream: false }, viewShown = {}, viewLoading = {};
@@ -696,6 +703,11 @@ $("ev-goalset").onclick = () => {
 };
 $("ev-goaldrop").onclick = () => order("doom_goal", { goal: "none" });
 for (const el of $("evilcard").querySelectorAll("[data-p]")) el.addEventListener("change", () => { setsDirty = true; });
+for (const id of ["ev-fidle", "ev-fask"]) $(id).addEventListener("input", () => { forceDirty = true; });
+$("ev-forceapply").onclick = async () => {
+  const n = (id) => { const v = $(id).value.trim(); return v === "" ? null : Math.max(0, Number(v)); };
+  if (await cmd({ cmd: "forcing", idle: n("ev-fidle"), ask: n("ev-fask") })) forceDirty = false;
+};
 $("ev-setapply").onclick = async () => {
   const data = {};
   for (const el of $("evilcard").querySelectorAll("[data-p]")) data[el.dataset.p] = el.dataset.p === "idle" ? Number(el.value) : el.value;

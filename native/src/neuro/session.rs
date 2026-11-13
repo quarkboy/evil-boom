@@ -13,7 +13,8 @@ use crate::control::directed::{bearing, Director, Hints, Order, Topic, NAME_MAX}
 use crate::motor::Observation;
 use crate::play::Agent;
 
-/// waiting on her this long (tics) with nothing to do: a decision forced
+/// waiting on her this long (tics) with nothing to do: a decision forced (unless the console
+/// says otherwise: `set_forcing`)
 const IDLE_FORCE: i64 = 6 * 35;
 /// her state told (silently) at most this often, when it's changed
 const STATUS_EVERY: i64 = 20 * 35;
@@ -23,7 +24,7 @@ const LIST_MAX: usize = 15;
 /// silently (her context and her attention are what's being spent)
 const MOMENTS_A_MINUTE: usize = 6;
 const MINUTE: i64 = 60 * 35;
-/// a question unanswered this long (tics): a decision forced
+/// a question unanswered this long (tics): a decision forced (as `IDLE_FORCE`)
 const ASK_FORCE: i64 = 3 * 35;
 /// the rules told again (silently) this often, or after this many characters told her since,
 /// whichever comes first: her context rolls, and the rules shouldn't roll out of it
@@ -62,7 +63,45 @@ pub struct Session {
     exchanges: std::collections::VecDeque<Exchange>,
     reply: Option<(u64, String, bool, String)>,
     now_tic: i64,
+    /// the actions registered with Neuro now (`sync_actions`): only those that make sense where
+    /// she is, changed only when that changes (a few times a level)
+    registered: std::collections::BTreeSet<&'static str>,
+    /// how long (tics) she's waited with nothing to do, and a question's gone unanswered, before
+    /// a decision's forced on her (0: never); the console's to change
+    idle_force: i64,
+    ask_force: i64,
 }
+
+/// Every action's name, as `actions` has them.
+const ALL_ACTIONS: &[&str] = &[
+    "doom_look",
+    "doom_list",
+    "doom_press",
+    "doom_inspect",
+    "doom_go",
+    "doom_explore",
+    "doom_search",
+    "doom_name",
+    "doom_exit",
+    "doom_fight",
+    "doom_policy",
+    "doom_game",
+    "doom_answer",
+    "doom_stop",
+    "doom_status",
+    "doom_goal",
+    "doom_why",
+];
+
+/// Off a level (the title, a game over, the tally, a finale): the game itself, her answers, her
+/// status, and what stands across levels (her settings, a goal).
+const OFF_LEVEL: &[&str] = &[
+    "doom_game",
+    "doom_answer",
+    "doom_status",
+    "doom_policy",
+    "doom_goal",
+];
 
 /// An action and what came back, for the stream console.
 struct Exchange {
@@ -132,7 +171,7 @@ Ids come from doom_list; your names work as ids. \"NE 400\": north-east of you, 
 impl Session {
     pub fn new(url: &str) -> Session {
         Session {
-            link: Link::start(url, actions()),
+            link: Link::start(url),
             url: url.to_string(),
             connected: false,
             who: String::new(),
@@ -152,6 +191,9 @@ impl Session {
             exchanges: std::collections::VecDeque::new(),
             reply: None,
             now_tic: 0,
+            registered: std::collections::BTreeSet::new(),
+            idle_force: IDLE_FORCE,
+            ask_force: ASK_FORCE,
         }
     }
 
@@ -222,7 +264,20 @@ impl Session {
                 self.loud.len() as u32,
             ],
             reply: self.reply.clone(),
+            forcing: [self.idle_force as f64 / 35.0, self.ask_force as f64 / 35.0],
             ..EvilState::default()
+        }
+    }
+
+    /// How soon a decision's forced on her, in seconds (the console's): waiting with nothing to
+    /// do, a question unanswered; 0 never, None as it was. (Kept to an hour at most.)
+    pub fn set_forcing(&mut self, idle: Option<f64>, ask: Option<f64>) {
+        let tics = |s: f64| (s.clamp(0.0, 3600.0) * 35.0).round() as i64;
+        if let Some(s) = idle {
+            self.idle_force = tics(s);
+        }
+        if let Some(s) = ask {
+            self.ask_force = tics(s);
         }
     }
 
@@ -250,6 +305,8 @@ impl Session {
                 Incoming::Connected => {
                     log.push("neuro: connected".into());
                     self.connected = true;
+                    // (a new connection has nothing registered: what fits now, below)
+                    self.registered.clear();
                     self.forced = false;
                     self.idle_since = obs.tic;
                     if !self.briefed {
@@ -320,10 +377,10 @@ impl Session {
             .question()
             .filter(|q| !q.now && self.connected)
         {
-            if self.forced_question != Some(q.id) && obs.tic - q.opened >= ASK_FORCE {
+            if self.forced_question != Some(q.id) && self.ask_force > 0 && obs.tic - q.opened >= self.ask_force {
                 self.forced_question = Some(q.id);
                 self.forced = true;
-                self.link.force(
+                self.force(
                     &q.line(obs.tic),
                     &format!("Answer q{}?", q.id),
                     &[
@@ -341,9 +398,11 @@ impl Session {
         // (waiting on her: after a while, a decision forced; one at a time)
         if !self.director.idle(agent) {
             self.idle_since = obs.tic;
-        } else if self.connected && !self.forced && obs.tic - self.idle_since >= IDLE_FORCE {
+        } else if self.connected && !self.forced && self.idle_force > 0
+            && obs.tic - self.idle_since >= self.idle_force
+        {
             let state = self.state(agent, obs);
-            self.link.force(
+            self.force(
                 &state,
                 "You're waiting. What next?",
                 &[
@@ -362,7 +421,69 @@ impl Session {
             self.forced = true;
             log.push("neuro: waiting on her: decision forced".into());
         }
+        let wanted = self.level_actions(agent);
+        self.sync_actions(wanted, &mut log);
         log
+    }
+
+    /// In a level: every action but the game's own (only where she may restart the level), and
+    /// leaving only once she's seen an exit in this life (as stocking up waits for).
+    fn level_actions(&self, agent: &Agent) -> std::collections::BTreeSet<&'static str> {
+        let exit = agent.x().exit_seen_this_life();
+        ALL_ACTIONS
+            .iter()
+            .copied()
+            .filter(|&a| match a {
+                "doom_exit" => exit,
+                "doom_game" => self.director.restart_allowed,
+                _ => true,
+            })
+            .collect()
+    }
+
+    /// The actions registered with Neuro made `wanted`: those no longer wanted unregistered, the
+    /// new ones registered (a change slows her answers a moment: only when where she is changes).
+    fn sync_actions(
+        &mut self,
+        wanted: std::collections::BTreeSet<&'static str>,
+        log: &mut Vec<String>,
+    ) {
+        if !self.connected || wanted == self.registered {
+            return;
+        }
+        let gone: Vec<&str> = self.registered.difference(&wanted).copied().collect();
+        let new: Vec<Value> = actions()
+            .into_iter()
+            .filter(|a| {
+                a["name"]
+                    .as_str()
+                    .is_some_and(|n| wanted.contains(n) && !self.registered.contains(n))
+            })
+            .collect();
+        if !gone.is_empty() {
+            self.link
+                .send("actions/unregister", Some(json!({ "action_names": gone })));
+            log.push(format!("neuro: unregistered {}", gone.join(", ")));
+        }
+        if !new.is_empty() {
+            let names: Vec<&str> = new.iter().filter_map(|a| a["name"].as_str()).collect();
+            log.push(format!("neuro: registered {}", names.join(", ")));
+            self.link
+                .send("actions/register", Some(json!({ "actions": new })));
+        }
+        self.registered = wanted;
+    }
+
+    /// A decision forced, of those of `names` registered now.
+    fn force(&self, state: &str, query: &str, names: &[&str], priority: &str) {
+        let names: Vec<&str> = names
+            .iter()
+            .copied()
+            .filter(|n| self.registered.contains(n))
+            .collect();
+        if !names.is_empty() {
+            self.link.force(state, query, &names, priority);
+        }
     }
 
     /// What's happened since last told: one message, not silent if any of it's notable (and
@@ -411,6 +532,8 @@ impl Session {
                 Incoming::Connected => {
                     log.push("neuro: connected".into());
                     self.connected = true;
+                    // (a new connection has nothing registered: what fits now, below)
+                    self.registered.clear();
                     self.forced = false;
                     if !self.briefed {
                         self.brief(tic);
@@ -457,6 +580,7 @@ impl Session {
             self.brief(tic);
         }
         self.tell_news(tic, &mut log);
+        self.sync_actions(OFF_LEVEL.iter().copied().collect(), &mut log);
         log
     }
 
@@ -466,13 +590,17 @@ impl Session {
         self.now_tic = tic;
         let mut log = Vec::new();
         self.tell_news(tic, &mut log);
+        // (the game's own not hers here: going on is the screen's)
+        let wanted = OFF_LEVEL.iter().copied().filter(|&a| a != "doom_game");
+        self.sync_actions(wanted.collect(), &mut log);
         log
     }
 
     /// The link dropped and made again (the stream console's): what she's been told, her orders
     /// and names kept; the old link's thread ends as it finds its channels gone.
     pub fn reconnect(&mut self) {
-        self.link = Link::start(&self.url, actions());
+        self.link = Link::start(&self.url);
+        self.registered.clear();
         self.connected = false;
         self.forced = false;
     }
@@ -865,5 +993,21 @@ fn noted(msg: String, notes: &[String]) -> String {
         msg
     } else {
         format!("{msg} ({})", notes.join(", "))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every action named for registering is one `actions` has, and every one it has is named.
+    #[test]
+    fn all_actions_named() {
+        let named: std::collections::BTreeSet<&str> = super::ALL_ACTIONS.iter().copied().collect();
+        let had: Vec<String> = super::actions()
+            .iter()
+            .filter_map(|a| a["name"].as_str().map(str::to_string))
+            .collect();
+        assert_eq!(had.len(), named.len());
+        assert!(had.iter().all(|n| named.contains(n.as_str())));
+        assert!(super::OFF_LEVEL.iter().all(|n| named.contains(n)));
     }
 }

@@ -76,6 +76,10 @@ pub struct Settings {
     pub sfx_volume: Option<i32>,
     pub music_volume: Option<i32>,
     pub master_volume: Option<i32>,
+    /// how soon a decision's forced on Evil, in seconds: waiting with nothing to do, a question
+    /// unanswered (0: never); none: the game's own (6 and 3). Changed from the page as it plays.
+    pub force_idle: Option<f64>,
+    pub force_ask: Option<f64>,
     /// a game that crashes (or hangs) started again, at the level she was on
     pub auto_restart: bool,
     /// Doom's own screens: the title card, the menu, the melt, the tally, the finales
@@ -130,6 +134,8 @@ impl Default for Settings {
             sfx_volume: None,
             music_volume: None,
             master_volume: None,
+            force_idle: None,
+            force_ask: None,
             auto_restart: true,
             present: true,
             title_wait: true,
@@ -596,6 +602,10 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 if sfx.is_some() || music.is_some() || master.is_some() {
                     let _ = s.send(&Command::Volume { sfx, music, master });
                 }
+                let (idle, ask) = (s.settings.force_idle, s.settings.force_ask);
+                if idle.is_some() || ask.is_some() {
+                    let _ = s.send(&Command::Forcing { idle, ask });
+                }
                 // (the pictures pages want told it on their next ask)
                 s.views_told = (Vec::new(), None);
                 let spec = s.settings.choices();
@@ -969,6 +979,14 @@ fn handle(hub: &Hub, mut req: Request) {
                     st.sfx_volume = sfx.map(|v| v.clamp(0, 15)).or(st.sfx_volume);
                     st.music_volume = music.map(|v| v.clamp(0, 15)).or(st.music_volume);
                     st.master_volume = master.map(|v| v.clamp(0, 100)).or(st.master_volume);
+                    let saved = s.save();
+                    let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
+                    done(saved.and(sent))
+                } else if let Command::Forcing { idle, ask } = c {
+                    // (kept for the next game as well)
+                    let st = &mut s.settings;
+                    st.force_idle = idle.map(|v| v.clamp(0.0, 3600.0)).or(st.force_idle);
+                    st.force_ask = ask.map(|v| v.clamp(0.0, 3600.0)).or(st.force_ask);
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))

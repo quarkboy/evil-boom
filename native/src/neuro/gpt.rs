@@ -101,6 +101,8 @@ impl Config {
 /// What the WebSocket side tells the model's side.
 enum Event {
     Actions(Vec<Value>),
+    /// actions taken back (`actions/unregister`): no longer tools of hers
+    Unregister(Vec<String>),
     Context {
         message: String,
         silent: bool,
@@ -243,6 +245,14 @@ fn pump(
                     "actions/register" => {
                         Event::Actions(d["actions"].as_array().cloned().unwrap_or_default())
                     }
+                    "actions/unregister" => Event::Unregister(
+                        d["action_names"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|x| x.as_str().map(str::to_string))
+                            .collect(),
+                    ),
                     "context" => Event::Context {
                         message: s("message"),
                         silent: d["silent"].as_bool().unwrap_or(false),
@@ -346,14 +356,21 @@ impl<F: Fn(String)> Brain<F> {
                             .join(", ")
                     ));
                     // (a function tool: the action's name, description, and schema as its parameters;
-                    // not strict, some parameters being optional)
-                    self.tools = a
-                        .iter()
-                        .map(|t| {
-                            let params = if t["schema"].is_object() { t["schema"].clone() } else { json!({ "type": "object", "properties": {} }) };
-                            json!({ "type": "function", "name": t["name"], "description": t["description"], "parameters": params, "strict": false })
-                        })
-                        .collect();
+                    // not strict, some parameters being optional. Registered again: replaced)
+                    for t in &a {
+                        let params = if t["schema"].is_object() {
+                            t["schema"].clone()
+                        } else {
+                            json!({ "type": "object", "properties": {} })
+                        };
+                        self.tools.retain(|x| x["name"] != t["name"]);
+                        self.tools.push(json!({ "type": "function", "name": t["name"], "description": t["description"], "parameters": params, "strict": false }));
+                    }
+                }
+                Event::Unregister(names) => {
+                    (self.say)(format!("UNREGISTER {}", names.join(", ")));
+                    self.tools
+                        .retain(|x| !names.iter().any(|n| x["name"].as_str() == Some(n.as_str())));
                 }
                 Event::Context { message, silent } => {
                     (self.say)(format!(

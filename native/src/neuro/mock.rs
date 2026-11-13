@@ -134,6 +134,15 @@ fn summary(text: &str) -> String {
                 .collect();
             format!("REGISTER {}", names.join(", "))
         }
+        "actions/unregister" => {
+            let names: Vec<&str> = d["action_names"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            format!("UNREGISTER {}", names.join(", "))
+        }
         "context" => format!(
             "CONTEXT{} {}",
             if d["silent"].as_bool() == Some(true) {

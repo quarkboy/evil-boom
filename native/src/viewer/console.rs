@@ -314,6 +314,14 @@ impl Watch {
                 Command::Volume { sfx, music, master } => {
                     self.engine.set_volume(sfx, music, master)
                 }
+                Command::Forcing { idle, ask } => match self.neuro.as_mut() {
+                    Some(n) => n.set_forcing(idle, ask),
+                    None => self
+                        .agent
+                        .x_mut()
+                        .log
+                        .push("console: not directed by Neuro: nothing to force".into()),
+                },
                 Command::God { on } => {
                     self.engine.set_god(on);
                     self.agent.x_mut().log.push(format!(
