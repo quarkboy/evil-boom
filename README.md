@@ -74,3 +74,12 @@ commit with `dsda/dsda-doom.patch` applied.
 No game data is included. DOOM is a trademark of id Software; this project isn't affiliated with
 or endorsed by id Software, ZeniMax Media or Bethesda. Evil Neuro and Neuro-sama are Vedal's;
 this is an unofficial fan project, not affiliated with or endorsed by Vedal.
+
+## To do
+
+- Finish more levels, more consistently.
+- Beat the Icon of Sin levels.
+- Play more realistically still: everything decided by what she's seen, heard and learned.
+- Community WADs: play popular vanilla- and Boom-format map sets, not just the IWADs.
+- Experimental: a JEV-like advisor, a decision model with a say in the bot's choices.
+- A custom status bar for the stream.
