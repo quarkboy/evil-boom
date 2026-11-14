@@ -260,6 +260,9 @@ pub struct Player {
     fallen_for: BTreeSet<i32>,
     /// fallen back, waiting for them to come to her till this tic
     wait_until: i64,
+    /// which polys are in a pocket of the ground she knows (`pockets`), as far as asked: for
+    /// that many polys known
+    pocketed: std::cell::RefCell<(usize, std::collections::BTreeMap<usize, bool>)>,
     /// the things lying about that she's seen (items, and whatever else isn't a monster or a
     /// missile), by what and where (`what_where`): seen when the floor they're on was in her view with them on it
     things_seen: BTreeSet<(&'static str, i32, i32)>,
@@ -320,6 +323,7 @@ impl Player {
             pushing_still: 0,
             fallen_for: BTreeSet::new(),
             wait_until: 0,
+            pocketed: Default::default(),
             things_seen: BTreeSet::new(),
             advisor: None,
             base_tune: Rc::clone(&tune),
@@ -1619,8 +1623,24 @@ impl Player {
         None
     }
 
+    /// Is poly `p` in a pocket of the ground she knows: somewhere small with one narrow way in
+    /// (`pockets`), that a few of them in its mouth would shut her in?
+    fn in_pocket(&self, p: usize) -> bool {
+        let known = self.explorer.knowledge.known_polys();
+        let mut memo = self.pocketed.borrow_mut();
+        if memo.0 != known.len() {
+            *memo = (known.len(), Default::default());
+        }
+        *memo.1.entry(p).or_insert_with(|| {
+            crate::pockets::Ground::new(&self.explorer.nav.mesh, &known)
+                .around(p, self.fight.tune.retreat.pocket_area)
+                .is_some()
+        })
+    }
+
     /// The places she's been, not on hurting floors, between `near` and `far` from her: nearest
-    /// first, at most `n`.
+    /// first, at most `n`. Outmatched, not those in a pocket, while there's anywhere else: a
+    /// small room with one way in is no retreat from more than she can kill.
     fn visited_spots(&self, obs: &Observation, near: f64, far: f64, n: usize) -> Vec<(f64, usize)> {
         let k = &self.explorer.knowledge;
         let nav = &self.explorer.nav;
@@ -1632,6 +1652,16 @@ impl Player {
             .filter(|&(d, _)| near < d && d < far)
             .collect();
         spots.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        if self.fight.combat.now.outmatched {
+            let open: Vec<(f64, usize)> = spots
+                .iter()
+                .copied()
+                .filter(|&(_, p)| !self.in_pocket(p))
+                .collect();
+            if !open.is_empty() {
+                spots = open;
+            }
+        }
         spots.truncate(n);
         spots
     }

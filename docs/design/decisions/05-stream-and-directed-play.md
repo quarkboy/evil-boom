@@ -1118,3 +1118,28 @@ setting it on the cacodemon.)
 - Tried with it and not enough alone (0 of 8 each): no shot at what all her ammo couldn't
   kill; that and on along the route (walks into the barons' claws for the guns); that and no
   guns at all (dies at the door, the barons on her by the time she tries it).
+
+## Pockets: no retreat into a small room with one way in
+
+The maintainer's, from watching E2M9: she dies shut in somewhere small, the way out full of
+what's after her (an alcove of the first room, the closets with the keys). Every retreat chose
+among the places she'd been, the nearest out of the shooters' sight, and nothing looked at
+what was behind the place.
+
+`pockets.rs`: the ground round a spot with one narrow way in. Grown out from the spot over
+the mesh, each time by the neighbour that leaves the least edge open, the stage with the
+narrowest open edge kept: the mouth, one portal or several side by side. A pocket has a mouth
+of 320 at most, is the lesser part of her ground, at least 64 deep for its mouth's width and
+half as deep as that is wide (a room's corner the mesh cut off isn't one). On E2M9: the eight
+alcoves, the key rooms as one behind their 128 mouth, the closets in them. `drive`'s
+`pockets` lists a map's. (First by the graph's bridges: one portal's mouths only, and the
+alcoves, joined by two or three, weren't found.)
+
+- **Kept: outmatched, a retreat's places (`visited_spots`: cover, out of a ring, off for
+  ammo, baiting) leave out those in a pocket of up to 300,000 square (`retreat.pocket_area`)
+  while there's another.** Not outmatched, a doorway is still held. Score +0.0017 (s.e.
+  0.0046), 109 better, 101 worse, 772 the same, exits 409 against 407.
+
+To come, by the same test: a gun or armor she needs in a pocket fetched and straight out
+again, the rest of what's in one left while she's chased, out early when its mouth is being
+closed on.

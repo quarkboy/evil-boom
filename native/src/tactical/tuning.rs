@@ -733,6 +733,9 @@ impl Default for Errands {
 pub struct Retreat {
     /// below this, with something shooting at her: back off out of its sight
     pub health: f64,
+    /// ground with one narrow way in, up to this big (square units), is a pocket: no retreat
+    /// when she's outmatched
+    pub pocket_area: f64,
     /// cover looked for among the places she's been this near...
     pub cover_range: f64,
     /// a retreat is over once nothing that shoots has been in sight this long
@@ -811,6 +814,7 @@ impl Default for Retreat {
     fn default() -> Self {
         Retreat {
             health: 55.0,
+            pocket_area: 300_000.0,
             cover_range: 768.0,
             clear_tics: 35,
             edge_look: 48.0,

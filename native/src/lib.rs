@@ -44,6 +44,7 @@ pub mod navigator;
 pub mod neuro;
 pub mod plan;
 pub mod play;
+pub mod pockets;
 pub mod replay;
 pub mod score;
 pub mod sight;

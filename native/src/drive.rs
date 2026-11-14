@@ -16,6 +16,7 @@
 //!   fire N [SLOT]       hold fire for N tics (facing as she is), with that weapon first
 //!   bot N               the bot plays N tics
 //!   where               position, sector, keys, the tally
+//!   pockets [AREA]      the map's pockets (ground with one way in) up to AREA square units
 //!   items               counted items there: seen, hers to get now, or from the level's start
 //!   exit?               is there a way out from here (knowing the whole map)?
 //!   sector S...         sectors' heights now, and as she believes them
@@ -292,6 +293,30 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 );
             }
             "where" => where_(&mut s),
+            "pockets" => {
+                // (the pockets of the whole map's ground no bigger than AREA square units, 300000
+                // unless given: where they are, for judging the test by eye)
+                let most = num(1).unwrap_or(300_000.0);
+                let mesh = &s.nav.mesh;
+                let all: std::collections::BTreeSet<usize> =
+                    mesh.live_polys().map(|(i, _)| i).collect();
+                let found = crate::pockets::Ground::new(mesh, &all).all(most);
+                println!("  {} pockets of {} polys", found.len(), all.len());
+                for k in &found {
+                    let sectors: std::collections::BTreeSet<usize> =
+                        k.polys.iter().map(|&p| mesh.poly(p).sector).collect();
+                    println!(
+                        "    mouth ({:.0}, {:.0}) {:.0} wide by {} portals: {:.0} square, {} polys, sectors {:?}",
+                        k.at.0,
+                        k.at.1,
+                        k.width,
+                        k.mouth.len(),
+                        k.area,
+                        k.polys.len(),
+                        sectors
+                    );
+                }
+            }
             "walls" => {
                 // (the walls she suspects from here, best first; "walls all": every wall round)
                 let obs = s.obs();
