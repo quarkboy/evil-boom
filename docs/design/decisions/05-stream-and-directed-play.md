@@ -1099,3 +1099,22 @@ seconds of everything else, then dead in the nukage. **A door she can open again
 whose press taught her nothing is pressed again when there's nothing else, as a repeatable
 switch is** (`pressed_again`). That run: out at 605 s. The score's runs: none changed (1086 the
 same to the tic, 0 better, 0 worse): it's rare.
+
+## E2M9 from a pistol start: armor before a gun
+
+E2M9 (four barons round the start, ten cacodemons next door, the keys and the exit past
+them): 0 exits of 16. Driven by hand, straight for the exit by the megaarmor at her feet and
+the soulsphere on the way, shooting nothing: out in 21 to 25 s on 5 seeds of 8, either skill.
+A demo the maintainer watched takes every gun in the first room without a shot, facing the
+barons to see their fireballs, then lets the barons and the cacodemons at each other next
+door. (A monster hurt keeps to who hurt it for 100 of its steps whatever else hits it, P_
+DamageMobj's threshold: every shot of hers at a baron keeps a cacodemon's stray one from
+setting it on the cacodemon.)
+
+- **Kept: armor within `errands.heal_near` that adds 50 to what she can take is urgent,
+  outmatched** (`errands.armor_outmatched`). She walked off from the megaarmor, 64 away, for
+  a chaingun at a baron's feet: a better gun was urgent and armor never. Score -0.0011 (s.e.
+  0.0017), 21 better, 15 worse, 1039 the same, exits 407 against 409: level.
+- Tried with it and not enough alone (0 of 8 each): no shot at what all her ammo couldn't
+  kill; that and on along the route (walks into the barons' claws for the guns); that and no
+  guns at all (dies at the door, the barons on her by the time she tries it).

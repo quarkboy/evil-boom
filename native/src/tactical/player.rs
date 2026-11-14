@@ -2810,6 +2810,14 @@ impl Fight {
             {
                 // Something to fight with, but on the way to it something she couldn't take on even with
                 // it: not worth dropping everything for.
+            } else if armor_item(t.name).is_some()
+                && self.combat.now.outmatched
+                && d < self.tune.errands.heal_near
+                && Combat::pickup_gain(obs, t.name) >= self.tune.errands.armor_outmatched
+            {
+                // Armor close by, with more in sight than she can kill: on before a gun is gone
+                // for among them. (A megaarmor at her feet was left for a chaingun at a baron's.)
+                why = " (outmatched)";
             } else if carried_nearer {
             } else if weapon_item(t.name).is_some() && need > 0.0 && self.better_gun(obs, t.name) {
                 why = " (a better gun)";

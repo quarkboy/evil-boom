@@ -689,6 +689,9 @@ pub struct Errands {
     pub mega_gain: f64,
     /// a soulsphere when it adds this much health (200 less this: under 150)
     pub soul_gain: f64,
+    /// armor within `heal_near` that adds this much to how much she can take is gone for at
+    /// once, outmatched by what's in sight
+    pub armor_outmatched: f64,
     /// invulnerability taken whenever it's to hand, not kept for a fight that needs it
     pub invulnerability_now: bool,
 }
@@ -718,6 +721,7 @@ impl Default for Errands {
             gun_worth: 10.0,
             mega_gain: 100.0,
             soul_gain: 50.0,
+            armor_outmatched: 50.0,
             invulnerability_now: false,
         }
     }
