@@ -12,7 +12,8 @@
 //! └─ a target, or a missile on its way
 //!    ├─ survive        out from under a crusher · out of a vile's sight · through a field
 //!    │                 of barrels · away from a barrel going off · ducking a hitscan heavy ·
-//!    │                 dodging · still for the BFG · away from a barrel
+//!    │                 dodging · away from a hit she didn't see coming · still for the BFG
+//!    │                 · away from a barrel
 //!    ├─ busy           (a jump: the route keeps the legs) shooting on the way
 //!    ├─ melee          (the weapon she'd fight it with, up close: `Style::Melee`) closing in
 //!    │                 · at it
@@ -94,13 +95,14 @@ impl Act {
 type Node = fn(&mut Combat, &Observation, &Situation) -> Option<Act>;
 
 /// Before anything else: out of the way of what would kill her outright.
-const SURVIVE: [Node; 8] = [
+const SURVIVE: [Node; 9] = [
     off_crusher,
     out_of_vile_sight,
     through_barrels,
     off_lit_barrel,
     ducking,
     dodging,
+    flinching,
     bfg_hold,
     off_barrel,
 ];
@@ -206,6 +208,28 @@ fn dodging(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
         format!("dodging {} on the way to the {}", m.name, s.errand)
     };
     Some(Act::new(Move::Dodging, moving, why))
+}
+
+/// Just hit from a side where she sees nothing (`Senses::flinch`): away from it for a moment,
+/// as near straight away as the floor allows, then on with what she was doing.
+fn flinching(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> {
+    let (until, away) = c.senses.flinch?;
+    if obs.tic > until {
+        c.senses.flinch = None;
+        return None;
+    }
+    let way = [0.0f64, 30.0, -30.0, 60.0, -60.0]
+        .into_iter()
+        .find_map(|off| {
+            let (sin, cos) = off.to_radians().sin_cos();
+            let d = (away.0 * cos - away.1 * sin, away.0 * sin + away.1 * cos);
+            c.safe(obs, d, 64.0).then_some(d)
+        })?;
+    Some(Act::new(
+        Move::BackingOff,
+        Some(way),
+        "hit from where she can't see: away from it".into(),
+    ))
 }
 
 /// Her BFG charging or its ball in the air: still, where she is (the spray comes from her when it

@@ -386,6 +386,7 @@ impl Combat {
                 cries_due: Vec::new(),
                 attacks_heard: Vec::new(),
                 alert: None,
+                flinch: None,
                 glanced: 0,
                 checked: 0,
                 looked: [i64::MIN / 2; 16],
@@ -1412,6 +1413,13 @@ impl Combat {
             });
             if !known {
                 self.alerted(obs, vec![way, obs.angle + 180.0], true, "hit from the side");
+                // And off the other way a moment, before anything else: what clawed her from
+                // out of her sight claws again while she walks on beside it.
+                let away = (way + 180.0).to_radians();
+                self.senses.flinch = Some((
+                    obs.tic + self.tune.senses.flinch_tics,
+                    (away.cos(), away.sin()),
+                ));
             }
         }
     }

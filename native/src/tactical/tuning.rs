@@ -156,6 +156,9 @@ pub struct Senses {
     pub track_steps: bool,
     /// something heard, a hit or a bump is looked round for this long at most (tics)
     pub alert_tics: i64,
+    /// hit from a side with nothing in sight there, she's off the other way this long (tics;
+    /// less than none: not at all)
+    pub flinch_tics: i64,
     /// turned to within this many degrees of it, she's looked
     pub looked: f64,
 }
@@ -197,6 +200,7 @@ impl Default for Senses {
             expect_range: 512.0,
             track_steps: true,
             alert_tics: 70,
+            flinch_tics: 18,
             looked: 10.0,
         }
     }

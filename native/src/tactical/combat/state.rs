@@ -120,6 +120,9 @@ pub struct Senses {
     pub(super) attacks_heard: Vec<(i64, &'static [&'static str])>,
     /// something to turn and look at: a sound from out of her view, a hit, a bump
     pub(super) alert: Option<Alert>,
+    /// hit from a side with nothing she can see there: away from it (the way, a unit) till
+    /// this tic, before whatever she was doing
+    pub(super) flinch: Option<(i64, crate::geom::Point)>,
     /// when she last looked about as she walked (`senses.glance_every`)
     pub(super) glanced: i64,
     /// when she last looked round for one she remembers (`senses.check_every`)

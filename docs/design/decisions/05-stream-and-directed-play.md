@@ -1165,3 +1165,32 @@ hers by the way she plays (the infighting E2M9 is won by). Fifteen minutes was t
 thought; 57 of 409 exits take longer, 18 longer than twenty.
 
 Not what a change is kept by: that stays the score. For reading changes to the fight.
+
+## Off a hit she didn't see coming; out by a gap
+
+Two of the maintainer's, from watching E2M9, each scored alone by a tuning number that turns it
+off (the control with both off: every run the same as the baseline's).
+
+- **Kept: hit from a side with nothing in sight there, she's off the other way for half a
+  second** (`senses.flinch_tics`), as near straight away as the floor allows, then on with what
+  she was at. Clawed from behind she had only turned to look, and was clawed again. Score
+  +0.0053 (s.e. 0.0075), exits 411 against 409 (58 gained, 56 lost); the fight score +0.0096
+  (s.e. 0.0071). It changes 677 runs for that: a smaller step, just out of a claw's reach, to
+  be tried.
+- **Kept: surrounded, with a body across her way and others close (`steer.hemmed_near`), out
+  by the widest gap between them she fits, the nearest to her way** (`through_gap`). She had
+  pushed on at a cacodemon while the rest closed up. Score +0.0017 (s.e. 0.0054), exits 414
+  against 409 (32 gained, 27 lost); the fight score +0.0011 (s.e. 0.0048).
+- **Not kept: outmatched, what's in a pocket waits unless it's a gun or armor she needs or the
+  way on.** Right on E2M9; -0.0130 (s.e. 0.0062), exits 398, the fight score -0.0112 (s.e.
+  0.0053).
+- **Not kept: no fight to be had** (holding fire and gathering till the ammo in hand would kill
+  four fifths of what's awake, the way out weighed first, her eyes on the middle of the missile
+  throwers near her, full pace whichever way she faces). With the three above: -0.110 (s.e.
+  0.010), exits 310 against 409. From a pistol start that's the opening of most levels, and
+  the thing to do there is shoot. On E2M9 itself, 2 exits of 40 against 1. The patch is
+  out/score/pile-4.patch; it wants a far narrower sense of when a fight can't be had.
+- An experiment, not realism (`out/score/known-throws-experiment.patch`): knowing of every
+  missile thrown by a kind of monster she's tracking. E2M9, forty seeds: 6 exits against 1,
+  141 kills against 75. Knowing where the monsters are for five seconds after losing sight
+  of them, without that: nothing (0 against 1).
