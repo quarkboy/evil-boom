@@ -352,6 +352,32 @@ impl Navigator {
         self.fit.fits_without(portal, blocking)
     }
 
+    /// Does the box get through the portal coming from poly `frm`, at the starting heights: the
+    /// ledges by it walls where she can't step up them from the floor she's on (as the flood
+    /// has it, `nav.rs`'s `fits_now`)?
+    pub fn fits_at_start(&self, portal: usize, frm: usize) -> bool {
+        if !self.portal_fits[portal] {
+            return false;
+        }
+        let Some(gates) = self.fit.gates.get(&portal) else {
+            return true;
+        };
+        let init = &self.movers.initial;
+        let sector = self.mesh.poly(frm).sector;
+        let mut blocking: Vec<usize> = gates
+            .iter()
+            .filter(|(_, _, (f, b))| {
+                [*f, *b]
+                    .iter()
+                    .any(|&s| s != sector && !can_cross(init[sector], init[s]))
+            })
+            .map(|g| g.0)
+            .collect();
+        blocking.sort_unstable();
+        blocking.dedup();
+        self.fit.fits_without(portal, &blocking)
+    }
+
     /// The gate lines at each portal: (line, sectors either side).
     pub fn portal_gate_lines(&self) -> HashMap<usize, Vec<(usize, Vec<usize>)>> {
         self.fit

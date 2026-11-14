@@ -32,7 +32,10 @@ const CLIMB_OFF_LINE: f64 = 8.0;
 impl JumpLab {
     /// The climbs up the map's faces too high to step, with the sectors at their starting
     /// heights (those a trigger moves left out): one per (run-up poly, sector reached).
-    pub fn find_climbs(&self, moving: &HashSet<usize>, portal_fits: &[bool]) -> Vec<Jump> {
+    /// `fits_from`: per portal, whether the box gets through it coming from its `a` poly and
+    /// from its `b`, at the starting heights, the ledges by it standing as walls where she
+    /// can't step up them from there (the planner's own test, `nav.rs`'s `fits_now`).
+    pub fn find_climbs(&self, moving: &HashSet<usize>, fits_from: &[[bool; 2]]) -> Vec<Jump> {
         let mesh = &self.mesh;
         let mut sim = PlayerSim::new(self, self.world());
         let mut found: HashSet<(usize, usize)> = HashSet::default();
@@ -76,9 +79,17 @@ impl JumpLab {
                             continue;
                         };
                         let key = (j.src_polys[0], mesh.poly(j.dest_poly).sector);
-                        if !found.contains(&key)
-                            && !self.walks_to(j.src_polys[0], key.1, portal_fits)
-                        {
+                        // (by the planner's own test of a portal, the ledges beside it too: a stair
+                        // of crates smaller than she is has portals the box "fits" by their
+                        // width alone, and none it gets through with the next crate up standing
+                        // in its way. Her box goes up them with her centre over the floor
+                        // beside: a climb, and by the width alone it was thrown out as stairs)
+                        let fits = |pi: usize, frm: usize| {
+                            fits_from
+                                .get(pi)
+                                .is_some_and(|f| f[usize::from(mesh.portals[pi].a != frm)])
+                        };
+                        if !found.contains(&key) && !self.walks_to(j.src_polys[0], key.1, &fits) {
                             out.push(j);
                         }
                         found.insert(key);
@@ -92,7 +103,12 @@ impl JumpLab {
     /// Is there a way from `src` to `sector` near it on foot, up nothing more than steps, at the
     /// starting heights? (Then a run that gets there up the side of the stairs is no climb: the
     /// box over a step with her centre beside it.)
-    pub(super) fn walks_to(&self, src: usize, sector: usize, portal_fits: &[bool]) -> bool {
+    pub(super) fn walks_to(
+        &self,
+        src: usize,
+        sector: usize,
+        fits: &dyn Fn(usize, usize) -> bool,
+    ) -> bool {
         let mesh = &self.mesh;
         let origin = mesh.center(src);
         let mut seen: HashSet<usize> = HashSet::default();
@@ -107,7 +123,7 @@ impl JumpLab {
                 let q = mesh.portals[pi].other(p);
                 let t = mesh.poly(q).sector;
                 let (f, (g, c)) = (self.initial[s].0, self.initial[t]);
-                if !portal_fits.get(pi).copied().unwrap_or(false)
+                if !fits(pi, p)
                     || g - f > MAX_STEP
                     || c - g.max(f) < PLAYER_HEIGHT
                     || dist(origin, mesh.center(q)) > CLIMB_WALK

@@ -581,7 +581,10 @@ impl JumpLab {
         let below_poly = mesh.poly_at((takeoff.0 + n.0 * 2.0, takeoff.1 + n.1 * 2.0));
         let plain = |s: usize| {
             below_poly.is_none_or(|bp| {
-                mesh.poly(bp).sector == s || self.walks_to(bp, s, &input.portal_fits)
+                mesh.poly(bp).sector == s
+                    || self.walks_to(bp, s, &|pi, _| {
+                        input.portal_fits.get(pi).copied().unwrap_or(false)
+                    })
             })
         };
         let (mut z, mut vz) = (floor, 0.0);

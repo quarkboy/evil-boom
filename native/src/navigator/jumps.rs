@@ -154,7 +154,14 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
         moving: moving.clone(),
         portal_fits: nav.portal_fits.clone(),
     });
-    found.extend(nav.jump_lab.find_climbs(&moving, &nav.portal_fits));
+    let fits_from: Vec<[bool; 2]> = nav
+        .mesh
+        .portals
+        .iter()
+        .enumerate()
+        .map(|(pi, p)| [p.a, p.b].map(|frm| nav.fits_at_start(pi, frm)))
+        .collect();
+    found.extend(nav.jump_lab.find_climbs(&moving, &fits_from));
     let out: Vec<Cached> = found
         .into_iter()
         .map(|j| Cached {

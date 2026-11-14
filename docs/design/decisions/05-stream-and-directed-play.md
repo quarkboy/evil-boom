@@ -1011,3 +1011,24 @@ the third press (the first two before she knew what it did, or had seen the key)
 1,100 s. From a pistol start she's out of ammo in five or six minutes with 1 of 17 items had,
 and that's what's left there: what she spends it on, what she picks up, and what she does
 with none.
+
+## A stair of crates smaller than she is (2026-11-14)
+
+The maintainer's, watching E4M9: a box of shells on a crate by the start with a stair of smaller
+crates up to it, and a megaarmor a short jump on from there, never gone for. The stair is 16,
+then 32 and 40, then the 64 of the crate itself; the two lowest are 16 square, half her width.
+In the game she goes up it: she stands on the highest floor under her box, so walked west
+along its south side, her middle over the floor beside, she's up 16, 40, 64 (by hand in
+`drive`: anywhere in a band 12 wide, at a walk or a run). The mesh has her centre in a sector
+and her box through its faces, and with the next crate up in the way it fits through none:
+out of reach, to the planner.
+
+That's what a climb is for (`jumps/climbs.rs`), and the finder found this one, and threw it
+out: its check that she can't walk there already went by each portal's width alone, where the
+planner's own test has the ledges by a portal as walls. Now the check is the planner's
+(`Navigator::fits_at_start`, the flood's `fits_now` at the starting heights). The finder's
+version is up, 30: every level's jumps found afresh.
+
+Only E4M9 has such a climb, of the 68 levels: 1078 of the 1088 runs the same to the tic, 6
+better, 2 worse, +0.0016 (s.e. 0.0015), exits 407 against 405; E4M9 HMP 5 of 8 out against 3.
+She goes for the megaarmor 11 s in.
