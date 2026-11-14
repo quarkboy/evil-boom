@@ -81,8 +81,8 @@ errors). Its set then becomes the new baseline (copy it to `out/score/base.tsv`)
 **The fight score** is printed beside it (`fight score`, and `fight score, run for run`): how she
 fared in each run's first twenty minutes, by more than out or not. Out within them is 1; else the
 health the monsters lost (to whatever: her, each other, a crusher) less what she and her armor
-took, as a share of all the health the level's monsters had, a quarter off for dying in that
-time, and never less than nothing. A run that lasts longer counts as it stood at twenty minutes.
+took, as a share of all the health the level's monsters had, three quarters of it for dying in
+that time, and never less than nothing. A run that lasts longer counts as it stood at twenty minutes.
 It moves for a fight better or worse fought where the score, mostly exits, only moves when a run
 tips over: the finer measure for changes to the fight and to how she moves in one. The score
 stays what a change is kept by. (Sets scored before 2026-11-14 don't have its numbers.)

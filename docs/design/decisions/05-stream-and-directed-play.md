@@ -1153,8 +1153,9 @@ exits read -7.5 standard errors on exits and -11 on time alive alone, from the s
 
 The maintainer's measure, kept beside the score (`Row::fight_points`, printed by score-report
 and step.sh): a run's first twenty minutes. Out within them, 1. Else the health the monsters
-lost less what she and her armor took, over all the health the level's monsters had; a quarter
-off for dying in that time; nothing below nothing. A run's RESULT line and the score's file
+lost less what she and her armor took, over all the health the level's monsters had; three
+quarters of it for dying in that time (a flat quarter off at first: two deaths in three had
+dealt less than that and all read nothing); nothing below nothing. A run's RESULT line and the score's file
 carry the three numbers (dealt, the monsters' health, taken), as they stood at twenty minutes
 for a run that goes on past it.
 

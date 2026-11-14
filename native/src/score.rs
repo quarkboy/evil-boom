@@ -67,8 +67,8 @@ impl Row {
 
     /// The fight score (the maintainer's, 2026-11-14): how she fared in the first twenty
     /// minutes, by more than out or not. Out within them: 1. Else the health the monsters lost
-    /// less what she took, as a share of all the health they had; a quarter off for dying in
-    /// that time; nothing less than nothing. A run that lasts longer is counted as it stood at
+    /// less what she took, as a share of all the health they had; three quarters of that for
+    /// dying in that time; nothing less than nothing. A run that lasts longer is counted as it stood at
     /// twenty minutes. Finer than exits: a fight better fought shows without the run tipping
     /// into an exit.
     pub fn fight_points(&self) -> Option<f64> {
@@ -83,7 +83,7 @@ impl Row {
             (f64::from(dealt) - f64::from(taken)) / f64::from(had)
         };
         let died = self.outcome == "DIED" && within;
-        Some((share - if died { DEATH } else { 0.0 }).clamp(0.0, 1.0))
+        Some((share * if died { DEATH } else { 1.0 }).clamp(0.0, 1.0))
     }
 
     pub fn kill_share(&self) -> f64 {
@@ -210,8 +210,9 @@ impl Row {
 
 /// A run that doesn't get out scores this times the share of monsters killed.
 const PARTIAL: f64 = 0.5;
-/// The fight score: this much off for dying.
-const DEATH: f64 = 0.25;
+/// The fight score: dying keeps this much of what the run earned. (A quarter off flat, at
+/// first: two deaths in three had dealt less than that and read nothing, 2% the same as 20%.)
+const DEATH: f64 = 0.75;
 
 /// A list's mean and the standard error of it.
 fn mean_se(v: &[f64]) -> (f64, f64) {
