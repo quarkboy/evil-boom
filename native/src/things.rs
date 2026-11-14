@@ -5,7 +5,7 @@
 
 /// Solid decorations from the vanilla mobjinfo table (MF_SOLID, not shootable or a monster):
 /// thing type -> collision radius. They block like a square box of that half-width, as the
-/// player does. Hanging bodies are solid too (types 49-53 and 73-77; 59-63 are the
+/// player does. Hanging bodies are solid too (types 49-53 and 73-78; 59-63 are the
 /// non-blocking copies). Explosive barrels are solid and shootable, and don't move.
 pub fn solid_radius(kind: u16) -> Option<f64> {
     match kind {
@@ -15,7 +15,7 @@ pub fn solid_radius(kind: u16) -> Option<f64> {
         | 30..=33 | 36 | 37 | 35 | 41 | 42 | 43 | 47 // pillars, candelabra, eye, rock, tree, stump
         | 44..=46 | 55..=57      // firesticks
         | 25..=29                // impaled bodies, skulls on poles, skull pile
-        | 49..=53 | 73..=77 => Some(16.0), // hanging victims (solid)
+        | 49..=53 | 73..=78 => Some(16.0), // hanging victims (solid)
         _ => None,
     }
 }
