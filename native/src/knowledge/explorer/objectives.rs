@@ -516,7 +516,9 @@ impl Explorer {
     }
 
     /// Repeatable switches pressed a while ago whose effect she never saw are worth another go
-    /// once there's nothing else, each by what it works; and those whose effect she has put
+    /// once there's nothing else, each by what it works (a door she can open again and again
+    /// among them: pressed as it stood open, by a monster come through it, it only shut, and
+    /// she's none the wiser what's behind it); and those whose effect she has put
     /// down to them on timing alone, unsure, are pressed again and watched, once a life.
     fn pressed_again(
         &self,
@@ -551,7 +553,9 @@ impl Explorer {
         let mut again = Vec::new();
         for &(li, tic) in &last_press {
             let Some(t) = by_line.get(&li) else { continue };
-            if !k.mapped.contains(&li) || !matches!(t.info.trigger, Trigger::SR | Trigger::GR) {
+            if !k.mapped.contains(&li)
+                || !matches!(t.info.trigger, Trigger::SR | Trigger::GR | Trigger::DR)
+            {
                 continue;
             }
             let unsure = doubted.contains(&k.tried_key(li))
@@ -579,7 +583,12 @@ impl Explorer {
                 Kind::Switch,
                 nav.activation_point(t, pos, reach),
                 format!(
-                    "try switch again (line {li}{})",
+                    "try {} again (line {li}{})",
+                    if t.info.category.is_door() {
+                        "door"
+                    } else {
+                        "switch"
+                    },
                     if unsure { ", unsure what it does" } else { "" }
                 ),
             );
