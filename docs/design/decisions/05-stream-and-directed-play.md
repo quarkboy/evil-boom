@@ -928,3 +928,26 @@ all four and not out. Elsewhere it costs time where the old order found everythi
 DOOM II MAP01, 100% in 226 s against 160 (48 walls pressed against 13); MAP02 the same to the
 tic; MAP05 2 of 3 secrets either way, the second at 852 s against 747. Undirected play is
 untouched: parity, all 24 the same.
+
+## Stuck in one place: three causes, two fixed (2026-11-13)
+
+Seen on stream, E1M1's exit room: stuck between a barrel and a corner till every objective
+timed out. The follower's "stuck" counted over eight levels on Ultra-Violence (seed 1) then
+showed it isn't corners in general: nearly all of a level's were at one spot, each spot its own
+cause.
+
+- **A lane round a barrel went through bars** (E1M1). The lane search asked only for floor
+  under her box's corners; a line she can't cross with the same floor both sides passed.
+  Now a cell is free where the game's own position check has her box clear
+  (`jumps::physics`). Six seeds from inside the door: never there before, there in 3 to 9 s
+  after. Score +0.0005 (s.e. 0.0022).
+- **The sixth hanging body is solid** (MAP05, an alcove one fills): the table had 73-77, the
+  game has 78 too; checked whole against `info.c`, the only one missing. 31 stuck reports to 1.
+  Score +0.0006 (s.e. 0.0006), 1 run better, none worse.
+- **Not kept: nothing past autoaim's range in reach unless it's level with her gun** (E1M7:
+  imps 1,100 off pulling her to and fro, "shooting on the way" in sight with no shot, "keeping
+  at it" out of sight; 133 times against 29 before the far-shot rule of this morning). On
+  that seed it's what was wanted: 63 stuck reports to 2, 150/150 kills in 712 s against 144/150
+  in 1007. On the score it lost a little, -0.0061 (s.e. 0.0059), 97 better, 118 worse, exits
+  394 against 400: the fourth rule sending the route on sooner past what she can't get at, and
+  the fourth to lose (MAP23's three, 2026-11-11). The patch is out/score/reach-past-autoaim.patch.
