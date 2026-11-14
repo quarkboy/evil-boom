@@ -984,3 +984,30 @@ none either way; on the traced seed she now has the plasma rifle at 357 s, but t
 is on the west platform (up the lift, a jump to the ledge south of it, its switch, a run
 across the room: the maintainer's recollection, and the map's), which nothing she knows of
 sends her to; and out of ammo the fight has her legs most of the time. Both still to do.
+
+## A wall pressed from where it's pressed from (2026-11-14)
+
+MAP06 UV again, after the jump: she had the switch on the ledge south of the lift (line 244)
+as an untried switch all along, and no way to it, having lost the lift. The lift is called
+back down by its face (line 359), a wall to her till it's pressed. She set out to press it
+eight times, the fight taking her each time (ducking out of the mastermind's sight); then the
+press stage, begun again wherever she'd been taken to, turned her to the wall's bearing and
+pressed at nothing from 330 off, and the wall was down as tried for good.
+
+- Kept: taken more than 24 from where a wall's pressed from before its press, she doesn't
+  press: it's left as anything interrupted is, not tried. And a wall never in front of her
+  while its press was still to make isn't tried when its time is up. The log says each wall
+  pressed, and each left with it in front of her. Score +0.0003 (s.e. 0.0052), 77 better, 92
+  worse, 737 the same, exits 405 against 401.
+- Tried with it and dropped: back to the wall up to three times when taken off it, and her
+  facing the press's while she's at it (as a switch's is). -0.0090 (s.e. 0.0063), exits 392
+  against 401, nearly half the runs changed: more of her time at walls with things about.
+  The patch is out/score/wall-press-full.patch.
+
+With a loadout (shotgun, super shotgun, chaingun, a backpack's ammo, megaarmor) MAP06 UV is
+then played through, 4 seeds: the mastermind crushed, the plasma rifle off the platform, the
+lift's face pressed, up and across to the ledge, its switch, the run to the west platform on
+the third press (the first two before she knew what it did, or had seen the key), out in some
+1,100 s. From a pistol start she's out of ammo in five or six minutes with 1 of 17 items had,
+and that's what's left there: what she spends it on, what she picks up, and what she does
+with none.

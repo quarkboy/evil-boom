@@ -16,6 +16,8 @@ use std::collections::BTreeSet;
 
 /// a suspected wall pressed: watched this long for something to happen
 const WALL_TICS: i64 = 25;
+/// a wall's pressed from within this of where she was to stand for it
+const WALL_AT: f64 = 24.0;
 
 /// a wall tried: walked up to till this near (past the box's edge), at this speed, giving up
 /// on it this many tics before the press is due
@@ -234,11 +236,24 @@ impl Explorer {
         } else if obj.kind == Kind::Wall {
             // face it, press use, watch a moment (what it does, if anything, the knowledge sees)
             let wall = obj.wall.unwrap_or(0);
+            // Taken off from it before its press (the fight had her, a look round): left for
+            // later, as anything interrupted is. A press from wherever she'd been taken to is at
+            // nothing, and the wall then counted as tried (the face that calls MAP06's lift back
+            // down, pressed from 330 off).
+            let pressed =
+                self.look_until.is_some() && self.knowledge.tried_walls.contains_key(&wall);
+            if !pressed && dist(obs.pos(), obj.goal) > WALL_AT {
+                self.look_until = None;
+                self.drop_objective(&obj, obs, Why::Interrupted);
+                self.follower = None;
+                return None;
+            }
             // Tried once pressed, or once the time for it is up unpressed. Not on arrival: a look round
             // can take the time to press it, and the wall would then count as tried without ever being
             // pressed.
             if self.look_until.is_none() {
                 self.look_until = Some(obs.tic + WALL_TICS + 20);
+                self.wall_faced = false;
             }
             let at = obj.look_at.unwrap_or(obj.goal);
             let bearing = (at.1 - obs.y).atan2(at.0 - obs.x).to_degrees();
@@ -246,6 +261,9 @@ impl Explorer {
             let until = self.look_until.unwrap_or(obs.tic);
             if obs.tic < until {
                 let mut c = turn_to(obs, Some(bearing));
+                // (in front of her while the press is still to make: later in the wait, it's
+                // only watched)
+                self.wall_faced |= off < 4.0 && obs.tic < until - WALL_TICS;
                 // Not where the press would reach an exit behind it, while the exit is held back.
                 let exit = self.exit_held_back
                     && self
@@ -269,6 +287,10 @@ impl Explorer {
                     self.look_until = Some(obs.tic + WALL_TICS); // (pressed: now watch)
                     self.knowledge
                         .note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
+                    self.log.push(format!(
+                        "tic {}: pressing the wall (line {wall}) from ({:.0}, {:.0})",
+                        obs.tic, obs.x, obs.y
+                    ));
                 } else if off < 4.0
                     && obs.tic > until - WALL_TICS + 4
                     && obs.tic < until - 8
@@ -292,8 +314,23 @@ impl Explorer {
                 }
                 return Some(c);
             }
-            self.knowledge
-                .note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
+            // (the time up with the wall never in front of her: the fight had her, her legs or
+            // her facing, from getting there. Not tried, then, and not for good: another go
+            // later, as anything interrupted has. The lift down into MAP06's big room is called
+            // back by its face, a wall to her till it's pressed; marked tried unpressed, the way
+            // back up was gone for the level)
+            if self.wall_faced {
+                if !self.knowledge.tried_walls.contains_key(&wall) {
+                    self.log.push(format!(
+                        "tic {}: the wall (line {wall}) in front of her and not pressed: left",
+                        obs.tic
+                    ));
+                }
+                self.knowledge
+                    .note(Note::TriedWall(wall, obs.keys.unwrap_or_default()));
+            } else {
+                self.drop_objective(&obj, obs, Why::Interrupted);
+            }
         } else if matches!(obj.kind, Kind::Item | Kind::Hunt) && !hooks.gone(obs, &obj) {
             if obj.kind == Kind::Item {
                 // Doom picks things up only when she moves onto them: come down on one from a ledge and

@@ -497,6 +497,8 @@ pub struct Explorer {
     exits_seen: usize,
     allowed: i64,
     look_until: Option<i64>,
+    /// the wall she's at to try: she's had it in front of her (its press hers to make, or not)
+    wall_faced: bool,
     glance_until: Option<i64>,
     /// fired lines looked round for so far
     glanced: usize,
@@ -699,6 +701,7 @@ impl Explorer {
             exits_seen: 0,
             allowed: GIVE_UP_TICS,
             look_until: None,
+            wall_faced: false,
             glance_until: None,
             glanced: 0,
             heard_n: 0,
