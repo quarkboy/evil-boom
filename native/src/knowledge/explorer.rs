@@ -566,6 +566,10 @@ pub struct Explorer {
     /// every secret the level counts found (whoever directs her says, from the tally): on
     /// instinct for them, no walls pressed for more
     pub secrets_done: bool,
+    /// whoever directs her is after the secrets (a goal of theirs) and one's left: on instinct
+    /// for them, with a way out known, the walls a search would press come before going back
+    /// over what she's done
+    pub secret_search: bool,
     /// on instinct for whoever directs her, what a goal of theirs puts first
     pub focus: Focus,
     /// (while choosing, on instinct for whoever directs her) only new ground offered: going back
@@ -731,6 +735,7 @@ impl Explorer {
             going_back: GoingBack::After,
             secrets_done: false,
             new_ground_only: false,
+            secret_search: false,
             focus: Focus::None,
             resort_wanted: None,
             stuck_retried: None,

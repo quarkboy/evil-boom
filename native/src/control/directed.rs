@@ -525,6 +525,8 @@ pub struct Director {
     resorts: std::collections::BTreeSet<crate::knowledge::explorer::Resort>,
     progress: Option<((usize, [usize; 6]), i64)>,
     told_restart: bool,
+    /// told, this while with nothing new, where a secret's likeliest
+    told_search: bool,
     /// the fight she's in, for its summary when it's over; and what she had last tic (what a
     /// fight cost is the falls from tic to tic, so a medikit taken in the middle doesn't hide it)
     fight: Option<Fight>,
@@ -661,6 +663,7 @@ impl Director {
         self.moments = moments::Moments::default();
         self.progress = None;
         self.told_restart = false;
+        self.told_search = false;
         self.restart_wanted = false;
     }
 
@@ -1277,6 +1280,11 @@ impl Director {
                             (0, false) => ", explored".to_string(),
                             (n, _) => format!(", {n} to explore"),
                         });
+                        // (where a secret's likeliest: the walls even the lightest search
+                        // presses, which few areas have)
+                        if hiding[0] > 0 {
+                            what.push_str(&format!(", {} likely secret walls", hiding[0]));
+                        }
                         Entry {
                             id: a.id.clone(),
                             what,
@@ -1520,6 +1528,10 @@ impl Director {
         // to press walls for)
         agent.x_mut().going_back = self.policy.going_back();
         agent.x_mut().secrets_done = self.secrets_done();
+        agent.x_mut().secret_search = matches!(
+            self.goal,
+            Some(goal::Goal::Everything | goal::Goal::Secrets)
+        ) && !self.secrets_done();
         self.check_complete(agent, obs);
         // (her policy on her numbers: on a change, and on each new level's player)
         if self.policy_due {
@@ -1541,11 +1553,18 @@ impl Director {
         self.powers(obs);
         self.questions(agent, obs);
         self.apply_tactics(agent, obs);
+        let everything = self.goal == Some(goal::Goal::Everything);
         agent.x_mut().spares = obs
             .things
             .iter()
             .flatten()
-            .filter(|t| spare(t.name, obs))
+            // (her goal everything: what the items tally counts too, need it or not: a bonus
+            // at 200 is still one of the level's items)
+            .filter(|t| {
+                spare(t.name, obs)
+                    || (everything
+                        && crate::knowledge::completion::Completionist::counted(t.name, obs))
+            })
             .map(|t| t.id)
             .collect();
         if let Some((line, what, until)) = self.pressed.clone() {
@@ -2670,6 +2689,36 @@ impl Director {
             return Vec::new();
         }
         agent.x_mut().suspected_walls(obs, how)
+    }
+
+    /// Where a secret's likeliest, for a search of hers: the areas with the walls the lightest
+    /// search presses (none: the next lightest), most first, as "area-0 (3), area-24 (1)"; ""
+    /// if there's none, or no secret left.
+    pub(super) fn likely_areas(&mut self, agent: &mut Agent, obs: &Observation) -> String {
+        let nav = std::rc::Rc::clone(&agent.x().nav);
+        for how in [1, 2] {
+            let walls = self.walls_to_search(agent, obs, how);
+            let places = self.places(agent);
+            let mut n: BTreeMap<String, usize> = BTreeMap::new();
+            for o in &walls {
+                if let Some(p) = nav.poly_at(o.goal) {
+                    *n.entry(places.area_of(nav.sector_of_poly(p)).id.clone())
+                        .or_default() += 1;
+                }
+            }
+            if n.is_empty() {
+                continue;
+            }
+            let mut areas: Vec<(String, usize)> = n.into_iter().collect();
+            areas.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+            return areas
+                .iter()
+                .take(3)
+                .map(|(id, n)| format!("{id} ({n})"))
+                .collect::<Vec<_>>()
+                .join(", ");
+        }
+        String::new()
     }
 
     /// Every secret the level counts found (the tally, as the automap's: hers to know).

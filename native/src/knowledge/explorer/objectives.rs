@@ -43,6 +43,8 @@ const EXIT_MARGIN: f64 = 64.0;
 /// a wall suspected this much is tried when she's this near where she'd stand to (not only when
 /// there's nothing else to do)
 pub(super) const NEAR_SUSPECT: f64 = 6.0;
+/// the secrets left her goal: the walls searched as thoroughly as a search asked for is by default
+const SEARCH_AS: u8 = 2;
 
 /// As she passes it, that is: a hall's width off, not only at her elbow.
 const NEAR_WALL: f64 = 448.0;
@@ -282,6 +284,18 @@ impl Explorer {
                 })
                 .collect();
             out.extend(near);
+            // The secrets left are what she's after, and the way out's known: the walls a search
+            // for them would press (its score, as asked for by default), not only the strong
+            // ones by her. In with the rest, not left for when there's nothing else: that's after
+            // every look again, every line stepped over and every switch pressed once more.
+            if self.searching_secrets() {
+                let search = self.suspected_walls(obs, SEARCH_AS);
+                for o in search {
+                    if !out.iter().any(|w| w.kind == Kind::Wall && w.wall == o.wall) {
+                        out.push(o);
+                    }
+                }
+            }
         }
         out.extend(self.teleporters(&reach, pos));
         out.extend(self.frontier(&reach, pos));
@@ -1214,6 +1228,16 @@ impl Explorer {
         out
     }
 
+    /// On instinct for whoever directs her, the secrets left what they're after and a way out
+    /// known (till then the way on is what walls are pressed for, in their turn).
+    fn searching_secrets(&self) -> bool {
+        self.secret_search
+            && !self.directed
+            && self.resorts.is_some()
+            && !self.secrets_done
+            && !self.knowledge.exits().is_empty()
+    }
+
     /// Since a press whose effect wasn't seen: the known sectors round the reachable area not
     /// seen since, one per sector, at the reachable poly next to it nearest her.
     fn recheck(&self, reach: &BTreeSet<usize>, pos: Point) -> Vec<Objective> {
@@ -1327,6 +1351,19 @@ impl Explorer {
                 // (stable: each part in its own order)
                 weighed.sort_by_key(|(_, o)| back_over(o));
             }
+        }
+        // (the secrets left what she's after: new ground, things to pick up and to kill first,
+        // as they come; then the walls a search would press, the likeliest before the rest,
+        // each lot nearest first; and only then a walk over floor she's seen or another look)
+        if self.searching_secrets() {
+            let likely = crate::knowledge::model::THOROUGHNESS[0].0;
+            weighed.sort_by_key(|(_, o)| match o.kind {
+                _ if o.urgent || o.needed => 0,
+                Kind::Wall if o.suspicion >= likely => 1,
+                Kind::Wall => 2,
+                Kind::Visit | Kind::Recheck => 3,
+                _ => 0,
+            });
         }
         // (a goal of whoever directs her: what it's after first, on instinct for them)
         if !self.directed && self.resorts.is_some() && self.focus != Focus::None {

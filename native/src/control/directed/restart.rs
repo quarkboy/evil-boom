@@ -17,7 +17,7 @@ const STALLED: i64 = 90 * 35;
 impl Director {
     /// Each tic: progress noted; once she's gone long enough without, told (once) that the
     /// restart is hers.
-    pub(super) fn watch_progress(&mut self, agent: &Agent, obs: &Observation) {
+    pub(super) fn watch_progress(&mut self, agent: &mut Agent, obs: &Observation) {
         let collected = usize::try_from(self.tally.items.0 + self.tally.kills.0).unwrap_or(0);
         let now = (collected, crate::sweep::known_progress(agent.x()));
         match &self.progress {
@@ -25,6 +25,29 @@ impl Director {
             _ => {
                 self.progress = Some((now, obs.tic));
                 self.told_restart = false;
+                self.told_search = false;
+            }
+        }
+        // (a secret left and nothing new for as long: where one's likeliest, once. Not with a
+        // goal of hers that searches them itself)
+        if !self.told_search && self.stalled_for(obs.tic) >= STALLED {
+            self.told_search = true;
+            let searching = matches!(
+                self.goal,
+                Some(super::goal::Goal::Everything | super::goal::Goal::Secrets)
+            );
+            let areas = if searching {
+                String::new()
+            } else {
+                self.likely_areas(agent, obs)
+            };
+            if !areas.is_empty() {
+                let (found, of) = self.tally.secrets;
+                self.tell(
+                    obs,
+                    Event::Suggestion { loud: true },
+                    format!("Secrets {found}/{of}. Likeliest walls: {areas}. doom_search them."),
+                );
             }
         }
         if self.restart_allowed && !self.told_restart && self.stalled_for(obs.tic) >= STALLED {
@@ -87,5 +110,6 @@ impl Director {
         self.new_life();
         self.progress = None;
         self.told_restart = false;
+        self.told_search = false;
     }
 }
