@@ -459,6 +459,9 @@ pub struct Steer {
     /// (tics): she stops a moment instead, then goes. Not when she's getting out of the way of
     /// something. (0: no such pause)
     pub dart_tics: i64,
+    /// bodies this near her (and their size) have her hemmed in, one of them across her way:
+    /// out by a gap between them
+    pub hemmed_near: f64,
 }
 
 impl Default for Steer {
@@ -492,6 +495,7 @@ impl Default for Steer {
             about_tics: 0,
             about_margin: 4.0,
             dart_tics: 0,
+            hemmed_near: 128.0,
         }
     }
 }

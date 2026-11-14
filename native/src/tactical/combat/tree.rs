@@ -17,7 +17,8 @@
 //!    ├─ busy           (a jump: the route keeps the legs) shooting on the way
 //!    ├─ melee          (the weapon she'd fight it with, up close: `Style::Melee`) closing in
 //!    │                 · at it
-//!    └─ fight          setting two bosses on each other · backing off from what claws ·
+//!    └─ fight          setting two bosses on each other · hemmed in: out by a gap ·
+//!                      backing off from what claws ·
 //!                      waiting out the crusher on it · sneaking past · shooting on the way
 //!                      to an errand · out of ammo: getting past · closing in (out of reach) ·
 //!                      out of reach: going on · stepping for a shot · outmatched: keeping
@@ -111,8 +112,9 @@ const BUSY: [Node; 1] = [busy];
 /// The weapon she'd fight her target with fought up close.
 const MELEE: [Node; 1] = [melee];
 /// The fight itself.
-const FIGHT: [Node; 15] = [
+const FIGHT: [Node; 16] = [
     setting_on,
+    through_gap,
     backing_off,
     waiting_out_crusher,
     sneaking,
@@ -650,6 +652,66 @@ fn waiting_out_crusher(c: &mut Combat, obs: &Observation, s: &Situation) -> Opti
     );
     a.hold_fire = c.ammo_short_against(obs, t);
     Some(a)
+}
+
+/// Hemmed in: surrounded, bodies close round her and one across the way she's going. Out by
+/// the widest gap between them she'd fit through, the nearest to her way: pushing on at a body
+/// gets her nowhere while the rest close up.
+fn through_gap(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    if !c.now.surrounded || c.now.invulnerable {
+        return None;
+    }
+    let pos = s.pos;
+    let near: Vec<(Point, f64)> = c
+        .visible
+        .iter()
+        .map(|t| ((t.x, t.y), mon(t.name).radius + PLAYER_RADIUS))
+        .filter(|&(at, r)| dist(at, pos) < c.tune.steer.hemmed_near + r)
+        .collect();
+    if near.len() < 2 {
+        return None;
+    }
+    let want = c.route_way.or(c.going_to.map(|g| heading(pos, g)))?;
+    // How much room she'd have past the bodies ahead that way (less than none: one's across it).
+    let room = |a: f64| {
+        let d = (a.to_radians().cos(), a.to_radians().sin());
+        near.iter()
+            .map(|&(at, r)| {
+                let v = (at.0 - pos.0, at.1 - pos.1);
+                if v.0 * d.0 + v.1 * d.1 <= 0.0 {
+                    f64::INFINITY
+                } else {
+                    (v.0 * d.1 - v.1 * d.0).abs() - r
+                }
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    if room(want) > 0.0 {
+        return None;
+    }
+    let mut best: Option<(f64, Point)> = None;
+    for k in 1..=12 {
+        for side in [1.0, -1.0] {
+            let off = 15.0 * f64::from(k) * side;
+            let a = want + off;
+            let d = (a.to_radians().cos(), a.to_radians().sin());
+            let gap = room(a);
+            if gap <= 0.0 || c.clear_run(obs, d, 96.0) < 96.0 {
+                continue;
+            }
+            // (a gap she fits with something to spare, as near her way as there is)
+            let score = gap.min(48.0) - off.abs() / 4.0;
+            if best.is_none_or(|(b, _)| score > b) {
+                best = Some((score, d));
+            }
+        }
+    }
+    let (_, d) = best?;
+    Some(Act::new(
+        Move::KeepingClear,
+        Some(d),
+        format!("hemmed in by {}: out by a gap", near.len()),
+    ))
 }
 
 /// Outmatched: shooting on the way, the route going on.
