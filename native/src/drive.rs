@@ -41,6 +41,8 @@
 //!   order go REF [risky] [sure] [rush] | order explore REF|DIR [secrets 1-3] | order exit [sure] | order stop
 //!                       (leaving the level with something left asks first: sure to leave anyway)
 //!                       an order (REF an id or a name; DIR n, ne, east, ...)
+//!   goal G | look | policy ... | idle ... | hints ... | why | answer ID CHOICE | answers ...
+//!                       the rest of directed play's commands (control::script)
 //!   run SECONDS         play on (directed) till she's done and waiting, or SECONDS; the reports
 
 use std::path::Path;
@@ -444,7 +446,8 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 Director::take_over(&mut s.agent);
                 println!("  directed: waiting for orders");
             }
-            "list" | "name" | "order" | "check" | "status" | "log" => {
+            "list" | "name" | "order" | "check" | "status" | "log" | "goal" | "look" | "policy"
+            | "idle" | "hints" | "why" | "answer" | "answers" => {
                 let obs = s.obs();
                 match crate::control::script::command(&mut director, &mut s.agent, &obs, line) {
                     Ok(out) => out.iter().for_each(|l| println!("  {l}")),
