@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Evil BOOM
+Comment=A DOOM bot for an AI streamer to direct: the stream console
+Exec=evil-boom console
+Icon=evil-boom
+Terminal=true
+Categories=Game;

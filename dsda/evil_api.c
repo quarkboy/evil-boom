@@ -905,6 +905,22 @@ EVIL_API void evil_window_title(const char *title)
     SDL_SetWindowTitle(evil_window, title);
 }
 
+/* The window's icon (ARGB, a row of `w` after another): the title bar's and the task list's.
+ * (On Windows the window has the program's own already; this is for where a window's icon is
+ * the window's to give, X11 and Wayland.) */
+EVIL_API void evil_window_icon(const unsigned int *px, int w, int h)
+{
+  SDL_Surface *icon;
+  if (!evil_window)
+    return;
+  icon = SDL_CreateRGBSurfaceFrom((void *)px, w, h, 32, w * 4, 0x00ff0000, 0x0000ff00,
+                                  0x000000ff, 0xff000000);
+  if (!icon)
+    return;
+  SDL_SetWindowIcon(evil_window, icon); /* (copied: the pixels needn't outlive the call) */
+  SDL_FreeSurface(icon);
+}
+
 EVIL_API void evil_window_close(void)
 {
   SDL_SetEventFilter(NULL, NULL);

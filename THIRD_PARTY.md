@@ -74,6 +74,8 @@ other platforms), by license:
   the stream window's column.
 - The logo (`native/assets/logo.png`) is ours, made by `tools/logo/make.py` with Tinos (Google,
   Apache-2.0), which isn't included; a homage to Boom's own.
+- The icon (`native/assets/icon.png`, `.ico`, `.res`) is ours too, the logo's words stacked, made
+  by `tools/logo/icon.py` with the same typeface.
 
 ## Not included
 

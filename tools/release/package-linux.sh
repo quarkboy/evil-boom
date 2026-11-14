@@ -41,6 +41,9 @@ for f in "$dir"/lib/*; do
   patchelf --set-rpath '$ORIGIN' "$f"
 done
 cp LICENSE THIRD_PARTY.md README.md "$dir/"
+# (the icon, and a menu entry to put it by: RELEASE.md says where they go)
+cp native/assets/icon.png "$dir/evil-boom.png"
+cp tools/release/evil-boom.desktop "$dir/"
 mkdir -p "$dir/licenses"
 cp native/assets/fonts/OFL.txt "$dir/licenses/BarlowCondensed-OFL.txt"
 cp tools/release/RELEASE.md "$dir/"

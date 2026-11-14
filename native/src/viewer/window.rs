@@ -42,6 +42,9 @@ impl Window {
         spec: WindowSpec,
     ) -> Result<Window, String> {
         let info = game.window_open(title, w, h, spec)?;
+        if let Some((iw, ih, px)) = icon() {
+            game.window_icon(&px, iw, ih);
+        }
         let hz = if info.refresh > 0 { info.refresh } else { 60 };
         Ok(Window {
             period: Duration::from_secs_f64(1.0 / f64::from(hz)),
@@ -92,4 +95,23 @@ impl Window {
     pub(super) fn set_title(game: &Dsda, title: &str) {
         game.window_title(title);
     }
+}
+
+/// The program's icon (assets/icon.png, made by tools/logo/icon.py), as ARGB: its width, height
+/// and pixels.
+fn icon() -> Option<(usize, usize, Vec<u32>)> {
+    let bytes: &[u8] = include_bytes!("../../assets/icon.png");
+    let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
+        .read_info()
+        .ok()?;
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).ok()?;
+    if info.color_type != png::ColorType::Rgba {
+        return None;
+    }
+    let px = buf[..info.buffer_size()]
+        .chunks(4)
+        .map(|p| u32::from_be_bytes([p[3], p[0], p[1], p[2]]))
+        .collect();
+    Some((info.width as usize, info.height as usize, px))
 }

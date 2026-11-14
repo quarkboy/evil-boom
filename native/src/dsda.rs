@@ -156,6 +156,7 @@ type MenuFn = unsafe extern "C" fn(c_int, c_int);
 type ScreenFn = unsafe extern "C" fn(*mut c_int);
 type TitleFn = unsafe extern "C" fn(*mut c_char, c_int) -> c_int;
 type DrawAtFn = unsafe extern "C" fn(*mut u8, c_int, f64) -> c_int;
+type IconFn = unsafe extern "C" fn(*const u32, c_int, c_int);
 
 /// The watcher's window, the game's SDL's (evil_window_*): none in a library from before it.
 struct WindowFns {
@@ -295,6 +296,8 @@ pub struct Dsda {
     finale_text_fn: Option<TitleFn>,
     draw_at_fn: Option<DrawAtFn>,
     window_fns: Option<WindowFns>,
+    /// (none in a library from before it was added)
+    window_icon_fn: Option<IconFn>,
     /// what a frame's drawn into, kept across frames
     draw_buffer: RefCell<Vec<u8>>,
     /// (the game keeps pointers into its arguments: they live as long as it does)
@@ -485,6 +488,10 @@ impl Dsda {
             })
         })()
         .ok();
+        // SAFETY: as above, evil_window_icon's signature; optional.
+        let window_icon_fn = sym(b"evil_window_icon")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), IconFn>(p) });
         let argv: Vec<CString> = std::iter::once("evil".to_string())
             .chain(args.iter().cloned())
             .map(CString::new)
@@ -531,6 +538,7 @@ impl Dsda {
             finale_text_fn,
             draw_at_fn,
             window_fns,
+            window_icon_fn,
             draw_buffer: RefCell::new(Vec::new()),
             _argv: argv,
             _argv_ptrs: argv_ptrs,
@@ -986,6 +994,14 @@ impl Dsda {
         if let (Some(f), Ok(t)) = (&self.window_fns, CString::new(title)) {
             // SAFETY: a string the call only reads.
             unsafe { (f.title)(t.as_ptr()) };
+        }
+    }
+
+    /// The window's icon (ARGB, `w` by `h`).
+    pub fn window_icon(&self, px: &[u32], w: usize, h: usize) {
+        if let Some(f) = self.window_icon_fn.filter(|_| px.len() >= w * h) {
+            // SAFETY: the call reads `w * h` pixels, which `px` has, and keeps none of them.
+            unsafe { f(px.as_ptr(), w as c_int, h as c_int) };
         }
     }
 

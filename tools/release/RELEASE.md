@@ -38,6 +38,10 @@ evil-boom help                                       # every command; evil-boom 
 
 (On Windows, `evil-boom.exe` from a command prompt in this folder; on Linux, `./evil-boom`.)
 
+On Linux, for an entry in the desktop's menu: copy `evil-boom.desktop` to
+`~/.local/share/applications/` with its `Exec` line giving this folder's `evil-boom` in full,
+and `evil-boom.png` to `~/.local/share/icons/`.
+
 The commands and options: <https://github.com/quarkboy/evil-boom/blob/main/docs/USAGE.md>.
 Everything else (building it yourself, the Neuro SDK integration, how it works) is in the
 repository: <https://github.com/quarkboy/evil-boom>.
