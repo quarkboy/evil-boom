@@ -460,22 +460,20 @@ impl RouteFollower {
         }
         if obs.tic - self.weave.detour_tic >= 8 {
             let nav = &self.view.nav;
+            // (where her box can be, as the game has it (P_CheckPosition, `jumps::physics`):
+            // clear of walls, of lines she can't cross whatever's beyond them, of solid things,
+            // with room to stand; and the floor she'd be on there. Asked of the floor under
+            // her box's corners alone, a line of bars with the same floor both sides was open
+            // ground, and the lane round a barrel went through it)
+            let heights: Vec<(f64, f64)> =
+                obs.heights.iter().map(|h| (h.floor, h.ceiling)).collect();
+            let sim = nav.jump_lab.at_heights(&heights);
             let floor = |p: Point| {
-                let at = |q: Point| {
-                    nav.poly_at(q)
-                        .map(|i| nav.sector_of_poly(i))
-                        .filter(|&s| nav.damage.get(s).is_none_or(|&d| d == 0))
-                        .and_then(|s| obs.height(s))
-                        .filter(|h| h.ceiling - h.floor >= crate::navigator::PLAYER_HEIGHT)
-                };
-                let r = PLAYER_RADIUS + 1.0;
-                let mid = at(p)?.floor;
-                [(-r, -r), (r, -r), (r, r), (-r, r)]
-                    .into_iter()
-                    .all(|(dx, dy)| {
-                        at((p.0 + dx, p.1 + dy)).is_some_and(|h| (h.floor - mid).abs() <= MAX_STEP)
-                    })
-                    .then_some(mid)
+                nav.poly_at(p)
+                    .map(|i| nav.sector_of_poly(i))
+                    .filter(|&s| nav.damage.get(s).is_none_or(|&d| d == 0))?;
+                let (clear, floor, ceiling) = sim.fits_at(p);
+                (clear && ceiling - floor >= crate::navigator::PLAYER_HEIGHT).then_some(floor)
             };
             let found = on
                 .iter()
