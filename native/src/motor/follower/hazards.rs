@@ -302,7 +302,7 @@ impl RouteFollower {
     /// From `from` tics on to `to`, does sector s's ceiling leave her room (her height and
     /// `CROSS_HEADROOM`)? It's taken to go on as a crusher does, at its pace last seen, between
     /// its floor + 8 and its top, turning at each.
-    fn room_through(&self, obs: &Observation, s: usize, from: f64, to: f64) -> bool {
+    pub(super) fn room_through(&self, obs: &Observation, s: usize, from: f64, to: f64) -> bool {
         let (now, before) = (obs.heights[s], self.prev_live[s]);
         let need = now.floor + PLAYER_HEIGHT + CROSS_HEADROOM;
         let top = self.view.nav.movers.initial[s].ceiling.max(now.ceiling);

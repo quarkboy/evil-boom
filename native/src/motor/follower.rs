@@ -562,6 +562,12 @@ impl RouteFollower {
         self.jump.run.is_some()
     }
 
+    /// At a jump's run-up with what it needs there, settling on the spot square on to the
+    /// takeoff, not off yet: her facing is what the route is waiting on.
+    pub fn lining_up(&self) -> bool {
+        self.jump.lineup_tic.is_some() && self.jump.sprint.is_none()
+    }
+
     /// Stood to shoot a barrel this tic (where it's shot from, turning to it or tapping): the
     /// trigger and the way she faces are what the route is waiting on.
     pub fn stood_to_shoot(&self, tic: i64) -> bool {

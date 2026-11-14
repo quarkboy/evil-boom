@@ -37,6 +37,11 @@ const JUMP_HURRY: f64 = 2.0 * TICRATE;
 
 /// how much lower than planned a ceiling can be for a jump
 const JUMP_CEILING_SLACK: f64 = 16.0;
+/// ...or lower still with room for her under it from this long on (tics: the run and the
+/// jump)...
+const JUMP_ON: f64 = 20.0;
+/// ...for this long (tics: to what she came for and out, or through)
+const JUMP_UNDER: f64 = 3.0 * TICRATE;
 
 impl RouteFollower {
     /// At the run-up: settle on the exact spot facing the takeoff, then sprint.
@@ -50,12 +55,28 @@ impl RouteFollower {
         for &(sector, h) in &jump.requires {
             let live = obs.height(sector);
             // (a ceiling a little lower is fine: a door just starting to close as a lift brings her
-            // up for the jump through it)
+            // up for the jump through it. And one a lot lower, on the move, that will leave her
+            // room from when she'd be on it till she's had time to be off again, going on as a
+            // crusher does at the pace it has (`room_through`, as a crusher walked into is
+            // timed): one that never stops is at its top for a moment in every quarter of a
+            // minute, and a wait for that moment, pelted the while, never came off (MAP06's
+            // platform))
+            let room = self.prev_live.len() == obs.heights.len()
+                && self.room_through(obs, sector, JUMP_ON, JUMP_ON + JUMP_UNDER);
+            let rising = room; // (for the debug line)
             let off = live.is_none_or(|l| {
                 (l.floor - h.floor).abs() > 0.5
                     || l.ceiling > h.ceiling + 0.5
-                    || l.ceiling < h.ceiling - JUMP_CEILING_SLACK
+                    || (l.ceiling < h.ceiling - JUMP_CEILING_SLACK && !room)
             });
+            if crate::debug::on().pace && obs.tic % 10 == 0 {
+                eprintln!(
+                    "tic {}: the jump needs sector {sector} at {}: now {}, room {rising}, waits {off}",
+                    obs.tic,
+                    fmt_live(Some(h)),
+                    fmt_live(live)
+                );
+            }
             if !off {
                 continue;
             }
@@ -136,6 +157,17 @@ impl RouteFollower {
             && diff.abs() <= 3.0
         {
             settled = true;
+        }
+        if crate::debug::on().pace && obs.tic % 5 == 0 {
+            eprintln!(
+                "tic {}: lining up: {:.1} from the run-up, {:.1} degrees off, speed {:.2}, turning {:.2}, for {:?} tics",
+                obs.tic,
+                dist(obs.pos(), jump.runup),
+                diff,
+                self.motion.speed(),
+                self.motion.rate,
+                self.jump.lineup_tic.map(|t| obs.tic - t)
+            );
         }
         if self.jump.lineup_tic.is_none() {
             self.jumps.push(JumpNews::Going(jump.clone()));

@@ -1026,8 +1026,22 @@ impl Player {
             .follower
             .as_ref()
             .is_some_and(|f| f.stood_to_shoot(obs.tic));
+        // The same lining up a run-jump: square on to the takeoff is the jump, and aimed
+        // elsewhere she never is. A second or two with no shot, then she's off (and the fight
+        // shoots through the run as before); what she has to get out of the way of still takes
+        // her.
+        let lining = self
+            .explorer
+            .follower
+            .as_ref()
+            .is_some_and(RouteFollower::lining_up);
         match d {
-            Some(d) if stood && d.kind == Move::ShootingOnTheWay => {
+            // (lining up: whichever move it is that leaves her legs to the route, shooting on the
+            // way, or on the way to an errand, getting past, out of reach)
+            Some(d)
+                if (stood && d.kind == Move::ShootingOnTheWay)
+                    || (lining && d.kind.route_goes_on() && !d.urgent) =>
+            {
                 self.fight.combat.route_walks(obs, &c);
                 c
             }

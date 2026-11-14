@@ -957,3 +957,30 @@ cause.
   ledger the other efforts use. E1M7 UV seed 1: 133 to 21, 63 stuck reports to 1, out in 706 s
   against 1007. E4M9: 7 of the 9 seeds the same to the tic, 3 exits either way. Score +0.0015
   (s.e. 0.0044), 66 better, 66 worse, exits 402 against 400.
+
+## A run-jump under a crusher, and lined up under fire (2026-11-14)
+
+The catalogue's longest loop, MAP06 UV out of ammo for most of an hour, traced back: she never
+got onto the crusher's platform in the middle of the room (the plasma rifle on it at every
+skill, the blue key on the easy ones). 5 of the baseline's 8 UV runs and 2 of the HMP ones stall
+in that room. Getting on is a run-jump across an 8-unit gap, and two things stopped it:
+
+- **She waited for the crusher at its top.** A jump wants the heights it was found with, a
+  ceiling 16 lower at most. A crusher that never stops is there some 32 tics in 500, slower
+  still while it's crushing something (an eighth the pace). Now a ceiling lower than that will
+  do if it leaves her room from when she'd be on (20 tics) for 3 s more, going on as a crusher
+  does at the pace it has: `room_through`, what a crusher walked into is timed by.
+- **She was never square on to the takeoff.** With imps in view the fight had her facing
+  ("shooting on the way to the plasma rifle") till a dodge took her off the spot. Now, from
+  what the jump needs being there till the sprint begins, the facing is the route's and the
+  fight holds its fire, whichever of its moves leaves her legs to the route; what's urgent
+  still takes her.
+
+Tried with it and dropped: this morning's barrel rule (the route's gun while it's stood to
+shoot one) widened from "shooting on the way" to all those moves. With it the score was
+-0.0032 (s.e. 0.0036), exits 397 against 402; without, as kept, -0.0012 (s.e. 0.0034), 40
+better, 41 worse, 963 the same, exits 401 against 402. MAP06 HMP: 6 exits of 8 against 3. UV:
+none either way; on the traced seed she now has the plasma rifle at 357 s, but the key there
+is on the west platform (up the lift, a jump to the ledge south of it, its switch, a run
+across the room: the maintainer's recollection, and the map's), which nothing she knows of
+sends her to; and out of ammo the fight has her legs most of the time. Both still to do.
