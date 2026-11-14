@@ -169,7 +169,7 @@ checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
 name = "evilboom"
-version = "0.8.1"
+version = "0.8.2"
 dependencies = [
  "font8x8",
  "fontdue",
