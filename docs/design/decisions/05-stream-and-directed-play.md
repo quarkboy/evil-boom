@@ -887,3 +887,40 @@ The same start after: the barrel gone in 3 taps, no shot at the shotgun guy from
 shotgun guys dead for 14 rounds by 13 s. Score, run for run on the baseline's runs: +0.0115
 (s.e. 0.0060), 196 better, 143 worse, 544 the same; HMP +0.0129, UV +0.0100; 0.461 against 0.450,
 exits 399 against 389.
+
+## The 100% goal and its last secret (2026-11-13)
+
+Seen on stream, E1M2 on Ultra-Violence, Evil's goal "everything": 5 of 6 secrets and then a
+quarter of an hour of searching that never found the sixth, a secret door (line 897, sector 106)
+in the big computer room. Her log: she had the wall as a suspect, 5.5 by her rounds' score and 6.0
+by the search's (the level's highest), and was never sent to press it. The model searched four
+other areas, of weak walls; nothing she was told said where the strong ones were (`doom_list
+areas` gave the door's area as "1 to explore"; the stall notice offered the restart). On
+instinct, walls come when there's nothing else, and after each switch whose effect she hadn't
+seen there was something else: another look at every sector round her reach (the same seven
+twice), lines stepped over, the switches pressed again. Six walls in 280 s. Three times
+"look at sector 106 again" walked her to the door to look at it, shut.
+
+- **On instinct for a goal after the secrets (everything, secrets), one left and a way out
+  known,** the walls a search would press (its score, thoroughness 2) are in with her ordinary
+  objectives: after new ground, pickups and hunts, the likeliest (thoroughness 1's) before the
+  rest, nearest first; before a walk over floor she's seen or another look. No way out known,
+  the order's as it was: walls are then for the way on, in their turn.
+- **Where to search is said.** `doom_list areas` gives an area's likely secret walls (the
+  lightest search's); with a secret left and nothing new for 90 s, once: "Secrets 5/6. Likeliest
+  walls: area-0 (3), ... doom_search them." (not under a goal that searches them itself).
+- **Her goal everything, what the items tally counts is hers to pick up, need it or not.**
+  A bonus was a spare pickup only under 200; at 200 with one left off her way, the tally
+  couldn't be finished. (No run was found that failed for it; she mostly walks over them.)
+- **Her goal everything and no kill, item or secret more for 3 minutes, she's asked** "You
+  haven't found the last secret in a while. Keep searching?" (what she has most left to find
+  named), a) leave the level, the default, in 20 s or her answers' wait if longer; b) keep
+  searching. Asked again after 3 minutes more with nothing found. The question about being
+  stuck isn't asked on top of it.
+
+Measured through `drive` (`directed`, `goal everything`, 1500 s, every question answered keep
+searching), E1M2 UV on 4 seeds: 6/6 secrets and out in 660-825 s on all four, against 5/6 on
+all four and not out. Elsewhere it costs time where the old order found everything anyway:
+DOOM II MAP01, 100% in 226 s against 160 (48 walls pressed against 13); MAP02 the same to the
+tic; MAP05 2 of 3 secrets either way, the second at 852 s against 747. Undirected play is
+untouched: parity, all 24 the same.

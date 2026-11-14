@@ -20,6 +20,10 @@ const MINUTE: i64 = 60 * 35;
 pub const ANSWER_WAIT: i64 = 8 * 35;
 /// no progress this long (tics): asked whether she's stuck
 const STUCK: i64 = 180 * 35;
+/// her goal everything and nothing of it found this long (tics): asked whether to go on looking
+const LOOKING: i64 = 180 * 35;
+/// ...and that question open at least this long (tics): its default changes her goal
+const LOOKING_WAIT: i64 = 20 * 35;
 /// a question that can't wait: open this long (tics) for her to switch from its default
 pub(super) const NOW_OPEN: i64 = 3 * 35;
 /// a fight's turned bad below this health
@@ -108,6 +112,9 @@ pub(super) struct Asking {
     asked: Vec<i64>,
     /// stuck asked for this stretch with nothing new
     asked_stuck: bool,
+    /// her goal everything: what the level counts as she last had more of it (kills, items,
+    /// secrets), and since when (or since she last said to keep looking)
+    found: Option<((i32, i32, i32), i64)>,
 }
 
 fn key(i: usize) -> char {
@@ -328,7 +335,9 @@ impl Director {
             });
             self.carry_out(agent, obs, c.then);
         }
-        self.ask_if_stuck(agent, obs);
+        if !self.ask_if_looking(obs) {
+            self.ask_if_stuck(agent, obs);
+        }
         self.ask_fight(agent, obs);
     }
 
@@ -705,6 +714,70 @@ impl Director {
             false,
         )
         .is_some()
+    }
+
+    /// Her goal everything, and no kill, item or secret more for a long while: asked whether
+    /// to keep looking, by what she has most of left to find. No answer: her goal's the way
+    /// out. Asked again after as long with nothing found. True while it's her goal (the
+    /// question about being stuck isn't asked on top of it).
+    fn ask_if_looking(&mut self, obs: &Observation) -> bool {
+        if self.goal != Some(super::goal::Goal::Everything) {
+            self.asking.found = None;
+            return false;
+        }
+        let t = &self.tally;
+        let now = (t.kills.0, t.items.0, t.secrets.0);
+        let since = match self.asking.found {
+            Some((was, since)) if was == now => since,
+            _ => {
+                self.asking.found = Some((now, obs.tic));
+                return true;
+            }
+        };
+        if obs.tic - since < LOOKING || self.asking.open.is_some() || self.fight.is_some() {
+            return true;
+        }
+        // (as many of two: the last of them named, a secret before an item before a monster)
+        let left = [
+            (t.kills.1 - t.kills.0, "monster"),
+            (t.items.1 - t.items.0, "item"),
+            (t.secrets.1 - t.secrets.0, "secret"),
+        ];
+        let Some(&(n, what)) = left.iter().filter(|(n, _)| *n > 0).max_by_key(|(n, _)| *n) else {
+            return true;
+        };
+        let last = if n == 1 {
+            format!("the last {what}")
+        } else {
+            format!("the last {n} {what}s")
+        };
+        let wait = self.answer_wait.unwrap_or(LOOKING_WAIT).max(LOOKING_WAIT);
+        let asked = self.open(
+            obs,
+            Draft {
+                text: format!("You haven't found {last} in a while. Keep searching?"),
+                choices: vec![
+                    Choice {
+                        label: "leave the level".into(),
+                        then: Then::Goal("out"),
+                    },
+                    Choice {
+                        label: "keep searching".into(),
+                        then: Then::Nothing,
+                    },
+                ],
+                default: 0,
+                told: false,
+                deadline: Some(obs.tic + wait),
+                about: About::Settle,
+                now: false,
+            },
+        );
+        if asked.is_some() {
+            // (asked: as long again before the next, whatever she says)
+            self.asking.found = Some((now, obs.tic));
+        }
+        true
     }
 
     /// Nothing new for a long while: asked whether to go on by instinct, restart (if that's
