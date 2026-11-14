@@ -397,6 +397,9 @@ pub struct MapRun {
 
 /// The damage she took by where it came from, most first, with the tics of the hits (the
 /// first few, to look up in the log): "ShotgunGuy 45 (+10 armor) at tic 1583 (45s), 1614".
+/// The fight score goes by a run's first so many minutes (`score::Row::fight`).
+pub const FIGHT_MINUTES: f64 = 20.0;
+
 fn damage_summary(damage: &BTreeMap<String, (i32, i32, Vec<i64>)>) -> String {
     const SHOWN: usize = 4;
     let mut d: Vec<_> = damage.iter().collect();
@@ -612,6 +615,12 @@ pub fn run_map_in(
     // (what hurt her, and how much: health, armour, by where it came from; the last hit)
     let mut damage: BTreeMap<String, (i32, i32, Vec<i64>)> = BTreeMap::new();
     let mut last_hit: Option<String> = None;
+    // (the fight's worth, for the fight score: the health the monsters have lost, to whatever,
+    // of all they had; and what she and her armor have taken. As they stood at FIGHT_MINUTES,
+    // once the run's that long)
+    let mut monster_health: BTreeMap<i32, i32> = BTreeMap::new();
+    let (mut dealt, mut monsters_had, mut taken) = (0i64, 0i64, 0i64);
+    let mut fight_at_cap: Option<(i64, i64, i64)> = None;
     let (mut turn_flips, mut last_jitter): (Vec<i64>, i64) = (Vec::new(), i64::MIN / 2);
     // (when the exit first came first, and what she had then: the stocking up measured)
     let mut exit_first_had: Option<(i64, crate::dsda::Loadout)> = None;
@@ -974,7 +983,31 @@ pub fn run_map_in(
             let d = damage.entry(from.clone()).or_default();
             (d.0, d.1) = (d.0 + h.health, d.1 + h.armor);
             d.2.push(e.tic);
+            taken += i64::from(h.health + h.armor);
             last_hit = Some(from);
+        }
+        if let Some(things) = &ob.things {
+            let now: BTreeMap<i32, i32> = things
+                .iter()
+                .filter(|t| t.category == "Monster")
+                .map(|t| (t.id, t.health.max(0)))
+                .collect();
+            for (id, &h) in &now {
+                match monster_health.get(id) {
+                    Some(&was) => dealt += i64::from((was - h).max(0)),
+                    None => monsters_had += i64::from(h), // (there from the start, or made since)
+                }
+            }
+            // (one gone altogether, a lost soul burst: all it had left)
+            dealt += monster_health
+                .iter()
+                .filter(|(id, _)| !now.contains_key(id))
+                .map(|(_, &was)| i64::from(was))
+                .sum::<i64>();
+            monster_health = now;
+        }
+        if fight_at_cap.is_none() && (e.tic - tic0) as f64 >= FIGHT_MINUTES * 60.0 * TICRATE {
+            fight_at_cap = Some((dealt, monsters_had, taken));
         }
         rec.entries.push(Entry::Tic(ob.tic, ctl));
         {
@@ -1088,8 +1121,9 @@ pub fn run_map_in(
         real - t_engine - t_observe - t_think,
         e.tic as f64 / real.max(1e-9)
     ));
+    let (dealt, monsters_had, taken) = fight_at_cap.unwrap_or((dealt, monsters_had, taken));
     let mut detail = format!(
-        "{game_s:.0}s game, {real:.0}s real, {deaths} deaths; {}",
+        "{game_s:.0}s game, {real:.0}s real, {deaths} deaths, {dealt}/{monsters_had} dealt, {taken} taken; {}",
         k.summary()
     );
     detail = format!(

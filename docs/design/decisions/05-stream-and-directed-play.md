@@ -1143,3 +1143,24 @@ alcoves, joined by two or three, weren't found.)
 To come, by the same test: a gun or armor she needs in a pocket fetched and straight out
 again, the rest of what's in one left while she's chased, out early when its mouth is being
 closed on.
+
+## A fight score beside the score
+
+The score is mostly exits, and most runs end in a death (641 of 1,088): a change that has her
+last longer or fight better without tipping a run into an exit doesn't show, and one flipped
+exit counts for as much as a real gain elsewhere. A pile of fight changes that lost a hundred
+exits read -7.5 standard errors on exits and -11 on time alive alone, from the same runs.
+
+The maintainer's measure, kept beside the score (`Row::fight_points`, printed by score-report
+and step.sh): a run's first twenty minutes. Out within them, 1. Else the health the monsters
+lost less what she and her armor took, over all the health the level's monsters had; a quarter
+off for dying in that time; nothing below nothing. A run's RESULT line and the score's file
+carry the three numbers (dealt, the monsters' health, taken), as they stood at twenty minutes
+for a run that goes on past it.
+
+The monsters' loss is to whatever, not only to her: the game's hits aren't told apart by who
+dealt them without a change to the engine's patch, and what she has them do to each other is
+hers by the way she plays (the infighting E2M9 is won by). Fifteen minutes was the first
+thought; 57 of 409 exits take longer, 18 longer than twenty.
+
+Not what a change is kept by: that stays the score. For reading changes to the fight.

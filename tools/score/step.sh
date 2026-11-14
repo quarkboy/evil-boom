@@ -20,6 +20,8 @@ base=out/score/base.tsv
 [ -f "$base" ] || { echo "no $base: make a baseline first (docs/TESTING.md)" >&2; exit 1; }
 "$bin" score --like "$base" --jobs "${JOBS:-12}" --out "out/score/$name.tsv" "$@" >/dev/null 2>&1
 "$bin" score-report "$base" "out/score/$name.tsv" | grep -A2 "run for run" | cut -c1-150
-"$bin" score-report "$base" "out/score/$name.tsv" | grep "moved most" | cut -c1-200
+"$bin" score-report "$base" "out/score/$name.tsv" | grep "^  moved most" | cut -c1-200
+"$bin" score-report "$base" "out/score/$name.tsv" | grep "fight score, run for run\|fight moved most" | cut -c1-200
+"$bin" score-report "out/score/$name.tsv" | grep "^  fight score" | cut -c1-150
 "$bin" score-report "out/score/$name.tsv" | tail -1
 python3 tools/score/screen.py base "$name" | cut -c1-100

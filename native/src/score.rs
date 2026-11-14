@@ -43,6 +43,9 @@ pub struct Row {
     /// times she died before the run ended (a run of several lives: out with this many deaths
     /// is out on the next life)
     pub deaths: u32,
+    /// the health the monsters lost (to whatever) of all they had, and what she and her armor
+    /// took, in the run's first `FIGHT_MINUTES` (None: a set from before these were kept)
+    pub fight: Option<((u32, u32), u32)>,
 }
 
 impl Row {
@@ -62,6 +65,27 @@ impl Row {
         }
     }
 
+    /// The fight score (the maintainer's, 2026-11-14): how she fared in the first twenty
+    /// minutes, by more than out or not. Out within them: 1. Else the health the monsters lost
+    /// less what she took, as a share of all the health they had; a quarter off for dying in
+    /// that time; nothing less than nothing. A run that lasts longer is counted as it stood at
+    /// twenty minutes. Finer than exits: a fight better fought shows without the run tipping
+    /// into an exit.
+    pub fn fight_points(&self) -> Option<f64> {
+        let ((dealt, had), taken) = self.fight?;
+        let within = self.seconds <= crate::sweep::FIGHT_MINUTES * 60.0;
+        if self.exited() && within {
+            return Some(1.0);
+        }
+        let share = if had == 0 {
+            0.0
+        } else {
+            (f64::from(dealt) - f64::from(taken)) / f64::from(had)
+        };
+        let died = self.outcome == "DIED" && within;
+        Some((share - if died { DEATH } else { 0.0 }).clamp(0.0, 1.0))
+    }
+
     pub fn kill_share(&self) -> f64 {
         if self.kills.1 == 0 {
             0.0
@@ -72,11 +96,11 @@ impl Row {
         }
     }
 
-    const HEADER: &'static str = "wad\tmap\tskill\tseed\toutcome\tseconds\tkills\tkills_total\titems\titems_total\tlines\tlines_total\tsectors\tsectors_total\tdeaths";
+    const HEADER: &'static str = "wad\tmap\tskill\tseed\toutcome\tseconds\tkills\tkills_total\titems\titems_total\tlines\tlines_total\tsectors\tsectors_total\tdeaths\tdealt\tmonster_health\ttaken";
 
     fn tsv(&self) -> String {
         format!(
-            "{}\t{}\t{}\t{}\t{}\t{:.0}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{:.0}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.wad,
             self.map,
             self.skill,
@@ -91,7 +115,9 @@ impl Row {
             self.lines.1,
             self.sectors.0,
             self.sectors.1,
-            self.deaths
+            self.deaths,
+            self.fight
+                .map_or_else(String::new, |((d, h), t)| format!("{d}\t{h}\t{t}"))
         )
     }
 
@@ -110,6 +136,7 @@ impl Row {
             lines: (n(10)?, n(11)?),
             sectors: (n(12)?, n(13)?),
             deaths: n(14).unwrap_or(0),
+            fight: (|| Some(((n(15)?, n(16)?), n(17)?)))(),
         })
     }
 
@@ -165,12 +192,34 @@ impl Row {
                 .and_then(|i| i.checked_sub(1))
                 .and_then(|i| words[i].parse().ok())
                 .unwrap_or(0),
+            fight: words
+                .iter()
+                .position(|w| *w == "dealt")
+                .and_then(|i| i.checked_sub(1))
+                .and_then(|i| pair(words[i]))
+                .zip(
+                    words
+                        .iter()
+                        .position(|w| *w == "taken")
+                        .and_then(|i| i.checked_sub(1))
+                        .and_then(|i| words[i].parse().ok()),
+                ),
         }
     }
 }
 
 /// A run that doesn't get out scores this times the share of monsters killed.
 const PARTIAL: f64 = 0.5;
+/// The fight score: this much off for dying.
+const DEATH: f64 = 0.25;
+
+/// A list's mean and the standard error of it.
+fn mean_se(v: &[f64]) -> (f64, f64) {
+    let n = v.len().max(1) as f64;
+    let mean = v.iter().sum::<f64>() / n;
+    let se = (v.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1.0).max(1.0) / n).sqrt();
+    (mean, se)
+}
 
 /// A seed from the clock and a count (splitmix64): a new one each run.
 fn random_seed(count: u64) -> u32 {
@@ -500,6 +549,15 @@ pub fn report(sets: &[Vec<Row>]) -> String {
     for (i, t) in tallies.iter().enumerate() {
         let runs: u32 = t.values().map(|l| l.runs).sum();
         out += &format!("set {} ({runs} runs):\n", i + 1);
+        let fights: Vec<f64> = sets[i].iter().filter_map(Row::fight_points).collect();
+        if !fights.is_empty() {
+            let (mean, se) = mean_se(&fights);
+            out += &format!(
+                "  fight score {mean:.3}, standard error {se:.3} ({} runs: the first {:.0} minutes)\n",
+                fights.len(),
+                crate::sweep::FIGHT_MINUTES
+            );
+        }
         for s in skills.iter().map(|&s| Some(s)).chain([None]) {
             let (score, exits, kills, spread, all, none, n) = summary(t, s);
             let name = s.map_or_else(|| "all    ".to_string(), |s| format!("skill {s}"));
@@ -649,6 +707,40 @@ fn paired(sets: &[Vec<Row>]) -> String {
         out += &format!(" {} {}/{} {d:+.2};", k.0, k.1, k.2);
     }
     out += "\n";
+    // The same by the fight score, where both sets have it.
+    let fights: Vec<(f64, &Row)> = pairs
+        .iter()
+        .filter_map(|(x, y)| Some((y.fight_points()? - x.fight_points()?, *x)))
+        .collect();
+    if !fights.is_empty() {
+        let d: Vec<f64> = fights.iter().map(|f| f.0).collect();
+        let (mean, se) = mean_se(&d);
+        out += &format!(
+            "fight score, run for run ({} runs): set 2 less set 1 {mean:+.4}, standard error {se:.4}; {} better, {} worse\n",
+            d.len(),
+            d.iter().filter(|&&d| d > 1e-9).count(),
+            d.iter().filter(|&&d| d < -1e-9).count()
+        );
+        let mut by: BTreeMap<Key, (f64, u32)> = BTreeMap::new();
+        for (d, x) in &fights {
+            let e = by
+                .entry((x.wad.clone(), x.map.clone(), x.skill))
+                .or_default();
+            e.0 += d;
+            e.1 += 1;
+        }
+        let mut moved: Vec<(f64, &Key)> = by
+            .iter()
+            .map(|(k, &(d, c))| (d / f64::from(c.max(1)), k))
+            .filter(|(d, _)| d.abs() > 1e-9)
+            .collect();
+        moved.sort_by(|p, q| q.0.abs().total_cmp(&p.0.abs()));
+        out += "  fight moved most:";
+        for (d, k) in moved.iter().take(12) {
+            out += &format!(" {} {}/{} {d:+.2};", k.0, k.1, k.2);
+        }
+        out += "\n";
+    }
     out
 }
 
