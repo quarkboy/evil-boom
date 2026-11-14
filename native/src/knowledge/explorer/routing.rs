@@ -482,6 +482,82 @@ impl Explorer {
                 },
             );
         }
+        // A way by a run-jump over somewhere there's no getting back from, with something safe
+        // still to do, isn't taken (`refusal`): another way without that jump, if there is one,
+        // before it's given up as no way. (A shortcut across the corner of a pit the stairs go
+        // round: the stairs.) None: the way she had, for `refusal` to turn down as before, and
+        // the risky twin to take.
+        /// a way round a jump over a fall for good is taken if no longer than the jump's way by
+        /// this factor, and this much (map units, as the planner costs them)
+        const WAY_ROUND: f64 = 1.5;
+        const WAY_ROUND_MORE: f64 = 256.0;
+        if obj.kind != Kind::Exit && !obj.risky {
+            let first = route.clone();
+            for _ in 0..REPLANS {
+                let Some(r) = route.as_ref() else { break };
+                let over: Vec<&crate::navigator::Jump> = r
+                    .legs
+                    .iter()
+                    .flat_map(|leg| leg.path.jumps.iter())
+                    .filter(|j| self.falls_for_good(j, &view, &r.states))
+                    .collect();
+                if over.is_empty() {
+                    break;
+                }
+                // ...nor by its twins, between the same two floors: over the same fall, most
+                // likely, whether or not each is told to be (one that takes off from the very
+                // lip of a pit isn't, the pit taken for where it starts).
+                let twins: Vec<String> = nav
+                    .jumps
+                    .iter()
+                    .filter(|j| {
+                        over.iter().any(|o| {
+                            nav.sector_of_poly(o.dest_poly) == nav.sector_of_poly(j.dest_poly)
+                                && o.src_polys.iter().any(|&a| {
+                                    j.src_polys
+                                        .iter()
+                                        .any(|&b| nav.sector_of_poly(a) == nav.sector_of_poly(b))
+                                })
+                        })
+                    })
+                    .map(|j| j.key())
+                    .collect();
+                self.unsafe_jumps.extend(twins);
+                let without = self.view();
+                route = without.plan(
+                    start,
+                    &[goal],
+                    &Plan {
+                        keys,
+                        states: Some(&states),
+                        key_items: &key_items,
+                        max_expansions: budget,
+                        max_seconds: PLAN_SECONDS,
+                        goal_triggers: &[],
+                        fired: &fired,
+                    },
+                );
+            }
+            if !self.unsafe_jumps.is_empty() {
+                // (Not a way round much longer than the jump's, though: that's the fights and the
+                // floors on a long walk for a risk the risky twin takes once, later.)
+                let length =
+                    |r: &Route| -> f64 { r.legs.iter().map(|leg| leg.path.cost).sum::<f64>() };
+                let near = match (&route, &first) {
+                    (Some(r), Some(f)) => length(r) <= length(f) * WAY_ROUND + WAY_ROUND_MORE,
+                    _ => false,
+                };
+                if near {
+                    self.log.push(format!(
+                        "tic {}: '{}': not by a jump over where there's no getting back from: another way",
+                        obs.tic, obj.label
+                    ));
+                } else {
+                    route = first;
+                }
+                self.unsafe_jumps.clear();
+            }
+        }
         if route.is_none() && crate::debug::on().no_route {
             let sec = |p: Point| nav.poly_at(p).map(|q| (q, nav.sector_of_poly(q)));
             let direct = view.find_path(start, obj.goal, &states, None);
@@ -784,6 +860,9 @@ impl Explorer {
     fn falls_for_good(&self, jump: &crate::navigator::Jump, view: &View, states: &States) -> bool {
         const EVERY: f64 = 16.0;
         let nav = &self.nav;
+        // (A takeoff on the very lip of a pit can be in the pit's own poly, the pit then taken
+        // for an end of the jump and not looked under. Left so: told right, the jumps she makes
+        // from such lips are refused, and the score is the worse for it; see the decision log.)
         let Some(from) = nav.poly_at(jump.takeoff) else {
             return false;
         };

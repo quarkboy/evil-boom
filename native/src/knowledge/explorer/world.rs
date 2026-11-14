@@ -356,6 +356,7 @@ impl Explorer {
                 missed.get(&j.key()).copied().unwrap_or(0) >= limit
                     || (j.strafe && !self.strafing_allowed)
                     || self.lapsing(&j.key())
+                    || self.unsafe_jumps.contains(&j.key())
             })
             .map(|(i, _)| i)
             .collect()

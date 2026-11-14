@@ -1064,3 +1064,38 @@ Seen in the same runs and not done: in a later life, knowing the switch's crushe
 outmatches her, she doesn't go and press it till late.
 
 A blind pistol start here on Ultra-Violence may be more than to ask of her (the maintainer's).
+
+## A way round a jump over a fall for good, and a door pressed shut
+
+MAP06's secret (rocket launcher, backpack, megasphere, megaarmor, behind a door on the ledge
+the spiral stairs' top jumps to) was never gone for, "no route": the plan to the stairs' top
+took a run-jump across the lava the stairs go round, a shortcut, and a way over somewhere
+there's no getting back from is refused whole (`refusal`). The jump onto the ledge itself is
+over the stairs, and was fine.
+
+- **Kept: plan again without the jump (and its twins, between the same two floors) before the
+  way is refused; taken if no more than 1.5 times as long and 256.** MAP06 UV with a loadout,
+  goal everything: the secret found and the launcher taken on every seed that lived to get there
+  (before: once in two, by the risky twin, at 1253 s). Score +0.0031 (s.e. 0.0037), 58 better,
+  41 worse, exits 409 against 408.
+- **Without the cap on length, lost** (-0.0008 with the change below it, exits 403): the way
+  round was often several times the length, through fights and hurting floors (MAP11: dead in
+  a minute or two; E1M5: 2450 along for 380), where the old way drops the thing and takes the
+  jump later as a risk.
+- **The test's own gap, left.** `falls_for_good` takes a takeoff on the very lip of a pit for
+  the pit's own poly, the pit then an end of the jump and not looked under (a 283 jump over
+  MAP06's last lava passed so, missed, and killed her). Told right (the ends by where it's run
+  from), it refuses lip jumps she makes and lands all the time: -0.0065 (s.e. 0.0045), exits
+  395, with the capped rule; +0.0017 without. So the twins go with a refused jump whether told
+  to be over a fall or not, which shuts that hole where the new rule opened it, and no more.
+- **Dropped: a thing given up for want of a route offered again once she's moved and is near
+  it** (the first try at the same secret). -0.0002 (s.e. 0.0045), MAP06 HMP -0.29 (three exits
+  gone, the crusher room gone at in another order). The patch is
+  out/score/no-route-near-full.patch.
+
+Found by it, on E1M5: a zombieman opened the exit room's door from inside, she pressed it as
+it stood open, and it shut. Nothing learned, the door "tried", and never pressed again: 1,000
+seconds of everything else, then dead in the nukage. **A door she can open again and again
+whose press taught her nothing is pressed again when there's nothing else, as a repeatable
+switch is** (`pressed_again`). That run: out at 605 s. The score's runs: none changed (1086 the
+same to the tic, 0 better, 0 worse): it's rare.

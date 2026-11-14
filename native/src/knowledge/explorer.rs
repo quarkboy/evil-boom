@@ -584,6 +584,9 @@ pub struct Explorer {
     /// opens a while, behind a lift's ride), left out of planning while she knows no more than
     /// she did (what she'd learned then: the count)
     pub lapsing_jumps: (BTreeSet<String>, usize),
+    /// run-jumps left out of the plan being made now: over somewhere there's no getting back
+    /// from, while another way is looked for (empty between plans)
+    unsafe_jumps: BTreeSet<String>,
     /// directed: the objective in hand is pressed on with mid-fight, shooting and dodging on
     /// the way, not stopped for the fight (a rush)
     pub press_on: bool,
@@ -743,6 +746,7 @@ impl Explorer {
             resort_wanted: None,
             stuck_retried: None,
             lapsing_jumps: (BTreeSet::new(), 0),
+            unsafe_jumps: BTreeSet::new(),
             press_on: false,
             panic_tries: 0,
             strong_only: false,
