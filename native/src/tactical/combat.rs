@@ -2158,6 +2158,21 @@ impl Combat {
         false
     }
 
+    /// What outmatches her, standing in a sector a crusher she knows of moves (its line learned),
+    /// whether it's moving now or not.
+    pub(super) fn under_her_crusher(&self, obs: &Observation, t: &Thing) -> bool {
+        self.too_much(obs, &[t.name], self.tune.guns.outmatched)
+            && self
+                .nav
+                .poly_at((t.x, t.y))
+                .is_some_and(|q| self.crusher_known(self.nav.sector_of_poly(q)))
+    }
+
+    /// Is sector s one a crusher she knows of moves?
+    fn crusher_known(&self, s: usize) -> bool {
+        self.movers.crushers.contains_key(&s)
+    }
+
     /// What outmatches her that a crusher she knows of is at work on, as she last saw it: standing
     /// in one of her crusher sectors whose ceiling has come down within `engage.crush_wait`. It
     /// dies where it stands, given time, and she has only to keep out of its sight till it has

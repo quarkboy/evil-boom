@@ -144,6 +144,16 @@ pub(super) fn engage(c: &mut Combat, obs: &Observation, s: &Situation) -> Act {
     {
         act.hold_fire = true;
     }
+    // Nor any at what outmatches her that stands under a crusher she knows of, at work on it or
+    // not yet (the maintainer's rule): the crusher is what kills it, and her rounds are for
+    // what she can. Whatever the move: ducking from it, dodging another's shot, going by.
+    if !act.hold_fire
+        && s.target
+            .as_ref()
+            .is_some_and(|t| c.under_her_crusher(obs, t))
+    {
+        act.hold_fire = true;
+    }
     act
 }
 

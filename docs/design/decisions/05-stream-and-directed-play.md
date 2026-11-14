@@ -1032,3 +1032,35 @@ version is up, 30: every level's jumps found afresh.
 Only E4M9 has such a climb, of the 68 levels: 1078 of the 1088 runs the same to the tic, 6
 better, 2 worse, +0.0016 (s.e. 0.0015), exits 407 against 405; E4M9 HMP 5 of 8 out against 3.
 She goes for the megaarmor 11 s in.
+
+## Her rounds and the spider mastermind (2026-11-14)
+
+MAP06 UV from a pistol start again: out of ammo in five or six minutes. Not from poor shooting
+(238 of 312 pellets on a monster, 10 shots of 96 on nothing): the level has 32 shells and a
+clip lying about and the rest is cells and rockets; and a third of what she fired went into the
+spider mastermind (32 of 96 on the seed traced; 18, 28, 44 on others), 3,000 health that all
+she carries couldn't kill and the crusher is there for.
+
+Tried, on the rule that keeps her ammo from what she can't kill (it held only in "keeping
+clear"):
+
+- **In every move** (ducking from it, dodging another's shot, waiting out the crusher): lost,
+  -0.0146 (s.e. 0.0057), exits 386 against 407, 50 levels changed, the boss levels most. Not
+  traced; the rounds she "wastes" on a baron from a pistol start seem to earn their keep.
+- **"In her way" only on a level with her** (the mastermind on its platform, 128 over the
+  floor she went by on, had counted as in her way, the rule's exception): level, -0.0005 (s.e.
+  0.0018). Right as far as it goes, and it took few of the shots away by itself. Not in; the
+  patch is out/score/in-her-way-level.patch.
+- **Kept, the maintainer's: no shot at what outmatches her that stands in a sector a crusher
+  she knows of moves, at work or not, whatever the move.** By what she's learned, not the map:
+  in one life it saves little (30 of the 32: she shoots before she's pressed the switch and
+  seen what it does), and that's the point of it. Given five lives she shoots the mastermind
+  30 to 44 times in the first and 0 to 5 in each after, where without the rule it was 21, 59,
+  29, 26 in later lives. Score +0.0008 (s.e. 0.0014), 4 better, 2 worse, 1082 the same (MAP06's
+  only), exits 408 against 407. By the map's own crusher sectors the shots go at once (0 to
+  2), and that's knowledge she hasn't earned: not done.
+
+Seen in the same runs and not done: in a later life, knowing the switch's crusher kills what
+outmatches her, she doesn't go and press it till late.
+
+A blind pistol start here on Ultra-Violence may be more than to ask of her (the maintainer's).
