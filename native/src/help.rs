@@ -238,9 +238,10 @@ The run options: evil-boom help options.
 const SCORE: &str = "\
 Usage: evil-boom score [WAD [MAPS]...]... [OPTIONS]
 
-The bot's score: every level of DOOM and DOOM II (or those named) from a pistol start, one life,
-on each skill, with random seeds. A row a run goes to out/score/, then the report: 1 for an exit,
-else half the share of monsters killed. See docs/TESTING.md.
+The bot's score: every level of DOOM and DOOM II (or those named: a WAD by itself is all its
+levels, `score tnt plutonia`) from a pistol start, one life, on each skill, with random seeds. A
+row a run goes to out/score/, then the report: 1 for an exit, else half the share of monsters
+killed; and the fight score beside it. See docs/TESTING.md.
 
   --skills 3,4    the skills (Hurt Me Plenty and Ultra-Violence)
   --seeds K       seeds a skill (8)

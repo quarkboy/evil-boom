@@ -294,7 +294,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
             t => {
                 let lower = t.to_lowercase();
-                if lower == "doom" || lower == "doom2" || lower.ends_with(".wad") {
+                if matches!(lower.as_str(), "doom" | "doom2" | "tnt" | "plutonia")
+                    || lower.ends_with(".wad")
+                {
                     groups.push((t.to_string(), Vec::new()));
                 } else if let Some(g) = groups.last_mut() {
                     g.1.push(t.to_uppercase());
