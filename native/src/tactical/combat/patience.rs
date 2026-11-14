@@ -3,7 +3,7 @@
 
 //! How long she keeps at a monster she's getting nowhere with: one ledger for every such clock.
 //! An effort (closing in on what's out of reach, standing with no shot, hitting it and not
-//! hurting it, walking at it and getting no nearer) is kept at for so long, the clock set back
+//! hurting it, walking at it and getting no nearer, keeping at it out of sight again and again) is kept at for so long, the clock set back
 //! by progress where there's a measure of it, started afresh after a break where the effort's one
 //! that comes and goes; out of patience, the monster's given up on a while, whichever effort it
 //! was.
@@ -23,6 +23,8 @@ pub enum Effort {
     MeleeUnhurt,
     /// closing in to hit it in melee: how near she's got is the measure
     MeleeNoNearer,
+    /// kept at out of sight, time and again, with no shot at it in between
+    LostAgain,
 }
 
 #[derive(Clone, Copy, Debug)]

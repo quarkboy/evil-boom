@@ -929,7 +929,7 @@ DOOM II MAP01, 100% in 226 s against 160 (48 walls pressed against 13); MAP02 th
 tic; MAP05 2 of 3 secrets either way, the second at 852 s against 747. Undirected play is
 untouched: parity, all 24 the same.
 
-## Stuck in one place: three causes, two fixed (2026-11-13)
+## Stuck in one place: three causes (2026-11-13)
 
 Seen on stream, E1M1's exit room: stuck between a barrel and a corner till every objective
 timed out. The follower's "stuck" counted over eight levels on Ultra-Violence (seed 1) then
@@ -944,10 +944,16 @@ cause.
 - **The sixth hanging body is solid** (MAP05, an alcove one fills): the table had 73-77, the
   game has 78 too; checked whole against `info.c`, the only one missing. 31 stuck reports to 1.
   Score +0.0006 (s.e. 0.0006), 1 run better, none worse.
-- **Not kept: nothing past autoaim's range in reach unless it's level with her gun** (E1M7:
-  imps 1,100 off pulling her to and fro, "shooting on the way" in sight with no shot, "keeping
-  at it" out of sight; 133 times against 29 before the far-shot rule of this morning). On
-  that seed it's what was wanted: 63 stuck reports to 2, 150/150 kills in 712 s against 144/150
-  in 1007. On the score it lost a little, -0.0061 (s.e. 0.0059), 97 better, 118 worse, exits
-  394 against 400: the fourth rule sending the route on sooner past what she can't get at, and
-  the fourth to lose (MAP23's three, 2026-11-11). The patch is out/score/reach-past-autoaim.patch.
+- **Kept at out of sight time and again, given up on** (E1M7: imps 1,100 off pulling her to
+  and fro, "shooting on the way" in sight with no shot, "keeping at it" out of sight; 133 times
+  against 29 before the far-shot rule of this morning). Two rules on the logic lost first:
+  nothing past autoaim's range in reach unless it's level with her gun (-0.0061, s.e. 0.0059,
+  exits 394 against 400; on E4M9 HMP, 9 seeds, no exit against 3), and the same for
+  `lost_sight` alone (E4M9: 1 exit of 9, dead two and a half minutes sooner). Traced on one of
+  those seeds, the once is worth having: kept at where the fight was, what's coming comes to
+  her a few at a time; sent on, she opens a new sight line hurt. So the logic stays and the
+  repetition goes (the maintainer's): kept at the same one, on and off, for `lost_again` (8 s,
+  some three times round) with no shot at it in between, it's given up on a while, by the
+  ledger the other efforts use. E1M7 UV seed 1: 133 to 21, 63 stuck reports to 1, out in 706 s
+  against 1007. E4M9: 7 of the 9 seeds the same to the tic, 3 exits either way. Score +0.0015
+  (s.e. 0.0044), 66 better, 66 worse, exits 402 against 400.

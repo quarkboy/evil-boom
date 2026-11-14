@@ -1982,6 +1982,9 @@ impl Combat {
         if let Some(t) = target.as_ref().filter(|t| self.reachable(obs, t)) {
             self.patience.rest(Effort::Closing, t.id); // (got it in reach: the clock again, next time)
         }
+        if let Some(t) = target.clone().filter(|t| self.can_hit(obs, t, None)) {
+            self.patience.rest(Effort::LostAgain, t.id); // (a shot at it: not round again for nothing)
+        }
         let close: Vec<Thing> = self
             .now
             .about
@@ -2238,6 +2241,18 @@ impl Combat {
             })
             .max_by(|a, b| mon(a.0.name).threat.total_cmp(&mon(b.0.name).threat));
         let (s, ghost, at) = s?;
+        // Kept at so time and again with no shot at it in between (in sight a moment, no shot,
+        // gone, back): given up on a while, as one closed in on and never reached is. The once
+        // is worth having, a pause where the fight was while what's coming comes to her; it's
+        // the going round that isn't (two imps 1,100 off, 133 times, E1M7).
+        let again = self.tune.engage.lost_again;
+        if self
+            .patience
+            .spent(Effort::LostAgain, s.id, obs.tic, again, None, Some(again))
+        {
+            self.give_up(obs, s.id);
+            return None;
+        }
         let gun = self.preferred_gun(obs, &ghost);
         // (stepped about as for one in sight, and that's kept: holding still for it, as a player
         // waits at a corner, cost her on the score, -0.028 (2026-11-11): what comes back round

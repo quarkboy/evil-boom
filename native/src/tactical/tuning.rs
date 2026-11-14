@@ -219,6 +219,9 @@ pub struct Engage {
     pub lost_tics: i64,
     /// ...once it's been out of sight this long (tics: a moment, not one tic)
     pub lost_after: i64,
+    /// ...and kept at so, on and off, this long (tics) with no shot at it in between: left a
+    /// while (some three times round; one time, a pause where the fight was, is as it was)
+    pub lost_again: i64,
     /// outmatched by an awake monster this near: keeping clear of it, not getting past
     pub keep_clear: f64,
     /// ...but a run for it along the route, under a hitscanner's fire, when the route takes her
@@ -282,6 +285,7 @@ impl Default for Engage {
             given_up_tics: 30 * 35,
             lost_tics: 3 * 35,
             lost_after: 9,
+            lost_again: 8 * 35,
             keep_clear: 1024.0,
             dash_tics: 2 * 35,
             dash_share: 0.5,
