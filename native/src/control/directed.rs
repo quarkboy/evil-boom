@@ -1553,7 +1553,11 @@ impl Director {
         self.powers(obs);
         self.questions(agent, obs);
         self.apply_tactics(agent, obs);
-        let everything = self.goal == Some(goal::Goal::Everything);
+        // (...once she's seen a way out this life: till then a sphere or a berserk she's no
+        // need of is left for when she might, as without the goal. One known only from a life
+        // before isn't yet: she has the level to get through again)
+        let everything =
+            self.goal == Some(goal::Goal::Everything) && agent.x().exit_seen_this_life();
         agent.x_mut().spares = obs
             .things
             .iter()

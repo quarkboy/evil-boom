@@ -912,6 +912,10 @@ twice), lines stepped over, the switches pressed again. Six walls in 280 s. Thre
 - **Her goal everything, what the items tally counts is hers to pick up, need it or not.**
   A bonus was a spare pickup only under 200; at 200 with one left off her way, the tally
   couldn't be finished. (No run was found that failed for it; she mostly walks over them.)
+  Only once she's seen a way out this life (the maintainer's rule; `exit_seen_this_life`, as
+  stocking up goes by): till then a sphere or a berserk she's no need of is left for when she
+  might, and one known from a life before isn't seen yet. E1M1 from 200 health and armor: 3
+  bonuses gone for before the exit came in sight (hurt by then), 31 after; 37/37.
 - **Her goal everything and no kill, item or secret more for 3 minutes, she's asked** "You
   haven't found the last secret in a while. Keep searching?" (what she has most left to find
   named), a) leave the level, the default, in 20 s or her answers' wait if longer; b) keep
