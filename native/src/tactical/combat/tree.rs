@@ -577,7 +577,15 @@ fn setting_on(c: &mut Combat, obs: &Observation, _s: &Situation) -> Option<Act> 
 /// Outmatched by something awake within `engage.keep_clear` that she wouldn't fight where it
 /// stands (`fought`): her distance kept, by the fight's steering. Still shooting, unless all the
 /// ammo she has couldn't kill it.
+///
+/// Not on a floor that hurts unless it's in the route's way (as `standing`): her distance kept there is
+/// more of the floor, and with the route going on whenever it's out of her guns' reach she went
+/// to and fro between the two at that reach's edge till the floor had her. The route's way off
+/// the floor is the way clear of it too: getting past, shooting as she goes.
 fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
+    if c.on_hurting_floor(obs) && !s.target.as_ref().is_some_and(|t| c.in_her_way(obs, t)) {
+        return None;
+    }
     let pos = s.pos;
     let t = s.target.as_ref().filter(|t| {
         c.now.outmatched

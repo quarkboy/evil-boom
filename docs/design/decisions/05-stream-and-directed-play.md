@@ -1327,3 +1327,12 @@ where the five sets before had 3, 2, 3, 5, 5: taken as that level's spread, not 
 further. Seen there and not the sprint's: a dodge mid-sprint carries her 200 units off the
 run-up and the sprint is then called too slow; and out of ammo on nukage she goes to and fro
 between "outmatched: keeping clear" and "out of reach: going on" till the floor has her.
+
+## Loops on MAP06: keeping clear on a hurting floor; away to nowhere further
+
+- **On a floor that hurts, keeping clear leaves her legs to the route** unless the monster's in
+  the route's way (the rule `standing` and `stepping_for_shot` had; `outmatched_keep_clear`
+  hadn't). Out of reach of her gun the route went on; in reach, keeping clear backed her off,
+  out of reach again: to and fro at that edge on nukage for half a minute, 3 health a second,
+  till the floor had her (MAP06 skill 3, seed 729663407: 917 "keeping clear" for 66, floor
+  hits 65 for 30, no death). Score +0.0008 (s.e. 0.0015), exits 421 for 420; 1,038 the same.
