@@ -1452,13 +1452,11 @@ impl Player {
     }
 
     /// Hurt, with something shooting at her in sight: under `retreat.health`, or as low as that
-    /// by the time she'd get to cover as far off as it's looked for, at the rate she's losing
-    /// health.
+    /// by the time she'd get to cover as far off as it's looked for, at the rate she's being
+    /// hit (what a floor takes isn't counted: cover from an imp does nothing about nukage, and
+    /// the way off the floor was left for it).
     fn cover_due(&mut self) -> bool {
-        let (health, rate) = (
-            self.fight.combat.now.health,
-            self.fight.combat.now.damage_rate,
-        );
+        let (health, rate) = (self.fight.combat.now.health, self.fight.combat.now.hit_rate);
         (health < self.fight.tune.retreat.health
             || health - rate * self.fight.tune.retreat.cover_range / RUN_SPEED
                 < self.fight.tune.retreat.health)

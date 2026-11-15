@@ -1302,3 +1302,11 @@ else (without it: -0.017). On a floor she knows hurts, with no suit on, it's now
 (`Motion::any_way`, set by the explorer each tic). Score +0.0061 (s.e. 0.0055), exits 422
 for 414; fight score +0.0064 (s.e. 0.0050). Skill 4 gains (+0.0173), skill 3 doesn't
 (-0.0050). It changes 454 runs.
+
+What a floor takes isn't a reason to fall back to cover: the same run, an imp in sight and 5
+health a second going to the nukage, she fell back "to cover" from the imp, the floor's doing.
+Health lost with nothing having hit her (the status bar's face), on a floor she knows hurts,
+is the floor's (`now.hit_rate` is the rest), and cover goes by that. The other rules that go
+by the rate she's losing health keep all of it. And the fight's log says "the floor" or
+"nothing near" where it said "a shot" (a label only: nothing reads it). Score -0.0004 (s.e.
+0.0003), exits 422 for 422; 1,057 runs the same. Kept as the right rule, not for the number.

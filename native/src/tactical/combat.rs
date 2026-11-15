@@ -322,6 +322,8 @@ pub struct Combat {
     trigger: Trigger,
     /// health lost lately: (tic, how much)
     damage: Vec<(i64, f64)>,
+    /// ...and of it, what the floor took (nothing having hit her, on a floor she knows hurts)
+    floor_damage: Vec<(i64, f64)>,
     /// for the log: rounds spent this fight, and the health monsters lost as the engine has it.
     /// Nothing is decided by them.
     spent: f64,
@@ -469,6 +471,7 @@ impl Combat {
                 held_fire: None,
             },
             damage: Vec::new(),
+            floor_damage: Vec::new(),
             spent: 0.0,
             dealt: 0.0,
             ammo_was: Vec::new(),
@@ -623,6 +626,12 @@ impl Combat {
         if let Some(h) = obs.health {
             if let Some(before) = self.health.filter(|&before| h < before) {
                 self.damage.push((obs.tic, before - h));
+                // (the floor's: nothing dealt it, as the status bar's face has it, and she's on
+                // a floor she knows hurts)
+                let floor = obs.hit_sides.is_empty() && self.on_hurting_floor(obs);
+                if floor {
+                    self.floor_damage.push((obs.tic, before - h));
+                }
                 // What by: what has gone off by her, what's up against her.
                 let by: Vec<String> = obs
                     .things
@@ -638,8 +647,10 @@ impl Combat {
                     "tic {}: hurt {:.0}, health {h:.0} ({})",
                     obs.tic,
                     before - h,
-                    if by.is_empty() {
-                        "a shot".to_string()
+                    if floor {
+                        "the floor".to_string()
+                    } else if by.is_empty() {
+                        "nothing near".to_string()
                     } else {
                         by.join(", ")
                     }
@@ -2730,12 +2741,16 @@ impl Combat {
                 && gap < self.tune.senses.floor_crush_gap)
     }
 
-    /// Health lost a second lately (over the last few seconds): `now.damage_rate`.
-    fn damage_rate(&mut self, tic: i64) -> f64 {
-        self.damage
-            .retain(|&(t, _)| tic - t < self.tune.senses.damage_window);
-        self.damage.iter().map(|(_, d)| d).sum::<f64>()
-            / (self.tune.senses.damage_window as f64 / TICRATE)
+    /// Health lost a second lately (over the last few seconds): `now.damage_rate`; and of it,
+    /// what something dealt her (not the floor's): `now.hit_rate`.
+    fn damage_rate(&mut self, tic: i64) -> (f64, f64) {
+        let window = self.tune.senses.damage_window;
+        self.damage.retain(|&(t, _)| tic - t < window);
+        self.floor_damage.retain(|&(t, _)| tic - t < window);
+        let per =
+            |d: &[(i64, f64)]| d.iter().map(|(_, d)| d).sum::<f64>() / (window as f64 / TICRATE);
+        let all = per(&self.damage);
+        (all, (all - per(&self.floor_damage)).max(0.0))
     }
 
     /// Could a hitscan shooter she knows of, awake, from where she last saw it, see her at p? (Its

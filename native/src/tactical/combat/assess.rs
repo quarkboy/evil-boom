@@ -59,6 +59,8 @@ pub struct Assessment {
     pub vile: bool,
     /// health lost a second, lately
     pub damage_rate: f64,
+    /// ...of it, what something dealt her: not a floor that hurts (cover does nothing for that)
+    pub hit_rate: f64,
     /// seconds till she's dead at that rate (a lot: not losing any)
     pub time_to_death: f64,
 }
@@ -90,6 +92,7 @@ impl Default for Assessment {
             surrounded: false,
             vile: false,
             damage_rate: 0.0,
+            hit_rate: 0.0,
             time_to_death: f64::INFINITY,
         }
     }
@@ -200,7 +203,7 @@ impl Combat {
             .cloned()
             .collect();
         let firepower = self.firepower(obs);
-        let damage_rate = self.damage_rate(obs.tic);
+        let (damage_rate, hit_rate) = self.damage_rate(obs.tic);
         let health = obs.health.unwrap_or(100.0);
         let odds = self.odds_in_sight(obs);
         Assessment {
@@ -224,6 +227,7 @@ impl Combat {
                     && f64::from(mon(t.name).health) / firepower > self.tune.retreat.vile_kill
             }),
             damage_rate,
+            hit_rate,
             time_to_death: if damage_rate <= 0.0 {
                 f64::INFINITY
             } else {
