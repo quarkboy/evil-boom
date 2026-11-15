@@ -39,6 +39,19 @@ const GUN_HEIGHT: f64 = 36.0;
 /// 4 tics after, and a barrel hit is seen lit the tic after that)
 const TAP_SEEN: i64 = 8;
 
+/// a tap's shot is out of the gun this many tics after the trigger at the latest (the pistol's
+/// 4, the shotgun's 3: S_PISTOL1, S_SGUN1), going the way she faces then, not the way she
+/// faced at the trigger: she faces the barrel till then, whatever her legs do
+const TAP_OUT: i64 = 4;
+
+/// a tap's let go only this square on the barrel: within this much of its half-width as seen
+/// from where she is (and `TAP_SQUARE` degrees at most), so a far one isn't shot past
+const TAP_ON: f64 = 0.6;
+const TAP_SQUARE: f64 = 2.0;
+/// ...and her turn all but done (degrees a tic): one still swinging goes on past the barrel
+/// in the tics before the shot's out
+const TAP_STILL: f64 = 0.5;
+
 /// (mortal) shot, she runs off this long...
 const BARREL_FLEE_TICS: i64 = 2 * 35;
 
@@ -273,6 +286,16 @@ impl RouteFollower {
         // barrels going off. Once the shot's had time to land with no barrel lit and none gone,
         // she's back to tapping, at the pistol's own pace, not a run and a wait a tap)
         if let Some((n, at)) = self.shot.tapped {
+            if crate::debug::on().barrels {
+                if let Some(b) = self.shot.target.and_then(|(was, _)| barrel_now(obs, was)) {
+                    eprintln!(
+                        "tic {}: {} after the tap, facing {:.0} degrees off the barrel",
+                        obs.tic,
+                        obs.tic - at,
+                        norm(heading(obs.pos(), b) - obs.angle)
+                    );
+                }
+            }
             let going_off =
                 !obs.barrels_lit.is_empty() || obs.barrels.as_ref().map_or(0, Vec::len) != n;
             if going_off {
@@ -283,6 +306,13 @@ impl RouteFollower {
                 self.shot.settle = None;
             }
         }
+        // (the tap not yet out of the gun: the barrel faced till it is)
+        let aim = self
+            .shot
+            .tapped
+            .filter(|&(_, at)| obs.tic - at <= TAP_OUT)
+            .and(self.shot.target)
+            .map(|(was, _)| heading(obs.pos(), barrel_now(obs, was).unwrap_or(was)));
         if let Some(until) = self.shot.flee_until {
             if obs.tic < until && !self.shot.flee_way.is_empty() {
                 self.progress_tic = obs.tic;
@@ -291,7 +321,7 @@ impl RouteFollower {
                     self.shot.flee_way.remove(0);
                 }
                 let h = heading(pos, self.shot.flee_way[0]);
-                return self.motion.go(obs, h, FULL_SPEED, Some(h));
+                return self.motion.go(obs, h, FULL_SPEED, Some(aim.unwrap_or(h)));
             }
             self.shot.flee_until = None;
             self.shot.settle = Some((obs.barrels.as_ref().map_or(0, Vec::len), obs.tic));
@@ -314,7 +344,7 @@ impl RouteFollower {
                     if self.shot.tapped.is_some() {
                         self.shot.stood = obs.tic;
                     }
-                    return self.motion.hold(obs, (0.0, 0.0), None);
+                    return self.motion.hold(obs, (0.0, 0.0), aim);
                 }
                 let pos = obs.pos();
                 if let Some(b) = obs
@@ -587,7 +617,10 @@ impl RouteFollower {
         };
         if obs.weapon != Some(gun) {
             c.weapon = gun;
-        } else if norm(look - obs.angle).abs() < 2.0 && obs.tic - self.shot.last_shot >= BARREL_TAP
+        } else if norm(look - (obs.angle - c.turn)).abs()
+            < TAP_SQUARE.min(TAP_ON * (BARREL_RADIUS / dist(pos, at)).atan().to_degrees())
+            && c.turn.abs() <= TAP_STILL
+            && obs.tic - self.shot.last_shot >= BARREL_TAP
         {
             if let Some(post) = self
                 .shot

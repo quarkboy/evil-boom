@@ -1387,3 +1387,19 @@ those were then sent three more times: a forced action that fails is sent again 
   unless set; `doom_policy answers` is gone). She has no way to know how long her answers
   take, and nothing to gain by setting it: the stand-in set 3 s only because the field was
   there to fill.
+
+## A barrel's shot goes where she faces when it leaves the gun
+
+Seen on stream: clearing a barrel with the shotgun, her view swung well off it as she fired.
+Traced on E1M2 and E1M7 (`EVIL_DEBUG_BARRELS`, which now prints where she faces each tic after
+a tap): the pellets leave 3 tics after the trigger and a pistol's bullet 4 (S_SGUN1, S_PISTOL1),
+going the way she faces then. Two faults: with a run off planned she turned to it the tic after
+the trigger (a shotgun tap left 32 degrees off); and she pulled the trigger within 2 degrees
+while still swinging, and went 2 to 4 past (a barrel 500 off is 1 degree to each side).
+
+- **She faces the barrel till the shot's out** (`TAP_OUT`), her legs off at once all the same.
+- **The trigger's pulled only with the turn all but done, and square on the barrel for how far
+  it is** (`TAP_STILL`, `TAP_ON`).
+- Shots 2 degrees or more off as they left: E1M2 16 of 48 to 0 of 44, E1M7 18 of 31 to 1 of 23
+  (that one turned by something else, not traced). Score -0.0007 (s.e. 0.0037), exits 423 for
+  424; 859 runs the same.
