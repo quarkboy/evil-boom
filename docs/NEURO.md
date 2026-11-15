@@ -18,9 +18,11 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 - **Time decides the design.** A model's answer takes seconds; a fight takes tics. So the model
   decides where to go and what matters, and the bot decides how: moving, aiming, dodging,
   shooting.
-- **Instinct when idle.** With no action from her for 3 seconds she carries on by instinct
-  (exploring new ground first, as her `explore` setting says). An action of hers takes over at
-  once. `doom_policy idle 0` makes her wait instead.
+- **Instinct between her actions.** An action of hers done, she carries on by instinct at once
+  (exploring new ground first, as her `explore` setting says), and a decision's forced on her:
+  what she's taken up, carry on or something else (a question; the same after a fight, and at
+  most every 15 s as instinct takes up new things). An action of hers takes over at once.
+  `doom_policy instinct off` makes her stand and wait instead.
 - **She's told the game as a player.** Everything she reads is in the second person and short
   ("You picked up a shotgun"; "A cacodemon is down"). It covers moments worth reacting to (big
   kills, barrel chains, close calls, secrets, levels done), at most a few a minute beyond the
@@ -47,8 +49,8 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_exit` | leave the level; with things left she's asked first (`sure: true` doesn't ask); no answer and she stays, or leaves if her goal is `out` or her `explore` setting `speedy`. Going on to another level with health, armor or ammo she's seen and could still take with her, the question names them and its default is to stock up first (the supplies goal) |
 | `doom_pause` | pause the game, as stepping away (Doom's menu up on its own screens), till `on: false`; meanwhile only what doesn't move her is registered |
 | `doom_fight` | your say in the fight for a while: a target, a weapon, hold fire, a stance |
-| `doom_goal` | a standing aim, till met. It doesn't play for her: it puts what it's after first in what's suggested to her and in what she does on instinct after the idle wait: out, completionist (100%, then out; she's asked if she's sure), a key, kills, supplies, secrets. A goal says what she's after, not how she explores: that stays her `explore` setting |
-| `doom_policy` | standing settings: stance, save, risk, powerups, explore, idle, hints, answers |
+| `doom_goal` | a standing aim, till met. It doesn't play for her: it puts what it's after first in what's suggested to her and in what she does on instinct: out, completionist (100%, then out; she's asked if she's sure), a key, kills, supplies, secrets. A goal says what she's after, not how she explores: that stays her `explore` setting |
+| `doom_policy` | standing settings: stance, save, risk, powerups, explore, instinct, hints, answers |
 | `doom_answer` | answer one of the bot's questions |
 | `doom_game` | the game itself: start, next level, restart; only the moves hers, and the levels, skills and play on offer, in its schema (registered again when the console changes them) |
 
@@ -72,7 +74,7 @@ a stray field) are mended against the schema (`neuro/repair.rs`).
 - **powerups:** `need` (spheres and invulnerability when they'd help), `now` (as they come).
 - **explore:** `normal` (new ground first, back over what's done after), `methodical` (everything
   as it comes, secrets too: slow), `speedy` (new ground only, never back). A goal doesn't change it.
-- **idle** seconds before instinct, **hints** (`off`, `on_stall`, `always`), **answers** (seconds
+- **instinct** (`on`, `off`: she waits for each action), **hints** (`off`, `on_stall`, `always`), **answers** (seconds
   a question waits before its default).
 
 ## Testing without Neuro

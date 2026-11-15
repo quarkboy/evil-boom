@@ -419,10 +419,10 @@ struct Queued {
 }
 
 /// with no action from her this long (tics), she carries on by instinct (2026-11-11:
-/// a bot standing still waiting on her looks dead on stream; 6 s at first, then 3: an action
-/// of hers takes over at once, and the notice of it prompts her; `doom_policy idle 0` has her
-/// wait)
-pub const IDLE_AUTO: i64 = 3 * 35;
+/// a bot standing still waiting on her looks dead on stream; 6 s at first, then 3, now at
+/// once: an action of hers takes over, and she's asked what next as instinct takes up;
+/// `doom_policy instinct off` has her wait)
+pub const IDLE_AUTO: i64 = 0;
 /// who's at the stream console, unless it says
 pub const CONSOLE_NAME: &str = "Vedal";
 
@@ -478,8 +478,8 @@ pub struct Director {
     /// it takes); and since when she's had none
     pub idle_auto: Option<i64>,
     /// a moment to ask her what next, on with what she's at meanwhile ("step": instinct's taken
-    /// up something new; "fight": a fight worth telling of is over); whoever speaks for her
-    /// takes it
+    /// up something new; "done": instinct's taken up after an order of hers; "fight": a fight
+    /// worth telling of is over); whoever speaks for her takes it
     pub next_due: Option<&'static str>,
     /// who's at the stream console, as she's told of what they do (`console_name`)
     pub console_name: String,
@@ -493,6 +493,9 @@ pub struct Director {
     told_auto_tic: Option<i64>,
     /// on her own she found nothing more to do: not taken up again till an order's been given
     auto_spent: bool,
+    /// an order of hers begun since she was last on instinct: instinct taking up after it is
+    /// the moment to ask her what next
+    had_order: bool,
     /// how much of its own opinion the bot offers; and how often it's suggested its pick this
     /// wait for an order
     pub hints: Hints,
@@ -1641,15 +1644,21 @@ impl Director {
                 self.go_instinct(agent);
                 // (her goal's things first from its first choice, not its second)
                 self.goal_tick(agent, obs);
-                self.report(
-                    obs,
-                    true,
-                    Event::OnInstinct,
-                    format!(
-                        "No action for {} s: on by instinct till your next.",
-                        limit / 35
-                    ),
-                );
+                if std::mem::take(&mut self.had_order) {
+                    self.next_due = Some("done");
+                }
+                // (at once, it's not news: what she takes up is told, and she's asked)
+                if limit > 0 {
+                    self.report(
+                        obs,
+                        true,
+                        Event::OnInstinct,
+                        format!(
+                            "No action for {} s: on by instinct till your next.",
+                            limit / 35
+                        ),
+                    );
+                }
                 return;
             }
         }
@@ -1889,6 +1898,10 @@ impl Director {
                 Ok("Fighting as usual.".into())
             }
             "auto" => {
+                // (nothing of hers holding: said, so it isn't sent again and again for nothing)
+                if !self.tactics.any(obs.tic) {
+                    return Ok("Nothing of yours to end: the fight's by reflex already.".into());
+                }
                 self.tactics = Tactics::default();
                 if let Some(p) = agent.player_mut() {
                     p.steady();
@@ -2129,7 +2142,9 @@ impl Director {
         // would be gone without a word. An errand in the middle of exploring is an errand: the
         // exploring goes on after it)
         let errand = matches!(o, Order::Go(..));
-        self.auto_spent = false;
+        // (told to stop, she stops: not on by instinct the moment after)
+        self.auto_spent = matches!(o, Order::Stop);
+        self.had_order = true;
         self.nudged = 0;
         if matches!(self.doing, Some(Doing::Auto)) {
             self.end_auto(agent);

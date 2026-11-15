@@ -284,7 +284,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
             <label>risk<select data-p="risk"><option>careful</option><option>normal</option><option>bold</option></select></label>
             <label>save<select data-p="save"><option>cells</option><option>none</option></select></label>
             <label>powerups<select data-p="powerups"><option>need</option><option>now</option></select></label>
-            <label>idle (s)<input type="number" min="0" max="60" data-p="idle"></label>
+            <label>instinct<select data-p="instinct"><option>on</option><option>off</option></select></label>
           </div>
           <div class="row"><button id="ev-setapply">Apply as hers</button><span class="dim" id="ev-policy" style="font-size:12px;align-self:center"></span></div>
           <div class="ev-sets" style="margin-top:8px" title="The stream's, not hers: how soon a decision's pushed on her, in seconds (0: never). Kept for the next game.">
@@ -539,7 +539,7 @@ function renderEvil(e, n) {
   // (her settings into the selects, unless they're being chosen here)
   const pol = {};
   for (const part of (e.policy || "").split(", ")) { const [k, v] = part.split(" "); pol[k] = v; }
-  const idle = /after (\d+) s/.exec(e.idle || ""); pol.idle = idle ? idle[1] : "0";
+  pol.instinct = /instinct/.test(e.idle || "") ? "on" : "off";
   for (const el of $("evilcard").querySelectorAll("[data-p]")) if (!setsDirty && document.activeElement !== el && pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
   // (how soon she's pushed, as the game has it, unless it's being changed here)
   [["ev-fidle", 0], ["ev-fask", 1], ["ev-fnext", 2]].forEach(([id, i]) => { if (!forceDirty && document.activeElement !== $(id) && e.forcing) $(id).value = Math.round(e.forcing[i] * 10) / 10; });
@@ -758,7 +758,7 @@ $("ev-forceapply").onclick = async () => {
 };
 $("ev-setapply").onclick = async () => {
   const data = {};
-  for (const el of $("evilcard").querySelectorAll("[data-p]")) data[el.dataset.p] = el.dataset.p === "idle" ? Number(el.value) : el.value;
+  for (const el of $("evilcard").querySelectorAll("[data-p]")) data[el.dataset.p] = el.value;
   if (await order("doom_policy", data)) setsDirty = false;
 };
 function gotoMap(map) {

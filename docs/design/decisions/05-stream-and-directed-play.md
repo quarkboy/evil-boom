@@ -1252,3 +1252,21 @@ while an order of hers is in hand, except after a fight that broke into it. Any 
 starts the 15 s afresh. The 6 s force is as it
 was, for when she's standing with nothing to do. To be judged by watching with a model:
 whether a carry-on every so often is a better watch than the bot left to it.
+
+## No standing about between her actions; instinct on or off
+
+From a run with a GPT model through Gary (E1M3): she stood for seconds after each action of
+hers, and sent `doom_fight auto` nineteen times.
+
+- The model's first `doom_policy` filled in every field, `idle: 0` among them, which turned
+  instinct off: after each action she stood till the 6 s force. A number whose zero means off
+  is a trap for a model that fills in every field. Now it's `instinct: on|off`, and on means
+  at once: an action of hers done, instinct takes up that tic (it was after 3 s), and she's
+  asked what next then, whatever the 15 s (the action's end is the moment to ask). Off, she
+  stands and waits, the 6 s force as before.
+- Actions that move nothing (a look, a list, her status, a setting, her say in a fight) put
+  off the waiting force by 3 s at most and the what-next ask not at all: sent one after
+  another they had kept either from ever coming.
+- `doom_fight auto` with nothing of hers holding says so ("Nothing of yours to end"). Most of
+  the nineteen were Gary's auto-act, left on by accident, wanting some action from her.
+- A stop order stops: not on by instinct the moment after (the scripts'; she has no stop).

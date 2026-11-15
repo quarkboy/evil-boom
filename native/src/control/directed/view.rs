@@ -22,6 +22,7 @@ impl Director {
         to.goal = self.goal_label();
         to.policy = self.policy.line();
         to.idle = match self.idle_auto {
+            Some(0) => "on by instinct".into(),
             Some(t) => format!("on by instinct after {} s", t / 35),
             None => "waits for her".into(),
         };

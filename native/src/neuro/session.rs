@@ -30,6 +30,9 @@ const MINUTE: i64 = 60 * 35;
 /// on with something by herself (instinct's taken up something new, a fight's over): asked
 /// what next, at most this often (tics; the console's to change, as `IDLE_FORCE`)
 const NEXT_FORCE: i64 = 15 * 35;
+/// waiting on her, an action of hers that moves nothing (a look, a list, a setting): at least
+/// this long (tics) after it before a decision's forced
+const AFTER_LOOK: i64 = 3 * 35;
 /// a question unanswered this long (tics): a decision forced (as `IDLE_FORCE`)
 const ASK_FORCE: i64 = 3 * 35;
 /// the rules told again (silently) this often, or after this many characters told her since,
@@ -184,7 +187,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_search", "description": "Search an area or a compass direction for secrets: thorough 2 (most suspicious walls, default) or 3 (every one, slow). queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "thorough": { "type": "integer", "enum": [2, 3] }, "queue_up": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": format!("Who you fight and how: target, weapon or hold_fire for the next {TACTIC_SECONDS}s; bold, careful, avoid or steady for {STANCE_SECONDS}s (or seconds, if given). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / avoid (keep clear: to get past) / steady: how you fight. auto: end this, fight as usual."), "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "avoid", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
-        json!({ "name": "doom_policy", "description": format!("Your settings, kept till you change them. Give any to change them; none to hear them all. {} idle: seconds without an action from you before you play on by instinct (0: you wait for one). hints: when you get suggestions: off, on_stall (when you're stuck) or always. answers: seconds a question waits for your answer before its default is taken (0: no limit).", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "idle": { "type": "integer" }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] }, "answers": { "type": "integer" } }), &[]) }),
+        json!({ "name": "doom_policy", "description": format!("Your settings, kept till you change them. Give any to change them; none to hear them all. {} instinct: on (an action done, you carry on by yourself and are asked what next), off (you stand and wait). hints: when you get suggestions: off, on_stall (when you're stuck) or always. answers: seconds a question waits for your answer before its default is taken (0: no limit).", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] }, "answers": { "type": "integer" } }), &[]) }),
         json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map; skill 1 easiest to 4 hardest; play single level or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer", "enum": [1, 2, 3, 4] }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
         json!({ "name": "doom_pause", "description": "Pause the game, as stepping away from it: the menu comes up and nothing moves till you play on (on: false). on: true by default.", "schema": s(json!({ "on": { "type": "boolean" } }), &[]) }),
@@ -197,7 +200,7 @@ pub fn actions() -> Vec<Value> {
 /// The rules, told on connecting and at each level. Everything she's told is told to her as
 /// the one playing ("you found a secret"), never of a player she directs ("she found").
 const BRIEFING: &str = "You're playing Doom. Moving, fighting and taking spare health, armor and ammo you do by reflex; you choose where you go. \
-Ids come from doom_list; your names work as ids. \"NE 400\": north-east of you, 400 units away. (tally): counts for the items %. An action done, you wait for the next; with none for 3 s, you carry on by instinct, not leaving the level (doom_policy idle).";
+Ids come from doom_list; your names work as ids. \"NE 400\": north-east of you, 400 units away. (tally): counts for the items %. An action done, you carry on by instinct, not leaving the level, and you're asked what next (doom_policy instinct).";
 
 impl Session {
     pub fn new(url: &str) -> Session {
@@ -382,10 +385,28 @@ impl Session {
                 }
                 Incoming::Action { id, name, data } => {
                     self.forced = false;
-                    self.idle_since = obs.tic;
-                    // (she's just had her say: not asked what next on top of it)
-                    self.next_due = None;
-                    self.next_at = obs.tic;
+                    if matches!(
+                        name.as_str(),
+                        "doom_go"
+                            | "doom_explore"
+                            | "doom_search"
+                            | "doom_press"
+                            | "doom_exit"
+                            | "doom_answer"
+                            | "doom_goal"
+                            | "doom_game"
+                            | "doom_pause"
+                    ) {
+                        self.idle_since = obs.tic;
+                        // (she's just had her say: not asked what next on top of it)
+                        self.next_due = None;
+                        self.next_at = obs.tic;
+                    } else {
+                        // (a look, a list, her status, a setting: time to act on it, no more.
+                        // One after another doesn't put off her being asked)
+                        self.idle_since =
+                            self.idle_since.max(obs.tic - self.idle_force + AFTER_LOOK);
+                    }
                     let (ok, msg) = self.action(agent, obs, &name, data.as_deref());
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
                     log.push(format!(
@@ -503,7 +524,10 @@ impl Session {
         // next, a question with carrying on its default; she goes on meanwhile. Not mid-fight, not over
         // a question, not while she's waiting: that's the force above)
         if let Some(due) = self.director.next_due.take() {
-            self.next_due = Some(due);
+            // (instinct's first step after her order is that order's end still)
+            if !(due == "step" && self.next_due.is_some()) {
+                self.next_due = Some(due);
+            }
         }
         if self.director.idle(agent) {
             self.next_due = None;
@@ -512,7 +536,8 @@ impl Session {
             self.connected
                 && !self.forced
                 && self.next_force > 0
-                && obs.tic - self.next_at >= self.next_force
+                && (self.next_due == Some("done") && agent.x().current.is_some()
+                    || self.next_due != Some("done") && obs.tic - self.next_at >= self.next_force)
                 && !self.director.now.fighting()
                 && self.director.question().is_none()
         }) {
@@ -947,14 +972,17 @@ impl Session {
             }
             "doom_look" => (true, self.director.look(agent, obs).join("\n")),
             "doom_policy" => {
-                let idle = args.get("idle").and_then(Value::as_f64);
                 let answers = args.get("answers").and_then(Value::as_f64);
-                // (seconds, none of them less than none: 0 is "off", said as such)
-                for (name, v) in [("idle", idle), ("answers", answers)] {
-                    if v.is_some_and(|v| v < 0.0 || !v.is_finite()) {
-                        return (false, format!("{name}: seconds, 0 or more (0: off)."));
-                    }
+                // (seconds, not less than none: 0 is "off", said as such)
+                if answers.is_some_and(|v| v < 0.0 || !v.is_finite()) {
+                    return (false, "answers: seconds, 0 or more (0: off).".into());
                 }
+                let instinct = match arg("instinct") {
+                    Some("on") => Some(true),
+                    Some("off") => Some(false),
+                    Some(_) => return (false, "instinct: on or off.".into()),
+                    None => None,
+                };
                 let hints = match arg("hints").map(Hints::parse) {
                     Some(None) => return (false, "hints: off, on_stall or always.".into()),
                     Some(h) => h,
@@ -973,15 +1001,15 @@ impl Session {
                 if let Some(secs) = answers {
                     self.director.answer_wait = (secs > 0.0).then_some((secs * 35.0) as i64);
                 }
-                if let Some(secs) = idle {
-                    self.director.idle_auto = (secs > 0.0).then_some((secs * 35.0) as i64);
+                if let Some(on) = instinct {
+                    self.director.idle_auto = on.then_some(crate::control::directed::IDLE_AUTO);
                 }
                 if let Some(h) = hints {
                     self.director.hints = h;
                 }
                 let idle = match self.director.idle_auto {
-                    Some(t) => format!("carry on by instinct after {} s with no action", t / 35),
-                    None => "wait for the next action".to_string(),
+                    Some(_) => "carry on by instinct when an action's done".to_string(),
+                    None => "wait for the next action (instinct off)".to_string(),
                 };
                 let answers = match self.director.answer_wait {
                     Some(t) => format!("questions wait {} s", t / 35),
