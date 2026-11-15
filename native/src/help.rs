@@ -9,7 +9,7 @@
 pub fn version() -> String {
     format!(
         "evil-boom {} (build {})",
-        env!("CARGO_PKG_VERSION"),
+        env!("EVIL_VERSION"),
         crate::config::COMMIT
     )
 }
@@ -57,7 +57,7 @@ MAP: E1M1 (DOOM) or MAP01 (DOOM II).
 
 Documentation: https://github.com/quarkboy/evil-boom (docs/USAGE.md)
 ",
-        env!("CARGO_PKG_VERSION")
+        env!("EVIL_VERSION")
     )
 }
 

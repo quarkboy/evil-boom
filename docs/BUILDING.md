@@ -158,7 +158,10 @@ top with `--pwad FILE` (see [USAGE.md](USAGE.md)).
 
 ## Making a release
 
-Pushing a tag `vX.Y.Z` runs `.github/workflows/release.yml`. It builds the Linux and Windows
+The version is `version` in `native/Cargo.toml`, and for a release of fixes a fourth number
+after it, `fix` under `[package.metadata.evil]` (0.8.5 and fix 1: 0.8.5.1; Cargo's own takes
+only three, so `build.rs` puts them together). Pushing a tag `vX.Y.Z` or `vX.Y.Z.N` runs
+`.github/workflows/release.yml`. It builds the Linux and Windows
 packages, and the engine's source archive that the GPL asks a binary release to offer, and
 publishes them as a GitHub release. Started by hand (Actions, *Release*, a version), it makes a
 draft instead.

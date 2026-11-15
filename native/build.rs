@@ -23,8 +23,28 @@ fn main() {
         "cargo:rustc-env=EVIL_COMMIT={hash}{}",
         if dirty { "-dirty" } else { "" }
     );
+    // (the version as it's shown: Cargo's three numbers, and the fix's after them if there is
+    // one, `fix = N` under [package.metadata.evil])
+    let fix = std::fs::read_to_string("Cargo.toml")
+        .ok()
+        .and_then(|t| {
+            t.lines()
+                .find_map(|l| l.strip_prefix("fix = ").map(str::trim).map(str::to_string))
+        })
+        .filter(|n| n != "0")
+        .map_or(String::new(), |n| format!(".{n}"));
+    println!(
+        "cargo:rustc-env=EVIL_VERSION={}{fix}",
+        env!("CARGO_PKG_VERSION")
+    );
     // (again on a commit, or a change to the sources)
-    for p in ["../.git/HEAD", "../.git/index", "src", "assets/icon.res"] {
+    for p in [
+        "../.git/HEAD",
+        "../.git/index",
+        "src",
+        "assets/icon.res",
+        "Cargo.toml",
+    ] {
         println!("cargo:rerun-if-changed={p}");
     }
     // The program's icon on Windows: assets/icon.res (a compiled resource, made by
