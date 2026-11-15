@@ -864,6 +864,25 @@ pub(crate) fn with_trenches(
     effects: &Effects,
 ) -> Effects {
     let mut out = effects.clone();
+    // (a door that's a slot itself: its ceiling as the door has it, over its sides' floor)
+    for (s, hs) in &mut out {
+        if let Some(around) = trenches.get(s) {
+            let floor_of = |o: usize| {
+                effects
+                    .iter()
+                    .find(|(e, _)| *e == o)
+                    .and_then(|(_, ohs)| ohs.iter().map(|h| h.floor).reduce(f64::min))
+                    .unwrap_or(movers.initial[o].floor)
+            };
+            let low = around
+                .iter()
+                .map(|&o| floor_of(o))
+                .fold(f64::INFINITY, f64::min);
+            for h in hs.iter_mut() {
+                h.floor = h.floor.max(low);
+            }
+        }
+    }
     for (&tr, around) in trenches {
         let moving: Vec<usize> = around
             .iter()

@@ -68,16 +68,27 @@ fn boss_rules(map: &str) -> Vec<(u16, u16, u16, Category)> {
 /// narrow channel round a bridge: no pits). The planner sees it at its lowest neighbour's
 /// floor (and follows them as they move: with_trenches); the movers keep the real heights.
 /// Returns trench -> its neighbours.
+///
+/// Exactly as wide as the box is too narrow: the game takes a box that only touches a line as
+/// clear of it (PIT_CheckLine), so she'd be in the slot only standing dead centre to the last
+/// fraction of a unit, and walking she's always over one side or the other. And a door whose
+/// floor is such a slot is one too: a door moves its ceiling, the floor under it never.
+/// a slot's a place to stand only with this much room to spare on each side
+const SLOT_SPARE: f64 = 0.5;
+
 pub(super) fn fill_trenches(
     m: &MapData,
     mesh: &Mesh,
     movers: &mut MoverModel,
 ) -> BTreeMap<usize, Vec<usize>> {
     let mut moved: BTreeSet<usize> = BTreeSet::new();
+    let mut doors: BTreeSet<usize> = BTreeSet::new();
     for l in m.linedefs.iter().filter(|l| l.special != 0) {
-        moved.extend(m.tagged_sectors(l.tag));
+        let door = classify_line(l.special).is_some_and(|i| i.category.is_door());
+        let to = if door { &mut doors } else { &mut moved };
+        to.extend(m.tagged_sectors(l.tag));
         if l.two_sided() {
-            moved.extend(m.back_sector(l));
+            to.extend(m.back_sector(l));
         }
     }
     let r = PLAYER_RADIUS;
@@ -106,7 +117,8 @@ pub(super) fn fill_trenches(
         else {
             continue;
         };
-        if low <= sec.floor || sec.ceiling - low < PLAYER_HEIGHT {
+        // (no room over it ever: nothing to walk over. A door's room is as it opens)
+        if low <= sec.floor || (sec.ceiling - low < PLAYER_HEIGHT && !doors.contains(&si)) {
             continue;
         }
         let fits = mesh
@@ -129,8 +141,17 @@ pub(super) fn fill_trenches(
                 while x <= x1 {
                     let mut y = y0;
                     while y <= y1 {
+                        // (and with room to spare there or a touch to one side: a fit with
+                        // none isn't one)
+                        let clear = |x: f64, y: f64, r: f64| {
+                            !bounds.iter().any(|&e| box_hits_segment(x, y, r, e))
+                        };
+                        let s = SLOT_SPARE;
                         if inside(&poly.vertices, x, y)
-                            && !bounds.iter().any(|&e| box_hits_segment(x, y, r, e))
+                            && clear(x, y, r)
+                            && [(0.0, 0.0), (s, s), (s, -s), (-s, s), (-s, -s)]
+                                .iter()
+                                .any(|d| clear(x + d.0, y + d.1, r + s))
                         {
                             return true;
                         }

@@ -1481,3 +1481,38 @@ E1M6.
 - **Left:** a single listing is still a late frame on a big level, two or three times a second,
   and her own choice of what to do next is one more when it comes. Making the listing itself
   cheaper (or taking it off the tic) is the next step if it still shows.
+
+## TNT and Plutonia: the levels the planner couldn't finish (from 2026-11-15)
+
+The sweep of TNT and Plutonia (2026-11-14; 512 runs a difficulty) left levels that stall on
+every seed whatever the skill. Asked for a plan knowing the whole map, her planner had none for
+five: TNT MAP02, MAP10, MAP18, MAP31 and Plutonia MAP17 (a mechanic her model lacks); it had
+one for TNT MAP22, MAP26, MAP29 and Plutonia MAP04 (she fails to find or take the way). Not
+yet asked: TNT MAP05 to MAP09, MAP19 to MAP21, Plutonia MAP12. The two WADs stay held out of
+tuning: what's traced there goes in as a rule about the game, looked up in the engine, and is
+measured on Doom and Doom II.
+
+### TNT MAP18
+
+- **The planner's start was a voodoo doll.** The map has four player 1 starts; the game sets a
+  player down at each and the one played is the last (P_SpawnMapThing). The offline tools, and
+  her own plan from the level's start (`completion.rs`), took the first: a doll in a closet,
+  three polys of reach. `MapData::player_start` is the last. Maps with more than one: TNT
+  MAP18 and MAP30, Plutonia MAP06 and MAP28; none in Doom or Doom II (parity the same).
+- **Doors sunk in the floor.** The four doors out of the start yard are 32 units thick with
+  their floor 30 below the ground on both sides. In the game she walks straight over: a box
+  32 wide is always on one side's line or the other's, and stands at the higher floor
+  (PIT_CheckLine takes a box only touching a line as clear of it, so she's in the slot only
+  dead centre to the last fraction of a unit). Her model had a 30-unit step up out of each
+  door. The trench rule (`fill_trenches`) covered this but for two things: it left out every
+  sector a special line moves, doors among them, and it took an exact fit for room to stand.
+  Now a door's floor is a slot like any other (a door moves its ceiling only; its effect is
+  its ceiling over its sides' floor, `with_trenches`), and a place to stand needs half a unit
+  to spare on some side (`SLOT_SPARE`).
+- **What else it touches.** New slots in Doom and Doom II: doors at E1M5 (sector 122), E3M5
+  (161, floor 48 below its sides: thought impassable before) and MAP19 (229); a 32-deep
+  sunken switch niche at MAP12 (42); a 24-wide lava slot at MAP20 (39), left out before as the
+  back of a tagged door's switch line. About twenty in TNT and Plutonia.
+- **Measured:** TNT MAP18 on the easiest skill, 4 seeds: 4 exits (0 of 8 before, all stalled).
+  The score: all 1,088 runs the same to the tic (0.482, 420 exits): none of the five is on a
+  way she takes there.
