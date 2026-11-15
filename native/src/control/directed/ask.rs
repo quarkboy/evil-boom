@@ -309,7 +309,8 @@ impl Director {
     }
 
     /// Her answer to question `id` (by its letter, or the start of an option's words): done, and
-    /// what it was; or why not (no such question; closed already, and how).
+    /// what it was (closed already: that, and how, with nothing done); or why not (no such
+    /// question, no such choice).
     pub fn answer(
         &mut self,
         agent: &mut Agent,
@@ -323,10 +324,12 @@ impl Director {
             .parse()
             .map_err(|_| format!("\"{id}\" isn't a question's id (q3, say)."))?;
         let Some(q) = self.asking.open.clone().filter(|q| q.id == n) else {
-            return Err(match self.asking.closed.iter().rev().find(|c| c.id == n) {
-                Some(c) => format!("Too late: q{n} is closed ({}).", c.how),
-                None => format!("No question q{n}."),
-            });
+            // (closed already: told so, and not as a failure. There's nothing to try again, and
+            // a forced action that fails is sent again at once, the same answer over and over)
+            return match self.asking.closed.iter().rev().find(|c| c.id == n) {
+                Some(c) => Ok(format!("Too late: q{n} is closed ({}).", c.how)),
+                None => Err(format!("No question q{n}.")),
+            };
         };
         let c = choice.trim().to_lowercase();
         let i = q

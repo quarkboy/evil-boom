@@ -1372,3 +1372,15 @@ actions, which the console could turn back on but not keep on.
   it, and `instinct: off` sent anyway is refused ("not yours to turn off").
 - **Taken out, not just refused:** a setting she can see and can't use costs her context and a
   wasted action each time she tries it.
+
+## A late answer isn't a failure
+
+The Episode 1 session (2026-11-15, the GPT stand-in): 113 what-next questions, 200 answers to
+them. 30 first answers came after the question's default was taken (she had set `answers: 3`
+herself; her answers took 2.2 s at the median), each was refused as "Too late", and 28 of
+those were then sent three more times: a forced action that fails is sent again at once.
+
+- **An answer to a question already closed succeeds,** saying it's closed and how, with
+  nothing done. There's nothing for her to try again. One to a question that never was
+  ("No question q7") still fails.
+- Not changed: how long a question waits is hers (`doom_policy answers`), down to 1 s.
