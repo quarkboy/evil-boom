@@ -2109,6 +2109,9 @@ impl Director {
         self.told_auto.clear();
         let x = agent.x_mut();
         x.directed = false;
+        // (an order's rush ends with the order: what she takes up by herself isn't pressed on
+        // with mid-fight)
+        x.press_on = false;
         // (her last resorts only as she's let them: the first held back is asked about)
         x.resorts = Some(self.resorts.clone());
         x.hold_exits(true);
