@@ -6,10 +6,11 @@
 //! nothing more is known to do for it, or she says `none`. An action of hers comes first; the
 //! goal goes on after. On instinct for her as the idle fallback is, with what the goal needs:
 //! what it's after first (`Explorer::focus`), last resorts let go of where it's a thorough one,
-//! the exit given back where it's leaving.
+//! the exit given back where it's leaving. How she explores meanwhile stays her `explore`
+//! setting's: a goal doesn't change it.
 
 use super::{Director, Doing, Event};
-use crate::knowledge::explorer::{Focus, GoingBack, Resort};
+use crate::knowledge::explorer::{Focus, Resort};
 use crate::motor::Observation;
 use crate::play::Agent;
 use crate::specials::{Color, Keys};
@@ -21,7 +22,7 @@ pub enum Goal {
     /// out by the first exit she knows of
     Out,
     /// every kill, item and secret, then out
-    Everything,
+    Completionist,
     /// a key of that colour, or any (and the keys she held when it was set)
     Key(Option<Color>, Keys),
     /// every monster the level counts dead
@@ -37,7 +38,7 @@ impl Goal {
     fn label(&self) -> String {
         match self {
             Goal::Out => "leave the level".into(),
-            Goal::Everything => "everything (100%), then leave".into(),
+            Goal::Completionist => "completionist (100%), then leave".into(),
             Goal::Key(Some(c), _) => format!("get the {} key", color_name(*c)),
             Goal::Key(None, _) => "get a key".into(),
             Goal::Kills => "kill everything".into(),
@@ -70,8 +71,40 @@ fn thorough_resorts() -> BTreeSet<Resort> {
 
 impl Director {
     /// Her goal set (`what`, and for a key which: a colour, or a key's id), or cleared (`none`):
-    /// what she's told.
+    /// what she's told. Completionist asked first (a question: she's sure, or not).
     pub fn set_goal(
+        &mut self,
+        agent: &mut Agent,
+        obs: &Observation,
+        what: &str,
+        r: Option<&str>,
+    ) -> Result<String, String> {
+        if what.trim().eq_ignore_ascii_case("completionist")
+            && self.goal != Some(Goal::Completionist)
+        {
+            let asked = self.ask(
+                obs,
+                "Completionist: every kill, item and secret before you leave. Slow, and dull to watch. Sure?".into(),
+                vec![
+                    super::ask::Choice {
+                        label: "yes, completionist".into(),
+                        then: super::ask::Then::Goal("completionist"),
+                    },
+                    super::ask::Choice {
+                        label: "no".into(),
+                        then: super::ask::Then::Nothing,
+                    },
+                ],
+                1,
+                true,
+            );
+            return asked.ok_or_else(|| "Not now: answer what's asked first.".into());
+        }
+        self.goal_to(agent, obs, what, r)
+    }
+
+    /// The goal taken (asked about already where it's asked), or cleared: what she's told.
+    pub(super) fn goal_to(
         &mut self,
         agent: &mut Agent,
         obs: &Observation,
@@ -89,14 +122,14 @@ impl Director {
                 });
             }
             "out" => Goal::Out,
-            "everything" => Goal::Everything,
+            "completionist" => Goal::Completionist,
             "kills" => Goal::Kills,
             "supplies" => Goal::Supplies,
             "secrets" => Goal::Secrets,
             "key" => Goal::Key(r.and_then(|r| key_color(r, obs)), obs.keys.unwrap_or_default()),
             other => {
                 return Err(format!(
-                    "goal: no \"{other}\". out, everything, key (ref: a colour or a key's id), kills, supplies, secrets, none."
+                    "goal: no \"{other}\". out, completionist, key (ref: a colour or a key's id), kills, supplies, secrets, none."
                 ))
             }
         };
@@ -177,15 +210,9 @@ impl Director {
             Goal::Kills => Focus::Kills,
             Goal::Secrets => Focus::Secrets,
             Goal::Supplies => Focus::Supplies,
-            Goal::Out | Goal::Everything => Focus::None,
+            Goal::Out | Goal::Completionist => Focus::None,
         };
-        if matches!(
-            goal,
-            Goal::Everything | Goal::Kills | Goal::Secrets | Goal::Supplies
-        ) {
-            x.going_back = GoingBack::AsItComes;
-        }
-        if matches!(goal, Goal::Everything | Goal::Kills | Goal::Secrets) {
+        if matches!(goal, Goal::Completionist | Goal::Kills | Goal::Secrets) {
             x.resorts = Some(thorough_resorts());
         }
         x.hold_exits(*goal != Goal::Out);
@@ -206,7 +233,7 @@ impl Director {
         let keys = obs.keys.unwrap_or_default();
         match goal {
             Goal::Out => None,
-            Goal::Everything => {
+            Goal::Completionist => {
                 if self.tally.complete() {
                     self.goal = Some(Goal::Out);
                     self.tell(

@@ -20,7 +20,7 @@ const MINUTE: i64 = 60 * 35;
 pub const ANSWER_WAIT: i64 = 8 * 35;
 /// no progress this long (tics): asked whether she's stuck
 const STUCK: i64 = 180 * 35;
-/// her goal everything and nothing of it found this long (tics): asked whether to go on looking
+/// her goal completionist and nothing of it found this long (tics): asked whether to go on looking
 const LOOKING: i64 = 180 * 35;
 /// ...and that question open at least this long (tics): its default changes her goal
 const LOOKING_WAIT: i64 = 20 * 35;
@@ -112,7 +112,7 @@ pub(super) struct Asking {
     asked: Vec<i64>,
     /// stuck asked for this stretch with nothing new
     asked_stuck: bool,
-    /// her goal everything: what the level counts as she last had more of it (kills, items,
+    /// her goal completionist: what the level counts as she last had more of it (kills, items,
     /// secrets), and since when (or since she last said to keep looking)
     found: Option<((i32, i32, i32), i64)>,
 }
@@ -456,7 +456,7 @@ impl Director {
             }),
             Then::Instinct => self.on_instinct(agent, obs),
             Then::Goal(what) => {
-                let line = self.set_goal(agent, obs, what, None).unwrap_or_else(|e| e);
+                let line = self.goal_to(agent, obs, what, None).unwrap_or_else(|e| e);
                 self.tell(obs, Event::Outcome, line);
             }
             Then::Restart => self.restart_wanted = self.restart_allowed,
@@ -552,7 +552,7 @@ impl Director {
         let left = self.exit_check(agent, obs)?;
         // (her goal the way out, or exploring new ground only: leaving's what she's said she
         // wants, so no answer leaves; otherwise no answer stays)
-        let out = self.goal == Some(super::goal::Goal::Out) || self.policy.explore == "quick";
+        let out = self.goal == Some(super::goal::Goal::Out) || self.policy.explore == "speedy";
         Some(
             self.ask(
                 obs,
@@ -719,12 +719,12 @@ impl Director {
         .is_some()
     }
 
-    /// Her goal everything, and no kill, item or secret more for a long while: asked whether
+    /// Her goal completionist, and no kill, item or secret more for a long while: asked whether
     /// to keep looking, by what she has most of left to find. No answer: her goal's the way
     /// out. Asked again after as long with nothing found. True while it's her goal (the
     /// question about being stuck isn't asked on top of it).
     fn ask_if_looking(&mut self, obs: &Observation) -> bool {
-        if self.goal != Some(super::goal::Goal::Everything) {
+        if self.goal != Some(super::goal::Goal::Completionist) {
             self.asking.found = None;
             return false;
         }

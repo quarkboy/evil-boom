@@ -44,10 +44,10 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_explore` | explore an area or a direction |
 | `doom_search` | search an area or a direction for secrets (thorough 2 or 3) |
 | `doom_press` | press a switch |
-| `doom_exit` | leave the level; with things left she's asked first (`sure: true` doesn't ask); no answer and she stays, or leaves if her goal is `out` or her `explore` setting `quick`. Going on to another level with health, armor or ammo she's seen and could still take with her, the question names them and its default is to stock up first (the supplies goal) |
+| `doom_exit` | leave the level; with things left she's asked first (`sure: true` doesn't ask); no answer and she stays, or leaves if her goal is `out` or her `explore` setting `speedy`. Going on to another level with health, armor or ammo she's seen and could still take with her, the question names them and its default is to stock up first (the supplies goal) |
 | `doom_pause` | pause the game, as stepping away (Doom's menu up on its own screens), till `on: false`; meanwhile only what doesn't move her is registered |
 | `doom_fight` | your say in the fight for a while: a target, a weapon, hold fire, a stance |
-| `doom_goal` | a standing aim worked toward whenever no action is in hand: out, everything, a key, kills, supplies, secrets |
+| `doom_goal` | a standing aim worked toward whenever no action is in hand: out, completionist (100%, then out; she's asked if she's sure), a key, kills, supplies, secrets. A goal says what she's after, not how she explores: that stays her `explore` setting |
 | `doom_policy` | standing settings: stance, save, risk, powerups, explore, idle, hints, answers |
 | `doom_answer` | answer one of the bot's questions |
 | `doom_game` | the game itself: start, next level, restart; only the moves hers, and the levels, skills and play on offer, in its schema (registered again when the console changes them) |
@@ -70,8 +70,8 @@ a stray field) are mended against the schema (`neuro/repair.rs`).
 - **save:** `cells` (plasma and BFG kept for bosses), `none`.
 - **risk:** `careful`, `normal`, `bold` (floors that hurt).
 - **powerups:** `need` (spheres and invulnerability when they'd help), `now` (as they come).
-- **explore:** `new` (new ground first, back over what's done after), `thorough` (everything as
-  it comes, secrets too), `quick` (new ground only, never back).
+- **explore:** `normal` (new ground first, back over what's done after), `methodical` (everything
+  as it comes, secrets too: slow), `speedy` (new ground only, never back). A goal doesn't change it.
 - **idle** seconds before instinct, **hints** (`off`, `on_stall`, `always`), **answers** (seconds
   a question waits before its default).
 

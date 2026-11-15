@@ -1202,3 +1202,21 @@ stayed. With her goal `out`, or her `explore` setting `quick`, she has said alre
 leaving is what she wants: there no answer leaves. Still asked (the maintainer's choice over
 not asking at all), so she can change her mind on seeing what's left. The stock-up question
 (going on to another level) is as it was. Directed play only: the score's runs don't ask.
+
+## Exploring's names, a goal that leaves exploring alone, and completionist asked first
+
+The GPT stand-ins chose 100% and thorough nearly every time: dull to watch (the maintainer's).
+
+- **The `explore` values renamed:** `normal` (was `new`), `methodical` (was `thorough`),
+  `speedy` (was `quick`). What each does is as it was. The old names are refused, with the
+  new ones listed.
+- **A goal no longer changes how she explores.** Completionist, kills, secrets and supplies
+  made her go back over ground as it came, whatever `explore` said. Now going back is her
+  `explore` setting's alone; a goal says what she's after (what's put first, when it's met,
+  whether the exit's held). What a thorough goal still takes unasked: the last resorts
+  (completionist, kills, secrets) and the wall search (completionist, secrets). With `speedy`
+  a goal that needs old ground runs out of things to do and ends, told as that.
+- **`everything` is `completionist`, and asked first** ("Slow, and dull to watch. Sure?", the
+  default no), as yolo is. The question's own yes sets it without asking again.
+
+Directed play only: no score to measure.

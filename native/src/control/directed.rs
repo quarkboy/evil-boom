@@ -1530,7 +1530,7 @@ impl Director {
         agent.x_mut().secrets_done = self.secrets_done();
         agent.x_mut().secret_search = matches!(
             self.goal,
-            Some(goal::Goal::Everything | goal::Goal::Secrets)
+            Some(goal::Goal::Completionist | goal::Goal::Secrets)
         ) && !self.secrets_done();
         self.check_complete(agent, obs);
         // (her policy on her numbers: on a change, and on each new level's player)
@@ -1557,7 +1557,7 @@ impl Director {
         // need of is left for when she might, as without the goal. One known only from a life
         // before isn't yet: she has the level to get through again)
         let everything =
-            self.goal == Some(goal::Goal::Everything) && agent.x().exit_seen_this_life();
+            self.goal == Some(goal::Goal::Completionist) && agent.x().exit_seen_this_life();
         agent.x_mut().spares = obs
             .things
             .iter()

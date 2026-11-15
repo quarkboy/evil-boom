@@ -380,12 +380,12 @@ const WAIT_LOOK_TICS: i64 = 35;
 /// when (her `explore` setting).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GoingBack {
-    /// once there's no new ground left ("new")
+    /// once there's no new ground left ("normal")
     #[default]
     After,
-    /// as it comes, in the run's own order ("thorough")
+    /// as it comes, in the run's own order ("methodical")
     AsItComes,
-    /// never: new ground only ("quick")
+    /// never: new ground only ("speedy")
     Never,
 }
 

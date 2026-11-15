@@ -34,7 +34,7 @@ impl Director {
             self.told_search = true;
             let searching = matches!(
                 self.goal,
-                Some(super::goal::Goal::Everything | super::goal::Goal::Secrets)
+                Some(super::goal::Goal::Completionist | super::goal::Goal::Secrets)
             );
             let areas = if searching {
                 String::new()
