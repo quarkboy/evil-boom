@@ -192,7 +192,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_search", "description": "Search an area or a compass direction for secrets: thorough 2 (most suspicious walls, default) or 3 (every one, slow). queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "thorough": { "type": "integer", "enum": [2, 3] }, "queue_up": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": format!("Who you fight and how: target, weapon or hold_fire for the next {TACTIC_SECONDS}s; bold, careful, avoid or steady for {STANCE_SECONDS}s (or seconds, if given). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / avoid (keep clear: to get past) / steady: how you fight. auto: end this, fight as usual."), "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "avoid", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
-        json!({ "name": "doom_policy", "description": format!("Your settings, kept till you change them. Give any to change them; none to hear them all. {}{INSTINCT_HELP} hints: when you get suggestions: off, on_stall (when you're stuck) or always. answers: seconds a question waits for your answer before its default is taken (0: no limit).", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] }, "answers": { "type": "integer" } }), &[]) }),
+        json!({ "name": "doom_policy", "description": format!("Your settings, kept till you change them. Give any to change them; none to hear them all. {}{INSTINCT_HELP} hints: when you get suggestions: off, on_stall (when you're stuck) or always.", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] } }), &[]) }),
         json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map; skill 1 easiest to 4 hardest; play single level or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer", "enum": [1, 2, 3, 4] }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
         json!({ "name": "doom_pause", "description": "Pause the game, as stepping away from it: the menu comes up and nothing moves till you play on (on: false). on: true by default.", "schema": s(json!({ "on": { "type": "boolean" } }), &[]) }),
@@ -334,6 +334,7 @@ impl Session {
                 self.next_force as f64 / 35.0,
             ],
             instinct_hers: self.instinct_hers,
+            answer_wait: self.director.answer_wait.map_or(0.0, |t| t as f64 / 35.0),
             ..EvilState::default()
         }
     }
@@ -352,6 +353,13 @@ impl Session {
         if let Some(s) = ask {
             self.ask_force = tics(s);
         }
+    }
+
+    /// How long a question waits for her answer before its default's taken, in seconds (the
+    /// console's, not hers: she can't know how long her answers take); 0: till she answers.
+    pub fn set_answer_wait(&mut self, secs: f64) {
+        let secs = secs.clamp(0.0, 3600.0);
+        self.director.answer_wait = (secs > 0.0).then_some((secs * 35.0).round() as i64);
     }
 
     /// Whether instinct's hers to turn off (the console's say). Not: it's on from now, her
@@ -1029,11 +1037,6 @@ impl Session {
             }
             "doom_look" => (true, self.director.look(agent, obs).join("\n")),
             "doom_policy" => {
-                let answers = args.get("answers").and_then(Value::as_f64);
-                // (seconds, not less than none: 0 is "off", said as such)
-                if answers.is_some_and(|v| v < 0.0 || !v.is_finite()) {
-                    return (false, "answers: seconds, 0 or more (0: off).".into());
-                }
                 let instinct = match arg("instinct") {
                     Some("on") => Some(true),
                     Some("off") => Some(false),
@@ -1055,9 +1058,6 @@ impl Session {
                         }
                     }
                 }
-                if let Some(secs) = answers {
-                    self.director.answer_wait = (secs > 0.0).then_some((secs * 35.0) as i64);
-                }
                 if instinct == Some(false) && !self.instinct_hers {
                     return (false, "instinct: not yours to turn off.".into());
                 }
@@ -1071,14 +1071,10 @@ impl Session {
                     Some(_) => "carry on by instinct when an action's done".to_string(),
                     None => "wait for the next action (instinct off)".to_string(),
                 };
-                let answers = match self.director.answer_wait {
-                    Some(t) => format!("questions wait {} s", t / 35),
-                    None => "questions wait for you".to_string(),
-                };
                 (
                     true,
                     format!(
-                        "Your policy: {}. You {idle}; hints {}; {answers}.",
+                        "Your policy: {}. You {idle}; hints {}.",
                         self.director.policy.line(),
                         self.director.hints.name()
                     ),

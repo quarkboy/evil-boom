@@ -57,6 +57,10 @@ pub enum Command {
         next: Option<f64>,
         #[serde(default)]
         instinct: Option<bool>,
+        /// seconds a question waits for her answer before its default's taken (0: till she
+        /// answers)
+        #[serde(default)]
+        answers: Option<f64>,
     },
     /// who's at the console, as Evil's told of what they do and say
     ConsoleName {
@@ -260,6 +264,9 @@ pub struct EvilState {
     /// instinct hers to turn off (`doom_policy instinct`); not: on, the stream's say
     #[serde(default)]
     pub instinct_hers: bool,
+    /// seconds a question waits for her answer before its default's taken (0: till she answers)
+    #[serde(default)]
+    pub answer_wait: f64,
     /// the console's last action's answer: (its number, the action, done, the answer)
     pub reply: Option<(u64, String, bool, String)>,
 }

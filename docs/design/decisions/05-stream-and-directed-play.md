@@ -1383,4 +1383,7 @@ those were then sent three more times: a forced action that fails is sent again 
 - **An answer to a question already closed succeeds,** saying it's closed and how, with
   nothing done. There's nothing for her to try again. One to a question that never was
   ("No question q7") still fails.
-- Not changed: how long a question waits is hers (`doom_policy answers`), down to 1 s.
+- **How long a question waits is the stream's, not hers** (the console's `answer_wait`, 8 s
+  unless set; `doom_policy answers` is gone). She has no way to know how long her answers
+  take, and nothing to gain by setting it: the stand-in set 3 s only because the field was
+  there to fill.

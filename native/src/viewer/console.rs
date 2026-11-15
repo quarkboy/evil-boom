@@ -327,11 +327,15 @@ impl Watch {
                     ask,
                     next,
                     instinct,
+                    answers,
                 } => match self.neuro.as_mut() {
                     Some(n) => {
                         n.set_forcing(idle, ask, next);
                         if let Some(hers) = instinct {
                             n.set_instinct_hers(hers);
+                        }
+                        if let Some(secs) = answers {
+                            n.set_answer_wait(secs);
                         }
                     }
                     None => self

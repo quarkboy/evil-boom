@@ -87,6 +87,9 @@ pub struct Settings {
     /// instinct hers to turn off (`doom_policy instinct: off`: she stands and waits when an
     /// action's done); off: it stays on whatever she says. Changed from the page as it plays.
     pub evil_instinct: bool,
+    /// seconds a question waits for Evil's answer before its default's taken (0: till she
+    /// answers; none: the game's own, 8). Changed from the page as it plays.
+    pub answer_wait: Option<f64>,
     /// a game that crashes (or hangs) started again, at the level she was on
     pub auto_restart: bool,
     /// Doom's own screens: the title card, the menu, the melt, the tally, the finales
@@ -152,6 +155,7 @@ impl Default for Settings {
             force_ask: None,
             force_next: None,
             evil_instinct: true,
+            answer_wait: None,
             auto_restart: true,
             present: true,
             title_wait: true,
@@ -656,11 +660,13 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                     s.settings.force_next,
                 );
                 let instinct = Some(s.settings.evil_instinct);
+                let answers = s.settings.answer_wait;
                 let _ = s.send(&Command::Forcing {
                     idle,
                     ask,
                     next,
                     instinct,
+                    answers,
                 });
                 // (the pictures pages want told it on their next ask)
                 s.views_told = (Vec::new(), None);
@@ -1066,6 +1072,7 @@ fn handle(hub: &Hub, mut req: Request) {
                     ask,
                     next,
                     instinct,
+                    answers,
                 } = c
                 {
                     // (kept for the next game as well)
@@ -1074,6 +1081,7 @@ fn handle(hub: &Hub, mut req: Request) {
                     st.force_ask = ask.map(|v| v.clamp(0.0, 3600.0)).or(st.force_ask);
                     st.force_next = next.map(|v| v.clamp(0.0, 3600.0)).or(st.force_next);
                     st.evil_instinct = instinct.unwrap_or(st.evil_instinct);
+                    st.answer_wait = answers.map(|v| v.clamp(0.0, 3600.0)).or(st.answer_wait);
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))

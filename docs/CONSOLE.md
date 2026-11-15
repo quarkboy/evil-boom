@@ -71,9 +71,10 @@ for her: answer the question, set a goal, change a setting, look, ask why, take 
 Actions from the page are marked as yours, and she's told of them by the name in Settings (`console_name`, Vedal by default). Below her settings, the stream's own: how
 soon a decision's forced on her when she's waited with nothing to do (6 s) or left a question
 unanswered (3 s), and how often at most she's asked what next while she's on with something
-(15 s); 0 for never; and whether she may turn instinct off (unticked: it stays on, and the
+(15 s); 0 for never; how long a question waits for her answer before its default's taken
+(8 s; 0: till she answers); and whether she may turn instinct off (unticked: it stays on, and the
 setting's taken out of her `doom_policy`). Kept in `config/console.local.json` (`force_idle`,
-`force_ask`, `force_next`, `evil_instinct`) for the next game.
+`force_ask`, `force_next`, `answer_wait`, `evil_instinct`) for the next game.
 
 The Stream column section sets the stream window's column: its side, which of its items it
 shows (the logo and a box for chat at the top, the level, the map, now, Evil's calls, a question she's been asked with
