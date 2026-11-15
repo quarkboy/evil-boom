@@ -1344,3 +1344,14 @@ between "outmatched: keeping clear" and "out of reach: going on" till the floor 
   run). It stops the running; what she should do there, with no ammo, none known and them
   between her and the rest, isn't settled by it. Score +0.0029 (s.e. 0.0043), exits 423 for
   421; fight score +0.0026 (s.e. 0.0035).
+- **Not kept: a missile a wall will stop isn't dodged.** MAP06's lift stands among seven
+  pillars that stop most of what the imps throw, and `incoming` takes any missile whose line
+  passes near her, with no look at what's between: she dodged fireballs about to burst on a
+  pillar, off the lift's run-up each time. The rule (the missile's middle line at its own
+  height, by `LineOfSight`, to where it's nearest her; not for one that steers) made that
+  seed a full clear (90 of 90, out in 805 s, from stalled), and lost on the score: -0.0118
+  (s.e. 0.0083), exits 407 for 423, 798 runs changed. Checked only to where it could first
+  touch her (a wall just past her stops nothing): -0.0096 (s.e. 0.0079), exits 410. E3M6 and
+  E4M3 at skill 3 lost a third each both times. Not traced why: dodging more than she need
+  may be keeping her moving, as the slow legs did. The patch is out/score/stopped-missiles.patch.
+  What was traced and still stands: a dodge mid run-up takes her off it, and the jump's lost.
