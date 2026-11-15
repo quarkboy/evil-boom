@@ -1270,3 +1270,7 @@ hers, and sent `doom_fight auto` nineteen times.
 - `doom_fight auto` with nothing of hers holding says so ("Nothing of yours to end"). Most of
   the nineteen were Gary's auto-act, left on by accident, wanting some action from her.
 - A stop order stops: not on by instinct the moment after (the scripts'; she has no stop).
+
+The what-next question carries her status, the suggested pick and "Unsure? doom_look, or
+doom_list." only: it had the lists a waiting force has (up to 27 lines), every time, and
+carrying on needs none of them. The waiting force keeps them: there she has to choose.

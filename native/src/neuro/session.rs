@@ -564,7 +564,13 @@ impl Session {
             };
             // (put to her here: not forced again as a question left unanswered)
             self.forced_question = self.director.question().map(|q| q.id);
-            let state = self.state(agent, obs);
+            // (short: it comes often, and carrying on needs none of the lists; a look or a
+            // list is among her answers)
+            let mut state = format!("## Status\n{}\n", self.director.status(agent, obs));
+            if let Some(p) = self.director.pick_line(agent, obs) {
+                state.push_str(&format!("\nSuggested: {p}.\n"));
+            }
+            state.push_str("\nUnsure? doom_look, or doom_list.\n");
             self.force(
                 &state,
                 &query,
