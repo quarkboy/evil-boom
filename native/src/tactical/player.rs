@@ -875,6 +875,12 @@ impl Player {
             .follower
             .as_ref()
             .is_some_and(|f| !f.done && !f.failed);
+        self.fight.combat.jump_under_way = self.retreat.is_none()
+            && self
+                .explorer
+                .follower
+                .as_ref()
+                .is_some_and(RouteFollower::in_jump);
         // (the way the explorer's route goes on, for a run along it: none while a retreat has her)
         self.fight.combat.route_ahead = match (&self.retreat, &self.explorer.follower) {
             (None, Some(f)) => f

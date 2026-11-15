@@ -1355,3 +1355,8 @@ between "outmatched: keeping clear" and "out of reach: going on" till the floor 
   E4M3 at skill 3 lost a third each both times. Not traced why: dodging more than she need
   may be keeping her moving, as the slow legs did. The patch is out/score/stopped-missiles.patch.
   What was traced and still stands: a dodge mid run-up takes her off it, and the jump's lost.
+- **Kept, the same rule for a jump's run-up only:** lining up a run-jump, sprinting for it or
+  in the air off it, a missile a wall will stop before it could touch her isn't dodged
+  (`Combat::jump_under_way`). All her other dodging is as it was. MAP06 skill 3, 8 seeds, one
+  life: sprints called off too slow 10 of 89 to 6 of 126. Score +0.0006 (s.e. 0.0019), exits
+  424 for 423; 1,066 runs the same.

@@ -5,6 +5,7 @@
 
 use super::{clearance, hit_clearance, miss_by, Combat};
 use crate::geom::{dist, segments_cross, Point};
+use crate::los::Body;
 use crate::motor::{heading, norm, Observation, Thing, FRICTION, RUN_THRUST};
 use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS, TELEPORTERS_FOR_PLAYERS};
 use crate::tactical::bestiary::{missile, weapon_in, Weapon};
@@ -67,6 +68,21 @@ impl Combat {
             if !self.dodge.missiles.contains(&t.id) && miss > clearance(&self.tune.dodge, &m) {
                 continue;
             }
+            // (lining up a jump or sprinting for it, one a wall stands in the way of isn't got
+            // out of the way of: it never gets to her, and the dodge takes her off the run-up
+            // and the jump's lost. Only then: everywhere else, dodging what a wall would have
+            // stopped was worth more than it cost, twice measured)
+            // (not one that steers: it comes round what's in its way)
+            // (and only what stops it before it could touch her: its box reaches hers a little
+            // before its middle is nearest her, and a wall just past that point stops nothing)
+            let reach = (PLAYER_RADIUS + m.radius) * 1.5 / t.vx.hypot(t.vy);
+            if self.jump_under_way
+                && !m.homing
+                && when > reach
+                && self.stopped_short(obs, t, when - reach)
+            {
+                continue;
+            }
             if self.dodge.missiles.insert(t.id) {
                 self.log.push(format!(
                     "tic {}: dodging {} {} (due in {when:.0} tics, {miss:.0} off)",
@@ -98,6 +114,29 @@ impl Combat {
         }
         out.sort_by(|a, b| a.0.total_cmp(&b.0));
         out.into_iter().map(|(_, t)| t).collect()
+    }
+
+    /// Is something solid in the way of missile t before it's flown `tics` more, as it's going?
+    /// Its middle's line at its own height, as she sees the walls now: sure when that's stopped
+    /// (its sides may catch a corner its middle passes: then she dodges one that wouldn't have
+    /// come, no harm).
+    fn stopped_short(&mut self, obs: &Observation, t: &Thing, tics: f64) -> bool {
+        /// a missile's middle above its foot (the smallest of them is 8 high)
+        const MIDDLE: f64 = 4.0;
+        self.refresh_tic_cache(obs);
+        let from = Body {
+            x: t.x,
+            y: t.y,
+            z: t.z + MIDDLE - 3.0,
+            height: 4.0,
+        }; // (its eye, 0.75 up, at its middle)
+        let to = Body {
+            x: t.x + t.vx * tics,
+            y: t.y + t.vy * tics,
+            z: t.z + t.vz * tics + MIDDLE - 0.5,
+            height: 1.0,
+        };
+        !self.los.clear(from, to, &self.heights_now)
     }
 
     /// The way to run that keeps her furthest from all of them as they go by, where the floor's

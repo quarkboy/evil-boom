@@ -266,6 +266,8 @@ pub struct Combat {
     pub barrels_seen: Vec<Point>,
     /// a route under way (the player's): its follower has its own crusher rules
     pub route_under_way: bool,
+    /// ...and it's lining up a run-jump, sprinting for one or in the air off it
+    pub jump_under_way: bool,
     /// the route's way on from where she is, as far as it goes unbroken (empty: none)
     pub route_ahead: Vec<Point>,
     pub target: Option<i32>,
@@ -406,6 +408,7 @@ impl Combat {
             visible: Vec::new(),
             barrels_seen: Vec::new(),
             route_under_way: false,
+            jump_under_way: false,
             route_ahead: Vec::new(),
             target: None,
             kills: 0,
