@@ -1220,3 +1220,15 @@ The GPT stand-ins chose 100% and thorough nearly every time: dull to watch (the 
   default no), as yolo is. The question's own yes sets it without asking again.
 
 Directed play only: no score to measure.
+
+## A goal doesn't play for her
+
+A goal set, the bot went on instinct for it at once, with no idle wait, till it was met. A
+stand-in set completionist and did nothing else all level: the bot played, and she was never
+waiting, so never asked what next (the maintainer's, from watching). Now a goal starts
+nothing. It puts what it's after first in two places: the pick suggested to her (lists, a
+look, a decision forced, the nudges; "your goal: ..." its reason; the way out first under
+`out`), and what instinct does once the ordinary idle wait has put her on it (from its first
+choice). Setting one starts her wait afresh. A key goal with no key seen says so. With
+`idle 0` instinct never runs, so every action of hers that ends leaves her waiting, and
+she's asked what next after `force_idle` (6 s), her goal's pick marked in what she's shown.

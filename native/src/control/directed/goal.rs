@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Quarkboy
 
-//! `doom_goal`: a standing aim of hers (the SDK plan's 4.2): the bot works toward it by itself
-//! whenever no action of hers is in hand, at once rather than after the idle wait, till it's met,
-//! nothing more is known to do for it, or she says `none`. An action of hers comes first; the
-//! goal goes on after. On instinct for her as the idle fallback is, with what the goal needs:
+//! `doom_goal`: a standing aim of hers (the SDK plan's 4.2), till it's met, nothing more is
+//! known to do for it, or she says `none`. It doesn't play for her: it puts what it's after
+//! first in what's suggested to her (`Director::pick`), and in what she does on instinct once
+//! she's left it to that (the idle wait, as without a goal). On instinct, what the goal needs:
 //! what it's after first (`Explorer::focus`), last resorts let go of where it's a thorough one,
 //! the exit given back where it's leaving. How she explores meanwhile stays her `explore`
 //! setting's: a goal doesn't change it.
@@ -44,6 +44,19 @@ impl Goal {
             Goal::Kills => "kill everything".into(),
             Goal::Supplies => "pick up everything you know of".into(),
             Goal::Secrets => "find every secret".into(),
+        }
+    }
+}
+
+impl Goal {
+    /// What the goal puts first, on instinct and in what's suggested to her.
+    pub(super) fn focus(&self) -> Focus {
+        match self {
+            Goal::Key(..) => Focus::Keys,
+            Goal::Kills => Focus::Kills,
+            Goal::Secrets => Focus::Secrets,
+            Goal::Supplies => Focus::Supplies,
+            Goal::Out | Goal::Completionist => Focus::None,
         }
     }
 }
@@ -145,13 +158,26 @@ impl Director {
             x.current = None;
             x.follower = None;
         }
-        let said = format!("Goal: {}.", goal.label());
+        let mut said = format!("Goal: {}.", goal.label());
+        // (a key not seen yet: nothing to put first, and she'd wonder why nothing's different)
+        if matches!(goal, Goal::Key(..))
+            && !self
+                .open_objectives(agent, obs)
+                .iter()
+                .any(|o| goal.focus().wants(o))
+        {
+            said.push_str(" None seen yet: explore.");
+        }
         self.goal = Some(goal);
+        // (an action of hers: her wait for the next starts afresh, and instinct may take up
+        // again after it, with the goal's things first)
+        self.auto_spent = false;
+        self.idle_since = None;
         Ok(said)
     }
 
-    /// The goal, worked toward with nothing of hers in hand; met, or with nothing more to do for
-    /// it, ended and said. True if it took the bot up this tic.
+    /// The goal: met, or with nothing more to do for it on instinct, ended and said; on
+    /// instinct, what it needs set. It never starts her off (always false: the tic goes on).
     pub(super) fn goal_tick(&mut self, agent: &mut Agent, obs: &Observation) -> bool {
         let Some(goal) = self.goal.clone() else {
             return false;
@@ -183,35 +209,13 @@ impl Director {
             self.steer_goal(agent, &goal);
             return false;
         }
-        let waiting = self.doing.is_none()
-            && self.queue.is_empty()
-            && self.resume.is_none()
-            && self.pressed.is_none()
-            && agent.x().current.is_none();
-        if !waiting || obs.health.unwrap_or(0.0) <= 0.0 {
-            return false;
-        }
-        self.auto_spent = false;
-        self.go_instinct(agent);
-        self.steer_goal(agent, &goal);
-        self.tell(
-            obs,
-            Event::Instinct,
-            format!("Going on with your goal: {}.", goal.label()),
-        );
-        true
+        false
     }
 
     /// What the goal asks of the bot, on instinct for it.
     fn steer_goal(&self, agent: &mut Agent, goal: &Goal) {
         let x = agent.x_mut();
-        x.focus = match goal {
-            Goal::Key(..) => Focus::Keys,
-            Goal::Kills => Focus::Kills,
-            Goal::Secrets => Focus::Secrets,
-            Goal::Supplies => Focus::Supplies,
-            Goal::Out | Goal::Completionist => Focus::None,
-        };
+        x.focus = goal.focus();
         if matches!(goal, Goal::Completionist | Goal::Kills | Goal::Secrets) {
             x.resorts = Some(thorough_resorts());
         }

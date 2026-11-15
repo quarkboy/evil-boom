@@ -105,12 +105,23 @@ impl Director {
         if self.hints == Hints::Off {
             return None;
         }
-        let open = self.open_unheld(agent, obs);
+        let mut open = self.open_unheld(agent, obs);
         // (everything the level counts done: the way out first)
         if self.tally.complete() {
             if let Some(e) = open.iter().find(|o| o.kind == Kind::Exit) {
                 return Some(self.pick_of(agent, obs, e, "everything's done: the way out".into()));
             }
+        }
+        // (her goal: the way out first where that's it; else what it's after, in the order the
+        // explorer had them)
+        let focus = self.goal.as_ref().map(super::goal::Goal::focus);
+        if self.goal == Some(super::goal::Goal::Out) {
+            if let Some(e) = open.iter().find(|o| o.kind == Kind::Exit) {
+                return Some(self.pick_of(agent, obs, e, "your goal: the way out".into()));
+            }
+        }
+        if let Some(f) = focus {
+            open.sort_by_key(|o| !f.wants(o));
         }
         // (not a pickup she takes by herself on the way or while she waits: nothing to choose;
         // nor a wall to search with every secret found)
@@ -128,6 +139,9 @@ impl Director {
         match choice {
             Some(o) if o.kind == Kind::Recheck && exit.is_some() => exit
                 .map(|e| self.pick_of(agent, obs, e, "the way out: only another look left".into())),
+            Some(o) if focus.is_some_and(|f| f.wants(o)) => {
+                Some(self.pick_of(agent, obs, o, format!("your goal: {}", why(o))))
+            }
             Some(o) => Some(self.pick_of(agent, obs, o, why(o))),
             // (nothing else she has a way to: the way out, if she knows one)
             None => open

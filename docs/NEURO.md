@@ -47,7 +47,7 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_exit` | leave the level; with things left she's asked first (`sure: true` doesn't ask); no answer and she stays, or leaves if her goal is `out` or her `explore` setting `speedy`. Going on to another level with health, armor or ammo she's seen and could still take with her, the question names them and its default is to stock up first (the supplies goal) |
 | `doom_pause` | pause the game, as stepping away (Doom's menu up on its own screens), till `on: false`; meanwhile only what doesn't move her is registered |
 | `doom_fight` | your say in the fight for a while: a target, a weapon, hold fire, a stance |
-| `doom_goal` | a standing aim worked toward whenever no action is in hand: out, completionist (100%, then out; she's asked if she's sure), a key, kills, supplies, secrets. A goal says what she's after, not how she explores: that stays her `explore` setting |
+| `doom_goal` | a standing aim, till met. It doesn't play for her: it puts what it's after first in what's suggested to her and in what she does on instinct after the idle wait: out, completionist (100%, then out; she's asked if she's sure), a key, kills, supplies, secrets. A goal says what she's after, not how she explores: that stays her `explore` setting |
 | `doom_policy` | standing settings: stance, save, risk, powerups, explore, idle, hints, answers |
 | `doom_answer` | answer one of the bot's questions |
 | `doom_game` | the game itself: start, next level, restart; only the moves hers, and the levels, skills and play on offer, in its schema (registered again when the console changes them) |

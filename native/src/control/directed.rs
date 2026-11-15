@@ -1633,6 +1633,8 @@ impl Director {
             // (not again once she's found nothing more to do by herself, till an order's come)
             if obs.tic - since >= limit && obs.health.unwrap_or(0.0) > 0.0 && !self.auto_spent {
                 self.go_instinct(agent);
+                // (her goal's things first from its first choice, not its second)
+                self.goal_tick(agent, obs);
                 self.report(
                     obs,
                     true,
