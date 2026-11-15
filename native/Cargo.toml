@@ -13,7 +13,7 @@ publish = false
 # The release's fourth number (0.8.5.1): Cargo's own version takes three, so it's kept here
 # and build.rs puts the two together (0: none, the version as above).
 [package.metadata.evil]
-fix = 1
+fix = 2
 
 [lib]
 name = "evilboom"
