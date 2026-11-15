@@ -280,10 +280,13 @@ impl Director {
         // (a level's tics start again from nothing: one asked late on the level before isn't in
         // this minute, and isn't counted till this level's as old)
         a.asked.retain(|&t| (0..MINUTE).contains(&(obs.tic - t)));
-        if a.open.is_some() || (!next && a.asked.len() >= QUESTIONS_A_MINUTE) {
+        // (the minute's few are the bot's own, so it doesn't nag: one that answers an action
+        // of hers, "sure?", is hers to have whenever she asks)
+        let counted = !next && !d.told;
+        if a.open.is_some() || (counted && a.asked.len() >= QUESTIONS_A_MINUTE) {
             return None;
         }
-        if !next {
+        if counted {
             a.asked.push(obs.tic);
         }
         a.next_id += 1;
