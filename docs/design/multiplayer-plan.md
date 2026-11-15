@@ -1,7 +1,8 @@
 # Two players: Evil and Neuro, co-op or deathmatch (a plan)
 
 > **Status:** proposed, nothing built. Written 2026-11-13 from a reading of the engine boundary,
-> the bot and the Neuro session as they are now.
+> the bot and the Neuro session as they are now. Section 4 (whose win a deathmatch is) added
+> 2026-11-14.
 
 The goal: one game with two players in it, each played by the bot and directed by her own AI
 (Evil on one, Neuro on the other), working together through a level (co-op) or against each
@@ -67,7 +68,7 @@ The bulk of the work, and where the score's lessons still apply: trace before fi
 
 - **Two agents** in the watch loop, each with its own observation and command. Knowledge
   could be shared (co-op: what one has seen, both know) or kept apart (realism, and
-  deathmatch). Start apart; share only what they'd tell each other (section 4).
+  deathmatch). Start apart; share only what they'd tell each other (section 6).
 - **The other player as a thing:** never a target in co-op; a target in deathmatch; never in
   a line of fire in co-op (the fight's shot already checks what's between; a teammate must
   count as a wall, splash damage included: rockets near her are out).
@@ -97,7 +98,8 @@ The bulk of the work, and where the score's lessons still apply: trace before fi
   `doom_cover` (fight from behind her), `doom_leave` an item for her ("the medkit's
   Neuro's"), and her moves told to the other ("Neuro is going to the red key"). They'll talk
   to each other out loud anyway; the game only needs to carry what voice can't (ids, places).
-- **Deathmatch actions:** what to hunt (her, or items), a stance; frags and taunt-worthy
+- **Deathmatch actions:** what to hunt (her, or items), a stance, and the rest of section 4's
+  list: these have to decide the match, or it's two bots and a coin. Frags and taunt-worthy
   moments told as they happen ("you fragged Neuro with the BFG").
 - **Questions that are both's:** leaving with things left, restarting a level: asked of
   both, the default taken unless either says otherwise.
@@ -120,7 +122,46 @@ The bulk of the work, and where the score's lessons still apply: trace before fi
   into the score.
 - Two GPT stand-ins, then Gary with two characters, before Neuro and Evil themselves.
 
-## 4. Stages, each with a gate
+## 4. Deathmatch: whose win is it?
+
+A deathmatch is fighting from start to end, and the fight is the bot's (a model's answer takes
+1.5 to 6 s; an exchange between two players is over in under one). Left as it is, a match is
+two copies of one bot and a coin: neither twin did anything to win. The other way, no instinct
+at all and every step and shot hers, is fair, and no good at the game's speed: each order is
+for a fight seconds gone. Funny for two minutes, then two players standing in rocket fire.
+
+**The plan: the same reflexes for both, and choices that decide it.**
+
+- **One instinct, the same for each, and modest.** Aiming, dodging and firing are the bot's,
+  with the same numbers on both sides and not too sharp: where she stands and what she holds
+  must beat raw aim. Reflexes too good, and whoever sees the other first wins, whatever was
+  chosen.
+- **What takes seconds is theirs, and there's more of it than in a level:**
+  - *Items.* In Doom's deathmatch the gun counts for more than the aim (a super shotgun or a
+    rocket launcher against a pistol is seldom close). Which gun, armor or sphere to go for,
+    when to keep the other from one, when it's back (altdeath).
+  - *Where to fight.* Wait at a doorway, hold the high ground, keep out of an open room,
+    break off hurt and come back armed.
+  - *Hunting and hiding.* They hear each other, and are told what they hear: "shots at the
+    plasma rifle: go round".
+  - *Reading the other.* Evil always runs for the rocket launcher; Neuro can be waiting
+    there. This is what makes a win hers, and worth watching.
+- **Actions to match** (beside what she has: go, a stance, a gun, hold fire): go for an item
+  and hold it; wait in ambush at a place, facing a way; hunt (to where she last saw or heard
+  her); break off to a place; keep a distance or close in. Told to her: what she hears, where
+  the other was last seen and with what, what's respawned that she knows of, the frags.
+- **The gate that it works:** two bots under different standing orders must not split even.
+  If orders don't move the result, they're not doing enough (or the reflexes do too much):
+  measured before any AI plays it (section 5, stage 5).
+
+**The other way, as a mode of its own: a duel by hand.** No instinct: every step, turn and
+shot is hers, and the game waits for them. Either slowed far down, or stepped a moment at a
+time with an order from each a step (correspondence chess with shotguns). Fair, all theirs,
+and its clumsiness is the joke where at full speed it'd be the trouble. Cheap once two
+players work: a speed and a small list of actions (step a way, turn to, fire, switch gun).
+A segment of a stream, not the match.
+
+## 5. Stages, each with a gate
 
 1. **Two players in the engine**, both bots, no Neuro: the boundary's player argument, a
    co-op game started, two agents, two views drawn. Gate: single-player parity; E1M1 co-op,
@@ -133,13 +174,21 @@ The bulk of the work, and where the score's lessons still apply: trace before fi
 4. **The stream:** the split picture, the column for two, the console's per-player settings.
    Gate: the maintainer's watch of a co-op run on the stream layout.
 5. **Deathmatch:** the player-opponent fighting style, deathmatch starts and respawns, frags,
-   the actions and moments. Gate: two bots on a few deathmatch maps, both scoring frags,
-   neither stuck; then two stand-ins.
+   the actions and moments (section 4). Gate: two bots on a few deathmatch maps, both scoring
+   frags, neither stuck; the same two under different standing orders (one for the guns, one
+   straight at her; one in ambush, one hunting) not splitting even; then two stand-ins.
+6. **The duel by hand** (section 4): the game slowed or stepped, instinct off, the small
+   action list. Gate: two stand-ins finish a duel, and it's watchable.
 
 Co-op first: it reuses nearly everything she does now. Deathmatch reuses stages 1, 3 and 4,
 and needs a fight she doesn't have yet.
 
-## 5. Open questions
+## 6. Open questions
+
+- **How sharp the deathmatch reflexes are:** dull enough that a better gun and a better place
+  win, sharp enough to look like play. A number to find with two bots (section 4's gate).
+- **The duel by hand: slowed or stepped?** Slowed keeps it moving; stepped is fairer to a slow
+  answer. And how much each is told a step without filling her context.
 
 - **Shared knowledge in co-op:** what one has seen, does the other know? Realism says no, unless
   told; the stream might be more fun if they share a map. A setting, measured both ways.
