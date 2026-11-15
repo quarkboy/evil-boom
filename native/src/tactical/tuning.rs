@@ -782,6 +782,9 @@ pub struct Retreat {
     pub ammo_away: f64,
     /// a way away is no nearer than this to any monster than she is now
     pub ammo_margin: f64,
+    /// ...and where it goes is at least this much further from the nearest of them than she is
+    /// now: else it's no flight, and she stays
+    pub ammo_gain: f64,
     /// a heavy taking longer than this (s) to kill with what she has: let others take its shots...
     pub bait_heavy: f64,
     /// ...from a place she's been this near...
@@ -843,6 +846,7 @@ impl Default for Retreat {
             ammo_tics: 20 * 35,
             ammo_away: 1536.0,
             ammo_margin: 16.0,
+            ammo_gain: 128.0,
             bait_heavy: 8.0,
             bait_range: 768.0,
             bait_again: 8 * 35,

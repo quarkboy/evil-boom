@@ -1336,3 +1336,11 @@ between "outmatched: keeping clear" and "out of reach: going on" till the floor 
   out of reach again: to and fro at that edge on nukage for half a minute, 3 health a second,
   till the floor had her (MAP06 skill 3, seed 729663407: 917 "keeping clear" for 66, floor
   hits 65 for 30, no death). Score +0.0008 (s.e. 0.0015), exits 421 for 420; 1,038 the same.
+- **Out of ammo, none known: away only to somewhere further from them** than where she stands
+  by `retreat.ammo_gain` (128). The spots to flee to are a way off (128 at least), so where
+  she stood was never one, and from each of two spots the best was the other: there and back
+  every 1.2 s for five minutes, till the run was called stalled (the same seed, once the
+  floor no longer killed her; the cycles catalogue's largest row is this, 2,675 s in one MAP06
+  run). It stops the running; what she should do there, with no ammo, none known and them
+  between her and the rest, isn't settled by it. Score +0.0029 (s.e. 0.0043), exits 423 for
+  421; fight score +0.0026 (s.e. 0.0035).

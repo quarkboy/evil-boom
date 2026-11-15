@@ -1832,6 +1832,14 @@ impl Player {
             })
             .collect();
         spots.sort_by(|a, b| b.0.total_cmp(&a.0));
+        // Only somewhere further from them than where she stands: where she is is never one of
+        // the spots (they're a way off), so the best of them from each of two places was the
+        // other, and she ran between the two every second for five minutes (MAP06).
+        let here = them
+            .iter()
+            .map(|m| dist((m.x, m.y), pos))
+            .fold(f64::INFINITY, f64::min);
+        spots.retain(|&(d, _)| d >= here + self.fight.tune.retreat.ammo_gain);
         // All of them, furthest first: the furthest may be beyond a lift, with no plain way there.
         for (_, pi) in spots {
             if let Some(f) = self.go_to_clear(obs, pi, &them, "for ammo", clear, true) {
