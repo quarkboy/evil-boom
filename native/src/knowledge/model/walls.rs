@@ -309,9 +309,10 @@ impl Knowledge {
             let closed = line.blocks_player()
                 || fh.ceiling.min(bh.ceiling) - fh.floor.max(bh.floor) < PLAYER_HEIGHT
                 || bh.floor - fh.floor > MAX_STEP;
-            if !closed && odd {
+            if !closed && odd && !self.face(line).is_empty() {
                 // A way through, but with a face above or below it unlike the walls round it, where a
-                // switch can be: only that part counts.
+                // switch can be: only that part counts. (With no face at all, floor and ceiling
+                // the same either side, there's nothing to be unlike them: no wall of any kind.)
                 behind = None;
             } else if !closed {
                 return Wall::Skip("a way through");

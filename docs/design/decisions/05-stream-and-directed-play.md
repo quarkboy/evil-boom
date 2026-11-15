@@ -1286,3 +1286,9 @@ ran out: four visits in a directed run, six (18 presses) on seed 1. Now a two-si
 like a switch or a door only once she's seen it from its front (`Knowledge::seen_front`, kept
 as lines are drawn in her view). Seed 1, no monsters: no press at it, the level in 395 s for
 470. Score +0.0038 (s.e. 0.0044), exits 413 for 410; fight score +0.0014 (s.e. 0.0040).
+
+An open line with no face is no wall to press: MAP06's lines 468 and 471 are ways through
+between two floors at one height, with no texture and nothing above or below them, and were
+taken as "unlike the walls round them" (no face against METAL2), then given the megasphere
+behind and a gap to see it through: 9.0 and 8.5, pressed before the wall that works (7.0).
+Score +0.0008 (s.e. 0.0019), exits 414 for 413; 1,036 runs the same.
