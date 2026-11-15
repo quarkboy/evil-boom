@@ -557,6 +557,12 @@ impl RouteFollower {
         self.jump.sprint.is_some() || self.jump.run.is_some()
     }
 
+    /// Sprinting for a run-jump's takeoff, or in the air off it. The sprint pushes forward the
+    /// way she faces, lined up along the jump: her facing is the jump's till she's down.
+    pub fn sprinting(&self) -> bool {
+        self.jump.sprint.is_some()
+    }
+
     /// Running over (or off) floors going down under her: done only on a floor that stays put.
     pub fn running_off(&self) -> bool {
         self.jump.run.is_some()

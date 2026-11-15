@@ -1039,11 +1039,21 @@ impl Player {
             .follower
             .as_ref()
             .is_some_and(RouteFollower::lining_up);
+        // And through the sprint and the jump itself, whatever the move (one that can't wait has
+        // her legs already, the arbiter's call): the sprint pushes forward the way she faces, so
+        // turned to aim at an imp across the room she ran at the imp, not along the jump, and
+        // came down short or never left. Under a second with no shot.
+        let sprinting = self
+            .explorer
+            .follower
+            .as_ref()
+            .is_some_and(RouteFollower::sprinting);
         match d {
             // (lining up: whichever move it is that leaves her legs to the route, shooting on the
             // way, or on the way to an errand, getting past, out of reach)
             Some(d)
-                if (stood && d.kind == Move::ShootingOnTheWay)
+                if sprinting
+                    || (stood && d.kind == Move::ShootingOnTheWay)
                     || (lining && d.kind.route_goes_on() && !d.urgent) =>
             {
                 self.fight.combat.route_walks(obs, &c);

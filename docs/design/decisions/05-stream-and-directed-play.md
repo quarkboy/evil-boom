@@ -1310,3 +1310,20 @@ is the floor's (`now.hit_rate` is the rest), and cover goes by that. The other r
 by the rate she's losing health keep all of it. And the fight's log says "the floor" or
 "nothing near" where it said "a shot" (a label only: nothing reads it). Score -0.0004 (s.e.
 0.0003), exits 422 for 422; 1,057 runs the same. Kept as the right rule, not for the number.
+
+## Through a jump's sprint she faces the jump
+
+MAP06 at skill 2, directed: three jumps failed in a run (two off the big lift), each with the
+fight "shooting on the way" at an imp far off; the twelve that landed had no fight aiming. The
+sprint presses forward the way she faces, lined up along the jump, turning 3 degrees a tic at
+most; the fight's aim laid over a route's legs keeps their way for the one tic only. Turned
+to aim, she ran at the imp: no speed along the jump ("too slow: -0.0 a tic for 12.4"), or off
+its line and down. Now the route has her facing and her trigger from the sprint's start till
+she's down (under a second; what can't wait has her legs anyway, the arbiter's). MAP06,
+skill 2, 8 seeds, one life: jumps missed 12 to 1, sprints called off too slow 15 to 3, every
+run out both ways. Score -0.0021 (s.e. 0.0043), exits 420 for 422; fight score -0.0016 (s.e.
+0.0037): no worse, and no gain shown. MAP06 itself at skills 3 and 4 had 1 exit of 16 for 5,
+where the five sets before had 3, 2, 3, 5, 5: taken as that level's spread, not looked into
+further. Seen there and not the sprint's: a dodge mid-sprint carries her 200 units off the
+run-up and the sprint is then called too slow; and out of ammo on nukage she goes to and fro
+between "outmatched: keeping clear" and "out of reach: going on" till the floor has her.
