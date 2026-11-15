@@ -2042,6 +2042,7 @@ impl Watch {
             return;
         }
         let mut y = c.text("Log (L: Evil only)", (LOG.0 + 8, LOG.1 + 4), HEAD, 2);
+        y = self.draw_standing(c, y);
         let tic_of = |s: &str| {
             if s.starts_with("tic ") {
                 s.split(':')
@@ -2098,8 +2099,43 @@ impl Watch {
 
     /// The log panel with only what passes between the game and Evil: her actions (>>), what
     /// she's told (<<), the connection; whole, wrapped, the latest at the bottom.
+    /// Directed: her standing choices as they are now (her goal, her settings), under the
+    /// log's heading from `y`; the row after them.
+    fn draw_standing(&self, c: &mut Canvas, mut y: usize) -> usize {
+        let director = self
+            .neuro
+            .as_ref()
+            .map(|n| &n.director)
+            .or(self.feed.as_ref().map(|f| &f.director));
+        if let Some(d) = director {
+            let (fit, _) = c.fits(1, LOG.2 - 16, LOG.3);
+            let standing = [
+                format!("goal: {}", d.goal_label().unwrap_or_else(|| "none".into())),
+                format!(
+                    "policy: {}, instinct {}",
+                    d.policy.line(),
+                    if d.idle_auto.is_some() { "on" } else { "off" }
+                ),
+            ];
+            for line in standing {
+                let chars: Vec<char> = line.chars().collect();
+                for (i, ch) in chars.chunks(fit.saturating_sub(3).max(10)).enumerate() {
+                    let row = format!(
+                        "{}{}",
+                        if i > 0 { "   " } else { "" },
+                        ch.iter().collect::<String>()
+                    );
+                    y = c.text(&row, (LOG.0 + 8, y), (255, 220, 120), 1);
+                }
+            }
+            y += 4;
+        }
+        y
+    }
+
     fn draw_evil_log(&self, c: &mut Canvas) {
         let mut y = c.text("Evil (L: whole log)", (LOG.0 + 8, LOG.1 + 4), HEAD, 2);
+        y = self.draw_standing(c, y);
         let (fit, rows_fit) = c.fits(1, LOG.2 - 16, LOG.3 - (y - LOG.1));
         let (width, rows_max) = (fit.saturating_sub(3).max(10), rows_fit);
         let mut rows: Vec<(String, (u8, u8, u8))> = Vec::new();
