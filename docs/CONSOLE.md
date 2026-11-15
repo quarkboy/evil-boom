@@ -70,8 +70,9 @@ its choices and countdown, `doom_why`, the last lines told her and her last acti
 for her: answer the question, set a goal, change a setting, look, ask why, take over the fight.
 Actions from the page are marked as yours, and she's told of them by the name in Settings (`console_name`, Vedal by default). Below her settings, the stream's own: how
 soon a decision's forced on her when she's waited with nothing to do (6 s) or left a question
-unanswered (3 s), 0 for never; kept in `config/console.local.json` (`force_idle`, `force_ask`)
-for the next game.
+unanswered (3 s), and how often at most she's asked what next while she's on with something
+(15 s); 0 for never; kept in `config/console.local.json` (`force_idle`, `force_ask`,
+`force_next`) for the next game.
 
 The Stream column section sets the stream window's column: its side, which of its items it
 shows (the logo and a box for chat at the top, the level, the map, now, Evil's calls, a question she's been asked with

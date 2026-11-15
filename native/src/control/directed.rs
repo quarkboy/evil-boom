@@ -477,6 +477,10 @@ pub struct Director {
     /// with no order this long (tics) she carries on by herself (None: she waits, as long as
     /// it takes); and since when she's had none
     pub idle_auto: Option<i64>,
+    /// a moment to ask her what next, on with what she's at meanwhile ("step": instinct's taken
+    /// up something new; "fight": a fight worth telling of is over); whoever speaks for her
+    /// takes it
+    pub next_due: Option<&'static str>,
     /// who's at the stream console, as she's told of what they do (`console_name`)
     pub console_name: String,
     idle_since: Option<i64>,
@@ -583,6 +587,7 @@ impl Director {
         Director {
             answer_wait: Some(ask::ANSWER_WAIT),
             idle_auto: Some(IDLE_AUTO),
+            next_due: None,
             console_name: CONSOLE_NAME.into(),
             policy_due: true,
             ..Director::default()
@@ -1193,6 +1198,7 @@ impl Director {
                 if killed < 2 && f.health_lost < FIGHT_WORTH_HEALTH {
                     return;
                 }
+                self.next_due = Some("fight");
                 self.tell(obs, Event::FightOver { notable }, format!(
                         "Fight over ({} s, against {}): {killed} killed; cost {}. Health {health:.0}.",
                         (obs.tic - f.since) / 35,
@@ -2077,6 +2083,7 @@ impl Director {
                 .is_none_or(|t| obs.tic - t >= AUTO_SAY_EVERY)
         {
             self.tell(obs, Event::Instinct, format!("By instinct: {phrase}."));
+            self.next_due = Some("step");
             self.told_auto = phrase;
             self.told_auto_tic = Some(obs.tic);
         }

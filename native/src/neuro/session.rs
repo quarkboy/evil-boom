@@ -27,6 +27,9 @@ const LIST_MAX: usize = 15;
 /// silently (her context and her attention are what's being spent)
 const MOMENTS_A_MINUTE: usize = 6;
 const MINUTE: i64 = 60 * 35;
+/// on with something by herself (instinct's taken up something new, a fight's over): asked
+/// what next, at most this often (tics; the console's to change, as `IDLE_FORCE`)
+const NEXT_FORCE: i64 = 15 * 35;
 /// a question unanswered this long (tics): a decision forced (as `IDLE_FORCE`)
 const ASK_FORCE: i64 = 3 * 35;
 /// the rules told again (silently) this often, or after this many characters told her since,
@@ -73,6 +76,12 @@ pub struct Session {
     /// a decision's forced on her (0: never); the console's to change
     idle_force: i64,
     ask_force: i64,
+    /// asked what next while she's on with something (`NEXT_FORCE`: at most this often, 0
+    /// never): the moment waiting to be asked about ("step", "fight"), and when she was last
+    /// asked or last acted
+    next_force: i64,
+    next_due: Option<&'static str>,
+    next_at: i64,
     /// the games hers to start and what of the game is hers (the watch's; doom_game's schema
     /// made from them), and doom_game registered with older ones
     choices: Option<Choices>,
@@ -100,6 +109,7 @@ const ALL_ACTIONS: &[&str] = &[
     "doom_status",
     "doom_goal",
     "doom_why",
+    "doom_carry_on",
 ];
 
 /// Off a level (the title, a game over, the tally, a finale): the game itself, her answers, her
@@ -181,6 +191,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_pause", "description": "Pause the game, as stepping away from it: the menu comes up and nothing moves till you play on (on: false). on: true by default.", "schema": s(json!({ "on": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_status", "description": "Health, armor, weapons, ammo, keys, tally, what you're doing, what you're fighting." }),
         json!({ "name": "doom_goal", "description": "A standing aim, till met. It doesn't play for you: what's suggested to you, and your instinct when you leave it to that, put it first: out, completionist (100% then out: slow, asked first), key (ref: a colour or key id), kills, supplies, secrets; none to drop it.", "schema": s(json!({ "goal": { "type": "string", "enum": ["out", "completionist", "key", "kills", "supplies", "secrets", "none"] }, "ref": { "type": "string" } }), &["goal"]) }),
+        json!({ "name": "doom_carry_on", "description": "Go on with what you're doing." }),
         json!({ "name": "doom_why", "description": "Why you're doing what you're doing: the aim and what it was chosen over, the fight, why you're not shooting, the last action that failed." }),
     ]
 }
@@ -216,6 +227,9 @@ impl Session {
             registered: std::collections::BTreeSet::new(),
             idle_force: IDLE_FORCE,
             ask_force: ASK_FORCE,
+            next_force: NEXT_FORCE,
+            next_due: None,
+            next_at: 0,
             choices: None,
             game_stale: false,
             paused: false,
@@ -290,14 +304,22 @@ impl Session {
                 self.loud.len() as u32,
             ],
             reply: self.reply.clone(),
-            forcing: [self.idle_force as f64 / 35.0, self.ask_force as f64 / 35.0],
+            forcing: [
+                self.idle_force as f64 / 35.0,
+                self.ask_force as f64 / 35.0,
+                self.next_force as f64 / 35.0,
+            ],
             ..EvilState::default()
         }
     }
 
     /// How soon a decision's forced on her, in seconds (the console's): waiting with nothing to
-    /// do, a question unanswered; 0 never, None as it was. (Kept to an hour at most.)
-    pub fn set_forcing(&mut self, idle: Option<f64>, ask: Option<f64>) {
+    /// do, a question unanswered, asked what next while she's on with something (at most that
+    /// often); 0 never, None as it was. (Kept to an hour at most.)
+    pub fn set_forcing(&mut self, idle: Option<f64>, ask: Option<f64>, next: Option<f64>) {
+        if let Some(s) = next {
+            self.next_force = (s.clamp(0.0, 3600.0) * 35.0).round() as i64;
+        }
         let tics = |s: f64| (s.clamp(0.0, 3600.0) * 35.0).round() as i64;
         if let Some(s) = idle {
             self.idle_force = tics(s);
@@ -363,6 +385,9 @@ impl Session {
                 Incoming::Action { id, name, data } => {
                     self.forced = false;
                     self.idle_since = obs.tic;
+                    // (she's just had her say: not asked what next on top of it)
+                    self.next_due = None;
+                    self.next_at = obs.tic;
                     let (ok, msg) = self.action(agent, obs, &name, data.as_deref());
                     log.push(format!(">> {name} {}", data.as_deref().unwrap_or("")));
                     log.push(format!(
@@ -475,6 +500,50 @@ impl Session {
             );
             self.forced = true;
             log.push("neuro: waiting on her: decision forced".into());
+        }
+        // (on with something by herself, instinct's new step or after a fight: asked what
+        // next, carrying on one of the answers; she goes on meanwhile. Not mid-fight, not over
+        // a question, not while she's waiting: that's the force above)
+        if let Some(due) = self.director.next_due.take() {
+            self.next_due = Some(due);
+        }
+        if self.director.idle(agent) {
+            self.next_due = None;
+        }
+        if let Some(due) = self.next_due.filter(|_| {
+            self.connected
+                && !self.forced
+                && self.next_force > 0
+                && obs.tic - self.next_at >= self.next_force
+                && !self.director.now.fighting()
+                && self.director.question().is_none()
+        }) {
+            let state = self.state(agent, obs);
+            let doing = self.director.doing(agent);
+            let query = if due == "fight" {
+                format!("Fight over. Before it: {doing}. Carry on, or something else?")
+            } else {
+                format!("Now {doing}. Carry on, or something else?")
+            };
+            self.force(
+                &state,
+                &query,
+                &[
+                    "doom_carry_on",
+                    "doom_explore",
+                    "doom_search",
+                    "doom_go",
+                    "doom_exit",
+                    "doom_look",
+                    "doom_list",
+                    "doom_inspect",
+                ],
+                "low",
+            );
+            self.forced = true;
+            self.next_due = None;
+            self.next_at = obs.tic;
+            log.push(format!("neuro: asked what next ({due}): {query}"));
         }
         let wanted = self.level_actions(agent);
         self.sync_actions(wanted, &mut log);
@@ -1051,6 +1120,10 @@ impl Session {
             }
             "doom_status" => (true, self.director.status(agent, obs)),
             "doom_why" => (true, self.director.why(agent, obs)),
+            "doom_carry_on" => (
+                true,
+                format!("Carrying on: {}.", self.director.doing(agent)),
+            ),
             "doom_goal" => {
                 let Some(g) = arg("goal") else {
                     return (

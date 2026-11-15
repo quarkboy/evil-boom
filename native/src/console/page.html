@@ -290,6 +290,7 @@ input[type=range] { padding: 0; accent-color: var(--accent); }
           <div class="ev-sets" style="margin-top:8px" title="The stream's, not hers: how soon a decision's pushed on her, in seconds (0: never). Kept for the next game.">
             <label>push her, waiting (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fidle"></label>
             <label>push her, a question (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fask"></label>
+            <label>ask what next, at most every (s)<input type="number" min="0" max="3600" step="0.5" id="ev-fnext"></label>
           </div>
           <div class="row"><button id="ev-forceapply">Apply</button><span class="dim" style="font-size:12px;align-self:center">the stream's: a decision forced after she's waited, or left a question, this long</span></div>
         </div>
@@ -541,7 +542,7 @@ function renderEvil(e, n) {
   const idle = /after (\d+) s/.exec(e.idle || ""); pol.idle = idle ? idle[1] : "0";
   for (const el of $("evilcard").querySelectorAll("[data-p]")) if (!setsDirty && document.activeElement !== el && pol[el.dataset.p] != null) el.value = pol[el.dataset.p];
   // (how soon she's pushed, as the game has it, unless it's being changed here)
-  [["ev-fidle", 0], ["ev-fask", 1]].forEach(([id, i]) => { if (!forceDirty && document.activeElement !== $(id) && e.forcing) $(id).value = Math.round(e.forcing[i] * 10) / 10; });
+  [["ev-fidle", 0], ["ev-fask", 1], ["ev-fnext", 2]].forEach(([id, i]) => { if (!forceDirty && document.activeElement !== $(id) && e.forcing) $(id).value = Math.round(e.forcing[i] * 10) / 10; });
   $("ev-calls").replaceChildren(...(e.calls || []).map(li));
   $("ev-why").replaceChildren(...((e.why && e.why.length) ? e.why : ["-"]).map(li));
   const q = e.question;
@@ -750,10 +751,10 @@ $("ev-goalset").onclick = () => {
 };
 $("ev-goaldrop").onclick = () => order("doom_goal", { goal: "none" });
 for (const el of $("evilcard").querySelectorAll("[data-p]")) el.addEventListener("change", () => { setsDirty = true; });
-for (const id of ["ev-fidle", "ev-fask"]) $(id).addEventListener("input", () => { forceDirty = true; });
+for (const id of ["ev-fidle", "ev-fask", "ev-fnext"]) $(id).addEventListener("input", () => { forceDirty = true; });
 $("ev-forceapply").onclick = async () => {
   const n = (id) => { const v = $(id).value.trim(); return v === "" ? null : Math.max(0, Number(v)); };
-  if (await cmd({ cmd: "forcing", idle: n("ev-fidle"), ask: n("ev-fask") })) forceDirty = false;
+  if (await cmd({ cmd: "forcing", idle: n("ev-fidle"), ask: n("ev-fask"), next: n("ev-fnext") })) forceDirty = false;
 };
 $("ev-setapply").onclick = async () => {
   const data = {};

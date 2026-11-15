@@ -79,9 +79,11 @@ pub struct Settings {
     pub music_volume: Option<i32>,
     pub master_volume: Option<i32>,
     /// how soon a decision's forced on Evil, in seconds: waiting with nothing to do, a question
-    /// unanswered (0: never); none: the game's own (6 and 3). Changed from the page as it plays.
+    /// unanswered, asked what next while she's on with something (at most that often); 0:
+    /// never; none: the game's own (6, 3 and 15). Changed from the page as it plays.
     pub force_idle: Option<f64>,
     pub force_ask: Option<f64>,
+    pub force_next: Option<f64>,
     /// a game that crashes (or hangs) started again, at the level she was on
     pub auto_restart: bool,
     /// Doom's own screens: the title card, the menu, the melt, the tally, the finales
@@ -145,6 +147,7 @@ impl Default for Settings {
             master_volume: None,
             force_idle: None,
             force_ask: None,
+            force_next: None,
             auto_restart: true,
             present: true,
             title_wait: true,
@@ -643,9 +646,13 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 let _ = s.send(&Command::Column { hide });
                 let (chat, map) = (s.settings.chat_height, s.settings.map_height);
                 let _ = s.send(&Command::Sizes { chat, map });
-                let (idle, ask) = (s.settings.force_idle, s.settings.force_ask);
-                if idle.is_some() || ask.is_some() {
-                    let _ = s.send(&Command::Forcing { idle, ask });
+                let (idle, ask, next) = (
+                    s.settings.force_idle,
+                    s.settings.force_ask,
+                    s.settings.force_next,
+                );
+                if idle.is_some() || ask.is_some() || next.is_some() {
+                    let _ = s.send(&Command::Forcing { idle, ask, next });
                 }
                 // (the pictures pages want told it on their next ask)
                 s.views_told = (Vec::new(), None);
@@ -1046,11 +1053,12 @@ fn handle(hub: &Hub, mut req: Request) {
                         }
                         Err(e) => (400, json!({ "error": e })),
                     }
-                } else if let Command::Forcing { idle, ask } = c {
+                } else if let Command::Forcing { idle, ask, next } = c {
                     // (kept for the next game as well)
                     let st = &mut s.settings;
                     st.force_idle = idle.map(|v| v.clamp(0.0, 3600.0)).or(st.force_idle);
                     st.force_ask = ask.map(|v| v.clamp(0.0, 3600.0)).or(st.force_ask);
+                    st.force_next = next.map(|v| v.clamp(0.0, 3600.0)).or(st.force_next);
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))

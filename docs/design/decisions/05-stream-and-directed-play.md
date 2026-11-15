@@ -1232,3 +1232,17 @@ look, a decision forced, the nudges; "your goal: ..." its reason; the way out fi
 choice). Setting one starts her wait afresh. A key goal with no key seen says so. With
 `idle 0` instinct never runs, so every action of hers that ends leaves her waiting, and
 she's asked what next after `force_idle` (6 s), her goal's pick marked in what she's shown.
+
+## Asked what next while she's on with something
+
+On instinct she was never waiting, so never asked anything: a model that sets a goal or
+nothing at all let the bot play the level. Now a decision's forced on her ("Now by instinct:
+going to open a door. Carry on, or something else?") when instinct takes up something new
+(the steps she's told of, not each objective: those last a second or seven, less than her
+answer takes) and when a fight worth telling of is over ("Fight over. Before it: ..."),
+whether she was on instinct or an order. At most every 15 s (`force_next`, the console's; 0
+never), not mid-fight, not over an open question, and she goes on meanwhile: her answer
+overrides, it isn't waited for. A force can't be declined under the SDK, so carrying on is an
+action, `doom_carry_on`. Any action of hers starts the 15 s afresh. The 6 s force is as it
+was, for when she's standing with nothing to do. To be judged by watching with a model:
+whether a carry-on every so often is a better watch than the bot left to it.

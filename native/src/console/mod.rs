@@ -45,12 +45,15 @@ pub enum Command {
         carry: bool,
     },
     /// how soon a decision's forced on her (Neuro's), in seconds: waiting with nothing to do
-    /// (`idle`), a question unanswered (`ask`); 0 never; one left out is left as it is
+    /// (`idle`), a question unanswered (`ask`), asked what next while she's on with something
+    /// (`next`: at most that often); 0 never; one left out is left as it is
     Forcing {
         #[serde(default)]
         idle: Option<f64>,
         #[serde(default)]
         ask: Option<f64>,
+        #[serde(default)]
+        next: Option<f64>,
     },
     /// who's at the console, as Evil's told of what they do and say
     ConsoleName {
@@ -248,9 +251,9 @@ pub struct EvilState {
     /// a minute's worth: her actions, words told her, moments (not silent)
     pub per_minute: [u32; 3],
     /// how soon a decision's forced on her, in seconds: waiting with nothing to do, a question
-    /// unanswered (0: never)
+    /// unanswered, asked what next while she's on with something (0: never)
     #[serde(default)]
-    pub forcing: [f64; 2],
+    pub forcing: [f64; 3],
     /// the console's last action's answer: (its number, the action, done, the answer)
     pub reply: Option<(u64, String, bool, String)>,
 }

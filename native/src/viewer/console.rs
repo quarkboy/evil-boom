@@ -322,8 +322,8 @@ impl Watch {
                         n.director.console_name = name;
                     }
                 }
-                Command::Forcing { idle, ask } => match self.neuro.as_mut() {
-                    Some(n) => n.set_forcing(idle, ask),
+                Command::Forcing { idle, ask, next } => match self.neuro.as_mut() {
+                    Some(n) => n.set_forcing(idle, ask, next),
                     None => self
                         .agent
                         .x_mut()

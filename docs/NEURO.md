@@ -39,6 +39,7 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_list` | known areas, doors, switches, items, monsters or exits, with ids, likeliest first |
 | `doom_inspect` | what something is and where |
 | `doom_status` | health, armor, weapons, ammo, keys, the tally, what you're doing and fighting |
+| `doom_carry_on` | go on with what you're doing: the answer to "what next?" that changes nothing |
 | `doom_why` | why you're doing what you're doing: the aim and what it was chosen over, the fight, why you're not shooting, the last action that failed |
 | `doom_go` | go to an area, item, door, switch or exit (`risky`, `sure`, `rush`, `queue_up`) |
 | `doom_explore` | explore an area or a direction |
