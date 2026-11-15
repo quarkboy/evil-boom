@@ -54,7 +54,7 @@ pub(super) struct Moments {
     told_dry: bool,
     /// her kit, as it stands (for the level's end, told after the last tic)
     kit: String,
-    last_tic: i64,
+    pub(super) last_tic: i64,
     /// the level's end told (it's told from wherever the level's left: once)
     told_done: bool,
 }

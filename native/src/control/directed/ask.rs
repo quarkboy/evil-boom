@@ -475,6 +475,17 @@ impl Director {
         }
     }
 
+    /// A new level, the old one `was` tics long: the questions asked lately as long ago on
+    /// the new level's clock as they were on the old; what's kept of the old level's, gone.
+    pub(super) fn questions_new_map(&mut self, was: i64) {
+        let a = &mut self.asking;
+        for t in &mut a.asked {
+            *t -= was;
+        }
+        a.asked_stuck = false;
+        a.found = None;
+    }
+
     /// An open question overtaken (an action of hers, a death, a restart, a new level).
     pub(super) fn overtaken(&mut self, by: &str) {
         self.close(format!("overtaken by {by}"));

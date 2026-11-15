@@ -355,6 +355,23 @@ impl Session {
         }
     }
 
+    /// The time now. The clock gone back (a new level: its tics start from nothing): what's
+    /// timed from the old clock is put back as far, each as long ago as it was. Else she isn't
+    /// pushed, asked what next or told a moment aloud till this level's as old as the last was.
+    fn clock(&mut self, tic: i64) {
+        if tic < self.now_tic {
+            let back = self.now_tic - tic;
+            self.idle_since -= back;
+            self.next_at -= back;
+            self.briefed_at -= back;
+            self.told_status.0 -= back;
+            self.loud.iter_mut().for_each(|t| *t -= back);
+            self.told_lines.iter_mut().for_each(|l| l.0 -= back);
+            self.exchanges.iter_mut().for_each(|e| e.tic -= back);
+        }
+        self.now_tic = tic;
+    }
+
     /// How long a question waits for her answer before its default's taken, in seconds (the
     /// console's, not hers: she can't know how long her answers take); 0: till she answers.
     pub fn set_answer_wait(&mut self, secs: f64) {
@@ -498,17 +515,7 @@ impl Session {
 
     /// The lines for the log.
     pub fn tic(&mut self, agent: &mut Agent, obs: &Observation) -> Vec<String> {
-        // (the clock gone back: a new level, its tics from nothing. What's timed from the old
-        // level's clock is timed from now, or she isn't pushed, asked what next or told a
-        // moment aloud till this level's as old as the last was)
-        if obs.tic < self.now_tic {
-            self.idle_since = self.idle_since.min(obs.tic);
-            self.next_at = self.next_at.min(obs.tic);
-            self.briefed_at = self.briefed_at.min(obs.tic);
-            self.told_status.0 = self.told_status.0.min(obs.tic);
-            self.loud.clear();
-        }
-        self.now_tic = obs.tic;
+        self.clock(obs.tic);
         let mut log = Vec::new();
         self.receive(agent, obs, &mut log);
         if self.connected
@@ -808,7 +815,7 @@ impl Session {
         idle: &str,
         mut act: impl FnMut(&Value) -> (bool, String),
     ) -> Vec<String> {
-        self.now_tic = tic;
+        self.clock(tic);
         let mut log = Vec::new();
         while let Ok(i) = self.link.incoming.try_recv() {
             match i {
@@ -871,7 +878,7 @@ impl Session {
     /// Between levels (the tally, a finale): what the director's been told of the screens,
     /// passed on; the lines for the log. (Her actions wait for the next level.)
     pub fn between(&mut self, tic: i64) -> Vec<String> {
-        self.now_tic = tic;
+        self.clock(tic);
         let mut log = Vec::new();
         self.tell_news(tic, &mut log);
         // (the game's own not hers here: going on is the screen's)
@@ -949,7 +956,7 @@ impl Session {
         name: &str,
         data: Option<&str>,
     ) -> (bool, String) {
-        self.now_tic = obs.tic;
+        self.clock(obs.tic);
         let (ok, msg) = self.action(agent, obs, name, data);
         self.keep(name, data, ok, &msg, true);
         let n = self.reply.as_ref().map_or(1, |r| r.0 + 1);

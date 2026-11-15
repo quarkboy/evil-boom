@@ -638,6 +638,24 @@ impl Director {
     pub fn new_map(&mut self) {
         self.goal_new_map();
         self.overtaken("a new level");
+        // (a level's tics start again from nothing: no time kept from the old level's clock
+        // is left to be measured against the new one's. What's timed across levels, the
+        // questions a minute, is put back by the old level's length)
+        self.questions_new_map(self.moments.last_tic);
+        self.off_tried = 0;
+        self.told_trapped = false;
+        self.paused = false;
+        self.told_paused = false;
+        self.calm_since = None;
+        self.next_due = None;
+        self.had_order = false;
+        self.nudged = 0;
+        self.told_auto.clear();
+        self.told_auto_tic = None;
+        self.told_hurt = None;
+        self.told_lock = None;
+        self.hits.clear();
+        self.gibbed.clear();
         self.policy_due = true;
         self.hurt.clear();
         self.running.clear();

@@ -1419,3 +1419,13 @@ Both from the Episode 1 session's log (2026-11-15).
   what's asked first", no question open. The same held her being pushed when idle, asked
   what next at a step, and told moments aloud. Now a question from a later tic than this
   isn't counted, and the session's clocks start again when the clock goes back.
+
+- **The check of every time kept across a level** (asked for after the above). Only a new
+  level sets the clock back: a death or a restart carries the tic count on. The director's
+  `new_map` now clears the rest of what it timed by the old level (getting off a hurting
+  floor last tried, the calm since, a lock or a fast loss last told, what's due to be asked),
+  and puts the questions asked lately back by the old level's length, so the three a minute
+  count across the change. The session does the same for all its times in one place
+  (`Session::clock`): each as long ago as it was. The stream column and the screens between
+  levels keep their own clocks and were right. Played E1M1 to E1M3 with the mock: asked what
+  next 14 s into E1M2 and 6 s into E1M3, each level's start told aloud.
