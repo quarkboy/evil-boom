@@ -84,6 +84,9 @@ pub struct Settings {
     pub force_idle: Option<f64>,
     pub force_ask: Option<f64>,
     pub force_next: Option<f64>,
+    /// instinct hers to turn off (`doom_policy instinct: off`: she stands and waits when an
+    /// action's done); off: it stays on whatever she says. Changed from the page as it plays.
+    pub evil_instinct: bool,
     /// a game that crashes (or hangs) started again, at the level she was on
     pub auto_restart: bool,
     /// Doom's own screens: the title card, the menu, the melt, the tally, the finales
@@ -148,6 +151,7 @@ impl Default for Settings {
             force_idle: None,
             force_ask: None,
             force_next: None,
+            evil_instinct: true,
             auto_restart: true,
             present: true,
             title_wait: true,
@@ -651,9 +655,13 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                     s.settings.force_ask,
                     s.settings.force_next,
                 );
-                if idle.is_some() || ask.is_some() || next.is_some() {
-                    let _ = s.send(&Command::Forcing { idle, ask, next });
-                }
+                let instinct = Some(s.settings.evil_instinct);
+                let _ = s.send(&Command::Forcing {
+                    idle,
+                    ask,
+                    next,
+                    instinct,
+                });
                 // (the pictures pages want told it on their next ask)
                 s.views_told = (Vec::new(), None);
                 let spec = s.settings.choices();
@@ -1053,12 +1061,19 @@ fn handle(hub: &Hub, mut req: Request) {
                         }
                         Err(e) => (400, json!({ "error": e })),
                     }
-                } else if let Command::Forcing { idle, ask, next } = c {
+                } else if let Command::Forcing {
+                    idle,
+                    ask,
+                    next,
+                    instinct,
+                } = c
+                {
                     // (kept for the next game as well)
                     let st = &mut s.settings;
                     st.force_idle = idle.map(|v| v.clamp(0.0, 3600.0)).or(st.force_idle);
                     st.force_ask = ask.map(|v| v.clamp(0.0, 3600.0)).or(st.force_ask);
                     st.force_next = next.map(|v| v.clamp(0.0, 3600.0)).or(st.force_next);
+                    st.evil_instinct = instinct.unwrap_or(st.evil_instinct);
                     let saved = s.save();
                     let sent = if s.to_game.is_some() { s.send(&c) } else { Ok(()) };
                     done(saved.and(sent))

@@ -1360,3 +1360,15 @@ between "outmatched: keeping clear" and "out of reach: going on" till the floor 
   (`Combat::jump_under_way`). All her other dodging is as it was. MAP06 skill 3, 8 seeds, one
   life: sprints called off too slow 10 of 89 to 6 of 126. Score +0.0006 (s.e. 0.0019), exits
   424 for 423; 1,066 runs the same.
+
+## Instinct hers to turn off, or the stream's
+
+Watched through Episode 1 (2026-11-15), she turned instinct off and stood waiting between her
+actions, which the console could turn back on but not keep on.
+
+- **The console says whether it's hers** (`evil_instinct`, on the Evil card with the push
+  timings; hers by default). Not hers: instinct's on at once and stays on, `doom_policy` is
+  registered again without the setting or its line of description, the briefing doesn't name
+  it, and `instinct: off` sent anyway is refused ("not yours to turn off").
+- **Taken out, not just refused:** a setting she can see and can't use costs her context and a
+  wasted action each time she tries it.

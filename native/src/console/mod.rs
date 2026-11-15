@@ -46,7 +46,8 @@ pub enum Command {
     },
     /// how soon a decision's forced on her (Neuro's), in seconds: waiting with nothing to do
     /// (`idle`), a question unanswered (`ask`), asked what next while she's on with something
-    /// (`next`: at most that often); 0 never; one left out is left as it is
+    /// (`next`: at most that often); 0 never; one left out is left as it is. `instinct`:
+    /// whether instinct's hers to turn off (not: it's on, and stays on)
     Forcing {
         #[serde(default)]
         idle: Option<f64>,
@@ -54,6 +55,8 @@ pub enum Command {
         ask: Option<f64>,
         #[serde(default)]
         next: Option<f64>,
+        #[serde(default)]
+        instinct: Option<bool>,
     },
     /// who's at the console, as Evil's told of what they do and say
     ConsoleName {
@@ -254,6 +257,9 @@ pub struct EvilState {
     /// unanswered, asked what next while she's on with something (0: never)
     #[serde(default)]
     pub forcing: [f64; 3],
+    /// instinct hers to turn off (`doom_policy instinct`); not: on, the stream's say
+    #[serde(default)]
+    pub instinct_hers: bool,
     /// the console's last action's answer: (its number, the action, done, the answer)
     pub reply: Option<(u64, String, bool, String)>,
 }

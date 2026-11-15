@@ -322,8 +322,18 @@ impl Watch {
                         n.director.console_name = name;
                     }
                 }
-                Command::Forcing { idle, ask, next } => match self.neuro.as_mut() {
-                    Some(n) => n.set_forcing(idle, ask, next),
+                Command::Forcing {
+                    idle,
+                    ask,
+                    next,
+                    instinct,
+                } => match self.neuro.as_mut() {
+                    Some(n) => {
+                        n.set_forcing(idle, ask, next);
+                        if let Some(hers) = instinct {
+                            n.set_instinct_hers(hers);
+                        }
+                    }
                     None => self
                         .agent
                         .x_mut()

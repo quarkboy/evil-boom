@@ -85,6 +85,11 @@ pub struct Session {
     next_force: i64,
     next_due: Option<&'static str>,
     next_at: i64,
+    /// instinct hers to turn off (`doom_policy instinct`); not (the console's say): it's on,
+    /// and the setting isn't in her schema. `policy_stale`: doom_policy registered with the
+    /// other schema
+    instinct_hers: bool,
+    policy_stale: bool,
     /// the games hers to start and what of the game is hers (the watch's; doom_game's schema
     /// made from them), and doom_game registered with older ones
     choices: Option<Choices>,
@@ -187,7 +192,7 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_search", "description": "Search an area or a compass direction for secrets: thorough 2 (most suspicious walls, default) or 3 (every one, slow). queue_up: queue this action up next, don't override current action.", "schema": s(json!({ "target": { "type": "string" }, "thorough": { "type": "integer", "enum": [2, 3] }, "queue_up": { "type": "boolean" } }), &["target"]) }),
         json!({ "name": "doom_exit", "description": "Leave the level. sure: even with things left.", "schema": s(json!({ "sure": { "type": "boolean" } }), &[]) }),
         json!({ "name": "doom_fight", "description": format!("Who you fight and how: target, weapon or hold_fire for the next {TACTIC_SECONDS}s; bold, careful, avoid or steady for {STANCE_SECONDS}s (or seconds, if given). target: ref a monster id or kind, shot first. weapon: ref a gun, or auto. retreat: to cover. hold_fire / fire. bold / careful / avoid (keep clear: to get past) / steady: how you fight. auto: end this, fight as usual."), "schema": s(json!({ "do": { "type": "string", "enum": ["target", "weapon", "retreat", "hold_fire", "fire", "bold", "careful", "avoid", "steady", "auto"] }, "ref": { "type": "string" }, "seconds": { "type": "integer" } }), &["do"]) }),
-        json!({ "name": "doom_policy", "description": format!("Your settings, kept till you change them. Give any to change them; none to hear them all. {} instinct: on (an action done, you carry on by yourself and are asked what next), off (you stand and wait). hints: when you get suggestions: off, on_stall (when you're stuck) or always. answers: seconds a question waits for your answer before its default is taken (0: no limit).", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] }, "answers": { "type": "integer" } }), &[]) }),
+        json!({ "name": "doom_policy", "description": format!("Your settings, kept till you change them. Give any to change them; none to hear them all. {}{INSTINCT_HELP} hints: when you get suggestions: off, on_stall (when you're stuck) or always. answers: seconds a question waits for your answer before its default is taken (0: no limit).", crate::control::directed::policy_help()), "schema": s(json!({ "stance": { "type": "string", "enum": ["careful", "steady", "bold", "avoid", "yolo"] }, "save": { "type": "string", "enum": ["cells", "none"] }, "risk": { "type": "string", "enum": ["careful", "normal", "bold"] }, "powerups": { "type": "string", "enum": ["need", "now"] }, "explore": { "type": "string", "enum": ["normal", "methodical", "speedy"] }, "instinct": { "type": "string", "enum": ["on", "off"] }, "hints": { "type": "string", "enum": ["off", "on_stall", "always"] }, "answers": { "type": "integer" } }), &[]) }),
         json!({ "name": "doom_game", "description": "The game itself, when it's yours. start: a game, when you're offered one (map; skill 1 easiest to 4 hardest; play single level or continuous). next: on to the next level from the tally screen. restart: this level from its start, after a while with nothing new.", "schema": s(json!({ "do": { "type": "string", "enum": ["start", "next", "restart"] }, "map": { "type": "string" }, "skill": { "type": "integer", "enum": [1, 2, 3, 4] }, "play": { "type": "string", "enum": ["single", "continuous"] } }), &["do"]) }),
         json!({ "name": "doom_answer", "description": "Answer a question ([ask q3] ...): id, and choice by its letter.", "schema": s(json!({ "id": { "type": "string" }, "choice": { "type": "string" } }), &["id", "choice"]) }),
         json!({ "name": "doom_pause", "description": "Pause the game, as stepping away from it: the menu comes up and nothing moves till you play on (on: false). on: true by default.", "schema": s(json!({ "on": { "type": "boolean" } }), &[]) }),
@@ -195,6 +200,22 @@ pub fn actions() -> Vec<Value> {
         json!({ "name": "doom_goal", "description": "A standing aim, till met. It doesn't play for you: what's suggested to you, and your instinct when you leave it to that, put it first: out, completionist (100% then out: slow, asked first), key (ref: a colour or key id), kills, supplies, secrets; none to drop it.", "schema": s(json!({ "goal": { "type": "string", "enum": ["out", "completionist", "key", "kills", "supplies", "secrets", "none"] }, "ref": { "type": "string" } }), &["goal"]) }),
         json!({ "name": "doom_why", "description": "Why you're doing what you're doing: the aim and what it was chosen over, the fight, why you're not shooting, the last action that failed." }),
     ]
+}
+
+/// `doom_policy`'s word on instinct: left out when it isn't hers to turn off.
+const INSTINCT_HELP: &str = " instinct: on (an action done, you carry on by yourself and are asked what next), off (you stand and wait).";
+
+/// `doom_policy` with no word of instinct: not hers to turn off.
+fn without_instinct(all: &mut [Value]) {
+    let Some(p) = all.iter_mut().find(|a| a["name"] == "doom_policy") else {
+        return;
+    };
+    if let Some(d) = p["description"].as_str() {
+        p["description"] = json!(d.replace(INSTINCT_HELP, ""));
+    }
+    if let Some(props) = p["schema"]["properties"].as_object_mut() {
+        props.remove("instinct");
+    }
 }
 
 /// The rules, told on connecting and at each level. Everything she's told is told to her as
@@ -231,6 +252,8 @@ impl Session {
             next_force: NEXT_FORCE,
             next_due: None,
             next_at: 0,
+            instinct_hers: true,
+            policy_stale: false,
             choices: None,
             game_stale: false,
             paused: false,
@@ -310,6 +333,7 @@ impl Session {
                 self.ask_force as f64 / 35.0,
                 self.next_force as f64 / 35.0,
             ],
+            instinct_hers: self.instinct_hers,
             ..EvilState::default()
         }
     }
@@ -330,9 +354,27 @@ impl Session {
         }
     }
 
+    /// Whether instinct's hers to turn off (the console's say). Not: it's on from now, her
+    /// `doom_policy` loses the setting, and one sent anyway is refused.
+    pub fn set_instinct_hers(&mut self, hers: bool) {
+        if !hers {
+            self.director.idle_auto = Some(crate::control::directed::IDLE_AUTO);
+        }
+        if hers != self.instinct_hers {
+            self.instinct_hers = hers;
+            self.policy_stale = true;
+        }
+    }
+
     /// The rules told her (silently), and the count since started again.
     fn brief(&mut self, tic: i64) {
-        self.link.context(BRIEFING, true);
+        // (instinct not hers to turn off: its setting not named)
+        if self.instinct_hers {
+            self.link.context(BRIEFING, true);
+        } else {
+            self.link
+                .context(&BRIEFING.replace(" (doom_policy instinct)", ""), true);
+        }
         self.briefed = true;
         self.briefed_at = tic;
         self.told_chars = 0;
@@ -621,6 +663,9 @@ impl Session {
         ) {
             *g = game_action(c);
         }
+        if !self.instinct_hers {
+            without_instinct(&mut all);
+        }
         all
     }
 
@@ -659,6 +704,12 @@ impl Session {
             self.link.send(
                 "actions/unregister",
                 Some(json!({ "action_names": ["doom_game"] })),
+            );
+        }
+        if std::mem::take(&mut self.policy_stale) && self.registered.remove("doom_policy") {
+            self.link.send(
+                "actions/unregister",
+                Some(json!({ "action_names": ["doom_policy"] })),
             );
         }
         if wanted == self.registered {
@@ -1007,6 +1058,9 @@ impl Session {
                 if let Some(secs) = answers {
                     self.director.answer_wait = (secs > 0.0).then_some((secs * 35.0) as i64);
                 }
+                if instinct == Some(false) && !self.instinct_hers {
+                    return (false, "instinct: not yours to turn off.".into());
+                }
                 if let Some(on) = instinct {
                     self.director.idle_auto = on.then_some(crate::control::directed::IDLE_AUTO);
                 }
@@ -1286,6 +1340,18 @@ fn noted(msg: String, notes: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// Instinct not hers to turn off: `doom_policy` says nothing of it, its other settings
+    /// as they were.
+    #[test]
+    fn instinct_out_of_her_policy() {
+        let mut all = super::actions();
+        super::without_instinct(&mut all);
+        let p = all.iter().find(|a| a["name"] == "doom_policy").unwrap();
+        assert!(!p.to_string().contains("instinct"), "{p}");
+        assert!(p["schema"]["properties"]["explore"].is_object());
+        assert!(p["description"].as_str().unwrap().contains(" hints: "));
+    }
+
     /// Every action named for registering is one `actions` has, and every one it has is named.
     #[test]
     fn all_actions_named() {
