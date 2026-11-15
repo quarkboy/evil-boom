@@ -916,11 +916,14 @@ impl Knowledge {
     }
 }
 
-/// What a suspected wall hides: the sector behind it, or (none) the line itself.
+/// What a suspected wall hides: the sector behind it, or (none) the line itself; or the run of
+/// walls it's one of, all alike (the lowest numbered of them), where one pressed is as good
+/// as any.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Behind {
     Sector(usize),
     Line(usize),
+    Run(usize),
 }
 
 fn segment_point_distance(a: Point, b: Point, p: Point) -> f64 {

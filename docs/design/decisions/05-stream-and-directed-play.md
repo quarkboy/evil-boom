@@ -1429,3 +1429,26 @@ Both from the Episode 1 session's log (2026-11-15).
   (`Session::clock`): each as long ago as it was. The stream column and the screens between
   levels keep their own clocks and were right. Played E1M1 to E1M3 with the mock: asked what
   next 14 s into E1M2 and 6 s into E1M3, each level's start told aloud.
+
+## Walls not worth a press: a stair's risers, the rest of a run all alike
+
+Watched (2026-11-15): a thorough search pressed at every step of a stair, and at each side of
+things that look the same all round.
+
+- **A step like the next isn't pressed.** An open two-sided line with one floor above the
+  other, where another such line on to or off either floor shows the same face: a flight's
+  riser. A press at it goes on through the opening over it (PTR_UseTraverse: no special, an
+  opening, the use carries on; not even a grunt). A door standing open is no step (its floors
+  are level) and is weighed as before.
+- **One of a run.** One-sided walls she's mapped, joined end to end on the one floor, showing
+  the same face at the same height (`run_of`): the best of them stands for the run
+  (`Behind::Run`), and once one's been tried the rest are skipped. Two-sided walls were
+  already one for each sector behind.
+- **What it could miss, looked up in the maps:** a use special on only some lines of such a
+  run. In Doom and Doom II there are four: two are switches (seen as switches, not searched
+  for), and two are E4M5's start pit, six wall lines with a lift special for tag 3, which no
+  sector has: dead, an editing leftover (the pit's lift is tag 2, worked by lines 329 and 335).
+- **Measured** by `secret-survey` over 66 maps (E3M3 and E4M7 left out: the survey's exploring
+  differed between the runs): walls pressed a map at thoroughness 1, 2, 3: 8, 36, 140 to 7,
+  30, 100. Every line that reveals a secret offered at the same thoroughness as before.
+  Score -0.0019 (s.e. 0.0029), exits 420 for 423; 912 runs the same, 32 better, 32 worse.

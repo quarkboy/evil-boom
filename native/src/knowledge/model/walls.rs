@@ -234,6 +234,15 @@ impl Knowledge {
         if line.front == NO_SIDEDEF {
             return Wall::Skip("no front side");
         }
+        // A run of wall all alike (a crate's sides, a curve's pieces): one pressed, none of
+        // the rest looks any likelier than it did.
+        let run = self.run_of(li);
+        if run
+            .iter()
+            .any(|x| *x != li && self.tried_walls.get(x).is_some_and(|k| k.covers(keys)))
+        {
+            return Wall::Skip("one like it tried");
+        }
         let (a, b) = m.line_seg(li);
         let length = dist(a, b);
         if length < 16.0 {
@@ -299,7 +308,9 @@ impl Knowledge {
             target: if target { 1.0 } else { 0.0 },
             ..Signs::default()
         };
-        let mut behind = back.map(Behind::Sector);
+        let mut behind = back
+            .map(Behind::Sector)
+            .or_else(|| (run.len() > 1).then(|| Behind::Run(run[0])));
         let (odd, neighbours) = self.odd(li);
         if let Some(bk) = back {
             // As she last saw them: a stair built since makes a wall of what was floor.
@@ -309,7 +320,11 @@ impl Knowledge {
             let closed = line.blocks_player()
                 || fh.ceiling.min(bh.ceiling) - fh.floor.max(bh.floor) < PLAYER_HEIGHT
                 || bh.floor - fh.floor > MAX_STEP;
-            if !closed && odd && !self.face(line).is_empty() {
+            if !closed && odd && self.step_of_a_flight(li, front, bk) {
+                // (a stair's riser, the same as the next step's: a press at it goes on through
+                // the opening over it, not even a grunt)
+                return Wall::Skip("a step like the next");
+            } else if !closed && odd && !self.face(line).is_empty() {
                 // A way through, but with a face above or below it unlike the walls round it, where a
                 // switch can be: only that part counts. (With no face at all, floor and ceiling
                 // the same either side, there's nothing to be unlike them: no wall of any kind.)
@@ -599,6 +614,64 @@ impl Knowledge {
     }
 
     /// The lines joined to this one at its ends, on the same sector's side.
+    /// The run of wall `li` is one of, lowest numbered first: the one-sided walls she's mapped
+    /// joined end to end with it on the same floor, showing the same face at the same height
+    /// (and in the same light: it's the one sector's). Itself alone if it's two-sided.
+    fn run_of(&self, li: usize) -> Vec<usize> {
+        let m = &self.nav.map;
+        let line = &m.linedefs[li];
+        if line.back != NO_SIDEDEF {
+            return vec![li];
+        }
+        let face = self.face(line);
+        let (mut run, mut todo) = (BTreeSet::from([li]), vec![li]);
+        while let Some(x) = todo.pop() {
+            for n in self.wall_neighbours(x) {
+                let other = &m.linedefs[n];
+                if other.back == NO_SIDEDEF
+                    && self.mapped.contains(&n)
+                    && self.face(other) == face
+                    && !self.shifted(line, other)
+                    && run.insert(n)
+                {
+                    todo.push(n);
+                }
+            }
+        }
+        run.into_iter().collect()
+    }
+
+    /// Is the open line `li` (between `front` and `back`) a step of a flight: another way
+    /// through she's mapped, on to or off either of its floors, showing the same face?
+    fn step_of_a_flight(&self, li: usize, front: usize, back: usize) -> bool {
+        let m = &self.nav.map;
+        let face = self.face(&m.linedefs[li]);
+        let h = |x: usize| {
+            self.seen_heights
+                .get(&x)
+                .copied()
+                .unwrap_or(self.nav.movers.initial[x])
+        };
+        // (a step itself: one floor above the other. A door standing open is no stair)
+        if face.is_empty() || h(front).floor == h(back).floor {
+            return false;
+        }
+        self.mapped.iter().any(|&n| {
+            let other = &m.linedefs[n];
+            let (Some(f), Some(b)) = m.sides(n) else {
+                return false;
+            };
+            let (fh, bh) = (h(f), h(b));
+            n != li
+                && [f, b].iter().any(|s| *s == front || *s == back)
+                && !other.blocks_player()
+                && fh.ceiling.min(bh.ceiling) - fh.floor.max(bh.floor) >= PLAYER_HEIGHT
+                && (bh.floor - fh.floor).abs() <= MAX_STEP
+                && fh.floor != bh.floor
+                && self.face(other) == face
+        })
+    }
+
     fn wall_neighbours(&self, li: usize) -> Vec<usize> {
         let m = &self.nav.map;
         let l = &m.linedefs[li];

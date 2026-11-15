@@ -346,6 +346,10 @@ pub fn survey_map(wad: &str, map: &str) -> Result<(), String> {
                 behind: Some(crate::knowledge::model::Behind::Sector(s)),
                 ..
             }) => format!("s{s}"),
+            Some(Wall::Suspect {
+                behind: Some(crate::knowledge::model::Behind::Run(r)),
+                ..
+            }) => format!("r{r}"),
             _ => format!("l{li}"),
         };
         let (status, signs) = if let Some((how, w)) = taken.get(&li) {
