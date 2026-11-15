@@ -342,7 +342,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    if let Some(rows) = like {
+    if let Some(mut rows) = like {
+        // (the longest first, by how long each took in that set: the last runs in are then
+        // short ones, not one long level played out alone on a machine otherwise idle)
+        rows.sort_by(|a, b| b.seconds.total_cmp(&a.seconds));
         todo = rows
             .into_iter()
             .map(|r| (r.wad, r.map, r.skill, r.seed))
