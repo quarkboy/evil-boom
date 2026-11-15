@@ -498,6 +498,16 @@ impl Session {
 
     /// The lines for the log.
     pub fn tic(&mut self, agent: &mut Agent, obs: &Observation) -> Vec<String> {
+        // (the clock gone back: a new level, its tics from nothing. What's timed from the old
+        // level's clock is timed from now, or she isn't pushed, asked what next or told a
+        // moment aloud till this level's as old as the last was)
+        if obs.tic < self.now_tic {
+            self.idle_since = self.idle_since.min(obs.tic);
+            self.next_at = self.next_at.min(obs.tic);
+            self.briefed_at = self.briefed_at.min(obs.tic);
+            self.told_status.0 = self.told_status.0.min(obs.tic);
+            self.loud.clear();
+        }
         self.now_tic = obs.tic;
         let mut log = Vec::new();
         self.receive(agent, obs, &mut log);

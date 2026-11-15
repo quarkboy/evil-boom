@@ -277,7 +277,9 @@ impl Director {
             self.close("another question".into());
         }
         let a = &mut self.asking;
-        a.asked.retain(|&t| obs.tic - t < MINUTE);
+        // (a level's tics start again from nothing: one asked late on the level before isn't in
+        // this minute, and isn't counted till this level's as old)
+        a.asked.retain(|&t| (0..MINUTE).contains(&(obs.tic - t)));
         if a.open.is_some() || (!next && a.asked.len() >= QUESTIONS_A_MINUTE) {
             return None;
         }

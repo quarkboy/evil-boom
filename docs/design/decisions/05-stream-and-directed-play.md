@@ -1403,3 +1403,19 @@ while still swinging, and went 2 to 4 past (a barrel 500 off is 1 degree to each
 - Shots 2 degrees or more off as they left: E1M2 16 of 48 to 0 of 44, E1M7 18 of 31 to 1 of 23
   (that one turned by something else, not traced). Score -0.0007 (s.e. 0.0037), exits 423 for
   424; 859 runs the same.
+
+## An order's rush ends with the order; a new level's clock starts from nothing
+
+Both from the Episode 1 session's log (2026-11-15).
+
+- **Rush stuck on.** After a `doom_go ... rush: true`, everything she then did by instinct
+  was "rushing" too: pressed on with mid-fight. The rush was cleared in the tic she stood
+  waiting after an order, and since instinct takes up at once there's no such tic. Now going
+  on by instinct clears it.
+- **Last level's clock.** A level's tics start from nothing, and times kept from the level
+  before were compared with them. The questions a minute stayed spent: after three asked
+  late on E1M4 (to 704 s), nothing could be asked on E1M5 (508 s long) or for the first 12
+  minutes of E1M6, and `doom_goal completionist` was refused 7 times of 8 with "answer
+  what's asked first", no question open. The same held her being pushed when idle, asked
+  what next at a step, and told moments aloud. Now a question from a later tic than this
+  isn't counted, and the session's clocks start again when the clock goes back.
