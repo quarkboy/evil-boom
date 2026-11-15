@@ -967,6 +967,11 @@ impl Explorer {
                 ..Controls::default()
             }; // (nothing to do: look round)
         };
+        // (on a floor she knows hurts, with no suit on: along the route at full pace whichever
+        // way the fight has her facing. Backing off an imp across nukage she went at a sixth
+        // of her pace, 5 health a second, 70 in all)
+        f.motion.any_way = self.sector.is_some_and(|s| self.knowledge.damaging(s))
+            && !self.knowledge.protected(obs.tic);
         let out = f.act(obs);
         // What the follower had to say: jumps, waits, trouble.
         for ev in &f.log.events[self.follower_seen.min(f.log.events.len())..] {

@@ -399,6 +399,9 @@ pub struct Motion {
     /// last tic's displacement
     pub disp: Point,
     last: Option<Point>,
+    /// at full pace whichever way she faces (`go`): on a floor that's hurting her, the way off
+    /// isn't gone slowly for having her eyes on what she's shooting
+    pub any_way: bool,
 }
 
 impl Motion {
@@ -472,6 +475,8 @@ impl Motion {
         // over a route's legs that's a crawl, and it's kept on purpose: the route at full pace
         // whichever way she's turned, and the same for retreats only, each lost on the score
         // (-0.017, -0.016; 2026-11-11). Going on slowly while she's shooting is a caution)
+        // (but not on a floor that's hurting her: `any_way`)
+        let off = if self.any_way { 0.0 } else { off };
         if off > 90.0 {
             speed *= (0.45 - (off - 90.0) / 60.0 * 0.3).max(0.15);
         } else if off > STRAFE_FREE {

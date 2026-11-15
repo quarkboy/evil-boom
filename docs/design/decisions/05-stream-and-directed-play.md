@@ -1292,3 +1292,13 @@ between two floors at one height, with no texture and nothing above or below the
 taken as "unlike the walls round them" (no face against METAL2), then given the megasphere
 behind and a gap to see it through: 9.0 and 8.5, pressed before the wall that works (7.0).
 Score +0.0008 (s.e. 0.0019), exits 414 for 413; 1,036 runs the same.
+
+## On a floor that hurts, the route at full pace whichever way she faces
+
+MAP06, a directed run: backing off an imp across the nukage of sector 101, on a route to get
+off it, she went at 15% of her pace (`Motion::go`'s slowing for legs against her facing) and
+lost 70 health in 13 s, 5 at a time. The slowing is a caution kept on purpose everywhere
+else (without it: -0.017). On a floor she knows hurts, with no suit on, it's now off
+(`Motion::any_way`, set by the explorer each tic). Score +0.0061 (s.e. 0.0055), exits 422
+for 414; fight score +0.0064 (s.e. 0.0050). Skill 4 gains (+0.0173), skill 3 doesn't
+(-0.0050). It changes 454 runs.
