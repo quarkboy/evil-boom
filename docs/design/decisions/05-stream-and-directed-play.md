@@ -1274,3 +1274,15 @@ hers, and sent `doom_fight auto` nineteen times.
 The what-next question carries her status, the suggested pick and "Unsure? doom_look, or
 doom_list." only: it had the lists a waiting force has (up to 27 lines), every time, and
 carrying on needs none of them. The waiting force keeps them: there she has to choose.
+
+## A switch looks like one only from its front
+
+MAP06's megasphere is in a shut compartment in the ceiling (a lift, sector 98). Its east side
+(line 458) has a switch's texture on the inside, to bring the lift down again from up there.
+`looks_interactive` went by the front side's textures whether or not she'd seen that side: she
+"found" the switch at 0.5 s from the room, and went to press at it from below (the use line
+stops at the compartment's shut side), three presses a visit, again each time the drop's wait
+ran out: four visits in a directed run, six (18 presses) on seed 1. Now a two-sided line looks
+like a switch or a door only once she's seen it from its front (`Knowledge::seen_front`, kept
+as lines are drawn in her view). Seed 1, no monsters: no press at it, the level in 395 s for
+470. Score +0.0038 (s.e. 0.0044), exits 413 for 410; fight score +0.0014 (s.e. 0.0040).

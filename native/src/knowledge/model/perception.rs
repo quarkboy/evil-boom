@@ -95,6 +95,11 @@ impl Knowledge {
         for &li in &seen.drawn {
             let (f, b) = m.sides(li);
             in_view.extend([f, b].into_iter().flatten());
+            // (the front is right of v1->v2)
+            let (v1, v2) = m.line_seg(li);
+            if (v2.0 - v1.0) * (obs.y - v1.1) - (v2.1 - v1.1) * (obs.x - v1.0) < 0.0 {
+                self.seen_front.insert(li);
+            }
             if !self.mapped.contains(&li) {
                 self.map_line(li);
             }

@@ -39,6 +39,12 @@ impl Knowledge {
         if l.front == NO_SIDEDEF {
             return false;
         }
+        // (a two-sided line seen only from behind: its front's textures aren't what she saw.
+        // A switch set inside a shut compartment was taken for one from outside, and pressed
+        // at from there again and again)
+        if self.perceive && l.back != NO_SIDEDEF && !self.seen_front.contains(&li) {
+            return false;
+        }
         let sd = &m.sidedefs[usize::from(l.front)];
         [&sd.upper, &sd.middle, &sd.lower].iter().any(|t| {
             if t.is_empty() {

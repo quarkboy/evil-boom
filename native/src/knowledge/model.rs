@@ -190,6 +190,9 @@ pub struct Knowledge {
     /// known on sight (peeking at the map)
     pub perceive: bool,
     pub mapped: BTreeSet<usize>,
+    /// the mapped lines she's seen from their front side: a two-sided line's front face (a
+    /// switch's, a door's) is only to be seen from there
+    pub seen_front: BTreeSet<usize>,
     pub sectors: BTreeSet<usize>,
     /// as last seen
     pub seen_heights: BTreeMap<usize, Heights>,
@@ -386,6 +389,7 @@ impl Knowledge {
             exit_floors: BTreeSet::new(),
             perceive,
             mapped: BTreeSet::new(),
+            seen_front: BTreeSet::new(),
             sectors: BTreeSet::new(),
             seen_heights: BTreeMap::new(),
             first_heights: BTreeMap::new(),
