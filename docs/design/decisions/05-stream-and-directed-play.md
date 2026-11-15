@@ -1194,3 +1194,11 @@ off (the control with both off: every run the same as the baseline's).
   missile thrown by a kind of monster she's tracking. E2M9, forty seeds: 6 exits against 1,
   141 kills against 75. Knowing where the monsters are for five seconds after losing sight
   of them, without that: nothing (0 against 1).
+
+## Leaving with things left: the default goes by what she's said
+
+`doom_exit` with things left asks "Leave anyway?" whatever her goal or settings, and no answer
+stayed. With her goal `out`, or her `explore` setting `quick`, she has said already that
+leaving is what she wants: there no answer leaves. Still asked (the maintainer's choice over
+not asking at all), so she can change her mind on seeing what's left. The stock-up question
+(going on to another level) is as it was. Directed play only: the score's runs don't ask.

@@ -550,6 +550,9 @@ impl Director {
             );
         }
         let left = self.exit_check(agent, obs)?;
+        // (her goal the way out, or exploring new ground only: leaving's what she's said she
+        // wants, so no answer leaves; otherwise no answer stays)
+        let out = self.goal == Some(super::goal::Goal::Out) || self.policy.explore == "quick";
         Some(
             self.ask(
                 obs,
@@ -564,7 +567,7 @@ impl Director {
                         then: Then::Nothing,
                     },
                 ],
-                1,
+                usize::from(!out),
                 true,
             )
             .unwrap_or_else(|| format!("{left} Leave anyway? Resend with sure: true.")),
