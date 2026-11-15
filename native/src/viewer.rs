@@ -1954,7 +1954,11 @@ impl Watch {
                 h.given_up,
             );
         }
-        if obs.tic - self.options_tic >= TICRATE as i64 {
+        // (her options, for the map that marks them: not listed for the stream's window, which
+        // has none, unless a console page is showing that map. A listing's tens of milliseconds
+        // on a big level well known)
+        let marked = self.stream.is_none() || self.console.as_ref().is_some_and(|c| c.wants("map"));
+        if marked && obs.tic - self.options_tic >= TICRATE as i64 {
             self.options = self.agent.objectives(&obs);
             self.options_tic = obs.tic;
         }

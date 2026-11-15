@@ -62,6 +62,11 @@ const PICKUP_RANGE: f64 = 256.0;
 const PICKUP_TRIES: usize = 4;
 /// the same lock's message told again only after this long (tics)
 const LOCK_AGAIN: i64 = 10 * 35;
+/// exits, switches and doors newly hers to go to, and what's newly in reach, are looked for this
+/// often (tics): the safe ones on the second, the risky at `NEWS_RISKY_AT` into it (both
+/// multiples of the five tics `events` looks at all)
+const NEWS_EVERY: i64 = 35;
+const NEWS_RISKY_AT: i64 = 15;
 /// an item listed that counts for the level's items tally (the rest are just pickups)
 const COUNTS: &str = " (tally)";
 /// ...to the best of this many places
@@ -911,14 +916,17 @@ impl Director {
         // swung her round to see is hers to rush to, not news for an explore order's end that a
         // fight puts off)
         let (mut exits, mut switches, mut doors) = (Vec::new(), Vec::new(), Vec::new());
-        // (on her own with the exits held back, they're looked for a second apart: each look
-        // is a listing with them in and one without)
-        let kinds: &[Kind] = if agent.x().exit_held_back && obs.tic % 35 != 0 {
-            &[Kind::Switch, Kind::Door]
-        } else {
-            &[Kind::Exit, Kind::Switch, Kind::Door]
+        // (looked for once a second, not each time here: a listing is the explorer's whole
+        // reckoning of what she can do, tens of milliseconds of it on a big level well known,
+        // and the game's picture waits on it. The safe ones and the risky half a second apart,
+        // so that no tic has two)
+        let listed = match obs.tic % NEWS_EVERY {
+            0 => Some(false),
+            NEWS_RISKY_AT => Some(true),
+            _ => None,
         };
-        for e in self.objectives_of(agent, obs, kinds) {
+        let open = listed.map_or_else(Vec::new, |risky| self.open_half(agent, obs, risky));
+        for e in entries_of(&open, &[Kind::Exit, Kind::Switch, Kind::Door]) {
             if !self.told_exits.insert(e.id.clone()) {
                 continue;
             }
@@ -1006,7 +1014,10 @@ impl Director {
                 format!("Spotted: {}.", seen.join("; ")),
             );
         }
-        self.newly_reachable(agent, obs);
+        // (by what the listing found she can get to: with it)
+        if listed == Some(false) {
+            self.newly_reachable(agent, obs);
+        }
         // (monsters seen for the first time, together: how many of each, the nearest; worth a
         // reaction when one's dangerous)
         let new: Vec<(i32, &'static str, Point)> = agent
@@ -2022,7 +2033,8 @@ impl Director {
     /// told her once, and asked to leave if she's on instinct (leaving the default: there's
     /// nothing left that counts).
     fn check_complete(&mut self, agent: &mut Agent, obs: &Observation) {
-        if self.told_complete || !self.tally.complete() {
+        // (once a second while there's no exit to tell her of: each look is two listings)
+        if self.told_complete || !self.tally.complete() || obs.tic % NEWS_EVERY != 0 {
             return;
         }
         let exits = self.objectives_of(agent, obs, &[Kind::Exit]);
@@ -2621,6 +2633,19 @@ impl Director {
             self.open_objectives(agent, obs)
         };
         entries_of(&open, kinds)
+    }
+
+    /// One of the two listings `open_unheld` is made of: the safe objectives or the risky.
+    fn open_half(&self, agent: &mut Agent, obs: &Observation, risky: bool) -> Vec<Objective> {
+        let held = agent.x().exit_held_back;
+        if held {
+            agent.x_mut().hold_exits(false);
+        }
+        let open = agent.ranked(obs, risky);
+        if held {
+            agent.x_mut().hold_exits(true);
+        }
+        open
     }
 
     /// The explorer's open objectives, the exits among them even while they're held back from

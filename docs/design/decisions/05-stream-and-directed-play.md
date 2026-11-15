@@ -1452,3 +1452,32 @@ things that look the same all round.
   differed between the runs): walls pressed a map at thoroughness 1, 2, 3: 8, 36, 140 to 7,
   30, 100. Every line that reveals a secret offered at the same thoroughness as before.
   Score -0.0019 (s.e. 0.0029), exits 420 for 423; 912 runs the same, 32 better, 32 worse.
+
+## The picture stuttered more the longer a level went: the director's listings
+
+Watched (2026-11-15): the frame rate fell off as a level went on, plain by 15 minutes into
+E1M6.
+
+- **Traced** by timing each part of a watched tic over 20 game minutes of E1M6 on UV, directed
+  through the mock. The engine was 0.05 ms a tic throughout and her own play 0.4 ms. The
+  director was 2 ms a tic at the first minute and 5 to 8 ms from the fifth on, with single tics
+  of 50 to 90 ms: all of it `Director::events` asking the explorer for every open objective
+  (`open_objectives`: a safe listing and a risky one) every five tics, to see whether an exit,
+  a switch or a door had newly become hers to go to. A listing is the explorer's whole
+  reckoning of what she can do (most of it the sift of what would cut her off, `cut_off.rs`),
+  and it costs more the more of the level she knows: 15 to 30 ms each on E1M6 well explored.
+  Fourteen a second, in pairs, was a quarter of all real time and three to five frames lost
+  seven times a second. No memory grew; the cost is the level known.
+- **The rule:** that news is looked for once a second, the safe listing on the second and the
+  risky one 15 tics into it, so no tic has two. What's newly in reach is told with the safe
+  one (it goes by that listing's reach). The level-complete check, which listed twice every tic
+  while everything was done with no exit to tell of, looks once a second too. And the watcher's
+  own once-a-second listing (the marks on the map) isn't made for the stream's window, which
+  draws no map, unless a console page is showing one.
+- **Measured** on the same 20 minutes: tics over 16 ms (a frame at 60 Hz) from about 430 a
+  minute to between 15 and 150; the director from 5 ms a tic to 1. She played the same run tic
+  for tic, told the same doors and switches up to 0.7 s later. Undirected play doesn't go
+  through any of this: parity, all 24 runs the same.
+- **Left:** a single listing is still a late frame on a big level, two or three times a second,
+  and her own choice of what to do next is one more when it comes. Making the listing itself
+  cheaper (or taking it off the tic) is the next step if it still shows.
