@@ -46,11 +46,7 @@ fn reading_doom() {
     );
     let m = load_map(&w, "E1M1", &[]).expect("E1M1 loads");
     assert_eq!((m.linedefs.len(), m.sectors.len()), (486, 88));
-    let start = m
-        .things
-        .iter()
-        .find(|t| t.kind == 1)
-        .expect("a player start");
+    let start = m.player_start().expect("a player start");
     assert_eq!((start.x, start.y), (1056.0, -3616.0));
     let exits: Vec<usize> = m
         .linedefs
@@ -116,12 +112,7 @@ fn e1m1_needs_no_keys_and_starts_with_doors_closed() {
     let m = Arc::new(load_map(&w, "E1M1", &[]).expect("E1M1 loads"));
     let nav = Rc::new(Navigator::new(Arc::clone(&m), 3).expect("the analysis"));
     let view = nav.full_view();
-    let start = m
-        .things
-        .iter()
-        .find(|t| t.kind == 1)
-        .map(|t| (t.x, t.y))
-        .expect("a start");
+    let start = m.player_start().map(|t| (t.x, t.y)).expect("a start");
     let stages = view.progression(nav.poly_at(start).expect("on the map"));
     assert_eq!(stages.len(), 1);
     assert!(stages[0]
@@ -157,12 +148,7 @@ fn e1m3_exit_is_behind_the_blue_door() {
     let m = Arc::new(load_map(&w, "E1M3", &[]).expect("E1M3 loads"));
     let nav = Rc::new(Navigator::new(Arc::clone(&m), 3).expect("the analysis"));
     let view = nav.full_view();
-    let start = m
-        .things
-        .iter()
-        .find(|t| t.kind == 1)
-        .map(|t| (t.x, t.y))
-        .expect("a start");
+    let start = m.player_start().map(|t| (t.x, t.y)).expect("a start");
     let stages = view.progression(nav.poly_at(start).expect("on the map"));
     // both keycards can be had without keys; the exit opens up once they're held
     assert_eq!(

@@ -358,11 +358,7 @@ impl Navigator {
                     })
                     .map(|l| l.index)
                     .collect(),
-                start_angle: map
-                    .things
-                    .iter()
-                    .find(|t| t.kind == 1)
-                    .map_or(90.0, |t| f64::from(t.angle)),
+                start_angle: map.player_start().map_or(90.0, |t| f64::from(t.angle)),
                 permanent: triggers
                     .iter()
                     .filter(|t| t.line >= 0 && t.permanent())

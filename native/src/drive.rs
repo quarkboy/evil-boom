@@ -339,7 +339,7 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 x.objectives(&obs, false, &mut crate::knowledge::explorer::NoHooks); // (her reach now)
                 let known = x.knowledge.known_polys();
                 let fresh = x.fresh_view();
-                let start = s.m.things.iter().find(|t| t.kind == 1).map(|t| (t.x, t.y));
+                let start = s.m.player_start().map(|t| (t.x, t.y));
                 let states = fresh.initial_states();
                 for t in obs
                     .things

@@ -134,14 +134,7 @@ impl Hooks for Completionist {
         if self.no_way_back.as_ref() == Some(&asked) {
             return false;
         }
-        let Some(start) = x
-            .nav
-            .map
-            .things
-            .iter()
-            .find(|t| t.kind == 1)
-            .map(|t| (t.x, t.y))
-        else {
+        let Some(start) = x.nav.map.player_start().map(|t| (t.x, t.y)) else {
             return false;
         };
         let view = x.fresh_view();

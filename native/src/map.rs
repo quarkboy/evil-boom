@@ -197,6 +197,13 @@ pub struct MapData {
 }
 
 impl MapData {
+    /// Where the player starts: the last player 1 start among the things. The game sets her
+    /// down at each in turn, and the one she plays is the last; the ones before are left
+    /// standing where they were put (voodoo dolls).
+    pub fn player_start(&self) -> Option<&Thing> {
+        self.things.iter().rev().find(|t| t.kind == 1)
+    }
+
     fn side_sector(&self, side: u16) -> Option<usize> {
         (side != NO_SIDEDEF).then(|| self.sidedefs[usize::from(side)].sector)
     }

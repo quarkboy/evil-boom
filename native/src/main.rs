@@ -66,9 +66,7 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
     println!("shot_floors {sf:?}");
     let nav = Rc::new(nav);
     let start = m
-        .things
-        .iter()
-        .find(|t| t.kind == 1)
+        .player_start()
         .map(|t| (t.x, t.y))
         .ok_or("no player start")?;
     let view = nav.full_view();
@@ -247,9 +245,7 @@ fn follow(wad: &str, map: &str) -> Result<(), String> {
     let nav = Rc::new(nav);
     let view = std::rc::Rc::new(nav.full_view());
     let start = m
-        .things
-        .iter()
-        .find(|t| t.kind == 1)
+        .player_start()
         .map(|t| (t.x, t.y))
         .ok_or("no player start")?;
     let plan = evilboom::walkthrough::plan_level(&view, start, 60.0, 20000);

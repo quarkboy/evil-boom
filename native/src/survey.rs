@@ -124,12 +124,7 @@ pub struct Secrets {
 
 pub fn secrets(m: &MapData, nav: &Navigator) -> Secrets {
     let at = |x: f64, y: f64| nav.mesh.poly_at((x, y)).map(|p| nav.sector_of_poly(p));
-    let start = m
-        .things
-        .iter()
-        .find(|t| t.kind == 1)
-        .and_then(|t| at(t.x, t.y))
-        .unwrap_or(0);
+    let start = m.player_start().and_then(|t| at(t.x, t.y)).unwrap_or(0);
     let secret: Vec<usize> = m
         .sectors
         .iter()
