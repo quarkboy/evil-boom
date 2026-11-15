@@ -1516,3 +1516,19 @@ measured on Doom and Doom II.
 - **Measured:** TNT MAP18 on the easiest skill, 4 seeds: 4 exits (0 of 8 before, all stalled).
   The score: all 1,088 runs the same to the tic (0.482, 420 exits): none of the five is on a
   way she takes there.
+
+### The planner asked again, every level (2026-11-15, after MAP18's two fixes)
+
+`dump-nav` on all 64, set beside the sweep of 2026-11-14 (exits of 32 runs, four skills):
+
+- **No way even in principle** (the first check, `progression`): TNT MAP08, MAP09, MAP10, MAP20
+  (0 exits, 7 or 8 of 8 stalled on the easiest skill), MAP27 (2 exits), MAP30; Plutonia MAP07,
+  MAP15, MAP17, MAP20, MAP29, MAP30, MAP31 (0 exits), MAP13 (6 exits). The two MAP30s end on
+  the Icon of Sin, which is no exit line. MAP13 and TNT MAP27 she has got out of: the check
+  says no where there is a way, so it's a pointer to a mechanic, not proof of one.
+- **In reach in principle, the search finds no plan:** TNT MAP02, MAP05, MAP06, MAP16, MAP18,
+  MAP21, MAP31, MAP32 (0 exits; most stall), MAP28 (10 exits, 8 of 8 on the easiest);
+  Plutonia MAP09, MAP10, MAP12, MAP21, MAP22, MAP27 (0 exits); Plutonia MAP03 ran out its
+  60 s. MAP18 and MAP28 she gets out of: the search's no is weaker still.
+- **A plan found, and she stalls all the same** (easiest skill, 8 of 8): TNT MAP07, MAP19,
+  MAP26, MAP29; half the runs on TNT MAP22.
