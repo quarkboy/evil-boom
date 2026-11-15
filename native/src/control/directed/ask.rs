@@ -69,6 +69,9 @@ pub enum About {
     Fight,
     /// the run-jump lined up for (its key): over once she's jumped
     Jump(String),
+    /// what next, while she's on with something (`ask_next`): no weight of its own. Not one of
+    /// the minute's, it gives way to any other question, and its time up is silent
+    Next,
 }
 
 #[derive(Clone, Debug)]
@@ -200,6 +203,36 @@ impl Director {
         )
     }
 
+    /// Ask her what next while she's on with something (`text`: what that is): carrying on the
+    /// default, stopping to wait for her the other where it's instinct she's on; any action of
+    /// hers instead settles it too. Its line given back, not told (whoever speaks for her
+    /// puts it to her); None with a question open.
+    pub fn ask_next(&mut self, obs: &Observation, text: String) -> Option<String> {
+        let mut choices = vec![Choice {
+            label: "carry on".into(),
+            then: Then::Nothing,
+        }];
+        if matches!(self.doing, Some(Doing::Auto)) {
+            choices.push(Choice {
+                label: "stop here".into(),
+                then: Then::Stay,
+            });
+        }
+        let deadline = Some(obs.tic + self.answer_wait.unwrap_or(ANSWER_WAIT));
+        self.open(
+            obs,
+            Draft {
+                text,
+                choices,
+                default: 0,
+                told: true,
+                deadline,
+                about: About::Next,
+                now: false,
+            },
+        )
+    }
+
     /// Ask her about something that can't wait: its default done at once and said, her answer
     /// in `NOW_OPEN` switching it. False if not asked (one open, the minute's spent).
     pub(super) fn ask_now(
@@ -233,12 +266,24 @@ impl Director {
     /// A question opened (`d`), its line given back and told her unless it's told already;
     /// None if one's open or the minute's spent.
     fn open(&mut self, obs: &Observation, d: Draft) -> Option<String> {
+        let next = d.about == About::Next;
+        if !next
+            && self
+                .asking
+                .open
+                .as_ref()
+                .is_some_and(|q| q.about == About::Next)
+        {
+            self.close("another question".into());
+        }
         let a = &mut self.asking;
         a.asked.retain(|&t| obs.tic - t < MINUTE);
-        if a.open.is_some() || a.asked.len() >= QUESTIONS_A_MINUTE {
+        if a.open.is_some() || (!next && a.asked.len() >= QUESTIONS_A_MINUTE) {
             return None;
         }
-        a.asked.push(obs.tic);
+        if !next {
+            a.asked.push(obs.tic);
+        }
         a.next_id += 1;
         let q = Question {
             id: a.next_id,
@@ -318,6 +363,14 @@ impl Director {
             } else if q.deadline.is_some_and(|d| obs.tic >= d) {
                 self.close(format!("no answer: {}", q.choices[q.default].label));
             }
+        }
+        if self
+            .asking
+            .open
+            .as_ref()
+            .is_some_and(|q| q.about == About::Next && q.deadline.is_some_and(|d| obs.tic >= d))
+        {
+            self.close("no answer: carry on".into());
         }
         if let Some(q) = self
             .asking
