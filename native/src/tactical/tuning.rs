@@ -789,6 +789,9 @@ pub struct Retreat {
     /// ...and where it goes is at least this much further from the nearest of them than she is
     /// now: else it's no flight, and she stays
     pub ammo_gain: f64,
+    /// out of ammo, none known, away from them: for this long with no round gained and nothing
+    /// new seen, then no more of it till there is (on with her way, past them)
+    pub away_give_up: i64,
     /// a heavy taking longer than this (s) to kill with what she has: let others take its shots...
     pub bait_heavy: f64,
     /// ...from a place she's been this near...
@@ -851,6 +854,7 @@ impl Default for Retreat {
             ammo_away: 1536.0,
             ammo_margin: 16.0,
             ammo_gain: 128.0,
+            away_give_up: 60 * 35,
             bait_heavy: 8.0,
             bait_range: 768.0,
             bait_again: 8 * 35,

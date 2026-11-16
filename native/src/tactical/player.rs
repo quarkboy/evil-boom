@@ -240,6 +240,9 @@ pub struct Player {
     barrel_runs: Vec<Point>,
     /// when the last retreat started or found no cover
     retreat_tic: i64,
+    /// away from them out of ammo with none known: since when, and what she had and knew
+    /// then (rounds, lines and sectors seen); None: not fled so yet, or better off since
+    away_since: Option<(i64, (i32, usize))>,
     /// the last retreat tried was for cover
     tried_cover: bool,
     /// when a way off for ammo was last called off with one of them on it
@@ -313,6 +316,7 @@ impl Player {
             barrel_run_again: 0,
             barrel_runs: Vec::new(),
             retreat_tic: -1_000_000_000,
+            away_since: None,
             tried_cover: false,
             walled_tic: -1_000_000_000,
             shooters_tic: -1_000_000_000,
@@ -1825,6 +1829,34 @@ impl Player {
             ));
             return None;
         }
+        // Away isn't for ever. Away finds no ammo and kills nothing; what's left to do is past
+        // them, and each time she set off for it she was run back from it, the same errand
+        // chosen again once she was away: every 17 seconds till the clock ran out (Doom II
+        // MAP14, seven runs of sixteen, two chaingunners between her and the rest of the
+        // level). Fled so for `away_give_up` with no round gained and nothing new seen, she's
+        // done with fleeing till she has or knows more: on with her way, past them.
+        // (New ground seen sets the clock back, though it's seen by going on, never by going
+        // away, and she does go on a little and get run back again: with only a round gained
+        // setting it back the flights are a tenth as many and the score no better, two
+        // more runs stalled. See the decision log.)
+        let k = &self.explorer.knowledge;
+        let has = (
+            obs.ammo
+                .as_ref()
+                .map_or(0, |a| a.iter().map(|&(_, n)| n).sum::<i32>()),
+            k.mapped.len() + k.sectors.len(),
+        );
+        match self.away_since {
+            Some((_, had)) if has.0 > had.0 || has.1 > had.1 => self.away_since = None,
+            Some((since, _)) if obs.tic - since > self.fight.tune.retreat.away_give_up => {
+                self.log(format!(
+                    "tic {}: out of ammo, none known: away has got her nothing: on with her way",
+                    obs.tic
+                ));
+                return None;
+            }
+            _ => {}
+        }
         let mut spots: Vec<(f64, usize)> = self
             .visited_spots(obs, 128.0, self.fight.tune.retreat.ammo_away, COVER_SPOTS)
             .into_iter()
@@ -1849,6 +1881,7 @@ impl Player {
         // All of them, furthest first: the furthest may be beyond a lift, with no plain way there.
         for (_, pi) in spots {
             if let Some(f) = self.go_to_clear(obs, pi, &them, "for ammo", clear, true) {
+                self.away_since.get_or_insert((obs.tic, has));
                 self.log(format!(
                     "tic {}: out of ammo, none known: away from them",
                     obs.tic

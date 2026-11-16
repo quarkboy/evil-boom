@@ -2097,3 +2097,24 @@ follower stuck all the while and never failing.
     58 runs moved, 17 better, 19 worse. Kept as the right model of a switch, not for the
     score. MAP14, which it was hoped to mend, is 2 exits and 8 stalls of 16 for 3 and 7: its
     stalls are something else, to be traced.
+- **Doom II MAP14's stalls traced: out of ammo and run back for ever** (2026-11-16). Eight of
+  its sixteen runs stalled. One is the level's own trap: a run-jump to the ledge by the
+  courtyard and a drop behind the red bars without the red skull, nothing to do there (with
+  lives she starts again, keeps out till she has the key, and exits: the trap's mark). The
+  other seven are one loop. Out of rounds by 260 to 520 s, what's left to see is east past two
+  chaingunners; she sets out, the fight has her "out of ammo, none known: away from them",
+  back west, and the same errand is chosen again: every 17 s, 29 to 176 flights a run.
+  - **The rule** (`for_ammo`, `retreat.away_give_up`, 60 s): fled so that long with no round
+    gained and nothing new seen, no more of it till there is: on with her way, past them.
+  - **Measured:** 0.495 for 0.492 (+0.0031, s.e. 0.0015); exits 443 for 439, stalls 30 for 38,
+    deaths 615 for 611; 13 runs better, 5 worse. MAP14: six stalls gone, three to exits.
+  - **Tried and not kept:** only a round gained setting the clock back, and given up for
+    good till then (the maintainer's worry, and a fair one: new ground is seen by going on,
+    and with it setting the clock back she goes on a little and is run back again, 159
+    flights for 129 on one run). The flights are a tenth as many and she's through the
+    same ground in half the time, but 0.495 (+0.0029, s.e. 0.0028), exits 441, stalls 32: two
+    runs of E3M7 died-to-stalled, and one of MAP14's left stuck for the hour at other
+    things (a shotgun with no way to it, walls). Not traced.
+  - **Not built:** the flight weighed against what's fled from (the fight's own threat
+    number for them where they stand, so a far chaingunner is gone past sooner than a near
+    one). If the deaths after giving up turn out to be at the moment she does.
