@@ -27,6 +27,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 
+/// the level again for being stranded, at most this many times a run (unless told)
+const STRANDED: u32 = 3;
+
 /// One run: the level, skill and seed, and how it went.
 #[derive(Clone, Debug)]
 pub struct Row {
@@ -46,6 +49,8 @@ pub struct Row {
     /// the health the monsters lost (to whatever) of all they had, and what she and her armor
     /// took, in the run's first `FIGHT_MINUTES` (None: a set from before these were kept)
     pub fight: Option<((u32, u32), u32)>,
+    /// times she began the level again for being stranded (`--stranded`: not deaths)
+    pub stranded: u32,
 }
 
 impl Row {
@@ -96,11 +101,11 @@ impl Row {
         }
     }
 
-    const HEADER: &'static str = "wad\tmap\tskill\tseed\toutcome\tseconds\tkills\tkills_total\titems\titems_total\tlines\tlines_total\tsectors\tsectors_total\tdeaths\tdealt\tmonster_health\ttaken";
+    const HEADER: &'static str = "wad\tmap\tskill\tseed\toutcome\tseconds\tkills\tkills_total\titems\titems_total\tlines\tlines_total\tsectors\tsectors_total\tdeaths\tdealt\tmonster_health\ttaken\tstranded";
 
     fn tsv(&self) -> String {
         format!(
-            "{}\t{}\t{}\t{}\t{}\t{:.0}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{:.0}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.wad,
             self.map,
             self.skill,
@@ -116,8 +121,11 @@ impl Row {
             self.sectors.0,
             self.sectors.1,
             self.deaths,
-            self.fight
-                .map_or_else(String::new, |((d, h), t)| format!("{d}\t{h}\t{t}"))
+            self.fight.map_or_else(
+                || "\t\t".to_string(),
+                |((d, h), t)| format!("{d}\t{h}\t{t}")
+            ),
+            self.stranded
         )
     }
 
@@ -137,6 +145,7 @@ impl Row {
             sectors: (n(12)?, n(13)?),
             deaths: n(14).unwrap_or(0),
             fight: (|| Some(((n(15)?, n(16)?), n(17)?)))(),
+            stranded: n(18).unwrap_or(0),
         })
     }
 
@@ -186,6 +195,12 @@ impl Row {
                 .unwrap_or((0, 0)),
             lines: before("lines"),
             sectors: before("sectors"),
+            stranded: words
+                .iter()
+                .position(|w| *w == "stranded")
+                .and_then(|i| i.checked_sub(1))
+                .and_then(|i| words[i].parse().ok())
+                .unwrap_or(0),
             deaths: words
                 .iter()
                 .position(|w| *w == "deaths")
@@ -238,6 +253,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let mut window = true;
     let (mut like, mut passed) = (None::<String>, Vec::<String>::new());
     let mut lives = 1u32;
+    // Stranded (nothing left to do, no way on), the level again, so many times a run: on
+    // stream that's a minute, and what she learned of the trap is what the next go is for.
+    // Dead is still out. (`--stranded 0`: as the score was before 2026-11-16.)
+    let mut stranded = STRANDED;
     let mut groups: Vec<(String, Vec<String>)> = Vec::new();
     let mut i = 0;
     while i < args.len() {
@@ -277,6 +296,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     (3600 * n.clamp(1, 4)).to_string(),
                 ]);
                 lives = n;
+                i += 2;
+            }
+            "--stranded" => {
+                stranded = v.and_then(|v| v.parse().ok()).ok_or("--stranded N")?;
                 i += 2;
             }
             "--known" => {
@@ -400,6 +423,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 } else {
                     &[]
                 })
+                .args(["--stranded", &stranded.to_string()])
                 .args(&passed)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())

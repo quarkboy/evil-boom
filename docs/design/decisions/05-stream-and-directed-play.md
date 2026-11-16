@@ -2118,3 +2118,17 @@ follower stuck all the while and never failing.
   - **Not built:** the flight weighed against what's fled from (the fight's own threat
     number for them where they stand, so a far chaingunner is gone past sooner than a near
     one). If the deaths after giving up turn out to be at the moment she does.
+- **The score: stranded isn't out** (the maintainer's change, 2026-11-16). A run on its one
+  life that ended with her stranded (nothing left to do and no way on: a trap she couldn't
+  know of, which she marks and keeps out of the next go) was counted with the loops as
+  stalled, the worst there is; on stream it's the level again within the minute. Now such
+  a run begins the level again, up to three times (`--stranded N`, run-map's and the
+  score's; 0 as before), knowing what she learned; dying still ends it, and 300 s with
+  nothing new is still a stall.
+  - **The same play scored both ways** (commit c5baf30, the same 1,088 runs): 0.495 either
+    way (-0.0005, s.e. 0.0014); exits 446 for 443, deaths 628 for 615, stalls 13 for 30, and
+    one run out of its hour (E2M4, stranded three times). Of the 30 stalls 17 were her
+    stranded: 3 of those now exit, 13 die on a later go, 1 runs out the hour. The 13 left
+    are loops.
+  - Sets from before this aren't comparable on stalls or deaths; the baseline was made
+    again.

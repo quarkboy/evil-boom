@@ -248,6 +248,8 @@ killed; and the fight score beside it. See docs/TESTING.md.
   --jobs N        how many at a time (12)
   --out FILE      where the rows go
   --like FILE     the same runs as an earlier score's (its levels, skills and seeds)
+  --stranded N    stranded (nothing left to do, no way on), the level again up to N times a
+                  run, knowing what she learned; dying still ends the run (3; 0: none)
   --tuning FILE   given to every run; --bar NAMES too
   --no-window     no progress window
 ";
@@ -330,6 +332,8 @@ Run options: they go with watch, run-map, sweep, episode, record, drive and scor
   --mortal             she can die (without it, nothing hurts her)
   --lives N|unlimited  how many tries at a level (unlimited unless told)
   --seed N|random      the game's random numbers (0 unless told; random for real play)
+  --stranded N         the level again up to N times when she's stranded (nothing left to do
+                       and no way on), not counted as lives: the score's (0 unless told)
   --max-seconds S      give up after S game seconds, all lives together (3600)
   --pwad FILE          a PWAD over the IWAD, repeatable (any command): maps from the last that
                        has them

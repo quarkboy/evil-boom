@@ -28,6 +28,11 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
                 };
                 o.lives_given = true;
             }
+            "--stranded" => {
+                o.stranded = value("--stranded")?
+                    .parse()
+                    .map_err(|_| "--stranded: a number")?;
+            }
             "--snapshot" => {
                 o.snapshot = Some(
                     value("--snapshot")?
@@ -166,6 +171,9 @@ pub(crate) fn option_args(o: &RunOptions) -> Vec<String> {
         "--seed".into(),
         o.seed.map_or("random".into(), |s| s.to_string()),
     ];
+    if o.stranded > 0 {
+        out.extend(["--stranded".to_string(), o.stranded.to_string()]);
+    }
     if o.fight > 0 {
         out.push("--fight".into());
         out.push(o.fight.to_string());

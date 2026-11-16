@@ -49,6 +49,10 @@ pub struct RunOptions {
     pub lives: i32,
     /// `--lives` given (`unlimited` too): a watched episode's one life by default doesn't apply
     pub lives_given: bool,
+    /// the level again this many times for being stranded (nothing left to do and no way on),
+    /// over and above the lives: dying still takes a life. The score's: stranded, on stream
+    /// she starts the level again within the minute, knowing the trap; dead to it is dead.
+    pub stranded: i32,
     /// every switch and door known on sight from the map data
     pub peek: bool,
     /// every secret there is found (going by the tally's count), then the exit
@@ -108,6 +112,7 @@ impl Default for RunOptions {
             charmed: false,
             lives: i32::MAX,
             lives_given: false,
+            stranded: 0,
             peek: false,
             secrets: false,
             expert: false,
@@ -571,6 +576,8 @@ pub fn run_map_in(
         mut rec,
         secrets_short,
     } = setup(wad, map_name, o, o.snapshot.is_some(), engine)?;
+    // times begun again for being stranded, of `o.stranded`
+    let mut strandings = 0;
     // (the level looked round first: the run's own time is from after that)
     let mut tic0 = 0;
     if o.known {
@@ -706,12 +713,21 @@ pub fn run_map_in(
             stranded = false;
         }
         let finished = e.finished();
-        if finished || (stranded && deaths + 1 < o.lives) {
+        // (stranded, not wanting the level again for what's left: one of the goes kept for
+        // that, if there's one, before a life)
+        let spare = stranded && !agent.x().restart_wanted && strandings < o.stranded;
+        if finished || (stranded && (spare || deaths + 1 < o.lives)) {
             // dead, or stranded with nothing to do (a trap she couldn't know of, a floor that drops
             // into a pit): the level again, knowing what she learned
             let dead = e.dead();
-            if (dead || stranded) && deaths + 1 < o.lives {
-                deaths += 1;
+            if (dead && deaths + 1 < o.lives)
+                || (!dead && stranded && (spare || deaths + 1 < o.lives))
+            {
+                if !dead && spare {
+                    strandings += 1;
+                } else {
+                    deaths += 1;
+                }
                 let why = if dead {
                     "died"
                 } else if agent.x().restart_wanted {
@@ -1128,7 +1144,12 @@ pub fn run_map_in(
     ));
     let (dealt, monsters_had, taken) = fight_at_cap.unwrap_or((dealt, monsters_had, taken));
     let mut detail = format!(
-        "{game_s:.0}s game, {real:.0}s real, {deaths} deaths, {dealt}/{monsters_had} dealt, {taken} taken; {}",
+        "{game_s:.0}s game, {real:.0}s real, {deaths} deaths, {}{dealt}/{monsters_had} dealt, {taken} taken; {}",
+        if o.stranded > 0 {
+            format!("{strandings} stranded, ")
+        } else {
+            String::new()
+        },
         k.summary()
     );
     detail = format!(

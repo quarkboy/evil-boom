@@ -59,7 +59,10 @@ evil-boom score --jobs 12 --out out/score/NAME.tsv
 plays every level of DOOM (E1-E4) and DOOM II, from a pistol start, on one life, on Hurt Me
 Plenty and Ultra-Violence, with 8 random seeds each: 1,088 runs, about 17 minutes at 12 jobs.
 A run scores 1 for reaching the exit, otherwise half its share of the kills; the score is the
-mean. `score-report FILE` gives the full report: by skill, the levels beaten every time, each
+mean. One life is one death: stranded (nothing left to do and no way on, a trap she couldn't
+know of), she begins the level again knowing what she learned, up to three times a run
+(`--stranded N`; the hour is for all of it), as she would on stream within the minute. A loop
+is still a stall: 300 s with nothing new ends the run. `score-report FILE` gives the full report: by skill, the levels beaten every time, each
 level's spread.
 
 Two sets on different seeds differ by about ±0.01 from luck alone, so changes are compared on
