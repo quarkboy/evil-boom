@@ -1879,3 +1879,17 @@ waits at the bottom.
   she knows the sector, as before; nothing new of the map is given her.
 - **Measured:** score +0.0000 (s.e. 0.0015), exits 435 as before, stalls 32 for 34; 1,053 of
   1,088 runs the same, 4 better, 8 worse.
+- **Back and forth between the two** (the same day). Knowing both, she still didn't get in:
+  come to the door and found it shut, the way back on track was made by the heights as they
+  were, the lift she'd just lowered down in them. Off to open the door, back, and the lift
+  had gone up; off to lower the lift, back, and the door had shut; and round again.
+  - **The rule:** in the follower's way back on track (`replan`), where the new way comes to
+    something of hers that's timed after its time is up, it's planned again with that at
+    rest: the line that works it is then a step too, in its place.
+  - **Tried in the explorer's own planning, and dropped:** any route that comes late to a
+    timed door open just now, planned with the door at rest. It fires all the time on a level
+    of doors: with every narrowing tried (lifts left out, her own doors left out, taken only
+    with a line more to set off) -0.003 to -0.005, Doom II MAP19 three exits to stalls.
+  - **Measured:** TNT MAP32 on the easiest skill with no dying: out in 2,055 s, 71 of 71
+    killed, never stranded (it ran out the hour). The score's 1,088 runs all the same to the
+    tic.

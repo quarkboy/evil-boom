@@ -1199,18 +1199,82 @@ impl RouteFollower {
                 ),
             );
         } else {
-            let route = view.plan(
-                pos,
-                &[goal],
-                &crate::navigator::Plan {
-                    keys: self.keys,
-                    states: Some(&states),
-                    max_expansions: 200,
-                    max_seconds: 600.0,
-                    fired: &self.fired,
-                    ..Default::default()
-                },
-            );
+            let plan = |states: &States| {
+                view.plan(
+                    pos,
+                    &[goal],
+                    &crate::navigator::Plan {
+                        keys: self.keys,
+                        states: Some(states),
+                        max_expansions: 200,
+                        max_seconds: 600.0,
+                        fired: &self.fired,
+                        ..Default::default()
+                    },
+                )
+            };
+            let mut route = plan(&states);
+            // The way back on track goes by the heights as they are, and a lift she lowered a
+            // moment ago is down as they are: but it won't be when a way round by another
+            // switch gets back to it. Where the new way comes to something of hers that's timed
+            // after its time is up, it's planned again with that at rest, and the line that
+            // works it is a step of the way too, after the other. (TNT MAP32's exit, a door
+            // and a lift behind it each worked from a teleporter away: back for the door, the
+            // lift had gone up; back for the lift, the door had shut; and round again.)
+            if let Some(r) = route.as_ref() {
+                const PACE: f64 = 10.0;
+                let nav = &view.nav;
+                let mut rested = states.clone();
+                let mut late = false;
+                for w in &self.watches {
+                    let (Some(hold), s) = (w.expect.hold, w.expect.sector) else {
+                        continue;
+                    };
+                    let left = w.since as f64 + w.expect.travel + hold - obs.tic as f64;
+                    if w.over || left <= 0.0 {
+                        continue;
+                    }
+                    let mut far = 0.0;
+                    let mut last: Option<crate::geom::Point> = None;
+                    let mut reached = false;
+                    'legs: for leg in &r.legs {
+                        for wp in &leg.path.waypoints {
+                            let Some(q) = *wp else {
+                                last = None;
+                                continue;
+                            };
+                            let from = last.unwrap_or(q);
+                            let n = (dist(from, q) / 16.0).ceil().max(1.0) as usize;
+                            for i in 1..=n {
+                                let f = i as f64 / n as f64;
+                                let at = (from.0 + (q.0 - from.0) * f, from.1 + (q.1 - from.1) * f);
+                                if nav.poly_at(at).map(|p| nav.sector_of_poly(p)) == Some(s) {
+                                    far += dist(from, at);
+                                    reached = true;
+                                    break 'legs;
+                                }
+                            }
+                            far += dist(from, q);
+                            last = Some(q);
+                        }
+                        if leg
+                            .trigger
+                            .is_some_and(|id| view.trigger(id).effect(s).is_some())
+                        {
+                            break;
+                        }
+                    }
+                    if reached && far / PACE > left {
+                        rested[s] = vec![nav.movers.initial[s]];
+                        late = true;
+                    }
+                }
+                if late {
+                    if let Some(again) = plan(&rested) {
+                        route = Some(again);
+                    }
+                }
+            }
             if let Some(route) = route {
                 let new = steps_from_legs(&view, &route.legs, Some(step), Some(&states));
                 let n = new.len();
