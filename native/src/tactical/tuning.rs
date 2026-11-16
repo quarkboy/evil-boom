@@ -355,7 +355,7 @@ pub struct Barrels {
     pub keep_clear: f64,
     /// a barrel this near a monster (its chain all clear of her) is shot instead
     pub by_monster: f64,
-    /// getting clear of barrels: at most this long at a time...
+    /// getting clear of barrels: at most this long a bout (the coming back between counted)...
     pub clear_tics: i64,
     /// ...then not again for this long (else she presses against a wall for ever)
     pub clear_rest: i64,

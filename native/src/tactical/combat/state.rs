@@ -104,7 +104,10 @@ pub struct Cover {
 /// Keeping off the barrels by her while there's shooting.
 pub struct OffBarrels {
     pub(super) way: Option<Point>,
+    /// when this bout of it began: the stepping away and the coming back between
     pub(super) since: i64,
+    /// when she was last stepping away
+    pub(super) last: i64,
     pub(super) rest_until: i64,
 }
 

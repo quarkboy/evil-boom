@@ -745,7 +745,11 @@ impl Combat {
         if obs.tic < self.off_barrels.rest_until {
             return None;
         }
-        if self.off_barrels.way.is_none() {
+        // The time allowed is a bout's: the stepping away and the coming back between. (Counted
+        // afresh each time she got clear, a route that goes by the barrel had her to and fro for
+        // good: clear in half a second, brought back by the route, away again, the rest never
+        // come to. E1M7's ring corridor, three imps in sight far off, an hour.)
+        if obs.tic - self.off_barrels.last > self.tune.barrels.clear_rest {
             self.off_barrels.since = obs.tic;
         } else if obs.tic - self.off_barrels.since > self.tune.barrels.clear_tics {
             self.off_barrels.way = None;
@@ -765,11 +769,15 @@ impl Combat {
         }
         if let Some(way) = self.off_barrels.way {
             if self.safe(obs, way, 48.0) && self.clear_of_barrels(obs, way) {
+                self.off_barrels.last = obs.tic;
                 return Some(way);
             }
         }
         let way = self.away_from(obs, nearest);
         self.off_barrels.way = way.filter(|&w| self.clear_of_barrels(obs, w));
+        if self.off_barrels.way.is_some() {
+            self.off_barrels.last = obs.tic;
+        }
         self.off_barrels.way
     }
 

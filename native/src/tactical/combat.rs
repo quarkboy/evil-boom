@@ -440,6 +440,7 @@ impl Combat {
             off_barrels: OffBarrels {
                 way: None,
                 since: 0,
+                last: -1_000_000_000,
                 rest_until: -1_000_000_000,
             },
             steer: Stepping {

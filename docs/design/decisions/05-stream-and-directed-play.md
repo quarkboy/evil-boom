@@ -1717,3 +1717,25 @@ few hits. That there's no way off the floor wasn't counted.
   164, 187 and 1,329 s with 10, 11, 11 and 42 of 52 killed (no exits: the monsters now). Score
   +0.0031 (s.e. 0.0024), exits 433 for 428; 1,008 of 1,088 runs the same to the tic, 25 better,
   23 worse.
+
+### E1M7: to and fro at a barrel for an hour (2026-11-16)
+
+In the ring corridor a barrel stands in the walkway, the route past it, and three imps are in
+sight 600 to 900 off that she has no shot at and that never hit her. With a target she steps
+away from a barrel within 160 till she's 224 from it; the route walks her back; 28 tics a
+turn, till the hour's up. In the baseline too: one Hurt Me Plenty run stalled at it, 2,003
+steps away in 2,148 s.
+
+The guard against it (two seconds of stepping away at most, then three of rest) counted from
+when she last got clear, and she got clear in half a second each time. It was written for
+never getting clear at all (pressed against a wall).
+
+- **The rule:** the two seconds are a bout's, the coming back between counted: the clock
+  starts afresh only after a rest's length with no stepping away. The rest is the route's
+  time to take her past the barrel. No new number.
+- **Not done:** giving up on what she can't hit doesn't end it (the barrel step and "shooting
+  on the way" are decided before the nodes that count patience); and she holds the shotgun's
+  fire at those imps with 200 bullets for the chaingun.
+- **Measured:** the stalled run exits in 420 s (17 steps away), another on the level 586 to
+  511 s. Score +0.0016 (s.e. 0.0031), exits 435 for 433; 928 of 1,088 runs the same to the
+  tic, 24 better, 19 worse.
