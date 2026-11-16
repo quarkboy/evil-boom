@@ -405,7 +405,7 @@ impl RouteFollower {
             .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
             .collect();
         let states = states.unwrap_or_else(|| view.initial_states());
-        let sinking = view.nav.sinking_sectors().clone();
+        let sinking = view.sinking();
         let mut f = RouteFollower {
             view,
             steps,

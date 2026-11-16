@@ -284,6 +284,8 @@ pub struct Restriction {
     pub polys: BTreeSet<usize>,
     pub teleports: BTreeSet<usize>,
     pub spent: BTreeSet<usize>,
+    /// once-only walk-over lines she has set off this life: they do nothing again
+    pub spent_walks: BTreeSet<usize>,
 }
 
 /// The navigator as she knows the level.
@@ -617,6 +619,33 @@ impl View {
     /// The teleport lines that no longer teleport, as far as she knows.
     pub fn spent(&self) -> &BTreeSet<usize> {
         self.restriction.as_ref().map_or(EMPTY, |r| &r.spent)
+    }
+
+    /// The floors that still sink once stepped on, as far as she knows: not one whose lines
+    /// are once-only and set off already this life. (Raised again by a switch, such a floor
+    /// stays up: Plutonia MAP22's bridge to the yellow card.)
+    pub fn sinking(&self) -> BTreeSet<usize> {
+        let nav = &self.nav;
+        let Some(spent) = self.restriction.as_ref().map(|r| &r.spent_walks) else {
+            return nav.sinking_sectors().clone();
+        };
+        nav.sinking_sectors()
+            .iter()
+            .copied()
+            .filter(|&s| {
+                nav.triggers.iter().any(|t| {
+                    t.info.trigger.walked()
+                        && t.linedef().is_some_and(|li| {
+                            !spent.contains(&li) && {
+                                let (f, b) = nav.map.sides(li);
+                                f == Some(s) || b == Some(s)
+                            }
+                        })
+                        && t.effect(s)
+                            .is_some_and(|hs| hs.iter().any(|h| h.floor < nav.movers.real[s].floor))
+                })
+            })
+            .collect()
     }
 
     fn with_core<T>(&self, f: impl FnOnce(&mut NavCore, &mut PlanCaches) -> T) -> T {

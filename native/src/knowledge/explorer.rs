@@ -665,6 +665,7 @@ struct ViewKey {
     teleports: usize,
     spent_doors: BTreeSet<usize>,
     spent_teleports: BTreeSet<usize>,
+    spent_walks: BTreeSet<usize>,
     exits_offered: bool,
     blocked: BTreeSet<usize>,
     missed_jumps_in: bool,

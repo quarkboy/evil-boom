@@ -2036,6 +2036,20 @@ follower stuck all the while and never failing.
   jump onto the fall. The jumps that land where she's been wedged are barred for the level
   (`wedge_jumps`). Wedged there once in the hour for three times. The score's 1,088 runs
   all the same to the tic.
-- **MAP22 still:** no exit. From the second life the yellow card isn't gone for (held back
-  as "after what it cuts off", then dropped without a route, three times), and the later
-  lives end with nothing left to do by the yellow switch. Not traced yet.
+- **MAP22 traced** (2026-11-16, with the maintainer's video and wiki checks). The level's
+  order is blue card, yellow card, the yellow switch (line 238, in a hall behind blue
+  doors) that lifts the yellow bars, switch 1052 behind them, its teleporter to the red
+  card. Line 1052 can be pressed through the bars (posts with gaps, 24 clear of the floor: a
+  press isn't stopped by a line with any opening), a skip the wiki knows; taken without the
+  blue card it leaves her in the hall for good. Both cards lie in pits floored with nukage
+  that doesn't hurt, which she takes by its look till she's stood in it.
+- **A floor that sank once and was raised again stays up.** The yellow card is over a
+  bridge that a once-only line on its edge lowers (lines 1509, 1521) and a switch raises
+  again (1638). Raised, she ran off it into the pit every time: the follower took any floor
+  with such a line for sinking still (`Navigator::sinking_sectors`, from the map alone) and
+  ran for "the nearest floor that stays put".
+  - **The rule:** a floor sinks under her only while a walk-over line that lowers it is
+    still to go off this life (`View::sinking`, from the once-only walk-over lines she has
+    set off, `spent_walks`).
+  - **Measured:** the score's 1,088 runs all the same to the tic. MAP22 with `--charmed`:
+    the yellow card picked up (never before).

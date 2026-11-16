@@ -251,6 +251,18 @@ impl Explorer {
         (spent_doors, spent_teleports)
     }
 
+    /// The once-only walk-over lines set off this life.
+    pub(super) fn spent_walks(&self, fresh: bool) -> BTreeSet<usize> {
+        if fresh {
+            return BTreeSet::new();
+        }
+        let k = &self.knowledge;
+        self.spent_once()
+            .into_iter()
+            .filter(|&li| k.special(li).is_some_and(|i| i.trigger == Trigger::W1))
+            .collect()
+    }
+
     pub(super) fn blocked(&self) -> BTreeSet<usize> {
         self.knowledge
             .stuck_at
@@ -271,6 +283,7 @@ impl Explorer {
             teleports: k.teleports.len(),
             spent_doors,
             spent_teleports,
+            spent_walks: self.spent_walks(fresh),
             exits_offered: fresh || self.exits_offered,
             blocked: self.blocked(),
             missed_jumps_in: self.missed_jumps_in,
@@ -334,6 +347,7 @@ impl Explorer {
                 polys,
                 teleports,
                 spent: spent_teleports,
+                spent_walks: self.spent_walks(fresh),
             },
             triggers,
             keys_at,
