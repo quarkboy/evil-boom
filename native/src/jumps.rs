@@ -15,7 +15,7 @@ pub use finder::FinderInput;
 pub use physics::{Controls, PlayerSim, World};
 
 use crate::det::{HashMap, HashSet};
-use crate::geom::{Cell, Point, Seg};
+use crate::geom::{dist, Cell, Point, Seg, MAX_STEP};
 use crate::map::MapData;
 use crate::mesh::Mesh;
 use crate::motor::{MAX_MOVE, RUN_TURN};
@@ -106,6 +106,18 @@ pub const STRAFE_FACING: f64 = 38.659_808_254_090_09;
 /// Bumped whenever the finder's results could change (it keys Python's jump cache).
 pub const FINDER_VERSION: u32 = 30;
 
+/// `walks`: begun this far to the side of the stretch's start (units), a try each
+const WALK_SIDES: [f64; 5] = [0.0, 3.0, -3.0, 6.0, -6.0];
+/// ...got there within this of its end
+const WALK_NEAR: f64 = 10.0;
+/// ...given up after this many tics no nearer
+const WALK_STALL: u32 = 25;
+/// ...and in all, the tics it takes at this many units a tic, and these more
+const WALK_SLOWEST: f64 = 3.0;
+const WALK_SPARE_TICS: usize = 70;
+/// ...turning at most this much a tic (degrees)
+const WALK_TURN: f64 = 20.0;
+
 /// The map as the jump tools need it.
 pub struct JumpLab {
     pub map: Arc<MapData>,
@@ -162,6 +174,64 @@ impl JumpLab {
 
     fn world(&self) -> &World {
         self.world.get_or_init(|| World::new(self))
+    }
+
+    /// Walked from `a` to `b` with the sectors at `heights`, as the game moves a player (run,
+    /// facing `b`, sliding along what's in the way): the share of tries that get there, each
+    /// begun a little to one side or the other (0 if she can't stand at `a` at all). For a
+    /// stretch of a path the box's fit, judged by straight lines with room to spare, has for
+    /// a squeeze: tight and walked all the same, or not.
+    pub fn walks(&self, a: Point, b: Point, heights: &[(f64, f64)]) -> f64 {
+        let length = dist(a, b);
+        if length < 1.0 {
+            return 1.0;
+        }
+        let (ux, uy) = ((b.0 - a.0) / length, (b.1 - a.1) / length);
+        let facing = uy.atan2(ux).to_degrees();
+        let (mut tries, mut made) = (0u32, 0u32);
+        for side in WALK_SIDES {
+            let start = (a.0 - uy * side, a.1 + ux * side);
+            let mut sim = self.at_heights(heights);
+            if !sim.fits_at(start).0 {
+                continue;
+            }
+            tries += 1;
+            sim.place(start, facing);
+            let mut floor = sim.floorz_units();
+            let (mut best, mut since) = (dist(start, b), 0);
+            for _ in 0..(length / WALK_SLOWEST) as usize + WALK_SPARE_TICS {
+                let pos = sim.pos();
+                let left = dist(pos, b);
+                if left <= WALK_NEAR {
+                    made += 1;
+                    break;
+                }
+                if left < best - 0.5 {
+                    (best, since) = (left, 0);
+                } else {
+                    since += 1;
+                }
+                // (stopped, off the way, or the floor gone from under her by more than a step,
+                // off a ledge: not walked. Stairs, a step at a time, are)
+                let under = sim.floorz_units();
+                if since > WALK_STALL || sim.teleported || floor - under > MAX_STEP {
+                    break;
+                }
+                floor = under;
+                let want = (b.1 - pos.1).atan2(b.0 - pos.0).to_degrees();
+                let off = (want - sim.angle_degrees() + 540.0).rem_euclid(360.0) - 180.0;
+                sim.step(Controls {
+                    forward: 50.0,
+                    strafe: 0.0,
+                    turn: (-off).clamp(-WALK_TURN, WALK_TURN),
+                });
+            }
+        }
+        if tries == 0 {
+            0.0
+        } else {
+            f64::from(made) / f64::from(tries)
+        }
     }
 
     /// Running from `start` pushing towards each of `headings`, with the sectors at `heights`:

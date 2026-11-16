@@ -1653,3 +1653,28 @@ make, with the heights on both sides (`relaxed_stops`). That named each cause.
   1,052 the same to the tic, 16 better, 11 worse.
 - **Together** the plans found over the 132 maps go from 99 to 103 (TNT MAP05 and MAP32,
   Plutonia MAP03 and MAP10), none lost.
+
+### A squeeze, walked (2026-11-16)
+
+A leg is "squeezed" where the path's fit, sweeping the box along straight lines with a quarter
+unit to spare and room kept from corners, finds it over a wall and no way round, and the walls
+aren't shut sectors only (that's no way at all). Squeezed legs wait behind clean ones, a plan
+with one is a fallback, and the search goes on for a clean one. Whether she'd really get
+through was a guess.
+
+- **The stretch is walked** in the player simulator the jumps are checked with
+  (`JumpLab::walks`): run, facing the far end, sliding along what's in the way, five tries
+  begun up to 6 units to either side; given up when she stops getting nearer or the floor goes
+  from under her by more than a step (off a ledge; stairs are walked). Four of five there:
+  no squeeze. The sectors by the stretch at the roomiest heights the leg's world has them.
+- **Against the game:** seven stretches of Plutonia MAP03 and Doom II MAP29 walked in the
+  engine: six as the simulator had them; the seventh a stair the first rule failed for its
+  floor changing at all, mended, and now one try in five (a squeeze still: cautious).
+- **A clean route from the narrow search is the route.** The search from all the lines after
+  it was for "the route as ever", and found the same or one no better by anything measured,
+  in up to a minute. Now only where the narrow search has none, or a squeezed one.
+- **Keys of bars beside a doorway** asked for by the relaxed plan, as the posts' switches are.
+- **Measured.** Planning all 132 maps from 227 s to 156 s (Plutonia MAP03 12 s to 0.06 s, TNT
+  MAP05 12 s to 0.1 s); plans found 103 either way (Doom II MAP06 gained, Plutonia MAP09
+  lost till the change after this one). Score +0.0020 (s.e. 0.0035), exits 423 for 418; 872 of
+  1,088 runs the same to the tic, 52 better, 40 worse.

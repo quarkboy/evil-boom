@@ -34,6 +34,11 @@ const TRIP_MARGIN: f64 = 24.0;
 const BOX_SLACK: f64 = 0.25;
 /// How many waypoints ahead straightening looks for a direct line.
 const STRAIGHTEN_REACH: usize = 10;
+/// A stretch the box's fit calls a squeeze is none if she walks it this often, tried from a
+/// little to each side (`JumpLab::walks`).
+const WALK_SURE: f64 = 0.8;
+/// the sectors within this of such a stretch are taken at the heights the path has them
+const WALK_ROUND: f64 = 64.0;
 /// Most expansions of a detour search.
 const DETOUR_EXPANSIONS: usize = 150;
 
@@ -591,6 +596,9 @@ impl Fitter<'_> {
             if !hits.is_empty() {
                 if let Some(d) = self.detour(a, b, &ignore) {
                     out.extend(d);
+                } else if self.walked(a, b, &hits) {
+                    // (tight by the box's straight lines with room to spare, and walked as the
+                    // game moves her: no squeeze)
                 } else {
                     let points = self.squeeze_points(a, b, &ignore);
                     self.squeezes.points.extend(points.iter().copied());
@@ -613,6 +621,50 @@ impl Fitter<'_> {
             out.push(b);
         }
         out
+    }
+
+    /// The stretch a-b, which the box's fit has no way along or round: does she walk it all
+    /// the same, moved as the game moves a player (`JumpLab::walks`), often enough to count on?
+    /// Not past a line that sets something off, nor past shut sectors only (those are no
+    /// squeeze at all, `box_fits_path`). The heights: the map's, but for the sectors by the
+    /// stretch, each at the roomiest it can be (a door she can open on the way, open).
+    fn walked(&mut self, a: Point, b: Point, hits: &HashSet<SegKey>) -> bool {
+        let nav = self.nav;
+        let trips = hits.iter().any(|e| {
+            nav.seg_lines
+                .get(e)
+                .is_some_and(|li| nav.trip_lines.contains(li) && !self.exempt.contains(li))
+        });
+        if trips || self.shut_in(hits) {
+            return false;
+        }
+        let mut heights: Vec<(f64, f64)> = nav.initial.iter().map(|h| h.tuple()).collect();
+        let mut near: Vec<usize> = Vec::new();
+        for c in cells_around(a, b, WALK_ROUND) {
+            for &li in nav.mesh.line_grid.get(&c).into_iter().flatten() {
+                let (f, bk) = nav.map.sides(li);
+                for s in [f, bk].into_iter().flatten() {
+                    if !near.contains(&s) {
+                        near.push(s);
+                    }
+                }
+            }
+        }
+        for s in near {
+            let mut hs: Vec<Heights> = self.heights(s).to_vec();
+            if let Some(d) = self.doors.and_then(|d| d.get(&s)) {
+                hs.extend_from_slice(&d.heights);
+            }
+            let roomiest = hs.into_iter().max_by(|x, y| {
+                (x.ceiling - x.floor)
+                    .total_cmp(&(y.ceiling - y.floor))
+                    .then(y.floor.total_cmp(&x.floor))
+            });
+            if let Some(h) = roomiest {
+                heights[s] = h.tuple();
+            }
+        }
+        nav.callbacks.walks(a, b, &heights) >= WALK_SURE
     }
 
     /// Up to about 6 spots between a and b where the box overlaps something.

@@ -173,24 +173,56 @@ pub type FitsFn = Box<dyn Fn(usize, &[usize]) -> bool>;
 /// Is there room to drop off line `line` from sector `high`, whose floor is at `top`:
 /// `landable(line, high, top)`.
 pub type LandableFn = Box<dyn Fn(usize, usize, f64) -> bool>;
+/// Walked from a to b with the sectors at these (floor, ceiling) heights, as the game moves a
+/// player: the share of tries that get there (`JumpLab::walks`).
+pub type WalksFn = Box<dyn Fn(Point, Point, &[(f64, f64)]) -> f64>;
+/// A stretch walked: its ends (bits) and a hash of the heights.
+type WalkKey = (u64, u64, u64, u64, u64);
 
 /// The geometry questions the flood fill asks of the level's analysis (navigator), and their
 /// answers so far.
 pub struct Callbacks {
     fits: FitsFn,
     landable: LandableFn,
+    walks: WalksFn,
+    /// by the stretch's ends and a hash of the heights it was walked at
+    walks_cache: std::cell::RefCell<HashMap<WalkKey, f64>>,
     fits_cache: HashMap<(usize, Vec<usize>), bool>,
     landable_cache: HashMap<(usize, usize, i64), bool>,
 }
 
 impl Callbacks {
-    pub fn new(fits: FitsFn, landable: LandableFn) -> Self {
+    pub fn new(fits: FitsFn, landable: LandableFn, walks: WalksFn) -> Self {
         Callbacks {
             fits,
             landable,
+            walks,
+            walks_cache: std::cell::RefCell::new(HashMap::default()),
             fits_cache: HashMap::default(),
             landable_cache: HashMap::default(),
         }
+    }
+
+    /// `WalksFn`.
+    pub(crate) fn walks(&self, a: Point, b: Point, heights: &[(f64, f64)]) -> f64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for (f, c) in heights {
+            (f.to_bits(), c.to_bits()).hash(&mut h);
+        }
+        let key = (
+            a.0.to_bits(),
+            a.1.to_bits(),
+            b.0.to_bits(),
+            b.1.to_bits(),
+            h.finish(),
+        );
+        if let Some(&v) = self.walks_cache.borrow().get(&key) {
+            return v;
+        }
+        let v = (self.walks)(a, b, heights);
+        self.walks_cache.borrow_mut().insert(key, v);
+        v
     }
 
     fn landable(&mut self, line: usize, high: usize, top: f64) -> bool {

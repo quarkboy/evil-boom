@@ -272,6 +272,11 @@ impl View {
                 );
             }
         }
+        // (a way with the few lines and the box fitting all along it: that's the route. The
+        // search from them all after it found the same way or one no better by anything it
+        // measures, in as many seconds as the level has switches)
+        let clean =
+            narrow.is_some() && crate::stats::last_ended() == Some(crate::stats::Ended::Found);
         // (a tenth of the budget, which comes down as searches use theirs up: the explorer's)
         let max_expansions = if none {
             (q.max_expansions / WIDER_BUDGET_DIVISOR).min(WIDER_EXPANSIONS)
@@ -283,9 +288,13 @@ impl View {
             max_expansions,
             ..query
         };
-        let found = self.with_core(|nav, caches| {
-            Planner::new(nav, facts, caches).plan(&wider, world(&states0))
-        });
+        let found = if clean {
+            None
+        } else {
+            self.with_core(|nav, caches| {
+                Planner::new(nav, facts, caches).plan(&wider, world(&states0))
+            })
+        };
         if crate::stats::enabled() {
             eprintln!("{}", crate::stats::report(t0.elapsed().as_secs_f64()));
         }
@@ -624,6 +633,19 @@ impl View {
                                 if let Some(&h) = moved {
                                     needed.insert((s, h.key()));
                                     needed_h.insert((s, h.key()), h);
+                                }
+                                // (bars she opens herself, with a key: the key)
+                                if doors_all.contains_key(&s) {
+                                    for t in &self.triggers {
+                                        if t.sectors.contains(&s) && t.info.lock != Lock::None {
+                                            if let Some(k) =
+                                                key_for(t.info.lock).filter(|k| !need_k.has(*k))
+                                            {
+                                                need_k = need_k.with(k);
+                                                queue.push(spots_of(k));
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }

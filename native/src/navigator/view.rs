@@ -144,9 +144,11 @@ impl Core {
         };
         let fit = Rc::clone(&n.fit);
         let (map, lab) = (Arc::clone(&n.map), Arc::clone(&n.jump_lab));
+        let walker = Arc::clone(&n.jump_lab);
         let callbacks = Callbacks::new(
             Box::new(move |pi, blocking| fit.fits_without(pi, blocking)),
             Box::new(move |li, high, top| super::widths::landable(&map, &lab, li, high, top)),
+            Box::new(move |a, b, heights| walker.walks(a, b, heights)),
         );
         Core {
             nav: Some(NavCore::new(
