@@ -2150,3 +2150,11 @@ follower stuck all the while and never failing.
     kills 314 for 250, all still deaths. MAP25: two more stalls, which are three more runs
     living through its first half minute (11 of 16 died in it before, 8 now): every run
     that does stalls, before and after. To be traced.
+  - **Too hurt is no trap.** Started again from there, where she could get to (444 pieces
+    of the mesh, most of the level) was marked a trap, and with the mark now holding for
+    every option she was stranded again within minutes, three times. No mark with a way on
+    turned down for want of health in the minute before (not only on the tic she gives up:
+    by then what's turned down has been given up a while and isn't asked about). The level
+    again is the health for it. Without the teleporter's rule, that run: one stranding for
+    three, 55 kills for 27, still out of its hour. With it the score's runs are as the
+    teleporter rule's but one (-0.0001).

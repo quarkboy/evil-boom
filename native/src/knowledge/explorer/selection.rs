@@ -383,7 +383,17 @@ impl Explorer {
             self.current = None;
             // The exit out of reach too: where she can get from here is a trap, if it's where she has
             // started again from. Known for the next go.
-            self.trapped = Some((self.reach.clone(), obs.keys.unwrap_or_default()));
+            // Not with a way on turned down lately for want of health (not this tic only: turned
+            // down again and again, what's left is given up a while and isn't asked about on
+            // the last go round): that's no trap but her too hurt for what's left, and the level
+            // again is the health for it. (E2M4: the blood before the exit, her at 12; marked a
+            // trap, most of the level was kept out of on every go after.)
+            /// a way on turned down for want of health this lately: no trap
+            const HURT_LATELY: i64 = 60 * 35;
+            let hurt = self
+                .short_of_health
+                .is_some_and(|t| obs.tic - t <= HURT_LATELY);
+            self.trapped = (!hurt).then(|| (self.reach.clone(), obs.keys.unwrap_or_default()));
         }
     }
 
