@@ -1999,3 +1999,24 @@ that hurts.
   teleporters never made its four seconds. Pieces that don't join now count for no walk.
   MAP32 with `--charmed`, easiest skill: out in 1,714 s and 1,610 s on two seeds (it ran out
   the hour). The score's 1,088 runs all the same to the tic.
+
+### Plutonia MAP22: wedged for forty minutes and not knowing it (2026-11-16)
+
+A slime fall: three steps down, 32 wide each, the roof stepping down with them. She jumped
+up onto the lowest from below (a line to step over, risky), ran to the top, and couldn't
+come back down: on the middle step, her own width, she's held up by the lip of the one
+above, and at that height doesn't fit under the next roof. The exact middle unit clears
+both (stood there in the game she walks out): a glide again.
+
+She was "stuck" there 1,159 times in forty minutes. Being wedged ("stuck here whatever she
+sets out for: stranded", the level begun again) was counted only from objectives that
+failed stuck. Hers were each given up after their twenty seconds as taking too long, the
+follower stuck all the while and never failing.
+
+- **The rule:** an objective timed out with the follower stuck counts towards being wedged
+  as one failed stuck does (`stuck_again`); and wedged, the spot and the mesh's pieces next
+  to it are a trap for the go after.
+- **Measured:** the score's 1,088 runs all the same to the tic. MAP22 with `--charmed`:
+  stranded and begun again within a minute or so of wedging, 1,478 of 1,709 lines seen for
+  1,305; no exit yet (wedged there again the life after in spite of the mark, and at a
+  second spot, (-1720, -136): next).

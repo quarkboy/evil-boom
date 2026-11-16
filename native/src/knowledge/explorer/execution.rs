@@ -439,6 +439,42 @@ impl Explorer {
         }
     }
 
+    /// Stuck once more: at one spot whatever she sets out for, she's wedged, in a trap she
+    /// couldn't know of, and as stranded as with nothing to do.
+    fn stuck_again(&mut self, obs: &Observation) {
+        let here = obs.pos();
+        let same = self
+            .stuck_run
+            .is_some_and(|(at, _)| dist(at, here) < STUCK_SAME);
+        let n = if same {
+            self.stuck_run.map_or(0, |(_, n)| n) + 1
+        } else {
+            1
+        };
+        self.stuck_run = Some((here, n));
+        if n >= STUCK_RUN && self.knowledge.summary() == self.stuck_known {
+            self.log.push(format!(
+                "tic {}: stuck here {n} times over, whatever for: stranded",
+                obs.tic
+            ));
+            self.restart_wanted = true;
+            // (where she's wedged, and the pieces of the mesh next to it, are a trap for the
+            // go after: the same way taken, she's wedged at the same spot)
+            if let Some(p) = self.nav.poly_at(here) {
+                let mesh = &self.nav.mesh;
+                let mut trap: BTreeSet<usize> = BTreeSet::from([p]);
+                trap.extend(
+                    mesh.poly(p)
+                        .portals
+                        .iter()
+                        .map(|&pi| mesh.portals[pi].other(p)),
+                );
+                self.trapped = Some(trap);
+            }
+        }
+        self.stuck_known = self.knowledge.summary();
+    }
+
     pub(super) fn need_new(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
         self.note_presses(obs);
         if self.note_misses(obs) {
@@ -487,26 +523,7 @@ impl Explorer {
                 self.drop_objective(&obj, obs, Why::Route(line, trouble));
                 if self.follower.as_ref().is_some_and(|f| f.failed_stuck) {
                     self.note_stuck(obs);
-                    // Stuck at one spot whatever she sets out for: wedged, in a trap she couldn't know of, and
-                    // as stranded as with nothing to do.
-                    let here = obs.pos();
-                    let same = self
-                        .stuck_run
-                        .is_some_and(|(at, _)| dist(at, here) < STUCK_SAME);
-                    let n = if same {
-                        self.stuck_run.map_or(0, |(_, n)| n) + 1
-                    } else {
-                        1
-                    };
-                    self.stuck_run = Some((here, n));
-                    if n >= STUCK_RUN && self.knowledge.summary() == self.stuck_known {
-                        self.log.push(format!(
-                            "tic {}: stuck here {n} times over, whatever for: stranded",
-                            obs.tic
-                        ));
-                        self.restart_wanted = true;
-                    }
-                    self.stuck_known = self.knowledge.summary();
+                    self.stuck_again(obs);
                 } else {
                     self.stuck_run = None;
                 }
@@ -604,7 +621,12 @@ impl Explorer {
                     .any(|e| e.contains("stuck at"))
             });
             if stuck {
-                self.note_stuck(obs); // (timed out stuck: the same as failing stuck)
+                // (timed out stuck: the same as failing stuck, and counted with it for being
+                // wedged. On a step her own width under a lower roof she stuck at whatever
+                // she set out for, each given up for its time and none as stuck: forty
+                // minutes of Plutonia MAP22)
+                self.note_stuck(obs);
+                self.stuck_again(obs);
             }
             return true;
         }
