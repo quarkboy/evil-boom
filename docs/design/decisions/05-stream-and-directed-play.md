@@ -2020,3 +2020,14 @@ follower stuck all the while and never failing.
   stranded and begun again within a minute or so of wedging, 1,478 of 1,709 lines seen for
   1,305; no exit yet (wedged there again the life after in spite of the mark, and at a
   second spot, (-1720, -136): next).
+
+- **A switch 0.6 out of her reach, and well inside the game's** (MAP22, the same day). The
+  plan's next switch (line 1052) is behind a grid of bars a foot off the floor. They stopped
+  her 56.6 from it; the press works from there, over the bars (in the game: its sector moved).
+  Stuck on the way to a press she presses from where she is, if within `PRESS_RANGE`, 56, how
+  near she'd choose to stand: she walked at the bars 54 times. Stuck, it's now `PRESS_STUCK`,
+  62: the game's own reach, 64, less a little. Pressed at the first try, 498 s. Score -0.0002
+  (s.e. 0.0001), exits and stalls as before; 1,086 of 1,088 runs the same.
+  - **Tried and dropped:** the spot to press from having to be one she can stand at (presses
+    that work from within reach were lost, and she was at the walls 447 times); a spot chosen
+    among the bars (the same).

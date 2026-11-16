@@ -143,6 +143,8 @@ const MAX_REPLANS: i32 = 6;
 
 /// how near a door to press it (use reaches 64)
 const PRESS_RANGE: f64 = 56.0;
+/// ...and how near a switch she's stuck on the way to is pressed from where she is
+const PRESS_STUCK: f64 = 62.0;
 /// don't stand still for moves to finish: some floors are hopped onto rising
 const SETTLE_MAX: f64 = 0.0;
 /// a route (replans that add steps start the per-step count again)

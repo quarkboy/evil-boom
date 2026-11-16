@@ -6,7 +6,7 @@
 use super::Trouble;
 use super::{
     last_point, roll_speed, stops, Drop, Phase, RouteFollower, Run, SegEnd, Segment,
-    CROSS_REST_WAIT, LIFT_STILL, PRESS_RANGE,
+    CROSS_REST_WAIT, LIFT_STILL,
 };
 use crate::geom::{cells, closest_point, dist, segment_distance, Point};
 use crate::motor::{heading, Controls, Observation, Track, BRAKE, FULL_SPEED, TICRATE};
@@ -182,10 +182,13 @@ impl RouteFollower {
         if obs.tic - self.progress_tic > STUCK_TICS
             && step.action == Action::Use
             && self.seg_i == self.segments.len() - 1
-            && trig_line.is_some_and(|li| self.line_distance(pos, li) <= PRESS_RANGE)
+            && trig_line.is_some_and(|li| self.line_distance(pos, li) <= super::PRESS_STUCK)
         {
             // can't get to the spot, but the switch is in reach from here (past a shut door the
-            // press opens first, say): press from here
+            // press opens first, say): press from here. In the game's reach, that is, not
+            // only as near as she'd choose to stand: stopped by bars a foot off the floor,
+            // 56.6 from a switch behind them, she walked at them 54 times for the 0.6
+            // (Plutonia MAP22's line 1052; the press goes through over the bars)
             self.reset_progress(obs.tic);
             self.phase = Phase::Act;
             return self.act_at_goal(obs);
