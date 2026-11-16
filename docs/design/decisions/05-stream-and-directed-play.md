@@ -2031,3 +2031,11 @@ follower stuck all the while and never failing.
   - **Tried and dropped:** the spot to press from having to be one she can stand at (presses
     that work from within reach were lost, and she was at the walls 447 times); a spot chosen
     among the bars (the same).
+- **Wedged again the life after.** The trap's mark keeps risky options whose goal is in it
+  out; a wall to try at the fall's foot, not risky and its goal outside, went by the same
+  jump onto the fall. The jumps that land where she's been wedged are barred for the level
+  (`wedge_jumps`). Wedged there once in the hour for three times. The score's 1,088 runs
+  all the same to the tic.
+- **MAP22 still:** no exit. From the second life the yellow card isn't gone for (held back
+  as "after what it cuts off", then dropped without a route, three times), and the later
+  lives end with nothing left to do by the yellow switch. Not traced yet.

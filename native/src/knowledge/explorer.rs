@@ -587,6 +587,8 @@ pub struct Explorer {
     /// run-jumps left out of the plan being made now: over somewhere there's no getting back
     /// from, while another way is looked for (empty between plans)
     unsafe_jumps: BTreeSet<String>,
+    /// jumps that land where she's been wedged (`stuck_again`): not taken again, this level
+    wedge_jumps: BTreeSet<String>,
     /// directed: the objective in hand is pressed on with mid-fight, shooting and dodging on
     /// the way, not stopped for the fight (a rush)
     pub press_on: bool,
@@ -747,6 +749,7 @@ impl Explorer {
             stuck_retried: None,
             lapsing_jumps: (BTreeSet::new(), 0),
             unsafe_jumps: BTreeSet::new(),
+            wedge_jumps: BTreeSet::new(),
             press_on: false,
             panic_tries: 0,
             strong_only: false,

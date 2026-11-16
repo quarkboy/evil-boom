@@ -469,6 +469,16 @@ impl Explorer {
                         .iter()
                         .map(|&pi| mesh.portals[pi].other(p)),
                 );
+                // (and no jump lands her there again, whatever it's for: a wall to try at
+                // the fall's foot took her back up it the life after)
+                let into: Vec<String> = self
+                    .nav
+                    .jumps
+                    .iter()
+                    .filter(|j| trap.contains(&j.dest_poly))
+                    .map(crate::navigator::Jump::key)
+                    .collect();
+                self.wedge_jumps.extend(into);
                 self.trapped = Some(trap);
             }
         }
