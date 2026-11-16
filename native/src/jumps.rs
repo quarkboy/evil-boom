@@ -189,10 +189,14 @@ impl JumpLab {
         let (ux, uy) = ((b.0 - a.0) / length, (b.1 - a.1) / length);
         let facing = uy.atan2(ux).to_degrees();
         let (mut tries, mut made) = (0u32, 0u32);
+        // (each try from the floor the stretch starts on: a step to the side can put the box
+        // over the edge of a ledge above, and the try would be a walk along the ledge)
+        let from = self.at_heights(heights).fits_at(a).1;
         for side in WALK_SIDES {
             let start = (a.0 - uy * side, a.1 + ux * side);
             let mut sim = self.at_heights(heights);
-            if !sim.fits_at(start).0 {
+            let (clear, floor, _) = sim.fits_at(start);
+            if !clear || (floor - from).abs() > 0.5 {
                 continue;
             }
             tries += 1;

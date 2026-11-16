@@ -1693,3 +1693,9 @@ through was a guess.
   beside it, and some seventy of its runs came out different for that alone: the next run,
   on a quieter machine, had them back as they were (the searches' clock backstops). The
   figure above is the one to go by.
+- **A try begun on a ledge above.** Doom II MAP17's fallback route has a stretch from a floor
+  at 96 into the face of rock steps 104 above it: no squeeze but a wall (walked in the game,
+  she slides along its foot). The simulator had it two tries in five: the tries begun to one
+  side had the box over the ledge's edge, and were set down on the ledge. Every try now
+  begins on the floor the stretch does. That stretch none in five; the stretches checked
+  against the game as they were; the score's 1,088 runs all the same to the tic.
