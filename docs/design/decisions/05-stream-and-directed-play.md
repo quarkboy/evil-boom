@@ -2132,3 +2132,21 @@ follower stuck all the while and never failing.
     are loops.
   - Sets from before this aren't comparable on stalls or deaths; the baseline was made
     again.
+- **E2M4 traced: too hurt for the one way on** (2026-11-16; the run stranded three times). None
+  of the level's known traps. Both keys by 229 s and the yellow door opened from its front;
+  then 1,030 of 1,117 lines seen and no exit, the way on being a teleporter pad in the
+  blood before the exit room. That was turned down from the first as a drop onto a floor
+  that hurts with no way off it she knows. Her health: 100 to 3 in nine seconds at 734 s (the
+  closets by the red lift opening round her, two cacodemons and imps); back to 73; then 73
+  to 12 over twelve minutes on floors that hurt, trying walls and stepping over lines with
+  nothing safe left; at 12 nothing was to be afforded, the pad least of all.
+  - **A teleporter she has seen is the way off the floor it's on** (the maintainer's
+    point): a drop onto a floor that hurts isn't turned down as a dead end when it's a
+    teleporter there she's going for (`refusal`, both passes). What it costs is weighed as
+    any way's is. That run: the pad taken at 1,280 s, out at 1,369 s, never stranded.
+    Score 0.496 for 0.495 (+0.0014, s.e. 0.0022); exits 448 for 446; stalled or out of the
+    hour 14 for 14; 62 runs moved, 24 better, 22 worse. Doom II MAP24 (far pads in the
+    nukage, the maintainer's worry): its 16 runs the same to the tic; MAP29: 4 of 16 moved,
+    kills 314 for 250, all still deaths. MAP25: two more stalls, which are three more runs
+    living through its first half minute (11 of 16 died in it before, 8 now): every run
+    that does stalls, before and after. To be traced.

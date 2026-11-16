@@ -677,7 +677,10 @@ impl Explorer {
                     let PathNote::Drop { sector: s, .. } = *n else {
                         continue;
                     };
-                    if !self.knowledge.damaging(s) {
+                    // (nor for a teleporter she has seen there and is going for: the way off is
+                    // what she's dropping in for. E2M4: the pad in the blood before the exit,
+                    // turned down at full health while sixty went on walls over other floors)
+                    if !self.knowledge.damaging(s) || obj.kind == Kind::Teleporter {
                         continue;
                     }
                     let landing = leg
@@ -722,7 +725,8 @@ impl Explorer {
                     let PathNote::Drop { sector: s, .. } = *n else {
                         continue;
                     };
-                    if k.damaging(s) && !escaped.contains(&s) {
+                    // (a teleporter to try there is the way off it: as above)
+                    if k.damaging(s) && !escaped.contains(&s) && obj.kind != Kind::Teleporter {
                         return Some(Refusal::DropOntoHarm { sector: s });
                     }
                 }
