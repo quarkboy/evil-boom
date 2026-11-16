@@ -1640,3 +1640,9 @@ make, with the heights on both sides (`relaxed_stops`). That named each cause.
 - **The way to a switch, before the switch.** The relaxed plan's way to a trigger was the
   shortest with everything set off, which can run through the very wall it lowers. It's
   looked for first without the height the trigger's wanted for. (In the same change.)
+- **TNT MAP32: a lift beside a walkway that's lowered first.** The way to the blue skull's
+  switch: lower a walkway, step onto it, call the lift beside it, ride up. A lift's low stop
+  was worked out once, from the floors round it as the map starts, where this one is already
+  at its lowest. It now follows the floors round it when it's called (`LIFT` among
+  `depends_on_heights`), as EV_DoPlat does. Score with the above +0.0016 (s.e. 0.0010), exits
+  419 for 417; 1,053 the same to the tic, 16 better, 10 worse.

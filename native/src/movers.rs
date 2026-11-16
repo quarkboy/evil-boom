@@ -88,6 +88,9 @@ pub fn depends_on_heights(special: u16) -> bool {
         CEIL_HIGHEST,
         DOOR_OPEN,
         DONUT,
+        // (a lift goes down to the lowest floor round it then: beside a walkway that's lowered
+        // first, lower than it would have as the map starts)
+        LIFT,
     ]
     .iter()
     .any(|set| set.contains(&special))
