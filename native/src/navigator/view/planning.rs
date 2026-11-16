@@ -196,6 +196,16 @@ impl View {
             (&reach_all, &states_all, keys_all),
         );
         if crate::debug::on().relaxed {
+            self.relaxed_gaps(
+                start_poly,
+                &states0,
+                q,
+                &actions,
+                &rel_t,
+                (&reach_all, &states_all, keys_all),
+            );
+        }
+        if crate::debug::on().relaxed {
             eprintln!(
                 "relaxed: lines {:?} keys {:?}",
                 rel_t,
@@ -243,6 +253,25 @@ impl View {
         });
         let none =
             narrow.is_none() && crate::stats::last_ended() == Some(crate::stats::Ended::Exhausted);
+        if none && crate::debug::on().relaxed {
+            let furthest = self.with_core(|_, caches| caches.furthest.take());
+            if let Some((reach, w, lines)) = furthest {
+                let reach: BTreeSet<usize> = reach.into_iter().collect();
+                eprintln!(
+                    "relaxed: the search's furthest: {} polys in reach, lines set off {:?}",
+                    reach.len(),
+                    lines
+                );
+                self.relaxed_stops(
+                    start_poly,
+                    &actions,
+                    &rel_t,
+                    (&reach, &states_of(&w)),
+                    (&reach_all, &states_all, keys_all),
+                    &lines,
+                );
+            }
+        }
         // (a tenth of the budget, which comes down as searches use theirs up: the explorer's)
         let max_expansions = if none {
             (q.max_expansions / WIDER_BUDGET_DIVISOR).min(WIDER_EXPANSIONS)
@@ -280,6 +309,156 @@ impl View {
             keys: Keys(route.keys.0),
             goal: Some(route.goal),
         })
+    }
+
+    /// For EVIL_DEBUG_RELAXED: with only the relaxed plan's lines set off (all that can be,
+    /// in any order, nothing lost), which of them are never got to, and for each the first
+    /// crossing on the way there, as the level is with every line set off, that isn't made.
+    fn relaxed_gaps(
+        &self,
+        start: usize,
+        states0: &States,
+        q: &Plan<'_>,
+        actions: &[&TriggerLine],
+        rel_t: &BTreeSet<i64>,
+        (reach_all, states_all, keys_all): (&BTreeSet<usize>, &States, Keys),
+    ) {
+        let rel: Vec<&TriggerLine> = actions
+            .iter()
+            .copied()
+            .filter(|t| rel_t.contains(&t.line))
+            .collect();
+        let (reach_r, states_r, keys_r) = self.saturate(start, states0, q.keys, q.key_items, &rel);
+        eprintln!(
+            "relaxed: with its lines alone: {} polys of {} in reach, keys {:?} of {:?}",
+            reach_r.len(),
+            reach_all.len(),
+            keys_r,
+            keys_all
+        );
+        self.relaxed_stops(
+            start,
+            actions,
+            rel_t,
+            (&reach_r, &states_r),
+            (reach_all, states_all, keys_all),
+            &[],
+        );
+    }
+
+    /// For EVIL_DEBUG_RELAXED: of the relaxed plan's lines not in `done`, those not to be set
+    /// off from `reach_r`, and for each the first crossing on the way there (as the level is
+    /// with every line set off) that goes out of `reach_r`.
+    fn relaxed_stops(
+        &self,
+        start: usize,
+        actions: &[&TriggerLine],
+        rel_t: &BTreeSet<i64>,
+        (reach_r, states_r): (&BTreeSet<usize>, &States),
+        (reach_all, states_all, keys_all): (&BTreeSet<usize>, &States, Keys),
+        done: &[usize],
+    ) {
+        let n = &self.nav;
+        let mesh = &n.mesh;
+        let rel: Vec<&TriggerLine> = actions
+            .iter()
+            .copied()
+            .filter(|t| rel_t.contains(&t.line))
+            .collect();
+        let doors_all = self.local_doors(keys_all);
+        for t in &rel {
+            if t.linedef().is_some_and(|l| done.contains(&l)) {
+                continue;
+            }
+            if !t.activators.is_disjoint(reach_r) || t.activators.is_disjoint(reach_all) {
+                if !t.activators.is_disjoint(reach_r) && !done.is_empty() {
+                    eprintln!(
+                        "relaxed: line {} ({}): in reach there and not set off (usable from {:?} of its polys there)",
+                        t.line,
+                        t.info.description,
+                        self.activators_now(t, states_r, None).intersection(reach_r).count()
+                    );
+                }
+                continue;
+            }
+            // (the way there before it has done what it does)
+            let mut before = states_all.clone();
+            for (es, hs) in &t.effects {
+                if before[*es].len() > 1 {
+                    before[*es].retain(|x| !hs.contains(x));
+                }
+            }
+            let states_all = &before;
+            let mut parent: BTreeMap<usize, (Option<usize>, Option<Step>)> =
+                BTreeMap::from([(start, (None, None))]);
+            let mut todo = std::collections::VecDeque::from([start]);
+            let mut end = None;
+            while let Some(p) = todo.pop_front() {
+                if t.activators.contains(&p) {
+                    end = Some(p);
+                    break;
+                }
+                let mut moves: Vec<(usize, Step)> = mesh
+                    .poly(p)
+                    .portals
+                    .iter()
+                    .filter(|&&pi| n.passable(pi, p, states_all, Some(&doors_all), self.spent()))
+                    .map(|&pi| (mesh.portals[pi].other(p), Step::Portal(pi)))
+                    .collect();
+                moves.extend(
+                    n.tele_from[p]
+                        .iter()
+                        .filter(|&&e| {
+                            !matches!(e, TeleEdge::Jump(j) if self.banned_jumps.contains(&j))
+                                && n.edge_ok(e, states_all)
+                        })
+                        .map(|&e| (n.edge_dest(e).0, Step::Tele(e))),
+                );
+                for (to, via) in moves {
+                    if let std::collections::btree_map::Entry::Vacant(e) = parent.entry(to) {
+                        e.insert((Some(p), Some(via)));
+                        todo.push_back(to);
+                    }
+                }
+            }
+            let Some(end) = end else {
+                eprintln!("relaxed: line {}: no way to it at all", t.line);
+                continue;
+            };
+            let mut chain = vec![end];
+            let mut p = end;
+            while let (Some(prev), _) = parent[&p] {
+                chain.push(prev);
+                p = prev;
+            }
+            chain.reverse();
+            let Some(i) = chain.iter().position(|p| !reach_r.contains(p)) else {
+                continue;
+            };
+            let (from, to) = (chain[i.saturating_sub(1)], chain[i]);
+            let (sa, sb) = (n.sector_of_poly(from), n.sector_of_poly(to));
+            let via = match parent[&to].1 {
+                Some(Step::Portal(pi)) => {
+                    format!("portal {pi} (line {:?})", mesh.portals[pi].linedef)
+                }
+                Some(Step::Tele(TeleEdge::Jump(j))) => {
+                    format!("a jump needing {:?}", n.jumps[j].requires)
+                }
+                Some(Step::Tele(_)) => "a teleport".to_string(),
+                None => String::new(),
+            };
+            let c = mesh.poly(to).center;
+            eprintln!(
+                "relaxed: line {} ({}): stops going from poly {from} (sector {sa}, heights {:?}) to poly {to} at ({:.0}, {:.0}) (sector {sb}: {:?}, in the end {:?}) by {via}",
+                t.line,
+                t.info.description,
+                states_r[sa].iter().map(|h| (h.floor, h.ceiling)).collect::<Vec<_>>(),
+                c.0,
+                c.1,
+                states_r[sb].iter().map(|h| (h.floor, h.ceiling)).collect::<Vec<_>>(),
+                states_all[sb].iter().map(|h| (h.floor, h.ceiling)).collect::<Vec<_>>(),
+            );
+        }
     }
 
     /// The relaxed plan (order ignored): which triggers and keys a route to `goals` depends on.
@@ -342,6 +521,10 @@ impl View {
         let mut without: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
         let mut relied: BTreeSet<(usize, HeightsKey)> = BTreeSet::new();
         let mut queue: Vec<BTreeSet<usize>> = vec![goals.clone()];
+        // (a trigger's polys, wanted for a height it makes: the way to them is looked for in the
+        // level without that height. The shortest way to a switch can run through the very
+        // wall it lowers, and what's needed is the way there before it has)
+        let mut before: BTreeMap<BTreeSet<usize>, (usize, Heights)> = BTreeMap::new();
         let mut seen_goals: BTreeSet<BTreeSet<usize>> = BTreeSet::new();
         while let Some(target) = queue.pop() {
             if seen_goals.len() >= RELAXED_GOAL_LIMIT {
@@ -351,40 +534,67 @@ impl View {
                 continue;
             }
             seen_goals.insert(target.clone());
-            // breadth first with parents, in the saturated world
-            let mut parent: BTreeMap<usize, (Option<usize>, Option<Step>)> =
-                BTreeMap::from([(start, (None, None))]);
-            let mut todo = std::collections::VecDeque::from([start]);
-            let mut end = None;
-            while let Some(p) = todo.pop_front() {
-                if target.contains(&p) {
-                    end = Some(p);
-                    break;
-                }
-                let mut moves: Vec<(usize, Step)> = mesh
-                    .poly(p)
-                    .portals
-                    .iter()
-                    .filter(|&&pi| n.passable(pi, p, states_all, Some(&doors_all), self.spent()))
-                    .map(|&pi| (mesh.portals[pi].other(p), Step::Portal(pi)))
-                    .collect();
-                moves.extend(
-                    n.tele_from[p]
+            let earlier: Option<(States, crate::navigator::Doors)> = before
+                .get(&target)
+                .filter(|(s, _)| states_all[*s].len() > 1)
+                .map(|&(s, h)| {
+                    let mut st = states_all.clone();
+                    st[s].retain(|x| *x != h);
+                    let mut d = doors_all.clone();
+                    d.remove(&s);
+                    (st, d)
+                });
+            // breadth first with parents, in the saturated world (without the height the
+            // target's wanted for, if there's a way then)
+            let mut found = None;
+            for world in [
+                earlier.as_ref().map(|(st, d)| (st, d)),
+                Some((states_all, &doors_all)),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                let (st, doors_t) = world;
+                let mut parent: BTreeMap<usize, (Option<usize>, Option<Step>)> =
+                    BTreeMap::from([(start, (None, None))]);
+                let mut todo = std::collections::VecDeque::from([start]);
+                let mut end = None;
+                while let Some(p) = todo.pop_front() {
+                    if target.contains(&p) {
+                        end = Some(p);
+                        break;
+                    }
+                    let mut moves: Vec<(usize, Step)> = mesh
+                        .poly(p)
+                        .portals
                         .iter()
-                        .filter(|&&e| {
-                            !matches!(e, TeleEdge::Jump(j) if self.banned_jumps.contains(&j))
-                                && n.edge_ok(e, states_all)
-                        })
-                        .map(|&e| (n.edge_dest(e).0, Step::Tele(e))),
-                );
-                for (to, via) in moves {
-                    if let std::collections::btree_map::Entry::Vacant(e) = parent.entry(to) {
-                        e.insert((Some(p), Some(via)));
-                        todo.push_back(to);
+                        .filter(|&&pi| n.passable(pi, p, st, Some(doors_t), self.spent()))
+                        .map(|&pi| (mesh.portals[pi].other(p), Step::Portal(pi)))
+                        .collect();
+                    moves.extend(
+                        n.tele_from[p]
+                            .iter()
+                            .filter(|&&e| {
+                                !matches!(e, TeleEdge::Jump(j) if self.banned_jumps.contains(&j))
+                                    && n.edge_ok(e, st)
+                            })
+                            .map(|&e| (n.edge_dest(e).0, Step::Tele(e))),
+                    );
+                    for (to, via) in moves {
+                        if let std::collections::btree_map::Entry::Vacant(e) = parent.entry(to) {
+                            e.insert((Some(p), Some(via)));
+                            todo.push_back(to);
+                        }
                     }
                 }
+                if let Some(end) = end {
+                    found = Some((end, parent, st));
+                    break;
+                }
             }
-            let Some(end) = end else { continue };
+            let Some((end, parent, st)) = found else {
+                continue;
+            };
             let mut needed: BTreeSet<(usize, HeightsKey)> = BTreeSet::new();
             let mut needed_h: BTreeMap<(usize, HeightsKey), Heights> = BTreeMap::new();
             let mut p = end;
@@ -417,10 +627,10 @@ impl View {
                             }
                         }
                         let (sa, sb) = (n.sector_of_poly(prev), n.sector_of_poly(p));
-                        let pairs: Vec<(Heights, Heights)> = states_all[sa]
+                        let pairs: Vec<(Heights, Heights)> = st[sa]
                             .iter()
                             .flat_map(|&ha| {
-                                states_all[sb]
+                                st[sb]
                                     .iter()
                                     .filter(move |&&hb| can_cross(ha, hb))
                                     .map(move |&hb| (ha, hb))
@@ -461,6 +671,23 @@ impl View {
                 }
                 p = prev;
             }
+            if crate::debug::on().relaxed {
+                eprintln!(
+                    "relaxed: to polys {:?}... needs {:?}",
+                    target.iter().take(3).collect::<Vec<_>>(),
+                    needed
+                        .iter()
+                        .map(|sh| (
+                            sh.0,
+                            needed_h[sh].floor,
+                            needed_h[sh].ceiling,
+                            producers
+                                .get(sh)
+                                .map(|v| v.iter().map(|t| t.line).collect::<Vec<_>>())
+                        ))
+                        .collect::<Vec<_>>()
+                );
+            }
             for sh in needed {
                 let cands: Vec<&TriggerLine> = producers.get(&sh).cloned().unwrap_or_default();
                 // A producer that can be got to without what it makes (a switch that opens a door
@@ -498,6 +725,14 @@ impl View {
                         .collect()
                 };
                 let first = cands.iter().copied().find(|t| !free(t).is_disjoint(w));
+                if crate::debug::on().relaxed && first.is_none() {
+                    eprintln!(
+                        "relaxed: sector {} at {:?}: no maker got to without it (makers {:?})",
+                        sh.0,
+                        needed_h.get(&sh).map(|h| (h.floor, h.ceiling)),
+                        cands.iter().map(|t| t.line).collect::<Vec<_>>()
+                    );
+                }
                 if first.is_none() {
                     for dt in &self.triggers {
                         if dt.sectors.contains(&sh.0) && dt.info.lock != Lock::None {
@@ -540,11 +775,15 @@ impl View {
                         .collect();
                     let clear_reach: BTreeSet<usize> =
                         clear.intersection(reach_all).copied().collect();
-                    queue.push(if clear_reach.is_empty() {
+                    let wanted = if clear_reach.is_empty() {
                         t.activators.clone()
                     } else {
                         clear_reach.clone()
-                    });
+                    };
+                    before
+                        .entry(wanted.clone())
+                        .or_insert((sh.0, needed_h[&sh]));
+                    queue.push(wanted);
                     if clear_reach.is_empty() {
                         // pressed through a door: its key
                         let gates: BTreeSet<usize> = t
@@ -567,6 +806,41 @@ impl View {
                         if let Some(k) = key_for(t.info.lock).filter(|k| !need_k.has(*k)) {
                             need_k = need_k.with(k);
                             queue.push(spots_of(k));
+                        }
+                    }
+                    // walked over, and from nowhere can she walk onto its far side as the level
+                    // starts (a line round a pedestal with no headroom till it's lowered): what
+                    // makes the room there
+                    let sides: Vec<(usize, usize)> = t
+                        .activators
+                        .intersection(reach_all)
+                        .filter_map(|&p| {
+                            self.cross_sides()
+                                .get(&(li, p))
+                                .map(|&far| (n.sector_of_poly(p), far))
+                        })
+                        .collect();
+                    let walks = |st: &States, here: usize, far: usize| {
+                        st[here]
+                            .iter()
+                            .any(|&a| st[far].iter().any(|&b| can_cross(a, b)))
+                    };
+                    if !sides.is_empty() && !sides.iter().any(|&(h, f)| walks(states0, h, f)) {
+                        let made = sides.iter().find_map(|&(here, far)| {
+                            states_all[far]
+                                .iter()
+                                .filter(|b| !states0[far].contains(b))
+                                .find(|&&b| states_all[here].iter().any(|&a| can_cross(a, b)))
+                                .map(|&b| (far, b))
+                        });
+                        if let Some((far, h)) = made {
+                            relied.insert((far, h.key()));
+                            if let Some(t2) = producers.get(&(far, h.key())).and_then(|v| v.first())
+                            {
+                                if need_t.insert(t2.line) {
+                                    queue.push(t2.activators.clone());
+                                }
+                            }
                         }
                     }
                 }

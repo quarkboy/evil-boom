@@ -273,6 +273,7 @@ impl<'a> Planner<'a> {
         let t0 = Instant::now();
         self.strict_fit = q.strict_fit;
         self.moving_off.clear();
+        self.caches.furthest = None;
         let mut goal_polys: Vec<(usize, Point)> = Vec::new();
         for &g in &q.goals {
             if let Some(gp) = self.nav.mesh.poly_at(g) {
@@ -337,6 +338,11 @@ impl<'a> Planner<'a> {
         ))]);
         let mut seen = TimerSets::default();
         let mut expansions = 0usize;
+        // (for EVIL_DEBUG_RELAXED: what any node expanded had done, and any step offered)
+        let mut done_lines: BTreeSet<usize> = BTreeSet::new();
+        let mut offered_lines: BTreeSet<usize> = BTreeSet::new();
+        let mut failed_lines: BTreeSet<usize> = BTreeSet::new();
+        let mut held = KeySet::default();
         let mut fallback: Option<Fallback> = None;
         let deadline = t0 + Duration::from_secs_f64(q.max_seconds);
 
@@ -385,6 +391,9 @@ impl<'a> Planner<'a> {
                     if !pend.timers.is_empty() {
                         seen.forget(&sig, &tm);
                     }
+                    if crate::debug::on().relaxed {
+                        failed_lines.extend(pend.trigger.and_then(|t| triggers[t].line));
+                    }
                     continue;
                 };
                 let squeezes = path.squeezes;
@@ -411,6 +420,28 @@ impl<'a> Planner<'a> {
                 }
             }
             expansions += 1;
+            if crate::debug::on().relaxed
+                && self
+                    .caches
+                    .furthest
+                    .as_ref()
+                    .is_none_or(|f| node.world.len() > f.0.len())
+            {
+                self.caches.furthest = Some((
+                    (*node.world).clone(),
+                    node.states.clone(),
+                    node.legs
+                        .iter()
+                        .filter_map(|l| l.trigger.and_then(|t| triggers[t].line))
+                        .collect(),
+                ));
+            }
+            if crate::debug::on().relaxed {
+                if let Some(l) = node.legs.last() {
+                    done_lines.extend(l.trigger.and_then(|t| triggers[t].line));
+                }
+                held = KeySet(held.0 | node.keys.0);
+            }
 
             // goals
             let doors = self.doors_for(node.keys);
@@ -477,6 +508,14 @@ impl<'a> Planner<'a> {
                 children.extend(self.make_child(&node, step, q));
             }
             for c in children {
+                if crate::debug::on().relaxed {
+                    offered_lines.extend(
+                        c.pending
+                            .as_ref()
+                            .and_then(|p| p.trigger)
+                            .and_then(|t| triggers[t].line),
+                    );
+                }
                 let no_goal = !c.stable.iter().any(|p| goal_set.contains(p));
                 push(
                     &mut heap,
@@ -489,6 +528,18 @@ impl<'a> Planner<'a> {
                     c,
                 );
             }
+        }
+        if crate::debug::on().relaxed {
+            let wanted: BTreeSet<usize> = q.relevant_lines.iter().flatten().copied().collect();
+            eprintln!(
+                "relaxed: search over ({} left); of its lines never made {:?} (never offered {:?}; offered, no way to them {:?}); keys held {:?} of {:?}",
+                heap.len(),
+                wanted.difference(&done_lines).collect::<Vec<_>>(),
+                wanted.difference(&offered_lines).collect::<Vec<_>>(),
+                wanted.intersection(&failed_lines).filter(|l| !done_lines.contains(l)).collect::<Vec<_>>(),
+                held,
+                q.relevant_keys,
+            );
         }
         if crate::stats::enabled() {
             eprintln!(

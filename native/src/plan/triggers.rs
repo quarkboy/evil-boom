@@ -122,6 +122,9 @@ pub struct PlanCaches {
     /// heights the search asked for, by which it's the same way in another world (`leg`)
     pub(super) legs: HashMap<LegKey, Vec<LegFound>>,
     pub(super) legs_kept: usize,
+    /// for EVIL_DEBUG_RELAXED: of the last search's nodes, the one with the most in reach for
+    /// good: what's in reach, the world, the lines set off on the way
+    pub furthest: Option<(HashSet<usize>, World, Vec<usize>)>,
 }
 
 /// A way asked for: from, to (bits), the keys, whether the box must fit all the way.

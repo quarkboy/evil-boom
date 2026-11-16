@@ -1623,3 +1623,20 @@ with ten minutes and a hundred times its budget. Looked into as a question of th
   those the same the search would go the same way step for step. Parity, all 24 runs the
   same; the same searches step for step and three times as fast where legs are most of the
   time (TNT MAP05's 2,000 steps 17.7 s to 5.0 s, Plutonia MAP03's 20,000 45 s to 13 s).
+
+### TNT MAP05 and MAP32, Plutonia MAP03: plans the search had no way to
+
+Each "in reach in principle, no plan". `EVIL_DEBUG_RELAXED` now says, when a search is over,
+which of the relaxed plan's lines were never set off, and for each the first crossing on the
+way to it (the way before it has done what it does) that the search's furthest node doesn't
+make, with the heights on both sides (`relaxed_stops`). That named each cause.
+
+- **TNT MAP05: a line walked over onto a floor she can't be on yet.** The blue key's lift is
+  set off over the lines round a pedestal with 32 units of headroom, lowered by another line.
+  The relaxed plan asked for nothing: a walk-over line's polys were its target whatever was
+  beyond. Now, where from nowhere can she walk onto its far side as the level starts, it asks
+  for what makes the room there. Score +0.0006 (s.e. 0.0006), exits 418 for 417; 1,082 of
+  1,088 runs the same to the tic, 2 better, none worse.
+- **The way to a switch, before the switch.** The relaxed plan's way to a trigger was the
+  shortest with everything set off, which can run through the very wall it lowers. It's
+  looked for first without the height the trigger's wanted for. (In the same change.)
