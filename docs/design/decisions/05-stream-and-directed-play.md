@@ -1678,3 +1678,18 @@ through was a guess.
   MAP05 12 s to 0.1 s); plans found 103 either way (Doom II MAP06 gained, Plutonia MAP09
   lost till the change after this one). Score +0.0020 (s.e. 0.0035), exits 423 for 418; 872 of
   1,088 runs the same to the tic, 52 better, 40 worse.
+- **Plutonia MAP09: down a lift for a key, and no line to call it back.** The relaxed plan
+  names one line for each thing it needs, and the narrow search may set off only its lines:
+  the lift called from its top was named, the line at its foot not, and the search was stuck
+  in the pit with the key. The narrow search may now set off every line whose effect is the
+  same as one of the relaxed plan's (the ranking's list as it was: with these in it Doom II
+  MAP15's plan was lost). The stop report says where the way to each key stops, too.
+- **Measured.** Plans over the 132 maps 103 to 105, none lost (Doom II MAP06, and MAP17 by a
+  fallback route with a stretch that can't be walked: 104 honestly). Score, this and the
+  walked squeezes together against the set before both: +0.0055 (s.e. 0.0020), exits 428 for
+  418; 1,017 of 1,088 runs the same to the tic, 26 better, 13 worse.
+- **A score run wants the machine to itself.** The walked squeezes' own run (+0.0020, s.e.
+  0.0035, 52 better and 40 worse) was made with the planner's 132-map comparisons running
+  beside it, and some seventy of its runs came out different for that alone: the next run,
+  on a quieter machine, had them back as they were (the searches' clock backstops). The
+  figure above is the one to go by.

@@ -7,7 +7,7 @@ use super::{key_bit, states_of, world, Leg, LowVariant, Plan, Route, Step, View}
 use crate::det::HashMap;
 use crate::geom::{point_key, Point};
 use crate::nav::{can_cross, Heights, HeightsKey};
-use crate::navigator::{States, TeleEdge, TriggerLine};
+use crate::navigator::{Effects, States, TeleEdge, TriggerLine};
 use crate::plan::{KeySet, Kind, PlanFacts, Planner, Query, Trigger as PlanTrigger};
 use crate::specials::{Key, Keys, Lock, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
@@ -195,6 +195,18 @@ impl View {
             &actions,
             (&reach_all, &states_all, keys_all),
         );
+        // (and every line that does just what one of those does: a lift's called from its top
+        // by one line and from its foot by another, and the relaxed plan names the one)
+        let same: Vec<&Effects> = actions
+            .iter()
+            .filter(|t| rel_t.contains(&t.line))
+            .map(|t| &t.effects)
+            .collect();
+        let rel_same: BTreeSet<i64> = actions
+            .iter()
+            .filter(|t| rel_t.contains(&t.line) || same.contains(&&t.effects))
+            .map(|t| t.line)
+            .collect();
         if crate::debug::on().relaxed {
             self.relaxed_gaps(
                 start_poly,
@@ -236,7 +248,7 @@ impl View {
                 .collect(),
             relevant_lines: rel_t.iter().map(|&l| usize::try_from(l).ok()).collect(),
             relevant_keys: KeySet(rel_k.0),
-            useful_lines: Some(rel_t.iter().map(|&l| usize::try_from(l).ok()).collect()),
+            useful_lines: Some(rel_same.iter().map(|&l| usize::try_from(l).ok()).collect()),
             strict_fit: n.strict_fit,
             fired: q.fired.clone(),
         };
@@ -376,6 +388,9 @@ impl View {
             .filter(|t| rel_t.contains(&t.line))
             .collect();
         let doors_all = self.local_doors(keys_all);
+        // (what's wanted: each line, by its polys and what it makes; each key, by where it's
+        // picked up from)
+        let mut wanted: Vec<(String, BTreeSet<usize>, Effects)> = Vec::new();
         for t in &rel {
             if t.linedef().is_some_and(|l| done.contains(&l)) {
                 continue;
@@ -391,9 +406,22 @@ impl View {
                 }
                 continue;
             }
+            wanted.push((
+                format!("line {} ({})", t.line, t.info.description),
+                t.activators.clone(),
+                t.effects.clone(),
+            ));
+        }
+        for (k, spots) in n.key_items(None) {
+            let polys: BTreeSet<usize> = spots.iter().map(|(p, _)| *p).collect();
+            if polys.is_disjoint(reach_r) && !polys.is_disjoint(reach_all) {
+                wanted.push((format!("key {}", k.name()), polys, Vec::new()));
+            }
+        }
+        for (what, target, effects) in &wanted {
             // (the way there before it has done what it does)
             let mut before = states_all.clone();
-            for (es, hs) in &t.effects {
+            for (es, hs) in effects {
                 if before[*es].len() > 1 {
                     before[*es].retain(|x| !hs.contains(x));
                 }
@@ -404,7 +432,7 @@ impl View {
             let mut todo = std::collections::VecDeque::from([start]);
             let mut end = None;
             while let Some(p) = todo.pop_front() {
-                if t.activators.contains(&p) {
+                if target.contains(&p) {
                     end = Some(p);
                     break;
                 }
@@ -432,7 +460,7 @@ impl View {
                 }
             }
             let Some(end) = end else {
-                eprintln!("relaxed: line {}: no way to it at all", t.line);
+                eprintln!("relaxed: {what}: no way to it at all");
                 continue;
             };
             let mut chain = vec![end];
@@ -459,9 +487,7 @@ impl View {
             };
             let c = mesh.poly(to).center;
             eprintln!(
-                "relaxed: line {} ({}): stops going from poly {from} (sector {sa}, heights {:?}) to poly {to} at ({:.0}, {:.0}) (sector {sb}: {:?}, in the end {:?}) by {via}",
-                t.line,
-                t.info.description,
+                "relaxed: {what}: stops going from poly {from} (sector {sa}, heights {:?}) to poly {to} at ({:.0}, {:.0}) (sector {sb}: {:?}, in the end {:?}) by {via}",
                 states_r[sa].iter().map(|h| (h.floor, h.ceiling)).collect::<Vec<_>>(),
                 c.0,
                 c.1,
