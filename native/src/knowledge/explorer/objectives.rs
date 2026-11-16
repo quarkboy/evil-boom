@@ -9,7 +9,7 @@ use crate::geom::{dist, segment_distance, Point};
 use crate::knowledge::model::Heard;
 use crate::motor::Observation;
 use crate::nav::can_cross;
-use crate::navigator::{States, TeleEdge, TriggerLine, View, EXIT_FLOOR, MAX_STEP};
+use crate::navigator::{States, TeleEdge, TriggerLine, View, EXIT_FLOOR, MAX_STEP, PLAYER_HEIGHT};
 use crate::specials::{classify_line, Key, Keys, Trigger};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
@@ -477,6 +477,35 @@ impl Explorer {
         out
     }
 
+    /// A door she opens again and again by pressing it, standing open as she last saw it, that
+    /// she has learned another line opens to stay: not one to try. Pressed open, it shuts after
+    /// its wait (EV_VerticalDoor: a new open-wait-close on a door already up) and stays shut
+    /// behind her: TNT MAP32's line 824, its door opened for good by a switch.
+    ///
+    /// Only with the other line learned. Any such door standing open (a monster come through
+    /// it, mostly) left untried moved 151 of the score's 1,088 runs, somewhat for the worse; and
+    /// a door pressed once that opens and stays (31 to 34, 118) can't be shut by a press at all
+    /// (E3M7's line 835, where the try is what takes her over a floor that hurts to it).
+    pub(super) fn stands_open(&self, t: &TriggerLine) -> bool {
+        let k = &self.knowledge;
+        let open = |h: &crate::nav::Heights| h.ceiling - h.floor >= PLAYER_HEIGHT;
+        let opened_to_stay = |s: usize| {
+            k.learned.iter().any(|(&i, sectors)| {
+                let other = &self.nav.triggers[i];
+                sectors.contains(&s)
+                    && other.line != t.line
+                    && other.permanent()
+                    && other.effect(s).is_some_and(|hs| hs.iter().any(open))
+            })
+        };
+        t.info.category.is_door()
+            && t.info.trigger == Trigger::DR
+            && !t.sectors.is_empty()
+            && t.sectors
+                .iter()
+                .all(|&s| k.seen_heights.get(&s).is_some_and(open) && opened_to_stay(s))
+    }
+
     /// The switches and doors she can tell are there and hasn't tried, that she can get to and
     /// has the key for.
     fn untried(
@@ -501,6 +530,10 @@ impl Explorer {
             } else {
                 Kind::Switch
             };
+            let stands_open = kind == Kind::Door && self.stands_open(t);
+            if stands_open {
+                continue;
+            }
             let mut o = Objective::new(
                 kind,
                 nav.activation_point(t, pos, reach),

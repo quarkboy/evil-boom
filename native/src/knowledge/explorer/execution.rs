@@ -546,6 +546,16 @@ impl Explorer {
         {
             return self.ends(obs, Why::BeenThrough);
         }
+        // A door to try that she finds standing open as she comes up to it (opened from
+        // elsewhere since she last saw it: the switch she pressed the moment before): not
+        // pressed.
+        if obj.kind == Kind::Door
+            && !self.directed
+            && !committed
+            && obj.trigger.as_ref().is_some_and(|t| self.stands_open(t))
+        {
+            return self.ends(obs, Why::StandsOpen);
+        }
         // Given objectives aren't ended by her own wants (an exit seen, a noise, a gun spotted):
         // whoever gave it hears of those.
         if !self.directed

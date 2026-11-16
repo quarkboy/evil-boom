@@ -1739,3 +1739,25 @@ never getting clear at all (pressed against a wall).
 - **Measured:** the stalled run exits in 420 s (17 steps away), another on the level 586 to
   511 s. Score +0.0016 (s.e. 0.0031), exits 435 for 433; 928 of 1,088 runs the same to the
   tic, 24 better, 19 worse.
+
+### TNT MAP32: a door she shut behind herself (2026-11-16)
+
+Door 122 starts open, a trap line shuts it, a switch (line 872) opens it for good; and its
+own line (824, pressed again and again, on the outer face only) she then pressed as a door to
+try. A press on such a door standing open starts its open-wait-close afresh: it shuts after
+the wait, with nothing to press on the far side. 97 of 256 sectors seen in the hour.
+
+- **The rule:** a door opened by pressing it again and again, standing open as she last saw
+  it, that she's learned another line opens to stay, isn't a door to try (`stands_open`); nor
+  pressed if she finds it so on coming up to it (the switch pressed the moment before).
+- **Tried wider, and dropped:** any pressed door standing open. A door pressed once that
+  opens and stays can't be shut by a press, and the try is what takes her to it (E3M7's line
+  835, over a floor that hurts: 4 exits lost there). Any repeatable door standing open, the
+  other line learned or not (a monster come through it, mostly): 151 runs moved, -0.0035
+  (s.e. 0.0036).
+- **A timed door believed to rest shut, not as the map starts** (tried with it): not needed
+  for MAP32, -0.0011 (s.e. 0.0012) alone. Not in.
+- **Measured:** MAP32, no monsters: 184 of 256 sectors (no exit yet: stranded where the
+  planner has no way either). Score -0.0007 (s.e. 0.0014), exits 434 for 435; 1,070 of 1,088
+  runs the same to the tic, and all the rest E2M4's (line 516, the same make of door) but two.
+  E2M4 on 8 fresh seeds a skill: 8 exits of 16 with it, 7 without.
