@@ -524,7 +524,13 @@ impl RouteFollower {
                 .is_some_and(|&d| d != 0)
         });
         let hopeless = burning && still && waited >= 35 / 2 && (waited - 35 / 2) % 35 == 0; // (a try a second)
-        if missed || (!opener && (waited == 5 * 35 || hopeless) && !switch_nearby) {
+                                                                                            // (a door shut tight and standing still, nothing of hers on its way to it, isn't a lift
+                                                                                            // that comes back by itself: half a second, not five. A walk-over line crossed while the
+                                                                                            // door was still closing from the time before does nothing in the game, and the door she
+                                                                                            // took for opened is stood at)
+        let shut = live[sector].ceiling <= live[sector].floor;
+        let wont = shut && still && waited == 35 / 2;
+        if missed || (!opener && (waited == 5 * 35 || hopeless || wont) && !switch_nearby) {
             let why = if missed {
                 format!("missed sector {sector}'s window")
             } else {

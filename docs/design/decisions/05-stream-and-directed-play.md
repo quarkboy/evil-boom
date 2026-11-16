@@ -1785,3 +1785,27 @@ them awake, in sight and outmatching her.
   for the hour gone, none worse, one exit 2,079 s to 850 s.
 - **A stall is worse than a death** (the maintainer, of this): on stream a death is a quick
   start again, a loop is painful to watch. Even on the score, taken for the stalls.
+
+### E1M4: five seconds stood at a big door (2026-11-16)
+
+Seen on stream: she runs up to a door, stands at it some five seconds, then goes round and
+opens it. E1M4's middle room: two big doors with no line to press, opened by walk-over lines
+(a ring that opens them for a while, four by the blue key that open them to stay). She
+crosses the ring, the doors open and start to shut; she crosses the lines by the key while
+they're still moving, which the game ignores (a line does nothing to a sector with a mover);
+she takes them for open for good, and comes to one shut.
+
+The five seconds are the follower's patience with a lift, which comes back by itself. A shut
+door doesn't.
+
+- **The rule:** a mover shut tight (no room in it) and standing still, nothing of hers on its
+  way to it and no switch by her, is waited at half a second before the way's made again, not
+  five.
+- **Tried with it, and left out:** the step ended at once when that finds no way (the route's
+  map is older than what she learned on the way, so it often doesn't: 17 s at the door in one
+  run, half a second with this). About -0.002 on the score, within noise; the maintainer
+  chose the plain half second.
+- **Not fixed:** that she takes the line for having worked. What a crossing did is learned
+  from what moved after it.
+- **Measured:** score -0.0001 (s.e. 0.0014), exits 437 and stalls 35 as before; 1,051 of
+  1,088 runs the same to the tic, 10 better, 6 worse.
