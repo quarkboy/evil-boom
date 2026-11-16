@@ -1809,3 +1809,19 @@ door doesn't.
   from what moved after it.
 - **Measured:** score -0.0001 (s.e. 0.0014), exits 437 and stalls 35 as before; 1,051 of
   1,088 runs the same to the tic, 10 better, 6 worse.
+
+### A jump's flight isn't judged as a walk (2026-11-16)
+
+The path's fit took the stretch from a jump's takeoff to its landing for a walk: waypoints
+added round the corners by it (the pillar jumped off), and what the box passes over (the far
+wall of the gap, the lip landed on) counted as a squeeze. Doom II MAP17's plan took a minute
+for it, the search trying ways round squeezes that weren't; and any rule harder on squeezes
+closed real jumps (MAP22's hop to the red skull).
+
+- **The rule:** from a takeoff the stretch is the flight: no corners rounded, nothing fitted,
+  the landing kept as a waypoint. The jump was tried as it is (`JumpLab`).
+- **Measured:** MAP17 planned in 0.2 s for 61 s, MAP22 in 0.7 s for 1.4 s; six other maps'
+  plans as they were. Score -0.0006 (s.e. 0.0014), exits 436 for 437, stalls 38 for 35 (MAP14
+  to and fro between dead and stalled, as in every run of the day; E4M1 one exit to a stall,
+  its route parting from the old one at tic 790 by five units of path); 1,037 of 1,088 runs
+  the same, 15 better, 10 worse.

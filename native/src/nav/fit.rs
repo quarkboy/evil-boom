@@ -581,6 +581,7 @@ impl Fitter<'_> {
             let p = pts[i];
             let prev = kept[kept.len() - 1];
             if self.is_pinned(p)
+                || self.takeoffs.contains(&point_key(prev))
                 || self.box_clear(p, p, &none)
                 || self.ledges_crossed(prev, pts[i + 1])
             {
@@ -591,6 +592,13 @@ impl Fitter<'_> {
         let mut out = vec![kept[0]];
         for &b in &kept[1..] {
             let a = out[out.len() - 1];
+            // (a jump's flight isn't walked: what the box is over on the way, a pit's far wall
+            // or the lip it lands on, is the jump's to clear, and it was tried as it is. Judged
+            // as a walk it was a squeeze, or a way round the pit's corner looked for)
+            if self.takeoffs.contains(&point_key(a)) {
+                out.push(b);
+                continue;
+            }
             let ignore = self.overlapped_at(a, b);
             let hits = self.box_hits(a, b, &ignore);
             if !hits.is_empty() {
@@ -970,6 +978,12 @@ impl Fitter<'_> {
         let mut out = vec![first];
         for &b in rest {
             let a = out[out.len() - 1];
+            // (from a takeoff it's the jump's flight, to where it lands: the jump was tried as it
+            // is, and has no corners to go round)
+            if self.takeoffs.contains(&point_key(a)) {
+                out.push(b);
+                continue;
+            }
             self.round_corners(a, b, 0, &mut out);
         }
         for i in 1..out.len().saturating_sub(1) {
