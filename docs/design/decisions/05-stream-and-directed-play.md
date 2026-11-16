@@ -1646,3 +1646,10 @@ make, with the heights on both sides (`relaxed_stops`). That named each cause.
   at its lowest. It now follows the floors round it when it's called (`LIFT` among
   `depends_on_heights`), as EV_DoPlat does. Score with the above +0.0016 (s.e. 0.0010), exits
   419 for 417; 1,053 the same to the tic, 16 better, 10 worse.
+- **Plutonia MAP03: a route found and thrown away.** The search with the relaxed plan's
+  lines found a route, a squeezed one; the search from all the lines, run after it for a
+  better, ran out its 20,000 steps, and "no route" was the answer. The first one's kept when
+  the second has none. Score with the two above +0.0010 (s.e. 0.0012), exits 418 for 417;
+  1,052 the same to the tic, 16 better, 11 worse.
+- **Together** the plans found over the 132 maps go from 99 to 103 (TNT MAP05 and MAP32,
+  Plutonia MAP03 and MAP10), none lost.

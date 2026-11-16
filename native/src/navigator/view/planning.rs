@@ -289,7 +289,8 @@ impl View {
         if crate::stats::enabled() {
             eprintln!("{}", crate::stats::report(t0.elapsed().as_secs_f64()));
         }
-        let route = found?;
+        // (none from them all in its budget, and one with the few lines: that one)
+        let route = found.or(narrow)?;
         let legs = route
             .legs
             .iter()
