@@ -94,10 +94,11 @@ pub fn setup(
     } else {
         e.goto(&map_name)?;
     }
-    if !o.mortal {
+    if !o.mortal || o.charmed {
         e.set_god(true);
     }
-    let knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
+    let mut knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
+    knowledge.charmed = o.charmed;
     let mut agent = Agent::new(
         &nav,
         knowledge,

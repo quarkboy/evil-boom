@@ -81,6 +81,10 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--peek" => o.peek = true,
             "--secrets" => o.secrets = true,
             "--mortal" => o.mortal = true,
+            "--charmed" => {
+                o.mortal = true;
+                o.charmed = true;
+            }
             "--complete" => o.complete = true,
             "--stall-out" => o.stall_out = true,
             "--decisions" => o.decisions = true,
@@ -170,6 +174,7 @@ pub(crate) fn option_args(o: &RunOptions) -> Vec<String> {
         (o.peek, "--peek"),
         (o.secrets, "--secrets"),
         (o.mortal, "--mortal"),
+        (o.charmed, "--charmed"),
         (o.expert, "--expert"),
         (o.complete, "--complete"),
         (o.stall_out, "--stall-out"),

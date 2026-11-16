@@ -346,6 +346,8 @@ What she knows:
   --peek               every switch and door known from the start
 
 Testing:
+  --charmed            she plays as one who can die, and nothing hurts her: can the level be
+                       got through at all, the fight aside (not for the score)
   --carry W,C,S,L,R,B,H,A,T   the loadout she starts with: weapons (a bit each), clip, shells,
                        cells, rockets, backpack (0/1), health, armor, armor type
   --tuning FILE        the fight's numbers from FILE (evil-boom tuning prints them)

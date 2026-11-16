@@ -40,6 +40,10 @@ pub struct RunOptions {
     pub max_seconds: f64,
     /// no god mode: floors hurt
     pub mortal: bool,
+    /// for testing whether a level can be got through at all: she plays as one who can die
+    /// (no drops into what she can't get out of, no wading she hasn't the health for), and
+    /// nothing hurts her. `mortal` is set with it.
+    pub charmed: bool,
     /// tries at a map (dying starts it again, knowing what was learned), the game time cap
     /// counting them all (unlimited unless told: lives are for testing, not a resource)
     pub lives: i32,
@@ -101,6 +105,7 @@ impl Default for RunOptions {
         RunOptions {
             max_seconds: 3600.0,
             mortal: false,
+            charmed: false,
             lives: i32::MAX,
             lives_given: false,
             peek: false,
@@ -578,7 +583,7 @@ pub fn run_map_in(
                 p.know_monsters(&first);
             }
         } else {
-            tic0 = scout(&mut e, &mut agent, o.mortal);
+            tic0 = scout(&mut e, &mut agent, o.mortal && !o.charmed);
             (c, obs, deaths) = (None, None, 0);
             if let Some(p) = agent
                 .player_mut()

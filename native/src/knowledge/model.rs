@@ -186,6 +186,9 @@ pub struct Knowledge {
     /// nothing can hurt her for now (a time through the level beforehand): a floor is felt as
     /// it would have hurt, not as harmless for her having stood on it unhurt
     pub immune: bool,
+    /// a test run in which she plays as mortal and nothing hurts her (`--charmed`): what a
+    /// floor does is taken from the map, since standing on it tells her nothing
+    pub charmed: bool,
     /// sectors whose floor she's had end the level under her (the game's ending floor: it
     /// hurts her down to a tenth of her health, and that's the level over): an exit she knows
     pub exit_floors: BTreeSet<usize>,
@@ -389,6 +392,7 @@ impl Knowledge {
             width: VIEW_WIDTH,
             mortal,
             immune: false,
+            charmed: false,
             exit_floors: BTreeSet::new(),
             perceive,
             mapped: BTreeSet::new(),

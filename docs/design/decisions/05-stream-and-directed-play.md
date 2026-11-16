@@ -1912,3 +1912,17 @@ stands in as she last saw things, and she last saw no room on it.
 - **Measured:** TNT MAP05 on the easiest skill with no dying: out in 1,402 s (it ran out the
   hour). Score +0.0007 (s.e. 0.0018), exits 436 for 435, stalls 32 as before; 1,046 of 1,088
   runs the same, 7 better, 3 worse.
+
+### Testing whether a level can be got through at all: `--charmed` (2026-11-16)
+
+On TNT and Plutonia she mostly dies of the monsters before the way through is ever tried, so
+"can she find the way" was being tested with no monsters, or with them and nothing able to
+hurt her. Both mislead. With no monsters the fight's side is off, and no barrel is ever
+cleared (TNT MAP32: stood against one by the red skull). With nothing able to hurt her she
+isn't mortal, and her cautions are off: she walks into pits there's no way out of, and takes
+a floor she's stood on unhurt for one that doesn't hurt (Plutonia MAP09's slime).
+
+- **`--charmed`:** she plays as one who can die (every caution on, what a floor does taken
+  from the map since standing on it tells her nothing), and nothing hurts her. With `--fight
+  1` it's the test for the way through, the fight aside. Not for the score; no play of any
+  other run is changed by it.
