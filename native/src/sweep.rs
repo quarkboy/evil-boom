@@ -209,7 +209,7 @@ fn plan_report(lp: &LevelPlan, x: &Explorer, real: &[Heights]) -> Vec<String> {
                 if let Some(n) = k.stuck_at.get(&p) {
                     line += &format!("; stuck there {n}x");
                 }
-                if k.traps.iter().any(|t| t.contains(&p)) {
+                if k.traps.iter().any(|t| t.0.contains(&p)) {
                     line += "; in a trap";
                 }
                 out.push(line + ")");

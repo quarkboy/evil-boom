@@ -159,7 +159,7 @@ pub enum Note {
     /// a run-jump came down off its landing: the times it has now
     MissedJump(String, i32),
     /// a place she was stuck in with nothing to do
-    Trap(BTreeSet<usize>),
+    Trap(BTreeSet<usize>, Keys),
     /// a switch pressed from here did nothing
     FailedPress(Point, usize),
 }
@@ -222,8 +222,9 @@ pub struct Knowledge {
     pub felt: BTreeMap<usize, bool>,
     /// run-jump key -> times it came down off its landing
     pub missed_jumps: BTreeMap<String, i32>,
-    /// places she got stuck in, nothing to do and no way out
-    pub traps: Vec<BTreeSet<usize>>,
+    /// places she got stuck in, nothing to do and no way out, each with the keys she held
+    /// then (with a key she didn't have, the way out may be the door it opens)
+    pub traps: Vec<(BTreeSet<usize>, Keys)>,
     /// poly -> times a route failed stuck there
     pub stuck_at: BTreeMap<usize, i32>,
     /// walls she's pressed use on, suspecting them -> the keys she held then (with a key she
@@ -603,8 +604,8 @@ impl Knowledge {
                 self.missed_jumps.insert(key.clone(), *times);
                 Vec::new()
             }
-            Note::Trap(polys) => {
-                self.traps.push(polys.clone());
+            Note::Trap(polys, keys) => {
+                self.traps.push((polys.clone(), *keys));
                 Vec::new()
             }
             Note::FailedPress(at, li) => self.failed_press(*at, *li),

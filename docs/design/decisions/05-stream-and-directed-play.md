@@ -2053,3 +2053,18 @@ follower stuck all the while and never failing.
     set off, `spent_walks`).
   - **Measured:** the score's 1,088 runs all the same to the tic. MAP22 with `--charmed`:
     the yellow card picked up (never before).
+- **A trap is a trap for every option, and for the keys she held.** Started again from the
+  hall with nothing left to do, she had it marked a trap and went back each life: the mark
+  kept only risky options out, and the red card (not risky, held back as "after what it
+  cuts off") was taken as before.
+  - **The rule:** nothing whose goal is in a trap is offered, risky or not (`ranked`); and
+    the trap is kept with the keys she held (`Note::Trap`), holding only while she has no
+    key she lacked then: the door it opens may be the way out. Wedged is wedged whatever
+    she holds.
+  - **Measured:** the score's 1,088 runs all the same to the tic (one life: no trap is ever
+    come back to). MAP22 with `--charmed`, two hours allowed: exits, at 6,796 s on the sixth
+    life, never before.
+  - **Left:** three lives go on learning the trap (its mark is where she could get to when
+    she gave up, which leaves out the red card's own ledge a drop above); the blue card
+    isn't offered till 6,100 s; and line 1052 pressed through the bars is the skip that
+    makes the trap: next.

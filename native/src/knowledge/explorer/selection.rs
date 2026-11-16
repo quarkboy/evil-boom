@@ -383,7 +383,7 @@ impl Explorer {
             self.current = None;
             // The exit out of reach too: where she can get from here is a trap, if it's where she has
             // started again from. Known for the next go.
-            self.trapped = Some(self.reach.clone());
+            self.trapped = Some((self.reach.clone(), obs.keys.unwrap_or_default()));
         }
     }
 

@@ -479,7 +479,8 @@ impl Explorer {
                     .map(crate::navigator::Jump::key)
                     .collect();
                 self.wedge_jumps.extend(into);
-                self.trapped = Some(trap);
+                // (wedged is wedged, whatever she holds)
+                self.trapped = Some((trap, crate::specials::Keys(u8::MAX)));
             }
         }
         self.stuck_known = self.knowledge.summary();

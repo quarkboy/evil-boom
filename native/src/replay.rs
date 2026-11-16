@@ -55,14 +55,15 @@ impl Recording {
                     Note::TriedWall(li, keys) => writeln!(out, "n {t} tried {li} {}", keys.0),
                     Note::Stuck(p, times) => writeln!(out, "n {t} stuck {p} {times}"),
                     Note::MissedJump(key, times) => writeln!(out, "n {t} missed {key} {times}"),
-                    Note::Trap(polys) => writeln!(
+                    Note::Trap(polys, keys) => writeln!(
                         out,
-                        "n {t} trap {}",
+                        "n {t} trap {} {}",
                         polys
                             .iter()
                             .map(usize::to_string)
                             .collect::<Vec<_>>()
-                            .join(",")
+                            .join(","),
+                        keys.0
                     ),
                     Note::FailedPress(at, li) => {
                         writeln!(out, "n {t} pressed {:?} {:?} {li}", at.0, at.1)
@@ -127,6 +128,8 @@ impl Recording {
                                         .collect::<BTreeSet<usize>>()
                                 })
                                 .ok_or_else(bad)?,
+                            // (recordings from before the keys were kept: none)
+                            Keys(w.get(4).and_then(|v| v.parse().ok()).unwrap_or(0)),
                         ),
                         Some("pressed") => Note::FailedPress((f(3)?, f(4)?), n(5)?),
                         _ => return Err(bad()),

@@ -1336,14 +1336,19 @@ impl Explorer {
     ) -> Vec<Objective> {
         let mut options = self.objectives(obs, risky, hooks);
         let mesh = Arc::clone(&self.nav.mesh);
-        if risky && !self.knowledge.traps.is_empty() {
-            // Not back into a trap she's been stuck in before; but in one already, it's all there is.
+        if !self.knowledge.traps.is_empty() {
+            // Not back into a trap she's been stuck in before, for a key lying there or anything
+            // else; but in one already, it's all there is. Nor is it a trap still with a key she
+            // didn't hold then: the door it opens may be the way out. (Plutonia MAP22: the red
+            // card's hall, shut till the yellow card's switch.)
             let here = mesh.poly_at(obs.pos());
+            let keys = obs.keys.unwrap_or_default();
             let traps: Vec<&BTreeSet<usize>> = self
                 .knowledge
                 .traps
                 .iter()
-                .filter(|t| here.is_none_or(|h| !t.contains(&h)))
+                .filter(|(t, held)| here.is_none_or(|h| !t.contains(&h)) && keys.0 & !held.0 == 0)
+                .map(|(t, _)| t)
                 .collect();
             options.retain(|o| {
                 !traps

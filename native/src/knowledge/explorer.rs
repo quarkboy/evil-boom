@@ -25,7 +25,7 @@ use crate::geom::{dist, Point};
 use crate::motor::follower::RouteFollower;
 use crate::motor::{Controls, Observation};
 use crate::navigator::{Navigator, States, TriggerLine, View};
-use crate::specials::{classify_line, Key, Lock};
+use crate::specials::{classify_line, Key, Keys, Lock};
 use crate::walkthrough::Step;
 pub use ending::Why;
 use std::collections::{BTreeMap, BTreeSet};
@@ -552,7 +552,7 @@ pub struct Explorer {
     /// polys beyond walk-over exit lines, and those lines
     pads: (BTreeSet<usize>, Vec<(Point, Point)>),
     /// where she could get to, with nothing at all to do
-    trapped: Option<BTreeSet<usize>>,
+    trapped: Option<(BTreeSet<usize>, Keys)>,
     /// things whoever directs her wants picked up whenever it's safe (directed play's own
     /// pickups: bonuses, health that won't go to waste, ammo with room for it): offered as
     /// items, past the same checks as any (danger, cut off)
@@ -800,9 +800,9 @@ impl Explorer {
         if let Some(t) = self.trapped.take() {
             self.log.push(format!(
                 "--- that was a trap ({} polys): not going back in",
-                t.len()
+                t.0.len()
             ));
-            self.knowledge.note(Note::Trap(t));
+            self.knowledge.note(Note::Trap(t.0, t.1));
         }
         self.sensed = None;
         self.knowledge.restart();
