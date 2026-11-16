@@ -527,12 +527,11 @@ impl Fitter<'_> {
     /// Are all these edges lines of shut sectors we can't open (so squeezing past them is no
     /// squeeze but a dead end)? With `at`, the faces of blocks more than a step above the floor
     /// she's on there count as shut too: for a stretch she's `pinched` on.
-    fn shut_in(&mut self, edges: &HashSet<SegKey>, at: Option<Point>) -> bool {
+    fn shut_in(&mut self, edges: &HashSet<SegKey>, floor: Option<f64>) -> bool {
         if edges.is_empty() {
             return false;
         }
         let room = |h: &Heights| h.ceiling - h.floor >= PLAYER_HEIGHT;
-        let floor = at.and_then(|p| self.standing_floor(p));
         // (a wall along with it opens no more than they do: a gap between a door's jamb and a
         // block risen beside it, narrower than the box, is no squeeze to hand out; but one
         // between walls alone is as it was, a tight spot that may do)
@@ -642,7 +641,9 @@ impl Fitter<'_> {
                     let goal = pts[last];
                     if trips
                         || self.shut_in(&hits, None)
-                        || (self.shut_in(&hits, Some(a)) && self.pinched(a, b, goal, &ignore))
+                        || self
+                            .pinched(a, b, goal, &ignore)
+                            .is_some_and(|z| self.shut_in(&hits, Some(z)))
                     {
                         self.squeezes.hard = true;
                     }
@@ -700,12 +701,16 @@ impl Fitter<'_> {
     /// Is there a spot on a-b where the box overlaps something and clears it nowhere to either
     /// side (up to two boxes' width off, on the floor she's walking)? Not by the path's end: a
     /// press at the foot of a lift's face is no getting past it. A path hugging the foot of a
-    /// ledge has room on its other side, and isn't.
-    fn pinched(&mut self, a: Point, b: Point, goal: Point, ignore: &HashSet<SegKey>) -> bool {
+    /// ledge has room on its other side, and isn't. The floor she's on at the spot, if so.
+    fn pinched(
+        &mut self,
+        a: Point,
+        b: Point,
+        goal: Point,
+        ignore: &HashSet<SegKey>,
+    ) -> Option<f64> {
         let length = dist(a, b);
-        let Some(floor) = self.standing_floor(a).filter(|_| length >= 1.0) else {
-            return false;
-        };
+        let from = self.standing_floor(a).filter(|_| length >= 1.0)?;
         let (nx, ny) = (-(b.1 - a.1) / length, (b.0 - a.0) / length);
         let none = HashSet::default();
         let spots: Vec<Point> = steps_along(a, b).collect();
@@ -713,6 +718,11 @@ impl Fitter<'_> {
             if dist(p, goal) <= 2.0 * PLAYER_RADIUS || self.box_clear(p, p, ignore) {
                 continue;
             }
+            // (the floor she's on there: the one the stretch began on, or the one under her
+            // middle once that's below it: a stretch off a walkway's end and on down a moat
+            // beside it is in the moat for the rest)
+            let under = self.nav.sector_at(p).map(|s| top_floor(&self.heights(s)));
+            let floor = under.map_or(from, |z| z.min(from));
             let mut room = false;
             'side: for k in 1..=8 {
                 for sign in [1.0, -1.0] {
@@ -729,10 +739,10 @@ impl Fitter<'_> {
                 }
             }
             if !room {
-                return true;
+                return Some(floor);
             }
         }
-        false
+        None
     }
 
     /// Up to about 6 spots between a and b where the box overlaps something.

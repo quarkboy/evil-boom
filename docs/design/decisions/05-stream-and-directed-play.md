@@ -1854,3 +1854,12 @@ headroom over it, was "a tight spot that may do".
   before both: -0.0008 (s.e. 0.0022), exits 435 for 437, stalls 34 for 35.
 - **MAP32 still:** no exit. The walkway's east tip strands her (her middle over the moat,
   stood on the walkway); and the way from the red skull back up to the walkway isn't found.
+
+- **Judged from the floor she'd be on there** (the same day). From the walkway's north side
+  her way to the lift's far switch ran to the walkway's east tip, off its corner and on up
+  the 32-wide moat: one stretch, begun on the walkway, and judged from the walkway's floor,
+  where the moat's sides aren't faces above her. She stood at the tip till stranded, twice a
+  run. A pinch is now judged from the floor under her middle at the pinched spot, when
+  that's below where the stretch began. MAP32, monsters in and no dying: no stranding at the
+  tip, 254 of 256 sectors for 233, at the exit chamber by 1,730 s (the lift behind the posts
+  was at 2,867 s). The score's 1,088 runs all the same to the tic.
