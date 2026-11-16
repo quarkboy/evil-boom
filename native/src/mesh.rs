@@ -139,6 +139,52 @@ fn shared_segment(a1: Point, a2: Point, b1: Point, b2: Point) -> Option<(Point, 
     ))
 }
 
+/// two edges with no line of the map along either are one edge if they're this near each other
+/// where they overlap
+const LEAN_TOL: f64 = 8.0;
+/// and lean apart by no more than this (units a unit along them: about two degrees)
+const LEAN_MOST: f64 = 1.0 / 32.0;
+
+/// The overlap of two edges that lean a little apart, measured where they overlap (not at
+/// their far ends, as `shared_segment` has it). For two edges of open floor, no map line on
+/// either: both lie on the one BSP partition, and one poly was cut again by the line of a seg
+/// that ends at the partition's start. The node builder's partition runs through that seg's
+/// rounded end, so it leans off the linedef's own line, and the second cut takes a wedge off
+/// the poly beyond the linedef's end, a few units wide after some hundreds: floor with no
+/// portal over it, and what's past it an island.
+fn leaning_segment(a1: Point, a2: Point, b1: Point, b2: Point) -> Option<(Point, Point)> {
+    let d = (a2.0 - a1.0, a2.1 - a1.1);
+    let length = d.0.hypot(d.1);
+    if length < 1e-6 {
+        return None;
+    }
+    let (ux, uy) = (d.0 / length, d.1 / length);
+    let t1 = (b1.0 - a1.0) * ux + (b1.1 - a1.1) * uy;
+    let t2 = (b2.0 - a1.0) * ux + (b2.1 - a1.1) * uy;
+    let lo = 0.0f64.max(t1.min(t2));
+    let hi = length.min(t1.max(t2));
+    if hi - lo < 1.0 || (t2 - t1).abs() < 1e-6 {
+        return None;
+    }
+    // (b's line where the overlap begins and ends, and how far off a's it is there)
+    let off = |t: f64| {
+        let s = (t - t1) / (t2 - t1);
+        let p = (b1.0 + s * (b2.0 - b1.0), b1.1 + s * (b2.1 - b1.1));
+        cross(a1, d, p) / length
+    };
+    let (at_lo, at_hi) = (off(lo), off(hi));
+    if at_lo.abs() > LEAN_TOL
+        || at_hi.abs() > LEAN_TOL
+        || (at_hi - at_lo).abs() > LEAN_MOST * (hi - lo)
+    {
+        return None;
+    }
+    Some((
+        (a1.0 + ux * lo, a1.1 + uy * lo),
+        (a1.0 + ux * hi, a1.1 + uy * hi),
+    ))
+}
+
 /// Is the point inside (or on) the convex polygon?
 pub fn inside(vs: &[Point], x: f64, y: f64) -> bool {
     let (mut pos, mut neg) = (false, false);
@@ -477,18 +523,66 @@ impl Mesh {
                 }
             }
         }
+        // (two polys join along the longest stretch any two of their edges share, in the order
+        // the pairs were first found. Not the first stretch found: a poly whose corner runs a
+        // few units past its neighbour's, along the neighbour's next wall, shares that sliver
+        // too, and a portal there, with no line of the map on it, leaves the real one, a door's
+        // line say, unmade)
         let mut seen: HashSet<(usize, usize)> = HashSet::default();
+        let mut found: Vec<(usize, usize, Point, Point)> = Vec::new();
+        let mut at: HashMap<(usize, usize), usize> = HashMap::default();
         for c in &order {
             let bucket = &grid[c];
             for (i, &(pa, a1, a2)) in bucket.iter().enumerate() {
                 for &(pb, b1, b2) in &bucket[i + 1..] {
-                    let key = (pa.min(pb), pa.max(pb));
-                    if pa == pb || seen.contains(&key) {
+                    if pa == pb {
                         continue;
                     }
                     let Some((o1, o2)) = shared_segment(a1, a2, b1, b2) else {
                         continue;
                     };
+                    let key = (pa.min(pb), pa.max(pb));
+                    let long = (o1.0 - o2.0).hypot(o1.1 - o2.1);
+                    match at.get(&key) {
+                        Some(&n) => {
+                            let (_, _, q1, q2) = found[n];
+                            if long > (q1.0 - q2.0).hypot(q1.1 - q2.1) + EPS {
+                                found[n] = (pa, pb, o1, o2);
+                            }
+                        }
+                        None => {
+                            at.insert(key, found.len());
+                            found.push((pa, pb, o1, o2));
+                        }
+                    }
+                }
+            }
+        }
+        for (pa, pb, o1, o2) in found {
+            seen.insert((pa.min(pb), pa.max(pb)));
+            self.add_portal(m, pa, pb, o1, o2);
+        }
+        // (then, for polys of one sector not joined yet: edges of open floor, no line of the
+        // map along either, that lean a little apart; see `leaning_segment`)
+        for c in &order {
+            let bucket = &grid[c];
+            for (i, &(pa, a1, a2)) in bucket.iter().enumerate() {
+                for &(pb, b1, b2) in &bucket[i + 1..] {
+                    let key = (pa.min(pb), pa.max(pb));
+                    if pa == pb
+                        || seen.contains(&key)
+                        || self.poly(pa).sector != self.poly(pb).sector
+                    {
+                        continue;
+                    }
+                    let Some((o1, o2)) = leaning_segment(a1, a2, b1, b2) else {
+                        continue;
+                    };
+                    if !self.lines_on_edge(m, a1, a2).is_empty()
+                        || !self.lines_on_edge(m, b1, b2).is_empty()
+                    {
+                        continue;
+                    }
                     seen.insert(key);
                     self.add_portal(m, pa, pb, o1, o2);
                 }

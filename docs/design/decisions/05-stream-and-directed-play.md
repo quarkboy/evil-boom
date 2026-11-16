@@ -1544,3 +1544,30 @@ measured on Doom and Doom II.
   game has nothing to go by (a one-sided first line: no donut, or the vanilla overrun). Donuts
   in the IWADs: E1M2, E2M2, TNT MAP20 (11 lines) and MAP21. Score: +0.0000, 1,074 of 1,088
   runs the same to the tic, none better or worse.
+- **Open floor with no portal over it.** The outdoor floor before the exit (sector 200) was two
+  islands in the mesh. A poly's edge on a BSP partition and its neighbours' on the same
+  partition leaned 4 units apart after 760: the node builder runs a partition through its
+  seg's rounded end, a little off the linedef's own line, and the poly that has that seg is
+  cut again by the linedef's line, which takes a wedge off it beyond the linedef's end.
+  `shared_segment` allows 3 units. Now two polys of one sector not joined otherwise are joined
+  where edges with no line of the map along either overlap within 8 units and lean apart by no
+  more than 1 in 32 (`leaning_segment`). 483 portals more over the four IWADs' 132 maps (117 on
+  30 maps of Doom and Doom II), none fewer.
+- **A door with no portal on its line.** The door out of the blue key's pit (line 1352) had
+  none: the first stretch two polys were found to share was taken for their portal, and here
+  that was 8 units of the door's sliver running on past its corner along the next wall, with no
+  line on it. Two polys now join along the longest stretch any two of their edges share.
+- **Measured:** MAP20 with no monsters exits (3,507 s exploring; 630 s with the level known
+  beforehand); before, the blue key was got and the pit never left. With monsters on the
+  easiest skill the four runs before the last fix ran out their hour; not run again yet. The
+  score with both mesh rules: -0.0013 (s.e. 0.0032), exits 418 for 420, 959 of 1,088 runs the
+  same to the tic, 23 better and 25 worse (the leaning join alone: +0.0003, s.e. 0.0027, 421).
+
+### TNT MAP09 (traced, not fixed)
+
+The blue key is on a crate 128 high whose only way on is a run through a window from the room
+above (sector 361, over a sill 16 deep). The finder has that jump eleven ways; the check
+throws every one out. Tried in the game she stops dead at the window: five barrels stand in a
+row on the floor under it, and a thing blocks at any height here. So, most likely: the barrels
+shot first, then the jump. Not confirmed (the barrels weren't got to blow in the drive
+script). A rule for it: a jump only barrels block is kept, to be made once they're cleared.
