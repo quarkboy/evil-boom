@@ -661,6 +661,42 @@ impl Explorer {
                 });
             }
         }
+        // Mortal, and risky or not: no drop onto a floor that hurts with no way off it she
+        // knows. That's no risk taken but the end, short of a secret found in ten seconds; a
+        // jump over the same floor, which the risky pass does take, is a way on if it's made.
+        // Left for when there's nothing else at all (`with_harm_allowed`).
+        if self.knowledge.mortal
+            && obj.kind != Kind::Exit
+            && obj.risky
+            && !self.harm_allowed
+            && !self.on_hurting_floor(obs)
+            && !self.knowledge.protected(obs.tic)
+        {
+            for leg in &route.legs {
+                for n in &leg.path.notes {
+                    let PathNote::Drop { sector: s, .. } = *n else {
+                        continue;
+                    };
+                    if !self.knowledge.damaging(s) {
+                        continue;
+                    }
+                    let landing = leg
+                        .path
+                        .polys
+                        .iter()
+                        .copied()
+                        .find(|&p| nav.sector_of_poly(p) == s);
+                    let way_off = landing.is_some_and(|p| {
+                        view.reachable(p, &route.states, None)
+                            .iter()
+                            .any(|&q| !self.knowledge.damaging(nav.sector_of_poly(q)))
+                    });
+                    if !way_off {
+                        return Some(Refusal::DropOntoHarm { sector: s });
+                    }
+                }
+            }
+        }
         if obj.kind != Kind::Exit && !obj.risky && !self.knowledge.protected(obs.tic) {
             // Nukage and the like only for what costs a tenth of her health or less, and never
             // dropping into it; but where she's been down before and got out again is all right.

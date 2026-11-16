@@ -1699,3 +1699,21 @@ through was a guess.
   side had the box over the ledge's edge, and were set down on the ledge. Every try now
   begins on the floor the stretch does. That stretch none in five; the stretches checked
   against the game as they were; the score's 1,088 runs all the same to the tic.
+
+### Plutonia MAP03: dead in 16 seconds, of the floor (2026-11-16)
+
+Every seed, no kill: she starts on a platform in a slime moat, the way off a run-jump to a
+ledge. A jump over where there's no getting back from isn't taken while anything safe is left
+(`JumpOverNoWayBack`), so it was the risky pass's; and there the first choice with a way to
+it was a wall to try down in the moat, 180 off, nearer than the jump's. The risky pass refused
+a way only for costing more health than she had to spare, and the walk to that wall costs a
+few hits. That there's no way off the floor wasn't counted.
+
+- **The rule:** mortal, a drop onto a floor that hurts with no way off it she knows isn't
+  taken, risky or not (`DropOntoHarm`, as the safe pass has it for any such drop). A jump
+  over the same floor still is. The drop is left for when there's nothing else at all
+  (`with_harm_allowed`).
+- **Measured:** MAP03 on the easiest skill, 4 seeds: from dead at 16 s with no kill to 159,
+  164, 187 and 1,329 s with 10, 11, 11 and 42 of 52 killed (no exits: the monsters now). Score
+  +0.0031 (s.e. 0.0024), exits 433 for 428; 1,008 of 1,088 runs the same to the tic, 25 better,
+  23 worse.
