@@ -525,12 +525,14 @@ impl Fitter<'_> {
     }
 
     /// Are all these edges lines of shut sectors we can't open (so squeezing past them is no
-    /// squeeze but a dead end)?
-    fn shut_in(&mut self, edges: &HashSet<SegKey>) -> bool {
+    /// squeeze but a dead end)? With `at`, the faces of blocks more than a step above the floor
+    /// she's on there count as shut too: for a stretch she's `pinched` on.
+    fn shut_in(&mut self, edges: &HashSet<SegKey>, at: Option<Point>) -> bool {
         if edges.is_empty() {
             return false;
         }
         let room = |h: &Heights| h.ceiling - h.floor >= PLAYER_HEIGHT;
+        let floor = at.and_then(|p| self.standing_floor(p));
         // (a wall along with it opens no more than they do: a gap between a door's jamb and a
         // block risen beside it, narrower than the box, is no squeeze to hand out; but one
         // between walls alone is as it was, a tight spot that may do)
@@ -557,7 +559,19 @@ impl Fitter<'_> {
                     .any(|hb| hf.ceiling.min(hb.ceiling) - hf.floor.max(hb.floor) >= PLAYER_HEIGHT)
             }) && fs.iter().any(room)
                 && bs.iter().any(room);
-            if open {
+            // (a face: one side more than a step above the other, its top more than a step
+            // above her at any height it can be. A row of posts risen across a corridor, the
+            // gaps between them narrower than the box, is a fence, with all the headroom there
+            // is over it: TNT MAP32's, walked at till she was stranded)
+            let face = floor.is_some_and(|z| {
+                fs.iter().all(|hf| {
+                    bs.iter().all(|hb| {
+                        (hf.floor - hb.floor).abs() > MAX_STEP
+                            && hf.floor.max(hb.floor) - z > MAX_STEP
+                    })
+                })
+            });
+            if open && !face {
                 return false;
             }
             shut = true;
@@ -621,7 +635,15 @@ impl Fitter<'_> {
                     // cage of door bars with gaps the box's own width is a way in Doom only on the
                     // exact unit, which she never hits, and a box fitting near each squeeze isn't one
                     // getting through)
-                    if trips || self.shut_in(&hits) {
+                    // (nor between faces more than a step above her, with nowhere to either
+                    // side the box clears them: a fence of posts risen across a corridor, a moat
+                    // exactly the box's width between a wall and a walkway's edge. That last is
+                    // a speedrunner's glide, on the exact unit; not hers)
+                    let goal = pts[last];
+                    if trips
+                        || self.shut_in(&hits, None)
+                        || (self.shut_in(&hits, Some(a)) && self.pinched(a, b, goal, &ignore))
+                    {
                         self.squeezes.hard = true;
                     }
                 }
@@ -643,7 +665,7 @@ impl Fitter<'_> {
                 .get(e)
                 .is_some_and(|li| nav.trip_lines.contains(li) && !self.exempt.contains(li))
         });
-        if trips || self.shut_in(hits) {
+        if trips || self.shut_in(hits, None) {
             return false;
         }
         let mut heights: Vec<(f64, f64)> = nav.initial.iter().map(|h| h.tuple()).collect();
@@ -673,6 +695,44 @@ impl Fitter<'_> {
             }
         }
         nav.callbacks.walks(a, b, &heights) >= WALK_SURE
+    }
+
+    /// Is there a spot on a-b where the box overlaps something and clears it nowhere to either
+    /// side (up to two boxes' width off, on the floor she's walking)? Not by the path's end: a
+    /// press at the foot of a lift's face is no getting past it. A path hugging the foot of a
+    /// ledge has room on its other side, and isn't.
+    fn pinched(&mut self, a: Point, b: Point, goal: Point, ignore: &HashSet<SegKey>) -> bool {
+        let length = dist(a, b);
+        let Some(floor) = self.standing_floor(a).filter(|_| length >= 1.0) else {
+            return false;
+        };
+        let (nx, ny) = (-(b.1 - a.1) / length, (b.0 - a.0) / length);
+        let none = HashSet::default();
+        let spots: Vec<Point> = steps_along(a, b).collect();
+        for p in spots {
+            if dist(p, goal) <= 2.0 * PLAYER_RADIUS || self.box_clear(p, p, ignore) {
+                continue;
+            }
+            let mut room = false;
+            'side: for k in 1..=8 {
+                for sign in [1.0, -1.0] {
+                    let off = 4.0 * f64::from(k) * sign;
+                    let q = (p.0 + nx * off, p.1 + ny * off);
+                    let Some(s) = self.nav.sector_at(q) else {
+                        continue;
+                    };
+                    let on_floor = (top_floor(&self.heights(s)) - floor).abs() <= MAX_STEP;
+                    if on_floor && self.box_clear(q, q, &none) {
+                        room = true;
+                        break 'side;
+                    }
+                }
+            }
+            if !room {
+                return true;
+            }
+        }
+        false
     }
 
     /// Up to about 6 spots between a and b where the box overlaps something.

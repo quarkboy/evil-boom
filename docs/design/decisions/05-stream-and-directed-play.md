@@ -1825,3 +1825,32 @@ closed real jumps (MAP22's hop to the red skull).
   to and fro between dead and stalled, as in every run of the day; E4M1 one exit to a stall,
   its route parting from the old one at tic 790 by five units of path); 1,037 of 1,088 runs
   the same, 15 better, 10 worse.
+
+### Glides aren't ways (TNT MAP32, 2026-11-16)
+
+TNT MAP32's ring walkway had her walking at things for minutes till she'd nowhere left to
+go: a fence of skull posts risen across it (16 wide, the gaps 16 and 24; line 1279 lowers
+them), and the moat outside it where it narrows to exactly 32 between the walkway's edge
+and the outer wall. That last a player gets through only on the exact unit: a speedrunner's
+glide (the maintainer's word for it), never asked of anyone, and not hers; walked at in the
+game she stops at its mouth.
+
+All three are pinches inside one long piece of the mesh, where no crossing's width is
+checked: only the whole path's fit sees them, and it had a pinch for a dead end only when
+what pinched was a shut door. A block or a ledge's face, more than a step above her with
+headroom over it, was "a tight spot that may do".
+
+- **The rule:** a stretch pinched between faces more than a step above the floor she's on
+  (and walls), with nowhere up to two boxes' width to either side that the box clears them,
+  is no way (`pinched`, `shut_in` with the floor). Not by the path's end (a press at the foot
+  of a lift), nor a path along a ledge's foot (room on its other side). The first try, any
+  such face in the box's way, closed both of those, and the planner's way to MAP32's first
+  lift with them.
+- **What it shows up:** MAP32's plan was by a glide, and now there's none (followed in the
+  game, the old one stuck at the red skull's barrier anyway). Seven other maps' plans as
+  they were, MAP17's and MAP22's with their jumps (the entry above).
+- **Measured:** on top of the flight change, score -0.0003 (s.e. 0.0016), exits 435 for 436,
+  stalls 34 for 38; 1,064 of 1,088 runs the same, 9 better, 11 worse. Against the baseline
+  before both: -0.0008 (s.e. 0.0022), exits 435 for 437, stalls 34 for 35.
+- **MAP32 still:** no exit. The walkway's east tip strands her (her middle over the moat,
+  stood on the walkway); and the way from the red skull back up to the walkway isn't found.
