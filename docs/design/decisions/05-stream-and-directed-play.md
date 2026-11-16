@@ -1863,3 +1863,19 @@ headroom over it, was "a tight spot that may do".
   that's below where the stretch began. MAP32, monsters in and no dying: no stranding at the
   tip, 254 of 256 sectors for 233, at the exit chamber by 1,730 s (the lift behind the posts
   was at 2,867 s). The score's 1,088 runs all the same to the tic.
+
+### TNT MAP32's exit: the lift she never saw move (2026-11-16)
+
+The exit is behind two things in a row: a door opened for four seconds by a switch on a shelf
+a teleporter away, and right behind it a lift lowered by a switch by another teleporter. She
+learned the door. The lift's switch she pressed again and again and never learned, the lift
+being behind the shut door whenever she went to look: 1,300 off from its switch, out of
+earshot as it starts down; and by the teleporter she's beside it in under a second, as it
+waits at the bottom.
+
+- **The rule:** a lift's line set off within `LIFT_BACK_TICS` (six seconds), and a mover of
+  its heard to start: the lift on its way back up, and the line's doing, as a clank within
+  8 tics of a press already was (`heard_move`). She's told which sector a sound is from, if
+  she knows the sector, as before; nothing new of the map is given her.
+- **Measured:** score +0.0000 (s.e. 0.0015), exits 435 as before, stalls 32 for 34; 1,053 of
+  1,088 runs the same, 4 better, 8 worse.

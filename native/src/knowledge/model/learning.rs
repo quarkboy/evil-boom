@@ -3,7 +3,9 @@
 
 //! Attributing sector movement to triggers and learning whether activations took effect.
 
-use super::{needs_key, Fired, How, Knowledge, BUSY_TICS, SHOT_RANGE, SURE_TICS, TAKE_TICS};
+use super::{
+    needs_key, Fired, How, Knowledge, BUSY_TICS, LIFT_BACK_TICS, SHOT_RANGE, SURE_TICS, TAKE_TICS,
+};
 use crate::motor::{Controls, Observation};
 use crate::nav::Heights;
 use crate::navigator::{States, TriggerLine, EXIT_FLOOR, SHOT_HEIGHT};
@@ -19,14 +21,32 @@ impl Knowledge {
         if !self.sectors.contains(&s) {
             return;
         }
-        let Some(f) = self
+        let last = self
             .fired
             .iter()
             .rev()
             .find(|f| f.life == self.lives && f.tic <= tic)
             .copied()
-            .filter(|f| tic - f.tic <= SURE_TICS)
-        else {
+            .filter(|f| tic - f.tic <= SURE_TICS);
+        // Or a lift's line set off a few seconds back, whatever she's set off since: a lift
+        // goes down, waits three seconds and starts back up, and the start back is heard as
+        // the start down was. Set off out of earshot of it and gone to by a teleporter, the
+        // way back up is all she hears of it (TNT MAP32's exit: the lift behind the door).
+        let lift = || {
+            self.fired
+                .iter()
+                .rev()
+                .take_while(|f| f.life == self.lives && tic - f.tic <= LIFT_BACK_TICS)
+                .find(|f| {
+                    f.tic <= tic
+                        && self.by_line.get(&f.line).into_iter().flatten().any(|&ti| {
+                            let t = self.trigger(ti);
+                            t.info.category == Category::Lift && t.effect(s).is_some()
+                        })
+                })
+                .copied()
+        };
+        let Some(f) = last.or_else(lift) else {
             return;
         };
         for ti in self.by_line.get(&f.line).cloned().unwrap_or_default() {

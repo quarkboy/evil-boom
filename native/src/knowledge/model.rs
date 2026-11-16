@@ -54,6 +54,9 @@ pub const EXPECTED_FOR: i64 = 8 * 35;
 pub const TAKE_TICS: i64 = 35;
 /// a sector starting to move this soon after a press: the press did it (later: in doubt)
 pub const SURE_TICS: i64 = 8;
+/// a lift's line set off this long ago at most: a mover of its heard starting is the lift on
+/// its way back (the way down, three seconds' wait, and some to spare)
+pub const LIFT_BACK_TICS: i64 = 6 * 35;
 /// ...where it acts on what moved this lately: it didn't take (Doom leaves a switch on a busy
 /// sector unused)
 pub const BUSY_TICS: i64 = 200;
