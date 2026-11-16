@@ -265,7 +265,7 @@ impl Explorer {
         out.extend(self.exits(&by_line, &reach, keys, pos));
         out.extend(self.keys_seen(&view, &states, &reach, keys, pos));
         out.extend(self.ammo_for_tapping(obs, &reach));
-        out.extend(self.untried(&by_line, &reach, keys, pos));
+        out.extend(self.untried(&by_line, &reach, keys, (pos, obs.tic)));
         let again = self.pressed_again(obs, &by_line, &reach, keys, pos);
         if self.suspecting != Suspecting::No {
             let panic = self.suspecting == Suspecting::EveryWall;
@@ -508,16 +508,23 @@ impl Explorer {
 
     /// The switches and doors she can tell are there and hasn't tried, that she can get to and
     /// has the key for.
+    ///
+    /// Lines that work the same thing (`tried_key`) and join end to end are one of them: the
+    /// facets of a round lift's face, a wide door drawn in pieces. One to try, pressed from
+    /// the nearest place any of its lines can be pressed from; a line of it tried lately and
+    /// given up is passed over for the next nearest, so she goes round the lot once, not back
+    /// to the facet in the corner that can't be pressed (Doom II MAP14's line 537), and not
+    /// to every facet in turn as so many things to do.
     fn untried(
         &self,
         by_line: &BTreeMap<usize, &TriggerLine>,
         reach: &BTreeSet<usize>,
         keys: Keys,
-        pos: Point,
+        (pos, tic): (Point, i64),
     ) -> Vec<Objective> {
         let nav = &self.nav;
         let k = &self.knowledge;
-        let mut out: Vec<Objective> = Vec::new();
+        let mut found: Vec<(usize, Objective)> = Vec::new();
         for li in k.interactables() {
             let Some(t) = by_line
                 .get(&li)
@@ -543,9 +550,63 @@ impl Explorer {
                 ),
             );
             o.trigger = Some((*t).clone());
-            out.push(o);
+            found.push((li, o));
         }
-        out
+        // Which of them are one: the same thing worked, joined by their ends (through any
+        // line of the map that works it too, seen or not: a facet she hasn't made out yet
+        // doesn't make two of a face).
+        let ends = |li: usize| {
+            let (a, b) = nav.map.line_seg(li);
+            [a, b]
+        };
+        let mut group: Vec<usize> = (0..found.len()).collect();
+        for i in 0..found.len() {
+            if group[i] != i {
+                continue;
+            }
+            let key = k.tried_key(found[i].0);
+            let mut points: Vec<Point> = ends(found[i].0).to_vec();
+            let mut alike: Vec<usize> = (0..nav.map.linedefs.len())
+                .filter(|&li| {
+                    li != found[i].0 && nav.map.linedefs[li].special != 0 && k.tried_key(li) == key
+                })
+                .collect();
+            loop {
+                let before = alike.len();
+                alike.retain(|&li| {
+                    let e = ends(li);
+                    let joined = e.iter().any(|p| points.contains(p));
+                    if joined {
+                        points.extend(e);
+                    }
+                    !joined
+                });
+                if alike.len() == before {
+                    break;
+                }
+            }
+            for j in i + 1..found.len() {
+                if group[j] == j
+                    && k.tried_key(found[j].0) == key
+                    && ends(found[j].0).iter().any(|p| points.contains(p))
+                {
+                    group[j] = i;
+                }
+            }
+        }
+        // Of each lot, the nearest not given up lately (all given up: the nearest, which waits
+        // its turn as any does).
+        let rank = |o: &Objective| (!self.fresh(o, tic), dist(o.goal, pos));
+        let mut best: BTreeMap<usize, Objective> = BTreeMap::new();
+        for (g, (_, o)) in group.into_iter().zip(found) {
+            match best.get(&g) {
+                Some(b) if rank(b) <= rank(&o) => {}
+                _ => {
+                    best.insert(g, o);
+                }
+            }
+        }
+        best.into_values().collect()
     }
 
     /// Repeatable switches pressed a while ago whose effect she never saw are worth another go

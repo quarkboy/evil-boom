@@ -2068,3 +2068,32 @@ follower stuck all the while and never failing.
     she gave up, which leaves out the red card's own ledge a drop above); the blue card
     isn't offered till 6,100 s; and line 1052 pressed through the bars is the skip that
     makes the trap: next.
+- **MAP22's skip left to the trap's mark** (the maintainer's call, 2026-11-16). Three rules to
+  keep her from pressing line 1052 past the bars were tried and dropped, each scored on the
+  1,088 runs (baseline 0.493, 440 exits, 35 stalls):
+  - *a press waits for what moves that's between her and the line* (the walls of moving
+    sectors her box would meet on the straight way up to it): 0.488, 432 exits. It took a
+    door at the foot of a lift's shaft for barred (Doom II MAP26's line 279).
+  - *a press is stood for before the line's face, not off its end* (the maintainer's
+    idea: the skip is pressed slantwise from the corner outside the bars, 40 past the
+    switch's end): 0.488, 433 exits, 39 stalls; 111 runs moved, Doom II MAP19 four exits to
+    stalls, E3M6 three lost. Not traced. It trims the press places of 297 lines on the 68
+    maps and leaves one with none (a corner facet of a round lift, MAP14's line 537).
+  - *an untried switch needs a place to stand for it* (`stand_gates`, which the planner
+    keeps for the switches she knows and `untried` doesn't): a further -0.005, four exits
+    each on Doom II MAP05 and MAP26. Not traced.
+  With `--charmed` either of the last two has MAP22 done in the level's order with no life
+  lost to the hall; as committed, she takes the skip once, is stranded, and starts again.
+- **Lines that work one thing and join end to end are one thing to try** (the maintainer's
+  model, 2026-11-16). The facets of a round lift's face and a wide door drawn in pieces were
+  each a switch or door to try till one worked (a press that works settles all that work
+  the same: `tried_key`). On the 68 maps, 2,193 lines to press are 1,779 such things; 295 of
+  the 414 fewer are lifts' facets, E4M8 113 of them, Doom II MAP14 58.
+  - **The rule** (`untried`): one to try for each lot (the same `tried_key`, joined by their
+    ends through any line of the map that works it too), pressed from the nearest place any
+    of its lines can be pressed from; a line of it tried lately and given up is passed over
+    for the next nearest.
+  - **Measured:** 0.492 for 0.493 (-0.0005, s.e. 0.0024), exits 439 for 440, stalls 38 for 35;
+    58 runs moved, 17 better, 19 worse. Kept as the right model of a switch, not for the
+    score. MAP14, which it was hoped to mend, is 2 exits and 8 stalls of 16 for 3 and 7: its
+    stalls are something else, to be traced.
