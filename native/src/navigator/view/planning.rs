@@ -147,6 +147,7 @@ impl View {
                     .map(|(k, v)| (*k, v.iter().copied().collect()))
                     .collect(),
                 shot_floors: n.shot_floors.clone(),
+                stand_gates: n.stand_gates.clone(),
                 cross_sides: self.cross_sides().clone(),
                 temporary: crate::navigator::temporary_heights(&self.triggers, &n.movers)
                     .into_iter()
@@ -398,6 +399,23 @@ impl View {
                     Some(Step::Portal(pi))
                         if !n.passable(pi, prev, states0, None, self.spent()) =>
                     {
+                        // (the lines of moving sectors in the box's way at the portal now and
+                        // not in the end, a fence's posts: what brings them down is needed)
+                        let now = n.gate_blockers(pi, prev, states0, None);
+                        let then = n.gate_blockers(pi, prev, states_all, Some(&doors_all));
+                        for li in now.into_iter().filter(|l| !then.contains(l)) {
+                            let (f, b) = n.map.sides(li);
+                            for s in [f, b].into_iter().flatten() {
+                                let moved = states_all[s]
+                                    .iter()
+                                    .filter(|h| !states0[s].contains(h))
+                                    .min_by(|x, y| x.floor.total_cmp(&y.floor));
+                                if let Some(&h) = moved {
+                                    needed.insert((s, h.key()));
+                                    needed_h.insert((s, h.key()), h);
+                                }
+                            }
+                        }
                         let (sa, sb) = (n.sector_of_poly(prev), n.sector_of_poly(p));
                         let pairs: Vec<(Heights, Heights)> = states_all[sa]
                             .iter()
@@ -470,6 +488,12 @@ impl View {
                                 && !n.use_line_gates.get(&(li, p)).is_some_and(|g| {
                                     g.iter().any(|pr| pr.0 == sh.0 || pr.1 == sh.0)
                                 })
+                                && !n.stand_gates.get(&(li, p)).is_some_and(|places| {
+                                    places
+                                        .iter()
+                                        .flatten()
+                                        .any(|pr| pr.0 == sh.0 || pr.1 == sh.0)
+                                })
                         })
                         .collect()
                 };
@@ -511,6 +535,7 @@ impl View {
                         .filter(|&p| {
                             !n.use_gates.contains_key(&(li, p))
                                 && !n.use_line_gates.contains_key(&(li, p))
+                                && !n.stand_gates.contains_key(&(li, p))
                         })
                         .collect();
                     let clear_reach: BTreeSet<usize> =

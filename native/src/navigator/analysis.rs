@@ -240,7 +240,14 @@ type Gates = (
     HashMap<(usize, usize), BTreeSet<usize>>,
     HashMap<(usize, usize), BTreeSet<(usize, usize)>>,
     HashMap<(usize, usize), (f64, f64)>,
+    HashMap<(usize, usize), StandGates>,
 );
+
+/// Where a press can be stood for in a poly, each place by the lines of moving sectors her box
+/// is over there, (front, back): one of the places must have the box clear over all its lines.
+pub type StandGates = Vec<Vec<(usize, usize)>>;
+/// the places kept for a press from one poly
+const STAND_PLACES: usize = 6;
 
 pub(super) struct Analysis<'a> {
     m: &'a MapData,
@@ -254,6 +261,7 @@ pub(super) struct Analysis<'a> {
     use_gates: HashMap<(usize, usize), BTreeSet<usize>>,
     use_line_gates: HashMap<(usize, usize), BTreeSet<(usize, usize)>>,
     shot_floors: HashMap<(usize, usize), (f64, f64)>,
+    stand_gates: HashMap<(usize, usize), StandGates>,
 }
 
 impl<'a> Analysis<'a> {
@@ -288,6 +296,7 @@ impl<'a> Analysis<'a> {
             use_gates: HashMap::default(),
             use_line_gates: HashMap::default(),
             shot_floors: HashMap::default(),
+            stand_gates: HashMap::default(),
         }
     }
 
@@ -296,6 +305,7 @@ impl<'a> Analysis<'a> {
             std::mem::take(&mut self.use_gates),
             std::mem::take(&mut self.use_line_gates),
             std::mem::take(&mut self.shot_floors),
+            std::mem::take(&mut self.stand_gates),
         )
     }
 
@@ -515,9 +525,9 @@ impl<'a> Analysis<'a> {
             }
             // ...and somewhere in it the box can stand within use range (a floor below the one in
             // front of a door can be out of reach of it)
-            if !self.press_point_in(pi, poly, a, b) {
+            let Some(stand) = self.press_point_in(pi, poly, a, b) else {
                 continue;
-            }
+            };
             // The use trace stops at the first line with no opening: a switch behind shut bars
             // can only be pressed through them once they're open.
             let near = spot_in_poly(vs, c, crate::geom::midpoint(a, b), 1.0);
@@ -539,6 +549,9 @@ impl<'a> Analysis<'a> {
                 continue;
             };
             out.insert(pi);
+            if !stand.is_empty() {
+                self.stand_gates.insert((li, pi), stand);
+            }
             if !sectors.is_empty() {
                 self.use_gates.insert((li, pi), sectors);
             }
@@ -549,11 +562,15 @@ impl<'a> Analysis<'a> {
         out
     }
 
-    /// Is there a spot in the poly the box can stand at within use range of the line a-b
-    /// (along its edges, moved in by the box)?
-    fn press_point_in(&self, pi: usize, poly: &Poly, a: Point, b: Point) -> bool {
+    /// The spots in the poly the box can stand at within use range of the line a-b (along its
+    /// edges, moved in by the box): None if there's none; empty if at one of them the box is
+    /// clear of everything; else, for each, the lines of moving sectors that are walls to it
+    /// there as the map starts (a post of a fence that comes down: the switch behind is
+    /// pressed from the gap once it has).
+    fn press_point_in(&self, pi: usize, poly: &Poly, a: Point, b: Point) -> Option<StandGates> {
         let vs = &poly.vertices;
         let n = vs.len();
+        let mut places: StandGates = Vec::new();
         for i in 0..n {
             let (p1, p2) = (vs[i], vs[(i + 1) % n]);
             for k in 0..9 {
@@ -577,11 +594,75 @@ impl<'a> Analysis<'a> {
                     && self.mesh.poly_at(q) == Some(pi)
                     && !self.box_on_wall(q)
                 {
-                    return true;
+                    let over = self.moving_walls_at(q, poly.sector);
+                    if over.is_empty() {
+                        return Some(Vec::new());
+                    }
+                    if !places.contains(&over) && places.len() < STAND_PLACES {
+                        places.push(over);
+                    }
                 }
             }
         }
-        false
+        // (and through the poly's middle, where its edges' spots were all by something: a
+        // door's sill between two more doors has room in the middle and none along the walls)
+        let (x0, x1, y0, y1) = vs.iter().fold(
+            (
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+            ),
+            |(a0, a1, b0, b1), v| (a0.min(v.0), a1.max(v.0), b0.min(v.1), b1.max(v.1)),
+        );
+        let step = ((x1 - x0).max(y1 - y0) / 12.0).max(4.0);
+        let mut x = x0 + step / 2.0;
+        while x < x1 {
+            let mut y = y0 + step / 2.0;
+            while y < y1 {
+                let q = (x, y);
+                if segment_distance(a, b, q, q) <= USE_REACH + 16.0
+                    && self.mesh.poly_at(q) == Some(pi)
+                    && crate::mesh::inside(vs, x, y)
+                    && !self.box_on_wall(q)
+                {
+                    let over = self.moving_walls_at(q, poly.sector);
+                    if over.is_empty() {
+                        return Some(Vec::new());
+                    }
+                    if !places.contains(&over) && places.len() < STAND_PLACES {
+                        places.push(over);
+                    }
+                }
+                y += step;
+            }
+            x += step;
+        }
+        (!places.is_empty()).then_some(places)
+    }
+
+    /// The lines under the box at q, standing in `sector`, that are walls to it as the map
+    /// starts and have a sector that may move: (front, back).
+    fn moving_walls_at(&self, q: Point, sector: usize) -> Vec<(usize, usize)> {
+        let r = PLAYER_RADIUS - 0.5;
+        let init = &self.movers.initial;
+        let mut out: Vec<(usize, usize)> = Vec::new();
+        for cell in cells(q.0 - r, q.1 - r, q.0 + r, q.1 + r) {
+            for &li in self.mesh.line_grid.get(&cell).into_iter().flatten() {
+                let (Some(f), Some(b)) = self.m.sides(li) else {
+                    continue;
+                };
+                if (self.may_move.contains(&f) || self.may_move.contains(&b))
+                    && !out.contains(&(f, b))
+                    && !crate::nav::box_over(init[sector], init[f], init[b])
+                    && box_hits_segment(q.0, q.1, r, self.m.line_seg(li))
+                {
+                    out.push((f, b));
+                }
+            }
+        }
+        out.sort_unstable();
+        out
     }
 
     /// Does the box at q overlap a one-sided or impassable line, or a solid thing?
@@ -590,7 +671,21 @@ impl<'a> Analysis<'a> {
         for cell in cells(q.0 - r, q.1 - r, q.0 + r, q.1 + r) {
             for &li in self.mesh.line_grid.get(&cell).into_iter().flatten() {
                 let line = &self.m.linedefs[li];
-                if (line.back == NO_SIDEDEF || line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0)
+                // (or the face of something nothing ever moves that she can't get onto or off:
+                // a post of a fence, a pillar: as much a wall as a one-sided line)
+                let face = || {
+                    let (Some(f), Some(b)) = self.m.sides(li) else {
+                        return false;
+                    };
+                    let init = &self.movers.initial;
+                    !self.may_move.contains(&f)
+                        && !self.may_move.contains(&b)
+                        && !crate::nav::can_cross(init[f], init[b])
+                        && !crate::nav::can_cross(init[b], init[f])
+                };
+                if (line.back == NO_SIDEDEF
+                    || line.flags & (ML_BLOCKING | ML_BLOCKPLAYERS) != 0
+                    || face())
                     && box_hits_segment(q.0, q.1, r, self.m.line_seg(li))
                 {
                     return true;

@@ -8,7 +8,7 @@ use super::world::{Pair, Timers, World};
 use super::{KeySet, Planner};
 use crate::det::{HashMap, HashSet};
 use crate::geom::{Point, MAX_STEP};
-use crate::nav::{can_cross, DoorOpening, Doors, Found, Heights};
+use crate::nav::{box_over, can_cross, DoorOpening, Doors, Found, Heights};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -79,6 +79,10 @@ impl Trigger {
     }
 }
 
+/// The places to stand for a press from one poly, each by the (front, back) sectors of the lines
+/// her box must be clear over there.
+pub type StandPlaces = Vec<Vec<(usize, usize)>>;
+
 /// The plan search's per-map facts.
 pub struct PlanFacts {
     pub triggers: Vec<Trigger>,
@@ -89,6 +93,9 @@ pub struct PlanFacts {
     pub use_line_gates: HashMap<(usize, usize), Vec<(usize, usize)>>,
     /// (gun line, activator poly) -> the floors it can be shot from there
     pub shot_floors: HashMap<(usize, usize), (f64, f64)>,
+    /// (line, activator poly) -> the places to stand for the press there, each by the (front,
+    /// back) sectors of the lines her box must be clear over
+    pub stand_gates: HashMap<(usize, usize), StandPlaces>,
     /// (walk-over line, activator poly) -> the sector across the line
     pub cross_sides: HashMap<(usize, usize), usize>,
     /// heights that don't last (lifts, doors that close again)
@@ -192,6 +199,21 @@ impl Planner<'_> {
                     }
                 }
                 let here = &states[self.nav.poly_sector[p]];
+                if let Some(places) = self.facts.stand_gates.get(&(line, p)) {
+                    let clear = |f: usize, b: usize| {
+                        here.iter().any(|&h| {
+                            states[f]
+                                .iter()
+                                .any(|&a| states[b].iter().any(|&c| box_over(h, a, c)))
+                        })
+                    };
+                    if !places
+                        .iter()
+                        .any(|place| place.iter().all(|&(f, b)| clear(f, b)))
+                    {
+                        return false;
+                    }
+                }
                 if let Some(&(lo, hi)) = self.facts.shot_floors.get(&(line, p)) {
                     if !here.iter().any(|h| lo <= h.floor && h.floor <= hi) {
                         return false;

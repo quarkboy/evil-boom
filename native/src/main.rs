@@ -61,6 +61,9 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
     let mut ulg: Vec<_> = nav.use_line_gates.iter().collect();
     ulg.sort();
     println!("use_line_gates {ulg:?}");
+    let mut sg: Vec<_> = nav.stand_gates.iter().collect();
+    sg.sort();
+    println!("stand_gates {sg:?}");
     let mut sf: Vec<_> = nav.shot_floors.iter().map(|(k, v)| (*k, *v)).collect();
     sf.sort_by_key(|a| a.0);
     println!("shot_floors {sf:?}");

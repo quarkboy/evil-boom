@@ -914,6 +914,21 @@ impl View {
                 }
             }
             let sector = n.sector_of_poly(p);
+            if let Some(places) = n.stand_gates.get(&(li, p)) {
+                let clear = |f: usize, b: usize| {
+                    states[sector].iter().any(|&h| {
+                        states[f]
+                            .iter()
+                            .any(|&a| states[b].iter().any(|&c| crate::nav::box_over(h, a, c)))
+                    })
+                };
+                if !places
+                    .iter()
+                    .any(|place| place.iter().all(|&(f, b)| clear(f, b)))
+                {
+                    continue;
+                }
+            }
             if let Some(&(lo, hi)) = n.shot_floors.get(&(li, p)) {
                 if !states[sector]
                     .iter()

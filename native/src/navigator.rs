@@ -245,6 +245,9 @@ pub struct Navigator {
     pub use_line_gates: HashMap<(usize, usize), BTreeSet<(usize, usize)>>,
     /// (gun line, poly) -> floors to stand on there for a level shot to hit it
     pub shot_floors: HashMap<(usize, usize), (f64, f64)>,
+    /// (switch line, poly) -> where it can be stood for there, each place by the lines of moving
+    /// sectors the box must be clear over (`analysis::StandGates`)
+    pub stand_gates: HashMap<(usize, usize), analysis::StandGates>,
     pub triggers: Vec<TriggerLine>,
     pub teleports: Vec<Teleport>,
     pub jumps: Vec<Jump>,
@@ -310,7 +313,7 @@ impl Navigator {
         let obstacle_grid = widths::obstacle_grid(&map, skill, true);
         let mut a = analysis::Analysis::new(&map, &mesh, &movers, &obstacle_grid, skill);
         let mut triggers = a.find_triggers();
-        let (use_gates, use_line_gates, shot_floors) = a.take_gates();
+        let (use_gates, use_line_gates, shot_floors, stand_gates) = a.take_gates();
         for t in &mut triggers {
             t.effects = with_trenches(&movers, &trenches, &t.effects);
         }
@@ -381,6 +384,7 @@ impl Navigator {
             use_gates,
             use_line_gates,
             shot_floors,
+            stand_gates,
             triggers,
             teleports,
             jumps: Vec::new(),

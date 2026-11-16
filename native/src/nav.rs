@@ -45,6 +45,18 @@ pub fn can_cross(a: Heights, b: Heights) -> bool {
         && a.ceiling.min(b.ceiling) - a.floor.max(b.floor) >= PLAYER_HEIGHT
 }
 
+/// Standing at heights `here`, may her box be over a line between sectors at `a` and `b`? Not
+/// where there's no opening over it she fits (a post, bars, a door shut), nor where it's a face
+/// more than a step high and she's below its top by more than a step.
+#[inline]
+pub fn box_over(here: Heights, a: Heights, b: Heights) -> bool {
+    let top = a.floor.max(b.floor);
+    let under = a.ceiling.min(b.ceiling);
+    under - top >= PLAYER_HEIGHT
+        && under - here.floor >= PLAYER_HEIGHT
+        && ((a.floor - b.floor).abs() <= MAX_STEP || here.floor >= top - MAX_STEP)
+}
+
 /// Some heights of `a` and some of `b` the player can cross between, one way or the other.
 fn crossable_either_way(a: &[Heights], b: &[Heights]) -> bool {
     a.iter()

@@ -1571,3 +1571,48 @@ throws every one out. Tried in the game she stops dead at the window: five barre
 row on the floor under it, and a thing blocks at any height here. So, most likely: the barrels
 shot first, then the jump. Not confirmed (the barrels weren't got to blow in the drive
 script). A rule for it: a jump only barrels block is kept, to be made once they're cleared.
+
+### TNT MAP18 again: the plan search, and where a switch is pressed from
+
+MAP18 was the one level of these the planner reached "in principle" and found no plan for,
+with ten minutes and a hundred times its budget. Looked into as a question of the search
+(orderings, depth, pruning), it came down to the level's model.
+
+- **What the search was doing.** Its nodes went deep (most at 18 or 19 steps, 13 of them
+  lasting changes), a fifth of them worlds not seen before, six duplicates thrown away for
+  each one kept. Three in four of its seconds were paths for legs, most of those failing:
+  legs to press the switches of a pillar from outside the ring of posts round it.
+- **Where a switch can be pressed from** (`polys_in_use_range`) asked only for somewhere in
+  the poly, in reach, clear of one-sided walls. Now the face of anything nothing moves that
+  she can't get onto or off is a wall to it too (a fixed post). And where every such place
+  has her box over the line of something that may move and is a wall to the box as the map
+  starts (a post that comes down, a door shut beside the one pressed), the press from that
+  poly waits on one of the places coming clear (`stand_gates`, read by both `activators_now`).
+  A wall to the box: no opening over the line she fits, or a face over a step high with her
+  more than a step below its top (`nav::box_over`).
+- **The relaxed plan didn't name a fence.** Its way to a trigger went through a portal too
+  narrow with the posts up, and asked for nothing, the two sides being the one sector. Now
+  the gate lines in the box's way at such a portal at the start and not in the end have what
+  moves their sectors asked for. And a press that waits on a place to stand isn't taken for
+  one with nothing in its way.
+- **Measured.** MAP18's relaxed plan from 12 lines to 27 (the four switches that lower the
+  posts, the red key); a plan of 28 steps at the usual budget in 7 s, where there was none
+  in 45,000 steps. Over the four IWADs' 132 maps the plans found go from 96 to 99 (TNT MAP18,
+  Plutonia MAP09 and MAP22; none lost, 16 others' plans different). Its press of the pillar's
+  west switch from by the fence, once the south posts are down, tried in the game: it works
+  (from 44 units off, aimed just inside the line's end). Score -0.0005 (s.e. 0.0011), exits
+  417 for 418; 1,057 of 1,088 runs the same to the tic, 6 better, 7 worse.
+- **Tried and not kept.** A step that loses nothing taken at once, alone: twice in 10,000
+  steps on MAP18, every walk to a switch there going over a one-way drop. Lifts and timed
+  doors as ways to walk, crudely (as use-doors are): fewer steps to choose from, each twice
+  as slow, no plan. Ranking by the relaxed plan's lasting changes still to make: a plan in
+  4,515 steps, but one that pressed a switch through the fence with the posts up, which the
+  game doesn't allow (tried: 68 units off, the reach 64). Refusing a press whose chosen spot
+  has the box on a fixed wall: level on the score (+0.0010, s.e. 0.0008) but it refuses the
+  press above that works; the places-to-stand rule replaces it. A depth cap: the sound bound
+  is about 40 lasting steps and the deepest node had 19.
+- **Not done.** The flood fill by which portals of a poly the box gets between (built for
+  the plain fill, saved aside): right in the one case tried in the game, two more plans and
+  two levels newly closed in principle not yet looked at, twice the fill's time. The legs
+  kept by the heights their search asked for (the same 188 legs asked for 11,522 times on
+  MAP18): exact by parity, next.
