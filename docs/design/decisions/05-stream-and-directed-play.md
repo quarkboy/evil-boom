@@ -1945,3 +1945,25 @@ in ten, taken once there was nothing else: into the slime.
   landing came in, and two exits there went (-0.0014).
 - **Measured:** score -0.0000, exits 436 as before, stalls 30 for 32; 1,083 of 1,088 runs
   the same, 1 better, 2 worse. Plutonia MAP09 needs two more things to get out (below).
+
+### A floor still on its way to where the route has it (2026-11-16)
+
+Plutonia MAP09's last switch raises the bridge to the exit 200 at the slow speed, nearly six
+seconds. Her heights have what a line she knows does as done, once it's set off: the next
+route, made a moment after the press, has the bridge up, and she walked off the rim onto it
+half raised. Every way to the exit failed at once ("unexpected drop"), and she went on to
+other things below.
+
+The follower waited at an edge for a floor only when the route's own step had set it going,
+or for a lift on its way round.
+
+- **The rule:** at a drop the route didn't have, where one of the two floors is moving this
+  tic and the route's heights have the crossing level, she waits at the edge while it moves,
+  whoever set it going; `MOVING_WAIT` (15 s) at most, for what goes up and down for good.
+- **Measured:** score +0.0030 (s.e. 0.0025), exits 440 for 436, deaths 614 for 622, stalls
+  34 for 30; 976 of 1,088 runs the same, 27 better, 13 worse. The stalls: five deaths and
+  an exit to stalls, two the other way. One traced (Doom II MAP29): not held by the wait.
+  She lives past where she died at 169 s, and ends on a safe patch in a floor that hurts
+  with nothing she'll risk, saying "nothing left to do" till the hour's up: with a life to
+  spare that's the level begun again in a minute, not a loop. How many of the score's stalls
+  are that kind isn't counted yet.

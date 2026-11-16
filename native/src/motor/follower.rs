@@ -120,6 +120,9 @@ pub fn barrel_now(obs: &Observation, at: Point) -> Option<Point> {
         .min_by(|a, b| dist(*a, at).total_cmp(&dist(*b, at)))
 }
 
+/// the longest wait at an edge for a floor moving towards where the way has it (a floor
+/// raised 256 at the slow speed takes about half this)
+pub(crate) const MOVING_WAIT: i64 = 15 * 35;
 /// the longest wait for a lift to come back before crossing its line
 const CROSS_REST_WAIT: i64 = 8 * 35;
 /// a lift still this long isn't on its way anywhere (vanilla's waits 3 s at the bottom before
@@ -373,6 +376,8 @@ pub struct RouteFollower {
     live: Vec<Heights>,
     /// the heights the tic before (which way a ceiling's going)
     prev_live: Vec<Heights>,
+    /// since when she's waited at an edge for a floor moving to where the way has it
+    moving_wait: Option<i64>,
     /// ceilings coming down: what she's seen of them, and the wait or the crossing in hand
     crusher: Crushers,
     /// when the heights were last looked at (the fight may have had her between)
@@ -513,6 +518,7 @@ impl RouteFollower {
             speed_cap: f64::INFINITY,
             live: Vec::new(),
             prev_live: Vec::new(),
+            moving_wait: None,
             crusher: Crushers {
                 wait: None,
                 cross: None,

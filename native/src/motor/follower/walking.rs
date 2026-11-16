@@ -1008,6 +1008,38 @@ impl RouteFollower {
                     return Drop::None;
                 }
             }
+            // (or a floor moving this tic towards where the plan has it, whoever set it going:
+            // a bridge raised by a switch pressed before this route was made is taken as up,
+            // and is some seconds getting there. Waited for at the edge while it moves)
+            let moving = |s: usize| {
+                self.prev_live
+                    .get(s)
+                    .is_some_and(|&was| was != obs.heights[s])
+            };
+            let on_its_way = [(ns, a), (cs, b)]
+                .into_iter()
+                .any(|(s, other)| moving(s) && level(s, other));
+            // (not for ever: something that goes up and down for good is level only in
+            // passing, and isn't waited on past `MOVING_WAIT`)
+            let waited = if on_its_way {
+                obs.tic - *self.moving_wait.get_or_insert(obs.tic)
+            } else {
+                self.moving_wait = None;
+                0
+            };
+            if on_its_way && waited <= super::MOVING_WAIT {
+                if !self.edge_wait {
+                    self.log.add(
+                        obs.tic,
+                        format!("waiting for sector {ns} to get to where the way has it"),
+                    );
+                    self.edge_wait = true;
+                }
+                self.speed_cap = 0.0;
+                self.progress_tic = obs.tic;
+                self.step_tic = obs.tic;
+                return Drop::None;
+            }
             self.drops_ok.insert(key);
             let why = format!("unexpected drop into sector {ns}");
             // (heights she allowed for, a lift down that she counted on coming up: only the timing
