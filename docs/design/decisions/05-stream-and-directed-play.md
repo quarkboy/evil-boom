@@ -1991,3 +1991,11 @@ that hurts.
   death to a stall); 1,085 of 1,088 runs the same. Plutonia MAP09 with `--charmed` on the
   easiest skill: out on two seeds of three (941 s and 901 s, all but one killed); it ran out
   the hour on all three. The third isn't traced.
+
+- **A teleporter's hop counted as a walk** (TNT MAP32's exit again, with `--charmed`). At the
+  exit with both switches learned, she had no plan in: `lapses` reckons whether a timed door
+  will still be open when a later leg gets to it, by the walk between the middles of the
+  mesh's pieces on the way; and a teleporter's two ends can be the level apart. A way by two
+  teleporters never made its four seconds. Pieces that don't join now count for no walk.
+  MAP32 with `--charmed`, easiest skill: out in 1,714 s and 1,610 s on two seeds (it ran out
+  the hour). The score's 1,088 runs all the same to the tic.

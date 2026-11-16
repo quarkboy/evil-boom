@@ -869,14 +869,30 @@ impl Explorer {
         const PRESS: f64 = 18.0;
         let nav = &self.nav;
         let legs = &route.legs;
-        // How far along a leg's way till a poly that fits, by the polys' middles.
+        // The walk from one piece of the mesh to the next on a way, by their middles: none
+        // where they don't join (a teleporter's two ends can be the level apart, and she's
+        // across in a tic: counted as a walk, a way by two teleporters never got back to
+        // its timed door in time. TNT MAP32's exit).
+        let hop = |a: usize, b: usize| {
+            let joined = nav
+                .mesh
+                .poly(a)
+                .portals
+                .iter()
+                .any(|&pi| nav.mesh.portals[pi].other(a) == b);
+            if joined {
+                dist(nav.poly_center(a), nav.poly_center(b))
+            } else {
+                0.0
+            }
+        };
+        // How far along a leg's way till a poly that fits.
         let along = |leg: &crate::navigator::Leg, fits: &dyn Fn(usize) -> bool| -> Option<f64> {
             let mut far = 0.0;
-            let mut last: Option<Point> = None;
+            let mut last: Option<usize> = None;
             for &p in &leg.path.polys {
-                let c = nav.poly_center(p);
-                far += last.map_or(0.0, |l| dist(l, c));
-                last = Some(c);
+                far += last.map_or(0.0, |l| hop(l, p));
+                last = Some(p);
                 if fits(p) {
                     return Some(far);
                 }
@@ -887,7 +903,7 @@ impl Explorer {
             leg.path
                 .polys
                 .windows(2)
-                .map(|w| dist(nav.poly_center(w[0]), nav.poly_center(w[1])))
+                .map(|w| hop(w[0], w[1]))
                 .sum::<f64>()
         };
         let mut running = states.clone();
