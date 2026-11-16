@@ -244,7 +244,10 @@ impl Navigator {
                 }
             }
             let v = r.split('@').next().unwrap_or("");
+            // (one come down short is the jump to where it stops, kept above, and no jump to
+            // where it was meant for)
             if v == FAIL
+                || v == "short"
                 || v == SLID
                     && sticks.contains(&(
                         j.src_polys.iter().copied().collect(),

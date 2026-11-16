@@ -65,6 +65,19 @@ impl Push {
     }
 }
 
+/// How a jump is flown in the simulator: to stop on its landing; run straight across the
+/// landing onto what's beyond; or run at the landing and stopped short of it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Land,
+    Through,
+    Short,
+}
+
+/// a jump come down short counts when it stops this near where it was meant to land (her
+/// width: at the landing's foot)
+const NEAR_LANDING: f64 = 32.0;
+
 /// What test_jump makes of a jump.
 enum Test {
     Stuck(Push),
@@ -73,6 +86,8 @@ enum Test {
     Off {
         slid: bool,
         through: Option<Point>,
+        /// `through` is where it came down short of the landing, on a floor of its own
+        short: bool,
     },
     Unverified,
 }
@@ -156,7 +171,8 @@ impl JumpLab {
                     .into_iter()
                     .find_map(|s| {
                         let w = self.verdict(&mut sim, &s);
-                        sticks(&w).then(|| format!("{w}~{:.2},{:.2}", s.runup.0, s.runup.1))
+                        (sticks(&w) || w.starts_with("short@"))
+                            .then(|| format!("{w}~{:.2},{:.2}", s.runup.0, s.runup.1))
                     })
                     .unwrap_or(v)
             })
@@ -183,8 +199,18 @@ impl JumpLab {
                     })
                     .map_or_else(|| "fail".to_string(), Push::label)
             }
-            Test::Off { slid, through } => {
-                let r = if slid { "slid" } else { "fail" };
+            Test::Off {
+                slid,
+                through,
+                short,
+            } => {
+                let r = if short {
+                    "short"
+                } else if slid {
+                    "slid"
+                } else {
+                    "fail"
+                };
                 if (slid || through.is_some()) && !self.robust(sim, j) {
                     "fail".to_string()
                 } else if let Some(at) = through {
@@ -255,7 +281,7 @@ impl JumpLab {
         let Some(heading) = self.prepare(sim, j) else {
             return reach;
         };
-        let (result, at) = self.fly(sim, j, heading, push, false);
+        let (result, at) = self.fly(sim, j, heading, push, Mode::Land);
         if reach && result == Flight::Missed && dist(at, j.runup) < 4.0 {
             return true;
         }
@@ -315,6 +341,7 @@ impl JumpLab {
                         Test::Off {
                             slid: false,
                             through: None,
+                            ..
                         } => tried += 1,
                         _ => {
                             tried += 1;
@@ -388,7 +415,8 @@ impl JumpLab {
                     self.test_jump(sim, &shifted),
                     Test::Off {
                         slid: false,
-                        through: None
+                        through: None,
+                        ..
                     }
                 )
         })
@@ -411,19 +439,44 @@ impl JumpLab {
             let Some(heading) = self.prepare(sim, j) else {
                 return Test::Unverified;
             };
-            match self.fly(sim, j, heading, push, false).0 {
+            match self.fly(sim, j, heading, push, Mode::Land).0 {
                 Flight::Stuck => return Test::Stuck(push),
                 Flight::Slid if push == Push::Full => slid = true,
                 _ => {}
             }
         }
         let through = self.prepare(sim, j).and_then(|heading| {
-            match self.fly(sim, j, heading, Push::Full, true) {
+            match self.fly(sim, j, heading, Push::Full, Mode::Through) {
                 (Flight::Stuck, at) => Some(at),
                 _ => None,
             }
         });
-        Test::Off { slid, through }
+        // Or it comes down short, on a floor of its own above the gap it crossed, at the foot
+        // of the landing: a pillar with the switch's pedestal on it, the run at the pedestal
+        // brought up against it on the pillar. A jump to there, as good as one meant for it.
+        let short = if through.is_none() {
+            self.prepare(sim, j).and_then(|heading| {
+                match self.fly(sim, j, heading, Push::Full, Mode::Short) {
+                    // (short of it: not past where it was meant to land, along the flight)
+                    (Flight::Stuck, at)
+                        if dist(at, j.dest) <= NEAR_LANDING
+                            && (at.0 - j.dest.0) * (j.dest.0 - j.takeoff.0)
+                                + (at.1 - j.dest.1) * (j.dest.1 - j.takeoff.1)
+                                <= 0.0 =>
+                    {
+                        Some(at)
+                    }
+                    _ => None,
+                }
+            })
+        } else {
+            None
+        };
+        Test::Off {
+            slid,
+            through: through.or(short),
+            short: short.is_some(),
+        }
     }
 
     /// The heights the jump needs (and whatever else the trigger making them moves: two posts
@@ -497,8 +550,9 @@ impl JumpLab {
         j: &Jump,
         heading: f64,
         push: Push,
-        through: bool,
+        mode: Mode,
     ) -> (Flight, Point) {
+        let through = mode != Mode::Land;
         let edge = dist(j.runup, j.takeoff);
         let flight = edge + dist(j.takeoff, j.dest);
         let (uy, ux) = heading.to_radians().sin_cos();
@@ -512,6 +566,7 @@ impl JumpLab {
         let mut last = sim.pos();
         let mut touched: Option<usize> = None;
         let mut crossed = false;
+        let mut lowest = f64::INFINITY;
         for i in 0..6 * TICRATE {
             let o = sim.pos();
             motion.observe(o);
@@ -524,14 +579,21 @@ impl JumpLab {
             let past = (o.0 - j.takeoff.0) * ux + (o.1 - j.takeoff.1) * uy > 0.0;
             crossed = crossed || (past && here == Some(want));
             if let (None, true, Some(s)) = (touched, past, here) {
+                if !src.contains(&s) {
+                    lowest = lowest.min(sim.floor_of(s));
+                }
                 if (sim.z_units() - sim.floor_of(s)).abs() < 1.0 {
                     if !through && s == want {
                         touched = Some(i);
-                    } else if through
-                        && crossed
-                        && !src.contains(&s)
+                    } else if !src.contains(&s)
                         && s != want
-                        && sim.floor_of(s) >= sim.floor_of(want) - MAX_STEP
+                        && match mode {
+                            Mode::Land => false,
+                            Mode::Short => sim.floor_of(s) > lowest + MAX_STEP,
+                            Mode::Through => {
+                                crossed && sim.floor_of(s) >= sim.floor_of(want) - MAX_STEP
+                            }
+                        }
                     {
                         touched = Some(i);
                         want = s;

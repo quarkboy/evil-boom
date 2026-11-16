@@ -1926,3 +1926,22 @@ a floor she's stood on unhurt for one that doesn't hurt (Plutonia MAP09's slime)
   from the map since standing on it tells her nothing), and nothing hurts her. With `--fight
   1` it's the test for the way through, the fight aside. Not for the score; no play of any
   other run is changed by it.
+
+### Plutonia MAP09: the hop onto the switch's pillar (2026-11-16)
+
+The last switch stands on a pedestal on a pillar, a 64 gap of slime from the rim and 48
+below it. Run straight at the pedestal she comes down on the pillar and is brought up
+against it, at the switch: in the game, at every speed tried. The jump check had no such
+jump. The candidate along that line was a jump to the pedestal's top; flown, it stopped on
+the pillar short of it, so it failed; and the candidates meant for the pillar came in aslant
+and slid off beside the pedestal. All she had was a strafing run onto the pedestal, three
+in ten, taken once there was nothing else: into the slime.
+
+- **The rule:** a jump that comes to rest short of where it was meant to land (not past it,
+  along the flight; within her width of it), on a floor of its own more than a step above
+  the lowest it crossed, is a jump to there (`Mode::Short`, verdict "short@x,y"; tried from
+  shorter run-ups too). A fall into the gap itself isn't: that floor is the lowest crossed.
+- **Tried first without "not past it":** a Doom II MAP19 jump that ended 20 beyond its
+  landing came in, and two exits there went (-0.0014).
+- **Measured:** score -0.0000, exits 436 as before, stalls 30 for 32; 1,083 of 1,088 runs
+  the same, 1 better, 2 worse. Plutonia MAP09 needs two more things to get out (below).
