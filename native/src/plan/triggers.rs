@@ -9,6 +9,7 @@ use super::{KeySet, Planner};
 use crate::det::{HashMap, HashSet};
 use crate::geom::{Point, MAX_STEP};
 use crate::nav::{box_over, can_cross, DoorOpening, Doors, Found, Heights};
+use std::rc::Rc;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -117,7 +118,16 @@ pub struct PlanCaches {
     /// strict fit): the same from one search to the next for the same view (several items
     /// compared are each searched for through the same lifts and teleports)
     pub(super) timed: HashMap<TimedKey, Option<(Found, World)>>,
+    /// ways found (or not) between two points, by (from, to, keys, strict fit): each with the
+    /// heights the search asked for, by which it's the same way in another world (`leg`)
+    pub(super) legs: HashMap<LegKey, Vec<LegFound>>,
+    pub(super) legs_kept: usize,
 }
+
+/// A way asked for: from, to (bits), the keys, whether the box must fit all the way.
+pub(super) type LegKey = (u64, u64, u64, u64, KeySet, bool);
+/// What a way's search asked the heights of and was told, and the way.
+pub(super) type LegFound = (Vec<(usize, Rc<Vec<Heights>>)>, Option<Found>);
 
 /// A leg asked for: from, to (bits), a hash of the heights, the keys, a hash of the timers,
 /// whether the box must fit all the way.
@@ -128,6 +138,8 @@ impl PlanCaches {
     pub(super) const MAX_REACH: usize = 200_000;
     /// Legs remembered before the cache is started afresh.
     pub(super) const MAX_TIMED: usize = 50_000;
+    /// Ways kept before that cache is started afresh.
+    pub(super) const MAX_LEGS: usize = 50_000;
 }
 
 impl Planner<'_> {

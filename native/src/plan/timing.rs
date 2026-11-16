@@ -4,13 +4,14 @@
 //! Legs of a plan timed against the temporary heights they rely on: a lift that will have
 //! gone back up by the time the player gets there can't be used.
 
-use super::triggers::TimedKey;
+use super::triggers::{LegKey, TimedKey};
 use super::world::{without, world_hash, Pair, Timers, World, ACTIVATION_TICS, LEG_SPEED};
 use super::{KeySet, PlanCaches, Planner};
 use crate::det::{HashMap, HashSet};
 use crate::geom::{dist, Point};
-use crate::nav::{Doors, Found, Heights, Planned, TeleKind, Via};
+use crate::nav::{Doors, Found, HeightSource, Heights, Planned, TeleKind, Via};
 use crate::stats::{self, Phase};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -18,6 +19,23 @@ use std::time::Instant;
 const LIFT_BACK: f64 = 60.0;
 /// Map units between samples used to estimate arrival at a sector along a path.
 const ARRIVAL_SAMPLE_STEP: f64 = 8.0;
+
+/// A world's heights, noting which sectors were asked for and what was answered.
+struct Asked<'a> {
+    states: &'a World,
+    of: Vec<(usize, Rc<Vec<Heights>>)>,
+    seen: HashSet<usize>,
+}
+
+impl HeightSource for Asked<'_> {
+    fn heights(&mut self, sector: usize) -> Rc<Vec<Heights>> {
+        let hs = Rc::clone(&self.states[sector]);
+        if self.seen.insert(sector) {
+            self.of.push((sector, Rc::clone(&hs)));
+        }
+        hs
+    }
+}
 
 impl Planner<'_> {
     /// When the player gets to each sector along a path (tics, from 10 for setting off).
@@ -113,7 +131,7 @@ impl Planner<'_> {
             return out;
         }
         let doors = self.doors_for(keys);
-        let out = self.timed_path_inner(start, goal, states, &doors, deadlines);
+        let out = self.timed_path_inner(start, goal, states, keys, &doors, deadlines);
         if self.caches.timed.len() > PlanCaches::MAX_TIMED {
             self.caches.timed.clear();
         }
@@ -127,13 +145,12 @@ impl Planner<'_> {
         start: Point,
         goal: Point,
         states: &World,
+        keys: KeySet,
         doors: &Arc<Doors>,
         deadlines: &Timers,
     ) -> Option<(Found, World)> {
         let doors = (!doors.is_empty()).then_some(&**doors);
-        let path = self
-            .nav
-            .find_path(start, goal, &mut Planned(states), doors, self.strict_fit)?;
+        let path = self.leg(start, goal, states, keys, doors)?;
         if deadlines.is_empty() {
             return Some((path, states.clone()));
         }
@@ -183,9 +200,60 @@ impl Planner<'_> {
             return Some((path, states.clone()));
         }
         let slower = without(states, late);
-        self.nav
-            .find_path(start, goal, &mut Planned(&slower), doors, self.strict_fit)
+        self.leg(start, goal, &slower, keys, doors)
             .map(|p| (p, slower))
+    }
+
+    /// The way from `start` to `goal` in this world (`NavCore::find_path`), kept by the heights
+    /// it was found by: the sectors the search asked the heights of, and what it was told. In
+    /// another world that has those sectors the same, the search would go the same way step
+    /// for step, so its answer's the same. A plan's worlds differ mostly somewhere else in the
+    /// level, and the same few legs come up in thousands of them.
+    fn leg(
+        &mut self,
+        start: Point,
+        goal: Point,
+        states: &World,
+        keys: KeySet,
+        doors: Option<&Doors>,
+    ) -> Option<Found> {
+        let key: LegKey = (
+            start.0.to_bits(),
+            start.1.to_bits(),
+            goal.0.to_bits(),
+            goal.1.to_bits(),
+            keys,
+            self.strict_fit,
+        );
+        if let Some(known) = self.caches.legs.get(&key) {
+            let same = known.iter().find(|(asked, _)| {
+                asked
+                    .iter()
+                    .all(|(s, hs)| Rc::ptr_eq(&states[*s], hs) || *states[*s] == **hs)
+            });
+            if let Some((_, found)) = same {
+                return found.clone();
+            }
+        }
+        let mut asked = Asked {
+            states,
+            of: Vec::new(),
+            seen: HashSet::default(),
+        };
+        let found = self
+            .nav
+            .find_path(start, goal, &mut asked, doors, self.strict_fit);
+        if self.caches.legs_kept > PlanCaches::MAX_LEGS {
+            self.caches.legs.clear();
+            self.caches.legs_kept = 0;
+        }
+        self.caches.legs_kept += 1;
+        self.caches
+            .legs
+            .entry(key)
+            .or_default()
+            .push((asked.of, found.clone()));
+        found
     }
 
     /// The polys reachable from `poly` in this world with these keys (cached).

@@ -1616,3 +1616,10 @@ with ten minutes and a hundred times its budget. Looked into as a question of th
   two levels newly closed in principle not yet looked at, twice the fill's time. The legs
   kept by the heights their search asked for (the same 188 legs asked for 11,522 times on
   MAP18): exact by parity, next.
+- **Legs kept by the heights their search asked for** (`Planner::leg`). A plan's worlds
+  differ mostly somewhere else in the level, and the cache of legs went by the whole world: on
+  MAP18 11,522 legs were asked for, 188 different ones, 723 found kept. A leg is now kept with
+  the sectors its path search asked the heights of and what it was told; in a world that has
+  those the same the search would go the same way step for step. Parity, all 24 runs the
+  same; the same searches step for step and three times as fast where legs are most of the
+  time (TNT MAP05's 2,000 steps 17.7 s to 5.0 s, Plutonia MAP03's 20,000 45 s to 13 s).
