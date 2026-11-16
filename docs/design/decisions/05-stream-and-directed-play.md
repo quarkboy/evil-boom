@@ -1893,3 +1893,22 @@ waits at the bottom.
   - **Measured:** TNT MAP32 on the easiest skill with no dying: out in 2,055 s, 71 of 71
     killed, never stranded (it ran out the hour). The score's 1,088 runs all the same to the
     tic.
+
+### TNT MAP05: the pedestal there's room on only for three seconds (2026-11-16)
+
+The blue card is on a lift that comes down when the edge of a pedestal in the middle of the
+room is walked over. The pedestal has 32 of headroom, and can be stepped onto only while a
+switch has it down, three seconds. She found the switch and learned what it lowers (heard);
+pressed the pedestal's edges as walls; and ran out of things to do, stranded three times in
+the hour.
+
+Lines to step over and see (`thresholds`) are for places in her reach she hasn't stood in:
+the pedestal was in her reach, by the switch, but a place to step to had to be one the box
+stands in as she last saw things, and she last saw no room on it.
+
+- **The rule:** a place to step to is one the box stands in as last seen, or as a line she
+  knows the effect of leaves that sector (`standable_moved`). The planner has the rest: the
+  switch, onto the pedestal in its window, the lift down, the card.
+- **Measured:** TNT MAP05 on the easiest skill with no dying: out in 1,402 s (it ran out the
+  hour). Score +0.0007 (s.e. 0.0018), exits 436 for 435, stalls 32 as before; 1,046 of 1,088
+  runs the same, 7 better, 3 worse.

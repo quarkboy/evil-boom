@@ -725,7 +725,13 @@ impl Explorer {
                     mid.0 + (poly.center.0 - mid.0) / d * THRESHOLD_IN,
                     mid.1 + (poly.center.1 - mid.1) / d * THRESHOLD_IN,
                 );
-                if mesh.poly_at(spot) != Some(pi) || !self.standable(spot, false) {
+                // (standable as she last saw things, or as a line she knows leaves the place:
+                // a pedestal under a low roof that a switch lowers for three seconds is in her
+                // reach by the switch, and has room on it only then. TNT MAP05's, whose edge is
+                // the line that brings the blue card's lift down)
+                if mesh.poly_at(spot) != Some(pi)
+                    || !(self.standable(spot, false) || self.standable_moved(spot, poly.sector))
+                {
                     continue; // (a sliver by a wall or shut door the box can't stand in)
                 }
                 let mut o = Objective::new(Kind::Visit, spot, format!("step over line {li}"));

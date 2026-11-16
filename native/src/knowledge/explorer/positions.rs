@@ -83,6 +83,25 @@ impl Explorer {
         self.standable_at(q, play, &heights)
     }
 
+    /// `standable` with sector `s` where a line she knows the effect of leaves it (each such
+    /// height in turn), the rest as she last saw it.
+    pub(super) fn standable_moved(&self, q: Point, s: usize) -> bool {
+        let k = &self.knowledge;
+        let seen = self.as_seen();
+        let probe_at = |h: crate::nav::Heights| {
+            let mut heights = seen.clone();
+            heights[s] = (h.floor, h.ceiling);
+            let probe = self.nav.jump_lab.at_heights(&heights);
+            self.stands_with(q, &heights, &probe)
+        };
+        k.learned.iter().any(|(&ti, sectors)| {
+            sectors.contains(&s)
+                && self.nav.triggers[ti]
+                    .effect(s)
+                    .is_some_and(|hs| hs.iter().any(|&h| probe_at(h)))
+        })
+    }
+
     /// `standable` at these heights (hers as seen), remembered while they stay as they are:
     /// it's asked of every poly she can get to for each list of what she could do, with the
     /// same answers each time.
