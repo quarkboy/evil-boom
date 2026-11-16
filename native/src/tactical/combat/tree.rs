@@ -592,7 +592,37 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
             && !fought_where_it_stands(c, obs, t)
             && c.known.get(&t.id).is_some_and(|k| k.awake)
             && dist((t.x, t.y), pos) < c.tune.engage.keep_clear
+            && !c.given_up_on(obs, t.id)
     })?;
+    // Not for ever, of one that shoots and doesn't. In her sight `engage.clear_give_up` with
+    // nothing thrown at her and nothing hurting her, it isn't going to (E3M7's cacodemons in
+    // their windows: awake, in plain sight, not a ball in fifty minutes, and her out of ammo
+    // keeping clear of them for the hour). Left a while, and the route goes on. One that only
+    // claws isn't judged so: kept clear of, it never gets its attack in. Only with her fire held
+    // (the ammo kept, below): shooting at it, the fight gets somewhere by itself, and one she has
+    // put out of its own sight for a while throws nothing either.
+    if matches!(mon(t.name).attack, Attack::Hitscan | Attack::Missile)
+        && c.visible.iter().any(|v| v.id == t.id)
+        && c.ammo_short_against(obs, t)
+        && !c.in_her_way(obs, t)
+    {
+        if t.attack >= 0 || !s.missiles.is_empty() {
+            c.patience.rest(Effort::KeptClear, t.id);
+        } else {
+            let limit = c.tune.engage.clear_give_up;
+            if c.patience.spent(
+                Effort::KeptClear,
+                t.id,
+                obs.tic,
+                limit,
+                Some((c.now.health, 0.0)),
+                Some(limit),
+            ) {
+                c.give_up(obs, t.id);
+                return None;
+            }
+        }
+    }
     let gun = c.preferred_gun(obs, t);
     let moving = c.steer(obs, Some(t), &gun);
     let mut a = Act::new(

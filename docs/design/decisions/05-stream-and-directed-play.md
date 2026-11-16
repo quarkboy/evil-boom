@@ -1761,3 +1761,27 @@ the wait, with nothing to press on the far side. 97 of 256 sectors seen in the h
   planner has no way either). Score -0.0007 (s.e. 0.0014), exits 434 for 435; 1,070 of 1,088
   runs the same to the tic, and all the rest E2M4's (line 516, the same make of door) but two.
   E2M4 on 8 fresh seeds a skill: 8 exits of 16 with it, 7 without.
+
+### E3M7: keeping clear, for the hour, of what can't see her (2026-11-16)
+
+Two cacodemons sit in alcoves behind windows that can't be walked through. Out of ammo to
+kill one, she's outmatched, holds her fire (the ammo kept) and keeps clear of them: for fifty
+minutes in one run, her health never moving. They throw nothing because the map's REJECT
+table has their alcoves unable to see the two sectors she was in, though the window gives a
+clear line (they're on the screen). Her own sight (`los.rs`) leaves the table out, so she has
+them awake, in sight and outmatching her.
+
+- **Not given the table.** A person sees them too, and learns by watching that they do
+  nothing. So the rule goes by what she can watch.
+- **The rule:** outmatched and holding her fire for the ammo, one that shoots, in her sight
+  `engage.clear_give_up` (20 s) with nothing thrown at her and nothing hurting her, is left a
+  while, as one she can't get at (`Effort::KeptClear`). Not one that only claws: kept clear
+  of, it never gets its attack in.
+- **Tried wider, and dropped:** the same whenever she keeps clear, shooting or not. 226 runs
+  moved, 67 better and 85 worse: shooting, the fight gets somewhere by itself.
+- **Measured:** score -0.0006 (s.e. 0.0042), exits 437 for 434; 893 of 1,088 runs the same,
+  59 better, 70 worse; stalls 35 for 34. E3M7's scored runs: two stalls to exits, four exits
+  to deaths (not traced). E3M7 on 8 fresh seeds a skill: 8 exits of 16 for 5, both runs stuck
+  for the hour gone, none worse, one exit 2,079 s to 850 s.
+- **A stall is worse than a death** (the maintainer, of this): on stream a death is a quick
+  start again, a loop is painful to watch. Even on the score, taken for the stalls.

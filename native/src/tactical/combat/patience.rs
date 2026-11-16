@@ -25,6 +25,9 @@ pub enum Effort {
     MeleeNoNearer,
     /// kept at out of sight, time and again, with no shot at it in between
     LostAgain,
+    /// kept clear of, outmatched, with it in sight throwing nothing at her: her health is the
+    /// measure
+    KeptClear,
 }
 
 #[derive(Clone, Copy, Debug)]

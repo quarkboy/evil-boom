@@ -228,6 +228,9 @@ pub struct Engage {
     pub lost_again: i64,
     /// outmatched by an awake monster this near: keeping clear of it, not getting past
     pub keep_clear: f64,
+    /// ...till one that shoots has been in her sight this long (tics) and thrown nothing at
+    /// her, nothing hurting her: it isn't going to; left, as one given up on
+    pub clear_give_up: i64,
     /// ...but a run for it along the route, under a hitscanner's fire, when the route takes her
     /// out of its sight (or to where she's going) within this many tics at a run...
     pub dash_tics: i64,
@@ -291,6 +294,7 @@ impl Default for Engage {
             lost_after: 9,
             lost_again: 8 * 35,
             keep_clear: 1024.0,
+            clear_give_up: 20 * 35,
             dash_tics: 2 * 35,
             dash_share: 0.5,
             crush_wait: 10 * 35,
