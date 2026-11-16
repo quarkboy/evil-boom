@@ -39,6 +39,8 @@ const CRUSHER: &[u16] = &[6, 25, 49, 73, 77, 141];
 const PLAT_CHANGE: &[u16] = &[14, 15, 20, 22, 47, 66, 67, 68, 95];
 /// close, wait 30 s, open
 const DOOR_CLOSE_30: &[u16] = &[16, 76];
+/// a pillar down to the floor round its pool, the pool up to it (EV_DoDonut)
+const DONUT: &[u16] = &[9];
 
 fn floor_raise(special: u16) -> Option<f64> {
     match special {
@@ -85,6 +87,7 @@ pub fn depends_on_heights(special: u16) -> bool {
         FLOOR_SHORTEST_TEX,
         CEIL_HIGHEST,
         DOOR_OPEN,
+        DONUT,
     ]
     .iter()
     .any(|set| set.contains(&special))
@@ -159,6 +162,9 @@ impl MoverModel {
     pub fn effects(&self, special: u16, sectors: &[usize], now: HeightsNow<'_>) -> Effects {
         if let Some(step) = stairs_step(special) {
             return self.stairs(sectors, step);
+        }
+        if DONUT.contains(&special) {
+            return self.donut(sectors, now);
         }
         sectors
             .iter()
@@ -334,6 +340,8 @@ impl MoverModel {
             (PLAT_CHANGE_SPEED, None)
         } else if is_stairs(special) {
             (if fast { FLOOR_FAST } else { FLOOR_SPEED / 4.0 }, None)
+        } else if is(DONUT) {
+            (FLOOR_SPEED / 2.0, None)
         } else if is(CRUSHER) {
             (if fast { 2.0 } else { 1.0 }, Some(0.0))
         } else {
@@ -369,6 +377,51 @@ impl MoverModel {
             }
         }
         f64::from(best.unwrap_or(64))
+    }
+
+    /// EV_DoDonut: each tagged sector is a pillar. The pool is what's across the pillar's
+    /// lowest-numbered line; the model is the back sector of the pool's first line whose back
+    /// isn't the pillar (the pool itself, where that line's the pillar's own with the pool
+    /// behind it). The pillar goes down to the model's floor and the pool comes up to it.
+    /// Nothing where the game has nothing to go by: the pillar's first line one-sided (no
+    /// donut), or the pool's first such line (the game reads off the end of its memory there).
+    fn donut(&self, sectors: &[usize], now: HeightsNow<'_>) -> Effects {
+        let m = &self.map;
+        let lines_of = |s: usize| {
+            m.linedefs
+                .iter()
+                .filter(move |l| m.front_sector(l) == Some(s) || m.back_sector(l) == Some(s))
+        };
+        let mut out: Effects = Vec::new();
+        for &pillar in sectors {
+            let Some(first) = lines_of(pillar).next() else {
+                continue;
+            };
+            let (Some(f), Some(b)) = (m.front_sector(first), m.back_sector(first)) else {
+                continue;
+            };
+            let pool = if f == pillar { b } else { f };
+            let Some(model) = lines_of(pool)
+                .find(|l| m.back_sector(l) != Some(pillar))
+                .and_then(|l| m.back_sector(l))
+            else {
+                continue;
+            };
+            let to = self.at(model, now).floor;
+            for s in [pillar, pool] {
+                let at = self.at(s, now);
+                if at.floor != to && !out.iter().any(|(x, _)| *x == s) {
+                    out.push((
+                        s,
+                        vec![Heights {
+                            floor: to,
+                            ceiling: at.ceiling,
+                        }],
+                    ));
+                }
+            }
+        }
+        out
     }
 
     /// EV_BuildStairs: the tagged sector up a step, then on through two-sided lines whose front

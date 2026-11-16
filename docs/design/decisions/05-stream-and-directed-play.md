@@ -1532,3 +1532,15 @@ measured on Doom and Doom II.
   60 s. MAP18 and MAP28 she gets out of: the search's no is weaker still.
 - **A plan found, and she stalls all the same** (easiest skill, 8 of 8): TNT MAP07, MAP19,
   MAP26, MAP29; half the runs on TNT MAP22.
+
+### TNT MAP20
+
+- **The donut (special 9) did nothing in her model.** The courtyard's pillar, with a plasma gun
+  and a crowd on top, comes down by a donut switch on its sides, and the way on is over it.
+  Modelled as EV_DoDonut has it (`MoverModel::donut`): each tagged sector is a pillar, the
+  pool is what's across the pillar's lowest-numbered line, the model is the back sector of the
+  pool's first line whose back isn't the pillar; pillar down and pool up to the model's floor
+  (here both to 280, a ledge's height: the courtyard rises with her on it). Nothing where the
+  game has nothing to go by (a one-sided first line: no donut, or the vanilla overrun). Donuts
+  in the IWADs: E1M2, E2M2, TNT MAP20 (11 lines) and MAP21. Score: +0.0000, 1,074 of 1,088
+  runs the same to the tic, none better or worse.
