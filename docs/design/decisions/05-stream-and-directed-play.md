@@ -1967,3 +1967,27 @@ or for a lift on its way round.
   with nothing she'll risk, saying "nothing left to do" till the hour's up: with a life to
   spare that's the level begun again in a minute, not a loop. How many of the score's stalls
   are that kind isn't counted yet.
+
+### Not marooned above a floor that hurts (Plutonia MAP09, 2026-11-16)
+
+Before ever trying the last switch she had jumped down onto the low spans and islands of the
+slime pit ("walk across sector 133", risky): ground that doesn't hurt, with no way back up
+and no way off but into the slime, which has none either. A drop into the pit itself was
+refused (`DropOntoHarm`); a jump to a perch over it wasn't, the perch not being the floor
+that hurts.
+
+- **The rule:** mortal, a way that ends by a jump or a drop on ground she can't come back
+  from, off which everything she could get to is that ground or floor that hurts, is refused
+  as the drop into the pit is (`marooned`). What she could get to is reckoned as `dead_end`
+  reckons it: with the doors she can open, the lines she knows, and the key in hand if it's
+  a key she's going for. Not when there's a switch, a door or a teleporter to try there, nor
+  with ground there she hasn't seen into, nor a teleporter to be got to.
+- **How it got there.** First with a second half, the way planned again keeping out of a
+  dead-end floor that hurts: -0.0050, dropped. Alone, reckoned by walking only: -0.0042 (E4M4's
+  chaingun on its island with the level going on beyond; a teleporter pad in the slime).
+  With unseen ground and teleporters let through: -0.0012, four more stalls (Doom II MAP21's
+  red skull on its island, the door it opens the way on).
+- **Measured:** score -0.0001 (s.e. 0.0001), exits 440 as before, stalls 35 for 34 (an E4M6
+  death to a stall); 1,085 of 1,088 runs the same. Plutonia MAP09 with `--charmed` on the
+  easiest skill: out on two seeds of three (941 s and 901 s, all but one killed); it ran out
+  the hour on all three. The third isn't traced.

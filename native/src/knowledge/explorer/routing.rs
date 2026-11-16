@@ -696,6 +696,13 @@ impl Explorer {
                     }
                 }
             }
+            // (not for a switch or a door to try there: what it does isn't known, and it's
+            // the one thing on such a perch that could be the way off it)
+            if obj.trigger.is_none() && obj.kind != Kind::Teleporter {
+                if let Some(s) = self.marooned(route, obj, obs, view) {
+                    return Some(Refusal::DropOntoHarm { sector: s });
+                }
+            }
         }
         if obj.kind != Kind::Exit && !obj.risky && !self.knowledge.protected(obs.tic) {
             // Nukage and the like only for what costs a tenth of her health or less, and never
@@ -759,6 +766,92 @@ impl Explorer {
             return Some(Refusal::ShutsHerIn);
         }
         None
+    }
+
+    /// A route that ends, by a jump or a drop, on ground she can't come back from, off which
+    /// the only way is onto a floor that hurts, with no other ground that doesn't to be got to
+    /// from there: marooned, the same end as the drop into the pit itself, a jump later. The
+    /// sector she'd be marooned on. (Plutonia MAP09: the low span of the exit bridge, jumped
+    /// down onto from the pit's rim before the switch that raises it.)
+    fn marooned(
+        &self,
+        route: &Route,
+        obj: &Objective,
+        obs: &Observation,
+        view: &View,
+    ) -> Option<usize> {
+        let nav = &self.nav;
+        let down = route.legs.iter().any(|leg| {
+            leg.path
+                .notes
+                .iter()
+                .any(|n| matches!(n, PathNote::Drop { .. } | PathNote::RunJump { .. }))
+        });
+        let end = route.legs.last()?.path.polys.last().copied()?;
+        let here = nav.poly_at(self.standing_point(obs))?;
+        if !down || self.knowledge.damaging(nav.sector_of_poly(end)) {
+            return None;
+        }
+        // (everywhere she could get to from there, with the doors she can open and the lines
+        // she knows, and the key she'd have if it's a key she's going for: as `dead_end` has
+        // it. A skull key on its island in the lava opens the door that's the way on)
+        let keys = obj.key.map_or(route.keys, |kk| route.keys.with(kk));
+        let doors = view.local_doors(keys);
+        let mut states = route.states.clone();
+        for (&d, o) in &doors {
+            for &h in &o.heights {
+                add_height(&mut states[d], h);
+            }
+        }
+        let actions: Vec<&TriggerLine> = view
+            .triggers
+            .iter()
+            .filter(|t| !t.effects.is_empty())
+            .collect();
+        let after = view.saturate(end, &states, keys, &[], &actions).0;
+        if after.contains(&here)
+            || !after
+                .iter()
+                .any(|&q| self.knowledge.damaging(nav.sector_of_poly(q)))
+        {
+            return None;
+        }
+        // (nor with somewhere there she hasn't seen into, or a teleporter: either may be the
+        // way on. E4M4's chaingun on its island in the lava, the level going on beyond it;
+        // a teleporter pad out in the slime)
+        let known = self.knowledge.known_polys();
+        let unseen_beyond = after.iter().any(|&q| {
+            nav.mesh
+                .poly(q)
+                .portals
+                .iter()
+                .any(|&pi| !known.contains(&nav.mesh.portals[pi].other(q)))
+        });
+        if unseen_beyond
+            || nav
+                .teleports
+                .iter()
+                .any(|tp| !tp.src_polys.is_disjoint(&after))
+        {
+            return None;
+        }
+        // the ground that doesn't hurt she can walk to from where she ends without crossing
+        // any that does
+        let safe = |q: usize| after.contains(&q) && !self.knowledge.damaging(nav.sector_of_poly(q));
+        let mut island: BTreeSet<usize> = BTreeSet::from([end]);
+        let mut queue = vec![end];
+        while let Some(p) = queue.pop() {
+            for &pi in &nav.mesh.poly(p).portals {
+                let q = nav.mesh.portals[pi].other(p);
+                if safe(q) && island.insert(q) {
+                    queue.push(q);
+                }
+            }
+        }
+        after
+            .iter()
+            .all(|&q| island.contains(&q) || self.knowledge.damaging(nav.sector_of_poly(q)))
+            .then(|| nav.sector_of_poly(end))
     }
 
     /// Does the route count on something timed that will have lapsed by the time it's needed?
