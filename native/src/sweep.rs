@@ -44,6 +44,10 @@ pub struct RunOptions {
     /// (no drops into what she can't get out of, no wading she hasn't the health for), and
     /// nothing hurts her. `mortal` is set with it.
     pub charmed: bool,
+    /// for testing with the want of ammo taken out of it: the chaingun in her hands from the
+    /// start and its bullets topped up every second. What she'd do with rounds for ever, not
+    /// what she does.
+    pub endless_bullets: bool,
     /// tries at a map (dying starts it again, knowing what was learned), the game time cap
     /// counting them all (unlimited unless told: lives are for testing, not a resource)
     pub lives: i32,
@@ -110,6 +114,7 @@ impl Default for RunOptions {
             max_seconds: 3600.0,
             mortal: false,
             charmed: false,
+            endless_bullets: false,
             lives: i32::MAX,
             lives_given: false,
             stranded: 0,
@@ -780,6 +785,9 @@ pub fn run_map_in(
         }
         let t1 = Instant::now();
         let ob = e.observe();
+        if o.endless_bullets && e.tic % 35 == 0 {
+            top_up_bullets(&e.game, &ob);
+        }
         let found = e.tally()[2].0;
         if found > secrets_seen {
             if let Some(p) = agent.x().nav.poly_at(ob.pos()) {
@@ -1313,4 +1321,40 @@ fn snapshot(
     _: Option<(f64, f64, f64)>,
 ) -> Result<(), String> {
     Err("built without the viewer (the `viewer` feature)".into())
+}
+
+/// `--endless-bullets`: her as she is, but the chaingun hers and its bullets full.
+pub fn top_up_bullets(game: &crate::dsda::Dsda, ob: &Observation) {
+    let slot = |n: i32| ob.weapons.as_ref().is_some_and(|w| w.contains(&n));
+    let ammo = |n: i32| {
+        ob.ammo
+            .iter()
+            .flatten()
+            .find(|(s, _)| *s == n)
+            .map_or(0, |(_, a)| *a)
+    };
+    let mut weapons = 1 | 2 | 8;
+    for (n, bit) in [(3, 4), (5, 16), (6, 32), (7, 64)] {
+        if slot(n) {
+            weapons |= bit;
+        }
+    }
+    if ob.chainsaw == Some(true) {
+        weapons |= 128;
+    }
+    if ob.super_shotgun == Some(true) {
+        weapons |= 256;
+    }
+    game.give(&crate::dsda::Loadout {
+        weapons,
+        clip: 400,
+        shell: ammo(3),
+        cell: ammo(6),
+        rocket: ammo(5),
+        backpack: false,
+        health: ob.health.unwrap_or(100.0) as i32,
+        armor: ob.armor.unwrap_or(0.0) as i32,
+        armor_type: ob.armor_type.unwrap_or(0),
+        ready: None,
+    });
 }

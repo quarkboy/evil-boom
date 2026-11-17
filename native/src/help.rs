@@ -350,6 +350,8 @@ What she knows:
   --peek               every switch and door known from the start
 
 Testing:
+  --endless-bullets    for testing: the chaingun hers from the start, its bullets topped up
+                       every second (is it the want of ammo that stops her?)
   --charmed            she plays as one who can die, and nothing hurts her: can the level be
                        got through at all, the fight aside (not for the score)
   --carry W,C,S,L,R,B,H,A,T   the loadout she starts with: weapons (a bit each), clip, shells,

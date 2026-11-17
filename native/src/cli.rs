@@ -90,6 +90,7 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
                 o.mortal = true;
                 o.charmed = true;
             }
+            "--endless-bullets" => o.endless_bullets = true,
             "--complete" => o.complete = true,
             "--stall-out" => o.stall_out = true,
             "--decisions" => o.decisions = true,
@@ -183,6 +184,7 @@ pub(crate) fn option_args(o: &RunOptions) -> Vec<String> {
         (o.secrets, "--secrets"),
         (o.mortal, "--mortal"),
         (o.charmed, "--charmed"),
+        (o.endless_bullets, "--endless-bullets"),
         (o.expert, "--expert"),
         (o.complete, "--complete"),
         (o.stall_out, "--stall-out"),

@@ -291,6 +291,10 @@ impl Canvas {
 /// How to watch.
 #[derive(Clone)]
 pub struct WatchOptions {
+    /// she plays as mortal and nothing hurts her (`--charmed`)
+    pub charmed: bool,
+    /// the chaingun and bullets for ever (`--endless-bullets`)
+    pub endless_bullets: bool,
     pub speed: f64,
     pub show_all: bool,
     pub mortal: bool,
@@ -649,6 +653,8 @@ struct Watch {
     no_use: bool,
     /// secrets found so far (as the tally has them)
     secrets_seen: i32,
+    /// `--endless-bullets`
+    endless_bullets: bool,
     /// the hits on her last tic, for whoever's directing to be told of
     hits: Vec<crate::dsda::Hit>,
     m: Arc<MapData>,
@@ -761,7 +767,7 @@ fn first_watch(
     )?;
     engine.carry.clone_from(&o.carry);
     engine.start();
-    if !o.mortal || o.practice {
+    if !o.mortal || o.practice || o.charmed {
         engine.set_god(true);
     }
     if o.practice {
@@ -1217,7 +1223,8 @@ fn level(
     let map_name = engine.map_name.clone();
     let skill = if o.fight > 0 { o.fight } else { 3 };
     // (seeing as a run does: watched, a run plays as it did)
-    let knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
+    let mut knowledge = Knowledge::new(Rc::clone(&nav), o.mortal, !o.peek);
+    knowledge.charmed = o.charmed;
     let mut agent = Agent::new(
         &nav,
         knowledge,
@@ -1273,6 +1280,7 @@ fn level(
     }
     let mut watch = Watch::new(w, m, &map_name, engine, agent, o.focus, o.lives - 1);
     watch.hold = hold;
+    watch.endless_bullets = o.endless_bullets;
     watch.speed = o.speed;
     watch.show_all = o.show_all;
     Ok(watch)
@@ -1767,6 +1775,7 @@ impl Watch {
             next_wanted: false,
             no_use: false,
             secrets_seen: 0,
+            endless_bullets: false,
             hits: Vec::new(),
             m,
             map_name: map_name.to_string(),
@@ -1861,6 +1870,9 @@ impl Watch {
                 .push("the level again, as she asked".into());
         }
         let obs = self.engine.observe();
+        if self.endless_bullets && obs.tic % 35 == 0 {
+            crate::sweep::top_up_bullets(&self.engine.game, &obs);
+        }
         if let (Some(st), Some(m)) = (self.stream.as_mut(), obs.message.as_deref()) {
             st.message(m, obs.tic);
         }
