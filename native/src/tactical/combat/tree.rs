@@ -414,6 +414,15 @@ fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         .filter(|(_, &(till, _))| obs.tic < till)
         .map(|(&id, _)| id)
         .collect();
+    // Out of ammo she can hurt none of them, and backing off from one or another of them is
+    // one go at the same thing: one clock for the lot (a clock each, with three imps taking
+    // turns to be nearest, was never run out: backing off and getting past by turns, a few
+    // tics each, for five minutes).
+    /// the lot of them, out of ammo: no monster's id
+    const ANY: i32 = -1;
+    if !armed && left.contains(&ANY) {
+        return None;
+    }
     let nearest = s
         .close
         .iter()
@@ -436,21 +445,33 @@ fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
     /// backing off is one go at it with no more than this between
     const BACK_BREAK: i64 = 2 * 35;
     let limit = c.tune.engage.close_give_up;
+    let (who, measure) = if armed {
+        (t.id, Some((f64::from(t.health), 0.0)))
+    } else {
+        (ANY, None)
+    };
     if c.patience.spent(
         Effort::BackedFrom,
-        t.id,
+        who,
         obs.tic,
         limit,
-        Some((f64::from(t.health), 0.0)),
+        measure,
         Some(BACK_BREAK),
     ) {
         let left = left_till(
-            c.steer.no_back.get(&t.id),
+            c.steer.no_back.get(&who),
             obs.tic,
             c.tune.engage.given_up_tics,
         );
-        c.steer.no_back.insert(t.id, left);
-        c.give_up(obs, t.id);
+        c.steer.no_back.insert(who, left);
+        if armed {
+            c.give_up(obs, t.id);
+        } else {
+            c.log.push(format!(
+                "tic {}: out of ammo, backing off has got her nothing: on with her way",
+                obs.tic
+            ));
+        }
         return None;
     }
     let gun = c.preferred_gun(obs, &t);
