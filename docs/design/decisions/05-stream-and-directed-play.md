@@ -2399,3 +2399,20 @@ follower stuck all the while and never failing.
     a death to exits.
   - **All four against the baseline:** first seeds +0.0052 (s.e. 0.0053), exits 445 for 438,
     stalls 6 for 10; second seeds +0.0125 (s.e. 0.0051), exits 424 for 411, stalls 5 for 6.
+
+- **A jump from a shortened run-up carries that run's speed** (2026-11-17). E4M5: every monster
+  dead, the exit in sight, stalled. The exit's way was a run-jump off (864, 1344) through a
+  window into the exit room, called off nine times as "too slow for the jump (9.0 a tic for
+  13.7)"; following the plan with the whole map known failed the same way every time.
+  - **Why.** The checker finds the jump comes in too fast from its full run-up and keeps it
+    from a shorter one (64 units), but the jump kept the speed of the long run (15.2). The
+    follower's check for a sprint knocked short fits its push to that speed, so it wanted
+    13.7 where a 64-unit run from standing gives the 9.0 she had.
+  - **The rule** (`keep_verified`): a run-up moved by the checker takes the speed that run
+    gives (`run_speed`, the game's thrust and friction, as the finder reckons it).
+  - **Measured.** First seeds +0.0005 (s.e. 0.0006), exits 446 for 445, stalls 5 for 6, 1,067
+    runs the same to the tic; second +0.0011 (s.e. 0.0007), exits 426 for 424, stalls 4 for 5,
+    1,076 the same. E4M5 three exits more.
+  - **Found on the way, not in this:** the window is a skip (the exit room is behind a yellow
+    door); she had the key and had walked through the door, and still planned the jump each
+    time, a jump given up for want of speed not being counted a miss.

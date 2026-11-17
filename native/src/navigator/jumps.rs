@@ -10,7 +10,9 @@ use std::fmt::Write as _;
 use sha2::{Digest, Sha256};
 
 use super::{add_height, Jump, Navigator};
+use crate::geom::dist;
 use crate::jumps::{FinderInput, Jump as LabJump, FINDER_VERSION};
+use crate::motor::{FRICTION, RUN_THRUST};
 use crate::nav::Heights;
 
 /// A jump that never comes off made a little differently costs this much more (units).
@@ -184,6 +186,18 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
     out.into_iter().map(from).collect()
 }
 
+/// The speed a run from standing has after `length`, pushed forward and `side` sideways (the
+/// game's thrust and friction, as the finder reckons a run-up's).
+fn run_speed(length: f64, side: f64) -> f64 {
+    let thrust = RUN_THRUST * (1.0 + (side / 50.0).powi(2)).sqrt();
+    let (mut v, mut d) = (0.0, 0.0);
+    while d < length {
+        v = v * FRICTION + thrust;
+        d += v;
+    }
+    v
+}
+
 impl Navigator {
     /// Check the jumps in the movement simulator and keep only those that come off (made a
     /// little off their line too: nobody lines up to a fraction of a unit), and how sure each
@@ -204,6 +218,9 @@ impl Navigator {
                 let xy: Vec<f64> = at.split(',').filter_map(|x| x.parse().ok()).collect();
                 if let [x, y] = xy[..] {
                     j.runup = (x, y);
+                    // (and the speed that run gives, not the longer one's: the follower calls
+                    // a sprint off that's well short of the speed it should have)
+                    j.speed = run_speed(dist(j.runup, j.takeoff), j.sidestep());
                 }
                 r = v;
             }
