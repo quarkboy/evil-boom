@@ -2545,3 +2545,14 @@ Eight stalls on the two sets to begin with: E4M6 three, MAP21 two, MAP14, MAP06,
   waiting at a floor, passes over a line she's behind.
 - **Measured, the two together.** First seeds: 1,081 of 1,088 runs the same, exits 451 for
   451, stalls 2 for 2. Second: 1,078 the same, exits 442 for 442, stalls none for 2.
+- **Plasma going short of it is no shot** (MAP14). At 2 health, the plasma rifle her only
+  gun with rounds, a shotgun guy 500 off across a pit's lip: fire held ("plasma wouldn't get
+  there") and stood facing him five minutes, between steps for a shot and falls back to
+  cover, given up twice in the run. Her patience with a monster she has no shot at asked
+  only whether the line to it is clear. With the plasma in hand and its fire held for that,
+  it's no shot (`no_shot_long`), and he's left a while like any other she can't get at.
+  Measured: first seeds 1,083 of 1,088 runs the same, exits 450 for 451, stalls 1 for 2;
+  second 1,085 the same, exits 442 for 442, no stalls.
+- **Traced and left:** MAP06 on Ultra-Violence, the one stall remaining on the two sets: out
+  of ammo by 158 s with the spider mastermind about, a third of the map seen, no route to the
+  exit from where she ends. A want of ammo, not a loop.

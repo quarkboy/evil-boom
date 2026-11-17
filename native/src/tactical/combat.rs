@@ -2168,7 +2168,13 @@ impl Combat {
         if self.given_up_on(obs, t.id) {
             return true;
         }
-        if self.can_hit(obs, t, None) {
+        // (in her sights and the plasma in her hand going into something short of it is no
+        // shot either: stood facing one across a pit's lip at 2 health for five minutes, not a
+        // round fired)
+        let blocked = obs.weapon == Some(6)
+            && self.target == Some(t.id)
+            && self.trigger.held_fire == Some(moves::HeldFire::PlasmaBlocked);
+        if !blocked && self.can_hit(obs, t, None) {
             self.patience.rest(Effort::NoShot, t.id);
             return false;
         }
