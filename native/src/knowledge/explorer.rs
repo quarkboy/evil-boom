@@ -222,12 +222,20 @@ impl Objective {
     /// Taken up before anything nearer of a lower one: the exit, then the doors and switches a
     /// key she has opens (what the key was got for), and what can't wait; last, what would cut
     /// her off from other things to do.
+    ///
+    /// And new ground before going back over old: somewhere she hasn't seen into, though the
+    /// way there shuts behind her, comes before a walk across floor she's seen, a wall to
+    /// try, another look, a hunt. (Doom II MAP19: a switch opens two doors that shut again;
+    /// through one, a line underfoot opens the way to the yellow skull. What's through it
+    /// was left till nothing else at all was, seventeen minutes of walls and second looks
+    /// after the switch was first pressed.)
     pub fn priority(&self) -> i32 {
         if self.kind == Kind::Exit {
             return 0;
         }
         if self.later && !self.urgent {
-            return 3; // (first what it would cut her off from; but not what's to be had only now)
+            // (first what it would cut her off from; but not what's to be had only now)
+            return if self.kind == Kind::Frontier { 3 } else { 4 };
         }
         if matches!(self.kind, Kind::Door | Kind::Switch)
             && self

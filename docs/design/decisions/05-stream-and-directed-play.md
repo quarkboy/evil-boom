@@ -2354,3 +2354,22 @@ follower stuck all the while and never failing.
   - **Measured.** MAP19 in the pass: out on four seeds of four at 29 to 33 minutes, for one
     of four. Score on top of the rule above: first seeds +0.0014 (s.e. 0.0017), exits 438
     for 436, stalls 9 for 10; second +0.0003 (s.e. 0.0014), exits 408, stalls 4 for 6.
+- **Unseen ground behind a door that shuts is hers to go to** (MAP19, the maintainer watching:
+  "she tries almost everything else many, many times"). A switch opens two doors that shut
+  again; through the lower one a line underfoot opens the way to the yellow skull. She knew
+  the switch opened both from 394 s and first went through the lower at 1,430 s. What's
+  beyond a door that shuts with its switch outside cuts her off from the rest, and such
+  places were left for when nothing safe is; but there's always another wall, another look.
+  - **The rule** (`usable`): somewhere she hasn't seen into, with more unseen or untried
+    beyond where she'd be left, is kept among the ordinary things to do, held back as
+    what cuts her off is (after the rest of what's new).
+  - **Measured.** The pass: MAP19 22 to 25 minutes on four seeds; MAP13 28 minutes, four of
+    four out, for 53 and two; MAP20 and E4M5 out on all four; 264 of 268 out for 257.
+    Score on top of the two rules above: first seeds +0.0058 (s.e. 0.0049), exits 446 for
+    438, stalls 7 for 9; second seeds +0.0166 (s.e. 0.0050), exits 427 for 408.
+  - **Tried with it and dropped:** new ground before all going back over old (a walk
+    across floor seen, a wall, another look, a hunt ranked after anything unseen). MAP19
+    in ten minutes, but six runs of the pass stuck that weren't: E1M5 (a walk onto a rising
+    platform, later than before, into the pocket of the rule below), MAP18 (a loop, not
+    traced), E4M2, and a seed each of MAP13, MAP14, MAP17. Walking floor she's seen is how
+    walk-over lines are found, and when it's done matters.

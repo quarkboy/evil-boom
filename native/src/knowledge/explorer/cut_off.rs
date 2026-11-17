@@ -369,12 +369,18 @@ impl Explorer {
             }
             let cut = nav.poly_at(o.goal).map(|p| back.lost_from(p));
             let open = cut.as_ref().is_none_or(|c| c.1) || self.placed(obs, &o);
+            let ahead = cut.as_ref().is_some_and(|c| c.1);
             let gone = cut.map(|c| c.0);
             // Worth the risk, however far she can't get back from: the exit; a teleporter (where it
             // leads is the unknown); a key (it opens the way). And ammo or a gun the level put there
             // when she's next to out of it: nothing she can't get back to is worth much without, and
             // there's a way out from where the level put it.
+            // And somewhere she hasn't seen into, with more unseen or untried beyond where she'd
+            // be left (`open`): a door that shuts behind her onto new ground is how a level
+            // goes on, as often as not. Held back as what cuts her off is (after the rest of
+            // what's new), not left for when there's nothing at all.
             let risk_it = matches!(o.kind, Kind::Exit | Kind::Teleporter | Kind::Key)
+                || (o.kind == Kind::Frontier && ahead)
                 || (self.placed(obs, &o) && hooks.worth_cut_off(obs, &o));
             // Most of what she can get to, and never the way out, as far as she knows.
             let reach = back.now.polys;
