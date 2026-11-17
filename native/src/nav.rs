@@ -25,6 +25,49 @@ pub struct Heights {
     pub ceiling: f64,
 }
 
+/// A switch's face on a line with a way through it: its front's upper part (between the two
+/// ceilings), its lower part (between the two floors), or both, showing a switch's texture.
+#[derive(Clone, Copy, Debug)]
+pub struct SwitchFace {
+    pub upper: bool,
+    pub lower: bool,
+    pub front: usize,
+    pub back: usize,
+}
+
+/// a switch's face this far over the floor she stands on is out of her sight
+pub const FACE_REACH: f64 = 96.0;
+
+impl SwitchFace {
+    /// May it be pressed by someone standing on a floor at `floor`, the line's two sectors at
+    /// `f` and `b`? Where a part with the switch's texture is showing, only from where one
+    /// such part is within sight: not far over her head, nor under her feet. Where none is
+    /// showing (the two ceilings level, or the floors), there's no face to be out of sight
+    /// of, and it's as any line: the texture's a leftover on a part never seen (E4M3's lifts
+    /// carry one on an upper part that doesn't exist; what shows is the lift's side below),
+    /// or the thing hasn't moved to show it yet.
+    pub fn seen(self, f: Heights, b: Heights, floor: f64) -> bool {
+        let parts = [
+            (self.upper, b.ceiling, f.ceiling),
+            (self.lower, f.floor, b.floor),
+        ];
+        let mut showing = parts
+            .iter()
+            .filter(|(is, lo, hi)| *is && hi > lo)
+            .peekable();
+        showing.peek().is_none()
+            || showing.any(|&(_, lo, hi)| lo - FACE_REACH <= floor && floor <= hi)
+    }
+
+    /// `seen`, with any of the heights the three sectors can be at together.
+    pub fn seen_any(self, f: &[Heights], b: &[Heights], here: &[Heights]) -> bool {
+        f.iter().any(|&f| {
+            b.iter()
+                .any(|&b| here.iter().any(|h| self.seen(f, b, h.floor)))
+        })
+    }
+}
+
 /// Heights by value, for hash sets and maps.
 pub type HeightsKey = (u64, u64);
 

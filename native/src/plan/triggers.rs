@@ -94,6 +94,8 @@ pub struct PlanFacts {
     pub use_line_gates: HashMap<(usize, usize), Vec<(usize, usize)>>,
     /// (gun line, activator poly) -> the floors it can be shot from there
     pub shot_floors: HashMap<(usize, usize), (f64, f64)>,
+    /// switch line -> its face, seen only from some floors (`nav::SwitchFace`)
+    pub switch_faces: HashMap<usize, crate::nav::SwitchFace>,
     /// (line, activator poly) -> the places to stand for the press there, each by the (front,
     /// back) sectors of the lines her box must be clear over
     pub stand_gates: HashMap<(usize, usize), StandPlaces>,
@@ -231,6 +233,11 @@ impl Planner<'_> {
                 }
                 if let Some(&(lo, hi)) = self.facts.shot_floors.get(&(line, p)) {
                     if !here.iter().any(|h| lo <= h.floor && h.floor <= hi) {
+                        return false;
+                    }
+                }
+                if let Some(face) = self.facts.switch_faces.get(&line) {
+                    if !face.seen_any(&states[face.front], &states[face.back], here) {
                         return false;
                     }
                 }

@@ -147,6 +147,7 @@ impl View {
                     .map(|(k, v)| (*k, v.iter().copied().collect()))
                     .collect(),
                 shot_floors: n.shot_floors.clone(),
+                switch_faces: n.switch_faces.clone(),
                 stand_gates: n.stand_gates.clone(),
                 cross_sides: self.cross_sides().clone(),
                 temporary: crate::navigator::temporary_heights(&self.triggers, &n.movers)

@@ -261,6 +261,8 @@ pub(super) struct Analysis<'a> {
     use_gates: HashMap<(usize, usize), BTreeSet<usize>>,
     use_line_gates: HashMap<(usize, usize), BTreeSet<(usize, usize)>>,
     shot_floors: HashMap<(usize, usize), (f64, f64)>,
+    /// switch line -> its face (`switch_face`)
+    pub(super) switch_faces: HashMap<usize, crate::nav::SwitchFace>,
     stand_gates: HashMap<(usize, usize), StandGates>,
 }
 
@@ -296,6 +298,7 @@ impl<'a> Analysis<'a> {
             use_gates: HashMap::default(),
             use_line_gates: HashMap::default(),
             shot_floors: HashMap::default(),
+            switch_faces: HashMap::default(),
             stand_gates: HashMap::default(),
         }
     }
@@ -364,6 +367,18 @@ impl<'a> Analysis<'a> {
                 }
                 _ => self.gun_activators(li, touching_any.get(&li).cloned().unwrap_or_default()),
             };
+            // A switch whose face is the upper or the lower part of a line with a way through
+            // it is pressed only from a floor its face can be seen from, the heights as they
+            // are then: not far over her head nor under her feet, nor before it shows at all.
+            // (The game's press has no height to it. E1M5: the switch at the top of each rising
+            // platform in the nukage, pressed from the platform down at the bottom, 270 under
+            // it, where it does nothing; and then, shut in at the top beside the other one,
+            // which works the same thing, she counted it tried.)
+            if matches!(info.trigger, Trigger::S1 | Trigger::SR) {
+                if let Some(face) = self.switch_face(li) {
+                    self.switch_faces.insert(li, face);
+                }
+            }
             let sectors = self.affected(li, &info);
             let shift_from = (is_stairs(line.special) && sectors.len() == 1)
                 .then(|| (sectors[0], self.movers.initial[sectors[0]].floor));
@@ -485,6 +500,33 @@ impl<'a> Analysis<'a> {
                 keep: None,
             })
             .collect()
+    }
+
+    /// A two-sided line's switch face: its front's upper or lower part, where that part
+    /// shows a switch's texture and the middle doesn't. None: no such face (a switch on a
+    /// plain wall is all the wall's height, and seen from any floor before it).
+    fn switch_face(&self, li: usize) -> Option<crate::nav::SwitchFace> {
+        let m = self.m;
+        let line = &m.linedefs[li];
+        if line.front == NO_SIDEDEF || line.back == NO_SIDEDEF {
+            return None;
+        }
+        let (f, b) = m.sides(li);
+        let sd = &m.sidedefs[usize::from(line.front)];
+        let switch = |t: &str| {
+            let t = t.to_uppercase();
+            t.starts_with("SW1") || t.starts_with("SW2")
+        };
+        if switch(&sd.middle) {
+            return None;
+        }
+        let (upper, lower) = (switch(&sd.upper), switch(&sd.lower));
+        (upper || lower).then_some(crate::nav::SwitchFace {
+            upper,
+            lower,
+            front: f?,
+            back: b?,
+        })
     }
 
     /// Polys that come within USE_REACH of the line on its front side. Use traces 64 from the

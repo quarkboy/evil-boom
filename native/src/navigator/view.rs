@@ -910,6 +910,29 @@ impl View {
         })
     }
 
+    /// The trigger's activator polys whose floor, with these heights, is one its line can be
+    /// worked from: a gun line's hit from (`shot_floors`), a switch's face seen from
+    /// (`switch_faces`). All of them where the line has no such bound.
+    pub fn floors_now(&self, t: &TriggerLine, states: &States) -> BTreeSet<usize> {
+        let Some(li) = t.linedef() else {
+            return t.activators.clone();
+        };
+        let n = &self.nav;
+        t.activators
+            .iter()
+            .copied()
+            .filter(|&p| {
+                let here = &states[n.sector_of_poly(p)];
+                n.shot_floors
+                    .get(&(li, p))
+                    .is_none_or(|&(lo, hi)| here.iter().any(|h| lo <= h.floor && h.floor <= hi))
+                    && n.switch_faces.get(&li).is_none_or(|face| {
+                        face.seen_any(&states[face.front], &states[face.back], here)
+                    })
+            })
+            .collect()
+    }
+
     /// The trigger's activator polys whose use trace isn't blocked by something shut with these
     /// heights (with `doors`, ones she can open count as open), and for gun lines, where the
     /// floor can be at a height a level shot hits the line from.
@@ -965,6 +988,11 @@ impl View {
                     .iter()
                     .any(|h| lo <= h.floor && h.floor <= hi)
                 {
+                    continue;
+                }
+            }
+            if let Some(face) = n.switch_faces.get(&li) {
+                if !face.seen_any(&states[face.front], &states[face.back], &states[sector]) {
                     continue;
                 }
             }

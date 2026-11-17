@@ -245,6 +245,9 @@ pub struct Navigator {
     pub use_line_gates: HashMap<(usize, usize), BTreeSet<(usize, usize)>>,
     /// (gun line, poly) -> floors to stand on there for a level shot to hit it
     pub shot_floors: HashMap<(usize, usize), (f64, f64)>,
+    /// switch line -> its face, where that's the upper or lower part of a line with a way
+    /// through: pressed only from a floor it's seen from (`nav::SwitchFace`)
+    pub switch_faces: HashMap<usize, crate::nav::SwitchFace>,
     /// (switch line, poly) -> where it can be stood for there, each place by the lines of moving
     /// sectors the box must be clear over (`analysis::StandGates`)
     pub stand_gates: HashMap<(usize, usize), analysis::StandGates>,
@@ -314,6 +317,7 @@ impl Navigator {
         let mut a = analysis::Analysis::new(&map, &mesh, &movers, &obstacle_grid, skill);
         let mut triggers = a.find_triggers();
         let (use_gates, use_line_gates, shot_floors, stand_gates) = a.take_gates();
+        let switch_faces = std::mem::take(&mut a.switch_faces);
         for t in &mut triggers {
             t.effects = with_trenches(&movers, &trenches, &t.effects);
         }
@@ -384,6 +388,7 @@ impl Navigator {
             use_gates,
             use_line_gates,
             shot_floors,
+            switch_faces,
             stand_gates,
             triggers,
             teleports,

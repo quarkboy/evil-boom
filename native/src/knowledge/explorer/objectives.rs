@@ -265,7 +265,7 @@ impl Explorer {
         out.extend(self.exits(&by_line, &reach, keys, pos));
         out.extend(self.keys_seen(&view, &states, &reach, keys, pos));
         out.extend(self.ammo_for_tapping(obs, &reach));
-        out.extend(self.untried(&by_line, &reach, keys, pos));
+        out.extend(self.untried(&by_line, &reach, keys, pos, (&view, &states)));
         let again = self.pressed_again(obs, &by_line, &reach, keys, pos);
         if self.suspecting != Suspecting::No {
             let panic = self.suspecting == Suspecting::EveryWall;
@@ -521,14 +521,23 @@ impl Explorer {
         reach: &BTreeSet<usize>,
         keys: Keys,
         pos: Point,
+        (view, states): (&View, &States),
     ) -> Vec<Objective> {
         let nav = &self.nav;
         let k = &self.knowledge;
-        // (one of them to try, as a line by itself)
+        // (one of them to try, as a line by itself: from a floor, as she believes the floors
+        // now, that its face is seen from or a shot hits it from)
         let to_try = |li: usize| -> Option<Objective> {
             let t = by_line
                 .get(&li)
-                .filter(|t| !t.activators.is_disjoint(reach) && t.info.lock.satisfied(keys))?;
+                .filter(|t| t.info.lock.satisfied(keys))
+                .map(|t| {
+                    let mut t = (*t).clone();
+                    t.activators = view.floors_now(&t, states);
+                    t
+                })
+                .filter(|t| !t.activators.is_disjoint(reach))?;
+            let t = &t;
             let kind = if t.info.category.is_door() {
                 Kind::Door
             } else {

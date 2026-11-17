@@ -2373,3 +2373,29 @@ follower stuck all the while and never failing.
     platform, later than before, into the pocket of the rule below), MAP18 (a loop, not
     traced), E4M2, and a seed each of MAP13, MAP14, MAP17. Walking floor she's seen is how
     walk-over lines are found, and when it's done matters.
+- **A switch isn't pressed from where its face is out of sight** (E1M5, the maintainer's rule).
+  In the nukage are two platforms that rise when walked onto, each with a switch at the top
+  of its shaft that brings both down: ride up, jump off for the ledge, or press the switch
+  if the jump's missed. The game's press has no height to it, and she pressed one switch
+  from its platform down at the bottom, its face 270 over her head, where it does nothing;
+  then rode the other up, was shut in at the top beside its switch, and didn't press it:
+  the two work the same thing and that was tried. A pocket one piece of the mesh wide.
+  - **The rule** (`SwitchFace`): where a switch's texture is the upper or lower part of a
+    line with a way through, and that part is showing, it's pressed only from a floor
+    the part is within sight of (not more than 96 over it, nor under her feet), the heights
+    as they are when she would. The planner's press places and a switch not tried both.
+  - **Two goes before it.** The face reckoned from the map's starting heights: the
+    maintainer's objection, a switch on something that moves is elsewhere by then. Then
+    "not showing, not pressed": E4M3 not out on any seed, its lifts carrying a switch's
+    texture on an upper part that doesn't exist (the ceilings level). The map can't say
+    whether a texture out of sight is a platform yet to rise or a leftover, so the rule is
+    for a face showing only.
+  - **Surveyed:** 149 such switches on the 68 maps. Of the plans' 257 presses, four are of
+    a face not showing: MAP15's (shown only by the stairs its own press builds), two at
+    E2M1's start, one on E4M7 that never shows.
+  - **Measured.** The pass: 264 of 268 out, as before it; 258 runs the same to the second.
+    Score on top of the three rules above: first seeds -0.0006 (s.e. 0.0018), exits 445 for
+    446, stalls 6 for 7; second -0.0017 (s.e. 0.0010), exits 424 for 427. E1M5: a stall and
+    a death to exits.
+  - **All four against the baseline:** first seeds +0.0052 (s.e. 0.0053), exits 445 for 438,
+    stalls 6 for 10; second seeds +0.0125 (s.e. 0.0051), exits 424 for 411, stalls 5 for 6.
