@@ -141,11 +141,19 @@ impl Knowledge {
                 Wall::Skip(_) => None,
             })
             .collect();
+        let m = &self.nav.map;
         for (from, like) in tried {
+            // (with the same floor behind, where there's one: the sides of one platform. The
+            // sides of two platforms that touch show the same signs and aren't one thing:
+            // without this the sides of a lift raised late were tried, a like platform's side
+            // across the room having been pressed, and Doom II MAP28 had no way on: its lift's
+            // sides look like any wall and are found by being tried as walls.)
+            let behind = m.back_sector(&m.linedefs[from]);
             let (mut seen, mut todo) = (BTreeSet::from([from]), vec![from]);
             while let Some(x) = todo.pop() {
                 for n in self.wall_neighbours(x) {
                     if matches!(walls.get(&n), Some(Wall::Suspect { signs, .. }) if *signs == like)
+                        && m.back_sector(&m.linedefs[n]) == behind
                         && seen.insert(n)
                     {
                         walls.insert(n, Wall::Skip("one of its run tried"));

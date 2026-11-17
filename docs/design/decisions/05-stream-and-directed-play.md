@@ -2271,3 +2271,21 @@ follower stuck all the while and never failing.
   0.500, 451 exits. On a fresh set: 0.468, 413 exits. Two sets differ by about 0.013 from
   luck alone; this is two and a half times that. What was kept was what did no worse on
   those 1,088 runs, and some of it was those runs' luck.
+- **A run of walls is the sides of one thing** (2026-11-17: the rule above, put right). The
+  maintainer's pass of every level `--charmed` on Hurt Me Plenty (67 levels, E1M8 left out
+  for its ending) had Doom II MAP28 and MAP16 with no exit. MAP28's way on is a floor
+  raised late into a platform whose sides are a lift, looking like any wall: she finds it by
+  trying it as a wall. The sides of another raised platform beside it showed the very
+  signs, one of those had been pressed, and the lift's sides were "one of its run tried".
+  The build before the rule: out at 898 s.
+  - **The rule:** a run is also of one floor behind (`walls_weighed`): the sides of one
+    platform. The sides of a stair seen from below, each step a floor of its own, are no
+    longer one run; that much of the saving is given back.
+  - **Measured.** `--charmed`, the 67 levels: 65 out for 64 (MAP28 at 961 s, MAP16 at
+    1,357 s; MAP13 at 1,830 s for 3,460 s; MAP17, out at 3,357 s before, ran out its hour: not
+    traced; MAP30 is the Icon of Sin). The score against the rule as it was: first seeds
+    +0.0024 (s.e. 0.0031), exits 445 for 441, stalls 8 for 6; second seeds +0.0011 (s.e.
+    0.0029), exits 412 for 411, stalls 7 for 8.
+  - **What the score can't see.** She dies on MAP28 in every scored run, so its way on
+    being taken away cost nothing on either set of seeds. The charmed pass showed it in
+    minutes. Worth running beside the score for anything that touches exploring.
