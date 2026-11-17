@@ -652,7 +652,8 @@ impl Explorer {
             // nothing else. Otherwise her best suspect can be refused by a few points while weaker
             // walls over cheaper floors are tried and wear her down past it.
             let walls = obj.kind == Kind::Wall && self.suspecting != super::Suspecting::No;
-            let margin = match (self.harm_allowed || walls, way_on) {
+            let lifted = self.harm_allowed && (way_on || !self.harm_ways_only);
+            let margin = match (lifted || walls, way_on) {
                 (true, true) => 0.0,
                 (true, false) => self.hardest_floor_hit(&route.legs, obj, states),
                 (false, _) => HEALTH_MARGIN,

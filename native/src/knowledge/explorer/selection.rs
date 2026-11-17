@@ -310,6 +310,7 @@ impl Explorer {
         let perceive = self.knowledge.perceive;
         self.strafing_allowed = false;
         self.harm_allowed = false;
+        self.harm_ways_only = false;
         self.from_dead_end = false;
         self.resort_wanted = None;
         let mut found = self.ordinary(obs, hooks);
@@ -321,6 +322,12 @@ impl Explorer {
         }
         if found {
             self.panic_tries = 0;
+        }
+        // A way on she knows of, turned down only for want of health, before the walls: a
+        // round of walls is minutes, round after round, and a wall she only suspects is no
+        // better a way on than one she has seen.
+        if !found {
+            found = self.ways_on_hurt(obs, hooks);
         }
         if !found && perceive && self.suspecting == Suspecting::No {
             found = self.suspect_walls(obs, hooks);
@@ -626,6 +633,34 @@ impl Explorer {
         self.from_dead_end = found;
         if !found {
             self.harm_allowed = false;
+        }
+        found
+    }
+
+    /// The ways on she knows of (a line to set off, a look into somewhere she hasn't seen) that
+    /// were turned down for want of health, the margin lifted for those alone: only a way that
+    /// would take all she has is refused. With nothing else to do but press walls, healing
+    /// there's no way to isn't waited for.
+    fn ways_on_hurt(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        if self.short_of_health.is_none() || !self.may(Resort::Harm) {
+            return false;
+        }
+        let tic = obs.tic;
+        let refused = std::mem::take(&mut self.refused_now.1);
+        self.dropped
+            .retain(|id, &mut t| t != tic || !refused.contains(id));
+        self.refused_now.1 = refused;
+        self.harm_allowed = true;
+        self.harm_ways_only = true;
+        let found = self.safe_then_risky(obs, hooks);
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing else to do but walls: a way on she was too hurt for",
+                obs.tic
+            ));
+        } else {
+            self.harm_allowed = false;
+            self.harm_ways_only = false;
         }
         found
     }

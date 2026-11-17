@@ -620,6 +620,9 @@ pub struct Explorer {
     strafing_allowed: bool,
     /// switches pressed from a floor that hurts allowed (nothing else at all to do)
     harm_allowed: bool,
+    /// ...for ways on only (a line to set off, a look into somewhere not seen): the pass
+    /// before the walls (`ways_on_hurt`)
+    harm_ways_only: bool,
     /// her health when she stepped onto a floor that hurts for a risky objective there (on
     /// purpose, not fallen in), while she's still down on it
     waded: Option<f64>,
@@ -777,6 +780,7 @@ impl Explorer {
             waiting_reopen: false,
             strafing_allowed: false,
             harm_allowed: false,
+            harm_ways_only: false,
             from_dead_end: false,
             waded_dead_end: false,
             waded: None,
