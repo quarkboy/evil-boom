@@ -63,6 +63,22 @@ fn boss_rules(map: &str) -> Vec<(u16, u16, u16, Category)> {
     }
 }
 
+/// The kinds of monster (by class name) whose last death moves something on this map.
+pub(super) fn boss_death_kinds(map: &str) -> Vec<&'static str> {
+    boss_rules(map)
+        .into_iter()
+        .filter(|r| r.1 != 0)
+        .filter_map(|r| match r.0 {
+            BARON => Some("BaronOfHell"),
+            CYBERDEMON => Some("Cyberdemon"),
+            SPIDER => Some("SpiderMastermind"),
+            MANCUBUS => Some("Fatso"),
+            ARACHNOTRON => Some("Arachnotron"),
+            _ => None,
+        })
+        .collect()
+}
+
 /// A sector lower than everything round it and too narrow anywhere for the player's box can't
 /// be stood in: the box always rests on the floor beside it (an 8-unit slot in a floor, a
 /// narrow channel round a bridge: no pits). The planner sees it at its lowest neighbour's

@@ -47,6 +47,10 @@ use std::rc::Rc;
 
 /// invulnerability lasts this long (INVULNTICS)...
 const INVULNERABLE_TICS: i64 = 30 * 35;
+/// A boss kind's death, from the killing shot to the game's look for others of its kind (the
+/// longest of their dying frames, an arachnotron's 55 tics, and what it takes her to see it's
+/// dead)
+const BOSS_DEATH_TICS: i64 = 70;
 
 /// a rocket's blast reaches this far (less her radius: 128 in all)
 const SPLASH: f64 = 112.0;
@@ -228,6 +232,9 @@ pub struct Combat {
     /// forced: whoever directs her): its slot, and which gun of the slot (the game's number:
     /// the plain shotgun or the super, the fist or the chainsaw)
     pub ordered_gun: Option<i32>,
+    /// the kinds whose last death moves something on this map, and when one of each last died
+    boss_kinds: Vec<&'static str>,
+    kind_died: BTreeMap<&'static str, i64>,
     pub ordered_weapon: Option<i32>,
     /// switched away from the ordered gun (something on her, hits coming): not back to it before
     /// this tic, and only once it'd fire (i64::MIN: not switched away)
@@ -379,6 +386,8 @@ impl Combat {
             forced_target: None,
             barred: Vec::new(),
             ordered_gun: None,
+            boss_kinds: nav.boss_death_kinds(),
+            kind_died: BTreeMap::new(),
             ordered_weapon: None,
             ordered_away_until: std::cell::Cell::new(i64::MIN),
             ordered_hold_fire: false,
@@ -685,6 +694,7 @@ impl Combat {
             if let Some(s) = self.known.get(i) {
                 self.dead.insert(*i);
                 self.kills += 1;
+                self.kind_died.insert(s.name, obs.tic);
                 self.senses.cries_due.push((obs.tic, s.name));
                 *self.tally.entry("deaths seen".to_string()).or_insert(0.0) += 1.0;
                 self.log
@@ -1335,6 +1345,7 @@ impl Combat {
                     if let Some((_, id, name)) = whose {
                         self.dead.insert(id);
                         self.kills += 1;
+                        self.kind_died.insert(name, obs.tic);
                         self.log
                             .push(format!("tic {}: {name} {id} dead (heard)", obs.tic));
                         self.count("deaths heard", 1.0);
@@ -2158,6 +2169,19 @@ impl Combat {
             return false;
         }
         true
+    }
+
+    /// One of t's kind died a moment ago, and the last of that kind dead moves something on
+    /// this map: the game looks, as each finishes dying, for another of its kind still alive,
+    /// and two dying together each find none. What their death moves then moves twice (MAP07's
+    /// step to the exit, raised a second time, is too high to get onto: no way out of the
+    /// level). The next isn't shot till the one before has done dying.
+    pub(super) fn boss_dying(&self, obs: &Observation, t: &Thing) -> bool {
+        self.boss_kinds.contains(&t.name)
+            && self
+                .kind_died
+                .get(t.name)
+                .is_some_and(|&d| obs.tic - d < BOSS_DEATH_TICS)
     }
 
     /// Standing to fight t with no shot at it from here: given up on a while once she has had

@@ -459,6 +459,11 @@ impl Navigator {
         *self.core.get_mut() = view::Core::new(self);
     }
 
+    /// The kinds of monster whose last death moves something on this map (A_BossDeath).
+    pub fn boss_death_kinds(&self) -> Vec<&'static str> {
+        analysis::boss_death_kinds(&self.map.name)
+    }
+
     pub fn initial_states(&self) -> States {
         self.movers.initial.iter().map(|&h| vec![h]).collect()
     }

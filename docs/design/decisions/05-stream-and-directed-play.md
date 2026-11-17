@@ -2556,3 +2556,20 @@ Eight stalls on the two sets to begin with: E4M6 three, MAP21 two, MAP14, MAP06,
 - **Traced and left:** MAP06 on Ultra-Violence, the one stall remaining on the two sets: out
   of ammo by 158 s with the spider mastermind about, a third of the map seen, no route to the
   exit from where she ends. A want of ammo, not a loop.
+
+## Stuck runs, round two: a third seed set (2026-11-17)
+
+The build after round one on eight fresh seeds a skill (`out/score/base3.tsv`): 448 out, 637
+died, 3 stalled (MAP07, E2M4 on Ultra-Violence, MAP11 on Ultra-Violence).
+
+- **The next of a boss's kind isn't shot while the one before is dying** (MAP07). All twelve
+  dead, the exit's step at 40 where the plan has 24, and no way onto it: the level can't be
+  left. The game's own fault: as each arachnotron finishes dying it looks for another alive
+  and, finding none, raises the step; the last two killed 51 tics apart (dying takes 55) each
+  found none, and it rose twice.
+  - **The rule** (`boss_dying`, `HeldFire::BossDying`): on a map where a kind's last death
+    moves something (`boss_death_kinds`), fire's held at that kind for 70 tics after one of
+    it dies.
+  - **Measured** on the four levels with such kinds (MAP07, E1M8, E4M6, E4M8), all three
+    seed sets, 192 runs: out 61 for 57, the stall gone; MAP07 on 24 more seeds a skill, 3 out
+    for 4 on Hurt Me Plenty, none either way on Ultra-Violence. Parity's 24 runs the same.

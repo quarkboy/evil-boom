@@ -171,6 +171,7 @@ pub enum HeldFire {
     LeftToBoss,
     NoShot,
     BarrelInLine,
+    BossDying,
 }
 
 impl HeldFire {
@@ -182,6 +183,7 @@ impl HeldFire {
             HeldFire::LeftToBoss => "left to the boss",
             HeldFire::NoShot => "no shot (too steep, or something in the way)",
             HeldFire::BarrelInLine => "a barrel in the line of fire, its chain by her",
+            HeldFire::BossDying => "another of its kind still dying: its death comes after",
         }
     }
 }
