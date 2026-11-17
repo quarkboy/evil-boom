@@ -2320,3 +2320,22 @@ follower stuck all the while and never failing.
     margin too: -0.0012 (s.e. 0.0047), exits 411 for 412, stalls 6 for 7.
   - **Left:** seven minutes in that room still. A walk over floor she's seen counts as
     twice as far as it is (`Kind::Visit`), and the nearer-looking chores go first.
+- **The charmed pass with endless bullets** (the maintainer's, 2026-11-17): every level but E1M8
+  `--charmed --endless-bullets` on Hurt Me Plenty, four seeds (268 runs), ranked by mean time
+  to get out. Nothing can hurt her and she never wants for rounds, so what is slow is her
+  exploring or a loop in the fight. His bar: no Doom II level over thirty minutes. First
+  pass: 253 out; none out on MAP30 (the Icon of Sin) and E3M9; over thirty minutes MAP13,
+  MAP19, MAP17, MAP29, MAP14, MAP20. After the four rules below: 264 out, all but MAP30's;
+  over thirty minutes MAP17 (3,229 s), MAP14 (2,208 s), MAP29 (2,146 s).
+- **A lasting move takes its time from where the thing was** (E3M9, the maintainer's sighting).
+  Left of the first door a switch opens it, right of it a switch shuts it, both outside, the
+  exit out there too. She pressed the one, then the other as a switch not tried, and walked
+  in under the closing door: shut in for the level, five strandings a run. She does plan to
+  open again a door she has shut; but how long the shutting takes was reckoned from where
+  the map starts the door, shut, so it was done as it began, and seen half way down it was
+  taken as it stood.
+  - **The rule** (`states`, `timing_from`): from where it was when she set it off.
+  - **Measured.** The pass: E3M9 out on four seeds of four, 480 s, for none; nothing else
+    moved. Score: first seeds -0.0013 (s.e. 0.0015), exits 436 for 438; second -0.0026
+    (s.e. 0.0016), 408 for 411. The runs moved are E1M5, E1M7, E1M8, E2M8, E3M9, MAP05;
+    the exits lost are E1M5's, to the pocket the fourth rule below ends.

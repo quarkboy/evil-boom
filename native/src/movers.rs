@@ -318,7 +318,20 @@ impl MoverModel {
     /// How long the special takes to move sector s from its initial heights to `target`, and
     /// how long it stays there (near enough: vanilla speeds, from rest).
     pub fn timing(&self, special: u16, description: &str, s: usize, target: Heights) -> Timing {
-        let Heights { floor, ceiling } = self.initial[s];
+        self.timing_from(special, description, self.initial[s], target)
+    }
+
+    /// `timing`, the sector moving from `from` (where it was when the line went off), not from
+    /// where the map starts it: a door standing open, shut by a line, takes its whole height
+    /// to close, though shut is where it began.
+    pub fn timing_from(
+        &self,
+        special: u16,
+        description: &str,
+        from: Heights,
+        target: Heights,
+    ) -> Timing {
+        let Heights { floor, ceiling } = from;
         let fast = description.contains("blazing")
             || description.contains("turbo")
             || description.contains("fast");

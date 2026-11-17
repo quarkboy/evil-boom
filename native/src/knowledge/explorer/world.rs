@@ -67,7 +67,22 @@ impl Explorer {
                 let h = hs[0];
                 let timing = (t.line >= 0)
                     .then(|| nav.movers.timing(t.info.special, &t.info.description, s, h));
-                let done = f.tic + timing.map_or(0, |tm| tm.travel as i64);
+                // (how long a move that stays takes, from where it was when she set it off: a
+                // door standing open that she shuts by a switch is its whole height closing,
+                // and seen half way down it isn't "as seen" but shut. Reckoned from the map's
+                // start, shut already, the move was done as it began, and she walked in under
+                // it: E3M9's first door, both its switches outside, the exit out there too)
+                let stays = (t.line >= 0 && t.permanent()).then(|| {
+                    let from = k
+                        .fired_rest
+                        .get(&(t.id, f.tic))
+                        .and_then(|r| r.iter().find(|(x, _)| *x == s))
+                        .map_or(nav.movers.initial[s], |r| r.1);
+                    nav.movers
+                        .timing_from(t.info.special, &t.info.description, from, h)
+                        .travel as i64
+                });
+                let done = f.tic + stays.unwrap_or_else(|| timing.map_or(0, |tm| tm.travel as i64));
                 // What comes back is only as moved till it's due back (a timed door).
                 let back = done
                     + timing
