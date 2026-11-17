@@ -563,8 +563,26 @@ impl NavCore {
         match e.linedef {
             _ if ha.floor - hb.floor <= MAX_STEP => true,
             None => true,
-            Some(li) => self.callbacks.landable(li, e.from_sector, ha.floor),
+            Some(li) => {
+                self.callbacks.landable(li, e.from_sector, ha.floor)
+                    && self.drop_reaches(e, li, ha.floor)
+            }
         }
+    }
+
+    /// Is any of edge `e`'s portal within the stretch of its line she can drop off from a floor
+    /// at `top` (`Callbacks::landing_span`)? A long ledge is several portals, and the pieces
+    /// of it under a low ceiling beyond are no way down at all.
+    fn drop_reaches(&self, e: Edge, li: usize, top: f64) -> bool {
+        let Some((a, b)) = self.callbacks.landing_span(li, e.from_sector, top) else {
+            return true;
+        };
+        let q = &self.mesh.portals[e.portal];
+        let (dx, dy) = (q.p2.0 - q.p1.0, q.p2.1 - q.p1.1);
+        let len = dx.hypot(dy).max(1e-9);
+        let along = |p: Point| ((p.0 - q.p1.0) * dx + (p.1 - q.p1.1) * dy) / len;
+        let (ta, tb) = (along(a), along(b));
+        ta.max(tb).min(len) - ta.min(tb).max(0.0) > 0.5
     }
 
     /// The ways edge `e` from `frm` can be crossed, coming from its sector at its heights after
