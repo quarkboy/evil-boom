@@ -1060,6 +1060,7 @@ impl RouteFollower {
                         );
                     }
                     self.lift_back = Some((s, live, obs.tic));
+                    self.felt.insert(s);
                 }
                 if self
                     .lift_back

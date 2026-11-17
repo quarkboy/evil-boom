@@ -384,6 +384,9 @@ impl RouteFollower {
             obs.tic
         });
         let waited = obs.tic - wait_tic;
+        if waited == 35 {
+            self.felt.insert(sector);
+        }
         self.progress_tic = obs.tic; // (waiting isn't being stuck)
                                      // pressing use on a moving door reverses it: only press once things are still
         if Some(live[sector]) != self.mover_heights {

@@ -2591,3 +2591,36 @@ died, 3 stalled (MAP07, E2M4 on Ultra-Violence, MAP11 on Ultra-Violence).
   (E4M9, MAP15, E4M4, MAP14), each further on than she got before (cover rested two or
   three times in each): exploring loops at 692 s, 3,063 s and 2,651 s, and on E4M4 out of
   ammo backing off from an imp. Round three's.
+
+## Stuck runs, round three (2026-11-17)
+
+The four stalls round two left on the first two seed sets, each further on than she got before.
+
+- **Held short of a lift's line while its floor's door is open** (MAP15). A block that's a
+  lift by one walk-over line and a door by another. She opened the door and walked over the
+  lift's line 52 tics later; the door came down to the lowered floor, the floor came back up
+  into it, and the two held each other there for good, every line that moves either doing
+  nothing after: the way to the exit shut. The game's own fault. A lift's walk-over line
+  just ahead of her, the floor it lowers under a door that's open and shuts by itself: she
+  waits short of the line till it has, 8 s at most (`jam_wait`). Alone: 4 or 5 runs changed
+  a set, exits 447 for 446 and 454 for 454.
+- **Out of ammo, one clock for backing off** (E4M4 on Ultra-Violence). Low and unarmed among
+  three imps: "backing off" and "getting past" by turns every few tics for five minutes.
+  Backing off is given up a monster at a time, and with them taking turns to be nearest no
+  clock ran out. Out of ammo she can hurt none of them: one clock for the lot. That run:
+  dead at 244 s. Alone: exits 444 for 446 and 454 for 454, about 15 runs changed a set.
+- **A floor she's stood waiting at is as she found it** (E4M9). A fence that's a lift came
+  back up beside her while she faced the other way; her plans went across it as down (as
+  last seen), and she waited at it, again and again. What the follower has stood a second
+  at, or waited for as a lift to come back, is noted at the height it's at (`felt`).
+  - **A go before it:** everything within 40 units of her seen at its height, whichever way
+    she faced. About 150 runs changed a set; alone, exits 444 for 446 and 446 for 454. Dropped.
+- **The three together, three seed sets:** exits 447, 444, 454 for 445, 446, 454 (1,345
+  for 1,345); stalls 1, 0, 0 for 2, 2, 0; run for run +0.0013 (s.e. 0.0015), -0.0015
+  (0.0016), -0.0001 (0.0002).
+- **Tried and held back:** ammo a retreat made for and never had, left alone a while (MAP31
+  on Ultra-Violence: out for a stimpack, demons, away for a clip never got to, out for the
+  stimpack again). It ends that loop, and with the three above cost exits 439 for 447 and
+  451 for 454: on unarmed after one trip that failed, where the loop would have ended by
+  itself. The maintainer's idea in its place, next: the walls near her searched hard before
+  a long walk for supplies.

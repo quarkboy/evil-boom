@@ -67,6 +67,15 @@ impl Knowledge {
         }
     }
 
+    /// Sector s is at `now`, known by being up against it (not by sight): as seen, for what
+    /// she plans next.
+    pub fn felt(&mut self, s: usize, now: Heights, tic: i64) {
+        if self.sectors.contains(&s) {
+            self.seen_tic.insert(s, tic);
+            self.seen_heights.insert(s, now);
+        }
+    }
+
     /// Take in a tic: what's in view now, what got set off (`controls`: what she did on the tic
     /// that led here).
     pub fn update(&mut self, obs: &Observation, controls: Option<&Controls>) {

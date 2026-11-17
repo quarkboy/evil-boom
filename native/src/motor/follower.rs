@@ -314,6 +314,9 @@ pub struct RouteFollower {
     weave: Weave,
     /// run-jumps that came down off their landing (for the explorer)
     pub missed: Vec<Jump>,
+    /// floors she's stood waiting at and found not where the plan has them (for the explorer:
+    /// what she's up against she knows the height of, whichever way she's turned)
+    pub felt: BTreeSet<usize>,
     /// ...and those that didn't come off with her hit on the way: not the jump's doing (for the
     /// explorer)
     pub knocked: Vec<Jump>,
@@ -437,6 +440,7 @@ impl RouteFollower {
                 detour_tic: -1000,
             },
             missed: Vec::new(),
+            felt: BTreeSet::new(),
             knocked: Vec::new(),
             jumps: Vec::new(),
             failed_presses: Vec::new(),

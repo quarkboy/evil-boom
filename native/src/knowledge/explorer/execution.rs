@@ -408,6 +408,12 @@ impl Explorer {
         let Some(f) = &mut self.follower else {
             return false;
         };
+        // A floor she's stood waiting at is as she found it, whichever way she was turned: a
+        // fence that's a lift, back up beside her while she looked the other way, was planned
+        // across as down (as last seen) time after time, and waited at each time.
+        for s in std::mem::take(&mut f.felt) {
+            self.knowledge.felt(s, obs.heights[s], obs.tic);
+        }
         if f.missed.is_empty() && f.knocked.is_empty() {
             return false;
         }
