@@ -30,6 +30,8 @@ pub enum Effort {
     KeptClear,
     /// stepped to for a shot at it, time and again: its health is the measure
     SteppedFor,
+    /// backed off from, on and on: its health is the measure
+    BackedFrom,
 }
 
 #[derive(Clone, Copy, Debug)]

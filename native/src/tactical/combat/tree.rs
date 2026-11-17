@@ -388,6 +388,15 @@ fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
 
 // --- the fight ---------------------------------------------------------------------------------
 
+/// Till when one left alone by a move is left this time, and how many times that makes:
+/// `first` the first time, twice as long each time after (up to 32 times as long). Left for
+/// the one length every time, a pit of demons was gone round for ever: twenty seconds at each,
+/// and the first was hers again before she'd done with the last.
+fn left_till(before: Option<&(i64, u32)>, tic: i64, first: i64) -> (i64, u32) {
+    let times = before.map_or(0, |&(_, n)| n);
+    (tic + (first << times.min(5)), times + 1)
+}
+
 /// Backing off from the nearest thing that claws, when it's close and she is armed, or low, or
 /// one hit of it could kill her. Unarmed and in no such danger she doesn't: a clawing monster
 /// follows for ever, and the route takes her past it faster than backing off does.
@@ -398,9 +407,17 @@ fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
     }
     let pos = s.pos;
     let armed = c.armed(obs);
+    let left: std::collections::BTreeSet<i32> = c
+        .steer
+        .no_back
+        .iter()
+        .filter(|(_, &(till, _))| obs.tic < till)
+        .map(|(&id, _)| id)
+        .collect();
     let nearest = s
         .close
         .iter()
+        .filter(|t| !left.contains(&t.id))
         .filter(|t| {
             let low = c.now.health < c.tune.engage.low_health;
             let others = armed || claw_max(t.name) >= c.now.health;
@@ -409,6 +426,33 @@ fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         })
         .min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)))?;
     let t = nearest.clone();
+    // Not for ever. One that claws, near her as the crow flies and down in a pit under her
+    // ledge: it can't get at her nor she at it (too steep for the gun's aim), and "backing off"
+    // was all she did, stood at the ledge, for the five minutes the maintainer watched (Doom
+    // II MAP19, 727 s on). Backed off from so `engage.close_give_up` without a break and it
+    // none the worse, it's left a while as one she can't get at, and not backed off from
+    // meanwhile (the mark is this move's own, as stepping's is: one given up on for another
+    // reason is backed off from as ever when it comes for her).
+    /// backing off is one go at it with no more than this between
+    const BACK_BREAK: i64 = 2 * 35;
+    let limit = c.tune.engage.close_give_up;
+    if c.patience.spent(
+        Effort::BackedFrom,
+        t.id,
+        obs.tic,
+        limit,
+        Some((f64::from(t.health), 0.0)),
+        Some(BACK_BREAK),
+    ) {
+        let left = left_till(
+            c.steer.no_back.get(&t.id),
+            obs.tic,
+            c.tune.engage.given_up_tics,
+        );
+        c.steer.no_back.insert(t.id, left);
+        c.give_up(obs, t.id);
+        return None;
+    }
     let gun = c.preferred_gun(obs, &t);
     let moving = c
         .steer(obs, Some(&t), &gun)
@@ -515,7 +559,8 @@ fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option
             && !c
                 .steer
                 .no_step
-                .is_some_and(|(id, till)| id == t.id && obs.tic < till)
+                .get(&t.id)
+                .is_some_and(|&(till, _)| obs.tic < till)
     })?;
     // Not for ever. The step gets her where there's a shot; with a shot the route has her legs
     // again and walks her back out of it before it's taken, and she's stepped for it again:
@@ -541,7 +586,12 @@ fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option
         // given up on for another reason is stepped for as ever. Stepping passing over all
         // that are given up on lost 9 exits of 452: a demon left as out of reach wasn't stepped
         // for when it came for her.)
-        c.steer.no_step = Some((t.id, obs.tic + c.tune.engage.given_up_tics));
+        let left = left_till(
+            c.steer.no_step.get(&t.id),
+            obs.tic,
+            c.tune.engage.given_up_tics,
+        );
+        c.steer.no_step.insert(t.id, left);
         c.give_up(obs, t.id);
         return None;
     }

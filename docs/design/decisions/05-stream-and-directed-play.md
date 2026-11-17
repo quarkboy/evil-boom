@@ -2339,3 +2339,18 @@ follower stuck all the while and never failing.
     moved. Score: first seeds -0.0013 (s.e. 0.0015), exits 436 for 438; second -0.0026
     (s.e. 0.0016), 408 for 411. The runs moved are E1M5, E1M7, E1M8, E2M8, E3M9, MAP05;
     the exits lost are E1M5's, to the pocket the fourth rule below ends.
+- **Backing off isn't for ever, and one left alone is left longer each time** (MAP19, the
+  maintainer watching). On a narrow ledge over a pit of demons she "backed off" from the
+  nearest for as long as he watched: it can't get at her, the gun's aim won't go so steep.
+  Standing with no shot has a clock and stepping for one has; backing off had none.
+  - **The rule:** `Effort::BackedFrom`, as `SteppedFor`: backed off from without a break for
+    `engage.close_give_up`, it none the worse, it's left a while and not backed off from
+    meanwhile. And each time one is left so, by this move or by stepping, twice as long
+    (`left_till`).
+  - **Two goes before that held.** The mark kept for the last one only: she went from demon
+    to demon, 24 leavings in ten minutes at the ledge. Kept for each, thirty seconds: with
+    twenty at each of a pitful the first was hers again before the last was done, 65
+    leavings.
+  - **Measured.** MAP19 in the pass: out on four seeds of four at 29 to 33 minutes, for one
+    of four. Score on top of the rule above: first seeds +0.0014 (s.e. 0.0017), exits 438
+    for 436, stalls 9 for 10; second +0.0003 (s.e. 0.0014), exits 408, stalls 4 for 6.

@@ -85,9 +85,15 @@ pub struct Stepping {
     /// the way the fight's legs last went, and when; and when they last turned about
     pub(super) legs_way: Option<(Point, i64)>,
     pub(super) legs_turned: i64,
-    /// stepped for a shot at this one for long with it none the worse: not stepped for
-    /// again till this tic
-    pub(super) no_step: Option<(i32, i64)>,
+    /// stepped for a shot at these for long with them none the worse: each not stepped for
+    /// again till its tic
+    pub(super) no_step: BTreeMap<i32, (i64, u32)>,
+    /// backed off from these for long with them none the worse: each not backed off from
+    /// again till its tic. (Each, not the last only: with a pit of demons under her ledge
+    /// she left one, backed off from the next for its twenty seconds, and by then the first
+    /// was hers to back off from again; ten minutes at the ledge.)
+    /// With the tic, how many times it's been left so: twice as long each time (`left_till`).
+    pub(super) no_back: BTreeMap<i32, (i64, u32)>,
 }
 
 /// Getting out of fire there's no dodging: an arch-vile's, a hitscan shooter's.

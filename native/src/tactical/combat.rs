@@ -452,7 +452,8 @@ impl Combat {
                 turned_about: i64::MIN / 2,
                 legs_way: None,
                 legs_turned: i64::MIN / 2,
-                no_step: None,
+                no_step: BTreeMap::new(),
+                no_back: BTreeMap::new(),
             },
             wanted_dead: BTreeSet::new(),
             cover: Cover {
