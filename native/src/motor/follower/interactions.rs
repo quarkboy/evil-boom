@@ -438,6 +438,16 @@ impl RouteFollower {
                 {
                     continue;
                 }
+                // (a line's pressed from its front, the right of its first end to its second:
+                // from behind it the game does nothing, and a piece of the mesh at a line's end
+                // can lie on both sides of it)
+                let behind = t.linedef().is_some_and(|li| {
+                    let (la, lb) = nav.map.line_seg(li);
+                    (lb.0 - la.0) * (pos.1 - la.1) - (lb.1 - la.1) * (pos.0 - la.0) > 0.0
+                });
+                if behind {
+                    continue;
+                }
                 switch_nearby = true;
                 if waited > 3 * 35 && still {
                     // the nearest bit of it (a long lift edge's middle can be out of use range),

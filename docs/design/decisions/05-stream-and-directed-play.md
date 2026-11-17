@@ -2534,3 +2534,14 @@ Eight stalls on the two sets to begin with: E4M6 three, MAP21 two, MAP14, MAP06,
   (MAP30 three more from the commit before, the rest three fewer), stalls 2 for 5. Second:
   +0.0056 (s.e. 0.0035), exits 442 for 435 (MAP30 five more, the rest two more), stalls 2 for
   3. Stranded restarts 43 for 26.
+- **The pieces of a ledge under a low ceiling are no way down** (E4M6, a fourth seed at the
+  same ledge). The ledge is several pieces of the mesh: she crossed by one lying wholly
+  where the ceiling beyond is too low, and the path's stretch had nothing of it to keep to.
+  A drop by a portal is one only if some of the portal is within the stretch she can drop off
+  (`drop_reaches`).
+- **A line isn't pressed from behind it** (MAP21). A lift built up as stairs, called from
+  beside it: 488 presses of its line from the back, at the line's end, where a piece of the
+  mesh lies on both sides. The game takes a press from a line's front only; the follower,
+  waiting at a floor, passes over a line she's behind.
+- **Measured, the two together.** First seeds: 1,081 of 1,088 runs the same, exits 451 for
+  451, stalls 2 for 2. Second: 1,078 the same, exits 442 for 442, stalls none for 2.
