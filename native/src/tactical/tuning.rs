@@ -790,6 +790,11 @@ pub struct Retreat {
     /// out of ammo, none known, away from them: for this long with no round gained and nothing
     /// new seen, then no more of it till there is (on with her way, past them)
     pub away_give_up: i64,
+    /// back to cover this many times running with nothing killed and nothing new learned
+    /// between, and cover's no answer: none for `cover_rest`, twice as long each time after
+    /// (on with what she was about)
+    pub cover_runs: u32,
+    pub cover_rest: i64,
     /// a heavy taking longer than this (s) to kill with what she has: let others take its shots...
     pub bait_heavy: f64,
     /// ...from a place she's been this near...
@@ -853,6 +858,8 @@ impl Default for Retreat {
             ammo_margin: 16.0,
             ammo_gain: 128.0,
             away_give_up: 60 * 35,
+            cover_runs: 3,
+            cover_rest: 60 * 35,
             bait_heavy: 8.0,
             bait_range: 768.0,
             bait_again: 8 * 35,

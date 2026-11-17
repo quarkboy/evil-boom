@@ -2573,3 +2573,21 @@ died, 3 stalled (MAP07, E2M4 on Ultra-Violence, MAP11 on Ultra-Violence).
   - **Measured** on the four levels with such kinds (MAP07, E1M8, E4M6, E4M8), all three
     seed sets, 192 runs: out 61 for 57, the stall gone; MAP07 on 24 more seeds a skill, 3 out
     for 4 on Hurt Me Plenty, none either way on Ultra-Violence. Parity's 24 runs the same.
+- **A way on she knows of comes before the walls** (E2M4 on Ultra-Violence, 53 minutes). At
+  18 health, the one way on (through the blood to the exit's door) turned down for want of
+  health, and wall rounds from then on: the pass that lifts the margin comes after every
+  round of walls and never came. Ways on (a line to set off, a look into somewhere not
+  seen) turned down only for health are tried before the walls, refused only if they'd take
+  all she has (`ways_on_hurt`). The run: out at 2,800 s.
+- **Cover that gets her nothing isn't gone back to** (MAP11 on Ultra-Violence). Out of ammo
+  at 20 health: off for a shotgun, two imps in sight, back to cover, off again, 76 times in
+  five minutes. Back to cover three times running with nothing killed and nothing learned
+  between, cover's off a minute, twice as long each time (`cover_spent`,
+  `retreat.cover_runs`, `retreat.cover_rest`), and she goes on with what she was about.
+  The run: every monster dead, 837 of 850 lines, dead at 1,258 s on the way to the exit.
+- **Measured, the two together, three seed sets.** Exits 445, 446, 454 for 450, 442, 448
+  (1,345 for 1,340); run for run -0.0035 (s.e. 0.0038), +0.0030 (0.0043), +0.0049 (0.0037).
+  Stalls 2, 2, 0 for 1, 0, 3: the three on the third set gone, four new on the first two
+  (E4M9, MAP15, E4M4, MAP14), each further on than she got before (cover rested two or
+  three times in each): exploring loops at 692 s, 3,063 s and 2,651 s, and on E4M4 out of
+  ammo backing off from an imp. Round three's.

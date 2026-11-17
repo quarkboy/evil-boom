@@ -245,6 +245,11 @@ pub struct Player {
     /// away from them out of ammo with none known: since when, and what she had and knew
     /// then (rounds, lines and sectors seen); None: not fled so yet, or better off since
     away_since: Option<(i64, (i32, usize))>,
+    /// retreats to cover one after another with nothing come of them: how many, when the last
+    /// was, and what she'd killed and knew then
+    cover_runs: (u32, i64, (i32, String)),
+    /// no cover till then (`retreat.cover_rest`), and how many times it's been rested so
+    cover_off: (i64, u32),
     /// the last retreat tried was for cover
     tried_cover: bool,
     /// when a way off for ammo was last called off with one of them on it
@@ -322,6 +327,8 @@ impl Player {
             barrel_runs: Vec::new(),
             retreat_tic: -1_000_000_000,
             away_since: None,
+            cover_runs: (0, 0, (0, String::new())),
+            cover_off: (0, 0),
             tried_cover: false,
             walled_tic: -1_000_000_000,
             shooters_tic: -1_000_000_000,
@@ -1504,6 +1511,7 @@ impl Player {
             {
                 Some(r) => (RetreatKind::ForAmmo, Some(r)),
                 None if on_way => (RetreatKind::ForAmmo, None),
+                None if self.cover_spent(obs) => return None,
                 None => (RetreatKind::Cover, self.find_cover(obs)),
             }
         } else if self.fight.combat.in_the_open(obs.tic) {
@@ -1557,6 +1565,35 @@ impl Player {
             || health - rate * self.fight.tune.retreat.cover_range / RUN_SPEED
                 < self.fight.tune.retreat.health)
             && !self.fight.combat.now.shooters.is_empty()
+    }
+
+    /// Is cover no answer just now? Back to it `retreat.cover_runs` times running with nothing
+    /// killed and nothing new learned between (each within a minute of the last), it has got
+    /// her nothing and will again: out, set off for the same thing, the same ones in sight,
+    /// back. None for `retreat.cover_rest`, twice as long each time it comes to that, and she
+    /// goes on with what she was about. Counts this one.
+    fn cover_spent(&mut self, obs: &Observation) -> bool {
+        if obs.tic < self.cover_off.0 {
+            return true;
+        }
+        let now = (self.fight.combat.kills, self.explorer.knowledge.summary());
+        let (n, last, then) = &self.cover_runs;
+        let same = *then == now && obs.tic - last < 60 * 35;
+        let n = if same { n + 1 } else { 1 };
+        self.cover_runs = (n, obs.tic, now);
+        if n <= self.fight.tune.retreat.cover_runs {
+            return false;
+        }
+        let times = self.cover_off.1;
+        let rest = self.fight.tune.retreat.cover_rest << times.min(5);
+        self.cover_off = (obs.tic + rest, times + 1);
+        self.cover_runs.0 = 0;
+        self.log(format!(
+            "tic {}: cover's got her nothing {n} times running: none for {:.0}s",
+            obs.tic,
+            rest as f64 / 35.0
+        ));
+        true
     }
 
     /// Where she stands now, while nothing's shooting at her and nothing's hurting her: on the
