@@ -183,6 +183,9 @@ impl RouteFollower {
                 && (near || obs.tic - lineup > 3 * 35))
         {
             self.jump.lineup_tic = None;
+            if self.jump.sprints_short == 0 {
+                self.jump.run_at = obs.tic;
+            }
             self.jump.sprint = Some((jump.clone(), hd, obs.tic));
             self.log.add(
                 obs.tic,
@@ -512,11 +515,27 @@ impl RouteFollower {
         })
     }
 
+    /// A jump that didn't come off: the jump's own miss, or, with her hit on the run or in the
+    /// air, a knock (a hit pushes her), which says nothing of the jump.
+    fn fell_short(&mut self, obs: &Observation, jump: Jump) {
+        if obs.hit_tic.is_some_and(|t| t >= self.jump.run_at) {
+            self.knocked.push(jump);
+        } else {
+            self.missed.push(jump);
+        }
+    }
+
     /// A run-jump done: once she's on a floor again, did it come down on its landing?
     pub(super) fn judge_landing(&mut self, obs: &Observation) {
         let Some((jump, tic)) = self.jump.touchdown.clone() else {
             return;
         };
+        // (looked at long after, the fight having had her legs since: where she is now says
+        // nothing of where the jump came down)
+        if obs.tic - tic > JUDGED_WITHIN {
+            self.jump.touchdown = None;
+            return;
+        }
         let nav = &self.view.nav;
         let here = nav.mesh.poly_at(obs.pos());
         let on_floor = match (here, obs.z) {
@@ -541,7 +560,7 @@ impl RouteFollower {
                 ),
             );
             self.jumps.push(JumpNews::Missed(jump.clone(), got));
-            self.missed.push(jump);
+            self.fell_short(obs, jump);
         } else {
             self.jumps.push(JumpNews::Made(jump));
         }
@@ -633,6 +652,9 @@ impl RouteFollower {
                 self.jump.sprints_short += 1;
                 if self.jump.sprints_short >= SPRINTS_SHORT {
                     self.jump.sprints_short = 0;
+                    // (a miss, for what she plans next: another way first, as for one she
+                    // came down short from)
+                    self.fell_short(obs, jump.clone());
                     return self.fail(obs, Trouble::JumpShort);
                 }
                 self.log.add(obs.tic, format!("too slow for the jump ({along:.1} a tic for {due:.1}, {:.0} short of the edge): lining up again", -flown));
@@ -665,6 +687,10 @@ impl RouteFollower {
         }
     }
 }
+
+/// a landing is judged within this of the jump (tics: the fall and coming to a stop), or not
+/// at all
+const JUDGED_WITHIN: i64 = 4 * 35;
 
 /// a sprint this share of the speed it should have by where she is, or less: it won't carry
 const SPRINT_SHORT: f64 = 0.7;

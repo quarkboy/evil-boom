@@ -83,6 +83,9 @@ pub struct Jumping {
     pub(super) sprint: Option<(Jump, f64, i64)>,
     /// sprints called off for want of speed, one after another
     pub(super) sprints_short: u32,
+    /// when the jump in hand was first run at: hit by something since (a hit pushes her), what
+    /// comes of it isn't the jump's doing
+    pub(super) run_at: i64,
     /// (jump, tic) a run-jump done: where does it come down?
     pub(super) touchdown: Option<(Jump, i64)>,
     pub(super) run: Option<Run>,

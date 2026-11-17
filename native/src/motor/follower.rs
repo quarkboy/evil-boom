@@ -314,6 +314,9 @@ pub struct RouteFollower {
     weave: Weave,
     /// run-jumps that came down off their landing (for the explorer)
     pub missed: Vec<Jump>,
+    /// ...and those that didn't come off with her hit on the way: not the jump's doing (for the
+    /// explorer)
+    pub knocked: Vec<Jump>,
     /// the run-jumps set off and how each came down, for whoever's to hear of them (taken by
     /// the explorer each tic)
     pub jumps: Vec<JumpNews>,
@@ -432,6 +435,7 @@ impl RouteFollower {
                 detour_tic: -1000,
             },
             missed: Vec::new(),
+            knocked: Vec::new(),
             jumps: Vec::new(),
             failed_presses: Vec::new(),
             drops_ok: BTreeSet::new(),
@@ -445,6 +449,7 @@ impl RouteFollower {
             jump: Jumping {
                 sprint: None,
                 sprints_short: 0,
+                run_at: 0,
                 touchdown: None,
                 run: None,
                 run_for: None,

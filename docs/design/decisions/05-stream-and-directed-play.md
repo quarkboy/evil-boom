@@ -2416,3 +2416,23 @@ follower stuck all the while and never failing.
   - **Found on the way, not in this:** the window is a skip (the exit room is behind a yellow
     door); she had the key and had walked through the door, and still planned the jump each
     time, a jump given up for want of speed not being counted a miss.
+
+- **A jump given up for want of speed is a miss; one she was hit out of isn't** (2026-11-17).
+  The same E4M5 run: nine plans for the exit, each through the window jump that had just
+  failed, with the yellow door's way known and walked.
+  - **Why.** A jump she comes down short from is counted and left out of the next plan; one
+    called off three sprints running before takeoff was counted for nothing.
+  - **The rules.** Given up for want of speed: a miss, as one fallen short from (another way
+    first; another go with nothing else to do; twice, out for good). Hit by something since
+    the run began (the maintainer's: a hit pushes her, and she shouldn't go back at once to
+    be hit again): not counted, left out 30 s (`JUMP_KNOCKED_TICS`). The hit's tic is in the
+    observation (`hit_tic`), so it counts while the fight has her legs. A landing looked at
+    more than 4 s after the jump isn't judged: 22 of 155 misses timed in a score's logs were
+    judged later than that, the fight having moved her since (MAP06: landed at 304.6 s,
+    "missed" at 316.1 s).
+  - **A go before it:** the hit noticed by the follower on its own tics: 319 misses in two
+    scores, none recognised as a knock.
+  - **Measured.** First seeds +0.0006 (s.e. 0.0010), exits 447 for 446, stalls 5 for 5;
+    second +0.0024 (s.e. 0.0012), exits 430 for 426, stalls 4 for 4. Eleven knocks
+    recognised. Barrels and other solid things: nothing added (barrels are cleared; the
+    planner knows the rest).

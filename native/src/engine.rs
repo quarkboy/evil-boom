@@ -106,6 +106,8 @@ pub struct Engine {
     hits: Vec<crate::dsda::Hit>,
     /// which way the face looked for each hit since she last looked (`Observation::hit_sides`)
     hit_sides: Vec<i32>,
+    /// the tic of the last of those (`Observation::hit_tic`)
+    hit_tic: Option<i64>,
 }
 
 impl Engine {
@@ -202,6 +204,7 @@ impl Engine {
             carry: None,
             hits: Vec::new(),
             hit_sides: Vec::new(),
+            hit_tic: None,
         })
     }
 
@@ -588,6 +591,7 @@ impl Engine {
             message,
             sounds,
             hit_sides: std::mem::take(&mut self.hit_sides),
+            hit_tic: self.hit_tic,
         }
     }
 
@@ -604,8 +608,12 @@ impl Engine {
         });
         self.tic += 1;
         let hits = self.game.hits();
+        let sides = self.hit_sides.len();
         self.hit_sides
             .extend(hits.iter().filter(|h| !h.own).filter_map(|h| h.side));
+        if self.hit_sides.len() > sides {
+            self.hit_tic = Some(self.tic);
+        }
         self.hits.extend(hits);
     }
 

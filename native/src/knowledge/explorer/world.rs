@@ -385,6 +385,10 @@ impl Explorer {
                 missed.get(&j.key()).copied().unwrap_or(0) >= limit
                     || (j.strafe && !self.strafing_allowed)
                     || self.lapsing(&j.key())
+                    || self
+                        .knocked_jumps
+                        .get(&j.key())
+                        .is_some_and(|&till| self.clock < till)
                     || self.unsafe_jumps.contains(&j.key())
                     || self.wedge_jumps.contains(&j.key())
             })

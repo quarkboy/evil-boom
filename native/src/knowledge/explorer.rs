@@ -42,6 +42,8 @@ pub const STUCK_TIMES: i32 = 2;
 
 /// a run-jump missed this often isn't tried again; missed once, only when there's nothing else
 pub const JUMP_MISSES: i32 = 2;
+/// A run-jump she was hit out of is left out of her plans this long (tics).
+const JUMP_KNOCKED_TICS: i64 = 30 * 35;
 
 /// with nothing to do, look for something again this often
 const IDLE_RETRY: i64 = 35;
@@ -592,6 +594,11 @@ pub struct Explorer {
     /// opens a while, behind a lift's ride), left out of planning while she knows no more than
     /// she did (what she'd learned then: the count)
     pub lapsing_jumps: (BTreeSet<String>, usize),
+    /// run-jumps that didn't come off with her hit on the way, each left out till its tic:
+    /// not counted against the jump, and not gone back to at once to be hit again
+    pub knocked_jumps: BTreeMap<String, i64>,
+    /// the tic, as of her last think
+    clock: i64,
     /// run-jumps left out of the plan being made now: over somewhere there's no getting back
     /// from, while another way is looked for (empty between plans)
     unsafe_jumps: BTreeSet<String>,
@@ -757,6 +764,8 @@ impl Explorer {
             resort_wanted: None,
             stuck_retried: None,
             lapsing_jumps: (BTreeSet::new(), 0),
+            knocked_jumps: BTreeMap::new(),
+            clock: 0,
             unsafe_jumps: BTreeSet::new(),
             wedge_jumps: BTreeSet::new(),
             press_on: false,

@@ -404,11 +404,20 @@ impl Explorer {
     /// Run-jumps the follower missed: counted (for the level, across lives), and left out from
     /// now on. True if one was.
     fn note_misses(&mut self, obs: &Observation) -> bool {
+        self.clock = obs.tic;
         let Some(f) = &mut self.follower else {
             return false;
         };
-        if f.missed.is_empty() {
+        if f.missed.is_empty() && f.knocked.is_empty() {
             return false;
+        }
+        for j in std::mem::take(&mut f.knocked) {
+            self.knocked_jumps
+                .insert(j.key(), obs.tic + super::JUMP_KNOCKED_TICS);
+            self.log.push(format!(
+                "tic {}: hit out of the jump off ({:.0}, {:.0}): left a while",
+                obs.tic, j.takeoff.0, j.takeoff.1
+            ));
         }
         let missed = std::mem::take(&mut f.missed);
         for j in missed {
