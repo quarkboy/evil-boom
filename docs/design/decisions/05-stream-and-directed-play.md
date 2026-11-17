@@ -2489,6 +2489,21 @@ there and fires till it's dead, killing only what's in the way.
   UV 2 of 8. Score, first seeds +0.0032 (s.e. 0.0017), exits 451 for 447 (MAP30 4 of 16 for
   none); second +0.0018 (s.e. 0.0013), exits 435 for 433 (MAP30 2 of 16). Only MAP30's runs
   differ, on both.
+- **After the first rocket, what mends her; and the BFG for what's waiting** (the
+  maintainer's two, the same day).
+  - Hurt (health or armour under 150) with a rocket just away, and a megasphere or
+    soulsphere she's seen within 700 of the post: off the lift for it by the planner's way
+    from where the lift's going (MAP30: a run-jump from the pillar to the ledge before the
+    face), and a radiation suit by it if the floor the lift's called from hurts; then back to
+    the rides. Each thing once.
+  - What's in sight and shooting as the brain wakes: the BFG ordered for it, till it's dead
+    or 12 s (UV's revenant: dead 8 s after the cry).
+  - Found with them: a dodge had her legs while she waited on the lift at the bottom, and
+    stepped her off it, the ride lost (`Turn::Stay`: not a step); a lift she'd ridden, seen
+    at the bottom, was no lift to ride (its rest is remembered); the place to wait for the
+    pillar could be the pillar.
+  - **Measured**, 24 fresh seeds a skill, mortal: HMP 17 out for 12; UV 7 for 8. Parity's 24
+    runs the same.
 - **Not done:** other brains than MAP30's are untested (TNT's and Plutonia's are held out); a
   switch that opens the rocket's way (not the floor she stands on) is left to her ordinary
   exploring, the mode trying again as the heights change; no way to it, she explores.

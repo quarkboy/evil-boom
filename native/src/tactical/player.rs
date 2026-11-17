@@ -895,6 +895,7 @@ impl Player {
         // In a jump, or crossing a crusher it has timed, the route keeps the legs and the fight
         // only shoots.
         let free = matches!(icon, Some(boss::Turn::Free(_)));
+        let stay = matches!(icon, Some(boss::Turn::Stay(_)));
         let busy = (icon.is_some() && !free)
             || self
                 .explorer
@@ -956,7 +957,7 @@ impl Player {
         // The Icon of Sin's business is a race: on its route her legs are the fight's only to
         // get out of the way of what's about to hit her.
         let legs = match d.as_ref() {
-            Some(d) if busy && icon.is_some() && d.kind != Move::Dodging => Legs::Route,
+            Some(d) if busy && icon.is_some() && (d.kind != Move::Dodging || stay) => Legs::Route,
             _ => legs,
         };
         // Moved a long way by the fight or a retreat: what she was going for is thought again as
@@ -1063,7 +1064,7 @@ impl Player {
             f.shooters_about = shooters;
         }
         let mut c = match icon {
-            Some(boss::Turn::Wait(c)) => c,
+            Some(boss::Turn::Wait(c) | boss::Turn::Stay(c)) => c,
             // (time to spare: its route if it has one on, as the fight leaves her legs)
             Some(boss::Turn::Free(c))
                 if !self

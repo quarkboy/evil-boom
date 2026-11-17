@@ -47,7 +47,14 @@ const PATIENCE: i64 = 30 * 35;
 /// a way that failed isn't planned again for this long (tics)
 const AGAIN: i64 = 5 * 35;
 /// what's in sight as the brain wakes is fought this long at most before she's off (tics)
-const CLEARING: i64 = 6 * 35;
+const CLEARING: i64 = 12 * 35;
+/// the BFG's slot
+const BFG_SLOT: i32 = 7;
+/// from a ride, what mends her is gone for if it's within this of the post (a jump off the
+/// lift and a few steps, not a walk round the level)
+const FETCH_WITHIN: f64 = 700.0;
+/// ...a megasphere with health or armour under this
+const FETCH_UNDER: f64 = 150.0;
 /// a lift waits this long at the bottom (PLATWAIT, 3 s)
 const LIFT_WAIT: i64 = 105;
 /// she's back where she's needed this long before she's needed (tics)
@@ -90,6 +97,9 @@ enum Stage {
     Leaving(Post, Point, Point, i64),
     /// on the way to a post good as it stands, then firing from it
     Standing(Post),
+    /// a rocket's away and she's hurt: from where the ride has her, for what mends her (the
+    /// things still to fetch, by their ids and places)
+    Fetching(Vec<(i32, Point)>),
 }
 
 /// Whose the tic is, the Icon of Sin's business in hand.
@@ -100,6 +110,9 @@ pub(super) enum Turn {
     Route,
     /// stood waiting, these controls, the fight shooting over them
     Wait(Controls),
+    /// the same, and not a step from the spot whatever's coming: on a lift, off it is the ride
+    /// lost
+    Stay(Controls),
     /// time to spare (something of hers is moving and she's not needed yet): the fight's, its
     /// legs and all, these controls if it wants nothing
     Free(Controls),
@@ -137,6 +150,12 @@ pub(super) struct Boss {
     setting: Option<usize>,
     /// the brain woke then, and what was in sight hasn't been seen to yet
     clear_from: Option<i64>,
+    /// the gun the fight was told to use before she took the BFG to what was in sight
+    gun_before: Option<Option<i32>>,
+    /// the lift she rides, and where it rests
+    rest: Option<(usize, f64)>,
+    /// what she's gone for from a ride already (ids): not again
+    fetched: BTreeSet<i32>,
     /// what's settling: the sector, where its floor's going, and where she'll wait for it
     settling: Option<(usize, f64, Vec<Point>)>,
 }
@@ -163,6 +182,9 @@ impl Boss {
             set_off: BTreeSet::new(),
             setting: None,
             clear_from: None,
+            gun_before: None,
+            rest: None,
+            fetched: BTreeSet::new(),
             settling: None,
         }
     }
@@ -283,9 +305,17 @@ impl Player {
                         .is_some_and(|m| m.attack != crate::tactical::bestiary::Attack::None)
                 });
                 if shooter && obs.tic - since < CLEARING {
+                    // (the BFG for it, while there's a shot in it)
+                    if self.boss.gun_before.is_none() {
+                        self.boss.gun_before = Some(self.fight.combat.ordered_gun);
+                        self.fight.combat.ordered_gun = Some(BFG_SLOT);
+                    }
                     self.boss.stage = Stage::Clearing(since);
                     Some(Turn::Free(Controls::default()))
                 } else {
+                    if let Some(before) = self.boss.gun_before.take() {
+                        self.fight.combat.ordered_gun = before;
+                    }
                     self.boss_choose(obs, brain)
                 }
             }
@@ -309,7 +339,7 @@ impl Player {
                     let by: Vec<(Point, Option<usize>)> = self
                         .boss_presses(obs, &lifts)
                         .into_iter()
-                        .filter_map(|(at, _)| self.boss_dry_by(obs, at))
+                        .filter_map(|(at, _)| self.boss_dry_by(obs, at, p.sector))
                         .map(|at| (at, None))
                         .collect();
                     let to = done
@@ -335,6 +365,7 @@ impl Player {
             Stage::Riding(p, since) => Some(self.boss_ride(obs, brain, p, since)),
             Stage::Leaving(p, mid, out, since) => Some(self.boss_leave(obs, p, mid, out, since)),
             Stage::Standing(p) => Some(self.boss_stand(obs, brain, p)),
+            Stage::Fetching(rest) => Some(self.boss_fetch(obs, rest)),
         };
         if c.is_none() {
             // Nothing she can do about it now: the exploring's, till something changes.
@@ -372,8 +403,19 @@ impl Player {
         goals: &[(Point, Option<usize>)],
         label: &str,
     ) -> Option<RouteFollower> {
+        self.boss_way_at(obs, &obs.heights, goals, label)
+    }
+
+    /// The same, the heights taken to be `heights` (a lift she's on, where it's going).
+    fn boss_way_at(
+        &mut self,
+        obs: &Observation,
+        heights: &[Heights],
+        goals: &[(Point, Option<usize>)],
+        label: &str,
+    ) -> Option<RouteFollower> {
         let view = self.boss_view();
-        let live: States = obs.heights.iter().map(|&h| vec![h]).collect();
+        let live: States = heights.iter().map(|&h| vec![h]).collect();
         let keys = obs.keys.unwrap_or_default();
         let key_items = view.nav.key_items(None);
         let points: Vec<Point> = goals.iter().map(|g| g.0).collect();
@@ -418,11 +460,12 @@ impl Player {
 
     /// The nearest spot to `at` to wait at on a floor that doesn't hurt (`at` itself, if its
     /// floor doesn't).
-    fn boss_dry_by(&self, obs: &Observation, at: Point) -> Option<Point> {
+    fn boss_dry_by(&self, obs: &Observation, at: Point, not: usize) -> Option<Point> {
         let nav = &self.explorer.nav;
+        // (not on the floor that's moving itself)
         let dry = |q: Point| {
             lanes::standable(&nav.map, &nav.mesh, &obs.heights, q)
-                .is_some_and(|s| nav.damage[s] == 0)
+                .is_some_and(|s| s != not && nav.damage[s] == 0)
         };
         if dry(at) {
             return Some(at);
@@ -474,6 +517,12 @@ impl Player {
         let mut out: Vec<(u8, Post, How)> = Vec::new();
         for p in all {
             let floor = obs.heights[p.sector].floor;
+            // (a lift she's ridden, down or on its way: where it rests is where it'll be)
+            let rest = self
+                .boss
+                .rest
+                .filter(|r| r.0 == p.sector)
+                .map_or(floor, |r| r.1.max(floor));
             // (as it stands: stood, not a lift passing through)
             let still = self
                 .boss
@@ -484,7 +533,7 @@ impl Player {
                 out.push((0, p, How::Stand));
                 continue;
             }
-            let ride = lifts(p.sector, floor, p.feet);
+            let ride = lifts(p.sector, rest, p.feet);
             if !ride.is_empty() {
                 out.push((1, p, How::Ride(ride)));
                 continue;
@@ -571,6 +620,7 @@ impl Player {
                         .boss_way(obs, &goals[..1], "call the lift")
                         .or_else(|| self.boss_way(obs, &goals, "call the lift"));
                     if let Some(route) = route {
+                        self.boss.rest = Some((p.sector, obs.heights[p.sector].floor));
                         self.boss_log(
                             obs,
                             format!(
@@ -821,6 +871,14 @@ impl Player {
             if self.boss.fired.is_none() {
                 self.boss_log(obs, format!("no shot that ride (floor {floor:.0})"));
             }
+            // Hurt, and something that mends her to be had from up here: that, before the next
+            // ride.
+            if on && away {
+                if let Some(rest) = self.boss_fetch_from(obs, &p) {
+                    self.boss.stage = Stage::Fetching(rest);
+                    return Turn::Hers(self.boss_aim(obs, brain, p.at, false));
+                }
+            }
             self.boss.stage = match self.boss_call_line(obs, &p).filter(|_| on) {
                 Some((mid, out)) => Stage::Leaving(p.clone(), mid, out, obs.tic),
                 None => Stage::Choosing,
@@ -858,7 +916,7 @@ impl Player {
             let at = p_at;
             let face = heading(obs.pos(), brain.at);
             let want = ((at.0 - obs.x) * 0.3, (at.1 - obs.y) * 0.3);
-            Turn::Wait(self.boss.motion.hold(obs, want, Some(face)))
+            Turn::Stay(self.boss.motion.hold(obs, want, Some(face)))
         }
     }
 
@@ -921,6 +979,87 @@ impl Player {
             .insert(p.sector, obs.heights[p.sector].floor);
         self.boss.stage = Stage::Leaving(p, mid, out, since);
         Turn::Hers(c)
+    }
+
+    /// What's worth going for from the lift, a rocket just away, and a way to the first of it
+    /// in hand: a megasphere she's seen near the post, with her health or armour down, and a
+    /// radiation suit by it if the floor the lift's called from hurts. The way is planned from
+    /// where the lift's taking her (its rest).
+    fn boss_fetch_from(&mut self, obs: &Observation, p: &Post) -> Option<Vec<(i32, Point)>> {
+        let hurt =
+            obs.health.unwrap_or(100.0) < FETCH_UNDER || obs.armor.unwrap_or(0.0) < FETCH_UNDER;
+        if !hurt {
+            return None;
+        }
+        let near = |t: &&crate::motor::Thing| {
+            dist((t.x, t.y), p.at) < FETCH_WITHIN && !self.boss.fetched.contains(&t.id)
+        };
+        let things: Vec<&crate::motor::Thing> = obs.things.iter().flatten().filter(near).collect();
+        let mega = things
+            .iter()
+            .find(|t| t.name == "Megasphere" || t.name == "Soulsphere")?;
+        let mut want = vec![(mega.id, (mega.x, mega.y))];
+        let slime = self
+            .boss_call_line(obs, p)
+            .and_then(|(_, out)| self.explorer.nav.poly_at(out))
+            .is_some_and(|i| self.explorer.nav.damage[self.explorer.nav.sector_of_poly(i)] != 0);
+        if slime {
+            let from = want[0].1;
+            if let Some(suit) = things
+                .iter()
+                .filter(|t| t.name == "RadSuit")
+                .min_by(|a, b| dist((a.x, a.y), from).total_cmp(&dist((b.x, b.y), from)))
+            {
+                want.push((suit.id, (suit.x, suit.y)));
+            }
+        }
+        let mut heights = obs.heights.clone();
+        if let Some((_, rest)) = self.boss.rest.filter(|r| r.0 == p.sector) {
+            heights[p.sector].floor = rest;
+        }
+        let route = self.boss_way_at(obs, &heights, &[(want[0].1, None)], "for what mends her")?;
+        self.boss_log(
+            obs,
+            format!(
+                "hurt ({:.0} health, {:.0} armour): off the lift for what mends her ({} things)",
+                obs.health.unwrap_or(0.0),
+                obs.armor.unwrap_or(0.0),
+                want.len()
+            ),
+        );
+        self.boss.fetched.extend(want.iter().map(|w| w.0));
+        self.boss.route = Some(route);
+        Some(want)
+    }
+
+    /// Fetching: the way to the first of them, then the next; all had, or a way failed, back to
+    /// the brain.
+    fn boss_fetch(&mut self, obs: &Observation, mut rest: Vec<(i32, Point)>) -> Turn {
+        if self
+            .boss
+            .route
+            .as_ref()
+            .is_some_and(|r| !r.done && !r.failed)
+        {
+            self.boss.stage = Stage::Fetching(rest);
+            return Turn::Route;
+        }
+        let failed = self.boss.route.as_ref().is_some_and(|r| r.failed);
+        self.boss.route = None;
+        if !rest.is_empty() {
+            rest.remove(0);
+        }
+        if failed || rest.is_empty() {
+            self.boss.stage = Stage::Choosing;
+            return Turn::Wait(Controls::default());
+        }
+        self.boss.route = self.boss_way(obs, &[(rest[0].1, None)], "for what mends her");
+        if self.boss.route.is_some() {
+            self.boss.stage = Stage::Fetching(rest);
+            return Turn::Route;
+        }
+        self.boss.stage = Stage::Choosing;
+        Turn::Wait(Controls::default())
     }
 
     /// To the post, then rockets from it for as long as they go in.
