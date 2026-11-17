@@ -72,13 +72,13 @@ impl Knowledge {
         let ctx = self.wall_context(reach, unreached_items, unreached_places);
         let mut best: BTreeMap<Behind, (f64, usize, Point, Point)> = BTreeMap::new();
         let mut order: Vec<Behind> = Vec::new();
-        for &li in &self.mapped {
+        for (li, wall) in self.walls_weighed(&ctx) {
             let Wall::Suspect {
                 signs,
                 behind,
                 stand,
                 aim,
-            } = self.wall_signs(li, &ctx)
+            } = wall
             else {
                 continue;
             };
@@ -113,10 +113,48 @@ impl Knowledge {
         unreached_places: Option<&dyn Fn(Point, f64) -> bool>,
     ) -> Vec<(usize, Wall)> {
         let ctx = self.wall_context(reach, unreached_items, unreached_places);
-        self.mapped
+        self.walls_weighed(&ctx)
+    }
+
+    /// Every wall she's mapped, weighed (`wall_signs`), and then: a run of walls that match,
+    /// one of them tried, is tried. A run: walls joined end to end on the one floor's side,
+    /// each showing the very signs of the next, point for point. One pressed and nothing come
+    /// of it, the rest look no likelier than it did: the sides of a platform, the risers of a
+    /// stair, a moat's edge all the way round (Doom II MAP14, a level of platforms in a moat:
+    /// thirty walls at six points or more, nearly all "not a wall on the automap, a
+    /// platform's side, somewhere seen behind", pressed one after another). A wide secret
+    /// door drawn as two lines is one run, and still pressed once.
+    /// (`run_of` is the same for one-sided walls showing one face in line; this is by what
+    /// she'd make of them, two-sided ones and faces out of line among them.)
+    fn walls_weighed(&self, ctx: &WallContext) -> Vec<(usize, Wall)> {
+        let mut walls: BTreeMap<usize, Wall> = self
+            .mapped
             .iter()
-            .map(|&li| (li, self.wall_signs(li, &ctx)))
-            .collect()
+            .map(|&li| (li, self.wall_signs(li, ctx, false)))
+            .collect();
+        let tried: Vec<(usize, Signs)> = self
+            .tried_walls
+            .iter()
+            .filter(|(li, k)| k.covers(ctx.keys) && self.mapped.contains(li))
+            .filter_map(|(&li, _)| match self.wall_signs(li, ctx, true) {
+                Wall::Suspect { signs, .. } => Some((li, signs)),
+                Wall::Skip(_) => None,
+            })
+            .collect();
+        for (from, like) in tried {
+            let (mut seen, mut todo) = (BTreeSet::from([from]), vec![from]);
+            while let Some(x) = todo.pop() {
+                for n in self.wall_neighbours(x) {
+                    if matches!(walls.get(&n), Some(Wall::Suspect { signs, .. }) if *signs == like)
+                        && seen.insert(n)
+                    {
+                        walls.insert(n, Wall::Skip("one of its run tried"));
+                        todo.push(n);
+                    }
+                }
+            }
+        }
+        walls.into_iter().collect()
     }
 
     /// What every wall's weighed against: where she can get to, what she's seen.
@@ -203,8 +241,9 @@ impl Knowledge {
         }
     }
 
-    /// One wall's signs, or why it's none to try (`suspicious`, the rubric).
-    fn wall_signs(&self, li: usize, ctx: &WallContext) -> Wall {
+    /// One wall's signs, or why it's none to try (`suspicious`, the rubric). `as_untried`: what
+    /// she'd make of one she has tried, had she not.
+    fn wall_signs(&self, li: usize, ctx: &WallContext, as_untried: bool) -> Wall {
         let nav = Rc::clone(&self.nav);
         let (m, mesh) = (&nav.map, &nav.mesh);
         let init = &nav.movers.initial;
@@ -221,7 +260,7 @@ impl Knowledge {
         } = ctx;
         let (reach, keys, unreached_items, unreached_places) =
             (*reach, *keys, *unreached_items, *unreached_places);
-        if self.tried_walls.get(&li).is_some_and(|k| k.covers(keys)) {
+        if !as_untried && self.tried_walls.get(&li).is_some_and(|k| k.covers(keys)) {
             return Wall::Skip("tried");
         }
         if self.looks_interactive(li) {
@@ -237,9 +276,10 @@ impl Knowledge {
         // A run of wall all alike (a crate's sides, a curve's pieces): one pressed, none of
         // the rest looks any likelier than it did.
         let run = self.run_of(li);
-        if run
-            .iter()
-            .any(|x| *x != li && self.tried_walls.get(x).is_some_and(|k| k.covers(keys)))
+        if !as_untried
+            && run
+                .iter()
+                .any(|x| *x != li && self.tried_walls.get(x).is_some_and(|k| k.covers(keys)))
         {
             return Wall::Skip("one like it tried");
         }
@@ -718,7 +758,7 @@ pub enum Wall {
 }
 
 /// What a wall shows, each sign the points it adds to its suspicion (0: not there).
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Signs {
     /// two-sided with a middle texture: a grate or panel set in it
     pub target: f64,

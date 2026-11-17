@@ -2244,3 +2244,30 @@ follower stuck all the while and never failing.
   - The maintainer's other notes from watching MAP14, not acted on: shells spent on lost
     souls and on far-off monsters; and every wall tried, the level's textures being out
     of line everywhere, which is what she takes for a clue.
+- **A run of walls that match is tried once** (the maintainer's rule, 2026-11-17). She pressed
+  every wall round a room, every side of a platform, every riser of a stair seen from
+  below: each a wall with signs of its own. His first thought was the faces out of line,
+  everywhere on Doom II MAP14; measured, a face shifted beside another shifted never
+  occurs as a sign on the 68 maps (a plain wall's shift is hardly gone by as it is), and a
+  rule for it changed no wall's weighing. What MAP14's thirty best walls show is "not a
+  wall on the automap, a platform's side, somewhere seen behind": a third of them the
+  sides and risers of small stairs, a quarter rows of like blocks.
+  - **The rule** (`walls_weighed`): walls joined end to end on one floor's side, each showing
+    the very signs of the next, are a run; one of it pressed, the rest are tried. (`run_of`
+    was that already for one-sided walls of one face in line.) A wide secret door drawn as
+    two lines is a run and still pressed once.
+  - **The survey** (she explores each map till there's nothing left): walls pressed 513 for
+    584 on Doom, 453 for 644 on Doom II (MAP14 56 for 77); secrets found 178 for 180 of 276
+    on the 63 maps in both, four maps one up, three one down, MAP17 three down behind
+    doors and switches the rule doesn't touch; out of things to do 9% sooner.
+  - **The score, on two sets of seeds.** The first: 0.494 for 0.500 (-0.0057, s.e. 0.0058);
+    exits 441 for 451, stalls 6 for 10; 427 runs moved, 94 better, 91 worse. One lost exit
+    traced (E3M5): five walls pressed round the start room for two, six seconds sooner
+    into the first fight, dead at 42 s; no wall passed over that led anywhere. A second
+    set, fresh: 0.467 for 0.468 (-0.0013, s.e. 0.0050); exits 411 for 413, stalls 8 for 9;
+    93 better, 93 worse. Kept.
+- **The baseline's seeds flatter it** (the maintainer's question, the same day). The same
+  build on the first set of seeds, every change since 2026-11-09 kept or dropped by it:
+  0.500, 451 exits. On a fresh set: 0.468, 413 exits. Two sets differ by about 0.013 from
+  luck alone; this is two and a half times that. What was kept was what did no worse on
+  those 1,088 runs, and some of it was those runs' luck.
