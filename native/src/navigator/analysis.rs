@@ -627,21 +627,36 @@ impl<'a> Analysis<'a> {
                 } else {
                     0.0
                 };
-                let q = (
+                let towards = (
                     e.0 + (poly.center.0 - e.0) * f,
                     e.1 + (poly.center.1 - e.1) * f,
                 );
-                // (the trace's whole 64)
-                if segment_distance(a, b, q, q) <= USE_REACH + 16.0
-                    && self.mesh.poly_at(q) == Some(pi)
-                    && !self.box_on_wall(q)
-                {
-                    let over = self.moving_walls_at(q, poly.sector);
-                    if over.is_empty() {
-                        return Some(Vec::new());
-                    }
-                    if !places.contains(&over) && places.len() < STAND_PLACES {
-                        places.push(over);
+                // (and square in from the edge: the middle of a long piece is far along its
+                // edges, and a spot moved towards it is still on the edge it started from, her
+                // box over whatever is beyond)
+                let (ex, ey) = (p2.0 - p1.0, p2.1 - p1.1);
+                let len = ex.hypot(ey).max(1e-9);
+                let (mut nx, mut ny) = (-ey / len, ex / len);
+                if (poly.center.0 - e.0) * nx + (poly.center.1 - e.1) * ny < 0.0 {
+                    (nx, ny) = (-nx, -ny);
+                }
+                let square = (
+                    e.0 + nx * (PLAYER_RADIUS + 1.0),
+                    e.1 + ny * (PLAYER_RADIUS + 1.0),
+                );
+                for q in [towards, square] {
+                    // (the trace's whole 64)
+                    if segment_distance(a, b, q, q) <= USE_REACH + 16.0
+                        && self.mesh.poly_at(q) == Some(pi)
+                        && !self.box_on_wall(q)
+                    {
+                        let over = self.moving_walls_at(q, poly.sector);
+                        if over.is_empty() {
+                            return Some(Vec::new());
+                        }
+                        if !places.contains(&over) && places.len() < STAND_PLACES {
+                            places.push(over);
+                        }
                     }
                 }
             }

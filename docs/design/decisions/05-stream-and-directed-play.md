@@ -2436,3 +2436,17 @@ follower stuck all the while and never failing.
     second +0.0024 (s.e. 0.0012), exits 430 for 426, stalls 4 for 4. Eleven knocks
     recognised. Barrels and other solid things: nothing added (barrels are cleared; the
     planner knows the rest).
+
+- **A press place is looked for square in from a poly's edge too** (2026-11-17). MAP30: she
+  could not plan the second tier's lift (line 47), with the whole map known or not: "try the
+  wall (line 47)" over and over, the skull switch behind it never reached.
+  - **Why.** Where a line can be pressed from, in a poly, is tried at spots along the poly's
+    edges moved a box's half towards its middle. A tier 2,000 across has its middle far along
+    its edges: a spot on the edge by the lift, moved towards it, is still on that edge, her box
+    over the lift's own line, and the press was held to need the lift down already.
+  - **The rule** (`press_point_in`): each spot is tried moved square in from its edge as well.
+  - **What it touches.** The analysis of 57 of the 68 maps: mostly presses no longer held to
+    need something moved first, and a poly or two more to press some lines from. The 24 parity
+    runs the same.
+  - **Measured.** First seeds +0.0004 (s.e. 0.0013), exits 447 for 447, stalls 5 for 5;
+    second +0.0014 (s.e. 0.0013), exits 433 for 430, stalls 3 for 4. All of it on MAP14.
