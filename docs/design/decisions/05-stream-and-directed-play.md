@@ -2223,3 +2223,24 @@ follower stuck all the while and never failing.
     for when it came for her. 281 runs moved by it. (3) a mark of stepping's own that no
     other move reads: MAP14 back to five stalls, the other moves going on with the same
     dance. Kept: both, the general mark set and stepping reading only its own.
+- **A lot of joined lines is pressed at any of its lines** (2026-11-17; the union the
+  maintainer asked for, which the first go only made over the lines she'd made out). On
+  MAP14 she made out one facet of the moat's round lift, the one at the end of its arc by
+  the wall (line 375), and pressed from before it nothing goes off (by hand: nothing; the
+  facet beside it lowers the lift at once). Eighteen presses in one run, the lift never
+  learned; and with no lift known the moat is a fall for good, so every jump across it was
+  turned down, the red skull's and the plasma rifle's among them (89 times in twenty
+  minutes), and she ran dry on what's this side of it.
+  - **The rule** (`untried`): one facet of a face seen, the face is seen: the lot is pressed
+    at whichever of its lines (joined to one she's made out, made out or not) has been
+    given up the fewest times, the nearest of those. Not "given up lately": that half
+    minute was over each time she came back, and the dead facet is the nearest.
+  - **Measured**, with the rule above: 0.500 (+0.0003, s.e. 0.0023); exits 451 for 452, stalls
+    10 for 11; 57 runs moved, 19 better, 20 worse. MAP14: 7 exits, 8 deaths, 1 stall of 16
+    for 6, 9, 1. Without the rule above: MAP14 1 exit and 8 stalls, 0.492.
+  - **Tried and dropped:** a lift she knows and can call from below counted as a way back
+    from a fall short of a jump (`falls_for_good` by `saturate`): 0.491, ten exits fewer,
+    four of them Doom II MAP05's; only over floor that doesn't hurt: the same. Not traced.
+  - The maintainer's other notes from watching MAP14, not acted on: shells spent on lost
+    souls and on far-off monsters; and every wall tried, the level's textures being out
+    of line everywhere, which is what she takes for a clue.

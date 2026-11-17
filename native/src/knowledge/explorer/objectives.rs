@@ -265,7 +265,7 @@ impl Explorer {
         out.extend(self.exits(&by_line, &reach, keys, pos));
         out.extend(self.keys_seen(&view, &states, &reach, keys, pos));
         out.extend(self.ammo_for_tapping(obs, &reach));
-        out.extend(self.untried(&by_line, &reach, keys, (pos, obs.tic)));
+        out.extend(self.untried(&by_line, &reach, keys, pos));
         let again = self.pressed_again(obs, &by_line, &reach, keys, pos);
         if self.suspecting != Suspecting::No {
             let panic = self.suspecting == Suspecting::EveryWall;
@@ -511,8 +511,8 @@ impl Explorer {
     ///
     /// Lines that work the same thing (`tried_key`) and join end to end are one of them: the
     /// facets of a round lift's face, a wide door drawn in pieces. One to try, pressed from
-    /// the nearest place any of its lines can be pressed from; a line of it tried lately and
-    /// given up is passed over for the next nearest, so she goes round the lot once, not back
+    /// the nearest place any of its lines can be pressed from; a line of it given up is passed
+    /// over for one given up fewer times, so she goes round the lot, not back
     /// to the facet in the corner that can't be pressed (Doom II MAP14's line 537), and not
     /// to every facet in turn as so many things to do.
     fn untried(
@@ -520,26 +520,22 @@ impl Explorer {
         by_line: &BTreeMap<usize, &TriggerLine>,
         reach: &BTreeSet<usize>,
         keys: Keys,
-        (pos, tic): (Point, i64),
+        pos: Point,
     ) -> Vec<Objective> {
         let nav = &self.nav;
         let k = &self.knowledge;
-        let mut found: Vec<(usize, Objective)> = Vec::new();
-        for li in k.interactables() {
-            let Some(t) = by_line
+        // (one of them to try, as a line by itself)
+        let to_try = |li: usize| -> Option<Objective> {
+            let t = by_line
                 .get(&li)
-                .filter(|t| !t.activators.is_disjoint(reach) && t.info.lock.satisfied(keys))
-            else {
-                continue;
-            };
+                .filter(|t| !t.activators.is_disjoint(reach) && t.info.lock.satisfied(keys))?;
             let kind = if t.info.category.is_door() {
                 Kind::Door
             } else {
                 Kind::Switch
             };
-            let stands_open = kind == Kind::Door && self.stands_open(t);
-            if stands_open {
-                continue;
+            if kind == Kind::Door && self.stands_open(t) {
+                return None;
             }
             let mut o = Objective::new(
                 kind,
@@ -550,8 +546,13 @@ impl Explorer {
                 ),
             );
             o.trigger = Some((*t).clone());
-            found.push((li, o));
-        }
+            Some(o)
+        };
+        let mut found: Vec<(usize, Objective)> = k
+            .interactables()
+            .into_iter()
+            .filter_map(|li| to_try(li).map(|o| (li, o)))
+            .collect();
         // Which of them are one: the same thing worked, joined by their ends (through any
         // line of the map that works it too, seen or not: a facet she hasn't made out yet
         // doesn't make two of a face).
@@ -559,8 +560,9 @@ impl Explorer {
             let (a, b) = nav.map.line_seg(li);
             [a, b]
         };
-        let mut group: Vec<usize> = (0..found.len()).collect();
-        for i in 0..found.len() {
+        let known = found.len();
+        let mut group: Vec<usize> = (0..known).collect();
+        for i in 0..known {
             if group[i] != i {
                 continue;
             }
@@ -571,32 +573,51 @@ impl Explorer {
                     li != found[i].0 && nav.map.linedefs[li].special != 0 && k.tried_key(li) == key
                 })
                 .collect();
+            let mut joined: Vec<usize> = Vec::new();
             loop {
                 let before = alike.len();
                 alike.retain(|&li| {
                     let e = ends(li);
-                    let joined = e.iter().any(|p| points.contains(p));
-                    if joined {
+                    let join = e.iter().any(|p| points.contains(p));
+                    if join {
                         points.extend(e);
+                        joined.push(li);
                     }
-                    !joined
+                    !join
                 });
                 if alike.len() == before {
                     break;
                 }
             }
-            for j in i + 1..found.len() {
-                if group[j] == j
-                    && k.tried_key(found[j].0) == key
-                    && ends(found[j].0).iter().any(|p| points.contains(p))
-                {
+            for j in i + 1..known {
+                if group[j] == j && joined.contains(&found[j].0) {
                     group[j] = i;
                 }
             }
+            // ...and the lot is pressed at any of its lines, made out or not: one facet of a
+            // lift's face seen, the face is seen, and the one she made out may be the one that
+            // can't be pressed (MAP14's line 375, at the end of its arc by the wall: pressed
+            // from before it nothing goes off, five times in eleven minutes, and the lift never
+            // learned; the facet next to it works).
+            for li in joined {
+                if found.iter().all(|(l, _)| *l != li) {
+                    if let Some(o) = to_try(li) {
+                        found.push((li, o));
+                        group.push(i);
+                    }
+                }
+            }
         }
-        // Of each lot, the nearest not given up lately (all given up: the nearest, which waits
-        // its turn as any does).
-        let rank = |o: &Objective| (!self.fresh(o, tic), dist(o.goal, pos));
+        // Of each lot, the line given up the fewest times, the nearest of those: a press that
+        // did nothing isn't made again before the lines beside it have had theirs. (Not "given
+        // up lately": the half minute that lasts was over by the time she came back for the
+        // lift, and the dead facet, nearest, was pressed again: eighteen times in one run.)
+        let rank = |o: &Objective| {
+            (
+                self.drop_count.get(&o.ident()).copied().unwrap_or(0),
+                dist(o.goal, pos),
+            )
+        };
         let mut best: BTreeMap<usize, Objective> = BTreeMap::new();
         for (g, (_, o)) in group.into_iter().zip(found) {
             match best.get(&g) {
