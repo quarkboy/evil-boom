@@ -676,6 +676,19 @@ impl RouteFollower {
         let (Some(fq), Some(fb)) = (floor_at(q), floor_at(b)) else {
             return false;
         };
+        // Within the gun's own reach up and down: the game aims a shot for her only at what's
+        // within 100 in 160 of level from the gun (P_AimLineAttack's topslope and bottomslope);
+        // steeper, the shot goes off level and over or under it. (A barrel on a pillar, shot
+        // at from its foot.)
+        const AIM_SLOPE: f64 = 100.0 / 160.0;
+        let away = dist(q, b).max(1.0);
+        let (low, high) = (
+            (fb - (fq + GUN_HEIGHT)) / away,
+            (fb + BARREL_HEIGHT - (fq + GUN_HEIGHT)) / away,
+        );
+        if low > AIM_SLOPE || high < -AIM_SLOPE {
+            return false;
+        }
         let gun = crate::los::Body {
             x: q.0,
             y: q.1,

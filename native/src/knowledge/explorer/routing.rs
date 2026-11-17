@@ -9,7 +9,9 @@ use crate::geom::{dist, segments_cross, Point};
 use crate::knowledge::RISK_SHARE;
 use crate::motor::Observation;
 use crate::nav::Heights;
-use crate::navigator::{add_height, PathNote, Plan, Route, States, TriggerLine, View, MAX_STEP};
+use crate::navigator::{
+    add_height, PathNote, Plan, Route, States, TriggerLine, View, MAX_STEP, PLAYER_RADIUS,
+};
 use crate::specials::Key;
 use crate::walkthrough::{action_for, steps_from_legs, Action, Step};
 use std::collections::{BTreeMap, BTreeSet};
@@ -67,6 +69,9 @@ enum Refusal {
     DeadEnd,
     /// The lines it walks over would shut her in at its end.
     ShutsHerIn,
+    /// It has a run-jump that comes down among barrels standing on its landing (the one at
+    /// `at`): cleared first, or not jumped.
+    BarrelsOnLanding { at: Point },
 }
 
 impl Explorer {
@@ -763,11 +768,68 @@ impl Explorer {
         {
             return Some(Refusal::JumpOverNoWayBack);
         }
+        if let Some(at) = self.barrels_on_landing(route, obs) {
+            return Some(Refusal::BarrelsOnLanding { at });
+        }
         if obj.kind != Kind::Exit && self.dead_end(route, obj, obs, view) {
             return Some(Refusal::DeadEnd);
         }
         if obj.kind != Kind::Exit && !obj.risky && self.shuts_in(route, obj, obs, view) {
             return Some(Refusal::ShutsHerIn);
+        }
+        None
+    }
+
+    /// A barrel she has seen, still standing, that a run-jump of the route would bring her
+    /// down against: on the landing's floor, in the way of her box from where the flight
+    /// comes over that floor to where the jump ends. Among barrels on a landing she's wedged:
+    /// none to be shot from so near, and every way on a straight line into one. (Doom II
+    /// MAP25: the pillar of five on the way to the megasphere; every run that lived to
+    /// jump onto it stalled there.) Whatever the route's for, risky or not: cleared first.
+    fn barrels_on_landing(&self, route: &Route, obs: &Observation) -> Option<Point> {
+        /// a barrel's thing type, its half-width, and room to spare
+        const BARREL: u16 = 2035;
+        const BARREL_RADIUS: f64 = 10.0;
+        const SPARE: f64 = 6.0;
+        const EVERY: f64 = 8.0;
+        let nav = &self.nav;
+        let standing = obs.barrels.as_ref()?;
+        let jumps: Vec<&crate::navigator::Jump> = route
+            .legs
+            .iter()
+            .flat_map(|leg| leg.path.jumps.iter())
+            .collect();
+        if jumps.is_empty() || standing.is_empty() {
+            return None;
+        }
+        // (those she has seen the floor under: as the map has them, where one stands still)
+        let seen: Vec<Point> = self
+            .knowledge
+            .known_things()
+            .iter()
+            .filter(|t| t.kind == BARREL)
+            .map(|t| (t.x, t.y))
+            .filter(|&p| standing.iter().any(|&b| dist(b, p) < 2.0 * BARREL_RADIUS))
+            .collect();
+        for j in jumps {
+            let landing = nav.sector_of_poly(j.dest_poly);
+            let length = dist(j.takeoff, j.dest).max(1e-6);
+            let mut at = 0.0;
+            while at <= length {
+                let p = (
+                    j.takeoff.0 + (j.dest.0 - j.takeoff.0) * at / length,
+                    j.takeoff.1 + (j.dest.1 - j.takeoff.1) * at / length,
+                );
+                if nav.poly_at(p).map(|q| nav.sector_of_poly(q)) == Some(landing) {
+                    if let Some(&b) = seen
+                        .iter()
+                        .find(|&&b| dist(b, p) < PLAYER_RADIUS + BARREL_RADIUS + SPARE)
+                    {
+                        return Some(b);
+                    }
+                }
+                at += EVERY;
+            }
         }
         None
     }

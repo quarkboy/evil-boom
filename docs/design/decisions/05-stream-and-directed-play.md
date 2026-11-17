@@ -2158,3 +2158,22 @@ follower stuck all the while and never failing.
     again is the health for it. Without the teleporter's rule, that run: one stranding for
     three, 55 kills for 27, still out of its hour. With it the score's runs are as the
     teleporter rule's but one (-0.0001).
+- **Doom II MAP25 traced** (2026-11-16): dead in its first half minute in 11 runs of 16 (out
+  of the start room into the open, shotgun guys, chaingunners and a revenant on her at
+  once, on blood that hurts: the fight's, not traced further), and every run that lived
+  stalled. The megasphere is at the end of a row of pillars in the blood room, a run-jump
+  from each to the next, and the middle pillar has five barrels on it. Hurt, she jumped for
+  it; the middle barrel stopped her short of where the jump ends, in the slot between two
+  of them, where every way on is a straight line into a barrel and none can be shot from
+  so near: "a barrel in the way, nowhere to shoot it from", once a second till the clock
+  ran out.
+  - **No jump onto barrels** (`barrels_on_landing`): a way is turned down when a run-jump of
+    it comes over its landing's floor through a barrel she has seen and that still stands,
+    whatever it's for, risky or not.
+  - **A shot at a barrel within the gun's own aim up and down** (`shot_reaches`): 100 in
+    160 of level, P_AimLineAttack's slopes; steeper, the game aims nothing for her. (A
+    barrel on a pillar, from its foot.)
+  - **Measured:** 0.497 for 0.496 (+0.0005, s.e. 0.0008); exits 449 for 448, stalls 10 for
+    14; 1,080 runs the same to the tic. MAP25: one stall left of five, one exit, its first.
+  - TNT MAP09, which the rule was first thought of for, is no different with it (charmed:
+    wedged on barrels 76 times either way): another mechanism, not traced.
