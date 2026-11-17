@@ -2289,3 +2289,17 @@ follower stuck all the while and never failing.
   - **What the score can't see.** She dies on MAP28 in every scored run, so its way on
     being taken away cost nothing on either set of seeds. The charmed pass showed it in
     minutes. Worth running beside the score for anything that touches exploring.
+- **The fight keeps off a teleporter's front** (2026-11-17; the maintainer's sighting, Doom II
+  MAP13 at 600 s). Fighting a mancubus by a pad she was sent across the level seven times,
+  a few shots at it each time she'd walked back. Tic by tic: "keeping off" pushes her west
+  past the end of the pad's line, "stepping for a shot" pulls her back south-east, and her
+  speed carries her round the end and onto it. `slide_ok` already turned down a slide whose
+  middle crosses the line; hers was 4 short of it when the game took her.
+  - **The rule:** a slide is turned down that ends, on the pad's front, within 4 of its line
+    taken as her half-width longer at each end (`PAD_MARGIN`).
+  - **Measured.** That fight (`--charmed --endless-bullets`): one crossing for seven, the
+    level out at 1,909 s where it ran out its hour. The line lengthened and no margin: six
+    crossings, no better. The score, first seeds: 0.490 for 0.496, exits 438 for 445,
+    stalls 9 for 8 (a margin of 8: 437 exits; and on the second seeds +0.0003, exits 415 for
+    412). Kept at the maintainer's word: the first seeds are the ones the baseline has been
+    chosen on, and anything that moves two hundred runs' fights loses there.

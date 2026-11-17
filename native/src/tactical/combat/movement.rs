@@ -613,9 +613,30 @@ impl Combat {
         let side = |(a, b): (Point, Point), p: Point| {
             (b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0)
         };
+        // (or come up to it from that side nearer than `PAD_MARGIN`, past either end of it by
+        // her half-width or less: the game takes her as she touches it, not only as her middle
+        // goes over. Doom II MAP13: kept off a mancubus westward past the end of a pad's
+        // line, then stepped back south-east for a shot, her speed carried her round the end
+        // and onto it with her middle 4 short of the line; sent across the level seven times
+        // in the one fight, a few shots at it each time she'd walked back.)
+        /// a teleporter's line kept this far from, on its front
+        const PAD_MARGIN: f64 = 4.0;
         let teleported = |from: Point, to: Point| {
             teleports.iter().any(|&l| {
-                side(l, from) <= 0.0 && side(l, to) > 0.0 && segments_cross(from, to, l.0, l.1)
+                if side(l, from) > 0.0 {
+                    return false; // (from behind it: nothing)
+                }
+                if side(l, to) > 0.0 && segments_cross(from, to, l.0, l.1) {
+                    return true;
+                }
+                let (a, b) = l;
+                let length = dist(a, b).max(1e-6);
+                let (ux, uy) = ((b.0 - a.0) / length, (b.1 - a.1) / length);
+                let (a, b) = (
+                    (a.0 - ux * PLAYER_RADIUS, a.1 - uy * PLAYER_RADIUS),
+                    (b.0 + ux * PLAYER_RADIUS, b.1 + uy * PLAYER_RADIUS),
+                );
+                crate::geom::segment_distance(to, to, a, b) < PAD_MARGIN
             })
         };
         let (mut x, mut y) = obs.pos();
