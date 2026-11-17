@@ -42,6 +42,7 @@ Runs without a window, and testing:
 Looking inside a level:
   dump-nav WAD MAP           the level's analysis
   sector WAD MAP SECTOR...   sectors as the map has them
+  brain-posts WAD MAP        where a rocket can be fired from at a boss brain
   follow WAD MAP             plan the level and follow the plan
   drive WAD MAP --script F   drive her by hand from a script
   secret-survey WAD MAP...   how each secret is found
@@ -78,6 +79,7 @@ pub fn topic(name: &str) -> Option<&'static str> {
         "arena" | "arena-one" | "arena-watch" => ARENA,
         "dump-nav" => DUMP_NAV,
         "sector" => SECTOR,
+        "brain-posts" => BRAIN_POSTS,
         "follow" => FOLLOW,
         "drive" => DRIVE,
         "secret-survey" => SECRET_SURVEY,
@@ -292,6 +294,14 @@ Usage: evil-boom sector WAD MAP SECTOR...
 
 Sectors as the map has them: heights, specials and tags, their lines and what they do, the
 things in them, and the jumps landing there. For answering \"what lowers this floor\".
+";
+
+const BRAIN_POSTS: &str = "\
+Usage: evil-boom brain-posts WAD MAP
+
+On a level with a boss brain (an Icon of Sin): the places a rocket can be fired from to hurt
+it, the map's heights as it starts, a line a sector: how many, whether any is good as the
+floor stands, the heights her feet may be at, and the best of them.
 ";
 
 const FOLLOW: &str = "\

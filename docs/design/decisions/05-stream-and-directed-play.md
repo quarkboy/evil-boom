@@ -2450,3 +2450,45 @@ follower stuck all the while and never failing.
     runs the same.
   - **Measured.** First seeds +0.0004 (s.e. 0.0013), exits 447 for 447, stalls 5 for 5;
     second +0.0014 (s.e. 0.0013), exits 433 for 430, stalls 3 for 4. All of it on MAP14.
+
+## The Icon of Sin (2026-11-17)
+
+A level that ends when a boss brain dies had no exit to her: MAP30 was the one level never got
+out of, charmed or not. The maintainer's brief: custom logic that takes over on any map with an
+awake brain, finds a platform (a moving one too) to angle rockets into the gap from, goes
+there and fires till it's dead, killing only what's in the way.
+
+- **An omniscient shortcut, said plainly.** The mode plans with the whole map known
+  (`Navigator::full_view`) and takes the brain's place from the map. It's the one place she
+  does. The maintainer's earlier call was that the brain may be known (its cry wakes the
+  level); this goes further, to the switch and the lifts, because the level is a race against
+  what the brain spawns. What it buys: MAP30 from never to out (below).
+- **Where to fire from** (`tactical/icon/lanes.rs`). The game's rules for a player's missile,
+  worked on the map's lines: it leaves 32 over her feet and flies level, a box 22 across and 8
+  tall; it goes off where the box stops fitting; the blast hurts within 128 by the further map
+  distance, in its sight. Spots along lines through the brain, each with the heights her feet
+  may be at. MAP30: feet 353 to 376, 105 a rocket. `evil-boom brain-posts` prints them.
+- **How the floor comes right** (`tactical/player/boss.rs`): as it stands; a lift that passes
+  through those heights (called, boarded at the bottom, one rocket as it carries her through:
+  the window is 6 tics and the launcher refires in 20); either once a switch has moved the
+  floor for good. MAP30 is the last two.
+- **Found by tracing its runs.**
+  - A player's missile goes at anything in her aim (three lines, 5.6 degrees apart, 1,024
+    out): every miss had a monster there, every clean shot hurt. No rocket with one near
+    enough for the blast to reach her.
+  - Use has no height: she backs off the lift over the line that calls it and presses it in
+    the air. A ride every 11 s, for 12.8.
+  - The slime was 48% of the damage taken (16 runs): she waits for the pillar on a floor that
+    doesn't hurt, and is on the lift the moment it's down.
+  - Her legs on its routes are the fight's only for a dodge; with none she died sooner (HMP 2
+    of 8 for 7), with every move allowed the route never got there. Rockets are kept from the
+    fight (the launcher's left out of what it sees she has).
+  - What's in sight and shooting as the brain wakes gets a few seconds first (UV's revenant
+    in front of the face: its tracers had her dodging the whole way round).
+- **Measured.** Charmed: out on every seed tried, 72 to 111 s. Mortal, 8 seeds: HMP 7 of 8,
+  UV 2 of 8. Score, first seeds +0.0032 (s.e. 0.0017), exits 451 for 447 (MAP30 4 of 16 for
+  none); second +0.0018 (s.e. 0.0013), exits 435 for 433 (MAP30 2 of 16). Only MAP30's runs
+  differ, on both.
+- **Not done:** other brains than MAP30's are untested (TNT's and Plutonia's are held out); a
+  switch that opens the rocket's way (not the floor she stands on) is left to her ordinary
+  exploring, the mode trying again as the heights change; no way to it, she explores.

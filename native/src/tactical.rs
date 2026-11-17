@@ -7,6 +7,7 @@
 pub mod arbiter;
 pub mod bestiary;
 pub mod combat;
+pub mod icon;
 pub mod player;
 pub mod sound;
 pub mod tuning;

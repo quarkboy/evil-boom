@@ -30,6 +30,8 @@ use crate::walkthrough::{Action, Step};
 /// the most of each ammo she can carry (without a backpack), by weapon slot
 use crate::tactical::bestiary::ammo_max;
 
+mod boss;
+
 /// ...the nearest this many of them
 const COVER_SPOTS: usize = 48;
 /// ...the nearest this many of them...
@@ -291,10 +293,13 @@ pub struct Player {
     exposure: Option<(i64, Vec<Point>)>,
     /// when holding at the edge of cover was last logged
     edge_log: i64,
+    /// the Icon of Sin's business, on a level with a boss brain (`boss`)
+    boss: boss::Boss,
 }
 
 impl Player {
     pub fn new(nav: Rc<Navigator>, knowledge: Knowledge, tune: Rc<Tuning>) -> Player {
+        let boss = boss::Boss::new(&nav);
         Player {
             explorer: Explorer::new(Rc::clone(&nav), knowledge),
             fight: Fight {
@@ -339,6 +344,7 @@ impl Player {
             trail: Vec::new(),
             exposure: None,
             edge_log: i64::MIN / 2,
+            boss,
         }
     }
 
@@ -409,6 +415,12 @@ impl Player {
                     !Self::lies_about(t) || self.things_seen.contains(&Self::what_where(t))
                 }
             });
+        }
+        // Rockets kept for a boss brain: the fight has no launcher.
+        if self.rockets_kept() {
+            if let Some(w) = &mut seen.weapons {
+                w.retain(|&slot| slot != 5);
+            }
         }
         let barrels = &self.fight.combat.barrels_seen;
         seen.barrels = obs.barrels.as_ref().map(|_| barrels.clone());
@@ -755,6 +767,7 @@ impl Player {
     }
 
     pub fn restart(&mut self) {
+        self.boss_restart();
         // Dead with something on: noted, so as not to walk into it again the same way. A level
         // begun again for what's left has nothing on.
         if let Some(cur) = &self.explorer.current {
@@ -850,13 +863,44 @@ impl Player {
             self.explorer.log.push(format!("  [fight] {line}"));
         }
         self.keep_out_of_sight(obs);
+        // A boss brain awake and rockets in hand: that's all there is to do, and it's done its
+        // own way.
+        let turn = match self.boss(obs) {
+            Some(boss::Turn::Hers(c)) => {
+                self.explorer.hold(obs, last);
+                return c;
+            }
+            t => t,
+        };
+        let Some(turn) = turn else {
+            return self.decide_on(obs, last, None);
+        };
+        // Its route stands in for the exploring's while the fight has its say.
+        self.explorer.hold(obs, last);
+        std::mem::swap(&mut self.explorer.follower, &mut self.boss.route);
+        let c = self.decide_on(obs, last, Some(turn));
+        std::mem::swap(&mut self.explorer.follower, &mut self.boss.route);
+        c
+    }
+
+    /// The fight and the route between them. `icon`: the Icon of Sin's business has the route
+    /// (its own follower in the exploring's place, or stood waiting): it keeps her legs, the
+    /// fight shooting over it, and nothing's chosen by the exploring.
+    fn decide_on(
+        &mut self,
+        obs: &Observation,
+        last: Option<&Controls>,
+        icon: Option<boss::Turn>,
+    ) -> Controls {
         // In a jump, or crossing a crusher it has timed, the route keeps the legs and the fight
         // only shoots.
-        let busy = self
-            .explorer
-            .follower
-            .as_ref()
-            .is_some_and(|f| f.jumping() || f.crossing_crusher());
+        let free = matches!(icon, Some(boss::Turn::Free(_)));
+        let busy = (icon.is_some() && !free)
+            || self
+                .explorer
+                .follower
+                .as_ref()
+                .is_some_and(|f| f.jumping() || f.crossing_crusher());
         let (errand, toward) = if busy {
             (String::new(), None)
         } else {
@@ -899,13 +943,22 @@ impl Player {
         // And the crushers she knows of, for where they could have her if they start again.
         self.fight.combat.movers.crushers = self.explorer.knowledge.crusher_sectors();
         let d = self.fight.combat.decide(obs, busy, &errand);
-        let retreating = !busy && self.retreating(obs);
+        // (the Icon of Sin's business: no looking round at what she hears, the brain's cries
+        // among it)
+        let d = d.filter(|d| !(busy && icon.is_some() && d.kind == Move::Looking));
+        let retreating = !busy && !free && self.retreating(obs);
         let legs = arbiter::arbitrate(
             d.as_ref(),
             busy,
             retreating,
             self.fight.combat.dodge_clear(),
         );
+        // The Icon of Sin's business is a race: on its route her legs are the fight's only to
+        // get out of the way of what's about to hit her.
+        let legs = match d.as_ref() {
+            Some(d) if busy && icon.is_some() && d.kind != Move::Dodging => Legs::Route,
+            _ => legs,
+        };
         // Moved a long way by the fight or a retreat: what she was going for is thought again as
         // the route takes her legs back, since something else may be nearer by now.
         if legs == Legs::Route {
@@ -1009,7 +1062,29 @@ impl Player {
         if let Some(f) = self.explorer.follower.as_mut() {
             f.shooters_about = shooters;
         }
-        let mut c = self.explorer.act(obs, last, &mut self.fight);
+        let mut c = match icon {
+            Some(boss::Turn::Wait(c)) => c,
+            // (time to spare: its route if it has one on, as the fight leaves her legs)
+            Some(boss::Turn::Free(c))
+                if !self
+                    .explorer
+                    .follower
+                    .as_ref()
+                    .is_some_and(|f| !f.done && !f.failed) =>
+            {
+                c
+            }
+            Some(_) => self
+                .explorer
+                .follower
+                .as_mut()
+                .map_or_else(Controls::default, |f| {
+                    // (a race: at full pace whichever way the fight has her faced)
+                    f.motion.any_way = true;
+                    f.act(obs)
+                }),
+            None => self.explorer.act(obs, last, &mut self.fight),
+        };
         for line in std::mem::take(&mut self.fight.pending_log) {
             self.explorer.log.push(format!("  [fight] {line}"));
         }

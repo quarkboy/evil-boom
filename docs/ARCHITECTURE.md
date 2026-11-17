@@ -77,6 +77,11 @@ Planning starts from the WAD itself, not from the engine:
   place. `evil-boom tuning` prints them; `--tuning FILE` changes them for a run.
 - `tactical/player.rs`: the fight and the explorer together. It decides who has her legs and
   runs retreats (to cover, back the way she came, out of a crowd).
+- `tactical/icon/lanes.rs`, `tactical/player/boss.rs`: the Icon of Sin. On a level with a boss
+  brain, once it's awake and she has rockets, this takes over: where a rocket can be fired from to
+  hurt the brain (`lanes`, the game's rules for a missile worked on the map; `evil-boom
+  brain-posts` prints them), and getting there and firing (`boss`). It plans with the whole map
+  known: the one place she does (docs/design/decisions/05, "The Icon of Sin").
 - `tactical/bestiary.rs`: monsters, missiles, weapons and items by their numbers.  Evil is assumed to know the basics of the enemies in the game, she does not need to "learn" what the monsters and guns do, only the level layouts.
 
 ## Getting there

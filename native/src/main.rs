@@ -88,6 +88,49 @@ fn dump_nav(wad: &str, map: &str) -> Result<(), String> {
 
 /// What the map says about some sectors: heights, special and tag, each line round them (with
 /// what's on the other side), the lines whose tag moves them, and the things in them.
+/// Where a rocket can be fired from at the level's boss brain, the map's heights as it starts:
+/// a line a sector, for looking into `tactical::icon::lanes`.
+fn brain_posts(wad: &str, map: &str) -> Result<(), String> {
+    use evilboom::tactical::icon::lanes;
+    let w = Wad::open(&resolve_wad(wad))?;
+    let m = load_level(&w, map)?;
+    let nav = Navigator::new(Arc::new(m), 3)?;
+    let brain = lanes::brain_of(&nav.map, &nav.mesh).ok_or("no boss brain on that map")?;
+    let heights: Vec<_> = nav.initial_states().iter().map(|h| h[0]).collect();
+    println!(
+        "brain at ({:.0}, {:.0}) in sector {} (floor {})",
+        brain.at.0, brain.at.1, brain.sector, heights[brain.sector].floor
+    );
+    let posts = lanes::posts(&nav.map, &nav.mesh, &heights, brain);
+    let sectors: BTreeSet<usize> = posts.iter().map(|p| p.sector).collect();
+    for s in sectors {
+        let of: Vec<_> = posts.iter().filter(|p| p.sector == s).collect();
+        let floor = heights[s].floor;
+        let now = of
+            .iter()
+            .filter(|p| p.feet.0 <= floor && floor <= p.feet.1)
+            .count();
+        let best = of
+            .iter()
+            .max_by(|a, b| a.damage.total_cmp(&b.damage))
+            .ok_or("none")?;
+        println!(
+            "sector {s} (floor {floor}): {} posts, {now} good as it stands; feet {:.0} to {:.0}; best ({:.0}, {:.0}) facing {:.1}, feet {:.0} to {:.0}, {:.0} a rocket, {:.0} off",
+            of.len(),
+            of.iter().map(|p| p.feet.0).fold(f64::INFINITY, f64::min),
+            of.iter().map(|p| p.feet.1).fold(f64::NEG_INFINITY, f64::max),
+            best.at.0,
+            best.at.1,
+            best.heading,
+            best.feet.0,
+            best.feet.1,
+            best.damage,
+            lanes::range(best, brain),
+        );
+    }
+    Ok(())
+}
+
 fn sector(wad: &str, map: &str, sectors: &[String]) -> Result<(), String> {
     let w = Wad::open(&resolve_wad(wad))?;
     let m = load_level(&w, map)?;
@@ -1217,6 +1260,7 @@ fn main() -> ExitCode {
         }
         Some("follow") if args.len() == 3 => follow(&args[1], &args[2]),
         Some("sector") if args.len() >= 4 => sector(&args[1], &args[2], &args[3..]),
+        Some("brain-posts") if args.len() == 3 => brain_posts(&args[1], &args[2]),
         Some("run-map") => run_one(&args[1..]),
         Some("episode") => episode(&args[1..]),
         #[cfg(feature = "viewer")]
