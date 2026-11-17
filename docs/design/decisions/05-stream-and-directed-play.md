@@ -2177,3 +2177,29 @@ follower stuck all the while and never failing.
     14; 1,080 runs the same to the tic. MAP25: one stall left of five, one exit, its first.
   - TNT MAP09, which the rule was first thought of for, is no different with it (charmed:
     wedged on barrels 76 times either way): another mechanism, not traced.
+- **Barrels cleared from where she stands, and only when it's safe** (the maintainer's two
+  points, 2026-11-16). The errand went to the place she could get to nearest the barrel,
+  within 256, the follower finding where to shoot from once it began. By MAP25's pillar
+  that place is down in the blood, a drop she won't take, so they were never shot, a ledge
+  in plain view of them across the room. And it was offered whenever nothing was in sight:
+  begun on the tic a fight's monsters went round a corner, given up seconds later with them
+  back, begun again for the next barrel of the same pillar.
+  - **From where she stands** (`barrels`): the follower looks over everywhere within the
+    gun's aim of the barrel (1,024, as far as the game aims a shot) for the nearest place
+    to her the shot reaches from, out of the blasts; a standing shot is as good from far
+    as near. `barrels.spot` is gone. Not begun from a floor that hurts.
+  - **Only with nothing about her**, in sight or seen awake a while ago
+    (`Assessment::about`). Keeping clear of barrels in a fight, and shooting one by a
+    monster, are the fight's as before.
+  - **Measured**, on top of the rule above: 0.500 for 0.497; exits 452 for 449, stalls 11
+    for 10, deaths 625 for 629. Against the baseline before both: +0.0032 (s.e. 0.0044),
+    288 runs moved, 49 better, 38 worse: nearly every level with barrels plays otherwise.
+    MAP25: 4 exits and 1 stall of 16 for none and 5; its kills 546 for 330. Lost: three
+    exits each on MAP26 (HMP) and E1M6 (UV), two deaths to stalls on E4M5; MAP23 (the
+    maintainer's worry) still 16 deaths, its kills 285 for 348. Not traced.
+  - **The first go at "from where she stands", without the second rule,** was worse on
+    MAP25 than the jump rule alone (three seeds dead at 260 to 520 s for 550 to 840 s): nine
+    to eighteen errands a run in the blood room, each given up as "no getting to
+    somewhere to shoot it from".
+  - **Left:** the follower choosing a place to shoot from that she can't then walk to; and
+    a chain of barrels as one errand, not one for each.

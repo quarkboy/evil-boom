@@ -363,10 +363,9 @@ pub struct Barrels {
     pub clear_tics: i64,
     /// ...then not again for this long (else she presses against a wall for ever)
     pub clear_rest: i64,
-    /// barrels this near her (as the crow flies) are cleared...
+    /// barrels this near her (as the crow flies) are cleared, from wherever the follower
+    /// finds to shoot from...
     pub clear_within: f64,
-    /// ...from a place she can get to this near one (the follower finds where to shoot from)...
-    pub spot: f64,
     /// ...with this much for the pistol, or this many shells for the shotgun
     pub bullets: i32,
     pub shells: i32,
@@ -383,7 +382,6 @@ impl Default for Barrels {
             clear_tics: 2 * 35,
             clear_rest: 3 * 35,
             clear_within: 1024.0,
-            spot: 256.0,
             bullets: 10,
             shells: 12,
             field: 6,

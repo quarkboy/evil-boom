@@ -2470,15 +2470,17 @@ impl Fight {
     /// Barrels she's seen, near, with nothing in sight and the ammo for it: each to be shot from
     /// out of its chain's blasts (the follower's job), before a shot sets it off by her, hers
     /// at something beside it or a monster's at her.
-    fn barrels(
-        &self,
-        x: &Explorer,
-        obs: &Observation,
-        reach: &BTreeSet<usize>,
-        pos: Point,
-    ) -> Vec<Objective> {
+    fn barrels(&self, x: &Explorer, obs: &Observation, pos: Point) -> Vec<Objective> {
         if !self.combat.visible.is_empty() {
             return Vec::new(); // (in a fight, the fight's: shot by what they'd take with them)
+        }
+        // Nor with anything about her that she knows of, in sight or seen awake a while ago:
+        // clearing barrels is for when it's safe, not something to stand to between two
+        // rushes of the same fight. (MAP25: begun on the tic the spectres went out of sight,
+        // given up four seconds later with them back on her, begun again for the barrel beside
+        // it; nine to eighteen times, and she died in that room.)
+        if !self.combat.now.about.is_empty() {
+            return Vec::new();
         }
         if !obs.barrels_lit.is_empty() {
             return Vec::new(); // (nor while any are going off: the chain's not done)
@@ -2503,19 +2505,25 @@ impl Fight {
             if dist(b, pos) > self.tune.barrels.clear_within {
                 continue;
             }
-            let Some(pi) = reach
-                .iter()
-                .copied()
-                .filter(|&pi| dist(nav.poly_center(pi), b) < self.tune.barrels.spot)
-                .min_by(|&p, &q| {
-                    dist(nav.poly_center(p), b).total_cmp(&dist(nav.poly_center(q), b))
-                })
-            else {
+            // From where she stands. The step is the follower's from its start: it looks over
+            // everywhere within the gun's own aim of the barrel (1,024, as far as the game aims
+            // a shot for her) for the nearest place to her the shot reaches from, on a floor
+            // that doesn't hurt and out of the blasts, and a standing shot is as good from far
+            // as from near. All it wants of the errand is a way that isn't turned down. (It was
+            // to the place she could get to nearest the barrel: by MAP25's pillar of five in
+            // the blood that's down in the blood, a drop she won't take, and they were never
+            // shot, with a ledge in plain view of them across the room.)
+            // Not from a floor that hurts: off it first.
+            if nav
+                .poly_at(pos)
+                .is_none_or(|here| x.knowledge.damaging(nav.sector_of_poly(here)))
+            {
                 continue;
-            };
+            }
+            let spot = pos;
             let mut o = Objective::new(
                 Kind::Barrel,
-                nav.poly_center(pi),
+                spot,
                 format!("clear the barrel at ({:.0}, {:.0})", b.0, b.1),
             );
             o.look_at = Some(b);
@@ -3079,7 +3087,7 @@ impl Hooks for Fight {
             .map(|p| p as i64)
             .collect();
         let mut out = self.supplies(x, obs, reach, pos);
-        out.extend(self.barrels(x, obs, reach, pos));
+        out.extend(self.barrels(x, obs, pos));
         if let Some(c) = &mut self.completion {
             for o in c.wanted(x, obs, reach, pos) {
                 if !out.iter().any(|w| w.thing.is_some() && w.thing == o.thing) {
