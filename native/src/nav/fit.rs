@@ -86,6 +86,44 @@ fn tele_into<'a>(nav: &'a NavCore, chain: &Chain, i: usize) -> Option<&'a TeleKi
 }
 
 impl NavCore {
+    /// The stretch of portal `pi` the path may cross by, going from poly `from` to `to`: all
+    /// of it, but where that's a drop off a ledge, only where the box gets wholly past the
+    /// line up at the ledge's height (`Callbacks::landing_span`). She's held at the ledge's
+    /// floor till it has, and a ceiling too low for her up there, just beyond, stops her dead
+    /// at the edge.
+    fn drop_stretch(
+        &self,
+        pi: usize,
+        from: usize,
+        to: usize,
+        st: &mut dyn HeightSource,
+    ) -> (Point, Point) {
+        let q = &self.mesh.portals[pi];
+        let whole = (q.p1, q.p2);
+        let Some(li) = q.linedef else {
+            return whole;
+        };
+        let (high, low) = (self.mesh.poly(from).sector, self.mesh.poly(to).sector);
+        let top = top_floor(&st.heights(high));
+        if top - top_floor(&st.heights(low)) <= MAX_STEP {
+            return whole;
+        }
+        let Some((a, b)) = self.callbacks.landing_span(li, high, top) else {
+            return whole;
+        };
+        // The part of the portal within that stretch (both lie along the one line).
+        let (dx, dy) = (q.p2.0 - q.p1.0, q.p2.1 - q.p1.1);
+        let len2 = (dx * dx + dy * dy).max(1e-9);
+        let along = |p: Point| ((p.0 - q.p1.0) * dx + (p.1 - q.p1.1) * dy) / len2;
+        let (ta, tb) = (along(a), along(b));
+        let (lo, hi) = (ta.min(tb).max(0.0), ta.max(tb).min(1.0));
+        if hi < lo {
+            return whole;
+        }
+        let at = |t: f64| (q.p1.0 + dx * t, q.p1.1 + dy * t);
+        (at(lo), at(hi))
+    }
+
     /// The waypoints along `chain` (None where it teleports), and where the box got squeezed.
     pub(super) fn smooth(
         &self,
@@ -123,8 +161,8 @@ impl NavCore {
                     portals.clear();
                 }
                 Some(Via::Portal(pi)) => {
-                    let q = &self.mesh.portals[pi];
-                    portals.push(oriented(q.p1, q.p2, self.mesh.center(prev_poly)));
+                    let (p1, p2) = self.drop_stretch(pi, prev_poly, chain[i].0, st);
+                    portals.push(oriented(p1, p2, self.mesh.center(prev_poly)));
                 }
                 None => {}
             }

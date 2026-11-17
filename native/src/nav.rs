@@ -216,6 +216,11 @@ pub type FitsFn = Box<dyn Fn(usize, &[usize]) -> bool>;
 /// Is there room to drop off line `line` from sector `high`, whose floor is at `top`:
 /// `landable(line, high, top)`.
 pub type LandableFn = Box<dyn Fn(usize, usize, f64) -> bool>;
+/// Where along `line` there's room to drop off it from sector `high`, whose floor is at `top`:
+/// `landing_span(line, high, top)`, two points on the line (none: nowhere).
+pub type SpanFn = Box<dyn Fn(usize, usize, f64) -> Option<(Point, Point)>>;
+/// A stretch of a line (none: no such stretch).
+type Stretch = Option<(Point, Point)>;
 /// Walked from a to b with the sectors at these (floor, ceiling) heights, as the game moves a
 /// player: the share of tries that get there (`JumpLab::walks`).
 pub type WalksFn = Box<dyn Fn(Point, Point, &[(f64, f64)]) -> f64>;
@@ -227,6 +232,8 @@ type WalkKey = (u64, u64, u64, u64, u64);
 pub struct Callbacks {
     fits: FitsFn,
     landable: LandableFn,
+    span: SpanFn,
+    span_cache: std::cell::RefCell<HashMap<(usize, usize, i64), Stretch>>,
     walks: WalksFn,
     /// by the stretch's ends and a hash of the heights it was walked at
     walks_cache: std::cell::RefCell<HashMap<WalkKey, f64>>,
@@ -235,15 +242,33 @@ pub struct Callbacks {
 }
 
 impl Callbacks {
-    pub fn new(fits: FitsFn, landable: LandableFn, walks: WalksFn) -> Self {
+    pub fn new(fits: FitsFn, landable: LandableFn, span: SpanFn, walks: WalksFn) -> Self {
         Callbacks {
             fits,
             landable,
+            span,
+            span_cache: std::cell::RefCell::new(HashMap::default()),
             walks,
             walks_cache: std::cell::RefCell::new(HashMap::default()),
             fits_cache: HashMap::default(),
             landable_cache: HashMap::default(),
         }
+    }
+
+    /// `SpanFn`.
+    pub(crate) fn landing_span(
+        &self,
+        line: usize,
+        high: usize,
+        top: f64,
+    ) -> Option<(Point, Point)> {
+        let key = (line, high, (top * 16.0).round() as i64);
+        if let Some(&v) = self.span_cache.borrow().get(&key) {
+            return v;
+        }
+        let v = (self.span)(line, high, top);
+        self.span_cache.borrow_mut().insert(key, v);
+        v
     }
 
     /// `WalksFn`.

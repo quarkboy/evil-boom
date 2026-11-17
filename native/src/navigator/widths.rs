@@ -465,6 +465,62 @@ pub(super) fn landable(m: &MapData, lab: &JumpLab, li: usize, high: usize, top: 
     false
 }
 
+/// Where along line `li` she can drop off it from sector `high`, whose floor is at `top`: the
+/// longest stretch of it where no ceiling is too low for her up there with the box wholly
+/// past, as two points on the line. A ledge can be dropped off at one end and not the other:
+/// a sliver of open floor below it, narrowing to nothing under a lower ceiling beyond. Only
+/// the ceilings are asked (`landable` has said there's room somewhere): a wall or a teleport
+/// line just past the edge is the path's own business, and a drop onto a teleporter's pad is
+/// taken where the path has it.
+pub(super) fn landing_span(
+    m: &MapData,
+    lab: &JumpLab,
+    li: usize,
+    high: usize,
+    top: f64,
+) -> Option<(Point, Point)> {
+    let (a, b) = m.line_seg(li);
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let length = dx.hypot(dy);
+    let length = if length == 0.0 { 1.0 } else { length };
+    let (mut nx, mut ny) = (-dy / length, dx / length);
+    if m.back_sector(&m.linedefs[li]) == Some(high) {
+        (nx, ny) = (-nx, -ny);
+    }
+    let clear = PLAYER_RADIUS * (nx.abs() + ny.abs()) + 0.5;
+    let steps = ((length / 8.0).floor() as usize).max(2);
+    let lands = |i: usize| {
+        let t = i as f64 / steps as f64;
+        [clear, clear + 4.0, clear + 8.0, clear + 16.0, clear + 32.0]
+            .into_iter()
+            .any(|d| {
+                let p: Point = (a.0 + dx * t + nx * d, a.1 + dy * t + ny * d);
+                let (_fits, _floor, ceil) = lab.fits_at(p);
+                ceil - top >= PLAYER_HEIGHT
+            })
+    };
+    // (the line's ends are corners, not tried: each as the spot next to it)
+    let ok: Vec<bool> = (0..=steps).map(|i| lands(i.clamp(1, steps - 1))).collect();
+    if ok.iter().all(|&v| v) {
+        return Some((a, b));
+    }
+    let (mut best, mut run): (Option<(usize, usize)>, Option<usize>) = (None, None);
+    for i in 0..=steps + 1 {
+        if ok.get(i).copied().unwrap_or(false) {
+            run.get_or_insert(i);
+        } else if let Some(from) = run.take() {
+            if best.is_none_or(|(f, t)| i - 1 - from > t - f) {
+                best = Some((from, i - 1));
+            }
+        }
+    }
+    let at = |i: usize| {
+        let t = i as f64 / steps as f64;
+        (a.0 + dx * t, a.1 + dy * t)
+    };
+    best.map(|(from, to)| (at(from), at(to)))
+}
+
 /// The line sets `walls_near` and friends go by.
 pub(super) struct LineSets {
     walls: BTreeSet<usize>,
