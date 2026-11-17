@@ -28,6 +28,8 @@ pub enum Effort {
     /// kept clear of, outmatched, with it in sight throwing nothing at her: her health is the
     /// measure
     KeptClear,
+    /// stepped to for a shot at it, time and again: its health is the measure
+    SteppedFor,
 }
 
 #[derive(Clone, Copy, Debug)]

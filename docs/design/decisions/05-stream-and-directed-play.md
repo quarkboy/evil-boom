@@ -2203,3 +2203,23 @@ follower stuck all the while and never failing.
     somewhere to shoot it from".
   - **Left:** the follower choosing a place to shoot from that she can't then walk to; and
     a chain of barrels as one errand, not one for each.
+- **Stepping for a shot isn't for ever** (2026-11-17; Doom II MAP14's east yard, found once the
+  lift's rule below had her that far: eight stalls of sixteen). A shotgun guy or an
+  arachnotron in sight and no shot at it: "stepping for a shot"; the step brings a shot,
+  the move is then "shooting on the way", which gives the route her legs, and the route
+  walks her back out of the shot before it's taken. Some 750 times each way in one run, a
+  plasma rifle and 52 cells in hand, "0 rounds spent". Her patience for no shot didn't run:
+  its clock is set back whenever she could hit it, and each step got her that.
+  - **The rule** (`stepping_for_shot`, `Effort::SteppedFor`): stepped for without a break
+    (no more than two seconds between steps) for `engage.close_give_up` with it none the
+    worse (its health the measure), it's left a while as one she can't get at, and not
+    stepped for meanwhile.
+  - **Measured:** 0.500 either way (+0.0000, s.e. 0.0008); exits 452, stalls 10 for 11; 1,077
+    runs the same to the tic.
+  - **Three goes before it**, each scored: (1) the clock from her first step, any gap
+    under twenty seconds: 0.491, 14 exits fewer; (2) without a break: 0.494, 9 fewer. Both
+    had stepping pass over every monster given up on, for whatever reason, and that was
+    the harm, traced on a run of E4M8: a demon left earlier as out of reach wasn't stepped
+    for when it came for her. 281 runs moved by it. (3) a mark of stepping's own that no
+    other move reads: MAP14 back to five stalls, the other moves going on with the same
+    dance. Kept: both, the general mark set and stepping reading only its own.

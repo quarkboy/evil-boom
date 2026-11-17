@@ -85,6 +85,9 @@ pub struct Stepping {
     /// the way the fight's legs last went, and when; and when they last turned about
     pub(super) legs_way: Option<(Point, i64)>,
     pub(super) legs_turned: i64,
+    /// stepped for a shot at this one for long with it none the worse: not stepped for
+    /// again till this tic
+    pub(super) no_step: Option<(i32, i64)>,
 }
 
 /// Getting out of fire there's no dodging: an arch-vile's, a hitscan shooter's.

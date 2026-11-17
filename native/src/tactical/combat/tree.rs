@@ -508,13 +508,44 @@ fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option
         return None;
     }
     let pos = s.pos;
-    let way = s
-        .target
-        .as_ref()
-        .filter(|t| {
-            c.visible.len() == 1 && dist((t.x, t.y), pos) < 512.0 && !c.can_hit(obs, t, None)
-        })
-        .and_then(|t| c.shot_way(obs, t))?;
+    let t = s.target.as_ref().filter(|t| {
+        c.visible.len() == 1
+            && dist((t.x, t.y), pos) < 512.0
+            && !c.can_hit(obs, t, None)
+            && !c
+                .steer
+                .no_step
+                .is_some_and(|(id, till)| id == t.id && obs.tic < till)
+    })?;
+    // Not for ever. The step gets her where there's a shot; with a shot the route has her legs
+    // again and walks her back out of it before it's taken, and she's stepped for it again:
+    // every few tics, no round fired, till the clock ran out (Doom II MAP14, a shotgun guy
+    // and an arachnotron across the east yard: eight runs of sixteen once she got that far).
+    // Stepped for so `engage.close_give_up` without a break and it none the worse, no more
+    // steps for it for `engage.given_up_tics`: the route goes on, shooting on the way when a
+    // shot comes. (That she could have hit it from where she stepped to doesn't set the clock
+    // back, as it does for standing with no shot: only its being hurt does.)
+    /// stepping for a shot is one go at it with no more than this between the steps
+    const STEP_BREAK: i64 = 2 * 35;
+    let limit = c.tune.engage.close_give_up;
+    if c.patience.spent(
+        Effort::SteppedFor,
+        t.id,
+        obs.tic,
+        limit,
+        Some((f64::from(t.health), 0.0)),
+        Some(STEP_BREAK),
+    ) {
+        // (left a while as one she can't get at, which the other moves go by: standing to it,
+        // keeping at it out of sight; and not stepped for meanwhile, which is kept apart: one
+        // given up on for another reason is stepped for as ever. Stepping passing over all
+        // that are given up on lost 9 exits of 452: a demon left as out of reach wasn't stepped
+        // for when it came for her.)
+        c.steer.no_step = Some((t.id, obs.tic + c.tune.engage.given_up_tics));
+        c.give_up(obs, t.id);
+        return None;
+    }
+    let way = c.shot_way(obs, t)?;
     Some(Act::new(
         Move::SteppingForShot,
         Some(way),
