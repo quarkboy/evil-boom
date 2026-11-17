@@ -329,6 +329,8 @@ pub struct RouteFollower {
     settle_logged: i64,
     cross_ready: bool,
     cross_wait_logged: bool,
+    /// held short of a lift's line since then, its floor's door open over it (`jam_wait`)
+    jam_since: Option<i64>,
     goal_tic: i64,
     last_pos: Option<Point>,
     /// a run-jump or a run over sinking floors in hand
@@ -444,6 +446,7 @@ impl RouteFollower {
             settle_logged: -1,
             cross_ready: false,
             cross_wait_logged: false,
+            jam_since: None,
             goal_tic: 0,
             last_pos: None,
             jump: Jumping {

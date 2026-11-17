@@ -97,6 +97,9 @@ impl RouteFollower {
         if let Some(c) = self.lift_window_wait(obs, &step) {
             return c;
         }
+        if let Some(c) = self.jam_wait(obs) {
+            return c;
+        }
         if obs.tic < self.jump.brake_until {
             if self.motion.speed() > 1.0 {
                 // just landed a jump: stop first
@@ -351,6 +354,63 @@ impl RouteFollower {
             return Some(self.run_step(obs));
         }
         None
+    }
+
+    /// A lift's walk-over line just ahead on her way, and the floor it lowers standing under
+    /// a door that's open and will shut by itself: held short of the line till the door's
+    /// shut (no longer than a lift is waited for). A block that's a lift by one line and a door
+    /// by another: the door comes down to wherever the floor is, the floor comes back up into
+    /// it, and the two hold each other there for good, every line that moves either doing
+    /// nothing after (Doom II MAP15: the way to the exit shut for the rest of the level).
+    fn jam_wait(&mut self, obs: &Observation) -> Option<Controls> {
+        /// how far ahead of her a line is looked for
+        const AHEAD: f64 = 48.0;
+        let pos = obs.pos();
+        let next = self.planned_path(None).into_iter().flatten().next()?;
+        let far = dist(pos, next).max(1e-6);
+        let reach = far.min(AHEAD);
+        let to = (
+            pos.0 + (next.0 - pos.0) * reach / far,
+            pos.1 + (next.1 - pos.1) * reach / far,
+        );
+        let view = Rc::clone(&self.view);
+        let init = &view.nav.movers.initial;
+        let shuts = |x: usize| {
+            obs.height(x)
+                .is_some_and(|live| (live.ceiling - init[x].ceiling).abs() > 0.5)
+                && view.triggers.iter().any(|d| {
+                    !d.permanent()
+                        && d.info.category == crate::specials::Category::Door
+                        && d.effect(x).is_some()
+                })
+        };
+        let jams = view.triggers.iter().any(|t| {
+            t.info.trigger.walked()
+                && !t.permanent()
+                && t.info.category == crate::specials::Category::Lift
+                && t.linedef().is_some_and(|li| {
+                    let (a, b) = view.nav.map.line_seg(li);
+                    crate::geom::segments_cross(pos, to, a, b)
+                })
+                && t.effects.iter().any(|(x, _)| shuts(*x))
+        });
+        if !jams {
+            self.jam_since = None;
+            return None;
+        }
+        let since = *self.jam_since.get_or_insert_with(|| {
+            self.log.add(
+                obs.tic,
+                "a lift's line ahead with its floor's door open over it: waiting for the door"
+                    .to_string(),
+            );
+            obs.tic
+        });
+        if obs.tic - since > CROSS_REST_WAIT {
+            return None;
+        }
+        self.progress_tic = obs.tic;
+        Some(self.motion.hold(obs, (0.0, 0.0), self.look))
     }
 
     /// A lift line to cross for its window: if the lift's away already (set off on the way),
