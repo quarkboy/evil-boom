@@ -480,6 +480,7 @@ impl Explorer {
                 obs.tic
             ));
             self.restart_wanted = true;
+            self.wedged = true;
             // (where she's wedged, and the pieces of the mesh next to it, are a trap for the
             // go after: the same way taken, she's wedged at the same spot)
             if let Some(p) = self.nav.poly_at(here) {

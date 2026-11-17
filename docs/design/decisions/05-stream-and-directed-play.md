@@ -2507,3 +2507,30 @@ there and fires till it's dead, killing only what's in the way.
 - **Not done:** other brains than MAP30's are untested (TNT's and Plutonia's are held out); a
   switch that opens the rocket's way (not the floor she stands on) is left to her ordinary
   exploring, the mode trying again as the heights change; no way to it, she explores.
+
+## Stuck runs, round one (2026-11-17)
+
+The maintainer's brief: fix what stalls on the scoring sets, then a fresh seed set, and again.
+Eight stalls on the two sets to begin with: E4M6 three, MAP21 two, MAP14, MAP06, MAP20.
+
+- **A ledge is dropped off where a ceiling beyond lets her** (E4M6's three). A lift takes
+  her up to a soulsphere's ledge whose one way off is a drop into a sliver of floor, 64 wide
+  at its middle and nothing at its ends, the yard beyond it under a ceiling 16 over the
+  ledge's floor. The game holds her at the ledge's height till her whole box is past the
+  line; crossing at the narrow end her box met the low ceiling first and she stood at the
+  edge "waiting at mover" for a floor that doesn't move, every objective, till the run
+  stalled.
+  - **The rule** (`drop_stretch`, `landing_span`): a path crosses a ledge only along the
+    stretch where no ceiling is too low for her up there with the box wholly past.
+  - **A go before it** asked for the box to fit there altogether and never tried a line's two
+    ends: every ledge lost 8 units at each end, a drop onto a teleporter's pad missed the pad
+    (MAP25's start: dead in the blood in 30 s, 17 exits lost on the two sets). Now only
+    ceilings are asked, and a ledge open all along is left as it was.
+- **Wedged is stranded** (MAP20). "Stuck here 9 times over, whatever for: stranded", and no
+  restart: with one life the wedge's verdict was called off as a wish for the level again
+  for what's left, which the same flag carries. It takes one of the goes kept for being
+  stranded (`Explorer::wedged`).
+- **Measured, the two together.** First seeds: +0.0002 (s.e. 0.0038), exits 451 for 451
+  (MAP30 three more from the commit before, the rest three fewer), stalls 2 for 5. Second:
+  +0.0056 (s.e. 0.0035), exits 442 for 435 (MAP30 five more, the rest two more), stalls 2 for
+  3. Stranded restarts 43 for 26.

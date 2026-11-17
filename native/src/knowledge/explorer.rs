@@ -530,6 +530,8 @@ pub struct Explorer {
     pub patience: f64,
     /// for whoever runs the game: the level again, knowing what she knows
     pub restart_wanted: bool,
+    /// ...and it's for being wedged (`stuck_again`): stranded, not wanting more of the level
+    pub wedged: bool,
     /// (mortal runs) when a route last cost more health than she had to spare (floors that hurt:
     /// healing or a suit would do)
     short_of_health: Option<i64>,
@@ -735,6 +737,7 @@ impl Explorer {
             exit_before_risks: false,
             patience: 1.0,
             restart_wanted: false,
+            wedged: false,
             short_of_health: None,
             crusher_out: BTreeMap::new(),
             suited: false,

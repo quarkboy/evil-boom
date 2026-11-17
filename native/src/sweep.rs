@@ -711,16 +711,19 @@ pub fn run_map_in(
             );
             p.explorer.log.push(msg);
         }
-        if agent.x().restart_wanted && deaths + 1 >= o.lives {
+        // (wedged is stranded: one of the goes kept for that, if there's one left)
+        let wedged = agent.x().wedged && strandings < o.stranded;
+        if agent.x().restart_wanted && !wedged && deaths + 1 >= o.lives {
             // (no level again to be had: out with what she has)
             agent.x_mut().restart_wanted = false;
+            agent.x_mut().wedged = false;
             agent.no_more_restarts();
             stranded = false;
         }
         let finished = e.finished();
         // (stranded, not wanting the level again for what's left: one of the goes kept for
         // that, if there's one, before a life)
-        let spare = stranded && !agent.x().restart_wanted && strandings < o.stranded;
+        let spare = stranded && (!agent.x().restart_wanted || wedged) && strandings < o.stranded;
         if finished || (stranded && (spare || deaths + 1 < o.lives)) {
             // dead, or stranded with nothing to do (a trap she couldn't know of, a floor that drops
             // into a pit): the level again, knowing what she learned
@@ -735,7 +738,7 @@ pub fn run_map_in(
                 }
                 let why = if dead {
                     "died"
-                } else if agent.x().restart_wanted {
+                } else if agent.x().restart_wanted && !agent.x().wedged {
                     "for what's left"
                 } else {
                     "stranded"
@@ -766,6 +769,7 @@ pub fn run_map_in(
                     }
                 }
                 agent.x_mut().restart_wanted = false;
+                agent.x_mut().wedged = false;
                 let t = e.tally();
                 best_life = (best_life.0.max(t[0].0), best_life.1.max(t[2].0));
                 rec.entries.push(Entry::Restart(e.tic, why.to_string()));
