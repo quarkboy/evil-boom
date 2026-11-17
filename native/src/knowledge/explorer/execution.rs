@@ -94,9 +94,22 @@ impl Explorer {
             let f = self.knowledge.fired[self.glanced];
             // Not a teleporter whose destination she knows: there's nothing to look for, and the stop
             // costs time on the way through.
+            // Nor a line she has set off and looked round for so many times with nothing ever
+            // seen to come of it: there's nothing to see, this time either. (Doom II MAP13: the
+            // line that stops a lift, across the doorway of the lift's room, the lift not yet
+            // started: 378 looks round in 25 minutes of going in and out, every errand in
+            // there broken off by one, and the line beyond that starts the lift never walked
+            // over till the fiftieth minute.)
+            /// a walked line looked round for this many times, nothing learned: no more
+            const LOOKS_A_LINE: usize = 3;
+            let looked = self.knowledge.fired[..self.glanced]
+                .iter()
+                .filter(|g| g.line == f.line && g.how == How::Walk && g.life == f.life)
+                .count();
             let unknown = f.how == How::Walk
                 && !learned.contains(&(f.line as i64))
-                && !self.knowledge.teleports.contains_key(&f.line);
+                && !self.knowledge.teleports.contains_key(&f.line)
+                && looked < LOOKS_A_LINE;
             if unknown && obs.tic - f.tic < GLANCE_AFTER {
                 return None; // (give it a moment to be seen first)
             }

@@ -2303,3 +2303,20 @@ follower stuck all the while and never failing.
     stalls 9 for 8 (a margin of 8: 437 exits; and on the second seeds +0.0003, exits 415 for
     412). Kept at the maintainer's word: the first seeds are the ones the baseline has been
     chosen on, and anything that moves two hundred runs' fights loses there.
+- **A walked line looked round for three times is looked round for no more** (2026-11-17; why
+  Doom II MAP13's yellow card took fifty minutes, the maintainer's question). Its way is
+  the red door, a line beyond it that starts a tall lift, and a jump off the lift. The red
+  door was open at 1,794 s and the lift's line first walked over at 3,286 s. Across the
+  doorway is the line that stops the lift, which does nothing she can see with the lift
+  not started; a walked line whose work she doesn't know has her stop and look round, and
+  she did so 378 times in those 25 minutes, each look breaking off the errand in hand
+  (49 looks at the room's walls begun, 32 walls). The walk into the far part of the room,
+  over the starting line, was offered all the while, not turned down, and never got to.
+  - **The rule** (`glance`): looked round for three times this life with nothing learned
+    of it, a walked line isn't looked round for again.
+  - **Measured.** That run (`--charmed`): three looks for 378; red door to the lift's
+    line 7 minutes for 25; out at 2,085 s for 3,519 s. Score, first seeds: +0.0004 (s.e.
+    0.0027), exits 438 either way, stalls 10 for 9; second seeds, with the teleporter's
+    margin too: -0.0012 (s.e. 0.0047), exits 411 for 412, stalls 6 for 7.
+  - **Left:** seven minutes in that room still. A walk over floor she's seen counts as
+    twice as far as it is (`Kind::Visit`), and the nearer-looking chores go first.
