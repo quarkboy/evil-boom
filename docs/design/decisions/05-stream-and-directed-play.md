@@ -2674,3 +2674,31 @@ trigger and the launch 8 tics on. Two seed sets, 7,806 rockets in 688 runs.
   works, and her note of the press had it tried for good: the closet with the way to the
   blue key shut every go after. Correctness, not judgement (`Knowledge::counts`). That run:
   out, 91 of 91. Second seeds: 3 runs changed, no outcome.
+
+- **Five more from the third set's screen** (2026-11-18), scored together on the first
+  seed set: exits 452 for 452, stalls 1 for 0, run for run -0.0012 (s.e. 0.0065), 584 of
+  1,088 runs changed.
+  - **A switch's twin** (`pressed_again`): another line of what a press worked, mapped and
+    never pressed itself, is tried from where it is, with no wait, where no line of it has
+    taught her what the press does (E1M5: two pillars up and down together, a switch on
+    each, the only way off). Without that last condition it was every learned door's
+    other face: MAP14, a hundred and fifty "try door again", an hour stuck.
+  - **Idle, she looks about** (`IdleLook`): a turn one way of 25 to 120 degrees at 1.5 to
+    6 a tic, a pause of 12 to 90 tics, a turn the other way; a full look round first when
+    she's out of things to do. It replaces the endless spin, and the fixed left-pause-right
+    of waiting to be told.
+  - **Cover that gets her nothing, by what she knows** (`Knowledge::known`): the count of
+    lines fired was in the comparison, and a teleporter walked is a line fired, so a round
+    of eight teleporters back to cover was news every time (MAP21: ten minutes of it, two
+    seeds).
+  - **A ledge left over its landing's middle, square on** (`smooth`): where only part of
+    a ledge can be dropped off, the path is pinned a body's width before and past that
+    part's middle; the smoothing after took the crossing back along the line to wherever
+    was straightest (E4M6).
+  - **Held up on a ledge, the track is kept to** (`overhanging`): her middle over the
+    floor below and her box's edge still on the ledge, no corner is rounded. She turned
+    along the ledge up there and stopped where a ceiling past it was too low (E4M6, the
+    narrow step under the lift: the pin's own stall on the first screen).
+  - **The stall left:** MAP06, skill 3 (died at 438 s before). A blazing lift's window of
+    4.4 s to make by a drop of 320 that she creeps up to (`creep_to_drop`), 23 times
+    missed. Neither the pin nor the ledge rule acts there. Next.

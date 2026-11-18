@@ -136,6 +136,7 @@ impl NavCore {
         let mut points: Vec<Option<Point>> = Vec::new();
         let mut seg_start = start;
         let mut portals: Vec<(Point, Point)> = Vec::new();
+        let mut drop_pins: Vec<Point> = Vec::new();
         for i in 1..chain.len() {
             let prev_poly = chain[i - 1].0;
             match chain[i].1 {
@@ -162,7 +163,45 @@ impl NavCore {
                 }
                 Some(Via::Portal(pi)) => {
                     let (p1, p2) = self.drop_stretch(pi, prev_poly, chain[i].0, st);
-                    portals.push(oriented(p1, p2, self.mesh.center(prev_poly)));
+                    let q = &self.mesh.portals[pi];
+                    let mid = ((p1.0 + p2.0) / 2.0, (p1.1 + p2.1) / 2.0);
+                    let len = dist(p1, p2).max(1e-9);
+                    let (mut nx, mut ny) = (-(p2.1 - p1.1) / len, (p2.0 - p1.0) / len);
+                    let c = self.mesh.center(prev_poly);
+                    if (c.0 - mid.0) * nx + (c.1 - mid.1) * ny > 0.0 {
+                        (nx, ny) = (-nx, -ny); // (pointing off the ledge)
+                    }
+                    // A point that far off the line's middle, on the floor it's meant to be on:
+                    // the nearest such to a body's width (a narrow step below a ledge has the
+                    // next drop within that, and a point past it is on the floor below: E4M6,
+                    // taken down two drops and held at the foot waiting for the first floor to
+                    // come to her).
+                    let on = |side: f64, poly: usize| {
+                        let sector = self.mesh.poly(poly).sector;
+                        [PLAYER_RADIUS + 4.0, 12.0, 6.0, 2.0]
+                            .into_iter()
+                            .find_map(|d| {
+                                let p = (mid.0 + side * nx * d, mid.1 + side * ny * d);
+                                let at = self.mesh.poly_at(p)?;
+                                (self.mesh.poly(at).sector == sector).then_some(p)
+                            })
+                    };
+                    let part = dist(p1, p2) + 1.0 < dist(q.p1, q.p2);
+                    let pins = part
+                        .then(|| on(-1.0, prev_poly).zip(on(1.0, chain[i].0)))
+                        .flatten();
+                    if let Some((before, after)) = pins {
+                        // A ledge to be dropped off along part of itself only: over its
+                        // middle, square on, and held to that (the smoothing after would
+                        // take the crossing back along the line to wherever is straightest).
+                        points.extend(funnel(seg_start, before, &portals).into_iter().map(Some));
+                        points.push(Some(after));
+                        drop_pins.extend([before, after]);
+                        seg_start = after;
+                        portals.clear();
+                    } else {
+                        portals.push(oriented(p1, p2, self.mesh.center(prev_poly)));
+                    }
                 }
                 None => {}
             }
@@ -185,6 +224,7 @@ impl NavCore {
         exempt.retain(|li| !self.shutting.contains(li));
         let mut pinned: HashSet<PointKey> = HashSet::default();
         let mut takeoffs: HashSet<PointKey> = HashSet::default();
+        pinned.extend(drop_pins.iter().map(|&p| point_key(p)));
         for i in 1..chain.len() {
             if let Some(TeleKind::Jump { runup, takeoff, .. }) = tele_into(self, chain, i) {
                 pinned.extend([point_key(*runup), point_key(*takeoff)]);
