@@ -3153,6 +3153,10 @@ impl Fight {
 }
 
 impl Hooks for Fight {
+    fn unarmed(&self, obs: &Observation) -> bool {
+        !self.combat.armed(obs)
+    }
+
     fn stocking(&self) -> bool {
         self.going_on
     }

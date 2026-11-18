@@ -45,6 +45,12 @@ const EXIT_MARGIN: f64 = 64.0;
 pub(super) const NEAR_SUSPECT: f64 = 6.0;
 /// the secrets left her goal: the walls searched as thoroughly as a search asked for is by default
 const SEARCH_AS: u8 = 2;
+/// what she needs is far off from this (as the crow flies): the walls round her first...
+const SUPPLY_FAR: f64 = 1024.0;
+/// ...those within this of her (and no further than half way to it)...
+const SEARCH_NEAR: f64 = 768.0;
+/// ...searched this hard (the most a search for secrets goes to)
+const SEARCH_HARD: u8 = 3;
 
 /// As she passes it, that is: a hall's width off, not only at her elbow.
 const NEAR_WALL: f64 = 448.0;
@@ -308,6 +314,30 @@ impl Explorer {
         out.extend(self.secrets_again(&reach, pos));
         out.extend(self.noises(&reach, pos, obs.tic));
         out.extend(hooks.wanted(self, obs, &reach, pos));
+        // Out of ammo, and the nearest thing she needs (health, ammo) a long way off: the walls
+        // round her first, searched as hard as a search for secrets goes. What a level hides
+        // is mostly supplies, and a wall by her is seconds where the walk is minutes (the
+        // maintainer's, watching Doom II MAP31: out of ammo, round and round between a
+        // stimpack and a clip a corridor of doors apart, past walls with things behind them).
+        if self.suspecting == Suspecting::No && hooks.unarmed(obs) {
+            let far = out
+                .iter()
+                .filter(|o| o.kind == Kind::Item && (o.needed || o.urgent))
+                .map(|o| dist(o.goal, pos))
+                .min_by(f64::total_cmp)
+                .filter(|&d| d > SUPPLY_FAR);
+            if let Some(d) = far {
+                let within = (d / 2.0).min(SEARCH_NEAR);
+                for mut o in self.suspected_walls(obs, SEARCH_HARD) {
+                    if dist(o.goal, pos) <= within
+                        && !out.iter().any(|w| w.kind == Kind::Wall && w.wall == o.wall)
+                    {
+                        o.needed = true;
+                        out.push(o);
+                    }
+                }
+            }
+        }
         if !while_open.is_empty() {
             for o in out.iter_mut().filter(|o| {
                 o.kind != Kind::Exit && nav.poly_at(o.goal).is_some_and(|p| while_open.contains(&p))

@@ -2624,3 +2624,17 @@ The four stalls round two left on the first two seed sets, each further on than 
   451 for 454: on unarmed after one trip that failed, where the loop would have ended by
   itself. The maintainer's idea in its place, next: the walls near her searched hard before
   a long walk for supplies.
+- **Out of ammo, the walls near her before a long walk for supplies** (the maintainer's,
+  watching the MAP31 loop: walls with things behind them walked past, round after round).
+  With nothing to shoot with, and the nearest thing she needs (health, ammo) over 1,024 off
+  as the crow flies: the walls within 768 of her (and no further than half way to it) are
+  searched as hard as a search for secrets goes (thoroughness 3), ranked as needed, before
+  the walk. Each wall once.
+  - **A go before it** did the same whenever anything she needs was far off, armed or not:
+    over half the runs changed, exits 1,305 for 1,345 on the three sets, stalls 5 for 1
+    (E4M7 down 5, 6 and 7; MAP14 1, 6 and 3), items picked up 2% more. "Needs" takes in a
+    better gun seen and a medikit when she's a little hurt.
+  - **Measured**, out of ammo only: exits 454, 442, 456 for 447, 444, 454 (1,352 for
+    1,345); stalls none for 1 (no stall on any of the three sets); run for run +0.0045
+    (s.e. 0.0031), -0.0014 (0.0037), +0.0011 (0.0032); about 100 runs changed a set. MAP31
+    itself 3 and 1 fewer out on the second and third.

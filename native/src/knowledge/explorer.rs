@@ -299,6 +299,10 @@ pub trait Hooks {
     fn interrupt(&mut self, _x: &Explorer, _obs: &Observation, _obj: &Objective) -> bool {
         false
     }
+    /// has she nothing to shoot with (no gun with a round in it, no fists that would do)?
+    fn unarmed(&self, _obs: &Observation) -> bool {
+        false
+    }
     /// rather the level again than out (asks restart_wanted)
     /// Going on to another level after this one: what she'd take with her had before the exit,
     /// all of it she can get to (`Objective::stock`).
