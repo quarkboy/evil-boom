@@ -567,7 +567,12 @@ impl Knowledge {
     /// Mapped lines she can tell are switches or use-doors (or gun targets), not used yet. A
     /// gun target is told by its look, or by a face unlike the walls either side of it.
     pub fn interactables(&self) -> Vec<usize> {
-        let used: BTreeSet<Mechanism> = self.fired.iter().map(|f| self.tried_key(f.line)).collect();
+        let used: BTreeSet<Mechanism> = self
+            .fired
+            .iter()
+            .filter(|f| self.counts(f))
+            .map(|f| self.tried_key(f.line))
+            .collect();
         self.mapped
             .iter()
             .copied()
@@ -663,7 +668,24 @@ impl Knowledge {
     /// Has she worked that line, or one that works the same (`tried_key`)?
     pub fn tried(&self, li: usize) -> bool {
         let key = self.tried_key(li);
-        self.fired.iter().any(|f| self.tried_key(f.line) == key)
+        self.fired
+            .iter()
+            .any(|f| self.counts(f) && self.tried_key(f.line) == key)
+    }
+
+    /// Does that press count as the line tried? This try at the level's do; one of an earlier
+    /// try's only if she learned what it does. The level begun again, what a press did is
+    /// undone, and a switch she pressed the time before without seeing what it moved is one
+    /// she knows nothing of and hasn't pressed: left as tried, the door it opens stays shut
+    /// for good (E1M5: the closet with the blue key, every go after the first).
+    fn counts(&self, f: &Fired) -> bool {
+        f.life == self.lives
+            || self
+                .by_line
+                .get(&f.line)
+                .into_iter()
+                .flatten()
+                .any(|ti| self.learned.get(ti).is_some_and(|l| !l.is_empty()))
     }
 
     /// Exit lines she can tell are there: mapped ones, or walk-over ones in a sector she has

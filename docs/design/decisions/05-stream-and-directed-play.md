@@ -2667,3 +2667,10 @@ trigger and the launch 8 tics on. Two seed sets, 7,806 rockets in 688 runs.
   +0.0059 (0.0052), +0.0032 (0.0050); rockets hurting their target 61%, nothing 35%.
 - **From here, by the maintainer's word:** an experiment is screened on one seed set; three
   only with their leave.
+
+- **A press from an earlier go counts as tried only if she learned what it does**
+  (2026-11-18; E1M5, stranded three times and stalled). A once-only switch pressed on her
+  first go, what it opened not seen; the level begun again, the door's shut and the switch
+  works, and her note of the press had it tried for good: the closet with the way to the
+  blue key shut every go after. Correctness, not judgement (`Knowledge::counts`). That run:
+  out, 91 of 91. Second seeds: 3 runs changed, no outcome.
