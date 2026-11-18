@@ -631,6 +631,12 @@ pub struct Explorer {
     secrets_had: BTreeSet<usize>,
     /// switches set out to press, and what she knew then (pressed again only knowing more)
     pressed_knowing: BTreeMap<usize, String>,
+    /// this choice is down to the last resort of all: the switches she knows, pressed again
+    /// (`known_switches_again`)
+    known_again: bool,
+    /// since when she has had nothing at all to do (a choice that found nothing, and none
+    /// since that found something)
+    nothing_since: Option<i64>,
     /// where she last failed stuck, and how many objectives in a row did there
     stuck_run: Option<(Point, usize)>,
     /// what she knew when last stuck (no news since: still the same trap)
@@ -833,6 +839,8 @@ impl Explorer {
             crusher_out: BTreeMap::new(),
             suited: false,
             pressed_knowing: BTreeMap::new(),
+            known_again: false,
+            nothing_since: None,
             secrets_mode: false,
             secret_sectors: BTreeSet::new(),
             secrets_had: BTreeSet::new(),

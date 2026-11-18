@@ -58,6 +58,11 @@ const NEAR_WALL: f64 = 448.0;
 /// a repeatable switch whose effect wasn't seen: another go after this
 const REPRESS_AFTER: i64 = 60 * 35;
 
+/// a switch she knows, this near her when there's nothing left to do, is pressed again
+const SWITCH_AT_HAND: f64 = 256.0;
+/// ...once what moved since she last pressed it has been still this long (tics)
+const MOVED_STILL: i64 = 35;
+
 /// a sound is worth going to look into for this long
 const NOISE_TICS: i64 = 60 * 35;
 
@@ -737,11 +742,22 @@ impl Explorer {
             }
             let unsure = doubted.contains(&k.tried_key(li))
                 && !k.rechecked.contains(&(k.tried_key(li), k.lives));
-            if learned_lines.contains(&(li as i64)) && !unsure {
+            // (down to the last resort, the ones she knows the working of as well, and no wait:
+            // a switch at hand, not a door and not a walk away. Shut in with one, she presses
+            // it; she doesn't go round the level pressing what she knows)
+            // And only if something has moved since she last pressed it, and has stopped:
+            // pressed again into the same stillness it does the same nothing, and into a
+            // floor on its way the game ignores it.
+            let at_hand = self.known_again
+                && !t.info.category.is_door()
+                && dist(nav.activation_point(t, pos, reach), pos) <= SWITCH_AT_HAND
+                && k.last_moved()
+                    .is_some_and(|m| m > tic && obs.tic - m >= MOVED_STILL);
+            if learned_lines.contains(&(li as i64)) && !unsure && !at_hand {
                 continue;
             }
             // (a twin isn't waited for: it was never pressed from there)
-            if (obs.tic - tic < REPRESS_AFTER && !unsure && !twin)
+            if (obs.tic - tic < REPRESS_AFTER && !unsure && !twin && !at_hand)
                 || t.activators.is_disjoint(reach)
                 || !t.info.lock.satisfied(keys)
             {
@@ -750,6 +766,7 @@ impl Explorer {
             // Not again knowing no more than when she last set out to press it: what was missed then
             // would be missed again.
             if !unsure
+                && !at_hand
                 && self
                     .pressed_knowing
                     .get(&li)

@@ -947,6 +947,19 @@ impl Knowledge {
     }
 
     /// Sectors last tic, as the knowledge saw them move.
+    /// When what she knew to be moving last started or stopped, this go; none while something
+    /// she knows of is still on its way.
+    pub fn last_moved(&self) -> Option<i64> {
+        if !self.moving.is_empty() {
+            return None;
+        }
+        self.moved_at
+            .values()
+            .chain(self.stopped_at.values())
+            .copied()
+            .max()
+    }
+
     pub fn moved_at(&self, s: usize) -> Option<i64> {
         self.moved_at.get(&s).copied()
     }

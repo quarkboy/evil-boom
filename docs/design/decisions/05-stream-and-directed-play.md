@@ -2732,3 +2732,21 @@ trigger and the launch 8 tics on. Two seed sets, 7,806 rockets in 688 runs.
   - Left: the two jumps on the way to the blue door are over pits with no way out she'd
     plan, and stay the risky pass's. And past the blue door a shotgun down a one-way drop
     can take her off into the moat before the door's tried (one seed, four minutes).
+
+- **Shut in with a switch at hand, she presses it again** (2026-11-18; E1M5's pillars, a
+  run stranded facing the switch). The two pillars are one tag: every raise line and both
+  lowering switches work both. Hers was held half up by her own head under the ledge and
+  rising again as she pressed; the game skips a floor on its way, the other pillar went
+  down, she heard it, and that was the switch learned, truly, and never offered again.
+  - **The rule** (`known_switches_again`, the last resort of all): with nothing at all to
+    do for three seconds, a repeatable switch within 256, not a door, is pressed again
+    though she knows its working, once something has moved since she last pressed it and
+    has come to rest.
+  - **Tried and lost, second seed set, each -0.005 (s.e. 0.0024), 7 exits:** every
+    switch and door in reach; and the switch at hand pressed the moment there was nothing
+    to do. "Nothing to do" is often a second's wait, and pressing into the same stillness
+    spent the one press before the pillar had carried her up, and blocked the minute's
+    re-press that had been getting her out 21 tics ahead of the stranded call.
+  - **As kept, second seed set:** exits 433 for 434, runs stranded 19 for 21, 17 of 1,088
+    runs changed, run for run -0.0003 (s.e. 0.0012). E1M5: the stranded run out, the other
+    stranded one out in 553 s for 1,040, four more out sooner.

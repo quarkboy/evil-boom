@@ -286,7 +286,8 @@ impl Explorer {
     /// 8. the exit, where it was being held back (`held_back_exit`);
     /// 9. the run-jumps missed once (`missed_jumps_again`);
     /// 10. switches and walls from a floor that hurts, the health margin lifted
-    ///     (`with_harm_allowed`).
+    ///     (`with_harm_allowed`);
+    /// 11. a repeatable switch at hand that she knows, pressed again (`known_switches_again`).
     ///
     /// With nothing at all, she stands, and where she can get to is noted as a trap.
     pub(super) fn next(&mut self, obs: &Observation, hooks: &mut dyn Hooks) {
@@ -311,6 +312,7 @@ impl Explorer {
         self.strafing_allowed = false;
         self.harm_allowed = false;
         self.harm_ways_only = false;
+        self.known_again = false;
         self.from_dead_end = false;
         self.resort_wanted = None;
         let mut found = self.ordinary(obs, hooks);
@@ -381,6 +383,14 @@ impl Explorer {
         }
         if !found {
             found = self.with_harm_allowed(obs, hooks);
+        }
+        if !found {
+            found = self.known_switches_again(obs, hooks);
+        }
+        if found {
+            self.nothing_since = None;
+        } else {
+            self.nothing_since.get_or_insert(obs.tic);
         }
         if !found {
             if self.current.is_some() {
@@ -597,6 +607,40 @@ impl Explorer {
         ));
         self.set_jumps(true);
         self.safe_then_risky(obs, hooks)
+    }
+
+    /// Nothing at all, and about to stand: a repeatable switch at hand (`SWITCH_AT_HAND`; not
+    /// a door) that she knows the working of is pressed again, as anyone shut in with a
+    /// switch in front of her presses it. What she
+    /// knows of it may not be all it does, or all it did that time: a press does nothing to
+    /// a floor already moving. (E1M5: two pillars on one tag, hers held half up by her own
+    /// head under the ledge and still rising as she pressed; the other, at rest, went down,
+    /// and that was what the switch did, learned. Up on hers with the switch in front of
+    /// her, a minute stood, and the level again.) Once something has moved since she
+    /// last pressed it and come to rest: into the same stillness a press does the same
+    /// nothing.
+    ///
+    /// Not till she has stood a few seconds with nothing: "nothing to do" is often only a
+    /// floor she set going not there yet, and a press into that is ignored, or sets it going
+    /// back (E1M5 again: the pillar's switch pressed a second after itself, her on the pillar
+    /// coming down; run after run that got out, stranded).
+    fn known_switches_again(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        /// stood with nothing to do this long first (tics)
+        const STOOD: i64 = 3 * 35;
+        if self.nothing_since.is_none_or(|t| obs.tic - t < STOOD) {
+            return false;
+        }
+        self.known_again = true;
+        let found = self.safe_then_risky(obs, hooks);
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing else to do: a switch she knows, again",
+                obs.tic
+            ));
+        } else {
+            self.known_again = false;
+        }
+        found
     }
 
     /// Nothing at all else, walls and all: a switch pressed from a floor that hurts is the only
