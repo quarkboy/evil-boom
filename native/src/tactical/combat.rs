@@ -19,6 +19,7 @@ mod assess;
 mod movement;
 mod moves;
 mod patience;
+mod rockets;
 mod sight;
 mod state;
 mod steering;
@@ -235,6 +236,8 @@ pub struct Combat {
     /// the kinds whose last death moves something on this map, and when one of each last died
     boss_kinds: Vec<&'static str>,
     kind_died: BTreeMap<&'static str, i64>,
+    /// her rockets, measured for the run's statistics (`rockets`)
+    rockets: rockets::Rockets,
     pub ordered_weapon: Option<i32>,
     /// switched away from the ordered gun (something on her, hits coming): not back to it before
     /// this tic, and only once it'd fire (i64::MIN: not switched away)
@@ -388,6 +391,7 @@ impl Combat {
             ordered_gun: None,
             boss_kinds: nav.boss_death_kinds(),
             kind_died: BTreeMap::new(),
+            rockets: rockets::Rockets::default(),
             ordered_weapon: None,
             ordered_away_until: std::cell::Cell::new(i64::MIN),
             ordered_hold_fire: false,
@@ -583,6 +587,7 @@ impl Combat {
         };
         self.see_monsters(obs, me);
         self.see_missiles(obs, me);
+        self.measure_rockets(obs);
         self.see_barrels(obs, me);
         self.heed(obs);
         self.watch_infighting(obs);
