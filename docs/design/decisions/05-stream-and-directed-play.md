@@ -2750,3 +2750,35 @@ trigger and the launch 8 tics on. Two seed sets, 7,806 rockets in 688 runs.
   - **As kept, second seed set:** exits 433 for 434, runs stranded 19 for 21, 17 of 1,088
     runs changed, run for run -0.0003 (s.e. 0.0012). E1M5: the stranded run out, the other
     stranded one out in 553 s for 1,040, four more out sooner.
+
+## Continuous play, and where the bot stops (2026-11-18)
+
+Episodes on one run of lives: 8 seeds, four lives an episode, three stranded restarts, the two
+easiest skills, on `ebf71b6`.
+
+| | skill 1 | skill 2 |
+|---|---|---|
+| E1 | 8/8 | 8/8 |
+| E2 | 8/8 | 8/8 |
+| E3 | 8/8 | 5/8 (three out of lives at E3M8) |
+| E4 | 1/8 | 0/8 (thirteen of fifteen ended at E4M6, two at E4M2) |
+
+- **E4M6, traced.** The cyberdemon guards the exit from a raised room over the lava; the level
+  is nearly all of itself done under its rockets for what kills it (the BFG, cells, an
+  invulnerability: one in its room on the two easy skills, one at lava level on every skill),
+  then the kill point blank. From the episode's loadouts, second skill, 32 deaths: 17 the
+  lava, 15 its rockets; about 19 in the lava pool round the central teleporter (the four
+  lifts, the four sides that go four ways); 0 to 3 cells at 22 of them (she comes in with 1 to
+  82); on walls, teleporter tries, medikits. Each decision right by itself, the order wrong.
+- **Tried and set aside** (`sphere-rush.patch`, not committed): the sphere run for past what
+  it's for with the BFG, 120 cells and 80 health; and the sphere kept as the fight's errand
+  however long the way (the fight's "keeping clear" held her in the lava at the lift to it).
+  E4M6 alone, exits of 16: first skill 6, 11, 11; second skill 0, 2, 1.
+- **The maintainer's, and it's a rule from here:** rules of that size, made for one level's
+  shape, will cost elsewhere; and the plan of a level (what to get first, what to keep, when
+  to spend a suit or a sphere) is past what the bot is for. That's whoever directs her: Evil.
+  The bot's part is to do well what it's told and what's in front of it. A mode that planned
+  E4M6 for her was drafted and dropped on that word.
+- **Left:** E3M8's three on the second skill, not looked at. Whether Evil has the orders such
+  a level needs (keep the cells, stay out of there, that item next, a suit and then across)
+  is the question that follows.
