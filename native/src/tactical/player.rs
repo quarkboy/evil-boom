@@ -1568,17 +1568,21 @@ impl Player {
     }
 
     /// Is cover no answer just now? Back to it `retreat.cover_runs` times running with nothing
-    /// killed and nothing new learned between (each within a minute of the last), it has got
+    /// killed and nothing new learned between (each within three minutes of the last), it has got
     /// her nothing and will again: out, set off for the same thing, the same ones in sight,
     /// back. None for `retreat.cover_rest`, twice as long each time it comes to that, and she
     /// goes on with what she was about. Counts this one.
     fn cover_spent(&mut self, obs: &Observation) -> bool {
+        /// retreats to cover are one run of them with no longer than this between (tics: a
+        /// retreat, the wait out of sight and the walk back to the same ones is a minute or
+        /// more by itself)
+        const COVER_RUN: i64 = 180 * 35;
         if obs.tic < self.cover_off.0 {
             return true;
         }
         let now = (self.fight.combat.kills, self.explorer.knowledge.summary());
         let (n, last, then) = &self.cover_runs;
-        let same = *then == now && obs.tic - last < 60 * 35;
+        let same = *then == now && obs.tic - last < COVER_RUN;
         let n = if same { n + 1 } else { 1 };
         self.cover_runs = (n, obs.tic, now);
         if n <= self.fight.tune.retreat.cover_runs {

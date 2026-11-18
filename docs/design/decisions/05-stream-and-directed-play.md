@@ -2638,3 +2638,32 @@ The four stalls round two left on the first two seed sets, each further on than 
     1,345); stalls none for 1 (no stall on any of the three sets); run for run +0.0045
     (s.e. 0.0031), -0.0014 (0.0037), +0.0011 (0.0032); about 100 runs changed a set. MAP31
     itself 3 and 1 fewer out on the second and third.
+
+## Her rockets, measured (2026-11-18)
+
+The maintainer's, from watching: rockets into walls, perhaps for her moving while one's
+coming out. Each rocket of hers is followed for the run's statistics
+(`tactical/combat/rockets.rs`): what it hurt, and what she and its target did between the
+trigger and the launch 8 tics on. Two seed sets, 7,806 rockets in 688 runs.
+
+- **54% hurt what she aimed at, 5% something else, 41% nothing.**
+- **Not her feet.** 88% are fired with her feet moving (over 16 between trigger and launch),
+  and those hurt their target more often, 56% for 45% stood still, at every range. "She
+  stepped" was in three quarters of the misses only for being in nearly every rocket.
+- **Range.** Under 256, 74%; 256 to 640, 68%; over 640, 41%, and half of all her rockets are
+  fired from there. A rocket's 32 tics to 640, and what it was fired at is elsewhere by then.
+- **Her own blast.** 6.2% go off within the blast's reach of her; in 298 of those 487 she was
+  out of it at the trigger and walked in. Not yet acted on.
+- **The launcher's reach: 768** (`bestiary::weapon`), past which it isn't fired, wide
+  targets excepted (a cyberdemon's 40 across and up: `style::WIDE`). Alone, three seed sets:
+  exits 1,361 for 1,352; a tenth fewer rockets, 60% hurting their target for 54%. Four
+  stalls came with it, none its doing: three at E4M5's exit window, below.
+- **Retreats to cover are one run of them within three minutes** (`cover_spent`), for one:
+  a retreat, the wait and the walk back is a minute by itself, and at E4M5's exit window,
+  a shotgun guy under it too steep to shoot, they came 60.1 s apart and the count began
+  again each time.
+- **The two together, three seed sets:** exits 452, 452, 459 for 454, 442, 456 (1,363 for
+  1,352); stalls 0, 0, 1 for none (E1M5, not traced); run for run -0.0029 (s.e. 0.0054),
+  +0.0059 (0.0052), +0.0032 (0.0050); rockets hurting their target 61%, nothing 35%.
+- **From here, by the maintainer's word:** an experiment is screened on one seed set; three
+  only with their leave.
