@@ -292,6 +292,10 @@ pub fn weapon(slot: i32) -> Weapon {
             hitscan: false,
             speed: 20.0,
             splash: 160.0,
+            // (20 a tic: at 768 a rocket's 38 tics in the air, and what it was fired at has had
+            // that long to be elsewhere. Measured over 7,806 of hers: 68% hurt their target
+            // fired from 256 to 640, 41% from further)
+            reach: 768.0,
             keep: (320.0, 1024.0),
             pellets: 2.0,
             ..w(5, 1, 180.0, 20.0)

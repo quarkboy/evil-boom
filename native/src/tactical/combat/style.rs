@@ -64,6 +64,9 @@ pub fn standoff(name: &str) -> f64 {
 
 /// a man's size, as the game has its zombies and imps: (radius, height)
 const MAN: (f64, f64) = (20.0, 56.0);
+/// a monster this wide (a cyberdemon's 40 and up: mancubus, arachnotron, the spider) is worth a
+/// rocket from beyond the launcher's reach
+const WIDE: f64 = 40.0;
 
 impl Combat {
     /// Close enough to shoot at with w: inside its reach, or (at something that hurts her from
@@ -97,6 +100,10 @@ impl Combat {
         // A gun's reach is how far its spread is worth a shot at something the size of a man. At
         // something wider it's worth it from farther: as far as as much of the shot lands as lands
         // on a man at its reach.
+        // (and a rocket at something wide: the blast's reach makes up for where it's got to)
+        if w.slot == 5 && info.radius >= WIDE {
+            return true;
+        }
         w.hitscan
             && w.spread > 0.0
             && w.slot != 1
