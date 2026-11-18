@@ -384,11 +384,89 @@ pub(crate) enum EndKind {
     PressedNothing,
 }
 
-/// waiting for an order (directed): a look round this often (tics), turning this far (degrees)
-/// over this long
-const WAIT_LOOK_EVERY: i64 = 4 * 35;
-const WAIT_LOOK_TURN: f64 = 90.0;
-const WAIT_LOOK_TICS: i64 = 35;
+/// With nothing to do: one look all round (what's behind her may be something to do), then
+/// looking about as someone waiting does, not spinning on the spot: round to one side by so
+/// much, a pause, back to the other by so much, a pause, each as far, as fast and as long as
+/// it happens to be. The same every time on a run's seed: its own numbers, begun from the
+/// tic and the spot.
+#[derive(Clone, Debug)]
+struct IdleLook {
+    /// the look all round's tics left
+    round: i64,
+    /// turning now: degrees left of it and degrees a tic (positive: to her right)
+    turning: (f64, f64),
+    /// ...or stood: tics left
+    pause: i64,
+    /// which way the next turn goes
+    right: bool,
+    seed: u64,
+}
+
+impl IdleLook {
+    /// the look all round, a tic's turn and how many
+    const ROUND: (f64, i64) = (10.0, 36);
+    /// a turn's size (degrees), its pace (degrees a tic) and a pause's length (tics)
+    const TURN: (f64, f64) = (25.0, 120.0);
+    const PACE: (f64, f64) = (1.5, 6.0);
+    const PAUSE: (f64, f64) = (12.0, 90.0);
+
+    /// Waiting for an order: the looking about only, no look all round first (she's just
+    /// done what she was told, and has seen where she is).
+    fn waiting(obs: &Observation) -> IdleLook {
+        IdleLook {
+            round: 0,
+            ..IdleLook::new(obs)
+        }
+    }
+
+    fn new(obs: &Observation) -> IdleLook {
+        let seed = (obs.tic as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+            ^ obs.x.to_bits().rotate_left(17)
+            ^ obs.y.to_bits().rotate_left(41);
+        IdleLook {
+            round: Self::ROUND.1,
+            turning: (0.0, 0.0),
+            pause: 0,
+            right: seed & 1 == 0,
+            seed: seed | 1,
+        }
+    }
+
+    /// A number in `range`, the next of hers (xorshift).
+    fn pick(&mut self, range: (f64, f64)) -> f64 {
+        self.seed ^= self.seed << 13;
+        self.seed ^= self.seed >> 7;
+        self.seed ^= self.seed << 17;
+        let unit = (self.seed >> 11) as f64 / (1u64 << 53) as f64;
+        range.0 + (range.1 - range.0) * unit
+    }
+
+    /// This tic's turn (degrees, positive to her right).
+    fn turn(&mut self) -> f64 {
+        if self.round > 0 {
+            self.round -= 1;
+            return Self::ROUND.0;
+        }
+        if self.pause > 0 {
+            self.pause -= 1;
+            return 0.0;
+        }
+        if self.turning.0 <= 0.0 {
+            // (the next turn: the other way, and a pause after it)
+            let size = self.pick(Self::TURN);
+            let pace = self.pick(Self::PACE);
+            self.turning = (size, if self.right { pace } else { -pace });
+            self.right = !self.right;
+        }
+        let step = self.turning.1.abs().min(self.turning.0);
+        self.turning.0 -= step;
+        if self.turning.0 <= 0.0 {
+            self.pause = self.pick(Self::PAUSE) as i64;
+        }
+        step.copysign(self.turning.1)
+    }
+}
+
 /// On instinct for whoever directs her: going back over what she's done (a walk across floor
 /// she's seen, walls pressed for secrets, another look, a hunt, a spare pickup a way off), and
 /// when (her `explore` setting).
@@ -524,6 +602,8 @@ pub struct Explorer {
     follower_seen: usize,
     glance_at: Option<f64>,
     idle_since: i64,
+    /// nothing to do: how she's looking about meanwhile (`IdleLook`)
+    idle: Option<IdleLook>,
     /// the exit only once there's nothing else to do (the 100% runs)
     pub exit_held_back: bool,
     /// ...but before anything risky (a drop she mightn't come back from, a floor that hurts):
@@ -740,6 +820,7 @@ impl Explorer {
             follower_seen: 0,
             glance_at: None,
             idle_since: -1_000_000_000,
+            idle: None,
             exit_held_back: false,
             exit_before_risks: false,
             patience: 1.0,
@@ -958,24 +1039,17 @@ impl Explorer {
         }
         if self.directed {
             // Given objectives only: when the one in hand ends, how it ended is kept, and then nothing
-            // till the next is given. She stays where she is, looking round now and then (a
-            // quarter turn one way, a while, a quarter turn back), as a player waiting does.
+            // till the next is given. She stays where she is, looking about as a player waiting
+            // does (`IdleLook`).
             if (self.current.is_some() || self.follower.is_some()) && self.need_new(obs, hooks) {
                 self.note_end(obs);
             }
             if self.current.is_none() {
                 let (forward, strafe) = crate::motor::brake(obs, obs.angle);
-                let into = obs.tic.rem_euclid(WAIT_LOOK_EVERY);
-                let way = if (obs.tic / WAIT_LOOK_EVERY) % 2 == 0 {
-                    1.0
-                } else {
-                    -1.0
-                };
-                let turn = if into < WAIT_LOOK_TICS {
-                    way * WAIT_LOOK_TURN / WAIT_LOOK_TICS as f64
-                } else {
-                    0.0
-                };
+                let turn = self
+                    .idle
+                    .get_or_insert_with(|| IdleLook::waiting(obs))
+                    .turn();
                 return Controls {
                     forward,
                     strafe,
@@ -994,11 +1068,14 @@ impl Explorer {
             }
         }
         let Some(f) = &mut self.follower else {
+            // (nothing to do: a look all round, then looking about as someone waiting does)
+            let idle = self.idle.get_or_insert_with(|| IdleLook::new(obs));
             return Controls {
-                turn: 10.0,
+                turn: idle.turn(),
                 ..Controls::default()
-            }; // (nothing to do: look round)
+            };
         };
+        self.idle = None;
         // (on a floor she knows hurts, with no suit on: along the route at full pace whichever
         // way the fight has her facing. Backing off an imp across nukage she went at a sixth
         // of her pace, 5 health a second, 70 in all)
