@@ -401,8 +401,7 @@ impl RouteFollower {
         let since = *self.jam_since.get_or_insert_with(|| {
             self.log.add(
                 obs.tic,
-                "a lift's line ahead with its floor's door open over it: waiting for the door"
-                    .to_string(),
+                "a lift's line ahead with its floor's door open over it: waiting for the door",
             );
             obs.tic
         });
