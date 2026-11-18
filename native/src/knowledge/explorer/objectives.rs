@@ -702,10 +702,33 @@ impl Explorer {
                 None => last_press.push((f.line, tic)),
             }
         }
+        // And the other lines of what a press worked, ones she's mapped and never pressed
+        // themselves: the same thing, to be had from where they are. Two pillars that go up
+        // and down together, a switch on each: the one pressed with them down already did
+        // nothing she saw, and up on the other, its switch in front of her the only way off,
+        // it was "tried" (E1M5: stranded there, and again every go). Not where she learned
+        // what the press does from any line of it: a door's other face is no news (MAP14: a
+        // hundred and fifty doors over again, an hour of it).
+        let pressed: BTreeSet<usize> = last_press.iter().map(|p| p.0).collect();
+        // (a boss's death works floors with no line: -1)
+        let learned_keys: BTreeSet<crate::knowledge::model::Mechanism> = learned_lines
+            .iter()
+            .filter(|&&li| li >= 0)
+            .map(|&li| k.tried_key(li as usize))
+            .collect();
+        let twins: Vec<(usize, i64)> = k
+            .mapped
+            .iter()
+            .copied()
+            .filter(|li| !pressed.contains(li) && by_line.contains_key(li))
+            .filter(|&li| !learned_keys.contains(&k.tried_key(li)))
+            .filter_map(|li| last_by_key.get(&k.tried_key(li)).map(|&tic| (li, tic)))
+            .collect();
         let doubted: BTreeSet<crate::knowledge::model::Mechanism> =
             k.doubts.keys().map(|(m, _)| *m).collect();
         let mut again = Vec::new();
-        for &(li, tic) in &last_press {
+        for &(li, tic) in last_press.iter().chain(&twins) {
+            let twin = !pressed.contains(&li);
             let Some(t) = by_line.get(&li) else { continue };
             if !k.mapped.contains(&li)
                 || !matches!(t.info.trigger, Trigger::SR | Trigger::GR | Trigger::DR)
@@ -717,7 +740,8 @@ impl Explorer {
             if learned_lines.contains(&(li as i64)) && !unsure {
                 continue;
             }
-            if (obs.tic - tic < REPRESS_AFTER && !unsure)
+            // (a twin isn't waited for: it was never pressed from there)
+            if (obs.tic - tic < REPRESS_AFTER && !unsure && !twin)
                 || t.activators.is_disjoint(reach)
                 || !t.info.lock.satisfied(keys)
             {
