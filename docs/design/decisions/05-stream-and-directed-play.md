@@ -2717,3 +2717,18 @@ trigger and the launch 8 tics on. Two seed sets, 7,806 rockets in 688 runs.
     (MAP14 skill 4, died at 2,888 s before: at the blue door only at 3,111 s, then "try
     door (line 1077): no route", seen on MAP14 before these two; not traced); run for run
     -0.0006 (s.e. 0.0041), 209 of 1,088 runs changed. MAP06: 2 more out.
+
+- **A fall under a jump is for good only with no way back she'd plan** (2026-11-18;
+  MAP14, an hour's cap hit). The gap before the exit's door: a window, 88 of moat, the
+  ledge with the door. `falls_for_good` asked whether she could walk from under the flight
+  back to either end, and from the moat she can't; but it's the moat she has been round
+  all level, a lift out of it, and the way back to the window is the lift, the blue door
+  and the jumps that brought her. The door past the gap was "no route" till everything
+  safe in the level had been gone over again, five minutes and more. Now, where walking
+  back fails, the planner is asked for a way from there to the takeoff (switches, doors
+  she has the key to, jumps), once for what she knows (`back_up`).
+  - That run: out at 1,998 s, 78 of 78. First seed set: exits 450 for 451, at the cap 0
+    for 1, no stalls; run for run +0.0017 (s.e. 0.0028), 109 of 1,088 runs changed.
+  - Left: the two jumps on the way to the blue door are over pits with no way out she'd
+    plan, and stay the risky pass's. And past the blue door a shotgun down a one-way drop
+    can take her off into the moat before the door's tried (one seed, four minutes).

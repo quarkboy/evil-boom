@@ -500,11 +500,12 @@ impl Explorer {
             let first = route.clone();
             for _ in 0..REPLANS {
                 let Some(r) = route.as_ref() else { break };
-                let over: Vec<&crate::navigator::Jump> = r
+                let over: Vec<crate::navigator::Jump> = r
                     .legs
                     .iter()
                     .flat_map(|leg| leg.path.jumps.iter())
-                    .filter(|j| self.falls_for_good(j, &view, &r.states))
+                    .filter(|j| self.falls_for_good(j, &view, &r.states, keys))
+                    .cloned()
                     .collect();
                 if over.is_empty() {
                     break;
@@ -764,7 +765,7 @@ impl Explorer {
                 leg.path
                     .jumps
                     .iter()
-                    .any(|j| self.falls_for_good(j, view, &route.states))
+                    .any(|j| self.falls_for_good(j, view, &route.states, route.keys))
             })
         {
             return Some(Refusal::JumpOverNoWayBack);
@@ -1069,9 +1070,22 @@ impl Explorer {
 
     /// A run-jump that, fallen short of, leaves her somewhere she knows no way back from to
     /// either end of it: what's under its flight, lower than she could step back up from.
-    fn falls_for_good(&self, jump: &crate::navigator::Jump, view: &View, states: &States) -> bool {
+    ///
+    /// No way back by walking, that is, and none she'd plan either: by a lift's switch, a
+    /// door she has the key to, the jumps that brought her. (MAP14: the gap before the exit's
+    /// door, 88 of water under it; the water's the moat she has been round all level, a lift
+    /// out of it, but the way back up to the window is through the blue door and two jumps,
+    /// so the door past the gap was "no route" till everything safe in the level had been
+    /// gone over again, five minutes and more, and an hour's cap hit.)
+    fn falls_for_good(
+        &mut self,
+        jump: &crate::navigator::Jump,
+        view: &View,
+        states: &States,
+        keys: crate::specials::Keys,
+    ) -> bool {
         const EVERY: f64 = 16.0;
-        let nav = &self.nav;
+        let nav = Rc::clone(&self.nav);
         // (A takeoff on the very lip of a pit can be in the pit's own poly, the pit then taken
         // for an end of the jump and not looked under. Left so: told right, the jumps she makes
         // from such lips are refused, and the score is the worse for it; see the decision log.)
@@ -1095,10 +1109,51 @@ impl Explorer {
             }
             at += EVERY;
         }
-        under.values().any(|&poly| {
-            let back = view.reachable(poly, states, None);
-            !back.contains(&from) && !back.contains(&jump.dest_poly)
-        })
+        let stuck: Vec<usize> = under
+            .into_values()
+            .filter(|&poly| {
+                let back = view.reachable(poly, states, None);
+                !back.contains(&from) && !back.contains(&jump.dest_poly)
+            })
+            .collect();
+        stuck
+            .into_iter()
+            .any(|poly| !self.back_up(jump, poly, view, states, keys))
+    }
+
+    /// Is there a way she'd plan from poly `under`, below a jump's flight, back to its
+    /// takeoff? Worked out once for what she knows.
+    fn back_up(
+        &mut self,
+        jump: &crate::navigator::Jump,
+        under: usize,
+        view: &View,
+        states: &States,
+        keys: crate::specials::Keys,
+    ) -> bool {
+        let known = self.knowledge.known_summary();
+        let id = (jump.key(), under);
+        if let Some((_, back)) = self.ways_back.get(&id).filter(|(k, _)| *k == known) {
+            return *back;
+        }
+        let fired = self.spent_once();
+        let back = view
+            .plan(
+                self.nav.mesh.center(under),
+                &[jump.takeoff],
+                &Plan {
+                    keys,
+                    states: Some(states),
+                    key_items: &[],
+                    max_expansions: self.plan_expansions,
+                    max_seconds: PLAN_SECONDS,
+                    goal_triggers: &[],
+                    fired: &fired,
+                },
+            )
+            .is_some();
+        self.ways_back.insert(id, (known, back));
+        back
     }
 
     /// Does the route drop her somewhere she couldn't get back from, with nothing there to try

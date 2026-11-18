@@ -688,6 +688,9 @@ pub struct Explorer {
     /// run-jumps left out of the plan being made now: over somewhere there's no getting back
     /// from, while another way is looked for (empty between plans)
     unsafe_jumps: BTreeSet<String>,
+    /// a jump and a floor under its flight: is there a way back up from there to its takeoff,
+    /// as she'd plan one (`falls_for_good`), and what she knew when that was worked out
+    ways_back: BTreeMap<(String, usize), (String, bool)>,
     /// jumps that land where she's been wedged (`stuck_again`): not taken again, this level
     wedge_jumps: BTreeSet<String>,
     /// directed: the objective in hand is pressed on with mid-fight, shooting and dodging on
@@ -858,6 +861,7 @@ impl Explorer {
             knocked_jumps: BTreeMap::new(),
             clock: 0,
             unsafe_jumps: BTreeSet::new(),
+            ways_back: BTreeMap::new(),
             wedge_jumps: BTreeSet::new(),
             press_on: false,
             panic_tries: 0,
