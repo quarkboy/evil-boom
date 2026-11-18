@@ -8,7 +8,8 @@ use super::triggers::{LegKey, TimedKey};
 use super::world::{without, world_hash, Pair, Timers, World, ACTIVATION_TICS, LEG_SPEED};
 use super::{KeySet, PlanCaches, Planner};
 use crate::det::{HashMap, HashSet};
-use crate::geom::{dist, Point};
+use crate::geom::{dist, Point, MAX_STEP};
+use crate::motor::{creep_pace, CREEP_RANGE, LANDING_ROOM};
 use crate::nav::{Doors, Found, HeightSource, Heights, Planned, TeleKind, Via};
 use crate::stats::{self, Phase};
 use std::rc::Rc;
@@ -39,12 +40,45 @@ impl HeightSource for Asked<'_> {
 
 impl Planner<'_> {
     /// When the player gets to each sector along a path (tics, from 10 for setting off).
-    fn arrival_tics(&self, path: &Found) -> HashMap<usize, f64> {
+    ///
+    /// A drop onto a landing narrow the way she's going is crept up to and stepped off
+    /// (`creep_to_drop`): the creep and the fall, with no ground made in it, are counted, as
+    /// the follower will take them (MAP06: a blazing lift's 4.4 s, a drop of 320 onto 45 of
+    /// floor on the way, planned at 3.4 s and walked in 5.4, 23 times).
+    fn arrival_tics(&self, path: &Found, states: &World) -> HashMap<usize, f64> {
         let mut out: HashMap<usize, f64> = HashMap::default();
+        // (a floor that's one height in this world; a lift's two say nothing of a drop)
+        let floor = |s: usize| match states[s].as_slice() {
+            [h] => Some(h.floor),
+            _ => None,
+        };
+        let floor_at = |q: Point| self.nav.sector_at(q).and_then(floor);
+        let mut last: Option<(usize, Point)> = None;
+        let mut crept = 0.0;
         let mut note = |q: Point, d: f64| {
-            if let Some(s) = self.nav.sector_at(q) {
-                out.entry(s).or_insert(ACTIVATION_TICS + d / LEG_SPEED);
+            let Some(s) = self.nav.sector_at(q) else {
+                return;
+            };
+            if let Some((ls, lq)) = last.filter(|(ls, _)| *ls != s) {
+                let step = dist(lq, q);
+                if let (Some(a), Some(b), true) = (floor(ls), floor(s), step > 0.0) {
+                    let dir = ((q.0 - lq.0) / step, (q.1 - lq.1) / step);
+                    let room = (1..)
+                        .map(|k| f64::from(k) * 8.0)
+                        .take_while(|&r| r < LANDING_ROOM)
+                        .find(|&r| {
+                            floor_at((q.0 + dir.0 * r, q.1 + dir.1 * r))
+                                .is_none_or(|f| f < b - MAX_STEP)
+                        });
+                    if let (Some(room), true) = (room, a - b > MAX_STEP) {
+                        crept += CREEP_RANGE / creep_pace(room, a - b) + (2.0 * (a - b)).sqrt()
+                            - CREEP_RANGE / LEG_SPEED;
+                    }
+                }
             }
+            last = Some((s, q));
+            out.entry(s)
+                .or_insert(ACTIVATION_TICS + d / LEG_SPEED + crept);
         };
         let mut so_far = 0.0;
         let mut prev: Option<Point> = None;
@@ -72,7 +106,7 @@ impl Planner<'_> {
         }
         for &poly in &path.polys {
             out.entry(self.nav.poly_sector[poly])
-                .or_insert(ACTIVATION_TICS + path.cost / LEG_SPEED);
+                .or_insert(ACTIVATION_TICS + path.cost / LEG_SPEED + crept);
         }
         out
     }
@@ -154,7 +188,7 @@ impl Planner<'_> {
         if deadlines.is_empty() {
             return Some((path, states.clone()));
         }
-        let mut arrive = self.arrival_tics(&path);
+        let mut arrive = self.arrival_tics(&path, states);
         // what a jump needs, it needs when taking off
         for (takeoff, requires) in self.jumps(&path) {
             let Some(&at) = self.nav.sector_at(takeoff).and_then(|src| arrive.get(&src)) else {

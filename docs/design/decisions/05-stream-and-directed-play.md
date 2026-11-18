@@ -2702,3 +2702,18 @@ trigger and the launch 8 tics on. Two seed sets, 7,806 rockets in 688 runs.
   - **The stall left:** MAP06, skill 3 (died at 438 s before). A blazing lift's window of
     4.4 s to make by a drop of 320 that she creeps up to (`creep_to_drop`), 23 times
     missed. Neither the pin nor the ledge rule acts there. Next.
+
+- **MAP06's east lift switch** (2026-11-18): it lowers the west lift for 4.4 s, and her
+  way there was a drop of 320 onto 45 of floor with nukage past it. Two faults, traced tic
+  by tic, fixed together; that run out in 734 s, 85 of 90.
+  - **The creep is kept till she falls** (`RouteFollower::creep`): her middle over the
+    edge, the cap went, and with her box still on the ledge four tics she was at 6.5 a tic
+    for the 25 of the fall: 140 out, in the nukage.
+  - **The plan counts the creep and the fall** (`arrival_tics`): a drop onto a landing
+    narrow the way she's going costs what the follower takes over it (`motor::creep_pace`,
+    shared). Planned at 3.4 s, walked in 5.4: pressed, missed and gone round again 23
+    times. Now that window isn't planned by that drop.
+  - First seed set: exits 451 for 452, stalls 0 for 1, one run at the hour's cap for none
+    (MAP14 skill 4, died at 2,888 s before: at the blue door only at 3,111 s, then "try
+    door (line 1077): no route", seen on MAP14 before these two; not traced); run for run
+    -0.0006 (s.e. 0.0041), 209 of 1,088 runs changed. MAP06: 2 more out.
