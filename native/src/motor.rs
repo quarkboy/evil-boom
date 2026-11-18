@@ -17,6 +17,21 @@ pub const RUN_THRUST: f64 = 1.5625;
 /// ORIG_FRICTION, on the ground only
 pub const FRICTION: f64 = 0.90625;
 
+/// A drop this near ahead onto a narrow landing...
+pub const CREEP_RANGE: f64 = 48.0;
+/// ...narrower than this the way she's going...
+pub const LANDING_ROOM: f64 = 192.0;
+/// ...is stepped off no slower than this (units a tic).
+pub const DROP_CREEP: f64 = 1.0;
+
+/// The pace to step off a drop of `fall` at, to go no further than `room` after: the fall,
+/// about sqrt(2h) tics, and the slide on landing, 1 / (1 - friction) tics' worth, at the
+/// speed she went over.
+pub fn creep_pace(room: f64, fall: f64) -> f64 {
+    let tics = (2.0 * fall).sqrt() + 1.0 / (1.0 - FRICTION);
+    (room / tics).max(DROP_CREEP)
+}
+
 /// degrees a tic she turns running across sinking floors
 pub(crate) const RUN_TURN: f64 = 10.0;
 

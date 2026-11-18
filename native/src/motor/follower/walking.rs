@@ -9,7 +9,9 @@ use super::{
     CROSS_REST_WAIT, LIFT_STILL,
 };
 use crate::geom::{cells, closest_point, dist, segment_distance, Point};
-use crate::motor::{heading, Controls, Observation, Track, BRAKE, FULL_SPEED, TICRATE};
+use crate::motor::{
+    heading, Controls, Observation, Track, BRAKE, CREEP_RANGE, FULL_SPEED, LANDING_ROOM, TICRATE,
+};
 use crate::nav::{can_cross, Heights};
 use crate::navigator::{
     closest_on_portal, PathNote, ITEM_RADIUS, MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT, PLAYER_RADIUS,
@@ -31,15 +33,6 @@ const PICKUP_REACHED: f64 = 6.0;
 
 /// a barrel this close when stuck is what's in the way
 const BARREL_IN_WAY: f64 = 40.0;
-
-/// a drop this near ahead onto a narrow landing...
-const CREEP_RANGE: f64 = 48.0;
-
-/// ...narrower than this the way she's going...
-const LANDING_ROOM: f64 = 192.0;
-
-/// ...is stepped off no slower than this (units a tic)
-const DROP_CREEP: f64 = 1.0;
 
 /// how far ahead to look for crossings that became one-way drops
 const DROP_CHECK_DIST: f64 = 48.0;
@@ -124,7 +117,18 @@ impl RouteFollower {
             Drop::Replanned => return self.walk(obs),
             Drop::GiveBack(why) => return self.fail(obs, why),
         }
+        // (crept off a ledge, she's stepping off it till she falls: her middle over the edge
+        // and her box still on it, let go to full pace she had four tics' push before the
+        // fall, 6.5 a tic for the 25 of it, clean over the 45 of floor the creep was for.
+        // MAP06: into the nukage, the lift's window gone, 23 times)
+        let crept = self.creep.take();
         self.creep_to_drop(obs);
+        if self.speed_cap.is_finite() {
+            self.creep = Some(self.speed_cap);
+        } else if let Some(c) = crept.filter(|_| self.overhanging(obs)) {
+            self.speed_cap = c;
+            self.creep = Some(c);
+        }
         // (a crusher before a mover: what it's waited for differs, and where)
         if let Some(c) = self.crusher_ahead(obs) {
             return c;
@@ -952,12 +956,11 @@ impl RouteFollower {
                     mesh.poly_at((edge.0 + dir.0 * r, edge.1 + dir.1 * r))
                         .is_none_or(|q| obs.heights[mesh.poly(q).sector].floor < b.floor - MAX_STEP)
                 });
-            // (as fast as goes no further than that: the fall, about sqrt(2h) tics, and the
-            // slide on landing, 1 / (1 - friction) tics' worth, at the speed she went over)
+            // (as fast as goes no further than that)
             if let Some(room) = room {
-                let tics =
-                    (2.0 * (a.floor - b.floor)).sqrt() + 1.0 / (1.0 - crate::motor::FRICTION);
-                self.speed_cap = self.speed_cap.min((room / tics).max(DROP_CREEP));
+                self.speed_cap = self
+                    .speed_cap
+                    .min(crate::motor::creep_pace(room, a.floor - b.floor));
             }
             return;
         }

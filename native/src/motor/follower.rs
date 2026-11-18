@@ -383,6 +383,9 @@ pub struct RouteFollower {
     /// the tic she last stood turned for a press at a door or switch she was waiting at
     press_tic: Option<i64>,
     speed_cap: f64,
+    /// the pace she was stepping off a ledge at last tic (`creep_to_drop`), kept while her box
+    /// still holds her up on it
+    creep: Option<f64>,
     live: Vec<Heights>,
     /// the heights the tic before (which way a ceiling's going)
     prev_live: Vec<Heights>,
@@ -530,6 +533,7 @@ impl RouteFollower {
             press_tic: None,
             last_use: -USE_EVERY,
             speed_cap: f64::INFINITY,
+            creep: None,
             live: Vec::new(),
             prev_live: Vec::new(),
             moving_wait: None,
