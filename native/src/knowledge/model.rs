@@ -293,6 +293,10 @@ pub struct Knowledge {
     line_subsectors: BTreeMap<usize, BTreeSet<usize>>,
 }
 
+/// `Knowledge::known`: lines mapped, sectors, effects learned, doubts, untried switches and
+/// doors, exits seen.
+pub type Known = (usize, usize, usize, usize, usize, usize);
+
 impl Knowledge {
     pub fn new(nav: Rc<Navigator>, mortal: bool, perceive: bool) -> Knowledge {
         let m = Arc::clone(&nav.map);
@@ -926,6 +930,19 @@ impl Knowledge {
             self.doubts.len(),
             self.interactables().len(),
             self.exits().len()
+        )
+    }
+
+    /// What she knows of the map, to tell whether anything's been learned since: `summary`
+    /// without the count of lines fired (a teleporter walked again is nothing new).
+    pub fn known(&self) -> Known {
+        (
+            self.mapped.len(),
+            self.sectors.len(),
+            self.learned.values().map(BTreeSet::len).sum(),
+            self.doubts.len(),
+            self.interactables().len(),
+            self.exits().len(),
         )
     }
 

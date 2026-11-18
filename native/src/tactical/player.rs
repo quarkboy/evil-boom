@@ -21,7 +21,7 @@ use crate::decisions::Record;
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
 use crate::knowledge::explorer::{Explorer, Hooks, Kind, Objective};
-use crate::knowledge::model::Knowledge;
+use crate::knowledge::model::{Knowledge, Known};
 use crate::motor::follower::RouteFollower;
 use crate::motor::{Controls, Observation, Thing};
 use crate::navigator::{Navigator, States, PLAYER_HEIGHT, PLAYER_RADIUS};
@@ -247,7 +247,7 @@ pub struct Player {
     away_since: Option<(i64, (i32, usize))>,
     /// retreats to cover one after another with nothing come of them: how many, when the last
     /// was, and what she'd killed and knew then
-    cover_runs: (u32, i64, (i32, String)),
+    cover_runs: (u32, i64, (i32, Known)),
     /// no cover till then (`retreat.cover_rest`), and how many times it's been rested so
     cover_off: (i64, u32),
     /// the last retreat tried was for cover
@@ -327,7 +327,7 @@ impl Player {
             barrel_runs: Vec::new(),
             retreat_tic: -1_000_000_000,
             away_since: None,
-            cover_runs: (0, 0, (0, String::new())),
+            cover_runs: (0, 0, (0, Known::default())),
             cover_off: (0, 0),
             tried_cover: false,
             walled_tic: -1_000_000_000,
@@ -1580,7 +1580,7 @@ impl Player {
         if obs.tic < self.cover_off.0 {
             return true;
         }
-        let now = (self.fight.combat.kills, self.explorer.knowledge.summary());
+        let now = (self.fight.combat.kills, self.explorer.knowledge.known());
         let (n, last, then) = &self.cover_runs;
         let same = *then == now && obs.tic - last < COVER_RUN;
         let n = if same { n + 1 } else { 1 };
