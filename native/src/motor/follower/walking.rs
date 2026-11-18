@@ -203,7 +203,7 @@ impl RouteFollower {
             return self.stuck(obs);
         }
         // follow the track: steer for a point a little ahead, look further ahead
-        let mut carrot = self.carrot(pos, track);
+        let mut carrot = self.carrot(obs, track);
         if seg.end == SegEnd::Teleport && to_end < REACHED {
             carrot = seg.look.pts[seg.look.pts.len() - 1]; // (keep going through the line)
         }
@@ -739,7 +739,11 @@ impl RouteFollower {
 
     /// The point to steer for: as far ahead on the track as the straight line there keeps the
     /// box clear (corners rounded where there's room), else the next waypoint exactly.
-    fn carrot(&self, pos: Point, track: &Track) -> Point {
+    fn carrot(&self, obs: &Observation, track: &Track) -> Point {
+        let pos = obs.pos();
+        if self.overhanging(obs) {
+            return track.carrot(self.at.index, self.at.along, TRACK_AHEAD);
+        }
         for ahead in CARROT_STEPS {
             let q = track.point_at(self.at.along + ahead);
             // (a path that doubles back can put a point far along it right next to her)
@@ -756,6 +760,31 @@ impl RouteFollower {
             }
         }
         track.carrot(self.at.index, self.at.along, TRACK_AHEAD)
+    }
+
+    /// Is she held up on a ledge with her middle already over the floor below (the box's
+    /// trailing edge still on the ledge: she falls when all of it is off)? Then the track is
+    /// kept to, no corner rounded: where a ledge is left is the plan's business (the stretch
+    /// of it with room to land: `NavCore::drop_stretch`), and turned along it up there she
+    /// comes off it elsewhere, or not at all (E4M6, the narrow step below the lift, a low
+    /// ceiling past it: turned north with half her box over, stopped by the ceiling where the
+    /// step narrows, for good).
+    fn overhanging(&self, obs: &Observation) -> bool {
+        let nav = &self.view.nav;
+        let floor = |p: Point| {
+            let poly = nav.mesh.poly_at(p)?;
+            Some(self.live.get(nav.mesh.poly(poly).sector)?.floor)
+        };
+        let (Some(z), pos) = (obs.z, obs.pos()) else {
+            return false;
+        };
+        let r = PLAYER_RADIUS;
+        // (not falling past: on the floor one of her corners is over)
+        floor(pos).is_some_and(|f| z - f > MAX_STEP)
+            && [(-r, -r), (-r, r), (r, -r), (r, r)]
+                .into_iter()
+                .filter_map(|(dx, dy)| floor((pos.0 + dx, pos.1 + dy)))
+                .any(|f| (z - f).abs() < 0.5)
     }
 
     /// Can the box move straight from p to q without touching a wall, solid thing or
