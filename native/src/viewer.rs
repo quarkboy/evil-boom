@@ -304,6 +304,8 @@ pub struct WatchOptions {
     pub ultra_speed: f64,
     /// (`--ultra-after N`) hers on a level once she's died N times there
     pub ultra_after: Option<i32>,
+    /// (`--ultra-back S`) how many seconds back a death is undone to
+    pub ultra_back: f64,
     /// she plays as mortal and nothing hurts her (`--charmed`)
     pub charmed: bool,
     /// the chaingun and bullets for ever (`--endless-bullets`)
@@ -692,6 +694,8 @@ struct Watch {
     /// (`--ultra-after N`) hers by dying: on a level once she's died N times there (see
     /// `ultra::LIVE_CAP`)
     ultra_after: Option<i32>,
+    /// (`--ultra-back S`) how far back a death is undone to, in tics
+    ultra_back: i64,
     /// her deaths on this level that stood
     ultra_deaths: i32,
     /// what she has of it, in tics
@@ -1347,6 +1351,7 @@ fn level(
     watch.hold = hold;
     watch.endless_bullets = o.endless_bullets;
     watch.ultra_after = o.ultra_after;
+    watch.ultra_back = (o.ultra_back * TICRATE) as i64;
     // (hers by dying, and no workers asked for: eight, or each look would stop the picture)
     watch.ultra_workers = if o.ultra_after.is_some() && o.workers == 0 {
         8
@@ -1899,6 +1904,7 @@ impl Watch {
             ultra_mask: std::cell::RefCell::new((((0, 0, 0, 0), 0), Vec::new())),
             ultra_heat: std::cell::Cell::new((0.0, 0.0)),
             ultra_after: None,
+            ultra_back: crate::ultra::LIVE_BACK,
             ultra_deaths: 0,
             ultra_charge: 0.0,
             ultra_earned: false,
@@ -2181,10 +2187,7 @@ impl Watch {
             if !self.ultra_unlocked() || self.ultra_charge < crate::ultra::LIVE_LEAST {
                 return;
             }
-            let Some(back) = self
-                .ultra_rolling
-                .back(&mut self.engine, crate::ultra::LIVE_BACK)
-            else {
+            let Some(back) = self.ultra_rolling.back(&mut self.engine, self.ultra_back) else {
                 return;
             };
             self.clock_ahead += back;

@@ -107,6 +107,13 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
                         .map_err(|_| "--ultra-after N".to_string())?,
                 );
             }
+            "--ultra-back" => {
+                o.ultra_back = value("--ultra-back")?
+                    .parse()
+                    .ok()
+                    .filter(|x: &f64| *x >= 1.0 && *x <= 20.0)
+                    .ok_or("--ultra-back S (1 to 20)")?;
+            }
             "--ultra-speed" => {
                 o.ultra_speed = value("--ultra-speed")?
                     .parse()

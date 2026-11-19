@@ -1420,7 +1420,7 @@ pub const LIVE_REFILL: f64 = 0.1;
 pub const LIVE_LEAST: f64 = 5.0 * 35.0;
 pub const LIVE_BACK: i64 = 5 * 35;
 
-/// Games kept as she plays, a second apart, the last ten: what a death is undone to. (A
+/// Games kept as she plays, a second apart, the last 24: what a death is undone to. (A
 /// session's own are kept from where it began; these are for beginning one before the death.)
 #[derive(Default)]
 pub struct Rolling {
@@ -1428,7 +1428,7 @@ pub struct Rolling {
 }
 
 const ROLLING0: i32 = 440;
-const ROLLING_SLOTS: i32 = 10;
+const ROLLING_SLOTS: i32 = 24;
 
 impl Rolling {
     pub fn keep(&mut self, e: &mut Engine) {

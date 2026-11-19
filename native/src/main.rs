@@ -832,6 +832,7 @@ fn watch_options(
         workers: o.workers,
         ultra_speed: o.ultra_speed,
         ultra_after: o.ultra_after,
+        ultra_back: o.ultra_back,
         headless: false,
         paced: false,
         max_seconds: o.max_seconds,

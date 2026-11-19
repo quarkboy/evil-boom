@@ -106,6 +106,8 @@ pub struct RunOptions {
     /// (`--ultra-after N`) the ultra instinct hers on a level once she's died N times there
     /// (None: never)
     pub ultra_after: Option<i32>,
+    /// (`--ultra-back S`) how many seconds back a death is undone to (5 unless told; 20 at most)
+    pub ultra_back: f64,
     /// the journal of her decisions kept, and written beside the log (`crate::decisions`)
     pub decisions: bool,
     /// moves and retreats she isn't to make, by name (`Player::bar`)
@@ -150,6 +152,7 @@ impl Default for RunOptions {
             workers: 0,
             ultra_speed: crate::ultra::LIVE_SPEED,
             ultra_after: None,
+            ultra_back: crate::ultra::LIVE_BACK as f64 / 35.0,
             decisions: false,
             bar: None,
             advisor: None,
