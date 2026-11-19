@@ -2782,3 +2782,45 @@ easiest skills, on `ebf71b6`.
 - **Left:** E3M8's three on the second skill, not looked at. Whether Evil has the orders such
   a level needs (keep the cells, stay out of there, that item next, a suit and then across)
   is the question that follows.
+
+## Charmed continuous play, and MAP13's key room (2026-11-18)
+
+Continuous play with the charm and endless chaingun bullets (nothing hurts her: what's left
+is the exploring), 8 seeds, on `ebf71b6`. Ultimate Doom, all four skills: Episodes 2 and 3
+through on all 64; Episode 1 to E1M8 on all 32 (E1M8 can't end charmed: it ends by her
+health); Episode 4 short by five runs at the time cap (E4M6 three, E4M2 two: not traced).
+Doom II: 8/8 on the two easy skills, 7/8 on Hurt Me Plenty (MAP18), 5/8 on Ultra-Violence
+(MAP13 three), the Icon dead on all 28 that reached it. MAP17 takes 54 to 64 minutes on
+every skill (not traced: the maintainer suspects the jumps over lava that aren't needed).
+
+- **MAP13 traced.** The yellow key is on a stepped pyramid (tiers at 112, 208, 304 over a
+  floor at 16), thirteen imps on the tiers and the lift on Ultra-Violence, seven on Hurt Me
+  Plenty, none below. The way up is a perpetual lift (line 918 starts it, the doorway's 952
+  stops it), then a run-jump. All but five sectors found by 22 minutes; then one to two and
+  a half hours at that room, the key not an objective till she'd learned the lift. Endless
+  cells and the BFG made no difference: it isn't firepower.
+- **Kept, five rules** (`f6d4c3b` to `4a3d1a4`): no shot at anything in sight is one effort
+  and the lot is left together; a perpetual lift isn't waited for before its start line; one
+  on another floor with no way to walk to her isn't backed off from; backing out of an ambush
+  is rested as cover is; a circling tracer is shaken off with only what she can't fight
+  about. MAP13 charmed on Ultra-Violence: all eight out in 26 to 46 minutes. Scored together,
+  second seed set: 0.486 to 0.490 (+0.0031, s.e. 0.0047), exits 433 to 440, stranded runs 19
+  to 15, one run at the time cap (MAP14 UV, neither new retreat nor fight rule fired in it).
+- **Measured and narrowed.** "No way to walk to her" without "on another floor" cost E1M9 10
+  exits of 48: the pen of imps by its start, fenced on her own floor, is worth backing off
+  from for the room to dodge.
+- **Dropped:** monsters that can't come at her not counted in an ambush (the count is right
+  where there's elsewhere to go).
+- **Left in the room:** about ten minutes from entering it to crossing the lift's line; the
+  shot test against the engine's aim (imps on the 208 tier should be hittable from 240 back,
+  and she holds fire at 274: not checked); with plain invulnerability (the review's trace of
+  18 November) the lift's lines are still crossed over and over, by what isn't known.
+- **Revenant tracers** (the maintainer's): on open ground with no corner the player's answer
+  is her back to a wall and a step aside at the last moment; and a flock of them kept
+  circling can be led onto a cyberdemon. The first is advanced and unbuilt; the second is a
+  plan across a fight, Evil's to order if ever.
+- **The review of 18 November** (`behavior-review-2026-11-18.md`) checked against the code on
+  eight points, all sound: parity passing on failed runs, score counting a run that never
+  started, `--carry` dropped by sweep and episode, secret allowances by map name, "the same
+  to the tic" being outcome, whole seconds and kills, the Icon's restart, the stuck prompt's
+  flag, and the lot's two marks (fixed in `f6d4c3b`). The rest not yet done.
