@@ -2885,3 +2885,24 @@ were her ordinary play, and are fixed on main (`git log` for the two commits' nu
   0.0005), 3 runs of 1,088 changed. A rule that stops her shooting, or refuses her a way,
   wants to be as narrow as the failure it came from; and E2M8 is where a shooting rule that
   isn't shows first.
+
+## Two faults of her own found by ultra instinct on Plutonia (2026-11-19)
+
+The ultra-instinct runs on Plutonia MAP01 and MAP02 (the plan's stage 3 check) kept her alive
+through the fights and then stalled on her own exploring. Two tapes watched by the maintainer,
+two general faults, both hers and both fixed on `main`. Plutonia stays held out of tuning: each
+is a rule about the game, looked up in the engine and measured on Doom and Doom II.
+
+- **A teleporter's hop read as a walk** (`22c6fba`). The follower took two polys of a path in a
+  row for a walk when a portal joined them. A pad in a pit under the walkway it sends her to
+  has just that: she waited for the walkway as for a lift. A path now keeps its teleporter
+  hops and all six looks ahead ask one place (`RouteFollower::walk_portal`). Score: all 1,088
+  runs the same to the tic.
+- **An item resting above the floor under its middle** (`b1bb24b`). A thing rests on the
+  highest floor under its box, so one dropped at a ledge's edge stays up when the floor beside
+  sinks. She stood under a chaingun 177 units up. Where to stand for an item now goes by where
+  she sees it lie, and the out-of-ammo retreat leaves such a one out. Score +0.0007 (s.e.
+  0.0034), exits 456 to 457, runs stranded 18 to 16.
+
+Not done: an item she's stood on and couldn't pick up is still offered again by the next
+list of options. With the cause above gone no case of it is known.
