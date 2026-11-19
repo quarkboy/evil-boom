@@ -211,5 +211,11 @@ pub(crate) fn option_args(o: &RunOptions) -> Vec<String> {
         out.push("--tuning".into());
         out.push(t.display().to_string());
     }
+    // (the loadout she starts with: left out, a sweep's or an episode's runs began from a
+    // pistol whatever was asked, and said nothing of it)
+    if let Some(l) = &o.carry {
+        out.push("--carry".into());
+        out.push(carry_arg(l));
+    }
     out
 }

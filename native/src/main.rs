@@ -476,6 +476,9 @@ fn episode_one(args: &[String]) -> Result<(), String> {
     let mut map = Some(first.to_uppercase());
     let mut engine = None;
     let mut levels = 0;
+    // (what she was given to start the episode with: `o.carry` is from here on what she takes
+    // from each level into the next)
+    let given = o.carry.clone();
     while let Some(m) = map.take() {
         o.lives = left;
         // (a level with one after it: what she'd take with her had before she leaves)
@@ -500,7 +503,7 @@ fn episode_one(args: &[String]) -> Result<(), String> {
             }
             println!("DAMAGE {}", r.damage);
             let mut os = o.clone();
-            os.carry = None;
+            os.carry = given.clone();
             println!(
                 "WATCH evil-boom watch {wad} {first} {} --episode",
                 option_args(&os).join(" ")
