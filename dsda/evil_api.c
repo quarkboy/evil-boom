@@ -1201,6 +1201,11 @@ EVIL_API int evil_restore(int slot)
   if (slot < 0 || slot >= EVIL_FRAMES || !evil_frames[slot].buf)
     return -1;
   f = &evil_frames[slot];
+  /* (the game's tic first: the load works basetic out from it (dsda_UnArchiveContext), and a
+   * revenant's missile homes on the tics gametic - basetic says (A_Tracer). Set after, a game
+   * put back from some tics on had its missiles turning on other tics than the game saved) */
+  gametic = f->gametic;
+  maketic = gametic;
   save_p = f->buf;
   dsda_UnArchiveAll();
   save_p = NULL;

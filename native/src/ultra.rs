@@ -286,7 +286,8 @@ pub struct Ultra {
 }
 
 /// slots: 0 the look's root; 1.. the beam's lines, two rows of them; from `KEPT0` the games
-/// kept to go back to
+/// kept to go back to; `START_SLOT` the game as the run began
+const START_SLOT: i32 = 500;
 const ROW: i32 = 64;
 const KEPT0: i32 = 200;
 const KEPT_SLOTS: i32 = 128;
@@ -884,6 +885,139 @@ pub fn check(wad: &str, map: &str, o: &RunOptions) -> Result<String, String> {
     ))
 }
 
+/// A way of playing a tape: its state at every tic as a number, how it ended, and the whole
+/// state at the tic asked for.
+type Played = (Vec<(i64, u64)>, String, String);
+
+/// `ultra-check --tape FILE`: the run's controls played three ways, and where they part. As
+/// they are; with the game saved and put back before every tic; and with it saved, played
+/// `AHEAD` tics on, and put back before every tic (as a look does). All three should be one
+/// game: a tape that plays out otherwise than its run means a restore isn't the game it saved.
+pub fn check_tape(
+    wad: &str,
+    map: &str,
+    o: &RunOptions,
+    tape: &std::path::Path,
+) -> Result<String, String> {
+    use std::hash::{Hash, Hasher};
+    const AHEAD: i64 = 30;
+    let tape: std::collections::BTreeMap<i64, Controls> = crate::replay::Recording::read(tape)?
+        .entries
+        .into_iter()
+        .filter_map(|en| match en {
+            crate::replay::Entry::Tic(t, c) => Some((t, c)),
+            _ => None,
+        })
+        .collect();
+    let end = tape.keys().next_back().copied().unwrap_or(0);
+    let state = |e: &mut Engine| -> String {
+        let (mut p, things) = e.peek();
+        // (what she was last told isn't the game's state)
+        p.message_tic = 0;
+        p.message.fill(0);
+        let mut s = format!("{p:?}");
+        for m in things {
+            s += &format!("\n{m:?}");
+        }
+        s
+    };
+    // (one game a process: every way played starts from the level's start, put back; hers before
+    // the tape begins are kept from the first)
+    let crate::sweep::Setup {
+        mut e, mut agent, ..
+    } = crate::sweep::setup(wad, map, o, false, None)?;
+    let start = e.save(3).ok_or("the engine library can't save")?;
+    let mut tape = tape;
+    let mut first = true;
+    let mut play = |mode: u8, full: Option<i64>| -> Result<Played, String> {
+        if !first {
+            e.restore(3, &start);
+        }
+        let mut last: Option<Controls> = None;
+        let mut seen = Vec::new();
+        let mut whole = String::new();
+        let mut how = "the tape ran out".to_string();
+        while e.tic <= end {
+            if e.exited() {
+                how = format!("out at tic {}", e.tic);
+                break;
+            }
+            if e.dead() {
+                how = format!("dead at tic {}", e.tic);
+                break;
+            }
+            if mode > 0 && tape.contains_key(&e.tic) {
+                let mark = e.save(0).ok_or("the engine library can't save")?;
+                if mode == 2 {
+                    for t in e.tic..e.tic + AHEAD {
+                        let Some(c) = tape.get(&t) else { break };
+                        e.step(c);
+                    }
+                }
+                e.restore(0, &mark);
+            }
+            let c = match tape.get(&e.tic) {
+                Some(c) => *c,
+                None => {
+                    let ob = e.observe();
+                    let c = agent.act(&ob, last.as_ref());
+                    tape.insert(e.tic, c);
+                    c
+                }
+            };
+            e.step(&c);
+            last = Some(c);
+            let s = state(&mut e);
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            s.hash(&mut h);
+            seen.push((e.tic, h.finish()));
+            if full == Some(e.tic) {
+                whole = s;
+                break;
+            }
+        }
+        first = false;
+        Ok((seen, how, whole))
+    };
+    // (EVIL_TAPE_DUMP=MODE:TIC: that way played from a fresh game, its whole state at the tic)
+    if let Some((mode, tic)) = std::env::var("EVIL_TAPE_DUMP").ok().and_then(|v| {
+        let (m, t) = v.split_once(':')?;
+        Some((m.parse::<u8>().ok()?, t.parse::<i64>().ok()?))
+    }) {
+        return Ok(play(mode, Some(tic))?.2);
+    }
+    let (plain, how, _) = play(0, None)?;
+    let mut out = format!("{wad} {map}: the tape as it is: {how}");
+    for (mode, name) in [
+        (1u8, "saved and put back every tic"),
+        (2, "saved, played on and put back every tic"),
+    ] {
+        let (other, how, _) = play(mode, None)?;
+        let parts = plain
+            .iter()
+            .zip(&other)
+            .find(|(a, b)| a != b)
+            .map(|(a, _)| a.0);
+        out += &format!("\n{name}: {how}; ");
+        match parts {
+            None => out += "the same game throughout",
+            Some(t) => {
+                out += &format!("PARTS at tic {t}:");
+                let a = play(0, Some(t))?.2;
+                let b = play(mode, Some(t))?.2;
+                let (la, lb): (Vec<&str>, Vec<&str>) = (a.lines().collect(), b.lines().collect());
+                if la.len() != lb.len() {
+                    out += &format!(" {} things for {}", la.len() - 1, lb.len().max(1) - 1);
+                }
+                for (x, y) in la.iter().zip(&lb).filter(|(x, y)| x != y).take(12) {
+                    out += &format!("\n  {x}\n  {y}");
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// A level played with the ultra instinct on, offline. A line of how it went.
 pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, String> {
     let crate::sweep::Setup {
@@ -894,6 +1028,8 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     } = crate::sweep::setup(wad, map, o, false, None)?;
     let mut ultra = Ultra::new(tune);
     ultra.hot = Some(std::rc::Rc::clone(&agent.x().nav));
+    // (the game as it starts, for playing the tape over at the end)
+    let start = e.save(START_SLOT);
     let t0 = Instant::now();
     let tic0 = e.tic;
     let mut last: Option<Controls> = None;
@@ -998,6 +1134,31 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
             }
         }
     }
+    // The tape played over from the start with nothing saved or put back: it must come out as
+    // the run did, or a restore somewhere wasn't the game it saved (2026-11-19: it wasn't, with
+    // a revenant's missile in the air, and the tape of an exit played out as a death).
+    let state = |e: &Engine| {
+        let p = e.game.player();
+        format!(
+            "tic {}, health {} armor {} at ({:.2}, {:.2})",
+            e.tic, p.health, p.armor, p.x, p.y
+        )
+    };
+    let taped_same = start.map(|start| {
+        let was = state(&e);
+        e.restore(START_SLOT, &start);
+        for (t, c) in &tape {
+            if e.tic == *t {
+                e.step(c);
+            }
+        }
+        let now = state(&e);
+        if now == was {
+            "the tape plays out the same".to_string()
+        } else {
+            format!("THE TAPE PLAYS OUT OTHERWISE (the run: {was}; the tape: {now})")
+        }
+    });
     let [items, kills, secrets] = e.tally();
     let p = e.game.player();
     let dir = crate::config::out_dir().join("ultra");
@@ -1023,7 +1184,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     .write(&taped)?;
     let t = &ultra.tally;
     Ok(format!(
-        "ULTRA {outcome} {map_name}: {:.0}s game ({} tics, {} of them searched), health {} armor {} (lowest health {worst}), kills {}/{}, items {}/{}, secrets {}/{}; gone back {} times for a death and {} for a hurt ({gone_back} tics), {} hurts let stand; {} of {} moves pressed on a wall; {} looks, {} tics played ahead, {} restores, {} saves, {:.1}s searching of {:.1}s real; log {}; to watch it: evil-boom watch {wad} {map_name} --fight {} --seed {} --mortal --tape {}",
+        "ULTRA {outcome} {map_name}: {:.0}s game ({} tics, {} of them searched), health {} armor {} (lowest health {worst}), kills {}/{}, items {}/{}, secrets {}/{}; gone back {} times for a death and {} for a hurt ({gone_back} tics), {} hurts let stand; {} of {} moves pressed on a wall; {} looks, {} tics played ahead, {} restores, {} saves, {:.1}s searching of {:.1}s real; {}; log {}; to watch it: evil-boom watch {wad} {map_name} --fight {} --seed {} --mortal --tape {}",
         (e.tic - tic0) as f64 / 35.0,
         e.tic - tic0,
         t.ultra_tics,
@@ -1046,6 +1207,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         t.saves,
         t.searched_secs,
         t0.elapsed().as_secs_f64(),
+        taped_same.as_deref().unwrap_or("the tape not checked"),
         file.display(),
         o.fight,
         o.seed.unwrap_or(0),

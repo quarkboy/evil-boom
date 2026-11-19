@@ -245,3 +245,26 @@ Ultra-Violence 0 of 6. What it showed, and what was done:
 - **"Orphan mobj in msecnode list"** is DSDA's own warning as it saves, for a thing just
   removed and still in a sector's list; it skips it. 38 times in one E4M6 run, whose tape
   played back with no save or restore came out the same (1,519 s, 43/51 kills, 3 health).
+
+### A restore that wasn't the game it saved (2026-11-19, Plutonia MAP01)
+
+The first tape off Plutonia (MAP01, Ultra-Violence, an exit at 617 s with 88 health the lowest)
+played out in the window as a death at 200 s. Not the load on the machine: the same headless.
+
+- **Traced** with `ultra-check WAD MAP --tape FILE`, which plays a tape three ways in one
+  process (as it is; saved and put back before every tic; saved, played 30 tics on and put
+  back before every tic) and says where they part. The third parted from the first at tic
+  3977: a revenant's missile turned in one and not the other.
+- **The mechanics.** A_Tracer turns the missile only on tics where `gametic - basetic` is a
+  multiple of four. DSDA's load works `basetic` out from the `gametic` of the moment
+  (`dsda_UnArchiveContext`), and `evil_restore` set `gametic` back after the load. So a game
+  put back from N tics on had its missiles homing N tics out of step: a different game from
+  the one saved wherever N wasn't a multiple of four, and a move is 6 tics. Nothing else
+  reads `basetic` in play. E2M9 and E4M6 have no revenants; stage 1's check put back a game
+  with none in the air.
+- **The rule:** `evil_restore` sets `gametic` before the load. All three ways are then one
+  game on that tape.
+- **Every run checks itself now:** the tape is played over from the start at the end of a run
+  with nothing saved or put back, and the result line says whether it came out the same.
+- The Plutonia runs made before this (21 finished) aren't games Doom would play, and are
+  thrown out.

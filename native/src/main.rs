@@ -559,7 +559,9 @@ fn ultra(args: &[String], check: bool) -> Result<(), String> {
     o.mortal = true;
     println!(
         "{}",
-        if check {
+        if let (true, Some(tape)) = (check, &o.tape) {
+            evilboom::ultra::check_tape(wad, map, &o, tape)?
+        } else if check {
             evilboom::ultra::check(wad, map, &o)?
         } else {
             evilboom::ultra::run(wad, map, &o, tune)?
