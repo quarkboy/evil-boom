@@ -551,6 +551,28 @@ impl RouteFollower {
         f
     }
 
+    /// The portal she walks through from one poly of her path to the next. None where the two
+    /// aren't joined, or the hop is a teleporter's: a pad's poly can lie right beside the one
+    /// it sends her to (a walkway over the pit the pad is in), and the portal between the two
+    /// is no part of the way. Read as a walk, that walkway was a floor to wait for: Plutonia
+    /// MAP01's slime pit, stood in for good 45 units from the pad.
+    pub(super) fn walk_portal(&self, cur: usize, nxt: usize) -> Option<usize> {
+        if self
+            .step()
+            .path
+            .as_ref()
+            .is_some_and(|p| p.teleports.contains(&(cur, nxt)))
+        {
+            return None;
+        }
+        let mesh = &self.view.nav.mesh;
+        mesh.poly(cur)
+            .portals
+            .iter()
+            .copied()
+            .find(|&pi| mesh.portals[pi].other(cur) == nxt)
+    }
+
     fn step(&self) -> &Step {
         &self.steps[self.step_i as usize]
     }
@@ -800,6 +822,7 @@ impl RouteFollower {
             cost: 0.0,
             notes: Vec::new(),
             jumps: Vec::new(),
+            teleports: Vec::new(),
             squeezes: 0,
         });
         self.path_polys = path.polys.iter().copied().collect();

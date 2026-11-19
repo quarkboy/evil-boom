@@ -124,12 +124,7 @@ impl RouteFollower {
             {
                 return None;
             }
-            let portal_i = mesh
-                .poly(cur)
-                .portals
-                .iter()
-                .copied()
-                .find(|&pi| mesh.portals[pi].other(cur) == nxt)?; // (none: a teleport)
+            let portal_i = self.walk_portal(cur, nxt)?; // (none: a teleport)
             let portal = &mesh.portals[portal_i];
             let near = closest_on_portal(obs.pos(), portal.p1, portal.p2);
             let d = dist(near, obs.pos());

@@ -935,13 +935,7 @@ impl RouteFollower {
             if cs == ns || a.floor - b.floor <= MAX_STEP {
                 continue;
             }
-            let Some(portal) = mesh
-                .poly(cur)
-                .portals
-                .iter()
-                .map(|&pi| &mesh.portals[pi])
-                .find(|p| p.other(cur) == nxt)
-            else {
+            let Some(portal) = self.walk_portal(cur, nxt).map(|pi| &mesh.portals[pi]) else {
                 return;
             };
             let edge = closest_on_portal(pos, portal.p1, portal.p2);
@@ -997,13 +991,7 @@ impl RouteFollower {
             if cs == ns {
                 continue;
             }
-            let Some(portal) = mesh
-                .poly(cur)
-                .portals
-                .iter()
-                .map(|&pi| &mesh.portals[pi])
-                .find(|p| p.other(cur) == nxt)
-            else {
+            let Some(portal) = self.walk_portal(cur, nxt).map(|pi| &mesh.portals[pi]) else {
                 return Drop::None;
             };
             if dist(

@@ -279,12 +279,7 @@ impl RouteFollower {
         let mut d_in = (mesh.poly_at(pos).map(|p| mesh.poly(p).sector) == Some(s)).then_some(0.0);
         for w in polys.windows(2) {
             let (cur, nxt) = (w[0], w[1]);
-            let pi = mesh
-                .poly(cur)
-                .portals
-                .iter()
-                .copied()
-                .find(|&pi| mesh.portals[pi].other(cur) == nxt)?;
+            let pi = self.walk_portal(cur, nxt)?;
             let portal = &mesh.portals[pi];
             let p = closest_on_portal(at, portal.p1, portal.p2);
             along += dist(at, p);
@@ -492,13 +487,7 @@ impl RouteFollower {
         let mut ahead = None;
         for w in polys.windows(2).take(15) {
             let (cur, nxt) = (w[0], w[1]);
-            let Some(pi) = mesh
-                .poly(cur)
-                .portals
-                .iter()
-                .copied()
-                .find(|&pi| mesh.portals[pi].other(cur) == nxt)
-            else {
+            let Some(pi) = self.walk_portal(cur, nxt) else {
                 break;
             };
             let portal = &mesh.portals[pi];
@@ -660,12 +649,7 @@ impl RouteFollower {
         let mut entry_along = None;
         for w in polys.windows(2) {
             let (cur, nxt) = (w[0], w[1]);
-            let pi = mesh
-                .poly(cur)
-                .portals
-                .iter()
-                .copied()
-                .find(|&pi| mesh.portals[pi].other(cur) == nxt)?;
+            let pi = self.walk_portal(cur, nxt)?;
             let portal = &mesh.portals[pi];
             let p = closest_on_portal(at, portal.p1, portal.p2);
             along += dist(at, p);

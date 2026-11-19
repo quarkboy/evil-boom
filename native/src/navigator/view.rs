@@ -229,6 +229,9 @@ pub struct Path {
     pub cost: f64,
     pub notes: Vec<PathNote>,
     pub jumps: Vec<Jump>,
+    /// the hops made by a teleporter (the poly left, the poly arrived in): no walk between
+    /// the two, though they may lie side by side
+    pub teleports: Vec<(usize, usize)>,
     pub squeezes: usize,
 }
 
@@ -826,6 +829,11 @@ impl View {
             cost: f.cost,
             notes: self.annotate(&chain, states, doors),
             jumps,
+            teleports: chain
+                .windows(2)
+                .filter(|w| matches!(w[1].1, Some(Step::Tele(TeleEdge::Teleport(_)))))
+                .map(|w| (w[0].0, w[1].0))
+                .collect(),
             squeezes: f.squeezes,
         }
     }
