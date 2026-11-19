@@ -279,6 +279,8 @@ pub struct Dsda {
     save_fn: Option<unsafe extern "C" fn(c_int) -> c_int>,
     restore_fn: Option<unsafe extern "C" fn(c_int) -> c_int>,
     forget_fn: Option<unsafe extern "C" fn(c_int)>,
+    /// the nearest monster she has a line of sight to (`evil_nearest_seen`)
+    seen_fn: Option<unsafe extern "C" fn(*mut f64) -> c_int>,
     clear_fn: Option<ClearFn>,
     reset_ids_fn: Option<ResetIdsFn>,
     hits_fn: Option<HitsFn>,
@@ -397,6 +399,10 @@ impl Dsda {
         let forget_fn = sym(b"evil_forget")
             .ok()
             .map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
+        // SAFETY: the symbol, if the library has it, is `int evil_nearest_seen(double *)`.
+        let seen_fn = sym(b"evil_nearest_seen").ok().map(|p| unsafe {
+            std::mem::transmute::<*const (), unsafe extern "C" fn(*mut f64) -> c_int>(p)
+        });
         // SAFETY: as above, evil_clear_items's signature; optional.
         let clear_fn = sym(b"evil_clear_items")
             .ok()
@@ -536,6 +542,7 @@ impl Dsda {
             save_fn,
             restore_fn,
             forget_fn,
+            seen_fn,
             clear_fn,
             reset_ids_fn,
             hits_fn,
@@ -854,6 +861,15 @@ impl Dsda {
     pub fn restore(&self, slot: i32) -> bool {
         // SAFETY: a plain value into the game; see `load`.
         self.restore_fn.is_some_and(|f| unsafe { f(slot) } == 0)
+    }
+
+    /// The nearest monster alive that she has a line of sight to, by the game's own check: its
+    /// id and where it is. None: none in sight (or no such call).
+    pub fn nearest_seen(&self) -> Option<(i32, (f64, f64, f64))> {
+        let mut at = [0.0f64; 3];
+        // SAFETY: the game writes three numbers into the buffer it's given.
+        let id = unsafe { (self.seen_fn?)(at.as_mut_ptr()) };
+        (id >= 0).then_some((id, (at[0], at[1], at[2])))
     }
 
     /// A slot's memory let go (all of them: -1).

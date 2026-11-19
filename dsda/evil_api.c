@@ -1235,3 +1235,40 @@ EVIL_API void evil_forget(int slot)
       evil_frames[i].buf = NULL;
     }
 }
+
+/* The nearest thing she could shoot that she has a line of sight to (a monster alive, or a
+ * lost soul): its id, and where it is into out (x, y, z). -1: none. The game's own sight
+ * check, as its monsters use (the ultra instinct's: it doesn't aim at what's behind a wall). */
+fixed_t P_AproxDistance(fixed_t dx, fixed_t dy);  /* (p_maputl.c) */
+
+EVIL_API int evil_nearest_seen(double *out)
+{
+  thinker_t *th;
+  mobj_t *me = players[consoleplayer].mo;
+  mobj_t *best = NULL;
+  fixed_t best_d = 0;
+  if (gamestate != GS_LEVEL || !me)
+    return -1;
+  for (th = thinkercap.next; th != &thinkercap; th = th->next)
+  {
+    mobj_t *mo;
+    fixed_t d;
+    if (th->function != P_MobjThinker)
+      continue;
+    mo = (mobj_t *)th;
+    if (!((mo->flags & MF_COUNTKILL) || mo->type == MT_SKULL) || !(mo->flags & MF_SHOOTABLE) ||
+        mo->health <= 0)
+      continue;
+    d = P_AproxDistance(mo->x - me->x, mo->y - me->y);
+    if (best && d >= best_d)
+      continue;
+    if (!P_CheckSight(me, mo))
+      continue;
+    best = mo;
+    best_d = d;
+  }
+  if (!best)
+    return -1;
+  out[0] = fx(best->x); out[1] = fx(best->y); out[2] = fx(best->z);
+  return best->evil_id;
+}

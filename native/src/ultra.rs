@@ -51,6 +51,10 @@ pub struct Tune {
     pub moved: f64,
     /// a round in hand
     pub ammo: f64,
+    /// a move that was to take her somewhere and took her less than `pushed` units: she was
+    /// pressing on a wall, and standing still is the same and looks like nothing's wrong
+    pub push: f64,
+    pub pushed: f64,
     /// out of the level
     pub exit: f64,
     /// something after her within this, or anything of theirs in the air: the search has her;
@@ -81,10 +85,12 @@ impl Default for Tune {
             key: 3000.0,
             moved: 60.0,
             ammo: 0.3,
+            push: 40.0,
+            pushed: 8.0,
             exit: 1.0e6,
             near: 1500.0,
             keep_every: 35,
-            kept: 12,
+            kept: 60,
             tries: 3,
             shake: 80.0,
         }
@@ -137,6 +143,9 @@ pub struct Tally {
     pub back: u32,
     pub searched_secs: f64,
     pub ultra_tics: i64,
+    /// moves made for real, and those of them that were to take her somewhere and didn't
+    pub moves: u64,
+    pub pressed: u64,
 }
 
 fn alive(m: &Mobj) -> bool {
@@ -211,6 +220,10 @@ pub struct Ultra {
     pub tally: Tally,
     /// the move under way, and its tics left
     doing: Option<(Move, usize)>,
+    /// the move just played went nowhere, told to go
+    pushed: bool,
+    /// where the move under way began
+    began: Option<Point>,
     kept: Vec<Kept>,
     kept_at: i64,
     next_kept: i32,
@@ -231,6 +244,8 @@ impl Ultra {
             tune,
             tally: Tally::default(),
             doing: None,
+            pushed: false,
+            began: None,
             kept: Vec::new(),
             kept_at: i64::MIN / 2,
             next_kept: 0,
@@ -246,9 +261,9 @@ impl Ultra {
         mv: &Move,
         first: bool,
         p: &PlayerState,
-        things: &[Mobj],
         root: &Root,
         hers: Option<&Controls>,
+        seen: Option<Point>,
     ) -> Controls {
         let pos = (p.x, p.y);
         let (go, fire) = match *mv {
@@ -275,13 +290,12 @@ impl Ultra {
             }
         }
         if fire {
-            // (the nearest of them: the turn's worked out, not searched)
-            let target = things
-                .iter()
-                .filter(|m| alive(m) && monster_of(m).is_some())
-                .min_by(|a, b| dist((a.x, a.y), pos).total_cmp(&dist((b.x, b.y), pos)));
+            // (the nearest of them she has a line of sight to, by the game's own check: the
+            // turn's worked out, not searched. The nearest whatever was between had her
+            // shooting rockets into the wall it stood behind)
+            let target = seen;
             if let Some(t) = target {
-                let off = norm(heading(pos, (t.x, t.y)) - p.angle);
+                let off = norm(heading(pos, t) - p.angle);
                 let turn = off.clamp(-self.tune.turn, self.tune.turn);
                 c.turn = -turn;
                 facing = p.angle + turn;
@@ -303,14 +317,19 @@ impl Ultra {
 
     /// `mv` played from where the game stands. False: dead in it.
     fn play(&mut self, e: &mut Engine, mv: &Move, root: &Root) -> bool {
+        let fires = matches!(mv, Move::Plain { fire: true, .. });
+        let goes = !matches!(mv, Move::Plain { go: Go::Still, .. });
+        let mut from: Option<Point> = None;
+        self.pushed = false;
         for i in 0..self.tune.move_tics {
             let c = {
-                let (p, things) = e.peek();
+                let p = e.game.player();
                 if p.playerstate != 0 || p.health <= 0 {
                     return false;
                 }
-                let things: Vec<Mobj> = things.to_vec();
-                self.controls(mv, i == 0, &p, &things, root, None)
+                from.get_or_insert((p.x, p.y));
+                let seen = if fires { Self::seen(e) } else { None };
+                self.controls(mv, i == 0, &p, root, None, seen)
             };
             e.step(&c);
             self.tally.played += 1;
@@ -318,8 +337,15 @@ impl Ultra {
                 return true;
             }
         }
-        let (p, _) = e.peek();
+        let p = e.game.player();
+        // (told to go and gone nowhere: she's been pressing on a wall)
+        self.pushed = goes && from.is_some_and(|f| dist(f, (p.x, p.y)) < self.tune.pushed);
         p.playerstate == 0 && p.health > 0
+    }
+
+    /// Where the nearest of them she has a line of sight to is.
+    fn seen(e: &Engine) -> Option<Point> {
+        e.game.nearest_seen().map(|(_, at)| (at.0, at.1))
     }
 
     /// What the game as it stands is worth.
@@ -409,7 +435,11 @@ impl Ultra {
                     if !self.play(e, &mv, root) {
                         continue;
                     }
+                    let pushed = self.pushed;
                     let mut w = self.worth(e, root);
+                    if pushed {
+                        w -= self.tune.push;
+                    }
                     if root.shake != 0 {
                         w += self.tune.shake
                             * mix(
@@ -546,19 +576,34 @@ impl Ultra {
                                 .count()
                         ));
                     }
+                    // (the move before, for the count: did it take her anywhere?)
+                    if let (Some((was, _)), Some(from)) = (self.doing, self.began) {
+                        self.tally.moves += 1;
+                        if !matches!(was, Move::Plain { go: Go::Still, .. })
+                            && dist(from, pos) < self.tune.pushed
+                        {
+                            self.tally.pressed += 1;
+                        }
+                    }
+                    self.began = Some(pos);
                     self.doing = Some((mv, self.tune.move_tics));
                 }
                 None => return Err(self.go_back(e).unwrap_or(0)),
             }
         }
         let (mv, left) = self.doing.expect("a move was chosen");
+        let seen = if matches!(mv, Move::Plain { fire: true, .. }) {
+            Self::seen(e)
+        } else {
+            None
+        };
         let c = self.controls(
             &mv,
             left == self.tune.move_tics,
             &p,
-            &things,
             &root,
             Some(&hers),
+            seen,
         );
         self.doing = Some((mv, left - 1));
         Ok(c)
@@ -720,7 +765,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     .write(&taped)?;
     let t = &ultra.tally;
     Ok(format!(
-        "ULTRA {outcome} {map_name}: {:.0}s game ({} tics, {} of them searched), health {} armor {} (lowest health {worst}), kills {}/{}, items {}/{}, secrets {}/{}; gone back {} times ({gone_back} tics); {} looks, {} tics played ahead, {} restores, {} saves, {:.1}s searching of {:.1}s real; log {}; to watch it: evil-boom watch {wad} {map_name} --fight {} --seed {} --mortal --tape {}",
+        "ULTRA {outcome} {map_name}: {:.0}s game ({} tics, {} of them searched), health {} armor {} (lowest health {worst}), kills {}/{}, items {}/{}, secrets {}/{}; gone back {} times ({gone_back} tics); {} of {} moves pressed on a wall; {} looks, {} tics played ahead, {} restores, {} saves, {:.1}s searching of {:.1}s real; log {}; to watch it: evil-boom watch {wad} {map_name} --fight {} --seed {} --mortal --tape {}",
         (e.tic - tic0) as f64 / 35.0,
         e.tic - tic0,
         t.ultra_tics,
@@ -733,6 +778,8 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         secrets.0,
         secrets.1,
         t.back,
+        t.pressed,
+        t.moves,
         t.decisions,
         t.played,
         t.restores,
