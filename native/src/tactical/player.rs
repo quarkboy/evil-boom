@@ -250,6 +250,9 @@ pub struct Player {
     cover_runs: (u32, i64, (i32, Known)),
     /// no cover till then (`retreat.cover_rest`), and how many times it's been rested so
     cover_off: (i64, u32),
+    /// the same of backing out of an ambush (`back_spent`)
+    back_runs: (u32, i64, (i32, Known)),
+    back_off: (i64, u32),
     /// the last retreat tried was for cover
     tried_cover: bool,
     /// when a way off for ammo was last called off with one of them on it
@@ -329,6 +332,8 @@ impl Player {
             away_since: None,
             cover_runs: (0, 0, (0, Known::default())),
             cover_off: (0, 0),
+            back_runs: (0, 0, (0, Known::default())),
+            back_off: (0, 0),
             tried_cover: false,
             walled_tic: -1_000_000_000,
             shooters_tic: -1_000_000_000,
@@ -1523,7 +1528,7 @@ impl Player {
         } else if let Some(r) = self.fall_back(obs) {
             self.retreat_tic = obs.tic;
             (RetreatKind::FallBack, Some(r))
-        } else if let Some(why) = self.ambushed(obs) {
+        } else if let Some(why) = self.ambushed(obs).filter(|_| !self.back_spent(obs)) {
             self.retreat_tic = obs.tic;
             match self.back_out(obs, why) {
                 Some(r) => (RetreatKind::Back, Some(r)),
@@ -1594,6 +1599,39 @@ impl Player {
         self.cover_runs.0 = 0;
         self.log(format!(
             "tic {}: cover's got her nothing {n} times running: none for {:.0}s",
+            obs.tic,
+            rest as f64 / 35.0
+        ));
+        true
+    }
+
+    /// Is backing out of an ambush no answer just now? As cover (`cover_spent`, and by its
+    /// numbers): backed out `retreat.cover_runs` times running with nothing killed and nothing
+    /// new learned between, and the way she was going takes her back among the same ones, who
+    /// are no fewer for it. None for `retreat.cover_rest`, twice as long each time, and she goes
+    /// on through them. Doom II MAP13's key room, the key up among thirteen imps on ledges she
+    /// has no shot at from the floor she has to cross: backed out every three seconds, over the
+    /// doorway's line that stops the lift she'd just started. Counts this one.
+    fn back_spent(&mut self, obs: &Observation) -> bool {
+        /// back-outs are one run of them with no longer than this between
+        const BACK_RUN: i64 = 180 * 35;
+        if obs.tic < self.back_off.0 {
+            return true;
+        }
+        let now = (self.fight.combat.kills, self.explorer.knowledge.known());
+        let (n, last, then) = &self.back_runs;
+        let same = *then == now && obs.tic - last < BACK_RUN;
+        let n = if same { n + 1 } else { 1 };
+        self.back_runs = (n, obs.tic, now);
+        if n <= self.fight.tune.retreat.cover_runs {
+            return false;
+        }
+        let times = self.back_off.1;
+        let rest = self.fight.tune.retreat.cover_rest << times.min(5);
+        self.back_off = (obs.tic + rest, times + 1);
+        self.back_runs.0 = 0;
+        self.log(format!(
+            "tic {}: backing out's got her nothing {n} times running: none for {:.0}s",
             obs.tic,
             rest as f64 / 35.0
         ));
