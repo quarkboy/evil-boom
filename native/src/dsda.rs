@@ -274,6 +274,11 @@ pub struct Dsda {
     spawn_fn: Option<SpawnFn>,
     give_fn: Option<GiveFn>,
     ready_fn: Option<unsafe extern "C" fn(c_int)>,
+    /// the game saved to a slot and put back (`evil_save`, `evil_restore`, `evil_forget`): the
+    /// ultra instinct's look ahead
+    save_fn: Option<unsafe extern "C" fn(c_int) -> c_int>,
+    restore_fn: Option<unsafe extern "C" fn(c_int) -> c_int>,
+    forget_fn: Option<unsafe extern "C" fn(c_int)>,
     clear_fn: Option<ClearFn>,
     reset_ids_fn: Option<ResetIdsFn>,
     hits_fn: Option<HitsFn>,
@@ -379,6 +384,17 @@ impl Dsda {
             .map(|p| unsafe { std::mem::transmute::<*const (), GiveFn>(p) });
         // SAFETY: the symbol, if the library has it, is `void evil_ready(int)`.
         let ready_fn = sym(b"evil_ready")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
+        // SAFETY: the symbols, if the library has them, are `int evil_save(int)`,
+        // `int evil_restore(int)` and `void evil_forget(int)`.
+        let save_fn = sym(b"evil_save").ok().map(|p| unsafe {
+            std::mem::transmute::<*const (), unsafe extern "C" fn(c_int) -> c_int>(p)
+        });
+        let restore_fn = sym(b"evil_restore").ok().map(|p| unsafe {
+            std::mem::transmute::<*const (), unsafe extern "C" fn(c_int) -> c_int>(p)
+        });
+        let forget_fn = sym(b"evil_forget")
             .ok()
             .map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
         // SAFETY: as above, evil_clear_items's signature; optional.
@@ -517,6 +533,9 @@ impl Dsda {
             spawn_fn,
             give_fn,
             ready_fn,
+            save_fn,
+            restore_fn,
+            forget_fn,
             clear_fn,
             reset_ids_fn,
             hits_fn,
@@ -821,6 +840,28 @@ impl Dsda {
         let f = self.clear_fn?;
         // SAFETY: no arguments; see `load`.
         Some(unsafe { f() })
+    }
+
+    /// The game saved into `slot` (its size in bytes), over what was there. None: the library
+    /// hasn't the call, or there's no level to save.
+    pub fn save(&self, slot: i32) -> Option<usize> {
+        // SAFETY: a plain value into the game; see `load`.
+        let n = unsafe { (self.save_fn?)(slot) };
+        usize::try_from(n).ok()
+    }
+
+    /// The game put back as `slot` has it. False: nothing there, or no such call.
+    pub fn restore(&self, slot: i32) -> bool {
+        // SAFETY: a plain value into the game; see `load`.
+        self.restore_fn.is_some_and(|f| unsafe { f(slot) } == 0)
+    }
+
+    /// A slot's memory let go (all of them: -1).
+    pub fn forget(&self, slot: i32) {
+        if let Some(f) = self.forget_fn {
+            // SAFETY: a plain value into the game; see `load`.
+            unsafe { f(slot) };
+        }
     }
 
     /// Give her a loadout (see `Loadout`); false if the library hasn't the call.

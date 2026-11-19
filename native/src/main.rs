@@ -527,6 +527,45 @@ fn episode_one(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// `ultra WAD MAP [run options]`: the level played with the ultra instinct on, offline;
+/// `ultra-check`: the game saved, put back and played again, and what that costs.
+fn ultra(args: &[String], check: bool) -> Result<(), String> {
+    let mut tune = evilboom::ultra::Tune::default();
+    let mut rest_args = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut num = |what: &str| -> Result<f64, String> {
+            it.next()
+                .and_then(|v| v.parse().ok())
+                .ok_or_else(|| format!("{what} N"))
+        };
+        match a.as_str() {
+            "--depth" => tune.depth = num("--depth")? as usize,
+            "--width" => tune.width = num("--width")? as usize,
+            "--move" => tune.move_tics = num("--move")? as usize,
+            "--way" => tune.way = num("--way")?,
+            _ => rest_args.push(a.clone()),
+        }
+    }
+    let (mut o, _, rest) = run_options(&rest_args)?;
+    let [wad, map] = rest.as_slice() else {
+        return Err(
+            "usage: evil-boom ultra <wad> <map> [--depth N --width N --move N] [run options]"
+                .into(),
+        );
+    };
+    o.mortal = true;
+    println!(
+        "{}",
+        if check {
+            evilboom::ultra::check(wad, map, &o)?
+        } else {
+            evilboom::ultra::run(wad, map, &o, tune)?
+        }
+    );
+    Ok(())
+}
+
 fn drive(args: &[String]) -> Result<(), String> {
     let (o, _, rest) = run_options(args)?;
     let mut names = Vec::new();
@@ -1198,6 +1237,9 @@ fn main() -> ExitCode {
     }
     let result = match first {
         Some("dump-nav") if args.len() == 3 => dump_nav(&args[1], &args[2]),
+        // (the ultra instinct, a prototype: docs/design/ultra-instinct-plan.md)
+        Some("ultra-check") => ultra(&args[1..], true),
+        Some("ultra") => ultra(&args[1..], false),
         Some("secret-survey") => {
             // (one map in this process, its rows out: the survey's children)
             let one = args.iter().any(|a| a == "--one");

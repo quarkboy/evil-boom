@@ -761,6 +761,30 @@ impl Player {
         self.explorer.ranked(obs, risky, &mut self.fight)
     }
 
+    /// The way on from `pos`, as points: the rest of the route's step she's on, else straight to
+    /// what the explorer has her going for. Empty: nowhere. (The ultra instinct's: where she'd
+    /// be going is a term in what it weighs.)
+    pub fn way_on(&self, pos: crate::geom::Point) -> Vec<crate::geom::Point> {
+        // (a retreat's way first: where she's going just now)
+        let follower = self
+            .retreat
+            .as_ref()
+            .map(|r| &r.route)
+            .or(self.explorer.follower.as_ref());
+        let pts: Vec<crate::geom::Point> = follower
+            .map_or(Vec::new(), |f| f.planned_path(Some(pos)))
+            .into_iter()
+            .map_while(|p| p)
+            .collect();
+        if pts.len() >= 2 {
+            return pts;
+        }
+        self.explorer
+            .current
+            .as_ref()
+            .map_or(Vec::new(), |c| vec![pos, c.goal])
+    }
+
     /// The level begun again with no death to note (a look round it first, then the level; her
     /// order, or the console's). All that's a life's is set back, the Icon's fight with it: left
     /// out, a level begun again by an order in the middle of that fight kept its stage and its

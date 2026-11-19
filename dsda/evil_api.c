@@ -1138,3 +1138,100 @@ EVIL_API void evil_ready(int weapon)
   p->readyweapon = weapon;
   P_SetupPsprites(p);
 }
+
+/* --- The game saved and put back, in memory (the ultra instinct's look ahead) -----------------
+ *
+ * A slot holds the whole game as a saved game has it (DSDA's own archive, what its key frames
+ * and rewind use), and with it what the boundary keeps of its own that the archive doesn't:
+ * the level left or not, the things' numbering, the count of hits and sounds so far. The game
+ * is deterministic: from a slot put back, the same commands play the same tics, random numbers
+ * and all. */
+#include "p_saveg.h"
+#include "z_zone.h"
+#include "dsda/save.h"
+
+#define EVIL_FRAMES 512
+
+typedef struct {
+  byte *buf;
+  int len;
+  int exited, secret_exit, held, spawned, gametic;
+  int hit_count, sound_count;
+  int pellets[7];
+} evil_frame_t;
+
+static evil_frame_t evil_frames[EVIL_FRAMES];
+
+void G_AfterLoad(void);
+
+/* Save the game into slot (0 to EVIL_FRAMES - 1), over what was there. Returns its size in
+ * bytes, or -1 (no such slot, or not in a level). */
+EVIL_API int evil_save(int slot)
+{
+  evil_frame_t *f;
+  int i;
+  if (slot < 0 || slot >= EVIL_FRAMES || gamestate != GS_LEVEL)
+    return -1;
+  f = &evil_frames[slot];
+  P_InitSaveBuffer();
+  dsda_ArchiveAll();
+  if (f->buf)
+    Z_Free(f->buf);
+  f->buf = savebuffer;
+  f->len = (int)(save_p - savebuffer);
+  P_ForgetSaveBuffer();
+  f->exited = exited;
+  f->secret_exit = secret_exit;
+  f->held = evil_held;
+  f->spawned = evil_spawned;
+  f->gametic = gametic;
+  f->hit_count = evil_hit_count;
+  f->sound_count = evil_sound_count;
+  for (i = 0; i < 7; i++)
+    f->pellets[i] = evil_pellets[i];
+  return f->len;
+}
+
+/* Put the game back as slot has it. Returns 0, or -1 (nothing saved there). The hits and
+ * sounds of the tics played since are forgotten: they didn't happen. */
+EVIL_API int evil_restore(int slot)
+{
+  evil_frame_t *f;
+  int i;
+  if (slot < 0 || slot >= EVIL_FRAMES || !evil_frames[slot].buf)
+    return -1;
+  f = &evil_frames[slot];
+  save_p = f->buf;
+  dsda_UnArchiveAll();
+  save_p = NULL;
+  G_AfterLoad();
+  gameaction = ga_nothing;
+  gamestate = GS_LEVEL;
+  exited = f->exited;
+  secret_exit = f->secret_exit;
+  evil_held = f->held;
+  evil_spawned = f->spawned;
+  gametic = f->gametic;
+  maketic = gametic;
+  evil_hit_count = f->hit_count;
+  evil_sound_count = f->sound_count;
+  if (evil_hits_read > evil_hit_count)
+    evil_hits_read = evil_hit_count;
+  if (evil_sounds_read > evil_sound_count)
+    evil_sounds_read = evil_sound_count;
+  for (i = 0; i < 7; i++)
+    evil_pellets[i] = f->pellets[i];
+  return 0;
+}
+
+/* Let a slot's memory go (all of them: slot -1). */
+EVIL_API void evil_forget(int slot)
+{
+  int i;
+  for (i = 0; i < EVIL_FRAMES; i++)
+    if ((slot < 0 || slot == i) && evil_frames[i].buf)
+    {
+      Z_Free(evil_frames[i].buf);
+      evil_frames[i].buf = NULL;
+    }
+}

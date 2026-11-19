@@ -1,8 +1,10 @@
 # Ultra instinct: a fight searched in the game itself (a plan)
 
-> **Status:** proposed, nothing built. Written 2026-11-16 after the TNT and Plutonia sweeps,
-> where she dies on about nine Plutonia runs in ten on the easiest skill. The numbers in
-> section 4 are estimates from one measurement; the first stage is to measure them.
+> **Status:** a prototype of stages 1 to 3 on the branch `ultra-instinct` (2026-11-19), tried on
+> one level only, E2M9 from a pistol start: section 8. Nothing live, nothing of Evil's.
+> Written 2026-11-16 after the TNT and Plutonia sweeps, where she dies on about nine Plutonia
+> runs in ten on the easiest skill. Section 4's numbers were estimates; section 8 has the
+> measured ones.
 
 The goal: a mode Evil can call on when a level has beaten her too often, in which the fight is
 played as well as the game allows. Not a better rule for the fight: a search, tic by tic, over
@@ -130,3 +132,69 @@ Each stage is something that runs, with its check.
 Using what it finds to teach her ordinary fight (where its line and hers part is a list of what
 she lacks) is the most valuable thing it could do, and a separate piece of work once there are
 lines to compare.
+
+## 8. The prototype (2026-11-19, branch `ultra-instinct`)
+
+`evil-boom ultra WAD MAP [--depth N --width N --move N] [run options]` plays a level offline
+with it on; `evil-boom ultra-check WAD MAP` is stage 1's check. The search is
+`native/src/ultra.rs`; the save and restore are `evil_save`, `evil_restore`, `evil_forget` in
+`dsda/evil_api.c` (DSDA's own archive, with what the boundary keeps beside it), `Engine::save`
+and `restore` (`Mark`: what the Rust side keeps).
+
+**Stage 1, measured.** Saved after 500 tics, played 500 more, put back, the same 500 again: the
+same state to the last number on E1M1, E2M9 and MAP15. Parity with the engine library rebuilt:
+all 24 the same.
+
+| | saved game | a save | a restore | a tic, the engine alone |
+|---|---|---|---|---|
+| E2M9 | 35 KB | 0.006 ms | 0.05 ms | 0.002 ms |
+| E1M1 | 100 KB | 0.025 ms | 0.2 ms | 0.005 ms |
+| MAP15 | 321 KB | 0.08 ms | 0.7 ms | 0.018 ms |
+
+Far cheaper than section 4 allowed for: a restore is some tens of tics' worth, not hundreds.
+(The engine's tic there is with nothing drawn and her not thinking; with her, 0.1 to 0.7 ms.)
+
+**What's built.** A move is 6 tics: still, one of eight compass ways, or along the way on;
+shooting (turned to the nearest of them, the turn worked out) or not. 21 moves from each line
+kept, 8 lines kept, 8 moves deep (1.4 seconds), the first move of the best made for real, then
+again. A line she dies on is dropped. The game is kept every second; with no line she lives
+on, or dead for real, it goes back to the last one kept (three goes, then the one before),
+the lines' worth shaken so it isn't the same line again. What a state is worth: her health and
+armor, the monsters' health left by how dangerous each is, the way on still to go, a missile
+about to land, something clawing in reach, keys, sectors moved, ammo, the exit. The numbers
+are in `ultra::Tune` for now.
+
+Where to go is still hers: she's asked every real tic, and with nothing after her within 1,500
+and nothing of theirs in the air she plays as she does. Searched, the way she'd go is the term
+"the way on"; and not shooting, the turn, the press and the change of gun are her own (which
+way she faces changes nothing a compass move counted on, and it's facing a door and pressing it
+that opens it: without that she never got through E2M9's door).
+
+**E2M9, Ultra-Violence, pistol start.** As she plays, 0 of 16 in the score (dead at about 100
+seconds). With it, 8 seeds:
+
+| seed | out at | health, armor | lowest health | kills | gone back | real time |
+|---|---|---|---|---|---|---|
+| 1 | 170 s | 119, 51 | 6 | 14/14 | 10 | 98 s |
+| 2 | 164 s | 147, 97 | 2 | 14/14 | 21 | 98 s |
+| 3 | 240 s | 200, 136 | 53 | 14/14 | 0 | 140 s |
+| 4 | 211 s | 128, 103 | 3 | 14/14 | 54 | 121 s |
+| 5 | 325 s | 167, 67 | 1 | 14/14 | 52 | 183 s |
+| 6 | 173 s | 102, 80 | 1 | 14/14 | 31 | 98 s |
+| 7 | 178 s | 200, 166 | 76 | 14/14 | 0 | 91 s |
+| 8 | 323 s | 74, 0 | 1 | 14/14 | 74 | 183 s |
+
+One core, about 1,000 to 2,000 looks a run, each about 7,000 tics played ahead and 90 ms.
+
+**What it shows, and doesn't.**
+
+- It isn't yet the fight "played as well as the game allows": in five of the eight she was
+  down to 6 health or less, most of it lost in the first twenty seconds, and lived by going
+  back. A look of 1.4 seconds weighs a hit taken, not a room walked into. Going back on a
+  hit that needn't have been taken (not only on a death) is the next thing to try.
+- The first version, 6 deep and 6 wide and with her turn and press not passed through, ended
+  at the time cap at 2 health having gone back 229 times: the depth and the door both mattered.
+- After going back she still knows what she saw in the tics undone, and her clock is made to
+  go only forward (the tics gone back added to what she's told). Her knowledge isn't put back.
+- One level. Not the arenas, not Plutonia, not live at half speed, no workers, nothing Evil
+  can call.
