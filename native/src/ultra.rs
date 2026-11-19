@@ -1351,6 +1351,7 @@ impl Drop for Pool {
 pub fn worker(wad: &str, map: &str, o: &RunOptions, tune: Tune, port: u16) -> Result<(), String> {
     use std::io::{Read, Write};
     let crate::sweep::Setup { mut e, agent, .. } = crate::sweep::setup(wad, map, o, false, None)?;
+    long_way(&e);
     let mut ultra = Ultra::new(tune);
     ultra.hot = Some(std::rc::Rc::clone(&agent.x().nav));
     let mut stream =
@@ -1550,12 +1551,22 @@ impl Session {
     }
 }
 
+/// (EVIL_SLOW_RESTORE: every game put back the long way, DSDA's own load with the level set up
+/// again, to check the quick way against. Workers are started with what started them, so
+/// theirs go the same way.) Whether it's set.
+fn long_way(e: &Engine) -> bool {
+    let slow = std::env::var_os("EVIL_SLOW_RESTORE").is_some();
+    e.game.restore_quick(!slow);
+    slow
+}
+
 /// Stage 1's check: the game saved, played on, put back and played the same again comes out
 /// the same; and what a save and a restore cost.
 pub fn check(wad: &str, map: &str, o: &RunOptions) -> Result<String, String> {
     let crate::sweep::Setup {
         mut e, mut agent, ..
     } = crate::sweep::setup(wad, map, o, false, None)?;
+    long_way(&e);
     let mut last: Option<Controls> = None;
     let step = |e: &mut Engine, agent: &mut Agent, last: &mut Option<Controls>| {
         let ob = e.observe();
@@ -1661,6 +1672,7 @@ pub fn check_tape(
     let crate::sweep::Setup {
         mut e, mut agent, ..
     } = crate::sweep::setup(wad, map, o, false, None)?;
+    let slow = long_way(&e);
     let start = e.save(3).ok_or("the engine library can't save")?;
     let mut tape = tape;
     let mut first = true;
@@ -1705,6 +1717,13 @@ pub fn check_tape(
             let s = state(&mut e);
             let mut h = std::collections::hash_map::DefaultHasher::new();
             s.hash(&mut h);
+            // (and every sector's floor and ceiling. Not DSDA's archive of the game: a game put
+            // back archives to other bytes than the game it was saved from, the long way too)
+            let mut sectors = Vec::new();
+            e.game.sectors(&mut sectors);
+            for (f, c) in &sectors {
+                (f.to_bits(), c.to_bits()).hash(&mut h);
+            }
             seen.push((e.tic, h.finish()));
             if full == Some(e.tic) {
                 whole = s;
@@ -1722,7 +1741,14 @@ pub fn check_tape(
         return Ok(play(mode, Some(tic))?.2);
     }
     let (plain, how, _) = play(0, None)?;
-    let mut out = format!("{wad} {map}: the tape as it is: {how}");
+    let mut out = format!(
+        "{wad} {map} (games put back {}): the tape as it is: {how}",
+        if slow {
+            "the long way"
+        } else {
+            "the quick way"
+        }
+    );
     for (mode, name) in [
         (1u8, "saved and put back every tic"),
         (2, "saved, played on and put back every tic"),
@@ -1761,6 +1787,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         map_name,
         ..
     } = crate::sweep::setup(wad, map, o, false, None)?;
+    long_way(&e);
     let mut session = Session::new(tune, &agent, e.tic);
     if o.workers > 0 {
         session.ultra.pool = Some(Pool::spawn(

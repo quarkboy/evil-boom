@@ -644,6 +644,16 @@ static void evil_render(fixed_t frac)
    * changed, and between tics the gun jumped about) */
   if (!I_StartDisplay())
     return;
+  /* (I_StartDisplay takes a frame for a tic's first when the tic is later than the last it
+   * drew. A game put back is at an earlier one: till it had caught up, seconds of it, no frame
+   * was a first, and the weapon was drawn each frame from where it was before the game went
+   * back to where it is now: a gun changed in those seconds hopped between the two) */
+  {
+    static int drawn_tic = -1;
+    if (gametic != drawn_tic)
+      realframe = true;
+    drawn_tic = gametic;
+  }
   if (setsizeneeded)
     R_ExecuteSetViewSize();  /* (the view's size and buffers: D_Display does this first) */
   if (gamestate == GS_LEVEL)
@@ -1147,6 +1157,7 @@ EVIL_API void evil_ready(int weapon)
  * is deterministic: from a slot put back, the same commands play the same tics, random numbers
  * and all. */
 #include "p_saveg.h"
+#include "p_spec.h"
 #include "z_zone.h"
 #include "dsda/save.h"
 
@@ -1155,6 +1166,7 @@ EVIL_API void evil_ready(int weapon)
 typedef struct {
   byte *buf;
   int len;
+  int episode, map, skill;  /* the level it's of */
   int exited, secret_exit, held, spawned, gametic;
   int hit_count, sound_count;
   int pellets[7];
@@ -1163,6 +1175,67 @@ typedef struct {
 static evil_frame_t evil_frames[EVIL_FRAMES];
 
 void G_AfterLoad(void);
+
+/* Putting a game back without setting the level up again. DSDA's load does that every time
+ * (G_InitNew, in dsda_UnArchiveContext: the whole level read from the WAD and its things
+ * spawned, to be thrown away by the archive that follows), which is most of what a restore
+ * costs on a big level. When the game put back is of the level that's up, the archive alone
+ * is nearly enough: it writes every sector, line and side it keeps, clears each sector's
+ * movers and sound target, and removes every thinker before making its own (P_UnArchiveWorld,
+ * P_UnArchiveThinkers; a thing removed is unlinked from its sector and block and its sounds
+ * stopped). What the level's setting up did besides, that play changes and the archive
+ * doesn't carry, evil_level_again does. The first game put back of a level goes the long way,
+ * and what the long way leaves the totals at is kept for the rest. */
+int evil_level_stays;   /* (read by dsda_UnArchiveContext: this load is of the level that's up) */
+static int evil_quick = 1;
+static struct { int valid, episode, map, skill, kills, items, secret; } evil_level;
+
+void A_ResetPlayerCorpseQueue(void);     /* (p_enemy.c) */
+void P_ResetTeleptFromSector(int i);     /* (p_telept.c) */
+void R_StopAllInterpolations(void);      /* (r_fps.c) */
+
+void evil_level_again(void)
+{
+  int i;
+  thinker_t *th;
+  /* (the archive removes every thinker, but a thing another still points at is only freed
+   * when the last pointer lets go (P_RemoveThinkerDelayed), and here they all go at once,
+   * pointing at each other and remembered by sectors as what was heard. So every such pointer
+   * is let go first, and each thing is then freed as it's removed. The level's setting up
+   * frees the lot whatever (Z_FreeLevel); without this the quick way kept some of every game
+   * it put back, gigabytes in a few minutes of looking) */
+  for (i = 0; i < numsectors; i++)
+    P_SetTarget(&sectors[i].soundtarget, NULL);
+  for (th = thinkercap.next; th != &thinkercap; th = th->next)
+    if (th->function == P_MobjThinker)
+    {
+      mobj_t *mo = (mobj_t *)th;
+      P_SetTarget(&mo->target, NULL);
+      P_SetTarget(&mo->tracer, NULL);
+      P_SetTarget(&mo->lastenemy, NULL);
+    }
+  for (th = thinkercap.next; th != &thinkercap; th = th->next)
+    th->references = 0;
+  /* (the totals aren't in the archive: as the level's setting up counts them) */
+  totalkills = evil_level.kills;
+  totalitems = evil_level.items;
+  totalsecret = evil_level.secret;
+  /* (switches waiting to pop back: the archive adds those of its game to an empty list) */
+  memset(buttonlist, 0, sizeof(buttonlist));
+  /* (each sector's teleport destination, remembered as a pointer to the thing) */
+  for (i = 0; i < numsectors; i++)
+    P_ResetTeleptFromSector(i);
+  /* (the player's corpses kept, pointers too) */
+  A_ResetPlayerCorpseQueue();
+  R_StopAllInterpolations();
+}
+
+/* The long way every time (0), or the quick way when it can (1, as it starts): for checking
+ * the one against the other. */
+EVIL_API void evil_restore_quick(int on)
+{
+  evil_quick = on;
+}
 
 /* Save the game into slot (0 to EVIL_FRAMES - 1), over what was there. Returns its size in
  * bytes, or -1 (no such slot, or not in a level). */
@@ -1180,6 +1253,9 @@ EVIL_API int evil_save(int slot)
   f->buf = savebuffer;
   f->len = (int)(save_p - savebuffer);
   P_ForgetSaveBuffer();
+  f->episode = gameepisode;
+  f->map = gamemap;
+  f->skill = gameskill;
   f->exited = exited;
   f->secret_exit = secret_exit;
   f->held = evil_held;
@@ -1206,9 +1282,24 @@ EVIL_API int evil_restore(int slot)
    * put back from some tics on had its missiles turning on other tics than the game saved) */
   gametic = f->gametic;
   maketic = gametic;
+  evil_level_stays = evil_quick && evil_level.valid && gamestate == GS_LEVEL
+    && f->episode == gameepisode && f->map == gamemap && f->skill == (int)gameskill
+    && evil_level.episode == f->episode && evil_level.map == f->map
+    && evil_level.skill == f->skill;
   save_p = f->buf;
   dsda_UnArchiveAll();
   save_p = NULL;
+  if (!evil_level_stays)
+  {
+    evil_level.valid = 1;
+    evil_level.episode = gameepisode;
+    evil_level.map = gamemap;
+    evil_level.skill = gameskill;
+    evil_level.kills = totalkills;
+    evil_level.items = totalitems;
+    evil_level.secret = totalsecret;
+  }
+  evil_level_stays = 0;
   G_AfterLoad();
   gameaction = ga_nothing;
   gamestate = GS_LEVEL;
@@ -1243,10 +1334,11 @@ EVIL_API void evil_forget(int slot)
 
 /* A saved game out of this process and into another (the ultra instinct's workers: each has
  * the game in it, and is handed the one to look ahead from). The bytes are EVIL_FRAME_HEAD
- * ints (exited, secret_exit, held, spawned, gametic, the pellets' seven) and then DSDA's own
+ * ints (exited, secret_exit, held, spawned, gametic, the pellets' seven, the level's episode,
+ * map and skill) and then DSDA's own
  * archive, which sets the level up itself when it's loaded. The hits and sounds counted are
  * each process's own. */
-#define EVIL_FRAME_HEAD 12
+#define EVIL_FRAME_HEAD 15
 
 /* The size of slot's game as bytes (out NULL), or the bytes copied into out (cap its room).
  * -1: nothing saved there, or too little room. */
@@ -1267,6 +1359,7 @@ EVIL_API int evil_frame_get(int slot, unsigned char *out, int cap)
   head[3] = f->spawned; head[4] = f->gametic;
   for (i = 0; i < 7; i++)
     head[5 + i] = f->pellets[i];
+  head[12] = f->episode; head[13] = f->map; head[14] = f->skill;
   memcpy(out, head, sizeof(head));
   memcpy(out + sizeof(head), f->buf, f->len);
   return size;
@@ -1292,6 +1385,7 @@ EVIL_API int evil_frame_put(int slot, const unsigned char *in, int len)
   f->spawned = head[3]; f->gametic = head[4];
   for (i = 0; i < 7; i++)
     f->pellets[i] = head[5 + i];
+  f->episode = head[12]; f->map = head[13]; f->skill = head[14];
   f->hit_count = evil_hit_count;
   f->sound_count = evil_sound_count;
   return 0;

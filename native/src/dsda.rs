@@ -283,6 +283,8 @@ pub struct Dsda {
     /// `evil_frame_put`): the ultra instinct's workers
     frame_get_fn: Option<unsafe extern "C" fn(c_int, *mut u8, c_int) -> c_int>,
     frame_put_fn: Option<unsafe extern "C" fn(c_int, *const u8, c_int) -> c_int>,
+    /// `evil_restore_quick`: a game put back the long way every time, or the quick way
+    quick_fn: Option<unsafe extern "C" fn(c_int)>,
     /// the nearest monster she has a line of sight to (`evil_nearest_seen`)
     seen_fn: Option<unsafe extern "C" fn(*mut f64) -> c_int>,
     clear_fn: Option<ClearFn>,
@@ -562,6 +564,10 @@ impl Dsda {
             forget_fn,
             frame_get_fn,
             frame_put_fn,
+            // SAFETY: the symbol, if the library has it, is `void evil_restore_quick(int)`.
+            quick_fn: sym(b"evil_restore_quick").ok().map(|p| unsafe {
+                std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p)
+            }),
             seen_fn,
             clear_fn,
             reset_ids_fn,
@@ -912,6 +918,15 @@ impl Dsda {
         };
         // SAFETY: the game reads `len` bytes from a buffer of that many, and copies them.
         unsafe { f(slot, bytes.as_ptr(), len) == 0 }
+    }
+
+    /// Games put back the quick way when they can be (as it starts), or the long way every time
+    /// (DSDA's own load, the level set up again): for checking the one against the other.
+    pub fn restore_quick(&self, on: bool) {
+        if let Some(f) = self.quick_fn {
+            // SAFETY: a plain value into the game; see `load`.
+            unsafe { f(c_int::from(on)) };
+        }
     }
 
     /// A slot's memory let go (all of them: -1).

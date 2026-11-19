@@ -340,3 +340,48 @@ the 343 ms a move has at half speed, Plutonia MAP01 now fits with room.
 
 As steady as with it off. Still to do for stage 4: a cheaper restore (DSDA's load sets the
 level up again each time, and that's most of a look on a big level).
+
+### Stage 4, a cheaper restore (2026-11-19)
+
+DSDA's load sets the whole level up again before it reads a game back (`G_InitNew` in
+`dsda_UnArchiveContext`: the level read from the WAD, every thing spawned, to be thrown away
+by the archive that follows). When the game put back is of the level that's up, `evil_restore`
+now skips that (a three-line hook in DSDA's load, in our patch; the rest in `evil_api.c`).
+
+- **Why the archive alone is nearly enough:** it writes every sector, line and side it keeps,
+  clears each sector's movers and sound target, and removes every thinker before making its
+  own; a thing removed is unlinked from its sector and block and its sounds stopped.
+- **What `evil_level_again` does besides:** the level's totals put back to what the level's
+  setting up counts (they aren't in the archive: kept from the first restore of a level, which
+  goes the long way); the list of switches waiting to pop back emptied; each sector's
+  remembered teleport destination and the player's corpse queue forgotten (pointers to
+  things); and every pointer between things let go before they're removed.
+- **That last one was a leak found by measuring:** a thing another still points at is only
+  freed when the last pointer lets go, and the level's setting up frees the lot whatever. The
+  first quick restore kept some of every game: 2.7 GB in four minutes of looking on MAP06. Now
+  91 MB there (61 the long way), 41 MB on E2M9 (the same).
+
+**Measured, a restore:** E2M9 0.062 ms the long way, 0.008 ms the quick; Plutonia MAP01 0.346
+and 0.029; MAP15 0.716 and 0.141. **A look,** Plutonia MAP01's first 390 s with 8 workers: 116
+ms (the longest 173) before, 31 ms (63) now. One process, the search's time for 240 s of game:
+E2M9 114 s for 22, MAP06 879 s for 193.
+
+**Checked.** `EVIL_SLOW_RESTORE=1` has every restore go the long way, for comparing.
+
+- Seven levels played offline both ways with no workers (a run is then the same every time):
+  E2M9 twice, Plutonia MAP01, MAP06, MAP15, MAP30, E4M6, 240 s of each. The same run to the
+  tic, the long way and the quick, all seven; every tape plays out the same.
+- A 392 s Plutonia MAP01 tape three ways (as it is; saved and put back every tic; saved,
+  played 30 tics on and put back every tic), every thing and every sector's heights compared
+  each tic: the same game throughout.
+- Workers against the asking process on MAP06: 1,592 answers, none different.
+- Not a check that works: DSDA's archive of a game put back isn't the same bytes as the game
+  it was saved from, the long way either.
+
+### The weapon hopping after a rewind (2026-11-19)
+
+Watched by the maintainer: a gun changed for another hopped between two places. DSDA smooths
+the weapon between tics from where it was on a tic's first frame, and takes a frame for a
+tic's first when the tic is later than the last it drew (`I_StartDisplay`). A game put back is
+at an earlier tic, so for the seconds till it had caught up no frame was a first. `evil_render`
+now takes any frame whose tic differs from the last drawn for a first.
