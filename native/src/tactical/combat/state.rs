@@ -39,6 +39,17 @@ pub struct Movers {
 
 /// The gun's timing: when the trigger was down, when a shot left, what her legs wait for.
 pub struct Trigger {
+    /// the target she's shooting at with a missile gun: its id, its health, the gun's slot and
+    /// her rounds for it, and where it stood, as when she began, it was last hurt, or it moved
+    pub(super) shot_at: Option<(i32, i32, i32, i32, crate::geom::Point, i64)>,
+    /// no more fired at this one from where she stood then, till this tic: her rounds weren't
+    /// getting there (`aim.wasted`)
+    pub(super) no_effect: Option<(i32, crate::geom::Point, i64)>,
+    /// the target her plasma was last reckoned not to reach, and when
+    pub(super) blocked_at: Option<(i32, i64)>,
+    /// her rounds for the gun in hand, by the tic, a few seconds of it (for which of them have
+    /// had time to land)
+    pub(super) ammo_log: std::collections::VecDeque<(i64, i32, i32)>,
     /// the trigger was down last tic
     pub(super) held: bool,
     /// when a bullet or a shell last left the gun (by its ammo's count), and the slot's

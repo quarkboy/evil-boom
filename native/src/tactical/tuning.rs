@@ -565,6 +565,20 @@ pub struct Aim {
     pub switch_wait: i64,
     /// with a boss in sight, others this far off aren't shot (left to it)
     pub leave_to_boss: f64,
+    /// a missile gun's rounds worth this much damage gone at one target, it standing where it
+    /// is, with its health no lower: they aren't getting there, and no more are fired at it from here for
+    /// `wasted_tics` (or till she's `wasted_room` from where she stood)
+    pub wasted: f64,
+    pub wasted_tics: i64,
+    pub wasted_room: f64,
+    /// ...the target within this of where it stood all the while
+    pub wasted_still: f64,
+    /// ...counting a round this long after it would have got there (tics)
+    pub wasted_land: i64,
+    /// ...and her plasma reckoned not to reach it within this long before (tics)
+    pub wasted_waver: i64,
+    /// ...and it further off than this
+    pub wasted_far: f64,
     /// kept clear beyond the rocket's box each side of its way (a miss is better than a near thing)
     pub rocket_margin: f64,
     /// with a hitscanner about, a monster she'd be longer than this many seconds killing isn't put
@@ -584,6 +598,13 @@ impl Default for Aim {
             rocket_wary: 3 * 35,
             switch_wait: 40,
             leave_to_boss: 384.0,
+            wasted: 300.0,
+            wasted_tics: 30 * 35,
+            wasted_room: 96.0,
+            wasted_still: 48.0,
+            wasted_land: 12,
+            wasted_waver: 70,
+            wasted_far: 512.0,
             rocket_margin: 8.0,
             kill_first: 8.0,
             pain_near: 512.0,

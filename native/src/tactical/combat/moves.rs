@@ -168,6 +168,8 @@ pub enum HeldFire {
     OutOfReach,
     RocketNotSafe,
     PlasmaBlocked,
+    /// her rounds have gone at it and it's none the worse
+    NoEffect,
     LeftToBoss,
     NoShot,
     BarrelInLine,
@@ -180,6 +182,7 @@ impl HeldFire {
             HeldFire::OutOfReach => "out of reach",
             HeldFire::RocketNotSafe => "rocket not safe",
             HeldFire::PlasmaBlocked => "plasma wouldn't get there",
+            HeldFire::NoEffect => "her shots aren't getting there",
             HeldFire::LeftToBoss => "left to the boss",
             HeldFire::NoShot => "no shot (too steep, or something in the way)",
             HeldFire::BarrelInLine => "a barrel in the line of fire, its chain by her",

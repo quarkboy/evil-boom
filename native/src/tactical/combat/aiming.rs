@@ -215,13 +215,90 @@ impl Combat {
         let info = mon(t.name);
         let tolerance = 1.5f64.max((info.radius * 0.7).atan2(d.max(1.0)).to_degrees());
         let on = norm(aim - obs.angle).abs() < tolerance;
+        // A missile gun's rounds gone at one standing where it is and it none the worse: they aren't getting there,
+        // whatever the reckoning says. (`projectile_reaches` goes by the missile's middle, on
+        // purpose; with its middle just clear of a corner and its side not, the reckoning said
+        // "blocked" and "clear" by turns as she shifted a unit, and she fired in the clear ones:
+        // E4M9, all 92 cells at a demon 1,025 off in 43 seconds, no damage done; E4M6 under the
+        // ultra instinct, the maintainer watching.) Held from where she stands, a while: from
+        // somewhere else it's another shot.
+        let gun_ammo = Self::ammo(obs, held);
+        // (one that stays where it is: at one moving about a miss is a miss, and counting
+        // those she gave up on a cyberdemon after three rockets: E2M8 8 exits of 16 to none)
+        // (and only where the reckoning itself has just said "blocked" of this one: that's the
+        // case it's for, the shot's middle clear and its side not. Any rounds that did nothing,
+        // a cyberdemon she'd missed with three rockets was left alone for half a minute: E2M8
+        // 8 exits of 16 to 3)
+        let plasma_blocked = held == 6 && !self.projectile_reaches(obs, t, pos, PLASMA_RADIUS);
+        if plasma_blocked {
+            self.trigger.blocked_at = Some((t.id, obs.tic));
+        }
+        // (never a boss: there's no leaving one of those for half a minute. Nor one near her:
+        // that one's her business whatever her rounds are doing, and a lost soul left alone
+        // comes for her. Without those two, E2M8 8 exits of 16 to 5 and MAP10 3 to 1)
+        let wavering = !mon(t.name).boss
+            && d > self.tune.aim.wasted_far
+            && self
+                .trigger
+                .blocked_at
+                .is_some_and(|(id, tic)| id == t.id && obs.tic - tic <= self.tune.aim.wasted_waver);
+        let fresh = (t.id, t.health, held, gun_ammo, (t.x, t.y), obs.tic);
+        let at = self.trigger.shot_at.get_or_insert(fresh);
+        if !wavering
+            || at.0 != t.id
+            || at.2 != held
+            || t.health < at.1
+            || gun_ammo > at.3
+            || dist(at.4, (t.x, t.y)) > self.tune.aim.wasted_still
+        {
+            *at = fresh;
+        }
+        // (the rounds that have had time to land: fired, a missile is a second on its way at
+        // 1,000 off, and counted as it left the gun she'd given up with the first still in the
+        // air: E2M8 again, 8 exits of 16 to 1)
+        let (begun, since) = (at.3, at.5);
+        let log = &mut self.trigger.ammo_log;
+        log.push_back((obs.tic, held, gun_ammo));
+        while log
+            .front()
+            .is_some_and(|&(tic, _, _)| obs.tic - tic > 6 * 35)
+        {
+            log.pop_front();
+        }
+        let flight = if w.speed > 0.0 {
+            (d / w.speed) as i64
+        } else {
+            0
+        } + self.tune.aim.wasted_land;
+        // (her rounds as they stood a flight ago, if that's since she began at it: before
+        // that they're no rounds at it. Any count from the log, she'd "spent" what she'd since
+        // picked up, and left a lost soul 238 off every tic: E2M8 8 exits of 16 to 5)
+        let landed = log
+            .iter()
+            .rev()
+            .find(|&&(tic, slot, _)| slot == held && obs.tic - tic >= flight)
+            .filter(|&&(tic, _, _)| tic >= since)
+            .map_or(begun, |&(_, _, n)| n.min(begun));
+        let gone = f64::from(begun - landed) / f64::from(w.ammo_per_shot.max(1)) * w.damage;
+        if !w.hitscan && gone >= self.tune.aim.wasted {
+            self.trigger.no_effect = Some((t.id, pos, obs.tic + self.tune.aim.wasted_tics));
+            self.trigger.shot_at = None;
+            // (and it's one she can't get at, to the rest of the fight: not stood to, not
+            // stepped for, the route goes on)
+            self.give_up(obs, t.id);
+        }
+        let no_effect = self.trigger.no_effect.is_some_and(|(id, from, till)| {
+            id == t.id && obs.tic < till && dist(from, pos) < self.tune.aim.wasted_room
+        });
         let held_fire = if self.boss_dying(obs, t) {
             Some(HeldFire::BossDying)
         } else if !self.worth_a_shot(&w, t, d) {
             Some(HeldFire::OutOfReach)
         } else if held == 5 && (!self.rocket_safe(obs, t) || blocked) {
             Some(HeldFire::RocketNotSafe)
-        } else if held == 6 && !self.projectile_reaches(obs, t, pos, PLASMA_RADIUS) {
+        } else if no_effect && !w.hitscan {
+            Some(HeldFire::NoEffect)
+        } else if plasma_blocked {
             Some(HeldFire::PlasmaBlocked)
         } else if !mon(t.name).boss
             && d > self.tune.aim.leave_to_boss

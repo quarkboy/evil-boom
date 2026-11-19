@@ -484,6 +484,10 @@ impl Combat {
             invulnerable_until: i64::MIN / 2,
             immune: false,
             trigger: Trigger {
+                shot_at: None,
+                no_effect: None,
+                ammo_log: std::collections::VecDeque::new(),
+                blocked_at: None,
                 held: false,
                 shot_out: None,
                 line_held: None,
