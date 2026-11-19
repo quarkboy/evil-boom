@@ -2824,3 +2824,32 @@ every skill (not traced: the maintainer suspects the jumps over lava that aren't
   started, `--carry` dropped by sweep and episode, secret allowances by map name, "the same
   to the tic" being outcome, whole seconds and kills, the Icon's restart, the stuck prompt's
   flag, and the lot's two marks (fixed in `f6d4c3b`). The rest not yet done.
+
+## MAP14's alcove behind the red bars (2026-11-19)
+
+MAP14 on Ultra-Violence from a pistol start, 64 seeds, on `d6eeda4`: 17 out (24 to 57
+minutes), 47 dead (29 by chaingunners and shotgun guys; 21 with nothing left to shoot), no
+run at the time cap; 21 strandings in 15 runs, 15 of them in one place.
+
+- **The place.** The alcove behind the red bars (384 to 576 by -160 to -344): the bars to the
+  north, a wall to the west, a ledge 32 up to the east that she drops off and can't step
+  back onto, a door to the south. The door is opened by a line beyond it and by one 16
+  inside the bars, for whoever walks in once they're down: from inside she comes up to that
+  line and can't get her centre over it. With the bars up there's no way out. The level's
+  flaw (the maintainer's).
+- **Why she goes in.** The door opens and shuts by something else's doing (not found what);
+  she saw it open, and the planner takes a sector as last seen: 16 seconds on she planned
+  over the ledge, down and out by it, and found it shut.
+- **Tried and dropped** (`out/score/counts-on-moved.patch`): a route with a drop she can't
+  climb back from refused when, from where it lands her, the way on and the way back both
+  hang on a sector seen moved from its rest by nothing she's learned. The 64 seeds: exits 17
+  and 17, strandings 21 to 10 (the alcove's 15 to 7). The score, second seed set against
+  `lot5.tsv`: -0.0005 (s.e. 0.0008), 1 better, 3 worse, 1,082 the same; exits 440 and 440;
+  the one run at the time cap out at 55 minutes; nothing but MAP14 moved in 1,088 runs. A
+  rule that in practice is one level's, for no gain on the score: dropped on the
+  maintainer's word given beforehand.
+- **Also tried, no effect:** a walk-over line counted as set off only where her box has room
+  both sides of it. True of the engine; the plan never rested on that line.
+- **Left:** the other seven alcove strandings are her dropping in from the ledge to press a
+  wall she suspects (the rule that a well-marked wall is worth a pit); three strandings at
+  (1170, 422), "try switch (line 375)", not traced.
