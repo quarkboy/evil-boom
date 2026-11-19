@@ -122,6 +122,8 @@ The window:
   --headless              no window: played as fast as it goes, its log in out/watch/live.log
   --ultra                 the ultra instinct on from the start and kept on (U in the window
                           turns it on from where she stands, till the fight's over)
+  --ultra-speed X         how fast the game goes while its search has her, of the window's
+                          speed (0.5 unless told: half; 0.75 looks better where the looks fit)
   --workers N             its looks by N worker processes (8 is plenty; 0: its own, which
                           stops the picture for each look)
 

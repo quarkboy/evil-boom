@@ -48,6 +48,9 @@ const W: usize = 1600;
 const H: usize = 900;
 /// (x, y, w, h)
 type Rect = (usize, usize, usize, usize);
+/// The ultra instinct's glow as last worked out: the picture's box and the canvas's width it
+/// was for, and each pixel it reddens (its place on the canvas, how much).
+type UltraMask = ((Rect, usize), Vec<(u32, u8)>);
 const GAME: Rect = (0, 0, 800, 600);
 const LOG: Rect = (0, 600, 800, 300);
 const MAP: Rect = (800, 0, 800, 520);
@@ -297,6 +300,8 @@ pub struct WatchOptions {
     pub ultra: bool,
     /// (`--workers N`) its looks by N worker processes, started with the window (0: its own)
     pub workers: usize,
+    /// (`--ultra-speed X`) the window's speed while its search has her, of what it is otherwise
+    pub ultra_speed: f64,
     /// she plays as mortal and nothing hurts her (`--charmed`)
     pub charmed: bool,
     /// the chaingun and bullets for ever (`--endless-bullets`)
@@ -680,6 +685,11 @@ struct Watch {
     ultra_waiting: bool,
     /// its looks waited for (the headless watcher), not come back for (the window)
     ultra_block: bool,
+    /// (`--ultra-speed`) the window's speed while its search has her, of what it is otherwise
+    ultra_speed: f64,
+    /// its glow: the pixels it reddens and how much each, for the picture's box it was last
+    /// drawn in (the box and the canvas's width)
+    ultra_mask: std::cell::RefCell<UltraMask>,
     /// the hits on her last tic, for whoever's directing to be told of
     hits: Vec<crate::dsda::Hit>,
     m: Arc<MapData>,
@@ -1318,6 +1328,7 @@ fn level(
     watch.hold = hold;
     watch.endless_bullets = o.endless_bullets;
     watch.ultra_workers = o.workers;
+    watch.ultra_speed = o.ultra_speed;
     watch.ultra_pool_up();
     if o.ultra {
         watch.ultra_stays = true;
@@ -1574,9 +1585,9 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             watch.sound_on = sound;
         }
         let (now, tic0) = (Instant::now(), watch.engine.tic);
-        // (the ultra instinct searching: at half speed, which is what its looks have to fit in)
+        // (the ultra instinct searching: slowed, which is what its looks have to fit in)
         let ultra_pace = if watch.ultra.as_ref().is_some_and(|u| u.searching) {
-            crate::ultra::LIVE_SPEED
+            watch.ultra_speed
         } else {
             1.0
         };
@@ -1855,6 +1866,8 @@ impl Watch {
             ultra_wait: None,
             ultra_waiting: false,
             ultra_block: true,
+            ultra_speed: crate::ultra::LIVE_SPEED,
+            ultra_mask: std::cell::RefCell::new(((((0, 0, 0, 0)), 0), Vec::new())),
             hits: Vec::new(),
             m,
             map_name: map_name.to_string(),
@@ -1950,6 +1963,58 @@ impl Watch {
         ) {
             Ok(p) => self.ultra_pool = Some(p),
             Err(e) => self.ultra_log(e),
+        }
+    }
+
+    /// The ultra instinct showing: an angry red glow in from the edges of the game's picture
+    /// while it's on, throbbing, and stronger while its search has her.
+    fn ultra_glow(&self, c: &mut Canvas, r: Rect) {
+        let Some(u) = &self.ultra else { return };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0.0, |d| d.as_secs_f64() % 1000.0);
+        let throb = (now * std::f64::consts::TAU * 1.1).sin();
+        let strength = if u.searching {
+            0.44 + 0.12 * throb
+        } else {
+            0.20 + 0.05 * throb
+        };
+        // (how red each pixel of the bands is, by how near the edge: worked out once for a
+        // picture's box, then a frame is an integer blend of those pixels only)
+        let mut mask = self.ultra_mask.borrow_mut();
+        if mask.0 != (r, c.width) {
+            let m = (r.2.min(r.3) / 6).max(1);
+            let fall = |d: usize| {
+                if d < m {
+                    1.0 - d as f64 / m as f64
+                } else {
+                    0.0
+                }
+            };
+            let mut at = Vec::new();
+            for y in 0..r.3 {
+                let ey = fall(y.min(r.3 - 1 - y));
+                for x in 0..r.2 {
+                    let t = fall(x.min(r.2 - 1 - x)).hypot(ey).min(1.0);
+                    let a = (t * t * 255.0) as u8;
+                    // (too faint to see left alone: a third of the band, and of the work)
+                    if a >= 10 {
+                        at.push((((r.1 + y) * c.width + r.0 + x) as u32, a));
+                    }
+                }
+            }
+            *mask = ((r, c.width), at);
+        }
+        let s = (strength * 256.0) as u32;
+        for &(i, a) in &mask.1 {
+            let Some(p) = c.px.get_mut(i as usize) else {
+                continue;
+            };
+            // (red and blue together in one multiply, green in another)
+            let a = (u32::from(a) * s) >> 8;
+            let rb = ((*p & 0x00ff_00ff) * (256 - a) + 0x00ff_0006 * a) >> 8;
+            let g = ((*p & 0x0000_ff00) * (256 - a) + 0x0000_0e00 * a) >> 8;
+            *p = (rb & 0x00ff_00ff) | (g & 0x0000_ff00);
         }
     }
 
@@ -2251,6 +2316,7 @@ impl Watch {
                 }
             }
         }
+        self.ultra_glow(c, GAME);
         if self.engine.finished() && self.present.is_none() {
             c.text(
                 if self.engine.exited() {

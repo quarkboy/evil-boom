@@ -100,6 +100,13 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--tuning" => o.tuning = Some(std::path::PathBuf::from(value("--tuning")?)),
             "--tape" => o.tape = Some(std::path::PathBuf::from(value("--tape")?)),
             "--ultra" => o.ultra = true,
+            "--ultra-speed" => {
+                o.ultra_speed = value("--ultra-speed")?
+                    .parse()
+                    .ok()
+                    .filter(|x: &f64| *x > 0.0 && *x <= 1.0)
+                    .ok_or("--ultra-speed X (over 0, up to 1)")?;
+            }
             "--workers" => {
                 o.workers = value("--workers")?
                     .parse()

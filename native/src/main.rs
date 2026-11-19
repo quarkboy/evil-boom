@@ -830,6 +830,7 @@ fn watch_options(
         tape: o.tape.clone(),
         ultra: o.ultra,
         workers: o.workers,
+        ultra_speed: o.ultra_speed,
         headless: false,
         paced: false,
         max_seconds: o.max_seconds,
