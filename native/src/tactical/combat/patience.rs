@@ -101,6 +101,14 @@ impl Patience {
         self.given_up.insert(id, until);
     }
 
+    /// id's no longer given up on, if it was till `until` (who gave it up takes that back:
+    /// given up on since by another, till another time, it stays so).
+    pub fn take_back(&mut self, id: i32, until: i64) {
+        if self.given_up.get(&id) == Some(&until) {
+            self.given_up.remove(&id);
+        }
+    }
+
     /// Is id given up on, at `tic`?
     pub fn given_up(&self, id: i32, tic: i64) -> bool {
         self.given_up.get(&id).is_some_and(|&until| tic < until)

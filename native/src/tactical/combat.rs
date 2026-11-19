@@ -261,6 +261,8 @@ pub struct Combat {
     /// monsters that only claw or charge, in her sight: since when, how far off then, and where
     /// she stood (for whether one can get at her: `cant_reach`)
     reach_watch: BTreeMap<i32, (i64, f64, Point)>,
+    /// what's in sight with no shot at any of it, as one effort (`leave_the_lot`)
+    lot: Lot,
     /// the ground she's been on, by the mesh's polys: where she knows is safe
     been: Vec<bool>,
     /// the fight's move last tic: for measuring, and for directed play (an order paused while
@@ -413,6 +415,7 @@ impl Combat {
             crush_wait: None,
             missiles_seen: BTreeSet::new(),
             reach_watch: BTreeMap::new(),
+            lot: Lot::default(),
             been: Vec::new(),
             nav,
             last_move: None,
@@ -529,6 +532,7 @@ impl Combat {
             (s.tic, s.sighted) = (i64::MIN / 2, i64::MIN / 2);
         }
         self.reach_watch.clear();
+        self.lot = Lot::default();
         self.patience = Patience::default();
         self.missiles_seen.clear();
         self.seen_hurt.clear();
@@ -2026,16 +2030,19 @@ impl Combat {
         if let Some(t) = target.clone().filter(|t| self.can_hit(obs, t, None)) {
             self.patience.rest(Effort::LostAgain, t.id); // (a shot at it: not round again for nothing)
         }
+        self.leave_the_lot(obs);
         let close: Vec<Thing> = self
             .now
             .about
             .iter()
             .filter(|t| {
                 let m = mon(t.name);
-                // Not one that can't get at her: nothing to back off from.
+                // Not one that can't get at her: nothing to back off from. Nor one of a lot
+                // she's left as out of her guns' way.
                 (matches!(m.attack, Attack::Melee | Attack::Charge | Attack::Fire) || m.melee)
                     && dist((t.x, t.y), pos) < self.tune.engage.close + m.radius
                     && !self.cant_reach(obs, t)
+                    && !self.left_with_the_lot(t.id)
             })
             .cloned()
             .collect();
@@ -2129,6 +2136,91 @@ impl Combat {
     /// The sector under a point.
     pub(super) fn sector_at(&self, p: Point) -> Option<usize> {
         self.nav.poly_at(p).map(|pi| self.nav.sector_of_poly(pi))
+    }
+
+    /// A fight with no shot at anything in sight is one go at the same thing, whichever of them
+    /// is the target. Each effort at a monster has its own clock (`Patience`), and with several
+    /// out of her guns' way taking turns to be the target no clock ran out before the next one's
+    /// began: Doom II MAP13's key room on Ultra-Violence, thirteen imps on ledges over her, 137
+    /// given up one at a time in 21 minutes and one to two hours before she'd crossed the room.
+    /// So, as out of ammo (`backing_off`), one clock for the lot: `engage.close_give_up` of such
+    /// fighting with nothing hurt meanwhile (breaks of `engage.given_up_tics` and over start it
+    /// afresh), and all in sight she can't hit are left a while together, those that come into
+    /// sight meanwhile with them; twice as long each time till something's hurt. One she gets a
+    /// shot at is none of the lot from then.
+    fn leave_the_lot(&mut self, obs: &Observation) {
+        if self.dealt > self.lot.dealt {
+            (self.lot.spent, self.lot.times) = (0, 0);
+        }
+        self.lot.dealt = self.dealt;
+        if obs.tic >= self.lot.till {
+            self.lot.ids.clear();
+        }
+        let foes: Vec<Thing> = self
+            .visible
+            .iter()
+            .filter(|t| mon(t.name).attack != Attack::None)
+            .cloned()
+            .collect();
+        if foes.is_empty() {
+            return;
+        }
+        let no_shot: Vec<i32> = foes
+            .iter()
+            .filter(|t| !self.can_hit(obs, t, None))
+            .map(|t| t.id)
+            .collect();
+        // (a shot at one of them: none of the lot from now, and the lot's leaving it taken back
+        // with that, or it stood given up on till the lot's time was out, 16 minutes at the
+        // longest, and wasn't stood to with a clear shot at it. One given up on for itself
+        // since stays so.)
+        let shot_at: Vec<i32> = self
+            .lot
+            .ids
+            .iter()
+            .copied()
+            .filter(|id| !no_shot.contains(id) && foes.iter().any(|t| t.id == *id))
+            .collect();
+        for id in shot_at {
+            self.lot.ids.remove(&id);
+            self.patience.take_back(id, self.lot.till);
+        }
+        if obs.tic < self.lot.till {
+            for &id in &no_shot {
+                if self.lot.ids.insert(id) {
+                    self.patience.give_up(id, self.lot.till);
+                }
+            }
+            return;
+        }
+        if no_shot.len() < foes.len() {
+            return;
+        }
+        if obs.tic - self.lot.last > self.tune.engage.given_up_tics {
+            self.lot.spent = 0;
+        }
+        self.lot.last = obs.tic;
+        self.lot.spent += 1;
+        if self.lot.spent <= self.tune.engage.close_give_up {
+            return;
+        }
+        self.lot.spent = 0;
+        self.lot.till = obs.tic + (self.tune.engage.given_up_tics << self.lot.times.min(5));
+        self.lot.times += 1;
+        for &id in &no_shot {
+            self.lot.ids.insert(id);
+            self.patience.give_up(id, self.lot.till);
+        }
+        self.log.push(format!(
+            "tic {}: no shot at any of the {} in sight: leaving the lot a while",
+            obs.tic,
+            no_shot.len()
+        ));
+    }
+
+    /// Is id one of a lot left as out of her guns' way (`leave_the_lot`)?
+    pub(super) fn left_with_the_lot(&self, id: i32) -> bool {
+        self.lot.ids.contains(&id)
     }
 
     /// Give up on getting at id a while.
@@ -2951,4 +3043,21 @@ pub fn segment_point_distance(a: Point, b: Point, p: Point) -> f64 {
         (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / n).clamp(0.0, 1.0)
     };
     dist(p, (a.0 + dx * u, a.1 + dy * u))
+}
+
+/// The fight with no shot at anything in sight, as one effort (`Combat::leave_the_lot`).
+#[derive(Clone, Debug, Default)]
+struct Lot {
+    /// tics of it so far
+    spent: i64,
+    /// when last at it
+    last: i64,
+    /// the damage done as last looked at: more is progress
+    dealt: f64,
+    /// the lot's left till then
+    till: i64,
+    /// how many times running, nothing hurt between
+    times: u32,
+    /// who's left
+    ids: BTreeSet<i32>,
 }

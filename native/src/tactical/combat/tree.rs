@@ -577,6 +577,7 @@ fn stepping_for_shot(c: &mut Combat, obs: &Observation, s: &Situation) -> Option
         c.visible.len() == 1
             && dist((t.x, t.y), pos) < 512.0
             && !c.can_hit(obs, t, None)
+            && !c.left_with_the_lot(t.id)
             && !c
                 .steer
                 .no_step
@@ -876,6 +877,7 @@ fn keeping_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         .as_ref()
         .filter(|t| {
             mon(t.name).attack != Attack::None
+                && !c.left_with_the_lot(t.id)
                 && dist((t.x, t.y), pos)
                     < window(&c.preferred_gun(obs, t), t, c.tune.steer.near_by_gun).0
         })
