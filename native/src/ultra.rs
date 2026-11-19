@@ -57,9 +57,11 @@ pub struct Tune {
     pub pushed: f64,
     /// out of the level
     pub exit: f64,
-    /// something after her within this, or anything of theirs in the air: the search has her;
-    /// else she plays as she does
+    /// one of them in her sight, or anything of theirs in the air within this: the search has
+    /// her; else she plays as she does
     pub near: f64,
+    /// ...or one of them after her within this, in sight or not
+    pub close: f64,
     /// the game kept this often (tics), this many of them, to go back to
     pub keep_every: i64,
     pub kept: usize,
@@ -89,6 +91,7 @@ impl Default for Tune {
             pushed: 8.0,
             exit: 1.0e6,
             near: 1500.0,
+            close: 256.0,
             keep_every: 35,
             kept: 60,
             tries: 3,
@@ -162,15 +165,17 @@ fn hostile_missile(m: &Mobj) -> bool {
     m.owner_type > 0 && m.momx.hypot(m.momy) > 1.0
 }
 
-/// Is something after her near, or anything of theirs in the air?
-fn threatened(p: &PlayerState, things: &[Mobj], near: f64) -> bool {
+/// Is she in a fight this tic: one of them in her sight (`seen`), anything of theirs in the
+/// air within `near`, or one of them after her right by her (round a corner, at her back)?
+/// One after her somewhere out of sight is no fight: with the last of them a room away the
+/// search held her standing still for 21 seconds, her way on a straight line through a wall,
+/// till her own route gave up as stuck (the maintainer, watching E2M9 seed 1).
+fn threatened(p: &PlayerState, things: &[Mobj], seen: bool, near: f64, close: f64) -> bool {
     let pos = (p.x, p.y);
-    things.iter().any(|m| {
-        hostile_missile(m)
-            || (alive(m)
-                && monster_of(m).is_some()
-                && m.after_her != 0
-                && dist((m.x, m.y), pos) < near)
+    seen || things.iter().any(|m| {
+        let d = dist((m.x, m.y), pos);
+        (hostile_missile(m) && d < near)
+            || (alive(m) && monster_of(m).is_some() && m.after_her != 0 && d < close)
     })
 }
 
@@ -542,7 +547,8 @@ impl Ultra {
     pub fn act(&mut self, e: &mut Engine, agent: &Agent, hers: Controls) -> Result<Controls, i64> {
         let (p, things) = e.peek();
         let things: Vec<Mobj> = things.to_vec();
-        if !threatened(&p, &things, self.tune.near) {
+        let seen = Self::seen(e).is_some();
+        if !threatened(&p, &things, seen, self.tune.near, self.tune.close) {
             self.doing = None;
             self.keep(e);
             return Ok(hers);
