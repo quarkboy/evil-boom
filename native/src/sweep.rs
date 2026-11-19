@@ -96,6 +96,8 @@ pub struct RunOptions {
     /// (`watch --tape FILE`) a run's controls, tic by tic, played in place of hers: an ultra
     /// instinct run, which is searched offline, watched
     pub tape: Option<std::path::PathBuf>,
+    /// (`watch --ultra`) the ultra instinct on in the window from the start, and kept on
+    pub ultra: bool,
     /// the journal of her decisions kept, and written beside the log (`crate::decisions`)
     pub decisions: bool,
     /// moves and retreats she isn't to make, by name (`Player::bar`)
@@ -136,6 +138,7 @@ impl Default for RunOptions {
             stall_out: false,
             tuning: None,
             tape: None,
+            ultra: false,
             decisions: false,
             bar: None,
             advisor: None,

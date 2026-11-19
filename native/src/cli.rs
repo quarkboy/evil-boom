@@ -99,6 +99,7 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--advisor" => o.advisor = Some(std::path::PathBuf::from(value("--advisor")?)),
             "--tuning" => o.tuning = Some(std::path::PathBuf::from(value("--tuning")?)),
             "--tape" => o.tape = Some(std::path::PathBuf::from(value("--tape")?)),
+            "--ultra" => o.ultra = true,
             "--carry" => o.carry = Some(parse_carry(&value("--carry")?)?),
             _ => rest.push(a.clone()),
         }

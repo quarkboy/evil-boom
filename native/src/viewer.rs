@@ -293,6 +293,8 @@ impl Canvas {
 pub struct WatchOptions {
     /// (`--tape FILE`) a recorded run's controls, played in place of hers
     pub tape: Option<std::path::PathBuf>,
+    /// (`--ultra`) the ultra instinct on from the start, and kept on
+    pub ultra: bool,
     /// she plays as mortal and nothing hurts her (`--charmed`)
     pub charmed: bool,
     /// the chaingun and bullets for ever (`--endless-bullets`)
@@ -659,6 +661,11 @@ struct Watch {
     endless_bullets: bool,
     /// (`--tape`) a run's controls by its tics, played in place of hers while there are any
     pub tape: std::collections::BTreeMap<i64, Controls>,
+    /// the ultra instinct, while it's on (`U`, or `--ultra`): the fight searched in the game
+    /// itself, at half speed while it searches (`crate::ultra`)
+    ultra: Option<crate::ultra::Session>,
+    /// (`--ultra`) kept on: not dropped when the fight's over
+    ultra_stays: bool,
     /// the hits on her last tic, for whoever's directing to be told of
     hits: Vec<crate::dsda::Hit>,
     m: Arc<MapData>,
@@ -1128,9 +1135,20 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
         let mut shown = 0;
         let (mut began, mut first) = (Instant::now(), watch.engine.tic);
         let _ = writeln!(log, "== {}", watch.map_name);
-        while (!watch.engine.finished() || (watch.engine.dead() && watch.lives_left > 0))
+        while (!watch.engine.finished()
+            || (watch.engine.dead() && (watch.lives_left > 0 || watch.ultra.is_some())))
             && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE
         {
+            // (dead with the ultra instinct on: its to go back from, if it has a game kept)
+            if watch.engine.dead() {
+                watch.ultra_died();
+                if !watch.engine.dead() {
+                    continue;
+                }
+                if watch.lives_left <= 0 {
+                    break;
+                }
+            }
             // (dead with lives left: the level again from its start, what she came in with and
             // what she's learned of it kept, as the window's loop has it; whoever directs her
             // told)
@@ -1285,6 +1303,10 @@ fn level(
     let mut watch = Watch::new(w, m, &map_name, engine, agent, o.focus, o.lives - 1);
     watch.hold = hold;
     watch.endless_bullets = o.endless_bullets;
+    if o.ultra {
+        watch.ultra_stays = true;
+        watch.ultra_toggle();
+    }
     if let Some(p) = &o.tape {
         watch.tape = crate::replay::Recording::read(p)?
             .entries
@@ -1492,6 +1514,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
                 key::MINUS | key::KP_MINUS => watch.speed = (watch.speed / 2.0).max(0.25),
                 key::A => watch.show_all.toggle(),
                 key::F => watch.follow.toggle(),
+                key::U => watch.ultra_toggle(),
                 key::L => watch.evil_log.toggle(),
                 key::T => watch.text_size = (watch.text_size + 1) % TEXT_SIZES.len(),
                 key::M => watch.muted.toggle(),
@@ -1530,7 +1553,13 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             watch.sound_on = sound;
         }
         let (now, tic0) = (Instant::now(), watch.engine.tic);
-        owed += (now - last).as_secs_f64() * TICRATE * watch.speed;
+        // (the ultra instinct searching: at half speed, which is what its looks have to fit in)
+        let ultra_pace = if watch.ultra.as_ref().is_some_and(|u| u.searching) {
+            crate::ultra::LIVE_SPEED
+        } else {
+            1.0
+        };
+        owed += (now - last).as_secs_f64() * TICRATE * watch.speed * ultra_pace;
         last = now;
         owed = f64::min(owed, 8.0); // (don't race to catch up after a slow plan)
         if watch.present.is_some() {
@@ -1547,6 +1576,10 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
                 watch.agent.x_mut().restart_wanted = false; // (out with what she has)
             }
             // (dead: told whoever directs her, once, as it came)
+            // (dead with the ultra instinct on: its to go back from, if it has a game kept)
+            if watch.engine.dead() && !watch.paused {
+                watch.ultra_died();
+            }
             if watch.engine.dead() {
                 let again = watch.lives_left > 0;
                 watch.tell_death(again);
@@ -1791,6 +1824,8 @@ impl Watch {
             secrets_seen: 0,
             endless_bullets: false,
             tape: std::collections::BTreeMap::new(),
+            ultra: None,
+            ultra_stays: false,
             hits: Vec::new(),
             m,
             map_name: map_name.to_string(),
@@ -1858,6 +1893,59 @@ impl Watch {
         }
     }
 
+    fn ultra_log(&mut self, what: String) {
+        let tic = self.engine.tic;
+        self.agent
+            .x_mut()
+            .log
+            .push(format!("tic {tic}: ultra instinct: {what}"));
+    }
+
+    /// (`U`) The ultra instinct on from here, or dropped.
+    fn ultra_toggle(&mut self) {
+        if self.ultra.is_some() {
+            self.ultra_end("dropped");
+        } else if !self.engine.finished() {
+            self.ultra = Some(crate::ultra::Session::new(
+                crate::ultra::Tune::default(),
+                &self.agent,
+                self.engine.tic,
+            ));
+            self.ultra_log("on".into());
+        }
+    }
+
+    fn ultra_end(&mut self, why: &str) {
+        let Some(mut u) = self.ultra.take() else {
+            return;
+        };
+        u.end(&self.engine);
+        let t = &u.ultra.tally;
+        let mean = 1000.0 * t.searched_secs / (t.decisions.max(1) as f64);
+        self.ultra_log(format!(
+            "off ({why}): {} tics searched in {} looks, {mean:.0} ms a look, the longest {:.0} ms; back {} times for a death and {} for a hurt ({} tics)",
+            t.ultra_tics,
+            t.decisions,
+            1000.0 * t.worst_look,
+            t.back,
+            t.hurt_back,
+            u.gone_back
+        ));
+    }
+
+    /// Dead with the ultra instinct on: back to a game it kept, or it's over.
+    fn ultra_died(&mut self) {
+        let Some(u) = self.ultra.as_mut() else { return };
+        match u.died(&mut self.engine) {
+            Some(back) => {
+                self.controls = None;
+                self.frame = None;
+                self.ultra_log(format!("back {:.1}s: she died", back as f64 / TICRATE));
+            }
+            None => self.ultra_end("she died, and no game kept to go back to"),
+        }
+    }
+
     fn tic(&mut self) {
         // (the level again, as she asked: what she came in with, what she knows kept, no life)
         let asked = self
@@ -1884,7 +1972,10 @@ impl Watch {
                 .log
                 .push("the level again, as she asked".into());
         }
-        let obs = self.engine.observe();
+        let mut obs = self.engine.observe();
+        if let Some(u) = self.ultra.as_mut() {
+            u.see(&mut obs);
+        }
         if self.endless_bullets && obs.tic % 35 == 0 {
             crate::sweep::top_up_bullets(&self.engine.game, &obs);
         }
@@ -1948,7 +2039,38 @@ impl Watch {
         if let Some(t) = self.tape.get(&self.engine.tic) {
             c = *t;
         }
+        // (the ultra instinct: its controls for hers, or the game put back and nothing played)
+        if let Some(u) = self.ultra.as_mut() {
+            match u.decide(&mut self.engine, &self.agent, c) {
+                crate::ultra::Went::On(theirs) => c = theirs,
+                crate::ultra::Went::Back(back) => {
+                    self.ultra_log(format!(
+                        "back {:.1}s: no way she lives on",
+                        back as f64 / TICRATE
+                    ));
+                    self.controls = None;
+                    self.frame = None;
+                    self.obs = Some(obs);
+                    return;
+                }
+                crate::ultra::Went::NoWay => {
+                    self.ultra_log("no way she lives on, and no game kept to go back to".into());
+                    self.ultra_end("it has no way");
+                }
+            }
+        }
         self.engine.step(&c);
+        let mut put_back = false;
+        if let Some(u) = self.ultra.as_mut() {
+            if let Some(back) = u.stepped(&mut self.engine) {
+                put_back = true;
+                self.frame = None;
+                self.ultra_log(format!("back {:.1}s: hurt too fast", back as f64 / TICRATE));
+            } else if !self.ultra_stays && self.engine.tic - u.searched_at > crate::ultra::LIVE_OVER
+            {
+                self.ultra_end("the fight's over");
+            }
+        }
         let hits = self.engine.take_hits();
         self.hits.clone_from(&hits);
         for h in hits {
@@ -1964,7 +2086,10 @@ impl Watch {
                 h.from()
             ));
         }
-        self.controls = Some(c);
+        if self.engine.exited() {
+            self.ultra_end("out of the level");
+        }
+        self.controls = (!put_back).then_some(c);
         if let Some(h) = self.hold.as_mut().filter(|_| obs.tic % TICRATE as i64 == 0) {
             let now = progress(&self.engine, self.agent.x(), &h.o);
             if now.iter().zip(&h.best).any(|(n, b)| n > b) {

@@ -268,3 +268,32 @@ played out in the window as a death at 200 s. Not the load on the machine: the s
   with nothing saved or put back, and the result line says whether it came out the same.
 - The Plutonia runs made before this (21 finished) aren't games Doom would play, and are
   thrown out.
+
+### Stage 4, first step: live in the window, one process (2026-11-19)
+
+The maintainer's brief for the live mode: not for playing a level through, but switched on for
+a while to get her out of a pickle. So the search, the games kept and the going back are now a
+`Session` (`ultra.rs`) begun at any tic and dropped at any other, which goes back no further
+than where it began. The offline run plays through the same thing (E2M9 seeds 1 to 3: the same
+runs to the tic as before).
+
+- **In the window:** `U` turns it on from where she stands; it's dropped when the search hasn't
+  had her for 5 seconds (the fight's over), or by `U` again. `watch --ultra` has it on from
+  the start and keeps it on (for trying it; works with `--headless`). While the search has
+  her the game runs at half the window's speed. Going back shows as the jump it is, and is
+  logged ("back 2.4s: hurt too fast"). When it's dropped the log has what it cost.
+- **Not yet:** the workers. The look runs between two frames.
+
+**Measured, E2M9, Ultra-Violence, seed 1, one core.** Headless: out at 154 s as offline; 821
+looks, 71 ms a look, the longest 117 ms. A move of 6 tics at half speed is 343 ms, so on this
+level one core is enough for the search. The window, 30 s of each (`EVIL_DEBUG_FRAMES`):
+
+| | frames a second | gap between frames, median / p95 / longest | late frames |
+|---|---|---|---|
+| as she plays | 59.9 | 16.7 / 16.7 / 16.9 ms | 0 |
+| ultra instinct on | 49.1 | 16.7 / 81.7 / 103.6 ms | 6.0% |
+
+The budget holds and the picture doesn't: every look stops the window for five frames, about
+three times a second. That's what the workers are for (the look in other processes, the window's
+own only playing the move settled on), and on Plutonia MAP01 a look was 800 ms, twice the
+budget, where the restore is most of it (DSDA's load sets the level up again: `G_InitNew`).

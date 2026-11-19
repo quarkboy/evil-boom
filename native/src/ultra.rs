@@ -180,6 +180,8 @@ pub struct Tally {
     pub saves: u64,
     pub back: u32,
     pub searched_secs: f64,
+    /// the longest look, in seconds
+    pub worst_look: f64,
     pub ultra_tics: i64,
     /// moves made for real, and those of them that were to take her somewhere and didn't
     pub moves: u64,
@@ -567,7 +569,9 @@ impl Ultra {
         e.restore(0, &mark0);
         self.was = was0;
         self.tally.restores += 1;
-        self.tally.searched_secs += t0.elapsed().as_secs_f64();
+        let took = t0.elapsed().as_secs_f64();
+        self.tally.searched_secs += took;
+        self.tally.worst_look = self.tally.worst_look.max(took);
         best
     }
 
@@ -815,6 +819,146 @@ impl Ultra {
     }
 }
 
+/// Live, the game runs at this much of its speed while the search has her (the plan's section
+/// 4: what a look has to fit in), and a session not kept on is over when the search hasn't had
+/// her for `LIVE_OVER` tics: the fight's over.
+pub const LIVE_SPEED: f64 = 0.5;
+pub const LIVE_OVER: i64 = 5 * 35;
+
+/// What a tic of a session came to.
+pub enum Went {
+    /// the controls to play this tic
+    On(Controls),
+    /// the game was put back this many tics: nothing to play, ask again
+    Back(i64),
+    /// no line she lives on and no game left to go back to
+    NoWay,
+}
+
+/// The ultra instinct on, from the tic it's begun till it's dropped: the search, the games kept
+/// to go back to, and going back for a death or a hurt. Begun at any moment of a level (it's for
+/// getting her out of a pickle, not for playing a level through), it goes back no further than
+/// where it began. The offline run and the watcher's window both play through this.
+pub struct Session {
+    pub ultra: Ultra,
+    /// the tics gone back over: her own clock only goes on
+    pub gone_back: i64,
+    /// her health and armor together, by the tic, a few seconds of it
+    hps: std::collections::VecDeque<(i64, f64)>,
+    /// the tic up to which what she's lost is let stand
+    stood: i64,
+    /// its controls as they came out in the end, by the game's tics
+    pub tape: Vec<(i64, Controls)>,
+    pub worst: i32,
+    /// the search had her this tic (one of them in sight or near), and the tic it last did
+    pub searching: bool,
+    pub searched_at: i64,
+}
+
+impl Session {
+    pub fn new(tune: Tune, agent: &Agent, tic: i64) -> Session {
+        let mut ultra = Ultra::new(tune);
+        ultra.hot = Some(std::rc::Rc::clone(&agent.x().nav));
+        Session {
+            ultra,
+            gone_back: 0,
+            hps: std::collections::VecDeque::new(),
+            stood: i64::MIN,
+            tape: Vec::new(),
+            worst: i32::MAX,
+            searching: false,
+            searched_at: tic,
+        }
+    }
+
+    /// What she's shown: her clock with the tics gone back added (it only goes on).
+    pub fn see(&mut self, ob: &mut crate::motor::Observation) {
+        ob.tic += self.gone_back;
+        ob.hit_tic = ob.hit_tic.map(|t| t + self.gone_back);
+        self.worst = self.worst.min(ob.health.map_or(self.worst, |h| h as i32));
+    }
+
+    fn went_back(&mut self, e: &Engine, back: i64) {
+        self.gone_back += back;
+        self.tape.retain(|&(t, _)| t < e.tic);
+        self.hps.retain(|&(t, _)| t <= e.tic);
+    }
+
+    /// Dead for real (a death no look saw coming): back to a game kept. None: there's none.
+    pub fn died(&mut self, e: &mut Engine) -> Option<i64> {
+        let back = self.ultra.go_back(e)?;
+        self.went_back(e, back);
+        Some(back)
+    }
+
+    /// This tic's controls, hers given (`Ultra::act`), or the game put back.
+    pub fn decide(&mut self, e: &mut Engine, agent: &Agent, hers: Controls) -> Went {
+        let before = self.ultra.tally.ultra_tics;
+        let went = match self.ultra.act(e, agent, hers) {
+            Ok(c) => {
+                self.tape.push((e.tic, c));
+                Went::On(c)
+            }
+            Err(0) if self.ultra.kept.is_empty() => Went::NoWay,
+            Err(back) => {
+                self.went_back(e, back);
+                Went::Back(back)
+            }
+        };
+        self.searching = self.ultra.tally.ultra_tics > before;
+        if self.searching {
+            self.searched_at = e.tic;
+        }
+        went
+    }
+
+    /// After the tic's played. Hurt too fast: back, and another way (not past what's been let
+    /// stand). Some: the game was put back this many tics.
+    pub fn stepped(&mut self, e: &mut Engine) -> Option<i64> {
+        let p = e.game.player();
+        let hp = f64::from(p.health + p.armor);
+        self.hps.retain(|&(t, _)| t < e.tic); // (gone back since for a death: those tics didn't happen)
+        self.hps.push_back((e.tic, hp));
+        while self
+            .hps
+            .front()
+            .is_some_and(|&(t, _)| e.tic - t > self.ultra.tune.hurt_tics)
+        {
+            self.hps.pop_front();
+        }
+        if self.ultra.tune.hurt <= 0.0 || p.health <= 0 {
+            return None;
+        }
+        let limit = self.ultra.tune.hurt * self.ultra.tune.hurt_tics as f64 / 35.0;
+        // (from the most she had in the stretch, after what's let stand)
+        let stood = self.stood;
+        let (since, most) = self
+            .hps
+            .iter()
+            .filter(|&&(t, _)| t >= stood)
+            .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)))
+            .copied()
+            .filter(|&(_, most)| most - hp >= limit)?;
+        match self.ultra.hurt_back(e, since, most - hp) {
+            Some(back) => {
+                self.went_back(e, back);
+                Some(back)
+            }
+            None => {
+                self.stood = e.tic;
+                None
+            }
+        }
+    }
+
+    /// Dropped: the games kept let go.
+    pub fn end(&mut self, e: &Engine) {
+        for k in self.ultra.kept.drain(..) {
+            e.game.forget(k.slot);
+        }
+    }
+}
+
 /// Stage 1's check: the game saved, played on, put back and played the same again comes out
 /// the same; and what a save and a restore cost.
 pub fn check(wad: &str, map: &str, o: &RunOptions) -> Result<String, String> {
@@ -1026,25 +1170,15 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         map_name,
         ..
     } = crate::sweep::setup(wad, map, o, false, None)?;
-    let mut ultra = Ultra::new(tune);
-    ultra.hot = Some(std::rc::Rc::clone(&agent.x().nav));
+    let mut session = Session::new(tune, &agent, e.tic);
     // (the game as it starts, for playing the tape over at the end)
     let start = e.save(START_SLOT);
     let t0 = Instant::now();
     let tic0 = e.tic;
     let mut last: Option<Controls> = None;
-    // (the tics gone back over: her own clock only goes on)
-    let mut gone_back = 0i64;
     let cap = (o.max_seconds * 35.0) as i64;
     let mut played = 0i64;
-    // (her health and armor together, by the tic, a few seconds of it; and the tic up to which
-    // what she's lost is let stand)
-    let mut hps: std::collections::VecDeque<(i64, f64)> = std::collections::VecDeque::new();
-    let mut stood = i64::MIN;
-    // (the run as it came out in the end, its controls by the game's tics: for watching)
-    let mut tape: Vec<(i64, Controls)> = Vec::new();
     let mut outcome = "TIME";
-    let mut worst = i32::MAX;
     // (nothing more collected, learned or tried for `--stall` seconds: the run's over. Her own
     // exploring is hers here too, and with nothing left she'd try at 3 health she stood idle
     // for half an hour of an E4M6 run till the time was up)
@@ -1067,73 +1201,41 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         }
         if e.dead() {
             // (a death the look didn't see coming: back, as from a look with none to live on)
-            match ultra.go_back(&mut e) {
-                Some(back) => {
-                    gone_back += back;
-                    last = None;
-                    tape.retain(|&(t, _)| t < e.tic);
-                    continue;
-                }
-                None => {
-                    outcome = "DIED";
-                    break;
-                }
-            }
-        }
-        let mut ob = e.observe();
-        ob.tic += gone_back;
-        ob.hit_tic = ob.hit_tic.map(|t| t + gone_back);
-        worst = worst.min(ob.health.map_or(worst, |h| h as i32));
-        let hers = agent.act(&ob, last.as_ref());
-        let c = match ultra.act(&mut e, &agent, hers) {
-            Ok(c) => c,
-            Err(back) => {
-                if back == 0 && ultra.kept.is_empty() {
-                    outcome = "NO WAY";
-                    break;
-                }
-                gone_back += back;
+            if session.died(&mut e).is_some() {
                 last = None;
-                tape.retain(|&(t, _)| t < e.tic);
                 continue;
             }
+            outcome = "DIED";
+            break;
+        }
+        let mut ob = e.observe();
+        session.see(&mut ob);
+        let hers = agent.act(&ob, last.as_ref());
+        let c = match session.decide(&mut e, &agent, hers) {
+            Went::On(c) => c,
+            Went::Back(_) => {
+                last = None;
+                continue;
+            }
+            Went::NoWay => {
+                outcome = "NO WAY";
+                break;
+            }
         };
-        tape.push((e.tic, c));
         e.step(&c);
         last = Some(c);
         played += 1;
-        // Hurt too fast: back, and another way (not past what's been let stand).
-        let p = e.game.player();
-        let hp = f64::from(p.health + p.armor);
-        hps.retain(|&(t, _)| t < e.tic); // (gone back since for a death: those tics didn't happen)
-        hps.push_back((e.tic, hp));
-        while hps
-            .front()
-            .is_some_and(|&(t, _)| e.tic - t > ultra.tune.hurt_tics)
-        {
-            hps.pop_front();
-        }
-        if ultra.tune.hurt > 0.0 && p.health > 0 {
-            let limit = ultra.tune.hurt * ultra.tune.hurt_tics as f64 / 35.0;
-            // (from the most she had in the stretch, after what's let stand)
-            let top = hps
-                .iter()
-                .filter(|&&(t, _)| t >= stood)
-                .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)))
-                .copied();
-            if let Some((since, most)) = top.filter(|&(_, most)| most - hp >= limit) {
-                match ultra.hurt_back(&mut e, since, most - hp) {
-                    Some(back) => {
-                        gone_back += back;
-                        last = None;
-                        tape.retain(|&(t, _)| t < e.tic);
-                        hps.retain(|&(t, _)| t <= e.tic);
-                    }
-                    None => stood = e.tic,
-                }
-            }
+        if session.stepped(&mut e).is_some() {
+            last = None;
         }
     }
+    let Session {
+        ultra,
+        gone_back,
+        tape,
+        worst,
+        ..
+    } = session;
     // The tape played over from the start with nothing saved or put back: it must come out as
     // the run did, or a restore somewhere wasn't the game it saved (2026-11-19: it wasn't, with
     // a revenant's missile in the air, and the tape of an exit played out as a death).

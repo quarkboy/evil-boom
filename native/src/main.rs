@@ -822,6 +822,7 @@ fn watch_options(
         episode: false,
         tuning: o.tuning.clone(),
         tape: o.tape.clone(),
+        ultra: o.ultra,
         headless: false,
         paced: false,
         max_seconds: o.max_seconds,
