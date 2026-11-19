@@ -690,6 +690,8 @@ struct Watch {
     /// its glow: the pixels it reddens and how much each, for the picture's box it was last
     /// drawn in (the box and the canvas's width)
     ultra_mask: std::cell::RefCell<UltraMask>,
+    /// ...and how hot it glows (0: on and idle, 1: the search has her), eased; when last drawn
+    ultra_heat: std::cell::Cell<(f64, f64)>,
     /// the hits on her last tic, for whoever's directing to be told of
     hits: Vec<crate::dsda::Hit>,
     m: Arc<MapData>,
@@ -1585,9 +1587,10 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             watch.sound_on = sound;
         }
         let (now, tic0) = (Instant::now(), watch.engine.tic);
-        // (the ultra instinct searching: slowed, which is what its looks have to fit in)
-        let ultra_pace = if watch.ultra.as_ref().is_some_and(|u| u.searching) {
-            watch.ultra_speed
+        // (the ultra instinct searching: slowed, which is what its looks have to fit in; eased in
+        // and out with its glow, not from one tic to the next)
+        let ultra_pace = if watch.ultra.is_some() {
+            1.0 - watch.ultra_heat.get().0 * (1.0 - watch.ultra_speed)
         } else {
             1.0
         };
@@ -1868,6 +1871,7 @@ impl Watch {
             ultra_block: true,
             ultra_speed: crate::ultra::LIVE_SPEED,
             ultra_mask: std::cell::RefCell::new(((((0, 0, 0, 0)), 0), Vec::new())),
+            ultra_heat: std::cell::Cell::new((0.0, 0.0)),
             hits: Vec::new(),
             m,
             map_name: map_name.to_string(),
@@ -1974,11 +1978,14 @@ impl Watch {
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0.0, |d| d.as_secs_f64() % 1000.0);
         let throb = (now * std::f64::consts::TAU * 1.1).sin();
-        let strength = if u.searching {
-            0.44 + 0.12 * throb
-        } else {
-            0.20 + 0.05 * throb
-        };
+        // (eased from one to the other over half a second: the search has her and hasn't from
+        // tic to tic as one of them comes into sight and goes, and the glow flickered with it)
+        let want = if u.searching { 1.0 } else { 0.0 };
+        let (mut heat, last) = self.ultra_heat.get();
+        let dt = (now - last).rem_euclid(1000.0).min(0.1);
+        heat += (want - heat).clamp(-2.0 * dt, 2.0 * dt);
+        self.ultra_heat.set((heat, now));
+        let strength = (0.20 + 0.05 * throb) + heat * (0.24 + 0.07 * throb);
         // (how red each pixel of the bands is, by how near the edge: worked out once for a
         // picture's box, then a frame is an integer blend of those pixels only)
         let mut mask = self.ultra_mask.borrow_mut();
