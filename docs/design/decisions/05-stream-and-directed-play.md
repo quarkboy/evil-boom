@@ -2823,7 +2823,13 @@ every skill (not traced: the maintainer suspects the jumps over lava that aren't
   eight points, all sound: parity passing on failed runs, score counting a run that never
   started, `--carry` dropped by sweep and episode, secret allowances by map name, "the same
   to the tic" being outcome, whole seconds and kills, the Icon's restart, the stuck prompt's
-  flag, and the lot's two marks (fixed in `f6d4c3b`). The rest not yet done.
+  flag, and the lot's two marks (fixed in `f6d4c3b`).
+- **Done from it on the 19th:** parity and the score fail on runs that failed, and the report
+  says what it compared; `--carry` reaches a sweep's and an episode's runs; "stuck?" is asked
+  once it can be; an ordered restart sets the Icon's fight back; a stop takes back a start due
+  after a crash. Not done: the secret allowances by map identity (before community WADs), the
+  secret taught in the wrong sector on a replay, `watch --from`, perpetual lifts by a property
+  of the special, the restarts' accounting, the planner's budget misses, and the structure.
 
 ## MAP14's alcove behind the red bars (2026-11-19)
 
