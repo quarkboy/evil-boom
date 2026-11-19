@@ -100,6 +100,13 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--tuning" => o.tuning = Some(std::path::PathBuf::from(value("--tuning")?)),
             "--tape" => o.tape = Some(std::path::PathBuf::from(value("--tape")?)),
             "--ultra" => o.ultra = true,
+            "--ultra-after" => {
+                o.ultra_after = Some(
+                    value("--ultra-after")?
+                        .parse()
+                        .map_err(|_| "--ultra-after N".to_string())?,
+                );
+            }
             "--ultra-speed" => {
                 o.ultra_speed = value("--ultra-speed")?
                     .parse()

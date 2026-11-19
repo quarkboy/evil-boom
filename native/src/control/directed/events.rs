@@ -119,6 +119,11 @@ pub enum Event {
     },
     /// the restart hers now
     RestartOpen,
+    /// the ultra instinct hers on this level from now; or it's taken her back from a death and
+    /// is fighting for her
+    Ultra,
+    /// ...and it's over
+    UltraOver,
 
     // The game.
     LevelStart,
@@ -172,6 +177,7 @@ impl Event {
             | E::NotJumping
             | E::Suggestion { loud: true }
             | E::RestartOpen
+            | E::UltraOver
             | E::LevelStart => Weight::Moment,
             E::Outcome
             | E::Replaced
@@ -194,6 +200,7 @@ impl Event {
             | E::OnScreen
             | E::GameOffer
             | E::GameOver
+            | E::Ultra
             | E::Restarted => Weight::Urgent,
         }
     }

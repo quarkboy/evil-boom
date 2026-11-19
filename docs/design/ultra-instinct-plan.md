@@ -385,3 +385,34 @@ the weapon between tics from where it was on a tic's first frame, and takes a fr
 tic's first when the tic is later than the last it drew (`I_StartDisplay`). A game put back is
 at an earlier tic, so for the seconds till it had caught up no frame was a first. `evil_render`
 now takes any frame whose tic differs from the last drawn for a first.
+
+### Stage 5, first cut: hers by dying (2026-11-19, the maintainer's design)
+
+Section 3 had it an action of hers. It isn't: a directing model answers in seconds and a
+pickle kills in two, and with games kept all the time, being late costs nothing. So the death
+is the trigger, and there's no action to register.
+
+- **Hers on a level once she's died there N times** (`watch --ultra-after N`; the maintainer's
+  three), deaths that stood. For the rest of that level.
+- **A death is then undone:** the game put back 5 s (`ultra::Rolling`: a game kept every second
+  as she plays, the last ten) and the ultra instinct on.
+- **She has 30 s of it** (game time), spent while it's on, got back at a second for ten of
+  play. A death with under 5 s left stands. It's dropped when the search hasn't had her for 2
+  s (the fight's over), or when it's spent.
+- **It can fail:** no line she lives on and no game left to go back to, or spent with them
+  still on her, and the death stands and is counted.
+- **What she's told** (`Event::Ultra`, urgent; `UltraOver`, a moment): "Ultra instinct is yours
+  on this level. Die, and it takes you back 5s and fights for you: 30s of it, refilling as you
+  play."; "You died. Ultra instinct: back 5s, fighting for you (30s of it left)."; "Ultra
+  instinct over (12s left)."
+- **The watcher's status line** has what she has of it: "ultra after 2 more deaths", "ultra
+  30s", "ULTRA 17s" while it's on, "ultra 3s (needs 5)".
+- **Her clock** only goes on: the tics put back are added to what she's shown from then on
+  (`Watch::clock_ahead`), sessions past too.
+
+Tried headless on E2M9, Ultra-Violence, pistol start, seed 1, eight lives: hers after the third
+death; five deaths undone after, two of the fights seen through (dropped with the fight over),
+three spent with them still on her, and she died soon after each.
+
+Not done: the console's setting and the stream's column; tried with a directing model (the Gary
+test bed wasn't up); whether what she has of it should be full again after a death that stands.

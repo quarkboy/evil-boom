@@ -1405,7 +1405,68 @@ pub fn worker(wad: &str, map: &str, o: &RunOptions, tune: Tune, port: u16) -> Re
 /// 4: what a look has to fit in), and a session not kept on is over when the search hasn't had
 /// her for `LIVE_OVER` tics: the fight's over.
 pub const LIVE_SPEED: f64 = 0.5;
-pub const LIVE_OVER: i64 = 5 * 35;
+pub const LIVE_OVER: i64 = 2 * 35;
+
+/// Hers by dying (the maintainer's design, 2026-11-19). After so many deaths on a level it's
+/// hers for the rest of that level, with no action of hers to take: a death then is undone,
+/// the game put back `LIVE_BACK` tics, and it fights for her till the fight's over or what she
+/// has of it is spent. She has up to `LIVE_CAP` tics of it, spent a tic a tic while it's on and
+/// got back at `LIVE_REFILL` a tic of play; a death with under `LIVE_LEAST` left stands.
+pub const LIVE_CAP: f64 = 30.0 * 35.0;
+pub const LIVE_REFILL: f64 = 0.1;
+pub const LIVE_LEAST: f64 = 5.0 * 35.0;
+pub const LIVE_BACK: i64 = 5 * 35;
+
+/// Games kept as she plays, a second apart, the last ten: what a death is undone to. (A
+/// session's own are kept from where it began; these are for beginning one before the death.)
+#[derive(Default)]
+pub struct Rolling {
+    kept: std::collections::VecDeque<(i32, Mark)>,
+}
+
+const ROLLING0: i32 = 440;
+const ROLLING_SLOTS: i32 = 10;
+
+impl Rolling {
+    pub fn keep(&mut self, e: &mut Engine) {
+        if self.kept.back().is_some_and(|(_, m)| e.tic - m.tic < 35) {
+            return;
+        }
+        let slot = if self.kept.len() as i32 >= ROLLING_SLOTS {
+            self.kept.pop_front().map_or(ROLLING0, |(s, _)| s)
+        } else {
+            (ROLLING0..ROLLING0 + ROLLING_SLOTS)
+                .find(|s| self.kept.iter().all(|(k, _)| k != s))
+                .unwrap_or(ROLLING0)
+        };
+        if let Some(mark) = e.save(slot) {
+            self.kept.push_back((slot, mark));
+        }
+    }
+
+    /// The game put back to `tics` ago (the nearest kept before that, or the oldest there is):
+    /// how far back it went. None: none kept. They're all let go either way.
+    pub fn back(&mut self, e: &mut Engine, tics: i64) -> Option<i64> {
+        let now = e.tic;
+        let at = self
+            .kept
+            .iter()
+            .rposition(|(_, m)| now - m.tic >= tics)
+            .or((!self.kept.is_empty()).then_some(0));
+        let went = at.and_then(|i| {
+            let (slot, mark) = &self.kept[i];
+            e.restore(*slot, mark).then(|| now - e.tic)
+        });
+        self.clear(e);
+        went
+    }
+
+    pub fn clear(&mut self, e: &Engine) {
+        for (slot, _) in self.kept.drain(..) {
+            e.game.forget(slot);
+        }
+    }
+}
 
 /// What a tic of a session came to.
 pub enum Went {

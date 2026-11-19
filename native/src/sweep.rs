@@ -103,6 +103,9 @@ pub struct RunOptions {
     /// (`--ultra-speed X`) how fast the window plays while the ultra instinct's search has
     /// her, of its own speed (0.5: half)
     pub ultra_speed: f64,
+    /// (`--ultra-after N`) the ultra instinct hers on a level once she's died N times there
+    /// (None: never)
+    pub ultra_after: Option<i32>,
     /// the journal of her decisions kept, and written beside the log (`crate::decisions`)
     pub decisions: bool,
     /// moves and retreats she isn't to make, by name (`Player::bar`)
@@ -146,6 +149,7 @@ impl Default for RunOptions {
             ultra: false,
             workers: 0,
             ultra_speed: crate::ultra::LIVE_SPEED,
+            ultra_after: None,
             decisions: false,
             bar: None,
             advisor: None,

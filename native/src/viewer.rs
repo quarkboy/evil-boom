@@ -302,6 +302,8 @@ pub struct WatchOptions {
     pub workers: usize,
     /// (`--ultra-speed X`) the window's speed while its search has her, of what it is otherwise
     pub ultra_speed: f64,
+    /// (`--ultra-after N`) hers on a level once she's died N times there
+    pub ultra_after: Option<i32>,
     /// she plays as mortal and nothing hurts her (`--charmed`)
     pub charmed: bool,
     /// the chaingun and bullets for ever (`--endless-bullets`)
@@ -687,6 +689,19 @@ struct Watch {
     ultra_block: bool,
     /// (`--ultra-speed`) the window's speed while its search has her, of what it is otherwise
     ultra_speed: f64,
+    /// (`--ultra-after N`) hers by dying: on a level once she's died N times there (see
+    /// `ultra::LIVE_CAP`)
+    ultra_after: Option<i32>,
+    /// her deaths on this level that stood
+    ultra_deaths: i32,
+    /// what she has of it, in tics
+    ultra_charge: f64,
+    /// the session that's on is one a death began: it spends what she has
+    ultra_earned: bool,
+    /// games kept as she plays, for a death to be undone to
+    ultra_rolling: crate::ultra::Rolling,
+    /// the tics games have been put back over, sessions past: her own clock only goes on
+    clock_ahead: i64,
     /// its glow: the pixels it reddens and how much each, for the picture's box it was last
     /// drawn in (the box and the canvas's width)
     ultra_mask: std::cell::RefCell<UltraMask>,
@@ -1162,7 +1177,8 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
         let (mut began, mut first) = (Instant::now(), watch.engine.tic);
         let _ = writeln!(log, "== {}", watch.map_name);
         while (!watch.engine.finished()
-            || (watch.engine.dead() && (watch.lives_left > 0 || watch.ultra.is_some())))
+            || (watch.engine.dead()
+                && (watch.lives_left > 0 || watch.ultra.is_some() || watch.ultra_unlocked())))
             && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE
         {
             // (dead with the ultra instinct on: its to go back from, if it has a game kept)
@@ -1179,6 +1195,7 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
             // what she's learned of it kept, as the window's loop has it; whoever directs her
             // told)
             if watch.engine.dead() {
+                watch.ultra_real_death();
                 watch.lives_left -= 1;
                 let left = if o.lives == i32::MAX {
                     "no limit to the lives".to_string()
@@ -1329,7 +1346,13 @@ fn level(
     let mut watch = Watch::new(w, m, &map_name, engine, agent, o.focus, o.lives - 1);
     watch.hold = hold;
     watch.endless_bullets = o.endless_bullets;
-    watch.ultra_workers = o.workers;
+    watch.ultra_after = o.ultra_after;
+    // (hers by dying, and no workers asked for: eight, or each look would stop the picture)
+    watch.ultra_workers = if o.ultra_after.is_some() && o.workers == 0 {
+        8
+    } else {
+        o.workers
+    };
     watch.ultra_speed = o.ultra_speed;
     watch.ultra_pool_up();
     if o.ultra {
@@ -1620,6 +1643,9 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
                 watch.tell_death(again);
             }
             if (watch.engine.dead() || wanted) && watch.lives_left > 0 && !watch.paused {
+                if watch.engine.dead() {
+                    watch.ultra_real_death();
+                }
                 watch.agent.x_mut().restart_wanted = false;
                 watch.lives_left -= 1;
                 watch.engine.restart(true);
@@ -1870,8 +1896,14 @@ impl Watch {
             ultra_waiting: false,
             ultra_block: true,
             ultra_speed: crate::ultra::LIVE_SPEED,
-            ultra_mask: std::cell::RefCell::new(((((0, 0, 0, 0)), 0), Vec::new())),
+            ultra_mask: std::cell::RefCell::new((((0, 0, 0, 0), 0), Vec::new())),
             ultra_heat: std::cell::Cell::new((0.0, 0.0)),
+            ultra_after: None,
+            ultra_deaths: 0,
+            ultra_charge: 0.0,
+            ultra_earned: false,
+            ultra_rolling: crate::ultra::Rolling::default(),
+            clock_ahead: 0,
             hits: Vec::new(),
             m,
             map_name: map_name.to_string(),
@@ -2025,11 +2057,66 @@ impl Watch {
         }
     }
 
+    /// Is it hers on this level (she's died here often enough)?
+    fn ultra_unlocked(&self) -> bool {
+        self.ultra_after.is_some_and(|n| self.ultra_deaths >= n)
+    }
+
+    /// What she has of it, for the watcher's status line.
+    fn ultra_status(&self) -> Option<String> {
+        let after = self.ultra_after?;
+        let secs = (self.ultra_charge / TICRATE).floor();
+        Some(if !self.ultra_unlocked() {
+            let more = after - self.ultra_deaths;
+            format!(
+                "ultra after {more} more death{}",
+                if more == 1 { "" } else { "s" }
+            )
+        } else if self.ultra.is_some() {
+            format!("ULTRA {secs:.0}s")
+        } else if self.ultra_charge < crate::ultra::LIVE_LEAST {
+            format!("ultra {secs:.0}s (needs 5)")
+        } else {
+            format!("ultra {secs:.0}s")
+        })
+    }
+
+    /// A death that stands (the level's about to begin again, or the game's over): counted,
+    /// and the ultra instinct hers from the one that makes enough. What it had going is let go.
+    pub(super) fn ultra_real_death(&mut self) {
+        self.ultra_end("she died");
+        self.ultra_rolling.clear(&self.engine);
+        let Some(after) = self.ultra_after else {
+            return;
+        };
+        self.ultra_deaths += 1;
+        if self.ultra_deaths == after {
+            self.ultra_charge = crate::ultra::LIVE_CAP;
+            self.ultra_log(format!("hers on this level: {after} deaths here"));
+            let tic = self.engine.tic + self.clock_ahead;
+            self.tell_screens(|d| {
+                d.ultra(
+                    tic,
+                    "Ultra instinct is yours on this level. Die, and it takes you back 5s and fights for you: 30s of it, refilling as you play.",
+                    crate::control::directed::Event::Ultra,
+                );
+            });
+        }
+    }
+
     /// (`U`) The ultra instinct on from here, or dropped.
     fn ultra_toggle(&mut self) {
         if self.ultra.is_some() {
             self.ultra_end("dropped");
         } else if !self.engine.finished() {
+            self.ultra_earned = false;
+            self.ultra_begin();
+        }
+    }
+
+    /// A session begun from the game as it stands.
+    fn ultra_begin(&mut self) {
+        {
             let mut session = crate::ultra::Session::new(
                 crate::ultra::Tune::default(),
                 &self.agent,
@@ -2053,6 +2140,13 @@ impl Watch {
             return;
         };
         self.ultra_pool = u.end(&self.engine);
+        self.clock_ahead += u.gone_back;
+        if std::mem::take(&mut self.ultra_earned) {
+            let left = (self.ultra_charge / TICRATE).floor();
+            let tic = self.engine.tic + self.clock_ahead;
+            let text = format!("Ultra instinct over ({left:.0}s left).");
+            self.tell_screens(|d| d.ultra(tic, &text, crate::control::directed::Event::UltraOver));
+        }
         let t = &u.ultra.tally;
         let mean = 1000.0 * t.searched_secs / (t.decisions.max(1) as f64);
         self.ultra_log(format!(
@@ -2067,8 +2161,33 @@ impl Watch {
     }
 
     /// Dead with the ultra instinct on: back to a game it kept, or it's over.
-    fn ultra_died(&mut self) {
-        let Some(u) = self.ultra.as_mut() else { return };
+    pub(super) fn ultra_died(&mut self) {
+        let Some(u) = self.ultra.as_mut() else {
+            // (not on, and hers by dying with enough of it left: the death undone, and on)
+            if !self.ultra_unlocked() || self.ultra_charge < crate::ultra::LIVE_LEAST {
+                return;
+            }
+            let Some(back) = self
+                .ultra_rolling
+                .back(&mut self.engine, crate::ultra::LIVE_BACK)
+            else {
+                return;
+            };
+            self.clock_ahead += back;
+            self.controls = None;
+            self.frame = None;
+            self.ultra_wait = None;
+            self.ultra_earned = true;
+            self.ultra_begin();
+            let (secs, left) = (back as f64 / TICRATE, (self.ultra_charge / TICRATE).floor());
+            self.ultra_log(format!("a death undone: back {secs:.1}s"));
+            let tic = self.engine.tic + self.clock_ahead;
+            let text = format!(
+                "You died. Ultra instinct: back {secs:.0}s, fighting for you ({left:.0}s of it left)."
+            );
+            self.tell_screens(|d| d.ultra(tic, &text, crate::control::directed::Event::Ultra));
+            return;
+        };
         match u.died(&mut self.engine) {
             Some(back) => {
                 self.controls = None;
@@ -2108,6 +2227,8 @@ impl Watch {
                 .push("the level again, as she asked".into());
         }
         let mut obs = self.engine.observe();
+        obs.tic += self.clock_ahead;
+        obs.hit_tic = obs.hit_tic.map(|t| t + self.clock_ahead);
         if let Some(u) = self.ultra.as_mut() {
             u.see(&mut obs);
         }
@@ -2219,6 +2340,25 @@ impl Watch {
             } else if !self.ultra_stays && self.engine.tic - u.searched_at > crate::ultra::LIVE_OVER
             {
                 self.ultra_end("the fight's over");
+            }
+        }
+        // (hers by dying: what she has of it spent while it's on, got back as she plays; and
+        // the games a death is undone to, kept as she plays)
+        if self.ultra_unlocked() {
+            if self.ultra.is_some() && self.ultra_earned {
+                self.ultra_charge -= 1.0;
+                if self.ultra_charge <= 0.0 {
+                    self.ultra_charge = 0.0;
+                    self.ultra_end("spent");
+                }
+            } else if self.ultra.is_none() {
+                self.ultra_charge =
+                    (self.ultra_charge + crate::ultra::LIVE_REFILL).min(crate::ultra::LIVE_CAP);
+                // (kept whatever she has of it just now: by the time she's got enough back,
+                // there are five seconds of them to go back over)
+                if !self.engine.finished() {
+                    self.ultra_rolling.keep(&mut self.engine);
+                }
             }
         }
         let hits = self.engine.take_hits();
@@ -2850,6 +2990,9 @@ impl Watch {
         };
         if let Some(h) = self.obs.as_ref().and_then(|o| o.health) {
             state += &format!("  {h:.0}hp");
+        }
+        if let Some(u) = self.ultra_status() {
+            state += &format!("  {u}");
         }
         if k.protected(tic) {
             state += &format!(
