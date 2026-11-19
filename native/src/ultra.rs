@@ -139,6 +139,27 @@ enum Go {
     On,
 }
 
+impl Tune {
+    /// As the command line gives it (`--depth N` and the rest): for the workers, which are
+    /// started with the same.
+    pub fn args(&self) -> Vec<String> {
+        vec![
+            "--depth".into(),
+            self.depth.to_string(),
+            "--width".into(),
+            self.width.to_string(),
+            "--move".into(),
+            self.move_tics.to_string(),
+            "--way".into(),
+            self.way.to_string(),
+            "--hurt".into(),
+            self.hurt.to_string(),
+            "--hurt-tries".into(),
+            self.hurt_tries.to_string(),
+        ]
+    }
+}
+
 /// A move: `Tune::move_tics` of going one way, facing and shooting or not.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Move {
@@ -147,6 +168,28 @@ enum Move {
     /// what she'd have done herself this tic (a door pressed, a gun changed), then on along the
     /// way
     Hers(Controls),
+}
+
+/// What a look found: the first move of its best line (and its number among the first moves),
+/// what the line's worth, and how deep it got (a line she dies on stops short).
+#[derive(Clone, Copy)]
+struct Found {
+    idx: usize,
+    mv: Move,
+    worth: f64,
+    depth: usize,
+}
+
+/// A line of a look: the slot it's kept in and its mark, the first move it began with (and
+/// that move's number), her turn as it left her.
+type Line = (i32, Mark, Option<(usize, Move)>, f64);
+
+/// Why `Ultra::act` has no controls for the tic.
+pub enum Stop {
+    /// dead whatever she does: the game's gone back this many tics
+    Back(i64),
+    /// the workers are still looking: ask again, this same tic
+    Wait,
 }
 
 /// What a look ahead is from, kept through it.
@@ -189,6 +232,9 @@ pub struct Tally {
     /// gone back for a hurt, and hurts let stand after every go at them
     pub hurt_back: u32,
     pub hurt_stood: u32,
+    /// (EVIL_ULTRA_VERIFY) workers' answers looked at here as well, and those that differed
+    pub verified: u64,
+    pub differed: u64,
 }
 
 fn alive(m: &Mobj) -> bool {
@@ -285,6 +331,13 @@ pub struct Ultra {
     shaken: (u64, i64),
     sectors: Vec<(f64, f64)>,
     pub log: Vec<String>,
+    /// the workers that look ahead for it, if it has any (`Pool`): else it looks itself
+    pub pool: Option<Pool>,
+    /// with workers: wait for their answer (a run, the headless watcher), or come back for it
+    /// (`Stop::Wait`: the window, which goes on showing the game meanwhile)
+    pub block: bool,
+    /// the tic a look's being waited for at (asked again that tic, it's the same tic)
+    waiting: Option<i64>,
 }
 
 /// slots: 0 the look's root; 1.. the beam's lines, two rows of them; from `KEPT0` the games
@@ -312,6 +365,9 @@ impl Ultra {
             shaken: (0, i64::MIN / 2),
             sectors: Vec::new(),
             log: Vec::new(),
+            pool: None,
+            block: true,
+            waiting: None,
         }
     }
 
@@ -499,18 +555,41 @@ impl Ultra {
     /// The look ahead from where the game stands: the first move of the best line, and what
     /// the line's worth. None: she dies on every one.
     fn look(&mut self, e: &mut Engine, root: &Root, hers: Controls) -> Option<(Move, f64)> {
+        self.tally.decisions += 1;
+        let width = self.tune.width;
+        self.look_from(e, root, hers, None, width)
+            .map(|f| (f.mv, f.worth))
+    }
+
+    /// The look ahead, over all the first moves or a share of them (`share`: those numbered k
+    /// of every n, a worker's), `width` lines kept.
+    fn look_from(
+        &mut self,
+        e: &mut Engine,
+        root: &Root,
+        hers: Controls,
+        share: Option<(usize, usize)>,
+        width: usize,
+    ) -> Option<Found> {
         let t0 = Instant::now();
         let mark0 = e.save(0)?;
         self.tally.saves += 1;
-        self.tally.decisions += 1;
         let was0 = self.was;
-        let mut lines: Vec<(i32, Mark, Option<Move>, f64)> = vec![(0, mark0.clone(), None, was0)];
-        let mut best: Option<(Move, f64)> = None;
+        // (a line: where it's kept, the first move it began with and that move's number, her
+        // turn as it left her)
+        let mut lines: Vec<Line> = vec![(0, mark0.clone(), None, was0)];
+        let mut best: Option<Found> = None;
         for depth in 0..self.tune.depth {
             // (every move from every line kept: played, weighed)
-            let mut tried: Vec<(f64, usize, Move)> = Vec::new();
+            let mut tried: Vec<(f64, usize, Move, usize)> = Vec::new();
             for (li, (slot, mark, _, was)) in lines.iter().enumerate() {
-                for mv in Self::moves((depth == 0).then_some(hers)) {
+                for (mi, mv) in Self::moves((depth == 0).then_some(hers))
+                    .into_iter()
+                    .enumerate()
+                {
+                    if depth == 0 && share.is_some_and(|(k, n)| mi % n != k) {
+                        continue;
+                    }
                     e.restore(*slot, mark);
                     self.tally.restores += 1;
                     self.was = *was;
@@ -530,22 +609,27 @@ impl Ultra {
                                 tried.len() as u64 + li as u64 * 97,
                             );
                     }
-                    tried.push((w, li, mv));
+                    tried.push((w, li, mv, mi));
                 }
             }
             if tried.is_empty() {
                 break; // (dead whatever she does from here: what's found so far, if anything)
             }
             tried.sort_by(|a, b| b.0.total_cmp(&a.0));
-            tried.truncate(self.tune.width);
+            tried.truncate(width);
             // (the best of them played again and kept, to go on from)
             let row = 1 + ROW * (depth as i32 % 2);
-            let mut next: Vec<(i32, Mark, Option<Move>, f64)> = Vec::new();
-            for (k, (w, li, mv)) in tried.iter().enumerate() {
+            let mut next: Vec<Line> = Vec::new();
+            for (k, (w, li, mv, mi)) in tried.iter().enumerate() {
                 let (slot, mark, first, was) = &lines[*li];
-                let first = first.unwrap_or(*mv);
+                let first = first.unwrap_or((*mi, *mv));
                 if k == 0 {
-                    best = Some((first, *w));
+                    best = Some(Found {
+                        idx: first.0,
+                        mv: first.1,
+                        worth: *w,
+                        depth,
+                    });
                 }
                 if depth + 1 == self.tune.depth {
                     break; // (the last: nothing goes on from it)
@@ -694,6 +778,72 @@ impl Ultra {
         Some(now - e.tic)
     }
 
+    /// The look ahead by the workers: asked of them (the game as it stands handed to each, with
+    /// its share of the first moves), and their best. None: they haven't all answered yet
+    /// (never, with `block`).
+    #[allow(clippy::option_option)]
+    fn look_pool(
+        &mut self,
+        pool: &mut Pool,
+        e: &mut Engine,
+        root: &Root,
+        hers: Controls,
+    ) -> Option<Option<(Move, f64)>> {
+        if !pool.asked() {
+            self.keep(e);
+            let handed = e.save(0).and_then(|mark| e.hand(0, &mark));
+            let Some((bytes, kept)) = handed else {
+                return Some(self.look(e, root, hers));
+            };
+            self.tally.saves += 1;
+            self.tally.decisions += 1;
+            let width = pool.width(self.tune.width);
+            pool.ask(&request(self.was, &hers, root, kept, &bytes), width);
+        }
+        let (replies, took) = pool.poll(self.block)?;
+        self.tally.searched_secs += took;
+        self.tally.worst_look = self.tally.worst_look.max(took);
+        for r in replies.iter().flatten() {
+            self.tally.played += r.played;
+            self.tally.restores += r.restores;
+            self.tally.saves += r.saves;
+        }
+        // (EVIL_ULTRA_VERIFY: each worker's share looked at here as well, from the same game:
+        // the two must agree, or a game handed over isn't the game)
+        if std::env::var_os("EVIL_ULTRA_VERIFY").is_some() {
+            let (n, width) = (replies.len(), pool.width(self.tune.width));
+            for (k, r) in replies.iter().enumerate() {
+                let here = self.look_from(e, root, hers, Some((k, n)), width);
+                let same = match (here, r) {
+                    (None, None) => true,
+                    (Some(a), Some(b)) => {
+                        a.idx == b.idx && a.worth == b.worth && a.depth == b.depth
+                    }
+                    _ => false,
+                };
+                self.tally.verified += 1;
+                if !same {
+                    self.tally.differed += 1;
+                    self.log.push(format!(
+                        "tic {}: worker {k} of {n} found {:?}, here {:?}",
+                        e.tic,
+                        r.map(|r| (r.idx, r.worth, r.depth)),
+                        here.map(|f| (f.idx, f.worth, f.depth))
+                    ));
+                }
+            }
+        }
+        let first = Self::moves(Some(hers));
+        Some(
+            replies
+                .iter()
+                .flatten()
+                .filter(|r| r.idx < first.len())
+                .max_by(|a, b| a.depth.cmp(&b.depth).then(a.worth.total_cmp(&b.worth)))
+                .map(|r| (first[r.idx], r.worth)),
+        )
+    }
+
     /// The sector at `q`, if its floor hurts.
     fn hot_at(&self, agent: &Agent, q: Point) -> Option<usize> {
         let nav = &agent.x().nav;
@@ -703,7 +853,9 @@ impl Ultra {
 
     /// This tic's controls: the search's, something after her; else `hers`. None: dead
     /// whatever she does, and the game's gone back (`back` tics): ask again.
-    pub fn act(&mut self, e: &mut Engine, agent: &Agent, hers: Controls) -> Result<Controls, i64> {
+    pub fn act(&mut self, e: &mut Engine, agent: &Agent, hers: Controls) -> Result<Controls, Stop> {
+        // (asked again the tic a look's waited for: the tic's counted once)
+        let again = self.waiting == Some(e.tic);
         let (p, things) = e.peek();
         let things: Vec<Mobj> = things.to_vec();
         let seen = Self::seen(e).is_some();
@@ -713,7 +865,9 @@ impl Ultra {
             self.keep(e);
             return Ok(hers);
         }
-        self.tally.ultra_tics += 1;
+        if !again {
+            self.tally.ultra_tics += 1;
+        }
         let pos = (p.x, p.y);
         let mut sectors = Vec::new();
         e.game.sectors(&mut sectors);
@@ -729,7 +883,8 @@ impl Ultra {
                     && m.after_her != 0
                     && d < self.tune.eager_clear)
         });
-        if dist(self.stood.0, pos) > self.tune.eager_room {
+        if again {
+        } else if dist(self.stood.0, pos) > self.tune.eager_room {
             self.stood = (pos, e.tic);
             self.idle = 0.0;
         } else {
@@ -759,8 +914,23 @@ impl Ultra {
             return Ok(hers);
         }
         if self.doing.is_none_or(|(_, left)| left == 0) {
-            self.keep(e);
-            match self.look(e, &root, hers) {
+            let found = match self.pool.take() {
+                Some(mut pool) => {
+                    let found = self.look_pool(&mut pool, e, &root, hers);
+                    self.pool = Some(pool);
+                    let Some(found) = found else {
+                        self.waiting = Some(e.tic);
+                        return Err(Stop::Wait);
+                    };
+                    found
+                }
+                None => {
+                    self.keep(e);
+                    self.look(e, &root, hers)
+                }
+            };
+            self.waiting = None;
+            match found {
                 Some((mv, w)) => {
                     if self.tally.decisions % 20 == 1 {
                         self.log.push(format!(
@@ -796,7 +966,7 @@ impl Ultra {
                     self.began = Some(pos);
                     self.doing = Some((mv, self.tune.move_tics));
                 }
-                None => return Err(self.go_back(e).unwrap_or(0)),
+                None => return Err(Stop::Back(self.go_back(e).unwrap_or(0))),
             }
         }
         let (mv, left) = self.doing.expect("a move was chosen");
@@ -819,6 +989,417 @@ impl Ultra {
     }
 }
 
+/// Bytes for the wire, and back.
+#[derive(Default)]
+struct Wire(Vec<u8>, usize);
+
+impl Wire {
+    fn u32(&mut self, v: u32) {
+        self.0.extend(v.to_le_bytes());
+    }
+    fn u64(&mut self, v: u64) {
+        self.0.extend(v.to_le_bytes());
+    }
+    fn i64(&mut self, v: i64) {
+        self.0.extend(v.to_le_bytes());
+    }
+    fn f64(&mut self, v: f64) {
+        self.0.extend(v.to_le_bytes());
+    }
+    fn take<const N: usize>(&mut self) -> Option<[u8; N]> {
+        let b = self.0.get(self.1..self.1 + N)?.try_into().ok()?;
+        self.1 += N;
+        Some(b)
+    }
+    fn get_u32(&mut self) -> Option<u32> {
+        self.take().map(u32::from_le_bytes)
+    }
+    fn get_u64(&mut self) -> Option<u64> {
+        self.take().map(u64::from_le_bytes)
+    }
+    fn get_i64(&mut self) -> Option<i64> {
+        self.take().map(i64::from_le_bytes)
+    }
+    fn get_f64(&mut self) -> Option<f64> {
+        self.take().map(f64::from_le_bytes)
+    }
+}
+
+/// What every worker is sent for a look, but its share: her turn the tic before, what she'd
+/// do herself, what the look is from, and the game.
+fn request(was: f64, hers: &Controls, root: &Root, kept: [i64; 4], game: &[u8]) -> Vec<u8> {
+    let mut w = Wire::default();
+    w.f64(was);
+    w.f64(hers.forward);
+    w.f64(hers.strafe);
+    w.f64(hers.turn);
+    w.u32(u32::from(hers.use_) | u32::from(hers.attack) << 1 | u32::from(hers.run) << 2);
+    w.i64(i64::from(hers.weapon));
+    w.i64(hers.exact.map_or(i64::MIN, i64::from));
+    w.f64(root.eager);
+    w.i64(i64::from(root.keys));
+    w.u64(root.shake);
+    w.u32(root.way.len() as u32);
+    for q in &root.way {
+        w.f64(q.0);
+        w.f64(q.1);
+    }
+    w.u32(root.wades.len() as u32);
+    for &s in &root.wades {
+        w.u64(s as u64);
+    }
+    w.u32(root.sectors.len() as u32);
+    for h in &root.sectors {
+        w.f64(h.0);
+        w.f64(h.1);
+    }
+    for k in kept {
+        w.i64(k);
+    }
+    w.u32(game.len() as u32);
+    w.0.extend_from_slice(game);
+    w.0
+}
+
+/// A request as a worker reads it: (her turn before, hers, the root, what the engine keeps
+/// beside the game, the game).
+type Asked = (f64, Controls, Root, [i64; 4], Vec<u8>);
+
+fn read_request(bytes: Vec<u8>) -> Option<Asked> {
+    let mut w = Wire(bytes, 0);
+    let was = w.get_f64()?;
+    let (forward, strafe, turn) = (w.get_f64()?, w.get_f64()?, w.get_f64()?);
+    let flags = w.get_u32()?;
+    let weapon = w.get_i64()? as i32;
+    let exact = Some(w.get_i64()?)
+        .filter(|&x| x != i64::MIN)
+        .map(|x| x as i32);
+    let hers = Controls {
+        forward,
+        strafe,
+        turn,
+        use_: flags & 1 != 0,
+        attack: flags & 2 != 0,
+        run: flags & 4 != 0,
+        weapon,
+        exact,
+    };
+    let eager = w.get_f64()?;
+    let keys = w.get_i64()? as i32;
+    let shake = w.get_u64()?;
+    let mut way = Vec::new();
+    for _ in 0..w.get_u32()? {
+        way.push((w.get_f64()?, w.get_f64()?));
+    }
+    let mut wades = Vec::new();
+    for _ in 0..w.get_u32()? {
+        wades.push(w.get_u64()? as usize);
+    }
+    let mut sectors = Vec::new();
+    for _ in 0..w.get_u32()? {
+        sectors.push((w.get_f64()?, w.get_f64()?));
+    }
+    let kept = [w.get_i64()?, w.get_i64()?, w.get_i64()?, w.get_i64()?];
+    let n = w.get_u32()? as usize;
+    let game = w.0.get(w.1..w.1 + n)?.to_vec();
+    Some((
+        was,
+        hers,
+        Root {
+            way,
+            wades,
+            eager,
+            sectors,
+            keys,
+            shake,
+        },
+        kept,
+        game,
+    ))
+}
+
+/// A worker's answer: the best of its share (None: she dies on all of it), and what it played.
+#[derive(Clone, Copy)]
+struct Reply {
+    idx: usize,
+    worth: f64,
+    depth: usize,
+    played: u64,
+    restores: u64,
+    saves: u64,
+}
+
+/// A look being asked: its number, when it was asked, each worker's answer so far (None: not
+/// in yet; Some(None): she dies on all its share, or it's gone).
+type Asking = (u32, Instant, Vec<Option<Option<Reply>>>);
+
+/// A reply on the wire: the look's number, whether anything was found, then `Reply`'s six.
+const REPLY_BYTES: usize = 4 + 4 + 6 * 8;
+
+/// The ultra instinct's workers: this program started again `n` times, each with the game in
+/// it (the engine's state is the process's, so more than one core is more than one process).
+/// For a look each is handed the game as it stands and a share of the first moves, looks ahead
+/// from them, and answers with its best. They keep nothing between looks: a game gone back to
+/// is just the next game handed over.
+pub struct Pool {
+    workers: Vec<Worker>,
+    /// the look they're on: its number, when it was asked, the answers so far
+    look: Option<Asking>,
+    number: u32,
+    /// the level they were started on (their floors that hurt are that level's)
+    pub map: String,
+}
+
+struct Worker {
+    child: std::process::Child,
+    stream: Option<std::net::TcpStream>,
+    read: Vec<u8>,
+}
+
+impl Pool {
+    /// `n` workers on this level. They're a second or so starting: started before they're
+    /// needed, not when she's in the pickle.
+    pub fn spawn(
+        iwad: &std::path::Path,
+        map: &str,
+        skill: i32,
+        tune: &Tune,
+        n: usize,
+    ) -> Result<Pool, String> {
+        use std::process::{Command, Stdio};
+        let err = |e: std::io::Error| format!("the ultra instinct's workers: {e}");
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).map_err(err)?;
+        let port = listener.local_addr().map_err(err)?.port();
+        let me = std::env::current_exe().map_err(err)?;
+        let mut children = Vec::new();
+        for _ in 0..n {
+            let mut c = Command::new(&me);
+            c.arg("ultra-worker")
+                .arg(iwad)
+                .arg(map)
+                .args(["--fight", &skill.to_string(), "--port", &port.to_string()])
+                .args(tune.args())
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            children.push(c.spawn().map_err(err)?);
+        }
+        // (each connects when its level's up; one that never does is done without)
+        listener.set_nonblocking(true).map_err(err)?;
+        let until = Instant::now() + std::time::Duration::from_secs(60);
+        let mut streams = Vec::new();
+        while streams.len() < n && Instant::now() < until {
+            match listener.accept() {
+                Ok((s, _)) => {
+                    let _ = s.set_nodelay(true);
+                    let _ = s.set_nonblocking(false);
+                    streams.push(s);
+                }
+                Err(_) => std::thread::sleep(std::time::Duration::from_millis(5)),
+            }
+        }
+        if streams.is_empty() {
+            for mut c in children {
+                let _ = c.kill();
+                let _ = c.wait();
+            }
+            return Err("the ultra instinct's workers: none came up".into());
+        }
+        let mut streams = streams.into_iter();
+        Ok(Pool {
+            workers: children
+                .into_iter()
+                .map(|child| Worker {
+                    child,
+                    stream: streams.next(),
+                    read: Vec::new(),
+                })
+                .collect(),
+            look: None,
+            number: 0,
+            map: map.to_string(),
+        })
+    }
+
+    /// The workers that answer.
+    pub fn len(&self) -> usize {
+        self.workers.iter().filter(|w| w.stream.is_some()).count()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The lines each keeps: between them about twice what one process looking alone keeps
+    /// (each has only its share of the first moves to begin from), and never under two.
+    pub fn width(&self, alone: usize) -> usize {
+        (2 * alone).div_ceil(self.len().max(1)).max(2)
+    }
+
+    fn asked(&self) -> bool {
+        self.look.is_some()
+    }
+
+    /// A look asked of them all (`request`), each its share.
+    fn ask(&mut self, request: &[u8], width: usize) {
+        use std::io::Write;
+        self.number = self.number.wrapping_add(1);
+        let n = self.workers.len();
+        let mut answers = Vec::with_capacity(n);
+        for (k, w) in self.workers.iter_mut().enumerate() {
+            let mut head = Wire::default();
+            head.u32((request.len() + 16) as u32);
+            head.u32(self.number);
+            head.u32(k as u32);
+            head.u32(n as u32);
+            head.u32(width as u32);
+            let sent = w.stream.as_mut().is_some_and(|s| {
+                let _ = s.set_nonblocking(false);
+                s.write_all(&head.0)
+                    .and_then(|()| s.write_all(request))
+                    .is_ok()
+            });
+            if !sent {
+                w.stream = None; // (gone: done without, its share with it)
+            }
+            w.read.clear();
+            answers.push((!sent).then_some(None));
+        }
+        self.look = Some((self.number, Instant::now(), answers));
+    }
+
+    /// Their answers, when all are in (`block`: waited for), and how long the look took.
+    fn poll(&mut self, block: bool) -> Option<(Vec<Option<Reply>>, f64)> {
+        use std::io::Read;
+        let (number, since, answers) = self.look.as_mut()?;
+        loop {
+            for (k, w) in self.workers.iter_mut().enumerate() {
+                if answers[k].is_some() {
+                    continue;
+                }
+                let Some(s) = w.stream.as_mut() else {
+                    answers[k] = Some(None);
+                    continue;
+                };
+                let _ = s.set_nonblocking(true);
+                let mut buf = [0u8; 256];
+                loop {
+                    match s.read(&mut buf) {
+                        Ok(0) => {
+                            w.stream = None;
+                            answers[k] = Some(None);
+                            break;
+                        }
+                        Ok(n) => w.read.extend_from_slice(&buf[..n]),
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                        Err(_) => {
+                            w.stream = None;
+                            answers[k] = Some(None);
+                            break;
+                        }
+                    }
+                }
+                // (answers to a look dropped since are passed over)
+                while w.read.len() >= REPLY_BYTES && answers[k].is_none() {
+                    let mut r = Wire(w.read.drain(..REPLY_BYTES).collect(), 0);
+                    let (no, found) = (r.get_u32()?, r.get_u32()?);
+                    let reply = Reply {
+                        idx: r.get_u64()? as usize,
+                        worth: r.get_f64()?,
+                        depth: r.get_u64()? as usize,
+                        played: r.get_u64()?,
+                        restores: r.get_u64()?,
+                        saves: r.get_u64()?,
+                    };
+                    if no == *number {
+                        answers[k] = Some((found != 0).then_some(reply));
+                    }
+                }
+            }
+            if answers.iter().all(Option::is_some) {
+                break;
+            }
+            if !block {
+                return None;
+            }
+            std::thread::sleep(std::time::Duration::from_micros(200));
+        }
+        let took = since.elapsed().as_secs_f64();
+        let (_, _, answers) = self.look.take()?;
+        Some((answers.into_iter().map(Option::flatten).collect(), took))
+    }
+
+    /// What was asked and not yet answered is nobody's: its answers, when they come, are
+    /// passed over.
+    pub fn cancel(&mut self) {
+        self.look = None;
+    }
+}
+
+impl Drop for Pool {
+    fn drop(&mut self) {
+        for w in &mut self.workers {
+            w.stream = None;
+            let _ = w.child.kill();
+            let _ = w.child.wait();
+        }
+    }
+}
+
+/// A worker (`evil-boom ultra-worker`, started by `Pool::spawn`): the game in it, looks ahead
+/// asked of it over the port till whoever asks is gone.
+pub fn worker(wad: &str, map: &str, o: &RunOptions, tune: Tune, port: u16) -> Result<(), String> {
+    use std::io::{Read, Write};
+    let crate::sweep::Setup { mut e, agent, .. } = crate::sweep::setup(wad, map, o, false, None)?;
+    let mut ultra = Ultra::new(tune);
+    ultra.hot = Some(std::rc::Rc::clone(&agent.x().nav));
+    let mut stream =
+        std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|e| format!("the port: {e}"))?;
+    let _ = stream.set_nodelay(true);
+    loop {
+        let mut head = [0u8; 4];
+        if stream.read_exact(&mut head).is_err() {
+            return Ok(()); // (whoever asked is gone)
+        }
+        let mut bytes = vec![0u8; u32::from_le_bytes(head) as usize];
+        if stream.read_exact(&mut bytes).is_err() {
+            return Ok(());
+        }
+        let mut w = Wire(bytes, 0);
+        let (Some(number), Some(k), Some(n), Some(width)) =
+            (w.get_u32(), w.get_u32(), w.get_u32(), w.get_u32())
+        else {
+            return Err("a request cut short".into());
+        };
+        let rest = w.0.split_off(w.1);
+        let (was, hers, root, kept, game) = read_request(rest).ok_or("a request cut short")?;
+        let before = (ultra.tally.played, ultra.tally.restores, ultra.tally.saves);
+        let found = e.take(0, &game, kept).and_then(|mark| {
+            e.restore(0, &mark);
+            ultra.was = was;
+            ultra.look_from(
+                &mut e,
+                &root,
+                hers,
+                Some((k as usize, n as usize)),
+                width as usize,
+            )
+        });
+        let mut out = Wire::default();
+        out.u32(number);
+        out.u32(u32::from(found.is_some()));
+        out.u64(found.map_or(0, |f| f.idx as u64));
+        out.f64(found.map_or(0.0, |f| f.worth));
+        out.u64(found.map_or(0, |f| f.depth as u64));
+        out.u64(ultra.tally.played - before.0);
+        out.u64(ultra.tally.restores - before.1);
+        out.u64(ultra.tally.saves - before.2);
+        if stream.write_all(&out.0).is_err() {
+            return Ok(());
+        }
+    }
+}
+
 /// Live, the game runs at this much of its speed while the search has her (the plan's section
 /// 4: what a look has to fit in), and a session not kept on is over when the search hasn't had
 /// her for `LIVE_OVER` tics: the fight's over.
@@ -833,6 +1414,8 @@ pub enum Went {
     Back(i64),
     /// no line she lives on and no game left to go back to
     NoWay,
+    /// the workers are still looking: nothing to play yet, ask again with the same `hers`
+    Wait,
 }
 
 /// The ultra instinct on, from the tic it's begun till it's dropped: the search, the games kept
@@ -899,8 +1482,12 @@ impl Session {
                 self.tape.push((e.tic, c));
                 Went::On(c)
             }
-            Err(0) if self.ultra.kept.is_empty() => Went::NoWay,
-            Err(back) => {
+            Err(Stop::Wait) => {
+                self.searching = true;
+                return Went::Wait;
+            }
+            Err(Stop::Back(0)) if self.ultra.kept.is_empty() => Went::NoWay,
+            Err(Stop::Back(back)) => {
                 self.went_back(e, back);
                 Went::Back(back)
             }
@@ -951,11 +1538,15 @@ impl Session {
         }
     }
 
-    /// Dropped: the games kept let go.
-    pub fn end(&mut self, e: &Engine) {
+    /// Dropped: the games kept let go, and its workers handed back (what they were asked and
+    /// haven't answered is nobody's now).
+    pub fn end(&mut self, e: &Engine) -> Option<Pool> {
         for k in self.ultra.kept.drain(..) {
             e.game.forget(k.slot);
         }
+        let mut pool = self.ultra.pool.take()?;
+        pool.cancel();
+        Some(pool)
     }
 }
 
@@ -1171,6 +1762,15 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         ..
     } = crate::sweep::setup(wad, map, o, false, None)?;
     let mut session = Session::new(tune, &agent, e.tic);
+    if o.workers > 0 {
+        session.ultra.pool = Some(Pool::spawn(
+            &e.iwad,
+            &map_name,
+            e.skill(),
+            &session.ultra.tune,
+            o.workers,
+        )?);
+    }
     // (the game as it starts, for playing the tape over at the end)
     let start = e.save(START_SLOT);
     let t0 = Instant::now();
@@ -1221,6 +1821,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
                 outcome = "NO WAY";
                 break;
             }
+            Went::Wait => unreachable!("a run waits for its workers"),
         };
         e.step(&c);
         last = Some(c);
@@ -1286,7 +1887,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     .write(&taped)?;
     let t = &ultra.tally;
     Ok(format!(
-        "ULTRA {outcome} {map_name}: {:.0}s game ({} tics, {} of them searched), health {} armor {} (lowest health {worst}), kills {}/{}, items {}/{}, secrets {}/{}; gone back {} times for a death and {} for a hurt ({gone_back} tics), {} hurts let stand; {} of {} moves pressed on a wall; {} looks, {} tics played ahead, {} restores, {} saves, {:.1}s searching of {:.1}s real; {}; log {}; to watch it: evil-boom watch {wad} {map_name} --fight {} --seed {} --mortal --tape {}",
+        "ULTRA {outcome} {map_name}: {:.0}s game ({} tics, {} of them searched), health {} armor {} (lowest health {worst}), kills {}/{}, items {}/{}, secrets {}/{}; gone back {} times for a death and {} for a hurt ({gone_back} tics), {} hurts let stand; {} of {} moves pressed on a wall; {} looks, {} tics played ahead, {} restores, {} saves, {:.1}s searching of {:.1}s real, the longest look {:.0} ms{}; {}; log {}; to watch it: evil-boom watch {wad} {map_name} --fight {} --seed {} --mortal --tape {}",
         (e.tic - tic0) as f64 / 35.0,
         e.tic - tic0,
         t.ultra_tics,
@@ -1309,6 +1910,15 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         t.saves,
         t.searched_secs,
         t0.elapsed().as_secs_f64(),
+        1000.0 * t.worst_look,
+        if t.verified > 0 {
+            format!(
+                "; {} workers' answers looked at here as well, {} differed",
+                t.verified, t.differed
+            )
+        } else {
+            String::new()
+        },
         taped_same.as_deref().unwrap_or("the tape not checked"),
         file.display(),
         o.fight,

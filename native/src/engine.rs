@@ -638,6 +638,38 @@ impl Engine {
         true
     }
 
+    /// The game saved in `slot` as bytes for another process (`take`), and what this side
+    /// keeps of it that the other needs: the tic, the suits, the suit on, the message's tic.
+    pub fn hand(&self, slot: i32, mark: &Mark) -> Option<(Vec<u8>, [i64; 4])> {
+        let bytes = self.game.frame_get(slot)?;
+        Some((
+            bytes,
+            [
+                mark.tic,
+                i64::from(mark.suits),
+                i64::from(mark.ironfeet),
+                i64::from(mark.message_tic),
+            ],
+        ))
+    }
+
+    /// A game another process handed over (`hand`), into `slot` here: its `Mark`, for
+    /// `restore`. The hits on her are each process's own.
+    pub fn take(&mut self, slot: i32, bytes: &[u8], kept: [i64; 4]) -> Option<Mark> {
+        if !self.game.frame_put(slot, bytes) {
+            return None;
+        }
+        Some(Mark {
+            tic: kept[0],
+            suits: kept[1] as i32,
+            ironfeet: kept[2] as i32,
+            message_tic: kept[3] as i32,
+            hits: 0,
+            hit_sides: Vec::new(),
+            hit_tic: None,
+        })
+    }
+
     /// The player and the things as the game has them now, read and no more (no sounds taken,
     /// no message, nothing kept): for looking at a tic played ahead.
     pub fn peek(&mut self) -> (crate::dsda::PlayerState, &[Mobj]) {

@@ -1241,6 +1241,62 @@ EVIL_API void evil_forget(int slot)
     }
 }
 
+/* A saved game out of this process and into another (the ultra instinct's workers: each has
+ * the game in it, and is handed the one to look ahead from). The bytes are EVIL_FRAME_HEAD
+ * ints (exited, secret_exit, held, spawned, gametic, the pellets' seven) and then DSDA's own
+ * archive, which sets the level up itself when it's loaded. The hits and sounds counted are
+ * each process's own. */
+#define EVIL_FRAME_HEAD 12
+
+/* The size of slot's game as bytes (out NULL), or the bytes copied into out (cap its room).
+ * -1: nothing saved there, or too little room. */
+EVIL_API int evil_frame_get(int slot, unsigned char *out, int cap)
+{
+  evil_frame_t *f;
+  int head[EVIL_FRAME_HEAD];
+  int i, size;
+  if (slot < 0 || slot >= EVIL_FRAMES || !evil_frames[slot].buf)
+    return -1;
+  f = &evil_frames[slot];
+  size = (int)sizeof(head) + f->len;
+  if (!out)
+    return size;
+  if (cap < size)
+    return -1;
+  head[0] = f->exited; head[1] = f->secret_exit; head[2] = f->held;
+  head[3] = f->spawned; head[4] = f->gametic;
+  for (i = 0; i < 7; i++)
+    head[5 + i] = f->pellets[i];
+  memcpy(out, head, sizeof(head));
+  memcpy(out + sizeof(head), f->buf, f->len);
+  return size;
+}
+
+/* Bytes evil_frame_get gave, in any process with a level going, into slot (over what was
+ * there): evil_restore then puts that game back here. Returns 0, or -1. */
+EVIL_API int evil_frame_put(int slot, const unsigned char *in, int len)
+{
+  evil_frame_t *f;
+  int head[EVIL_FRAME_HEAD];
+  int i;
+  if (slot < 0 || slot >= EVIL_FRAMES || !in || len <= (int)sizeof(head))
+    return -1;
+  f = &evil_frames[slot];
+  memcpy(head, in, sizeof(head));
+  if (f->buf)
+    Z_Free(f->buf);
+  f->len = len - (int)sizeof(head);
+  f->buf = Z_Malloc(f->len);
+  memcpy(f->buf, in + sizeof(head), f->len);
+  f->exited = head[0]; f->secret_exit = head[1]; f->held = head[2];
+  f->spawned = head[3]; f->gametic = head[4];
+  for (i = 0; i < 7; i++)
+    f->pellets[i] = head[5 + i];
+  f->hit_count = evil_hit_count;
+  f->sound_count = evil_sound_count;
+  return 0;
+}
+
 /* The nearest thing she could shoot that she has a line of sight to (a monster alive, or a
  * lost soul): its id, and where it is into out (x, y, z). -1: none. The game's own sight
  * check, as its monsters use (the ultra instinct's: it doesn't aim at what's behind a wall). */

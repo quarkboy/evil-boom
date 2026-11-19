@@ -295,6 +295,8 @@ pub struct WatchOptions {
     pub tape: Option<std::path::PathBuf>,
     /// (`--ultra`) the ultra instinct on from the start, and kept on
     pub ultra: bool,
+    /// (`--workers N`) its looks by N worker processes, started with the window (0: its own)
+    pub workers: usize,
     /// she plays as mortal and nothing hurts her (`--charmed`)
     pub charmed: bool,
     /// the chaingun and bullets for ever (`--endless-bullets`)
@@ -666,6 +668,18 @@ struct Watch {
     ultra: Option<crate::ultra::Session>,
     /// (`--ultra`) kept on: not dropped when the fight's over
     ultra_stays: bool,
+    /// its workers, while no session has them (`--workers N`)
+    ultra_pool: Option<crate::ultra::Pool>,
+    /// its workers asked for (they're started, or started again on another level, when it's
+    /// next turned on)
+    ultra_workers: usize,
+    /// the tic it's waiting on its workers for: what she saw and what she'd have done, kept
+    /// till they answer (she's asked once a tic)
+    ultra_wait: Option<(Observation, Controls)>,
+    /// ...and that the tic asked for just now wasn't played
+    ultra_waiting: bool,
+    /// its looks waited for (the headless watcher), not come back for (the window)
+    ultra_block: bool,
     /// the hits on her last tic, for whoever's directing to be told of
     hits: Vec<crate::dsda::Hit>,
     m: Arc<MapData>,
@@ -1303,6 +1317,8 @@ fn level(
     let mut watch = Watch::new(w, m, &map_name, engine, agent, o.focus, o.lives - 1);
     watch.hold = hold;
     watch.endless_bullets = o.endless_bullets;
+    watch.ultra_workers = o.workers;
+    watch.ultra_pool_up();
     if o.ultra {
         watch.ultra_stays = true;
         watch.ultra_toggle();
@@ -1492,6 +1508,11 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
     };
     let mut aside: Option<Canvas> = None;
     let mut last = Instant::now();
+    // (the window goes on showing the game while the ultra instinct's workers look)
+    watch.ultra_block = false;
+    if let Some(u) = watch.ultra.as_mut() {
+        u.ultra.block = false;
+    }
     let mut owed = 0.0;
     // (her log written as it plays, as a headless watch's is: a watched run read afterwards)
     let mut live = LiveLog::create(opts.as_ref().and_then(|o| o.seed))?;
@@ -1593,6 +1614,9 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
             }
             while owed >= 1.0 && !watch.paused && !watch.engine.finished() {
                 watch.tic();
+                if watch.ultra_waiting {
+                    break; // (its workers are looking: the tic's still to play, next frame)
+                }
                 owed -= 1.0;
             }
             if let Some((w, o)) = game.filter(|(_, o)| o.episode && watch.engine.exited()) {
@@ -1826,6 +1850,11 @@ impl Watch {
             tape: std::collections::BTreeMap::new(),
             ultra: None,
             ultra_stays: false,
+            ultra_pool: None,
+            ultra_workers: 0,
+            ultra_wait: None,
+            ultra_waiting: false,
+            ultra_block: true,
             hits: Vec::new(),
             m,
             map_name: map_name.to_string(),
@@ -1901,17 +1930,49 @@ impl Watch {
             .push(format!("tic {tic}: ultra instinct: {what}"));
     }
 
+    /// Its workers up, if any are asked for and none are (or they're another level's).
+    fn ultra_pool_up(&mut self) {
+        if self.ultra_workers == 0
+            || self
+                .ultra_pool
+                .as_ref()
+                .is_some_and(|p| p.map == self.map_name && !p.is_empty())
+        {
+            return;
+        }
+        self.ultra_pool = None; // (another level's: let go first)
+        match crate::ultra::Pool::spawn(
+            &self.engine.iwad,
+            &self.map_name,
+            self.engine.skill(),
+            &crate::ultra::Tune::default(),
+            self.ultra_workers,
+        ) {
+            Ok(p) => self.ultra_pool = Some(p),
+            Err(e) => self.ultra_log(e),
+        }
+    }
+
     /// (`U`) The ultra instinct on from here, or dropped.
     fn ultra_toggle(&mut self) {
         if self.ultra.is_some() {
             self.ultra_end("dropped");
         } else if !self.engine.finished() {
-            self.ultra = Some(crate::ultra::Session::new(
+            let mut session = crate::ultra::Session::new(
                 crate::ultra::Tune::default(),
                 &self.agent,
                 self.engine.tic,
-            ));
-            self.ultra_log("on".into());
+            );
+            self.ultra_pool_up();
+            session.ultra.pool = self.ultra_pool.take();
+            session.ultra.block = self.ultra_block;
+            let with = session
+                .ultra
+                .pool
+                .as_ref()
+                .map_or("no workers".to_string(), |p| format!("{} workers", p.len()));
+            self.ultra = Some(session);
+            self.ultra_log(format!("on ({with})"));
         }
     }
 
@@ -1919,7 +1980,7 @@ impl Watch {
         let Some(mut u) = self.ultra.take() else {
             return;
         };
-        u.end(&self.engine);
+        self.ultra_pool = u.end(&self.engine);
         let t = &u.ultra.tally;
         let mean = 1000.0 * t.searched_secs / (t.decisions.max(1) as f64);
         self.ultra_log(format!(
@@ -1946,7 +2007,9 @@ impl Watch {
         }
     }
 
-    fn tic(&mut self) {
+    /// A tic's first half: the level as she sees it, whoever directs her told, and what she'd
+    /// do.
+    fn tic_see(&mut self) -> (Observation, Controls) {
         // (the level again, as she asked: what she came in with, what she knows kept, no life)
         let asked = self
             .feed
@@ -2039,6 +2102,16 @@ impl Watch {
         if let Some(t) = self.tape.get(&self.engine.tic) {
             c = *t;
         }
+        (obs, c)
+    }
+
+    fn tic(&mut self) {
+        // (waiting on the ultra instinct's workers for this tic: seen and asked already)
+        self.ultra_waiting = false;
+        let (obs, mut c) = match self.ultra_wait.take() {
+            Some(seen) => seen,
+            None => self.tic_see(),
+        };
         // (the ultra instinct: its controls for hers, or the game put back and nothing played)
         if let Some(u) = self.ultra.as_mut() {
             match u.decide(&mut self.engine, &self.agent, c) {
@@ -2056,6 +2129,11 @@ impl Watch {
                 crate::ultra::Went::NoWay => {
                     self.ultra_log("no way she lives on, and no game kept to go back to".into());
                     self.ultra_end("it has no way");
+                }
+                crate::ultra::Went::Wait => {
+                    self.ultra_wait = Some((obs, c));
+                    self.ultra_waiting = true;
+                    return;
                 }
             }
         }

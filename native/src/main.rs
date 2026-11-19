@@ -531,6 +531,8 @@ fn episode_one(args: &[String]) -> Result<(), String> {
 /// `ultra-check`: the game saved, put back and played again, and what that costs.
 fn ultra(args: &[String], check: bool) -> Result<(), String> {
     let mut tune = evilboom::ultra::Tune::default();
+    // (`ultra-worker`, started by a run or the window: the port it's asked its looks over)
+    let mut port: Option<u16> = None;
     let mut rest_args = Vec::new();
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -546,6 +548,7 @@ fn ultra(args: &[String], check: bool) -> Result<(), String> {
             "--way" => tune.way = num("--way")?,
             "--hurt" => tune.hurt = num("--hurt")?,
             "--hurt-tries" => tune.hurt_tries = num("--hurt-tries")? as u32,
+            "--port" => port = Some(num("--port")? as u16),
             _ => rest_args.push(a.clone()),
         }
     }
@@ -557,6 +560,9 @@ fn ultra(args: &[String], check: bool) -> Result<(), String> {
         );
     };
     o.mortal = true;
+    if let Some(port) = port {
+        return evilboom::ultra::worker(wad, map, &o, tune, port);
+    }
     println!(
         "{}",
         if let (true, Some(tape)) = (check, &o.tape) {
@@ -823,6 +829,7 @@ fn watch_options(
         tuning: o.tuning.clone(),
         tape: o.tape.clone(),
         ultra: o.ultra,
+        workers: o.workers,
         headless: false,
         paced: false,
         max_seconds: o.max_seconds,
@@ -1245,7 +1252,7 @@ fn main() -> ExitCode {
         Some("dump-nav") if args.len() == 3 => dump_nav(&args[1], &args[2]),
         // (the ultra instinct, a prototype: docs/design/ultra-instinct-plan.md)
         Some("ultra-check") => ultra(&args[1..], true),
-        Some("ultra") => ultra(&args[1..], false),
+        Some("ultra") | Some("ultra-worker") => ultra(&args[1..], false),
         Some("secret-survey") => {
             // (one map in this process, its rows out: the survey's children)
             let one = args.iter().any(|a| a == "--one");

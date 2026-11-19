@@ -98,6 +98,8 @@ pub struct RunOptions {
     pub tape: Option<std::path::PathBuf>,
     /// (`watch --ultra`) the ultra instinct on in the window from the start, and kept on
     pub ultra: bool,
+    /// (`--workers N`) the ultra instinct's looks by N worker processes (0: its own)
+    pub workers: usize,
     /// the journal of her decisions kept, and written beside the log (`crate::decisions`)
     pub decisions: bool,
     /// moves and retreats she isn't to make, by name (`Player::bar`)
@@ -139,6 +141,7 @@ impl Default for RunOptions {
             tuning: None,
             tape: None,
             ultra: false,
+            workers: 0,
             decisions: false,
             bar: None,
             advisor: None,

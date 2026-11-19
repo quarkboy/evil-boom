@@ -297,3 +297,46 @@ The budget holds and the picture doesn't: every look stops the window for five f
 three times a second. That's what the workers are for (the look in other processes, the window's
 own only playing the move settled on), and on Plutonia MAP01 a look was 800 ms, twice the
 budget, where the restore is most of it (DSDA's load sets the level up again: `G_InitNew`).
+
+### Stage 4, the workers (2026-11-19)
+
+`--workers N` (on `watch` and on `ultra`): the looks are done by N more processes of this
+program, each with the game in it (`ultra::Pool`, `evil-boom ultra-worker`).
+
+- **They keep nothing between looks.** Not kept in step by playing the same moves, as section
+  4 had it: for each look every worker is handed the game as it stands, as bytes
+  (`evil_frame_get` and `evil_frame_put` at the boundary: DSDA's archive with what the boundary
+  keeps beside it; `Engine::hand`, `take`), over a local port. 27 KB on E2M9, 110 KB on
+  Plutonia MAP01. So a game gone back to, a session begun mid-level, the next level: all just
+  the next game handed over, and nothing to fall out of step.
+- **Each has a share of the first moves** (every n-th of the 21) and looks ahead from those
+  alone, keeping fewer lines (between them about twice what one process keeps). It answers
+  with the best of its share and how deep that got; the deepest, then the best, is taken. So
+  it isn't the same search as one process's: wider, and split by its first move.
+- **The window doesn't wait.** A tic that needs a look asks for it and isn't played; the frames
+  go on; the tic is played when the answers are in (she's asked what she'd do once, kept with
+  what she saw). A run and the headless watcher wait.
+- **Checked** (`EVIL_ULTRA_VERIFY=1`: every worker's share looked at in the asking process as
+  well, from the same game): E2M9 8,856 answers and Plutonia MAP01 (120 s, revenants about)
+  2,456, none different. Every run's tape still plays out the same.
+
+**Measured, Ultra-Violence, a look's time (the asking to the last answer):**
+
+| | its own | 8 workers | 14 workers |
+|---|---|---|---|
+| E2M9, mean | 71 ms | 24 ms | |
+| Plutonia MAP01's first 120 s, mean (longest) | 351 ms (421) | 116 ms (173) | 142 ms (233) |
+| tics played ahead in those 120 s | 2.5 million | 4.4 million | 7.4 million |
+
+Eight is plenty: fourteen each keep two lines whatever, so do more and take longer. Against
+the 343 ms a move has at half speed, Plutonia MAP01 now fits with room.
+
+**The window, E2M9, 30 s with it on** (`EVIL_DEBUG_FRAMES`):
+
+| | frames a second | gap, median / p95 / longest | late frames |
+|---|---|---|---|
+| its own looks | 49.2 | 16.7 / 80.6 / 100.8 ms | 5.9% |
+| 8 workers | 59.9 | 16.7 / 16.7 / 17.0 ms | 0 |
+
+As steady as with it off. Still to do for stage 4: a cheaper restore (DSDA's load sets the
+level up again each time, and that's most of a look on a big level).

@@ -120,6 +120,10 @@ The window:
   --fullscreen            the whole screen, at the desktop's resolution, borderless
   --no-vsync              frames shown when ready, not at the screen's refresh
   --headless              no window: played as fast as it goes, its log in out/watch/live.log
+  --ultra                 the ultra instinct on from the start and kept on (U in the window
+                          turns it on from where she stands, till the fight's over)
+  --workers N             its looks by N worker processes (8 is plenty; 0: its own, which
+                          stops the picture for each look)
 
 The music (see evil-boom help music):
   --music sc55|idkfa      the songs as the Steam re-release recorded them

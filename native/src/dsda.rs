@@ -279,6 +279,10 @@ pub struct Dsda {
     save_fn: Option<unsafe extern "C" fn(c_int) -> c_int>,
     restore_fn: Option<unsafe extern "C" fn(c_int) -> c_int>,
     forget_fn: Option<unsafe extern "C" fn(c_int)>,
+    /// a saved game as bytes, out of one process and into another (`evil_frame_get`,
+    /// `evil_frame_put`): the ultra instinct's workers
+    frame_get_fn: Option<unsafe extern "C" fn(c_int, *mut u8, c_int) -> c_int>,
+    frame_put_fn: Option<unsafe extern "C" fn(c_int, *const u8, c_int) -> c_int>,
     /// the nearest monster she has a line of sight to (`evil_nearest_seen`)
     seen_fn: Option<unsafe extern "C" fn(*mut f64) -> c_int>,
     clear_fn: Option<ClearFn>,
@@ -399,6 +403,20 @@ impl Dsda {
         let forget_fn = sym(b"evil_forget")
             .ok()
             .map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
+        // SAFETY: the symbols, if the library has them, are `int evil_frame_get(int,
+        // unsigned char *, int)` and `int evil_frame_put(int, const unsigned char *, int)`.
+        let frame_get_fn = sym(b"evil_frame_get").ok().map(|p| unsafe {
+            std::mem::transmute::<*const (), unsafe extern "C" fn(c_int, *mut u8, c_int) -> c_int>(
+                p,
+            )
+        });
+        let frame_put_fn =
+            sym(b"evil_frame_put").ok().map(|p| unsafe {
+                std::mem::transmute::<
+                    *const (),
+                    unsafe extern "C" fn(c_int, *const u8, c_int) -> c_int,
+                >(p)
+            });
         // SAFETY: the symbol, if the library has it, is `int evil_nearest_seen(double *)`.
         let seen_fn = sym(b"evil_nearest_seen").ok().map(|p| unsafe {
             std::mem::transmute::<*const (), unsafe extern "C" fn(*mut f64) -> c_int>(p)
@@ -542,6 +560,8 @@ impl Dsda {
             save_fn,
             restore_fn,
             forget_fn,
+            frame_get_fn,
+            frame_put_fn,
             seen_fn,
             clear_fn,
             reset_ids_fn,
@@ -870,6 +890,28 @@ impl Dsda {
         // SAFETY: the game writes three numbers into the buffer it's given.
         let id = unsafe { (self.seen_fn?)(at.as_mut_ptr()) };
         (id >= 0).then_some((id, (at[0], at[1], at[2])))
+    }
+
+    /// The game saved in `slot`, as bytes another process's `frame_put` takes. None: nothing
+    /// saved there, or no such call.
+    pub fn frame_get(&self, slot: i32) -> Option<Vec<u8>> {
+        let f = self.frame_get_fn?;
+        // SAFETY: a null buffer asks the size only.
+        let size = unsafe { f(slot, std::ptr::null_mut(), 0) };
+        let mut out = vec![0u8; usize::try_from(size).ok()?];
+        // SAFETY: the game writes at most `size` bytes into a buffer of that many.
+        let n = unsafe { f(slot, out.as_mut_ptr(), size) };
+        (n == size).then_some(out)
+    }
+
+    /// Bytes `frame_get` gave (here or in another process) into `slot`: `restore` then puts
+    /// that game back. False: not taken, or no such call.
+    pub fn frame_put(&self, slot: i32, bytes: &[u8]) -> bool {
+        let (Some(f), Ok(len)) = (self.frame_put_fn, c_int::try_from(bytes.len())) else {
+            return false;
+        };
+        // SAFETY: the game reads `len` bytes from a buffer of that many, and copies them.
+        unsafe { f(slot, bytes.as_ptr(), len) == 0 }
     }
 
     /// A slot's memory let go (all of them: -1).
