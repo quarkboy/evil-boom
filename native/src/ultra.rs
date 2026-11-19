@@ -71,6 +71,12 @@ pub struct Tune {
     pub tries: u32,
     /// how far a line's worth is shaken on a second go, so it isn't the same line again
     pub shake: f64,
+    /// hurt this much a second (health and armor together) over `hurt_tics`, the game goes
+    /// back to before it and it's tried another way, `hurt_tries` times; hurt as much every
+    /// time, the last go is let stand (0: only a death takes it back)
+    pub hurt: f64,
+    pub hurt_tics: i64,
+    pub hurt_tries: u32,
 }
 
 impl Default for Tune {
@@ -99,6 +105,9 @@ impl Default for Tune {
             kept: 60,
             tries: 3,
             shake: 80.0,
+            hurt: 8.0,
+            hurt_tics: 105,
+            hurt_tries: 3,
         }
     }
 }
@@ -137,6 +146,8 @@ struct Kept {
     slot: i32,
     mark: Mark,
     tries: u32,
+    /// gone back to for a hurt (`hurt_back`), this often
+    hurt: u32,
 }
 
 /// How a run went.
@@ -152,6 +163,9 @@ pub struct Tally {
     /// moves made for real, and those of them that were to take her somewhere and didn't
     pub moves: u64,
     pub pressed: u64,
+    /// gone back for a hurt, and hurts let stand after every go at them
+    pub hurt_back: u32,
+    pub hurt_stood: u32,
 }
 
 fn alive(m: &Mobj) -> bool {
@@ -526,6 +540,7 @@ impl Ultra {
             slot,
             mark,
             tries: 0,
+            hurt: 0,
         });
         self.kept_at = e.tic;
     }
@@ -555,6 +570,48 @@ impl Ultra {
         );
         self.log.push(format!(
             "tic {now}: no line she lives on: back {} tics to tic {} (go {tries} from there)",
+            now - e.tic,
+            e.tic
+        ));
+        Some(now - e.tic)
+    }
+
+    /// Hurt too fast (`Tune::hurt`): back to the last game kept from before `since` (the tic
+    /// the stretch she was hurt in began), to try it another way. The tics gone back; None: let
+    /// stand (every go at it hurt as much, or nothing's kept from before it).
+    fn hurt_back(&mut self, e: &mut Engine, since: i64, lost: f64) -> Option<i64> {
+        let now = e.tic;
+        let i = self.kept.iter().rposition(|k| k.mark.tic <= since)?;
+        if self.kept[i].hurt >= self.tune.hurt_tries {
+            self.tally.hurt_stood += 1;
+            self.log.push(format!(
+                "tic {now}: {lost:.0} lost since tic {since} whatever she tried from tic {}: let stand",
+                self.kept[i].mark.tic
+            ));
+            return None;
+        }
+        self.kept[i].hurt += 1;
+        let (slot, mark, go) = (
+            self.kept[i].slot,
+            self.kept[i].mark.clone(),
+            self.kept[i].hurt,
+        );
+        if !e.restore(slot, &mark) {
+            return None;
+        }
+        // (what was kept after it is of a game that didn't happen)
+        self.kept.truncate(i + 1);
+        self.tally.restores += 1;
+        self.tally.hurt_back += 1;
+        self.doing = None;
+        self.was = 0.0;
+        self.kept_at = e.tic;
+        self.shaken = (
+            u64::from(self.tally.hurt_back) * 104_729 + u64::from(go),
+            now + 35,
+        );
+        self.log.push(format!(
+            "tic {now}: {lost:.0} lost since tic {since}: back {} tics to tic {} (go {go} at it)",
             now - e.tic,
             e.tic
         ));
@@ -723,6 +780,10 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     let mut gone_back = 0i64;
     let cap = (o.max_seconds * 35.0) as i64;
     let mut played = 0i64;
+    // (her health and armor together, by the tic, a few seconds of it; and the tic up to which
+    // what she's lost is let stand)
+    let mut hps: std::collections::VecDeque<(i64, f64)> = std::collections::VecDeque::new();
+    let mut stood = i64::MIN;
     // (the run as it came out in the end, its controls by the game's tics: for watching)
     let mut tape: Vec<(i64, Controls)> = Vec::new();
     let mut outcome = "TIME";
@@ -769,6 +830,37 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         e.step(&c);
         last = Some(c);
         played += 1;
+        // Hurt too fast: back, and another way (not past what's been let stand).
+        let p = e.game.player();
+        let hp = f64::from(p.health + p.armor);
+        hps.retain(|&(t, _)| t < e.tic); // (gone back since for a death: those tics didn't happen)
+        hps.push_back((e.tic, hp));
+        while hps
+            .front()
+            .is_some_and(|&(t, _)| e.tic - t > ultra.tune.hurt_tics)
+        {
+            hps.pop_front();
+        }
+        if ultra.tune.hurt > 0.0 && p.health > 0 {
+            let limit = ultra.tune.hurt * ultra.tune.hurt_tics as f64 / 35.0;
+            // (from the most she had in the stretch, after what's let stand)
+            let top = hps
+                .iter()
+                .filter(|&&(t, _)| t >= stood)
+                .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)))
+                .copied();
+            if let Some((since, most)) = top.filter(|&(_, most)| most - hp >= limit) {
+                match ultra.hurt_back(&mut e, since, most - hp) {
+                    Some(back) => {
+                        gone_back += back;
+                        last = None;
+                        tape.retain(|&(t, _)| t < e.tic);
+                        hps.retain(|&(t, _)| t <= e.tic);
+                    }
+                    None => stood = e.tic,
+                }
+            }
+        }
     }
     let [items, kills, secrets] = e.tally();
     let p = e.game.player();
@@ -792,7 +884,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     .write(&taped)?;
     let t = &ultra.tally;
     Ok(format!(
-        "ULTRA {outcome} {map_name}: {:.0}s game ({} tics, {} of them searched), health {} armor {} (lowest health {worst}), kills {}/{}, items {}/{}, secrets {}/{}; gone back {} times ({gone_back} tics); {} of {} moves pressed on a wall; {} looks, {} tics played ahead, {} restores, {} saves, {:.1}s searching of {:.1}s real; log {}; to watch it: evil-boom watch {wad} {map_name} --fight {} --seed {} --mortal --tape {}",
+        "ULTRA {outcome} {map_name}: {:.0}s game ({} tics, {} of them searched), health {} armor {} (lowest health {worst}), kills {}/{}, items {}/{}, secrets {}/{}; gone back {} times for a death and {} for a hurt ({gone_back} tics), {} hurts let stand; {} of {} moves pressed on a wall; {} looks, {} tics played ahead, {} restores, {} saves, {:.1}s searching of {:.1}s real; log {}; to watch it: evil-boom watch {wad} {map_name} --fight {} --seed {} --mortal --tape {}",
         (e.tic - tic0) as f64 / 35.0,
         e.tic - tic0,
         t.ultra_tics,
@@ -805,6 +897,8 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         secrets.0,
         secrets.1,
         t.back,
+        t.hurt_back,
+        t.hurt_stood,
         t.pressed,
         t.moves,
         t.decisions,

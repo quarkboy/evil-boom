@@ -198,3 +198,27 @@ One core, about 1,000 to 2,000 looks a run, each about 7,000 tics played ahead a
   go only forward (the tics gone back added to what she's told). Her knowledge isn't put back.
 - One level. Not the arenas, not Plutonia, not live at half speed, no workers, nothing Evil
   can call.
+
+### After a day of watching it (2026-11-19, the maintainer's notes acted on)
+
+In the order they went in, each tried on the same eight seeds of E2M9:
+
+- **A tape.** A run's controls as it came out in the end are written beside its log, and
+  `watch WAD MAP --tape FILE` plays them in the window.
+- **Aiming only at what she can see** (the game's own sight check, `evil_nearest_seen`): she'd
+  been firing rockets into the wall a monster stood behind. **Not pressing on walls:** a move
+  told to go somewhere that goes under 8 units costs a little, so standing or a way that goes
+  is taken. **A minute of games kept** to go back to, not twelve seconds.
+- **The search has her only in a fight:** one of them in her sight, something of theirs in the
+  air near, or one after her within 256. With the last monster a room away it had held her
+  still for 21 seconds, her way on a straight line through a wall.
+- **Her hand's limits on the turn** (18 degrees a tic, changing by 10 at most). It costs: five
+  of eight down to 1 health and back 20 to 86 times, where it was three with the free turn.
+- **Going back for a hurt, not only a death:** 8 points a second of health and armor together
+  over 3 seconds, and the game goes back to before it and tries another way, three goes, the
+  last let stand.
+
+With all of it, E2M9 Ultra-Violence from a pistol start, 8 seeds: 8 out in 151 to 314 s of
+game; lowest health 37 to 100 (five of them 72 or more); never gone back for a death; gone back
+for a hurt 2 to 16 times, 3 hurts let stand in all; 69 to 148 s real on one core. Still one
+level.

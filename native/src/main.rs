@@ -544,6 +544,8 @@ fn ultra(args: &[String], check: bool) -> Result<(), String> {
             "--width" => tune.width = num("--width")? as usize,
             "--move" => tune.move_tics = num("--move")? as usize,
             "--way" => tune.way = num("--way")?,
+            "--hurt" => tune.hurt = num("--hurt")?,
+            "--hurt-tries" => tune.hurt_tries = num("--hurt-tries")? as u32,
             _ => rest_args.push(a.clone()),
         }
     }
