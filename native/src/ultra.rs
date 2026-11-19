@@ -909,10 +909,25 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     let mut tape: Vec<(i64, Controls)> = Vec::new();
     let mut outcome = "TIME";
     let mut worst = i32::MAX;
+    // (nothing more collected, learned or tried for `--stall` seconds: the run's over. Her own
+    // exploring is hers here too, and with nothing left she'd try at 3 health she stood idle
+    // for half an hour of an E4M6 run till the time was up)
+    let mut best = crate::sweep::progress(&e, agent.x(), o);
+    let mut best_at = 0i64;
     while played < cap {
         if e.exited() {
             outcome = "EXITED";
             break;
+        }
+        if played % 35 == 0 {
+            let now = crate::sweep::progress(&e, agent.x(), o);
+            if now.iter().zip(&best).any(|(n, b)| n > b) {
+                best = std::array::from_fn(|i| now[i].max(best[i]));
+                best_at = played;
+            } else if (played - best_at) as f64 > o.stall_seconds * 35.0 {
+                outcome = "STALLED";
+                break;
+            }
         }
         if e.dead() {
             // (a death the look didn't see coming: back, as from a look with none to live on)

@@ -222,3 +222,26 @@ With all of it, E2M9 Ultra-Violence from a pistol start, 8 seeds: 8 out in 151 t
 game; lowest health 37 to 100 (five of them 72 or more); never gone back for a death; gone back
 for a hurt 2 to 16 times, 3 hurts let stand in all; 69 to 148 s real on one core. Still one
 level.
+
+### E4M6 (2026-11-19)
+
+Ultra-Violence and the easiest skill, pistol start, 8 seeds each, before the changes it led
+to: the easiest 3 out of 7 finished (in 596 to 1,945 s, one of them never back for a death),
+Ultra-Violence 0 of 6. What it showed, and what was done:
+
+- **The lava river read as a way to take:** it costs nothing the tic she steps in and the look
+  is 1.4 s. A hurting floor her way on doesn't cross now costs.
+- **The games kept ran out** 100 s in. Now thinned the further back, about two a doubling of
+  how long ago, reaching over the whole run (the maintainer's scheme).
+- **Stood still at the start** with monsters in sight across the lava: the way on followed by
+  its nearer points, her own legs when the search has nothing better than standing and
+  nothing presses her, and the way on worth more the longer she stays in one place.
+- **A run with nothing more collected, learned or tried for `--stall` seconds ends** (STALLED).
+- **What's left is the level's, not the fight's.** With those in, the two easiest-skill runs
+  that finished stood at 1 to 3 health at the time cap: about seventy times onto a hurting
+  floor for her own objectives (a wall to try, a medikit marked risky), at a drain under the
+  hurt gate's 8 a second, then nothing left she'd try. The search kept her alive in the
+  fights; the order of things on this level is a plan, and that's Evil's.
+- **"Orphan mobj in msecnode list"** is DSDA's own warning as it saves, for a thing just
+  removed and still in a sector's list; it skips it. 38 times in one E4M6 run, whose tape
+  played back with no save or restore came out the same (1,519 s, 43/51 kills, 3 health).
