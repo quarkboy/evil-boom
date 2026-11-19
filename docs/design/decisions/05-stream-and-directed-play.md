@@ -2866,3 +2866,22 @@ run at the time cap; 21 strandings in 15 runs, 15 of them in one place.
 - **Left:** the other seven alcove strandings are her dropping in from the ledge to press a
   wall she suspects (the rule that a well-marked wall is worth a pit); three strandings at
   (1170, 422), "try switch (line 375)", not traced.
+
+## Two faults seen on an ultra-instinct tape, both her own (2026-11-19)
+
+Watching E4M6 played by the ultra instinct (a branch: `ultra-instinct-plan.md`), the
+maintainer saw her push at bars she can't fit through and fire plasma into a wall. Both
+were her ordinary play, and are fixed on main (`git log` for the two commits' numbers).
+
+- **Plasma into a wall.** `projectile_reaches` goes by the shot's middle; at a corner it
+  wavers, and she fired when it said clear: 92 cells for nothing on E4M9. Kept: plasma she's
+  just reckoned blocked, at a far target standing still that isn't a boss, its rounds landed
+  and it none the worse, is held for half a minute.
+- **The bars.** Stood in a notch between two shut pillars she touches both, and what she
+  touches was let off the next stretch. Kept: not where the stretch goes on into shut faces
+  she's touching on both sides.
+- **What it cost to get there:** the first versions of both together scored -0.027 (s.e.
+  0.0065), exits 455 to 426; the second -0.0065 (s.e. 0.0032); the third +0.0005 (s.e.
+  0.0005), 3 runs of 1,088 changed. A rule that stops her shooting, or refuses her a way,
+  wants to be as narrow as the failure it came from; and E2M8 is where a shooting rule that
+  isn't shows first.
