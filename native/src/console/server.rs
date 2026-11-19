@@ -427,6 +427,11 @@ struct Shared {
     heard: Option<Instant>,
     /// when the game last crashed, the last few
     crashes: VecDeque<Instant>,
+    /// a start after a crash on its way (`RESTART_DELAY`), by its number: taken back by a stop
+    /// or a start of the operator's meanwhile
+    restart_due: Option<u64>,
+    /// how many such have been set going
+    restarts: u64,
     /// the session's log, everything the page shows (out/console/)
     file: Option<std::fs::File>,
     /// the game's latest pictures (PNG) by name ("map", "game"), each with its number (the page
@@ -519,6 +524,8 @@ pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
         seq: 0,
         heard: None,
         crashes: VecDeque::new(),
+        restart_due: None,
+        restarts: 0,
         file: session_log(),
         views: BTreeMap::new(),
         views_asked: BTreeMap::new(),
@@ -755,10 +762,24 @@ fn watch_child(hub: &Hub) {
                     RESTART_DELAY.as_secs(),
                     at.as_ref().map_or(String::new(), |m| format!(", at {m}"))
                 ));
+                // Its number kept: stopped from the page while it waits, or automatic restarts
+                // turned off, it isn't started after all (it came back two seconds after the
+                // operator had stopped it: the review of 18 November).
+                s.restarts += 1;
+                let due = s.restarts;
+                s.restart_due = Some(due);
                 let hub = Arc::clone(hub);
                 thread::spawn(move || {
                     thread::sleep(RESTART_DELAY);
-                    if lock(&hub).child.is_none() {
+                    let go = {
+                        let mut s = lock(&hub);
+                        let mine = s.restart_due == Some(due);
+                        if mine {
+                            s.restart_due = None;
+                        }
+                        mine && s.child.is_none() && s.settings.auto_restart
+                    };
+                    if go {
                         if let Err(e) = start_at(&hub, at) {
                             lock(&hub).push(format!("[console] not started again: {e}"));
                         }
@@ -808,6 +829,7 @@ fn start_at(hub: &Hub, map: Option<String>) -> Result<(), String> {
     if s.child.is_some() {
         return Err("the game's running".into());
     }
+    s.restart_due = None; // (started now: nothing more is due)
     let mut settings = s.settings.clone();
     if let Some(m) = map {
         settings.map = m;
@@ -875,27 +897,33 @@ fn start_at(hub: &Hub, map: Option<String>) -> Result<(), String> {
     Ok(())
 }
 
-/// Stop the game: asked to quit, killed if it hasn't after a while. Waits for it.
+/// Stop the game: asked to quit, killed if it hasn't after a while. Waits for it. A start due
+/// after a crash is taken back with it. The game that was running when it was asked is the one
+/// it stops and waits for: one started meanwhile (a restart asked for beside it) is left alone.
 fn stop(hub: &Hub) {
-    {
+    let which = {
         let mut s = lock(hub);
-        if s.child.is_none() {
-            return;
+        if s.restart_due.take().is_some() {
+            s.push("[console] stopped: not starting it again".into());
         }
+        let Some(which) = s.child.as_ref().map(Child::id) else {
+            return;
+        };
         s.game.stopping = true;
         if s.send(&Command::Quit).is_err() {
             if let Some(c) = s.child.as_mut() {
                 let _ = c.kill();
             }
         }
-    }
+        which
+    };
     let asked = Instant::now();
     let mut killed = false;
     loop {
         thread::sleep(Duration::from_millis(100));
         let mut s = lock(hub);
-        // (watch_child notices the end and clears it)
-        if s.child.is_none() {
+        // (watch_child notices the end and clears it; another's there: not this one's to stop)
+        if s.child.as_ref().map(Child::id) != Some(which) {
             return;
         }
         if !killed && asked.elapsed() > QUIT_WAIT {
