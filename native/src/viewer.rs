@@ -2089,19 +2089,34 @@ impl Watch {
         let Some(after) = self.ultra_after else {
             return;
         };
+        let had = self.ultra_cap();
         self.ultra_deaths += 1;
-        if self.ultra_deaths == after {
-            self.ultra_charge = crate::ultra::LIVE_CAP;
-            self.ultra_log(format!("hers on this level: {after} deaths here"));
+        // (and what she has of it full again, for the level's next go)
+        self.ultra_charge = self.ultra_cap();
+        if self.ultra_cap() > had {
+            let secs = self.ultra_cap() / TICRATE;
+            let text = if had == 0.0 {
+                self.ultra_log(format!("hers on this level: {after} deaths here"));
+                "Ultra Instinct unlocked.".to_string()
+            } else {
+                self.ultra_log(format!(
+                    "{secs:.0}s of it now: {} deaths here",
+                    self.ultra_deaths
+                ));
+                format!("Ultra Instinct: {secs:.0}s now.")
+            };
             let tic = self.engine.tic + self.clock_ahead;
-            self.tell_screens(|d| {
-                d.ultra(
-                    tic,
-                    "Ultra instinct is yours on this level. Die, and it takes you back 5s and fights for you: 30s of it, refilling as you play.",
-                    crate::control::directed::Event::Ultra,
-                );
-            });
+            self.tell_screens(|d| d.ultra(tic, &text, crate::control::directed::Event::Ultra));
         }
+    }
+
+    /// The most she can have of it, in tics: `ultra::LIVE_CAP` for every `--ultra-after` deaths
+    /// on the level, up to `ultra::LIVE_TIERS` times (none before the first of them).
+    fn ultra_cap(&self) -> f64 {
+        self.ultra_after.filter(|&n| n > 0).map_or(0.0, |n| {
+            crate::ultra::LIVE_CAP
+                * f64::from((self.ultra_deaths / n).min(crate::ultra::LIVE_TIERS))
+        })
     }
 
     /// (`U`) The ultra instinct on from here, or dropped.
@@ -2142,9 +2157,8 @@ impl Watch {
         self.ultra_pool = u.end(&self.engine);
         self.clock_ahead += u.gone_back;
         if std::mem::take(&mut self.ultra_earned) {
-            let left = (self.ultra_charge / TICRATE).floor();
             let tic = self.engine.tic + self.clock_ahead;
-            let text = format!("Ultra instinct over ({left:.0}s left).");
+            let text = "Ultra Instinct off.".to_string();
             self.tell_screens(|d| d.ultra(tic, &text, crate::control::directed::Event::UltraOver));
         }
         let t = &u.ultra.tally;
@@ -2179,12 +2193,10 @@ impl Watch {
             self.ultra_wait = None;
             self.ultra_earned = true;
             self.ultra_begin();
-            let (secs, left) = (back as f64 / TICRATE, (self.ultra_charge / TICRATE).floor());
+            let secs = back as f64 / TICRATE;
             self.ultra_log(format!("a death undone: back {secs:.1}s"));
             let tic = self.engine.tic + self.clock_ahead;
-            let text = format!(
-                "You died. Ultra instinct: back {secs:.0}s, fighting for you ({left:.0}s of it left)."
-            );
+            let text = format!("You died. Ultra Instinct on: back {secs:.0}s.");
             self.tell_screens(|d| d.ultra(tic, &text, crate::control::directed::Event::Ultra));
             return;
         };
@@ -2353,7 +2365,7 @@ impl Watch {
                 }
             } else if self.ultra.is_none() {
                 self.ultra_charge =
-                    (self.ultra_charge + crate::ultra::LIVE_REFILL).min(crate::ultra::LIVE_CAP);
+                    (self.ultra_charge + crate::ultra::LIVE_REFILL).min(self.ultra_cap());
                 // (kept whatever she has of it just now: by the time she's got enough back,
                 // there are five seconds of them to go back over)
                 if !self.engine.finished() {

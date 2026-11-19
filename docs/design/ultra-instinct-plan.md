@@ -416,3 +416,17 @@ three spent with them still on her, and she died soon after each.
 
 Not done: the console's setting and the stream's column; tried with a directing model (the Gary
 test bed wasn't up); whether what she has of it should be full again after a death that stands.
+
+**The maintainer's word on it, the same day:**
+
+- **She's told less.** It isn't hers to trigger, so three short lines: "Ultra Instinct
+  unlocked."; "You died. Ultra Instinct on: back 5s."; "Ultra Instinct off."
+- **Full again after a death that stands.** It carried over at first: run dry, she began the
+  level again with next to none of it and five minutes of play from having it back.
+- **Twice as much after as many deaths again:** 30 s at three deaths on the level, 60 s at six
+  (`LIVE_TIERS`), and she's told ("Ultra Instinct: 60s now.").
+- **No alert at half health.** The death is the only trigger.
+
+E2M9 again, seed 1, ten lives: hers at the third death; four deaths undone on 30 s (one fight
+seen through in 6 s, three spent to the last second); 60 s at the sixth death; the next death
+undone, the 60 s spent, and she got out at 882 s.

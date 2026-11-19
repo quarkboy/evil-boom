@@ -1413,6 +1413,9 @@ pub const LIVE_OVER: i64 = 2 * 35;
 /// has of it is spent. She has up to `LIVE_CAP` tics of it, spent a tic a tic while it's on and
 /// got back at `LIVE_REFILL` a tic of play; a death with under `LIVE_LEAST` left stands.
 pub const LIVE_CAP: f64 = 30.0 * 35.0;
+/// As many deaths again on the level and she has twice as much of it, and no more than that.
+/// What she has is full again after every death that stands.
+pub const LIVE_TIERS: i32 = 2;
 pub const LIVE_REFILL: f64 = 0.1;
 pub const LIVE_LEAST: f64 = 5.0 * 35.0;
 pub const LIVE_BACK: i64 = 5 * 35;
