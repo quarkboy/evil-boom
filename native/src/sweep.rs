@@ -93,6 +93,9 @@ pub struct RunOptions {
     /// the numbers she judges by, changed from their defaults by this file (see
     /// `tactical::tuning`)
     pub tuning: Option<std::path::PathBuf>,
+    /// (`watch --tape FILE`) a run's controls, tic by tic, played in place of hers: an ultra
+    /// instinct run, which is searched offline, watched
+    pub tape: Option<std::path::PathBuf>,
     /// the journal of her decisions kept, and written beside the log (`crate::decisions`)
     pub decisions: bool,
     /// moves and retreats she isn't to make, by name (`Player::bar`)
@@ -132,6 +135,7 @@ impl Default for RunOptions {
             things: false,
             stall_out: false,
             tuning: None,
+            tape: None,
             decisions: false,
             bar: None,
             advisor: None,

@@ -651,6 +651,8 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     let mut gone_back = 0i64;
     let cap = (o.max_seconds * 35.0) as i64;
     let mut played = 0i64;
+    // (the run as it came out in the end, its controls by the game's tics: for watching)
+    let mut tape: Vec<(i64, Controls)> = Vec::new();
     let mut outcome = "TIME";
     let mut worst = i32::MAX;
     while played < cap {
@@ -664,6 +666,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
                 Some(back) => {
                     gone_back += back;
                     last = None;
+                    tape.retain(|&(t, _)| t < e.tic);
                     continue;
                 }
                 None => {
@@ -686,9 +689,11 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
                 }
                 gone_back += back;
                 last = None;
+                tape.retain(|&(t, _)| t < e.tic);
                 continue;
             }
         };
+        tape.push((e.tic, c));
         e.step(&c);
         last = Some(c);
         played += 1;
@@ -705,9 +710,17 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     text.push('\n');
     text += &agent.x().log.join("\n");
     let _ = std::fs::write(&file, text);
+    let taped = file.with_extension(format!("s{}.run", o.seed.unwrap_or(0)));
+    crate::replay::Recording {
+        entries: tape
+            .into_iter()
+            .map(|(t, c)| crate::replay::Entry::Tic(t, c))
+            .collect(),
+    }
+    .write(&taped)?;
     let t = &ultra.tally;
     Ok(format!(
-        "ULTRA {outcome} {map_name}: {:.0}s game ({} tics, {} of them searched), health {} armor {} (lowest health {worst}), kills {}/{}, items {}/{}, secrets {}/{}; gone back {} times ({gone_back} tics); {} looks, {} tics played ahead, {} restores, {} saves, {:.1}s searching of {:.1}s real; log {}",
+        "ULTRA {outcome} {map_name}: {:.0}s game ({} tics, {} of them searched), health {} armor {} (lowest health {worst}), kills {}/{}, items {}/{}, secrets {}/{}; gone back {} times ({gone_back} tics); {} looks, {} tics played ahead, {} restores, {} saves, {:.1}s searching of {:.1}s real; log {}; to watch it: evil-boom watch {wad} {map_name} --fight {} --seed {} --mortal --tape {}",
         (e.tic - tic0) as f64 / 35.0,
         e.tic - tic0,
         t.ultra_tics,
@@ -726,6 +739,9 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         t.saves,
         t.searched_secs,
         t0.elapsed().as_secs_f64(),
-        file.display()
+        file.display(),
+        o.fight,
+        o.seed.unwrap_or(0),
+        taped.display()
     ))
 }

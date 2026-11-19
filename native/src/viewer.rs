@@ -291,6 +291,8 @@ impl Canvas {
 /// How to watch.
 #[derive(Clone)]
 pub struct WatchOptions {
+    /// (`--tape FILE`) a recorded run's controls, played in place of hers
+    pub tape: Option<std::path::PathBuf>,
     /// she plays as mortal and nothing hurts her (`--charmed`)
     pub charmed: bool,
     /// the chaingun and bullets for ever (`--endless-bullets`)
@@ -655,6 +657,8 @@ struct Watch {
     secrets_seen: i32,
     /// `--endless-bullets`
     endless_bullets: bool,
+    /// (`--tape`) a run's controls by its tics, played in place of hers while there are any
+    pub tape: std::collections::BTreeMap<i64, Controls>,
     /// the hits on her last tic, for whoever's directing to be told of
     hits: Vec<crate::dsda::Hit>,
     m: Arc<MapData>,
@@ -1281,6 +1285,16 @@ fn level(
     let mut watch = Watch::new(w, m, &map_name, engine, agent, o.focus, o.lives - 1);
     watch.hold = hold;
     watch.endless_bullets = o.endless_bullets;
+    if let Some(p) = &o.tape {
+        watch.tape = crate::replay::Recording::read(p)?
+            .entries
+            .into_iter()
+            .filter_map(|en| match en {
+                crate::replay::Entry::Tic(t, c) => Some((t, c)),
+                _ => None,
+            })
+            .collect();
+    }
     watch.speed = o.speed;
     watch.show_all = o.show_all;
     Ok(watch)
@@ -1776,6 +1790,7 @@ impl Watch {
             no_use: false,
             secrets_seen: 0,
             endless_bullets: false,
+            tape: std::collections::BTreeMap::new(),
             hits: Vec::new(),
             m,
             map_name: map_name.to_string(),
@@ -1927,6 +1942,11 @@ impl Watch {
         let mut c = self.agent.act(&obs, self.controls.as_ref());
         if self.no_use {
             c.use_ = false;
+        }
+        // (a tape: its controls for this tic, whatever she'd have done. She's asked all the
+        // same, so what she knows and what the column shows go on)
+        if let Some(t) = self.tape.get(&self.engine.tic) {
+            c = *t;
         }
         self.engine.step(&c);
         let hits = self.engine.take_hits();

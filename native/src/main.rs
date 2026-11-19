@@ -817,6 +817,7 @@ fn watch_options(
         carry: o.carry.clone(),
         episode: false,
         tuning: o.tuning.clone(),
+        tape: o.tape.clone(),
         headless: false,
         paced: false,
         max_seconds: o.max_seconds,
