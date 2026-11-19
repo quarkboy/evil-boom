@@ -538,9 +538,49 @@ impl Fitter<'_> {
     }
 
     /// What the box at `a` and at `b` already overlaps (not to count against going between).
+    ///
+    /// Not what the stretch goes on into from `a`, though. Touching a wall where she stands
+    /// doesn't count against leaving it or going along it; but stood in a notch between two
+    /// pillars set corner to corner, the box touches all four of their faces, and with all four
+    /// let off the way on between them (24 wide, and she's 32) was no squeeze at all. E4M6's
+    /// blue bars: a medikit beyond them, "stuck" 33 times in a run. A box `INTO` narrower each
+    /// side, swept along the stretch, still hitting what she touches, all of that the faces of
+    /// shut sectors, and some of it either side of the way: those count.
     fn overlapped_at(&mut self, a: Point, b: Point) -> HashSet<SegKey> {
+        /// how far into what she's touching a stretch may go and that still be let off
+        const INTO: f64 = 4.0;
         let none = HashSet::default();
         let mut ignore = self.box_hits(a, a, &none);
+        // (only where what it goes into is shut sectors' faces and nothing else, `shut_in`: that
+        // is a dead end and nothing she walks. Any wall or line she touched counted so, and
+        // ways she does walk went: 29 exits of 455 and 12 more runs stranded, with the rule
+        // below for her shots; E2M2 15 exits of 16 to 12 by this alone)
+        let into: HashSet<SegKey> = self
+            .box_hits_at(a, b, PLAYER_RADIUS - INTO, &none)
+            .into_iter()
+            .filter(|k| ignore.contains(k))
+            .collect();
+        // (...and they're on both sides of the way: between them there's no getting by. On one
+        // side only it's a corner the straight line clips and she slides round as she walks:
+        // counted, E4M8 lost 2 exits of 16, the first of them a way off a step beside a block)
+        let mut sides = (false, false);
+        // (of all she's touching where she stands, not only what the narrower box hits: in the
+        // notch that box clears the pillar on one side by its 4)
+        for k in &ignore {
+            if let Some(&li) = self.nav.seg_lines.get(k) {
+                let (p, q) = self.nav.map.line_seg(li);
+                let m = ((p.0 + q.0) / 2.0, (p.1 + q.1) / 2.0);
+                let cross = (b.0 - a.0) * (m.1 - a.1) - (b.1 - a.1) * (m.0 - a.0);
+                if cross > 1.0 {
+                    sides.0 = true;
+                } else if cross < -1.0 {
+                    sides.1 = true;
+                }
+            }
+        }
+        if sides.0 && sides.1 && self.shut_in(&into, None) {
+            ignore.retain(|k| !into.contains(k));
+        }
         ignore.extend(self.box_hits(b, b, &none));
         ignore
     }
