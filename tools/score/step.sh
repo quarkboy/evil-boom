@@ -18,7 +18,15 @@ bin=${BIN:-out/build/release/evil-boom}
 [ -x "$bin" ] || bin="$bin.exe"
 base=out/score/base.tsv
 [ -f "$base" ] || { echo "no $base: make a baseline first (docs/TESTING.md)" >&2; exit 1; }
-"$bin" score --like "$base" --jobs "${JOBS:-12}" --out "out/score/$name.tsv" "$@" >/dev/null 2>&1
+# (a run that didn't run makes the score fail: no comparison from a set that isn't whole)
+if ! "$bin" score --like "$base" --jobs "${JOBS:-12}" --out "out/score/$name.tsv" "$@" \
+    > "out/score/$name.log" 2>&1; then
+  echo "the score did not finish: no comparison (out/score/$name.log)" >&2
+  grep -a "did not run" "out/score/$name.log" | head -5 >&2
+  tail -1 "out/score/$name.log" | cut -c1-300 >&2
+  exit 1
+fi
+# (and a set that doesn't pair whole with the baseline's is said so, by the report's own line)
 "$bin" score-report "$base" "out/score/$name.tsv" | grep -A2 "run for run" | cut -c1-150
 "$bin" score-report "$base" "out/score/$name.tsv" | grep "^  moved most" | cut -c1-200
 "$bin" score-report "$base" "out/score/$name.tsv" | grep "fight score, run for run\|fight moved most" | cut -c1-200

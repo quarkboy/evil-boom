@@ -46,6 +46,9 @@ tools/parity.sh save out/build/release/evil-boom   # with the build before the c
 tools/parity.sh check out/check/release/evil-boom  # "all 24 runs the same", or which differ
 ```
 
+A run that fails, or gives no result, is `FAILED`: then nothing is saved and nothing compared,
+and the script says which (exit 2). A baseline is only ever 24 runs that ran.
+
 For a change to comments only, `tools/dev/code_only.py --check` proves it without running
 anything: it strips the comments from every changed `.rs` file and compares the code with the
 last commit's.
@@ -76,10 +79,17 @@ BIN=out/check/release/evil-boom tools/score/step.sh NAME
 ```
 
 `step.sh` plays the baseline's runs with the new build, then prints the difference run for run
-with its standard error, how many runs came out the same to the tic, the levels that moved most,
-and both sets' summaries. A change that touches nothing scores exactly 0.0000; one that touches a
-few runs moves only those. A change is kept if it's no worse within the noise (about two standard
+with its standard error, how many runs came out with the same outcome, seconds and kills (not
+"the same run": for that the recordings are compared), the levels that moved most, and both
+sets' summaries. A change that touches nothing scores exactly 0.0000; one that touches a few
+runs moves only those. A change is kept if it's no worse within the noise (about two standard
 errors). Its set then becomes the new baseline (copy it to `out/score/base.tsv`).
+
+A run that never ran (a level not there, the program fallen over) is no run she lost: `score`
+says which, keeps what the program said in `NAME.errors/`, leaves the run's row as `ERROR` (in
+no tally and no pair), and fails; `step.sh` then stops with no comparison. A report over a set
+with such rows, lines that aren't runs, a run twice, or runs with no partner in the other set
+says so (`NOTE ...`, `NOT A WHOLE PAIRING`).
 
 **The fight score** is printed beside it (`fight score`, and `fight score, run for run`): how she
 fared in each run's first twenty minutes, by more than out or not. Out within them is 1; else the

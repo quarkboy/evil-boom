@@ -336,6 +336,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             if !groups.is_empty() {
                 return Err("--like FILE plays that set's levels: name none".into());
             }
+            // (every run it names, those that didn't run then among them: they're to be run)
             let text = std::fs::read_to_string(&p).map_err(|e| format!("{p}: {e}"))?;
             Some(text.lines().skip(1).filter_map(Row::from_tsv).collect())
         }
@@ -356,7 +357,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     // (each level's runs spread over the whole sweep, not one level's all at once: the long ones
     // don't come in a lump at the end)
     let mut count = 0u64;
-    let mut todo: VecDeque<(String, String, u32, u32)> = VecDeque::new();
+    let mut todo: VecDeque<Job> = VecDeque::new();
     for _ in 0..seeds {
         for &skill in &skills {
             for (w, m) in &levels {
@@ -401,7 +402,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
             .stderr(Stdio::null())
             .spawn();
     }
-    let mut running: Vec<((String, String, u32, u32), Child)> = Vec::new();
+    let errors = path.with_extension("errors");
+    std::fs::create_dir_all(&errors).map_err(|e| format!("{}: {e}", errors.display()))?;
+    let mut failed = 0usize;
+    let mut running: Vec<(Job, Child)> = Vec::new();
     let mut rows: Vec<Row> = Vec::new();
     while !todo.is_empty() || !running.is_empty() {
         while running.len() < jobs.max(1) {
@@ -426,7 +430,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 .args(["--stranded", &stranded.to_string()])
                 .args(&passed)
                 .stdout(Stdio::piped())
-                .stderr(Stdio::null())
+                // (what it says of itself kept, a file a run, till it's known to have run: a
+                // pipe nobody reads till the run's over would stop a run that said much)
+                .stderr(
+                    std::fs::File::create(said(&errors, &job))
+                        .map_or_else(|_| Stdio::null(), Stdio::from),
+                )
                 .spawn()
                 .map_err(|e| e.to_string())?;
             running.push((job, child));
@@ -438,18 +447,44 @@ pub fn run(args: &[String]) -> Result<(), String> {
             std::thread::sleep(std::time::Duration::from_millis(100));
             continue;
         };
-        let ((w, m, skill, seed), mut child) = running.swap_remove(i);
+        let (job, mut child) = running.swap_remove(i);
         let lines: Vec<String> = child
             .stdout
             .take()
             .map(BufReader::new)
             .map(|r| r.lines().map_while(Result::ok).collect())
             .unwrap_or_default();
-        let line = lines
-            .iter()
-            .find(|l| l.starts_with("RESULT "))
-            .cloned()
-            .unwrap_or_else(|| "RESULT ERROR".into());
+        let result = lines.iter().find(|l| l.starts_with("RESULT ")).cloned();
+        // A run that gave no result didn't run (the level not there, the program fallen over):
+        // not a run she lost. Its row is kept as ERROR, to say which, and counts for nothing;
+        // what the program said is kept beside the set; and the score isn't one.
+        let said_file = said(&errors, &job);
+        if result.is_none() {
+            let why = std::fs::read_to_string(&said_file)
+                .ok()
+                .and_then(|t| {
+                    t.lines()
+                        .rev()
+                        .find(|l| !l.trim().is_empty())
+                        .map(str::to_string)
+                })
+                .unwrap_or_else(|| "it said nothing".into());
+            eprintln!(
+                "did not run: {} {} skill {} seed {} ({}): {why}",
+                job.0,
+                job.1,
+                job.2,
+                job.3,
+                child
+                    .wait()
+                    .map_or_else(|e| e.to_string(), |st| st.to_string())
+            );
+            failed += 1;
+        } else {
+            let _ = std::fs::remove_file(&said_file);
+        }
+        let (w, m, skill, seed) = job;
+        let line = result.unwrap_or_else(|| "RESULT ERROR".into());
         // (the run's counts, a line of JSON a run beside the TSV: FILE.stats.jsonl)
         if let Some(st) = lines.iter().find_map(|l| l.strip_prefix("STATS ")) {
             let _ = writeln!(stats, "{{\"wad\":\"{w}\",\"map\":\"{m}\",\"skill\":{skill},\"seed\":{seed},\"stats\":{st}}}");
@@ -466,21 +501,74 @@ pub fn run(args: &[String]) -> Result<(), String> {
     }
     println!("\nruns in {}\n", path.display());
     print!("{}", report(&[rows]));
+    if failed > 0 {
+        return Err(format!(
+            "{failed} of {total} runs did not run: no score from this set (their rows are ERROR in {}, what they said is in {})",
+            path.display(),
+            errors.display()
+        ));
+    }
+    let _ = std::fs::remove_dir(&errors); // (empty: every run ran)
     Ok(())
+}
+
+/// A run of the score: WAD, map, skill, seed.
+type Job = (String, String, u32, u32);
+
+/// Where a run's own words (its stderr) are kept till it's known to have run.
+fn said(dir: &std::path::Path, job: &Job) -> std::path::PathBuf {
+    dir.join(format!("{}_{}_{}_{}.txt", job.0, job.1, job.2, job.3))
+}
+
+/// A set as a file has it: its runs, and what was wrong with the file, a line each (lines that
+/// aren't runs; runs that didn't run, left out of everything; the same run twice).
+fn read_set(p: &str) -> Result<(Vec<Row>, Vec<String>), String> {
+    let text = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?;
+    let mut notes = Vec::new();
+    let lines: Vec<&str> = text
+        .lines()
+        .skip(1)
+        .filter(|l| !l.trim().is_empty())
+        .collect();
+    let all: Vec<Row> = lines.iter().filter_map(|l| Row::from_tsv(l)).collect();
+    if all.len() < lines.len() {
+        notes.push(format!(
+            "{p}: {} lines that aren't runs, not read",
+            lines.len() - all.len()
+        ));
+    }
+    let (rows, errors): (Vec<Row>, Vec<Row>) = all.into_iter().partition(|r| r.outcome != "ERROR");
+    if !errors.is_empty() {
+        notes.push(format!(
+            "{p}: {} runs that did not run (ERROR), left out: the set is not whole",
+            errors.len()
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    let twice = rows
+        .iter()
+        .filter(|r| !seen.insert((r.wad.clone(), r.map.clone(), r.skill, r.seed)))
+        .count();
+    if twice > 0 {
+        notes.push(format!(
+            "{p}: {twice} runs in it twice (the same level, skill and seed)"
+        ));
+    }
+    Ok((rows, notes))
 }
 
 pub fn report_files(paths: &[String]) -> Result<(), String> {
     let mut sets = Vec::new();
+    let mut notes = Vec::new();
     for p in paths {
-        let text = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?;
-        sets.push(
-            text.lines()
-                .skip(1)
-                .filter_map(Row::from_tsv)
-                .collect::<Vec<_>>(),
-        );
+        let (rows, n) = read_set(p)?;
+        sets.push(rows);
+        notes.extend(n);
     }
     print!("{}", report(&sets));
+    for n in &notes {
+        println!("NOTE {n}");
+    }
     Ok(())
 }
 
@@ -551,6 +639,17 @@ fn summary(
 
 pub fn report(sets: &[Vec<Row>]) -> String {
     let mut out = String::new();
+    // (a run that didn't run is no run of hers: in no tally, no pair)
+    let sets: Vec<Vec<Row>> = sets
+        .iter()
+        .map(|rows| {
+            rows.iter()
+                .filter(|r| r.outcome != "ERROR")
+                .cloned()
+                .collect()
+        })
+        .collect();
+    let sets = &sets[..];
     let tallies: Vec<_> = sets.iter().map(|rows| tally(rows)).collect();
     let skills: Vec<u32> = {
         let mut s: Vec<u32> = tallies.iter().flat_map(|t| t.keys().map(|k| k.2)).collect();
@@ -690,16 +789,29 @@ fn paired(sets: &[Vec<Row>]) -> String {
     let mean = diffs.iter().sum::<f64>() / n;
     let se =
         (diffs.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1.0).max(1.0) / n).sqrt();
+    // (as near as a set's file tells: the outcome, the time to the second and the kills. Not
+    // "the same run": for that, the recordings are compared, tools/dev/compare-runs.py)
     let same = pairs
         .iter()
         .filter(|(x, y)| x.outcome == y.outcome && x.seconds == y.seconds && x.kills == y.kills)
         .count();
+    // Not every run with its partner: said, by how many (a piece of a set, or two sets that
+    // only overlap, give a difference of the runs they share and no more).
+    let alone = if pairs.len() == a.len() && pairs.len() == b.len() {
+        String::new()
+    } else {
+        format!(
+            "; NOT A WHOLE PAIRING: {} of set 1 and {} of set 2 with no partner",
+            a.len().saturating_sub(pairs.len()),
+            b.len().saturating_sub(pairs.len())
+        )
+    };
     let (better, worse) = (
         diffs.iter().filter(|&&d| d > 1e-9).count(),
         diffs.iter().filter(|&&d| d < -1e-9).count(),
     );
     out += &format!(
-        "\nrun for run ({} runs on the same seeds): set 2 less set 1 {mean:+.4}, standard error {se:.4}; {same} runs the same to the tic, {better} better, {worse} worse\n",
+        "\nrun for run ({} runs on the same seeds{alone}): set 2 less set 1 {mean:+.4}, standard error {se:.4}; {same} with the same outcome, seconds and kills, {better} better, {worse} worse\n",
         pairs.len()
     );
     for skill in {
