@@ -53,6 +53,19 @@ pub struct Tune {
     pub moved: f64,
     /// a round in hand
     pub ammo: f64,
+    /// standing on a floor that hurts that her way on doesn't cross
+    pub hot: f64,
+    /// stood within `eager_room` of one place, the way on counts for as much again every
+    /// `eager_tics`, up to `eager_most` times more: or with something in sight that never
+    /// comes and never goes she stands where nothing hits her for good
+    pub eager_room: f64,
+    /// ...with none of them after her within this, and nothing of theirs in the air within
+    /// twice it
+    pub eager_clear: f64,
+    /// pressed, it counts for more this many times more slowly
+    pub eager_pressed: f64,
+    pub eager_tics: i64,
+    pub eager_most: f64,
     /// a move that was to take her somewhere and took her less than `pushed` units: she was
     /// pressing on a wall, and standing still is the same and looks like nothing's wrong
     pub push: f64,
@@ -64,9 +77,8 @@ pub struct Tune {
     pub near: f64,
     /// ...or one of them after her within this, in sight or not
     pub close: f64,
-    /// the game kept this often (tics), this many of them, to go back to
+    /// the game kept this often (tics) to go back to (thinned the further back: `keep`)
     pub keep_every: i64,
-    pub kept: usize,
     /// gone back to the same one this often, the one before it instead
     pub tries: u32,
     /// how far a line's worth is shaken on a second go, so it isn't the same line again
@@ -96,13 +108,18 @@ impl Default for Tune {
             key: 3000.0,
             moved: 60.0,
             ammo: 0.3,
+            hot: 600.0,
+            eager_room: 128.0,
+            eager_clear: 512.0,
+            eager_pressed: 5.0,
+            eager_tics: 105,
+            eager_most: 12.0,
             push: 40.0,
             pushed: 8.0,
             exit: 1.0e6,
             near: 1500.0,
             close: 256.0,
             keep_every: 35,
-            kept: 60,
             tries: 3,
             shake: 80.0,
             hurt: 8.0,
@@ -135,6 +152,10 @@ enum Move {
 /// What a look ahead is from, kept through it.
 struct Root {
     way: Vec<Point>,
+    /// the hurting floors her way on goes over (hers to wade: not held against a line)
+    wades: Vec<usize>,
+    /// how much more the way on counts for her having stood about (1: not)
+    eager: f64,
     sectors: Vec<(f64, f64)>,
     keys: i32,
     /// shaken by this (0: not)
@@ -222,7 +243,7 @@ fn way_point(way: &[Point], pos: Point) -> Option<Point> {
     way.iter()
         .copied()
         .skip(1)
-        .find(|&q| dist(q, pos) > 48.0)
+        .find(|&q| dist(q, pos) > 24.0)
         .or(way.last().copied())
 }
 
@@ -244,13 +265,20 @@ pub struct Ultra {
     doing: Option<(Move, usize)>,
     /// the move just played went nowhere, told to go
     pushed: bool,
+    /// the level's floors (which hurt)
+    pub hot: Option<std::rc::Rc<crate::navigator::Navigator>>,
+    /// where she's stood about, and since when
+    stood: (Point, i64),
+    /// how long she's stood about, in `eager_tics` (slower while pressed)
+    idle: f64,
+    /// her own controls till this tic (the search had nothing better than standing)
+    let_be: i64,
     /// her turn the tic before, in whichever game is being played (the hand's limit is from it)
     was: f64,
     /// where the move under way began
     began: Option<Point>,
     kept: Vec<Kept>,
     kept_at: i64,
-    next_kept: i32,
     /// shaking, till this tic (after going back)
     shaken: (u64, i64),
     sectors: Vec<(f64, f64)>,
@@ -261,6 +289,7 @@ pub struct Ultra {
 /// kept to go back to
 const ROW: i32 = 64;
 const KEPT0: i32 = 200;
+const KEPT_SLOTS: i32 = 128;
 
 impl Ultra {
     pub fn new(tune: Tune) -> Ultra {
@@ -269,11 +298,14 @@ impl Ultra {
             tally: Tally::default(),
             doing: None,
             pushed: false,
+            hot: None,
+            stood: ((f64::MAX, f64::MAX), 0),
+            let_be: i64::MIN,
+            idle: 0.0,
             was: 0.0,
             began: None,
             kept: Vec::new(),
             kept_at: i64::MIN / 2,
-            next_kept: 0,
             shaken: (0, i64::MIN / 2),
             sectors: Vec::new(),
             log: Vec::new(),
@@ -401,7 +433,19 @@ impl Ultra {
         w += f64::from(p.ammo.iter().sum::<i32>()) * t.ammo;
         w += f64::from(p.cards.iter().filter(|&&c| c != 0).count() as i32 - root.keys) * t.key;
         w += moved as f64 * t.moved;
-        w -= way_left(&root.way, pos) * t.way;
+        w -= way_left(&root.way, pos) * t.way * root.eager;
+        // On a floor that hurts that her way on doesn't cross: it costs nothing the tic she steps
+        // onto it and the look is a second and a half, so a lava river read as the way to take,
+        // and every way out of it was further back than there were games kept (the maintainer,
+        // watching E4M6).
+        if let Some(sec) = self.hot.as_ref().and_then(|nav| {
+            let sec = nav.sector_of_poly(nav.poly_at(pos)?);
+            (nav.damage.get(sec).is_some_and(|&d| d != 0)).then_some(sec)
+        }) {
+            if !root.wades.contains(&sec) {
+                w -= t.hot;
+            }
+        }
         for m in things {
             if hostile_missile(m) {
                 // (when it's nearest her as it flies, and how near)
@@ -526,16 +570,22 @@ impl Ultra {
         best
     }
 
-    /// The game kept to go back to, every so often.
+    /// The game kept to go back to: one every `keep_every`, and of those kept before, fewer the
+    /// further back (the maintainer's: a second ago, two, four, eight, sixteen: about two for
+    /// each doubling of how long ago, the oldest and the newest of it). So a few dozen reach
+    /// back over the whole run, and a mistake made minutes before can be gone back past; a flat
+    /// minute of them ran out 100 seconds into E4M6 with her in the lava.
     fn keep(&mut self, e: &mut Engine) {
         if e.tic - self.kept_at < self.tune.keep_every {
             return;
         }
-        let slot = KEPT0 + self.next_kept;
-        self.next_kept = (self.next_kept + 1) % self.tune.kept as i32;
+        let Some(slot) =
+            (KEPT0..KEPT0 + KEPT_SLOTS).find(|s| self.kept.iter().all(|k| k.slot != *s))
+        else {
+            return;
+        };
         let Some(mark) = e.save(slot) else { return };
         self.tally.saves += 1;
-        self.kept.retain(|k| k.slot != slot);
         self.kept.push(Kept {
             slot,
             mark,
@@ -543,6 +593,25 @@ impl Ultra {
             hurt: 0,
         });
         self.kept_at = e.tic;
+        // (thinned: by how many doublings ago each is, the first and the last of each kept)
+        let (now, every) = (e.tic, self.tune.keep_every.max(1));
+        let ago = |k: &Kept| (((now - k.mark.tic) / every).max(1) as u64).ilog2();
+        let n = self.kept.len();
+        let keep: Vec<bool> = (0..n)
+            .map(|i| {
+                let b = ago(&self.kept[i]);
+                i == 0 || i + 1 == n || ago(&self.kept[i - 1]) != b || ago(&self.kept[i + 1]) != b
+            })
+            .collect();
+        let mut i = 0;
+        self.kept.retain(|k| {
+            let stays = keep[i];
+            i += 1;
+            if !stays {
+                e.game.forget(k.slot);
+            }
+            stays
+        });
     }
 
     /// Back to the last game kept (the one before, gone back to too often). The tics gone
@@ -561,6 +630,7 @@ impl Ultra {
         self.tally.restores += 1;
         self.tally.back += 1;
         self.doing = None;
+        self.let_be = i64::MIN;
         self.was = 0.0;
         self.kept_at = e.tic;
         // (another way this time, till past where it went wrong)
@@ -604,6 +674,7 @@ impl Ultra {
         self.tally.restores += 1;
         self.tally.hurt_back += 1;
         self.doing = None;
+        self.let_be = i64::MIN;
         self.was = 0.0;
         self.kept_at = e.tic;
         self.shaken = (
@@ -616,6 +687,13 @@ impl Ultra {
             e.tic
         ));
         Some(now - e.tic)
+    }
+
+    /// The sector at `q`, if its floor hurts.
+    fn hot_at(&self, agent: &Agent, q: Point) -> Option<usize> {
+        let nav = &agent.x().nav;
+        let sec = nav.sector_of_poly(nav.poly_at(q)?);
+        nav.damage.get(sec).is_some_and(|&d| d != 0).then_some(sec)
     }
 
     /// This tic's controls: the search's, something after her; else `hers`. None: dead
@@ -634,8 +712,36 @@ impl Ultra {
         let pos = (p.x, p.y);
         let mut sectors = Vec::new();
         e.game.sectors(&mut sectors);
+        // (stood about: within a little way of one place since when)
+        // (...with nothing pressing her: with something flying at her or one of them coming, where
+        // she stands is the fight's business, and hurrying her on then had her into walls and
+        // into their fire on E2M9)
+        let pressed = things.iter().any(|m| {
+            let d = dist((m.x, m.y), pos);
+            (hostile_missile(m) && d < self.tune.eager_clear * 2.0)
+                || (alive(m)
+                    && monster_of(m).is_some()
+                    && m.after_her != 0
+                    && d < self.tune.eager_clear)
+        });
+        if dist(self.stood.0, pos) > self.tune.eager_room {
+            self.stood = (pos, e.tic);
+            self.idle = 0.0;
+        } else {
+            // (pressed, far more slowly: but not never, or a corner nothing can hit her in,
+            // with them after her and unable to reach her, is where she stays: E4M6's start)
+            let slow = if pressed {
+                self.tune.eager_pressed
+            } else {
+                1.0
+            };
+            self.idle += 1.0 / (self.tune.eager_tics as f64 * slow);
+        }
+        let way = agent.player().map_or(Vec::new(), |pl| pl.way_on(pos));
         let root = Root {
-            way: agent.player().map_or(Vec::new(), |pl| pl.way_on(pos)),
+            wades: way.iter().filter_map(|&q| self.hot_at(agent, q)).collect(),
+            way,
+            eager: 1.0 + self.idle.min(self.tune.eager_most),
             sectors,
             keys: p.cards.iter().filter(|&&c| c != 0).count() as i32,
             shake: if e.tic < self.shaken.1 {
@@ -644,6 +750,9 @@ impl Ultra {
                 0
             },
         };
+        if e.tic < self.let_be {
+            return Ok(hers);
+        }
         if self.doing.is_none_or(|(_, left)| left == 0) {
             self.keep(e);
             match self.look(e, &root, hers) {
@@ -667,6 +776,17 @@ impl Ultra {
                         {
                             self.tally.pressed += 1;
                         }
+                    }
+                    // Nothing better than standing still, and nothing pressing her: her own legs
+                    // for the move, then. She knows the way round what's in front of her, which a
+                    // compass move doesn't; stood still by the search with monsters in sight
+                    // across the lava, her route called itself stuck for half a minute (E4M6's
+                    // start, the maintainer watching).
+                    if !pressed && matches!(mv, Move::Plain { go: Go::Still, .. }) {
+                        self.doing = None;
+                        self.let_be = e.tic + self.tune.move_tics as i64;
+                        self.was = hers.turn;
+                        return Ok(hers);
                     }
                     self.began = Some(pos);
                     self.doing = Some((mv, self.tune.move_tics));
@@ -773,6 +893,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
         ..
     } = crate::sweep::setup(wad, map, o, false, None)?;
     let mut ultra = Ultra::new(tune);
+    ultra.hot = Some(std::rc::Rc::clone(&agent.x().nav));
     let t0 = Instant::now();
     let tic0 = e.tic;
     let mut last: Option<Controls> = None;
@@ -866,15 +987,18 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     let p = e.game.player();
     let dir = crate::config::out_dir().join("ultra");
     let _ = std::fs::create_dir_all(&dir);
+    // (a file a skill and a seed: runs side by side each keep their own)
     let file = dir.join(format!(
-        "{}_{map_name}.txt",
-        crate::config::wad_tag(&e.iwad)
+        "{}_{map_name}.k{}.s{}.txt",
+        crate::config::wad_tag(&e.iwad),
+        o.fight,
+        o.seed.unwrap_or(0)
     ));
     let mut text = ultra.log.join("\n");
     text.push('\n');
     text += &agent.x().log.join("\n");
     let _ = std::fs::write(&file, text);
-    let taped = file.with_extension(format!("s{}.run", o.seed.unwrap_or(0)));
+    let taped = file.with_extension("run");
     crate::replay::Recording {
         entries: tape
             .into_iter()
