@@ -1077,7 +1077,7 @@ impl Director {
             {
                 continue;
             }
-            let reachable = x.touch_spot((t.x, t.y), &x.reach).is_some();
+            let reachable = x.touch_spot((t.x, t.y), t.z, &x.reach).is_some();
             if !reachable {
                 // (each told once: a door that shuts again would tell it again and again)
                 if !self.told_reachable.contains(&t.id) {
@@ -2457,7 +2457,7 @@ impl Director {
             .and_then(|n| obs.things.iter().flatten().find(|t| t.id == n))
         {
             let x = agent.x();
-            let Some(at) = x.touch_spot((t.x, t.y), &x.reach) else {
+            let Some(at) = x.touch_spot((t.x, t.y), t.z, &x.reach) else {
                 let (name, at) = (called(t.name), (t.x, t.y));
                 let toward = self.toward(agent, obs, at);
                 return Err(format!("No known way to the {name} yet.{toward}"));

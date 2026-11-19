@@ -498,7 +498,7 @@ impl Explorer {
                 if !nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)) {
                     continue;
                 }
-                if let Some(spot) = self.touch_spot((t.x, t.y), reach) {
+                if let Some(spot) = self.touch_spot((t.x, t.y), t.z, reach) {
                     let mut o = Objective::new(
                         Kind::Item,
                         spot,
@@ -1310,7 +1310,7 @@ impl Explorer {
             {
                 continue;
             }
-            if let Some(spot) = self.touch_spot((t.x, t.y), reach) {
+            if let Some(spot) = self.touch_spot((t.x, t.y), t.z, reach) {
                 let why = if suit {
                     "for the floors that hurt"
                 } else {
@@ -1345,7 +1345,7 @@ impl Explorer {
             {
                 continue;
             }
-            if let Some(spot) = self.touch_spot((t.x, t.y), reach) {
+            if let Some(spot) = self.touch_spot((t.x, t.y), t.z, reach) {
                 let mut o = Objective::new(Kind::Item, spot, format!("pick up {}", t.name));
                 o.thing = Some(t.id);
                 out.push(o);

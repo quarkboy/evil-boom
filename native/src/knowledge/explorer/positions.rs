@@ -137,13 +137,20 @@ impl Explorer {
 
     /// Where to stand to pick up a thing at `item`: there if the box can stand there, else the
     /// nearest spot it can, in a poly she can get to, close enough for the boxes to touch, on a
-    /// floor near the item's (an item in an alcove, say). `None` if there isn't one.
-    pub fn touch_spot(&self, item: Point, reach: &BTreeSet<usize>) -> Option<Point> {
+    /// floor near the item's (an item in an alcove, say). `None` if there isn't one. `z`: how
+    /// high the item lies, as she sees it.
+    pub fn touch_spot(&self, item: Point, z: f64, reach: &BTreeSet<usize>) -> Option<Point> {
         let nav = &self.nav;
         let heights = self.roomiest();
         let probe = nav.jump_lab.at_heights(&heights);
-        // The item on its floor as she believes it now (a floor it lies on may have moved).
-        let floor = nav.poly_at(item).map(|p| heights[nav.sector_of_poly(p)].0);
+        // The item on its floor as she believes it now (a floor it lies on may have moved), or
+        // higher, where she sees it lie higher: a thing rests on the highest floor under its
+        // box, not the one under its middle (P_ThingHeightClip), so one dropped at a ledge's
+        // edge stays up at the ledge when the floor beside sinks. Plutonia MAP02's start: a
+        // chaingun 177 over the floor she stood on under it, gone back to for seven minutes.
+        let floor = nav
+            .poly_at(item)
+            .map(|p| heights[nav.sector_of_poly(p)].0.max(z));
         // Square rings, as the boxes touch, every 4 round each: an item on the point of a ledge can
         // be had only from a corner of the square.
         for &(dx, dy) in pickup_offsets() {
@@ -184,7 +191,7 @@ impl Explorer {
     }
 
     /// Each sector at its roomiest as she believes it now (floor, ceiling).
-    pub(super) fn roomiest(&self) -> Vec<(f64, f64)> {
+    pub fn roomiest(&self) -> Vec<(f64, f64)> {
         // And what the triggers she knows could give, as of her last list: a lift she can lower.
         let could = &self.reach_states;
         self.states()

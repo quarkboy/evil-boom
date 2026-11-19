@@ -349,7 +349,7 @@ pub fn drive(wad: &str, map: &str, o: &RunOptions, script: &Path) -> Result<(), 
                 {
                     let p = s.nav.poly_at((t.x, t.y));
                     let seen = p.is_some_and(|p| known.contains(&p));
-                    let now = seen && x.touch_spot((t.x, t.y), &x.reach).is_some();
+                    let now = seen && x.touch_spot((t.x, t.y), t.z, &x.reach).is_some();
                     let from_start = seen
                         && start.is_some_and(|st| {
                             fresh

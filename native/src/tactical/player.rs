@@ -1925,6 +1925,7 @@ impl Player {
         let held = obs.weapons.clone().unwrap_or_else(|| vec![1, 2]);
         let known = self.explorer.knowledge.known_polys();
         let nav = Rc::clone(&self.explorer.nav);
+        let floors = self.explorer.roomiest();
         // To the thing itself, not the middle of the floor it's on: a big floor's middle can be
         // further from the thing than her reach, and she'd stop there none the richer.
         let mut ammo: Vec<(f64, Point, &'static str, i32)> = obs
@@ -1937,6 +1938,13 @@ impl Player {
                         .is_some_and(|(slots, _)| slots.iter().any(|s| held.contains(s)))
             })
             .filter(|t| nav.poly_at((t.x, t.y)).is_some_and(|p| known.contains(&p)))
+            // (not one lying out of her reach over the floor under it: at a ledge's edge, the
+            // floor beside sunk away. She'd stand under it none the richer)
+            .filter(|t| {
+                nav.poly_at((t.x, t.y)).is_none_or(|p| {
+                    t.z - floors[nav.sector_of_poly(p)].0 <= crate::geom::PLAYER_HEIGHT
+                })
+            })
             .map(|t| (dist((t.x, t.y), pos), (t.x, t.y), t.name, t.id))
             .collect();
         ammo.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -3044,7 +3052,7 @@ impl Fight {
             if not_now && !stock {
                 continue;
             }
-            let Some(goal) = x.touch_spot((t.x, t.y), reach) else {
+            let Some(goal) = x.touch_spot((t.x, t.y), t.z, reach) else {
                 continue;
             };
             let mut why = "";

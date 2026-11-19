@@ -92,7 +92,7 @@ impl Hooks for Completionist {
             if !known.contains(&p) {
                 continue;
             }
-            if let Some(spot) = x.touch_spot((t.x, t.y), reach) {
+            if let Some(spot) = x.touch_spot((t.x, t.y), t.z, reach) {
                 let mut o = Objective::new(Kind::Item, spot, format!("pick up {}", t.name));
                 o.thing = Some(t.id);
                 out.push(o);
