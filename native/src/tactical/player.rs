@@ -761,8 +761,12 @@ impl Player {
         self.explorer.ranked(obs, risky, &mut self.fight)
     }
 
-    /// The level begun again with no death to note (a look round it first, then the level).
+    /// The level begun again with no death to note (a look round it first, then the level; her
+    /// order, or the console's). All that's a life's is set back, the Icon's fight with it: left
+    /// out, a level begun again by an order in the middle of that fight kept its stage and its
+    /// route, riding a platform that was no longer under her (the review of 18 November).
     pub fn start_over(&mut self) {
+        self.boss_restart();
         self.forget_dropped();
         self.explorer.restart();
         self.fight.combat.restart();
@@ -778,8 +782,9 @@ impl Player {
         self.fight.combat.know_monsters(obs);
     }
 
+    /// Dead, and the level again: what killed her noted, then as any level begun again
+    /// (`start_over`).
     pub fn restart(&mut self) {
-        self.boss_restart();
         // Dead with something on: noted, so as not to walk into it again the same way. A level
         // begun again for what's left has nothing on.
         if let Some(cur) = &self.explorer.current {
@@ -799,14 +804,7 @@ impl Player {
             ));
             self.fight.deaths.push(d);
         }
-        self.forget_dropped();
-        self.explorer.restart();
-        self.fight.combat.restart();
-        self.retreat = None;
-        self.fight.combat.baiting = false;
-        self.trail.clear();
-        self.fallen_for.clear();
-        self.fight.hunted_spots.clear();
+        self.start_over();
     }
 
     /// The level begun again: of the things she remembers lying about, only what lies there at
