@@ -866,7 +866,6 @@ impl Director {
         if self.asking.asked_stuck || self.asking.open.is_some() || self.fight.is_some() {
             return;
         }
-        self.asking.asked_stuck = true;
         let mut choices = Vec::new();
         let instinct = matches!(self.doing, Some(Doing::Auto));
         if !instinct {
@@ -889,12 +888,18 @@ impl Director {
             then: Then::Nothing,
         });
         let default = if instinct { choices.len() - 1 } else { 0 };
-        self.ask(
-            obs,
-            format!("Nothing new for {} minutes. Stuck?", STUCK / MINUTE),
-            choices,
-            default,
-            false,
-        );
+        // Asked for this stretch once it has been put to her, not before: with the minute's
+        // few questions used up it isn't opened, and marked asked all the same it never was,
+        // she stuck the whole while (the review of 18 November). Tried again each tic till
+        // there's room; and with nothing to offer just now, looked at again when there may be.
+        self.asking.asked_stuck = self
+            .ask(
+                obs,
+                format!("Nothing new for {} minutes. Stuck?", STUCK / MINUTE),
+                choices,
+                default,
+                false,
+            )
+            .is_some();
     }
 }
