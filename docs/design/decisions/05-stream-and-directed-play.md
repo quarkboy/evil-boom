@@ -2829,7 +2829,14 @@ every skill (not traced: the maintainer suspects the jumps over lava that aren't
   once it can be; an ordered restart sets the Icon's fight back; a stop takes back a start due
   after a crash. Not done: the secret allowances by map identity (before community WADs), the
   secret taught in the wrong sector on a replay, `watch --from`, perpetual lifts by a property
-  of the special, the restarts' accounting, the planner's budget misses, and the structure.
+  of the special, the restarts' accounting, and the structure.
+- **The planner's budget misses: looked at, nothing to do.** A throwaway build searched again,
+  with the whole budget and with five times it, for every route search that ran out. All 68
+  levels, one seed: Hurt Me Plenty and Ultra-Violence as she plays (66,745 searches) and
+  Ultra-Violence charmed to each level's end (58,078): none ran out, no search was made on a
+  halved budget, and all 294 with no route had looked everywhere. The clock limit on a route
+  search is 600 seconds, a backstop: the count of steps decides, so load doesn't. The fight's
+  own searches weren't counted.
 
 ## MAP14's alcove behind the red bars (2026-11-19)
 
