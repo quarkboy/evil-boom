@@ -32,10 +32,11 @@ use super::tuning::{Dodge, Tuning};
 use crate::decisions::{Journal, Record};
 use crate::geom::{dist, Point};
 use crate::los::{Body, LineOfSight};
+use crate::map::{ML_BLOCKING, ML_BLOCKMONSTERS};
 use crate::motor::{
     heading, norm, Controls, Heard, Observation, Thing, FRICTION, RUN_THRUST, TICRATE,
 };
-use crate::navigator::{Navigator, PLAYER_HEIGHT, PLAYER_RADIUS};
+use crate::navigator::{Navigator, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::specials::Category;
 pub use arsenal::Odds;
 pub use assess::Assessment;
@@ -1609,6 +1610,63 @@ impl Combat {
         })
     }
 
+    /// One that walks, on a floor above hers or below it, with no way to walk to her from where
+    /// it stands, by the floors as they stand: steps of 24 at most up or down (a monster doesn't walk off a ledge), not through
+    /// lines that block it, looked for no further than `WITHIN` of her (a way that leaves that
+    /// may come round: for all she knows it can). Up on a ledge over her or down in a pit, near
+    /// as the crow flies: it won't be clawing her, and isn't backed off from, whatever it throws
+    /// (that's dodged, as ever). Doom II MAP13's key room: thirteen imps on tiers 96 apart over
+    /// the floor she crosses, each backed off from in its turn.
+    pub fn kept_from_her(&self, obs: &Observation, t: &Thing) -> bool {
+        /// how far from her a way round is looked for
+        const WITHIN: f64 = 768.0;
+        if matches!(t.name, "Cacodemon" | "LostSoul" | "PainElemental") {
+            return false;
+        }
+        let pos = obs.pos();
+        let (mesh, map) = (&self.nav.mesh, &self.nav.map);
+        let (Some(from), Some(to)) = (self.nav.poly_at((t.x, t.y)), self.nav.poly_at(pos)) else {
+            return false;
+        };
+        let floor = |p: usize| self.heights_now.get(mesh.poly(p).sector).map(|h| h.0);
+        // Only one on another level than hers. Behind a fence on her own floor it's kept from
+        // her as surely, and backing off from it is still worth having, for the room it gives
+        // her to dodge what it throws from that near: excused too, E1M9's pen of imps by the
+        // start cost 10 exits of 48 (25 to 15, three seed sets).
+        if !floor(from)
+            .zip(floor(to))
+            .is_some_and(|(a, b)| (a - b).abs() > MAX_STEP)
+        {
+            return false;
+        }
+        let mut seen = BTreeSet::from([from]);
+        let mut todo = vec![from];
+        while let Some(p) = todo.pop() {
+            if p == to || dist(mesh.poly(p).center, pos) > WITHIN {
+                return false;
+            }
+            let Some(f) = floor(p) else {
+                return false;
+            };
+            for &pi in &mesh.poly(p).portals {
+                let portal = &mesh.portals[pi];
+                if portal.linedef.is_some_and(|li| {
+                    map.linedefs[li].flags & (ML_BLOCKING | ML_BLOCKMONSTERS) != 0
+                }) {
+                    continue;
+                }
+                let o = portal.other(p);
+                let Some(of) = floor(o) else {
+                    return false;
+                };
+                if (of - f).abs() <= MAX_STEP && seen.insert(o) {
+                    todo.push(o);
+                }
+            }
+        }
+        true
+    }
+
     /// Is p off the ground she's been on (a poly of the mesh she's never stood in, or none)?
     pub(super) fn off_known(&self, p: Point) -> bool {
         self.nav
@@ -2043,6 +2101,7 @@ impl Combat {
                     && dist((t.x, t.y), pos) < self.tune.engage.close + m.radius
                     && !self.cant_reach(obs, t)
                     && !self.left_with_the_lot(t.id)
+                    && !self.kept_from_her(obs, t)
             })
             .cloned()
             .collect();
