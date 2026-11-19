@@ -33,8 +33,10 @@ pub struct Tune {
     pub depth: usize,
     /// lines kept at each
     pub width: usize,
-    /// the most she turns in a tic, degrees
+    /// the most she turns in a tic, degrees, and the most that changes from one tic to the next:
+    /// her hand's, as when she plays (`aim.hand_turn`, `aim.hand_accel`)
     pub turn: f64,
+    pub turn_accel: f64,
     /// a point of her health, and of her armor
     pub health: f64,
     pub armor: f64,
@@ -77,7 +79,8 @@ impl Default for Tune {
             move_tics: 6,
             depth: 8,
             width: 8,
-            turn: 20.0,
+            turn: 18.0,
+            turn_accel: 10.0,
             health: 10.0,
             armor: 3.0,
             monster: 0.4,
@@ -227,6 +230,8 @@ pub struct Ultra {
     doing: Option<(Move, usize)>,
     /// the move just played went nowhere, told to go
     pushed: bool,
+    /// her turn the tic before, in whichever game is being played (the hand's limit is from it)
+    was: f64,
     /// where the move under way began
     began: Option<Point>,
     kept: Vec<Kept>,
@@ -250,6 +255,7 @@ impl Ultra {
             tally: Tally::default(),
             doing: None,
             pushed: false,
+            was: 0.0,
             began: None,
             kept: Vec::new(),
             kept_at: i64::MIN / 2,
@@ -290,7 +296,10 @@ impl Ultra {
             c.weapon = h.weapon;
             c.exact = h.exact;
             if !fire {
-                c.turn = h.turn.clamp(-self.tune.turn, self.tune.turn);
+                c.turn = h.turn.clamp(-self.tune.turn, self.tune.turn).clamp(
+                    self.was - self.tune.turn_accel,
+                    self.was + self.tune.turn_accel,
+                );
                 facing = p.angle - c.turn;
             }
         }
@@ -300,11 +309,15 @@ impl Ultra {
             // shooting rockets into the wall it stood behind)
             let target = seen;
             if let Some(t) = target {
+                // (her hand's limits, as when she plays: so fast and no faster, and no jerk
+                // from the tic before)
                 let off = norm(heading(pos, t) - p.angle);
-                let turn = off.clamp(-self.tune.turn, self.tune.turn);
-                c.turn = -turn;
-                facing = p.angle + turn;
-                c.attack = (off - turn).abs() < 4.0;
+                let (most, accel) = (self.tune.turn, self.tune.turn_accel);
+                c.turn = (-off)
+                    .clamp(-most, most)
+                    .clamp(self.was - accel, self.was + accel);
+                facing = p.angle - c.turn;
+                c.attack = (off + c.turn).abs() < 4.0;
             }
         }
         let way = match go {
@@ -337,6 +350,7 @@ impl Ultra {
                 self.controls(mv, i == 0, &p, root, None, seen)
             };
             e.step(&c);
+            self.was = c.turn;
             self.tally.played += 1;
             if e.exited() {
                 return true;
@@ -428,15 +442,17 @@ impl Ultra {
         let mark0 = e.save(0)?;
         self.tally.saves += 1;
         self.tally.decisions += 1;
-        let mut lines: Vec<(i32, Mark, Option<Move>)> = vec![(0, mark0.clone(), None)];
+        let was0 = self.was;
+        let mut lines: Vec<(i32, Mark, Option<Move>, f64)> = vec![(0, mark0.clone(), None, was0)];
         let mut best: Option<(Move, f64)> = None;
         for depth in 0..self.tune.depth {
             // (every move from every line kept: played, weighed)
             let mut tried: Vec<(f64, usize, Move)> = Vec::new();
-            for (li, (slot, mark, _)) in lines.iter().enumerate() {
+            for (li, (slot, mark, _, was)) in lines.iter().enumerate() {
                 for mv in Self::moves((depth == 0).then_some(hers)) {
                     e.restore(*slot, mark);
                     self.tally.restores += 1;
+                    self.was = *was;
                     if !self.play(e, &mv, root) {
                         continue;
                     }
@@ -463,9 +479,9 @@ impl Ultra {
             tried.truncate(self.tune.width);
             // (the best of them played again and kept, to go on from)
             let row = 1 + ROW * (depth as i32 % 2);
-            let mut next: Vec<(i32, Mark, Option<Move>)> = Vec::new();
+            let mut next: Vec<(i32, Mark, Option<Move>, f64)> = Vec::new();
             for (k, (w, li, mv)) in tried.iter().enumerate() {
-                let (slot, mark, first) = &lines[*li];
+                let (slot, mark, first, was) = &lines[*li];
                 let first = first.unwrap_or(*mv);
                 if k == 0 {
                     best = Some((first, *w));
@@ -475,13 +491,14 @@ impl Ultra {
                 }
                 e.restore(*slot, mark);
                 self.tally.restores += 1;
+                self.was = *was;
                 if !self.play(e, mv, root) || e.exited() {
                     continue;
                 }
                 let s = row + k as i32;
                 let Some(m) = e.save(s) else { continue };
                 self.tally.saves += 1;
-                next.push((s, m, Some(first)));
+                next.push((s, m, Some(first), self.was));
             }
             if next.is_empty() {
                 break;
@@ -489,6 +506,7 @@ impl Ultra {
             lines = next;
         }
         e.restore(0, &mark0);
+        self.was = was0;
         self.tally.restores += 1;
         self.tally.searched_secs += t0.elapsed().as_secs_f64();
         best
@@ -528,6 +546,7 @@ impl Ultra {
         self.tally.restores += 1;
         self.tally.back += 1;
         self.doing = None;
+        self.was = 0.0;
         self.kept_at = e.tic;
         // (another way this time, till past where it went wrong)
         self.shaken = (
@@ -550,6 +569,7 @@ impl Ultra {
         let seen = Self::seen(e).is_some();
         if !threatened(&p, &things, seen, self.tune.near, self.tune.close) {
             self.doing = None;
+            self.was = hers.turn;
             self.keep(e);
             return Ok(hers);
         }
@@ -612,6 +632,7 @@ impl Ultra {
             seen,
         );
         self.doing = Some((mv, left - 1));
+        self.was = c.turn;
         Ok(c)
     }
 }
