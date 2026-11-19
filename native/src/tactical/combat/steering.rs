@@ -215,8 +215,16 @@ impl Combat {
         missiles: &[Thing],
     ) -> Option<(&'static str, Option<Point>)> {
         // Only with nothing else in sight after her. In a fight it is dodged as it comes: running
-        // off round a corner would take her into the others' fire.
-        if !self.now.about.is_empty() {
+        // off round a corner would take her into the others' fire. What's out of her guns' reach,
+        // or left as out of their way (`leave_the_lot`), is no fight: with only such about she
+        // went round and round with the one tracer for the three hours of the run, the
+        // revenants that threw it long dead (Doom II MAP13, imps and demons 900 to 1,650 off).
+        if self
+            .now
+            .about
+            .iter()
+            .any(|t| self.reachable(obs, t) && !self.left_with_the_lot(t.id))
+        {
             return None;
         }
         let t = missiles.iter().find(|t| {
