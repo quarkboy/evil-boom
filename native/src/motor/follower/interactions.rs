@@ -1169,7 +1169,12 @@ impl RouteFollower {
             .get(self.step_i as usize + 1)
             .filter(|n| n.action == Action::Cross)
             .and_then(|n| n.trigger.clone())
-            .filter(|nt| nt.info.trigger == Trigger::WR && !nt.permanent())
+            // (not a perpetual lift's: see `lift_window_wait`)
+            .filter(|nt| {
+                nt.info.trigger == Trigger::WR
+                    && !nt.permanent()
+                    && !nt.info.description.contains("perpetual")
+            })
         else {
             return false;
         };

@@ -418,9 +418,17 @@ impl RouteFollower {
 
     /// A lift line to cross for its window: if the lift's away already (set off on the way),
     /// crossing now does nothing and the window is shorter than planned. Waited for, a while.
+    ///
+    /// Not a perpetual lift's: away, it's going up and down by itself and comes round whether
+    /// she crosses or not, or it has been stopped where it stood and only this line starts it
+    /// again. Waited for, a stopped one never came (Doom II MAP13's key room: the doorway's
+    /// line stops it, and she stood eight seconds a try before the line that starts it).
     fn lift_window_wait(&mut self, obs: &Observation, step: &Step) -> Option<Controls> {
         let t = step.trigger.as_ref().filter(|t| {
-            step.action == Action::Cross && t.info.trigger == Trigger::WR && !t.permanent()
+            step.action == Action::Cross
+                && t.info.trigger == Trigger::WR
+                && !t.permanent()
+                && !t.info.description.contains("perpetual")
         })?;
         if self.cross_ready {
             return None;
