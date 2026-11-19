@@ -33,19 +33,33 @@ one() {
   set -- $1
   local wad=$1 map=$2 skill=$3 seed=$4
   shift 4
-  local out
-  out=$("$bin" run-map "$wad" "$map" --fight "$skill" --mortal --lives 1 --seed "$seed" --max-seconds 900 "$@" 2>/dev/null \
-    | grep -E '^(RESULT|CARRY|DAMAGE|STATS) ' | sed -E 's/, [0-9]+s real//' | md5sum | cut -c1-12)
+  local lines out
+  # A run that fails or gives no result is no run: FAILED, never a sum of nothing (two failed
+  # runs of a level would compare the same, and a failed save would be kept as the baseline).
+  if ! lines=$("$bin" run-map "$wad" "$map" --fight "$skill" --mortal --lives 1 --seed "$seed" --max-seconds 900 "$@" 2>/dev/null) \
+      || ! grep -q '^RESULT ' <<< "$lines" || grep -q '^RESULT ERROR' <<< "$lines"; then
+    echo "$wad $map skill $skill seed $seed $*: FAILED"
+    return
+  fi
+  out=$(grep -E '^(RESULT|CARRY|DAMAGE|STATS) ' <<< "$lines" | sed -E 's/, [0-9]+s real//' | md5sum | cut -c1-12)
   echo "$wad $map skill $skill seed $seed $*: $out"
 }
 export -f one
 export bin
 now="$dir/now.$$.txt"
 printf '%s\n' "${runs[@]}" | xargs -P 12 -I{} bash -c 'one "$@"' _ {} | sort > "$now"
+# Every run asked for, and every one of them run: or nothing's saved and nothing's compared.
+if [ "$(wc -l < "$now")" -ne "${#runs[@]}" ] || grep -q ': FAILED$' "$now"; then
+  echo "runs that failed with $bin ($(grep -c ': FAILED$' "$now") of ${#runs[@]}; $(wc -l < "$now") reported):" >&2
+  grep ': FAILED$' "$now" | sed 's/^/  /' >&2
+  rm -f "$now"
+  exit 2
+fi
 if [ "$mode" = save ]; then
   mv "$now" "$dir/golden.txt"
   echo "saved $(wc -l < "$dir/golden.txt") runs from $bin"
 else
+  [ -f "$dir/golden.txt" ] || { echo "no $dir/golden.txt: save one first" >&2; rm -f "$now"; exit 2; }
   if diff -q "$dir/golden.txt" "$now" > /dev/null; then
     echo "all $(wc -l < "$now") runs the same"
     rm -f "$now"
