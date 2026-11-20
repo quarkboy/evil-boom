@@ -634,6 +634,9 @@ pub struct Explorer {
     /// this choice is down to the last resort of all: the switches she knows, pressed again
     /// (`known_switches_again`)
     known_again: bool,
+    /// with nothing at all left to do: a way on taken whatever it's reckoned to cost her
+    /// (`way_on_whatever`)
+    harm_whatever: bool,
     /// the first switch of each way of several legs turned down this think for want of health
     /// (`way_on_by_legs`)
     short_legs: Vec<TriggerLine>,
@@ -846,6 +849,7 @@ impl Explorer {
             suited: false,
             pressed_knowing: BTreeMap::new(),
             known_again: false,
+            harm_whatever: false,
             short_legs: Vec::new(),
             legs_taken: BTreeSet::new(),
             nothing_since: None,

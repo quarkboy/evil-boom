@@ -316,6 +316,7 @@ impl Explorer {
         self.from_dead_end = false;
         self.resort_wanted = None;
         self.short_legs.clear();
+        self.harm_whatever = false;
         let mut found = self.ordinary(obs, hooks);
         if !found {
             found = self.strafing_runs(obs, hooks);
@@ -390,6 +391,9 @@ impl Explorer {
         }
         if !found {
             found = self.known_switches_again(obs, hooks);
+        }
+        if !found {
+            found = self.way_on_whatever(obs, hooks);
         }
         if found {
             self.nothing_since = None;
@@ -769,6 +773,43 @@ impl Explorer {
         ));
         self.start(obs, o, steps);
         true
+    }
+
+    /// Nothing at all left, every resort tried, and stood a few seconds with it: a way on she
+    /// knows (a line to set off, a look into somewhere she hasn't seen) is taken whatever it's
+    /// reckoned to cost her. The reckoning is a guess at a floor's hits, and what it guards
+    /// against is a death; standing where she is for the rest of the level is worse than
+    /// one, and is all that's left. (E2M6 again: hurt, the next switch alone more than she
+    /// had to spare, nothing she could get to that heals, and an hour stood.)
+    fn way_on_whatever(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        /// stood with nothing to do this long first (tics): as `known_switches_again`
+        const STOOD: i64 = 3 * 35;
+        if self.short_of_health.is_none()
+            || !self.may(Resort::Harm)
+            || self.nothing_since.is_none_or(|t| obs.tic - t < STOOD)
+        {
+            return false;
+        }
+        let tic = obs.tic;
+        let refused = std::mem::take(&mut self.refused_now.1);
+        self.dropped
+            .retain(|id, &mut t| t != tic || !refused.contains(id));
+        self.refused_now.1 = refused;
+        self.harm_allowed = true;
+        self.harm_ways_only = true;
+        self.harm_whatever = true;
+        let found = self.safe_then_risky(obs, hooks);
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing left to do but stand: a way on, whatever it costs her",
+                obs.tic
+            ));
+        } else {
+            self.harm_allowed = false;
+            self.harm_ways_only = false;
+            self.harm_whatever = false;
+        }
+        found
     }
 
     /// Take up the best objective there's a route to: of the nearest few as the crow flies, the

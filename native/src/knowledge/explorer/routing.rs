@@ -693,7 +693,11 @@ impl Explorer {
                 (true, false) => self.hardest_floor_hit(&route.legs, obj, states),
                 (false, _) => HEALTH_MARGIN,
             };
-            if cost > RISK_SHARE * health && health - cost < margin {
+            // (and not at all with nothing whatever left to do: `way_on_whatever`)
+            if cost > RISK_SHARE * health
+                && health - cost < margin
+                && !(self.harm_whatever && way_on)
+            {
                 self.short_of_health = Some(obs.tic);
                 return Some(Refusal::ShortOfHealth {
                     cost,
