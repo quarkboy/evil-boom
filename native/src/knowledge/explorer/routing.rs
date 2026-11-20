@@ -682,7 +682,9 @@ impl Explorer {
             // one hit of its hardest floor.
             let cost = self.expected_damage(&route.legs, obj, states, obs);
             let health = obs.health.unwrap_or(100.0);
-            let way_on = obj.trigger.is_some() || obj.kind == Kind::Frontier;
+            // (a key she hasn't got is a way on as much as a line to set off: E4M1, the blue
+            // skull 7 of her health off with 5 left and nothing else on the level to do)
+            let way_on = obj.trigger.is_some() || matches!(obj.kind, Kind::Frontier | Kind::Key);
             // Down to trying walls, a wall is weighed as with nothing else to do, because there is
             // nothing else. Otherwise her best suspect can be refused by a few points while weaker
             // walls over cheaper floors are tried and wear her down past it.
