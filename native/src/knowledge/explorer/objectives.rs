@@ -747,11 +747,14 @@ impl Explorer {
             // it; she doesn't go round the level pressing what she knows)
             // And only if something has moved since she last pressed it, and has stopped:
             // pressed again into the same stillness it does the same nothing, and into a
-            // floor on its way the game ignores it.
+            // floor on its way the game ignores it. Something the press didn't itself set
+            // going: a lift's switch moves its lift every time, and by its own doing was
+            // news for ever (E4M1: stood at one, pressed 337 times in half an hour).
+            let own: BTreeSet<usize> = t.effects.iter().map(|(s, _)| *s).collect();
             let at_hand = self.known_again
                 && !t.info.category.is_door()
                 && dist(nav.activation_point(t, pos, reach), pos) <= SWITCH_AT_HAND
-                && k.last_moved()
+                && k.last_moved_but(&own, tic)
                     .is_some_and(|m| m > tic && obs.tic - m >= MOVED_STILL);
             if learned_lines.contains(&(li as i64)) && !unsure && !at_hand {
                 continue;

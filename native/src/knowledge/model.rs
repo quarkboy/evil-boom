@@ -960,6 +960,23 @@ impl Knowledge {
             .max()
     }
 
+    /// As `last_moved`, but for what a press at `since` of a line that moves `own` didn't
+    /// itself set going: one of its own sectors that started after the press is the press's
+    /// doing, and no news. (One of its own already on its way when she pressed, and stopped
+    /// since, is: the press did nothing to it.)
+    pub fn last_moved_but(&self, own: &BTreeSet<usize>, since: i64) -> Option<i64> {
+        if !self.moving.is_empty() {
+            return None;
+        }
+        let hers = |s: &usize| own.contains(s) && self.moved_at.get(s).is_some_and(|&t| t >= since);
+        self.moved_at
+            .iter()
+            .chain(self.stopped_at.iter())
+            .filter(|(s, _)| !hers(s))
+            .map(|(_, &t)| t)
+            .max()
+    }
+
     pub fn moved_at(&self, s: usize) -> Option<i64> {
         self.moved_at.get(&s).copied()
     }
