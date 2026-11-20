@@ -2999,3 +2999,38 @@ floor she hasn't stood on was written for it and taken out again: it changes not
 Still open on MAP14: from far off the planner has no plan to the courtyard (its north gate
 she knows only by a line across the yard); the shells through the grate; a sidestep for a
 shot that presses on a wall.
+
+### MAP14 watched again: the cover spot, the lift faced in rock (2026-11-20)
+
+The maintainer went through a whole run (seed 145201490) with times. Traced from them:
+
+- **Retreats only to spots she can stand on** (`9c9c527`). The "pressing on a wall" at
+  1,212 s was a retreat to cover at the middle of a sliver poly, 12 nearer the wall than her
+  half-width: ten seconds against it. -0.0035 (s.e. 0.0039), exits 467 to 461, stalls 1 to
+  0; inside the noise, committed on the maintainer's word as a fix of what she does.
+- **A block that looks like a lift is one to try, and in a pit doesn't cut her off.** The
+  fifteen minutes from the blue key to its door: the door was first in line the tic she had
+  the key, and refused, rightly by what she knew. Its one way was a jump over a pool whose
+  only way out is a lift faced in rock (every other lift of the level is in metal), so a
+  fall short was a pit for good; and each refusal put the door off twice as long. The look
+  that tells a player: a face too high to step up, of a stone unlike the walls either side,
+  under a small floor level with one beside it. 62 such faces in the 68 levels, 13 lifts, 6
+  worked from the face; only a line that does something is ever offered (as with marked
+  faces), so the rest cost nothing. -0.0004 (s.e. 0.0031), exits 461 to 461. MAP14 on ten
+  lives: 2,282, 2,534 s to 1,818, 1,569 s.
+
+Tried and not kept:
+
+- **What's put off for want of a route, offered again from other ground**
+  (`shelved-offered-again.patch`): -0.0065 for everything (exits 467 to 457), -0.0046 for
+  the exit and keyed doors only (459, and a MAP14 stall). The lift was the fault, not the
+  putting off.
+- **The lift's look in `looks_interactive` itself**: -0.0025, E4M7 five exits down. The
+  wall search skips what looks interactive, so every lookalike step and crate was dropped
+  from the walls she'd try. The look goes in `interactables` only.
+
+Found and left: the "sidestep that presses on a wall" is a tug of war, not a wall (a step
+for a bullet's line with plasma up that the ball won't follow, the route taking her back;
+or a step worked out afresh each tic at something walking behind posts), each bout ended
+by the 20 s patience. And the red-bar yard ended a MAP14 run in four of the day's batches:
+she tries its door's line, notes that nothing came of it, and jumps in again a life later.

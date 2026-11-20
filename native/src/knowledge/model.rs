@@ -255,6 +255,8 @@ pub struct Knowledge {
     pub changed_floor: BTreeMap<usize, i32>,
     /// which floors look like they'd hurt (their flats: worked out once)
     looks: std::cell::OnceCell<Vec<bool>>,
+    /// which lines are the face of a block that looks like a lift (`lift_face`: worked out once)
+    lift_faces: std::cell::OnceCell<BTreeSet<usize>>,
     /// a radiation suit on till this tic
     pub suit_until: Option<i64>,
     /// tries at the level so far
@@ -427,6 +429,7 @@ impl Knowledge {
             rechecked: BTreeSet::new(),
             changed_floor: BTreeMap::new(),
             looks: std::cell::OnceCell::new(),
+            lift_faces: std::cell::OnceCell::new(),
             suit_until: None,
             lives: 1,
             events: Vec::new(),
@@ -587,6 +590,7 @@ impl Knowledge {
                         && !i.category.is_exit()
                         && (!self.perceive
                             || self.looks_interactive(li)
+                            || (self.seen_front.contains(&li) && self.lift_face(li))
                             || self.door_shaped(li)
                             || self.in_the_way.contains(&li)
                             || self.locked.contains(&li)

@@ -388,6 +388,18 @@ impl Explorer {
             if !self.fresh(&o, tic) || hooks.dangerous(obs, &o) {
                 continue;
             }
+            // A block that looks like a lift, to try from a pit: it's the way out of the pit,
+            // as she takes it, so going down to it cuts her off from nothing. (MAP14's pool
+            // again: its lift left untried for the pool's having no way out.)
+            if o.kind == Kind::Switch
+                && o.trigger
+                    .as_ref()
+                    .is_some_and(|t| t.line >= 0 && self.knowledge.lift_face(t.line as usize))
+            {
+                lost.push(BTreeSet::new());
+                kept.push(o);
+                continue;
+            }
             let cut = nav.poly_at(o.goal).map(|p| back.lost_from(p));
             let open = cut.as_ref().is_none_or(|c| c.1) || self.placed(obs, &o);
             let ahead = cut.as_ref().is_some_and(|c| c.1);

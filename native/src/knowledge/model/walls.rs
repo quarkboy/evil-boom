@@ -55,6 +55,25 @@ impl Knowledge {
         })
     }
 
+    /// Is the line the face of a block that looks like a lift, whatever it's faced with? Seen
+    /// from the floor below: a step too high to walk up, of a stone unlike the walls either
+    /// side of it, under a small floor of its own that's level with a floor beside it. A
+    /// player takes a block like that standing in a pit by a ledge for the way up. (Doom II
+    /// MAP14: the lift from the pool to the blue door's walk, faced in rock where every other
+    /// lift of the level is faced in metal. Never pressed, the walk was to be had only by a
+    /// jump over that pool, refused while anything safe was left: fifteen minutes from the
+    /// blue key to its door, the maintainer watching.)
+    ///
+    /// Of the 68 levels' 62 such faces 13 are lifts and 6 of those are worked from the face;
+    /// the rest are crates, steps and trim. As with a marked face, only a line that does
+    /// something is ever offered to try, so those cost her nothing: which is knowing more than
+    /// the look tells, as it is for the marked ones.
+    pub fn lift_face(&self, li: usize) -> bool {
+        self.lift_faces
+            .get_or_init(|| lift_faces(&self.nav.map))
+            .contains(&li)
+    }
+
     /// Walls worth pressing use on, as a player would suspect them, best first: (score, line,
     /// where to stand, the wall's middle). Only what she can see counts: the automap drawing a
     /// wall as a two-sided line (a mapper hides a secret one by flagging it), an item she can
@@ -893,4 +912,88 @@ impl Signs {
         .filter(|(_, v)| *v > 0.0)
         .collect()
     }
+}
+
+/// a lift's face rises more than a step and no more than this
+const LIFT_RISE: f64 = 160.0;
+
+/// a lift's floor is no longer than this, nor narrower than a body
+const LIFT_LONG: f64 = 256.0;
+
+/// The lines that are the face of a block that looks like a lift (`Knowledge::lift_face`).
+fn lift_faces(m: &crate::map::MapData) -> BTreeSet<usize> {
+    let two = |l: &Linedef| l.front != NO_SIDEDEF && l.back != NO_SIDEDEF;
+    let sectors = |l: &Linedef| {
+        (
+            m.sidedefs[usize::from(l.front)].sector,
+            (l.back != NO_SIDEDEF).then(|| m.sidedefs[usize::from(l.back)].sector),
+        )
+    };
+    let of = |l: &Linedef, s: usize| {
+        let (f, b) = sectors(l);
+        f == s || b == Some(s)
+    };
+    // The texture a line shows to sector s: the step's on a two-sided one, else the wall's.
+    let shows = |l: &Linedef, s: usize| -> Option<String> {
+        let (f, _) = sectors(l);
+        let sd = &m.sidedefs[usize::from(if f == s { l.front } else { l.back })];
+        let t = if two(l) && sd.lower != "-" && !sd.lower.is_empty() {
+            &sd.lower
+        } else {
+            &sd.middle
+        };
+        (t != "-" && !t.is_empty()).then(|| t.to_uppercase())
+    };
+    let mut out = BTreeSet::new();
+    for l in m.linedefs.iter().filter(|l| two(l)) {
+        // Pressed from its front, the floor below.
+        let (lo, Some(hi)) = sectors(l) else { continue };
+        let (low, top) = (&m.sectors[lo], &m.sectors[hi]);
+        let rise = top.floor - low.floor;
+        if lo == hi
+            || rise <= MAX_STEP
+            || rise > LIFT_RISE
+            || top.ceiling - top.floor < PLAYER_HEIGHT
+        {
+            continue;
+        }
+        let Some(face) = shows(l, lo) else { continue };
+        let block: Vec<&Linedef> = m.linedefs.iter().filter(|o| of(o, hi)).collect();
+        let (mut x, mut y) = ((f64::MAX, f64::MIN), (f64::MAX, f64::MIN));
+        for v in block.iter().flat_map(|o| [o.v1, o.v2]) {
+            let v = &m.vertexes[v];
+            x = (x.0.min(v.x), x.1.max(v.x));
+            y = (y.0.min(v.y), y.1.max(v.y));
+        }
+        let (w, h) = (x.1 - x.0, y.1 - y.0);
+        if w.max(h) > LIFT_LONG || w.min(h) < 2.0 * crate::geom::PLAYER_RADIUS {
+            continue;
+        }
+        let level = block.iter().filter(|o| two(o)).any(|o| {
+            let (f, b) = sectors(o);
+            let other = if f == hi { b.unwrap_or(hi) } else { f };
+            other != hi && other != lo && m.sectors[other].floor == top.floor
+        });
+        if !level {
+            continue;
+        }
+        // The face is every line between the two; the walls either side are the low floor's
+        // other lines at its ends.
+        let faces: Vec<&Linedef> = block.iter().copied().filter(|o| of(o, lo)).collect();
+        let mut ends: BTreeMap<usize, usize> = BTreeMap::new();
+        for v in faces.iter().flat_map(|o| [o.v1, o.v2]) {
+            *ends.entry(v).or_insert(0) += 1;
+        }
+        let beside: Vec<String> = m
+            .linedefs
+            .iter()
+            .filter(|o| of(o, lo) && !of(o, hi))
+            .filter(|o| [o.v1, o.v2].iter().any(|v| ends.get(v) == Some(&1)))
+            .filter_map(|o| shows(o, lo))
+            .collect();
+        if !beside.is_empty() && beside.iter().all(|t| *t != face) {
+            out.insert(l.index);
+        }
+    }
+    out
 }
