@@ -2957,3 +2957,45 @@ The seed, ten lives, no ultra instinct: stood at the hour before; out at 1,638 s
 Not yet known: whether E4M2's stuck is one of these. Rerun with the ultra instinct off she
 is out of lives in twenty minutes, before the place she stood; it wants the branch brought
 up and the same seeds with it on.
+
+## MAP14 watched: plasma's width, the front door, and what didn't work (2026-11-20)
+
+The maintainer watched one of the sweep's stuck MAP14 runs (Ultra-Violence, ten lives, the
+ultra instinct on) and it was painful: cells into window edges, shells through a grate, an
+hour round the moat, and never in by the courtyard's north door, where the blue skull's door
+is three seconds on. What came of it, each scored on the third seed set against the commit
+before:
+
+- **Plasma by the ball's whole width** (`80e6b55`), at one further than 384 that isn't a
+  boss. +0.0058 (s.e. 0.0034), exits 457 to 468. The whole width everywhere was -0.0005 with
+  E4M8 down four exits of sixteen and E2M9 three: close among pillars a ball that clips one
+  is a ball, and a stream held is the fight.
+- **A door a line underfoot opens every time opens from its far side too** (`036994d`), in
+  the reckoning of what would cut her off. The courtyard had been "after what it cuts off",
+  behind every wall she only suspects. -0.0006 (s.e. 0.0019), exits 468 to 467, runs
+  stranded 15 to 13. The three MAP14 seeds that stood at the hour by the blue skull: two
+  get out now (2,911 and 2,991 s), by that door.
+
+Tried and not kept (patches in `out/score/`):
+
+- **An arch-vile she can't hurt not kept clear of** (`vile-not-kept-clear.patch`): she kept
+  clear of it 6 times for 100 and still stood at the hour. The level starves her of ammo
+  and the arch-vile refills it with monsters; no one rule of the fight mends that.
+- **A shotgun's spread reckoned** (`shotgun-fan-v1.patch`, `-v2`): four tries, -0.0512 the
+  first (exits 468 to 400), 60 to 64 exits for 85 on eight levels the rest. A shell that
+  loses half its pellets is still worth more than a pistol, and holding fire and changing
+  guns is paid for in every fight. One run had 378 changes to the pistol and 327 back.
+- **Every suspected wall ranked after new ground that's put off**
+  (`walls-after-new-ground.patch`): -0.0397, exits 468 to 408. Far too wide: it moved walls
+  behind everything on every level.
+
+And looked up, since it was nearly "fixed": **the yard past the red bars is a real soft
+lock.** The door at its south end opens for line 1366, sixteen units inside the bars; with
+the bars shut her middle can't get past the line (the box stops against the posts with its
+middle on it, and on the line counts as this side, P_PointOnLineSide). Jumped into without
+the key there's no way out, as the maintainer said. A last resort of walking every bit of
+floor she hasn't stood on was written for it and taken out again: it changes nothing there.
+
+Still open on MAP14: from far off the planner has no plan to the courtyard (its north gate
+she knows only by a line across the yard); the shells through the grate; a sidestep for a
+shot that presses on a wall.
