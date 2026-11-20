@@ -1823,18 +1823,24 @@ impl Player {
             .filter(|&(d, _)| near < d && d < far)
             .collect();
         spots.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        // Only where she can stand: a spot is walked to at its poly's middle, and the middle of
+        // a sliver along a wall is nearer the wall than her half-width. Sent to one for cover
+        // she pressed on the wall 12 short of it till the retreat was over, ten seconds, the
+        // maintainer watching (Doom II MAP14, 1,212 s).
+        let stands = |&(_, p): &(f64, usize)| self.explorer.standable(nav.poly_center(p), false);
         if self.fight.combat.now.outmatched {
             let open: Vec<(f64, usize)> = spots
                 .iter()
                 .copied()
                 .filter(|&(_, p)| !self.in_pocket(p))
+                .filter(stands)
+                .take(n)
                 .collect();
             if !open.is_empty() {
-                spots = open;
+                return open;
             }
         }
-        spots.truncate(n);
-        spots
+        spots.into_iter().filter(stands).take(n).collect()
     }
 
     /// With a heavy after her she can't see off quickly and monsters of another kind near it:
