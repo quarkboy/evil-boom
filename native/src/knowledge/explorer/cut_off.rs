@@ -198,7 +198,28 @@ impl Explorer {
                 for &s in &shut {
                     states_back[s] = vec![nav.movers.initial[s]];
                 }
-                openers.push((t.clone(), shut));
+                // A door that a line underfoot opens every time it's crossed is taken to open
+                // for whoever walks up to it, from either side: that's what such a door is.
+                // The line on its far side she can't see and has never crossed, and going by
+                // the lines she knows alone, what's through such a door "cut her off" (Doom II
+                // MAP14: the yard past the red bars, the room beyond and the courtyard with the
+                // blue skull's door in it, every door on the way open from both sides, left
+                // "after what it cuts off" for the hour). Not a once-only line's door, nor a
+                // switch's: those are what a trap is made of.
+                let mut t = t.clone();
+                if t.info.trigger == crate::specials::Trigger::WR && t.info.category.is_door() {
+                    for (pi, poly) in nav.mesh.live_polys() {
+                        if shut.contains(&poly.sector) {
+                            for &portal in &poly.portals {
+                                let other = nav.mesh.portals[portal].other(pi);
+                                if !shut.contains(&nav.sector_of_poly(other)) {
+                                    t.activators.insert(other);
+                                }
+                            }
+                        }
+                    }
+                }
+                openers.push((t, shut));
             }
         }
         WayBack {
