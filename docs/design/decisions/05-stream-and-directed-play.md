@@ -2936,3 +2936,24 @@ begun again, and now dies on the way she takes instead.
 Still to trace from the same sweep: "the jumps missed once get another go" once a second for
 the rest of the hour (E4M2, E4M1, E3M7); E4M1 pressing one known switch 108 times in ten
 minutes; MAP14 and E2M4 (mixed).
+
+### E4M1: a switch pressed for half an hour, and a key she wouldn't risk (2026-11-20)
+
+The same sweep's E4M1, none out of eight seeds. One seed traced, two faults:
+
+- **"The jumps missed once get another go", once a second, was nothing happening.** The line
+  is logged before the retry's tried. Under it she had nothing left to do. (The line's still
+  to mend.)
+- **A lift's switch pressed 337 times** (`known_switches_again`): its own lift moving was
+  "something moved since her last press" every time. What counts now is what the press
+  didn't set going (`Knowledge::last_moved_but`). Score: all 1,088 runs the same.
+- **The blue skull 7 health off with 5 left:** refused for good, because a key wasn't a "way
+  on", which is what the rules for having nothing else to do go by. It is one now. Score
+  +0.0007 (s.e. 0.0007), exits 456 to 457, runs stranded 15 to 14.
+
+The seed, ten lives, no ultra instinct: stood at the hour before; out at 1,638 s with both.
+`way_on_whatever` is what got her through the red door on 5 health.
+
+Not yet known: whether E4M2's stuck is one of these. Rerun with the ultra instinct off she
+is out of lives in twenty minutes, before the place she stood; it wants the branch brought
+up and the same seeds with it on.
