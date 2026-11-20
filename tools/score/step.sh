@@ -3,6 +3,9 @@
 # Copyright (C) 2026 Quarkboy
 # step.sh NAME [score options...]: score a build on the baseline's very runs, and compare.
 #
+# RETIRED 2026-11-20: changes are judged by the three-lives test (tools/lives/run.sh), not by
+# this one-death score. Kept for reading old numbers and for the tuning sweeps. docs/TESTING.md.
+#
 # Plays the runs of out/score/base.tsv (the same levels, skills and seeds) with the build, into
 # out/score/NAME.tsv, then prints the run-for-run comparison (score-report), the levels that
 # moved most, and the set's summary beside the baseline's (screen.py). Options after NAME go to

@@ -3067,3 +3067,15 @@ loop of the ordering's.
 Tried on the way and not kept: any key she's seen ranked with what she needs (-0.0106 on
 the old score, exits 461 to 445); a key within 256 of her only (`key-at-hand.patch`:
 level, and by the crow's flight, which the maintainer rightly wouldn't have).
+
+### The measure changed: three lives, not one death (2026-11-20)
+
+The maintainer's decision. A change to how she plays is judged by `tools/lives/run.sh`: all
+68 levels, HMP and UV, four fixed seeds, three lives; exits, progress through the level,
+damage dealt over monster health, deaths, time, and the runs that stood out the hour
+(docs/TESTING.md). The one-death score is retired, its program and scripts kept. Why: with
+one death a run, E3M7, E4M7 and E4M8 (a Baron at arm's length, a Cyberdemon's rocket)
+turned on any reshuffle, the control with the order untouched as much as the change, and
+carried the verdict; three lives is also nearer how she plays on stream. Still to decide: a
+level she's stranded in on her last life stands out its hour here, where the old score began
+it again.

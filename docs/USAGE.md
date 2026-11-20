@@ -94,8 +94,8 @@ evil-boom run-map doom2 MAP14 --fight 3 --mortal        # one level; its log in 
 evil-boom sweep doom doom2 --jobs 8                      # every level, a line each, a summary
 evil-boom sweep doom E1M1 E1M2 doom2 MAP01               # some levels
 evil-boom episode doom E1M1 --fight 3 --mortal --seeds 8 # an episode on one life, 8 seeds side by side
-evil-boom score --jobs 12                                # the score (see TESTING.md)
-evil-boom score-report out/score/A.tsv out/score/B.tsv   # compare two score sets
+tools/lives/run.sh NAME base                             # the three-lives test (see TESTING.md)
+evil-boom score --jobs 12                                # the one-death score (retired)
 ```
 
 `run-map` writes everything about a run to `out/explore/<IWAD>_<MAP>.txt` and keeps a stamped

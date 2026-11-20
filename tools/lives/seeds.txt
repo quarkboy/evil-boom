@@ -1,0 +1,5 @@
+# The three-lives test's seeds (tools/lives/run.sh): drawn once, 2026-11-20.
+854202743
+1485696583
+205498993
+1008128369

@@ -53,7 +53,7 @@ Without them it's the OPL synth, as a Sound Blaster played it.
 | [docs/NEURO.md](docs/NEURO.md) | the Neuro SDK integration: the actions, and testing it without Neuro |
 | [docs/CONSOLE.md](docs/CONSOLE.md) | the stream console |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | how it works, and where things are in the code |
-| [docs/TESTING.md](docs/TESTING.md) | tests, parity checks, and the score that judges every change |
+| [docs/TESTING.md](docs/TESTING.md) | tests, parity checks, and the three-lives test that judges every change |
 | [docs/DEBUGGING.md](docs/DEBUGGING.md) | tracing a failed run back to its cause |
 | [docs/design/](docs/design/README.md) | the design history: decisions, plans, what was tried <- WARNING! very vibey> |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | how changes are made and judged |

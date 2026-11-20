@@ -27,8 +27,9 @@ code; [docs/TESTING.md](docs/TESTING.md) has the commands.
   observe, so it holds on any map or WAD. No map names, sector or line numbers, or coordinates
   in a rule. The failing map is only the test case.  Some gimmick maps (barrel's o fun, tricks and traps) are really hard without level specific logic, but resist the temptation.
 - **Look it up** (the Doom Wiki, secret lists) before calling something unreachable or broken.  Literally everything in this game is known and on the internet somewhere (maybe an ftp from the 1990s, but it's somewhere)
-- **Measured by the score.** A change to how she plays is scored on the baseline's very runs
-  (`tools/score/step.sh`) and kept if it's no worse within the noise. A change meant to change
+- **Measured by the three-lives test.** A change to how she plays is played on the baseline's
+  very runs (`tools/lives/run.sh`: every level, three lives) and kept if it's no worse within
+  the noise and no run of it stands out the hour. A change meant to change
   nothing is checked with `tools/parity.sh`, or `tools/dev/code_only.py --check` for comments.
   See [docs/TESTING.md](docs/TESTING.md).  The score is quite random.  A change that fixes one bit of stuck issue can lower score because it causes the bot to take a different route with a lower survivability rate in other levels, even if it's the "correct" choice.
 - **Several seeds** wherever randomness matters: any fight, shot barrels. Runs without monsters

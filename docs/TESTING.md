@@ -1,13 +1,13 @@
 # Testing Evil BOOM
 
-There are four kinds of check, from seconds to a quarter of an hour:
+There are four kinds of check, from seconds to ten minutes:
 
 | check | what it shows | needs | time |
 |---|---|---|---|
 | format, lint, unit tests | the code is tidy and its pieces work | nothing | seconds |
 | integration tests | WAD reading, planning and movement against the real game | IWADs, the engine | a minute |
 | parity | a change meant to alter nothing really didn't | IWADs, the engine | half a minute |
-| the score | how well she plays, and whether a change made it better or worse | IWADs, the engine | ~17 minutes |
+| the three-lives test | how well she plays, and whether a change made it better or worse | IWADs, the engine | ~9 minutes |
 
 `cargo` commands run from `native/`; everything else from the repository's root, where
 `evil-boom` stands for `out/build/release/evil-boom` (`.exe` on Windows; see
@@ -53,7 +53,65 @@ For a change to comments only, `tools/dev/code_only.py --check` proves it withou
 anything: it strips the comments from every changed `.rs` file and compares the code with the
 last commit's.
 
-## The score: how well she plays
+## The three-lives test: how well she plays
+
+```sh
+BIN=out/check/release/evil-boom tools/lives/run.sh NAME
+```
+
+plays every level of DOOM (E1-E4) and DOOM II from a pistol start with **three lives** (dead,
+the level again knowing what she learned), on Hurt Me Plenty and Ultra-Violence, on the four
+seeds of `tools/lives/seeds.txt`: 544 runs, about nine minutes at 14 jobs (`JOBS=N`). A row a
+run goes to `out/lives/NAME.rows/`; a run already there isn't played again. Then the report
+(`tools/lives/report.py NAME...`), a line a set:
+
+| measure | what it is |
+|---|---|
+| exit | she got out within her lives |
+| progress | 1 for an exit, else the share of the level's sectors she saw |
+| seen | that share, exit or not |
+| damage | the health she took off the monsters over all they had, every life together (as the program counts it: a run's first twenty game minutes) |
+| deaths | lives lost |
+| secs | game seconds, every life together |
+| stood | the run went its whole hour: stranded on her last life, or going round |
+
+No one number is the verdict. Exits and progress say how far she gets; damage says how the
+fights went where she didn't get out; time is travel, and travel is risk; a run that stood
+out the hour is the worst of outcomes and is listed by name.
+
+Changes are compared on **the same runs**:
+
+```sh
+# once: a baseline, with the build you start from
+BIN=out/build/release/evil-boom tools/lives/run.sh base
+# for each change: the same runs with its build, then each measure run for run beside the baseline
+BIN=out/check/release/evil-boom tools/lives/run.sh NAME base
+```
+
+The comparison gives each measure's difference run for run with its standard error, the exits
+by skill, the levels whose exits moved, and the runs that stood out the hour. A change that
+touches nothing reproduces the baseline's rows exactly. A change is kept if it's no worse
+within the noise (about two standard errors) and adds no run that stands out the hour; its
+set then becomes the baseline (move its folder to `out/lives/base.rows`).
+
+Runs are deterministic per build, but a different machine can still diverge on floating-point
+details. Make your own baseline rather than comparing with someone else's sets. And on a
+quiet machine: under load the clock's backstops fire differently and runs change.
+
+Other seeds (`SEEDS="1 2 3"`) or lives (`LIVES=1`) make another test, not this one: say so
+with the numbers.
+
+## Retired: the one-death score
+
+Until 2026-11-20 a change was judged by `evil-boom score` (and `tools/score/step.sh`): every
+level on one life, 8 seeds a skill, 1,088 runs; 1 for an exit, else half the share of kills.
+It was given up because one death ended a run: three knife-edge levels (E3M7, E4M7, E4M8)
+decided it whatever was changed, and a change that made her play sooner or better elsewhere
+read as a loss. Numbers in commit messages and the design notes before that date are its. The
+program and the scripts are kept, for reading those and for the tuning sweeps; nothing new is
+judged by them. What follows is how it worked.
+
+### The score
 
 ```sh
 evil-boom score --jobs 12 --out out/score/NAME.tsv
@@ -106,7 +164,7 @@ knew of it, turns, alerts). `tools/score/screen.py base NAME...` summarises them
 Runs are deterministic per build, but a different machine can still diverge on floating-point
 details. Make your own baseline rather than comparing with someone else's sets.
 
-### Quicker: the quarter sets
+### The quarter sets
 
 `tools/score/quarter.tsv` and `quarter-b.tsv` are two fixed sets of 272 runs each (two seeds a
 level-skill), about 4.5 minutes each. Use them to screen ideas and tuning before a full score:
@@ -118,7 +176,7 @@ evil-boom score --like tools/score/quarter.tsv --jobs 12 --out out/score/q-NAME.
 Two quarter sets that agree are better evidence than one. Values that look good on one alone
 often don't hold.
 
-### Tuning files
+### Tuning files (still as they were)
 
 Every judgement number in the fight is in `native/src/tactical/tuning.rs`. `evil-boom tuning`
 prints them all as JSON; edit a copy and give it to any run with `--tuning FILE`, a score
@@ -147,8 +205,8 @@ evil-boom arena arenas/combat.txt --jobs 12 --seeds 8    # every scenario, 8 see
 evil-boom arena-watch arenas/combat.txt NAME              # one, watched
 ```
 
-They're for developing a fight idea. Judge the idea by the score: arenas are too artificial to
-decide by.
+They're for developing a fight idea. Judge the idea by the three-lives test: arenas are too
+artificial to decide by.
 
 ## The Neuro integration
 

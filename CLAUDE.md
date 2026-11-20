@@ -7,10 +7,11 @@ source is fetched into `third_party/`, not committed).
 Read these first. They hold for you as for any contributor:
 
 - [CONTRIBUTING.md](CONTRIBUTING.md): how she should play and how changes are judged (trace,
-  then fix; general rules, never level-specific; measured by the score).
+  then fix; general rules, never level-specific; measured by the three-lives test).
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the map of the code, and where a change goes.
 - [docs/DEBUGGING.md](docs/DEBUGGING.md): how to trace a failed run. Read it before debugging.
-- [docs/TESTING.md](docs/TESTING.md): the checks, the score, parity, run-for-run comparisons.
+- [docs/TESTING.md](docs/TESTING.md): the checks, the three-lives test, parity, run-for-run
+  comparisons.
 - [docs/design/](docs/design/README.md): why things are as they are, what was tried and
   dropped. Check there before proposing something that may have been tried.
 
@@ -21,12 +22,14 @@ Read these first. They hold for you as for any contributor:
   else the rule touches. Don't make guessed fixes.
 - **Look it up** (the Doom Wiki, secret lists) before calling anything unreachable or broken. The
   Doom Wiki and Fandom refuse automated fetches: ask the maintainer to paste the page.
-- **Measure every change to play** with `tools/score/step.sh` on the baseline's runs, and give
-  the before and after numbers in the commit message. Ask before running other full sweeps;
-  up to 8 chosen levels or seeds per test is fine. Size `--jobs` to the machine.
+- **Measure every change to play** with the three-lives test (`tools/lives/run.sh NAME base`)
+  on the baseline's runs, and give the before and after numbers in the commit message: exits,
+  progress, damage, time, and any run that stood out the hour. The one-death score
+  (`tools/score/`) is retired: nothing is judged by it. Ask before running other full sweeps;
+  up to 8 chosen levels or seeds per test is fine. Size `JOBS` to the machine.
 - **A change meant to change nothing** gets `tools/parity.sh` (or `tools/dev/code_only.py
   --check` for comments) before it's committed.
-- **Don't rebuild a binary in use.** Sweeps, episodes, the score and the console start the
+- **Don't rebuild a binary in use.** Sweeps, episodes, the test and the console start the
   program afresh for each map, so a rebuild under them mixes two builds in one result. Build
   side builds into another folder (`--target-dir ../out/check`) and give it to the scripts
   (`BIN=...`). On Windows a running `.exe` can't be overwritten at all: rename it aside first.
