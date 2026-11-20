@@ -579,6 +579,9 @@ pub struct Aim {
     pub wasted_waver: i64,
     /// ...and it further off than this
     pub wasted_far: f64,
+    /// a missile's whole width is reckoned with at one further off than this (nearer, its
+    /// middle: a ball that clips a pillar is a ball, and holding the stream is the fight)
+    pub width_far: f64,
     /// kept clear beyond the rocket's box each side of its way (a miss is better than a near thing)
     pub rocket_margin: f64,
     /// with a hitscanner about, a monster she'd be longer than this many seconds killing isn't put
@@ -605,6 +608,7 @@ impl Default for Aim {
             wasted_land: 12,
             wasted_waver: 70,
             wasted_far: 512.0,
+            width_far: 384.0,
             rocket_margin: 8.0,
             kill_first: 8.0,
             pain_near: 512.0,

@@ -526,10 +526,19 @@ impl Combat {
     /// Would a shot of a projectile weapon (`radius`: the rocket's 11, plasma's 13) fired at t
     /// from `q`, facing it, go the way autoaim sends it and get to it, with nothing in its way
     /// at its height? This keeps plasma from being wasted on a ledge's lip below her or the
-    /// floor in front of something up on a ledge. Its middle only is checked, not its box's
-    /// sides: a side grazing a corner costs a cell at most (it steps 25 at a time, the box
-    /// checked where it lands, and may get by), and holding fire for that keeps her out of a
-    /// fight from cover.
+    /// floor in front of something up on a ledge, and, at one far off, on a corner or a post
+    /// its side catches.
+    ///
+    /// Its whole width at one further than `aim.width_far` that isn't a boss: the game moves a
+    /// missile as a box and it bursts on what the box touches. (Its middle only, at first, a
+    /// side grazing a corner reckoned at a cell: but she holds the trigger, and every ball of
+    /// the stream meets the same corner. MAP14, the maintainer watching: cells into the edges
+    /// of windows and the posts of a grate.) Held for that, she steps to where it does get
+    /// there (`plasma_spot`), as for a lip.
+    ///
+    /// Its middle only nearer than that, and at a boss: the whole width everywhere lost E4M8
+    /// four exits of sixteen and E2M9 three (a spider and two barons fought close among
+    /// pillars, where a ball that clips one is a ball, and a stream held is the fight).
     pub(super) fn projectile_reaches(
         &mut self,
         obs: &Observation,
@@ -539,13 +548,14 @@ impl Combat {
     ) -> bool {
         let d = dist((t.x, t.y), q);
         let (h, seen, _) = self.autoaim(obs, q, heading(q, (t.x, t.y)));
+        let wide = !mon(t.name).boss && d > self.tune.aim.width_far;
         self.rocket_flies(
             obs,
             q,
             h,
             (d - mon(t.name).radius - radius).max(1.0),
             seen,
-            (0.0, 0.0),
+            (if wide { radius } else { 0.0 }, 0.0),
         )
     }
 
