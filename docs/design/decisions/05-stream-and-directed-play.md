@@ -2906,3 +2906,33 @@ is a rule about the game, looked up in the engine and measured on Doom and Doom 
 
 Not done: an item she's stood on and couldn't pick up is still offered again by the next
 list of options. With the cause above gone no case of it is known.
+
+## Stood for good with a way on she knew: E2M6, lives, and a route weighed whole (2026-11-19)
+
+Found by the ultra-instinct sweep (all 68 levels, Ultra-Violence, pistol start, ten lives, two
+seeds; on the branch `ultra-instinct`, its plan has the sweep). Levels where a run reached the
+hour alive with few deaths were run on eight more random seeds each to tell a rare stuck from a
+fault: MAP11 8 out of 8 and E3M6 7 (rare); E3M7 6; E2M4 4; E2M6 3; MAP14 2; E4M1 and E4M2
+none. E2M6 first.
+
+- **Not the ultra instinct's doing:** the same seed with it off is the same run.
+- **The cause:** a way on of several legs (four switches, each a trip over the courtyard's
+  hurting floor) weighed as one route: 107 of her 100. Refused whole, at full health, for good.
+  In the lives before she had found the switches one at a time. Knowing more made her stand.
+- **A leg at a time** (`347725f`, `Explorer::way_on_by_legs`): the furthest switch of such a
+  way she can get to with her margin left, by itself, once a life each. Two tries at the rule
+  went wrong first: the first switch is the lift out of the start, which comes back up behind
+  her; and the leg was refused by the other health rule (harm while something safe is left)
+  till it was marked a risk taken knowingly.
+- **Whatever it costs** (`3e7220f`, `Explorer::way_on_whatever`): the last resort of all. A
+  stall is worse than a death, the maintainer's weighing, and the cost is a guess.
+
+Four of the stuck seeds, ten lives: all stood; with the first rule two get out and two stand;
+with both, two get out and none stands (one out of lives, one at the hour after eight deaths).
+Score: -0.0001 (s.e. 0.0001) and -0.0003 (s.e. 0.0005); exits 457, 457, 456; runs stranded 16,
+17, 15. The exit lost is an E3M7 run that had got out by way of a stranding and the level
+begun again, and now dies on the way she takes instead.
+
+Still to trace from the same sweep: "the jumps missed once get another go" once a second for
+the rest of the hour (E4M2, E4M1, E3M7); E4M1 pressing one known switch 108 times in ten
+minutes; MAP14 and E2M4 (mixed).
