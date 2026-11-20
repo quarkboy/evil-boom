@@ -898,11 +898,15 @@ impl Explorer {
                         let tries = obj.wall.map_or(1.0, |w| {
                             2f64.powi(self.wall_drops.get(&w).copied().unwrap_or(0))
                         });
-                        let prio = obj.priority();
-                        let weighed = hooks.weigh(obs, &obj);
+                        let needed = obj.nearer() < 1.0;
+                        let weighed = hooks.weigh(obs, &obj) * obj.nearer();
                         routed.push((length * obj.kind.weight() * tries * weighed, obj, steps));
-                        if prio < 2 && !exit_first {
-                            break; // (nothing further down the list comes first anyway)
+                        if needed && !exit_first {
+                            // (something she needs, with a way: taken against what was
+                            // nearer still, and no ways looked for to what's further. A way
+                            // looked for to each of the four, those with none are put off,
+                            // and that alone cost 16 exits of 461)
+                            break;
                         }
                     }
                     _ => self.drop_no_route(&obj, obs),
@@ -912,8 +916,8 @@ impl Explorer {
                 continue;
             }
             routed.sort_by(|a, b| {
-                (a.1.priority(), a.0)
-                    .partial_cmp(&(b.1.priority(), b.0))
+                (a.1.tier(), a.0)
+                    .partial_cmp(&(b.1.tier(), b.0))
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
             // And on the way to anything that comes first for what it is (the exit, a gun, a keyed

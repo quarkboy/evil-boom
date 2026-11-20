@@ -3034,3 +3034,36 @@ for a bullet's line with plasma up that the ball won't follow, the route taking 
 or a step worked out afresh each tic at something walking behind posts), each bout ended
 by the 20 s patience. And the red-bar yard ended a MAP14 run in four of the day's batches:
 she tries its door's line, notes that nothing came of it, and jumps in again a life later.
+
+### What she takes up next: by the walk, what she needs counted nearer (2026-11-20)
+
+The maintainer's rule: going anywhere is risk, so what to go for next is what she needs
+together with how long the walk is, never need alone. Traced from MAP14 (seed 145201490,
+679 s): the red skull 55 off beside the plasma rifle she'd just picked up, passed over for
+a cell pack 519 off that she "needed", because what's needed came before everything else
+whatever the walk; that walk took her across the level and she had the key six and a half
+minutes later.
+
+- **One list** (`Objective::tier`, `nearer`): the exit first and what would cut her off
+  last, as before; between them everything by the walk, with what she needs (what can't
+  wait, what she's short of, a keyed door she has the key to, a key) counted as a quarter
+  of its walk (`NEEDED_NEARER`).
+- **Ways are still looked for only as far as the first needed thing that has one.** A way
+  looked for to each of the four compared, those with none are put off, and that alone
+  cost 16 exits of 461 on the old score with the order untouched.
+- Known and left: something to look at from where she stands is a walk of nothing and
+  comes first, a second of standing each time.
+
+Measured a new way, the maintainer's (the old score, one death a run, is given up: three
+knife-edge levels, E3M7, E4M7 and E4M8, decided it whatever was changed): all 68 levels,
+HMP and UV, 4 seeds, **three lives**, 544 runs a build (`out/eval3/`). Against the tiers:
+exits 293 to 298; progress (1 for an exit, else the share of sectors seen) 0.805 to 0.803;
+damage dealt over monster health 0.769 to 0.773; deaths a run 1.08 to 1.10; game time 555
+to 530 s (-25, s.e. 14). At a tenth: exits 291, the rest the same, and two runs stood out
+the hour, both stranded on the last life (E3M9 past the rocket launcher, MAP29), which
+the old score would have begun again: the kind it had 12 of in 1,088 on every build, not a
+loop of the ordering's.
+
+Tried on the way and not kept: any key she's seen ranked with what she needs (-0.0106 on
+the old score, exits 461 to 445); a key within 256 of her only (`key-at-hand.patch`:
+level, and by the crow's flight, which the maintainer rightly wouldn't have).

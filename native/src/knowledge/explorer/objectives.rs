@@ -1534,11 +1534,16 @@ impl Explorer {
         let travel = self.travel(obs);
         let mut weighed: Vec<(f64, Objective)> = options
             .into_iter()
-            .map(|o| (travel(o.goal) * o.kind.weight() * hooks.weigh(obs, &o), o))
+            .map(|o| {
+                (
+                    travel(o.goal) * o.kind.weight() * hooks.weigh(obs, &o) * o.nearer(),
+                    o,
+                )
+            })
             .collect();
         weighed.sort_by(|a, b| {
-            (a.1.priority(), a.0)
-                .partial_cmp(&(b.1.priority(), b.0))
+            (a.1.tier(), a.0)
+                .partial_cmp(&(b.1.tier(), b.0))
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         // On instinct for whoever directs her (`resorts` given: never playing alone), new ground

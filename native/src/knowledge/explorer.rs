@@ -46,6 +46,9 @@ pub const JUMP_MISSES: i32 = 2;
 const JUMP_KNOCKED_TICS: i64 = 30 * 35;
 
 /// with nothing to do, look for something again this often
+/// what she needs counts as this much of its way (`Objective::nearer`)
+const NEEDED_NEARER: f64 = 0.25;
+
 const IDLE_RETRY: i64 = 35;
 
 /// a turn on the spot, at the edge of the known map
@@ -251,6 +254,33 @@ impl Objective {
             return 1;
         }
         2
+    }
+
+    /// Where it comes in what she takes up next: the exit (0), then everything by how far
+    /// it is by her way and how much she needs it (`nearer`), then what would cut her off
+    /// from other things to do (3, 4).
+    ///
+    /// Going anywhere is risk, so what she needs doesn't come first whatever the walk: it
+    /// counts as that much nearer, and the walk still tells. (Doom II MAP14: the red skull 55
+    /// off beside the plasma rifle she'd just picked up, passed over for a cell pack 519 off
+    /// that she "needed", when what she needed came before everything else; that walk took
+    /// her across the level, and she had the key six and a half minutes later. The
+    /// maintainer watching.)
+    pub fn tier(&self) -> i32 {
+        match self.priority() {
+            1 => 2,
+            p => p,
+        }
+    }
+
+    /// How much nearer than its way it counts for being needed: what can't wait, what she's
+    /// short of, a door or a switch a key she has opens, a key.
+    pub fn nearer(&self) -> f64 {
+        if self.priority() == 1 || self.kind == Kind::Key {
+            NEEDED_NEARER
+        } else {
+            1.0
+        }
     }
 }
 
