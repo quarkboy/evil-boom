@@ -634,6 +634,12 @@ pub struct Explorer {
     /// this choice is down to the last resort of all: the switches she knows, pressed again
     /// (`known_switches_again`)
     known_again: bool,
+    /// the first switch of each way of several legs turned down this think for want of health
+    /// (`way_on_by_legs`)
+    short_legs: Vec<TriggerLine>,
+    /// the switches pressed as a leg of such a way, by the life (once a life each: pressed
+    /// again into the same refusal it's the same press for ever)
+    legs_taken: BTreeSet<(i32, i64)>,
     /// since when she has had nothing at all to do (a choice that found nothing, and none
     /// since that found something)
     nothing_since: Option<i64>,
@@ -840,6 +846,8 @@ impl Explorer {
             suited: false,
             pressed_knowing: BTreeMap::new(),
             known_again: false,
+            short_legs: Vec::new(),
+            legs_taken: BTreeSet::new(),
             nothing_since: None,
             secrets_mode: false,
             secret_sectors: BTreeSet::new(),

@@ -315,6 +315,7 @@ impl Explorer {
         self.known_again = false;
         self.from_dead_end = false;
         self.resort_wanted = None;
+        self.short_legs.clear();
         let mut found = self.ordinary(obs, hooks);
         if !found {
             found = self.strafing_runs(obs, hooks);
@@ -330,6 +331,9 @@ impl Explorer {
         // better a way on than one she has seen.
         if !found {
             found = self.ways_on_hurt(obs, hooks);
+        }
+        if !found {
+            found = self.way_on_by_legs(obs, hooks);
         }
         if !found && perceive && self.suspecting == Suspecting::No {
             found = self.suspect_walls(obs, hooks);
@@ -707,6 +711,64 @@ impl Explorer {
             self.harm_ways_only = false;
         }
         found
+    }
+
+    /// A way on of several legs (switch after switch, each a trip over a floor that hurts),
+    /// turned down for costing more health than she has: the furthest of its switches she can
+    /// get to with enough health left, by itself. That much is then weighed for what it is, and
+    /// after it she's where she can heal and think again, as when she found the switches one at
+    /// a time. Priced whole, a way she had walked a leg at a time
+    /// in the lives before was refused for good once she knew all of it, with her health full
+    /// and nothing that could raise it (E2M6: four switches across the courtyard, 107 of her
+    /// 100, and "nothing left to do" for the rest of the hour).
+    ///
+    /// Each switch once a life: pressed again into the same refusal, it's the same press for
+    /// ever.
+    fn way_on_by_legs(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        let _ = hooks;
+        if self.short_of_health.is_none() || !self.may(Resort::Harm) {
+            return false;
+        }
+        let life = self.knowledge.lives;
+        let pos = obs.pos();
+        let legs: Vec<TriggerLine> = std::mem::take(&mut self.short_legs)
+            .into_iter()
+            .filter(|t| !self.legs_taken.contains(&(life, t.line)))
+            .collect();
+        // (a line to set off, with nothing else to do: the margin lifted, as `ways_on_hurt`)
+        self.harm_allowed = true;
+        self.harm_ways_only = true;
+        let mut best: Option<(f64, Objective, Vec<Step>)> = None;
+        for t in legs {
+            let mut o = Objective::new(
+                Kind::Switch,
+                self.nav.activation_point(&t, pos, &self.reach),
+                format!("line {} on the way (a leg at a time)", t.line),
+            );
+            o.trigger = Some(t);
+            // (over floors that hurt, knowingly: there's nothing safe left that this waits on)
+            o.risky = true;
+            if let Some(steps) = self.route_to(&o, obs).filter(|st| !st.is_empty()) {
+                let length = route_length(&steps);
+                if best.as_ref().is_none_or(|b| length < b.0) {
+                    best = Some((length, o, steps));
+                }
+            }
+        }
+        let Some((_, o, steps)) = best else {
+            self.harm_allowed = false;
+            self.harm_ways_only = false;
+            return false;
+        };
+        if let Some(line) = o.trigger.as_ref().map(|t| t.line) {
+            self.legs_taken.insert((life, line));
+        }
+        self.log.push(format!(
+            "tic {}: nothing else to do but walls: a way on too much for her health, a leg at a time",
+            obs.tic
+        ));
+        self.start(obs, o, steps);
+        true
     }
 
     /// Take up the best objective there's a route to: of the nearest few as the crow flies, the

@@ -614,6 +614,40 @@ impl Explorer {
             if crate::debug::on().no_route {
                 self.log
                     .push(format!("  no route for '{}': {refusal:?}", obj.label));
+                // (and what each leg of it costs her: a way of several legs is refused whole)
+                for (i, leg) in route.legs.iter().enumerate() {
+                    let cost = self.route_damage(std::slice::from_ref(leg), &states, obs);
+                    self.log.push(format!(
+                        "    leg {i}: trigger {:?}, {:.0} long, {cost:.0} of her health",
+                        leg.trigger.map(|id| view.trigger(id).line),
+                        leg.path.cost
+                    ));
+                }
+            }
+            // A way of several legs, too much for her health as a whole: the switch its legs
+            // get her to with enough left is kept, to be gone for by itself if there's nothing
+            // else (`way_on_by_legs`). The furthest such: the first is often only the lift
+            // out of where she is, which comes back up behind her every time. And none she's
+            // gone for this way in this life already.
+            if matches!(refusal, Refusal::ShortOfHealth { .. }) && route.legs.len() > 1 {
+                let health = obs.health.unwrap_or(100.0);
+                let life = self.knowledge.lives;
+                let far = (1..route.legs.len())
+                    .rev()
+                    .filter_map(|k| {
+                        let t = view.trigger(route.legs[k - 1].trigger?);
+                        let cost =
+                            obs.through_armor(self.route_damage(&route.legs[..k], &states, obs));
+                        (health - cost >= HEALTH_MARGIN
+                            && !self.legs_taken.contains(&(life, t.line)))
+                        .then(|| t.clone())
+                    })
+                    .next();
+                if let Some(t) = far {
+                    if !self.short_legs.iter().any(|x| x.line == t.line) {
+                        self.short_legs.push(t);
+                    }
+                }
             }
             return None;
         }
