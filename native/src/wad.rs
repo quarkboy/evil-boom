@@ -65,12 +65,30 @@ impl Wad {
 
     pub fn open(path: &Path) -> Result<Self, String> {
         let data = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        Self::from_bytes(path, data)
+    }
+
+    /// A WAD's bytes read (`path`: what it's called by). A file that isn't one, or is cut
+    /// short or says more than it holds, is an error, never a panic or a room's worth of
+    /// memory asked for on a broken header's word.
+    pub fn from_bytes(path: &Path, data: Vec<u8>) -> Result<Self, String> {
         let bad = || format!("{} is not a WAD", path.display());
         if data.len() < 12 || !(data.starts_with(b"IWAD") || data.starts_with(b"PWAD")) {
             return Err(bad());
         }
         let count = usize::try_from(i32_at(&data, 4).ok_or_else(bad)?).map_err(|_| bad())?;
         let dir = usize::try_from(i32_at(&data, 8).ok_or_else(bad)?).map_err(|_| bad())?;
+        // (the directory it says it has is all there, before room is made for it)
+        let end = count
+            .checked_mul(16)
+            .and_then(|n| n.checked_add(dir))
+            .ok_or_else(bad)?;
+        if end > data.len() {
+            return Err(format!(
+                "{}: its directory ({count} lumps at {dir}) runs past its end",
+                path.display()
+            ));
+        }
         let mut lumps = Vec::with_capacity(count);
         for i in 0..count {
             let at = dir + 16 * i;
@@ -91,7 +109,7 @@ impl Wad {
     }
 
     pub fn read(&self, lump: &Lump) -> &[u8] {
-        let end = (lump.offset + lump.size).min(self.data.len());
+        let end = lump.offset.saturating_add(lump.size).min(self.data.len());
         &self.data[lump.offset.min(end)..end]
     }
 
@@ -140,9 +158,11 @@ impl Wad {
             .filter(|l| l.name == "TEXTURE1" || l.name == "TEXTURE2")
         {
             let data = self.read(lump);
+            // (no more than the lump has room to point at, whatever it says)
             let count = i32_at(data, 0)
                 .and_then(|c| usize::try_from(c).ok())
-                .unwrap_or(0);
+                .unwrap_or(0)
+                .min(data.len() / 4);
             for i in 0..count {
                 let Some(offset) = i32_at(data, 4 + 4 * i).and_then(|o| usize::try_from(o).ok())
                 else {
@@ -322,7 +342,7 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
     for w in texture_wads.iter().copied().chain(std::iter::once(wad)) {
         texture_heights.extend(w.texture_heights());
     }
-    Ok(MapData {
+    let map = MapData {
         name: map_name.to_uppercase(),
         things,
         vertexes,
@@ -334,5 +354,199 @@ pub fn load_map(wad: &Wad, map_name: &str, texture_wads: &[&Wad]) -> Result<MapD
         nodes,
         texture_heights,
         blockmap: blockmap(lump("BLOCKMAP")),
-    })
+    };
+    whole(&map)?;
+    Ok(map)
+}
+
+/// Everything in the map that points at something points at something there: a line's ends
+/// and sides, a side's sector, a seg's ends and line, a subsector's segs, a node's children.
+/// The rest of the program indexes by them without asking; a map that fails is refused here,
+/// in words.
+fn whole(m: &MapData) -> Result<(), String> {
+    let no = |what: String| Err(format!("{}: {what}: the map is broken", m.name));
+    for l in &m.linedefs {
+        if l.v1 >= m.vertexes.len() || l.v2 >= m.vertexes.len() {
+            return no(format!(
+                "line {} ends at a vertex that isn't there",
+                l.index
+            ));
+        }
+        for side in [l.front, l.back] {
+            if side != crate::map::NO_SIDEDEF && usize::from(side) >= m.sidedefs.len() {
+                return no(format!(
+                    "line {} has side {side}, which isn't there",
+                    l.index
+                ));
+            }
+        }
+    }
+    if let Some(i) = m.sidedefs.iter().position(|s| s.sector >= m.sectors.len()) {
+        return no(format!(
+            "side {i} is of sector {}, which isn't there",
+            m.sidedefs[i].sector
+        ));
+    }
+    for (i, g) in m.segs.iter().enumerate() {
+        if g.v1 >= m.vertexes.len() || g.v2 >= m.vertexes.len() || g.linedef >= m.linedefs.len() {
+            return no(format!("seg {i} is of a vertex or a line that isn't there"));
+        }
+    }
+    if let Some(i) = m
+        .subsectors
+        .iter()
+        .position(|s| s.first_seg + s.seg_count > m.segs.len())
+    {
+        return no(format!("subsector {i} has segs that aren't there"));
+    }
+    for (i, n) in m.nodes.iter().enumerate() {
+        for child in [n.front, n.back] {
+            let there = if child & 0x8000 != 0 {
+                usize::from(child & 0x7FFF) < m.subsectors.len()
+            } else {
+                usize::from(child) < m.nodes.len()
+            };
+            if !there {
+                return no(format!("node {i} has a child that isn't there"));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A WAD of these lumps (name, bytes), as bytes.
+    fn wad_bytes(lumps: &[(&str, Vec<u8>)]) -> Vec<u8> {
+        let mut data = b"PWAD".to_vec();
+        data.extend((lumps.len() as i32).to_le_bytes());
+        data.extend([0u8; 4]); // (the directory's place, set below)
+        let mut dir = Vec::new();
+        for (name, bytes) in lumps {
+            dir.extend((data.len() as i32).to_le_bytes());
+            dir.extend((bytes.len() as i32).to_le_bytes());
+            let mut n = name.as_bytes().to_vec();
+            n.resize(8, 0);
+            dir.extend(n);
+            data.extend(bytes);
+        }
+        let at = (data.len() as i32).to_le_bytes();
+        data[8..12].copy_from_slice(&at);
+        data.extend(dir);
+        data
+    }
+
+    fn u16s(v: &[u16]) -> Vec<u8> {
+        v.iter().flat_map(|x| x.to_le_bytes()).collect()
+    }
+
+    /// A one-room map: a square of four lines, one sector. `vertex`: the first line's second
+    /// end, to point it somewhere that isn't there.
+    fn square(vertex: u16, sector: u16) -> Vec<(&'static str, Vec<u8>)> {
+        let mut sides = Vec::new();
+        for _ in 0..4 {
+            sides.extend([0u8; 4]);
+            for _ in 0..3 {
+                sides.extend(b"-\0\0\0\0\0\0\0");
+            }
+            sides.extend(sector.to_le_bytes());
+        }
+        let mut sectors = u16s(&[0, 128]);
+        sectors.extend(b"FLOOR4_8CEIL3_5\0");
+        sectors.extend(u16s(&[160, 0, 0]));
+        let line = |a: u16, b: u16, side: u16| u16s(&[a, b, 1, 0, 0, side, 0xFFFF]);
+        vec![
+            ("MAP01", Vec::new()),
+            ("THINGS", u16s(&[32, 32, 0, 1, 7])),
+            (
+                "LINEDEFS",
+                [
+                    line(0, vertex, 0),
+                    line(1, 2, 1),
+                    line(2, 3, 2),
+                    line(3, 0, 3),
+                ]
+                .concat(),
+            ),
+            ("SIDEDEFS", sides),
+            ("VERTEXES", u16s(&[0, 0, 0, 64, 64, 64, 64, 0])),
+            ("SECTORS", sectors),
+        ]
+    }
+
+    fn opened(data: Vec<u8>) -> Result<Wad, String> {
+        Wad::from_bytes(Path::new("test.wad"), data)
+    }
+
+    #[test]
+    fn a_small_whole_map_reads() {
+        let w = opened(wad_bytes(&square(1, 0))).expect("a WAD");
+        let m = load_map(&w, "MAP01", &[]).expect("a map");
+        assert_eq!(
+            (m.linedefs.len(), m.sectors.len(), m.things.len()),
+            (4, 1, 1)
+        );
+        assert_eq!(m.sectors[0].floor_tex, "FLOOR4_8");
+    }
+
+    #[test]
+    fn what_isnt_a_wad_is_refused() {
+        assert!(opened(Vec::new()).is_err());
+        assert!(opened(b"IWAD".to_vec()).is_err());
+        assert!(opened(b"NOPE\0\0\0\0\0\0\0\0".to_vec()).is_err());
+    }
+
+    #[test]
+    fn a_directory_past_the_end_is_refused_before_room_is_made_for_it() {
+        // (two thousand million lumps, it says: once that was room asked for at once)
+        let mut data = b"PWAD".to_vec();
+        data.extend(i32::MAX.to_le_bytes());
+        data.extend(12i32.to_le_bytes());
+        assert!(opened(data)
+            .err()
+            .is_some_and(|e| e.contains("runs past its end")));
+        // (cut short: the directory's last entries gone)
+        let mut cut = wad_bytes(&square(1, 0));
+        cut.truncate(cut.len() - 20);
+        assert!(opened(cut).is_err());
+        // (a count or a place below nothing)
+        let mut data = b"PWAD".to_vec();
+        data.extend((-1i32).to_le_bytes());
+        data.extend(12i32.to_le_bytes());
+        assert!(opened(data).is_err());
+    }
+
+    #[test]
+    fn a_lump_past_the_end_reads_as_what_there_is() {
+        let mut data = wad_bytes(&[("THING", vec![1, 2, 3, 4])]);
+        // (the one lump's size, in its directory entry: far more than the file)
+        let dir = data.len() - 16;
+        data[dir + 4..dir + 8].copy_from_slice(&i32::MAX.to_le_bytes());
+        let w = opened(data).expect("a WAD");
+        assert!(w.read(&w.lumps[0]).len() < 64);
+    }
+
+    #[test]
+    fn a_map_pointing_at_what_isnt_there_is_refused() {
+        let w = opened(wad_bytes(&square(9, 0))).expect("a WAD");
+        let e = load_map(&w, "MAP01", &[]).err().unwrap_or_default();
+        assert!(
+            e.contains("line 0 ends at a vertex that isn't there"),
+            "{e}"
+        );
+        let w = opened(wad_bytes(&square(1, 5))).expect("a WAD");
+        let e = load_map(&w, "MAP01", &[]).err().unwrap_or_default();
+        assert!(e.contains("of sector 5, which isn't there"), "{e}");
+    }
+
+    #[test]
+    fn a_texture_list_that_says_too_much_is_read_to_its_end() {
+        // (a count of two thousand million in eight bytes: read in no time, nothing found)
+        let mut lump = i32::MAX.to_le_bytes().to_vec();
+        lump.extend(0i32.to_le_bytes());
+        let w = opened(wad_bytes(&[("TEXTURE1", lump)])).expect("a WAD");
+        assert!(w.texture_heights().is_empty());
+    }
 }
