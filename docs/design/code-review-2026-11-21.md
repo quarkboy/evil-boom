@@ -59,6 +59,28 @@ the order of work changed.
   checks the pinned commit and refuses a tree changed by something else; `build.rs` reads
   `fix` from its own section. Left: `shellcheck` (not installed where this was done, so
   what it would flag is unknown), `-Wall -Wextra` on the bridge, Freedoom in CI.
+- **Phase 2.2, as far as it's gone** (2026-11-21): the check it waited on is
+  `tools/eachway.sh` (the same 24 runs by `run-map` and by the watcher with no window,
+  compared). Its first run found two real faults, both mended: the watcher's map listed her
+  options afresh each second, which changed what she did next (a watched run wasn't the run
+  measured), and a level's first run in a fresh folder played on jumps a last bit off from
+  the ones every later run read back. The watcher's three loops already share a tic
+  (`Watch::tic`); they now share a death too (`Watch::died`: the watcher with no window and
+  the recorder, which had ignored `--lives`). The sweep and the watcher share `run.rs` (the
+  options, the setting up, the 100% sums, a secret found).
+  **Left, and why:** one loop under both. On one life the two play the same tics already,
+  and the check holds them to it. Where they differ they differ on purpose: the sweep begins
+  the level again when she's stranded and stops at a stall, which a test wants; the watcher
+  does neither, because there the level again is Evil's to ask for. Folding them into one
+  means a `Session` that is the watcher's `Watch` without its window, its stream and its
+  console, which is also the splitting of `viewer.rs` (Phase 3.4), with the life rules as a
+  setting. It touches everything streamed, and what's streamed (the window, the stream's
+  column, the console, Neuro) can't be seen or tried where this was done. For the
+  maintainer to do, or to watch being done.
+- **Phase 2.3** (2026-11-21): unknown options are refused by every command (Phase 1). The
+  nine parsers weren't rewritten over `lexopt`: with that fault gone it's churn for its own
+  sake. `score.rs` and `tools/score/` are still there: removing them is the maintainer's
+  word to give.
 - **Phase 2.1** (2026-11-21): `domain.rs` holds a tic's observation and controls, the
   things and sounds in it, the game's constants of time and movement, her turn limits and
   the risk share; `bestiary.rs` is a module of its own, not the fight's (the engine and the

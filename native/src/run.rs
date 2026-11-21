@@ -284,3 +284,17 @@ pub fn top_up_bullets(game: &crate::dsda::Dsda, ob: &Observation) {
         ready: None,
     });
 }
+
+/// The game's tally of secrets is up on `seen` (the count when last looked): she's just found
+/// the one where she stands, and is told so, as the game tells a player. The count now, to be
+/// kept for the next look. Every loop that plays her calls this each tic, after observing.
+pub fn secret_found(e: &Engine, agent: &mut Agent, ob: &Observation, seen: i32) -> i32 {
+    let found = e.tally()[2].0;
+    if found > seen {
+        if let Some(p) = agent.x().nav.poly_at(ob.pos()) {
+            let s = agent.x().nav.sector_of_poly(p);
+            agent.x_mut().found_secret(s, ob.tic);
+        }
+    }
+    found
+}

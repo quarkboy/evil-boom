@@ -2304,14 +2304,8 @@ impl Watch {
             st.message(m, obs.tic);
         }
         // (a secret found told her, as a run tells her: watched, it plays as it did)
-        let found = self.engine.tally()[2].0;
-        if found > self.secrets_seen {
-            if let Some(p) = self.agent.x().nav.poly_at(obs.pos()) {
-                let s = self.agent.x().nav.sector_of_poly(p);
-                self.agent.x_mut().found_secret(s, obs.tic);
-            }
-        }
-        self.secrets_seen = found;
+        self.secrets_seen =
+            crate::run::secret_found(&self.engine, &mut self.agent, &obs, self.secrets_seen);
         if self.frame_per_tic {
             self.frame = self.engine.frame();
         }

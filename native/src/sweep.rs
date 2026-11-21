@@ -585,14 +585,7 @@ pub fn run_map_in(
         if o.endless_bullets && e.tic % 35 == 0 {
             top_up_bullets(&e.game, &ob);
         }
-        let found = e.tally()[2].0;
-        if found > secrets_seen {
-            if let Some(p) = agent.x().nav.poly_at(ob.pos()) {
-                let s = agent.x().nav.sector_of_poly(p);
-                agent.x_mut().found_secret(s, ob.tic);
-            }
-        }
-        secrets_seen = found;
+        secrets_seen = crate::run::secret_found(&e, &mut agent, &ob, secrets_seen);
         let t2 = Instant::now();
         let log_n = agent.x().log.len();
         let ctl = agent.act(&ob, c.as_ref());
