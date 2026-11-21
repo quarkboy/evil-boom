@@ -150,6 +150,21 @@ static double degrees(angle_t a) { return a * (360.0 / 4294967296.0); }
  * (evil_grab_sound) instead of played, as DSDA's video dump has it; -evilsoundfont FILE, the
  * music played by FluidSynth with that SoundFont (else by the OPL synth, a Sound Blaster's).
  * Returns 0 when ready. */
+/* What this library and the program built against it must agree on: a number raised whenever
+ * a call's arguments or one of the structs above changes its meaning, and the structs' sizes
+ * as this compiler laid them out. The program checks all four before it calls anything else
+ * (Dsda::load): one built against another evil_api.c would read or write past what's here. */
+#define EVIL_ABI 1
+
+EVIL_API int evil_abi(int *out)
+{
+  out[0] = EVIL_ABI;
+  out[1] = (int)sizeof(evil_mobj);
+  out[2] = (int)sizeof(evil_player);
+  out[3] = (int)sizeof(evil_status);
+  return EVIL_ABI;
+}
+
 EVIL_API int evil_init(int argc, char **argv)
 {
   int i, kept = 0;

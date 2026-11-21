@@ -121,6 +121,14 @@ const BT_USE: i32 = 2;
 const BT_CHANGE: i32 = 4;
 const BT_WEAPONSHIFT: i32 = 3;
 
+/// What `evil_api.c` calls itself (`EVIL_ABI` there): raised, there and here together, whenever
+/// a call's arguments or one of the structs above changes its meaning.
+const EVIL_ABI: c_int = 1;
+
+/// (said when the library isn't the one this program was built against)
+const REBUILD: &str = "the engine library doesn't match this program ({}): build them from the \
+                       same source (tools/build-engine.sh, then cargo build)";
+
 /// Initial capacity for bulk engine queries; grown when the level needs more.
 const INITIAL_QUERY_CAPACITY: usize = 1024;
 
@@ -347,6 +355,35 @@ impl Dsda {
                 .map(|s| *s)
                 .map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
         };
+        // (the library and this program agree on the calls and the structs, or nothing's called)
+        {
+            // SAFETY: the symbol, if the library has it, is `int evil_abi(int *)`, which
+            // writes four ints.
+            let abi_fn = sym(b"evil_abi").map(|p| unsafe {
+                std::mem::transmute::<*const (), unsafe extern "C" fn(*mut c_int) -> c_int>(p)
+            });
+            let Ok(abi_fn) = abi_fn else {
+                return Err(REBUILD.replace("{}", "it's from before the two were checked"));
+            };
+            let mut theirs = [0 as c_int; 4];
+            // SAFETY: room for the four ints it writes.
+            unsafe { abi_fn(theirs.as_mut_ptr()) };
+            let ours = [
+                EVIL_ABI,
+                std::mem::size_of::<Mobj>() as c_int,
+                std::mem::size_of::<PlayerState>() as c_int,
+                std::mem::size_of::<Status>() as c_int,
+            ];
+            if theirs != ours {
+                return Err(REBUILD.replace(
+                    "{}",
+                    &format!(
+                        "its version and structs are {theirs:?}, this program's {ours:?} \
+                         (version; a thing's, the player's, the status's bytes)"
+                    ),
+                ));
+            }
+        }
         // SAFETY: each symbol is the function of that name in evil_api.c, with this signature.
         let (
             init_fn,
