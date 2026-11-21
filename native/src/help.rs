@@ -126,6 +126,7 @@ The window:
                           death then is undone, 5 s back, and it fights for her (30 s of it,
                           60 after N deaths more; got back as she plays, full again after a
                           death that stands; 8 workers unless told)
+                          (N 0: hers from the start, the 30 s and no more for dying)
   --ultra-back S          how far back a death is undone to, in seconds (5 unless told)
   --ultra-speed X         how fast the game goes while its search has her, of the window's
                           speed (0.5 unless told: half; 0.75 looks better where the looks fit)

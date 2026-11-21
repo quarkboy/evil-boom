@@ -1351,6 +1351,7 @@ fn level(
     watch.hold = hold;
     watch.endless_bullets = o.endless_bullets;
     watch.ultra_after = o.ultra_after;
+    watch.ultra_charge = watch.ultra_cap();
     watch.ultra_back = (o.ultra_back * TICRATE) as i64;
     // (hers by dying, and no workers asked for: eight, or each look would stop the picture)
     watch.ultra_workers = if o.ultra_after.is_some() && o.workers == 0 {
@@ -2119,10 +2120,16 @@ impl Watch {
     /// The most she can have of it, in tics: `ultra::LIVE_CAP` for every `--ultra-after` deaths
     /// on the level, up to `ultra::LIVE_TIERS` times (none before the first of them).
     fn ultra_cap(&self) -> f64 {
-        self.ultra_after.filter(|&n| n > 0).map_or(0.0, |n| {
-            crate::ultra::LIVE_CAP
-                * f64::from((self.ultra_deaths / n).min(crate::ultra::LIVE_TIERS))
-        })
+        // (`--ultra-after 0`: hers from the level's first tic, the one measure of it and no
+        // more for dying)
+        match self.ultra_after {
+            None => 0.0,
+            Some(0) => crate::ultra::LIVE_CAP,
+            Some(n) => {
+                crate::ultra::LIVE_CAP
+                    * f64::from((self.ultra_deaths / n).min(crate::ultra::LIVE_TIERS))
+            }
+        }
     }
 
     /// (`U`) The ultra instinct on from here, or dropped.
