@@ -49,6 +49,7 @@ impl Link {
             wad: wad.to_string(),
             map: map.to_uppercase(),
             maps,
+            key: std::env::var(super::KEY_VAR).unwrap_or_default(),
         });
         Ok(link)
     }

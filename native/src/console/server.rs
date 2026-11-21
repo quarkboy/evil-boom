@@ -421,6 +421,8 @@ struct GameProc {
 struct Shared {
     settings: Settings,
     token: String,
+    /// what the game now running was given to say back when it connects (new each start)
+    game_key: String,
     neuro_urls: Vec<String>,
     saved_path: PathBuf,
     /// where the game connects back to (127.0.0.1, a port of the system's choosing)
@@ -523,6 +525,13 @@ fn lock(hub: &Hub) -> MutexGuard<'_, Shared> {
     hub.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// the requests answered at once
+const WORKERS: usize = 8;
+
+/// One stop or restart of the game at a time: a second asked for while the first is going on
+/// is told so, not set going beside it.
+static CHANGING: Mutex<()> = Mutex::new(());
+
 /// Serve the console on `bind` (host:port) till the program's stopped; `new_token`: the old token
 /// no longer works (one that's got out).
 pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
@@ -546,6 +555,7 @@ pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
     let hub: Hub = Arc::new(Mutex::new(Shared {
         settings: saved.settings,
         token: token.clone(),
+        game_key: String::new(),
         neuro_urls: saved.neuro_urls,
         saved_path,
         control_addr,
@@ -590,8 +600,21 @@ pub fn serve(bind: &str, new_token_wanted: bool) -> Result<(), String> {
         println!("  (under WSL2 the LAN reaches it only with mirrored networking, or a port proxy on Windows)");
     }
     lock(&hub).push(format!("[console] serving on {bind}"));
-    for req in server.incoming_requests() {
-        handle(&hub, req);
+    // (a few at once: one caller slow to send or to read holds up one of them, not the page
+    // for everyone)
+    let server = Arc::new(server);
+    let workers: Vec<_> = (0..WORKERS)
+        .map(|_| {
+            let (server, hub) = (Arc::clone(&server), Arc::clone(&hub));
+            thread::spawn(move || {
+                while let Ok(req) = server.recv() {
+                    handle(&hub, req);
+                }
+            })
+        })
+        .collect();
+    for w in workers {
+        let _ = w.join();
     }
     Ok(())
 }
@@ -610,6 +633,15 @@ fn session_log() -> Option<std::fs::File> {
 /// randomness), as hex.
 fn new_token() -> String {
     use std::hash::{BuildHasher, Hasher};
+    // (the system's own random bytes where there's a file of them; else, and on Windows, the
+    // hasher's keys below, which are from the system's randomness too)
+    let mut bytes = [0u8; 16];
+    if std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut bytes))
+        .is_ok()
+    {
+        return bytes.iter().map(|b| format!("{b:02x}")).collect();
+    }
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
@@ -660,8 +692,11 @@ fn read_game(stream: TcpStream, hub: &Hub) {
                 wad,
                 map,
                 maps,
+                key,
             } => {
-                if s.game.pid != Some(pid) {
+                // (its process number is anyone's to read off the system; the key was handed
+                // to the game this console started and to nobody else)
+                if s.game.pid != Some(pid) || s.game_key.is_empty() || !same(&key, &s.game_key) {
                     s.push(format!(
                         "[console] a game not started here tried to connect (pid {pid}): refused"
                     ));
@@ -882,8 +917,10 @@ fn start_at(hub: &Hub, map: Option<String>) -> Result<(), String> {
     settings.check()?;
     let args = settings.args(&s.control_addr);
     let exe = s.exe.clone();
+    s.game_key = new_token();
     let mut child = Process::new(&exe)
         .args(&args)
+        .env(super::KEY_VAR, &s.game_key)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -1095,12 +1132,20 @@ fn handle(hub: &Hub, mut req: Request) {
         (Method::Post, "/api/game/start") => done(start(hub)),
         (Method::Post, "/api/game/stop") => {
             let hub = Arc::clone(hub);
-            thread::spawn(move || stop(&hub));
+            thread::spawn(move || {
+                // (after a restart that's going on: the game it starts is the one stopped)
+                let _one = CHANGING.lock().unwrap_or_else(PoisonError::into_inner);
+                stop(&hub);
+            });
             done(Ok(()))
         }
         (Method::Post, "/api/game/restart") => {
             let hub = Arc::clone(hub);
             thread::spawn(move || {
+                let Ok(_one) = CHANGING.try_lock() else {
+                    lock(&hub).push("[console] restarting already: asked once is enough".into());
+                    return;
+                };
                 stop(&hub);
                 if let Err(e) = start(&hub) {
                     lock(&hub).push(format!("[console] not started: {e}"));

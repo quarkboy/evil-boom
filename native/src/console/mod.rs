@@ -131,6 +131,10 @@ pub enum Command {
 }
 
 /// What the game tells the console.
+/// The environment variable the console hands its game a key in, new each start, for the game
+/// to say back in its `Hello`.
+pub const KEY_VAR: &str = "EVIL_CONSOLE_KEY";
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FromGame {
@@ -144,6 +148,10 @@ pub enum FromGame {
         /// the WAD's levels, in its order
         #[serde(default)]
         maps: Vec<String>,
+        /// what the console gave the game it started, to say back (`KEY_VAR`): a game that
+        /// can't isn't the one it started
+        #[serde(default)]
+        key: String,
     },
     /// how things stand, a few times a second
     State(Box<GameState>),
