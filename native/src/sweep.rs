@@ -843,6 +843,17 @@ pub fn run_map_in(
         c = Some(ctl);
         obs = Some(ob);
     }
+    if let Some(path) = &o.demo {
+        // (the demo: every tic of the level from its first, as the game recorded them)
+        let tics = e.record_end(path)?;
+        println!(
+            "DEMO {} ({tics} tics, {:.0}s): dsda-doom -iwad {} -playdemo {}",
+            path.with_extension("lmp").display(),
+            f64::from(tics) / TICRATE,
+            iwad.display(),
+            path.with_extension("lmp").display()
+        );
+    }
     let (exited, died, game_s) = (
         e.exited(),
         e.finished() && e.dead(),

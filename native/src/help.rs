@@ -372,6 +372,9 @@ What she knows:
   --peek               every switch and door known from the start
   --keys               her movement as keys: only the pushes a keyboard gives (forward, back,
                        left, right, run), pressed no faster than a hand presses
+  --demo FILE          (run-map) the run recorded as a demo, FILE.lmp, for DSDA-Doom to play
+                       back (dsda-doom -iwad ... -playdemo FILE): one life, mortal, nothing
+                       carried in; with --keys it's a demo a hand could have played
 
 Testing:
   --endless-bullets    for testing: the chaingun hers from the start, its bullets topped up

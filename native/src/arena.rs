@@ -212,6 +212,7 @@ pub fn prepare(
             resolution: None,
             soundfont: None,
             music_wad: None,
+            record: false,
         },
     )?;
     e.start();

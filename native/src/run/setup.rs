@@ -60,6 +60,22 @@ pub fn setup(
     drawn: bool,
     engine: Option<Engine>,
 ) -> Result<Setup, String> {
+    if o.demo.is_some() {
+        // (a demo is the game played and nothing else done to it: what follows would each
+        // make a recording that plays back as another game)
+        let not = [
+            (o.lives != 1, "more than one life (--lives 1)"),
+            (!o.mortal || o.charmed, "god mode or --charmed (--mortal)"),
+            (o.carry.is_some(), "--carry"),
+            (o.endless_bullets, "--endless-bullets"),
+            (o.known, "--known"),
+            (o.from.is_some(), "--from"),
+            (engine.is_some(), "a level after another in one game"),
+        ];
+        if let Some((_, what)) = not.iter().find(|(is, _)| *is) {
+            return Err(format!("--demo: not with {what}"));
+        }
+    }
     let iwad = resolve_wad(wad);
     let w = Wad::open(&iwad)?;
     let map_name = map_name.to_uppercase();
@@ -85,6 +101,7 @@ pub fn setup(
                 resolution: None,
                 soundfont: None,
                 music_wad: None,
+                record: o.demo.is_some(),
             },
         )?,
     };

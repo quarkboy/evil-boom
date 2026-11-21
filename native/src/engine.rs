@@ -47,6 +47,9 @@ pub struct Options {
     pub soundfont: Option<PathBuf>,
     /// the songs recorded (crate::music's WAD of them); the rest played as MIDI
     pub music_wad: Option<PathBuf>,
+    /// the run recorded as a demo (`Engine::record_end` writes it): the level's first start
+    /// is the recording's, and there's no second
+    pub record: bool,
 }
 
 impl Default for Options {
@@ -62,8 +65,17 @@ impl Default for Options {
             resolution: None,
             soundfont: None,
             music_wad: None,
+            record: false,
         }
     }
+}
+
+/// (`Engine::record`)
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Recording {
+    No,
+    Wanted,
+    On,
 }
 
 pub struct Engine {
@@ -75,6 +87,8 @@ pub struct Engine {
     skill: i32,
     nomonsters: bool,
     objects: bool,
+    /// a demo's being recorded, or is to be from the level's start (`Options::record`)
+    record: Recording,
     pub tic: i64,
     god: bool,
     suits: i32,
@@ -165,6 +179,11 @@ impl Engine {
             // (w: windowed, the game's own window that nobody sees)
             args.extend(["-geom".to_string(), format!("{w}x{h}w")]);
         }
+        if o.record {
+            // (the game won't record without being told which game it's playing as; this is
+            // the one it plays as anyway, untold)
+            args.extend(["-complevel".to_string(), "21".to_string()]);
+        }
         args.push("-warp".into());
         args.extend(warp);
         if o.nomonsters {
@@ -189,6 +208,11 @@ impl Engine {
             skill: o.skill,
             nomonsters: o.nomonsters,
             objects: o.objects,
+            record: if o.record {
+                Recording::Wanted
+            } else {
+                Recording::No
+            },
             tic: 0,
             god: false,
             suits: 0,
@@ -265,8 +289,21 @@ impl Engine {
     }
 
     fn new_game(&mut self) {
-        self.game
-            .new_game(self.skill, self.episode, self.map, self.nomonsters);
+        match self.record {
+            // (the level begun and its recording with it; a second start isn't part of a demo)
+            Recording::Wanted
+                if self
+                    .game
+                    .record(self.skill, self.episode, self.map, self.nomonsters) =>
+            {
+                self.record = Recording::On;
+            }
+            _ => {
+                self.record = Recording::No;
+                self.game
+                    .new_game(self.skill, self.episode, self.map, self.nomonsters);
+            }
+        }
         self.suits = 0;
         self.ironfeet = 0;
         self.message_tic = -1;
@@ -285,6 +322,22 @@ impl Engine {
         if self.god {
             self.game.god(true);
         }
+    }
+
+    /// The demo being recorded, ended and written to `path` (see `Dsda::record_end`): the tics
+    /// in it. An error if none was (the library hasn't the call, or the level was begun again).
+    pub fn record_end(&mut self, path: &Path) -> Result<i32, String> {
+        if self.record != Recording::On {
+            return Err(
+                "no demo was being recorded (an engine library from before it: \
+                        tools/build-engine.sh; or the level was begun a second time)"
+                    .into(),
+            );
+        }
+        self.record = Recording::No;
+        self.game
+            .record_end(path)
+            .ok_or_else(|| "the game had no recording to end".to_string())
     }
 
     /// Monsters in the level or not, from the next start of it (a look round an empty level

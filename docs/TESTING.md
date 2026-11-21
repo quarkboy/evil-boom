@@ -63,6 +63,11 @@ window, on one life, and says which come out differently: the two loops play the
 none should. For a change to either loop or to what they share (`run.rs`). `tools/parity.sh`
 plays only the first.
 
+`tools/demos.sh` records nine runs as demos (`run-map --demo`), plays each back with the
+`dsda-doom` program itself, and compares the game's own tally with what the run reported: a
+run of hers is a demo anyone's DSDA-Doom plays, and stays one. For a change to the engine
+boundary, to how a tic's command is made, or to how a level is begun.
+
 `tools/dev/cycles.py` says whether any two top-level modules have come to depend on each
 other (none do; CI runs it): a module moved or a `use` added goes through it.
 

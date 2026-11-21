@@ -293,6 +293,9 @@ pub struct Dsda {
     frame_put_fn: Option<unsafe extern "C" fn(c_int, *const u8, c_int) -> c_int>,
     /// `evil_restore_quick`: a game put back the long way every time, or the quick way
     quick_fn: Option<unsafe extern "C" fn(c_int)>,
+    /// `evil_record` and `evil_record_end`: a run recorded as a demo
+    record_fn: Option<unsafe extern "C" fn(c_int, c_int, c_int, c_int) -> c_int>,
+    record_end_fn: Option<unsafe extern "C" fn(*const c_char) -> c_int>,
     /// the nearest monster she has a line of sight to (`evil_nearest_seen`)
     seen_fn: Option<unsafe extern "C" fn(*mut f64) -> c_int>,
     clear_fn: Option<ClearFn>,
@@ -568,6 +571,19 @@ impl Dsda {
             frame_get_fn,
             frame_put_fn,
             // SAFETY: the symbol, if the library has it, is `void evil_restore_quick(int)`.
+            // SAFETY: the symbols, if the library has them, are `int evil_record(int, int,
+            // int, int)` and `int evil_record_end(const char *)`.
+            record_fn: unsafe {
+                get::<unsafe extern "C" fn(c_int, c_int, c_int, c_int) -> c_int>(
+                    &lib,
+                    b"evil_record",
+                )
+            }
+            .ok(),
+            record_end_fn: unsafe {
+                get::<unsafe extern "C" fn(*const c_char) -> c_int>(&lib, b"evil_record_end")
+            }
+            .ok(),
             quick_fn: unsafe { get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_restore_quick") }
                 .ok(),
             seen_fn,
@@ -920,6 +936,27 @@ impl Dsda {
         };
         // SAFETY: the game reads `len` bytes from a buffer of that many, and copies them.
         unsafe { f(slot, bytes.as_ptr(), len) == 0 }
+    }
+
+    /// A new game on the map, as `new_game`, begun at once and recorded as a demo from its
+    /// first tic (the game's own recording: `evil_record`). False: the library hasn't the
+    /// call, or one's being recorded already.
+    pub fn record(&self, skill: i32, episode: i32, map: i32, no_monsters: bool) -> bool {
+        let Some(f) = self.record_fn else {
+            return false;
+        };
+        // SAFETY: plain values into the game; see `load`.
+        unsafe { f(skill, episode, map, c_int::from(no_monsters)) == 0 }
+    }
+
+    /// The recording ended and written to `path` (.lmp; a file there isn't written over: the
+    /// game numbers a new one). The tics recorded; None: nothing was being recorded.
+    pub fn record_end(&self, path: &Path) -> Option<i32> {
+        let f = self.record_end_fn?;
+        let name = CString::new(path.to_string_lossy().as_bytes()).ok()?;
+        // SAFETY: a nul-terminated string the call only reads; see `load`.
+        let tics = unsafe { f(name.as_ptr()) };
+        (tics >= 0).then_some(tics)
     }
 
     /// Games put back the quick way when they can be (as it starts), or the long way every time

@@ -593,6 +593,7 @@ fn first_watch(
             resolution: o.render,
             soundfont: o.soundfont.clone(),
             music_wad,
+            record: false,
         },
     )?;
     engine.carry.clone_from(&o.carry);

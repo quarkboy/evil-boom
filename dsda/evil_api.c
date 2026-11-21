@@ -238,6 +238,58 @@ EVIL_API void evil_new_game(int skill, int episode, int map, int no_monsters)
   G_DeferedInitNew(skill - 1, episode, map);
 }
 
+/* --- A run recorded as a demo --------------------------------------------------------------
+ *
+ * The game's own recording (what -record does), begun as the level begins and ended when the
+ * caller says: every tic's command goes into it as G_Ticker plays it, so the file is a demo
+ * like any other, to be played back with -playdemo by a DSDA-Doom that never heard of Evil.
+ * For that to be the same game: nothing may be done to the level but through evil_tic (no
+ * giving, warping, god mode, saved games put back), and the level begun here, at once, not on
+ * the next tic as evil_new_game begins it: a recording starts with the level's first tic.
+ * The game must have been started with -complevel and -skill (it refuses to record without). */
+#include "dsda/demo.h"
+
+void G_DoNewGame(void);        /* (g_game.c) */
+
+/* A new game on the map, as evil_new_game, begun now and recorded from its first tic.
+ * Returns 0; -1: one's being recorded already. */
+EVIL_API int evil_record(int skill, int episode, int map, int no_monsters)
+{
+  if (demorecording)
+    return -1;
+  nomonsters = clnomonsters = no_monsters != 0;
+  dsda_UpdateFlag(dsda_arg_nomonsters, no_monsters != 0);
+  dsda_UpdateIntConfig(dsda_config_no_monsters, no_monsters != 0, false);
+  exited = secret_exit = 0;
+  if (evil_fixed_seed)
+    rngseed = 0;
+  evil_message = NULL;
+  evil_message_tic = -1;
+  evil_held = 0;
+  dsda_InitDemoRecording();
+  /* (the level set up now: what the next tic's G_Ticker would have done for ga_newgame) */
+  G_DeferedInitNew(skill - 1, episode, map);
+  /* (which also begins the recording, seeing one's wanted: the header written with the
+   * level, the skill, the options and the seed as they are this moment) */
+  G_DoNewGame();
+  return 0;
+}
+
+/* The recording ended and written to `name` (its extension put aside for .lmp; a file there
+ * already isn't written over: name-00002.lmp and so on, as the game names them). Returns the
+ * tics recorded, or -1: nothing was being recorded. */
+EVIL_API int evil_record_end(const char *name)
+{
+  int tics;
+  if (!demorecording)
+    return -1;
+  tics = gametic - true_basetic;
+  dsda_ExportDemo(name);
+  /* (its buffer is the game's own to keep: one recording a process) */
+  demorecording = false;
+  return tics;
+}
+
 /* Presentation on or off (the stream console's game): see evil_presenting. With it on, a
  * melt holds the game: the caller steps it (evil_wipe_tic) instead of the game while
  * evil_screen says one's under way. */

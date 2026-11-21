@@ -61,6 +61,8 @@ These work with `watch`, `run-map`, `sweep`, `episode`, `score` and the rest:
 | `--mortal` | she can die (otherwise she can't be killed) |
 | `--lives N` | lives (unlimited unless given) |
 | `--seed N\|random` | the game's random numbers (0 unless given; real play uses `random`) |
+| `--keys` | her movement by the keys a keyboard has and nothing else (forward, back, left, right, run), pressed no faster than a hand presses; her turning is the mouse's |
+| `--demo FILE` | (`run-map`) the run recorded as a demo, `FILE.lmp`, that DSDA-Doom plays back: `dsda-doom -iwad DOOM.WAD -playdemo FILE`. One life, mortal, nothing carried in. With `--keys`, a demo a hand could have played |
 | `--max-seconds S` | give up after S game seconds, all lives together (3600) |
 | `--expert` | every item, then out |
 | `--secrets` | out only with every secret found |

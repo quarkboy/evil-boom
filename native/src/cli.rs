@@ -104,6 +104,7 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             }
             "--endless-bullets" => o.endless_bullets = true,
             "--keys" => o.keys = true,
+            "--demo" => o.demo = Some(std::path::PathBuf::from(value("--demo")?)),
             "--complete" => o.complete = true,
             "--stall-out" => o.stall_out = true,
             "--decisions" => o.decisions = true,
@@ -142,6 +143,9 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--carry" => o.carry = Some(parse_carry(&value("--carry")?)?),
             _ => rest.push(a.clone()),
         }
+    }
+    if o.demo.is_some() && !o.lives_given {
+        o.lives = 1; // (a demo is one life: the level begun again isn't in it)
     }
     if o.complete {
         // (all of it: the items run and the secrets run together, with the monsters in)

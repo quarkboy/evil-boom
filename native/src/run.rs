@@ -38,6 +38,9 @@ pub struct RunOptions {
     /// for testing with the want of ammo taken out of it: the chaingun in her hands from the
     /// start and its bullets topped up every second. What she'd do with rounds for ever, not
     /// what she does.
+    /// the run recorded as a demo, written here when it ends (`--demo FILE`): one life, and
+    /// nothing done to the game but play it
+    pub demo: Option<std::path::PathBuf>,
     pub endless_bullets: bool,
     /// her movement as keys: only the pushes a keyboard gives, pressed no faster than a
     /// hand presses (`motor::keys`)
@@ -123,6 +126,7 @@ impl Default for RunOptions {
             max_seconds: 3600.0,
             mortal: false,
             charmed: false,
+            demo: None,
             endless_bullets: false,
             keys: false,
             lives: i32::MAX,
