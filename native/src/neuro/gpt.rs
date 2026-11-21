@@ -215,8 +215,18 @@ fn run(listener: &TcpListener, config: &Config) -> Result<(), String> {
         log_path.display()
     ));
     for stream in listener.incoming() {
-        let stream = stream.map_err(|e| e.to_string())?;
-        let mut ws = tungstenite::accept(stream).map_err(|e| e.to_string())?;
+        // (a connection that fails, or isn't a WebSocket's (a port probe, a browser): said, and
+        // the next waited for; it used to end the stand-in)
+        let ws = stream
+            .map_err(|e| e.to_string())
+            .and_then(|s| tungstenite::accept(s).map_err(|e| e.to_string()));
+        let mut ws = match ws {
+            Ok(ws) => ws,
+            Err(e) => {
+                say(format!("a connection that wasn't a game's: {e}"));
+                continue;
+            }
+        };
         ws.get_ref()
             .set_read_timeout(Some(Duration::from_millis(20)))
             .map_err(|e| e.to_string())?;

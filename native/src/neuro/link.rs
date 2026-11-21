@@ -81,9 +81,10 @@ fn run(url: &str, out: &Receiver<Value>, incoming: &Sender<Incoming>) {
         match connect(url) {
             Ok(mut ws) => {
                 let hello = json!({ "command": "startup", "game": GAME });
-                if ws.send(Message::text(hello.to_string())).is_ok()
-                    && incoming.send(Incoming::Connected).is_ok()
-                {
+                if ws.send(Message::text(hello.to_string())).is_ok() {
+                    if incoming.send(Incoming::Connected).is_err() {
+                        return; // (the game's gone: not connecting again for nobody)
+                    }
                     let why = serve(&mut ws, out, incoming);
                     if incoming.send(Incoming::Lost(why)).is_err() {
                         return; // (the game's gone)
