@@ -1814,7 +1814,7 @@ pub fn snapshot_to(
     let mut watch = Watch::new(w, m, map_name, engine, agent, focus, 0);
     let obs = watch.engine.observe();
     watch.frame = watch.engine.frame();
-    watch.options = watch.agent.objectives(&obs);
+    watch.options = watch.agent.objectives();
     watch.options_tic = obs.tic;
     watch.obs = Some(obs);
     let mut canvas = Canvas {
@@ -2440,7 +2440,7 @@ impl Watch {
         // on a big level well known)
         let marked = self.stream.is_none() || self.console.as_ref().is_some_and(|c| c.wants("map"));
         if marked && obs.tic - self.options_tic >= TICRATE as i64 {
-            self.options = self.agent.objectives(&obs);
+            self.options = self.agent.objectives();
             self.options_tic = obs.tic;
         }
         self.obs = Some(obs);

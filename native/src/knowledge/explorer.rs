@@ -569,6 +569,10 @@ pub struct Explorer {
     pub stock_chosen: Vec<String>,
     /// what `list_objectives` set aside as wanted only to take on to another level
     stock_aside: Vec<Objective>,
+    /// a watcher's asked what she's choosing from: each choice's listing is kept for it
+    /// (`objectives_shown`)
+    show_options: bool,
+    shown: Vec<Objective>,
     /// when this life began (the level's start, or since she died): stocking up waits for the
     /// exit seen in it
     life_began: Option<i64>,
@@ -849,6 +853,8 @@ impl Explorer {
             exit_first: None,
             stock_chosen: Vec::new(),
             stock_aside: Vec::new(),
+            show_options: false,
+            shown: Vec::new(),
             life_began: None,
             follower: None,
             directed: false,

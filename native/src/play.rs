@@ -68,13 +68,10 @@ impl Agent {
         }
     }
 
-    /// The objectives open now (for showing).
-    pub fn objectives(&mut self, obs: &Observation) -> Vec<Objective> {
-        match self {
-            Agent::Plain(x) => x.objectives(obs, false, &mut NoHooks),
-            Agent::Expert(x, c) => x.objectives(obs, false, c),
-            Agent::Fight(p) => p.explorer.objectives(obs, false, &mut NoHooks),
-        }
+    /// The objectives she last chose from, for showing (`Explorer::objectives_shown`: asking
+    /// changes nothing she does).
+    pub fn objectives(&mut self) -> Vec<Objective> {
+        self.x_mut().objectives_shown()
     }
 
     /// Her options now, best first, with whoever's playing's own wants in (evil-boom drive).

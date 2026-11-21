@@ -122,6 +122,17 @@ impl Explorer {
         view.reach_chain(here, to, &all, Some(&view.local_doors(keys_all)))
     }
 
+    /// What she could go and do, for showing (a watcher's map): what her last choice had to
+    /// choose from, kept from then on. Nothing is listed for the asking. A listing changes
+    /// what her next choice goes by (what she can reach, the walls she suspects, as of the
+    /// moment it's made), and one made between choices, once a second for the picture, sent
+    /// the watched run another way than the same run unwatched (MAP21 and MAP23 of
+    /// tools/eachway.sh's 24). Empty till her first choice after the first asking.
+    pub fn objectives_shown(&mut self) -> Vec<Objective> {
+        self.show_options = true;
+        self.shown.clone()
+    }
+
     /// What she could go and do now.
     pub fn objectives(
         &mut self,
@@ -160,6 +171,9 @@ impl Explorer {
         }
         self.stats.listed += 1;
         self.stats.listed_secs += t0.elapsed().as_secs_f64();
+        if self.show_options && !risky {
+            self.shown.clone_from(&out);
+        }
         out
     }
 
