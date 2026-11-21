@@ -35,6 +35,7 @@ New decisions go at the end of the latest chapter.
 | [tuning-ranges.md](tuning-ranges.md) | done | how far each judgement number can move before she plays worse |
 | [cleanup-2026-11.md](cleanup-2026-11.md) | done | the code cleanup before the Neuro work: findings and their scores |
 | [rust-review.md](rust-review.md) | done | a structure and performance review of the Rust code |
+| [code-review-2026-11-21.md](code-review-2026-11-21.md) | proposed | a review of the whole repository and a plan to restructure it, with each finding checked against the code and the phases as amended |
 | [open-source-plan.md](open-source-plan.md) | in progress | preparing the repository for publication |
 | [multiplayer-plan.md](multiplayer-plan.md) | proposed | two players, Evil and Neuro, co-op or deathmatch: what each layer needs, in stages |
 | [human-player-plan.md](human-player-plan.md) | proposed | a person in the game with Evil, co-op or deathmatch: a second process in step with the host; shares its first stages with the two-players plan |
