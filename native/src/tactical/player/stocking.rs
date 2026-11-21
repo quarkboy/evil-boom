@@ -107,6 +107,7 @@ impl Fight {
             }
         }
         self.combat.wanted_dead = carried.iter().map(|(_, s)| s.id).collect();
+        self.gun_to_have = !carried.is_empty();
         for (gun, s) in &carried {
             let mut o = Objective::new(
                 Kind::Hunt,
@@ -229,6 +230,7 @@ impl Fight {
             if worth.is_some_and(|w| d > w) {
                 why = ""; // (too far to drop everything for, as the crow flies even)
             }
+            self.gun_to_have |= why == " (a better gun)";
             let to_take = if stock && why.is_empty() {
                 " (to take on)"
             } else {

@@ -733,6 +733,9 @@ pub struct Errands {
     /// ammo for a gun she hasn't yet is needed this much of what the same ammo would be for a
     /// gun she has (0: left lying). Under `needed`, so it waits its turn and isn't walked far for
     pub spare_ammo: f64,
+    /// a key counts as this much further with only the pistol and a better gun to go for
+    /// (4: no nearer than anything else, undoing what being a key takes off its way)
+    pub key_unarmed: f64,
 }
 
 impl Default for Errands {
@@ -762,6 +765,7 @@ impl Default for Errands {
             soul_gain: 50.0,
             armor_outmatched: 50.0,
             spare_ammo: 0.5,
+            key_unarmed: 4.0,
             invulnerability_now: false,
         }
     }

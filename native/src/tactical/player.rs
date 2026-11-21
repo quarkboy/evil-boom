@@ -111,6 +111,9 @@ struct Fight {
     rethink: bool,
     /// a better gun seen that she can't get to (as of the last list of things to do)
     gun_out_of_reach: bool,
+    /// a better gun than she has is among what she could go for now: one lying where she can
+    /// get to, or carried by something she can (`supplies`)
+    gun_to_have: bool,
     /// the polys not yet seen of the sectors such guns lie in
     toward_gun: BTreeSet<i64>,
 }
@@ -329,6 +332,7 @@ impl Player {
                 deaths: Vec::new(),
                 rethink: false,
                 gun_out_of_reach: false,
+                gun_to_have: false,
                 toward_gun: BTreeSet::new(),
             },
             retreat: None,
@@ -1559,6 +1563,17 @@ impl Hooks for Fight {
         // foot.
         if obj.kind == Kind::Frontier && !obj.reveals.is_disjoint(&self.toward_gun) {
             return self.tune.errands.switch_for_gun;
+        }
+        // With only the pistol and a better gun to go for, a key waits: it's no nearer for being
+        // a key (`Objective::nearer`), and the gun, or what carries one, comes first unless the
+        // key's on the way. The pistol alone is next to never enough for what's past a key.
+        // (Doom II MAP24, HMP: the blue key in a room of imps gone for life after life, the
+        // shotgun known and half as far again; the maintainer watching.)
+        if obj.kind == Kind::Key
+            && self.gun_to_have
+            && self.combat.now.firepower <= self.tune.errands.pistol_only
+        {
+            return self.tune.errands.key_unarmed;
         }
         let ammo = obj.kind == Kind::Item
             && obj

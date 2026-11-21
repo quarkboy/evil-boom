@@ -3381,3 +3381,17 @@ The three-lives test, 544 runs: exits 295 -> 292 (34 runs more, 37 less: it chan
 runs a little), lives lost a run 1.105 -> 1.096, damage 0.772 -> 0.771, 529 s -> 542 s.
 Two runs stood the hour that didn't (MAP14, UV, seeds 854202743 and 205498993), not yet
 traced. Kept on the maintainer's word, for how she plays; the stands are owed a trace.
+
+## A gun before a key, with only the pistol (2026-11-21)
+
+MAP24 on HMP, the maintainer watching: life after life straight to the blue key in a room
+of imps, the shotgun known and left. A key and anything she needs each count a quarter of
+their way (`Objective::nearer`), and the nearer is taken: that rule was made for ammo
+against a key (MAP14), never for her only real gun against one. Now, while her firepower is
+no better than the pistol's (`errands.pistol_only`) and there's a better gun to go for
+(lying where she can get to, or carried by something she can), a key counts its whole way
+(`errands.key_unarmed`). Any gun that does more than what she has; not the chainsaw.
+
+The three-lives test, 544 runs: exits 292 -> 289 (3 runs more, 6 less), lives lost a run
+1.096 -> 1.097, damage as it was, 542 s -> 537 s, stood the hour 2 -> 1. No evidence either
+way; kept on the maintainer's word ("pistol alone is almost never enough").
