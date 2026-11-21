@@ -153,11 +153,14 @@ impl NavCore {
                 continue;
             }
             let here = arrival.point;
-            let mult = if self.damage[self.poly_sector[poly]] {
-                DAMAGE_COST
-            } else {
-                1.0
-            } * self.exposure.get(poly).copied().unwrap_or(1.0);
+            let sector = self.poly_sector[poly];
+            let hurts = self
+                .floor_changed
+                .get(&sector)
+                .copied()
+                .unwrap_or(self.damage[sector]);
+            let mult = if hurts { DAMAGE_COST } else { 1.0 }
+                * self.exposure.get(poly).copied().unwrap_or(1.0);
             for i in 0..self.adj[poly].len() {
                 if self.enterable(self.adj[poly][i].to) && self.edge_passable(poly, i, st, doors) {
                     let e = self.adj[poly][i];

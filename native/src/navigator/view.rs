@@ -624,6 +624,15 @@ impl View {
         }
     }
 
+    /// The floors she's seen change since the level began, and whether each hurts now (sector
+    /// -> hurts): a way is costed by these, not by what the map began with. A pit risen level
+    /// with the ledges round it is floor to walk on, not something to skirt.
+    pub fn set_changed_floors(&self, changed: HashMap<usize, bool>) {
+        if let Some(nav) = self.nav.core.borrow_mut().nav.as_mut() {
+            nav.floor_changed = changed;
+        }
+    }
+
     /// The teleport lines that no longer teleport, as far as she knows.
     pub fn spent(&self) -> &BTreeSet<usize> {
         self.restriction.as_ref().map_or(EMPTY, |r| &r.spent)

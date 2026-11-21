@@ -198,6 +198,13 @@ impl Explorer {
             return Rc::clone(v);
         }
         let view = Rc::new(self.build_view(false));
+        view.set_changed_floors(
+            self.knowledge
+                .changed_floor
+                .iter()
+                .map(|(&s, &hit)| (s, hit != 0))
+                .collect(),
+        );
         self.view = Some((Rc::clone(&view), key));
         view
     }
@@ -323,6 +330,11 @@ impl Explorer {
             exits_offered: fresh || self.exits_offered,
             blocked: self.blocked(),
             missed_jumps_in: self.missed_jumps_in,
+            changed_floors: k
+                .changed_floor
+                .iter()
+                .map(|(&s, &hit)| (s, hit != 0))
+                .collect(),
         }
     }
 

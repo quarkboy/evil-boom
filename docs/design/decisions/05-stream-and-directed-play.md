@@ -3353,3 +3353,17 @@ keys yet; the follower still asks for pushes as if any could be had.
 **Not yet.** A demo of more than one life (a player dead presses use, and the level begins
 again inside the demo; hers begins it another way). Recording from the watcher. The
 follower's reaching and stopping written for taps.
+
+## A floor seen to change is costed by what it changed into (2026-11-21)
+
+Doom II MAP24, the maintainer watching: the pit round the rocket platform risen level with
+the ledges, and she still walked the eight-wide ledge round it and fell off its corner,
+time after time. She knew its height and had it as "safe now" (`Knowledge::changed_floor`);
+the path search took "does this floor hurt" from the map as it starts, and a way over a
+floor that hurts counts four times its length. Now the search is given the floors she's
+seen change and whether each hurts (`View::set_changed_floors`, part of the view's key):
+either way, risen into plain floor or lowered into slime. Only what a way costs; what she
+can reach is as it was.
+
+The three-lives test, 544 runs: exits 293 -> 295, lives lost a run 1.110 -> 1.105, damage
+0.771 -> 0.772, 527 s -> 529 s, none stood the hour in either.

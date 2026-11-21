@@ -410,6 +410,9 @@ pub struct NavCore {
     /// line -> (sector, units): crossing the line into the sector costs that much more (a
     /// crusher she'd set off going in, stopped too low to be under when it starts)
     pub entry_cost: HashMap<usize, (usize, f64)>,
+    /// sector -> does its floor hurt now: those she's seen change since the level began (a
+    /// pit risen into plain floor, a floor lowered into slime), for which `damage` is out of date
+    pub floor_changed: HashMap<usize, bool>,
 }
 
 /// The part of the map the player knows: the polys that can be walked into, and the
@@ -468,6 +471,7 @@ impl NavCore {
             known: None,
             exposure: Vec::new(),
             entry_cost: HashMap::default(),
+            floor_changed: HashMap::default(),
         }
     }
 
