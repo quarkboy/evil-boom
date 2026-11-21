@@ -39,6 +39,7 @@ mod console;
 mod draw;
 mod frames;
 mod instinct;
+mod keys;
 mod present;
 mod record;
 mod stream;
@@ -82,6 +83,8 @@ pub struct WatchOptions {
     pub endless_bullets: bool,
     /// her movement as keys (`--keys`)
     pub keys: bool,
+    /// her key presses drawn over the game (`--show-keys`)
+    pub show_keys: bool,
     pub speed: f64,
     pub show_all: bool,
     pub mortal: bool,
@@ -497,6 +500,10 @@ struct Watch {
     frame_per_tic: bool,
     obs: Option<Observation>,
     controls: Option<Controls>,
+    /// her keys drawn over the game (K), and the last tics' presses and turns for it
+    /// (`viewer/keys.rs`)
+    show_keys: bool,
+    pressed: std::collections::VecDeque<(u8, f64)>,
     options: Vec<Objective>,
     options_tic: i64,
     speed: f64,
@@ -831,6 +838,7 @@ fn level(
     }
     watch.speed = o.speed;
     watch.show_all = o.show_all;
+    watch.show_keys = o.show_keys;
     Ok(watch)
 }
 
@@ -872,6 +880,7 @@ fn enter_level(
     carry: Option<crate::dsda::Loadout>,
 ) -> Result<Watch, String> {
     let (speed, show_all, follow) = (watch.speed, watch.show_all, watch.follow);
+    let show_keys = watch.show_keys;
     let frame_per_tic = watch.frame_per_tic;
     let (sound, muted, sound_on) = (watch.sound, watch.muted, watch.sound_on);
     let (paused, mut console, present, stream) =
@@ -900,6 +909,7 @@ fn enter_level(
     engine.goto(name)?;
     let mut watch = level(w, m, nav, engine, o)?;
     (watch.speed, watch.show_all, watch.follow) = (speed, show_all, follow);
+    watch.show_keys = show_keys;
     watch.frame_per_tic = frame_per_tic;
     (watch.sound, watch.muted, watch.sound_on) = (sound, muted, sound_on);
     watch.paused = paused;
@@ -1030,6 +1040,7 @@ fn show(mut watch: Watch, title: &str, given: Option<(&Wad, &WatchOptions)>) -> 
                 key::EQUALS | key::KP_PLUS => watch.speed = (watch.speed * 2.0).min(16.0),
                 key::MINUS | key::KP_MINUS => watch.speed = (watch.speed / 2.0).max(0.25),
                 key::A => watch.show_all.toggle(),
+                key::K => watch.show_keys.toggle(),
                 key::F => watch.follow.toggle(),
                 key::U => watch.ultra_toggle(),
                 key::L => watch.evil_log.toggle(),
@@ -1376,6 +1387,8 @@ impl Watch {
             frame_per_tic: true,
             obs: None,
             controls: None,
+            show_keys: false,
+            pressed: std::collections::VecDeque::new(),
             options: Vec::new(),
             options_tic: -1_000_000_000,
             speed: 1.0,
@@ -1640,6 +1653,9 @@ impl Watch {
         }
         if self.engine.exited() {
             self.ultra_end("out of the level");
+        }
+        if !put_back {
+            self.keys_note(&c);
         }
         self.controls = (!put_back).then_some(c);
         if let Some(h) = self.hold.as_mut().filter(|_| obs.tic % TICRATE as i64 == 0) {

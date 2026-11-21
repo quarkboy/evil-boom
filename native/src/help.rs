@@ -100,13 +100,16 @@ Watch her play MAP, in a window: the game beside the map of what she knows and h
   evil-boom watch doom2 MAP01 --stream --title         the stream's window, from the title card
 
 Keys: space pause, N (or right arrow) a tic at a time while paused, + and - the speed, A the
-whole map, F follow her, M mute, L Evil's log, T text size, the mouse wheel zooms, Esc quits.
+whole map, F follow her, K her key presses, M mute, L Evil's log, T text size, the mouse wheel
+zooms, Esc quits.
 
 The game:
   --episode               on to the next level when she exits, what she has carried over
   --speed X               play speed (1: real time; the sound plays only at 1)
   --mute                  no sound
   --all                   the whole map shown, not only what she's seen
+  --show-keys             her key presses over the game: each key lit while down, its last
+                          three seconds beside it, and her turning (K puts it on and off)
 
 The window:
   --stream [right|left]   the stream's 16:9 window: the game on one side, a column for the

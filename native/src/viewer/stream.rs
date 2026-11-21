@@ -282,6 +282,7 @@ impl Watch {
             }
         }
         self.ultra_glow(c, r);
+        self.draw_keys(c, r);
     }
 
     fn draw_column(&self, c: &mut Canvas, r: Rect, st: &Stream) {

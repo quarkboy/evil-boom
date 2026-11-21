@@ -16,6 +16,7 @@ pub(super) mod key {
     pub const EQUALS: i32 = 61;
     pub const A: i32 = 97;
     pub const F: i32 = 102;
+    pub const K: i32 = 107;
     pub const L: i32 = 108;
     pub const M: i32 = 109;
     pub const N: i32 = 110;

@@ -173,6 +173,12 @@ impl Keys {
         c
     }
 
+    /// The keys as her hand holds them: forward (1) or back (-1), right (1) or left (-1), and
+    /// run. For showing (`watch --show-keys`).
+    pub fn held(&self) -> (i8, i8, bool) {
+        (self.axis(FWD, BACK), self.axis(RIGHT, LEFT), self.run)
+    }
+
     /// A pair of keys as one way: 1, -1, or neither.
     fn axis(&self, plus: usize, minus: usize) -> i8 {
         i8::from(self.down[plus]) - i8::from(self.down[minus])

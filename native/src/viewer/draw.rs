@@ -59,6 +59,7 @@ impl Watch {
             }
         }
         self.ultra_glow(c, GAME);
+        self.draw_keys(c, GAME);
         if self.engine.finished() && self.present.is_none() {
             c.text(
                 if self.engine.exited() {

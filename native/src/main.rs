@@ -825,6 +825,7 @@ fn watch_options(
         keys: o.keys,
         speed: 1.0,
         show_all: false,
+        show_keys: false,
         mortal: o.mortal,
         practice: o.known,
         lives: o.lives,
@@ -875,6 +876,7 @@ fn watch_options(
                 w.paced = true;
             }
             "--all" => w.show_all = true,
+            "--show-keys" => w.show_keys = true,
             "--episode" => w.episode = true,
             "--headless" => w.headless = true,
             "--mute" => w.sound = false,
