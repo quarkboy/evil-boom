@@ -104,7 +104,7 @@ pub const STRAFE_SIDE: f64 = 40.0;
 pub const STRAFE_FACING: f64 = 38.659_808_254_090_09;
 
 /// Bumped whenever the finder's results could change (it keys Python's jump cache).
-pub const FINDER_VERSION: u32 = 30;
+pub const FINDER_VERSION: u32 = 34;
 
 /// `walks`: begun this far to the side of the stretch's start (units), a try each
 const WALK_SIDES: [f64; 5] = [0.0, 3.0, -3.0, 6.0, -6.0];

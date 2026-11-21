@@ -103,6 +103,7 @@ impl Core {
                                     runup: j.runup,
                                     takeoff: j.takeoff,
                                     requires: j.requires.clone(),
+                                    rising: j.rising,
                                 },
                                 penalty: JUMP_DOUBT * (1.0 - j.sure),
                             }

@@ -119,6 +119,16 @@ pub struct FinderInput {
 
 impl JumpLab {
     pub fn find_jumps(&self, input: &FinderInput) -> Vec<Jump> {
+        self.find_from(input, None)
+    }
+
+    /// Search the same geometry at intermediate takeoff heights. These heights
+    /// belong to the takeoff floor only. Other moving sectors keep their ordinary states.
+    pub(crate) fn find_from(
+        &self,
+        input: &FinderInput,
+        rising: Option<&[Vec<Heights>]>,
+    ) -> Vec<Jump> {
         let mesh = &self.mesh;
         // Keep groups in first-discovery order; use the map only to locate them.
         let mut groups: Vec<Vec<Jump>> = Vec::new();
@@ -145,7 +155,7 @@ impl JumpLab {
                 if nx * (mid.0 - ca.0) + ny * (mid.1 - ca.1) < 0.0 {
                     (nx, ny) = (-nx, -ny);
                 }
-                for &ha in &input.options[sa] {
+                for &ha in rising.map_or(&input.options[sa], |r| &r[sa]) {
                     for &hb in &input.options[sb] {
                         if ha.floor - hb.floor <= MAX_STEP {
                             continue;
@@ -244,7 +254,13 @@ impl JumpLab {
                                             j
                                         })
                                     });
-                                if let Some(j) = found {
+                                if let Some(j) = found.filter(|j| {
+                                    let dest = mesh.poly(j.dest_poly).sector;
+                                    rising.is_none()
+                                        || (!input.moving.contains(&dest)
+                                            && (self.initial[dest].0 - ha.floor).abs() < 0.5
+                                            && j.requires.iter().any(|&(s, h)| s == sa && h == ha))
+                                }) {
                                     // (strafing runs apart: not taking the places of the jumps
                                     // without)
                                     let key = (a, mesh.poly(j.dest_poly).sector, j.strafe);
@@ -254,7 +270,7 @@ impl JumpLab {
                                     });
                                     groups[*index].push(j);
                                 }
-                                if normal_landing {
+                                if normal_landing && rising.is_none() {
                                     break;
                                 }
                             }
@@ -265,7 +281,29 @@ impl JumpLab {
         }
         groups
             .into_iter()
-            .flat_map(|group| self.select_landings(group))
+            .flat_map(|group| {
+                if rising.is_none() {
+                    return self.select_landings(group);
+                }
+                // At a corner the short straight crossing may only exist near the
+                // end of an edge. Keep a few short flights for the simulator too.
+                let mut ordered: Vec<_> = group.iter().collect();
+                ordered.sort_by(|a, b| dist(a.takeoff, a.dest).total_cmp(&dist(b.takeoff, b.dest)));
+                let mut kept = self.select_landings(group.clone());
+                let limit = kept.len() + JUMPS_PER_TARGET;
+                for j in ordered {
+                    if kept.len() >= limit {
+                        break;
+                    }
+                    if kept.iter().all(|k| {
+                        dist(j.takeoff, k.takeoff) > MIN_JUMP_SEPARATION
+                            || dist(j.dest, k.dest) > MIN_JUMP_SEPARATION
+                    }) {
+                        kept.push(j.clone());
+                    }
+                }
+                kept
+            })
             .collect()
     }
 

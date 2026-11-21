@@ -130,6 +130,27 @@ impl Explorer {
                 }
             }
         }
+        // While riding, the player can feel where the floor is now. Keep the
+        // predicted stop for later legs and the observed height for a dismount.
+        if let Some(obs) = &k.last {
+            if let Some(poly) = nav.poly_in(obs.pos()) {
+                let sector = nav.sector_of_poly(poly);
+                if let Some(h) = obs.height(sector) {
+                    if obs.z.is_some_and(|z| (z - h.floor).abs() <= 1.0)
+                        && !out[sector].contains(&h)
+                        && nav.jumps.iter().any(|j| {
+                            j.rising
+                                .is_some_and(|r| r.sector == sector && h.floor >= r.lineup_floor)
+                                && j.requires.iter().any(|&(s, target)| {
+                                    s == sector && h.floor <= target.floor + 4.0
+                                })
+                        })
+                    {
+                        add_height(&mut out[sector], h);
+                    }
+                }
+            }
+        }
         // A slot narrower than the box is walked over at its sides' floor, however deep she saw
         // it, at each floor the sides can be at.
         for &tr in nav.trenches.keys() {

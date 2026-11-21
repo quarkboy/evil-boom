@@ -3132,3 +3132,30 @@ fewer), stood out the hour 1 to 0, the rest the same to the third place.
 The other stepping loops (MAP14: a step for a bullet's line with plasma up that the ball
 won't follow; a step worked out afresh each tic at something walking behind posts) are
 bounded by the patience they have, 20 s a bout, and are still as they were.
+
+### Off a floor that's going up, onto a ledge it passes (2026-11-20)
+
+The other contributor's patch (docs/patches/rising-platform-jumps.patch, from its MAP20 and
+E1M5 experiments; docs/design/normal-bot-experiment-handoff.md), ported as it stood. The
+finder looks again at each floor that goes up under her, at the heights of the fixed ledges
+near it; such a jump is planned only while she's riding and feels the floor at or past
+where there's time to line up, and taken when the floor will be at the ledge's height as
+she reaches the edge, else given up ("takeoff too low") and planned again.
+
+- One change: which floors "go up" was the word "raise" in a line's description, at the
+  place it was asked. It's `LineSpecial::raises_floor` now, by the specials table, Boom's
+  generalized "floor move up" with it. (A first try, "a line that leaves the floor higher
+  than it began", cut E1M5 from 37 such jumps to 3 and MAP20 from 12 to 2: those floors
+  begin up, are lowered, and come back. The table's wording is the only place a floor's way
+  is written down.)
+- 834 such jumps in 22 of the 68 levels (MAP09 212, MAP17 97, E4M6 77, MAP14 73, E4M8 69).
+  First load of all 68: 75 s of processor to 112, kept after.
+- Three-lives test against 20805fd: 9 runs of 544 moved, E1M5's eight (all exits still) and
+  one MAP09 run that now exits. Exits 293 to 294, nothing else past the third place.
+- On E1M5 UV she goes for the blue armor by it on three seeds of four and lands on two; on
+  the third the floor was past and it was given up. On MAP20 from a pistol start she is
+  dead in the first room before the cell pack is any use to her (3 to 12 kills): the patch
+  reaches it, and she doesn't live to want it.
+- Left as it came: it reckons when to line up by a floor rising one unit a tic, and lifts go
+  four and eight; on a fast one she has less time and may miss. And she takes such a jump
+  only when already riding: no trip to a lift is planned for the sake of one.

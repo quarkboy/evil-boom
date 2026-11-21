@@ -283,6 +283,21 @@ pub struct LineSpecial {
     pub generalized: bool,
 }
 
+impl LineSpecial {
+    /// Does it send a floor up under whoever stands on it: a lift, or a floor raised? (The
+    /// table has a floor's way only in its description, "floor raise ..." or a generalized
+    /// line's "floor move up": read here, by the table, not where it's asked.)
+    pub fn raises_floor(&self) -> bool {
+        match self.category {
+            Category::Lift => true,
+            Category::Floor => {
+                self.description.contains("raise") || self.description.contains("move up")
+            }
+            _ => false,
+        }
+    }
+}
+
 impl fmt::Display for LineSpecial {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.description)

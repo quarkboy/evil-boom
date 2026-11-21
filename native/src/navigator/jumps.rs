@@ -51,6 +51,8 @@ fn lab_jump(j: &Jump) -> LabJump {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Cached {
+    #[serde(default)]
+    rising: Option<crate::nav::RisingTakeoff>,
     src: Vec<usize>,
     dest_poly: usize,
     dest: (f64, f64),
@@ -123,6 +125,7 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
         .join("navcache")
         .join(format!("jumps_rs_{}.json", cache_key(nav, &options)));
     let from = |c: Cached| Jump {
+        rising: c.rising,
         src_polys: c.src.into_iter().collect(),
         dest_poly: c.dest_poly,
         dest: c.dest,
@@ -151,11 +154,12 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
         .iter()
         .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
         .collect();
-    let mut found = nav.jump_lab.find_jumps(&FinderInput {
+    let input = FinderInput {
         options,
         moving: moving.clone(),
         portal_fits: nav.portal_fits.clone(),
-    });
+    };
+    let mut found = nav.jump_lab.find_jumps(&input);
     let fits_from: Vec<[bool; 2]> = nav
         .mesh
         .portals
@@ -164,9 +168,67 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
         .map(|(pi, p)| [p.a, p.b].map(|frm| nav.fits_at_start(pi, frm)))
         .collect();
     found.extend(nav.jump_lab.find_climbs(&moving, &fits_from));
+    let ordinary = found.len();
+    let mut rising = vec![Vec::new(); input.options.len()];
+    // The floors that go up under her: a lift's, a floor's that a line raises.
+    let can_rise: BTreeSet<_> = nav
+        .triggers
+        .iter()
+        .filter(|t| t.info.raises_floor())
+        .flat_map(|t| t.effects.iter().map(|(s, _)| *s))
+        .collect();
+    // Sample the elevations of actual nearby landings, not every tic of a lift.
+    for (_, poly) in nav.mesh.live_polys() {
+        let s = poly.sector;
+        let heights = &input.options[s];
+        if heights.len() < 2 || !can_rise.contains(&s) {
+            continue;
+        }
+        let base = nav.movers.real[s];
+        for (_, other) in nav.mesh.live_polys() {
+            let landing = nav.movers.real[other.sector].floor;
+            if input.moving.contains(&other.sector)
+                || !heights
+                    .iter()
+                    .any(|h| h.floor < landing - crate::geom::MAX_STEP)
+                || !heights.iter().any(|h| h.floor > landing)
+                || base.ceiling - landing < crate::geom::PLAYER_HEIGHT
+                || !poly
+                    .vertices
+                    .iter()
+                    .any(|&p| other.vertices.iter().any(|&q| dist(p, q) < 256.0))
+            {
+                continue;
+            }
+            add_height(
+                &mut rising[s],
+                Heights {
+                    floor: landing,
+                    ceiling: base.ceiling,
+                },
+            );
+        }
+    }
+    found.extend(nav.jump_lab.find_from(&input, Some(&rising)));
     let out: Vec<Cached> = found
         .into_iter()
-        .map(|j| Cached {
+        .enumerate()
+        .map(|(i, j)| Cached {
+            rising: (i >= ordinary).then(|| {
+                let sector = nav.sector_of_poly(j.src_polys[0]);
+                let landing = nav.movers.real[nav.sector_of_poly(j.dest_poly)].floor;
+                let low = input.options[sector]
+                    .iter()
+                    .map(|h| h.floor)
+                    .fold(f64::INFINITY, f64::min);
+                // Leave time to turn and get to the run-up. A floor still at its
+                // bottom stop alone cannot establish this opportunity.
+                crate::nav::RisingTakeoff {
+                    sector,
+                    lineup_floor: (low + 1.0)
+                        .max(landing - crate::nav::RisingTakeoff::WAIT_TICS as f64),
+                }
+            }),
             src: j.src_polys,
             dest_poly: j.dest_poly,
             dest: j.dest,
@@ -209,6 +271,11 @@ impl Navigator {
         let mut results: Vec<String> = Vec::with_capacity(verdicts.len());
         let mut jumps: Vec<Jump> = Vec::with_capacity(verdicts.len());
         for (j, r) in self.jumps.iter().zip(verdicts) {
+            // The launch is timed against the floor motion, so retain the
+            // simulated landing only if the player can stop there.
+            if j.rising.is_some() && !(r == OK || r.starts_with("ok~") || r.starts_with(SOFT)) {
+                continue;
+            }
             let mut j = j.clone();
             let mut r = r;
             if let Some((v, at)) = r

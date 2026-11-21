@@ -170,7 +170,46 @@ pub enum TeleKind {
         runup: Point,
         takeoff: Point,
         requires: Vec<(usize, Heights)>,
+        rising: Option<RisingTakeoff>,
     },
+}
+
+/// When a rising floor is close enough to the landing to plan the approach.
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+pub struct RisingTakeoff {
+    pub sector: usize,
+    pub lineup_floor: f64,
+}
+
+impl RisingTakeoff {
+    /// Bound a detour and the time spent waiting on a platform. At Doom's
+    /// ordinary rising-floor speed (one unit per tic) this is also the maximum
+    /// distance below the landing at which it is worth lining up.
+    pub(crate) const WAIT_TICS: i64 = 4 * 35;
+
+    /// A flight across a gap needs the departure height the simulator checked.
+    /// A fast floor may pass it by up to four units in one tic.
+    pub fn at_edge(target: Heights, floor: f64, ceiling: f64) -> bool {
+        floor >= target.floor
+            && floor <= target.floor + 4.0
+            && ceiling - floor.max(target.floor) >= crate::geom::PLAYER_HEIGHT
+    }
+}
+
+pub(crate) fn jump_height(
+    rising: Option<RisingTakeoff>,
+    sector: usize,
+    target: Heights,
+    states: &[Heights],
+) -> bool {
+    let Some(ride) = rising.filter(|r| r.sector == sector) else {
+        return states.contains(&target);
+    };
+    states.iter().any(|h| {
+        h.floor >= ride.lineup_floor
+            && h.floor <= target.floor + 4.0
+            && h.ceiling - h.floor.max(target.floor) >= crate::geom::PLAYER_HEIGHT
+    })
 }
 
 /// A way from a poly to a poly that isn't walking through a portal.
@@ -651,9 +690,11 @@ impl NavCore {
     /// Can teleport/jump `ti` from `poly` be taken now?
     fn tele_ok(&self, poly: usize, ti: usize, st: &mut dyn HeightSource) -> bool {
         match &self.tele[poly][ti].kind {
-            TeleKind::Jump { requires, .. } => {
+            TeleKind::Jump {
+                requires, rising, ..
+            } => {
                 for (s, h) in requires {
-                    if !st.heights(*s).contains(h) {
+                    if !jump_height(*rising, *s, *h, &st.heights(*s)) {
                         return false;
                     }
                 }
@@ -793,9 +834,11 @@ impl NavCore {
                 let dest = self.tele[poly][ti].dest;
                 if let Some(hs) = late_here {
                     let from_after = match &self.tele[poly][ti].kind {
-                        TeleKind::Jump { requires, .. } => requires
-                            .iter()
-                            .any(|(s, h)| *s == self.poly_sector[poly] && hs.contains(h)),
+                        TeleKind::Jump {
+                            requires, rising, ..
+                        } => requires.iter().any(|(s, h)| {
+                            *s == self.poly_sector[poly] && jump_height(*rising, *s, *h, hs)
+                        }),
                         TeleKind::Line { .. } => true,
                     };
                     if !from_after {
@@ -814,5 +857,30 @@ impl NavCore {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod rising_takeoff_tests {
+    use super::*;
+
+    #[test]
+    fn the_rider_can_line_up_before_it_is_time_to_leave() {
+        let target = Heights {
+            floor: 64.0,
+            ceiling: 136.0,
+        };
+        let ride = Some(RisingTakeoff {
+            sector: 1,
+            lineup_floor: -55.0,
+        });
+        let observed = |floor| Heights { floor, ..target };
+        assert!(!jump_height(ride, 1, target, &[observed(-56.0)]));
+        assert!(jump_height(ride, 1, target, &[observed(-55.0)]));
+        assert!(!jump_height(ride, 0, target, &[observed(-55.0)]));
+        assert!(!RisingTakeoff::at_edge(target, 40.0, 136.0));
+        assert!(RisingTakeoff::at_edge(target, 64.0, 136.0));
+        assert!(!RisingTakeoff::at_edge(target, 64.0, 100.0));
+        assert!(!RisingTakeoff::at_edge(target, 72.0, 136.0));
     }
 }

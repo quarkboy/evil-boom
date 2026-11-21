@@ -50,6 +50,67 @@ impl RouteFollower {
         // (faced off the way for a strafing run)
         let face = jump.facing(hd);
         let diff = norm(face - obs.angle);
+        // This run starts on a moving floor. Align while riding and leave
+        // while there is still space for the player at the edge.
+        if let Some(ride) = jump.rising {
+            let sector = ride.sector;
+            let current = obs.heights[sector];
+            let Some(&(_, target)) = jump.requires.iter().find(|(s, _)| *s == sector) else {
+                return self.fail(obs, Trouble::TakeoffLow);
+            };
+            let supported = self
+                .view
+                .nav
+                .poly_in(obs.pos())
+                .is_some_and(|p| self.view.nav.sector_of_poly(p) == sector);
+            let rest_ready = jump
+                .requires
+                .iter()
+                .all(|&(s, h)| s == sector || obs.height(s) == Some(h));
+            let speed = self
+                .prev_live
+                .get(sector)
+                .map_or(0.0, |h| current.floor - h.floor);
+            let mut v = 0.0;
+            let mut distance = 0.0;
+            let mut tics = 0;
+            while distance < dist(obs.pos(), jump.takeoff) && tics < 35 {
+                v = v * crate::motor::FRICTION
+                    + crate::motor::RUN_THRUST * (1.0 + (jump.sidestep() / 50.0).powi(2)).sqrt();
+                distance += v;
+                tics += 1;
+            }
+            let at_edge = current.floor + speed * f64::from(tics);
+            let ground = obs.z.is_some_and(|z| (z - current.floor).abs() <= 1.0);
+            if speed > 0.0
+                && supported
+                && ground
+                && rest_ready
+                && crate::nav::RisingTakeoff::at_edge(target, at_edge, current.ceiling)
+                && dist(obs.pos(), jump.runup) <= 5.0
+                && diff.abs() < 3.0
+                && self.motion.speed() < 1.0
+            {
+                self.jump.lineup_tic = None;
+                self.jump.run_at = obs.tic;
+                self.jump.sprint = Some((jump.clone(), hd, obs.tic));
+                return self.sprint_jump(obs);
+            }
+            let since = *self.jump.lineup_tic.get_or_insert(obs.tic);
+            if obs.tic - since > crate::nav::RisingTakeoff::WAIT_TICS
+                || at_edge > target.floor + 4.0
+                || current.ceiling - current.floor < crate::geom::PLAYER_HEIGHT
+            {
+                self.jump.lineup_tic = None;
+                return self.fail(obs, Trouble::TakeoffLow);
+            }
+            self.progress_tic = obs.tic;
+            return self.motion.hold(
+                obs,
+                ((jump.runup.0 - obs.x) * 0.3, (jump.runup.1 - obs.y) * 0.3),
+                Some(face),
+            );
+        }
         // the heights the jump was found with must be there, and not still moving (if one has
         // stopped somewhere else it's not coming: jump from there anyway)
         for &(sector, h) in &jump.requires {

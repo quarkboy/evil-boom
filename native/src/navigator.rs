@@ -149,6 +149,8 @@ pub struct Teleport {
 /// a one-way edge like a teleport.
 #[derive(Clone, Debug)]
 pub struct Jump {
+    /// Takeoff floor during its ascent. Its required height is the nominal launch height.
+    pub rising: Option<crate::nav::RisingTakeoff>,
     pub src_polys: BTreeSet<usize>,
     pub dest_poly: usize,
     pub dest: Point,
@@ -189,7 +191,9 @@ impl Jump {
     }
 
     pub fn usable(&self, states: &States) -> bool {
-        self.requires.iter().all(|(s, h)| states[*s].contains(h))
+        self.requires
+            .iter()
+            .all(|(s, h)| crate::nav::jump_height(self.rising, *s, *h, &states[*s]))
     }
 
     /// Its identity (for caching checks).
