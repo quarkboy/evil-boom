@@ -93,6 +93,21 @@ pub struct RunOptions {
     /// the numbers she judges by, changed from their defaults by this file (see
     /// `tactical::tuning`)
     pub tuning: Option<std::path::PathBuf>,
+    /// (`watch --tape FILE`) a run's controls, tic by tic, played in place of hers: an ultra
+    /// instinct run, which is searched offline, watched
+    pub tape: Option<std::path::PathBuf>,
+    /// (`watch --ultra`) the ultra instinct on in the window from the start, and kept on
+    pub ultra: bool,
+    /// (`--workers N`) the ultra instinct's looks by N worker processes (0: its own)
+    pub workers: usize,
+    /// (`--ultra-speed X`) how fast the window plays while the ultra instinct's search has
+    /// her, of its own speed (0.5: half)
+    pub ultra_speed: f64,
+    /// (`--ultra-after N`) the ultra instinct hers on a level once she's died N times there
+    /// (None: never)
+    pub ultra_after: Option<i32>,
+    /// (`--ultra-back S`) how many seconds back a death is undone to (5 unless told; 20 at most)
+    pub ultra_back: f64,
     /// the journal of her decisions kept, and written beside the log (`crate::decisions`)
     pub decisions: bool,
     /// moves and retreats she isn't to make, by name (`Player::bar`)
@@ -132,6 +147,12 @@ impl Default for RunOptions {
             things: false,
             stall_out: false,
             tuning: None,
+            tape: None,
+            ultra: false,
+            workers: 0,
+            ultra_speed: crate::ultra::LIVE_SPEED,
+            ultra_after: None,
+            ultra_back: crate::ultra::LIVE_BACK as f64 / 35.0,
             decisions: false,
             bar: None,
             advisor: None,

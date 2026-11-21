@@ -110,6 +110,18 @@ pub struct Engine {
     hit_tic: Option<i64>,
 }
 
+/// What the Rust side of the engine keeps that a saved game doesn't (`Engine::save`).
+#[derive(Clone, Debug)]
+pub struct Mark {
+    pub tic: i64,
+    suits: i32,
+    ironfeet: i32,
+    message_tic: i32,
+    hits: usize,
+    hit_sides: Vec<i32>,
+    hit_tic: Option<i64>,
+}
+
 impl Engine {
     pub fn new(iwad: &Path, map_name: &str, o: &Options) -> Result<Engine, String> {
         let (episode, map) = episode_map(map_name)?;
@@ -593,6 +605,77 @@ impl Engine {
             hit_sides: std::mem::take(&mut self.hit_sides),
             hit_tic: self.hit_tic,
         }
+    }
+
+    /// The game saved into `slot`, with what this side keeps of it (`Mark`): put back by
+    /// `restore`, the same controls then play the same tics. None: the library can't.
+    pub fn save(&mut self, slot: i32) -> Option<Mark> {
+        self.game.save(slot)?;
+        Some(Mark {
+            tic: self.tic,
+            suits: self.suits,
+            ironfeet: self.ironfeet,
+            message_tic: self.message_tic,
+            hits: self.hits.len(),
+            hit_sides: self.hit_sides.clone(),
+            hit_tic: self.hit_tic,
+        })
+    }
+
+    /// The game put back as `slot` has it, and this side as `mark` (the one `save` gave for
+    /// it). The hits of the tics played since are forgotten: they didn't happen.
+    pub fn restore(&mut self, slot: i32, mark: &Mark) -> bool {
+        if !self.game.restore(slot) {
+            return false;
+        }
+        self.tic = mark.tic;
+        self.suits = mark.suits;
+        self.ironfeet = mark.ironfeet;
+        self.message_tic = mark.message_tic;
+        self.hits.truncate(mark.hits);
+        self.hit_sides.clone_from(&mark.hit_sides);
+        self.hit_tic = mark.hit_tic;
+        true
+    }
+
+    /// The game saved in `slot` as bytes for another process (`take`), and what this side
+    /// keeps of it that the other needs: the tic, the suits, the suit on, the message's tic.
+    pub fn hand(&self, slot: i32, mark: &Mark) -> Option<(Vec<u8>, [i64; 4])> {
+        let bytes = self.game.frame_get(slot)?;
+        Some((
+            bytes,
+            [
+                mark.tic,
+                i64::from(mark.suits),
+                i64::from(mark.ironfeet),
+                i64::from(mark.message_tic),
+            ],
+        ))
+    }
+
+    /// A game another process handed over (`hand`), into `slot` here: its `Mark`, for
+    /// `restore`. The hits on her are each process's own.
+    pub fn take(&mut self, slot: i32, bytes: &[u8], kept: [i64; 4]) -> Option<Mark> {
+        if !self.game.frame_put(slot, bytes) {
+            return None;
+        }
+        Some(Mark {
+            tic: kept[0],
+            suits: kept[1] as i32,
+            ironfeet: kept[2] as i32,
+            message_tic: kept[3] as i32,
+            hits: 0,
+            hit_sides: Vec::new(),
+            hit_tic: None,
+        })
+    }
+
+    /// The player and the things as the game has them now, read and no more (no sounds taken,
+    /// no message, nothing kept): for looking at a tic played ahead.
+    pub fn peek(&mut self) -> (crate::dsda::PlayerState, &[Mobj]) {
+        let p = self.game.player();
+        self.game.things(&mut self.mobjs);
+        (p, &self.mobjs)
     }
 
     pub fn step(&mut self, c: &Controls) {

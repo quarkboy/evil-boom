@@ -120,6 +120,18 @@ The window:
   --fullscreen            the whole screen, at the desktop's resolution, borderless
   --no-vsync              frames shown when ready, not at the screen's refresh
   --headless              no window: played as fast as it goes, its log in out/watch/live.log
+  --ultra                 the ultra instinct on from the start and kept on (U in the window
+                          turns it on from where she stands, till the fight's over)
+  --ultra-after N         the ultra instinct hers on a level once she's died N times there: a
+                          death then is undone, 5 s back, and it fights for her (30 s of it,
+                          60 after N deaths more; got back as she plays, full again after a
+                          death that stands; 8 workers unless told)
+                          (N 0: hers from the start, the 30 s and no more for dying)
+  --ultra-back S          how far back a death is undone to, in seconds (5 unless told)
+  --ultra-speed X         how fast the game goes while its search has her, of the window's
+                          speed (0.5 unless told: half; 0.75 looks better where the looks fit)
+  --workers N             its looks by N worker processes (8 is plenty; 0: its own, which
+                          stops the picture for each look)
 
 The music (see evil-boom help music):
   --music sc55|idkfa      the songs as the Steam re-release recorded them

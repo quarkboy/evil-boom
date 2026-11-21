@@ -98,6 +98,34 @@ pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<Str
             "--bar" => o.bar = Some(value("--bar")?),
             "--advisor" => o.advisor = Some(std::path::PathBuf::from(value("--advisor")?)),
             "--tuning" => o.tuning = Some(std::path::PathBuf::from(value("--tuning")?)),
+            "--tape" => o.tape = Some(std::path::PathBuf::from(value("--tape")?)),
+            "--ultra" => o.ultra = true,
+            "--ultra-after" => {
+                o.ultra_after = Some(
+                    value("--ultra-after")?
+                        .parse()
+                        .map_err(|_| "--ultra-after N".to_string())?,
+                );
+            }
+            "--ultra-back" => {
+                o.ultra_back = value("--ultra-back")?
+                    .parse()
+                    .ok()
+                    .filter(|x: &f64| *x >= 1.0 && *x <= 20.0)
+                    .ok_or("--ultra-back S (1 to 20)")?;
+            }
+            "--ultra-speed" => {
+                o.ultra_speed = value("--ultra-speed")?
+                    .parse()
+                    .ok()
+                    .filter(|x: &f64| *x > 0.0 && *x <= 1.0)
+                    .ok_or("--ultra-speed X (over 0, up to 1)")?;
+            }
+            "--workers" => {
+                o.workers = value("--workers")?
+                    .parse()
+                    .map_err(|_| "--workers N".to_string())?;
+            }
             "--carry" => o.carry = Some(parse_carry(&value("--carry")?)?),
             _ => rest.push(a.clone()),
         }

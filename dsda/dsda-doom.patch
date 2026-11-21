@@ -118,6 +118,29 @@ index bbdfdb6..f71ed9b 100644
    if (dsda_ShowMessages() && player == &players[displayplayer])
      dsda_QueueMessage(str, message_normal);
  }
+diff --git a/prboom2/src/dsda/save.c b/prboom2/src/dsda/save.c
+index 5089f33..e963438 100644
+--- a/prboom2/src/dsda/save.c
++++ b/prboom2/src/dsda/save.c
+@@ -129,7 +129,17 @@ static void dsda_UnArchiveContext(void) {
+ 
+   P_LOAD_X(leave_data);
+ 
+-  G_InitNew(gameskill, gameepisode, gamemap, false);
++  // Evil (evil-boom): a game of the level that's up put back without setting the level up
++  // again (evil_restore, evil_api.c)
++  {
++    extern int evil_level_stays;
++    void evil_level_again(void);
++
++    if (evil_level_stays)
++      evil_level_again();
++    else
++      G_InitNew(gameskill, gameepisode, gamemap, false);
++  }
+ 
+   P_LOAD_X(map_colormap);
+ 
 diff --git a/prboom2/src/p_inter.c b/prboom2/src/p_inter.c
 index c941fd6..b834048 100644
 --- a/prboom2/src/p_inter.c

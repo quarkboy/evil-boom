@@ -274,6 +274,19 @@ pub struct Dsda {
     spawn_fn: Option<SpawnFn>,
     give_fn: Option<GiveFn>,
     ready_fn: Option<unsafe extern "C" fn(c_int)>,
+    /// the game saved to a slot and put back (`evil_save`, `evil_restore`, `evil_forget`): the
+    /// ultra instinct's look ahead
+    save_fn: Option<unsafe extern "C" fn(c_int) -> c_int>,
+    restore_fn: Option<unsafe extern "C" fn(c_int) -> c_int>,
+    forget_fn: Option<unsafe extern "C" fn(c_int)>,
+    /// a saved game as bytes, out of one process and into another (`evil_frame_get`,
+    /// `evil_frame_put`): the ultra instinct's workers
+    frame_get_fn: Option<unsafe extern "C" fn(c_int, *mut u8, c_int) -> c_int>,
+    frame_put_fn: Option<unsafe extern "C" fn(c_int, *const u8, c_int) -> c_int>,
+    /// `evil_restore_quick`: a game put back the long way every time, or the quick way
+    quick_fn: Option<unsafe extern "C" fn(c_int)>,
+    /// the nearest monster she has a line of sight to (`evil_nearest_seen`)
+    seen_fn: Option<unsafe extern "C" fn(*mut f64) -> c_int>,
     clear_fn: Option<ClearFn>,
     reset_ids_fn: Option<ResetIdsFn>,
     hits_fn: Option<HitsFn>,
@@ -381,6 +394,35 @@ impl Dsda {
         let ready_fn = sym(b"evil_ready")
             .ok()
             .map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
+        // SAFETY: the symbols, if the library has them, are `int evil_save(int)`,
+        // `int evil_restore(int)` and `void evil_forget(int)`.
+        let save_fn = sym(b"evil_save").ok().map(|p| unsafe {
+            std::mem::transmute::<*const (), unsafe extern "C" fn(c_int) -> c_int>(p)
+        });
+        let restore_fn = sym(b"evil_restore").ok().map(|p| unsafe {
+            std::mem::transmute::<*const (), unsafe extern "C" fn(c_int) -> c_int>(p)
+        });
+        let forget_fn = sym(b"evil_forget")
+            .ok()
+            .map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
+        // SAFETY: the symbols, if the library has them, are `int evil_frame_get(int,
+        // unsigned char *, int)` and `int evil_frame_put(int, const unsigned char *, int)`.
+        let frame_get_fn = sym(b"evil_frame_get").ok().map(|p| unsafe {
+            std::mem::transmute::<*const (), unsafe extern "C" fn(c_int, *mut u8, c_int) -> c_int>(
+                p,
+            )
+        });
+        let frame_put_fn =
+            sym(b"evil_frame_put").ok().map(|p| unsafe {
+                std::mem::transmute::<
+                    *const (),
+                    unsafe extern "C" fn(c_int, *const u8, c_int) -> c_int,
+                >(p)
+            });
+        // SAFETY: the symbol, if the library has it, is `int evil_nearest_seen(double *)`.
+        let seen_fn = sym(b"evil_nearest_seen").ok().map(|p| unsafe {
+            std::mem::transmute::<*const (), unsafe extern "C" fn(*mut f64) -> c_int>(p)
+        });
         // SAFETY: as above, evil_clear_items's signature; optional.
         let clear_fn = sym(b"evil_clear_items")
             .ok()
@@ -517,6 +559,16 @@ impl Dsda {
             spawn_fn,
             give_fn,
             ready_fn,
+            save_fn,
+            restore_fn,
+            forget_fn,
+            frame_get_fn,
+            frame_put_fn,
+            // SAFETY: the symbol, if the library has it, is `void evil_restore_quick(int)`.
+            quick_fn: sym(b"evil_restore_quick").ok().map(|p| unsafe {
+                std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p)
+            }),
+            seen_fn,
             clear_fn,
             reset_ids_fn,
             hits_fn,
@@ -821,6 +873,68 @@ impl Dsda {
         let f = self.clear_fn?;
         // SAFETY: no arguments; see `load`.
         Some(unsafe { f() })
+    }
+
+    /// The game saved into `slot` (its size in bytes), over what was there. None: the library
+    /// hasn't the call, or there's no level to save.
+    pub fn save(&self, slot: i32) -> Option<usize> {
+        // SAFETY: a plain value into the game; see `load`.
+        let n = unsafe { (self.save_fn?)(slot) };
+        usize::try_from(n).ok()
+    }
+
+    /// The game put back as `slot` has it. False: nothing there, or no such call.
+    pub fn restore(&self, slot: i32) -> bool {
+        // SAFETY: a plain value into the game; see `load`.
+        self.restore_fn.is_some_and(|f| unsafe { f(slot) } == 0)
+    }
+
+    /// The nearest monster alive that she has a line of sight to, by the game's own check: its
+    /// id and where it is. None: none in sight (or no such call).
+    pub fn nearest_seen(&self) -> Option<(i32, (f64, f64, f64))> {
+        let mut at = [0.0f64; 3];
+        // SAFETY: the game writes three numbers into the buffer it's given.
+        let id = unsafe { (self.seen_fn?)(at.as_mut_ptr()) };
+        (id >= 0).then_some((id, (at[0], at[1], at[2])))
+    }
+
+    /// The game saved in `slot`, as bytes another process's `frame_put` takes. None: nothing
+    /// saved there, or no such call.
+    pub fn frame_get(&self, slot: i32) -> Option<Vec<u8>> {
+        let f = self.frame_get_fn?;
+        // SAFETY: a null buffer asks the size only.
+        let size = unsafe { f(slot, std::ptr::null_mut(), 0) };
+        let mut out = vec![0u8; usize::try_from(size).ok()?];
+        // SAFETY: the game writes at most `size` bytes into a buffer of that many.
+        let n = unsafe { f(slot, out.as_mut_ptr(), size) };
+        (n == size).then_some(out)
+    }
+
+    /// Bytes `frame_get` gave (here or in another process) into `slot`: `restore` then puts
+    /// that game back. False: not taken, or no such call.
+    pub fn frame_put(&self, slot: i32, bytes: &[u8]) -> bool {
+        let (Some(f), Ok(len)) = (self.frame_put_fn, c_int::try_from(bytes.len())) else {
+            return false;
+        };
+        // SAFETY: the game reads `len` bytes from a buffer of that many, and copies them.
+        unsafe { f(slot, bytes.as_ptr(), len) == 0 }
+    }
+
+    /// Games put back the quick way when they can be (as it starts), or the long way every time
+    /// (DSDA's own load, the level set up again): for checking the one against the other.
+    pub fn restore_quick(&self, on: bool) {
+        if let Some(f) = self.quick_fn {
+            // SAFETY: a plain value into the game; see `load`.
+            unsafe { f(c_int::from(on)) };
+        }
+    }
+
+    /// A slot's memory let go (all of them: -1).
+    pub fn forget(&self, slot: i32) {
+        if let Some(f) = self.forget_fn {
+            // SAFETY: a plain value into the game; see `load`.
+            unsafe { f(slot) };
+        }
     }
 
     /// Give her a loadout (see `Loadout`); false if the library hasn't the call.

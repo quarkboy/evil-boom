@@ -438,6 +438,59 @@ impl Knowledge {
         }
     }
 
+    /// The game was put back (the ultra instinct): what she set off after `since` didn't
+    /// happen. Those lines aren't fired, a once-only one among them isn't used up, and what
+    /// they moved is as she'd last seen it before. What she saw in those tics she still
+    /// knows. The lines un-fired.
+    pub fn undone(&mut self, since: i64, tic: i64) -> Vec<usize> {
+        let gone: Vec<Fired> = self
+            .fired
+            .iter()
+            .filter(|f| f.tic > since && f.life == self.lives)
+            .copied()
+            .collect();
+        self.fired.retain(|f| !gone.contains(f));
+        let keys: Vec<(usize, i64)> = self
+            .fired_rest
+            .keys()
+            .filter(|(_, t)| *t > since)
+            .copied()
+            .collect();
+        // (the latest undone first, so a sector moved twice ends as it was before the first)
+        for k in keys.iter().rev() {
+            for (s, h) in self.fired_rest.remove(k).unwrap_or_default() {
+                if self.seen_heights.contains_key(&s) {
+                    self.seen_heights.insert(s, h);
+                }
+            }
+            self.fired_effects.remove(k);
+        }
+        self.taking.retain(|(f, ..)| f.tic <= since);
+        self.checking.retain(|(f, _)| f.tic <= since);
+        self.moved_at.retain(|_, t| *t <= since);
+        self.stopped_at.retain(|_, t| *t <= since);
+        // (every sector's heights jump back with the game: not a move seen or heard)
+        self.live.clear();
+        self.moving.clear();
+        self.standing = None;
+        self.hurt_on = None;
+        let mut lines: Vec<usize> = gone.iter().map(|f| f.line).collect();
+        lines.sort_unstable();
+        lines.dedup();
+        if !lines.is_empty() {
+            self.events.push(format!(
+                "tic {tic}: the game went back: line{} {} not set off after all",
+                if lines.len() == 1 { "" } else { "s" },
+                lines
+                    .iter()
+                    .map(usize::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        lines
+    }
+
     /// Is sector s, as far as she can tell, still in a move that comes back (a door open on its
     /// timer, a lift away): moved lately, by a line of hers that doesn't leave it for good (or
     /// by she doesn't know what), and not back where it started?

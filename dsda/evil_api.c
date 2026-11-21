@@ -644,6 +644,16 @@ static void evil_render(fixed_t frac)
    * changed, and between tics the gun jumped about) */
   if (!I_StartDisplay())
     return;
+  /* (I_StartDisplay takes a frame for a tic's first when the tic is later than the last it
+   * drew. A game put back is at an earlier one: till it had caught up, seconds of it, no frame
+   * was a first, and the weapon was drawn each frame from where it was before the game went
+   * back to where it is now: a gun changed in those seconds hopped between the two) */
+  {
+    static int drawn_tic = -1;
+    if (gametic != drawn_tic)
+      realframe = true;
+    drawn_tic = gametic;
+  }
   if (setsizeneeded)
     R_ExecuteSetViewSize();  /* (the view's size and buffers: D_Display does this first) */
   if (gamestate == GS_LEVEL)
@@ -1137,4 +1147,290 @@ EVIL_API void evil_ready(int weapon)
     return;
   p->readyweapon = weapon;
   P_SetupPsprites(p);
+}
+
+/* --- The game saved and put back, in memory (the ultra instinct's look ahead) -----------------
+ *
+ * A slot holds the whole game as a saved game has it (DSDA's own archive, what its key frames
+ * and rewind use), and with it what the boundary keeps of its own that the archive doesn't:
+ * the level left or not, the things' numbering, the count of hits and sounds so far. The game
+ * is deterministic: from a slot put back, the same commands play the same tics, random numbers
+ * and all. */
+#include "p_saveg.h"
+#include "p_spec.h"
+#include "z_zone.h"
+#include "dsda/save.h"
+
+#define EVIL_FRAMES 512
+
+typedef struct {
+  byte *buf;
+  int len;
+  int episode, map, skill;  /* the level it's of */
+  int exited, secret_exit, held, spawned, gametic;
+  int hit_count, sound_count;
+  int pellets[7];
+} evil_frame_t;
+
+static evil_frame_t evil_frames[EVIL_FRAMES];
+
+void G_AfterLoad(void);
+
+/* Putting a game back without setting the level up again. DSDA's load does that every time
+ * (G_InitNew, in dsda_UnArchiveContext: the whole level read from the WAD and its things
+ * spawned, to be thrown away by the archive that follows), which is most of what a restore
+ * costs on a big level. When the game put back is of the level that's up, the archive alone
+ * is nearly enough: it writes every sector, line and side it keeps, clears each sector's
+ * movers and sound target, and removes every thinker before making its own (P_UnArchiveWorld,
+ * P_UnArchiveThinkers; a thing removed is unlinked from its sector and block and its sounds
+ * stopped). What the level's setting up did besides, that play changes and the archive
+ * doesn't carry, evil_level_again does. The first game put back of a level goes the long way,
+ * and what the long way leaves the totals at is kept for the rest. */
+int evil_level_stays;   /* (read by dsda_UnArchiveContext: this load is of the level that's up) */
+static int evil_quick = 1;
+static struct { int valid, episode, map, skill, kills, items, secret; } evil_level;
+
+void A_ResetPlayerCorpseQueue(void);     /* (p_enemy.c) */
+void P_ResetTeleptFromSector(int i);     /* (p_telept.c) */
+void R_StopAllInterpolations(void);      /* (r_fps.c) */
+
+void evil_level_again(void)
+{
+  int i;
+  thinker_t *th;
+  /* (the archive removes every thinker, but a thing another still points at is only freed
+   * when the last pointer lets go (P_RemoveThinkerDelayed), and here they all go at once,
+   * pointing at each other and remembered by sectors as what was heard. So every such pointer
+   * is let go first, and each thing is then freed as it's removed. The level's setting up
+   * frees the lot whatever (Z_FreeLevel); without this the quick way kept some of every game
+   * it put back, gigabytes in a few minutes of looking) */
+  for (i = 0; i < numsectors; i++)
+    P_SetTarget(&sectors[i].soundtarget, NULL);
+  for (th = thinkercap.next; th != &thinkercap; th = th->next)
+    if (th->function == P_MobjThinker)
+    {
+      mobj_t *mo = (mobj_t *)th;
+      P_SetTarget(&mo->target, NULL);
+      P_SetTarget(&mo->tracer, NULL);
+      P_SetTarget(&mo->lastenemy, NULL);
+    }
+  for (th = thinkercap.next; th != &thinkercap; th = th->next)
+    th->references = 0;
+  /* (the totals aren't in the archive: as the level's setting up counts them) */
+  totalkills = evil_level.kills;
+  totalitems = evil_level.items;
+  totalsecret = evil_level.secret;
+  /* (switches waiting to pop back: the archive adds those of its game to an empty list) */
+  memset(buttonlist, 0, sizeof(buttonlist));
+  /* (the lists of lifts and ceilings moving: the archive adds each of its game's to them, and
+   * only the level's setting up empties them. Left, they kept an entry for every lift and
+   * crusher of every game put back, each pointing at a thinker since freed: the next thing to
+   * stop or start "all the lifts with this tag" read and wrote through them, into memory that
+   * was by then something else's. E2M3 crashed of it, the heap corrupted) */
+  P_RemoveAllActiveCeilings();
+  P_RemoveAllActivePlats();
+  /* (each sector's teleport destination, remembered as a pointer to the thing) */
+  for (i = 0; i < numsectors; i++)
+    P_ResetTeleptFromSector(i);
+  /* (the player's corpses kept, pointers too) */
+  A_ResetPlayerCorpseQueue();
+  R_StopAllInterpolations();
+}
+
+/* The long way every time (0), or the quick way when it can (1, as it starts): for checking
+ * the one against the other. */
+EVIL_API void evil_restore_quick(int on)
+{
+  evil_quick = on;
+}
+
+/* Save the game into slot (0 to EVIL_FRAMES - 1), over what was there. Returns its size in
+ * bytes, or -1 (no such slot, or not in a level). */
+EVIL_API int evil_save(int slot)
+{
+  evil_frame_t *f;
+  int i;
+  if (slot < 0 || slot >= EVIL_FRAMES || gamestate != GS_LEVEL)
+    return -1;
+  f = &evil_frames[slot];
+  P_InitSaveBuffer();
+  dsda_ArchiveAll();
+  if (f->buf)
+    Z_Free(f->buf);
+  f->buf = savebuffer;
+  f->len = (int)(save_p - savebuffer);
+  P_ForgetSaveBuffer();
+  f->episode = gameepisode;
+  f->map = gamemap;
+  f->skill = gameskill;
+  f->exited = exited;
+  f->secret_exit = secret_exit;
+  f->held = evil_held;
+  f->spawned = evil_spawned;
+  f->gametic = gametic;
+  f->hit_count = evil_hit_count;
+  f->sound_count = evil_sound_count;
+  for (i = 0; i < 7; i++)
+    f->pellets[i] = evil_pellets[i];
+  return f->len;
+}
+
+/* Put the game back as slot has it. Returns 0, or -1 (nothing saved there). The hits and
+ * sounds of the tics played since are forgotten: they didn't happen. */
+EVIL_API int evil_restore(int slot)
+{
+  evil_frame_t *f;
+  int i;
+  if (slot < 0 || slot >= EVIL_FRAMES || !evil_frames[slot].buf)
+    return -1;
+  f = &evil_frames[slot];
+  /* (the game's tic first: the load works basetic out from it (dsda_UnArchiveContext), and a
+   * revenant's missile homes on the tics gametic - basetic says (A_Tracer). Set after, a game
+   * put back from some tics on had its missiles turning on other tics than the game saved) */
+  gametic = f->gametic;
+  maketic = gametic;
+  evil_level_stays = evil_quick && evil_level.valid && gamestate == GS_LEVEL
+    && f->episode == gameepisode && f->map == gamemap && f->skill == (int)gameskill
+    && evil_level.episode == f->episode && evil_level.map == f->map
+    && evil_level.skill == f->skill;
+  save_p = f->buf;
+  dsda_UnArchiveAll();
+  save_p = NULL;
+  if (!evil_level_stays)
+  {
+    evil_level.valid = 1;
+    evil_level.episode = gameepisode;
+    evil_level.map = gamemap;
+    evil_level.skill = gameskill;
+    evil_level.kills = totalkills;
+    evil_level.items = totalitems;
+    evil_level.secret = totalsecret;
+  }
+  evil_level_stays = 0;
+  G_AfterLoad();
+  gameaction = ga_nothing;
+  gamestate = GS_LEVEL;
+  exited = f->exited;
+  secret_exit = f->secret_exit;
+  evil_held = f->held;
+  evil_spawned = f->spawned;
+  gametic = f->gametic;
+  maketic = gametic;
+  evil_hit_count = f->hit_count;
+  evil_sound_count = f->sound_count;
+  if (evil_hits_read > evil_hit_count)
+    evil_hits_read = evil_hit_count;
+  if (evil_sounds_read > evil_sound_count)
+    evil_sounds_read = evil_sound_count;
+  for (i = 0; i < 7; i++)
+    evil_pellets[i] = f->pellets[i];
+  return 0;
+}
+
+/* Let a slot's memory go (all of them: slot -1). */
+EVIL_API void evil_forget(int slot)
+{
+  int i;
+  for (i = 0; i < EVIL_FRAMES; i++)
+    if ((slot < 0 || slot == i) && evil_frames[i].buf)
+    {
+      Z_Free(evil_frames[i].buf);
+      evil_frames[i].buf = NULL;
+    }
+}
+
+/* A saved game out of this process and into another (the ultra instinct's workers: each has
+ * the game in it, and is handed the one to look ahead from). The bytes are EVIL_FRAME_HEAD
+ * ints (exited, secret_exit, held, spawned, gametic, the pellets' seven, the level's episode,
+ * map and skill) and then DSDA's own
+ * archive, which sets the level up itself when it's loaded. The hits and sounds counted are
+ * each process's own. */
+#define EVIL_FRAME_HEAD 15
+
+/* The size of slot's game as bytes (out NULL), or the bytes copied into out (cap its room).
+ * -1: nothing saved there, or too little room. */
+EVIL_API int evil_frame_get(int slot, unsigned char *out, int cap)
+{
+  evil_frame_t *f;
+  int head[EVIL_FRAME_HEAD];
+  int i, size;
+  if (slot < 0 || slot >= EVIL_FRAMES || !evil_frames[slot].buf)
+    return -1;
+  f = &evil_frames[slot];
+  size = (int)sizeof(head) + f->len;
+  if (!out)
+    return size;
+  if (cap < size)
+    return -1;
+  head[0] = f->exited; head[1] = f->secret_exit; head[2] = f->held;
+  head[3] = f->spawned; head[4] = f->gametic;
+  for (i = 0; i < 7; i++)
+    head[5 + i] = f->pellets[i];
+  head[12] = f->episode; head[13] = f->map; head[14] = f->skill;
+  memcpy(out, head, sizeof(head));
+  memcpy(out + sizeof(head), f->buf, f->len);
+  return size;
+}
+
+/* Bytes evil_frame_get gave, in any process with a level going, into slot (over what was
+ * there): evil_restore then puts that game back here. Returns 0, or -1. */
+EVIL_API int evil_frame_put(int slot, const unsigned char *in, int len)
+{
+  evil_frame_t *f;
+  int head[EVIL_FRAME_HEAD];
+  int i;
+  if (slot < 0 || slot >= EVIL_FRAMES || !in || len <= (int)sizeof(head))
+    return -1;
+  f = &evil_frames[slot];
+  memcpy(head, in, sizeof(head));
+  if (f->buf)
+    Z_Free(f->buf);
+  f->len = len - (int)sizeof(head);
+  f->buf = Z_Malloc(f->len);
+  memcpy(f->buf, in + sizeof(head), f->len);
+  f->exited = head[0]; f->secret_exit = head[1]; f->held = head[2];
+  f->spawned = head[3]; f->gametic = head[4];
+  for (i = 0; i < 7; i++)
+    f->pellets[i] = head[5 + i];
+  f->episode = head[12]; f->map = head[13]; f->skill = head[14];
+  f->hit_count = evil_hit_count;
+  f->sound_count = evil_sound_count;
+  return 0;
+}
+
+/* The nearest thing she could shoot that she has a line of sight to (a monster alive, or a
+ * lost soul): its id, and where it is into out (x, y, z). -1: none. The game's own sight
+ * check, as its monsters use (the ultra instinct's: it doesn't aim at what's behind a wall). */
+fixed_t P_AproxDistance(fixed_t dx, fixed_t dy);  /* (p_maputl.c) */
+
+EVIL_API int evil_nearest_seen(double *out)
+{
+  thinker_t *th;
+  mobj_t *me = players[consoleplayer].mo;
+  mobj_t *best = NULL;
+  fixed_t best_d = 0;
+  if (gamestate != GS_LEVEL || !me)
+    return -1;
+  for (th = thinkercap.next; th != &thinkercap; th = th->next)
+  {
+    mobj_t *mo;
+    fixed_t d;
+    if (th->function != P_MobjThinker)
+      continue;
+    mo = (mobj_t *)th;
+    if (!((mo->flags & MF_COUNTKILL) || mo->type == MT_SKULL) || !(mo->flags & MF_SHOOTABLE) ||
+        mo->health <= 0)
+      continue;
+    d = P_AproxDistance(mo->x - me->x, mo->y - me->y);
+    if (best && d >= best_d)
+      continue;
+    if (!P_CheckSight(me, mo))
+      continue;
+    best = mo;
+    best_d = d;
+  }
+  if (!best)
+    return -1;
+  out[0] = fx(best->x); out[1] = fx(best->y); out[2] = fx(best->z);
+  return best->evil_id;
 }

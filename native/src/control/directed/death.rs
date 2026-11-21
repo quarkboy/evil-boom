@@ -97,6 +97,17 @@ impl Director {
     /// her death told, once, as it came; `again`, the level begins again, her orders and her
     /// say in the fight the life before's. (No lives in what she's told: on stream the game goes
     /// on as the game itself does, again and again; lives are a test's.)
+    /// The ultra instinct's news (hers on this level now; a death undone and it fighting for
+    /// her; over), told as it comes.
+    pub fn ultra(&mut self, tic: i64, text: &str, event: Event) {
+        self.reports.push(Report {
+            tic,
+            ok: true,
+            text: text.to_string(),
+            event,
+        });
+    }
+
     pub fn died(&mut self, tic: i64, again: bool, hits: &[Hit]) {
         self.remember_hits(tic, hits);
         if !self.told_dead {

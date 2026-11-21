@@ -40,7 +40,7 @@ New decisions go at the end of the latest chapter.
 | [multiplayer-plan.md](multiplayer-plan.md) | proposed | two players, Evil and Neuro, co-op or deathmatch: what each layer needs, in stages |
 | [human-player-plan.md](human-player-plan.md) | proposed | a person in the game with Evil, co-op or deathmatch: a second process in step with the host; shares its first stages with the two-players plan |
 | [mbf21-plan.md](mbf21-plan.md) | proposed | MBF21, UDMF and community WADs: the engine plays them already; what the bot must learn to understand them |
-| [ultra-instinct-plan.md](ultra-instinct-plan.md) | proposed | a mode Evil can call on when a level has beaten her: the fight searched tic by tic in the engine itself (saved, played forward, restored), at half speed; what it could afford, and the stages |
+| [ultra-instinct-plan.md](ultra-instinct-plan.md) | a prototype on a branch | a mode Evil can call on when a level has beaten her: the fight searched tic by tic in the engine itself (saved, played forward, restored), at half speed; what it could afford, and the stages |
 | [cycles-catalogue.md](cycles-catalogue.md) | findings | where two rules hand her to and fro: every level played once and sorted (long loops, fast flickers), and an order to trace them in |
 
 ## Where things stand (2026-11-12)

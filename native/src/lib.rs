@@ -54,6 +54,7 @@ pub mod survey;
 pub mod sweep;
 pub mod tactical;
 pub mod things;
+pub mod ultra;
 #[cfg(feature = "viewer")]
 pub mod viewer;
 pub mod wad;
