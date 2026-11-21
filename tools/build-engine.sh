@@ -39,7 +39,21 @@ if [[ ! -d $SRC/.git ]]; then
 fi
 cd "$SRC"
 if git apply --reverse --check "$PATCH" 2>/dev/null; then
+  # (the patch is on: on the pinned commit, or it's some other DSDA-Doom it happens to fit)
+  head=$(git rev-parse HEAD)
+  if [[ $head != "$COMMIT"* ]]; then
+    echo "third_party/dsda-doom is at ${head:0:7}, not the pinned $COMMIT: run with --clean" >&2
+    exit 1
+  fi
   echo "patch already applied"
+elif [[ -n $(git status --porcelain --untracked-files=no) ]]; then
+  # (changed, and not by this patch: an older patch, or edits not written back to it. A
+  # checkout over them would fail or lose them: nothing's touched)
+  echo "third_party/dsda-doom has changes that aren't dsda/dsda-doom.patch (an older patch, or" >&2
+  echo "edits not yet written back to it: see this script's header). Write the patch again; or" >&2
+  echo "drop the changes (git -C third_party/dsda-doom checkout -- .) and run this again; or run" >&2
+  echo "with --clean for a fresh checkout and a whole build." >&2
+  exit 1
 else
   git checkout -q "$COMMIT"
   git apply "$PATCH"
