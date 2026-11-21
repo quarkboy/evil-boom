@@ -674,6 +674,12 @@ pub struct Explorer {
     /// what's been turned down for want of health, this life: what `anything_whatever` has
     /// back in
     health_refused: BTreeSet<Ident>,
+    /// lines she was to walk over and couldn't: how many times each...
+    uncrossed: BTreeMap<usize, u32>,
+    /// ...and, three times over, the ground she could walk to from where she was then: the
+    /// line isn't one to walk over from there, in any plan (`build_view`), this life or the
+    /// next, till she does walk over it
+    uncrossable: BTreeMap<usize, BTreeSet<usize>>,
     /// the first switch of each way of several legs turned down this think for want of health
     /// (`way_on_by_legs`)
     short_legs: Vec<TriggerLine>,
@@ -890,6 +896,8 @@ impl Explorer {
             harm_anything: false,
             anything_none: None,
             health_refused: BTreeSet::new(),
+            uncrossed: BTreeMap::new(),
+            uncrossable: BTreeMap::new(),
             short_legs: Vec::new(),
             legs_taken: BTreeSet::new(),
             nothing_since: None,

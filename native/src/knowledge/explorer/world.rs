@@ -350,6 +350,11 @@ impl Explorer {
                 }
             }
             let mut known = t.clone();
+            // (not to be walked over from ground she's found she can't get over it from:
+            // `note_misses`)
+            if let Some(ground) = t.linedef().and_then(|li| self.uncrossable.get(&li)) {
+                known.activators.retain(|p| !ground.contains(p));
+            }
             known.effects.retain(|(s, _)| keep.contains(s));
             known.keep = Some(keep);
             triggers.push(known);

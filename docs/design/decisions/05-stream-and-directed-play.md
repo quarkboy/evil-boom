@@ -3230,3 +3230,26 @@ pistol start and 1 of 32 with what she'd carry from MAP19. The Spider Mastermind
 durable monster as it is on a Cyberdemon (`boss-set-on-heavy.patch`) won E3M8 twice in 32
 and lost E4M8 twice on the standard test, with less damage dealt on the boss levels over
 all (-0.020, s.e. 0.007): not kept.
+
+### A line she can't walk over from where she stands is no way from there (2026-11-20)
+
+MAP14's yard past the red bars again, this time as an hour stood on main on her first life
+(UV, seed 145201490): the door out opens for a walk-over line sixteen inside the bars, and
+with the bars shut her body stops short of it. Every errand she had went by that line; each
+go was 20 seconds and "took too long", and the next went the same way: 471 goes, never once
+"nothing left to do", so never begun again as stranded. (That the yard is a soft lock without
+the red key was settled on the 19th; what was new is that she didn't know it.)
+
+- The follower says which line it gave up crossing; three times and the explorer keeps the
+  ground she could walk to from there, and the line's "walked over from" loses that ground
+  in every plan (`build_view`), this life and after, till she does walk over it.
+- On the run: 3 goes for 471; the first life stranded and begun again inside two minutes;
+  the next two don't jump into the yard at all.
+- MAP14 on 16 seeds a skill, three lives: exits 21 of 32 to 26 (UV 9 to 14), stood out the
+  hour 4 to 0, progress 0.943 to 0.978. Standard test against 074d809: three runs moved,
+  exits 294 to 293 (one of MAP14's eight), nothing stood out the hour.
+
+Tried beside it and not kept: **plasma put down where its ball is stopped short and a bullet
+isn't** (`plasma-put-down.patch`), for the stepping loops left on MAP14. On four seeds she
+changed guns half as often again or more (72 for 46, 35 for 15) and was held from firing as
+much. The fourth rule about changing guns in a fight to lose this fortnight.

@@ -414,6 +414,59 @@ impl Explorer {
         for s in std::mem::take(&mut f.felt) {
             self.knowledge.felt(s, obs.heights[s], obs.tic);
         }
+        // A line she was to walk over and couldn't get to the far side of, three times: it
+        // isn't to be got over from the ground she's on, whatever the plan has. The game
+        // wants her middle past it, and something stops her body short. No plan of hers has
+        // it walked over from that ground after (`build_view`), in this life or the next,
+        // till she does walk over it. (Doom II MAP14, the yard past the red bars: the door
+        // out opens for a line sixteen inside the bars, the bars shut, her middle can't pass
+        // it. Every errand she had went by that line: 471 goes at it, each given up as
+        // taking too long, to the hour, never once "nothing left to do" and so never begun
+        // again; and jumped into afresh every life.)
+        /// could not cross it this many times: not from here
+        const UNCROSSED: u32 = 3;
+        // (walked over after all, wherever from: what was found of it no longer holds)
+        let crossed: Vec<usize> = self
+            .knowledge
+            .fired
+            .iter()
+            .rev()
+            .take_while(|g| g.tic >= obs.tic - 1)
+            .filter(|g| g.how == How::Walk)
+            .map(|g| g.line)
+            .collect();
+        for line in crossed {
+            if self.uncrossable.remove(&line).is_some() {
+                self.uncrossed.remove(&line);
+                self.view = None;
+            }
+        }
+        let uncrossed = std::mem::take(&mut f.uncrossed);
+        for line in uncrossed {
+            let n = self.uncrossed.entry(line).or_insert(0);
+            *n += 1;
+            if *n != UNCROSSED {
+                continue;
+            }
+            let seen: crate::navigator::States = self
+                .as_seen()
+                .into_iter()
+                .map(|(floor, ceiling)| vec![crate::nav::Heights { floor, ceiling }])
+                .collect();
+            let ground = self
+                .nav
+                .poly_at(obs.pos())
+                .map_or_else(BTreeSet::new, |p| self.view().reachable(p, &seen, None));
+            self.log.push(format!(
+                "tic {}: line {line} isn't to be walked over from here ({UNCROSSED} goes at it): no way by it from this ground",
+                obs.tic
+            ));
+            self.uncrossable.insert(line, ground);
+            self.view = None;
+        }
+        let Some(f) = &mut self.follower else {
+            return false;
+        };
         if f.missed.is_empty() && f.knocked.is_empty() {
             return false;
         }

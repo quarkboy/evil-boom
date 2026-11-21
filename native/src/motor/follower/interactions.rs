@@ -785,6 +785,7 @@ impl RouteFollower {
                 obs.tic,
                 format!("could not cross line {}", self.trigger_line_no()),
             );
+            self.uncrossed.push(self.trigger_line_no());
             self.crossed = true; // (give up on it and carry on; replanning catches problems)
         }
         let hd = heading(pos, target);
