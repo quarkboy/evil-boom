@@ -19,6 +19,8 @@ pub struct Switches {
     pub barrels: bool,
     /// `EVIL_DEBUG_DARTS`: each dart (a run one way, then at once back the other) in the log
     pub darts: bool,
+    /// EVIL_DEBUG_KEYS: with `--keys`, each tic's push as asked and as the keys gave it (stderr)
+    pub keys: bool,
     /// `EVIL_DEBUG_CARRY`: the loadout a level is begun with
     pub carry: bool,
     /// `EVIL_DEBUG_DEAD_END`: what a drop refused as a dead end leads to
@@ -57,6 +59,7 @@ pub fn on() -> &'static Switches {
             shot: set("EVIL_DEBUG_SHOT"),
             barrels: set("EVIL_DEBUG_BARRELS"),
             darts: set("EVIL_DEBUG_DARTS"),
+            keys: set("EVIL_DEBUG_KEYS"),
             carry: set("EVIL_DEBUG_CARRY"),
             dead_end: set("EVIL_DEBUG_DEAD_END"),
             no_route: set("EVIL_DEBUG_NO_ROUTE"),

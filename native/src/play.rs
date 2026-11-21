@@ -68,7 +68,18 @@ impl Agent {
         };
         // (`--keys`: whatever she'd do, done with the keys a keyboard has)
         match self.x_mut().keys.as_mut() {
-            Some(k) => k.press(obs.tic, c),
+            Some(k) => {
+                let got = k.press(obs.tic, c);
+                if crate::debug::on().keys {
+                    eprintln!(
+                        "tic {}: at ({:.0}, {:.0}) facing {:.0} going {:?}: asked ({:.0}, {:.0}) turn {:.1}, keys ({:.0}, {:.0})",
+                        obs.tic, obs.x, obs.y, obs.angle,
+                        obs.velocity.map(|v| (v.0.round(), v.1.round())),
+                        c.forward * if c.run { 1.0 } else { 0.5 }, c.strafe * if c.run { 1.0 } else { 0.5 }, c.turn, got.forward, got.strafe
+                    );
+                }
+                got
+            }
             None => c,
         }
     }
@@ -80,6 +91,7 @@ impl Agent {
             Agent::Fight(p) => p.hand(),
             _ => crate::tactical::tuning::Hand::default(),
         };
+        crate::motor::keys::set_on();
         self.x_mut().keys = Some(crate::motor::keys::Keys::new(hand));
     }
 
