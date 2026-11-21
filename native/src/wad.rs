@@ -417,30 +417,7 @@ fn whole(m: &MapData) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A WAD of these lumps (name, bytes), as bytes.
-    fn wad_bytes(lumps: &[(&str, Vec<u8>)]) -> Vec<u8> {
-        let mut data = b"PWAD".to_vec();
-        data.extend((lumps.len() as i32).to_le_bytes());
-        data.extend([0u8; 4]); // (the directory's place, set below)
-        let mut dir = Vec::new();
-        for (name, bytes) in lumps {
-            dir.extend((data.len() as i32).to_le_bytes());
-            dir.extend((bytes.len() as i32).to_le_bytes());
-            let mut n = name.as_bytes().to_vec();
-            n.resize(8, 0);
-            dir.extend(n);
-            data.extend(bytes);
-        }
-        let at = (data.len() as i32).to_le_bytes();
-        data[8..12].copy_from_slice(&at);
-        data.extend(dir);
-        data
-    }
-
-    fn u16s(v: &[u16]) -> Vec<u8> {
-        v.iter().flat_map(|x| x.to_le_bytes()).collect()
-    }
+    use crate::test_support::{u16s, wad_bytes};
 
     /// A one-room map: a square of four lines, one sector. `vertex`: the first line's second
     /// end, to point it somewhere that isn't there.

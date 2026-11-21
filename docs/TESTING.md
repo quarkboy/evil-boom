@@ -35,6 +35,11 @@ engine and follows routes in the game. Each test skips itself when the IWADs or 
 library aren't there, so it passes without them. That's why CI can run it, and also why a pass
 there proves little. Run them locally with the game data installed.
 
+What CI does run without the game data: the unit tests, the WAD reader's on broken bytes, and
+`tests/synthetic.rs`, which plans a level made in memory (`evilboom::test_support`: a WAD's
+bytes from lumps, a one-room level with the walls it's given). A new test that needs a level
+and not a particular one goes there.
+
 ## Parity: a change that should change nothing
 
 A refactor, a rename or a comment pass must leave her play exactly as it was. Every run is
