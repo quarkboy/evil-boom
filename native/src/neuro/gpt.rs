@@ -144,16 +144,37 @@ pub fn serve(port: u16, config_path: &Path) -> Result<(), String> {
 /// The stand-in in the background, on a free port, for a game in the same program to connect to
 /// (`watch --gpt`: one program). Its URL. The configuration's checked first, so a missing key
 /// stops it before the game starts.
+///
+/// Its thread isn't begun here but by `go`, once the game's set up: the engine's setting up
+/// sets environment variables (SDL's drivers, where the game's files are), and that with
+/// another thread alive, one that will look names up and read its own, is undefined behaviour.
 pub fn start(config_path: &Path) -> Result<String, String> {
     let config = configured(config_path)?;
     let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| format!("a local port: {e}"))?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    thread::spawn(move || {
-        if let Err(e) = run(&listener, &config) {
-            eprintln!("GPT stand-in stopped: {e}");
-        }
-    });
+    *WAITING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((listener, config));
     Ok(format!("ws://127.0.0.1:{port}"))
+}
+
+/// (`start`'s, till `go`)
+static WAITING: std::sync::Mutex<Option<(TcpListener, Config)>> = std::sync::Mutex::new(None);
+
+/// The stand-in `start` set up, begun (nothing, if none was or it's begun already). A game
+/// that connected before this is waiting in the port's queue.
+pub fn go() {
+    let waiting = WAITING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take();
+    if let Some((listener, config)) = waiting {
+        thread::spawn(move || {
+            if let Err(e) = run(&listener, &config) {
+                eprintln!("GPT stand-in stopped: {e}");
+            }
+        });
+    }
 }
 
 /// The configuration, with a key.

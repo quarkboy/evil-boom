@@ -834,6 +834,8 @@ fn first_watch(
     }
     let mut watch = level(&w, m, nav, engine, o)?;
     watch.feed = o.directed.as_deref().map(Feed::new);
+    // (the stand-in's thread, if there's one waiting: the engine is up, the environment set)
+    crate::neuro::gpt::go();
     watch.neuro = o.neuro.as_deref().map(crate::neuro::session::Session::new);
     Ok((w, watch))
 }

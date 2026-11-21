@@ -699,8 +699,14 @@ fn watch(args: &[String]) -> Result<(), String> {
     let [wad, map] = names.as_slice() else {
         return Err("usage: evil-boom watch <wad> <map> [options]".into());
     };
+    if w.headless {
+        // (SDL takes Ctrl-C and SIGTERM for its own quit event, which nothing headless reads: left
+        // to the shell, they stop it. Set while the process is one thread still)
+        std::env::set_var("SDL_NO_SIGNAL_HANDLERS", "1");
+    }
     if let Some(config) = &w.gpt {
-        // (the stand-in in this program, on a port of its own: one program to run)
+        // (the stand-in in this program, on a port of its own: one program to run. Its thread
+        // begins once the game's set up: `gpt::go`)
         w.neuro = Some(evilboom::neuro::gpt::start(config)?);
     }
     if o.snapshot.is_some() {
@@ -708,11 +714,6 @@ fn watch(args: &[String]) -> Result<(), String> {
         let (outcome, detail) = run_map(wad, map, &o)?;
         println!("RESULT {outcome} {detail}");
         return Ok(());
-    }
-    if w.headless {
-        // (SDL takes Ctrl-C and SIGTERM for its own quit event, which nothing headless reads: left
-        // to the shell, they stop it)
-        std::env::set_var("SDL_NO_SIGNAL_HANDLERS", "1");
     }
     evilboom::viewer::watch(wad, map, &w)
 }
