@@ -3281,3 +3281,71 @@ the levels (+0.0046, s.e. 0.0021) and takes longer over them (+17 s, s.e. 6); ex
 walking, and on the IWADs that buys nothing. Left as it is for them
 (`door-shape-no-odd.patch`); for a custom WAD, where the list of door textures is the gap,
 it belongs with the per-WAD list in custom-textures-plan.md.
+
+### The ultra instinct merged, and what it's worth from the start (2026-11-21)
+
+The three-lives test through the watcher with no window, the ultra instinct off and hers
+from a level's start (30 s of it, got back as she plays; `--ultra-after 0`): exits 294 to
+401 of 544, progress 0.801 to 0.905, kills 0.584 to 0.745, lives lost a run 1.09 to 0.64;
+it came on 12 times a run and a run took 97 s of real time for 37. Levels never exited 12
+to 5. Two faults found by the test and mended before the merge: the quick way of putting a
+game back left the game's lists of moving lifts and ceilings pointing at freed thinkers
+(a crash on E2M3: `evil_level_again` empties them); and a game put back took back the game
+but not what she believed she'd done, so a once-only switch pressed in the seconds undone
+was used up as she knew it and unpressed in the game (MAP21's ring, stood the hour:
+`Knowledge::undone`). Five runs still stand the hour with it on, one of them with it off
+too. Tried and not kept: on past the moment she died (no evidence in eight runs); MAP23's
+barrel hall, where a death undone five seconds isn't undone far enough, is left as too
+hard.
+
+### The code review of 2026-11-21, carried out (2026-11-21)
+
+[code-review-2026-11-21.md](../code-review-2026-11-21.md) has what was found, what was
+done and what's left, finding by finding. In short: the bridge checks it matches the
+program; no two modules depend on each other; the four largest files are each split by
+their jobs; the 2024 edition; and two faults that the new each-way check found on its
+first run, both in what a test measures. A level's first run in a fresh folder played on
+jumps a last bit off from every later run's (the jumps are kept as text, and text read
+back isn't always the number written). And the watcher listed her options afresh once a
+second for its map, which changed what she chose next: a run watched was not the run
+measured. `tools/eachway.sh`, `tools/demos.sh` and `tools/dev/cycles.py` are the checks
+that came of it.
+
+### Her movement by keys, and a run as a demo (2026-11-21)
+
+The maintainer's: a mode in which she's moved only by what the game takes from a keyboard,
+within what a hand does, so that a run of hers is something a person could have played and
+can be a Doom demo, played back by DSDA-Doom itself. Expected to cost something; worth it
+in the long run.
+
+**A demo.** `run-map --demo FILE`: the game's own recording, begun as the level begins
+(`evil_record`). An MBF21 demo, which is what the game plays as. Nine runs recorded and
+played back by the `dsda-doom` program come out the same to the second, the kill and the
+item (`tools/demos.sh`). It needs nothing of the keys: any run of hers on one life is a
+demo. What a demo may hold that a hand couldn't make is the push: any size, any direction.
+
+**The keys.** `--keys` (`motor/keys.rs`, `tuning.hand`): each tic's push made the nearest
+the five keys give, forward or back at 25 or 50 and sideways at 24 or 40, run choosing
+which for both. A key is down two tics at least and up three before it's pressed again;
+what's asked and not given is owed and asked for again, a share a tic over a press's
+length. Her turning is left: that's the mouse, already kept to what a hand does. Fire, use
+and the weapon keys were keys already (a ticcmd names the gun, as the game's own key
+handling resolves it).
+
+The three-lives test (544 runs, this build without it 293 exits): the first of it 241; a
+key timed by itself, so forward to back is one motion, 251; debts spread over a press 271,
+which is what's kept. 22 exits of 293, two runs standing the hour, her killing as it was.
+
+**Tried and dropped.** By keys, going only where she faces and steering by the turn: 209.
+Her turn is eased over many tics, far slower than a hand on a mouse, and she walked the
+route wide. If it's tried again it's with a turn as quick as a hand's.
+
+**What the keys cost her, where it shows.** Fine positioning: a tap is a dozen units and
+more, so a spot to stand on is hunted back and forth, and a narrow ledge over a floor that
+hurts is where it kills (MAP25's first walk). The Icon of Sin's lift (MAP30: 5 of 8 exits
+lost): riding it to the height and firing on time. Nothing of hers has been rewritten for
+keys yet; the follower still asks for pushes as if any could be had.
+
+**Not yet.** A demo of more than one life (a player dead presses use, and the level begins
+again inside the demo; hers begins it another way). Recording from the watcher. The
+follower's reaching and stopping written for taps.
