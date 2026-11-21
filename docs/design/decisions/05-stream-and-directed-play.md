@@ -3270,3 +3270,14 @@ against e2a242e: no run's outcome moved.
 
 With this, the uncrossable line and what her health refused, a run stands out the hour in
 none of the standard test's 544, none of MAP14's 32 and none of the boss levels' 128.
+
+### A door by its shape alone, tried and left (2026-11-20)
+
+From the textures plan's side finding: `door_shaped` wants a thin shut sector *and* a face
+unlike the walls beside it, and on Eviternity II the second half halves the doors it finds
+(102 of 231 for 197). Without it, on the standard test against eb1bea3: she sees more of
+the levels (+0.0046, s.e. 0.0021) and takes longer over them (+17 s, s.e. 6); exits 293 to
+291 with E4M7 five down and five other levels up. More doors is more ground and more
+walking, and on the IWADs that buys nothing. Left as it is for them
+(`door-shape-no-odd.patch`); for a custom WAD, where the list of door textures is the gap,
+it belongs with the per-WAD list in custom-textures-plan.md.
