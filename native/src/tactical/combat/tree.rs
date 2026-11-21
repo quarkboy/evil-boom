@@ -872,20 +872,49 @@ fn keeping_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         return None;
     }
     let pos = s.pos;
-    let way = s
-        .target
-        .as_ref()
-        .filter(|t| {
-            mon(t.name).attack != Attack::None
-                && !c.left_with_the_lot(t.id)
-                && dist((t.x, t.y), pos)
-                    < window(&c.preferred_gun(obs, t), t, c.tune.steer.near_by_gun).0
-        })
-        .and_then(|t| {
-            let gun = c.preferred_gun(obs, t);
-            c.steer(obs, Some(t), &gun)
-                .or_else(|| c.keeping_off(obs, t, s.aim))
-        })?;
+    let near = s.target.clone().filter(|t| {
+        mon(t.name).attack != Attack::None
+            && !c.left_with_the_lot(t.id)
+            && !c
+                .steer
+                .no_keep
+                .get(&t.id)
+                .is_some_and(|&(till, _)| obs.tic < till)
+            && dist((t.x, t.y), pos)
+                < window(&c.preferred_gun(obs, t), t, c.tune.steer.near_by_gun).0
+    })?;
+    // Not for ever, as backing off and stepping aren't. The gun she'd fight it with wants
+    // more room than there is: kept off from it, the route's legs taken every few tics, no
+    // round fired, and whatever she was going for never got to. (Doom E3M2: nothing left
+    // but ten rockets, a Spectre 150 to 270 off in a room too small to get a rocket's
+    // distance from it, and it not coming for her; "keeping off" 590 times and each errand
+    // given up as taking too long, from 546 s to the hour.) Kept off from so
+    // `engage.close_give_up` without a break and it none the worse, left a while, twice as
+    // long each time: the route goes on, shooting on the way when a shot comes.
+    /// keeping off is one go at it with no more than this between
+    const KEEP_BREAK: i64 = 2 * 35;
+    if c.patience.spent(
+        Effort::KeptOff,
+        near.id,
+        obs.tic,
+        c.tune.engage.close_give_up,
+        Some((f64::from(near.health), 0.0)),
+        Some(KEEP_BREAK),
+    ) {
+        let left = left_till(
+            c.steer.no_keep.get(&near.id),
+            obs.tic,
+            c.tune.engage.given_up_tics,
+        );
+        c.steer.no_keep.insert(near.id, left);
+        c.give_up(obs, near.id);
+        return None;
+    }
+    let way = Some(&near).and_then(|t| {
+        let gun = c.preferred_gun(obs, t);
+        c.steer(obs, Some(t), &gun)
+            .or_else(|| c.keeping_off(obs, t, s.aim))
+    })?;
     Some(Act::new(
         Move::KeepingOff,
         Some(way),

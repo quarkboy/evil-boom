@@ -105,6 +105,9 @@ pub struct Stepping {
     /// was hers to back off from again; ten minutes at the ledge.)
     /// With the tic, how many times it's been left so: twice as long each time (`left_till`).
     pub(super) no_back: BTreeMap<i32, (i64, u32)>,
+    /// kept off from these for long with them none the worse: each not kept off from again
+    /// till its tic (and how many times, as `no_back`)
+    pub(super) no_keep: BTreeMap<i32, (i64, u32)>,
 }
 
 /// Getting out of fire there's no dodging: an arch-vile's, a hitscan shooter's.

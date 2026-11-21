@@ -32,6 +32,8 @@ pub enum Effort {
     SteppedFor,
     /// backed off from, on and on: its health is the measure
     BackedFrom,
+    /// kept off from, out to her gun's distance, on and on: its health is the measure
+    KeptOff,
 }
 
 #[derive(Clone, Copy, Debug)]

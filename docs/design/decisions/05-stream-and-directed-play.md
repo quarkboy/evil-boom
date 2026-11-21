@@ -3115,3 +3115,20 @@ Tried on the way and not kept:
 Written and not yet measured: **anything untried, whatever it costs, when there is nothing
 left but to stand** (`anything-whatever.patch`), from MAP29: at 24 health on a ledge in the
 lava, every wall left 2 to 12 of her health against a margin of 20, 49 minutes stood.
+
+### Keeping off has its patience, as backing off and stepping have (2026-11-20)
+
+The run the crossing fix shuffled into an hour stood (E3M2 UV, seed 1008128369): nothing
+left but the launcher and ten rockets, a Spectre 150 to 270 off that wasn't coming for her,
+and a room too small to get a rocket's distance from it. "Keeping off from Spectre" 590
+times, the route's legs taken every few tics, each errand given up as taking too long, from
+546 s on. `backing_off` and `stepping_for_shot` each give a monster up after
+`engage.close_give_up` at it with it none the worse; `keeping_off` had no end. It has the
+same now (`Effort::KeptOff`, `steer.no_keep`, left twice as long each time).
+
+Three-lives test against c8173fe: three runs of 544 moved. Exits 294 to 293 (MAP17 one
+fewer), stood out the hour 1 to 0, the rest the same to the third place.
+
+The other stepping loops (MAP14: a step for a bullet's line with plasma up that the ball
+won't follow; a step worked out afresh each tic at something walking behind posts) are
+bounded by the patience they have, 20 s a bout, and are still as they were.
