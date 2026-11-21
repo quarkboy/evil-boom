@@ -60,6 +60,16 @@ jobs:
         working-directory: native
         run: cargo test --release
 
+      # (the build with no window: what a server runs. Nothing else builds it, so a change
+      # that only compiles with the viewer in would land unseen)
+      - name: Lint, headless
+        working-directory: native
+        run: cargo clippy --release --no-default-features --all-targets -- -D warnings
+
+      - name: Tests, headless
+        working-directory: native
+        run: cargo test --release --no-default-features
+
   windows:
     if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: windows-latest
