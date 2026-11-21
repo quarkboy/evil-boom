@@ -5,7 +5,7 @@
 //! console's commands applied at the top of a frame, as the window's own keys are; the game's
 //! state, log and events sent back. A child of the viewer for `Watch`'s insides.
 
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{sync_channel, SyncSender};
 use std::time::{Duration, Instant};
 
 use super::{enter_level, load_level, Rect, Watch, WatchOptions, GAME, H, MAP, W};
@@ -22,6 +22,9 @@ const VIEW_EVERY: Duration = Duration::from_millis(500);
 const VIEWS_HOLD: Duration = Duration::from_secs(3);
 
 /// A picture to send, by name.
+/// the pictures waiting to be made PNGs, at most: a round of them (the stream's, the game's)
+const PICTURES_WAITING: usize = 4;
+
 enum Picture {
     /// pixels as RGB
     Rgb(&'static str, usize, usize, Vec<u8>),
@@ -33,7 +36,7 @@ enum Picture {
 pub(super) struct Console {
     link: Link,
     /// to the thread that makes the pictures PNGs (not the window's: it'd stall a frame)
-    pictures: Sender<Picture>,
+    pictures: SyncSender<Picture>,
     last_view: Option<Instant>,
     /// the pictures a page is showing, and till when they're wanted (`Command::Views`)
     wanted: Vec<String>,
@@ -47,7 +50,9 @@ pub(super) struct Console {
 impl Console {
     pub(super) fn connect(addr: &str, wad: &str, map: &str, w: &Wad) -> Result<Console, String> {
         let link = Link::connect(addr, wad, map, maps(w))?;
-        let (pictures, todo) = channel::<Picture>();
+        // (a few at most waiting: with the PNGs or the link behind, a picture is dropped, not
+        // kept, megabytes each, for a page that will be sent a newer one anyway)
+        let (pictures, todo) = sync_channel::<Picture>(PICTURES_WAITING);
         let out = link.sender();
         std::thread::spawn(move || {
             for picture in todo {
@@ -99,7 +104,7 @@ impl Console {
                 }
             }
         }
-        let _ = self.pictures.send(Picture::Rgb("stream", hw, hh, rgb));
+        let _ = self.pictures.try_send(Picture::Rgb("stream", hw, hh, rgb));
     }
 
     /// The pictures sent: due again in VIEW_EVERY.
@@ -137,7 +142,7 @@ impl Console {
             let right: Rect = (MAP.0, 0, W - MAP.0, H);
             let _ = self
                 .pictures
-                .send(Picture::Rgb("map", right.2, right.3, crop(px, right)));
+                .try_send(Picture::Rgb("map", right.2, right.3, crop(px, right)));
         }
         if !self.wants("game") {
             return;
@@ -156,7 +161,7 @@ impl Console {
             ),
             None => Picture::Rgb("game", GAME.2, GAME.3, crop(px, GAME)),
         };
-        let _ = self.pictures.send(game);
+        let _ = self.pictures.try_send(game);
     }
 
     /// A new level: her log starts again (a new agent's).
