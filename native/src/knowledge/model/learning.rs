@@ -6,6 +6,7 @@
 use super::{
     needs_key, Fired, How, Knowledge, BUSY_TICS, LIFT_BACK_TICS, SHOT_RANGE, SURE_TICS, TAKE_TICS,
 };
+use crate::geom::Point;
 use crate::motor::{Controls, Observation};
 use crate::nav::Heights;
 use crate::navigator::{States, TriggerLine, EXIT_FLOOR, SHOT_HEIGHT};
@@ -250,15 +251,25 @@ impl Knowledge {
         obs: &Observation,
         controls: Option<&Controls>,
     ) {
-        // walking over
-        for (_, li) in self.lines_along(last.pos(), obs.pos()) {
+        // walking over, as the game takes it (`walked_over`)
+        let (a, b) = (last.pos(), obs.pos());
+        let near: BTreeSet<usize> =
+            crate::geom::cells_around(a, b, crate::geom::PLAYER_RADIUS + 1.0)
+                .filter_map(|c| self.nav.mesh.line_grid.get(&c))
+                .flatten()
+                .copied()
+                .collect();
+        for li in near {
             let Some(info) = self.info.get(&li) else {
                 continue;
             };
             if !info.trigger.walked() || info.category == Category::Teleport {
                 continue; // (going through a teleport is seen by where she ends up)
             }
-            self.fire(li, obs.tic, How::Walk);
+            let (p, q) = self.nav.map.line_seg(li);
+            if walked_over(a, b, p, q) {
+                self.fire(li, obs.tic, How::Walk);
+            }
         }
         let Some(c) = controls else { return };
         let a = last.angle.to_radians();
@@ -556,4 +567,37 @@ impl Knowledge {
         }
         true
     }
+}
+
+/// Did a step from `a` to `b` set off a walk-over line from `p` to `q`, as the game takes it?
+/// Not "her middle went over the line": her box, where she ends up, on the line (touching
+/// its bounds and astride it), and her middle gone from one side to the other of the line
+/// carried on for ever (P_TryMove: the lines her box is on are kept, PIT_CheckLine, and each
+/// is crossed if P_PointOnLineSide of where she was and where she is differ). So a line goes
+/// off as she passes its end within her half-width, her middle never over it.
+///
+/// (Doom E3M9, the maintainer's finding: the pad past the rocket launcher, a square of four
+/// such lines that drops the walls round the last yard. Come at by its corner, its east side
+/// went off as her middle passed that side's line 8 below its end; her middle went over the
+/// south side a tic later. Put down to the south side, the walls had begun a tic "before" it:
+/// busy, then, and nothing moved after, so "it didn't take", the crossing struck out, and
+/// what the pad does never learned in three lives and a dozen crossings, the walls coming
+/// down in front of her. The third life, the pad's floor walked already and the walls up
+/// again: nothing left to do, at 845 s of an hour.)
+fn walked_over(a: Point, b: Point, p: Point, q: Point) -> bool {
+    let r = crate::geom::PLAYER_RADIUS;
+    let (lo, hi) = ((p.0.min(q.0), p.1.min(q.1)), (p.0.max(q.0), p.1.max(q.1)));
+    if b.0 + r <= lo.0 || b.0 - r >= hi.0 || b.1 + r <= lo.1 || b.1 - r >= hi.1 {
+        return false;
+    }
+    // (the back of it, the game's side 1: on the line counts as that)
+    let back = |x: Point| (q.0 - p.0) * (x.1 - p.1) - (q.1 - p.1) * (x.0 - p.0) >= 0.0;
+    let corners = [
+        (b.0 - r, b.1 - r),
+        (b.0 + r, b.1 - r),
+        (b.0 - r, b.1 + r),
+        (b.0 + r, b.1 + r),
+    ];
+    let astride = corners.iter().any(|&c| back(c)) && corners.iter().any(|&c| !back(c));
+    astride && back(a) != back(b)
 }

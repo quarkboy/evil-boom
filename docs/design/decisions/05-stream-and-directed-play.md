@@ -3079,3 +3079,39 @@ turned on any reshuffle, the control with the order untouched as much as the cha
 carried the verdict; three lives is also nearer how she plays on stream. Still to decide: a
 level she's stranded in on her last life stands out its hour here, where the old score began
 it again.
+
+### A walked line goes off as the game has it, not as her middle crosses it (2026-11-20)
+
+From the maintainer's watching of a run stranded on E3M9 (the pad past the rocket launcher
+that drops the eight walls of the last yard; he suspected the pad hadn't gone off).
+
+- **The mechanic** (P_TryMove, PIT_CheckLine, P_PointOnLineSide): a walk-over line goes off
+  when her box, where she ends up, is on the line and her middle has changed sides of the
+  line carried on for ever. So passing a line's end within her half-width sets it off, her
+  middle never over it. She noted a crossing only when her middle went over the segment.
+- **What it cost.** Come at by its corner, the pad's east side went off a tic before her
+  middle went over its south side. Put down to the south side, the walls had begun "before"
+  it: busy, then, and nothing moved after, so "it didn't take", the crossing struck out,
+  and what the pad does never learned in three lives, the walls coming down in front of her.
+  Third life: the pad's floor walked already, the walls up again, nothing left to do.
+- **Now** `walked_over` (knowledge/model/learning.rs) is the game's rule.
+
+Three-lives test against 5b68061: exits 298 to 294 (-0.007, s.e. 0.009), progress 0.803 to
+0.802, damage 0.773 to 0.771; one run stood out the hour (E3M2 UV: out of ammo, a Spectre
+she can't get at, "keeping off" and "stepping for a shot" by turns from 546 s on: the
+stepping loop, an old fault the reshuffle walked into, to be mended next). On E3M9 itself
+the four seeds went 6 exits of 8 to 2, and a story was built on it (a pause to look round
+that had drawn the Cyberdemon off); the maintainer asked for a real sample, and on 16 fresh
+seeds a skill with five lives it is 22 of 32 to 23, the stranding gone. **Eight runs of one
+level are no evidence.**
+
+Tried on the way and not kept:
+
+- **Walking over such a line again in the next life** (`walked-again.patch`): level, and not
+  needed once she learns the line.
+- **A look round when more moved than she saw move** (`look-round-partly.patch`): exits 298
+  to 291, four runs stood out the hour, E3M9 18 of 32 against 22.
+
+Written and not yet measured: **anything untried, whatever it costs, when there is nothing
+left but to stand** (`anything-whatever.patch`), from MAP29: at 24 health on a ledge in the
+lava, every wall left 2 to 12 of her health against a margin of 20, 49 minutes stood.
