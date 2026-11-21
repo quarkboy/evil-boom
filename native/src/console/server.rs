@@ -233,6 +233,20 @@ impl Settings {
                     .into(),
             );
         }
+        // (names of levels and nothing else: it goes into the game's --choices as it is, and a
+        // `;` in it would begin another setting there)
+        if self
+            .evil_maps
+            .split(',')
+            .map(str::trim)
+            .filter(|m| !m.is_empty())
+            .any(|m| m != "all" && crate::engine::episode_map(m).is_err())
+        {
+            return Err(
+                "evil_maps: levels' names with commas between (E1M1, E2M1), all, or empty (the level above)"
+                    .into(),
+            );
+        }
         if !["bot", "neuro", "gpt"].contains(&self.mode.as_str()) {
             return Err("mode: bot, neuro or gpt".into());
         }
@@ -468,8 +482,29 @@ impl Shared {
         if let Some(dir) = self.saved_path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
-        std::fs::write(&self.saved_path, text)
-            .map_err(|e| format!("{}: {e}", self.saved_path.display()))
+        // (written beside it and moved over it: a crash half way leaves the old one whole.
+        // The token's in it: hers to read and nobody else's, where the system has that)
+        let tmp = self.saved_path.with_extension("json.tmp");
+        let written = (|| {
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut f = options.open(&tmp)?;
+            #[cfg(unix)]
+            {
+                // (one made before this with other rights: put right)
+                use std::os::unix::fs::PermissionsExt;
+                f.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+            }
+            f.write_all(text.as_bytes())?;
+            f.sync_all()?;
+            std::fs::rename(&tmp, &self.saved_path)
+        })();
+        written.map_err(|e| format!("{}: {e}", self.saved_path.display()))
     }
 
     fn send(&mut self, c: &Command) -> Result<(), String> {
@@ -954,7 +989,10 @@ fn handle(hub: &Hub, mut req: Request) {
             .rsplit('/')
             .next()
             .is_some_and(|last| last.contains('.') && last != "index.html");
-        let _ = req.respond(if method != Method::Get || file {
+        // (`//somewhere` and `/\somewhere` are another site's address to a browser: never
+        // sent back as where to go)
+        let elsewhere = path.starts_with("//") || path.contains('\\');
+        let _ = req.respond(if method != Method::Get || file || elsewhere {
             Response::from_string("not found").with_status_code(404)
         } else if path.ends_with('/') || path.ends_with("/index.html") {
             // (the page is the same for anyone: nothing in it is secret, the API is)
@@ -979,7 +1017,15 @@ fn handle(hub: &Hub, mut req: Request) {
         return;
     };
     let token = lock(hub).token.clone();
-    if !param("t").is_some_and(|t| same(&t, &token)) {
+    // (in the address, as the page has it, or in a header, for a caller that would sooner
+    // keep it out of logs)
+    let given = param("t").or_else(|| {
+        req.headers()
+            .iter()
+            .find(|h| h.field.equiv("X-Evil-Token"))
+            .map(|h| h.value.as_str().to_string())
+    });
+    if !given.is_some_and(|t| same(&t, &token)) {
         let _ = req.respond(json_response(
             401,
             &json!({ "error": "the console's token is needed (?t=, as printed when it started)" }),
@@ -987,10 +1033,12 @@ fn handle(hub: &Hub, mut req: Request) {
         return;
     }
     // (who's asking, for the log: the login a tunnel in front vouches for, else where it's from)
+    // (the tunnel runs on this machine: from anywhere else the header is anyone's to write)
+    let local = req.remote_addr().is_some_and(|a| a.ip().is_loopback());
     let who = req
         .headers()
         .iter()
-        .find(|h| h.field.equiv("Cf-Access-Authenticated-User-Email"))
+        .find(|h| local && h.field.equiv("Cf-Access-Authenticated-User-Email"))
         .map(|h| h.value.as_str().to_string())
         .or_else(|| req.remote_addr().map(|a| a.ip().to_string()))
         .unwrap_or_else(|| "?".into());
@@ -1334,6 +1382,27 @@ mod tests {
     }
 
     use super::*;
+
+    /// The levels she may start: names and `all`, nothing that would begin another setting in
+    /// the game's --choices.
+    #[test]
+    fn evil_maps_are_names_only() {
+        let with = |maps: &str| Settings {
+            evil_maps: maps.into(),
+            ..Settings::default()
+        };
+        for ok in ["", "all", "E1M1", " E1M1, E2M1 ", "e1m1,all"] {
+            assert!(with(ok).check().is_ok(), "{ok:?}");
+        }
+        for bad in [
+            "E1M1;restart=on",
+            "MAP99X",
+            "all;play=continuous",
+            "E1M1|all",
+        ] {
+            assert!(with(bad).check().is_err(), "{bad:?}");
+        }
+    }
 
     #[test]
     fn settings_checked() {
