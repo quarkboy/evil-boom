@@ -242,10 +242,19 @@ pub(super) fn find_jumps_cached(nav: &Navigator) -> Vec<Jump> {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
-    if let Ok(text) = serde_json::to_string(&out) {
-        let _ = std::fs::write(&path, text);
-    }
-    out.into_iter().map(from).collect()
+    // (the jumps as the file has them, not as they were worked out: a number read back from
+    // its text can be the next one along from the number written, and a run on jumps found
+    // this time then went another way than the same run on jumps kept from last time, by a
+    // jump's last bit. Every run reads them now, the first as the rest)
+    let Ok(text) = serde_json::to_string(&out) else {
+        return out.into_iter().map(from).collect();
+    };
+    let _ = std::fs::write(&path, &text);
+    serde_json::from_str::<Vec<Cached>>(&text)
+        .unwrap_or(out)
+        .into_iter()
+        .map(from)
+        .collect()
 }
 
 /// The speed a run from standing has after `length`, pushed forward and `side` sideways (the
