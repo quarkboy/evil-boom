@@ -317,6 +317,7 @@ impl Explorer {
         self.resort_wanted = None;
         self.short_legs.clear();
         self.harm_whatever = false;
+        self.harm_anything = false;
         let mut found = self.ordinary(obs, hooks);
         if !found {
             found = self.strafing_runs(obs, hooks);
@@ -394,6 +395,9 @@ impl Explorer {
         }
         if !found {
             found = self.way_on_whatever(obs, hooks);
+        }
+        if !found {
+            found = self.anything_whatever(obs, hooks);
         }
         if found {
             self.nothing_since = None;
@@ -808,6 +812,72 @@ impl Explorer {
             self.harm_allowed = false;
             self.harm_ways_only = false;
             self.harm_whatever = false;
+        }
+        found
+    }
+
+    /// And no way on she knows of either: anything she hasn't tried, a wall she suspects, any
+    /// wall round her, whatever it's reckoned to cost her. She may well die of it; she dies
+    /// knowing what it was, and the level again has that. Stood where she is she learns
+    /// nothing, and the hour goes. (The maintainer's rule, from Doom II MAP29 watched: down in
+    /// the lava and out onto a ledge at 24 health, a switch there raising a bridge, the
+    /// bridge's sides plain marble and never pressed; every wall left cost 2 to 12 of her
+    /// health against a margin of 20, 56 refusals, and 49 minutes stood on her last life.)
+    fn anything_whatever(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        /// stood with nothing to do this long first (tics): as `way_on_whatever`
+        const STOOD: i64 = 3 * 35;
+        if self.health_refused.is_empty()
+            || !self.may(Resort::Harm)
+            || self.nothing_since.is_none_or(|t| obs.tic - t < STOOD)
+        {
+            return false;
+        }
+        // Once for what she knows: found nothing, there's nothing till she knows more.
+        let known = self.knowledge.known_summary();
+        if self.anything_none.as_deref() == Some(known.as_str()) {
+            return false;
+        }
+        // Back in: what was turned down for her health, and only that. (Everything she'd
+        // given up let back in, each time: a way planned afresh to the whole list, every
+        // five seconds she stood with nothing to do, whatever she stood for. Doom II MAP22
+        // waiting on a door: 68 times in six minutes, a walk of 12 to look at nothing each
+        // time, and half an hour of the machine for the one run.)
+        let back = &self.health_refused;
+        self.dropped.retain(|id, _| !back.contains(id));
+        self.harm_allowed = true;
+        self.harm_ways_only = false;
+        self.harm_whatever = true;
+        self.harm_anything = true;
+        let mut found = false;
+        for suspecting in [Suspecting::Walls, Suspecting::EveryWall] {
+            self.suspecting = suspecting;
+            found = self.safe_then_risky(obs, hooks);
+            if found {
+                break;
+            }
+        }
+        self.suspecting = Suspecting::No;
+        // (and what she's now gone for was turned down for her health, or this isn't the
+        // resort's to take: something else that happened to be free is the ordinary passes')
+        let hers = self
+            .current
+            .as_ref()
+            .is_some_and(|o| self.health_refused.contains(&o.ident()));
+        if found && hers {
+            if let Some(o) = &self.current {
+                self.health_refused.remove(&o.ident());
+            }
+            self.log.push(format!(
+                "tic {}: nothing left to do but stand: anything she hasn't tried, whatever it costs her",
+                obs.tic
+            ));
+        } else {
+            self.harm_allowed = false;
+            self.harm_whatever = false;
+            self.harm_anything = false;
+            if !found {
+                self.anything_none = Some(known);
+            }
         }
         found
     }

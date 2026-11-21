@@ -3176,3 +3176,31 @@ Its own verdict on the fight experiments stands: making monsters fight each othe
 done, turning that into exits "remains unsolved" (E3M8 1 of 160 to 2 with its patient
 policy). Still to try from them: the Spider Mastermind set on any durable monster as it is
 on a Cyberdemon (`boss-set-on-heavy.patch`), judged on E3M8, E2M8 and MAP20 with 16 seeds.
+
+### Nothing left but to stand: what was refused for her health, whatever it costs (2026-11-20)
+
+The maintainer's rule, from MAP29 watched (down into the lava and out onto a ledge at 24
+health; every wall left to try 2 to 12 of her health against a margin of 20; 56 refusals,
+then 49 minutes stood on her last life): better she tries what she doesn't know and dies of
+it, knowing then what it was, than stands.
+
+- `anything_whatever`, the last resort of all: stood three seconds with nothing, what was
+  turned down for want of health this life (`health_refused`) is let back in, and only
+  that, the walls she suspects and then any wall, the health reckoning lifted.
+- It took four goes, and the lesson is in them. It first let back in everything she'd ever
+  given up, every tic (a run that took half an hour of the machine); then once for what she
+  knew (no better: the slowness wasn't in finding nothing); then only what was refused that
+  tic (it never fired: by three seconds on, nothing had been refused "this tic"); then
+  everything again, once a go. Each mended the slowness seen and none asked why it was
+  firing on MAP22 at all, where she stood for another reason: its only test was that she
+  had ever been refused anything for her health. Traced, the mend was plain: keep the list
+  of what was refused for health, and act on that list alone.
+- On the MAP29 run (on the build it happened on): "nothing left to do" at 693 s, two walls
+  tried from 696 s, dead of the lava at 702 s. 49 minutes of standing gone.
+- Three-lives test against c01b58c: six runs of 544 moved, exits 296 to 294 (MAP12 and
+  MAP22 one each), nothing stood out the hour either way. In both lost exits the life went
+  either way: without the resort she stood till a monster had her (MAP22, 85 s) or till
+  the run began the level again as stranded (MAP12, 60 s); with it she died trying a wall.
+  What differed was the life after. So with lives in hand it buys nothing but the chance of
+  what a wall turns out to be; on a last life, or on stream where she isn't begun again, it
+  is a death in place of an hour.

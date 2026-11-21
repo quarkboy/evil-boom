@@ -698,9 +698,10 @@ impl Explorer {
             // (and not at all with nothing whatever left to do: `way_on_whatever`)
             if cost > RISK_SHARE * health
                 && health - cost < margin
-                && !(self.harm_whatever && way_on)
+                && !(self.harm_whatever && (way_on || self.harm_anything))
             {
                 self.short_of_health = Some(obs.tic);
+                self.health_refused.insert(obj.ident());
                 return Some(Refusal::ShortOfHealth {
                     cost,
                     health,

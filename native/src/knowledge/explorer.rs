@@ -667,6 +667,13 @@ pub struct Explorer {
     /// with nothing at all left to do: a way on taken whatever it's reckoned to cost her
     /// (`way_on_whatever`)
     harm_whatever: bool,
+    /// ...and for anything at all she hasn't tried, a wall too (`anything_whatever`)
+    harm_anything: bool,
+    /// ...found nothing, knowing this much: not looked for again till she knows more
+    anything_none: Option<String>,
+    /// what's been turned down for want of health, this life: what `anything_whatever` has
+    /// back in
+    health_refused: BTreeSet<Ident>,
     /// the first switch of each way of several legs turned down this think for want of health
     /// (`way_on_by_legs`)
     short_legs: Vec<TriggerLine>,
@@ -880,6 +887,9 @@ impl Explorer {
             pressed_knowing: BTreeMap::new(),
             known_again: false,
             harm_whatever: false,
+            harm_anything: false,
+            anything_none: None,
+            health_refused: BTreeSet::new(),
             short_legs: Vec::new(),
             legs_taken: BTreeSet::new(),
             nothing_since: None,
@@ -975,6 +985,8 @@ impl Explorer {
         self.follower = None;
         self.life_began = None;
         self.dropped.clear();
+        self.health_refused.clear();
+        self.anything_none = None;
         self.drop_count.clear();
         self.secrets_had.clear();
         self.look_until = None;
