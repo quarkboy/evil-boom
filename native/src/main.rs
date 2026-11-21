@@ -323,6 +323,7 @@ fn follow(wad: &str, map: &str) -> Result<(), String> {
 
 fn run_one(args: &[String]) -> Result<(), String> {
     let (o, _, rest) = run_options(args)?;
+    cli::no_flags(&rest)?;
     let [wad, map] = rest.as_slice() else {
         return Err("usage: evil-boom run-map <wad> <map> [options]".into());
     };
@@ -358,6 +359,7 @@ fn episode(args: &[String]) -> Result<(), String> {
             names.push(a.clone());
         }
     }
+    cli::no_flags(&names)?;
     let [wad, first] = names.as_slice() else {
         return Err("usage: evil-boom episode <wad> <first map> [--seeds K] [run options]".into());
     };
@@ -457,6 +459,7 @@ fn episode_chain(
 /// WATCH (how to watch the level it ended on), END (levels got through, how it ended).
 fn episode_one(args: &[String]) -> Result<(), String> {
     let (mut o, _, rest) = run_options(args)?;
+    cli::no_flags(&rest)?;
     let [wad, first] = rest.as_slice() else {
         return Err("usage: evil-boom episode-one <wad> <first map> [run options]".into());
     };
@@ -553,6 +556,7 @@ fn ultra(args: &[String], check: bool) -> Result<(), String> {
         }
     }
     let (mut o, _, rest) = run_options(&rest_args)?;
+    cli::no_flags(&rest)?;
     let [wad, map] = rest.as_slice() else {
         return Err(
             "usage: evil-boom ultra <wad> <map> [--depth N --width N --move N] [run options]"
@@ -588,6 +592,7 @@ fn drive(args: &[String]) -> Result<(), String> {
             names.push(a.clone());
         }
     }
+    cli::no_flags(&names)?;
     let ([wad, map], Some(script)) = (names.as_slice(), script) else {
         return Err("usage: evil-boom drive <wad> <map> --script FILE [run options]".into());
     };
@@ -596,6 +601,7 @@ fn drive(args: &[String]) -> Result<(), String> {
 
 fn sweep(args: &[String]) -> Result<(), String> {
     let (o, jobs, rest) = run_options(args)?;
+    cli::no_flags(&rest)?;
     // (wad, maps named after it)
     let mut groups: Vec<(String, Vec<String>)> = Vec::new();
     for t in rest {
@@ -696,6 +702,7 @@ fn sweep(args: &[String]) -> Result<(), String> {
 #[cfg(feature = "viewer")]
 fn watch(args: &[String]) -> Result<(), String> {
     let (mut w, names, o) = watch_options(args)?;
+    cli::no_flags(&names)?;
     let [wad, map] = names.as_slice() else {
         return Err("usage: evil-boom watch <wad> <map> [options]".into());
     };
@@ -770,6 +777,7 @@ fn record(args: &[String]) -> Result<(), String> {
         }
     }
     let (mut w, names, _) = watch_options(&rest)?;
+    cli::no_flags(&names)?;
     let [wad, map, out] = names.as_slice() else {
         return Err("usage: evil-boom record <wad> <map> <out.mp4> [--view game|full|hud] [--size WxH] [--speed N] [--episode] [options]".into());
     };

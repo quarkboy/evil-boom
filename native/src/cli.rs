@@ -5,6 +5,18 @@
 
 use evilboom::sweep::RunOptions;
 
+/// What's left once every option a command knows has been read is names (a WAD, maps, a file):
+/// anything there that begins `--` is an option nobody knew, a misspelling as a rule, and is
+/// said so, not taken for a name.
+pub(crate) fn no_flags(names: &[String]) -> Result<(), String> {
+    match names.iter().find(|a| a.starts_with("--")) {
+        Some(a) => Err(format!(
+            "unknown option {a} (evil-boom help options, or help and the command's name)"
+        )),
+        None => Ok(()),
+    }
+}
+
 /// The run options among `args`: (options, jobs, the rest as they were).
 pub(crate) fn run_options(args: &[String]) -> Result<(RunOptions, usize, Vec<String>), String> {
     let mut o = RunOptions::default();
