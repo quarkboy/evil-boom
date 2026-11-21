@@ -1222,6 +1222,13 @@ void evil_level_again(void)
   totalsecret = evil_level.secret;
   /* (switches waiting to pop back: the archive adds those of its game to an empty list) */
   memset(buttonlist, 0, sizeof(buttonlist));
+  /* (the lists of lifts and ceilings moving: the archive adds each of its game's to them, and
+   * only the level's setting up empties them. Left, they kept an entry for every lift and
+   * crusher of every game put back, each pointing at a thinker since freed: the next thing to
+   * stop or start "all the lifts with this tag" read and wrote through them, into memory that
+   * was by then something else's. E2M3 crashed of it, the heap corrupted) */
+  P_RemoveAllActiveCeilings();
+  P_RemoveAllActivePlats();
   /* (each sector's teleport destination, remembered as a pointer to the thing) */
   for (i = 0; i < numsectors; i++)
     P_ResetTeleptFromSector(i);
