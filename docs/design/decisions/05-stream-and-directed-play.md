@@ -3204,3 +3204,29 @@ it, knowing then what it was, than stands.
   What differed was the life after. So with lives in hand it buys nothing but the chance of
   what a wall turns out to be; on a last life, or on stream where she isn't begun again, it
   is a death in place of an hour.
+
+### E3M8: what she needs to come in with (2026-11-20)
+
+The maintainer's experiment. Ultra-Violence, 100 health and 100 green armor, 16 seeds a
+loadout, three lives (each begun with the loadout again); `out/lives/e3m8.sh`. A backpack's
+worth is what one gives: 10 bullets, 4 shells, 1 rocket, 20 cells.
+
+| Loadout | Exits | Without dying | Lives lost a run |
+|---|---|---|---|
+| Pistol start, no armor | 0 of 16 | 0 | 2.00 |
+| Every gun but the BFG, 2 backpacks | 0 | 0 | 2.00 |
+| ... 4 backpacks | 0 | 0 | 2.00 |
+| ... 6 backpacks | 6 | 2 | 1.56 |
+| ... 8 backpacks | 13 | 5 | 1.00 |
+| The BFG alone, 40 cells | 1 | 0 | 1.94 |
+| ... 80 cells | 1 | 0 | 2.00 |
+| ... 160 cells | 14 | 10 | 0.56 |
+| ... 320 cells | 16 | 16 | 0.00 (16 s of game) |
+
+The level is lost on what she brings, not on how she fights it: no win below six backpacks'
+worth with ordinary guns, nor below four BFG shots. And on the boss levels with 16 seeds a
+skill and three lives she stands at E3M8 0 of 32, E2M8 25 of 32, MAP20 0 of 32 from a
+pistol start and 1 of 32 with what she'd carry from MAP19. The Spider Mastermind set on any
+durable monster as it is on a Cyberdemon (`boss-set-on-heavy.patch`) won E3M8 twice in 32
+and lost E4M8 twice on the standard test, with less damage dealt on the boss levels over
+all (-0.020, s.e. 0.007): not kept.
