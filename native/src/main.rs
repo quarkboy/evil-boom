@@ -1107,7 +1107,8 @@ fn arena(args: &[String]) -> Result<(), String> {
         .collect();
     let total = todo.len();
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
-    let mut running: Vec<(String, u32, Child)> = Vec::new();
+    type Reading = Option<std::thread::JoinHandle<String>>;
+    let mut running: Vec<(String, u32, Child, Reading, Reading)> = Vec::new();
     let mut tally: std::collections::BTreeMap<String, [u32; 4]> = std::collections::BTreeMap::new();
     // (health left, a lost fight's none; seconds taken, won)
     let mut left: std::collections::BTreeMap<String, (f64, f64)> =
@@ -1118,42 +1119,45 @@ fn arena(args: &[String]) -> Result<(), String> {
             let Some((name, k)) = todo.pop_front() else {
                 break;
             };
-            let child = Command::new(&me)
+            let mut child = Command::new(&me)
                 .args(["arena-one", &file, &name, "--seed", &k.to_string()])
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .spawn()
                 .map_err(|e| e.to_string())?;
-            running.push((name, k, child));
-        }
-        let Some(i) = running
-            .iter_mut()
-            .position(|(_, _, c)| c.try_wait().ok().flatten().is_some())
-        else {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            continue;
-        };
-        let (name, k, mut child) = running.swap_remove(i);
-        let mut out = String::new();
-        if let Some(s) = child.stdout.take() {
-            out = BufReader::new(s)
-                .lines()
-                .map_while(Result::ok)
-                .find(|l| l.starts_with("RESULT "))
-                .unwrap_or_default();
-        }
-        if out.is_empty() {
-            let err = child
-                .stderr
-                .take()
-                .map(|s| {
+            // (both pipes read as the child writes: one waited on till it had ended, having
+            // written more than a pipe holds, would wait for ever, the child stuck on its
+            // write)
+            let result = child.stdout.take().map(|s| {
+                std::thread::spawn(move || {
+                    let mut lines = BufReader::new(s).lines().map_while(Result::ok);
+                    let first = lines.by_ref().find(|l| l.starts_with("RESULT "));
+                    lines.for_each(drop); // (the rest read too, to its end)
+                    first.unwrap_or_default()
+                })
+            });
+            let errors = child.stderr.take().map(|s| {
+                std::thread::spawn(move || {
                     BufReader::new(s)
                         .lines()
                         .map_while(Result::ok)
                         .collect::<Vec<_>>()
                         .join(" ")
                 })
-                .unwrap_or_default();
+            });
+            running.push((name, k, child, result, errors));
+        }
+        let Some(i) = running
+            .iter_mut()
+            .position(|(_, _, c, ..)| c.try_wait().ok().flatten().is_some())
+        else {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            continue;
+        };
+        let (name, k, _child, result, errors) = running.swap_remove(i);
+        let read = |h: Reading| h.and_then(|h| h.join().ok()).unwrap_or_default();
+        let (mut out, err) = (read(result), read(errors));
+        if out.is_empty() {
             out = format!("RESULT ERROR {err}");
         }
         let line = out.trim_start_matches("RESULT ").to_string();
