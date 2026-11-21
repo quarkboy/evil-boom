@@ -146,7 +146,7 @@ impl Default for Settings {
             episode: true,
             mode: "bot".into(),
             neuro_url: "ws://127.0.0.1:8000".into(),
-            console_name: crate::control::directed::CONSOLE_NAME.into(),
+            console_name: super::CONSOLE_NAME.into(),
             muted: false,
             sfx_volume: None,
             music_volume: None,

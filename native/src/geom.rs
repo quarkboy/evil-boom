@@ -225,6 +225,18 @@ pub fn cells_around(a: Point, b: Point, pad: f64) -> impl Iterator<Item = Cell> 
     )
 }
 
+/// How far `p` is from the segment a-b.
+pub fn segment_point_distance(a: Point, b: Point, p: Point) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let n = dx * dx + dy * dy;
+    let u = if n == 0.0 {
+        0.0
+    } else {
+        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / n).clamp(0.0, 1.0)
+    };
+    dist(p, (a.0 + dx * u, a.1 + dy * u))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

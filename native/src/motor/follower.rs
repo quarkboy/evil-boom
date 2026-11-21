@@ -19,7 +19,8 @@ mod state;
 mod trouble;
 mod walking;
 
-use super::{Motion, Track, RUN_TURN};
+use super::{Motion, Track};
+use crate::domain::RUN_TURN;
 use crate::domain::{heading, norm, Controls, Observation, FULL_SPEED, TICRATE};
 use crate::geom::{dist, segments_cross, Point};
 use crate::mesh::inside;

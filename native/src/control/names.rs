@@ -130,7 +130,7 @@ mod tests {
     #[test]
     fn every_kind_is_named() {
         for name in (0..200).filter_map(type_name) {
-            let kind = crate::tactical::bestiary::category(name);
+            let kind = crate::bestiary::category(name);
             if matches!(
                 kind,
                 "Monster" | "Weapon" | "Ammo" | "Health" | "Armor" | "Key" | "Powerup"

@@ -693,7 +693,7 @@ impl RouteFollower {
             t.category == "Monster"
                 && t.health > 0
                 // (bodies are boxes: touching on both axes)
-                && crate::tactical::bestiary::monster(t.name).is_some_and(|m| (t.x - pos.0).abs().max((t.y - pos.1).abs()) < m.radius + PLAYER_RADIUS + 8.0)
+                && crate::bestiary::monster(t.name).is_some_and(|m| (t.x - pos.0).abs().max((t.y - pos.1).abs()) < m.radius + PLAYER_RADIUS + 8.0)
                 && norm(heading(pos, (t.x, t.y)) - to).abs() < 90.0
         });
         if obs.tic - since > 8 && self.motion.speed() < 2.0 && body_ahead {

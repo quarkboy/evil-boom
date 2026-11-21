@@ -16,10 +16,10 @@ pub use physics::{Controls, PlayerSim, World};
 
 use crate::det::{HashMap, HashSet};
 use crate::domain::MAX_MOVE;
+use crate::domain::RUN_TURN;
 use crate::geom::{dist, Cell, Point, Seg, MAX_STEP};
 use crate::map::MapData;
 use crate::mesh::Mesh;
-use crate::motor::RUN_TURN;
 use crate::nav::Heights;
 use std::sync::{Arc, OnceLock};
 

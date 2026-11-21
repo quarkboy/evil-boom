@@ -302,8 +302,8 @@ impl Player {
                 // What was standing there when she came in will be shooting at her the whole
                 // way round: a few seconds for it now, with everything she has but the rockets.
                 let shooter = self.fight.combat.visible.iter().any(|t| {
-                    crate::tactical::bestiary::monster(t.name)
-                        .is_some_and(|m| m.attack != crate::tactical::bestiary::Attack::None)
+                    crate::bestiary::monster(t.name)
+                        .is_some_and(|m| m.attack != crate::bestiary::Attack::None)
                 });
                 if shooter && obs.tic - since < CLEARING {
                     // (the BFG for it, while there's a shot in it)
@@ -821,7 +821,7 @@ impl Player {
     fn boss_aim_taken(obs: &Observation, way: f64) -> Vec<(&'static str, f64)> {
         let mut out = Vec::new();
         for t in obs.things.iter().flatten() {
-            let Some(m) = crate::tactical::bestiary::monster(t.name) else {
+            let Some(m) = crate::bestiary::monster(t.name) else {
                 continue;
             };
             if t.health <= 0 {

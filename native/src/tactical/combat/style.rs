@@ -5,8 +5,8 @@
 //! distance), the distance she'd fight it from (its window), and how far the weapon reaches.
 
 use super::{mon, Combat};
+use crate::bestiary::{melee_at, Attack, Weapon};
 use crate::domain::Thing;
-use crate::tactical::bestiary::{melee_at, Attack, Weapon};
 
 /// How she fights a monster with a weapon.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

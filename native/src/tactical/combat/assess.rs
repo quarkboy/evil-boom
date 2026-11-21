@@ -15,9 +15,9 @@
 
 use super::arsenal::Odds;
 use super::{mon, spread, Combat};
+use crate::bestiary::Attack;
 use crate::domain::{Observation, Thing};
 use crate::geom::{dist, Point};
-use crate::tactical::bestiary::Attack;
 
 /// How things stand, this tic.
 #[derive(Clone, Debug)]

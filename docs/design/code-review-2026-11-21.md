@@ -59,6 +59,13 @@ the order of work changed.
   checks the pinned commit and refuses a tree changed by something else; `build.rs` reads
   `fix` from its own section. Left: `shellcheck` (not installed where this was done, so
   what it would flag is unknown), `-Wall -Wextra` on the bridge, Freedoom in CI.
+- **Phase 2.1** (2026-11-21): `domain.rs` holds a tic's observation and controls, the
+  things and sounds in it, the game's constants of time and movement, her turn limits and
+  the risk share; `bestiary.rs` is a module of its own, not the fight's (the engine and the
+  follower read it); `episode_map` is `map.rs`'s; `CONSOLE_NAME` is the console's; a
+  geometry helper is `geom.rs`'s. Of eight two-way dependencies between top-level modules
+  two are left, `sweep` with `viewer` and with `ultra`: the run's options and the game loop,
+  which is Phase 2.2. `wad` still reads `config::pwads()`.
 - **Phase 1** (2026-11-21): C3 (the ABI check, and no `transmute` left in `dsda.rs`), H1
   (`arena`), C1, C2, H6 (the progress line, unknown options), H3, H4, H5 (with the first
   tests CI can run without IWADs), C4 (all but ending the game on Ctrl-C, which needs a

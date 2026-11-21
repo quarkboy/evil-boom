@@ -9,7 +9,8 @@
 pub mod follower;
 
 use crate::domain::{
-    heading, norm, Controls, Observation, FRICTION, FULL_SPEED, MAX_MOVE, RUN_THRUST,
+    heading, norm, Controls, Observation, FRICTION, FULL_SPEED, MAX_MOVE, MAX_TURN, RUN_THRUST,
+    TURN_ACCEL,
 };
 use crate::geom::{closest_point, dist, Point};
 use crate::nav::Heights;
@@ -29,24 +30,6 @@ pub fn creep_pace(room: f64, fall: f64) -> f64 {
     (room / tics).max(DROP_CREEP)
 }
 
-/// degrees a tic she turns running across sinking floors
-pub(crate) const RUN_TURN: f64 = 10.0;
-
-/// Turning, roughly a keyboard player's (vanilla's fast keyboard turn is 7 degrees a tic).
-pub(crate) const MAX_TURN: f64 = 8.0;
-pub(crate) const TURN_ACCEL: f64 = 1.0;
-
-/// Tics to go `d` from `v0` units a tic (negative: going the other way), running straight on
-/// (thrust and friction as Doom has them), at `pace` of it.
-pub fn run_tics(v0: f64, d: f64, pace: f64) -> f64 {
-    let (mut v, mut x, mut k) = (v0, 0.0, 0.0);
-    while x < d && k < 400.0 {
-        v = (v + RUN_THRUST) * FRICTION;
-        x += v * pace;
-        k += 1.0;
-    }
-    k
-}
 /// deceleration assumed when planning speed (units a tic, per tic)
 pub const BRAKE: f64 = 1.5;
 /// moving up to this far off the facing direction costs no speed

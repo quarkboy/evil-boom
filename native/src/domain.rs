@@ -217,3 +217,28 @@ pub fn norm(deg: f64) -> f64 {
 pub fn heading(a: Point, b: Point) -> f64 {
     (b.1 - a.1).atan2(b.0 - a.0).to_degrees()
 }
+
+/// degrees a tic she turns running across sinking floors
+pub(crate) const RUN_TURN: f64 = 10.0;
+
+/// Turning, roughly a keyboard player's (vanilla's fast keyboard turn is 7 degrees a tic).
+pub(crate) const MAX_TURN: f64 = 8.0;
+pub(crate) const TURN_ACCEL: f64 = 1.0;
+
+/// Tics to go `d` from `v0` units a tic (negative: going the other way), running straight on
+/// (thrust and friction as Doom has them), at `pace` of it.
+pub fn run_tics(v0: f64, d: f64, pace: f64) -> f64 {
+    let (mut v, mut x, mut k) = (v0, 0.0, 0.0);
+    while x < d && k < 400.0 {
+        v = (v + RUN_THRUST) * FRICTION;
+        x += v * pace;
+        k += 1.0;
+    }
+    k
+}
+
+/// (hers, not the game's, but read at every level of her: the follower's, the explorer's, the
+/// fight's)
+/// the share of her health something on the way may cost her and still not be a risk (the
+/// user's: "10% or less of current health = not risky"): floors that hurt, a fast crusher's stroke
+pub const RISK_SHARE: f64 = 0.1;

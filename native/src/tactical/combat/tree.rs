@@ -36,10 +36,10 @@ use super::moves::{HeldFire, Move};
 use super::patience::Effort;
 use super::style::{window, Style};
 use super::{mon, Combat, Decision};
+use crate::bestiary::{claw_max, Attack};
 use crate::domain::{heading, norm, Observation, Thing};
 use crate::geom::{dist, Point};
 use crate::navigator::PLAYER_RADIUS;
-use crate::tactical::bestiary::{claw_max, Attack};
 
 /// The fight as it stands this tic, sized up before the tree.
 pub(super) struct Situation<'a> {

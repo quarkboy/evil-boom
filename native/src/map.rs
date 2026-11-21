@@ -240,3 +240,22 @@ impl MapData {
         (self.vertexes[l.v1].point(), self.vertexes[l.v2].point())
     }
 }
+
+/// (episode, map) from a map name: E1M1 or MAP01.
+pub fn episode_map(name: &str) -> Result<(i32, i32), String> {
+    let n = name.to_uppercase();
+    let bad = || format!("not a map name: {name}");
+    if let Some(rest) = n.strip_prefix("MAP") {
+        return Ok((1, rest.parse().map_err(|_| bad())?));
+    }
+    let b = n.as_bytes();
+    if b.len() == 4
+        && b[0] == b'E'
+        && b[2] == b'M'
+        && b[1].is_ascii_digit()
+        && b[3].is_ascii_digit()
+    {
+        return Ok((i32::from(b[1] - b'0'), i32::from(b[3] - b'0')));
+    }
+    Err(bad())
+}

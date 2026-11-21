@@ -35,7 +35,7 @@ const CROSS_COMMIT: i64 = 3 * 35;
 
 /// Tics to go `d` from `v0` units a tic, running straight on, at `CROSS_PACE` of her speed.
 fn run_tics(v0: f64, d: f64) -> f64 {
-    crate::motor::run_tics(v0, d, CROSS_PACE)
+    crate::domain::run_tics(v0, d, CROSS_PACE)
 }
 
 /// (mortal) a crusher ahead still this long, too low to get under, has stopped: no waiting for it
@@ -671,7 +671,7 @@ impl RouteFollower {
         let h = obs.heights[s];
         let room = crate::crush::room_tics(h, kind);
         if crate::crush::stroke_cost(kind, obs)
-            <= crate::knowledge::RISK_SHARE * obs.health.unwrap_or(100.0)
+            <= crate::domain::RISK_SHARE * obs.health.unwrap_or(100.0)
         {
             return None;
         }

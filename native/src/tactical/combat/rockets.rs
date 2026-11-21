@@ -241,7 +241,7 @@ impl Combat {
         }
         self.rockets.health = things
             .iter()
-            .filter(|t| crate::tactical::bestiary::monster(t.name).is_some())
+            .filter(|t| crate::bestiary::monster(t.name).is_some())
             .map(|t| (t.id, t.health))
             .collect();
     }

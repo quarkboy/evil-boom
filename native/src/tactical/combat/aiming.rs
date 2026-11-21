@@ -7,13 +7,13 @@
 use super::moves::HeldFire;
 use super::style::Style;
 use super::{mon, segment_point_distance, Combat};
+use crate::bestiary::{monster, weapon_in, Attack};
 use crate::decisions::Record;
 use crate::domain::{heading, norm, Observation, Thing};
 use crate::geom::{dist, Point};
 use crate::los::Body;
 use crate::motor::follower::blast_gap;
 use crate::navigator::PLAYER_HEIGHT;
-use crate::tactical::bestiary::{monster, weapon_in, Attack};
 
 /// a barrel's blast is clear of her this far off (its 128 and her radius, and a little), by
 /// `blast_gap`...
@@ -801,7 +801,7 @@ impl Combat {
 
     /// A barrel on the line of a shot at t (up to t, within the gun's spread) whose chain would
     /// go off by her: a bullet takes the first thing on its line.
-    fn barrel_in_line(obs: &Observation, w: &crate::tactical::bestiary::Weapon, t: &Thing) -> bool {
+    fn barrel_in_line(obs: &Observation, w: &crate::bestiary::Weapon, t: &Thing) -> bool {
         let pos = obs.pos();
         let d = dist((t.x, t.y), pos);
         // A bullet: anywhere in the spread at that distance. A missile: what its box touches.
@@ -887,7 +887,7 @@ impl Combat {
 
     /// How far off a rocket's burst must be from her: its blast and a margin.
     pub(super) fn rocket_clear() -> f64 {
-        crate::tactical::bestiary::weapon(5).splash + 48.0
+        crate::bestiary::weapon(5).splash + 48.0
     }
 
     /// Is a rocket at t sure not to blow up by her?

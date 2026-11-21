@@ -428,8 +428,7 @@ struct Queued {
 /// once: an action of hers takes over, and she's asked what next as instinct takes up;
 /// `doom_policy instinct off` has her wait)
 pub const IDLE_AUTO: i64 = 0;
-/// who's at the stream console, unless it says
-pub const CONSOLE_NAME: &str = "Vedal";
+pub use crate::console::CONSOLE_NAME;
 
 /// a go to an area whose middle she has no way to: at most this many of its unexplored spots,
 /// and this many of its other known spots, tried for one she has
@@ -979,8 +978,9 @@ impl Director {
         for t in obs.things.iter().flatten() {
             let notable = match t.category {
                 "Key" | "Powerup" => true,
-                "Weapon" => crate::tactical::bestiary::weapon_item(t.name)
-                    .is_some_and(|w| !held.contains(&w)),
+                "Weapon" => {
+                    crate::bestiary::weapon_item(t.name).is_some_and(|w| !held.contains(&w))
+                }
                 "Health" | "Armor" => matches!(
                     t.name,
                     "Soulsphere" | "Megasphere" | "BlueArmor" | "GreenArmor" | "Berserk"
@@ -1040,9 +1040,9 @@ impl Director {
                 .min_by(|a, b| dist(pos, *a).total_cmp(&dist(pos, *b)))
                 .unwrap_or(pos);
             let what: Vec<String> = counts.iter().map(|(n, c)| some(*c, n)).collect();
-            let dangerous = new.iter().any(|m| {
-                crate::tactical::bestiary::monster(m.1).is_some_and(|i| i.boss || i.threat >= 6.0)
-            });
+            let dangerous = new
+                .iter()
+                .any(|m| crate::bestiary::monster(m.1).is_some_and(|i| i.boss || i.threat >= 6.0));
             let text = format!(
                 "Monsters: {} ({} {:.0}).",
                 what.join(", "),
@@ -1091,8 +1091,9 @@ impl Director {
                     t.id
                 );
                 notable |= match t.category {
-                    "Weapon" => crate::tactical::bestiary::weapon_item(t.name)
-                        .is_some_and(|w| !held.contains(&w)),
+                    "Weapon" => {
+                        crate::bestiary::weapon_item(t.name).is_some_and(|w| !held.contains(&w))
+                    }
                     "Key" | "Powerup" | "Armor" => true,
                     _ => matches!(t.name, "Soulsphere" | "Megasphere" | "Berserk"),
                 };
@@ -3051,7 +3052,7 @@ fn with_secrets(secrets: u8) -> String {
 /// A pickup she takes by herself whenever it's safe: bonuses below 200, health that heals her
 /// without going to waste, ammo with room for all of it.
 fn spare(name: &str, obs: &Observation) -> bool {
-    use crate::tactical::bestiary::{ammo_item, ammo_max, health_item};
+    use crate::bestiary::{ammo_item, ammo_max, health_item};
     let health = obs.health.unwrap_or(100.0);
     match name {
         "HealthBonus" => health < 200.0,

@@ -19,6 +19,7 @@
 
 pub mod advisor;
 pub mod arena;
+pub mod bestiary;
 pub mod config;
 pub mod console;
 pub mod control;

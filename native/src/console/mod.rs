@@ -131,6 +131,9 @@ pub enum Command {
 }
 
 /// What the game tells the console.
+/// who's at the stream console, unless it says
+pub const CONSOLE_NAME: &str = "Vedal";
+
 /// The environment variable the console hands its game a key in, new each start, for the game
 /// to say back in its `Hello`.
 pub const KEY_VAR: &str = "EVIL_CONSOLE_KEY";

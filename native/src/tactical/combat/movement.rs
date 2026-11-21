@@ -4,11 +4,11 @@
 //! Missile avoidance, strafing and checking safe escape directions.
 
 use super::{clearance, hit_clearance, miss_by, Combat};
+use crate::bestiary::{missile, weapon_in, Weapon};
 use crate::domain::{heading, norm, Observation, Thing, FRICTION, RUN_THRUST};
 use crate::geom::{dist, segments_cross, Point};
 use crate::los::Body;
 use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS, TELEPORTERS_FOR_PLAYERS};
-use crate::tactical::bestiary::{missile, weapon_in, Weapon};
 use std::collections::BTreeSet;
 
 const DODGE_WAYS: usize = 16;

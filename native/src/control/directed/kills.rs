@@ -14,11 +14,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::Event;
 use super::{a, called, compass, some, the, Director};
+use crate::bestiary::monster;
 use crate::domain::{heading, Observation};
 use crate::dsda::HitCause;
 use crate::geom::{dist, Point};
 use crate::play::Agent;
-use crate::tactical::bestiary::monster;
 
 /// deaths this close together (tics) are "at once": one shot's, one blast's
 const TOGETHER: i64 = 3;

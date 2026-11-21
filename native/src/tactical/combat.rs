@@ -26,13 +26,14 @@ mod steering;
 mod style;
 mod tree;
 
-use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
 use super::tuning::{Dodge, Tuning};
+use crate::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use crate::decisions::{Journal, Record};
 use crate::domain::{
     heading, norm, Controls, Heard, Observation, Thing, FRICTION, RUN_THRUST, TICRATE,
 };
+use crate::geom::segment_point_distance;
 use crate::geom::{dist, Point};
 use crate::los::{Body, LineOfSight};
 use crate::map::{ML_BLOCKING, ML_BLOCKMONSTERS};
@@ -67,8 +68,8 @@ const SLOTS: [i32; 7] = [1, 2, 3, 4, 5, 6, 7];
 /// The chaingun fires twice a press: tics from its first bullet to its second (A_FireCGun's frames).
 const CHAINGUN_SECOND: i64 = 4;
 
-fn mon(name: &str) -> super::bestiary::Monster {
-    monster(name).unwrap_or(super::bestiary::Monster {
+fn mon(name: &str) -> crate::bestiary::Monster {
+    monster(name).unwrap_or(crate::bestiary::Monster {
         radius: 20.0,
         height: 56.0,
         health: 100,
@@ -1841,7 +1842,7 @@ impl Combat {
     /// attack heard a moment ago (a chaingun's heard through walls, within the game's 1200)?
     pub fn firing(&self, obs: &Observation, s: &Seen) -> bool {
         match self.visible.iter().find(|t| t.id == s.id) {
-            Some(t) => super::bestiary::first_shot(t.name).is_some_and(|f| t.attack >= f),
+            Some(t) => crate::bestiary::first_shot(t.name).is_some_and(|f| t.attack >= f),
             None => self.senses.attacks_heard.iter().any(|&(tic, kinds)| {
                 obs.tic - tic <= self.tune.senses.heard_firing && kinds.contains(&s.name)
             }),
@@ -2909,7 +2910,7 @@ impl Combat {
             h,
             kind,
             out,
-            crate::knowledge::RISK_SHARE * obs.health.unwrap_or(100.0),
+            crate::domain::RISK_SHARE * obs.health.unwrap_or(100.0),
             obs,
         )
     }
@@ -3096,17 +3097,6 @@ pub fn spread(at: Point, points: &[Point]) -> f64 {
         widest = widest.max(w[1] - w[0]);
     }
     360.0 - widest
-}
-
-pub fn segment_point_distance(a: Point, b: Point, p: Point) -> f64 {
-    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
-    let n = dx * dx + dy * dy;
-    let u = if n == 0.0 {
-        0.0
-    } else {
-        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / n).clamp(0.0, 1.0)
-    };
-    dist(p, (a.0 + dx * u, a.1 + dy * u))
 }
 
 /// The fight with no shot at anything in sight, as one effort (`Combat::leave_the_lot`).

@@ -83,7 +83,7 @@ Planning starts from the WAD itself, not from the engine:
   hurt the brain (`lanes`, the game's rules for a missile worked on the map; `evil-boom
   brain-posts` prints them), and getting there and firing (`boss`). It plans with the whole map
   known: the one place she does (docs/design/decisions/05, "The Icon of Sin").
-- `tactical/bestiary.rs`: monsters, missiles, weapons and items by their numbers.  Evil is assumed to know the basics of the enemies in the game, she does not need to "learn" what the monsters and guns do, only the level layouts.
+- `bestiary.rs`: monsters, missiles, weapons and items by their numbers.  Evil is assumed to know the basics of the enemies in the game, she does not need to "learn" what the monsters and guns do, only the level layouts.
 
 ## Getting there
 

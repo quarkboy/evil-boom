@@ -253,7 +253,7 @@ pub fn prepare(
                 )
             })?;
         // (the fight is its monsters: solid columns put about for it aren't to be killed)
-        if crate::tactical::bestiary::monster(&sp.name).is_some() {
+        if crate::bestiary::monster(&sp.name).is_some() {
             ids.push(id);
         }
     }

@@ -10,15 +10,16 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::arbiter::{self, Legs};
-use super::bestiary::{
+use super::combat::{eye, eye_of, spread, Combat, Move, Seen};
+use super::tuning::Tuning;
+use crate::advisor::{Advisor, Question};
+use crate::bestiary::{
     ammo_item, armor_item, carries, health_item, monster, weapon_in, weapon_item, Attack, CHAINSAW,
     SUPER_SHOTGUN,
 };
-use super::combat::{eye, eye_of, segment_point_distance, spread, Combat, Move, Seen};
-use super::tuning::Tuning;
-use crate::advisor::{Advisor, Question};
 use crate::decisions::Record;
 use crate::domain::{Controls, Observation, Thing};
+use crate::geom::segment_point_distance;
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
 use crate::knowledge::explorer::{Explorer, Hooks, Kind, Objective};
@@ -28,7 +29,7 @@ use crate::navigator::{Navigator, States, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::walkthrough::{Action, Step};
 
 /// the most of each ammo she can carry (without a backpack), by weapon slot
-use crate::tactical::bestiary::ammo_max;
+use crate::bestiary::ammo_max;
 
 mod boss;
 
@@ -367,7 +368,7 @@ impl Player {
         t.category != "Monster"
             && t.category != "Projectile"
             && monster(t.name).is_none()
-            && super::bestiary::missile(t.name).is_none()
+            && crate::bestiary::missile(t.name).is_none()
     }
 
     /// A thing lying about as she remembers it: what it is and where. Not the game's number for
@@ -421,7 +422,7 @@ impl Player {
             things.retain(|t| {
                 if monster(t.name).is_some() {
                     c.visible.iter().any(|v| v.id == t.id)
-                } else if super::bestiary::missile(t.name).is_some() {
+                } else if crate::bestiary::missile(t.name).is_some() {
                     c.missiles_seen.contains(&t.id)
                 } else {
                     !Self::lies_about(t) || self.things_seen.contains(&Self::what_where(t))
@@ -2738,7 +2739,7 @@ impl Fight {
         weapon_item(name).is_some_and(|s| !held.contains(&s))
     }
 
-    fn gun(obs: &Observation, name: &str) -> super::bestiary::Weapon {
+    fn gun(obs: &Observation, name: &str) -> crate::bestiary::Weapon {
         if name == "SuperShotgun" {
             SUPER_SHOTGUN
         } else if name == "Chainsaw" {

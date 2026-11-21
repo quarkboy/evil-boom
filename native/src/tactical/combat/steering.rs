@@ -8,11 +8,11 @@
 use super::sight::eye;
 use super::style::{standoff, window};
 use super::{mon, segment_point_distance, spread, Combat};
+use crate::bestiary::{claw_max, first_shot, weapon_in, Attack, Weapon};
 use crate::domain::{Observation, Thing};
 use crate::geom::{dist, Point};
 use crate::los::Body;
 use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
-use crate::tactical::bestiary::{claw_max, first_shot, weapon_in, Attack, Weapon};
 
 /// the ways round her looked along
 pub(super) const WAYS: usize = 16;

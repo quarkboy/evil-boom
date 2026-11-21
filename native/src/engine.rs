@@ -5,12 +5,12 @@
 //! into Observations. One game a process: DSDA-Doom is all globals, so sweeps give each map a
 //! process of its own.
 
+use crate::bestiary::category;
 use crate::config;
 use crate::domain::{Controls, Heard, Observation, Sound, Thing};
 use crate::dsda::{self, Dsda, Mobj, TicCmd};
 use crate::nav::Heights;
 use crate::specials::{Key, Keys};
-use crate::tactical::bestiary::category;
 use std::path::{Path, PathBuf};
 
 /// (the level loads on the first, then a few idle tics)
@@ -25,24 +25,7 @@ pub fn library() -> PathBuf {
     build_dir().join(config::ENGINE_LIBRARY)
 }
 
-/// (episode, map) from a map name: E1M1 or MAP01.
-pub fn episode_map(name: &str) -> Result<(i32, i32), String> {
-    let n = name.to_uppercase();
-    let bad = || format!("not a map name: {name}");
-    if let Some(rest) = n.strip_prefix("MAP") {
-        return Ok((1, rest.parse().map_err(|_| bad())?));
-    }
-    let b = n.as_bytes();
-    if b.len() == 4
-        && b[0] == b'E'
-        && b[2] == b'M'
-        && b[1].is_ascii_digit()
-        && b[3].is_ascii_digit()
-    {
-        return Ok((i32::from(b[1] - b'0'), i32::from(b[3] - b'0')));
-    }
-    Err(bad())
-}
+pub use crate::map::episode_map;
 
 pub struct Options {
     pub skill: i32,
@@ -405,7 +388,7 @@ impl Engine {
             .filter(|m| {
                 dsda::type_name(m.kind)
                     .filter(|n| GIBS.contains(n))
-                    .and_then(crate::tactical::bestiary::monster)
+                    .and_then(crate::bestiary::monster)
                     .is_some_and(|i| m.health < -i.health)
             })
             .map(|m| m.id)
@@ -808,8 +791,8 @@ impl SoundBook {
                 .unwrap_or((Heard::Other, &[]));
         };
         let thing = dsda::type_name(kind).unwrap_or("");
-        let missile = crate::tactical::bestiary::missile(thing).is_some()
-            && crate::tactical::bestiary::monster(thing).is_none();
+        let missile =
+            crate::bestiary::missile(thing).is_some() && crate::bestiary::monster(thing).is_none();
         // (blown apart: the game's one sound for it, whatever died: A_XScream)
         if f == "dsslop" {
             return (Heard::Death, self.alone.get(thing).copied().unwrap_or(&[]));
@@ -830,11 +813,11 @@ impl SoundBook {
             // zombieman's pistol, a chaingunner's burst. The kind is the game's word for what
             // made it: a shotgun's blast is a sergeant's, a chaingunner's or a spider's by ear)
             // (...unless it's made as it walks: a cyberdemon's hoof, a spider's legs)
-            None if crate::tactical::bestiary::monster(thing).is_some() && chasing => (
+            None if crate::bestiary::monster(thing).is_some() && chasing => (
                 Heard::Walking,
                 self.alone.get(thing).copied().unwrap_or(&[]),
             ),
-            None if crate::tactical::bestiary::monster(thing).is_some() => {
+            None if crate::bestiary::monster(thing).is_some() => {
                 (Heard::Attack, self.alone.get(thing).copied().unwrap_or(&[]))
             }
             None => (Heard::Other, &[]),

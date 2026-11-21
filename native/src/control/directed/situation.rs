@@ -80,7 +80,7 @@ impl Director {
         }
         let boss = against
             .keys()
-            .any(|n| crate::tactical::bestiary::monster(n).is_some_and(|m| m.boss));
+            .any(|n| crate::bestiary::monster(n).is_some_and(|m| m.boss));
         let p = agent.player();
         let now = p.map(|p| &p.combat().now);
         self.now = Situation {

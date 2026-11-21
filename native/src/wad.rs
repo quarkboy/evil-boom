@@ -56,7 +56,7 @@ impl Wad {
             let n = l.name.to_uppercase();
             let shaped = (n.len() == 4 && n.starts_with('E') && n.as_bytes()[2] == b'M')
                 || (n.len() == 5 && n.starts_with("MAP"));
-            if shaped && crate::engine::episode_map(&n).is_ok() && !out.contains(&n) {
+            if shaped && crate::map::episode_map(&n).is_ok() && !out.contains(&n) {
                 out.push(n);
             }
         }

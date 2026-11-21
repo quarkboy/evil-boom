@@ -5,7 +5,6 @@
 //! fight itself (`combat`), and playing with monsters about (`player`); the numbers the last two judge by (`tuning`).
 
 pub mod arbiter;
-pub mod bestiary;
 pub mod combat;
 pub mod icon;
 pub mod player;

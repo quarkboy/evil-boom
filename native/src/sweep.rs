@@ -984,10 +984,8 @@ pub fn run_map_in(
                     (_, _, Some(i), Some(s)) if i != s => "missile",
                     (_, _, _, Some(s))
                         if crate::dsda::type_name(s)
-                            .and_then(crate::tactical::bestiary::monster)
-                            .is_some_and(|m| {
-                                m.attack == crate::tactical::bestiary::Attack::Hitscan
-                            }) =>
+                            .and_then(crate::bestiary::monster)
+                            .is_some_and(|m| m.attack == crate::bestiary::Attack::Hitscan) =>
                     {
                         "bullet"
                     }

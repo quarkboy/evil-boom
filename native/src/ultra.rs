@@ -14,13 +14,13 @@
 //! the explorer's: the way on is a term in what a state is worth, and with nothing after her
 //! she plays as she always does.
 
+use crate::bestiary::monster;
 use crate::domain::{heading, norm, Controls};
 use crate::dsda::{Mobj, PlayerState, MF_CORPSE, MF_SHOOTABLE};
 use crate::engine::{Engine, Mark};
 use crate::geom::{dist, Point};
 use crate::play::Agent;
 use crate::sweep::RunOptions;
-use crate::tactical::bestiary::monster;
 use std::time::Instant;
 
 /// What the search goes by. (A prototype's numbers, here till the mode is kept: then
@@ -242,7 +242,7 @@ fn alive(m: &Mobj) -> bool {
 }
 
 /// The thing's kind, if it's a monster.
-fn monster_of(m: &Mobj) -> Option<crate::tactical::bestiary::Monster> {
+fn monster_of(m: &Mobj) -> Option<crate::bestiary::Monster> {
     crate::dsda::type_name(m.kind).and_then(monster)
 }
 

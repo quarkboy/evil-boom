@@ -8,11 +8,11 @@
 use super::steering::CLAW_REACH;
 use super::style::window;
 use super::{mon, Combat, SLOTS};
-use crate::domain::{Observation, Thing, TICRATE};
-use crate::geom::dist;
-use crate::tactical::bestiary::{
+use crate::bestiary::{
     claw_max, melee_at, punchable, weapon, weapon_in, Attack, Monster, Weapon, CHAINSAW,
 };
+use crate::domain::{Observation, Thing, TICRATE};
+use crate::geom::dist;
 
 /// tics to the first shot of a gun already up
 const FIRST_SHOT: f64 = 4.0;
@@ -373,7 +373,7 @@ impl Combat {
         let shots: i32 = SLOTS
             .iter()
             .filter(|&&s| held.contains(&s) && s != 4 && s != 7)
-            .map(|&s| (s, crate::tactical::bestiary::weapon(s)))
+            .map(|&s| (s, crate::bestiary::weapon(s)))
             .filter(|(_, w)| w.ammo_per_shot > 0)
             .map(|(s, w)| Self::ammo(obs, s) / w.ammo_per_shot)
             .sum();

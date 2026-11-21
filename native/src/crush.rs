@@ -7,9 +7,9 @@
 //! tic. A fast one keeps its speed on through her: one stroke, 120 at the worst. A slow one
 //! slows to an eighth of its speed on her: held there, some hundred hits, dead.
 
+use crate::domain::run_tics;
 use crate::domain::{Observation, FULL_SPEED};
 use crate::geom::Point;
-use crate::motor::run_tics;
 use crate::nav::Heights;
 use crate::navigator::{Navigator, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::specials::CrusherKind;
@@ -77,7 +77,7 @@ pub fn out_tics(nav: &Navigator, heights: &[Heights], s: usize) -> f64 {
         })
         .map(|pt| {
             ways.iter()
-                .map(|&(a, b)| crate::tactical::combat::segment_point_distance(a, b, pt))
+                .map(|&(a, b)| crate::geom::segment_point_distance(a, b, pt))
                 .fold(f64::INFINITY, f64::min)
         })
         .fold(0.0, f64::max);
