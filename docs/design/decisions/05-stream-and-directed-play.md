@@ -3367,3 +3367,17 @@ can reach is as it was.
 
 The three-lives test, 544 runs: exits 293 -> 295, lives lost a run 1.110 -> 1.105, damage
 0.771 -> 0.772, 527 s -> 529 s, none stood the hour in either.
+
+## Ammo for a gun she hasn't yet (2026-11-21)
+
+MAP24, the maintainer watching: two rockets a couple of steps off left lying, she with
+only the pistol. Ammo was wanted only for a gun she holds. "There's no reason not to go for
+ammo for a gun you don't have yet": it's now needed at half what the same ammo is for a gun
+she has (`errands.spare_ammo`), which keeps it under `needed` (it waits its turn behind
+keys, doors and guns) and inside the usual range for things lying about. Mid-fight she
+still turns aside only for what she can fire, and stocking up before an exit is as it was.
+
+The three-lives test, 544 runs: exits 295 -> 292 (34 runs more, 37 less: it changes most
+runs a little), lives lost a run 1.105 -> 1.096, damage 0.772 -> 0.771, 529 s -> 542 s.
+Two runs stood the hour that didn't (MAP14, UV, seeds 854202743 and 205498993), not yet
+traced. Kept on the maintainer's word, for how she plays; the stands are owed a trace.

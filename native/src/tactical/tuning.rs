@@ -730,6 +730,9 @@ pub struct Errands {
     pub armor_outmatched: f64,
     /// invulnerability taken whenever it's to hand, not kept for a fight that needs it
     pub invulnerability_now: bool,
+    /// ammo for a gun she hasn't yet is needed this much of what the same ammo would be for a
+    /// gun she has (0: left lying). Under `needed`, so it waits its turn and isn't walked far for
+    pub spare_ammo: f64,
 }
 
 impl Default for Errands {
@@ -758,6 +761,7 @@ impl Default for Errands {
             mega_gain: 100.0,
             soul_gain: 50.0,
             armor_outmatched: 50.0,
+            spare_ammo: 0.5,
             invulnerability_now: false,
         }
     }

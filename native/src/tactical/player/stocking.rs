@@ -156,15 +156,22 @@ impl Fight {
                 // A gun she has already is its ammo (a dropped shotgun is 4 shells): not left lying about.
                 need = (1.0 - ammo(slot) / ammo_max(slot) * 1.5).max(0.0);
             } else if let Some((slots, _)) = ammo_item(t.name) {
-                let fill: Vec<f64> = slots
+                // Ammo for a gun she hasn't yet is wanted too, less (`spare_ammo`): the gun's to
+                // come, here or a level on, and it's no good found with nothing to put in it. (A
+                // rocket at her feet was left lying, with only the pistol.)
+                let has_gun = slots.iter().any(|s| held.contains(s));
+                let min = slots
                     .iter()
-                    .filter(|s| held.contains(s))
+                    .filter(|s| !has_gun || held.contains(s))
                     .map(|&s| ammo(s) / ammo_max(s))
-                    .collect();
+                    .reduce(f64::min);
                 if t.name == "Backpack" {
                     need = 0.8;
-                } else if let Some(min) = fill.iter().copied().reduce(f64::min) {
+                } else if let Some(min) = min {
                     need = (1.0 - min * 1.5).max(0.0);
+                    if !has_gun {
+                        need *= self.tune.errands.spare_ammo;
+                    }
                 }
             } else if let Some((amount, cap)) = health_item(t.name)
                 && amount >= 10
