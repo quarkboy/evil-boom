@@ -3159,3 +3159,20 @@ she reaches the edge, else given up ("takeoff too low") and planned again.
 - Left as it came: it reckons when to line up by a floor rising one unit a tic, and lifts go
   four and eight; on a fast one she has less time and may miss. And she takes such a jump
   only when already riding: no trip to a lift is planned for the sake of one.
+
+### The other contributor's pilots, each on the three-lives test (2026-11-20)
+
+Its archive (docs/experiments/) has one finished patch, the rising platform (above), and
+small pilot diffs behind its experiments. Each was applied to main and tested alone,
+against 8992745:
+
+| Pilot | Exits (294) | Damage | Stood | Runs moved | Kept |
+|---|---|---|---|---|---|
+| Arch-vile, no shadow and no shelter: to the nearest floor out of its sight | 296 (MAP27 +2) | +0.0017 | 0 | ~30 | yes |
+| Arch-vile, a hiding spot chosen before this attack began: chosen again | 294 | +0.0004 | 0 | ~10 | no: nothing by itself, nothing added to the first |
+| Lost souls left for the route when nothing else is against her | 293 | -0.0039 | 0 | ~220 | no: UV two exits down, no gain anywhere |
+
+Its own verdict on the fight experiments stands: making monsters fight each other can be
+done, turning that into exits "remains unsolved" (E3M8 1 of 160 to 2 with its patient
+policy). Still to try from them: the Spider Mastermind set on any durable monster as it is
+on a Cyberdemon (`boss-set-on-heavy.patch`), judged on E3M8, E2M8 and MAP20 with 16 seeds.

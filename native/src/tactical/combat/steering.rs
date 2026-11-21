@@ -112,6 +112,27 @@ impl Combat {
         // further, costs more shooting than it saves.
         let hug = hug.filter(|&(far, _)| left <= self.tune.hide.shelter_late + far / RUN);
         let Some((_, spot)) = best.or(hug) else {
+            // No shadow in a straight run and no shelter by her: round a corner, then. The
+            // nearest floor she fits on that it can't see, by the mesh, no further than she
+            // can run before the blast. (The other contributor's pilot, from MAP20's
+            // arch-viles: on five incidents of six it took her out of the blast she'd stood
+            // and taken.)
+            let reach = (left * RUN).min(self.tune.hide.shake_far);
+            if reach > 0.0 {
+                let mesh = std::sync::Arc::clone(&self.nav.mesh);
+                let eye = eye(&vile);
+                let hidden = |p: usize| {
+                    let center = mesh.poly(p).center;
+                    dist(pos, center) <= reach
+                        && self.fits(obs, center)
+                        && self.hidden_from(obs, eye, center)
+                };
+                if let Some(h) = crate::motor::follower::nearest_heading(&mesh, obs, &hidden, reach)
+                {
+                    let angle = h.to_radians();
+                    return Some((vile.name, Some((angle.cos(), angle.sin()))));
+                }
+            }
             self.cover.vile_until = 0; // (nowhere to hide: fight on)
             return None;
         };
