@@ -385,7 +385,8 @@ impl Explorer {
         let mut kept: Vec<Objective> = Vec::new();
         let mut lost: Vec<BTreeSet<usize>> = Vec::new();
         for o in objectives {
-            if !self.fresh(&o, tic) || hooks.dangerous(obs, &o) {
+            let dared = self.dare_hunts && o.kind == Kind::Hunt;
+            if !self.fresh(&o, tic) || (!dared && hooks.dangerous(obs, &o)) {
                 continue;
             }
             // A block that looks like a lift, to try from a pit: it's the way out of the pit,

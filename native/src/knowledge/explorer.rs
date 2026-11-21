@@ -674,6 +674,9 @@ pub struct Explorer {
     /// what's been turned down for want of health, this life: what `anything_whatever` has
     /// back in
     health_refused: BTreeSet<Ident>,
+    /// nothing left but to stand: a monster she knows of gone for, dangerous or not
+    /// (`hunt_whatever`)
+    dare_hunts: bool,
     /// lines she was to walk over and couldn't: how many times each...
     uncrossed: BTreeMap<usize, u32>,
     /// ...and, three times over, the ground she could walk to from where she was then: the
@@ -896,6 +899,7 @@ impl Explorer {
             harm_anything: false,
             anything_none: None,
             health_refused: BTreeSet::new(),
+            dare_hunts: false,
             uncrossed: BTreeMap::new(),
             uncrossable: BTreeMap::new(),
             short_legs: Vec::new(),

@@ -3253,3 +3253,20 @@ Tried beside it and not kept: **plasma put down where its ball is stopped short 
 isn't** (`plasma-put-down.patch`), for the stepping loops left on MAP14. On four seeds she
 changed guns half as often again or more (72 for 46, 35 for 15) and was held from firing as
 much. The fourth rule about changing guns in a fight to lose this fortnight.
+
+### Nothing left but to stand, and something she knows of alive: after it (2026-11-20)
+
+E2M8, HMP, her third life (seed 1418424326; two of the boss test's 32 E2M8 runs): the
+Cyberdemon the far side of the arena and not coming for her, given up as out of reach, the
+walls pressed, "nothing left to do" at 794 s and stood to the hour. Going to where she last
+saw a monster is a last resort she has, but an errand by something she'd not take on is
+passed over as dangerous, and on a level that ends with its death that was the one errand
+left. `hunt_whatever`, after every other resort: stood three seconds with nothing, the hunt
+is taken dangerous or not (`dare_hunts`). On the run: after it eight times, dead at 887 s
+with 87% of its health off it.
+
+Boss levels (128 runs): stood out the hour 2 to 0, nothing else moved. Standard test
+against e2a242e: no run's outcome moved.
+
+With this, the uncrossable line and what her health refused, a run stands out the hour in
+none of the standard test's 544, none of MAP14's 32 and none of the boss levels' 128.

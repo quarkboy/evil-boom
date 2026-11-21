@@ -399,6 +399,9 @@ impl Explorer {
         if !found {
             found = self.anything_whatever(obs, hooks);
         }
+        if !found {
+            found = self.hunt_whatever(obs, hooks);
+        }
         if found {
             self.nothing_since = None;
         } else {
@@ -878,6 +881,31 @@ impl Explorer {
             if !found {
                 self.anything_none = Some(known);
             }
+        }
+        found
+    }
+
+    /// And nothing of that either: a monster she knows of and where she last saw it, gone
+    /// for though it's more than she'd take on. A hunt is passed over as dangerous while
+    /// there's anything else; with nothing else it is all there is, and on a level that ends
+    /// with something's death it is the way out. (Doom E2M8, HMP, her third life: the
+    /// Cyberdemon the far side of the arena and not coming, given up as out of reach, the
+    /// walls all pressed, "nothing left to do" at 794 s and stood to the hour. The same rule
+    /// as `anything_whatever`: better dead of trying than stood.)
+    fn hunt_whatever(&mut self, obs: &Observation, hooks: &mut dyn Hooks) -> bool {
+        /// stood with nothing to do this long first (tics): as `way_on_whatever`
+        const STOOD: i64 = 3 * 35;
+        if !self.may(Resort::Harm) || self.nothing_since.is_none_or(|t| obs.tic - t < STOOD) {
+            return false;
+        }
+        self.dare_hunts = true;
+        let found = self.try_objectives(obs, false, hooks);
+        self.dare_hunts = false;
+        if found {
+            self.log.push(format!(
+                "tic {}: nothing left to do but stand: after what she'd keep clear of",
+                obs.tic
+            ));
         }
         found
     }
