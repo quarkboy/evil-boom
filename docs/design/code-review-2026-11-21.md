@@ -59,6 +59,19 @@ the order of work changed.
   checks the pinned commit and refuses a tree changed by something else; `build.rs` reads
   `fix` from its own section. Left: `shellcheck` (not installed where this was done, so
   what it would flag is unknown), `-Wall -Wextra` on the bridge, Freedoom in CI.
+- **Phase 3, the files split** (2026-11-21): each of the four moved as it was into modules
+  under it, checked by `tools/parity.sh`, `tools/eachway.sh`, the arenas and (directed
+  play) one script played on the build before and after:
+  `viewer.rs` 3,288 lines to 1,676 (`canvas`, `draw`, `record`, `instinct`);
+  `tactical/player.rs` 3,460 to 1,600 (`retreats`, `cover`, `going`, `errands`, `stocking`,
+  `advice`); `control/directed.rs` 3,146 to 1,478 (`news`, `listings`, `tactics`,
+  `instinct`, `orders`, `open`); `tactical/combat.rs` 3,127 to 1,212 (`seeing`, `hearing`,
+  `memory`, `leaving`, `firing`, `metrics`, `counts`).
+  **Left, each a change to what the code says and not to where it is, so each its own
+  commit with its own check:** the retreats' three matches as one table; the three ways of
+  holding fire as one; `size_up` changing nothing before the tree decides; `Policy`'s
+  settings as enums; the follower's three longest functions cut into steps; the `Agent`'s
+  fields behind methods. Dropped as before: the per-sector record.
 - **Phase 2.2, as far as it's gone** (2026-11-21): the check it waited on is
   `tools/eachway.sh` (the same 24 runs by `run-map` and by the watcher with no window,
   compared). Its first run found two real faults, both mended: the watcher's map listed her

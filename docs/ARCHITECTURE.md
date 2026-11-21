@@ -73,6 +73,10 @@ Planning starts from the WAD itself, not from the engine:
   (close in, keep clear, stand and fight, make a run for it, ...).
 - `tactical/combat/assess.rs`: how things stand this tic (outmatched, what's against her, short
   of ammo), worked out once and read by every rule.
+- `combat/seeing.rs`, `hearing.rs`, `memory.rs`: what a tic's look and its sounds tell the
+  fight, and the monsters she knows of and isn't looking at. `combat/leaving.rs`: giving one
+  up. `combat/firing.rs`: a decision turned into the tic's controls. `combat/metrics.rs`,
+  `counts.rs`: the counting, for the logs and the tests.
 - `combat/arsenal.rs` and `combat/style.rs`: which gun, and how to fight with it.
 - `tactical/tuning.rs`: every judgement number (how near, how long, what's worth what) in one
   place. `evil-boom tuning` prints them; `--tuning FILE` changes them for a run.
