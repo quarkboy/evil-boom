@@ -56,8 +56,8 @@ use crate::geom::{dist, Point};
 use crate::knowledge::explorer::{Ident, Kind, Objective};
 use crate::motor::follower::RouteFollower;
 use crate::navigator::{Plan, States};
+use crate::run::{setup, RunOptions, Setup};
 use crate::specials::classify_line;
-use crate::sweep::{setup, RunOptions, Setup};
 use crate::walkthrough::steps_from_legs;
 
 /// a walk gives up after this long

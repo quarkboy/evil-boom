@@ -30,8 +30,8 @@ use crate::knowledge::model::Knowledge;
 use crate::map::{MapData, ML_DONTDRAW};
 use crate::navigator::Navigator;
 use crate::play::Agent;
+use crate::run::{broken_secrets, hold_exit, progress, RunOptions};
 use crate::specials::Lock;
-use crate::sweep::{broken_secrets, hold_exit, progress, RunOptions};
 use crate::tactical::tuning::Tuning;
 use crate::things::{pickup, PickupKind};
 
@@ -1309,8 +1309,8 @@ fn level(
     if let Some(p) = agent.player_mut() {
         p.set_going_on(
             o.episode
-                && (crate::sweep::next_map(&map_name, false).is_some()
-                    || crate::sweep::next_map(&map_name, true).is_some()),
+                && (crate::run::next_map(&map_name, false).is_some()
+                    || crate::run::next_map(&map_name, true).is_some()),
         );
     }
     // (a 100% run as a sweep plays it: the exit held back while what it's after is short, given
@@ -1387,7 +1387,7 @@ fn level(
 /// map the exit she took leads to (None: the episode's over).
 fn next_level(watch: Watch, w: &Wad, o: &WatchOptions) -> Result<Option<Watch>, String> {
     let secret = watch.engine.secret_exit();
-    let Some(next) = crate::sweep::next_map(&watch.map_name, secret) else {
+    let Some(next) = crate::run::next_map(&watch.map_name, secret) else {
         return Ok(None);
     };
     let loaded = load_level(w, &next, o)?;
@@ -2267,7 +2267,7 @@ impl Watch {
         }
         self.ahead_seen = ahead;
         if self.endless_bullets && obs.tic % 35 == 0 {
-            crate::sweep::top_up_bullets(&self.engine.game, &obs);
+            crate::run::top_up_bullets(&self.engine.game, &obs);
         }
         if let (Some(st), Some(m)) = (self.stream.as_mut(), obs.message.as_deref()) {
             st.message(m, obs.tic);

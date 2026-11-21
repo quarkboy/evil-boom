@@ -288,7 +288,7 @@ fn tic(
                 // (an episode's last level, played on through it or by itself: the game's
                 // finale follows either way)
                 let last =
-                    crate::sweep::next_map(&watch.map_name, watch.engine.secret_exit()).is_none();
+                    crate::run::next_map(&watch.map_name, watch.engine.secret_exit()).is_none();
                 p.stage = Stage::Between {
                     waiting_since: None,
                     pressed: None,

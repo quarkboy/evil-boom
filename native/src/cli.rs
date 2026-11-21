@@ -3,7 +3,7 @@
 
 //! Parsing run options and forwarding them to sweep subprocesses.
 
-use evilboom::sweep::RunOptions;
+use evilboom::run::RunOptions;
 
 /// What's left once every option a command knows has been read is names (a WAD, maps, a file):
 /// anything there that begins `--` is an option nobody knew, a misspelling as a rule, and is

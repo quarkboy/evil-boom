@@ -63,9 +63,11 @@ the order of work changed.
   things and sounds in it, the game's constants of time and movement, her turn limits and
   the risk share; `bestiary.rs` is a module of its own, not the fight's (the engine and the
   follower read it); `episode_map` is `map.rs`'s; `CONSOLE_NAME` is the console's; a
-  geometry helper is `geom.rs`'s. Of eight two-way dependencies between top-level modules
-  two are left, `sweep` with `viewer` and with `ultra`: the run's options and the game loop,
-  which is Phase 2.2. `wad` still reads `config::pwads()`.
+  geometry helper is `geom.rs`'s; a run's options, its setting up and what every way of
+  running her goes by are `run.rs`, under the sweep, the watcher and the ultra instinct's
+  runner alike. No two top-level modules depend on each other now (there were eight pairs),
+  and `tools/dev/cycles.py`, run in CI, keeps it so. A barrel's size and its blast's reach
+  are said once. `wad` still reads `config::pwads()`.
 - **Phase 1** (2026-11-21): C3 (the ABI check, and no `transmute` left in `dsda.rs`), H1
   (`arena`), C1, C2, H6 (the progress line, unknown options), H3, H4, H5 (with the first
   tests CI can run without IWADs), C4 (all but ending the game on Ctrl-C, which needs a

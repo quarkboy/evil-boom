@@ -419,7 +419,7 @@ fn episode_chain(
     me: &std::path::Path,
     wad: &str,
     first: &str,
-    o: &evilboom::sweep::RunOptions,
+    o: &evilboom::run::RunOptions,
 ) -> (usize, String) {
     let seed = o.seed.unwrap_or(0);
     let Ok(mut child) = Command::new(me)
@@ -485,8 +485,8 @@ fn episode_one(args: &[String]) -> Result<(), String> {
     while let Some(m) = map.take() {
         o.lives = left;
         // (a level with one after it: what she'd take with her had before she leaves)
-        o.going_on = evilboom::sweep::next_map(&m, false).is_some()
-            || evilboom::sweep::next_map(&m, true).is_some();
+        o.going_on = evilboom::run::next_map(&m, false).is_some()
+            || evilboom::run::next_map(&m, true).is_some();
         let r = evilboom::sweep::run_map_in(wad, &m, &o, engine.take())?;
         left -= r.deaths;
         let lost = if r.deaths > 0 {
@@ -524,7 +524,7 @@ fn episode_one(args: &[String]) -> Result<(), String> {
         }
         o.carry = Some(l);
         engine = r.engine;
-        map = evilboom::sweep::next_map(&m, r.secret);
+        map = evilboom::run::next_map(&m, r.secret);
     }
     println!("END {levels} the episode through");
     Ok(())
@@ -814,7 +814,7 @@ fn watch_options(
     (
         evilboom::viewer::WatchOptions,
         Vec<String>,
-        evilboom::sweep::RunOptions,
+        evilboom::run::RunOptions,
     ),
     String,
 > {

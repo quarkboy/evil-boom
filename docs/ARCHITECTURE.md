@@ -135,6 +135,7 @@ produce exactly the same runs.
 | what she's told | `control/directed/moments.rs`, `kills.rs`, `events.rs`, `why.rs` |
 | the engine boundary | `dsda/evil_api.c` and `native/src/dsda.rs` together (and `EVIL_ABI` in both, when a call or a struct changes) |
 | what a tic's observation or controls hold | `domain.rs` |
+| a run's options, or what every way of running her shares | `run.rs` (the sweep, the watcher and the ultra instinct's runner are each over it) |
 
 A number that's a judgement goes in `Tuning`; a fact about the engine stays a `const` where it's
 used. What the rest of her does about a fight decision goes by its `Move`

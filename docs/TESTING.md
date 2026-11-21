@@ -53,6 +53,9 @@ For a change to comments only, `tools/dev/code_only.py --check` proves it withou
 anything: it strips the comments from every changed `.rs` file and compares the code with the
 last commit's.
 
+`tools/dev/cycles.py` says whether any two top-level modules have come to depend on each
+other (none do; CI runs it): a module moved or a `use` added goes through it.
+
 ## The three-lives test: how well she plays
 
 ```sh

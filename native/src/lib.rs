@@ -48,6 +48,7 @@ pub mod plan;
 pub mod play;
 pub mod pockets;
 pub mod replay;
+pub mod run;
 pub mod score;
 pub mod sight;
 pub mod specials;

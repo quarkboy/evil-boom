@@ -19,7 +19,7 @@ impl Director {
     /// restart is hers.
     pub(super) fn watch_progress(&mut self, agent: &mut Agent, obs: &Observation) {
         let collected = usize::try_from(self.tally.items.0 + self.tally.kills.0).unwrap_or(0);
-        let now = (collected, crate::sweep::known_progress(agent.x()));
+        let now = (collected, crate::run::known_progress(agent.x()));
         match &self.progress {
             Some((was, _)) if *was == now => {}
             _ => {

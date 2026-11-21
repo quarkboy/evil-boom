@@ -52,6 +52,10 @@ jobs:
         working-directory: native
         run: cargo fmt --check
 
+      # (no two top-level modules that depend on each other: there are none, and it stays so)
+      - name: Layers
+        run: python3 tools/dev/cycles.py
+
       - name: Lint
         working-directory: native
         run: cargo clippy --release --all-targets -- -D warnings

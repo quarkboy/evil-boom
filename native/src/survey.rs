@@ -24,8 +24,8 @@ use std::process::{Command, Stdio};
 use crate::knowledge::model::{Signs, Wall};
 use crate::map::{MapData, ML_BLOCKING, ML_SECRET};
 use crate::navigator::{Navigator, MAX_STEP, PLAYER_HEIGHT};
+use crate::run::{setup, RunOptions, Setup};
 use crate::specials::{classify_line, Category, Trigger};
-use crate::sweep::{setup, RunOptions, Setup};
 
 /// the most game time a map's given to run out of things to do
 const SURVEY_SECONDS: f64 = 1500.0;

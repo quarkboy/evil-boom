@@ -20,7 +20,7 @@ use crate::dsda::{Mobj, PlayerState, MF_CORPSE, MF_SHOOTABLE};
 use crate::engine::{Engine, Mark};
 use crate::geom::{dist, Point};
 use crate::play::Agent;
-use crate::sweep::RunOptions;
+use crate::run::RunOptions;
 use std::time::Instant;
 
 /// What the search goes by. (A prototype's numbers, here till the mode is kept: then
@@ -1350,7 +1350,7 @@ impl Drop for Pool {
 /// asked of it over the port till whoever asks is gone.
 pub fn worker(wad: &str, map: &str, o: &RunOptions, tune: Tune, port: u16) -> Result<(), String> {
     use std::io::{Read, Write};
-    let crate::sweep::Setup { mut e, agent, .. } = crate::sweep::setup(wad, map, o, false, None)?;
+    let crate::run::Setup { mut e, agent, .. } = crate::run::setup(wad, map, o, false, None)?;
     long_way(&e);
     let mut ultra = Ultra::new(tune);
     ultra.hot = Some(std::rc::Rc::clone(&agent.x().nav));
@@ -1404,7 +1404,7 @@ pub fn worker(wad: &str, map: &str, o: &RunOptions, tune: Tune, port: u16) -> Re
 /// Live, the game runs at this much of its speed while the search has her (the plan's section
 /// 4: what a look has to fit in), and a session not kept on is over when the search hasn't had
 /// her for `LIVE_OVER` tics: the fight's over.
-pub const LIVE_SPEED: f64 = 0.5;
+pub const LIVE_SPEED: f64 = crate::run::ULTRA_SPEED;
 pub const LIVE_OVER: i64 = 2 * 35;
 
 /// Hers by dying (the maintainer's design, 2026-11-19). After so many deaths on a level it's
@@ -1418,7 +1418,7 @@ pub const LIVE_CAP: f64 = 30.0 * 35.0;
 pub const LIVE_TIERS: i32 = 2;
 pub const LIVE_REFILL: f64 = 0.1;
 pub const LIVE_LEAST: f64 = 5.0 * 35.0;
-pub const LIVE_BACK: i64 = 5 * 35;
+pub const LIVE_BACK: i64 = crate::run::ULTRA_BACK;
 
 /// Games kept as she plays, a second apart, the last 24: what a death is undone to. (A
 /// session's own are kept from where it began; these are for beginning one before the death.)
@@ -1627,9 +1627,9 @@ fn long_way(e: &Engine) -> bool {
 /// Stage 1's check: the game saved, played on, put back and played the same again comes out
 /// the same; and what a save and a restore cost.
 pub fn check(wad: &str, map: &str, o: &RunOptions) -> Result<String, String> {
-    let crate::sweep::Setup {
+    let crate::run::Setup {
         mut e, mut agent, ..
-    } = crate::sweep::setup(wad, map, o, false, None)?;
+    } = crate::run::setup(wad, map, o, false, None)?;
     long_way(&e);
     let mut last: Option<Controls> = None;
     let step = |e: &mut Engine, agent: &mut Agent, last: &mut Option<Controls>| {
@@ -1733,9 +1733,9 @@ pub fn check_tape(
     };
     // (one game a process: every way played starts from the level's start, put back; hers before
     // the tape begins are kept from the first)
-    let crate::sweep::Setup {
+    let crate::run::Setup {
         mut e, mut agent, ..
-    } = crate::sweep::setup(wad, map, o, false, None)?;
+    } = crate::run::setup(wad, map, o, false, None)?;
     let slow = long_way(&e);
     let start = e.save(3).ok_or("the engine library can't save")?;
     let mut tape = tape;
@@ -1845,12 +1845,12 @@ pub fn check_tape(
 
 /// A level played with the ultra instinct on, offline. A line of how it went.
 pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, String> {
-    let crate::sweep::Setup {
+    let crate::run::Setup {
         mut e,
         mut agent,
         map_name,
         ..
-    } = crate::sweep::setup(wad, map, o, false, None)?;
+    } = crate::run::setup(wad, map, o, false, None)?;
     long_way(&e);
     let mut session = Session::new(tune, &agent, e.tic);
     if o.workers > 0 {
@@ -1873,7 +1873,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
     // (nothing more collected, learned or tried for `--stall` seconds: the run's over. Her own
     // exploring is hers here too, and with nothing left she'd try at 3 health she stood idle
     // for half an hour of an E4M6 run till the time was up)
-    let mut best = crate::sweep::progress(&e, agent.x(), o);
+    let mut best = crate::run::progress(&e, agent.x(), o);
     let mut best_at = 0i64;
     while played < cap {
         if e.exited() {
@@ -1881,7 +1881,7 @@ pub fn run(wad: &str, map: &str, o: &RunOptions, tune: Tune) -> Result<String, S
             break;
         }
         if played % 35 == 0 {
-            let now = crate::sweep::progress(&e, agent.x(), o);
+            let now = crate::run::progress(&e, agent.x(), o);
             if now.iter().zip(&best).any(|(n, b)| n > b) {
                 best = std::array::from_fn(|i| now[i].max(best[i]));
                 best_at = played;
