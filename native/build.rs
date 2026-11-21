@@ -28,7 +28,11 @@ fn main() {
     let fix = std::fs::read_to_string("Cargo.toml")
         .ok()
         .and_then(|t| {
+            // (its own section's, not a `fix = ` anywhere else in the file)
             t.lines()
+                .skip_while(|l| l.trim() != "[package.metadata.evil]")
+                .skip(1)
+                .take_while(|l| !l.trim_start().starts_with('['))
                 .find_map(|l| l.strip_prefix("fix = ").map(str::trim).map(str::to_string))
         })
         .filter(|n| n != "0")
