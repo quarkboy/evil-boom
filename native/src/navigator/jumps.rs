@@ -17,6 +17,14 @@ use crate::nav::Heights;
 
 /// A jump that never comes off made a little differently costs this much more (units).
 pub const JUMP_DOUBT: f64 = 1024.0;
+/// Any run-jump costs this much more than its length (units): a way on foot as short, or
+/// all but, is the one taken. A person doesn't leap a gap the stairs beside it cross. Costed
+/// as its length alone, a jump she was sure of was a short cut across any corner of a ledge
+/// (Doom II MAP24, the shotgun's platform at the end of a spur she can walk, jumped for from
+/// the spur's foot; MAP27, the steps to the rocket launcher hopped corner to corner over the
+/// nukage; the maintainer watching). Small on purpose: every size tried cost exits on the
+/// three-lives test, the more the bigger (docs/design/decisions/05).
+pub const JUMP_RISK: f64 = 16.0;
 /// A jump that comes off less often than this, made a little differently, is dropped.
 const MIN_SURE: f64 = 0.25;
 

@@ -19,7 +19,7 @@ mod jumps;
 mod view;
 mod widths;
 
-pub use jumps::{JumpChecks, JUMP_DOUBT};
+pub use jumps::{JumpChecks, JUMP_DOUBT, JUMP_RISK};
 pub use view::{Leg, Path, PathNote, Plan, Restriction, Route, View};
 
 use crate::det::HashMap;

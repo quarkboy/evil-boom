@@ -3395,3 +3395,45 @@ no better than the pistol's (`errands.pistol_only`) and there's a better gun to 
 The three-lives test, 544 runs: exits 292 -> 289 (3 runs more, 6 less), lives lost a run
 1.096 -> 1.097, damage as it was, 542 s -> 537 s, stood the hour 2 -> 1. No evidence either
 way; kept on the maintainer's word ("pistol alone is almost never enough").
+
+## A run-jump costs a little more than its length (2026-11-21)
+
+The maintainer watching: she leaps gaps the floor beside them crosses. MAP24's shotgun,
+on a platform at the end of a spur she can walk, jumped for from the spur's foot (and
+landed: the jump wasn't failing, only needless); MAP27's steps to the rocket launcher
+hopped corner to corner over the nukage. A jump she's sure of was costed as its straight
+length and nothing more, so it won any near-tie with the walk. "Humans don't randomly jump
+out a window just to go somewhere."
+
+Every run-jump now costs `JUMP_RISK`, 16 units, over its length: a tie-breaker. It changes
+only which way is taken; an objective's distance for ranking is the walked length as before.
+
+Measured on the three-lives test (544 runs), each on the build with the two changes above
+and no jump cost (289 exits), with her run-jumps counted over the same runs:
+
+    cost    exits   run-jumps (a run)   not landed
+    0       289     2250 (4.1)          129
+    16      284     1911 (3.5)          117
+    32      281     1733 (3.2)          116
+    64      278
+    128     278
+    256     276
+    32 and half the leap's length       277
+    256 over a pit, none for a fall     277
+
+The more it costs the fewer exits, with no size at which it's free, and neither blending
+by length nor sparing falls helped. At 16: 3 runs more, 8 less, each on a different level.
+Half of all her jumps are on six levels; MAP14 alone has 279 of them and no cost of this
+size touches those (to be traced).
+
+What the lost exits are, where traced: not worse movement. MAP27 (HMP, 854202743): without
+the cost her hops in the first room take her early into the room with the invulnerability,
+whose only way back she knows is the nukage and the lift's switch, and that keeps her from
+the yellow skull's library for four minutes; with it she's at the library in two and dies
+there to what guards it. The jumps were putting off a fight she loses, and the test counts
+the putting off as progress. MAP25 (UV): the walk taken for a hop was a wade through the
+blood. So the cost is kept small and taken for how she plays, on the maintainer's word,
+not for the score.
+
+Not done: a cost on plain drops off a ledge (none now), and a way back that needs a floor
+that hurts still counts as a way back.

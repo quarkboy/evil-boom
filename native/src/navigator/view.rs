@@ -9,7 +9,7 @@ mod planning;
 
 use super::widths::{drop_lines, exit_walk_lines, shutting_lines, teleport_lines, wall_lines};
 use super::{
-    add_height, Jump, Navigator, States, TeleEdge, TriggerLine, JUMP_DOUBT, MAX_STEP,
+    add_height, Jump, Navigator, States, TeleEdge, TriggerLine, JUMP_DOUBT, JUMP_RISK, MAX_STEP,
     PLAYER_RADIUS, USE_REACH,
 };
 use crate::det::{HashMap, HashSet};
@@ -105,7 +105,7 @@ impl Core {
                                     requires: j.requires.clone(),
                                     rising: j.rising,
                                 },
-                                penalty: JUMP_DOUBT * (1.0 - j.sure),
+                                penalty: JUMP_RISK + JUMP_DOUBT * (1.0 - j.sure),
                             }
                         }
                         TeleEdge::Teleport(i) => {
