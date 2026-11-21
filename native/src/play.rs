@@ -61,11 +61,26 @@ impl Agent {
     }
 
     pub fn act(&mut self, obs: &Observation, last: Option<&Controls>) -> Controls {
-        match self {
+        let c = match self {
             Agent::Plain(x) => x.act(obs, last, &mut NoHooks),
             Agent::Expert(x, c) => x.act(obs, last, c),
             Agent::Fight(p) => p.act(obs, last),
+        };
+        // (`--keys`: whatever she'd do, done with the keys a keyboard has)
+        match self.x_mut().keys.as_mut() {
+            Some(k) => k.press(obs.tic, c),
+            None => c,
         }
+    }
+
+    /// Her movement by keys from here on (`--keys`, `motor::keys`): her hand as fast as her
+    /// tuning has it.
+    pub fn keys_only(&mut self) {
+        let hand = match self {
+            Agent::Fight(p) => p.hand(),
+            _ => crate::tactical::tuning::Hand::default(),
+        };
+        self.x_mut().keys = Some(crate::motor::keys::Keys::new(hand));
     }
 
     /// The objectives she last chose from, for showing (`Explorer::objectives_shown`: asking

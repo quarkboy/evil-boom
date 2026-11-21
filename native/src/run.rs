@@ -39,6 +39,9 @@ pub struct RunOptions {
     /// start and its bullets topped up every second. What she'd do with rounds for ever, not
     /// what she does.
     pub endless_bullets: bool,
+    /// her movement as keys: only the pushes a keyboard gives, pressed no faster than a
+    /// hand presses (`motor::keys`)
+    pub keys: bool,
     /// tries at a map (dying starts it again, knowing what was learned), the game time cap
     /// counting them all (unlimited unless told: lives are for testing, not a resource)
     pub lives: i32,
@@ -121,6 +124,7 @@ impl Default for RunOptions {
             mortal: false,
             charmed: false,
             endless_bullets: false,
+            keys: false,
             lives: i32::MAX,
             lives_given: false,
             stranded: 0,

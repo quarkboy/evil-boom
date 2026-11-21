@@ -569,6 +569,8 @@ pub struct Explorer {
     pub stock_chosen: Vec<String>,
     /// what `list_objectives` set aside as wanted only to take on to another level
     stock_aside: Vec<Objective>,
+    /// her movement as keys (`--keys`): the keys as she holds them
+    pub keys: Option<crate::motor::keys::Keys>,
     /// a watcher's asked what she's choosing from: each choice's listing is kept for it
     /// (`objectives_shown`)
     show_options: bool,
@@ -853,6 +855,7 @@ impl Explorer {
             exit_first: None,
             stock_chosen: Vec::new(),
             stock_aside: Vec::new(),
+            keys: None,
             show_options: false,
             shown: Vec::new(),
             life_began: None,
@@ -996,6 +999,9 @@ impl Explorer {
             self.knowledge.note(Note::Trap(t.0, t.1));
         }
         self.sensed = None;
+        if let Some(k) = self.keys.as_mut() {
+            k.let_go();
+        }
         self.knowledge.restart();
         self.log
             .push(format!("--- died: life {}", self.knowledge.lives));

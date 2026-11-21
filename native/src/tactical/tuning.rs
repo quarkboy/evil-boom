@@ -27,6 +27,7 @@ pub struct Tuning {
     pub errands: Errands,
     pub retreat: Retreat,
     pub deaths: Deaths,
+    pub hand: Hand,
 }
 
 impl Tuning {
@@ -933,6 +934,36 @@ impl Default for Deaths {
             death_zone_count: 2,
             death_zone_urgent: 3,
             same_goal: 96.0,
+        }
+    }
+}
+
+/// Her hand on the keys (`--keys`, `motor/keys.rs`): how fast it presses.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Hand {
+    /// a move key pressed or let go stays so this many tics (3: a tap and its gap are six,
+    /// under six taps a second)
+    pub hold: i64,
+    /// ...and run this many (it's held as a rule, let go to walk)
+    pub run_hold: i64,
+    /// what a key's change costs against how near the push is to what's asked (in units of
+    /// push): under this much nearer, the keys stay as they are
+    pub change_cost: f64,
+    /// of what was asked and no key gave, this share is asked again next tic...
+    pub carry: f64,
+    /// ...up to this much either way
+    pub owed: f64,
+}
+
+impl Default for Hand {
+    fn default() -> Self {
+        Hand {
+            hold: 3,
+            run_hold: 8,
+            change_cost: 6.0,
+            carry: 0.85,
+            owed: 30.0,
         }
     }
 }

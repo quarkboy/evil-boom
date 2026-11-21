@@ -80,6 +80,8 @@ pub struct WatchOptions {
     pub charmed: bool,
     /// the chaingun and bullets for ever (`--endless-bullets`)
     pub endless_bullets: bool,
+    /// her movement as keys (`--keys`)
+    pub keys: bool,
     pub speed: f64,
     pub show_all: bool,
     pub mortal: bool,
@@ -798,6 +800,9 @@ fn level(
     let mut watch = Watch::new(w, m, &map_name, engine, agent, o.focus, o.lives - 1);
     watch.hold = hold;
     watch.endless_bullets = o.endless_bullets;
+    if o.keys {
+        watch.agent.keys_only();
+    }
     watch.ultra_after = o.ultra_after;
     watch.ultra_charge = watch.ultra_cap();
     watch.ultra_back = (o.ultra_back * TICRATE) as i64;

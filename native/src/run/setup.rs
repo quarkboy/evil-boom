@@ -127,6 +127,9 @@ pub fn setup(
         let off = std::env::var("EVIL_DEBUG_STOCK").is_ok_and(|v| v == "off");
         p.set_going_on(o.going_on && !off);
     }
+    if o.keys {
+        agent.keys_only();
+    }
     let secrets_short = broken_secrets(&map_name);
     if o.secrets {
         agent.x_mut().exit_held_back = true;

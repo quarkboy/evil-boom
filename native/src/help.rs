@@ -370,6 +370,8 @@ What she knows:
   --known              the level known beforehand: she looks round it first with no monsters,
                        then plays it knowing the map and where every monster starts
   --peek               every switch and door known from the start
+  --keys               her movement as keys: only the pushes a keyboard gives (forward, back,
+                       left, right, run), pressed no faster than a hand presses
 
 Testing:
   --endless-bullets    for testing: the chaingun hers from the start, its bullets topped up

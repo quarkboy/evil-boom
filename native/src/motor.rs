@@ -7,6 +7,7 @@
 //! `crate::domain`'s.
 
 pub mod follower;
+pub mod keys;
 
 use crate::domain::{
     heading, norm, Controls, Observation, FRICTION, FULL_SPEED, MAX_MOVE, MAX_TURN, RUN_THRUST,

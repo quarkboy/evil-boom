@@ -13,6 +13,7 @@
 #   JOBS=N       runs at a time (12 unless given)
 #   SEEDS="..."  other seeds than the file's
 #   LIVES=N      other than three lives
+#   OPTS="..."   more options for every run (a mode under test: OPTS=--keys)
 set -eu
 cd "$(dirname "$0")/../.."
 name=${1:?usage: tools/lives/run.sh NAME [BASE]}
@@ -26,7 +27,7 @@ seeds=${SEEDS:-$(grep -v '^#' tools/lives/seeds.txt)}
   for m in $(seq -w 1 32); do echo "doom2 MAP$m"; done
 } | while read -r wad map; do
   for skill in 3 4; do for seed in $seeds; do echo "$name $bin $wad $map $skill $seed"; done; done
-done | LIVES=${LIVES:-3} xargs -P "${JOBS:-12}" -L 1 tools/lives/one.sh
+done | LIVES=${LIVES:-3} OPTS=${OPTS:-} xargs -P "${JOBS:-12}" -L 1 tools/lives/one.sh
 errors=$(grep -l "RESULT ERROR" "out/lives/$name.rows"/* 2>/dev/null | wc -l)
 [ "$errors" = 0 ] || echo "NOTE: $errors runs did not run (their rows say ERROR)" >&2
 if [ $# -ge 2 ]; then python3 tools/lives/report.py "$2" "$name"; else python3 tools/lives/report.py "$name"; fi

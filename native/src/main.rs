@@ -822,6 +822,7 @@ fn watch_options(
     let mut w = evilboom::viewer::WatchOptions {
         charmed: o.charmed,
         endless_bullets: o.endless_bullets,
+        keys: o.keys,
         speed: 1.0,
         show_all: false,
         mortal: o.mortal,

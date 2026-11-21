@@ -450,6 +450,11 @@ impl Player {
 
     /// The game goes on to another level after this one (or doesn't): what she'd take with her
     /// is had before the exit.
+    /// How fast her hand is on the keys (`Tuning::hand`, as the run began with it).
+    pub fn hand(&self) -> crate::tactical::tuning::Hand {
+        self.base_tune.hand.clone()
+    }
+
     pub fn set_going_on(&mut self, on: bool) {
         self.fight.going_on = on;
     }
