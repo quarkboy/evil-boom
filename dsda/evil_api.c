@@ -605,7 +605,7 @@ EVIL_API void evil_sound(int on)
 /* The sound's loudness, as the stream console sets it: sfx and music as the game's own settings
  * have them (0-15, its Sound menu's), master over the whole mix (0-100); -1 leaves one as it is.
  * Not saved to the game's config file. */
-extern int evil_master_volume;
+extern SDL_atomic_t evil_master_volume;  /* (i_sound.c, patched: read on the sound thread) */
 
 EVIL_API void evil_volume(int sfx, int music, int master)
 {
@@ -614,7 +614,7 @@ EVIL_API void evil_volume(int sfx, int music, int master)
   if (music >= 0)
     dsda_UpdateIntConfig(dsda_config_music_volume, music > 15 ? 15 : music, false);
   if (master >= 0)
-    evil_master_volume = master > 100 ? 100 : master;
+    SDL_AtomicSet(&evil_master_volume, master > 100 ? 100 : master);
 }
 
 /* The loudness now: out[0] sfx, out[1] music (0-15), out[2] master (0-100). */
@@ -622,7 +622,7 @@ EVIL_API void evil_get_volume(int *out)
 {
   out[0] = dsda_IntConfig(dsda_config_sfx_volume);
   out[1] = dsda_IntConfig(dsda_config_music_volume);
-  out[2] = evil_master_volume;
+  out[2] = SDL_AtomicGet(&evil_master_volume);
 }
 
 /* The game's sound for the next `samples` sample frames (16-bit stereo, interleaved: out holds
@@ -781,15 +781,20 @@ static Uint32 evil_window_id;
 #define EVIL_EVENTS 64
 static int evil_events[EVIL_EVENTS * 2];
 static int evil_event_count;
+/* (SDL may call the filter from another thread than the one that asks for the events: the
+ * queue's under a lock, held for a few stores) */
+static SDL_SpinLock evil_event_lock;
 
 static void evil_event(int kind, int value)
 {
+  SDL_AtomicLock(&evil_event_lock);
   if (evil_event_count < EVIL_EVENTS)
   {
     evil_events[evil_event_count * 2] = kind;
     evil_events[evil_event_count * 2 + 1] = value;
     evil_event_count++;
   }
+  SDL_AtomicUnlock(&evil_event_lock);
 }
 
 /* (each event as it comes in, before anyone polls: the window's kept for the caller (1 a key
@@ -917,10 +922,12 @@ EVIL_API int evil_window_events(int *out, int max)
 {
   int i, n;
   SDL_PumpEvents();
+  SDL_AtomicLock(&evil_event_lock);
   n = evil_event_count < max ? evil_event_count : max;
   for (i = 0; i < n * 2; i++)
     out[i] = evil_events[i];
   evil_event_count = 0;
+  SDL_AtomicUnlock(&evil_event_lock);
   return n;
 }
 

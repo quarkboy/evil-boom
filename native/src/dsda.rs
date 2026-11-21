@@ -321,9 +321,10 @@ pub struct Dsda {
     window_icon_fn: Option<IconFn>,
     /// what a frame's drawn into, kept across frames
     draw_buffer: RefCell<Vec<u8>>,
-    /// (the game keeps pointers into its arguments: they live as long as it does)
-    _argv: Vec<CString>,
-    _argv_ptrs: Vec<*mut c_char>,
+    /// (the game keeps pointers into its arguments, and it's never unloaded, as below: they're
+    /// never freed either, or its globals would point at nothing once this was dropped)
+    _argv: std::mem::ManuallyDrop<Vec<CString>>,
+    _argv_ptrs: std::mem::ManuallyDrop<Vec<*mut c_char>>,
     /// (last: the functions above point into it)
     /// (never unloaded: the game's threads, SDL's sound one among them, go on calling into it
     /// after the last of ours has done with it. Unloaded when a recorded episode ended, with
@@ -347,6 +348,12 @@ impl Dsda {
         if LOADED.swap(true, Ordering::SeqCst) {
             return Err("DSDA-Doom is already loaded in this process (one game a process)".into());
         }
+        // (a load that failed before the game was set up hasn't used the process's one go)
+        Self::load_once(lib, dll_dirs, args).inspect_err(|_| LOADED.store(false, Ordering::SeqCst))
+    }
+
+    /// (`load`'s work: every error it returns is from before `evil_init` is called)
+    fn load_once(lib: &Path, dll_dirs: &[&Path], args: &[String]) -> Result<Self, String> {
         let lib =
             open_library(lib, dll_dirs).map_err(|e| format!("loading {}: {e}", lib.display()))?;
         let sym = |name: &[u8]| -> Result<*const (), String> {
@@ -629,8 +636,8 @@ impl Dsda {
             window_fns,
             window_icon_fn,
             draw_buffer: RefCell::new(Vec::new()),
-            _argv: argv,
-            _argv_ptrs: argv_ptrs,
+            _argv: std::mem::ManuallyDrop::new(argv),
+            _argv_ptrs: std::mem::ManuallyDrop::new(argv_ptrs),
             _lib: std::mem::ManuallyDrop::new(lib),
         })
     }
