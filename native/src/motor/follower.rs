@@ -749,10 +749,11 @@ impl RouteFollower {
                         self.states[sec] = hs;
                     }
                 }
-                if t.once() && t.cumulative() {
-                    if let Some(li) = t.linedef() {
-                        self.fired.insert(li);
-                    }
+                if t.once()
+                    && t.cumulative()
+                    && let Some(li) = t.linedef()
+                {
+                    self.fired.insert(li);
                 }
                 for e in &done.expects {
                     self.watches.push(Watch {
@@ -943,11 +944,11 @@ impl RouteFollower {
             SegEnd::Goal => {}
         }
         let step = self.step();
-        if let Some(li) = step.trigger.as_ref().and_then(|t| t.linedef()) {
-            if stops(step.action) {
-                let (a, b) = self.view.nav.map.line_seg(li);
-                return vec![((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)];
-            }
+        if let Some(li) = step.trigger.as_ref().and_then(|t| t.linedef())
+            && stops(step.action)
+        {
+            let (a, b) = self.view.nav.map.line_seg(li);
+            return vec![((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)];
         }
         if let Some(next) = self.steps.get(self.step_i as usize + 1) {
             // rolling on into the next step: look where it goes
@@ -1061,19 +1062,20 @@ impl RouteFollower {
                 self.settle_until = obs.tic; // (judge where she is straight away)
             }
         }
-        if let Some(last) = self.last_pos {
-            if self.step().action == Action::Cross && !self.crossed {
-                let (a, b) = nav.nav.map.line_seg(self.trigger_line_no());
-                // (a teleporter goes off only crossed from its front, the right of its run, as
-                // the engine has it: over it from behind is not crossing it)
-                let from_front = (b.0 - a.0) * (last.1 - a.1) - (b.1 - a.1) * (last.0 - a.0) < 0.0;
-                let front_only = self
-                    .step()
-                    .trigger
-                    .as_ref()
-                    .is_some_and(|t| t.info.category == crate::specials::Category::Teleport);
-                self.crossed = segments_cross(last, pos, a, b) && (from_front || !front_only);
-            }
+        if let Some(last) = self.last_pos
+            && self.step().action == Action::Cross
+            && !self.crossed
+        {
+            let (a, b) = nav.nav.map.line_seg(self.trigger_line_no());
+            // (a teleporter goes off only crossed from its front, the right of its run, as
+            // the engine has it: over it from behind is not crossing it)
+            let from_front = (b.0 - a.0) * (last.1 - a.1) - (b.1 - a.1) * (last.0 - a.0) < 0.0;
+            let front_only = self
+                .step()
+                .trigger
+                .as_ref()
+                .is_some_and(|t| t.info.category == crate::specials::Category::Teleport);
+            self.crossed = segments_cross(last, pos, a, b) && (from_front || !front_only);
         }
         self.last_pos = Some(pos);
         if obs.tic - self.step_tic > GIVE_UP_TICS {
@@ -1089,10 +1091,10 @@ impl RouteFollower {
             if let Some(c) = self.pinned_under_ceiling(obs) {
                 return c;
             }
-            if self.phase != Phase::Walk {
-                if let Some(c) = self.crusher_guard(obs) {
-                    return c;
-                }
+            if self.phase != Phase::Walk
+                && let Some(c) = self.crusher_guard(obs)
+            {
+                return c;
             }
         }
         match self.phase {
@@ -1321,10 +1323,8 @@ impl RouteFollower {
                         late = true;
                     }
                 }
-                if late {
-                    if let Some(again) = plan(&rested) {
-                        route = Some(again);
-                    }
+                if late && let Some(again) = plan(&rested) {
+                    route = Some(again);
                 }
             }
             if let Some(route) = route {

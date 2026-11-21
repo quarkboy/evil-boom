@@ -191,10 +191,10 @@ fn moving_sectors(m: &MapData) -> Vec<bool> {
                     moving[s] = true;
                 }
             }
-        } else if matches!(info.category, Category::Door | Category::LockedDoor) {
-            if let Some(b) = m.back_sector(l) {
-                moving[b] = true;
-            }
+        } else if matches!(info.category, Category::Door | Category::LockedDoor)
+            && let Some(b) = m.back_sector(l)
+        {
+            moving[b] = true;
         }
     }
     moving

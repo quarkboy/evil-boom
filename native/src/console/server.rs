@@ -849,10 +849,8 @@ fn watch_child(hub: &Hub) {
                         }
                         mine && s.child.is_none() && s.settings.auto_restart
                     };
-                    if go {
-                        if let Err(e) = start_at(&hub, at) {
-                            lock(&hub).push(format!("[console] not started again: {e}"));
-                        }
+                    if go && let Err(e) = start_at(&hub, at) {
+                        lock(&hub).push(format!("[console] not started again: {e}"));
                     }
                 });
             }
@@ -982,10 +980,10 @@ fn stop(hub: &Hub) {
             return;
         };
         s.game.stopping = true;
-        if s.send(&Command::Quit).is_err() {
-            if let Some(c) = s.child.as_mut() {
-                let _ = c.kill();
-            }
+        if s.send(&Command::Quit).is_err()
+            && let Some(c) = s.child.as_mut()
+        {
+            let _ = c.kill();
         }
         which
     };

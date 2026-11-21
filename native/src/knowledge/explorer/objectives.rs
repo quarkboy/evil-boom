@@ -658,11 +658,11 @@ impl Explorer {
             // from before it nothing goes off, five times in eleven minutes, and the lift never
             // learned; the facet next to it works).
             for li in joined {
-                if found.iter().all(|(l, _)| *l != li) {
-                    if let Some(o) = to_try(li) {
-                        found.push((li, o));
-                        group.push(i);
-                    }
+                if found.iter().all(|(l, _)| *l != li)
+                    && let Some(o) = to_try(li)
+                {
+                    found.push((li, o));
+                    group.push(i);
                 }
             }
         }
@@ -1023,13 +1023,12 @@ impl Explorer {
                 continue;
             }
             let (front, back) = nav.map.sides(li);
-            if let (Some(f), Some(b)) = (front, back) {
-                if !now[f]
+            if let (Some(f), Some(b)) = (front, back)
+                && !now[f]
                     .iter()
                     .any(|&a| now[b].iter().any(|&c| can_cross(a, c)))
-                {
-                    continue; // (the pad isn't down yet, as far as she's seen)
-                }
+            {
+                continue; // (the pad isn't down yet, as far as she's seen)
             }
             let (a, b) = nav.map.line_seg(li);
             let length = dist(a, b).max(1.0);
@@ -1375,7 +1374,7 @@ impl Explorer {
     /// the polys of her reach from where she stands, between them at the portals' middles, no step
     /// up more than she can climb (at the heights she knows: a lift or door at any it can be). A
     /// point that's not in it (a teleporter's way, a jump) counts its straight line twice over.
-    pub(super) fn travel(&self, obs: &Observation) -> impl Fn(Point) -> f64 {
+    pub(super) fn travel(&self, obs: &Observation) -> impl Fn(Point) -> f64 + use<> {
         use std::cmp::Reverse;
         use std::collections::BinaryHeap;
         let mesh = Arc::clone(&self.nav.mesh);

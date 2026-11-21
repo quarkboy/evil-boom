@@ -411,7 +411,7 @@ fn backing_off(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> 
         .steer
         .no_back
         .iter()
-        .filter(|(_, &(till, _))| obs.tic < till)
+        .filter(|&(_, &(till, _))| obs.tic < till)
         .map(|(&id, _)| id)
         .collect();
     // Out of ammo she can hurt none of them, and backing off from one or another of them is
@@ -749,13 +749,13 @@ fn outmatched_keep_clear(c: &mut Combat, obs: &Observation, s: &Situation) -> Op
             a.why = format!("outmatched: making a run for it past {}", t.name);
             return Some(a);
         }
-        if mon(t.name).attack == Attack::Hitscan {
-            if let Some(way) = c.out_of_sight_of(obs, t) {
-                a.moving = Some(way);
-                a.kind = Move::HidingFromOutmatcher;
-                a.why = format!("outmatched: out of {}'s sight (ammo kept)", t.name);
-                return Some(a);
-            }
+        if mon(t.name).attack == Attack::Hitscan
+            && let Some(way) = c.out_of_sight_of(obs, t)
+        {
+            a.moving = Some(way);
+            a.kind = Move::HidingFromOutmatcher;
+            a.why = format!("outmatched: out of {}'s sight (ammo kept)", t.name);
+            return Some(a);
         }
     }
     // The route is walking her away from it already: on along the route, further each step.

@@ -196,12 +196,12 @@ impl Planner<'_> {
             .iter()
             .copied()
             .filter(|&p| {
-                if let Some(gates) = self.facts.use_gates.get(&(line, p)) {
-                    if !gates.iter().all(|&s| {
+                if let Some(gates) = self.facts.use_gates.get(&(line, p))
+                    && !gates.iter().all(|&s| {
                         states[s].iter().any(|h| h.ceiling - h.floor > 0.0) || openable(s)
-                    }) {
-                        return false;
-                    }
+                    })
+                {
+                    return false;
                 }
                 if let Some(pairs) = self.facts.use_line_gates.get(&(line, p)) {
                     let gap = |f: usize, b: usize| {
@@ -231,24 +231,23 @@ impl Planner<'_> {
                         return false;
                     }
                 }
-                if let Some(&(lo, hi)) = self.facts.shot_floors.get(&(line, p)) {
-                    if !here.iter().any(|h| lo <= h.floor && h.floor <= hi) {
-                        return false;
-                    }
+                if let Some(&(lo, hi)) = self.facts.shot_floors.get(&(line, p))
+                    && !here.iter().any(|h| lo <= h.floor && h.floor <= hi)
+                {
+                    return false;
                 }
-                if let Some(face) = self.facts.switch_faces.get(&line) {
-                    if !face.seen_any(&states[face.front], &states[face.back], here) {
-                        return false;
-                    }
+                if let Some(face) = self.facts.switch_faces.get(&line)
+                    && !face.seen_any(&states[face.front], &states[face.back], here)
+                {
+                    return false;
                 }
-                if let Some(&far) = self.facts.cross_sides.get(&(line, p)) {
-                    if !openable(far)
-                        && !here
-                            .iter()
-                            .any(|&a| states[far].iter().any(|&b| can_cross(a, b)))
-                    {
-                        return false;
-                    }
+                if let Some(&far) = self.facts.cross_sides.get(&(line, p))
+                    && !openable(far)
+                    && !here
+                        .iter()
+                        .any(|&a| states[far].iter().any(|&b| can_cross(a, b)))
+                {
+                    return false;
                 }
                 true
             })

@@ -101,10 +101,10 @@ fn read_all(stream: TcpStream, commands: &Sender<Command>, lost: &Sender<String>
         match line {
             // (a line it can't read is dropped: the supervisor checked it, a newer one may know more)
             Ok(l) => {
-                if let Ok(c) = serde_json::from_str::<Command>(&l) {
-                    if commands.send(c).is_err() {
-                        return; // (the game's gone)
-                    }
+                if let Ok(c) = serde_json::from_str::<Command>(&l)
+                    && commands.send(c).is_err()
+                {
+                    return; // (the game's gone)
                 }
             }
             Err(e) => {

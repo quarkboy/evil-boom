@@ -874,11 +874,12 @@ impl Player {
             }
             // Hurt, and something that mends her to be had from up here: that, before the next
             // ride.
-            if on && away {
-                if let Some(rest) = self.boss_fetch_from(obs, &p) {
-                    self.boss.stage = Stage::Fetching(rest);
-                    return Turn::Hers(self.boss_aim(obs, brain, p.at, false));
-                }
+            if on
+                && away
+                && let Some(rest) = self.boss_fetch_from(obs, &p)
+            {
+                self.boss.stage = Stage::Fetching(rest);
+                return Turn::Hers(self.boss_aim(obs, brain, p.at, false));
             }
             self.boss.stage = match self.boss_call_line(obs, &p).filter(|_| on) {
                 Some((mid, out)) => Stage::Leaving(p.clone(), mid, out, obs.tic),

@@ -333,6 +333,24 @@ pub struct Dsda {
     _lib: std::mem::ManuallyDrop<Library>,
 }
 
+/// An environment variable set (or, with no value, taken away) for the game and its SDL to
+/// read as they start: where its files are, which drivers. Here with the rest of what's
+/// unsafe about the game, and for the same reason: C reads it.
+///
+/// Only from where the process is one thread: `main`'s reading of its arguments, and
+/// `Engine::new`, before the game is loaded and before any thread of ours is begun (the GPT
+/// stand-in's waits for `neuro::gpt::go`, after it). Another thread reading the environment
+/// while it's written is undefined behaviour, which is why the 2024 edition makes these unsafe.
+pub fn set_env(var: &str, value: Option<&std::ffi::OsStr>) {
+    // SAFETY: as above: no other thread exists at any of the calls.
+    unsafe {
+        match value {
+            Some(v) => std::env::set_var(var, v),
+            None => std::env::remove_var(var),
+        }
+    }
+}
+
 /// The library's function called `name`, as the function type `T`.
 ///
 /// # Safety
@@ -1061,11 +1079,11 @@ impl Dsda {
     /// A picture shown in the window (0RGB, `w` by `h`): it waits for the screen's refresh
     /// where the window has vsync.
     pub fn window_show(&self, px: &[u32], w: usize, h: usize) {
-        if let Some(f) = &self.window_fns {
-            if px.len() >= w * h {
-                // SAFETY: the call reads `w * h` pixels, which `px` has.
-                unsafe { (f.show)(px.as_ptr(), w as c_int, h as c_int) };
-            }
+        if let Some(f) = &self.window_fns
+            && px.len() >= w * h
+        {
+            // SAFETY: the call reads `w * h` pixels, which `px` has.
+            unsafe { (f.show)(px.as_ptr(), w as c_int, h as c_int) };
         }
     }
 

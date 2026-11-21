@@ -1,0 +1,3 @@
+# The code is formatted as it was before the 2024 edition (its style sorts and wraps a little
+# differently): the edition changed what the code means, not how it is laid out.
+style_edition = "2021"

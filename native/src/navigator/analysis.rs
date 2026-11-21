@@ -390,10 +390,10 @@ impl<'a> Analysis<'a> {
             // platform in the nukage, pressed from the platform down at the bottom, 270 under
             // it, where it does nothing; and then, shut in at the top beside the other one,
             // which works the same thing, she counted it tried.)
-            if matches!(info.trigger, Trigger::S1 | Trigger::SR) {
-                if let Some(face) = self.switch_face(li) {
-                    self.switch_faces.insert(li, face);
-                }
+            if matches!(info.trigger, Trigger::S1 | Trigger::SR)
+                && let Some(face) = self.switch_face(li)
+            {
+                self.switch_faces.insert(li, face);
             }
             let sectors = self.affected(li, &info);
             let shift_from = (is_stairs(line.special) && sectors.len() == 1)

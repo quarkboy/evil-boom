@@ -540,26 +540,26 @@ pub fn run_map_in(
                     .x_mut()
                     .log
                     .push(format!("tic {}: {why}: starting again", e.tic));
-                if why == "stranded" {
-                    if let Some(ob) = &obs {
-                        // (a trap she walked into, or a way on she couldn't see?)
-                        let lp = plan_here(&nav, ob, 20.0);
-                        let x = agent.x();
-                        let label = x
-                            .current
-                            .as_ref()
-                            .map_or("-".to_string(), |c| c.label.clone());
-                        let head = format!(
+                if why == "stranded"
+                    && let Some(ob) = &obs
+                {
+                    // (a trap she walked into, or a way on she couldn't see?)
+                    let lp = plan_here(&nav, ob, 20.0);
+                    let x = agent.x();
+                    let label = x
+                        .current
+                        .as_ref()
+                        .map_or("-".to_string(), |c| c.label.clone());
+                    let head = format!(
                             "  stranded at ({:.0}, {:.0}), objective {label}; omniscient plan from there: {}",
                             ob.x,
                             ob.y,
                             if lp.complete { "ok".to_string() } else { lp.problem.clone() }
                         );
-                        let rep = plan_report(&lp, x, &ob.heights);
-                        let x = agent.x_mut();
-                        x.log.push(head);
-                        x.log.extend(rep.into_iter().map(|l| format!("  {l}")));
-                    }
+                    let rep = plan_report(&lp, x, &ob.heights);
+                    let x = agent.x_mut();
+                    x.log.push(head);
+                    x.log.extend(rep.into_iter().map(|l| format!("  {l}")));
                 }
                 agent.x_mut().restart_wanted = false;
                 agent.x_mut().wedged = false;
@@ -669,28 +669,29 @@ pub fn run_map_in(
                 .filter(|d| (3.0..64.0).contains(&d.0.hypot(d.1)))
                 .map(|d| d.1.atan2(d.0).to_degrees());
             if let Some(way) = push {
-                if let Some((was_way, at)) = last_push {
-                    if ob.tic - at <= 9 && crate::domain::norm(way - was_way).abs() > 120.0 {
-                        let doing = match legs {
-                            crate::tactical::arbiter::Legs::Fight => p
-                                .combat()
-                                .last_move
-                                .map_or("no move".to_string(), |m| format!("{m:?}")),
-                            other => format!("{other:?} legs"),
-                        };
-                        if crate::debug::on().darts {
-                            p.explorer.log.push(format!("tic {}: (measuring) dart: going {was_way:.0} at tic {at} ({was_doing}), now {way:.0} ({doing}); target {:?}", ob.tic, p.combat().target));
-                        }
-                        p.combat_mut().count("darts", 1.0);
-                        p.combat_mut().count(&format!("darts: {doing}"), 1.0);
-                        // (one soon after another is the jitter: to and fro inside a second.
-                        // A turn about every second or two is a player's sidestepping)
-                        if ob.tic - last_dart <= 20 {
-                            p.combat_mut().count("quick darts", 1.0);
-                            p.combat_mut().count(&format!("quick darts: {doing}"), 1.0);
-                        }
-                        last_dart = ob.tic;
+                if let Some((was_way, at)) = last_push
+                    && ob.tic - at <= 9
+                    && crate::domain::norm(way - was_way).abs() > 120.0
+                {
+                    let doing = match legs {
+                        crate::tactical::arbiter::Legs::Fight => p
+                            .combat()
+                            .last_move
+                            .map_or("no move".to_string(), |m| format!("{m:?}")),
+                        other => format!("{other:?} legs"),
+                    };
+                    if crate::debug::on().darts {
+                        p.explorer.log.push(format!("tic {}: (measuring) dart: going {was_way:.0} at tic {at} ({was_doing}), now {way:.0} ({doing}); target {:?}", ob.tic, p.combat().target));
                     }
+                    p.combat_mut().count("darts", 1.0);
+                    p.combat_mut().count(&format!("darts: {doing}"), 1.0);
+                    // (one soon after another is the jitter: to and fro inside a second.
+                    // A turn about every second or two is a player's sidestepping)
+                    if ob.tic - last_dart <= 20 {
+                        p.combat_mut().count("quick darts", 1.0);
+                        p.combat_mut().count(&format!("quick darts: {doing}"), 1.0);
+                    }
+                    last_dart = ob.tic;
                 }
                 last_push = Some((way, ob.tic));
                 was_doing = match legs {

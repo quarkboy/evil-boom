@@ -121,14 +121,13 @@ impl Knowledge {
             in_view.insert(sector);
             self.sectors.insert(sector);
         }
-        if let Some(last) = &self.last {
-            if let (Some(now), Some(before)) = (obs.suits, last.suits) {
-                if now > before {
-                    self.suit_until = Some(obs.tic + SUIT_TICS);
-                    self.events
-                        .push(format!("tic {}: radiation suit on", obs.tic));
-                }
-            }
+        if let Some(last) = &self.last
+            && let (Some(now), Some(before)) = (obs.suits, last.suits)
+            && now > before
+        {
+            self.suit_until = Some(obs.tic + SUIT_TICS);
+            self.events
+                .push(format!("tic {}: radiation suit on", obs.tic));
         }
         if let Some(last) = self.last.take() {
             if dist(last.pos(), obs.pos()) > TELEPORT_JUMP {

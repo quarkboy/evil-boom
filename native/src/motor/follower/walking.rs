@@ -144,10 +144,11 @@ impl RouteFollower {
         } else {
             f64::INFINITY
         };
-        if seg.end == SegEnd::Jump && to_end <= RUNUP_TOLERANCE {
-            if let Some(j) = &seg.jump {
-                return self.line_up(obs, j);
-            }
+        if seg.end == SegEnd::Jump
+            && to_end <= RUNUP_TOLERANCE
+            && let Some(j) = &seg.jump
+        {
+            return self.line_up(obs, j);
         }
         if step.action == Action::Pickup
             && obs
@@ -282,10 +283,10 @@ impl RouteFollower {
                 })
                 .collect();
         }
-        if !self.barrel_run {
-            if let Some(c) = self.keep_off_lit_chain(obs) {
-                return Some(c);
-            }
+        if !self.barrel_run
+            && let Some(c) = self.keep_off_lit_chain(obs)
+        {
+            return Some(c);
         }
         // (a barrel to clear on this step: taken on at once, shot from the nearest place out of
         // every blast of its chain, then on)

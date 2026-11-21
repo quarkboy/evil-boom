@@ -766,22 +766,22 @@ impl Combat {
         let mut act = tree::engage(self, obs, &s);
         // A rocket on its way out, 8 tics after the trigger, the way she faces then: if that way it
         // would go off near her, she turns to the nearest way it won't.
-        if s.vile.is_none() {
-            if let Some((aim, out)) = self.rocket_held(obs) {
-                act.aim = Some(aim);
-                if out {
-                    act.kind = Move::RocketTurnedOff;
-                    act.why = "turned off a rocket's way out into something near".into();
-                }
+        if s.vile.is_none()
+            && let Some((aim, out)) = self.rocket_held(obs)
+        {
+            act.aim = Some(aim);
+            if out {
+                act.kind = Move::RocketTurnedOff;
+                act.why = "turned off a rocket's way out into something near".into();
             }
         }
         // Hit from where she isn't looking: round to it, whatever she was shooting, and with
         // missiles in the air too. A dodge is her legs'; her eyes are free.
-        if s.vile.is_none() {
-            if let Some(way) = self.look(obs, true) {
-                act.aim = Some(way);
-                act.hold_fire = true;
-            }
+        if s.vile.is_none()
+            && let Some(way) = self.look(obs, true)
+        {
+            act.aim = Some(way);
+            act.hold_fire = true;
         }
         let aim = act.aim.or(s.aim);
         let fire = fire && !act.hold_fire && !self.baiting && !self.ordered_hold_fire;
@@ -802,10 +802,11 @@ impl Combat {
             });
             self.announced = why.clone();
         }
-        if obs.tic % 175 == 0 && crate::debug::on().shot {
-            if let Some(t) = &s.target {
-                self.log.push(format!("tic {}: (she's at ({:.0}, {:.0}, {:.0}); {} {} at ({:.0}, {:.0}, {:.0}), {:.0} off; the move {kind:?}, going {:?}; gun {:?}, ammo {:?}, keys {:?})", obs.tic, obs.x, obs.y, self.z(obs), t.name, t.id, t.x, t.y, t.z, dist((t.x, t.y), obs.pos()), act.moving.map(|m| (m.0.round(), m.1.round())), obs.weapon, obs.ammo, obs.keys));
-            }
+        if obs.tic % 175 == 0
+            && crate::debug::on().shot
+            && let Some(t) = &s.target
+        {
+            self.log.push(format!("tic {}: (she's at ({:.0}, {:.0}, {:.0}); {} {} at ({:.0}, {:.0}, {:.0}), {:.0} off; the move {kind:?}, going {:?}; gun {:?}, ammo {:?}, keys {:?})", obs.tic, obs.x, obs.y, self.z(obs), t.name, t.id, t.x, t.y, t.z, dist((t.x, t.y), obs.pos()), act.moving.map(|m| (m.0.round(), m.1.round())), obs.weapon, obs.ammo, obs.keys));
         }
         self.last_move = Some(kind);
         Some(Decision {
@@ -836,17 +837,17 @@ impl Combat {
         if let Some(t) = &target {
             let (a, f, w) = self.aim_and_fire(obs, t);
             (aim, fire, weapon) = (Some(a), f, w);
-            if let Some(shot) = self.barrel_shot(obs) {
-                if matches!(obs.weapon, Some(2..=4)) {
-                    // The barrels round a monster do what her gun can't.
-                    let a = heading(pos, shot);
-                    let d = dist(shot, pos);
-                    aim = Some(a);
-                    let floor = self.floor_at(obs, shot);
-                    fire = norm(a - obs.angle).abs() < 0.75f64.max(8.0f64.atan2(d).to_degrees())
-                        && d < weapon_in(obs.weapon.unwrap_or(2), obs).reach
-                        && self.shot_clear(obs, shot, floor, 32.0);
-                }
+            if let Some(shot) = self.barrel_shot(obs)
+                && matches!(obs.weapon, Some(2..=4))
+            {
+                // The barrels round a monster do what her gun can't.
+                let a = heading(pos, shot);
+                let d = dist(shot, pos);
+                aim = Some(a);
+                let floor = self.floor_at(obs, shot);
+                fire = norm(a - obs.angle).abs() < 0.75f64.max(8.0f64.atan2(d).to_degrees())
+                    && d < weapon_in(obs.weapon.unwrap_or(2), obs).reach
+                    && self.shot_clear(obs, shot, floor, 32.0);
             }
         }
         if let Some(t) = target.as_ref().filter(|t| self.reachable(obs, t)) {
@@ -886,11 +887,12 @@ impl Combat {
         let mut barrel_away = None;
         // With something shooting in sight, or her shooting at something: a shot, hers or theirs,
         // sets a barrel off.
-        if first_missile.is_none() && !busy && (shooting || target.is_some()) {
-            if let Some(b) = barrel.filter(|&b| dist(b, pos) < self.tune.barrels.keep_clear + 64.0)
-            {
-                barrel_away = self.away_from_barrels(obs, b);
-            }
+        if first_missile.is_none()
+            && !busy
+            && (shooting || target.is_some())
+            && let Some(b) = barrel.filter(|&b| dist(b, pos) < self.tune.barrels.keep_clear + 64.0)
+        {
+            barrel_away = self.away_from_barrels(obs, b);
         }
         // Invulnerable: nothing to hide from. Her BFG ball in the air: she stays in their sight
         // till it lands, since its spray comes from where she is.

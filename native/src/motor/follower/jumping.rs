@@ -302,20 +302,20 @@ impl RouteFollower {
         };
         // (the way to the nearest floor that stays put, along the floors she can still step
         // onto, steered along every tic: a winding way of them is followed round its bends)
-        if let (true, Some(sector)) = (on_ground, here_sector) {
-            if let Some((h, target)) = self.run_path(obs) {
-                if self.jump.run_for != Some(target) {
-                    self.log.add(obs.tic, format!("running off sector {sector} for sector {target}, the nearest floor that stays put"));
-                    self.jump.run_for = Some(target);
-                }
-                self.jump.run = Some(Run {
-                    heading: h,
-                    sector: Some(sector),
-                    next: obs.tic + RUN_REAIM,
-                });
-                self.motion.rate = 0.0;
-                return run_controls(obs.angle, h);
+        if let (true, Some(sector)) = (on_ground, here_sector)
+            && let Some((h, target)) = self.run_path(obs)
+        {
+            if self.jump.run_for != Some(target) {
+                self.log.add(obs.tic, format!("running off sector {sector} for sector {target}, the nearest floor that stays put"));
+                self.jump.run_for = Some(target);
             }
+            self.jump.run = Some(Run {
+                heading: h,
+                sector: Some(sector),
+                next: obs.tic + RUN_REAIM,
+            });
+            self.motion.rate = 0.0;
+            return run_controls(obs.angle, h);
         }
         if on_ground && (obs.tic >= run.next || here_sector != run.sector) {
             let Some(sector) = here_sector else {

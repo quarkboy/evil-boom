@@ -544,21 +544,19 @@ impl Session {
             .director
             .question()
             .filter(|q| !q.now && self.connected)
+            && self.forced_question != Some(q.id)
+            && self.ask_force > 0
+            && obs.tic - q.opened >= self.ask_force
         {
-            if self.forced_question != Some(q.id)
-                && self.ask_force > 0
-                && obs.tic - q.opened >= self.ask_force
-            {
-                self.forced_question = Some(q.id);
-                self.forced = true;
-                self.force(
-                    &q.line(obs.tic),
-                    &format!("Answer q{}?", q.id),
-                    &["doom_answer", "doom_go", "doom_explore", "doom_exit"],
-                    "high",
-                );
-                log.push(format!("neuro: q{} unanswered: decision forced", q.id));
-            }
+            self.forced_question = Some(q.id);
+            self.forced = true;
+            self.force(
+                &q.line(obs.tic),
+                &format!("Answer q{}?", q.id),
+                &["doom_answer", "doom_go", "doom_explore", "doom_exit"],
+                "high",
+            );
+            log.push(format!("neuro: q{} unanswered: decision forced", q.id));
         }
         // (waiting on her: after a while, a decision forced; one at a time)
         if !self.director.idle(agent) {
@@ -995,11 +993,11 @@ impl Session {
         };
         let (mut args, mut notes) = self.mend(name, args);
         // (a place as lists give it, "SW 305", for an id: what's listed nearest there)
-        if let Some(r) = args.get("ref").and_then(Value::as_str).map(str::to_string) {
-            if let Some(id) = self.director.at_position(agent, obs, &r) {
-                notes.push(format!("{r} read as {id}"));
-                args["ref"] = Value::String(id);
-            }
+        if let Some(r) = args.get("ref").and_then(Value::as_str).map(str::to_string)
+            && let Some(id) = self.director.at_position(agent, obs, &r)
+        {
+            notes.push(format!("{r} read as {id}"));
+            args["ref"] = Value::String(id);
         }
         let (ok, msg) = self.act(agent, obs, name, &args);
         (ok, noted(msg, &notes))
@@ -1111,10 +1109,11 @@ impl Session {
                     return (false, "ref: an id or name.".into());
                 };
                 let risky = args.get("risky").and_then(Value::as_bool).unwrap_or(false);
-                if self.director.resolve(r).starts_with("exit-") && !sure {
-                    if let Some(q) = self.director.ask_leave(agent, obs) {
-                        return (true, q);
-                    }
+                if self.director.resolve(r).starts_with("exit-")
+                    && !sure
+                    && let Some(q) = self.director.ask_leave(agent, obs)
+                {
+                    return (true, q);
                 }
                 // (a way that costs: asked; not to be retried as it is otherwise, the reason
                 // says what would do)

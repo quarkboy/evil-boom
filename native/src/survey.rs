@@ -268,10 +268,10 @@ pub fn survey_map(wad: &str, map: &str) -> Result<(), String> {
     {
         let ob = e.observe();
         let found = e.tally()[2].0;
-        if found > secrets_seen {
-            if let Some(p) = nav.mesh.poly_at(ob.pos()) {
-                agent.x_mut().found_secret(nav.sector_of_poly(p), ob.tic);
-            }
+        if found > secrets_seen
+            && let Some(p) = nav.mesh.poly_at(ob.pos())
+        {
+            agent.x_mut().found_secret(nav.sector_of_poly(p), ob.tic);
         }
         secrets_seen = found;
         let ctl = agent.act(&ob, c.as_ref());

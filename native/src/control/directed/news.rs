@@ -373,45 +373,47 @@ impl Director {
             .fight
             .as_ref()
             .is_some_and(|f| f.calm_since.is_some_and(|t| obs.tic - t >= RESUME_CALM))
+            && let Some(f) = self.fight.take()
         {
-            if let Some(f) = self.fight.take() {
-                let killed = self.tally.kills.0 - f.kills_at_start;
-                let them: Vec<String> = f.against.iter().map(|(name, n)| some(*n, name)).collect();
-                let mut cost = Vec::new();
-                if f.health_lost >= 1.0 {
-                    cost.push(format!("{:.0} health", f.health_lost));
-                }
-                if f.armor_lost >= 1.0 {
-                    cost.push(format!("{:.0} armor", f.armor_lost));
-                }
-                for (n, (_, what)) in f.spent.iter().zip(POOLS) {
-                    if *n > 0 {
-                        cost.push(format!("{n} {what}"));
-                    }
-                }
-                let notable =
-                    f.health_lost >= FIGHT_NOTABLE_HEALTH || killed >= FIGHT_NOTABLE_KILLS;
-                // (one that came to little isn't a fight to tell of: a monster seen and gone, a
-                // zombie shot in passing)
-                if killed < 2 && f.health_lost < FIGHT_WORTH_HEALTH {
-                    return;
-                }
-                self.next_due = Some("fight");
-                self.tell(obs, Event::FightOver { notable }, format!(
-                        "Fight over ({} s, against {}): {killed} killed; cost {}. Health {health:.0}.",
-                        (obs.tic - f.since) / 35,
-                        if them.is_empty() {
-                            "something unseen".to_string()
-                        } else {
-                            them.join(", ")
-                        },
-                        if cost.is_empty() {
-                            "nothing".to_string()
-                        } else {
-                            cost.join(", ")
-                        }
-                    ),);
+            let killed = self.tally.kills.0 - f.kills_at_start;
+            let them: Vec<String> = f.against.iter().map(|(name, n)| some(*n, name)).collect();
+            let mut cost = Vec::new();
+            if f.health_lost >= 1.0 {
+                cost.push(format!("{:.0} health", f.health_lost));
             }
+            if f.armor_lost >= 1.0 {
+                cost.push(format!("{:.0} armor", f.armor_lost));
+            }
+            for (n, (_, what)) in f.spent.iter().zip(POOLS) {
+                if *n > 0 {
+                    cost.push(format!("{n} {what}"));
+                }
+            }
+            let notable = f.health_lost >= FIGHT_NOTABLE_HEALTH || killed >= FIGHT_NOTABLE_KILLS;
+            // (one that came to little isn't a fight to tell of: a monster seen and gone, a
+            // zombie shot in passing)
+            if killed < 2 && f.health_lost < FIGHT_WORTH_HEALTH {
+                return;
+            }
+            self.next_due = Some("fight");
+            self.tell(
+                obs,
+                Event::FightOver { notable },
+                format!(
+                    "Fight over ({} s, against {}): {killed} killed; cost {}. Health {health:.0}.",
+                    (obs.tic - f.since) / 35,
+                    if them.is_empty() {
+                        "something unseen".to_string()
+                    } else {
+                        them.join(", ")
+                    },
+                    if cost.is_empty() {
+                        "nothing".to_string()
+                    } else {
+                        cost.join(", ")
+                    }
+                ),
+            );
         }
     }
 

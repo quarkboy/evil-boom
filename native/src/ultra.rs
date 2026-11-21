@@ -500,10 +500,9 @@ impl Ultra {
         if let Some(sec) = self.hot.as_ref().and_then(|nav| {
             let sec = nav.sector_of_poly(nav.poly_at(pos)?);
             (nav.damage.get(sec).is_some_and(|&d| d != 0)).then_some(sec)
-        }) {
-            if !root.wades.contains(&sec) {
-                w -= t.hot;
-            }
+        }) && !root.wades.contains(&sec)
+        {
+            w -= t.hot;
         }
         for m in things {
             if hostile_missile(m) {

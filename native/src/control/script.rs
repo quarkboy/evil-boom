@@ -112,11 +112,10 @@ pub fn command(
                 }
                 _ => false,
             };
-            if leaving && !sure {
-                if let Some(q) = d.ask_leave(agent, obs) {
+            if leaving && !sure
+                && let Some(q) = d.ask_leave(agent, obs) {
                     return Ok(vec![q]);
                 }
-            }
             let o = match w.get(1).copied() {
                 Some("go") => match w.last() {
                     Some(&"risky") => Order::Go(w[2..w.len() - 1].join(" "), true),

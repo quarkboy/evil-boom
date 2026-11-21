@@ -180,13 +180,12 @@ impl Stream {
         if self.title.1 != w.map_name
             && w.engine.screen().is_none_or(|s| s.state == 0 && !s.wiping)
             && w.engine.tic > crate::engine::WARMUP_TICS
+            && let Some(t) = w.engine.level_title()
         {
-            if let Some(t) = w.engine.level_title() {
-                let name = t.split_once(':').map_or(t.as_str(), |(_, n)| n).trim();
-                let name = title_case(name);
-                self.event(format!("{}: {name}", w.map_name), (110, 170, 255));
-                self.title = (name, w.map_name.clone());
-            }
+            let name = t.split_once(':').map_or(t.as_str(), |(_, n)| n).trim();
+            let name = title_case(name);
+            self.event(format!("{}: {name}", w.map_name), (110, 170, 255));
+            self.title = (name, w.map_name.clone());
         }
         let secrets = w.engine.tally()[2].0;
         let now = (

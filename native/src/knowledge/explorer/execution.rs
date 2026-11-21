@@ -138,10 +138,9 @@ impl Explorer {
             .as_ref()
             .filter(|o| o.kind == Kind::Wall)
             .and_then(|o| o.wall)
+            && !self.knowledge.tried_walls.contains_key(&wall)
         {
-            if !self.knowledge.tried_walls.contains_key(&wall) {
-                self.look_until = None;
-            }
+            self.look_until = None;
         }
         self.log.push(format!(
             "tic {}: {why}: looking {}",

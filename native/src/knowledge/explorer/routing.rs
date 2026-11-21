@@ -643,10 +643,10 @@ impl Explorer {
                         .then(|| t.clone())
                     })
                     .next();
-                if let Some(t) = far {
-                    if !self.short_legs.iter().any(|x| x.line == t.line) {
-                        self.short_legs.push(t);
-                    }
+                if let Some(t) = far
+                    && !self.short_legs.iter().any(|x| x.line == t.line)
+                {
+                    self.short_legs.push(t);
                 }
             }
             return None;
@@ -749,10 +749,11 @@ impl Explorer {
             }
             // (not for a switch or a door to try there: what it does isn't known, and it's
             // the one thing on such a perch that could be the way off it)
-            if obj.trigger.is_none() && obj.kind != Kind::Teleporter {
-                if let Some(s) = self.marooned(route, obj, obs, view) {
-                    return Some(Refusal::DropOntoHarm { sector: s });
-                }
+            if obj.trigger.is_none()
+                && obj.kind != Kind::Teleporter
+                && let Some(s) = self.marooned(route, obj, obs, view)
+            {
+                return Some(Refusal::DropOntoHarm { sector: s });
             }
         }
         if obj.kind != Kind::Exit && !obj.risky && !self.knowledge.protected(obs.tic) {
@@ -863,13 +864,12 @@ impl Explorer {
                     j.takeoff.0 + (j.dest.0 - j.takeoff.0) * at / length,
                     j.takeoff.1 + (j.dest.1 - j.takeoff.1) * at / length,
                 );
-                if nav.poly_at(p).map(|q| nav.sector_of_poly(q)) == Some(landing) {
-                    if let Some(&b) = seen
+                if nav.poly_at(p).map(|q| nav.sector_of_poly(q)) == Some(landing)
+                    && let Some(&b) = seen
                         .iter()
                         .find(|&&b| dist(b, p) < PLAYER_RADIUS + BARREL_RADIUS + SPARE)
-                    {
-                        return Some(b);
-                    }
+                {
+                    return Some(b);
                 }
                 at += EVERY;
             }
@@ -1077,25 +1077,19 @@ impl Explorer {
                         }
                     }
                     // A walk into it a leg or more on: is there a way without it?
-                    if j > i + 1 {
-                        if let Some(to) = along(leg, &|p| nav.sector_of_poly(p) == *s) {
-                            let (Some(&a), Some(&b)) =
-                                (leg.path.polys.first(), leg.path.polys.last())
-                            else {
-                                continue;
-                            };
-                            if elapsed + to / PACE > *window
-                                && view
-                                    .find_path(
-                                        nav.poly_center(a),
-                                        nav.poly_center(b),
-                                        &lapsed,
-                                        None,
-                                    )
-                                    .is_none()
-                            {
-                                return Some(jumps());
-                            }
+                    if j > i + 1
+                        && let Some(to) = along(leg, &|p| nav.sector_of_poly(p) == *s)
+                    {
+                        let (Some(&a), Some(&b)) = (leg.path.polys.first(), leg.path.polys.last())
+                        else {
+                            continue;
+                        };
+                        if elapsed + to / PACE > *window
+                            && view
+                                .find_path(nav.poly_center(a), nav.poly_center(b), &lapsed, None)
+                                .is_none()
+                        {
+                            return Some(jumps());
                         }
                     }
                 }

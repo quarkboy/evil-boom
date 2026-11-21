@@ -128,10 +128,10 @@ impl Planner<'_> {
                 return far;
             }
         }
-        if t.kind == Kind::Gun {
-            if let Some(near) = first_extreme(inter.iter().map(|&p| mesh.center(p)), pos, true) {
-                return near;
-            }
+        if t.kind == Kind::Gun
+            && let Some(near) = first_extreme(inter.iter().map(|&p| mesh.center(p)), pos, true)
+        {
+            return near;
         }
         if ok.contains(&front) {
             return front;
@@ -146,10 +146,10 @@ impl Planner<'_> {
                 }
             }
         }
-        if let Some((d, spot)) = best {
-            if d <= USE_REACH as f64 + 12.0 {
-                return spot;
-            }
+        if let Some((d, spot)) = best
+            && d <= USE_REACH as f64 + 12.0
+        {
+            return spot;
         }
         // (out of reach: somewhere else in those polys that isn't)
         if let Some(spot) = self.press_spot_in_reach(&inter, a, b) {

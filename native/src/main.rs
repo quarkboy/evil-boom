@@ -709,7 +709,7 @@ fn watch(args: &[String]) -> Result<(), String> {
     if w.headless {
         // (SDL takes Ctrl-C and SIGTERM for its own quit event, which nothing headless reads: left
         // to the shell, they stop it. Set while the process is one thread still)
-        std::env::set_var("SDL_NO_SIGNAL_HANDLERS", "1");
+        evilboom::dsda::set_env("SDL_NO_SIGNAL_HANDLERS", Some("1".as_ref()));
     }
     if let Some(config) = &w.gpt {
         // (the stand-in in this program, on a port of its own: one program to run. Its thread

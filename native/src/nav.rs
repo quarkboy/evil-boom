@@ -533,10 +533,10 @@ impl NavCore {
         frm: Option<usize>,
     ) -> Vec<Heights> {
         let mut out = st.heights(s).to_vec();
-        if let Some(door) = doors.and_then(|d| d.get(&s)) {
-            if frm.is_none_or(|p| door.users.contains(&p)) {
-                out.extend_from_slice(&door.heights);
-            }
+        if let Some(door) = doors.and_then(|d| d.get(&s))
+            && frm.is_none_or(|p| door.users.contains(&p))
+        {
+            out.extend_from_slice(&door.heights);
         }
         out
     }

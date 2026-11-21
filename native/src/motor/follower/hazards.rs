@@ -241,10 +241,10 @@ impl RouteFollower {
                 box_at(a.cos() * near, a.sin() * near)
             })
             .find(|&s| !under.iter().any(|&(u, _)| u == s) && coming_down(s));
-        if let Some((s, offset)) = under.iter().copied().find(|&(s, _)| coming_down(s)) {
-            if let Some(c) = self.escape_crusher(obs, s, offset, &doors) {
-                return Some(c);
-            }
+        if let Some((s, offset)) = under.iter().copied().find(|&(s, _)| coming_down(s))
+            && let Some(c) = self.escape_crusher(obs, s, offset, &doors)
+        {
+            return Some(c);
         }
         let Some(s) = next else {
             if self.crusher.wait.is_some() {
@@ -537,10 +537,9 @@ impl RouteFollower {
                     .copied()
                     .unwrap_or(i64::MIN / 2)
                 > CRUSH_TURN
+            && let Some(c) = self.set_off_first(obs, &polys, s, entry)
         {
-            if let Some(c) = self.set_off_first(obs, &polys, s, entry) {
-                return Some(c);
-            }
+            return Some(c);
         }
         let (go, timed) = self.crossable(obs, &polys, s, &crushers);
         // (and out of it into another she couldn't go into now: not in, a wait under the first is

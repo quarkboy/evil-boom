@@ -385,10 +385,11 @@ impl MoverModel {
             }
             for side in [line.front, line.back] {
                 let tex = &m.sidedefs[usize::from(side)].lower;
-                if !tex.is_empty() && tex != "-" {
-                    if let Some(&h) = m.texture_heights.get(tex) {
-                        best = Some(best.map_or(h, |b| b.min(h)));
-                    }
+                if !tex.is_empty()
+                    && tex != "-"
+                    && let Some(&h) = m.texture_heights.get(tex)
+                {
+                    best = Some(best.map_or(h, |b| b.min(h)));
                 }
             }
         }

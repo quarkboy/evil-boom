@@ -545,7 +545,7 @@ impl Knowledge {
         let same: Vec<usize> = self
             .info
             .iter()
-            .filter(|(&o, i)| {
+            .filter(|&(&o, i)| {
                 i.category == Category::Teleport && i.players && m.linedefs[o].tag == tag
             })
             .map(|(&o, _)| o)
@@ -702,7 +702,7 @@ impl Knowledge {
         let m = &self.nav.map;
         self.info
             .iter()
-            .filter(|(&i, info)| {
+            .filter(|&(&i, info)| {
                 let (f, b) = m.sides(i);
                 info.category.is_exit()
                     && (self.mapped.contains(&i)
@@ -726,7 +726,7 @@ impl Knowledge {
         let m = &self.nav.map;
         self.info
             .iter()
-            .filter(|(&i, info)| {
+            .filter(|&(&i, info)| {
                 let (f, b) = m.sides(i);
                 info.category == Category::Teleport
                     && info.players
@@ -780,7 +780,7 @@ impl Knowledge {
         }
         first
             .iter()
-            .filter(|(&l, _)| !explained.contains(&(l as i64)))
+            .filter(|&(&l, _)| !explained.contains(&(l as i64)))
             .map(|(_, &t)| t)
             .max()
     }
@@ -887,17 +887,17 @@ impl Knowledge {
             };
             if let Some(l) = self.learned.get(&t.id).filter(|l| !l.is_empty()) {
                 out.push((t.clone(), l.clone()));
-            } else if self.mapped.contains(&li) {
-                if let Some(same) = by_mechanism.get(&self.mechanism(li)) {
-                    let both: BTreeSet<usize> = t
-                        .effects
-                        .iter()
-                        .map(|(s, _)| *s)
-                        .filter(|s| same.contains(s))
-                        .collect();
-                    if !both.is_empty() {
-                        out.push((t.clone(), both));
-                    }
+            } else if self.mapped.contains(&li)
+                && let Some(same) = by_mechanism.get(&self.mechanism(li))
+            {
+                let both: BTreeSet<usize> = t
+                    .effects
+                    .iter()
+                    .map(|(s, _)| *s)
+                    .filter(|s| same.contains(s))
+                    .collect();
+                if !both.is_empty() {
+                    out.push((t.clone(), both));
                 }
             }
         }

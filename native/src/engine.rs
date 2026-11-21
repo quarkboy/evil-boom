@@ -117,13 +117,13 @@ impl Engine {
         if o.sound && !o.capture {
             // (the system's own, unless one's asked for; not the dummy one set before)
             if std::env::var_os("SDL_AUDIODRIVER").is_some_and(|v| v == "dummy") {
-                std::env::remove_var("SDL_AUDIODRIVER");
+                crate::dsda::set_env("SDL_AUDIODRIVER", None);
             }
         } else {
-            std::env::set_var("SDL_AUDIODRIVER", "dummy");
+            crate::dsda::set_env("SDL_AUDIODRIVER", Some("dummy".as_ref()));
         }
         if !o.drawn {
-            std::env::set_var("SDL_VIDEODRIVER", "dummy");
+            crate::dsda::set_env("SDL_VIDEODRIVER", Some("dummy".as_ref()));
         }
         // straight into the level (no title screen: its attract-mode demo took her commands)
         let warp: Vec<String> = if map_name.to_uppercase().starts_with("MAP") {
@@ -216,7 +216,7 @@ impl Engine {
             .weaponowned
             .iter()
             .enumerate()
-            .filter(|(_, &o)| o != 0)
+            .filter(|&(_, &o)| o != 0)
             .fold(0, |m, (i, _)| m | (1 << i));
         let [clip, shell, cell, rocket] = p.ammo;
         crate::dsda::Loadout {
@@ -702,7 +702,7 @@ impl Engine {
 
 fn set_env_default(var: &str, value: &Path) {
     if std::env::var_os(var).is_none() {
-        std::env::set_var(var, value);
+        crate::dsda::set_env(var, Some(value.as_ref()));
     }
 }
 

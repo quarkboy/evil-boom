@@ -664,13 +664,13 @@ impl View {
                                 // (bars she opens herself, with a key: the key)
                                 if doors_all.contains_key(&s) {
                                     for t in &self.triggers {
-                                        if t.sectors.contains(&s) && t.info.lock != Lock::None {
-                                            if let Some(k) =
+                                        if t.sectors.contains(&s)
+                                            && t.info.lock != Lock::None
+                                            && let Some(k) =
                                                 key_for(t.info.lock).filter(|k| !need_k.has(*k))
-                                            {
-                                                need_k = need_k.with(k);
-                                                queue.push(spots_of(k));
-                                            }
+                                        {
+                                            need_k = need_k.with(k);
+                                            queue.push(spots_of(k));
                                         }
                                     }
                                 }
@@ -706,13 +706,13 @@ impl View {
                         } else if doors_all.contains_key(&sb) {
                             // a use-door: which key does it need?
                             for t in &self.triggers {
-                                if t.sectors.contains(&sb) && t.info.lock != Lock::None {
-                                    if let Some(k) =
+                                if t.sectors.contains(&sb)
+                                    && t.info.lock != Lock::None
+                                    && let Some(k) =
                                         key_for(t.info.lock).filter(|k| !need_k.has(*k))
-                                    {
-                                        need_k = need_k.with(k);
-                                        queue.push(spots_of(k));
-                                    }
+                                {
+                                    need_k = need_k.with(k);
+                                    queue.push(spots_of(k));
                                 }
                             }
                         }
@@ -785,20 +785,21 @@ impl View {
                 }
                 if first.is_none() {
                     for dt in &self.triggers {
-                        if dt.sectors.contains(&sh.0) && dt.info.lock != Lock::None {
-                            if let Some(k) = key_for(dt.info.lock).filter(|k| !need_k.has(*k)) {
-                                need_k = need_k.with(k);
-                                queue.push(spots_of(k));
-                            }
+                        if dt.sectors.contains(&sh.0)
+                            && dt.info.lock != Lock::None
+                            && let Some(k) = key_for(dt.info.lock).filter(|k| !need_k.has(*k))
+                        {
+                            need_k = need_k.with(k);
+                            queue.push(spots_of(k));
                         }
                     }
                 }
                 for &(s2, h2) in assumed.get(&sh).into_iter().flatten() {
                     relied.insert((s2, h2.key()));
-                    if let Some(t2) = producers.get(&(s2, h2.key())).and_then(|v| v.first()) {
-                        if need_t.insert(t2.line) {
-                            queue.push(t2.activators.clone());
-                        }
+                    if let Some(t2) = producers.get(&(s2, h2.key())).and_then(|v| v.first())
+                        && need_t.insert(t2.line)
+                    {
+                        queue.push(t2.activators.clone());
                     }
                 }
                 let chosen: Vec<&TriggerLine> = match first {
@@ -844,19 +845,18 @@ impl View {
                         for dt in &self.triggers {
                             if dt.sectors.iter().any(|s| gates.contains(s))
                                 && dt.info.lock != Lock::None
+                                && let Some(k) = key_for(dt.info.lock).filter(|k| !need_k.has(*k))
                             {
-                                if let Some(k) = key_for(dt.info.lock).filter(|k| !need_k.has(*k)) {
-                                    need_k = need_k.with(k);
-                                    queue.push(spots_of(k));
-                                }
+                                need_k = need_k.with(k);
+                                queue.push(spots_of(k));
                             }
                         }
                     }
-                    if t.info.lock != Lock::None {
-                        if let Some(k) = key_for(t.info.lock).filter(|k| !need_k.has(*k)) {
-                            need_k = need_k.with(k);
-                            queue.push(spots_of(k));
-                        }
+                    if t.info.lock != Lock::None
+                        && let Some(k) = key_for(t.info.lock).filter(|k| !need_k.has(*k))
+                    {
+                        need_k = need_k.with(k);
+                        queue.push(spots_of(k));
                     }
                     // walked over, and from nowhere can she walk onto its far side as the level
                     // starts (a line round a pedestal with no headroom till it's lowered): what
@@ -886,10 +886,9 @@ impl View {
                         if let Some((far, h)) = made {
                             relied.insert((far, h.key()));
                             if let Some(t2) = producers.get(&(far, h.key())).and_then(|v| v.first())
+                                && need_t.insert(t2.line)
                             {
-                                if need_t.insert(t2.line) {
-                                    queue.push(t2.activators.clone());
-                                }
+                                queue.push(t2.activators.clone());
                             }
                         }
                     }

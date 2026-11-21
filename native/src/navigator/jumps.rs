@@ -326,14 +326,14 @@ impl Navigator {
             if let Some((_, at)) = r.split_once('@') {
                 // run straight across the strip it lands on, to where the simulator stopped
                 let xy: Vec<f64> = at.split(',').filter_map(|x| x.parse().ok()).collect();
-                if let [x, y] = xy[..] {
-                    if let Some(end) = self.mesh.poly_at((x, y)) {
-                        let mut t = j.clone();
-                        t.dest_poly = end;
-                        t.dest = (x, y);
-                        t.through = true;
-                        keep.push((t, r.clone()));
-                    }
+                if let [x, y] = xy[..]
+                    && let Some(end) = self.mesh.poly_at((x, y))
+                {
+                    let mut t = j.clone();
+                    t.dest_poly = end;
+                    t.dest = (x, y);
+                    t.through = true;
+                    keep.push((t, r.clone()));
                 }
             }
             let v = r.split('@').next().unwrap_or("");

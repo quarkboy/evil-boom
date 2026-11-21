@@ -436,10 +436,10 @@ impl Player {
             });
         }
         // Rockets kept for a boss brain: the fight has no launcher.
-        if self.rockets_kept() {
-            if let Some(w) = &mut seen.weapons {
-                w.retain(|&slot| slot != 5);
-            }
+        if self.rockets_kept()
+            && let Some(w) = &mut seen.weapons
+        {
+            w.retain(|&slot| slot != 5);
         }
         let barrels = &self.fight.combat.barrels_seen;
         seen.barrels = obs.barrels.as_ref().map(|_| barrels.clone());

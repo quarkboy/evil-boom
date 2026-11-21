@@ -596,10 +596,10 @@ pub fn classify_line(special: u16) -> Option<LineSpecial> {
     if special == 0 {
         return None;
     }
-    if special >= 0x2F80 {
-        if let Some(gen) = generalized(special) {
-            return Some(gen);
-        }
+    if special >= 0x2F80
+        && let Some(r#gen) = generalized(special)
+    {
+        return Some(r#gen);
     }
     Some(match TABLE.iter().find(|row| row.0 == special) {
         Some(&(_, trigger, category, description, lock, monsters, players)) => LineSpecial {

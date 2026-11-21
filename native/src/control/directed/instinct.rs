@@ -40,15 +40,16 @@ impl Director {
             return;
         }
         // (nothing ordinary left, a last resort held back: asked; meanwhile she waits)
-        if agent.x().current.is_none() && self.question().is_none() {
-            if let Some(r) = agent.x().resort_wanted {
-                let exit = self
-                    .objectives_of(agent, obs, &[Kind::Exit])
-                    .first()
-                    .map(|e| self.describe(e, obs));
-                if self.ask_resort(obs, r, exit) {
-                    return;
-                }
+        if agent.x().current.is_none()
+            && self.question().is_none()
+            && let Some(r) = agent.x().resort_wanted
+        {
+            let exit = self
+                .objectives_of(agent, obs, &[Kind::Exit])
+                .first()
+                .map(|e| self.describe(e, obs));
+            if self.ask_resort(obs, r, exit) {
+                return;
             }
         }
         // (what she's taken up, in plain words, as it changes: not each pickup and barrel on

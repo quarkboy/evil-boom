@@ -512,7 +512,7 @@ impl Explorer {
             .knowledge
             .stuck_at
             .iter()
-            .filter(|(_, &n)| n >= STUCK_TIMES)
+            .filter(|&(_, &n)| n >= STUCK_TIMES)
             .map(|(&p, _)| p)
             .collect();
         if stuck.is_empty()

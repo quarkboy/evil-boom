@@ -78,7 +78,7 @@ pub fn take_pwads(args: Vec<String>) -> Result<Vec<String>, String> {
     if !files.is_empty() {
         let joined = std::env::join_paths(&files).map_err(|e| format!("--pwad: {e}"))?;
         // (before anything else runs: the process is one thread still)
-        std::env::set_var("EVILBOOM_PWADS", joined);
+        crate::dsda::set_env("EVILBOOM_PWADS", Some(joined.as_ref()));
     }
     Ok(rest)
 }

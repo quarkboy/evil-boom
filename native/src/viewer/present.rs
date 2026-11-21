@@ -343,19 +343,19 @@ fn tic(
             next_told,
         } => {
             // (a finale's story, typed out on screen: told her a sentence at a time as each is)
-            if screen.state == 2 {
-                if let Some(text) = watch.engine.finale_text() {
-                    if text.len() != grew.0 {
-                        *grew = (text.len(), p.clock);
-                    }
-                    let done = screen.waiting || p.clock - grew.1 >= TEXT_DONE;
-                    if let Some(chunk) = next_chunk(&text, *told, done) {
-                        *told += chunk.len();
-                        let tic = watch.engine.tic;
-                        watch.tell_screens(|d| d.on_screen(tic, chunk));
-                    } else if done && *told > 0 {
-                        *text_done = true;
-                    }
+            if screen.state == 2
+                && let Some(text) = watch.engine.finale_text()
+            {
+                if text.len() != grew.0 {
+                    *grew = (text.len(), p.clock);
+                }
+                let done = screen.waiting || p.clock - grew.1 >= TEXT_DONE;
+                if let Some(chunk) = next_chunk(&text, *told, done) {
+                    *told += chunk.len();
+                    let tic = watch.engine.tic;
+                    watch.tell_screens(|d| d.on_screen(tic, chunk));
+                } else if done && *told > 0 {
+                    *text_done = true;
                 }
             }
             // (the episode over, its story told: a game hers to start)

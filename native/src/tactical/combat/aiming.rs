@@ -158,13 +158,13 @@ impl Combat {
             best = Some((f64::INFINITY, t.clone()));
         }
         let target = best.as_ref().map(|(_, t)| t.id);
-        if target != self.target {
-            if let Some((_, t)) = &best {
-                self.journal.note(|| Record {
-                    options: weighed,
-                    ..Record::new(obs.tic, "target", format!("{} {}", t.name, t.id))
-                });
-            }
+        if target != self.target
+            && let Some((_, t)) = &best
+        {
+            self.journal.note(|| Record {
+                options: weighed,
+                ..Record::new(obs.tic, "target", format!("{} {}", t.name, t.id))
+            });
         }
         self.target = target;
         best.map(|(_, t)| t)
@@ -666,11 +666,11 @@ impl Combat {
             }
         }
         let away = self.away_from(obs, (t.x, t.y));
-        if t.z <= self.z(obs) {
-            if let Some(a) = away {
-                let toward = (-a.0, -a.1);
-                return self.safe(obs, toward, 64.0).then_some(toward);
-            }
+        if t.z <= self.z(obs)
+            && let Some(a) = away
+        {
+            let toward = (-a.0, -a.1);
+            return self.safe(obs, toward, 64.0).then_some(toward);
         }
         away
     }
@@ -850,11 +850,12 @@ impl Combat {
             self.off_barrels.way = None;
             return None;
         }
-        if let Some(way) = self.off_barrels.way {
-            if self.safe(obs, way, 48.0) && self.clear_of_barrels(obs, way) {
-                self.off_barrels.last = obs.tic;
-                return Some(way);
-            }
+        if let Some(way) = self.off_barrels.way
+            && self.safe(obs, way, 48.0)
+            && self.clear_of_barrels(obs, way)
+        {
+            self.off_barrels.last = obs.tic;
+            return Some(way);
         }
         let way = self.away_from(obs, nearest);
         self.off_barrels.way = way.filter(|&w| self.clear_of_barrels(obs, w));

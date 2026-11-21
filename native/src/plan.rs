@@ -276,10 +276,10 @@ impl<'a> Planner<'a> {
         self.caches.furthest = None;
         let mut goal_polys: Vec<(usize, Point)> = Vec::new();
         for &g in &q.goals {
-            if let Some(gp) = self.nav.mesh.poly_at(g) {
-                if !goal_polys.iter().any(|(p, _)| *p == gp) {
-                    goal_polys.push((gp, g));
-                }
+            if let Some(gp) = self.nav.mesh.poly_at(g)
+                && !goal_polys.iter().any(|(p, _)| *p == gp)
+            {
+                goal_polys.push((gp, g));
             }
         }
         let start_poly = self.nav.mesh.poly_at(q.start)?;
@@ -456,10 +456,10 @@ impl<'a> Planner<'a> {
                     .then(a.0.cmp(&b.0))
             });
             for (gp, gpt) in gps {
-                if let Some(&gt) = q.goal_triggers.get(&point_key(gpt)) {
-                    if !self.activators_now(gt, &node.states, None).contains(&gp) {
-                        continue;
-                    }
+                if let Some(&gt) = q.goal_triggers.get(&point_key(gpt))
+                    && !self.activators_now(gt, &node.states, None).contains(&gp)
+                {
+                    continue;
                 }
                 let Some((path, used)) =
                     self.timed_path(node.pos, gpt, &node.states, node.keys, &node.timers)

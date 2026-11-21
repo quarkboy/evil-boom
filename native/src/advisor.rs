@@ -97,11 +97,11 @@ impl Config {
         };
         let mut v = read(path)?;
         let local = path.with_extension("local.json");
-        if local.exists() {
-            if let (Some(base), Value::Object(over)) = (v.as_object_mut(), read(&local)?) {
-                for (k, x) in over {
-                    base.insert(k, x);
-                }
+        if local.exists()
+            && let (Some(base), Value::Object(over)) = (v.as_object_mut(), read(&local)?)
+        {
+            for (k, x) in over {
+                base.insert(k, x);
             }
         }
         let s = |k: &str, d: &str| v.get(k).and_then(Value::as_str).unwrap_or(d).to_string();

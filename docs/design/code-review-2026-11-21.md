@@ -59,6 +59,15 @@ the order of work changed.
   checks the pinned commit and refuses a tree changed by something else; `build.rs` reads
   `fix` from its own section. Left: `shellcheck` (not installed where this was done, so
   what it would flag is unknown), `-Wall -Wextra` on the bridge, Freedoom in CI.
+- **Phase 4, in part** (2026-11-21): the 2024 edition (the environment is set through one
+  function, `dsda::set_env`, with the rest of the unsafe code and the reason it's safe
+  written on it; 110 nested `if`s the new edition lets be one were made one by clippy's own
+  fix; the formatting kept as it was by `style_edition`). Tests CI can run on a level made
+  in memory (`test_support`, `tests/synthetic.rs`).
+  **Left:** the typed ids and the bestiary read from the engine. That's the first stage of
+  [`mbf21-plan.md`](mbf21-plan.md) under another name, and belongs in that plan's order of
+  work, measured as it goes. The workspace split: not yet, as reviewed. Tests of more than
+  one room, and Freedoom in CI.
 - **Phase 3, the files split** (2026-11-21): each of the four moved as it was into modules
   under it, checked by `tools/parity.sh`, `tools/eachway.sh`, the arenas and (directed
   play) one script played on the build before and after:

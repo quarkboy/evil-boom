@@ -1,7 +1,7 @@
 [package]
 name = "evilboom"
 version = "0.8.5"
-edition = "2021"
+edition = "2024"
 license = "GPL-3.0-or-later"
 description = "Evil: a Doom bot that explores and finishes levels, playing DSDA-Doom in-process"
 authors = ["Quarkboy"]

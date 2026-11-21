@@ -313,7 +313,7 @@ impl Player {
         let hidden: Vec<usize> = spots
             .iter()
             .zip(&seen)
-            .filter(|(&(d, pi), &v)| v == 0.0 && d > 32.0 && open(pi))
+            .filter(|&(&(d, pi), &v)| v == 0.0 && d > 32.0 && open(pi))
             .map(|(&(_, pi), _)| pi)
             .collect();
         if hidden.is_empty() {

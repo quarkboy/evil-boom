@@ -508,10 +508,10 @@ pub(super) fn landing_span(
     for i in 0..=steps + 1 {
         if ok.get(i).copied().unwrap_or(false) {
             run.get_or_insert(i);
-        } else if let Some(from) = run.take() {
-            if best.is_none_or(|(f, t)| i - 1 - from > t - f) {
-                best = Some((from, i - 1));
-            }
+        } else if let Some(from) = run.take()
+            && best.is_none_or(|(f, t)| i - 1 - from > t - f)
+        {
+            best = Some((from, i - 1));
         }
     }
     let at = |i: usize| {
@@ -583,17 +583,15 @@ impl Navigator {
                     continue;
                 }
                 let wall = is_wall(li);
-                if let Some(live) = live {
-                    if !wall && exempt.is_none_or(|ex| !ex.contains(&li)) {
-                        if let (Some(f), Some(bk)) = self.map.sides(li) {
-                            if let (Some(&hf), Some(&hb)) = (live.get(f), live.get(bk)) {
-                                if !(can_cross(hf, hb) && can_cross(hb, hf)) {
-                                    out.push(self.map.line_seg(li));
-                                    continue;
-                                }
-                            }
-                        }
-                    }
+                if let Some(live) = live
+                    && !wall
+                    && exempt.is_none_or(|ex| !ex.contains(&li))
+                    && let (Some(f), Some(bk)) = self.map.sides(li)
+                    && let (Some(&hf), Some(&hb)) = (live.get(f), live.get(bk))
+                    && !(can_cross(hf, hb) && can_cross(hb, hf))
+                {
+                    out.push(self.map.line_seg(li));
+                    continue;
                 }
                 if wall {
                     out.push(self.map.line_seg(li));

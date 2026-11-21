@@ -62,16 +62,15 @@ impl Console {
                         (name, png(w, h, &px, Some(&palette)))
                     }
                 };
-                if let Some(png) = png {
-                    if out
+                if let Some(png) = png
+                    && out
                         .send(FromGame::View {
                             name: name.to_string(),
                             png: crate::console::base64(&png),
                         })
                         .is_err()
-                    {
-                        return;
-                    }
+                {
+                    return;
                 }
             }
         });

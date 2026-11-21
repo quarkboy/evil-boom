@@ -272,10 +272,11 @@ impl JumpLab {
                         .mesh
                         .poly_at(sim.pos())
                         .map(|p| self.mesh.poly(p).sector);
-                    if let Some(q) = here.filter(|&q| q != sector) {
-                        if sim.on_floor() && (sim.floorz_units() - heights[q].0).abs() < 0.5 {
-                            return Some((sim.pos(), q));
-                        }
+                    if let Some(q) = here.filter(|&q| q != sector)
+                        && sim.on_floor()
+                        && (sim.floorz_units() - heights[q].0).abs() < 0.5
+                    {
+                        return Some((sim.pos(), q));
                     }
                 }
                 None

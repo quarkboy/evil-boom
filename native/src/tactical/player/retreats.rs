@@ -316,27 +316,36 @@ impl Player {
         } else if unarmed {
             self.retreat_tic = obs.tic;
             (RetreatKind::ForAmmo, self.for_ammo(obs, on_way, true))
-        } else if let Some(r) = self.fall_back(obs) {
-            self.retreat_tic = obs.tic;
-            (RetreatKind::FallBack, Some(r))
-        } else if let Some(why) = self.ambushed(obs).filter(|_| !self.back_spent(obs)) {
-            self.retreat_tic = obs.tic;
-            match self.back_out(obs, why) {
-                Some(r) => (RetreatKind::Back, Some(r)),
-                None if self.fight.combat.now.surrounded => (RetreatKind::Out, self.out_of_it(obs)),
-                None => (RetreatKind::Back, None),
-            }
-        } else if self.fight.combat.now.surrounded {
-            self.retreat_tic = obs.tic;
-            (RetreatKind::Out, self.out_of_it(obs))
-        } else if obs.tic - self.bait_tic > self.fight.tune.retreat.bait_again {
-            let b = self.baiting(obs)?;
-            self.retreat_tic = obs.tic;
-            self.bait_tic = obs.tic;
-            self.fight.combat.baiting = true;
-            (RetreatKind::Bait, Some(b))
         } else {
-            return None;
+            match self.fall_back(obs) {
+                Some(r) => {
+                    self.retreat_tic = obs.tic;
+                    (RetreatKind::FallBack, Some(r))
+                }
+                _ => {
+                    if let Some(why) = self.ambushed(obs).filter(|_| !self.back_spent(obs)) {
+                        self.retreat_tic = obs.tic;
+                        match self.back_out(obs, why) {
+                            Some(r) => (RetreatKind::Back, Some(r)),
+                            None if self.fight.combat.now.surrounded => {
+                                (RetreatKind::Out, self.out_of_it(obs))
+                            }
+                            None => (RetreatKind::Back, None),
+                        }
+                    } else if self.fight.combat.now.surrounded {
+                        self.retreat_tic = obs.tic;
+                        (RetreatKind::Out, self.out_of_it(obs))
+                    } else if obs.tic - self.bait_tic > self.fight.tune.retreat.bait_again {
+                        let b = self.baiting(obs)?;
+                        self.retreat_tic = obs.tic;
+                        self.bait_tic = obs.tic;
+                        self.fight.combat.baiting = true;
+                        (RetreatKind::Bait, Some(b))
+                    } else {
+                        return None;
+                    }
+                }
+            }
         };
         self.tried_cover = kind == RetreatKind::Cover;
         if self.barred_retreats.contains(&kind) {
@@ -574,14 +583,14 @@ impl Player {
             let clear = them
                 .iter()
                 .all(|t| dist((t.x, t.y), p) > self.fight.tune.retreat.back_clear);
-            if !seen || clear {
-                if let Some(f) = self.go_to(obs, pi, &them, "back out") {
-                    self.log(format!(
-                        "tic {}: caught in {why}: backing out the way she came to ({:.0}, {:.0})",
-                        obs.tic, p.0, p.1
-                    ));
-                    return Some(f);
-                }
+            if (!seen || clear)
+                && let Some(f) = self.go_to(obs, pi, &them, "back out")
+            {
+                self.log(format!(
+                    "tic {}: caught in {why}: backing out the way she came to ({:.0}, {:.0})",
+                    obs.tic, p.0, p.1
+                ));
+                return Some(f);
             }
         }
         None

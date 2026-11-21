@@ -166,10 +166,11 @@ impl Fight {
                 } else if let Some(min) = fill.iter().copied().reduce(f64::min) {
                     need = (1.0 - min * 1.5).max(0.0);
                 }
-            } else if let Some((amount, cap)) = health_item(t.name) {
-                if amount >= 10 && health < f64::from(cap) {
-                    need = ((f64::from(cap) - health) / 60.0).min(1.0);
-                }
+            } else if let Some((amount, cap)) = health_item(t.name)
+                && amount >= 10
+                && health < f64::from(cap)
+            {
+                need = ((f64::from(cap) - health) / 60.0).min(1.0);
             }
             // Armor, and what brings armor with it, by what it adds to how much she can take. A
             // megaarmor on no armor is as much again as her health; a green over a few blue points is

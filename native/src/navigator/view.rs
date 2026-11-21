@@ -539,10 +539,10 @@ impl Navigator {
                 }
             }
         }
-        if let Some((d, spot)) = best {
-            if d <= USE_REACH + 12.0 {
-                return spot;
-            }
+        if let Some((d, spot)) = best
+            && d <= USE_REACH + 12.0
+        {
+            return spot;
         }
         // ...unless that's out of reach: then a spot in reach the box can stand at, nearest the
         // line, along those polys' edges (a door pressed from a floor below it)
@@ -961,24 +961,24 @@ impl View {
         let n = &self.nav;
         let mut out = BTreeSet::new();
         for &p in &t.activators {
-            if let Some(gates) = n.use_gates.get(&(li, p)) {
-                if !gates.iter().all(|&s| {
+            if let Some(gates) = n.use_gates.get(&(li, p))
+                && !gates.iter().all(|&s| {
                     states[s].iter().any(|h| h.ceiling - h.floor > 0.0)
                         || doors.is_some_and(|d| d.contains_key(&s))
-                }) {
-                    continue;
-                }
+                })
+            {
+                continue;
             }
-            if let Some(pairs) = n.use_line_gates.get(&(li, p)) {
-                if !pairs.iter().all(|&(f, b)| {
+            if let Some(pairs) = n.use_line_gates.get(&(li, p))
+                && !pairs.iter().all(|&(f, b)| {
                     states[f].iter().any(|a| {
                         states[b]
                             .iter()
                             .any(|c| a.ceiling.min(c.ceiling) - a.floor.max(c.floor) > 0.0)
                     })
-                }) {
-                    continue;
-                }
+                })
+            {
+                continue;
             }
             let sector = n.sector_of_poly(p);
             if let Some(places) = n.stand_gates.get(&(li, p)) {
@@ -996,27 +996,25 @@ impl View {
                     continue;
                 }
             }
-            if let Some(&(lo, hi)) = n.shot_floors.get(&(li, p)) {
-                if !states[sector]
+            if let Some(&(lo, hi)) = n.shot_floors.get(&(li, p))
+                && !states[sector]
                     .iter()
                     .any(|h| lo <= h.floor && h.floor <= hi)
-                {
-                    continue;
-                }
+            {
+                continue;
             }
-            if let Some(face) = n.switch_faces.get(&li) {
-                if !face.seen_any(&states[face.front], &states[face.back], &states[sector]) {
-                    continue;
-                }
+            if let Some(face) = n.switch_faces.get(&li)
+                && !face.seen_any(&states[face.front], &states[face.back], &states[sector])
+            {
+                continue;
             }
-            if let Some(&far) = self.cross_sides().get(&(li, p)) {
-                if !doors.is_some_and(|d| d.contains_key(&far))
-                    && !states[sector]
-                        .iter()
-                        .any(|&a| states[far].iter().any(|&b| can_cross(a, b)))
-                {
-                    continue;
-                }
+            if let Some(&far) = self.cross_sides().get(&(li, p))
+                && !doors.is_some_and(|d| d.contains_key(&far))
+                && !states[sector]
+                    .iter()
+                    .any(|&a| states[far].iter().any(|&b| can_cross(a, b)))
+            {
+                continue;
             }
             out.insert(p);
         }

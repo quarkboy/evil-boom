@@ -37,38 +37,37 @@ impl Director {
         if matches!(
             self.doing,
             Some(Doing::Auto | Doing::Area(..) | Doing::Way(..))
-        ) {
-            if let Some(o) = agent.x().current.clone() {
-                let open = self.open_objectives(agent, obs);
-                // (by the id she'd act on, what's to explore by its area: each once, and not the
-                // one in hand's)
-                let mut seen = vec![self.pick_of(agent, obs, &o, String::new()).id];
-                let mut over: Vec<String> = Vec::new();
-                for p in open.iter().filter(|p| explores(p) && id_of(p) != id_of(&o)) {
-                    let pick = self.pick_of(agent, obs, p, String::new());
-                    if seen.contains(&pick.id) {
-                        continue;
-                    }
-                    seen.push(pick.id.clone());
-                    let e = Entry {
-                        id: pick.id,
-                        what: String::new(),
-                        at: pick.at,
-                    };
-                    over.push(self.describe(&e, obs));
-                    if over.len() == 2 {
-                        break;
-                    }
+        ) && let Some(o) = agent.x().current.clone()
+        {
+            let open = self.open_objectives(agent, obs);
+            // (by the id she'd act on, what's to explore by its area: each once, and not the
+            // one in hand's)
+            let mut seen = vec![self.pick_of(agent, obs, &o, String::new()).id];
+            let mut over: Vec<String> = Vec::new();
+            for p in open.iter().filter(|p| explores(p) && id_of(p) != id_of(&o)) {
+                let pick = self.pick_of(agent, obs, p, String::new());
+                if seen.contains(&pick.id) {
+                    continue;
                 }
-                // (what the bot calls it, without its own reason in brackets: the "because" says it)
-                let what = plain(o.kind, &o.label);
-                let what = what.split(" (").next().unwrap_or(&what);
-                let mut line = format!("{what} {}", because(&o, obs));
-                if !over.is_empty() {
-                    line.push_str(&format!(", rather than {}", over.join(" or ")));
+                seen.push(pick.id.clone());
+                let e = Entry {
+                    id: pick.id,
+                    what: String::new(),
+                    at: pick.at,
+                };
+                over.push(self.describe(&e, obs));
+                if over.len() == 2 {
+                    break;
                 }
-                out.push(format!("{}{}.", line[..1].to_uppercase(), &line[1..]));
             }
+            // (what the bot calls it, without its own reason in brackets: the "because" says it)
+            let what = plain(o.kind, &o.label);
+            let what = what.split(" (").next().unwrap_or(&what);
+            let mut line = format!("{what} {}", because(&o, obs));
+            if !over.is_empty() {
+                line.push_str(&format!(", rather than {}", over.join(" or ")));
+            }
+            out.push(format!("{}{}.", line[..1].to_uppercase(), &line[1..]));
         }
         // (the fight: how it stands, what it's doing, what with)
         if self.now.fighting() {

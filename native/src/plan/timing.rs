@@ -227,7 +227,7 @@ impl Planner<'_> {
         }
         let late: Vec<Pair> = deadlines
             .iter()
-            .filter(|(&(s, _), &left)| arrive.get(&s).is_some_and(|&a| a > left))
+            .filter(|&(&(s, _), &left)| arrive.get(&s).is_some_and(|&a| a > left))
             .map(|(k, _)| *k)
             .collect();
         if late.is_empty() {

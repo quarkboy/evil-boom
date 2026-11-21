@@ -172,10 +172,8 @@ impl Director {
             .tactics
             .stance
             .is_some_and(|(_, until)| obs.tic >= until);
-        if stance_over {
-            if let Some((name, _)) = self.tactics.stance.take() {
-                over.push(format!("fighting {name}"));
-            }
+        if stance_over && let Some((name, _)) = self.tactics.stance.take() {
+            over.push(format!("fighting {name}"));
         }
         if let Some(p) = agent.player_mut() {
             if stance_over {

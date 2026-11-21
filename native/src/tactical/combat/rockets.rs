@@ -124,8 +124,8 @@ impl Combat {
                 .rockets
                 .health
                 .iter()
-                .filter(|(m, &was)| {
-                    let here = things.iter().find(|t| t.id == **m);
+                .filter(|&(m, &was)| {
+                    let here = things.iter().find(|t| t.id == *m);
                     was > 0
                         && here.is_none_or(|t| t.health < was)
                         && here.is_none_or(|t| dist((t.x, t.y), burst) < BLAST)

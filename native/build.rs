@@ -55,10 +55,11 @@ fn main() {
     // tools/logo/icon.py) handed to the linker as it is. MSVC's takes one; the GNU one wants it
     // turned into an object first, so a build with that toolchain goes without.
     let target = |k: &str| std::env::var(format!("CARGO_CFG_TARGET_{k}")).unwrap_or_default();
-    if target("OS") == "windows" && target("ENV") == "msvc" {
-        if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
-            let res = std::path::Path::new(&dir).join("assets").join("icon.res");
-            println!("cargo:rustc-link-arg-bins={}", res.display());
-        }
+    if target("OS") == "windows"
+        && target("ENV") == "msvc"
+        && let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR")
+    {
+        let res = std::path::Path::new(&dir).join("assets").join("icon.res");
+        println!("cargo:rustc-link-arg-bins={}", res.display());
     }
 }

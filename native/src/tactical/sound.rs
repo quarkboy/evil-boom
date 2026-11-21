@@ -46,10 +46,11 @@ impl Hearing {
 
     /// The sectors a shot from `sector` is heard in, the floors and ceilings as they are.
     pub fn heard(&self, sector: usize, heights: &[Heights]) -> BTreeSet<usize> {
-        if let Some((key, out)) = self.cache.borrow().as_ref() {
-            if key.0 == sector && key.1 == heights {
-                return out.clone();
-            }
+        if let Some((key, out)) = self.cache.borrow().as_ref()
+            && key.0 == sector
+            && key.1 == heights
+        {
+            return out.clone();
         }
         // (P_RecursiveSound: a sector is gone into again only if it's reached through fewer
         // sound-blocking lines than before)

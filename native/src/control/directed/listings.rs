@@ -162,10 +162,10 @@ impl Director {
         let mut rank = BTreeMap::new();
         for (i, o) in open.iter().enumerate() {
             rank.entry(id_of(o)).or_insert(i);
-            if explores(o) {
-                if let Some(area) = self.area_at(agent, o.goal) {
-                    rank.entry(area).or_insert(i);
-                }
+            if explores(o)
+                && let Some(area) = self.area_at(agent, o.goal)
+            {
+                rank.entry(area).or_insert(i);
             }
         }
         rank

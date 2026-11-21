@@ -276,15 +276,15 @@ impl RouteFollower {
         // barrels going off. Once the shot's had time to land with no barrel lit and none gone,
         // she's back to tapping, at the pistol's own pace, not a run and a wait a tap)
         if let Some((n, at)) = self.shot.tapped {
-            if crate::debug::on().barrels {
-                if let Some(b) = self.shot.target.and_then(|(was, _)| barrel_now(obs, was)) {
-                    eprintln!(
-                        "tic {}: {} after the tap, facing {:.0} degrees off the barrel",
-                        obs.tic,
-                        obs.tic - at,
-                        norm(heading(obs.pos(), b) - obs.angle)
-                    );
-                }
+            if crate::debug::on().barrels
+                && let Some(b) = self.shot.target.and_then(|(was, _)| barrel_now(obs, was))
+            {
+                eprintln!(
+                    "tic {}: {} after the tap, facing {:.0} degrees off the barrel",
+                    obs.tic,
+                    obs.tic - at,
+                    norm(heading(obs.pos(), b) - obs.angle)
+                );
             }
             let going_off =
                 !obs.barrels_lit.is_empty() || obs.barrels.as_ref().map_or(0, Vec::len) != n;

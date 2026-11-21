@@ -64,10 +64,10 @@ impl Combat {
         };
         let left = f64::from(VILE_BLAST - vile.attack - 2);
         self.cover.vile_until = obs.tic + VILE_BLAST as i64 - vile.attack as i64 + 4;
-        if let Some((_, id, spot)) = self.cover.vile_way {
-            if id == vile.id {
-                return Some((vile.name, self.towards(obs, spot)));
-            }
+        if let Some((_, id, spot)) = self.cover.vile_way
+            && id == vile.id
+        {
+            return Some((vile.name, self.towards(obs, spot)));
         }
         let best = self.shadow_spot(obs, eye(&vile), left * RUN);
         let z = self.z(obs);
@@ -535,15 +535,15 @@ impl Combat {
         // last time, for a way only a little better: she keeps the way she's on. A player's
         // steps to the side run a while each way; the best of sixteen ways scored afresh every
         // tic flips on a hair, and darts her to and fro.
-        if let (Some((bs, b)), Some((ks, k))) = (best, kept) {
-            if b.0 * k.0 + b.1 * k.1 < ABOUT {
-                if obs.tic - self.steer.turned_about < self.tune.steer.about_tics
-                    && bs - ks < self.tune.steer.about_margin
-                {
-                    best = kept;
-                } else {
-                    self.steer.turned_about = obs.tic;
-                }
+        if let (Some((bs, b)), Some((ks, k))) = (best, kept)
+            && b.0 * k.0 + b.1 * k.1 < ABOUT
+        {
+            if obs.tic - self.steer.turned_about < self.tune.steer.about_tics
+                && bs - ks < self.tune.steer.about_margin
+            {
+                best = kept;
+            } else {
+                self.steer.turned_about = obs.tic;
             }
         }
         // Pushing a way and not moving: caught on something the floor doesn't show.

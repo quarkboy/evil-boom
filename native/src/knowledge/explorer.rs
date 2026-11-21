@@ -1121,15 +1121,17 @@ impl Explorer {
             .iter()
             .filter_map(|(dx, dy)| self.nav.poly_at((obs.x + dx, obs.y + dy)))
             .any(|p| self.knowledge.is_moving(self.nav.sector_of_poly(p)));
-        if !busy && !under_mover {
-            if let Some(g) = self.glance(obs) {
-                return g;
-            }
+        if !busy
+            && !under_mover
+            && let Some(g) = self.glance(obs)
+        {
+            return g;
         }
-        if self.current.is_some() && self.follower.as_ref().is_some_and(|f| f.done) {
-            if let Some(look) = self.arrived(obs, hooks) {
-                return look;
-            }
+        if self.current.is_some()
+            && self.follower.as_ref().is_some_and(|f| f.done)
+            && let Some(look) = self.arrived(obs, hooks)
+        {
+            return look;
         }
         if self.directed {
             // Given objectives only: when the one in hand ends, how it ended is kept, and then nothing

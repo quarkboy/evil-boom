@@ -141,10 +141,10 @@ fn serve(
         }
         match ws.read() {
             Ok(Message::Text(t)) => {
-                if let Some(i) = parse(t.as_str()) {
-                    if incoming.send(i).is_err() {
-                        return "the game's gone".into();
-                    }
+                if let Some(i) = parse(t.as_str())
+                    && incoming.send(i).is_err()
+                {
+                    return "the game's gone".into();
                 }
             }
             Ok(Message::Close(_)) => return "closed".into(),

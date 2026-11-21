@@ -864,16 +864,16 @@ impl Director {
         ) && !self.secrets_done();
         self.check_complete(agent, obs);
         // (her policy on her numbers: on a change, and on each new level's player)
-        if self.policy_due {
-            if let Some(p) = agent.player_mut() {
-                self.policy_due = false;
-                if let Err(e) = p.set_policy(&self.policy.tuning()) {
-                    self.tell(
-                        obs,
-                        Event::Outcome,
-                        format!("Your policy couldn't be applied: {e}."),
-                    );
-                }
+        if self.policy_due
+            && let Some(p) = agent.player_mut()
+        {
+            self.policy_due = false;
+            if let Err(e) = p.set_policy(&self.policy.tuning()) {
+                self.tell(
+                    obs,
+                    Event::Outcome,
+                    format!("Your policy couldn't be applied: {e}."),
+                );
             }
         }
         self.events(agent, obs);
@@ -990,16 +990,18 @@ impl Director {
             agent.x_mut().press_on = false; // (her own doing: no order's rush)
         }
         // (an errand done, or come to nothing: on with the exploring it broke into)
-        if self.doing.is_none() && self.queue.is_empty() && self.pressed.is_none() {
-            if let Some(order) = self.resume.take() {
-                // (the bot's own going on, not hers: nothing asked is settled by it)
-                self.queue.push_back(Queued {
-                    order,
-                    rush: false,
-                    then: false,
-                });
-                return;
-            }
+        if self.doing.is_none()
+            && self.queue.is_empty()
+            && self.pressed.is_none()
+            && let Some(order) = self.resume.take()
+        {
+            // (the bot's own going on, not hers: nothing asked is settled by it)
+            self.queue.push_back(Queued {
+                order,
+                rush: false,
+                then: false,
+            });
+            return;
         }
         match self.doing.take() {
             None => {
