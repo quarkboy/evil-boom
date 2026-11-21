@@ -19,7 +19,7 @@ It runs the real game in-process: DSDA-Doom, built as a library with a small C b
                           |
    the explorer: what to do next, from what she knows          (knowledge/explorer*)
    the fight:    what to do about monsters, this tic           (tactical/combat*)
-   the player:   which of them has her legs, retreats          (tactical/player.rs)
+   the player:   which of them has her legs, retreats          (tactical/player.rs, player/)
                           |
    the follower: walking a route, jumps, lifts, doors          (motor/follower*)
                           |  controls: move, turn, fire, use
@@ -78,6 +78,9 @@ Planning starts from the WAD itself, not from the engine:
   place. `evil-boom tuning` prints them; `--tuning FILE` changes them for a run.
 - `tactical/player.rs`: the fight and the explorer together. It decides who has her legs and
   runs retreats (to cover, back the way she came, out of a crowd).
+  Under it, by what they're for: `player/retreats.rs` and `cover.rs` (falling back, backing
+  out, out of sight), `going.rs` (for ammo, to a point, by a clear way), `errands.rs` and
+  `stocking.rs` (what's worth going for), `advice.rs` (the advisor).
 - `tactical/icon/lanes.rs`, `tactical/player/boss.rs`: the Icon of Sin. On a level with a boss
   brain, once it's awake and she has rockets, this takes over: where a rocket can be fired from to
   hurt the brain (`lanes`, the game's rules for a missile worked on the map; `evil-boom

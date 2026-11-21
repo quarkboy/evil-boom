@@ -47,7 +47,7 @@ Read these first. They hold for you as for any contributor:
 
 `tactical/combat/tree.rs` is the fight, a node a decision (see its header).
 `combat/arsenal.rs` picks the weapon; `combat/style.rs` says how to fight with it. Retreats are
-`Retreat`/`RetreatKind` in `tactical/player.rs`. New behaviour goes in as a node, a style or a
+`Retreat`/`RetreatKind` in `tactical/player.rs` (what each does: `tactical/player/retreats.rs`, `cover.rs`). New behaviour goes in as a node, a style or a
 rule in `best_gun`, not as another case in a chain.
 
 A judgement number goes in `tactical/tuning.rs` (read as `self.tune.<group>.<field>`). How
