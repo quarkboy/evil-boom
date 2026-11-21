@@ -3336,6 +3336,10 @@ The three-lives test (544 runs, this build without it 293 exits): the first of i
 key timed by itself, so forward to back is one motion, 251; debts spread over a press 271,
 which is what's kept. 22 exits of 293, two runs standing the hour, her killing as it was.
 
+Her hand's speed, each on the same 544: a press three tics at least 259; one tic, and up two,
+275 (four more, inside the noise, for a hand quicker than most); a key's change costing
+nothing 261. Left at two down, three up.
+
 **Tried and dropped.** By keys, going only where she faces and steering by the turn: 209.
 Her turn is eased over many tics, far slower than a hand on a mouse, and she walked the
 route wide. If it's tried again it's with a turn as quick as a hand's.
