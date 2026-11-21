@@ -53,6 +53,20 @@ the order of work changed.
 - **Tests:** for invariants (rocket safety, the WAD parser, the console's checks), not for
   the fight tree's priorities, which change weekly and are judged by the three-lives test.
 
+### Done so far
+
+- **Phase 0** (2026-11-21): CI lints and tests the build with no window; `build-engine.sh`
+  checks the pinned commit and refuses a tree changed by something else; `build.rs` reads
+  `fix` from its own section. Left: `shellcheck` (not installed where this was done, so
+  what it would flag is unknown), `-Wall -Wextra` on the bridge, Freedoom in CI.
+- **Phase 1** (2026-11-21): C3 (the ABI check, and no `transmute` left in `dsda.rs`), H1
+  (`arena`), C1, C2, H6 (the progress line, unknown options), H3, H4, H5 (with the first
+  tests CI can run without IWADs), C4 (all but ending the game on Ctrl-C, which needs a
+  signal handler: a dependency, or unsafe code outside `dsda.rs`). H2 was looked at and
+  left: hits and sounds are read every tic, so none are left over at a restart, the
+  warm-up's sounds did happen, and the pellets are a count "so far" on purpose. `record`
+  ignoring `--lives` (H6) goes with the one game loop.
+
 ---
 
 ## Codebase Health Snapshot
