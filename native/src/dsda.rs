@@ -333,6 +333,19 @@ pub struct Dsda {
     _lib: std::mem::ManuallyDrop<Library>,
 }
 
+/// The library's function called `name`, as the function type `T`.
+///
+/// # Safety
+/// `T` is a function pointer type, and the function of that name in `evil_api.c` has exactly
+/// that signature: nothing checks it but `evil_abi` (`Dsda::load`), which vouches for the
+/// library being built from the same source as this.
+unsafe fn get<T: Copy>(lib: &Library, name: &[u8]) -> Result<T, String> {
+    // SAFETY: the caller's, as above.
+    unsafe { lib.get::<T>(name) }
+        .map(|s| *s)
+        .map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
+}
+
 impl Drop for Dsda {
     fn drop(&mut self) {
         // (the watcher's window, if one's open, shut with the game it shows)
@@ -356,19 +369,12 @@ impl Dsda {
     fn load_once(lib: &Path, dll_dirs: &[&Path], args: &[String]) -> Result<Self, String> {
         let lib =
             open_library(lib, dll_dirs).map_err(|e| format!("loading {}: {e}", lib.display()))?;
-        let sym = |name: &[u8]| -> Result<*const (), String> {
-            // SAFETY: as above; the pointer is only turned into the matching fn type.
-            unsafe { lib.get::<*const ()>(name) }
-                .map(|s| *s)
-                .map_err(|e| format!("{}: {e}", String::from_utf8_lossy(name)))
-        };
         // (the library and this program agree on the calls and the structs, or nothing's called)
         {
             // SAFETY: the symbol, if the library has it, is `int evil_abi(int *)`, which
             // writes four ints.
-            let abi_fn = sym(b"evil_abi").map(|p| unsafe {
-                std::mem::transmute::<*const (), unsafe extern "C" fn(*mut c_int) -> c_int>(p)
-            });
+            let abi_fn =
+                unsafe { get::<unsafe extern "C" fn(*mut c_int) -> c_int>(&lib, b"evil_abi") };
             let Ok(abi_fn) = abi_fn else {
                 return Err(REBUILD.replace("{}", "it's from before the two were checked"));
             };
@@ -406,146 +412,87 @@ impl Dsda {
             player_fn,
         ) = unsafe {
             (
-                std::mem::transmute::<*const (), InitFn>(sym(b"evil_init")?),
-                std::mem::transmute::<*const (), NewGameFn>(sym(b"evil_new_game")?),
-                std::mem::transmute::<*const (), GodFn>(sym(b"evil_god")?),
-                std::mem::transmute::<*const (), SeedFn>(sym(b"evil_seed")?),
-                std::mem::transmute::<*const (), TicFn>(sym(b"evil_tic")?),
-                std::mem::transmute::<*const (), WarpFn>(sym(b"evil_warp")?),
-                std::mem::transmute::<*const (), DrawFn>(sym(b"evil_draw")?),
-                std::mem::transmute::<*const (), StatusFn>(sym(b"evil_get_status")?),
-                std::mem::transmute::<*const (), SectorsFn>(sym(b"evil_sectors")?),
-                std::mem::transmute::<*const (), MobjsFn>(sym(b"evil_mobjs")?),
-                std::mem::transmute::<*const (), PlayerFn>(sym(b"evil_player_state")?),
+                get::<InitFn>(&lib, b"evil_init")?,
+                get::<NewGameFn>(&lib, b"evil_new_game")?,
+                get::<GodFn>(&lib, b"evil_god")?,
+                get::<SeedFn>(&lib, b"evil_seed")?,
+                get::<TicFn>(&lib, b"evil_tic")?,
+                get::<WarpFn>(&lib, b"evil_warp")?,
+                get::<DrawFn>(&lib, b"evil_draw")?,
+                get::<StatusFn>(&lib, b"evil_get_status")?,
+                get::<SectorsFn>(&lib, b"evil_sectors")?,
+                get::<MobjsFn>(&lib, b"evil_mobjs")?,
+                get::<PlayerFn>(&lib, b"evil_player_state")?,
             )
         };
         // SAFETY: as above, evil_power's signature; optional, an older library hasn't it.
-        let power_fn = sym(b"evil_power")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), PowerFn>(p) });
+        let power_fn = unsafe { get::<PowerFn>(&lib, b"evil_power") }.ok();
         // SAFETY: as above (evil_sound(int)).
-        let sound_fn = sym(b"evil_sound")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), SoundFn>(p) });
+        let sound_fn = unsafe { get::<SoundFn>(&lib, b"evil_sound") }.ok();
         // SAFETY: as above, evil_spawn's and evil_give's signatures; optional.
-        let spawn_fn = sym(b"evil_spawn")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), SpawnFn>(p) });
-        let give_fn = sym(b"evil_give")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), GiveFn>(p) });
+        let spawn_fn = unsafe { get::<SpawnFn>(&lib, b"evil_spawn") }.ok();
+        let give_fn = unsafe { get::<GiveFn>(&lib, b"evil_give") }.ok();
         // SAFETY: the symbol, if the library has it, is `void evil_ready(int)`.
-        let ready_fn = sym(b"evil_ready")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
+        let ready_fn = unsafe { get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_ready") }.ok();
         // SAFETY: the symbols, if the library has them, are `int evil_save(int)`,
         // `int evil_restore(int)` and `void evil_forget(int)`.
-        let save_fn = sym(b"evil_save").ok().map(|p| unsafe {
-            std::mem::transmute::<*const (), unsafe extern "C" fn(c_int) -> c_int>(p)
-        });
-        let restore_fn = sym(b"evil_restore").ok().map(|p| unsafe {
-            std::mem::transmute::<*const (), unsafe extern "C" fn(c_int) -> c_int>(p)
-        });
-        let forget_fn = sym(b"evil_forget")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p) });
+        let save_fn =
+            unsafe { get::<unsafe extern "C" fn(c_int) -> c_int>(&lib, b"evil_save") }.ok();
+        let restore_fn =
+            unsafe { get::<unsafe extern "C" fn(c_int) -> c_int>(&lib, b"evil_restore") }.ok();
+        let forget_fn = unsafe { get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_forget") }.ok();
         // SAFETY: the symbols, if the library has them, are `int evil_frame_get(int,
         // unsigned char *, int)` and `int evil_frame_put(int, const unsigned char *, int)`.
-        let frame_get_fn = sym(b"evil_frame_get").ok().map(|p| unsafe {
-            std::mem::transmute::<*const (), unsafe extern "C" fn(c_int, *mut u8, c_int) -> c_int>(
-                p,
-            )
-        });
-        let frame_put_fn =
-            sym(b"evil_frame_put").ok().map(|p| unsafe {
-                std::mem::transmute::<
-                    *const (),
-                    unsafe extern "C" fn(c_int, *const u8, c_int) -> c_int,
-                >(p)
-            });
+        let frame_get_fn = unsafe {
+            get::<unsafe extern "C" fn(c_int, *mut u8, c_int) -> c_int>(&lib, b"evil_frame_get")
+        }
+        .ok();
+        let frame_put_fn = unsafe {
+            get::<unsafe extern "C" fn(c_int, *const u8, c_int) -> c_int>(&lib, b"evil_frame_put")
+        }
+        .ok();
         // SAFETY: the symbol, if the library has it, is `int evil_nearest_seen(double *)`.
-        let seen_fn = sym(b"evil_nearest_seen").ok().map(|p| unsafe {
-            std::mem::transmute::<*const (), unsafe extern "C" fn(*mut f64) -> c_int>(p)
-        });
+        let seen_fn =
+            unsafe { get::<unsafe extern "C" fn(*mut f64) -> c_int>(&lib, b"evil_nearest_seen") }
+                .ok();
         // SAFETY: as above, evil_clear_items's signature; optional.
-        let clear_fn = sym(b"evil_clear_items")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), ClearFn>(p) });
+        let clear_fn = unsafe { get::<ClearFn>(&lib, b"evil_clear_items") }.ok();
         // SAFETY: as above, evil_reset_ids's signature; optional.
-        let reset_ids_fn = sym(b"evil_reset_ids")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), ResetIdsFn>(p) });
+        let reset_ids_fn = unsafe { get::<ResetIdsFn>(&lib, b"evil_reset_ids") }.ok();
         // SAFETY: as above, evil_hits_since's signature; optional.
-        let hits_fn = sym(b"evil_hits_since")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), HitsFn>(p) });
+        let hits_fn = unsafe { get::<HitsFn>(&lib, b"evil_hits_since") }.ok();
         // SAFETY: as above, evil_pellets_so_far(int*); optional.
-        let pellets_fn = sym(b"evil_pellets_so_far")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), PelletsFn>(p) });
+        let pellets_fn = unsafe { get::<PelletsFn>(&lib, b"evil_pellets_so_far") }.ok();
         // SAFETY: as above, evil_sounds_since's and evil_sfx_name's signatures; optional.
-        let sounds_fn = sym(b"evil_sounds_since")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), SoundsFn>(p) });
-        let mobj_sounds_fn = sym(b"evil_mobj_sounds")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), MobjSoundsFn>(p) });
-        let sfx_name_fn = sym(b"evil_sfx_name")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), SfxNameFn>(p) });
+        let sounds_fn = unsafe { get::<SoundsFn>(&lib, b"evil_sounds_since") }.ok();
+        let mobj_sounds_fn = unsafe { get::<MobjSoundsFn>(&lib, b"evil_mobj_sounds") }.ok();
+        let sfx_name_fn = unsafe { get::<SfxNameFn>(&lib, b"evil_sfx_name") }.ok();
         // SAFETY: as above, evil_grab_sound's signature; optional.
-        let grab_sound_fn = sym(b"evil_grab_sound")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), GrabSoundFn>(p) });
+        let grab_sound_fn = unsafe { get::<GrabSoundFn>(&lib, b"evil_grab_sound") }.ok();
         // SAFETY: as above, evil_sound_rate's signature; optional.
-        let sound_rate_fn = sym(b"evil_sound_rate")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), SoundRateFn>(p) });
+        let sound_rate_fn = unsafe { get::<SoundRateFn>(&lib, b"evil_sound_rate") }.ok();
         // SAFETY: as above, evil_volume's and evil_get_volume's signatures; optional.
-        let volume_fn = sym(b"evil_volume")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), VolumeFn>(p) });
-        let get_volume_fn = sym(b"evil_get_volume")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), GetVolumeFn>(p) });
+        let volume_fn = unsafe { get::<VolumeFn>(&lib, b"evil_volume") }.ok();
+        let get_volume_fn = unsafe { get::<GetVolumeFn>(&lib, b"evil_get_volume") }.ok();
         // SAFETY: as above, the presentation's calls' signatures (evil_present, evil_title,
         // evil_wipe_tic, evil_menu, evil_screen); optional.
-        let present_fn = sym(b"evil_present")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), PresentFn>(p) });
-        let title_fn = sym(b"evil_title")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), PlainFn>(p) });
-        let wipe_tic_fn = sym(b"evil_wipe_tic")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), PlainFn>(p) });
-        let menu_fn = sym(b"evil_menu")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), MenuFn>(p) });
-        let screen_fn = sym(b"evil_screen")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), ScreenFn>(p) });
+        let present_fn = unsafe { get::<PresentFn>(&lib, b"evil_present") }.ok();
+        let title_fn = unsafe { get::<PlainFn>(&lib, b"evil_title") }.ok();
+        let wipe_tic_fn = unsafe { get::<PlainFn>(&lib, b"evil_wipe_tic") }.ok();
+        let menu_fn = unsafe { get::<MenuFn>(&lib, b"evil_menu") }.ok();
+        let screen_fn = unsafe { get::<ScreenFn>(&lib, b"evil_screen") }.ok();
         // SAFETY: as above, evil_exit(int); optional.
-        let exit_fn = sym(b"evil_exit")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), PresentFn>(p) });
+        let exit_fn = unsafe { get::<PresentFn>(&lib, b"evil_exit") }.ok();
         // SAFETY: as above, evil_level_title(char*, int); optional.
-        let level_title_fn = sym(b"evil_level_title")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), TitleFn>(p) });
-        let finale_text_fn = sym(b"evil_finale_text")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), TitleFn>(p) });
+        let level_title_fn = unsafe { get::<TitleFn>(&lib, b"evil_level_title") }.ok();
+        let finale_text_fn = unsafe { get::<TitleFn>(&lib, b"evil_finale_text") }.ok();
         // SAFETY: as above, evil_draw_at's signature; optional.
-        let draw_at_fn = sym(b"evil_draw_at")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), DrawAtFn>(p) });
+        let draw_at_fn = unsafe { get::<DrawAtFn>(&lib, b"evil_draw_at") }.ok();
         // SAFETY: as above, the evil_window_* functions' signatures, all or none; optional.
         let window_fns = (|| -> Result<WindowFns, String> {
             Ok(unsafe {
                 WindowFns {
-                    open: std::mem::transmute::<
-                        *const (),
+                    open: get::<
                         unsafe extern "C" fn(
                             *const c_char,
                             c_int,
@@ -555,29 +502,23 @@ impl Dsda {
                             c_int,
                             *mut c_int,
                         ) -> c_int,
-                    >(sym(b"evil_window_open")?),
-                    show: std::mem::transmute::<
-                        *const (),
-                        unsafe extern "C" fn(*const u32, c_int, c_int),
-                    >(sym(b"evil_window_show")?),
-                    events: std::mem::transmute::<
-                        *const (),
-                        unsafe extern "C" fn(*mut c_int, c_int) -> c_int,
-                    >(sym(b"evil_window_events")?),
-                    title: std::mem::transmute::<*const (), unsafe extern "C" fn(*const c_char)>(
-                        sym(b"evil_window_title")?,
-                    ),
-                    close: std::mem::transmute::<*const (), unsafe extern "C" fn()>(sym(
-                        b"evil_window_close",
-                    )?),
+                    >(&lib, b"evil_window_open")?,
+                    show: get::<unsafe extern "C" fn(*const u32, c_int, c_int)>(
+                        &lib,
+                        b"evil_window_show",
+                    )?,
+                    events: get::<unsafe extern "C" fn(*mut c_int, c_int) -> c_int>(
+                        &lib,
+                        b"evil_window_events",
+                    )?,
+                    title: get::<unsafe extern "C" fn(*const c_char)>(&lib, b"evil_window_title")?,
+                    close: get::<unsafe extern "C" fn()>(&lib, b"evil_window_close")?,
                 }
             })
         })()
         .ok();
         // SAFETY: as above, evil_window_icon's signature; optional.
-        let window_icon_fn = sym(b"evil_window_icon")
-            .ok()
-            .map(|p| unsafe { std::mem::transmute::<*const (), IconFn>(p) });
+        let window_icon_fn = unsafe { get::<IconFn>(&lib, b"evil_window_icon") }.ok();
         let argv: Vec<CString> = std::iter::once("evil".to_string())
             .chain(args.iter().cloned())
             .map(CString::new)
@@ -609,9 +550,8 @@ impl Dsda {
             frame_get_fn,
             frame_put_fn,
             // SAFETY: the symbol, if the library has it, is `void evil_restore_quick(int)`.
-            quick_fn: sym(b"evil_restore_quick").ok().map(|p| unsafe {
-                std::mem::transmute::<*const (), unsafe extern "C" fn(c_int)>(p)
-            }),
+            quick_fn: unsafe { get::<unsafe extern "C" fn(c_int)>(&lib, b"evil_restore_quick") }
+                .ok(),
             seen_fn,
             clear_fn,
             reset_ids_fn,
