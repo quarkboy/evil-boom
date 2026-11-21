@@ -242,3 +242,15 @@ pub fn run_tics(v0: f64, d: f64, pace: f64) -> f64 {
 /// the share of her health something on the way may cost her and still not be a risk (the
 /// user's: "10% or less of current health = not risky"): floors that hurt, a fast crusher's stroke
 pub const RISK_SHARE: f64 = 0.1;
+
+/// A barrel, as the game has it (`mobjinfo`: radius 10, height 42), and its blast (128, as a
+/// rocket's: `P_RadiusAttack`, measured by the greater of the gaps along x and y).
+pub const BARREL_RADIUS: f64 = 10.0;
+/// (what a shot at one has to get to; seen over a ledge this high or not)
+pub const BARREL_HEIGHT: f64 = 42.0;
+/// a barrel blown up sets off another this near, by that measure (its blast, 128, and the
+/// other's radius)
+pub const BARREL_CHAIN: f64 = 138.0;
+/// ...and is clear of her this far off (its 128 and her radius, and a little): where she
+/// backs off to before shooting one
+pub const BARREL_SAFE: f64 = 150.0;

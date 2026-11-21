@@ -830,9 +830,9 @@ impl Explorer {
     /// MAP25: the pillar of five on the way to the megasphere; every run that lived to
     /// jump onto it stalled there.) Whatever the route's for, risky or not: cleared first.
     fn barrels_on_landing(&self, route: &Route, obs: &Observation) -> Option<Point> {
-        /// a barrel's thing type, its half-width, and room to spare
-        const BARREL: u16 = 2035;
-        const BARREL_RADIUS: f64 = 10.0;
+        use crate::domain::BARREL_RADIUS;
+        use crate::things::BARREL;
+        /// room to spare round a barrel's half-width
         const SPARE: f64 = 6.0;
         const EVERY: f64 = 8.0;
         let nav = &self.nav;

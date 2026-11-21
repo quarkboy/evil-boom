@@ -6,21 +6,15 @@
 use super::Trouble;
 use super::{along, barrel_gun, barrel_now, blast_gap, tap_rounds, RouteFollower, BARREL_TAP};
 use crate::domain::{heading, norm, Controls, Observation, FULL_SPEED};
+use crate::domain::{BARREL_CHAIN, BARREL_HEIGHT, BARREL_RADIUS, BARREL_SAFE};
 use crate::geom::{dist, segment_distance, Point};
 use crate::navigator::{States, PLAYER_RADIUS};
-
-/// back off this far before shooting one (blast radius 128)
-const BARREL_SAFE: f64 = 150.0;
 
 /// Give up after this many tics trying to clear a barrel from nearby.
 const BARREL_GIVE_UP: i64 = 8 * 35;
 
 /// Mortal runs allow longer to walk outside the blasts and shoot from there.
 const BARREL_GIVE_UP_FAR: i64 = 20 * 35;
-
-/// a barrel blown up sets off another this near, by `blast_gap` (its blast, 128, and the other's
-/// radius, 10)
-const BARREL_CHAIN: f64 = 138.0;
 
 /// a barrel hit goes off this many tics later (its death frames, 5 + 5 + 5); so does each one a
 /// blast sets off
@@ -66,10 +60,6 @@ const BARREL_POSTS: usize = 12;
 
 /// a spot this near one she had no shot from isn't chosen again for that barrel
 const FAILED_POST_NEAR: f64 = 16.0;
-/// a barrel's radius (a shot at another that passes this near it hits it instead)
-const BARREL_RADIUS: f64 = 10.0;
-/// a barrel's height (what a shot at it has to get to)
-const BARREL_HEIGHT: f64 = 42.0;
 
 /// Candidate retreat positions sampled backwards along the incoming path.
 const BACKTRACK_POINTS: usize = 64;

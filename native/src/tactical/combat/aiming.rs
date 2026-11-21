@@ -10,18 +10,12 @@ use super::{mon, segment_point_distance, Combat};
 use crate::bestiary::{monster, weapon_in, Attack};
 use crate::decisions::Record;
 use crate::domain::{heading, norm, Observation, Thing};
+use crate::domain::{BARREL_CHAIN, BARREL_RADIUS, BARREL_SAFE};
 use crate::geom::{dist, Point};
 use crate::los::Body;
 use crate::motor::follower::blast_gap;
 use crate::navigator::PLAYER_HEIGHT;
 
-/// a barrel's blast is clear of her this far off (its 128 and her radius, and a little), by
-/// `blast_gap`...
-const BARREL_SAFE: f64 = 150.0;
-/// ...and sets off another this near (its blast and the other's radius)
-const BARREL_CHAIN: f64 = 138.0;
-/// a barrel's radius
-const BARREL_RADIUS: f64 = 10.0;
 /// her missiles' radius, about (a rocket's 11, plasma's 13)
 const MISSILE_RADIUS: f64 = 13.0;
 

@@ -30,6 +30,7 @@ use super::sound::Hearing;
 use super::tuning::{Dodge, Tuning};
 use crate::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use crate::decisions::{Journal, Record};
+use crate::domain::BARREL_HEIGHT;
 use crate::domain::{
     heading, norm, Controls, Heard, Observation, Thing, FRICTION, RUN_THRUST, TICRATE,
 };
@@ -57,9 +58,6 @@ const BOSS_DEATH_TICS: i64 = 70;
 
 /// a rocket's blast reaches this far (less her radius: 128 in all)
 const SPLASH: f64 = 112.0;
-
-/// a barrel's height (seen over a ledge this high or not)
-const BARREL_HEIGHT: f64 = 42.0;
 
 /// a missile's height, about (for whether she can see it)
 const MISSILE_HEIGHT: f64 = 8.0;

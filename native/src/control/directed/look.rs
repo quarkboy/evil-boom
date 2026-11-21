@@ -11,6 +11,7 @@
 //! The look: what's round her now as a player's eyes give it: the room, what it leads to, the
 //! monsters, pickups, doors, switches and barrels in sight, what she's heard, and the pick.
 
+use crate::domain::BARREL_HEIGHT;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::Event;
@@ -42,9 +43,8 @@ const LATELY: i64 = 30 * 35;
 const KEY_NEAR: f64 = 64.0;
 /// things of a kind this near each other are in one place, for the look
 const SAME_PLACE: f64 = 64.0;
-/// how tall a pickup and a barrel are, for whether she sees one
+/// how tall a pickup is, for whether she sees one (a barrel: `BARREL_HEIGHT`)
 const PICKUP_HEIGHT: f64 = 16.0;
-const BARREL_HEIGHT: f64 = 42.0;
 
 /// How much of its own opinion the bot offers unasked.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
