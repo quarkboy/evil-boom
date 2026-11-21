@@ -1077,8 +1077,7 @@ pub fn record(
                 let secs = (watch.engine.tic - start) as f64 / TICRATE;
                 let real = began.elapsed().as_secs_f64().max(1e-3);
                 eprint!(
-                    "
-  {} {}:{:02} game  ({:.1}x real time)   ",
+                    "\r  {} {}:{:02} game  ({:.1}x real time)   ",
                     watch.map_name,
                     secs as i64 / 60,
                     secs as i64 % 60,
