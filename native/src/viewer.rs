@@ -1017,10 +1017,22 @@ pub fn record(
     // time, whoever directs her thinking on the clock. The video's speed is --speed's)
     let real_time = o.neuro.is_some() || o.directed.is_some();
     loop {
-        let (paced_from, paced_tic) = (Instant::now(), watch.engine.tic);
-        while !watch.engine.finished()
+        let (mut paced_from, mut paced_tic) = (Instant::now(), watch.engine.tic);
+        while (!watch.engine.finished()
+            || (watch.engine.dead()
+                && (watch.lives_left > 0 || watch.ultra.is_some() || watch.ultra_unlocked())))
             && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE
         {
+            // (dead: undone, or the level again with a life less, as the watcher with no
+            // window has it (`Watch::died`); it used to be the end of the video whatever
+            // lives she had)
+            if watch.engine.dead() {
+                match watch.died(real_time) {
+                    Died::Undone => continue,
+                    Died::Over => break,
+                    Died::Again(_) => (paced_from, paced_tic) = (Instant::now(), watch.engine.tic),
+                }
+            }
             if real_time {
                 let due = paced_from
                     + std::time::Duration::from_secs_f64(
@@ -1188,40 +1200,24 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
                 && (watch.lives_left > 0 || watch.ultra.is_some() || watch.ultra_unlocked())))
             && ((watch.engine.tic - start) as f64) < o.max_seconds * TICRATE
         {
-            // (dead with the ultra instinct on: its to go back from, if it has a game kept)
             if watch.engine.dead() {
-                watch.ultra_died();
-                if !watch.engine.dead() {
-                    continue;
-                }
-                if watch.lives_left <= 0 {
-                    break;
-                }
-            }
-            // (dead with lives left: the level again from its start, what she came in with and
-            // what she's learned of it kept, as the window's loop has it; whoever directs her
-            // told)
-            if watch.engine.dead() {
-                watch.ultra_real_death();
-                watch.lives_left -= 1;
-                let left = if o.lives == i32::MAX {
-                    "no limit to the lives".to_string()
-                } else {
-                    format!("{} lives left", watch.lives_left)
-                };
-                let line = format!(
-                    "{}: died at {:.0}s, {left}",
-                    watch.map_name,
-                    (watch.engine.tic - start) as f64 / TICRATE
-                );
-                println!("{line}");
-                let _ = writeln!(log, "{line}");
-                watch.tell_death(true);
-                watch.engine.restart(true);
-                watch.agent.restart();
-                watch.controls = None;
-                if o.directed.is_some() || o.neuro.is_some() {
-                    crate::control::directed::Director::take_over(&mut watch.agent);
+                match watch.died(o.directed.is_some() || o.neuro.is_some()) {
+                    Died::Undone => continue,
+                    Died::Over => break,
+                    Died::Again(at) => {
+                        let left = if o.lives == i32::MAX {
+                            "no limit to the lives".to_string()
+                        } else {
+                            format!("{} lives left", watch.lives_left)
+                        };
+                        let line = format!(
+                            "{}: died at {:.0}s, {left}",
+                            watch.map_name,
+                            (at - start) as f64 / TICRATE
+                        );
+                        println!("{line}");
+                        let _ = writeln!(log, "{line}");
+                    }
                 }
             }
             // (paused by her: what she sends answered, the game held; kept to time afresh after)
@@ -1282,6 +1278,16 @@ fn headless(mut watch: Watch, w: &Wad, o: &WatchOptions) -> Result<(), String> {
         }
         start = watch.engine.tic;
     }
+}
+
+/// What came of a death (`Watch::died`).
+pub(super) enum Died {
+    /// the ultra instinct put the game back: she's alive
+    Undone,
+    /// a life spent, the level begun again; the tic she died at
+    Again(i64),
+    /// no life left
+    Over,
 }
 
 /// The watcher for the level the engine's on: Evil in it afresh, as a run starts her.
@@ -2222,6 +2228,31 @@ impl Watch {
             }
             None => self.ultra_end("she died, and no game kept to go back to"),
         }
+    }
+
+    /// She's dead, in a loop that plays on by itself (no window, or a recording): the ultra
+    /// instinct's to go back from if it has a game kept; else, with a life left, that life
+    /// spent and the level again from its start, what she came in with and what she's learned
+    /// of it kept, whoever directs her told (`directed`: and given her back); else it's over.
+    pub(super) fn died(&mut self, directed: bool) -> Died {
+        self.ultra_died();
+        if !self.engine.dead() {
+            return Died::Undone;
+        }
+        if self.lives_left <= 0 {
+            return Died::Over;
+        }
+        let at = self.engine.tic;
+        self.ultra_real_death();
+        self.lives_left -= 1;
+        self.tell_death(true);
+        self.engine.restart(true);
+        self.agent.restart();
+        self.controls = None;
+        if directed {
+            crate::control::directed::Director::take_over(&mut self.agent);
+        }
+        Died::Again(at)
     }
 
     /// A tic's first half: the level as she sees it, whoever directs her told, and what she'd
