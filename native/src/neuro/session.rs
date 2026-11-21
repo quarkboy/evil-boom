@@ -13,7 +13,7 @@ use crate::control::directed::{
     bearing, Director, Hints, Order, Topic, STANCE_SECONDS, TACTIC_SECONDS,
 };
 use crate::control::game::Choices;
-use crate::motor::Observation;
+use crate::domain::Observation;
 use crate::play::Agent;
 
 /// waiting on her this long (tics) with nothing to do: a decision forced (unless the console

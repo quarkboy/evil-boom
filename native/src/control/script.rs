@@ -37,7 +37,7 @@
 //!   log [N]             her log's last N lines (40), as the watcher shows it
 
 use super::directed::{bearing, Director, Hints, Order, Topic};
-use crate::motor::Observation;
+use crate::domain::Observation;
 use crate::play::Agent;
 
 /// Carry out one command; what it says back (an order's own outcome comes later, as reports).

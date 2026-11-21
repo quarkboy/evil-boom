@@ -10,9 +10,9 @@
 
 use super::steering::WAYS;
 use super::{mon, Combat, Seen};
+use crate::domain::{Observation, Thing, FULL_SPEED, TICRATE};
 use crate::geom::{dist, Point};
 use crate::los::Body;
-use crate::motor::{Observation, Thing, FULL_SPEED, TICRATE};
 use crate::navigator::{PLAYER_HEIGHT, PLAYER_RADIUS};
 
 /// Where a monster sees from: all of it.

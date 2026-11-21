@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use super::{engaged, Director};
-use crate::motor::Observation;
+use crate::domain::Observation;
 use crate::play::Agent;
 use crate::tactical::combat::Move;
 

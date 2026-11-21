@@ -5,9 +5,9 @@
 
 use super::{Explorer, GoalKey, Kind, Objective, KEEP_REACH};
 use crate::det::HashMap;
+use crate::domain::Observation;
 use crate::geom::{dist, segments_cross, Point};
 use crate::knowledge::RISK_SHARE;
-use crate::motor::Observation;
 use crate::nav::Heights;
 use crate::navigator::{
     add_height, PathNote, Plan, Route, States, TriggerLine, View, MAX_STEP, PLAYER_RADIUS,

@@ -6,9 +6,9 @@
 
 use super::Event;
 use super::{compass, engaged, kit, some, Director};
+use crate::domain::{heading, Observation};
 use crate::geom::{dist, Point};
 use crate::motor::follower::JumpNews;
-use crate::motor::{heading, Observation};
 use crate::navigator::Jump;
 use crate::play::Agent;
 use std::collections::BTreeMap;

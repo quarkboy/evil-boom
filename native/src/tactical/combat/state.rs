@@ -6,8 +6,8 @@
 use super::super::sound::Hearing;
 use super::moves::HeldFire;
 use super::Alert;
+use crate::domain::Thing;
 use crate::geom::Point;
-use crate::motor::Thing;
 use crate::specials::CrusherKind;
 use std::collections::{BTreeMap, BTreeSet};
 

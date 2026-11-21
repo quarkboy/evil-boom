@@ -14,9 +14,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::Event;
 use super::{a, called, compass, some, the, Director};
+use crate::domain::{heading, Observation};
 use crate::dsda::HitCause;
 use crate::geom::{dist, Point};
-use crate::motor::{heading, Observation};
 use crate::play::Agent;
 use crate::tactical::bestiary::monster;
 

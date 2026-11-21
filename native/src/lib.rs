@@ -26,6 +26,7 @@ pub mod crush;
 pub mod debug;
 pub mod decisions;
 mod det;
+pub mod domain;
 pub mod drive;
 pub mod dsda;
 pub mod engine;

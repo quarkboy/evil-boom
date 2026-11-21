@@ -6,8 +6,8 @@
 use super::{
     needs_key, Fired, How, Knowledge, BUSY_TICS, LIFT_BACK_TICS, SHOT_RANGE, SURE_TICS, TAKE_TICS,
 };
+use crate::domain::{Controls, Observation};
 use crate::geom::Point;
-use crate::motor::{Controls, Observation};
 use crate::nav::Heights;
 use crate::navigator::{States, TriggerLine, EXIT_FLOOR, SHOT_HEIGHT};
 use crate::specials::{Category, Trigger};

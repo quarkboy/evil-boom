@@ -10,8 +10,8 @@
 //! setting's: a goal doesn't change it.
 
 use super::{Director, Doing, Event};
+use crate::domain::Observation;
 use crate::knowledge::explorer::{Focus, Resort};
-use crate::motor::Observation;
 use crate::play::Agent;
 use crate::specials::{Color, Keys};
 use std::collections::BTreeSet;

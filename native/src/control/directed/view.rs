@@ -7,7 +7,7 @@
 
 use super::{ask, Director};
 use crate::console::{EvilState, QuestionState};
-use crate::motor::Observation;
+use crate::domain::Observation;
 use crate::play::Agent;
 
 impl Director {

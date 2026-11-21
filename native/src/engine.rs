@@ -6,8 +6,8 @@
 //! process of its own.
 
 use crate::config;
+use crate::domain::{Controls, Heard, Observation, Sound, Thing};
 use crate::dsda::{self, Dsda, Mobj, TicCmd};
-use crate::motor::{Controls, Heard, Observation, Sound, Thing};
 use crate::nav::Heights;
 use crate::specials::{Key, Keys};
 use crate::tactical::bestiary::category;
@@ -374,7 +374,7 @@ impl Engine {
     pub fn grab_tic_sound(&self) -> Option<(u32, Vec<i16>)> {
         let rate = self.game.sound_rate()?;
         self.game
-            .grab_sound((rate as usize).div_ceil(crate::motor::TICRATE as usize))
+            .grab_sound((rate as usize).div_ceil(crate::domain::TICRATE as usize))
     }
 
     pub fn god(&self) -> bool {

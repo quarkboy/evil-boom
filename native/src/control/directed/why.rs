@@ -7,8 +7,8 @@
 //! didn't work. In plain words, as everything she reads.
 
 use super::{engaged, explores, fighting, id_of, plain, Director, Doing, Entry, Event};
+use crate::domain::Observation;
 use crate::knowledge::explorer::{Kind, Objective};
-use crate::motor::Observation;
 use crate::play::Agent;
 
 /// a failed action this recent is told as the last that didn't work (tics)

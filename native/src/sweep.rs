@@ -12,11 +12,11 @@ pub(crate) use setup::broken_secrets;
 pub use setup::{setup, Setup};
 
 use crate::config::out_dir;
+use crate::domain::{Observation, TICRATE};
 use crate::engine::Engine;
 use crate::knowledge::completion::{most_items, COUNTED};
 use crate::knowledge::explorer::Explorer;
 use crate::map::MapData;
-use crate::motor::{Observation, TICRATE};
 use crate::nav::Heights;
 use crate::navigator::{Navigator, States};
 use crate::play::Agent;
@@ -490,7 +490,7 @@ fn scout(e: &mut Engine, agent: &mut Agent, mortal: bool) -> i64 {
     let log_from = agent.x().log.len();
     let held = std::mem::replace(&mut agent.x_mut().exit_held_back, true); // (everything first, then out)
     agent.x_mut().exit_before_risks = true;
-    let mut c: Option<crate::motor::Controls> = None;
+    let mut c: Option<crate::domain::Controls> = None;
     let (mut best, mut best_tic, mut lives) = (0usize, e.tic, 0);
     let mut on_ending = false;
     let mut ended = "its time up";
@@ -905,7 +905,7 @@ pub fn run_map_in(
                 .map(|d| d.1.atan2(d.0).to_degrees());
             if let Some(way) = push {
                 if let Some((was_way, at)) = last_push {
-                    if ob.tic - at <= 9 && crate::motor::norm(way - was_way).abs() > 120.0 {
+                    if ob.tic - at <= 9 && crate::domain::norm(way - was_way).abs() > 120.0 {
                         let doing = match legs {
                             crate::tactical::arbiter::Legs::Fight => p
                                 .combat()

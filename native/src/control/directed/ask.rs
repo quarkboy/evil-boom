@@ -10,7 +10,7 @@
 
 use super::Event;
 use super::{Director, Doing, Order, Report};
-use crate::motor::Observation;
+use crate::domain::Observation;
 use crate::play::Agent;
 
 /// at most this many questions a minute (over it, the caller does as it would unasked)

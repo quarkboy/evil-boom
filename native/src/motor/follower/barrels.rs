@@ -5,8 +5,8 @@
 
 use super::Trouble;
 use super::{along, barrel_gun, barrel_now, blast_gap, tap_rounds, RouteFollower, BARREL_TAP};
+use crate::domain::{heading, norm, Controls, Observation, FULL_SPEED};
 use crate::geom::{dist, segment_distance, Point};
-use crate::motor::{heading, norm, Controls, Observation, FULL_SPEED};
 use crate::navigator::{States, PLAYER_RADIUS};
 
 /// back off this far before shooting one (blast radius 128)

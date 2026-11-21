@@ -7,8 +7,8 @@ use super::{
     segment_point_distance, Heard, How, Knowledge, EXPECTED_FOR, EXPECTED_RADIUS, HEAR_BEARING,
     HEAR_DISTANCE, HEAR_RANGE, NEAR_SOUND, TELEPORT_JUMP, TELEPORT_NEAR,
 };
+use crate::domain::{Controls, Observation};
 use crate::geom::dist;
-use crate::motor::{Controls, Observation};
 use crate::nav::Heights;
 use crate::sight::View as SightView;
 use crate::specials::Category;

@@ -8,7 +8,7 @@
 
 use super::Event;
 use super::{Director, Report};
-use crate::motor::Observation;
+use crate::domain::Observation;
 use crate::play::Agent;
 
 /// no progress this long (tics) and a restart is hers

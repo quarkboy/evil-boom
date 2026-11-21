@@ -51,10 +51,10 @@ use std::rc::Rc;
 
 use crate::config::out_dir;
 use crate::control::directed::Director;
+use crate::domain::{heading, norm, Controls, Observation, TICRATE};
 use crate::geom::{dist, Point};
 use crate::knowledge::explorer::{Ident, Kind, Objective};
 use crate::motor::follower::RouteFollower;
-use crate::motor::{heading, norm, Controls, Observation, TICRATE};
 use crate::navigator::{Plan, States};
 use crate::specials::classify_line;
 use crate::sweep::{setup, RunOptions, Setup};

@@ -10,9 +10,9 @@ use std::fmt::Write as _;
 use sha2::{Digest, Sha256};
 
 use super::{add_height, Jump, Navigator};
+use crate::domain::{FRICTION, RUN_THRUST};
 use crate::geom::dist;
 use crate::jumps::{FinderInput, Jump as LabJump, FINDER_VERSION};
-use crate::motor::{FRICTION, RUN_THRUST};
 use crate::nav::Heights;
 
 /// A jump that never comes off made a little differently costs this much more (units).

@@ -13,11 +13,11 @@
 
 use super::{Jump, JumpLab, STRAFE_SIDE};
 use crate::det::{HashMap, HashSet};
+use crate::domain::{FRICTION, RUN_THRUST};
 use crate::geom::{
     box_hits_segment, cells, closest_point, dist, segments_cross, Point, MAX_STEP, PLAYER_HEIGHT,
     PLAYER_RADIUS,
 };
-use crate::motor::{FRICTION, RUN_THRUST};
 use crate::nav::{can_cross, Heights};
 use std::cell::Cell;
 

@@ -189,8 +189,8 @@ fn e1m3_exit_is_behind_the_blue_door() {
 
 #[test]
 fn jumps_match_the_engine() {
+    use evilboom::domain::Controls;
     use evilboom::engine::{library, Engine, Options};
-    use evilboom::motor::Controls;
 
     let Some(w) = wad("doom2") else { return };
     if !library().exists() {

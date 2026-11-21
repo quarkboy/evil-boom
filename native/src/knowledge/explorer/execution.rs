@@ -8,10 +8,10 @@ use super::{
     turn_to, EndKind, Explorer, Hooks, Kind, Objective, ARRIVE_SLACK, JUMP_MISSES, LOOK_TICS,
     STUCK_TIMES,
 };
+use crate::domain::{Controls, Observation};
 use crate::geom::dist;
 use crate::knowledge::model::{Heard, How, Note};
 use crate::motor::follower::{RouteFollower, Trouble};
-use crate::motor::{Controls, Observation};
 use std::collections::BTreeSet;
 
 /// a suspected wall pressed: watched this long for something to happen
@@ -270,7 +270,7 @@ impl Explorer {
             }
             let at = obj.look_at.unwrap_or(obj.goal);
             let bearing = (at.1 - obs.y).atan2(at.0 - obs.x).to_degrees();
-            let off = crate::motor::norm(bearing - obs.angle).abs();
+            let off = crate::domain::norm(bearing - obs.angle).abs();
             let until = self.look_until.unwrap_or(obs.tic);
             if obs.tic < until {
                 let mut c = turn_to(obs, Some(bearing));

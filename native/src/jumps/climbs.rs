@@ -10,8 +10,8 @@
 use super::physics::{Controls, PlayerSim};
 use super::{Jump, JumpLab};
 use crate::det::HashSet;
+use crate::domain::MAX_MOVE;
 use crate::geom::{dist, Point, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
-use crate::motor::MAX_MOVE;
 
 /// degrees off the face's normal
 const CLIMB_ANGLES: [f64; 3] = [0.0, -30.0, 30.0];

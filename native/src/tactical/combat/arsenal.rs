@@ -8,8 +8,8 @@
 use super::steering::CLAW_REACH;
 use super::style::window;
 use super::{mon, Combat, SLOTS};
+use crate::domain::{Observation, Thing, TICRATE};
 use crate::geom::dist;
-use crate::motor::{Observation, Thing, TICRATE};
 use crate::tactical::bestiary::{
     claw_max, melee_at, punchable, weapon, weapon_in, Attack, Monster, Weapon, CHAINSAW,
 };
@@ -441,13 +441,14 @@ impl Combat {
         // What the BFG's spray would take in: forty lines from her, a quarter turn wide along the
         // shot, 1024 out (A_BFGSpray). Not everything in sight.
         let me = obs.pos();
-        let shot = crate::motor::heading(me, (t.x, t.y));
+        let shot = crate::domain::heading(me, (t.x, t.y));
         let crowd = self
             .visible
             .iter()
             .filter(|m| {
                 dist((m.x, m.y), me) < BFG_SPRAY
-                    && crate::motor::norm(crate::motor::heading(me, (m.x, m.y)) - shot).abs() < 45.0
+                    && crate::domain::norm(crate::domain::heading(me, (m.x, m.y)) - shot).abs()
+                        < 45.0
             })
             .count();
         // A boss seen and still about, and t isn't it: the big guns' ammo is kept for the boss.

@@ -4,8 +4,8 @@
 //! Finding standable and reachable pickup positions at believed sector heights.
 
 use super::{Explorer, ARRIVE_SLACK};
+use crate::domain::Observation;
 use crate::geom::{dist, Point};
-use crate::motor::Observation;
 use crate::navigator::{MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT, PLAYER_RADIUS};
 use std::collections::BTreeSet;
 use std::sync::OnceLock;

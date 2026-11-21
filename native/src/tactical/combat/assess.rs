@@ -15,8 +15,8 @@
 
 use super::arsenal::Odds;
 use super::{mon, spread, Combat};
+use crate::domain::{Observation, Thing};
 use crate::geom::{dist, Point};
-use crate::motor::{Observation, Thing};
 use crate::tactical::bestiary::Attack;
 
 /// How things stand, this tic.

@@ -12,8 +12,8 @@
 use std::collections::{BTreeMap, VecDeque};
 
 use super::{Combat, Move};
+use crate::domain::{heading, norm, Observation};
 use crate::geom::{dist, Point};
-use crate::motor::{heading, norm, Observation};
 
 /// the launcher lets a rocket go this long after the trigger (its first frame)
 const DELAY: i64 = 8;

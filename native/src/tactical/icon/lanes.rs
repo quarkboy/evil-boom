@@ -15,10 +15,10 @@
 //! now: a lift passes through them (`Post::feet`), and whoever plans with a post says how the
 //! floor gets there.
 
+use crate::domain::heading;
 use crate::geom::{dist, Point, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::map::MapData;
 use crate::mesh::Mesh;
-use crate::motor::heading;
 use crate::nav::Heights;
 
 /// a player's missile leaves this far over her feet (P_SpawnPlayerMissile)

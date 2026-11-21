@@ -262,7 +262,7 @@ pub fn survey_map(wad: &str, map: &str) -> Result<(), String> {
     let mut c = None;
     let mut last = e.observe();
     let mut secrets_seen = 0;
-    while (e.tic as f64) < SURVEY_SECONDS * crate::motor::TICRATE
+    while (e.tic as f64) < SURVEY_SECONDS * crate::domain::TICRATE
         && !e.finished()
         && agent.x().out_of_options.is_none()
     {
@@ -320,7 +320,7 @@ pub fn survey_map(wad: &str, map: &str) -> Result<(), String> {
         tally.0,
         tally.1,
         if ran_out {
-            e.tic as f64 / crate::motor::TICRATE
+            e.tic as f64 / crate::domain::TICRATE
         } else {
             -1.0
         }

@@ -8,10 +8,10 @@ use super::moves::HeldFire;
 use super::style::Style;
 use super::{mon, segment_point_distance, Combat};
 use crate::decisions::Record;
+use crate::domain::{heading, norm, Observation, Thing};
 use crate::geom::{dist, Point};
 use crate::los::Body;
 use crate::motor::follower::blast_gap;
-use crate::motor::{heading, norm, Observation, Thing};
 use crate::navigator::PLAYER_HEIGHT;
 use crate::tactical::bestiary::{monster, weapon_in, Attack};
 
@@ -132,7 +132,7 @@ impl Combat {
                     .iter()
                     .filter(|o| {
                         dist((o.x, o.y), me) < BFG_REACH
-                            && crate::motor::norm(heading(me, (o.x, o.y)) - at).abs() < BFG_CONE
+                            && crate::domain::norm(heading(me, (o.x, o.y)) - at).abs() < BFG_CONE
                     })
                     .map(|o| mon(o.name).threat.max(0.5))
                     .sum::<f64>()

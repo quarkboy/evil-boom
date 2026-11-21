@@ -16,8 +16,8 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::Path;
 
+use crate::domain::Controls;
 use crate::knowledge::model::Note;
-use crate::motor::Controls;
 use crate::specials::Keys;
 
 #[derive(Clone, Debug)]

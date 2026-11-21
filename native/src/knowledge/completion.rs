@@ -10,9 +10,9 @@
 use std::collections::BTreeSet;
 
 use super::explorer::{Explorer, Hooks, Kind, Objective};
+use crate::domain::Observation;
 use crate::geom::Point;
 use crate::map::MapData;
-use crate::motor::Observation;
 use crate::navigator::Plan;
 use crate::specials::Keys;
 

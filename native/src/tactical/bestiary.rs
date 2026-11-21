@@ -377,7 +377,7 @@ pub fn melee_at(w: &Weapon, name: &str) -> bool {
 /// What a slot brings up, as the game picks it for her (dsda/evil_api.c): slot 3 the super
 /// shotgun once she has it; slot 1 the fist while she's berserk, else the chainsaw once she has
 /// it.
-pub fn weapon_in(slot: i32, obs: &crate::motor::Observation) -> Weapon {
+pub fn weapon_in(slot: i32, obs: &crate::domain::Observation) -> Weapon {
     match slot {
         // (the plain shotgun up, the super had: slot 3 is the one in her hands)
         3 if obs.super_shotgun == Some(true) && obs.ready != Some(2) => SUPER_SHOTGUN,

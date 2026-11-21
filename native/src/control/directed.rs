@@ -16,9 +16,9 @@ use std::collections::{BTreeMap, VecDeque};
 
 use super::names::{a, called, some, the};
 use super::places::{Area, Places, SMALL};
+use crate::domain::{heading, norm, Observation};
 use crate::geom::{dist, Point};
 use crate::knowledge::explorer::{Ident, Kind, Objective};
-use crate::motor::{heading, norm, Observation};
 use crate::play::Agent;
 
 mod ask;
@@ -3119,7 +3119,7 @@ pub fn plain(kind: Kind, label: &str) -> String {
 
 /// What's fighting her, in a phrase: how many of each kind, and where the nearest is
 /// ("2 Fatso, 1 Arachnotron (NW 650)"). None: nothing is.
-fn fighting(against: &[crate::motor::Thing], obs: &Observation) -> Option<String> {
+fn fighting(against: &[crate::domain::Thing], obs: &Observation) -> Option<String> {
     let pos = obs.pos();
     let near = against
         .iter()
@@ -3138,7 +3138,7 @@ fn fighting(against: &[crate::motor::Thing], obs: &Observation) -> Option<String
     ))
 }
 
-fn engaged(agent: &Agent, obs: &Observation) -> Vec<crate::motor::Thing> {
+fn engaged(agent: &Agent, obs: &Observation) -> Vec<crate::domain::Thing> {
     agent
         .player()
         .map(|p| p.combat().engaged(obs))

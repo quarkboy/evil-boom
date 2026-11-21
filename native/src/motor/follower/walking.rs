@@ -8,10 +8,9 @@ use super::{
     last_point, roll_speed, stops, Drop, Phase, RouteFollower, Run, SegEnd, Segment,
     CROSS_REST_WAIT, LIFT_STILL,
 };
+use crate::domain::{heading, Controls, Observation, FULL_SPEED, TICRATE};
 use crate::geom::{cells, closest_point, dist, segment_distance, Point};
-use crate::motor::{
-    heading, Controls, Observation, Track, BRAKE, CREEP_RANGE, FULL_SPEED, LANDING_ROOM, TICRATE,
-};
+use crate::motor::{Track, BRAKE, CREEP_RANGE, LANDING_ROOM};
 use crate::nav::{can_cross, Heights};
 use crate::navigator::{
     closest_on_portal, PathNote, ITEM_RADIUS, MAX_STEP, PICKUP_BELOW, PLAYER_HEIGHT, PLAYER_RADIUS,

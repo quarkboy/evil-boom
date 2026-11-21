@@ -6,10 +6,10 @@
 
 use std::rc::Rc;
 
+use crate::domain::{Controls, Observation};
 use crate::knowledge::completion::Completionist;
 use crate::knowledge::explorer::{Explorer, NoHooks, Objective};
 use crate::knowledge::model::Knowledge;
-use crate::motor::{Controls, Observation};
 use crate::navigator::Navigator;
 use crate::tactical::player::Player;
 use crate::tactical::tuning::Tuning;

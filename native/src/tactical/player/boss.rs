@@ -22,9 +22,10 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use super::Player;
+use crate::domain::{heading, norm, Controls, Observation};
 use crate::geom::{dist, Point};
 use crate::motor::follower::RouteFollower;
-use crate::motor::{heading, norm, Controls, Motion, Observation};
+use crate::motor::Motion;
 use crate::nav::Heights;
 use crate::navigator::{Plan, View};
 use crate::navigator::{States, TriggerLine};
@@ -991,10 +992,10 @@ impl Player {
         if !hurt {
             return None;
         }
-        let near = |t: &&crate::motor::Thing| {
+        let near = |t: &&crate::domain::Thing| {
             dist((t.x, t.y), p.at) < FETCH_WITHIN && !self.boss.fetched.contains(&t.id)
         };
-        let things: Vec<&crate::motor::Thing> = obs.things.iter().flatten().filter(near).collect();
+        let things: Vec<&crate::domain::Thing> = obs.things.iter().flatten().filter(near).collect();
         let mega = things
             .iter()
             .find(|t| t.name == "Megasphere" || t.name == "Soulsphere")?;

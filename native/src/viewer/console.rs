@@ -523,7 +523,7 @@ impl Watch {
         let t = self.engine.tally();
         let mut s = GameState {
             map: self.map_name.clone(),
-            seconds: self.engine.tic as f64 / crate::motor::TICRATE,
+            seconds: self.engine.tic as f64 / crate::domain::TICRATE,
             items: t[0],
             kills: t[1],
             secrets: t[2],

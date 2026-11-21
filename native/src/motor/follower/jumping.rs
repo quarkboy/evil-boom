@@ -5,12 +5,13 @@
 
 use super::Trouble;
 use super::{run_controls, JumpNews, RouteFollower, Run, LIFT_STILL};
+use crate::domain::{heading, norm, Controls, Observation, TICRATE};
 use crate::geom::{
     closest_on_portal, closest_point, dist, funnel, oriented, Point, Seg, PLAYER_HEIGHT,
     PLAYER_RADIUS,
 };
 use crate::jumps::RunStart;
-use crate::motor::{fmt_live, heading, norm, Controls, Observation, TICRATE};
+use crate::motor::fmt_live;
 use crate::navigator::{Jump, MAX_STEP};
 use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap};
@@ -75,8 +76,8 @@ impl RouteFollower {
             let mut distance = 0.0;
             let mut tics = 0;
             while distance < dist(obs.pos(), jump.takeoff) && tics < 35 {
-                v = v * crate::motor::FRICTION
-                    + crate::motor::RUN_THRUST * (1.0 + (jump.sidestep() / 50.0).powi(2)).sqrt();
+                v = v * crate::domain::FRICTION
+                    + crate::domain::RUN_THRUST * (1.0 + (jump.sidestep() / 50.0).powi(2)).sqrt();
                 distance += v;
                 tics += 1;
             }
@@ -762,7 +763,7 @@ const SPRINTS_SHORT: u32 = 3;
 /// `at_end` fast at its end: the game's own way of getting up speed (a push a tic, then
 /// friction), the push fitted to the speed the jump was checked with.
 fn sprint_pace(length: f64, at_end: f64, left: f64) -> f64 {
-    use crate::motor::FRICTION;
+    use crate::domain::FRICTION;
     // (the speed at `to` along a run pushed `push` a tic)
     let run = |push: f64, to: f64| {
         let (mut x, mut v) = (0.0, 0.0);

@@ -18,10 +18,10 @@ use super::{
     called, compass, entries_of, explores, id_of, lock_name, some, weapon_name, Director, Entry,
     Places, Topic, SMALL,
 };
+use crate::domain::{heading, Observation};
 use crate::geom::{dist, Point};
 use crate::knowledge::explorer::{Kind, Objective};
 use crate::los::Body;
-use crate::motor::{heading, Observation};
 use crate::navigator::{MAX_STEP, PLAYER_HEIGHT};
 use crate::play::Agent;
 

@@ -5,9 +5,9 @@
 
 use super::Trouble;
 use super::{run_controls, RouteFollower};
+use crate::domain::{heading, Controls, Observation, FULL_SPEED};
 use crate::geom::{dist, Point};
 use crate::mesh::Mesh;
-use crate::motor::{heading, Controls, Observation, FULL_SPEED};
 use crate::navigator::{closest_on_portal, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use std::cmp::Reverse;
 use std::collections::{BTreeSet, BinaryHeap};

@@ -21,13 +21,13 @@ use crate::dsda::WindowEvent;
 use font8x8::legacy::BASIC_LEGACY;
 
 use crate::config::{out_dir, resolve_wad};
+use crate::domain::{Controls, Observation, TICRATE};
 use crate::engine::{Engine, Options};
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::most_items;
 use crate::knowledge::explorer::{Kind, Objective};
 use crate::knowledge::model::Knowledge;
 use crate::map::{MapData, ML_DONTDRAW};
-use crate::motor::{Controls, Observation, TICRATE};
 use crate::navigator::Navigator;
 use crate::play::Agent;
 use crate::specials::Lock;

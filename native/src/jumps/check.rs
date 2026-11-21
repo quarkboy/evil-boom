@@ -17,8 +17,9 @@
 use super::physics::{Controls, PlayerSim};
 use super::{Jump, JumpLab};
 use crate::det::HashSet;
+use crate::domain::{FRICTION, MAX_MOVE, RUN_THRUST};
 use crate::geom::{dist, Point, MAX_STEP};
-use crate::motor::{FRICTION, MAX_MOVE, MAX_TURN, RUN_THRUST, TURN_ACCEL};
+use crate::motor::{MAX_TURN, TURN_ACCEL};
 use crate::nav::Heights;
 
 const TICRATE: usize = 35;

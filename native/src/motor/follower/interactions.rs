@@ -5,9 +5,10 @@
 
 use super::Trouble;
 use super::{tap_gun, Blocked, Phase, RouteFollower, CROSS_REST_WAIT, PRESS_RANGE, USE_EVERY};
+use crate::domain::{heading, norm, Controls, Observation, TICRATE};
 use crate::geom::{cells, closest_point, dist, segments_cross, Point};
 use crate::mesh::Portal;
-use crate::motor::{fmt_live, heading, norm, Controls, Observation, BRAKE, TICRATE};
+use crate::motor::{fmt_live, BRAKE};
 use crate::nav::{can_cross, Heights};
 use crate::navigator::{closest_on_portal, rep, TriggerLine, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::specials::{Category, Key, Trigger};

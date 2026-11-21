@@ -7,10 +7,10 @@ use super::{
     route_length, EndKind, Explorer, Hooks, Kind, Objective, Resort, Spots, Suspecting,
     GIVE_UP_TICS, JUMP_MISSES, STUCK_TIMES, WHILE_OPEN,
 };
+use crate::domain::Observation;
 use crate::geom::{dist, Point};
 use crate::knowledge::model::{Behind, Note, Wall, SUSPICION_MIN, THOROUGHNESS};
 use crate::motor::follower::RouteFollower;
-use crate::motor::Observation;
 use crate::navigator::TriggerLine;
 use crate::walkthrough::Step;
 use std::collections::{BTreeMap, BTreeSet};

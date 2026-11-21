@@ -27,7 +27,8 @@ It runs the real game in-process: DSDA-Doom, built as a library with a small C b
    DSDA-Doom, a tic at a time                                   (dsda.rs, engine.rs)
 ```
 
-Each tic: the game's state is read (`engine`, into an `Observation`). The knowledge model updates
+Each tic: the game's state is read (`engine`, into an `Observation`; it and the `Controls` she
+gives back are `domain.rs`, which depends on nothing of hers). The knowledge model updates
 what she has seen, heard and learned (`knowledge/model`). The fight sizes up the situation once
 (`Combat::now`) and decides through its tree. The player picks who has her legs: the fight, a
 retreat, or the explorer's current route. The follower turns the route into controls, and they're
@@ -132,7 +133,8 @@ produce exactly the same runs.
 | how a line special behaves | `specials.rs`, `movers.rs` |
 | a Neuro action | `neuro/session.rs` (its schema), `control/directed/` (what it does) |
 | what she's told | `control/directed/moments.rs`, `kills.rs`, `events.rs`, `why.rs` |
-| the engine boundary | `dsda/evil_api.c` and `native/src/dsda.rs` together |
+| the engine boundary | `dsda/evil_api.c` and `native/src/dsda.rs` together (and `EVIL_ABI` in both, when a call or a struct changes) |
+| what a tic's observation or controls hold | `domain.rs` |
 
 A number that's a judgement goes in `Tuning`; a fact about the engine stays a `const` where it's
 used. What the rest of her does about a fight decision goes by its `Move`

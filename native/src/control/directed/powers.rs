@@ -10,7 +10,7 @@
 //! backpack: what she has now.
 
 use super::{Director, Event};
-use crate::motor::Observation;
+use crate::domain::Observation;
 
 /// a power running out told this long (tics) before it does
 const ENDING: i64 = 5 * 35;
@@ -162,7 +162,7 @@ impl Director {
 #[cfg(test)]
 mod tests {
     use super::{pickup, power};
-    use crate::motor::Observation;
+    use crate::domain::Observation;
 
     /// The game's pickup words: armor, the backpack, the powerups, and ammo she had none of told;
     /// the rest left out.

@@ -7,9 +7,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use evilboom::config::resolve_wad;
+use evilboom::domain::Controls;
 use evilboom::engine::{library, Engine, Options};
 use evilboom::motor::follower::RouteFollower;
-use evilboom::motor::Controls;
 use evilboom::navigator::Navigator;
 use evilboom::wad::{load_map, Wad};
 use evilboom::walkthrough::plan_level;

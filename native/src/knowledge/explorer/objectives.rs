@@ -5,9 +5,9 @@
 
 use super::cut_off::Reach;
 use super::{compass, Explorer, Focus, GoingBack, Hooks, Kind, Objective, Suspecting, WHILE_OPEN};
+use crate::domain::Observation;
 use crate::geom::{dist, segment_distance, Point};
 use crate::knowledge::model::Heard;
-use crate::motor::Observation;
 use crate::nav::can_cross;
 use crate::navigator::{States, TeleEdge, TriggerLine, View, EXIT_FLOOR, MAX_STEP, PLAYER_HEIGHT};
 use crate::specials::{classify_line, Key, Keys, Trigger};

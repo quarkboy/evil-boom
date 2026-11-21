@@ -8,9 +8,9 @@
 use super::sight::eye;
 use super::style::{standoff, window};
 use super::{mon, segment_point_distance, spread, Combat};
+use crate::domain::{Observation, Thing};
 use crate::geom::{dist, Point};
 use crate::los::Body;
-use crate::motor::{Observation, Thing};
 use crate::navigator::{MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::tactical::bestiary::{claw_max, first_shot, weapon_in, Attack, Weapon};
 
@@ -503,13 +503,15 @@ impl Combat {
             }
             // From there, facing her target: what she knows is about and would have behind her.
             if let Some(t) = target.filter(|_| self.tune.steer.w_out_of_view > 0.0) {
-                let facing = crate::motor::heading(ahead, (t.x, t.y));
+                let facing = crate::domain::heading(ahead, (t.x, t.y));
                 let hidden: f64 = them
                     .iter()
                     .filter(|m| {
                         m.id != t.id
-                            && crate::motor::norm(crate::motor::heading(ahead, (m.x, m.y)) - facing)
-                                .abs()
+                            && crate::domain::norm(
+                                crate::domain::heading(ahead, (m.x, m.y)) - facing,
+                            )
+                            .abs()
                                 > self.tune.senses.fov
                     })
                     .map(|m| mon(m.name).threat)

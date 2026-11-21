@@ -16,9 +16,9 @@ mod perception;
 mod walls;
 pub use walls::{Signs, Wall, THOROUGHNESS};
 
+use crate::domain::Observation;
 use crate::geom::{cells, dist, Point};
 use crate::map::ML_MAPPED;
-use crate::motor::Observation;
 use crate::movers::Effects;
 use crate::nav::Heights;
 use crate::navigator::{Navigator, TriggerLine};

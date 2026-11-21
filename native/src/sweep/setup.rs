@@ -5,11 +5,11 @@
 
 use super::{hold_exit, RunOptions};
 use crate::config::resolve_wad;
+use crate::domain::{Controls, Observation, TICRATE};
 use crate::engine::{Engine, Options};
 use crate::knowledge::completion::most_items;
 use crate::knowledge::model::{Knowledge, Note};
 use crate::map::MapData;
-use crate::motor::{Controls, Observation, TICRATE};
 use crate::navigator::Navigator;
 use crate::play::Agent;
 use crate::replay::{Entry, Recording};

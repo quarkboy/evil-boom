@@ -14,10 +14,10 @@
 //! the explorer's: the way on is a term in what a state is worth, and with nothing after her
 //! she plays as she always does.
 
+use crate::domain::{heading, norm, Controls};
 use crate::dsda::{Mobj, PlayerState, MF_CORPSE, MF_SHOOTABLE};
 use crate::engine::{Engine, Mark};
 use crate::geom::{dist, Point};
-use crate::motor::{heading, norm, Controls};
 use crate::play::Agent;
 use crate::sweep::RunOptions;
 use crate::tactical::bestiary::monster;
@@ -1520,7 +1520,7 @@ impl Session {
     }
 
     /// What she's shown: her clock with the tics gone back added (it only goes on).
-    pub fn see(&mut self, ob: &mut crate::motor::Observation) {
+    pub fn see(&mut self, ob: &mut crate::domain::Observation) {
         ob.tic += self.gone_back;
         ob.hit_tic = ob.hit_tic.map(|t| t + self.gone_back);
         self.worst = self.worst.min(ob.health.map_or(self.worst, |h| h as i32));

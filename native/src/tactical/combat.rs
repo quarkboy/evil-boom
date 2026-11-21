@@ -30,12 +30,12 @@ use super::bestiary::{missile, monster, weapon_in, Attack, Missile};
 use super::sound::Hearing;
 use super::tuning::{Dodge, Tuning};
 use crate::decisions::{Journal, Record};
+use crate::domain::{
+    heading, norm, Controls, Heard, Observation, Thing, FRICTION, RUN_THRUST, TICRATE,
+};
 use crate::geom::{dist, Point};
 use crate::los::{Body, LineOfSight};
 use crate::map::{ML_BLOCKING, ML_BLOCKMONSTERS};
-use crate::motor::{
-    heading, norm, Controls, Heard, Observation, Thing, FRICTION, RUN_THRUST, TICRATE,
-};
 use crate::navigator::{Navigator, MAX_STEP, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::specials::Category;
 pub use arsenal::Odds;
@@ -1410,7 +1410,7 @@ impl Combat {
             self.tune.senses.heed_volume,
             self.tune.senses.heed_active_volume,
         );
-        let loud = |s: &crate::motor::Sound| match s.what {
+        let loud = |s: &crate::domain::Sound| match s.what {
             Heard::Launch | Heard::Sight | Heard::Attack => s.volume >= heed,
             Heard::Active => s.volume >= heed_active,
             _ => false,

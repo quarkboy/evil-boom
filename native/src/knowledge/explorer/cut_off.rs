@@ -6,7 +6,7 @@
 //! while there's floor that doesn't; and with nothing safe left (`risky`), nearly anything.
 
 use super::{Explorer, Hooks, Kind, Objective, KEEP_REACH};
-use crate::motor::Observation;
+use crate::domain::Observation;
 use crate::movers::cycles_back;
 use crate::nav::Doors;
 use crate::navigator::{add_height, Navigator, States, TriggerLine, View, PLAYER_HEIGHT};

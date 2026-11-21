@@ -18,12 +18,12 @@ use super::combat::{eye, eye_of, segment_point_distance, spread, Combat, Move, S
 use super::tuning::Tuning;
 use crate::advisor::{Advisor, Question};
 use crate::decisions::Record;
+use crate::domain::{Controls, Observation, Thing};
 use crate::geom::{dist, Point};
 use crate::knowledge::completion::Completionist;
 use crate::knowledge::explorer::{Explorer, Hooks, Kind, Objective};
 use crate::knowledge::model::{Knowledge, Known};
 use crate::motor::follower::RouteFollower;
-use crate::motor::{Controls, Observation, Thing};
 use crate::navigator::{Navigator, States, PLAYER_HEIGHT, PLAYER_RADIUS};
 use crate::walkthrough::{Action, Step};
 
@@ -1080,7 +1080,7 @@ impl Player {
             if let Some(t) = near {
                 self.explorer.hold(obs, last);
                 let most = self.fight.tune.aim.hand_turn;
-                let turn = crate::motor::norm(obs.angle - crate::motor::heading(pos, (t.x, t.y)))
+                let turn = crate::domain::norm(obs.angle - crate::domain::heading(pos, (t.x, t.y)))
                     .clamp(-most, most);
                 let (forward, strafe) = crate::motor::brake(obs, obs.angle - turn);
                 return Controls {

@@ -3,8 +3,8 @@
 
 //! Optional live timing and planner-search diagnostics.
 
+use crate::domain::{Observation, TICRATE};
 use crate::knowledge::explorer::Explorer;
-use crate::motor::{Observation, TICRATE};
 
 /// The live status of a run, for watching it as it goes: with `EVIL_STATUS` set to a directory,
 /// a line each game second to `<dir>/<IWAD>_<MAP>.status` (game and real seconds, the think

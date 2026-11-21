@@ -21,9 +21,9 @@ mod world;
 mod viewpoints;
 
 use super::model::{Heard, Knowledge, Note};
+use crate::domain::{Controls, Observation};
 use crate::geom::{dist, Point};
 use crate::motor::follower::RouteFollower;
-use crate::motor::{Controls, Observation};
 use crate::navigator::{Navigator, States, TriggerLine, View};
 use crate::specials::{classify_line, Key, Keys, Lock};
 use crate::walkthrough::Step;
@@ -1230,7 +1230,7 @@ fn turn_to(obs: &Observation, bearing: Option<f64>) -> Controls {
     let turn = match bearing {
         None => 360.0 / LOOK_TICS as f64,
         Some(b) => {
-            let diff = crate::motor::norm(b - obs.angle); // (positive: anticlockwise, to the left)
+            let diff = crate::domain::norm(b - obs.angle); // (positive: anticlockwise, to the left)
             (-diff).clamp(-TURN_RATE, TURN_RATE)
         }
     };

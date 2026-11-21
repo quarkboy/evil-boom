@@ -12,7 +12,7 @@
 //! are kept from the play's.
 
 use super::{enter_level, load_level, next_level, Watch, WatchOptions};
-use crate::motor::Controls;
+use crate::domain::Controls;
 use crate::wad::Wad;
 
 /// on the title card this long before the menu opens (tics)

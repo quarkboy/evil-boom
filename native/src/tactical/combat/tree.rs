@@ -36,8 +36,8 @@ use super::moves::{HeldFire, Move};
 use super::patience::Effort;
 use super::style::{window, Style};
 use super::{mon, Combat, Decision};
+use crate::domain::{heading, norm, Observation, Thing};
 use crate::geom::{dist, Point};
-use crate::motor::{heading, norm, Observation, Thing};
 use crate::navigator::PLAYER_RADIUS;
 use crate::tactical::bestiary::{claw_max, Attack};
 

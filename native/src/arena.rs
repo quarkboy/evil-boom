@@ -24,11 +24,11 @@
 //! blue, backpack.
 
 use crate::config::resolve_wad;
+use crate::domain::{Controls, TICRATE};
 use crate::dsda::{type_of, Loadout};
 use crate::engine::{Engine, Options};
 use crate::knowledge::model::Knowledge;
 use crate::map::MapData;
-use crate::motor::{Controls, TICRATE};
 use crate::navigator::Navigator;
 use crate::play::Agent;
 use crate::wad::{load_level, Wad};
