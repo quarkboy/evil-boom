@@ -196,6 +196,12 @@ One core, about 1,000 to 2,000 looks a run, each about 7,000 tics played ahead a
   at the time cap at 2 health having gone back 229 times: the depth and the door both mattered.
 - After going back she still knows what she saw in the tics undone, and her clock is made to
   go only forward (the tics gone back added to what she's told). Her knowledge isn't put back.
+  (2026-11-21: what she *did* in the tics undone is now taken back, `Knowledge::undone`: the
+  lines she set off there aren't fired, a once-only one isn't used up, what they moved is as
+  she'd last seen it. On MAP21 she pressed the once-only switch that lowers the ring round
+  where she lands, died to the imps behind it, went back to before the press and took the
+  switch for used up, nine times over, and stood the hour in the pit. All six runs that
+  stood in the three-lives test with it on from the start went this way; none stands now.)
 - One level. Not the arenas, not Plutonia, not live at half speed, no workers, nothing Evil
   can call.
 

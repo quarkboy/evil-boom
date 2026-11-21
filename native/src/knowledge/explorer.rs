@@ -1015,6 +1015,16 @@ impl Explorer {
         self.lapsing_jumps.0.clear();
     }
 
+    /// The game was put back to how it was at `since`, her clock (the ultra instinct): what she
+    /// did after that didn't happen (`Knowledge::undone`), and what she was on is begun again.
+    pub fn gone_back(&mut self, since: i64, tic: i64) {
+        self.knowledge.undone(since, tic);
+        self.glanced = self.glanced.min(self.knowledge.fired.len());
+        self.current = None;
+        self.follower = None;
+        self.view = None;
+    }
+
     /// Taking over a run played back to here (replay): what she's heard and set off so far is
     /// old news, nothing's being done.
     pub fn resume(&mut self, tic: i64) {

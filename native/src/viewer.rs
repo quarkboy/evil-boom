@@ -706,6 +706,8 @@ struct Watch {
     ultra_rolling: crate::ultra::Rolling,
     /// the tics games have been put back over, sessions past: her own clock only goes on
     clock_ahead: i64,
+    /// her clock over the game's, when she last looked (`tic_see`)
+    ahead_seen: i64,
     /// its glow: the pixels it reddens and how much each, for the picture's box it was last
     /// drawn in (the box and the canvas's width)
     ultra_mask: std::cell::RefCell<UltraMask>,
@@ -1911,6 +1913,7 @@ impl Watch {
             ultra_earned: false,
             ultra_rolling: crate::ultra::Rolling::default(),
             clock_ahead: 0,
+            ahead_seen: 0,
             hits: Vec::new(),
             m,
             map_name: map_name.to_string(),
@@ -2254,6 +2257,14 @@ impl Watch {
         if let Some(u) = self.ultra.as_mut() {
             u.see(&mut obs);
         }
+        // (her clock over the game's: more than it was is a game put back since she last
+        // looked, and what she did in the tics gone back over didn't happen)
+        let ahead = obs.tic - self.engine.tic;
+        if ahead > self.ahead_seen {
+            let since = obs.tic - (ahead - self.ahead_seen);
+            self.agent.x_mut().gone_back(since, obs.tic);
+        }
+        self.ahead_seen = ahead;
         if self.endless_bullets && obs.tic % 35 == 0 {
             crate::sweep::top_up_bullets(&self.engine.game, &obs);
         }
