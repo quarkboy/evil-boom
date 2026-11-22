@@ -9,7 +9,8 @@ use super::steering::CLAW_REACH;
 use super::style::window;
 use super::{mon, Combat, SLOTS};
 use crate::bestiary::{
-    claw_max, melee_at, punchable, weapon, weapon_in, Attack, Monster, Weapon, CHAINSAW,
+    claw_max, melee_at, punchable, weapon, weapon_in, Attack, Monster, Weapon, BERSERK_FIST,
+    CHAINSAW,
 };
 use crate::domain::{Observation, Thing, TICRATE};
 use crate::geom::dist;
@@ -498,6 +499,39 @@ impl Combat {
                 self.ordered_away_until.set(obs.tic + ORDERED_AWAY);
             }
         }
+        // The fist, berserk, and her fit to use it: not hurt, and no one claw of its able to
+        // kill her (as below).
+        let berserk = held.contains(&1) && weapon_in(1, obs) == BERSERK_FIST;
+        let health = obs.health.unwrap_or(100.0);
+        let fist_fit =
+            berserk && health >= self.tune.engage.low_health && claw_max(t.name) < health;
+        // Gone at it with the fist: kept at it till it's dead or well out of reach
+        // (`guns.fist_commit`). The fist comes up for whatever's come right up to her, and she
+        // backs off from what claws, so by turns it was the fist and then a gun as the distance
+        // crossed a line, a second with neither each time. (Doom E3M4: a baron in a pit, fist,
+        // chaingun, fist, chaingun, and dead from 200; the maintainer watching.)
+        if self.tune.guns.fist_commit
+            && fist_fit
+            && self.fist_on.get() == Some(t.id)
+            && here < self.tune.guns.fist_let_go
+        {
+            return 1;
+        }
+        // Nothing on her but what only claws or bites: the fist, and the rounds kept
+        // (`guns.fist_for_melee`, the maintainer's: as a good player does).
+        if self.tune.guns.fist_for_melee
+            && fist_fit
+            && info.attack == Attack::Melee
+            && !self.now.engaged.is_empty()
+            && self
+                .now
+                .engaged
+                .iter()
+                .all(|m| mon(m.name).attack == Attack::Melee)
+            && !self.out_of_fist_reach(obs, t)
+        {
+            return 1;
+        }
         let (mut best, mut cost) = (obs.weapon.unwrap_or(2), f64::INFINITY);
         let mut blocked = None;
         // Others awake shooting at her from a distance, t aside.
@@ -529,6 +563,16 @@ impl Combat {
             }
             if slot == 1 && !self.in_reach(&w, t, d) {
                 continue; // not the fist just for being free when nothing else reaches
+            }
+            if slot == 1
+                && self.tune.guns.fist_punchable_only
+                && w == BERSERK_FIST
+                && !melee_at(&w, t.name)
+                && self.guns_armed(obs)
+            {
+                // Nor the berserk fist at what she wouldn't go up to with it, with a gun to
+                // hand: her legs keep her off it, and the fist only reaches when it closes.
+                continue;
             }
             if slot == 1 && info.attack == Attack::None && self.given_up_on(obs, t.id) {
                 // Nor the fist at something harmless she's given up getting at: free to punch, the fist is
@@ -636,10 +680,17 @@ impl Combat {
         }
         // Its way blocked close by: another gun rather than a rocket held, but one that will do.
         // Not the pistol at a boss.
-        match blocked {
+        let slot = match blocked {
             Some(r) if cost > self.tune.guns.blocked_rocket_worse * r => 5,
             _ => best,
+        };
+        // (the fist chosen for it, in reach: she's gone at it)
+        if slot == 1 && berserk && here < weapon_in(1, obs).reach {
+            self.fist_on.set(Some(t.id));
+        } else if self.fist_on.get() == Some(t.id) {
+            self.fist_on.set(None);
         }
+        slot
     }
 
     /// The chance a shot at t with w makes it flinch within `window` tics: the shots that land

@@ -249,6 +249,8 @@ pub struct Combat {
     /// switched away from the ordered gun (something on her, hits coming): not back to it before
     /// this tic, and only once it'd fire (i64::MIN: not switched away)
     pub(super) ordered_away_until: std::cell::Cell<i64>,
+    /// the one she's gone at with the berserk fist (`best_gun`, `guns.fist_commit`)
+    pub(super) fist_on: std::cell::Cell<Option<i32>>,
     /// the trigger let go, whatever's in her sights (a choice forced likewise)
     pub ordered_hold_fire: bool,
     pub los: LineOfSight,
@@ -403,6 +405,7 @@ impl Combat {
             rockets: rockets::Rockets::default(),
             ordered_weapon: None,
             ordered_away_until: std::cell::Cell::new(i64::MIN),
+            fist_on: std::cell::Cell::new(None),
             ordered_hold_fire: false,
             los: LineOfSight::new(&nav.map),
             known: BTreeMap::new(),

@@ -3503,3 +3503,40 @@ level seen 0.777, 0.784, 0.785; stood the hour 2, 0, 0. E3M9 5, 3, 6 exits; MAP2
 (seen 0.53, 0.73, 0.73). Still the worse for it with ten lives: MAP18 (3 -> 2 exits, seen
 0.78 -> 0.71), E3M4, MAP21 and MAP28 an exit each; not traced. The three-lives test, 544
 runs: exits 284 -> 287 (6 runs more, 3 less), stood the hour 2 -> 1.
+
+## The berserk fist: kept at what she's gone at, and for what only claws (2026-11-21)
+
+Doom E3M4, the maintainer watching: a baron in a pit, and she by turns on the fist and the
+chaingun, four switches in seven seconds and hardly a blow or a shot between, dead from 200.
+The fist berserk is for what she'd go up to (`bestiary::melee_at`: 400 health and under; a
+baron costs some 330 to punch down), but it also comes up for anything that has come right
+up to her, and from what claws she backs off: in reach the fist, out of it a gun, each
+switch a second with neither.
+
+Two rules in `best_gun`, each a setting (`tuning.guns`), both on:
+
+- `fist_commit`: the fist chosen for something in reach is kept, and she at it (the melee
+  node), till it's dead or `fist_let_go` (192) off.
+- `fist_for_melee` (the maintainer's, "common for good human players"): with nothing on her
+  but what only claws or bites, the fist, and the rounds kept.
+
+Both under the guards the fist already had: not with her health under `engage.low_health`,
+nor at what one claw of could kill her. A third, `fist_punchable_only` (no berserk fist at
+all for what she wouldn't go up to, a gun to hand), is the other way to make her legs and
+her hand agree; it changes next to nothing and is off.
+
+The three-lives test, 544 runs, each against the build before (287 exits). The same build
+with all three off differed from it in 5 runs (288 exits): that's what the machine's load
+does, and one exit either way is nothing.
+
+    rule                 runs changed   exits   more/less   lives lost a run   secs
+    none                 5              288     2/1         1.103              532
+    fist_commit          76             288     10/9        1.088              524
+    fist_punchable_only  10             287     2/2         1.103              532
+    fist_for_melee       95             287     8/8         1.116              530
+    commit and melee     110            287     10/10       1.110              524
+
+Neither shown better. The commit is in for the fault it mends; the other on the maintainer's
+word, for what it saves: rounds, which this test doesn't count and three lives from a pistol
+seldom run short of for demons. Berserk ends with the level, the rounds don't: an episode,
+or a custom WAD with more of both, is where it would tell.

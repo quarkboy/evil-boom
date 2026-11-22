@@ -335,7 +335,9 @@ fn busy(_c: &mut Combat, _obs: &Observation, s: &Situation) -> Option<Act> {
 fn melee(c: &mut Combat, obs: &Observation, s: &Situation) -> Option<Act> {
     let t = s.target.as_ref()?;
     let w = c.preferred_gun(obs, t);
-    if Style::of(&w, t) != Style::Melee {
+    // (...or one she's gone at with the berserk fist and is keeping at, `guns.fist_commit`)
+    let gone_at = w == crate::bestiary::BERSERK_FIST && c.fist_on.get() == Some(t.id);
+    if Style::of(&w, t) != Style::Melee && !gone_at {
         return None;
     }
     if c.out_of_fist_reach(obs, t) {

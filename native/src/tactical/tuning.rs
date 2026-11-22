@@ -651,6 +651,15 @@ pub struct Guns {
     pub vile_missed: f64,
     /// pain rolls a second worth twice a gun's kill time, against an arch-vile
     pub flinch_rolls: f64,
+    /// the berserk fist once chosen for something in reach is kept at it (and she at it) till
+    /// it's dead or this far off (`fist_let_go`), not changed for a gun as it steps back
+    pub fist_commit: bool,
+    pub fist_let_go: f64,
+    /// the berserk fist isn't brought up at all for what she wouldn't go up to with it
+    /// (`bestiary::melee_at`), while a gun has a shot
+    pub fist_punchable_only: bool,
+    /// with nothing on her but what only claws or bites, the berserk fist, to keep her rounds
+    pub fist_for_melee: bool,
 }
 
 impl Default for Guns {
@@ -669,6 +678,10 @@ impl Default for Guns {
             vile_kill_weight: 0.35,
             vile_missed: 8.0,
             flinch_rolls: 6.0,
+            fist_commit: true,
+            fist_let_go: 192.0,
+            fist_punchable_only: false,
+            fist_for_melee: true,
         }
     }
 }
