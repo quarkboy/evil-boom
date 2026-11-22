@@ -114,7 +114,7 @@ impl Policy {
         }
     }
 
-    /// How many walls exploring searches as it goes, as `explore` has it (`doom_search` for
+    /// How many walls exploring searches as it goes, as `explore` has it (`doom_go`'s `explore` for
     /// more).
     pub fn explore_secrets(&self) -> u8 {
         match self.explore {

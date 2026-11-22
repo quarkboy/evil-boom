@@ -643,7 +643,7 @@ impl Director {
                     true,
                 )
                 .unwrap_or_else(|| {
-                    format!("{text} (doom_goal supplies; or resend with sure: true.)")
+                    format!("{text} (Answer what's open first, then doom_exit again.)")
                 }),
             );
         }
@@ -668,7 +668,7 @@ impl Director {
                 usize::from(!out),
                 true,
             )
-            .unwrap_or_else(|| format!("{left} Leave anyway? Resend with sure: true.")),
+            .unwrap_or_else(|| format!("{left} Answer what's open first, then doom_exit again.")),
         )
     }
 
@@ -729,7 +729,7 @@ impl Director {
             })
             .collect();
         choices.push(Choice {
-            label: "stay (doom_explore with secrets searches walls)".into(),
+            label: "stay (doom_go explore: secrets searches walls)".into(),
             then: Then::Nothing,
         });
         let default = choices.len() - 1;

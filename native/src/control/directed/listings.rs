@@ -178,6 +178,12 @@ impl Director {
         Some(self.places(agent).area_of(sector).id.clone())
     }
 
+    /// She's standing in the area `r` names.
+    pub fn stands_in(&mut self, agent: &Agent, obs: &Observation, r: &str) -> bool {
+        let id = self.resolve(r);
+        self.area_at(agent, obs.pos()) == Some(id)
+    }
+
     /// A list as she's shown it: areas with nothing more to explore left out (unless `all`), but
     /// where she is and those she's named kept; and how many were left out.
     pub fn brief(

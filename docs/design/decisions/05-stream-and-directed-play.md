@@ -3920,3 +3920,24 @@ pushed; the rest was commentary. It's out of her actions (fourteen now; the stre
 Dropped with the action: each objective's "because", the "rather than" alternatives, the
 fight's "because you're outmatched and hurt", the last order that failed (told when it
 did). The console's panel has them still. Parity: 24 of 24.
+
+### `doom_go` goes, presses and explores; `sure` is gone
+
+Four actions for one idea, the maintainer's to merge: `doom_go` (to a thing), `doom_press`
+(the same order, with a check that it's a switch), `doom_explore` (an area or a direction gone
+over) and `doom_search` (the same, more walls). `doom_go` takes `explore` now: `none` (just
+go: a thing's picked up, pressed, opened), `sweep` (as `doom_explore` was, the walls her
+policy's `explore` says), `secrets` (search 2), `everything` (search 3). A compass direction
+is nowhere to go to, so it's swept; `explore` on one thing is said to be for areas, and she
+goes. Eleven actions in a level, from fourteen.
+
+**Rush** (the maintainer's rule): to an area, through whatever's in the way, till she's in it;
+the going over is as any other and pauses for a fight. A rushed sweep is a run round a room
+under fire. It's two orders: the go, rushed, and the sweep queued after it. For a direction
+there's no "there", and it isn't rushed.
+
+**`sure`** skipped the question about leaving with things left, on `doom_go` (for an exit
+only) and `doom_exit`. The question does it for one round trip, once a level, and she answers
+in a second. Gone from both. `doom_exit` has no parameters ("Leave the level by the nearest
+exit"); an exit as `doom_go`'s `ref` stays, the only way to choose between two (a secret
+exit). `thorough`, `sweep` and `search` are read as `explore` (`repair.rs`).

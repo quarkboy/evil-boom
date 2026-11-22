@@ -46,7 +46,7 @@ impl Director {
                 self.tell(
                     obs,
                     Event::Suggestion { loud: true },
-                    format!("Secrets {found}/{of}. Likeliest walls: {areas}. doom_search them."),
+                    format!("Secrets {found}/{of}. Likeliest walls: {areas}. doom_go them with explore: secrets."),
                 );
             }
         }

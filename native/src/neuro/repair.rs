@@ -48,7 +48,10 @@ const ALIASES: &[(&str, &[&str])] = &[
     ("then", &["queue_up"]),
     ("queue", &["queue_up"]),
     ("difficulty", &["skill"]),
-    ("thoroughness", &["thorough"]),
+    ("thorough", &["explore"]),
+    ("thoroughness", &["explore"]),
+    ("sweep", &["explore"]),
+    ("search", &["explore"]),
     ("secs", &["seconds"]),
     ("duration", &["seconds"]),
 ];
@@ -184,11 +187,14 @@ mod tests {
         assert_eq!(v, json!({ "do": "start", "play": "single" }));
         // (numbers as strings; an enum in capitals; the whole object as a string)
         let (v, _) = repair(
-            Value::String(r#"{"target": "N", "thorough": "3"}"#.into()),
-            schema("doom_search").as_ref(),
+            Value::String(r#"{"target": "N", "queue_up": "true", "Explore": "Secrets"}"#.into()),
+            schema("doom_go").as_ref(),
         );
-        // (`target`, its field's name once, read as `ref`)
-        assert_eq!(v, json!({ "ref": "N", "thorough": 3 }));
+        // (`target`, the field's name once, read as `ref`)
+        assert_eq!(
+            v,
+            json!({ "ref": "N", "queue_up": true, "explore": "secrets" })
+        );
         let (v, _) = repair(
             json!({ "fire": "Hold", "gun": "shotgun", "stance": "Bold", "seconds": 4.6 }),
             schema("doom_fight").as_ref(),

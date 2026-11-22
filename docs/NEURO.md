@@ -52,11 +52,8 @@ With `--stream --present` it's the stream's window with Doom's own screens. The
 | `doom_look` | what's round you: the room, what it leads to, monsters, items, doors and switches in sight, sounds (and the bot's suggestion, unless she's fighting) |
 | `doom_query` | what she knows of: `all` (areas, doors, switches, items, monsters or exits, with ids, the first to take first; monsters nearest first; 15 at most, and a cut list says so), or `ref` (one thing: what it is and where); `include_explored` for areas with nothing left |
 | `doom_status` | health, armor, weapons, ammo, keys, the tally, what you're doing; in a fight, what against, what the fight's doing, and that she isn't shooting when she isn't and it'll last; a plan of her own in force |
-| `doom_go` | go to an area, item, door, switch or exit (`risky`, `sure`, `rush`, `queue_up`) |
-| `doom_explore` | explore an area or a direction |
-| `doom_search` | search an area or a direction for secrets (thorough 2 or 3) |
-| `doom_press` | press a switch |
-| `doom_exit` | leave the level; with things left she's asked first (`sure: true` doesn't ask); no answer and she stays, or leaves if her goal is `out` or her `explore` setting `speedy`. Going on to another level with health, armor or ammo she's seen and could still take with her, the question names them and its default is to stock up first (the supplies goal) |
+| `doom_go` | go to an area, item, door, switch or exit (a thing's picked up, pressed or opened); `explore` (none, sweep, secrets, everything) goes over the area, or a compass direction, as she gets there; `risky`, `rush` (to an area: till she's in it), `queue_up` |
+| `doom_exit` | leave the level by the nearest exit; with things left she's asked first; no answer and she stays, or leaves if her goal is `out` or her `explore` setting `speedy`. Going on to another level with health, armor or ammo she's seen and could still take with her, the question names them and its default is to stock up first (the supplies goal) |
 | `doom_pause` | pause the game, as stepping away (Doom's menu up on its own screens), till `on: false`; meanwhile only what doesn't move her is registered |
 | `doom_fight` | your say in the fight for a while, any together: `target`, `weapon`, `fire` (hold, free), `override_stance`, `retreat`, `cancel`; none given, what's holding |
 | `doom_goal` | a standing aim, till met. It doesn't play for her: it puts what it's after first in what's suggested to her and in what she does on instinct: out, completionist (100%, then out; she's asked if she's sure), a key, kills, supplies, secrets. A goal says what she's after, not how she explores: that stays her `explore` setting |
@@ -122,7 +119,7 @@ evil-boom watch doom E1M1 --neuro ws://127.0.0.1:8000
 ```
 
 A stand-in Neuro server: it sends the actions you append to the file, one a line
-(`doom_explore {"ref": "north"}`, `doom_exit`, or `wait-for TEXT` to hold the rest until the game
+(`doom_go {"ref": "north"}`, `doom_exit`, or `wait-for TEXT` to hold the rest until the game
 says something with TEXT in it; `speaking` and `spoken` send her `speech_finished`, a part and
 the end), and logs everything the game sends to `FILE.log`, each force with its priority and
 whether it's silent.
