@@ -3487,3 +3487,19 @@ The three-lives test, 544 runs: exits 284 -> 286 (6 runs more, 4 less), lives lo
 1.107 -> 1.103, damage 0.768 -> 0.767, 536 s -> 530 s, stood the hour 2 -> 1. 73 runs
 differ, on the levels with spheres: MAP27's lines seen 0.28 -> 0.43, MAP21 and MAP10 an
 exit more each, MAP28 one less.
+
+**A sphere isn't carried off across the level (the same day).** The levels the rule changed,
+played with ten lives (17 levels, 136 runs), showed it at fault on Doom E3M9: a death tied
+to a baron's line at the far end; every life after, a sphere taken where she stood for the
+plight she was in, and then run 8,300 units of doors, lifts and a teleporter for that line,
+out before she was half way, and killed at the same place seven lives running (exits 5 of 8
+without the rule, 3 with). The run's reach was checked from the sphere when choosing to
+fetch one, never from her when she had it. Now, with it on, she goes for the old fight only
+if it's within `sphere_secs` of where she stands, else it's used where she is; and a death
+she's twice set off for with a sphere is one a sphere doesn't mend (`CHARGES`).
+
+Ten lives, those 136 runs, without the rule, as first written, as mended: exits 58, 55, 57;
+level seen 0.777, 0.784, 0.785; stood the hour 2, 0, 0. E3M9 5, 3, 6 exits; MAP27 1, 2, 2
+(seen 0.53, 0.73, 0.73). Still the worse for it with ten lives: MAP18 (3 -> 2 exits, seen
+0.78 -> 0.71), E3M4, MAP21 and MAP28 an exit each; not traced. The three-lives test, 544
+runs: exits 284 -> 287 (6 runs more, 3 less), stood the hour 2 -> 1.

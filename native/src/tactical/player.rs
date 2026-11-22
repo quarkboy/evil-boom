@@ -59,6 +59,8 @@ const HEAVIES: [&str; 7] = [
 const RUN_SPEED: f64 = 400.0;
 /// this near what the invulnerability's for, she's there
 const ARRIVED: f64 = 96.0;
+/// a sphere spent on the same death this often is spent on it no more
+const CHARGES: u32 = 2;
 /// what she's had in sight this lately (tics) is what was on her when she died
 const RECENT_TICS: i64 = 10 * 35;
 /// the trail back: a place every this far, at most this many
@@ -171,6 +173,9 @@ struct Death {
     /// door, a line walked over: `deaths.reveal_secs`): its line, where it is, what it's
     /// called, the sectors it moves. Doing it again is what brings them on again.
     action: Option<(usize, Point, String, Vec<usize>, f64)>,
+    /// times she's set off with a sphere for this (`Fight::charge`): tried twice, it isn't
+    /// what a sphere mends
+    charged: u32,
 }
 
 /// What things were like for her a moment ago (what killed her, at a restart).
@@ -784,6 +789,7 @@ impl Player {
                 label: cur.label.clone(),
                 why: self.plight.why(self.fight.tune.deaths.blast_hit),
                 action: self.revealed_by(),
+                charged: 0,
             };
             self.explorer.log.push(format!(
                 "  [fight] died at ({:.0}, {:.0}) going for: {} ({})",
@@ -1290,6 +1296,7 @@ impl Fight {
         let open = |d: &&Death| {
             let at = d.action.as_ref().map_or(d.goal, |a| a.1);
             !matches!(d.why, Cause::Unarmed | Cause::HurtingFloor)
+                && d.charged < CHARGES
                 && !self
                     .answered
                     .iter()
@@ -1869,7 +1876,24 @@ impl Hooks for Fight {
             (self.charge, self.charged) = (None, false);
         } else if !self.charged {
             self.charged = true;
-            self.charge = self.sphere_use(obs, None);
+            // (only what she'd reach with most of it left, from where she has it: a sphere
+            // taken for the plight she's in isn't carried off across the level for an old one.
+            // Doom E3M9: taken surrounded, and every life after run 8,000 units of doors and
+            // lifts for a baron's line, out before she was half way)
+            let e = &self.tune.errands;
+            self.charge = self.sphere_use(obs, None).filter(|(at, _)| {
+                dist(obs.pos(), *at) * e.sphere_detour / RUN_SPEED <= e.sphere_secs
+            });
+            if let Some((at, _)) = &self.charge {
+                let at = *at;
+                for d in self
+                    .deaths
+                    .iter_mut()
+                    .filter(|d| dist(d.action.as_ref().map_or(d.goal, |a| a.1), at) < 1.0)
+                {
+                    d.charged += 1;
+                }
+            }
             if let Some((at, what)) = &self.charge {
                 self.pending_log.push(format!(
                     "tic {}: invulnerable: off to ({:.0}, {:.0}) with it ({what})",
