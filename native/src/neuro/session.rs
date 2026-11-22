@@ -613,9 +613,36 @@ impl Session {
         if obs.tic % 35 == 0 {
             self.last_status = self.director.status(agent, obs);
         }
-        self.tell_news(obs.tic, &mut log);
         if self.forced.expire(obs.tic) {
             log.push("neuro: the force went unanswered: taken as dropped".into());
+        }
+        // (a question that can't wait: forced at once, by how much it matters, its default
+        // done already and her answer switching it while it's open. She may answer in half
+        // a second or in two: either's inside its few. With another force out it can't be:
+        // then it's told her aloud as before, and that's all)
+        let urgent = self
+            .director
+            .question()
+            .filter(|q| q.now && self.connected && self.forced_question != Some(q.id))
+            .filter(|_| !self.forced.out())
+            .map(|q| (q.id, q.line(obs.tic), q.priority, q.about.clone()));
+        // (its line, new this tic, quietly then: the force says it, and one prompt's enough)
+        self.tell_news(obs.tic, urgent.is_some(), &mut log);
+        if let Some((id, line, priority, about)) = urgent {
+            self.forced_question = Some(id);
+            let names: &[&str] = if about == crate::control::directed::About::Fight {
+                &["doom_answer", "doom_fight"]
+            } else {
+                &["doom_answer"]
+            };
+            self.force(
+                obs.tic,
+                &line,
+                &format!("q{id}: switch it?"),
+                names,
+                priority,
+            );
+            log.push(format!("neuro: q{id} can't wait: forced ({priority})"));
         }
         // (her status again when what she'd act on has changed: not a shell spent, nor a
         // monster's bearing)
@@ -884,7 +911,8 @@ impl Session {
 
     /// What's happened since last told: one message, not silent if any of it's notable (and
     /// the moments a minute not over).
-    fn tell_news(&mut self, tic: i64, log: &mut Vec<String>) {
+    /// (`asked_quietly`: a question among it is being forced this tic, and isn't told aloud too.)
+    fn tell_news(&mut self, tic: i64, asked_quietly: bool, log: &mut Vec<String>) {
         let news: Vec<_> = self.director.reports[self.shown..].to_vec();
         self.shown = self.director.reports.len();
         if !news.is_empty() {
@@ -894,7 +922,9 @@ impl Session {
             }
             // (a moment over the budget told quietly; one that's urgent, always, and not
             // counted against it: answers to her actions don't crowd out what she should see)
-            let urgent = news.iter().any(crate::control::directed::Report::urgent);
+            let urgent = news.iter().any(|r| {
+                r.urgent() && !(asked_quietly && r.event == crate::control::directed::Event::Asked)
+            });
             let moment = news
                 .iter()
                 .any(|r| r.event.weight() == crate::control::directed::Weight::Moment);
@@ -1002,7 +1032,7 @@ impl Session {
         {
             self.brief(tic);
         }
-        self.tell_news(tic, &mut log);
+        self.tell_news(tic, false, &mut log);
         self.sync_actions(OFF_LEVEL.iter().copied().collect(), &mut log);
         if let Some(offer) = offer
             && self.connected
@@ -1029,7 +1059,7 @@ impl Session {
     pub fn between(&mut self, tic: i64) -> Vec<String> {
         self.clock(tic);
         let mut log = Vec::new();
-        self.tell_news(tic, &mut log);
+        self.tell_news(tic, false, &mut log);
         // (the game's own not hers here: going on is the screen's)
         let wanted = OFF_LEVEL.iter().copied().filter(|&a| a != "doom_game");
         self.sync_actions(wanted.collect(), &mut log);

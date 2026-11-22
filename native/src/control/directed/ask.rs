@@ -74,6 +74,9 @@ pub struct Question {
     pub id: u32,
     /// it can't wait: the default's done already, her answer switches it
     pub now: bool,
+    /// ...and how hard it's put to her (the SDK's priority of a force: "high" cuts what she's
+    /// saying short, "critical" cuts her off; kept for when she has seconds to live)
+    pub priority: &'static str,
     pub about: About,
     pub text: String,
     pub choices: Vec<Choice>,
@@ -93,6 +96,7 @@ struct Draft {
     deadline: Option<i64>,
     about: About,
     now: bool,
+    priority: &'static str,
 }
 
 /// A question as it ended, for an answer that comes too late.
@@ -194,6 +198,7 @@ impl Director {
                 deadline,
                 about: About::Settle,
                 now: false,
+                priority: "high",
             },
         )
     }
@@ -225,12 +230,14 @@ impl Director {
                 deadline,
                 about: About::Next,
                 now: false,
+                priority: "low",
             },
         )
     }
 
     /// Ask her about something that can't wait: its default done at once and said, her answer
-    /// in `NOW_OPEN` switching it. False if not asked (one open, the minute's spent).
+    /// in `directed.now_open` switching it; what it's about, and how hard it's put to her
+    /// (`Question::priority`). False if not asked (one open, the minute's spent).
     pub(super) fn ask_now(
         &mut self,
         agent: &mut Agent,
@@ -238,7 +245,7 @@ impl Director {
         text: String,
         choices: Vec<Choice>,
         default: usize,
-        about: About,
+        (about, priority): (About, &'static str),
     ) -> bool {
         let then = choices[default].then.clone();
         let opened = self.open(
@@ -251,6 +258,7 @@ impl Director {
                 deadline: Some(obs.tic + Directed::tics(self.clocks.now_open)),
                 about,
                 now: true,
+                priority,
             },
         );
         if opened.is_some() {
@@ -290,6 +298,7 @@ impl Director {
         let q = Question {
             id: a.next_id,
             now: d.now,
+            priority: d.priority,
             about: d.about,
             text: d.text,
             choices: d.choices,
@@ -462,7 +471,15 @@ impl Director {
             format!("{why}: {} (health {:.0}).", them.join(", "), sit.health),
             choices,
             0,
-            About::Fight,
+            // (her health going: seconds to live, and worth cutting her off for)
+            (
+                About::Fight,
+                if why == "Health low" {
+                    "critical"
+                } else {
+                    "high"
+                },
+            ),
         );
     }
 
@@ -843,6 +860,7 @@ impl Director {
                 deadline: Some(obs.tic + wait),
                 about: About::Settle,
                 now: false,
+                priority: "high",
             },
         );
         if asked.is_some() {

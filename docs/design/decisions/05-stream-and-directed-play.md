@@ -3773,3 +3773,20 @@ that aren't worth commenting on, so she acts without talking about every one of 
 (`directed.next_silent`; the stream console's "what next asked quietly" turns it off as it
 runs, and keeps the choice). The other forces are as they were: a wait, a question and a
 game to start are worth her word.
+
+### A question that can't wait is forced, by how much it matters
+
+The plan's class T (a fight turned bad, a costly jump lined up): the default done at once,
+her answer switching it within `now_open` (3 s), and "never forced, its moment gone by the
+time a force is answered". That was for a model that takes seconds. Neuro answers in under
+half a second, one to two at worst (the maintainer): inside the three. So such a question is
+forced the tic it's asked, at a priority the asker gives it (`Question::priority`): `high`
+(she cuts short what she's saying) for an arch-vile, a boss, outmatched, a jump that costs;
+`critical` (she's cut off) only for her health going in a fight. Its actions: `doom_answer`,
+and for a fight `doom_fight`, her own say settling it too. Its line goes as silent context
+then (the force says it; one prompt, not two).
+
+The fallback is what was there: the default's done whatever she does, a late answer is told
+it's too late, and with another force out (one at a time) it's told aloud as before and not
+forced. Against the mock server, MAP07 on UV: "Outmatched: 1 mancubus" forced (high) at
+3.5 s and 98.8 s; the ones between, with a force out unanswered, told aloud.

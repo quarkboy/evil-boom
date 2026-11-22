@@ -185,7 +185,7 @@ impl Director {
                                     },
                                 ],
                                 0,
-                                super::ask::About::Jump(key),
+                                (super::ask::About::Jump(key), "high"),
                             );
                         if !asked {
                             self.tell(obs, Event::JumpAhead, line);

@@ -42,7 +42,7 @@ mod tactics;
 mod view;
 mod why;
 
-pub use ask::Question;
+pub use ask::{About, Question};
 pub use events::{Event, Weight};
 pub use look::{Hints, Listing, Pick};
 pub use moments::{skill_name, Level};
