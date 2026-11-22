@@ -721,7 +721,7 @@ impl<'a> Analysis<'a> {
                         && !self.box_on_ledge(q, poly.sector)
                         && reaches(q)
                     {
-                        let over = self.moving_walls_at(q, poly.sector);
+                        let over = self.moving_walls_at(q, poly.sector, li);
                         if over.is_empty() {
                             clear = true;
                         } else if !places.contains(&over) && places.len() < STAND_PLACES {
@@ -760,7 +760,7 @@ impl<'a> Analysis<'a> {
                     && !self.box_on_ledge(q, poly.sector)
                     && reaches(q)
                 {
-                    let over = self.moving_walls_at(q, poly.sector);
+                    let over = self.moving_walls_at(q, poly.sector, li);
                     if over.is_empty() {
                         clear = true;
                     } else if !places.contains(&over) && places.len() < STAND_PLACES {
@@ -787,12 +787,20 @@ impl<'a> Analysis<'a> {
 
     /// The lines under the box at q, standing in `sector`, that are walls to it as the map
     /// starts and have a sector that may move: (front, back).
-    fn moving_walls_at(&self, q: Point, sector: usize) -> Vec<(usize, usize)> {
+    ///
+    /// Not line `pressed` itself, the one she's there to press: a lift's face in an alcove
+    /// shallower than her box is pressed from the room in front, and what she presses needn't
+    /// be down for her to stand there. (Counted, the only ground Doom II MAP05's lift is
+    /// worked from waited on the lift being down already.)
+    fn moving_walls_at(&self, q: Point, sector: usize, pressed: usize) -> Vec<(usize, usize)> {
         let r = PLAYER_RADIUS - 0.5;
         let init = &self.movers.initial;
         let mut out: Vec<(usize, usize)> = Vec::new();
         for cell in cells(q.0 - r, q.1 - r, q.0 + r, q.1 + r) {
             for &li in self.mesh.line_grid.get(&cell).into_iter().flatten() {
+                if li == pressed {
+                    continue;
+                }
                 let (Some(f), Some(b)) = self.m.sides(li) else {
                     continue;
                 };

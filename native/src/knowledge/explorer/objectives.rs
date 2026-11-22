@@ -290,7 +290,7 @@ impl Explorer {
         out.extend(self.exits(&by_line, &reach, keys, pos));
         out.extend(self.keys_seen(&view, &states, &reach, keys, pos));
         out.extend(self.ammo_for_tapping(obs, &reach));
-        out.extend(self.untried(&by_line, &reach, keys, pos, (&view, &states)));
+        out.extend(self.untried(&by_line, &reach, keys, pos, (&view, &states, &states_all)));
         let again = self.pressed_again(obs, &by_line, &reach, keys, pos);
         if self.suspecting != Suspecting::No {
             let panic = self.suspecting == Suspecting::EveryWall;
@@ -570,19 +570,33 @@ impl Explorer {
         reach: &BTreeSet<usize>,
         keys: Keys,
         pos: Point,
-        (view, states): (&View, &States),
+        (view, states, states_all): (&View, &States, &States),
     ) -> Vec<Objective> {
         let nav = &self.nav;
         let k = &self.knowledge;
-        // (one of them to try, as a line by itself: from a floor, as she believes the floors
-        // now, that its face is seen from or a shot hits it from)
+        // (one of them to try, as a line by itself: from ground it's worked from as she
+        // believes things stand now. The floor its face is seen from or a shot hits it from;
+        // and, as the planner has it for a line she knows (`View::activators_now`), nothing
+        // shut between that she can't open, room for her box where she'd stand, a far side
+        // she can step onto. Held only to the first, a lift's face was "tried" from beside a
+        // block 72 high that had to come down before she could stand anywhere but in line
+        // with it: Doom E4M1, three presses along the face in seven runs of eight.)
+        // As things could stand, that is, with what she knows how to bring about
+        // (`states_all`): a door worked from a floor a line she's learned raises first is
+        // one to try, and the route sees to the line. (Doom E3M4's line 509, behind 491.)
+        let doors = view.local_doors(keys);
         let to_try = |li: usize| -> Option<Objective> {
             let t = by_line
                 .get(&li)
                 .filter(|t| t.info.lock.satisfied(keys))
                 .map(|t| {
                     let mut t = (*t).clone();
-                    t.activators = view.floors_now(&t, states);
+                    let now = view.activators_now(&t, states_all, Some(&doors));
+                    t.activators = view
+                        .floors_now(&t, states)
+                        .intersection(&now)
+                        .copied()
+                        .collect();
                     t
                 })
                 .filter(|t| !t.activators.is_disjoint(reach))?;

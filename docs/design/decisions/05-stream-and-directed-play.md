@@ -3650,3 +3650,41 @@ The 544 runs: exits 291 -> 288 (4 more, 7 less), lives lost a run 1.096 -> 1.108
 526 s; presses given up 26 -> 13 (MAP14 9 -> 0, E4M3 3 -> 1, MAP29 2 -> 0; E4M1's 7 not
 touched, untraced), stuck lines 2270 -> 2332, errands timed out 194 -> 213. Right in what
 it does and not shown better on the score; taken on the maintainer's word.
+
+## A switch untried is held to what a switch known is (2026-11-22)
+
+Doom E4M1: a lift's face pressed three times to nothing, in seven runs of eight, from dead
+in line with it. Beside the lift stands a block 72 high that a switch brings down later;
+between the block and the wall are 8 units, and the furthest she gets towards the spot she
+was sent to is in the face's own plane.
+
+The planner knew better (`activators_now`: that ground only once the block's down). But
+what lists switches she hasn't tried (`Explorer::untried`) asked only whether the face
+shows from that floor (`floors_now`), and offered it; once it's her errand she walks at the
+spot and presses from where she fetches up. Now an untried line is held to the same as a
+known one: nothing shut between that she can't open, room for her box where she'd stand,
+a far side she can step onto; with the heights as she could bring them about with what
+she's learned (`states_all`), not only as they stand.
+
+Two seed sets showed what that alone would have cost (MAP05, both sets: 8 runs an exit
+less for 2 more). A lift's face at the back of an alcove 16 deep, whose mouth is another
+line for the same lift: a press from the room is taken by the mouth's line, so the room
+"doesn't reach" the face; that leaves the alcove, where her box is over the lift's own
+face, so "not till the lift's down". The line she's there to press isn't a wall to
+standing by it (`moving_walls_at`).
+
+The first use of a second seed set (`out/lives/1122-seeds2.txt`), on the maintainer's
+word, the switch changes having each come out a few exits down on the one. Exits, first
+set and second:
+
+    before any of it (a67d56d)                 289   287 (one stood the hour)
+    spots, closing, ledges (8818775)           288   288
+    and this, as first written                 284   286
+    and this, as kept                          287   287
+
+So the three steps down on the first set were its seeds; and the same two levels losing
+on both was not.
+
+E4M1's presses given up: 7 -> 0. Left: E3M4 lost a run on the second set for the list of
+doors being grouped otherwise and the other door taking her to the baron's pit, which is
+the fight's to mend.
